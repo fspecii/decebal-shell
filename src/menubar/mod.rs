@@ -37,6 +37,8 @@ const BOTTOM_MARGIN: f32 = 8.0;
 const PANEL_REFRESH: Duration = Duration::from_secs(4);
 /// How long drawing must stay quiet before the heap is trimmed.
 const HEAP_QUIET: Duration = Duration::from_millis(750);
+/// A second trim this long after the first one catches memory freed by finishing worker threads.
+const HEAP_RECHECK: Duration = Duration::from_secs(4);
 
 // ------------------------------------------------------------------ layout
 
@@ -177,6 +179,7 @@ pub struct MacBar {
     workspaces: Vec<Workspace>,
     /// When the heap was last churned (drawing, font parsing); cleared once it has been trimmed.
     heap_dirty: Option<Instant>,
+    heap_rechecked: bool,
 }
 
 impl MacBar {
@@ -214,6 +217,7 @@ impl MacBar {
             show_workspaces: false,
             workspaces: Vec::new(),
             heap_dirty: None,
+            heap_rechecked: false,
         };
         bar.refresh_app_name();
         bar
@@ -757,6 +761,7 @@ impl App for MacBar {
             f.trim();
         }
         self.heap_dirty = Some(Instant::now());
+        self.heap_rechecked = false;
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
@@ -953,11 +958,20 @@ impl App for MacBar {
         // Once things have been quiet for a moment, hand every freed page back: a trim right after a
         // burst of allocations (face parsing, worker threads finishing) can miss memory freed just after it.
         let since = self.heap_dirty?;
-        match HEAP_QUIET.checked_sub(since.elapsed()) {
+        let wait = if self.heap_rechecked { HEAP_RECHECK } else { HEAP_QUIET };
+        match wait.checked_sub(since.elapsed()) {
             Some(left) => Some(left),
+            None if !self.heap_rechecked => {
+                crate::mem::trim();
+                // Look again shortly: worker threads may free memory a moment later.
+                self.heap_rechecked = true;
+                self.heap_dirty = Some(Instant::now());
+                Some(HEAP_RECHECK)
+            }
             None => {
                 crate::mem::trim();
                 self.heap_dirty = None;
+                self.heap_rechecked = false;
                 None
             }
         }
