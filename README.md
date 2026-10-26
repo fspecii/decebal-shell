@@ -59,7 +59,10 @@ window-rule {
     default-window-height { fixed 820; }
 }
 
-# Hyprland, classic config syntax (not tested here - my session uses the Lua config)
+# Hyprland, Lua config (tested): put in your hyprland.lua
+hl.window_rule({ match = { class = "^machaven$" }, float = true, center = true, size = { 1280, 820 } })
+
+# Hyprland, classic config syntax (not tested)
 windowrule = float, class:^(machaven)$
 windowrule = size 1280 820, class:^(machaven)$
 windowrule = center, class:^(machaven)$
