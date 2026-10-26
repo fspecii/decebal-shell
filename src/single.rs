@@ -43,7 +43,16 @@ mod tests {
         // The same process asking again would signal itself; the pid check keeps that a no-op.
         assert!(super::acquire(&name).is_none());
         drop(first);
-        assert!(super::acquire(&name).is_some());
+        // Another test may have a child between fork and exec that still shares the descriptor for a moment.
+        let mut again = None;
+        for _ in 0..50 {
+            again = super::acquire(&name);
+            if again.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(again.is_some());
         let _ = std::fs::remove_file(super::lock_path(&name));
     }
 }

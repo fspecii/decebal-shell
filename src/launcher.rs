@@ -18,6 +18,8 @@ const CELL_W: f32 = 132.0;
 const CELL_H: f32 = 116.0;
 const ICON: u32 = 60;
 const RADIUS: f32 = 14.0;
+const PANEL_MAX_W: u32 = 1100;
+const PANEL_MAX_H: u32 = 720;
 
 fn text_color() -> Color {
     color(245, 245, 247, 1.0)
@@ -33,7 +35,11 @@ pub struct Launcher {
     sel: usize,
     /// First visible row (whole rows keep every cell fully inside the window).
     scroll: usize,
+    /// Size of the panel (the whole window, or the card in the middle of the overlay).
     size: (u32, u32),
+    /// Top-left of the panel on the surface (non-zero only in overlay mode).
+    origin: (f32, f32),
+    overlay: bool,
     rounded: bool,
     fonts: Option<Fonts>,
     icons: IconCache,
@@ -46,7 +52,7 @@ impl Launcher {
 
     pub fn with_apps(apps: Vec<AppEntry>) -> Self {
         let shown = apps::filter(&apps, "");
-        Self { apps, shown, field: TextField::default(), sel: 0, scroll: 0, size: (1000, 680), rounded: true, fonts: Fonts::load(), icons: IconCache::default() }
+        Self { apps, shown, field: TextField::default(), sel: 0, scroll: 0, size: (1000, 680), origin: (0.0, 0.0), overlay: false, rounded: true, fonts: Fonts::load(), icons: IconCache::default() }
     }
 
     fn cols(&self) -> usize {
@@ -146,39 +152,11 @@ impl Launcher {
     }
 }
 
-impl Default for Launcher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl WindowApp for Launcher {
-    fn title(&self) -> String {
-        "Launchpad".into()
-    }
-
-    fn initial_size(&self) -> (u32, u32) {
-        self.size
-    }
-
-    fn set_waker(&mut self, _: Waker) {}
-
-    fn set_screen(&mut self, _: u32, _: u32) {}
-
-    fn resize(&mut self, w: u32, h: u32) {
-        self.size = (w, h);
-        self.clamp_scroll();
-        self.reveal_selection();
-    }
-
-    fn set_rounded(&mut self, rounded: bool) {
-        self.rounded = rounded;
-    }
-
-    fn draw(&mut self, pm: &mut Pixmap) {
+impl Launcher {
+    fn draw_panel(&mut self, pm: &mut Pixmap) {
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         pm.fill(Color::TRANSPARENT);
-        let radius = if self.rounded { RADIUS } else { 0.0 };
+        let radius = if self.rounded || self.overlay { RADIUS } else { 0.0 };
         fill_rounded(pm, 0.0, 0.0, w, h, radius, color(33, 33, 38, 0.97));
 
         // Search field.
@@ -221,7 +199,7 @@ impl WindowApp for Launcher {
         }
     }
 
-    fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
+    fn motion(&mut self, x: f32, y: f32) -> Response {
         match self.hit(x, y) {
             Some(i) if i != self.sel => {
                 self.sel = i;
@@ -229,6 +207,81 @@ impl WindowApp for Launcher {
             }
             _ => Response::NONE,
         }
+    }
+
+    fn click(&mut self, x: f32, y: f32) -> Response {
+        match self.hit(x, y) {
+            Some(i) => {
+                self.sel = i;
+                self.launch_selected()
+            }
+            None => Response::NONE,
+        }
+    }
+}
+
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WindowApp for Launcher {
+    fn title(&self) -> String {
+        "Launchpad".into()
+    }
+
+    fn initial_size(&self) -> (u32, u32) {
+        self.size
+    }
+
+    fn app_id(&self) -> &'static str {
+        "maclaunch"
+    }
+
+    fn overlay(&self) -> bool {
+        true
+    }
+
+    fn set_overlay(&mut self, overlay: bool) {
+        self.overlay = overlay;
+    }
+
+    fn set_waker(&mut self, _: Waker) {}
+
+    fn set_screen(&mut self, _: u32, _: u32) {}
+
+    fn resize(&mut self, w: u32, h: u32) {
+        if self.overlay {
+            self.size = ((w.saturating_sub(80)).clamp(300, PANEL_MAX_W), (h.saturating_sub(120)).clamp(300, PANEL_MAX_H));
+            self.origin = ((w as f32 - self.size.0 as f32) / 2.0, (h as f32 - self.size.1 as f32) / 2.0);
+        } else {
+            self.size = (w, h);
+            self.origin = (0.0, 0.0);
+        }
+        self.clamp_scroll();
+        self.reveal_selection();
+    }
+
+    fn set_rounded(&mut self, rounded: bool) {
+        self.rounded = rounded;
+    }
+
+    fn draw(&mut self, pm: &mut Pixmap) {
+        if !self.overlay {
+            self.draw_panel(pm);
+            return;
+        }
+        // Dim everything behind (the compositor blurs it when a layer rule asks for it), card in the middle.
+        pm.fill(color(0, 0, 0, 0.35));
+        if let Some(mut card) = Pixmap::new(self.size.0, self.size.1) {
+            self.draw_panel(&mut card);
+            pm.draw_pixmap(self.origin.0 as i32, self.origin.1 as i32, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+        }
+    }
+
+    fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
+        self.motion(x - self.origin.0, y - self.origin.1)
     }
 
     fn pointer_leave(&mut self) -> Response {
@@ -239,13 +292,12 @@ impl WindowApp for Launcher {
         if !pressed || button != Button::Left {
             return Response::NONE;
         }
-        match self.hit(x, y) {
-            Some(i) => {
-                self.sel = i;
-                self.launch_selected()
-            }
-            None => Response::NONE,
+        let (px, py) = (x - self.origin.0, y - self.origin.1);
+        if self.overlay && (px < 0.0 || py < 0.0 || px >= self.size.0 as f32 || py >= self.size.1 as f32) {
+            // A click on the dimmed background dismisses the Launchpad.
+            return Response::act(Action::Close);
         }
+        self.click(px, py)
     }
 
     fn scroll(&mut self, _: f32, _: f32, dy: f32) -> Response {
@@ -383,6 +435,30 @@ mod tests {
         let mut l = launcher(0);
         assert_eq!(l.key(&key(Key::Escape, "")).action, Some(Action::Close));
         assert_eq!(l.key(&key(Key::Enter, "")), Response::NONE);
+    }
+
+    #[test]
+    fn overlay_centres_a_card_and_background_clicks_close() {
+        let mut l = launcher(30);
+        l.set_overlay(true);
+        l.resize(3440, 1440);
+        assert_eq!(l.size, (PANEL_MAX_W, PANEL_MAX_H));
+        assert_eq!(l.origin, ((3440.0 - PANEL_MAX_W as f32) / 2.0, (1440.0 - PANEL_MAX_H as f32) / 2.0));
+        assert_eq!(l.pointer_button(5.0, 5.0, Button::Left, true).action, Some(Action::Close));
+        let (x, y, w, h) = l.cell_rect(0);
+        let r = l.pointer_button(l.origin.0 + x + w / 2.0, l.origin.1 + y + h / 2.0, Button::Left, true);
+        assert_eq!(r.action, Some(Action::Close), "a cell click launches and closes");
+        let mut pm = Pixmap::new(3440, 1440).unwrap();
+        l.draw(&mut pm);
+        assert!(pm.pixel(5, 5).unwrap().alpha() > 0, "background is dimmed");
+    }
+
+    #[test]
+    fn small_screens_shrink_the_card() {
+        let mut l = launcher(3);
+        l.set_overlay(true);
+        l.resize(800, 600);
+        assert_eq!(l.size, (720, 480));
     }
 
     #[test]

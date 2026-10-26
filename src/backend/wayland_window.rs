@@ -16,7 +16,7 @@ use smithay_client_toolkit::reexports::client::{
 };
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_xdg_shell, delegate_xdg_window,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_xdg_shell, delegate_xdg_window,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -26,6 +26,7 @@ use smithay_client_toolkit::{
         Capability, SeatHandler, SeatState,
     },
     shell::{
+        wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure},
         xdg::{
             window::{Window, WindowConfigure, WindowDecorations, WindowHandler},
             XdgShell,
@@ -65,6 +66,15 @@ impl std::error::Error for Error {}
 
 /// True when the compositor offers wl_shm and xdg-shell.
 pub fn supported() -> bool {
+    probe(&["xdg_wm_base", "wl_shm", "wl_compositor"])
+}
+
+/// True when the compositor also offers wlr-layer-shell (needed for the full-screen overlay mode).
+pub fn overlay_supported() -> bool {
+    probe(&["zwlr_layer_shell_v1", "wl_shm", "wl_compositor"])
+}
+
+fn probe(required: &[&str]) -> bool {
     struct Probe;
     impl
         smithay_client_toolkit::reexports::client::Dispatch<
@@ -88,10 +98,29 @@ pub fn supported() -> bool {
     let Ok((globals, _queue)) = registry_queue_init::<Probe>(&conn) else {
         return false;
     };
-    globals.contents().with_list(|list| {
-        let has = |name: &str| list.iter().any(|g| g.interface == name);
-        has("xdg_wm_base") && has("wl_shm") && has("wl_compositor")
-    })
+    globals.contents().with_list(|list| required.iter().all(|name| list.iter().any(|g| g.interface == *name)))
+}
+
+/// Either a normal xdg window or a full-screen layer-shell overlay.
+enum Surf {
+    Window(Window),
+    Layer(LayerSurface),
+}
+
+impl Surf {
+    fn wl(&self) -> &wl_surface::WlSurface {
+        match self {
+            Surf::Window(w) => w.wl_surface(),
+            Surf::Layer(l) => l.wl_surface(),
+        }
+    }
+
+    fn commit(&self) {
+        match self {
+            Surf::Window(w) => w.commit(),
+            Surf::Layer(l) => l.commit(),
+        }
+    }
 }
 
 struct State<A: WindowApp + 'static> {
@@ -100,7 +129,7 @@ struct State<A: WindowApp + 'static> {
     output_state: OutputState,
     shm: Shm,
     pool: SlotPool,
-    window: Window,
+    surf: Surf,
     loop_handle: LoopHandle<'static, State<A>>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
     pointer: Option<wl_pointer::WlPointer>,
@@ -122,17 +151,23 @@ impl<A: WindowApp + 'static> State<A> {
         self.dirty |= resp.redraw;
         match resp.action {
             Some(Action::Close) => self.exit = true,
-            Some(Action::Minimize) => self.window.set_minimized(),
+            Some(Action::Minimize) => {
+                if let Surf::Window(w) = &self.surf {
+                    w.set_minimized();
+                }
+            }
             Some(Action::ToggleMaximize) => {
-                if self.maximized {
-                    self.window.unset_maximized();
-                } else {
-                    self.window.set_maximized();
+                if let Surf::Window(w) = &self.surf {
+                    if self.maximized {
+                        w.unset_maximized();
+                    } else {
+                        w.set_maximized();
+                    }
                 }
             }
             Some(Action::Move) => {
-                if let Some(seat) = &self.seat {
-                    self.window.move_(seat, self.press_serial);
+                if let (Some(seat), Surf::Window(w)) = (&self.seat, &self.surf) {
+                    w.move_(seat, self.press_serial);
                 }
             }
             None => {}
@@ -165,13 +200,13 @@ impl<A: WindowApp + 'static> State<A> {
             dst[2] = src[0];
             dst[3] = src[3];
         }
-        self.window.wl_surface().damage_buffer(0, 0, w as i32, h as i32);
-        if let Err(e) = buffer.attach_to(self.window.wl_surface()) {
+        self.surf.wl().damage_buffer(0, 0, w as i32, h as i32);
+        if let Err(e) = buffer.attach_to(self.surf.wl()) {
             self.error = Some(Error::Buffer(e.to_string()));
             self.exit = true;
             return;
         }
-        self.window.commit();
+        self.surf.commit();
     }
 
     fn on_wake(&mut self) {
@@ -207,17 +242,32 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
     let loop_handle = event_loop.handle();
 
     let compositor = CompositorState::bind(&globals, &qh).map_err(|e| Error::Connect(format!("wl_compositor: {e}")))?;
-    let xdg_shell = XdgShell::bind(&globals, &qh).map_err(|e| Error::Connect(format!("xdg-shell: {e}")))?;
     let shm = Shm::bind(&globals, &qh).map_err(|e| Error::Connect(format!("wl_shm: {e}")))?;
 
     let (w, h) = app.initial_size();
     let surface = compositor.create_surface(&qh);
-    // We draw our own title bar, so ask for client-side decorations.
-    let window = xdg_shell.create_window(surface, WindowDecorations::RequestClient, &qh);
-    window.set_title(app.title());
-    window.set_app_id("machaven");
-    window.set_min_size(Some((480, 360)));
-    window.commit();
+    let overlay = app.overlay() && globals.contents().with_list(|l| l.iter().any(|g| g.interface == "zwlr_layer_shell_v1"));
+    let surf = if overlay {
+        let layer_shell = LayerShell::bind(&globals, &qh).map_err(|e| Error::Connect(format!("layer shell: {e}")))?;
+        let layer = layer_shell.create_layer_surface(&qh, surface, Layer::Overlay, Some(app.app_id()), None);
+        layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
+        layer.set_size(0, 0);
+        layer.set_exclusive_zone(-1);
+        layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+        layer.commit();
+        Surf::Layer(layer)
+    } else {
+        let xdg_shell = XdgShell::bind(&globals, &qh).map_err(|e| Error::Connect(format!("xdg-shell: {e}")))?;
+        // We draw our own title bar, so ask for client-side decorations.
+        let window = xdg_shell.create_window(surface, WindowDecorations::RequestClient, &qh);
+        window.set_title(app.title());
+        window.set_app_id(app.app_id());
+        window.set_min_size(Some((480, 360)));
+        window.commit();
+        Surf::Window(window)
+    };
+    let mut app = app;
+    app.set_overlay(overlay);
 
     let pool = SlotPool::new((w * h * 4) as usize, &shm).map_err(|e| Error::Buffer(e.to_string()))?;
     let mut state = State {
@@ -226,7 +276,7 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
         output_state: OutputState::new(&globals, &qh),
         shm,
         pool,
-        window,
+        surf,
         loop_handle: loop_handle.clone(),
         keyboard: None,
         pointer: None,
@@ -325,6 +375,24 @@ impl<A: WindowApp + 'static> WindowHandler for State<A> {
     }
 }
 
+impl<A: WindowApp + 'static> LayerShellHandler for State<A> {
+    fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface) {
+        self.exit = true;
+    }
+
+    fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
+        let (nw, nh) = configure.new_size;
+        let new = (if nw > 0 { nw } else { self.size.0 }, if nh > 0 { nh } else { self.size.1 });
+        self.app.set_rounded(false);
+        if new != self.size || !self.configured {
+            self.size = new;
+            self.app.resize(new.0, new.1);
+        }
+        self.configured = true;
+        self.dirty = true;
+    }
+}
+
 impl<A: WindowApp + 'static> SeatHandler for State<A> {
     fn seat_state(&mut self) -> &mut SeatState {
         &mut self.seat_state
@@ -380,7 +448,7 @@ impl<A: WindowApp + 'static> KeyboardHandler for State<A> {
 impl<A: WindowApp + 'static> PointerHandler for State<A> {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_pointer::WlPointer, events: &[PointerEvent]) {
         for event in events {
-            if event.surface != *self.window.wl_surface() {
+            if event.surface != *self.surf.wl() {
                 continue;
             }
             let (x, y) = (event.position.0 as f32, event.position.1 as f32);
@@ -435,6 +503,7 @@ delegate_keyboard!(@<A: WindowApp + 'static> State<A>);
 delegate_pointer!(@<A: WindowApp + 'static> State<A>);
 delegate_xdg_shell!(@<A: WindowApp + 'static> State<A>);
 delegate_xdg_window!(@<A: WindowApp + 'static> State<A>);
+delegate_layer!(@<A: WindowApp + 'static> State<A>);
 delegate_registry!(@<A: WindowApp + 'static> State<A>);
 
 impl<A: WindowApp + 'static> ProvidesRegistryState for State<A> {

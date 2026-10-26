@@ -68,6 +68,17 @@ impl Response {
 
 pub trait WindowApp {
     fn title(&self) -> String;
+    /// Application id / window class, for window rules.
+    fn app_id(&self) -> &'static str {
+        "machaven"
+    }
+    /// Ask for a full-screen overlay above all windows (a layer surface) instead of a normal window.
+    /// Backends without layer-shell fall back to a normal window and never call [`WindowApp::set_overlay`].
+    fn overlay(&self) -> bool {
+        false
+    }
+    /// The backend really is showing the app as a full-screen overlay.
+    fn set_overlay(&mut self, _overlay: bool) {}
     /// Preferred window size on first map.
     fn initial_size(&self) -> (u32, u32);
     /// Called once before the event loop starts; clone and keep it for worker threads.
