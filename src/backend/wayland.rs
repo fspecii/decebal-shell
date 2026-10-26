@@ -220,8 +220,17 @@ impl<A: App + 'static> State<A> {
         if want != self.requested {
             self.requested = want;
             self.layer.set_size(want.0, want.1);
-            self.layer.commit();
-            // The redraw happens when the compositor answers with a configure.
+            if self.configured {
+                // Attach a buffer of the new size in the same commit so the compositor never stretches the old
+                // one over the resized surface (visible as a glitchy open/close).
+                self.height = want.1;
+                self.app.resized(self.width, self.height);
+                self.dirty = false;
+                self.draw();
+            } else {
+                self.layer.commit();
+            }
+            // The compositor's configure confirms the size and triggers a final redraw if it differs.
         }
         let kb = self.app.wants_keyboard();
         if kb != self.keyboard_on {

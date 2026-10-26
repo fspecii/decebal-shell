@@ -53,7 +53,7 @@ fn main() {
             println!("wrote {path} ({w}x{h})");
         }
         None => {
-            let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 0, stretch: false, namespace: "macshell-dock" };
+            let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" };
             if let Err(e) = backend::run(DockApp::new(dock).track_windows(), spec) {
                 eprintln!("macdock: {e}");
                 std::process::exit(1);

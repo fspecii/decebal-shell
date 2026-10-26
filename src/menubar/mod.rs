@@ -95,11 +95,15 @@ pub fn next_wake(tm: &clock::Tm, panel_open: bool) -> Duration {
     }
 }
 
-/// Window height needed for the bar plus whatever is open below it.
+/// Height of the bar's surface. It never changes while panels open: resizing a layer surface makes
+/// Hyprland animate (stretch) it, which looks glitchy. Only the input region follows what is open.
+const SURFACE_MIN_HEIGHT: u32 = 420;
+
+/// Window height needed for the bar plus whatever is open below it (never less than [`SURFACE_MIN_HEIGHT`]).
 pub fn surface_height(open_bottom: Option<f32>) -> u32 {
     match open_bottom {
-        Some(b) => (b + BOTTOM_MARGIN).ceil() as u32,
-        None => BAR_HEIGHT as u32,
+        Some(b) => ((b + BOTTOM_MARGIN).ceil() as u32).max(SURFACE_MIN_HEIGHT),
+        None => SURFACE_MIN_HEIGHT,
     }
 }
 
@@ -942,10 +946,10 @@ mod tests {
     }
 
     #[test]
-    fn surface_is_26px_when_closed_and_grows_when_open() {
-        assert_eq!(surface_height(None), 26);
-        assert_eq!(surface_height(Some(300.0)), 308);
-        assert!(surface_height(Some(100.5)) >= 109);
+    fn surface_has_a_constant_height_unless_a_panel_is_taller() {
+        assert_eq!(surface_height(None), SURFACE_MIN_HEIGHT);
+        assert_eq!(surface_height(Some(300.0)), SURFACE_MIN_HEIGHT);
+        assert_eq!(surface_height(Some(500.0)), 508);
     }
 
     #[test]
@@ -995,11 +999,11 @@ mod tests {
         assert!(bar.pointer_button(span.x + 5.0, 10.0, Button::Left));
         assert_eq!(bar.open, Open::Menu(2));
         assert!(bar.wants_keyboard());
-        assert!(bar.size().1 > 26);
+        assert_eq!(bar.size().1, SURFACE_MIN_HEIGHT);
         assert_eq!(bar.input_rects().len(), 2);
         assert!(bar.key(Key::Escape));
         assert_eq!(bar.open, Open::None);
-        assert_eq!(bar.size().1, 26);
+        assert_eq!(bar.size().1, SURFACE_MIN_HEIGHT);
     }
 
     #[test]
