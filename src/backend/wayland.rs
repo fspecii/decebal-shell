@@ -3,8 +3,9 @@
 //! The event loop polls the Wayland socket plus a wake pipe, so the app can use timers
 //! (`App::tick`) and worker threads (`Waker`) without busy-waiting.
 
-use super::{poll_readable, Anchor as SpecAnchor, SurfaceSpec, WakePipe};
+use super::{poll_readable, poll_writable, Anchor as SpecAnchor, SurfaceSpec, WakePipe};
 use crate::app::{App, Button, InputRect, Key};
+use smithay_client_toolkit::reexports::client::backend::WaylandError;
 use smithay_client_toolkit::reexports::client::{
     globals::registry_queue_init,
     protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
@@ -84,6 +85,11 @@ fn dispatch_err<E: fmt::Display>(e: E) -> Error {
     Error::Dispatch(e.to_string())
 }
 
+/// EAGAIN is routine on a busy compositor (full socket buffer, spurious wake-up), not a failure.
+fn would_block(e: &WaylandError) -> bool {
+    matches!(e, WaylandError::Io(io) if io.kind() == std::io::ErrorKind::WouldBlock)
+}
+
 pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let conn = Connection::connect_to_env().map_err(|e| Error::Connect(e.to_string()))?;
     let (globals, mut queue) = registry_queue_init(&conn).map_err(|e| Error::Connect(e.to_string()))?;
@@ -147,14 +153,26 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
         if state.exit {
             return Ok(());
         }
-        queue.flush().map_err(dispatch_err)?;
+        match queue.flush() {
+            Ok(()) => {}
+            Err(e) if would_block(&e) => {
+                // The socket buffer is full: wait for the compositor to drain it, then retry.
+                poll_writable(conn.backend().poll_fd().as_raw_fd(), std::time::Duration::from_millis(100)).map_err(dispatch_err)?;
+                continue;
+            }
+            Err(e) => return Err(dispatch_err(e)),
+        }
 
         let Some(guard) = queue.prepare_read() else { continue };
         let timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
         let fds = [guard.connection_fd().as_raw_fd(), wake.fd()];
         let ready = poll_readable(&fds, timeout).map_err(dispatch_err)?;
         if ready[0] {
-            guard.read().map_err(dispatch_err)?;
+            match guard.read() {
+                Ok(_) => {}
+                Err(e) if would_block(&e) => {}
+                Err(e) => return Err(dispatch_err(e)),
+            }
         } else {
             drop(guard);
         }
@@ -412,4 +430,17 @@ impl<A: App + 'static> ProvidesRegistryState for State<A> {
         &mut self.registry_state
     }
     registry_handlers![OutputState, SeatState];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eagain_is_not_fatal() {
+        let busy = WaylandError::Io(std::io::Error::from(std::io::ErrorKind::WouldBlock));
+        let broken = WaylandError::Io(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+        assert!(would_block(&busy));
+        assert!(!would_block(&broken));
+    }
 }

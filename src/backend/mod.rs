@@ -90,6 +90,23 @@ pub(crate) fn poll_readable(fds: &[RawFd], timeout: Option<Duration>) -> io::Res
     }
 }
 
+/// Waits until `fd` can accept more data (the compositor socket buffer drained).
+pub(crate) fn poll_writable(fd: RawFd, timeout: Duration) -> io::Result<bool> {
+    let mut p = libc::pollfd { fd, events: libc::POLLOUT, revents: 0 };
+    let ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+    loop {
+        // SAFETY: `p` is a valid pollfd and we pass a length of exactly one.
+        let r = unsafe { libc::poll(&mut p, 1, ms) };
+        if r >= 0 {
+            return Ok(p.revents & libc::POLLOUT != 0);
+        }
+        let e = io::Error::last_os_error();
+        if e.kind() != io::ErrorKind::Interrupted {
+            return Err(e);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
