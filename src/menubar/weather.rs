@@ -224,10 +224,10 @@ mod tests {
     }
 
     #[test]
-    fn freshness_window_is_20_minutes() {
+    fn freshness_window_is_15_minutes() {
         let w = Weather { temp_c: 1, code: 113, night: false, fetched: 1000 };
-        assert!(is_fresh(&w, 1000 + 19 * 60));
-        assert!(!is_fresh(&w, 1000 + 21 * 60));
+        assert!(is_fresh(&w, 1000 + 14 * 60));
+        assert!(!is_fresh(&w, 1000 + 16 * 60));
         assert!(is_fresh(&w, 10), "clock going backwards must not panic");
     }
 
