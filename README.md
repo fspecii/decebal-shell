@@ -10,22 +10,23 @@ A tiny macOS-style desktop shell in Rust: **dock**, **menu bar with Control Cent
 
 The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 
-## Why
+## What is in it
 
-The original Quickshell/QML version used about 550 MB of RAM. This one draws on the CPU into a
-shared buffer and only redraws when something changes:
+| Program | What | Idle memory (release) |
+|---|---|---|
+| `macdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
+| `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing) | ~7 MB RSS |
+| `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~44 MB RSS with a page of thumbnails |
 
-| | macdock (release) |
-|---|---|
-| binary | 1.8 MB |
-| RSS | ~5.7 MB |
-| idle CPU | 0 % |
+For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
+into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
+2-4 MB.
 
 ## Install
 
 ```sh
 make && sudo make install          # or: makepkg -si
-systemctl --user enable --now macshell-dock.service
+systemctl --user enable --now macshell-dock.service macshell-bar.service
 ```
 
 On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
@@ -48,7 +49,10 @@ cargo test                       # unit tests
 macdock --png dock.png           # render the dock to a PNG without any display
 ```
 
-Tested nested in: Hyprland, sway, niri (Wayland) and dwm + picom in Xephyr (X11).
+Tested on: Hyprland (live), nested sway and niri (Wayland), and dwm + picom (X11).
+
+Known limits: X11 override-redirect windows cannot reserve screen space, so turn off dwm's own bar
+(`showbar = 0`). Scale factor 1 only. The Focus tile needs `dunstctl` or `makoctl`. The bar is dark-only.
 
 ## License
 
