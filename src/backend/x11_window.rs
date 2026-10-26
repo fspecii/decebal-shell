@@ -1,0 +1,453 @@
+//! X11 top-level window backend (normal managed window, keyboard + wheel input).
+//!
+//! Worker threads wake the loop by sending a private client message to the window over a
+//! second connection, so the main thread can simply block in `wait_for_event`.
+
+use crate::app::Button;
+use crate::keysym::{char_keysym, key_event, keysym_char};
+use crate::window_app::{Action, Response, Waker, WindowApp};
+use std::fmt;
+use std::sync::Arc;
+use tiny_skia::Pixmap;
+use x11rb::connection::{Connection, RequestConnection};
+use x11rb::properties::WmSizeHints;
+use x11rb::protocol::xproto::*;
+use x11rb::protocol::Event;
+use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
+
+/// Pixels scrolled per wheel notch.
+const WHEEL_STEP: f32 = 100.0;
+
+#[derive(Debug)]
+pub struct Error(String);
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "x11: {}", self.0)
+    }
+}
+impl std::error::Error for Error {}
+
+fn err<E: fmt::Display>(e: E) -> Error {
+    Error(e.to_string())
+}
+
+struct Atoms {
+    wm_protocols: Atom,
+    wm_delete: Atom,
+    net_wm_name: Atom,
+    utf8: Atom,
+    net_wm_state: Atom,
+    max_vert: Atom,
+    max_horz: Atom,
+    moveresize: Atom,
+    wm_change_state: Atom,
+    wake: Atom,
+}
+
+fn intern<C: Connection>(c: &C, name: &str) -> Result<Atom, Error> {
+    Ok(c.intern_atom(false, name.as_bytes())
+        .map_err(err)?
+        .reply()
+        .map_err(err)?
+        .atom)
+}
+
+fn atoms<C: Connection>(c: &C) -> Result<Atoms, Error> {
+    Ok(Atoms {
+        wm_protocols: intern(c, "WM_PROTOCOLS")?,
+        wm_delete: intern(c, "WM_DELETE_WINDOW")?,
+        net_wm_name: intern(c, "_NET_WM_NAME")?,
+        utf8: intern(c, "UTF8_STRING")?,
+        net_wm_state: intern(c, "_NET_WM_STATE")?,
+        max_vert: intern(c, "_NET_WM_STATE_MAXIMIZED_VERT")?,
+        max_horz: intern(c, "_NET_WM_STATE_MAXIMIZED_HORZ")?,
+        moveresize: intern(c, "_NET_WM_MOVERESIZE")?,
+        wm_change_state: intern(c, "WM_CHANGE_STATE")?,
+        wake: intern(c, "_MACSHELL_WAKE")?,
+    })
+}
+
+// ---------------------------------------------------------------- keyboard
+
+/// Keysym table from the server's keyboard mapping.
+struct Keymap {
+    min_keycode: u8,
+    per_keycode: usize,
+    syms: Vec<u32>,
+}
+
+impl Keymap {
+    fn load<C: Connection>(c: &C) -> Result<Keymap, Error> {
+        let setup = c.setup();
+        let (min, max) = (setup.min_keycode, setup.max_keycode);
+        let reply = c
+            .get_keyboard_mapping(min, max - min + 1)
+            .map_err(err)?
+            .reply()
+            .map_err(err)?;
+        Ok(Keymap {
+            min_keycode: min,
+            per_keycode: reply.keysyms_per_keycode as usize,
+            syms: reply.keysyms,
+        })
+    }
+
+    fn column(&self, keycode: u8, col: usize) -> u32 {
+        if keycode < self.min_keycode || col >= self.per_keycode {
+            return 0;
+        }
+        let i = (keycode - self.min_keycode) as usize * self.per_keycode + col;
+        self.syms.get(i).copied().unwrap_or(0)
+    }
+
+    /// Keysym for `keycode` given the modifier state (shift, caps lock, AltGr).
+    fn lookup(&self, keycode: u8, state: u16) -> u32 {
+        let shift = state & 1 != 0;
+        let caps = state & 2 != 0;
+        let altgr = state & (1 << 7) != 0; // Mod5 is ISO_Level3_Shift on most layouts
+        let base = if altgr && self.column(keycode, 4) != 0 {
+            4
+        } else {
+            0
+        };
+        let plain = self.column(keycode, base);
+        let shifted = match self.column(keycode, base + 1) {
+            0 => plain,
+            s => s,
+        };
+        let sym = if shift { shifted } else { plain };
+        // Caps lock only affects letters.
+        if caps && !shift {
+            if let Some(c) = keysym_char(plain).filter(|c| c.is_alphabetic()) {
+                return char_keysym(c.to_uppercase().next().unwrap_or(c)).unwrap_or(sym);
+            }
+        }
+        sym
+    }
+}
+
+// ---------------------------------------------------------------- window
+
+pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
+    let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
+    let screen = conn.setup().roots[screen_num].clone();
+    let at = atoms(&conn)?;
+    let keymap = Keymap::load(&conn)?;
+
+    let (sw, sh) = (
+        u32::from(screen.width_in_pixels),
+        u32::from(screen.height_in_pixels),
+    );
+    let (iw, ih) = app.initial_size();
+    let (w, h) = (
+        iw.min(sw.saturating_sub(40)).max(320),
+        ih.min(sh.saturating_sub(60)).max(240),
+    );
+
+    let win = conn.generate_id().map_err(err)?;
+    let aux = CreateWindowAux::new()
+        .background_pixel(screen.black_pixel)
+        .event_mask(
+            EventMask::EXPOSURE
+                | EventMask::STRUCTURE_NOTIFY
+                | EventMask::POINTER_MOTION
+                | EventMask::BUTTON_PRESS
+                | EventMask::BUTTON_RELEASE
+                | EventMask::LEAVE_WINDOW
+                | EventMask::ENTER_WINDOW
+                | EventMask::KEY_PRESS,
+        );
+    conn.create_window(
+        COPY_DEPTH,
+        win,
+        screen.root,
+        ((sw.saturating_sub(w)) / 2) as i16,
+        ((sh.saturating_sub(h)) / 2) as i16,
+        w as u16,
+        h as u16,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        0,
+        &aux,
+    )
+    .map_err(err)?;
+
+    let title = app.title();
+    conn.change_property8(
+        PropMode::REPLACE,
+        win,
+        AtomEnum::WM_NAME,
+        AtomEnum::STRING,
+        title.as_bytes(),
+    )
+    .map_err(err)?;
+    conn.change_property8(
+        PropMode::REPLACE,
+        win,
+        at.net_wm_name,
+        at.utf8,
+        title.as_bytes(),
+    )
+    .map_err(err)?;
+    conn.change_property8(
+        PropMode::REPLACE,
+        win,
+        AtomEnum::WM_CLASS,
+        AtomEnum::STRING,
+        b"machaven\0Machaven\0",
+    )
+    .map_err(err)?;
+    conn.change_property32(
+        PropMode::REPLACE,
+        win,
+        at.wm_protocols,
+        AtomEnum::ATOM,
+        &[at.wm_delete],
+    )
+    .map_err(err)?;
+    let mut hints = WmSizeHints::new();
+    hints.min_size = Some((480, 360));
+    hints.set_normal_hints(&conn, win).map_err(err)?;
+
+    let gc = conn.generate_id().map_err(err)?;
+    conn.create_gc(gc, win, &CreateGCAux::new()).map_err(err)?;
+
+    // Cross-thread wake-up: a second connection that pokes our window with a client message.
+    let wake_conn = Arc::new(x11rb::connect(None).map_err(err)?.0);
+    let wake_atom = at.wake;
+    let waker: Waker = {
+        let wc = wake_conn.clone();
+        Arc::new(move || {
+            let ev = ClientMessageEvent::new(32, win, wake_atom, [0u32; 5]);
+            let _ = wc.send_event(false, win, EventMask::NO_EVENT, ev);
+            let _ = wc.flush();
+        })
+    };
+
+    app.set_screen(sw, sh);
+    app.set_rounded(false);
+    app.resize(w, h);
+    app.set_waker(waker);
+
+    conn.map_window(win).map_err(err)?;
+    conn.flush().map_err(err)?;
+
+    let max_bytes = conn.maximum_request_bytes().saturating_sub(64);
+    let mut size = (w, h);
+    let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
+    let mut dirty = true;
+    let depth = screen.root_depth;
+
+    loop {
+        if dirty {
+            dirty = false;
+            if pm.width() != size.0 || pm.height() != size.1 {
+                pm = Pixmap::new(size.0.max(1), size.1.max(1))
+                    .ok_or_else(|| Error("pixmap".into()))?;
+            }
+            app.draw(&mut pm);
+            present(&conn, win, gc, &pm, depth, max_bytes)?;
+        }
+
+        let mut next = Some(conn.wait_for_event().map_err(err)?);
+        while let Some(ev) = next.take() {
+            let mut resp = Response::NONE;
+            match ev {
+                Event::Expose(e) if e.count == 0 => dirty = true,
+                Event::ConfigureNotify(c) => {
+                    let ns = (u32::from(c.width), u32::from(c.height));
+                    if ns != size && ns.0 > 0 && ns.1 > 0 {
+                        size = ns;
+                        app.resize(ns.0, ns.1);
+                        dirty = true;
+                    }
+                }
+                Event::MotionNotify(m) => {
+                    resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y))
+                }
+                Event::EnterNotify(m) => {
+                    resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y))
+                }
+                Event::LeaveNotify(_) => resp = app.pointer_leave(),
+                Event::ButtonPress(b) => {
+                    let (x, y) = (f32::from(b.event_x), f32::from(b.event_y));
+                    resp = match b.detail {
+                        1 => app.pointer_button(x, y, Button::Left, true),
+                        2 => app.pointer_button(x, y, Button::Middle, true),
+                        3 => app.pointer_button(x, y, Button::Right, true),
+                        4 => app.scroll(x, y, -WHEEL_STEP),
+                        5 => app.scroll(x, y, WHEEL_STEP),
+                        _ => Response::NONE,
+                    };
+                    if resp.action == Some(Action::Move) {
+                        start_move(&conn, &at, screen.root, win, &b)?;
+                        resp.action = None;
+                    }
+                }
+                Event::ButtonRelease(b) => {
+                    let (x, y) = (f32::from(b.event_x), f32::from(b.event_y));
+                    resp = match b.detail {
+                        1 => app.pointer_button(x, y, Button::Left, false),
+                        2 => app.pointer_button(x, y, Button::Middle, false),
+                        3 => app.pointer_button(x, y, Button::Right, false),
+                        _ => Response::NONE,
+                    };
+                }
+                Event::KeyPress(k) => {
+                    let state: u16 = k.state.into();
+                    let sym = keymap.lookup(k.detail, state);
+                    let plain = keymap.lookup(k.detail, 0);
+                    let (shift, ctrl, alt) = (state & 1 != 0, state & 4 != 0, state & 8 != 0);
+                    if let Some(ke) = key_event(sym, plain, None, shift, ctrl, alt) {
+                        resp = app.key(&ke);
+                    }
+                }
+                Event::ClientMessage(m) => {
+                    if m.type_ == at.wm_protocols && m.data.as_data32()[0] == at.wm_delete {
+                        return Ok(());
+                    }
+                    if m.type_ == at.wake {
+                        resp = app.tick();
+                    }
+                }
+                Event::DestroyNotify(_) => return Ok(()),
+                Event::Error(e) => return Err(Error(format!("server error: {e:?}"))),
+                _ => {}
+            }
+            dirty |= resp.redraw;
+            match resp.action {
+                Some(Action::Close) => return Ok(()),
+                Some(Action::Minimize) => send_root(
+                    &conn,
+                    &at,
+                    screen.root,
+                    win,
+                    at.wm_change_state,
+                    [3, 0, 0, 0, 0],
+                )?,
+                Some(Action::ToggleMaximize) => send_root(
+                    &conn,
+                    &at,
+                    screen.root,
+                    win,
+                    at.net_wm_state,
+                    [2, at.max_vert, at.max_horz, 1, 0],
+                )?,
+                Some(Action::Move) | None => {}
+            }
+            next = conn.poll_for_event().map_err(err)?;
+        }
+    }
+}
+
+/// `CopyFromParent` depth for `create_window`.
+const COPY_DEPTH: u8 = 0;
+
+fn send_root(
+    conn: &RustConnection,
+    _at: &Atoms,
+    root: Window,
+    win: Window,
+    ty: Atom,
+    data: [u32; 5],
+) -> Result<(), Error> {
+    let ev = ClientMessageEvent::new(32, win, ty, data);
+    conn.send_event(
+        false,
+        root,
+        EventMask::SUBSTRUCTURE_NOTIFY | EventMask::SUBSTRUCTURE_REDIRECT,
+        ev,
+    )
+    .map_err(err)?;
+    conn.flush().map_err(err)
+}
+
+/// Asks the window manager to start an interactive move (title-bar drag).
+fn start_move(
+    conn: &RustConnection,
+    at: &Atoms,
+    root: Window,
+    win: Window,
+    b: &ButtonPressEvent,
+) -> Result<(), Error> {
+    conn.ungrab_pointer(x11rb::CURRENT_TIME).map_err(err)?;
+    // 8 = _NET_WM_MOVERESIZE_MOVE, button 1, source indication 1 (normal application).
+    send_root(
+        conn,
+        at,
+        root,
+        win,
+        at.moveresize,
+        [b.root_x as u32, b.root_y as u32, 8, 1, 1],
+    )
+}
+
+/// Uploads the pixmap as premultiplied BGRX, splitting into row bands when a request would be too large.
+fn present(
+    conn: &RustConnection,
+    win: Window,
+    gc: Gcontext,
+    pm: &Pixmap,
+    depth: u8,
+    max_bytes: usize,
+) -> Result<(), Error> {
+    let (w, h) = (pm.width() as usize, pm.height() as usize);
+    let rows_per = (max_bytes / (w * 4)).clamp(1, h.min(128));
+    let mut buf = vec![0u8; w * rows_per * 4];
+    let mut y = 0;
+    while y < h {
+        let rows = rows_per.min(h - y);
+        let src = &pm.data()[y * w * 4..(y + rows) * w * 4];
+        for (d, s) in buf[..rows * w * 4]
+            .chunks_exact_mut(4)
+            .zip(src.chunks_exact(4))
+        {
+            d[0] = s[2];
+            d[1] = s[1];
+            d[2] = s[0];
+            d[3] = 0xff;
+        }
+        conn.put_image(
+            ImageFormat::Z_PIXMAP,
+            win,
+            gc,
+            w as u16,
+            rows as u16,
+            0,
+            y as i16,
+            0,
+            depth,
+            &buf[..rows * w * 4],
+        )
+        .map_err(err)?;
+        y += rows;
+    }
+    conn.flush().map_err(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keymap_shift_and_caps() {
+        // keycode 9 -> 'a' / 'A'
+        let km = Keymap {
+            min_keycode: 8,
+            per_keycode: 2,
+            syms: vec![0, 0, 0x61, 0x41],
+        };
+        assert_eq!(km.lookup(9, 0), 0x61);
+        assert_eq!(km.lookup(9, 1), 0x41);
+        assert_eq!(km.lookup(9, 2), 0x41, "caps lock uppercases letters");
+        assert_eq!(
+            km.lookup(9, 3),
+            0x41,
+            "shift wins over caps lock for the shifted column"
+        );
+        assert_eq!(km.lookup(3, 0), 0, "keycode below the minimum");
+        assert_eq!(km.lookup(200, 0), 0, "keycode beyond the table");
+    }
+}

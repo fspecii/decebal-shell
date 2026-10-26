@@ -14,7 +14,9 @@ pub enum Weight {
 /// Loads the UI font. Looks for Inter (the original look) then falls back to common sans fonts.
 pub struct Fonts {
     regular: Font,
-    bold: Font,
+    /// `None` when the bold face is the same file as the regular one (e.g. the variable Inter
+    /// collection): the file is parsed once and bold is faked with a double stroke.
+    bold: Option<Font>,
     cache: HashMap<(char, u32, Weight), (fontdue::Metrics, Vec<u8>)>,
 }
 
@@ -37,21 +39,32 @@ fn load(path: &Path) -> Option<Font> {
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
-        let regular = find_font(&["Inter", "Inter Variable", "sans-serif"]).and_then(|p| load(&p))?;
-        let bold = find_font(&["Inter:weight=bold", "sans-serif:weight=bold"]).and_then(|p| load(&p)).unwrap_or_else(|| regular.clone());
+        let regular_path = find_font(&["Inter", "Inter Variable", "sans-serif"])?;
+        let regular = load(&regular_path)?;
+        let bold_path = find_font(&["Inter:weight=bold", "sans-serif:weight=bold"]);
+        let bold = match bold_path {
+            Some(p) if p != regular_path => load(&p),
+            _ => None,
+        };
         Some(Self { regular, bold, cache: HashMap::new() })
     }
 
     fn font(&self, w: Weight) -> &Font {
         match w {
             Weight::Regular => &self.regular,
-            Weight::Bold => &self.bold,
+            Weight::Bold => self.bold.as_ref().unwrap_or(&self.regular),
         }
+    }
+
+    /// True when bold has to be synthesised from the regular face.
+    fn faux_bold(&self, w: Weight) -> bool {
+        w == Weight::Bold && self.bold.is_none()
     }
 
     /// Advance width of `text` at pixel size `px`.
     pub fn measure(&self, text: &str, px: f32, weight: Weight) -> f32 {
-        text.chars().map(|c| self.font(weight).metrics(c, px).advance_width).sum()
+        let extra = if self.faux_bold(weight) { 0.4 } else { 0.0 };
+        text.chars().map(|c| self.font(weight).metrics(c, px).advance_width + extra).sum()
     }
 
     /// Draws `text` with its baseline-box top-left at (`x`, `y`) and returns the width drawn.
@@ -59,6 +72,7 @@ impl Fonts {
         let ascent = self.font(weight).horizontal_line_metrics(px).map(|m| m.ascent).unwrap_or(px * 0.9);
         let baseline = y + ascent;
         let (cr, cg, cb, ca) = (color.red(), color.green(), color.blue(), color.alpha());
+        let faux = self.faux_bold(weight);
         let mut pen = x;
         for ch in text.chars() {
             let key = (ch, px.round() as u32 * 4, weight);
@@ -70,7 +84,10 @@ impl Fonts {
             let gx = (pen + m.xmin as f32).round() as i32;
             let gy = (baseline - m.height as f32 - m.ymin as f32).round() as i32;
             blend_glyph(pm, bitmap, m.width, m.height, gx, gy, (cr, cg, cb, ca));
-            pen += m.advance_width;
+            if faux {
+                blend_glyph(pm, bitmap, m.width, m.height, gx + 1, gy, (cr, cg, cb, ca * 0.45));
+            }
+            pen += m.advance_width + if faux { 0.4 } else { 0.0 };
         }
         pen - x
     }

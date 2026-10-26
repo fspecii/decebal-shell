@@ -4,6 +4,10 @@
 pub mod wayland;
 #[cfg(feature = "x11")]
 pub mod x11;
+#[cfg(feature = "wayland")]
+pub mod wayland_window;
+#[cfg(feature = "x11")]
+pub mod x11_window;
 
 use crate::app::App;
 
