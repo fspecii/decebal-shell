@@ -42,6 +42,31 @@ Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
 Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed.
 
+## Window rules for the wallpaper browser
+
+`machaven` is a normal window (app id / class `machaven`, 1280x820). Tiling compositors tile it unless you
+add a rule; your original QML panel was a floating, centred window.
+
+```
+# sway (tested)
+for_window [app_id="machaven"] floating enable, resize set 1280 820, move position center
+
+# niri (tested)
+window-rule {
+    match app-id="^machaven$"
+    open-floating true
+    default-column-width { fixed 1280; }
+    default-window-height { fixed 820; }
+}
+
+# Hyprland, classic config syntax (not tested here - my session uses the Lua config)
+windowrule = float, class:^(machaven)$
+windowrule = size 1280 820, class:^(machaven)$
+windowrule = center, class:^(machaven)$
+```
+
+dwm: add `{ "machaven", NULL, NULL, 0, 1, -1 }` to the `rules[]` table in `config.h` (floating = 1).
+
 ## Develop
 
 ```sh

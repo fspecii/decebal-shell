@@ -2,6 +2,6 @@
 Type=Application
 Name=Wallpapers
 Comment=Browse and set Wallhaven wallpapers
-Exec=machaven
+Exec=machaven --recent
 Icon=preferences-desktop-wallpaper
 Categories=Settings;DesktopSettings;
