@@ -31,3 +31,9 @@ scp -P 2222 tests/distro/debian-vm.sh tester@127.0.0.1: && ssh -p 2222 tester@12
 ```
 
 Use at least 8 GB of guest RAM: a 4 GB guest runs out of memory while linking.
+
+## Arch (KVM, official cloud image)
+Download `Arch-Linux-x86_64-cloudimg.qcow2` from geo.mirror.pkgbuild.com, boot it like the Debian VM (NoCloud over SMBIOS,
+ssh on a free port), install `xorg-server picom xterm base-devel git rust libxkbcommon fontconfig libx11 libxft libxinerama
+imagemagick inter-font`, build dwm from git.suckless.org and macshell, then run `arch-vm-measure.sh` inside the VM.
+Note: `mako` is Wayland-only; use `dunst` for notifications under X11.
