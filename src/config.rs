@@ -40,6 +40,38 @@ impl Pinned {
     }
 }
 
+/// Apps a fresh install gets when no pinned list exists: the first installed entry of each group,
+/// with the built-in Launchpad first and Trash last.
+const DEFAULT_GROUPS: &[&[&str]] = &[
+    &["org.gnome.Nautilus", "thunar", "org.kde.dolphin", "pcmanfm", "nemo", "pcmanfm-qt"],
+    &["firefox", "org.mozilla.firefox", "google-chrome", "chromium", "brave-browser", "org.chromium.Chromium"],
+    &["foot", "Alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty", "xterm", "org.gnome.Console"],
+];
+
+/// Pinned ids to show: the user's list, or sensible defaults when there is none.
+pub fn default_pinned(exists: &dyn Fn(&str) -> bool) -> Vec<String> {
+    let mut out = vec!["launchpad".to_string()];
+    for group in DEFAULT_GROUPS {
+        if let Some(id) = group.iter().find(|id| exists(id)) {
+            out.push((*id).to_string());
+        }
+    }
+    out.push("trash".to_string());
+    out
+}
+
+impl Pinned {
+    /// The configured order, or [`default_pinned`] when the config is missing or empty.
+    pub fn or_default(&self, exists: &dyn Fn(&str) -> bool) -> Vec<String> {
+        let ordered = self.ordered();
+        if ordered.is_empty() {
+            default_pinned(exists)
+        } else {
+            ordered
+        }
+    }
+}
+
 pub fn config_dir() -> PathBuf {
     std::env::var_os("MACSHELL_CONFIG")
         .map(PathBuf::from)
@@ -75,6 +107,22 @@ mod tests {
         let s: DockSettings = serde_json::from_str(r#"{"magnification": 2.0}"#).unwrap();
         assert_eq!(s.magnification, 2.0);
         assert_eq!(s.app_spacing, 6.0);
+    }
+
+    #[test]
+    fn fresh_install_gets_launchpad_apps_and_trash() {
+        let installed = |id: &str| matches!(id, "thunar" | "firefox" | "kitty" | "foot");
+        // the first installed entry of each group wins
+        assert_eq!(default_pinned(&installed), vec!["launchpad", "thunar", "firefox", "foot", "trash"]);
+        assert_eq!(default_pinned(&|_| false), vec!["launchpad", "trash"]);
+    }
+
+    #[test]
+    fn empty_config_falls_back_to_defaults() {
+        let none = |_: &str| false;
+        assert_eq!(Pinned::default().or_default(&none), vec!["launchpad", "trash"]);
+        let p = Pinned { pinned: vec!["a".into()], order: vec![] };
+        assert_eq!(p.or_default(&none), vec!["a"]);
     }
 
     #[test]

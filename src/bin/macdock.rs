@@ -35,7 +35,7 @@ fn main() {
         i += 1;
     }
 
-    let items: Vec<DockItem> = config::pinned().ordered().into_iter().map(|id| DockItem { running: running.contains(&id), id }).collect();
+    let items: Vec<DockItem> = config::pinned().or_default(&|id| macshell::launch::find_exec(id).is_some()).into_iter().map(|id| DockItem { running: running.contains(&id), id }).collect();
     let mut dock = Dock::new(items, config::dock_settings());
     dock.hover_x = hover;
     let (w, h) = dock.canvas_size();
