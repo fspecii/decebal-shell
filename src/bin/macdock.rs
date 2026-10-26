@@ -2,6 +2,7 @@ use macshell::config;
 use macshell::backend::{self, Anchor, SurfaceSpec};
 use macshell::dock::{Dock, DockItem};
 use macshell::dock_app::DockApp;
+use macshell::wm::Tracker;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -40,7 +41,7 @@ fn main() {
         }
         None => {
             let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 0, namespace: "macshell-dock" };
-            if let Err(e) = backend::run(DockApp::new(dock), spec) {
+            if let Err(e) = backend::run(DockApp::new(dock).with_tracker(Tracker::start(|| {})), spec) {
                 eprintln!("macdock: {e}");
                 std::process::exit(1);
             }

@@ -13,3 +13,4 @@ pub mod icons;
 pub mod launch;
 pub mod text;
 pub mod theme;
+pub mod wm;

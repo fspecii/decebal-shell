@@ -35,3 +35,7 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[[bin]]
+name = "macwm"
+path = "src/bin/macwm.rs"
