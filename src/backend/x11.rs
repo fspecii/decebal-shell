@@ -258,7 +258,11 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
             continue;
         }
 
-        let timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
+        let idle_wait = app.idle();
+        let mut timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
+        if let Some(wait) = idle_wait {
+            timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
+        }
         let ready = poll_readable(&[conn.stream().as_raw_fd(), wake.fd()], timeout).map_err(err)?;
         if ready[1] {
             wake.drain();

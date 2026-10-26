@@ -87,6 +87,14 @@ pub trait App {
     }
     /// Called once at start; keep it to wake the loop from threads.
     fn set_waker(&mut self, _waker: Waker) {}
+    /// The backend is about to block waiting for events: drop transient memory (parsed fonts and the
+    /// like) that input handling or layout may have loaded since the last frame.
+    ///
+    /// Returns how soon the backend should call `idle` again even if nothing else happens (for
+    /// deferred clean-up), or `None`.
+    fn idle(&mut self) -> Option<Duration> {
+        None
+    }
     /// Called on wake-ups and timeouts.
     fn tick(&mut self) -> Tick {
         Tick::default()

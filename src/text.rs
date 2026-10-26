@@ -110,6 +110,11 @@ impl Fonts {
         release_heap();
     }
 
+    /// True while a parsed face is held in memory.
+    pub fn has_loaded_face(&self) -> bool {
+        self.loaded.borrow().iter().any(Option::is_some)
+    }
+
     fn glyph(&self, ch: char, px: f32, weight: Weight) -> Option<Rc<Glyph>> {
         let key = (ch, (px * 4.0).round() as u32, weight);
         if let Some(g) = self.glyphs.borrow().get(&key) {
@@ -191,6 +196,16 @@ fn blend_glyph(pm: &mut Pixmap, bitmap: &[u8], gw: usize, gh: usize, gx: i32, gy
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn measuring_unseen_text_loads_a_face_that_trim_drops() {
+        let Some(f) = Fonts::load() else { return };
+        assert!(!f.has_loaded_face());
+        f.measure("zq unseen \u{2603} text", 12.0, Weight::Regular);
+        assert!(f.has_loaded_face());
+        f.trim();
+        assert!(!f.has_loaded_face());
+    }
 
     #[test]
     fn measures_and_draws() {

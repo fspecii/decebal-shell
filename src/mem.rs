@@ -9,14 +9,20 @@ mod sys {
     }
     /// `M_ARENA_MAX` from `<malloc.h>`.
     pub const M_ARENA_MAX: i32 = -8;
+    /// `M_MMAP_THRESHOLD`: allocations at least this big get their own mapping.
+    pub const M_MMAP_THRESHOLD: i32 = -3;
 }
 
-/// Share one malloc arena between all threads. Call once, early in `main`.
+/// Share one malloc arena between all threads, and pin the mmap threshold so big blocks (a parsed
+/// font face, an image) always get their own mapping that is returned on free. glibc otherwise raises
+/// the threshold to the size of the largest block freed so far and later parks such blocks on the
+/// heap, where they fragment it and stay resident. Call once, early in `main`.
 pub fn limit_arenas() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     // SAFETY: `mallopt` only changes allocator tuning and is safe to call at any time.
     unsafe {
         sys::mallopt(sys::M_ARENA_MAX, 1);
+        sys::mallopt(sys::M_MMAP_THRESHOLD, 256 * 1024);
     }
 }
 

@@ -35,6 +35,8 @@ const PANEL_GAP: f32 = 4.0;
 const BOTTOM_MARGIN: f32 = 8.0;
 /// While the Control Center is open its data is refreshed this often.
 const PANEL_REFRESH: Duration = Duration::from_secs(4);
+/// How long drawing must stay quiet before the heap is trimmed.
+const HEAP_QUIET: Duration = Duration::from_millis(750);
 
 // ------------------------------------------------------------------ layout
 
@@ -173,6 +175,8 @@ pub struct MacBar {
     // Window-manager workspaces (optional indicator)
     show_workspaces: bool,
     workspaces: Vec<Workspace>,
+    /// When the heap was last churned (drawing, font parsing); cleared once it has been trimmed.
+    heap_dirty: Option<Instant>,
 }
 
 impl MacBar {
@@ -209,6 +213,7 @@ impl MacBar {
             last_full_refresh: Instant::now(),
             show_workspaces: false,
             workspaces: Vec::new(),
+            heap_dirty: None,
         };
         bar.refresh_app_name();
         bar
@@ -751,6 +756,7 @@ impl App for MacBar {
         if let Some(f) = &self.fonts {
             f.trim();
         }
+        self.heap_dirty = Some(Instant::now());
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
@@ -933,6 +939,28 @@ impl App for MacBar {
             Open::None => {}
         }
         rects
+    }
+
+    fn idle(&mut self) -> Option<Duration> {
+        // Measuring text for hit-testing and menu layout can parse a whole face (~12 MB); the next draw
+        // would drop it, but a pointer event that needs no redraw leaves it (and a fragmented heap) behind.
+        if let Some(f) = &self.fonts {
+            if f.has_loaded_face() {
+                f.trim();
+                self.heap_dirty = Some(Instant::now());
+            }
+        }
+        // Once things have been quiet for a moment, hand every freed page back: a trim right after a
+        // burst of allocations (face parsing, worker threads finishing) can miss memory freed just after it.
+        let since = self.heap_dirty?;
+        match HEAP_QUIET.checked_sub(since.elapsed()) {
+            Some(left) => Some(left),
+            None => {
+                crate::mem::trim();
+                self.heap_dirty = None;
+                None
+            }
+        }
     }
 
     fn set_waker(&mut self, waker: Waker) {
@@ -1348,5 +1376,15 @@ mod tests {
         assert!(!bar.refresh_workspaces(), "already up to date");
         bar.workspaces.clear();
         assert!(bar.refresh_workspaces());
+    }
+
+    #[test]
+    fn idle_drops_fonts_loaded_by_layout() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let Some(f) = &bar.fonts else { return };
+        f.measure("never drawn \u{2603} string", 12.0, Weight::Bold);
+        assert!(f.has_loaded_face());
+        assert!(bar.idle().is_some(), "a deferred trim is pending");
+        assert!(!bar.fonts.as_ref().unwrap().has_loaded_face());
     }
 }

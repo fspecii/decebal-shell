@@ -37,6 +37,7 @@ On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
 
 * `dock-pinned-macos.json` - `{"pinned": [...], "order": [...]}` (desktop-file ids; `launchpad` and `trash` are built in)
 * `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`
+* `macshell.json` - `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
 
 Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
@@ -79,8 +80,8 @@ macdock --png dock.png           # render the dock to a PNG without any display
 
 Tested on: Hyprland (live), nested sway and niri (Wayland), and dwm + picom (X11).
 
-Known limits: X11 override-redirect windows cannot reserve screen space, so turn off dwm's own bar
-(`showbar = 0`). Scale factor 1 only. The Focus tile needs `dunstctl` or `makoctl`. The bar is dark-only.
+Known limits: on X11 the panels publish `_NET_WM_STRUT_PARTIAL` and the DOCK window type, which rdwm
+honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale factor 1 only. The Focus tile needs `dunstctl` or `makoctl`. The bar is dark-only.
 
 ## License
 

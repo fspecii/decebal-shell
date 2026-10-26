@@ -140,6 +140,7 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
         keyboard_on: false,
         input_rects: Vec::new(),
         pm: Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error::Buffer("pixmap".into()))?,
+        last_draw: Instant::now(),
     };
 
     let mut next_tick: Option<Instant> = Some(Instant::now());
@@ -163,8 +164,13 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
             Err(e) => return Err(dispatch_err(e)),
         }
 
+        let idle_wait = state.app.idle();
+        state.shrink_pool();
         let Some(guard) = queue.prepare_read() else { continue };
-        let timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
+        let mut timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
+        for wait in [state.shrink_wait(), idle_wait].into_iter().flatten() {
+            timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
+        }
         let fds = [guard.connection_fd().as_raw_fd(), wake.fd()];
         let ready = poll_readable(&fds, timeout).map_err(dispatch_err)?;
         if ready[0] {
@@ -211,9 +217,39 @@ struct State<A: App + 'static> {
     keyboard_on: bool,
     input_rects: Vec<InputRect>,
     pm: Pixmap,
+    last_draw: Instant,
 }
 
+/// A shm pool only ever grows, and the compositor may hold on to buffers for a while during bursts of
+/// frames (sliders, animations), so it can end up several frames big. True when it is worth replacing.
+fn pool_oversized(pool_len: usize, buffer_bytes: usize) -> bool {
+    pool_len > buffer_bytes.saturating_mul(2)
+}
+
+/// How long drawing has to stay quiet before an oversized pool is replaced.
+const POOL_SHRINK_AFTER: std::time::Duration = std::time::Duration::from_secs(3);
+
 impl<A: App + 'static> State<A> {
+    /// Replaces a pool that grew past two frames with a fresh single-frame one (in-flight buffers stay
+    /// valid on the compositor side), handing the shared memory back to the system.
+    fn pool_is_oversized(&self) -> bool {
+        pool_oversized(self.pool.len(), (self.width.max(1) * self.height.max(1) * 4) as usize)
+    }
+
+    /// Time until an oversized pool should be replaced (so the loop wakes up for it).
+    fn shrink_wait(&self) -> Option<std::time::Duration> {
+        self.pool_is_oversized().then(|| POOL_SHRINK_AFTER.saturating_sub(self.last_draw.elapsed()) + std::time::Duration::from_millis(50))
+    }
+
+    fn shrink_pool(&mut self) {
+        let bytes = (self.width.max(1) * self.height.max(1) * 4) as usize;
+        if self.last_draw.elapsed() >= POOL_SHRINK_AFTER && pool_oversized(self.pool.len(), bytes) {
+            if let Ok(p) = SlotPool::new(bytes, &self.shm) {
+                self.pool = p;
+            }
+        }
+    }
+
     /// Pushes app-driven changes (size, keyboard focus mode, input region) to the compositor.
     fn sync(&mut self) {
         let want = self.app.size();
@@ -266,6 +302,7 @@ impl<A: App + 'static> State<A> {
                 None => return,
             }
         }
+        self.last_draw = Instant::now();
         self.app.draw(&mut self.pm);
 
         let stride = w as i32 * 4;
@@ -451,5 +488,13 @@ mod tests {
         let broken = WaylandError::Io(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
         assert!(would_block(&busy));
         assert!(!would_block(&broken));
+    }
+
+    #[test]
+    fn pool_is_only_replaced_beyond_two_frames() {
+        assert!(!pool_oversized(100, 100));
+        assert!(!pool_oversized(200, 100));
+        assert!(pool_oversized(201, 100));
+        assert!(!pool_oversized(10, usize::MAX));
     }
 }
