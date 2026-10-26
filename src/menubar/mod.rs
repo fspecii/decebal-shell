@@ -191,7 +191,7 @@ impl MacBar {
         if let Ok(mut s) = self.shared.snap.lock() {
             *s = Snapshot::collect();
         }
-        self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, fetched: 0 });
+        self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
             Some("control") => {
                 self.relayout_control();
@@ -565,7 +565,8 @@ impl MacBar {
             match kind {
                 Tray::Weather => {
                     if let Some(wx) = &weather {
-                        self.symbol(pm, weather::symbol_for(wx.code), ICON_PX, s.x + 9.0 + ICON_PX / 2.0, 12.5);
+                        let glyph = format!("wx:{:x}", weather::nerd_codepoint(wx.code, wx.night));
+                        self.symbol(pm, &glyph, 17.0, s.x + 9.0 + ICON_PX / 2.0, 12.5);
                         self.text(pm, &format!("{}°", wx.temp_c), s.x + 9.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
                     }
                 }

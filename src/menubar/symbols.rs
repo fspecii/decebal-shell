@@ -120,6 +120,7 @@ pub fn shapes(name: &str) -> Option<String> {
         "chevron-right" => stroke("M9.5 5.5L16 12l-6.5 6.5", None),
         // Weather glyphs for the bar (simple, monochrome).
         "weather-clear" => sun_shape(false),
+        "weather-moon" => fill("M20 14.6A8.4 8.4 0 1 1 9.4 4a6.7 6.7 0 0 0 10.6 10.6z", None),
         "weather-cloud" => fill(CLOUD, None),
         "weather-partly" => fill("M15.5 3.5a3.6 3.6 0 1 1 0 7.2a3.6 3.6 0 1 1 0-7.2z", None) + &fill("M7 20a4.2 4.2 0 0 1-.5-8.4A5.6 5.6 0 0 1 17 13.5a3.3 3.3 0 0 1-.4 6.5z", None),
         "weather-rain" => fill("M7 14.5a4.2 4.2 0 0 1-.5-8.3A5.6 5.6 0 0 1 17 8a3.3 3.3 0 0 1-.4 6.5z", None) + &stroke("M8 17.5l-1 3M12 17.5l-1 3M16 17.5l-1 3", None),
@@ -179,8 +180,59 @@ fn nerd_glyph(ch: char, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
     Some(pm)
 }
 
+/// The original plugin's weather icon (WeatherSymbol.qml, monochrome mode) for the Nerd Font code point `g`
+/// its condition table yields. Everything is drawn in the single bar colour.
+pub fn weather_svg(g: u32, color: (u8, u8, u8)) -> String {
+    let c = hex(color);
+    let clear = matches!(g, 0xe30d | 0xe32b);
+    let night = matches!(g, 0xe32b | 0xe32e);
+    let partly = matches!(g, 0xe302 | 0xe32e);
+    let mut body = String::new();
+    if clear {
+        body += if night { "<g transform=\"translate(-3 5)\">" } else { "<g transform=\"translate(5 6)\">" };
+    }
+    if clear || partly {
+        if night {
+            body += &format!("<path d=\"M18 3a8 8 0 1 0 10 10A8 8 0 0 1 18 3Z\" fill=\"{c}\"/>");
+        } else {
+            body += &format!(
+                "<circle cx=\"12\" cy=\"11\" r=\"5\" fill=\"{c}\"/><path d=\"M12 2v2M12 18v2M3 11h2M19 11h2M5.5 4.5 7 6M17 16l1.5 1.5M5.5 17.5 7 16M17 6l1.5-1.5\" stroke=\"{c}\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>"
+            );
+        }
+    }
+    if clear {
+        body += "</g>";
+    } else {
+        body += &format!("<path d=\"M8 25a6 6 0 1 1 1-12 8 8 0 0 1 15-1 6.5 6.5 0 1 1 1 13Z\" fill=\"{c}\"/>");
+    }
+    if matches!(g, 0xe318 | 0xe308 | 0xe333) {
+        body += &format!("<path d=\"m10 27-1 3m8-3-1 3m8-3-1 3\" stroke=\"{c}\" stroke-width=\"2\" stroke-linecap=\"round\"/>");
+    }
+    if matches!(g, 0xe31a | 0xe30a | 0xe327 | 0xe3ad) {
+        body += &format!("<circle cx=\"10\" cy=\"29\" r=\"1.2\" fill=\"{c}\"/><circle cx=\"17\" cy=\"29\" r=\"1.2\" fill=\"{c}\"/><circle cx=\"24\" cy=\"29\" r=\"1.2\" fill=\"{c}\"/>");
+    }
+    if g == 0xe31d {
+        body += &format!("<path d=\"m18 20-6 8h5l-2 4 9-10h-6l2-2Z\" fill=\"{c}\"/>");
+    }
+    if matches!(g, 0xe346 | 0xe313) {
+        body += &format!("<path d=\"M6 28h21M10 31h14\" stroke=\"{c}\" stroke-width=\"1.4\" stroke-linecap=\"round\"/>");
+    }
+    format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 34 34\">{body}</svg>")
+}
+
 /// Rasterises `name` at `px` x `px`.
 pub fn render(name: &str, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
+    if let Some(code) = name.strip_prefix("wx:") {
+        let g = u32::from_str_radix(code, 16).ok()?;
+        let tree = resvg::usvg::Tree::from_str(&weather_svg(g, color), &resvg::usvg::Options::default()).ok()?;
+        let mut pm = Pixmap::new(px.max(1), px.max(1))?;
+        let scale = px as f32 / 34.0;
+        resvg::render(&tree, Transform::from_scale(scale, scale), &mut pm.as_mut());
+        return Some(pm);
+    }
+    if let Some(hex) = name.strip_prefix("nerd:") {
+        return u32::from_str_radix(hex, 16).ok().and_then(char::from_u32).and_then(|c| nerd_glyph(c, color, px));
+    }
     match name {
         "agents" => return nerd_glyph('\u{f16a3}', color, px),
         "awake" => return nerd_glyph('\u{f0176}', color, px).or_else(|| render("cup", color, px)),
@@ -245,6 +297,7 @@ mod tests {
         "backward",
         "chevron-right",
         "weather-clear",
+        "weather-moon",
         "weather-cloud",
         "weather-partly",
         "weather-rain",
@@ -252,6 +305,14 @@ mod tests {
         "weather-storm",
         "weather-fog",
     ];
+
+    #[test]
+    fn weather_icons_render_for_every_condition() {
+        for g in [0xe30d, 0xe32b, 0xe302, 0xe32e, 0xe33d, 0xe313, 0xe346, 0xe318, 0xe31a, 0xe31d] {
+            let pm = render(&format!("wx:{g:x}"), (255, 255, 255), 34).unwrap();
+            assert!(pm.data().chunks_exact(4).any(|p| p[3] > 0), "glyph {g:x} drew nothing");
+        }
+    }
 
     #[test]
     fn every_symbol_parses_and_draws_something() {
