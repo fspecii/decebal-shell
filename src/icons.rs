@@ -136,7 +136,19 @@ pub struct IconCache {
 impl IconCache {
     pub fn get(&mut self, id: &str, size: u32) -> &Pixmap {
         self.map.entry((id.to_string(), size)).or_insert_with(|| {
-            let pm = if id == "launchpad" { launchpad(size) } else { find_svg(id).and_then(|p| render_svg(&p, size)).or_else(|| find_png(id).and_then(|p| load_png_scaled(&p, size))) };
+            let pm = if id == "launchpad" {
+                launchpad(size)
+            } else if id.starts_with('/') {
+                // An absolute path, as `Icon=` in a .desktop file may give.
+                let path = Path::new(id);
+                if path.extension().is_some_and(|e| e == "svg") {
+                    render_svg(path, size)
+                } else {
+                    load_png_scaled(path, size)
+                }
+            } else {
+                find_svg(id).and_then(|p| render_svg(&p, size)).or_else(|| find_png(id).and_then(|p| load_png_scaled(&p, size)))
+            };
             pm.or_else(|| placeholder(size)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
         })
     }

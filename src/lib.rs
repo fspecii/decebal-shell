@@ -4,6 +4,7 @@
 //! same pixels can be pushed to a Wayland `wl_shm` buffer or an X11 ARGB window.
 
 pub mod app;
+pub mod apps;
 pub mod backend;
 pub mod config;
 pub mod controlcenter;
@@ -13,6 +14,7 @@ pub mod gfx;
 pub mod icons;
 pub mod keysym;
 pub mod launch;
+pub mod launcher;
 pub mod mem;
 pub mod menubar;
 pub mod text;

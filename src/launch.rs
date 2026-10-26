@@ -84,13 +84,22 @@ pub fn launch(id: &str) -> bool {
         "trash" => vec!["xdg-open".to_string(), "trash:///".to_string()],
         "launchpad" => match std::env::var("MACSHELL_LAUNCHPAD") {
             Ok(cmd) if !cmd.is_empty() => exec_argv(&cmd),
-            _ => return false,
+            _ => vec!["maclaunch".to_string()],
         },
         _ => match find_exec(id) {
             Some(e) => exec_argv(&e),
             None => return false,
         },
     };
+    spawn_argv(&argv)
+}
+
+/// Starts an `Exec=` line detached from us.
+pub fn spawn_exec(exec: &str) -> bool {
+    spawn_argv(&exec_argv(exec))
+}
+
+fn spawn_argv(argv: &[String]) -> bool {
     let Some((prog, args)) = argv.split_first() else {
         return false;
     };

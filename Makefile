@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven
+BINS = macdock macbar machaven maclaunch
 UNITS = macshell-dock.service macshell-bar.service
 AUTOSTART = macshell-dock.desktop macshell-bar.desktop
 

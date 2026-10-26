@@ -855,12 +855,13 @@ impl App for MacBar {
         match self.open {
             Open::Menu(i) => {
                 if let Some(d) = self.dropdown(i) {
-                    rects.push(InputRect { x: d.x.floor() as i32, y: d.y.floor() as i32, w: d.w.ceil() as i32, h: d.h.ceil() as i32 });
+                    // Starts at the bar's bottom edge so the pointer never leaves the surface in the gap above the menu.
+                    rects.push(InputRect { x: d.x.floor() as i32, y: BAR_HEIGHT as i32, w: d.w.ceil() as i32, h: (d.y + d.h - BAR_HEIGHT).ceil() as i32 });
                 }
             }
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
-                rects.push(InputRect { x: ox.floor() as i32, y: oy.floor() as i32, w: controlcenter::PANEL_W as i32, h: self.cc_height.ceil() as i32 });
+                rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: controlcenter::PANEL_W as i32, h: (oy + self.cc_height - BAR_HEIGHT).ceil() as i32 });
             }
             Open::None => {}
         }

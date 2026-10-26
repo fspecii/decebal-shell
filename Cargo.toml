@@ -51,3 +51,7 @@ strip = true
 [[bin]]
 name = "macwm"
 path = "src/bin/macwm.rs"
+
+[[bin]]
+name = "maclaunch"
+path = "src/bin/maclaunch.rs"
