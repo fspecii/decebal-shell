@@ -133,12 +133,13 @@ fn store(w: &Weather) {
 pub fn fetch() -> Option<Weather> {
     let out = crate::controlcenter::sys::run(&["curl", "-fsS", "--max-time", "10", "https://wttr.in/?format=j1"], Duration::from_secs(12))?;
     let mut w = parse_wttr(&out)?;
-    // Same source as the original plugin: Open-Meteo at the coordinates wttr.in detected.
+    // Like the original plugin without configured coordinates, temperature and condition come from wttr.in;
+    // Open-Meteo at the coordinates wttr.in detected only supplies day/night.
     if let Some((lat, lon)) = parse_wttr_area(&out) {
         let url = format!("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,is_day&timezone=auto");
         if let Some(body) = crate::controlcenter::sys::run(&["curl", "-fsS", "--max-time", "8", &url], Duration::from_secs(10)) {
             if let Some(om) = parse_open_meteo(&body) {
-                w = om;
+                w.night = om.night;
             }
         }
     }
