@@ -10,7 +10,9 @@ pub fn parse_wm_class(raw: &[u8]) -> String {
     let mut parts = raw.split(|b| *b == 0).filter(|p| !p.is_empty());
     let instance = parts.next();
     let class = parts.next().or(instance);
-    class.map(|c| String::from_utf8_lossy(c).into_owned()).unwrap_or_default()
+    let name = class.map(|c| String::from_utf8_lossy(c).into_owned()).unwrap_or_default();
+    // Terminals such as st report their TERM as the class ("st-256color").
+    name.strip_suffix("-256color").map(str::to_owned).unwrap_or(name)
 }
 
 fn atom(conn: &impl Connection, name: &str) -> Option<Atom> {
@@ -75,5 +77,6 @@ mod tests {
         assert_eq!(parse_wm_class(b"st\0St\0"), "St");
         assert_eq!(parse_wm_class(b"foot\0"), "foot");
         assert_eq!(parse_wm_class(b""), "");
+        assert_eq!(parse_wm_class(b"st-256color\0st-256color\0"), "st");
     }
 }
