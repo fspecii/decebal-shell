@@ -28,7 +28,7 @@ const CELL_RADIUS: f32 = 10.0;
 const SEARCH_W: f32 = 300.0;
 const SEARCH_H: f32 = 30.0;
 const WINDOW_RADIUS: f32 = 14.0;
-const THUMB_MAX_W: u32 = 480;
+const THUMB_MAX_W: u32 = 260;
 const MAX_CACHED_THUMBS: usize = 100;
 const MAX_PENDING_THUMBS: usize = 24;
 
