@@ -6,7 +6,7 @@ use macshell::menubar::active::{ActiveWindow, NoActiveWindow, StaticApp};
 use macshell::menubar::MacBar;
 use macshell::theme::BAR_HEIGHT;
 
-const USAGE: &str = "macbar [--app ID] [--png FILE [--width N] [--open KEY|control]]\n\
+const USAGE: &str = "macbar [--dry-run] [--app ID] [--png FILE [--width N] [--open KEY|control]]\n\
 Runs the menu bar. With --png it renders one frame to a file (for testing) instead.\n\
 KEY is one of apple, app, file, edit, view, window, help.";
 
@@ -31,6 +31,7 @@ fn main() {
                 i += 1;
                 app_id = args.get(i).cloned();
             }
+            "--dry-run" => macshell::controlcenter::sys::set_dry_run(true),
             "--open" => {
                 i += 1;
                 open = args.get(i).cloned();

@@ -36,12 +36,7 @@ fn err<E: fmt::Display>(e: E) -> Error {
 
 /// Finds a depth-32 TrueColor visual for real alpha.
 fn argb_visual(screen: &Screen) -> Option<Visualid> {
-    screen
-        .allowed_depths
-        .iter()
-        .find(|d| d.depth == 32)
-        .and_then(|d| d.visuals.iter().find(|v| v.class == VisualClass::TRUE_COLOR))
-        .map(|v| v.visual_id)
+    screen.allowed_depths.iter().find(|d| d.depth == 32).and_then(|d| d.visuals.iter().find(|v| v.class == VisualClass::TRUE_COLOR)).map(|v| v.visual_id)
 }
 
 /// Window geometry for a requested app size on a `sw` x `sh` screen.

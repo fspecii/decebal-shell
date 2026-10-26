@@ -6,6 +6,8 @@
 
 use std::io::Read;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(2500);
@@ -36,8 +38,27 @@ pub fn run(argv: &[&str], timeout: Duration) -> Option<String> {
     status.filter(|s| s.success()).map(|_| text)
 }
 
+static DRY_RUN: AtomicBool = AtomicBool::new(false);
+static LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// In dry-run mode setters are only recorded (see [`take_log`]), never executed.
+pub fn set_dry_run(on: bool) {
+    DRY_RUN.store(on, Ordering::SeqCst);
+}
+
+/// Commands recorded since the last call (dry-run only).
+pub fn take_log() -> Vec<String> {
+    LOG.lock().map(|mut l| std::mem::take(&mut *l)).unwrap_or_default()
+}
+
 /// Fire-and-forget (setters): detached, errors ignored, never blocks the caller.
 pub fn spawn(argv: &[&str]) {
+    if DRY_RUN.load(Ordering::SeqCst) {
+        if let Ok(mut l) = LOG.lock() {
+            l.push(argv.join(" "));
+        }
+        return;
+    }
     let argv: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
     std::thread::spawn(move || {
         let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
@@ -65,13 +86,17 @@ pub fn split_terse(line: &str) -> Vec<String> {
     for c in line.chars() {
         match (esc, c) {
             (true, c) => {
-                out.last_mut().map(|s| s.push(c));
+                if let Some(s) = out.last_mut() {
+                    s.push(c);
+                }
                 esc = false;
             }
             (false, '\\') => esc = true,
             (false, ':') => out.push(String::new()),
             (false, c) => {
-                out.last_mut().map(|s| s.push(c));
+                if let Some(s) = out.last_mut() {
+                    s.push(c);
+                }
             }
         }
     }
@@ -305,10 +330,7 @@ pub fn toggle_stay_awake() {
 
 /// `desktop-style appearance` state file: `dark` / `light`.
 pub fn is_light() -> bool {
-    std::env::var_os("HOME")
-        .and_then(|h| std::fs::read_to_string(std::path::PathBuf::from(h).join(".config/omarchy/desktop-styles/appearance")).ok())
-        .map(|s| s.trim() == "light")
-        .unwrap_or(false)
+    std::env::var_os("HOME").and_then(|h| std::fs::read_to_string(std::path::PathBuf::from(h).join(".config/omarchy/desktop-styles/appearance")).ok()).map(|s| s.trim() == "light").unwrap_or(false)
 }
 
 pub fn toggle_appearance() {

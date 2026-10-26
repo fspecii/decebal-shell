@@ -135,13 +135,7 @@ pub fn build(app: &str, light: bool) -> Vec<Menu> {
                 item("Move to Previous Desktop", "prev-desktop", ""),
             ],
         },
-        Menu {
-            key: "help",
-            title: "Help".into(),
-            icon: false,
-            bold: false,
-            items: vec![item("Keyboard Shortcuts", "shortcuts", "⌘K"), item("Omarchy Manual", "manual", "")],
-        },
+        Menu { key: "help", title: "Help".into(), icon: false, bold: false, items: vec![item("Keyboard Shortcuts", "shortcuts", "⌘K"), item("Omarchy Manual", "manual", "")] },
     ]
 }
 
@@ -171,12 +165,7 @@ pub struct Dropdown {
 impl Dropdown {
     /// Lays out `menu` with its top-left at (`x`, `y`). `text_w` measures a string at the menu font.
     pub fn layout(menu: &Menu, x: f32, y: f32, text_w: impl Fn(&str) -> f32) -> Dropdown {
-        let widest = menu
-            .items
-            .iter()
-            .filter(|i| !i.separator)
-            .map(|i| text_w(&i.label) + text_w(i.shortcut) + 56.0)
-            .fold(0.0f32, f32::max);
+        let widest = menu.items.iter().filter(|i| !i.separator).map(|i| text_w(&i.label) + text_w(i.shortcut) + 56.0).fold(0.0f32, f32::max);
         let w = MIN_W.max(widest + 2.0 * PAD);
         let mut cy = y + PAD;
         let rows = menu

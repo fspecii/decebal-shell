@@ -12,8 +12,7 @@ use smithay_client_toolkit::reexports::client::{
 };
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
-    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry,
-    delegate_seat, delegate_shm,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -64,7 +63,12 @@ pub fn supported() -> bool {
 }
 
 struct Probe;
-impl smithay_client_toolkit::reexports::client::Dispatch<smithay_client_toolkit::reexports::client::protocol::wl_registry::WlRegistry, smithay_client_toolkit::reexports::client::globals::GlobalListContents> for Probe {
+impl
+    smithay_client_toolkit::reexports::client::Dispatch<
+        smithay_client_toolkit::reexports::client::protocol::wl_registry::WlRegistry,
+        smithay_client_toolkit::reexports::client::globals::GlobalListContents,
+    > for Probe
+{
     fn event(
         _: &mut Self,
         _: &smithay_client_toolkit::reexports::client::protocol::wl_registry::WlRegistry,

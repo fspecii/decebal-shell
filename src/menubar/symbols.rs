@@ -146,10 +146,12 @@ pub fn render(name: &str, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
     Some(pm)
 }
 
+type SymbolKey = (String, (u8, u8, u8), u32);
+
 /// Caches rendered symbols.
 #[derive(Default)]
 pub struct SymbolCache {
-    map: HashMap<(String, (u8, u8, u8), u32), Option<Pixmap>>,
+    map: HashMap<SymbolKey, Option<Pixmap>>,
 }
 
 impl SymbolCache {
@@ -163,10 +165,44 @@ mod tests {
     use super::*;
 
     const ALL: &[&str] = &[
-        "apple", "wifi-0", "wifi-1", "wifi-2", "wifi-3", "wifi-off", "ethernet", "speaker-0", "speaker-1", "speaker-2", "speaker-3", "speaker-muted", "headphones",
-        "bluetooth", "bluetooth-connected", "bluetooth-off", "magnifyingglass", "switches", "moon", "sun", "sun-small", "night-shift", "dark-mode", "cup",
-        "screenshot", "record", "play", "pause", "forward", "backward", "chevron-right", "weather-clear", "weather-cloud", "weather-partly", "weather-rain",
-        "weather-snow", "weather-storm", "weather-fog",
+        "apple",
+        "wifi-0",
+        "wifi-1",
+        "wifi-2",
+        "wifi-3",
+        "wifi-off",
+        "ethernet",
+        "speaker-0",
+        "speaker-1",
+        "speaker-2",
+        "speaker-3",
+        "speaker-muted",
+        "headphones",
+        "bluetooth",
+        "bluetooth-connected",
+        "bluetooth-off",
+        "magnifyingglass",
+        "switches",
+        "moon",
+        "sun",
+        "sun-small",
+        "night-shift",
+        "dark-mode",
+        "cup",
+        "screenshot",
+        "record",
+        "play",
+        "pause",
+        "forward",
+        "backward",
+        "chevron-right",
+        "weather-clear",
+        "weather-cloud",
+        "weather-partly",
+        "weather-rain",
+        "weather-snow",
+        "weather-storm",
+        "weather-fog",
     ];
 
     #[test]

@@ -1,8 +1,6 @@
 //! Small drawing helpers on top of tiny-skia.
 
-use tiny_skia::{
-    Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Rect, Stroke, Transform,
-};
+use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Rect, Stroke, Transform};
 
 pub fn color(r: u8, g: u8, b: u8, a: f32) -> Color {
     Color::from_rgba8(r, g, b, (a.clamp(0.0, 1.0) * 255.0).round() as u8)
@@ -18,7 +16,7 @@ fn paint(c: Color) -> Paint<'static> {
 /// Rounded rectangle path; `r` is clamped to half the shorter side.
 pub fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<Path> {
     let r = r.clamp(0.0, w.min(h) / 2.0);
-    let k = 0.552_284_75 * r; // cubic approximation of a quarter circle
+    let k = 0.552_284_8 * r; // cubic approximation of a quarter circle
     let mut pb = PathBuilder::new();
     pb.move_to(x + r, y);
     pb.line_to(x + w - r, y);
@@ -39,6 +37,7 @@ pub fn fill_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c: 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn stroke_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c: Color, width: f32) {
     if let Some(path) = rounded_rect(x, y, w, h, r) {
         let stroke = Stroke { width, ..Stroke::default() };
@@ -71,6 +70,7 @@ pub fn blit_scaled(dst: &mut Pixmap, src: &Pixmap, x: f32, y: f32, w: f32, h: f3
 }
 
 /// A soft drop shadow: a few stacked translucent rounded rects (cheap, no blur pass).
+#[allow(clippy::too_many_arguments)]
 pub fn soft_shadow(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, spread: f32, alpha: f32) {
     const STEPS: u32 = 5;
     for i in 0..STEPS {

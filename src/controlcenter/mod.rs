@@ -109,16 +109,34 @@ pub enum Draw {
     /// Frosted tile.
     Tile,
     /// Round icon toggle, accent when `on`.
-    Circle { icon: &'static str, on: bool },
+    Circle {
+        icon: &'static str,
+        on: bool,
+    },
     /// Small icon (no background).
-    Glyph { icon: &'static str, size: f32, ink: Ink },
-    Text { text: String, size: f32, weight: Weight, ink: Ink, align: Align },
+    Glyph {
+        icon: &'static str,
+        size: f32,
+        ink: Ink,
+    },
+    Text {
+        text: String,
+        size: f32,
+        weight: Weight,
+        ink: Ink,
+        align: Align,
+    },
     /// Invisible click area.
     Hit,
     /// Pill slider with its icon inside.
-    Slider { value: f32, icon: &'static str },
+    Slider {
+        value: f32,
+        icon: &'static str,
+    },
     /// Square action tile background (accent when `on`).
-    SmallTile { on: bool },
+    SmallTile {
+        on: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -160,13 +178,24 @@ pub fn slider_value(px: f32, x: f32, w: f32) -> f32 {
     ((px - x) / w).clamp(0.0, 1.0)
 }
 
-fn conn_row(out: &mut Vec<Item>, x: f32, y: f32, w: f32, icon: &'static str, on: bool, title: &str, status: &str, toggle: Option<Target>, open: Option<Target>) {
-    out.push(item(x, y + 3.0, 30.0, 30.0, Draw::Circle { icon, on }, toggle));
-    if open.is_some() {
-        out.push(item(x + 40.0, y, w - 40.0, 36.0, Draw::Hit, open));
+/// One connectivity row: a toggle circle, a title and a status line.
+struct ConnRow<'a> {
+    icon: &'static str,
+    on: bool,
+    title: &'a str,
+    status: &'a str,
+    toggle: Option<Target>,
+    /// Clicking the name opens this (an invisible hit area).
+    open: Option<Target>,
+}
+
+fn conn_row(out: &mut Vec<Item>, x: f32, y: f32, w: f32, row: ConnRow) {
+    out.push(item(x, y + 3.0, 30.0, 30.0, Draw::Circle { icon: row.icon, on: row.on }, row.toggle));
+    if row.open.is_some() {
+        out.push(item(x + 40.0, y, w - 40.0, 36.0, Draw::Hit, row.open));
     }
-    out.push(text(x + 40.0, y + 3.0, w - 40.0, title, 13.0, Weight::SemiBold, Ink::Primary));
-    out.push(text(x + 40.0, y + 19.0, w - 40.0, status, 11.0, Weight::Regular, Ink::Secondary));
+    out.push(text(x + 40.0, y + 3.0, w - 40.0, row.title, 13.0, Weight::SemiBold, Ink::Primary));
+    out.push(text(x + 40.0, y + 19.0, w - 40.0, row.status, 11.0, Weight::Regular, Ink::Secondary));
 }
 
 /// Builds the display list for `s`, with the panel's top-left at the origin. Returns the list and the panel height.
@@ -184,19 +213,43 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
     let mut cy = y + 10.0;
     let cw = left_w - 20.0;
     if let Some(net) = &s.net {
-        let status = if !net.wifi_enabled { "Off".to_string() } else if net.wifi_name.is_empty() { "Not Connected".into() } else { net.wifi_name.clone() };
-        conn_row(&mut out, PAD + 10.0, cy, cw, if net.wifi_enabled { "wifi-3" } else { "wifi-off" }, net.wifi_enabled, "Wi-Fi", &status, Some(Target::Wifi), None);
+        let status = if !net.wifi_enabled {
+            "Off".to_string()
+        } else if net.wifi_name.is_empty() {
+            "Not Connected".into()
+        } else {
+            net.wifi_name.clone()
+        };
+        conn_row(
+            &mut out,
+            PAD + 10.0,
+            cy,
+            cw,
+            ConnRow { icon: if net.wifi_enabled { "wifi-3" } else { "wifi-off" }, on: net.wifi_enabled, title: "Wi-Fi", status: &status, toggle: Some(Target::Wifi), open: None },
+        );
         cy += 40.0;
     }
     if let Some(bt) = &s.bluetooth {
-        let icon = if !bt.powered { "bluetooth-off" } else if bt.connected > 0 { "bluetooth-connected" } else { "bluetooth" };
-        let status = if !bt.powered { "Off".to_string() } else if bt.connected > 0 { format!("{} connected", bt.connected) } else { "On".into() };
-        conn_row(&mut out, PAD + 10.0, cy, cw, icon, bt.powered, "Bluetooth", &status, Some(Target::Bluetooth), None);
+        let icon = if !bt.powered {
+            "bluetooth-off"
+        } else if bt.connected > 0 {
+            "bluetooth-connected"
+        } else {
+            "bluetooth"
+        };
+        let status = if !bt.powered {
+            "Off".to_string()
+        } else if bt.connected > 0 {
+            format!("{} connected", bt.connected)
+        } else {
+            "On".into()
+        };
+        conn_row(&mut out, PAD + 10.0, cy, cw, ConnRow { icon, on: bt.powered, title: "Bluetooth", status: &status, toggle: Some(Target::Bluetooth), open: None });
         cy += 40.0;
     }
     if let Some(net) = &s.net {
         let status = if net.wired_name.is_empty() { "Not Connected".to_string() } else { net.wired_name.clone() };
-        conn_row(&mut out, PAD + 10.0, cy, cw, "ethernet", !net.wired_name.is_empty(), "Network", &status, None, Some(Target::Network));
+        conn_row(&mut out, PAD + 10.0, cy, cw, ConnRow { icon: "ethernet", on: !net.wired_name.is_empty(), title: "Network", status: &status, toggle: None, open: Some(Target::Network) });
     }
 
     // Focus tile.
@@ -238,7 +291,14 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         out.push(item(PAD, y, inner, 64.0, Draw::Tile, None));
         out.push(text(PAD + 12.0, y + 9.0, inner * 0.4, "Sound", 13.0, Weight::SemiBold, Ink::Primary));
         let name = if s.sink.is_empty() { "Output" } else { s.sink.as_str() };
-        out.push(item(PAD + inner * 0.4, y + 11.0, inner * 0.6 - 12.0, 15.0, Draw::Text { text: name.to_string(), size: 11.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Right }, None));
+        out.push(item(
+            PAD + inner * 0.4,
+            y + 11.0,
+            inner * 0.6 - 12.0,
+            15.0,
+            Draw::Text { text: name.to_string(), size: 11.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Right },
+            None,
+        ));
         let shown = if v.muted { 0.0 } else { v.level.clamp(0.0, 1.0) };
         out.push(item(PAD + 12.0, y + 30.0, inner - 24.0, 26.0, Draw::Slider { value: shown, icon: speaker_icon(v) }, Some(Target::Volume)));
         y += 64.0 + GAP;
@@ -292,8 +352,18 @@ fn ink_rgba(ink: Ink) -> (u8, u8, u8, f32) {
     }
 }
 
-/// Paints the panel with its top-left at (`ox`, `oy`) in `pm`.
-pub fn draw(pm: &mut Pixmap, ox: f32, oy: f32, items: &[Item], height: f32, hover: Option<Target>, fonts: &mut Fonts, symbols: &mut SymbolCache) {
+/// Where and how the panel is painted.
+pub struct View<'a> {
+    /// Top-left of the panel in the destination pixmap.
+    pub origin: (f32, f32),
+    pub items: &'a [Item],
+    pub height: f32,
+    pub hover: Option<Target>,
+}
+
+/// Paints the panel described by `view` into `pm`.
+pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut SymbolCache) {
+    let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
     fill_rounded(pm, ox, oy, PANEL_W, height, 20.0, color(31, 31, 36, 0.88));
     stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, 19.5, color(255, 255, 255, 0.12), 1.0);
 
@@ -404,7 +474,23 @@ mod tests {
     #[test]
     fn every_target_is_reachable_with_a_full_snapshot() {
         let (items, _) = layout(&full());
-        for t in [Target::Wifi, Target::Bluetooth, Target::Network, Target::Focus, Target::NightShift, Target::DarkMode, Target::Brightness, Target::Volume, Target::MediaPrev, Target::MediaToggle, Target::MediaNext, Target::StayAwake, Target::Screenshot, Target::Record, Target::Settings] {
+        for t in [
+            Target::Wifi,
+            Target::Bluetooth,
+            Target::Network,
+            Target::Focus,
+            Target::NightShift,
+            Target::DarkMode,
+            Target::Brightness,
+            Target::Volume,
+            Target::MediaPrev,
+            Target::MediaToggle,
+            Target::MediaNext,
+            Target::StayAwake,
+            Target::Screenshot,
+            Target::Record,
+            Target::Settings,
+        ] {
             assert!(items.iter().any(|i| i.target == Some(t)), "{t:?} missing");
         }
     }

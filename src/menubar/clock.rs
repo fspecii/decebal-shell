@@ -20,14 +20,7 @@ pub struct Tm {
 
 /// `Mon 26 Oct  03:08` (day of month is not zero-padded, two spaces before the time).
 pub fn format(tm: &Tm) -> String {
-    format!(
-        "{} {} {}  {:02}:{:02}",
-        DAYS[(tm.wday % 7) as usize],
-        tm.mday,
-        MONTHS[(tm.mon % 12) as usize],
-        tm.hour,
-        tm.min
-    )
+    format!("{} {} {}  {:02}:{:02}", DAYS[(tm.wday % 7) as usize], tm.mday, MONTHS[(tm.mon % 12) as usize], tm.hour, tm.min)
 }
 
 /// Local time for a unix timestamp, via the C library so the system timezone is honoured.

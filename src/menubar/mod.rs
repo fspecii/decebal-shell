@@ -535,7 +535,13 @@ impl MacBar {
         for (i, (m, s)) in menus.iter().zip(&spans).enumerate() {
             let active = self.open == Open::Menu(i);
             let hovered = self.hover_title == Some(i);
-            let alpha = if active { 0.18 } else if hovered { 0.08 } else { 0.0 };
+            let alpha = if active {
+                0.18
+            } else if hovered {
+                0.08
+            } else {
+                0.0
+            };
             if alpha > 0.0 {
                 fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, color(255, 255, 255, alpha));
             }
@@ -567,7 +573,13 @@ impl MacBar {
                 }
                 Tray::Network => {
                     let net = snap.net.clone().unwrap_or_default();
-                    let icon = if !net.wired_name.is_empty() { "ethernet" } else if net.wifi_enabled && !net.wifi_name.is_empty() { "wifi-3" } else { "wifi-off" };
+                    let icon = if !net.wired_name.is_empty() {
+                        "ethernet"
+                    } else if net.wifi_enabled && !net.wifi_name.is_empty() {
+                        "wifi-3"
+                    } else {
+                        "wifi-off"
+                    };
                     self.symbol(pm, icon, ICON_PX, cx, 12.5);
                 }
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
@@ -602,12 +614,14 @@ impl MacBar {
                 fill_rounded(pm, d.x + menus::PAD, row.y, d.w - 2.0 * menus::PAD, row.h, 5.0, color(10, 132, 255, 1.0));
             }
             let alpha = if available { 1.0 } else { 0.35 };
-            let (label, red) = if self.confirm == Some(it.action) {
-                (format!("{}?", it.label.trim_end_matches('…')), true)
+            let (label, red) = if self.confirm == Some(it.action) { (format!("{}?", it.label.trim_end_matches('…')), true) } else { (it.label.clone(), false) };
+            let main = if hovered {
+                (255, 255, 255, 1.0)
+            } else if red {
+                (255, 105, 97, 1.0)
             } else {
-                (it.label.clone(), false)
+                (245, 245, 247, alpha)
             };
-            let main = if hovered { (255, 255, 255, 1.0) } else if red { (255, 105, 97, 1.0) } else { (245, 245, 247, alpha) };
             let sub = if hovered { (255, 255, 255, 1.0) } else { (255, 255, 255, 0.45 * alpha) };
             // Vertically centre in the 24px row.
             let Some(f) = self.fonts.as_mut() else { continue };
@@ -656,10 +670,14 @@ impl App for MacBar {
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
                 if let Some(f) = self.fonts.as_mut() {
-                    controlcenter::draw(pm, ox, oy, &self.cc_items, self.cc_height, self.cc_hover, f, &mut self.symbols);
+                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover };
+                    controlcenter::draw(pm, &view, f, &mut self.symbols);
                 }
             }
             Open::None => {}
+        }
+        if let Some(f) = &self.fonts {
+            f.trim();
         }
     }
 
@@ -897,20 +915,21 @@ mod tests {
     fn tray_is_right_aligned_and_in_order() {
         let items = [(Tray::Audio, 27.0), (Tray::Control, 27.0), (Tray::Clock, 120.0)];
         let t = tray_spans(1000.0, &items);
-        assert_eq!(t[2], (Tray::Clock, Span { x: 1000.0 - 9.0 - 120.0, w: 120.0 }));
+        assert_eq!(t[2], (Tray::Clock, Span { x: 1000.0 - RIGHT_PAD - 120.0, w: 120.0 }));
         assert_eq!(t[1].1.x + t[1].1.w, t[2].1.x);
         assert_eq!(t[0].1.x + t[0].1.w, t[1].1.x);
     }
 
     #[test]
     fn tray_matches_the_measured_original_positions() {
-        // From the 3440px screenshot: control button centre 3294.5, spotlight 3267.5, clock box from 3308.
-        let clock_w = 123.0;
+        // From the 3440px screenshot: control button centre 3294.5, spotlight 3267.5. The clock text is
+        // 105px wide there (varies a few px with the digits shown), so allow a few px of slack.
+        let clock_w = 105.0 + 17.0;
         let items = [(Tray::Spotlight, BTN_W), (Tray::Control, BTN_W), (Tray::Clock, clock_w)];
         let t = tray_spans(3440.0, &items);
         let centre = |s: &Span| s.x + s.w / 2.0;
-        assert!((centre(&t[1].1) - 3294.5).abs() < 1.5, "{}", centre(&t[1].1));
-        assert!((centre(&t[0].1) - 3267.5).abs() < 1.5);
+        assert!((centre(&t[1].1) - 3294.5).abs() < 3.5, "{}", centre(&t[1].1));
+        assert!((centre(&t[0].1) - 3267.5).abs() < 3.5);
     }
 
     #[test]
@@ -1036,5 +1055,153 @@ mod tests {
         assert_eq!(rects[1].w, 340);
         assert!(bar.size().1 > 100);
         assert!(bar.key(Key::Escape));
+    }
+    // ---- Control Center interaction (dry-run: setters are recorded, never executed) ----
+
+    static LOG_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn control_bar() -> MacBar {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.update_snapshot(|s| {
+            *s = Snapshot {
+                net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: String::new() }),
+                volume: Some(sys::Volume { level: 0.5, muted: false }),
+                brightness: Some(40),
+                night_shift: Some(false),
+                dnd: Some(false),
+                ..Snapshot::default()
+            }
+        });
+        bar.relayout_control();
+        bar.open = Open::Control;
+        bar
+    }
+
+    fn centre_of(bar: &MacBar, t: Target) -> (f32, f32, controlcenter::R) {
+        let it = bar.cc_items.iter().find(|i| i.target == Some(t)).expect("target present");
+        let (ox, oy) = bar.panel_origin();
+        (ox + it.r.x + it.r.w / 2.0, oy + it.r.y + it.r.h / 2.0, it.r)
+    }
+
+    #[test]
+    fn clicking_wifi_toggles_it_and_runs_nmcli() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let _ = sys::take_log();
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::Wifi);
+        assert!(bar.pointer_button(x, y, Button::Left));
+        assert_eq!(bar.snapshot().net.map(|n| n.wifi_enabled), Some(false), "optimistic update");
+        assert!(sys::take_log().iter().any(|l| l == "nmcli radio wifi off"));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn night_shift_and_focus_toggle_their_state() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::NightShift);
+        bar.pointer_button(x, y, Button::Left);
+        assert_eq!(bar.snapshot().night_shift, Some(true));
+        let (x, y, _) = centre_of(&bar, Target::Focus);
+        bar.pointer_button(x, y, Button::Left);
+        assert_eq!(bar.snapshot().dnd, Some(true));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn dragging_the_volume_slider_tracks_the_pointer_and_releases() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let _ = sys::take_log();
+        let mut bar = control_bar();
+        let (_, y, r) = centre_of(&bar, Target::Volume);
+        let (ox, _) = bar.panel_origin();
+        // Press at 25%, drag to 80%, release past the right edge.
+        assert!(bar.pointer_button(ox + r.x + r.w * 0.25, y, Button::Left));
+        assert!((bar.snapshot().volume.unwrap().level - 0.25).abs() < 0.01);
+        assert!(bar.pointer_motion(ox + r.x + r.w * 0.8, y + 40.0), "drag continues off the slider");
+        assert!((bar.snapshot().volume.unwrap().level - 0.8).abs() < 0.01);
+        assert!(bar.pointer_release(ox + r.x + r.w + 100.0, y, Button::Left));
+        assert!((bar.snapshot().volume.unwrap().level - 1.0).abs() < 0.01, "clamped at the end");
+        assert!(bar.cc_drag.is_none());
+        if sys::have("wpctl") {
+            assert!(sys::take_log().iter().any(|l| l.starts_with("wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.00")));
+        }
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn leaving_the_surface_mid_drag_does_not_close_the_panel() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::Brightness);
+        bar.pointer_button(x, y, Button::Left);
+        bar.pointer_leave();
+        assert_eq!(bar.open, Open::Control);
+        bar.pointer_release(x, y, Button::Left);
+        assert!(bar.pointer_leave());
+        assert_eq!(bar.open, Open::None);
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn scrolling_over_a_slider_nudges_it_by_5_percent() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::Volume);
+        assert!(bar.scroll(x, y, -1.0));
+        assert!((bar.snapshot().volume.unwrap().level - 0.55).abs() < 0.01);
+        assert!(bar.scroll(x, y, 1.0));
+        assert!((bar.snapshot().volume.unwrap().level - 0.50).abs() < 0.01);
+        assert!(!bar.scroll(2.0, 200.0, 1.0), "not over a slider");
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn hovering_panel_items_highlights_only_interactive_ones() {
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::DarkMode);
+        assert!(bar.pointer_motion(x, y));
+        assert_eq!(bar.cc_hover, Some(Target::DarkMode));
+        assert!(bar.pointer_motion(x, 400.0 + y));
+        assert_eq!(bar.cc_hover, None);
+    }
+
+    #[test]
+    fn destructive_menu_items_need_a_second_click_without_the_helper() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.runner = Runner::without_helper();
+        let apple = bar.spans()[0];
+        bar.pointer_button(apple.x + 3.0, 10.0, Button::Left);
+        let d = bar.dropdown(0).unwrap();
+        let idx = bar.menus[0].items.iter().position(|i| i.action == "shutdown").unwrap();
+        let row = d.rows[idx].clone();
+        // First click arms the confirmation and keeps the menu open.
+        assert!(bar.pointer_button(d.x + 20.0, row.y + 5.0, Button::Left));
+        assert_eq!(bar.confirm, Some("shutdown"));
+        assert_eq!(bar.open, Open::Menu(0));
+        // Escape cancels everything.
+        bar.key(Key::Escape);
+        assert_eq!(bar.confirm, None);
+        assert_eq!(bar.open, Open::None);
+    }
+
+    #[test]
+    fn unavailable_items_are_inert() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.runner = Runner::without_helper();
+        let file = bar.spans()[2];
+        bar.pointer_button(file.x + 3.0, 10.0, Button::Left);
+        let d = bar.dropdown(2).unwrap();
+        // "New Window" has no portable fallback, so the click does nothing and the menu stays.
+        assert!(!bar.pointer_button(d.x + 20.0, d.rows[0].y + 5.0, Button::Left));
+        assert_eq!(bar.open, Open::Menu(2));
     }
 }
