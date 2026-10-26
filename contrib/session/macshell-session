@@ -1,0 +1,5 @@
+#!/bin/sh
+# Starts Hyprland as the "macshell" session: the Rust bar and dock instead of Quickshell.
+export MACSHELL_SESSION=1
+export PATH="/usr/local/lib/macshell/shim:$PATH"
+exec /usr/bin/start-hyprland "$@"
