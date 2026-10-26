@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// How long a cached reading stays fresh.
-pub const MAX_AGE: Duration = Duration::from_secs(20 * 60);
+pub const MAX_AGE: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Weather {
