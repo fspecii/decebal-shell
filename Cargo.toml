@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "macdock"
 path = "src/bin/macdock.rs"
 
+[[bin]]
+name = "macbar"
+path = "src/bin/macbar.rs"
+
 [dependencies]
 tiny-skia = "0.11"
 resvg = { version = "0.45", default-features = false }

@@ -6,10 +6,12 @@
 pub mod app;
 pub mod backend;
 pub mod config;
+pub mod controlcenter;
 pub mod dock;
 pub mod dock_app;
 pub mod gfx;
 pub mod icons;
 pub mod launch;
+pub mod menubar;
 pub mod text;
 pub mod theme;

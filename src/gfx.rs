@@ -46,6 +46,13 @@ pub fn stroke_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c
     }
 }
 
+/// Axis-aligned filled rectangle.
+pub fn fill_rect(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
+    if let Some(r) = Rect::from_xywh(x, y, w, h) {
+        pm.fill_rect(r, &paint(c), Transform::identity(), None);
+    }
+}
+
 pub fn fill_circle(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
     if let Some(path) = PathBuilder::from_circle(cx, cy, r) {
         pm.fill_path(&path, &paint(c), FillRule::Winding, Transform::identity(), None);

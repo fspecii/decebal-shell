@@ -8,45 +8,63 @@ use tiny_skia::{Color, Pixmap};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Weight {
     Regular,
+    Medium,
+    SemiBold,
     Bold,
 }
 
 /// Loads the UI font. Looks for Inter (the original look) then falls back to common sans fonts.
 pub struct Fonts {
     regular: Font,
+    medium: Font,
+    semibold: Font,
     bold: Font,
     cache: HashMap<(char, u32, Weight), (fontdue::Metrics, Vec<u8>)>,
 }
 
-fn find_font(patterns: &[&str]) -> Option<PathBuf> {
+/// Resolves a fontconfig pattern to (file, face index inside a .ttc collection).
+fn find_font(patterns: &[&str]) -> Option<(PathBuf, u32)> {
     for pat in patterns {
-        let out = std::process::Command::new("fc-match").args(["-f", "%{file}", pat]).output().ok()?;
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let out = std::process::Command::new("fc-match").args(["-f", "%{file}\n%{index}", pat]).output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        let mut lines = text.lines();
+        let path = lines.next().unwrap_or("").trim().to_string();
+        let index = lines.next().and_then(|i| i.trim().parse().ok()).unwrap_or(0);
         if !path.is_empty() && Path::new(&path).is_file() {
-            return Some(PathBuf::from(path));
+            return Some((PathBuf::from(path), index));
         }
     }
     None
 }
 
-fn load(path: &Path) -> Option<Font> {
-    let data = std::fs::read(path).ok()?;
-    Font::from_bytes(data, FontSettings::default()).ok()
+fn load(face: &(PathBuf, u32)) -> Option<Font> {
+    let data = std::fs::read(&face.0).ok()?;
+    Font::from_bytes(data, FontSettings { collection_index: face.1, ..FontSettings::default() }).ok()
 }
 
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
         let regular = find_font(&["Inter", "Inter Variable", "sans-serif"]).and_then(|p| load(&p))?;
-        let bold = find_font(&["Inter:weight=bold", "sans-serif:weight=bold"]).and_then(|p| load(&p)).unwrap_or_else(|| regular.clone());
-        Some(Self { regular, bold, cache: HashMap::new() })
+        let pick = |patterns: &[&str]| find_font(patterns).and_then(|p| load(&p)).unwrap_or_else(|| regular.clone());
+        let medium = pick(&["Inter:weight=medium", "sans-serif:weight=medium"]);
+        let semibold = pick(&["Inter:weight=demibold", "sans-serif:weight=demibold"]);
+        let bold = pick(&["Inter:weight=bold", "sans-serif:weight=bold"]);
+        Some(Self { regular, medium, semibold, bold, cache: HashMap::new() })
     }
 
     fn font(&self, w: Weight) -> &Font {
         match w {
             Weight::Regular => &self.regular,
+            Weight::Medium => &self.medium,
+            Weight::SemiBold => &self.semibold,
             Weight::Bold => &self.bold,
         }
+    }
+
+    /// Distance from the top of the line box to the baseline at pixel size `px`.
+    pub fn ascent(&self, px: f32, weight: Weight) -> f32 {
+        self.font(weight).horizontal_line_metrics(px).map(|m| m.ascent).unwrap_or(px * 0.9)
     }
 
     /// Advance width of `text` at pixel size `px`.
@@ -117,6 +135,18 @@ mod tests {
         let w = f.draw(&mut pm, "File", 2.0, 2.0, 13.0, Weight::Regular, Color::WHITE);
         assert!(w > 10.0);
         assert!(pm.data().chunks_exact(4).any(|p| p[3] > 0));
+    }
+
+    #[test]
+    fn bold_is_a_different_face_than_regular() {
+        let Some(f) = Fonts::load() else { return };
+        assert!(f.measure("Finder File Edit", 12.0, Weight::Bold) > f.measure("Finder File Edit", 12.0, Weight::Regular));
+    }
+
+    #[test]
+    fn ascent_is_positive_and_scales() {
+        let Some(f) = Fonts::load() else { return };
+        assert!(f.ascent(24.0, Weight::Regular) > f.ascent(12.0, Weight::Regular) && f.ascent(12.0, Weight::Regular) > 0.0);
     }
 
     #[test]
