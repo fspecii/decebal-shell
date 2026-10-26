@@ -1,0 +1,36 @@
+[package]
+name = "macshell"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight macOS-style dock, menu bar and wallpaper browser for Wayland and X11"
+license = "MIT"
+readme = "README.md"
+rust-version = "1.80"
+
+[lib]
+name = "macshell"
+path = "src/lib.rs"
+
+[[bin]]
+name = "macdock"
+path = "src/bin/macdock.rs"
+
+[dependencies]
+tiny-skia = "0.11"
+resvg = { version = "0.45", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+smithay-client-toolkit = { version = "0.19", default-features = false, optional = true }
+x11rb = { version = "0.13", optional = true, features = ["shape"] }
+
+[features]
+default = ["wayland", "x11"]
+wayland = ["dep:smithay-client-toolkit"]
+x11 = ["dep:x11rb"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
