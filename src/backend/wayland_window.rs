@@ -309,7 +309,9 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
     let waker: Waker = Arc::new(move || {
         let _ = tx.send(());
     });
-    state.app.resize(w, h);
+    if !state.configured {
+        state.app.resize(w, h);
+    }
     state.app.set_waker(waker);
 
     WaylandSource::new(conn.clone(), queue).insert(loop_handle).map_err(|e| Error::Loop(e.to_string()))?;
