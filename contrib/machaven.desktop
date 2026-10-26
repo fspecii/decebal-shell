@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpapers
+Comment=Browse and set Wallhaven wallpapers
+Exec=machaven
+Icon=preferences-desktop-wallpaper
+Categories=Settings;DesktopSettings;

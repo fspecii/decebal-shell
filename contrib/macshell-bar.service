@@ -1,0 +1,12 @@
+[Unit]
+Description=macshell menu bar
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/macbar
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

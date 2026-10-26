@@ -35,10 +35,13 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock; do
+  for bin in macdock macbar machaven; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"
+  install -Dm644 contrib/macshell-bar.service "$pkgdir/usr/lib/systemd/user/macshell-bar.service"
   install -Dm644 contrib/macshell-dock.desktop "$pkgdir/etc/xdg/autostart/macshell-dock.desktop"
+  install -Dm644 contrib/macshell-bar.desktop "$pkgdir/etc/xdg/autostart/macshell-bar.desktop"
+  install -Dm644 contrib/machaven.desktop "$pkgdir/usr/share/applications/machaven.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
