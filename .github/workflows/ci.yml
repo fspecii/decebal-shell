@@ -12,3 +12,11 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
       - run: cargo build --release --all-features
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev fonts-dejavu-core
+      # Debian 13 ships Rust 1.85; Cargo.toml declares it as the minimum.
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - run: cargo build --release --locked
