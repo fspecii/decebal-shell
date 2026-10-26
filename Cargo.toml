@@ -34,7 +34,7 @@ libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 smithay-client-toolkit = { version = "0.19", default-features = false, features = ["calloop", "xkbcommon"], optional = true }
-x11rb = { version = "0.13", optional = true, features = ["shape"] }
+x11rb = { version = "0.13", optional = true, features = ["shape", "randr"] }
 
 [features]
 default = ["wayland", "x11"]
