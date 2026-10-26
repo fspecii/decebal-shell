@@ -485,6 +485,7 @@ dependencies = [
  "smithay-client-toolkit",
  "tiny-skia",
  "ureq",
+ "wayland-protocols",
  "x11rb",
 ]
 

@@ -34,6 +34,15 @@ impl DockApp {
         }
     }
 
+    /// Focuses the app's window when it already runs (like macOS); false when a launch is needed.
+    fn activate_running(&self, id: &str) -> bool {
+        let Some(win) = self.tracker.as_ref().and_then(|t| t.window_for(id)) else { return false };
+        if let Some(t) = &self.tracker {
+            t.activate(win.id);
+        }
+        true
+    }
+
     fn refresh_running(&mut self) {
         let Some(t) = &self.tracker else { return };
         let running = t.running_ids();
@@ -90,6 +99,9 @@ impl App for DockApp {
         let (w, h) = self.size;
         if let Some(i) = self.dock.hit_test(w as f32, h as f32, x, y) {
             let id = self.dock.items[i].id.clone();
+            if self.activate_running(&id) {
+                return false;
+            }
             if !launch::launch(&id) {
                 eprintln!("macdock: could not launch {id}");
             }
@@ -101,5 +113,50 @@ impl App for DockApp {
         let (w, h) = self.size;
         let strip = (PANEL_HEIGHT + 8.0) as i32;
         Some(InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wm::{Control, Window};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    struct Rec(Arc<AtomicU64>);
+    impl Control for Rec {
+        fn activate(&self, id: u64) {
+            self.0.store(id, Ordering::SeqCst);
+        }
+        fn switch_workspace(&self, _: usize) {}
+    }
+
+    fn app_with(windows: Vec<Window>) -> (DockApp, Arc<AtomicU64>) {
+        let seen = Arc::new(AtomicU64::new(0));
+        let tracker = Tracker::default();
+        tracker.set_control(Arc::new(Rec(seen.clone())));
+        tracker.replace(windows, vec![]);
+        let mut app = DockApp::new(Dock::new(vec![], crate::config::DockSettings::default()));
+        app.tracker = Some(tracker);
+        (app, seen)
+    }
+
+    fn win(id: u64, app: &str) -> Window {
+        Window { id, app_id: app.into(), title: String::new(), active: false, desktop: None }
+    }
+
+    #[test]
+    fn clicking_a_running_app_focuses_its_window() {
+        let (app, seen) = app_with(vec![win(7, "foot"), win(9, "firefox")]);
+        assert!(app.activate_running("firefox"));
+        assert_eq!(seen.load(Ordering::SeqCst), 9);
+    }
+
+    #[test]
+    fn clicking_a_closed_app_falls_through_to_launch() {
+        let (app, seen) = app_with(vec![win(7, "foot")]);
+        assert!(!app.activate_running("firefox"));
+        assert_eq!(seen.load(Ordering::SeqCst), 0);
+        assert!(!DockApp::new(Dock::new(vec![], crate::config::DockSettings::default())).activate_running("foot"), "no tracker");
     }
 }
