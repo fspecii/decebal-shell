@@ -4,7 +4,7 @@
 //! [`ActiveWindow`]; until it is wired the bar shows "Finder", like the original.
 
 use crate::app::Waker;
-use crate::wm::Tracker;
+use crate::wm::{Tracker, Workspace};
 use std::path::PathBuf;
 
 pub trait ActiveWindow {
@@ -12,6 +12,12 @@ pub trait ActiveWindow {
     fn active_app_name(&self) -> Option<String>;
     /// Called once when the event loop starts; sources that push changes keep it to wake the bar.
     fn set_waker(&mut self, _waker: Waker) {}
+    /// Workspaces/tags of the window manager (empty when it has none worth showing).
+    fn workspaces(&self) -> Vec<Workspace> {
+        Vec::new()
+    }
+    /// Ask the window manager to show workspace `index`.
+    fn switch_workspace(&self, _index: usize) {}
 }
 
 /// The real source: the compositor/EWMH window tracker from [`crate::wm`].
@@ -28,6 +34,16 @@ impl ActiveWindow for WmActive {
     fn set_waker(&mut self, waker: Waker) {
         if self.tracker.is_none() {
             self.tracker = Some(Tracker::start(move || waker.wake()));
+        }
+    }
+
+    fn workspaces(&self) -> Vec<Workspace> {
+        self.tracker.as_ref().map(Tracker::workspaces).unwrap_or_default()
+    }
+
+    fn switch_workspace(&self, index: usize) {
+        if let Some(t) = &self.tracker {
+            t.switch_workspace(index);
         }
     }
 }

@@ -12,6 +12,7 @@ use crate::controlcenter::{self, sys, Snapshot, Target};
 use crate::gfx::{color, fill_rounded, stroke_rounded};
 use crate::text::{Fonts, Weight};
 use crate::theme::{BAR_BG, BAR_HEIGHT};
+use crate::wm::Workspace;
 use active::ActiveWindow;
 use menus::{Dropdown, Menu, Runner};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -59,6 +60,7 @@ pub fn title_spans(menus: &[Menu], label_w: impl Fn(&Menu) -> f32) -> Vec<Span> 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tray {
+    Workspaces,
     Weather,
     Awake,
     Agents,
@@ -68,6 +70,25 @@ pub enum Tray {
     Spotlight,
     Control,
     Clock,
+}
+
+/// Width of one workspace dot cell and the padding around the group.
+const WS_SLOT: f32 = 14.0;
+const WS_PAD: f32 = 10.0;
+
+/// Width of the workspace indicator for `count` workspaces.
+pub fn workspaces_width(count: usize) -> f32 {
+    count as f32 * WS_SLOT + WS_PAD
+}
+
+/// Which workspace dot (if any) lies under `x`, given the indicator's span.
+pub fn workspace_hit(span: Span, count: usize, x: f32) -> Option<usize> {
+    let rel = x - (span.x + WS_PAD / 2.0);
+    if rel < 0.0 {
+        return None;
+    }
+    let i = (rel / WS_SLOT) as usize;
+    (i < count && x < span.x + span.w).then_some(i)
 }
 
 /// Lays the right-hand items out right-to-left from the bar's edge. `items` is in left-to-right order.
@@ -149,6 +170,9 @@ pub struct MacBar {
     cc_drag: Option<Target>,
     cc_last_send: Instant,
     last_full_refresh: Instant,
+    // Window-manager workspaces (optional indicator)
+    show_workspaces: bool,
+    workspaces: Vec<Workspace>,
 }
 
 impl MacBar {
@@ -183,9 +207,30 @@ impl MacBar {
             cc_drag: None,
             cc_last_send: Instant::now(),
             last_full_refresh: Instant::now(),
+            show_workspaces: false,
+            workspaces: Vec::new(),
         };
         bar.refresh_app_name();
         bar
+    }
+
+    /// Show the workspace/tag dots when the window manager reports more than one workspace.
+    pub fn with_workspaces(mut self, show: bool) -> Self {
+        self.show_workspaces = show;
+        self.refresh_workspaces();
+        self
+    }
+
+    fn refresh_workspaces(&mut self) -> bool {
+        if !self.show_workspaces {
+            return false;
+        }
+        let ws = self.active.workspaces();
+        if ws == self.workspaces {
+            return false;
+        }
+        self.workspaces = ws;
+        true
     }
 
     /// Renders one frame to a PNG (for testing and screenshots). `open` is a menu key or `control`.
@@ -249,6 +294,9 @@ impl MacBar {
     fn tray_items(&self) -> Vec<(Tray, f32)> {
         let snap = self.snapshot();
         let mut items = Vec::new();
+        if self.show_workspaces && !self.workspaces.is_empty() {
+            items.push((Tray::Workspaces, workspaces_width(self.workspaces.len())));
+        }
         let weather = self.shared.weather.lock().ok().and_then(|w| w.clone());
         if let Some(w) = &weather {
             let tw = self.fonts.as_ref().map(|f| f.measure(&format!("{}°", w.temp_c), TEXT_PX, Weight::Regular)).unwrap_or(14.0);
@@ -576,6 +624,18 @@ impl MacBar {
                         self.text(pm, &format!("{}°", wx.temp_c), s.x + 9.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
                     }
                 }
+                Tray::Workspaces => {
+                    for (i, ws) in self.workspaces.iter().enumerate() {
+                        let cx = s.x + WS_PAD / 2.0 + WS_SLOT * (i as f32 + 0.5);
+                        if ws.active {
+                            fill_rounded(pm, cx - 5.0, 10.0, 10.0, 6.0, 3.0, color(INK.0, INK.1, INK.2, 0.95));
+                        } else if ws.occupied {
+                            crate::gfx::fill_circle(pm, cx, 13.0, 2.5, color(INK.0, INK.1, INK.2, 0.6));
+                        } else {
+                            crate::gfx::fill_circle(pm, cx, 13.0, 2.0, color(INK.0, INK.1, INK.2, 0.22));
+                        }
+                    }
+                }
                 Tray::Awake => self.symbol(pm, "awake", 12.0, cx, 12.5),
                 Tray::Agents => self.symbol(pm, "agents", 14.0, cx, 12.5),
                 Tray::Bluetooth => self.symbol(pm, "bluetooth-connected", ICON_PX, cx, 12.5),
@@ -765,6 +825,13 @@ impl App for MacBar {
                     continue;
                 }
                 match kind {
+                    Tray::Workspaces => {
+                        if let Some(i) = workspace_hit(s, self.workspaces.len(), x) {
+                            self.close();
+                            self.active.switch_workspace(i);
+                        }
+                        return false;
+                    }
                     Tray::Control => {
                         if self.open == Open::Control {
                             self.close();
@@ -896,6 +963,9 @@ impl App for MacBar {
             }
         }
         if self.refresh_app_name() {
+            redraw = true;
+        }
+        if self.refresh_workspaces() {
             redraw = true;
         }
         if self.open == Open::Control && self.cc_drag.is_none() && self.last_full_refresh.elapsed() >= PANEL_REFRESH {
@@ -1217,5 +1287,66 @@ mod tests {
         // "New Window" has no portable fallback, so the click does nothing and the menu stays.
         assert!(!bar.pointer_button(d.x + 20.0, d.rows[0].y + 5.0, Button::Left));
         assert_eq!(bar.open, Open::Menu(2));
+    }
+
+    #[test]
+    fn workspace_dots_are_hit_by_cell() {
+        let span = Span { x: 100.0, w: workspaces_width(4) };
+        assert_eq!(workspace_hit(span, 4, 100.0 + WS_PAD / 2.0 + 1.0), Some(0));
+        assert_eq!(workspace_hit(span, 4, 100.0 + WS_PAD / 2.0 + WS_SLOT * 2.5), Some(2));
+        assert_eq!(workspace_hit(span, 4, 100.0 + 1.0), None, "left padding");
+        assert_eq!(workspace_hit(span, 4, span.x + span.w - 1.0), None, "right padding");
+    }
+
+    type Log = std::rc::Rc<std::cell::RefCell<Vec<usize>>>;
+    struct Spaces(Log, Vec<Workspace>);
+    impl ActiveWindow for Spaces {
+        fn active_app_name(&self) -> Option<String> {
+            None
+        }
+        fn workspaces(&self) -> Vec<Workspace> {
+            self.1.clone()
+        }
+        fn switch_workspace(&self, index: usize) {
+            self.0.borrow_mut().push(index);
+        }
+    }
+
+    fn spaces(n: usize) -> Vec<Workspace> {
+        (0..n).map(|i| Workspace { name: (i + 1).to_string(), active: i == 1, occupied: i == 2 }).collect()
+    }
+
+    #[test]
+    fn workspaces_are_hidden_unless_enabled() {
+        let bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(4))));
+        assert!(!bar.tray_items().iter().any(|(k, _)| *k == Tray::Workspaces));
+        let bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(4)))).with_workspaces(true);
+        let first = bar.tray_items()[0];
+        assert_eq!(first, (Tray::Workspaces, workspaces_width(4)));
+    }
+
+    #[test]
+    fn no_workspaces_means_no_indicator_even_when_enabled() {
+        let bar = MacBar::new(Box::new(Spaces(Default::default(), vec![]))).with_workspaces(true);
+        assert!(!bar.tray_items().iter().any(|(k, _)| *k == Tray::Workspaces));
+    }
+
+    #[test]
+    fn clicking_a_workspace_dot_asks_the_wm_to_switch() {
+        let log = Log::default();
+        let mut bar = MacBar::new(Box::new(Spaces(log.clone(), spaces(4)))).with_workspaces(true);
+        bar.width = 1920;
+        let (_, span) = bar.tray().into_iter().find(|(k, _)| *k == Tray::Workspaces).unwrap();
+        let x = span.x + WS_PAD / 2.0 + WS_SLOT * 3.5;
+        assert!(!bar.pointer_button(x, 10.0, Button::Left));
+        assert_eq!(*log.borrow(), vec![3]);
+    }
+
+    #[test]
+    fn workspace_changes_trigger_a_redraw() {
+        let mut bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(3)))).with_workspaces(true);
+        assert!(!bar.refresh_workspaces(), "already up to date");
+        bar.workspaces.clear();
+        assert!(bar.refresh_workspaces());
     }
 }

@@ -53,7 +53,8 @@ fn main() {
         Some(id) => Box::new(StaticApp(id)),
         None => Box::new(WmActive::default()),
     };
-    let mut bar = MacBar::new(active);
+    let show_workspaces = macshell::config::shell_settings().workspaces.resolve(macshell::wm::is_rdwm());
+    let mut bar = MacBar::new(active).with_workspaces(show_workspaces);
     if let Some(path) = png {
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
             eprintln!("macbar: {e}");

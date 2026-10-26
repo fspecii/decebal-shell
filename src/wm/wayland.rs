@@ -34,10 +34,10 @@ impl Wm {
             .iter()
             .map(|id| {
                 let p = &self.toplevels[id];
-                Window { app_id: p.app_id.clone(), title: p.title.clone(), active: p.active }
+                Window { id: *id as u64, app_id: p.app_id.clone(), title: p.title.clone(), active: p.active, desktop: None }
             })
             .collect();
-        if self.tracker.replace(windows) {
+        if self.tracker.replace(windows, Vec::new()) {
             (self.notify)();
         }
     }

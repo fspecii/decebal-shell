@@ -40,6 +40,48 @@ impl Pinned {
     }
 }
 
+/// Whether a feature is on, off, or follows the environment. In JSON: `true`, `false` or `"auto"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum Toggle {
+    Flag(bool),
+    Word(Word),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Word {
+    Auto,
+    On,
+    Off,
+}
+
+impl Toggle {
+    /// `auto_on` is what "auto" resolves to in the current environment.
+    pub fn resolve(self, auto_on: bool) -> bool {
+        match self {
+            Toggle::Flag(b) => b,
+            Toggle::Word(Word::On) => true,
+            Toggle::Word(Word::Off) => false,
+            Toggle::Word(Word::Auto) => auto_on,
+        }
+    }
+}
+
+/// `macshell.json`: shell-wide switches.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ShellSettings {
+    /// Workspace/tag dots in the menu bar. "auto" = only under rdwm.
+    pub workspaces: Toggle,
+}
+
+impl Default for ShellSettings {
+    fn default() -> Self {
+        Self { workspaces: Toggle::Word(Word::Auto) }
+    }
+}
+
 /// Apps a fresh install gets when no pinned list exists: the first installed entry of each group,
 /// with the built-in Launchpad first and Trash last.
 const DEFAULT_GROUPS: &[&[&str]] = &[
@@ -88,6 +130,10 @@ pub fn dock_settings() -> DockSettings {
     load("dock-settings.json")
 }
 
+pub fn shell_settings() -> ShellSettings {
+    load("macshell.json")
+}
+
 pub fn pinned() -> Pinned {
     load("dock-pinned-macos.json")
 }
@@ -129,5 +175,23 @@ mod tests {
     fn order_skips_unknown_and_appends_missing() {
         let p = Pinned { pinned: vec!["a".into(), "b".into(), "c".into()], order: vec!["c".into(), "x".into(), "a".into()] };
         assert_eq!(p.ordered(), vec!["c", "a", "b"]);
+    }
+
+    #[test]
+    fn workspaces_default_to_auto() {
+        let s = ShellSettings::default();
+        assert!(s.workspaces.resolve(true));
+        assert!(!s.workspaces.resolve(false));
+    }
+
+    #[test]
+    fn toggle_accepts_bools_and_words() {
+        let parse = |j: &str| serde_json::from_str::<ShellSettings>(j).unwrap().workspaces;
+        assert!(parse(r#"{"workspaces": true}"#).resolve(false));
+        assert!(!parse(r#"{"workspaces": false}"#).resolve(true));
+        assert!(parse(r#"{"workspaces": "on"}"#).resolve(false));
+        assert!(!parse(r#"{"workspaces": "off"}"#).resolve(true));
+        assert!(parse(r#"{"workspaces": "auto"}"#).resolve(true));
+        assert!(parse("{}").resolve(true));
     }
 }
