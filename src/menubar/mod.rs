@@ -61,6 +61,7 @@ pub fn title_spans(menus: &[Menu], label_w: impl Fn(&Menu) -> f32) -> Vec<Span> 
 pub enum Tray {
     Weather,
     Awake,
+    Agents,
     Bluetooth,
     Audio,
     Network,
@@ -251,6 +252,9 @@ impl MacBar {
         }
         if snap.awake {
             items.push((Tray::Awake, BTN_W));
+        }
+        if symbols::agents_available() {
+            items.push((Tray::Agents, BTN_W));
         }
         if snap.bluetooth.as_ref().map(|b| b.powered && b.connected > 0).unwrap_or(false) {
             items.push((Tray::Bluetooth, BTN_W));
@@ -565,7 +569,8 @@ impl MacBar {
                         self.text(pm, &format!("{}°", wx.temp_c), s.x + 9.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
                     }
                 }
-                Tray::Awake => self.symbol(pm, "cup", 11.0, cx, 12.5),
+                Tray::Awake => self.symbol(pm, "awake", 12.0, cx, 12.5),
+                Tray::Agents => self.symbol(pm, "agents", 14.0, cx, 12.5),
                 Tray::Bluetooth => self.symbol(pm, "bluetooth-connected", ICON_PX, cx, 12.5),
                 Tray::Audio => {
                     let icon = snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-2");

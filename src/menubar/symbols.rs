@@ -136,8 +136,56 @@ pub fn svg(name: &str, color: (u8, u8, u8)) -> Option<String> {
     Some(format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\">{}</svg>", body.replace("\"C\"", &format!("\"{}\"", hex(color)))))
 }
 
+/// The Nerd Font that carries the bar's "agents" robot glyph (U+F16A3), if installed.
+fn nerd_font() -> Option<&'static fontdue::Font> {
+    static FONT: std::sync::OnceLock<Option<fontdue::Font>> = std::sync::OnceLock::new();
+    FONT.get_or_init(|| {
+        let out = std::process::Command::new("fc-match").args(["-f", "%{file}", "JetBrainsMono Nerd Font"]).output().ok()?;
+        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !path.to_lowercase().contains("nerd") {
+            return None;
+        }
+        fontdue::Font::from_bytes(std::fs::read(path).ok()?, fontdue::FontSettings::default()).ok()
+    })
+    .as_ref()
+}
+
+/// True when the robot "agents" glyph can be drawn on this machine.
+pub fn agents_available() -> bool {
+    nerd_font().is_some()
+}
+
+/// Rasterises one Nerd Font glyph, centred in a `px` x `px` pixmap and tinted with `color`.
+fn nerd_glyph(ch: char, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
+    let font = nerd_font()?;
+    let (m, cov) = font.rasterize(ch, px as f32);
+    let mut pm = Pixmap::new(px.max(1), px.max(1))?;
+    let (ox, oy) = ((px as i32 - m.width as i32) / 2, (px as i32 - m.height as i32) / 2);
+    let data = pm.data_mut();
+    for row in 0..m.height as i32 {
+        for col in 0..m.width as i32 {
+            let (x, y) = (ox + col, oy + row);
+            if x < 0 || y < 0 || x >= px as i32 || y >= px as i32 {
+                continue;
+            }
+            let a = cov[row as usize * m.width + col as usize] as u32;
+            let i = (y as usize * px as usize + x as usize) * 4;
+            data[i] = (color.0 as u32 * a / 255) as u8;
+            data[i + 1] = (color.1 as u32 * a / 255) as u8;
+            data[i + 2] = (color.2 as u32 * a / 255) as u8;
+            data[i + 3] = a as u8;
+        }
+    }
+    Some(pm)
+}
+
 /// Rasterises `name` at `px` x `px`.
 pub fn render(name: &str, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
+    match name {
+        "agents" => return nerd_glyph('\u{f16a3}', color, px),
+        "awake" => return nerd_glyph('\u{f0176}', color, px).or_else(|| render("cup", color, px)),
+        _ => {}
+    }
     let doc = svg(name, color)?;
     let tree = resvg::usvg::Tree::from_str(&doc, &resvg::usvg::Options::default()).ok()?;
     let mut pm = Pixmap::new(px.max(1), px.max(1))?;
