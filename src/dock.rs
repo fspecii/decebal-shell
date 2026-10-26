@@ -32,6 +32,8 @@ pub struct Dock {
     pub settings: DockSettings,
     /// Pointer x in canvas coordinates while hovering the dock.
     pub hover_x: Option<f32>,
+    /// Smoothed per-item scales; empty until the first animation step.
+    eased: Vec<f32>,
     icons: IconCache,
 }
 
@@ -47,6 +49,7 @@ impl Dock {
             items,
             settings,
             hover_x: None,
+            eased: Vec::new(),
             icons: IconCache::default(),
         }
     }
@@ -83,6 +86,51 @@ impl Dock {
         }
     }
 
+    /// Scales the pointer asks for right now (1.0 everywhere without hover).
+    fn target_scales(&self, rest_x: f32, n: usize) -> Vec<f32> {
+        let base = Self::base_cell_w();
+        let sp = self.settings.app_spacing;
+        let mag = (self.settings.magnification - 1.0).max(0.0);
+        (0..n)
+            .map(|i| match self.hover_x {
+                Some(hx) => {
+                    let centre = rest_x + PANEL_PAD_X - CONTENT_NUDGE + i as f32 * (base + sp) + base / 2.0;
+                    1.0 + mag * Self::falloff((hx - centre).abs())
+                }
+                None => 1.0,
+            })
+            .collect()
+    }
+
+    fn current_scales(&self, rest_x: f32, n: usize) -> Vec<f32> {
+        if self.eased.len() == n {
+            self.eased.clone()
+        } else {
+            self.target_scales(rest_x, n)
+        }
+    }
+
+    /// Moves the displayed scales toward the pointer's target (about 110 ms to settle, like the
+    /// original). Returns true while still animating so the caller keeps ticking.
+    pub fn step(&mut self, canvas_w: f32) -> bool {
+        let n = self.items.len();
+        let rest_x = (canvas_w - self.rest_width()) / 2.0;
+        let target = self.target_scales(rest_x, n);
+        if self.eased.len() != n {
+            self.eased = vec![1.0; n];
+        }
+        let mut moving = false;
+        for (e, t) in self.eased.iter_mut().zip(&target) {
+            if (*t - *e).abs() < 0.002 {
+                *e = *t;
+            } else {
+                *e += (*t - *e) * 0.35;
+                moving = true;
+            }
+        }
+        moving
+    }
+
     /// Computes cell positions for a canvas of width `canvas_w`.
     pub fn layout(&self, canvas_w: f32) -> Layout {
         let sp = self.settings.app_spacing;
@@ -90,18 +138,8 @@ impl Dock {
         let n = self.items.len();
         let rest_w = self.rest_width();
         let rest_x = (canvas_w - rest_w) / 2.0;
-        let mag = (self.settings.magnification - 1.0).max(0.0);
 
-        let scales: Vec<f32> = (0..n)
-            .map(|i| match self.hover_x {
-                Some(hx) => {
-                    let centre =
-                        rest_x + PANEL_PAD_X - CONTENT_NUDGE + i as f32 * (base + sp) + base / 2.0;
-                    1.0 + mag * Self::falloff((hx - centre).abs())
-                }
-                None => 1.0,
-            })
-            .collect();
+        let scales = self.current_scales(rest_x, n);
 
         let total: f32 =
             scales.iter().map(|s| base * s).sum::<f32>() + sp * n.saturating_sub(1) as f32;
@@ -258,6 +296,23 @@ mod tests {
             Some(3)
         );
         assert_eq!(d.hit_test(w as f32, h as f32, c.x + 5.0, 2.0), None);
+    }
+
+    #[test]
+    fn easing_converges_to_target_and_back() {
+        let mut d = dock(5);
+        let w = d.canvas_size().0 as f32;
+        d.hover_x = Some(w / 2.0);
+        let mut steps = 0;
+        while d.step(w) {
+            steps += 1;
+            assert!(steps < 100, "easing never settled");
+        }
+        let l = d.layout(w);
+        assert!((l.cells[2].scale - 1.4).abs() < 0.01);
+        d.hover_x = None;
+        while d.step(w) {}
+        assert!(d.layout(w).cells.iter().all(|c| c.scale == 1.0));
     }
 
     #[test]
