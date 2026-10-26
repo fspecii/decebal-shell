@@ -11,4 +11,5 @@ pub mod dock_app;
 pub mod gfx;
 pub mod icons;
 pub mod launch;
+pub mod text;
 pub mod theme;
