@@ -622,6 +622,9 @@ impl WindowApp for WallhavenApp {
         }
         stroke_rounded(pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, (radius - 0.5).max(0.0), color(255, 255, 255, 0.12), 1.0);
         self.dirty = false;
+        if let Some(f) = &self.fonts {
+            f.trim();
+        }
         self.request_thumbs();
     }
 

@@ -137,29 +137,30 @@ pub fn svg(name: &str, color: (u8, u8, u8)) -> Option<String> {
     Some(format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\">{}</svg>", body.replace("\"C\"", &format!("\"{}\"", hex(color)))))
 }
 
-/// The Nerd Font that carries the bar's "agents" robot glyph (U+F16A3), if installed.
-fn nerd_font() -> Option<&'static fontdue::Font> {
-    static FONT: std::sync::OnceLock<Option<fontdue::Font>> = std::sync::OnceLock::new();
-    FONT.get_or_init(|| {
+/// Path of the Nerd Font that carries the bar's "agents" robot glyph (U+F16A3), if installed.
+fn nerd_font_path() -> Option<&'static std::path::Path> {
+    static PATH: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    PATH.get_or_init(|| {
         let out = std::process::Command::new("fc-match").args(["-f", "%{file}", "JetBrainsMono Nerd Font"]).output().ok()?;
         let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !path.to_lowercase().contains("nerd") {
-            return None;
-        }
-        fontdue::Font::from_bytes(std::fs::read(path).ok()?, fontdue::FontSettings::default()).ok()
+        (path.to_lowercase().contains("nerd") && std::path::Path::new(&path).is_file()).then(|| path.into())
     })
-    .as_ref()
+    .as_deref()
 }
 
 /// True when the robot "agents" glyph can be drawn on this machine.
 pub fn agents_available() -> bool {
-    nerd_font().is_some()
+    nerd_font_path().is_some()
 }
 
 /// Rasterises one Nerd Font glyph, centred in a `px` x `px` pixmap and tinted with `color`.
 fn nerd_glyph(ch: char, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
-    let font = nerd_font()?;
-    let (m, cov) = font.rasterize(ch, px as f32);
+    // Parsing the face costs tens of MB, so it lives only as long as one rasterisation.
+    let (m, cov) = {
+        let font = fontdue::Font::from_bytes(std::fs::read(nerd_font_path()?).ok()?, fontdue::FontSettings::default()).ok()?;
+        font.rasterize(ch, px as f32)
+    };
+    crate::mem::trim();
     let mut pm = Pixmap::new(px.max(1), px.max(1))?;
     let (ox, oy) = ((px as i32 - m.width as i32) / 2, (px as i32 - m.height as i32) / 2);
     let data = pm.data_mut();

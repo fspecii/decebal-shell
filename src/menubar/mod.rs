@@ -331,7 +331,9 @@ impl MacBar {
         let shared = Arc::clone(&self.shared);
         let waker = self.waker.clone();
         std::thread::spawn(move || {
-            if let Some(w) = weather::fetch() {
+            let fetched = weather::fetch();
+            crate::mem::trim();
+            if let Some(w) = fetched {
                 if let Ok(mut slot) = shared.weather.lock() {
                     *slot = Some(w);
                 }

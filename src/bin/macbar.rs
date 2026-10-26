@@ -11,6 +11,7 @@ Runs the menu bar. With --png it renders one frame to a file (for testing) inste
 KEY is one of apple, app, file, edit, view, window, help.";
 
 fn main() {
+    macshell::mem::limit_arenas();
     let args: Vec<String> = std::env::args().collect();
     let mut png: Option<String> = None;
     let mut width: u32 = 1920;
