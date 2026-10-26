@@ -10,23 +10,15 @@ fn app_dirs() -> Vec<PathBuf> {
     } else if let Some(h) = std::env::var_os("HOME") {
         dirs.push(PathBuf::from(h).join(".local/share/applications"));
     }
-    let data =
-        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
-    dirs.extend(
-        data.split(':')
-            .filter(|s| !s.is_empty())
-            .map(|d| PathBuf::from(d).join("applications")),
-    );
+    let data = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    dirs.extend(data.split(':').filter(|s| !s.is_empty()).map(|d| PathBuf::from(d).join("applications")));
     dirs
 }
 
 /// Finds `<id>.desktop` and returns its `Exec=` line.
 pub fn find_exec(id: &str) -> Option<String> {
     for dir in app_dirs() {
-        for name in [
-            format!("{id}.desktop"),
-            format!("{}.desktop", id.to_lowercase()),
-        ] {
+        for name in [format!("{id}.desktop"), format!("{}.desktop", id.to_lowercase())] {
             if let Ok(text) = std::fs::read_to_string(dir.join(name)) {
                 if let Some(e) = parse_exec(&text) {
                     return Some(e);
@@ -129,18 +121,12 @@ mod tests {
 
     #[test]
     fn strips_field_codes() {
-        assert_eq!(
-            exec_argv("nautilus --new-window %U"),
-            vec!["nautilus", "--new-window"]
-        );
+        assert_eq!(exec_argv("nautilus --new-window %U"), vec!["nautilus", "--new-window"]);
     }
 
     #[test]
     fn keeps_quoted_args() {
-        assert_eq!(
-            exec_argv(r#"sh -c "echo hi there""#),
-            vec!["sh", "-c", "echo hi there"]
-        );
+        assert_eq!(exec_argv(r#"sh -c "echo hi there""#), vec!["sh", "-c", "echo hi there"]);
     }
 
     #[test]

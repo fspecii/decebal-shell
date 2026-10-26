@@ -19,13 +19,7 @@ pub struct DockApp {
 impl DockApp {
     pub fn new(dock: Dock) -> Self {
         let size = dock.canvas_size();
-        Self {
-            dock,
-            size,
-            tracker: None,
-            track_windows: false,
-            waker: None,
-        }
+        Self { dock, size, tracker: None, track_windows: false, waker: None }
     }
 
     /// Show a running dot under every pinned app that has an open window (tracker starts with the event loop).
@@ -106,11 +100,6 @@ impl App for DockApp {
     fn input_rect(&self) -> Option<InputRect> {
         let (w, h) = self.size;
         let strip = (PANEL_HEIGHT + 8.0) as i32;
-        Some(InputRect {
-            x: 0,
-            y: h as i32 - strip,
-            w: w as i32,
-            h: strip,
-        })
+        Some(InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip })
     }
 }

@@ -15,12 +15,7 @@ pub struct DockSettings {
 
 impl Default for DockSettings {
     fn default() -> Self {
-        Self {
-            app_spacing: 6.0,
-            magnification: 1.4,
-            transparency: 0.4,
-            roundness: 0.45,
-        }
+        Self { app_spacing: 6.0, magnification: 1.4, transparency: 0.4, roundness: 0.45 }
     }
 }
 
@@ -35,12 +30,7 @@ pub struct Pinned {
 impl Pinned {
     /// Apps in display order; unknown ids in `order` are skipped, missing ones appended.
     pub fn ordered(&self) -> Vec<String> {
-        let mut out: Vec<String> = self
-            .order
-            .iter()
-            .filter(|id| self.pinned.contains(id))
-            .cloned()
-            .collect();
+        let mut out: Vec<String> = self.order.iter().filter(|id| self.pinned.contains(id)).cloned().collect();
         for id in &self.pinned {
             if !out.contains(id) {
                 out.push(id.clone());
@@ -59,10 +49,7 @@ pub fn config_dir() -> PathBuf {
 }
 
 fn load<T: Default + for<'de> Deserialize<'de>>(name: &str) -> T {
-    std::fs::read_to_string(config_dir().join(name))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    std::fs::read_to_string(config_dir().join(name)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
 pub fn dock_settings() -> DockSettings {
@@ -80,10 +67,7 @@ mod tests {
     #[test]
     fn defaults_match_original() {
         let s = DockSettings::default();
-        assert_eq!(
-            (s.app_spacing, s.magnification, s.transparency, s.roundness),
-            (6.0, 1.4, 0.4, 0.45)
-        );
+        assert_eq!((s.app_spacing, s.magnification, s.transparency, s.roundness), (6.0, 1.4, 0.4, 0.45));
     }
 
     #[test]
@@ -95,10 +79,7 @@ mod tests {
 
     #[test]
     fn order_skips_unknown_and_appends_missing() {
-        let p = Pinned {
-            pinned: vec!["a".into(), "b".into(), "c".into()],
-            order: vec!["c".into(), "x".into(), "a".into()],
-        };
+        let p = Pinned { pinned: vec!["a".into(), "b".into(), "c".into()], order: vec!["c".into(), "x".into(), "a".into()] };
         assert_eq!(p.ordered(), vec!["c", "a", "b"]);
     }
 }

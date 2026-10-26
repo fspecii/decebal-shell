@@ -45,13 +45,7 @@ const SIDE_MARGIN: f32 = 24.0;
 
 impl Dock {
     pub fn new(items: Vec<DockItem>, settings: DockSettings) -> Self {
-        Self {
-            items,
-            settings,
-            hover_x: None,
-            eased: Vec::new(),
-            icons: IconCache::default(),
-        }
+        Self { items, settings, hover_x: None, eased: Vec::new(), icons: IconCache::default() }
     }
 
     fn base_cell_w() -> f32 {
@@ -69,10 +63,7 @@ impl Dock {
 
     /// Canvas (window) size that always fits the fully magnified dock.
     pub fn canvas_size(&self) -> (u32, u32) {
-        let extra = self.items.len() as f32
-            * Self::base_cell_w()
-            * (self.settings.magnification - 1.0).max(0.0)
-            * 0.6;
+        let extra = self.items.len() as f32 * Self::base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
         let w = self.rest_width() + extra + 2.0 * SIDE_MARGIN;
         let h = PANEL_HEIGHT + HEADROOM;
         (w.ceil() as u32, h.ceil() as u32)
@@ -141,28 +132,19 @@ impl Dock {
 
         let scales = self.current_scales(rest_x, n);
 
-        let total: f32 =
-            scales.iter().map(|s| base * s).sum::<f32>() + sp * n.saturating_sub(1) as f32;
+        let total: f32 = scales.iter().map(|s| base * s).sum::<f32>() + sp * n.saturating_sub(1) as f32;
         let panel_w = total + 2.0 * PANEL_PAD_X;
         let panel_x = (canvas_w - panel_w) / 2.0;
         let mut x = panel_x + PANEL_PAD_X - CONTENT_NUDGE;
         let cells = scales
             .iter()
             .map(|&scale| {
-                let c = Cell {
-                    x,
-                    w: base * scale,
-                    scale,
-                };
+                let c = Cell { x, w: base * scale, scale };
                 x += c.w + sp;
                 c
             })
             .collect();
-        Layout {
-            panel_x,
-            panel_w,
-            cells,
-        }
+        Layout { panel_x, panel_w, cells }
     }
 
     /// Index of the item under canvas point (`x`, `y`), if any.
@@ -185,25 +167,8 @@ impl Dock {
 
         let radius = layout_radius(layout.panel_w, PANEL_HEIGHT, self.settings.roundness);
         let (r, g, b) = DOCK_BG;
-        fill_rounded(
-            pm,
-            layout.panel_x,
-            panel_y,
-            layout.panel_w,
-            PANEL_HEIGHT,
-            radius,
-            color(r, g, b, 1.0 - self.settings.transparency),
-        );
-        stroke_rounded(
-            pm,
-            layout.panel_x + 0.5,
-            panel_y + 0.5,
-            layout.panel_w - 1.0,
-            PANEL_HEIGHT - 1.0,
-            radius - 0.5,
-            color(255, 255, 255, DOCK_BORDER_ALPHA),
-            1.0,
-        );
+        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, PANEL_HEIGHT, radius, color(r, g, b, 1.0 - self.settings.transparency));
+        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, PANEL_HEIGHT - 1.0, radius - 0.5, color(255, 255, 255, DOCK_BORDER_ALPHA), 1.0);
 
         let icon_bottom = panel_y + PANEL_PAD_TOP + ICON_SIZE;
         for (item, cell) in self.items.iter().zip(&layout.cells) {
@@ -213,13 +178,7 @@ impl Dock {
             let ix = cell.x + (cell.w - size) / 2.0;
             blit_scaled(pm, icon, ix, icon_bottom - size, size, size, 1.0);
             if item.running {
-                fill_circle(
-                    pm,
-                    cell.x + cell.w / 2.0,
-                    icon_bottom + DOT_OFFSET,
-                    DOT_RADIUS,
-                    color(255, 255, 255, 0.85),
-                );
+                fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, color(255, 255, 255, 0.85));
             }
         }
     }
@@ -235,12 +194,7 @@ mod tests {
     use super::*;
 
     fn dock(n: usize) -> Dock {
-        let items = (0..n)
-            .map(|i| DockItem {
-                id: format!("app{i}"),
-                running: i == 0,
-            })
-            .collect();
+        let items = (0..n).map(|i| DockItem { id: format!("app{i}"), running: i == 0 }).collect();
         Dock::new(items, DockSettings::default())
     }
 
@@ -291,10 +245,7 @@ mod tests {
         let (w, h) = d.canvas_size();
         let l = d.layout(w as f32);
         let c = l.cells[3];
-        assert_eq!(
-            d.hit_test(w as f32, h as f32, c.x + 5.0, h as f32 - 20.0),
-            Some(3)
-        );
+        assert_eq!(d.hit_test(w as f32, h as f32, c.x + 5.0, h as f32 - 20.0), Some(3));
         assert_eq!(d.hit_test(w as f32, h as f32, c.x + 5.0, 2.0), None);
     }
 

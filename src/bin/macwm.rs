@@ -7,14 +7,7 @@ fn main() {
     let mut last = String::new();
     loop {
         let snap = tracker.snapshot();
-        let line = format!(
-            "active={:?} running={:?}",
-            tracker.active_app_name(),
-            snap.windows
-                .iter()
-                .map(|w| format!("{}{}", w.app_id, if w.active { "*" } else { "" }))
-                .collect::<Vec<_>>()
-        );
+        let line = format!("active={:?} running={:?}", tracker.active_app_name(), snap.windows.iter().map(|w| format!("{}{}", w.app_id, if w.active { "*" } else { "" })).collect::<Vec<_>>());
         if line != last {
             println!("{line}");
             last = line;

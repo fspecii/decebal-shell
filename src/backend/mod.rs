@@ -34,10 +34,7 @@ pub struct SurfaceSpec {
 pub fn run<A: App + 'static>(app: A, spec: SurfaceSpec) -> Result<(), String> {
     let forced = std::env::var("MACSHELL_BACKEND").ok();
     #[cfg(feature = "wayland")]
-    if forced.as_deref() != Some("x11")
-        && std::env::var_os("WAYLAND_DISPLAY").is_some()
-        && wayland::supported()
-    {
+    if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && wayland::supported() {
         return wayland::run(app, spec).map_err(|e| e.to_string());
     }
     #[cfg(feature = "x11")]
@@ -45,10 +42,7 @@ pub fn run<A: App + 'static>(app: A, spec: SurfaceSpec) -> Result<(), String> {
         return x11::run(app, spec).map_err(|e| e.to_string());
     }
     let _ = (app, spec, forced);
-    Err(
-        "no usable display: need a Wayland compositor with wlr-layer-shell, or an X11 DISPLAY"
-            .into(),
-    )
+    Err("no usable display: need a Wayland compositor with wlr-layer-shell, or an X11 DISPLAY".into())
 }
 
 /// Self-pipe used to wake the event loop: the read end goes into `poll`, the [`Waker`] writes.

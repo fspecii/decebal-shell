@@ -856,6 +856,7 @@ impl App for MacBar {
     }
 
     fn set_waker(&mut self, waker: Waker) {
+        self.active.set_waker(waker.clone());
         self.waker = Some(waker);
         // First data: weather (cached or fetched) and a light system snapshot.
         if self.weather_stale() {

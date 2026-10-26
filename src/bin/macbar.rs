@@ -2,7 +2,7 @@
 
 use macshell::app::App;
 use macshell::backend::{self, Anchor, SurfaceSpec};
-use macshell::menubar::active::{ActiveWindow, NoActiveWindow, StaticApp};
+use macshell::menubar::active::{ActiveWindow, StaticApp, WmActive};
 use macshell::menubar::MacBar;
 use macshell::theme::BAR_HEIGHT;
 
@@ -50,7 +50,7 @@ fn main() {
 
     let active: Box<dyn ActiveWindow> = match app_id {
         Some(id) => Box::new(StaticApp(id)),
-        None => Box::new(NoActiveWindow),
+        None => Box::new(WmActive::default()),
     };
     let mut bar = MacBar::new(active);
     if let Some(path) = png {

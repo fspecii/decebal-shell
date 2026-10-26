@@ -3,11 +3,33 @@
 //! The window-manager side (which window is focused) is supplied by the lead through
 //! [`ActiveWindow`]; until it is wired the bar shows "Finder", like the original.
 
+use crate::app::Waker;
+use crate::wm::Tracker;
 use std::path::PathBuf;
 
 pub trait ActiveWindow {
     /// App id or title of the focused window (e.g. `foot`, `org.gnome.Nautilus`), if any.
     fn active_app_name(&self) -> Option<String>;
+    /// Called once when the event loop starts; sources that push changes keep it to wake the bar.
+    fn set_waker(&mut self, _waker: Waker) {}
+}
+
+/// The real source: the compositor/EWMH window tracker from [`crate::wm`].
+#[derive(Default)]
+pub struct WmActive {
+    tracker: Option<Tracker>,
+}
+
+impl ActiveWindow for WmActive {
+    fn active_app_name(&self) -> Option<String> {
+        self.tracker.as_ref()?.snapshot().active().map(|w| w.app_id.clone())
+    }
+
+    fn set_waker(&mut self, waker: Waker) {
+        if self.tracker.is_none() {
+            self.tracker = Some(Tracker::start(move || waker.wake()));
+        }
+    }
 }
 
 /// Always reports no focused app, so the bar falls back to "Finder".
