@@ -17,6 +17,7 @@ pub mod launch;
 pub mod launcher;
 pub mod mem;
 pub mod menubar;
+pub mod single;
 pub mod text;
 pub mod theme;
 pub mod wallhaven;

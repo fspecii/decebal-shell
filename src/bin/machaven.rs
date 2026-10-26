@@ -54,6 +54,9 @@ fn main() {
         }
     }
 
+    let Some(_guard) = macshell::single::acquire("machaven") else {
+        return;
+    };
     let app = WallhavenApp::new(&words.join(" "), recent, screen);
     if let Err(e) = run_window(app) {
         eprintln!("machaven: {e}");

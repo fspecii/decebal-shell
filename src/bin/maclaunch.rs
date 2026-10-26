@@ -23,6 +23,9 @@ fn main() {
         }
         return;
     }
+    let Some(_guard) = macshell::single::acquire("maclaunch") else {
+        return;
+    };
     if let Err(e) = run_window(Launcher::new()) {
         eprintln!("maclaunch: {e}");
         std::process::exit(1);
