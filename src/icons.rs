@@ -6,8 +6,17 @@ use tiny_skia::{Pixmap, Transform};
 
 const THEMES: &[&str] = &["WhiteSur-dark", "WhiteSur", "hicolor", "Adwaita"];
 const SUBDIRS: &[&str] = &[
-    "apps/scalable", "places/scalable", "apps/512", "apps/256", "apps/128", "apps/96", "apps/64",
-    "apps/48", "places/48", "places/64", "devices/scalable",
+    "apps/scalable",
+    "places/scalable",
+    "apps/512",
+    "apps/256",
+    "apps/128",
+    "apps/96",
+    "apps/64",
+    "apps/48",
+    "places/48",
+    "places/64",
+    "devices/scalable",
 ];
 
 fn icon_roots() -> Vec<PathBuf> {
@@ -56,7 +65,11 @@ pub fn render_svg(path: &Path, size: u32) -> Option<Pixmap> {
     let scale = (size as f32 / s.width()).min(size as f32 / s.height());
     let dx = (size as f32 - s.width() * scale) / 2.0;
     let dy = (size as f32 - s.height() * scale) / 2.0;
-    resvg::render(&tree, Transform::from_scale(scale, scale).post_translate(dx, dy), &mut pm.as_mut());
+    resvg::render(
+        &tree,
+        Transform::from_scale(scale, scale).post_translate(dx, dy),
+        &mut pm.as_mut(),
+    );
     Some(pm)
 }
 
@@ -65,15 +78,32 @@ pub fn launchpad(size: u32) -> Option<Pixmap> {
     use crate::gfx::{color, fill_circle, fill_rounded, pixmap};
     let mut pm = pixmap(size, size)?;
     let s = size as f32;
-    fill_rounded(&mut pm, 0.0, 0.0, s, s, s * 0.225, color(222, 222, 226, 1.0));
+    fill_rounded(
+        &mut pm,
+        0.0,
+        0.0,
+        s,
+        s,
+        s * 0.225,
+        color(222, 222, 226, 1.0),
+    );
     let cols = [
-        (255, 95, 87), (255, 189, 46), (40, 200, 64),
-        (10, 132, 255), (175, 82, 222), (255, 159, 10),
-        (90, 200, 250), (255, 55, 95), (48, 209, 88),
+        (255, 95, 87),
+        (255, 189, 46),
+        (40, 200, 64),
+        (10, 132, 255),
+        (175, 82, 222),
+        (255, 159, 10),
+        (90, 200, 250),
+        (255, 55, 95),
+        (48, 209, 88),
     ];
     let (pad, step) = (s * 0.22, s * 0.28);
     for (i, (r, g, b)) in cols.iter().enumerate() {
-        let (cx, cy) = (pad + (i % 3) as f32 * step + s * 0.04, pad + (i / 3) as f32 * step + s * 0.04);
+        let (cx, cy) = (
+            pad + (i % 3) as f32 * step + s * 0.04,
+            pad + (i / 3) as f32 * step + s * 0.04,
+        );
         fill_circle(&mut pm, cx, cy, s * 0.07, color(*r, *g, *b, 1.0));
     }
     Some(pm)
@@ -93,7 +123,8 @@ impl IconCache {
             } else {
                 find_svg(id).and_then(|p| render_svg(&p, size))
             };
-            pm.or_else(|| placeholder(size)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
+            pm.or_else(|| placeholder(size))
+                .unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
         })
     }
 }

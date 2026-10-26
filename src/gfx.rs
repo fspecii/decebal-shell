@@ -18,7 +18,7 @@ fn paint(c: Color) -> Paint<'static> {
 /// Rounded rectangle path; `r` is clamped to half the shorter side.
 pub fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<Path> {
     let r = r.clamp(0.0, w.min(h) / 2.0);
-    let k = 0.552_284_75 * r; // cubic approximation of a quarter circle
+    let k = 0.552_284_8 * r; // cubic approximation of a quarter circle
     let mut pb = PathBuilder::new();
     pb.move_to(x + r, y);
     pb.line_to(x + w - r, y);
@@ -35,20 +35,45 @@ pub fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<Path> {
 
 pub fn fill_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c: Color) {
     if let Some(path) = rounded_rect(x, y, w, h, r) {
-        pm.fill_path(&path, &paint(c), FillRule::Winding, Transform::identity(), None);
+        pm.fill_path(
+            &path,
+            &paint(c),
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
     }
 }
 
-pub fn stroke_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c: Color, width: f32) {
+#[allow(clippy::too_many_arguments)]
+pub fn stroke_rounded(
+    pm: &mut Pixmap,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    c: Color,
+    width: f32,
+) {
     if let Some(path) = rounded_rect(x, y, w, h, r) {
-        let stroke = Stroke { width, ..Stroke::default() };
+        let stroke = Stroke {
+            width,
+            ..Stroke::default()
+        };
         pm.stroke_path(&path, &paint(c), &stroke, Transform::identity(), None);
     }
 }
 
 pub fn fill_circle(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
     if let Some(path) = PathBuilder::from_circle(cx, cy, r) {
-        pm.fill_path(&path, &paint(c), FillRule::Winding, Transform::identity(), None);
+        pm.fill_path(
+            &path,
+            &paint(c),
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
     }
 }
 
@@ -59,17 +84,46 @@ pub fn blit_scaled(dst: &mut Pixmap, src: &Pixmap, x: f32, y: f32, w: f32, h: f3
     }
     let sx = w / src.width() as f32;
     let sy = h / src.height() as f32;
-    let pp = PixmapPaint { opacity, quality: tiny_skia::FilterQuality::Bilinear, ..PixmapPaint::default() };
-    dst.draw_pixmap(0, 0, src.as_ref(), &pp, Transform::from_scale(sx, sy).post_translate(x, y), None);
+    let pp = PixmapPaint {
+        opacity,
+        quality: tiny_skia::FilterQuality::Bilinear,
+        ..PixmapPaint::default()
+    };
+    dst.draw_pixmap(
+        0,
+        0,
+        src.as_ref(),
+        &pp,
+        Transform::from_scale(sx, sy).post_translate(x, y),
+        None,
+    );
 }
 
 /// A soft drop shadow: a few stacked translucent rounded rects (cheap, no blur pass).
-pub fn soft_shadow(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, spread: f32, alpha: f32) {
+#[allow(clippy::too_many_arguments)]
+pub fn soft_shadow(
+    pm: &mut Pixmap,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    spread: f32,
+    alpha: f32,
+) {
     const STEPS: u32 = 5;
     for i in 0..STEPS {
         let t = i as f32 / STEPS as f32;
         let grow = spread * (1.0 - t);
-        fill_rounded(pm, x - grow, y - grow, w + 2.0 * grow, h + 2.0 * grow, r + grow, color(0, 0, 0, alpha / STEPS as f32 * (0.4 + t)));
+        fill_rounded(
+            pm,
+            x - grow,
+            y - grow,
+            w + 2.0 * grow,
+            h + 2.0 * grow,
+            r + grow,
+            color(0, 0, 0, alpha / STEPS as f32 * (0.4 + t)),
+        );
     }
 }
 

@@ -10,7 +10,10 @@ fn main() {
         let line = format!(
             "active={:?} running={:?}",
             tracker.active_app_name(),
-            snap.windows.iter().map(|w| format!("{}{}", w.app_id, if w.active { "*" } else { "" })).collect::<Vec<_>>()
+            snap.windows
+                .iter()
+                .map(|w| format!("{}{}", w.app_id, if w.active { "*" } else { "" }))
+                .collect::<Vec<_>>()
         );
         if line != last {
             println!("{line}");

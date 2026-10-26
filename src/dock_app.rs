@@ -3,8 +3,8 @@
 use crate::app::{App, Button, InputRect};
 use crate::dock::Dock;
 use crate::launch;
-use crate::wm::{app_matches, ActiveWindow, Tracker};
 use crate::theme::PANEL_HEIGHT;
+use crate::wm::{app_matches, ActiveWindow, Tracker};
 use tiny_skia::Pixmap;
 
 pub struct DockApp {
@@ -16,7 +16,11 @@ pub struct DockApp {
 impl DockApp {
     pub fn new(dock: Dock) -> Self {
         let size = dock.canvas_size();
-        Self { dock, size, tracker: None }
+        Self {
+            dock,
+            size,
+            tracker: None,
+        }
     }
 
     /// Shows a running dot under every pinned app that has an open window.
@@ -71,6 +75,11 @@ impl App for DockApp {
     fn input_rect(&self) -> Option<InputRect> {
         let (w, h) = self.size;
         let strip = (PANEL_HEIGHT + 8.0) as i32;
-        Some(InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip })
+        Some(InputRect {
+            x: 0,
+            y: h as i32 - strip,
+            w: w as i32,
+            h: strip,
+        })
     }
 }

@@ -34,7 +34,11 @@ impl Wm {
             .iter()
             .map(|id| {
                 let p = &self.toplevels[id];
-                Window { app_id: p.app_id.clone(), title: p.title.clone(), active: p.active }
+                Window {
+                    app_id: p.app_id.clone(),
+                    title: p.title.clone(),
+                    active: p.active,
+                }
             })
             .collect();
         if self.tracker.replace(windows) {
@@ -45,27 +49,55 @@ impl Wm {
 
 /// Returns true when the compositor offers the protocol and the tracker thread started.
 pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
-    let Ok(conn) = Connection::connect_to_env() else { return false };
-    let Ok((globals, mut queue)) = registry_queue_init::<Wm>(&conn) else { return false };
+    let Ok(conn) = Connection::connect_to_env() else {
+        return false;
+    };
+    let Ok((globals, mut queue)) = registry_queue_init::<Wm>(&conn) else {
+        return false;
+    };
     let qh = queue.handle();
-    if globals.bind::<ZwlrForeignToplevelManagerV1, _, _>(&qh, 1..=3, ()).is_err() {
+    if globals
+        .bind::<ZwlrForeignToplevelManagerV1, _, _>(&qh, 1..=3, ())
+        .is_err()
+    {
         return false;
     }
     std::thread::spawn(move || {
-        let mut wm = Wm { tracker, notify, toplevels: HashMap::new() };
+        let mut wm = Wm {
+            tracker,
+            notify,
+            toplevels: HashMap::new(),
+        };
         while queue.blocking_dispatch(&mut wm).is_ok() {}
     });
     true
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Wm {
-    fn event(_: &mut Self, _: &wl_registry::WlRegistry, _: wl_registry::Event, _: &GlobalListContents, _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &wl_registry::WlRegistry,
+        _: wl_registry::Event,
+        _: &GlobalListContents,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for Wm {
-    fn event(state: &mut Self, _: &ZwlrForeignToplevelManagerV1, event: zwlr_foreign_toplevel_manager_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &ZwlrForeignToplevelManagerV1,
+        event: zwlr_foreign_toplevel_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let zwlr_foreign_toplevel_manager_v1::Event::Toplevel { toplevel } = event {
-            state.toplevels.insert(toplevel.id().protocol_id(), Pending::default());
+            state
+                .toplevels
+                .insert(toplevel.id().protocol_id(), Pending::default());
         }
     }
 
@@ -75,7 +107,14 @@ impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for Wm {
 }
 
 impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for Wm {
-    fn event(state: &mut Self, handle: &ZwlrForeignToplevelHandleV1, event: zwlr_foreign_toplevel_handle_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        handle: &ZwlrForeignToplevelHandleV1,
+        event: zwlr_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         use zwlr_foreign_toplevel_handle_v1::Event;
         let id = handle.id().protocol_id();
         match event {

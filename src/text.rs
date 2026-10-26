@@ -20,7 +20,10 @@ pub struct Fonts {
 
 fn find_font(patterns: &[&str]) -> Option<PathBuf> {
     for pat in patterns {
-        let out = std::process::Command::new("fc-match").args(["-f", "%{file}", pat]).output().ok()?;
+        let out = std::process::Command::new("fc-match")
+            .args(["-f", "%{file}", pat])
+            .output()
+            .ok()?;
         let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if !path.is_empty() && Path::new(&path).is_file() {
             return Some(PathBuf::from(path));
@@ -37,9 +40,16 @@ fn load(path: &Path) -> Option<Font> {
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
-        let regular = find_font(&["Inter", "Inter Variable", "sans-serif"]).and_then(|p| load(&p))?;
-        let bold = find_font(&["Inter:weight=bold", "sans-serif:weight=bold"]).and_then(|p| load(&p)).unwrap_or_else(|| regular.clone());
-        Some(Self { regular, bold, cache: HashMap::new() })
+        let regular =
+            find_font(&["Inter", "Inter Variable", "sans-serif"]).and_then(|p| load(&p))?;
+        let bold = find_font(&["Inter:weight=bold", "sans-serif:weight=bold"])
+            .and_then(|p| load(&p))
+            .unwrap_or_else(|| regular.clone());
+        Some(Self {
+            regular,
+            bold,
+            cache: HashMap::new(),
+        })
     }
 
     fn font(&self, w: Weight) -> &Font {
@@ -51,12 +61,28 @@ impl Fonts {
 
     /// Advance width of `text` at pixel size `px`.
     pub fn measure(&self, text: &str, px: f32, weight: Weight) -> f32 {
-        text.chars().map(|c| self.font(weight).metrics(c, px).advance_width).sum()
+        text.chars()
+            .map(|c| self.font(weight).metrics(c, px).advance_width)
+            .sum()
     }
 
     /// Draws `text` with its baseline-box top-left at (`x`, `y`) and returns the width drawn.
-    pub fn draw(&mut self, pm: &mut Pixmap, text: &str, x: f32, y: f32, px: f32, weight: Weight, color: Color) -> f32 {
-        let ascent = self.font(weight).horizontal_line_metrics(px).map(|m| m.ascent).unwrap_or(px * 0.9);
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw(
+        &mut self,
+        pm: &mut Pixmap,
+        text: &str,
+        x: f32,
+        y: f32,
+        px: f32,
+        weight: Weight,
+        color: Color,
+    ) -> f32 {
+        let ascent = self
+            .font(weight)
+            .horizontal_line_metrics(px)
+            .map(|m| m.ascent)
+            .unwrap_or(px * 0.9);
         let baseline = y + ascent;
         let (cr, cg, cb, ca) = (color.red(), color.green(), color.blue(), color.alpha());
         let mut pen = x;
@@ -77,7 +103,15 @@ impl Fonts {
 }
 
 /// Source-over blend of an 8-bit coverage bitmap tinted with a straight (non-premultiplied) colour.
-fn blend_glyph(pm: &mut Pixmap, bitmap: &[u8], gw: usize, gh: usize, gx: i32, gy: i32, c: (f32, f32, f32, f32)) {
+fn blend_glyph(
+    pm: &mut Pixmap,
+    bitmap: &[u8],
+    gw: usize,
+    gh: usize,
+    gx: i32,
+    gy: i32,
+    c: (f32, f32, f32, f32),
+) {
     let (pw, ph) = (pm.width() as i32, pm.height() as i32);
     let stride = pm.width() as usize * 4;
     let data = pm.data_mut();
@@ -112,9 +146,19 @@ mod tests {
     #[test]
     fn measures_and_draws() {
         let Some(mut f) = Fonts::load() else { return }; // CI machines may have no fonts
-        assert!(f.measure("Finder", 13.0, Weight::Regular) > f.measure("Fi", 13.0, Weight::Regular));
+        assert!(
+            f.measure("Finder", 13.0, Weight::Regular) > f.measure("Fi", 13.0, Weight::Regular)
+        );
         let mut pm = Pixmap::new(80, 20).unwrap();
-        let w = f.draw(&mut pm, "File", 2.0, 2.0, 13.0, Weight::Regular, Color::WHITE);
+        let w = f.draw(
+            &mut pm,
+            "File",
+            2.0,
+            2.0,
+            13.0,
+            Weight::Regular,
+            Color::WHITE,
+        );
         assert!(w > 10.0);
         assert!(pm.data().chunks_exact(4).any(|p| p[3] > 0));
     }

@@ -10,15 +10,23 @@ fn app_dirs() -> Vec<PathBuf> {
     } else if let Some(h) = std::env::var_os("HOME") {
         dirs.push(PathBuf::from(h).join(".local/share/applications"));
     }
-    let data = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
-    dirs.extend(data.split(':').filter(|s| !s.is_empty()).map(|d| PathBuf::from(d).join("applications")));
+    let data =
+        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    dirs.extend(
+        data.split(':')
+            .filter(|s| !s.is_empty())
+            .map(|d| PathBuf::from(d).join("applications")),
+    );
     dirs
 }
 
 /// Finds `<id>.desktop` and returns its `Exec=` line.
 pub fn find_exec(id: &str) -> Option<String> {
     for dir in app_dirs() {
-        for name in [format!("{id}.desktop"), format!("{}.desktop", id.to_lowercase())] {
+        for name in [
+            format!("{id}.desktop"),
+            format!("{}.desktop", id.to_lowercase()),
+        ] {
             if let Ok(text) = std::fs::read_to_string(dir.join(name)) {
                 if let Some(e) = parse_exec(&text) {
                     return Some(e);
@@ -53,15 +61,27 @@ pub fn exec_argv(exec: &str) -> Vec<String> {
     let mut chars = exec.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
-            '"' => { in_q = !in_q; has = true; }
-            '\\' if in_q => { if let Some(n) = chars.next() { cur.push(n); } }
+            '"' => {
+                in_q = !in_q;
+                has = true;
+            }
+            '\\' if in_q => {
+                if let Some(n) = chars.next() {
+                    cur.push(n);
+                }
+            }
             ' ' | '\t' if !in_q => {
-                if has || !cur.is_empty() { out.push(std::mem::take(&mut cur)); has = false; }
+                if has || !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                    has = false;
+                }
             }
             _ => cur.push(c),
         }
     }
-    if has || !cur.is_empty() { out.push(cur); }
+    if has || !cur.is_empty() {
+        out.push(cur);
+    }
     out.retain(|a| !(a.len() == 2 && a.starts_with('%')));
     out.into_iter().map(|a| a.replace("%%", "%")).collect()
 }
@@ -79,7 +99,9 @@ pub fn launch(id: &str) -> bool {
             None => return false,
         },
     };
-    let Some((prog, args)) = argv.split_first() else { return false };
+    let Some((prog, args)) = argv.split_first() else {
+        return false;
+    };
     Command::new(prog)
         .args(args)
         .stdin(Stdio::null())
@@ -88,7 +110,9 @@ pub fn launch(id: &str) -> bool {
         .spawn()
         .map(|mut child| {
             // Reap in the background so finished apps don't linger as zombies.
-            std::thread::spawn(move || { let _ = child.wait(); });
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
         })
         .is_ok()
 }
@@ -105,12 +129,18 @@ mod tests {
 
     #[test]
     fn strips_field_codes() {
-        assert_eq!(exec_argv("nautilus --new-window %U"), vec!["nautilus", "--new-window"]);
+        assert_eq!(
+            exec_argv("nautilus --new-window %U"),
+            vec!["nautilus", "--new-window"]
+        );
     }
 
     #[test]
     fn keeps_quoted_args() {
-        assert_eq!(exec_argv(r#"sh -c "echo hi there""#), vec!["sh", "-c", "echo hi there"]);
+        assert_eq!(
+            exec_argv(r#"sh -c "echo hi there""#),
+            vec!["sh", "-c", "echo hi there"]
+        );
     }
 
     #[test]

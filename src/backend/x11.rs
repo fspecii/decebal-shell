@@ -31,7 +31,11 @@ fn argb_visual(screen: &Screen) -> Option<Visualid> {
         .allowed_depths
         .iter()
         .find(|d| d.depth == 32)
-        .and_then(|d| d.visuals.iter().find(|v| v.class == VisualClass::TRUE_COLOR))
+        .and_then(|d| {
+            d.visuals
+                .iter()
+                .find(|v| v.class == VisualClass::TRUE_COLOR)
+        })
         .map(|v| v.visual_id)
 }
 
@@ -41,7 +45,10 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let visual = argb_visual(&screen).ok_or_else(|| Error("no 32-bit ARGB visual".into()))?;
 
     let (w, h) = app.size();
-    let (sw, sh) = (screen.width_in_pixels as i32, screen.height_in_pixels as i32);
+    let (sw, sh) = (
+        screen.width_in_pixels as i32,
+        screen.height_in_pixels as i32,
+    );
     let x = ((sw - w as i32) / 2).max(0);
     let y = match spec.anchor {
         Anchor::Bottom => sh - h as i32 - spec.margin,
@@ -49,7 +56,8 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     };
 
     let colormap = conn.generate_id().map_err(err)?;
-    conn.create_colormap(ColormapAlloc::NONE, colormap, screen.root, visual).map_err(err)?;
+    conn.create_colormap(ColormapAlloc::NONE, colormap, screen.root, visual)
+        .map_err(err)?;
     let win = conn.generate_id().map_err(err)?;
     let aux = CreateWindowAux::new()
         .background_pixel(0)
@@ -64,14 +72,47 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 | EventMask::BUTTON_PRESS
                 | EventMask::STRUCTURE_NOTIFY,
         );
-    conn.create_window(32, win, screen.root, x as i16, y as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, visual, &aux)
-        .map_err(err)?;
-    conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, spec.namespace.as_bytes()).map_err(err)?;
+    conn.create_window(
+        32,
+        win,
+        screen.root,
+        x as i16,
+        y as i16,
+        w as u16,
+        h as u16,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        visual,
+        &aux,
+    )
+    .map_err(err)?;
+    conn.change_property8(
+        PropMode::REPLACE,
+        win,
+        AtomEnum::WM_NAME,
+        AtomEnum::STRING,
+        spec.namespace.as_bytes(),
+    )
+    .map_err(err)?;
 
     // Only the panel strip takes input; the transparent headroom lets clicks fall through.
     if let Some(r) = app.input_rect() {
-        let rect = Rectangle { x: r.x as i16, y: r.y as i16, width: r.w as u16, height: r.h as u16 };
-        conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[rect]).map_err(err)?;
+        let rect = Rectangle {
+            x: r.x as i16,
+            y: r.y as i16,
+            width: r.w as u16,
+            height: r.h as u16,
+        };
+        conn.shape_rectangles(
+            shape::SO::SET,
+            shape::SK::INPUT,
+            ClipOrdering::UNSORTED,
+            win,
+            0,
+            0,
+            &[rect],
+        )
+        .map_err(err)?;
     }
 
     let gc = conn.generate_id().map_err(err)?;
@@ -95,8 +136,12 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         while let Some(ev) = next.take() {
             match ev {
                 Event::Expose(_) => dirty = true,
-                Event::MotionNotify(m) => dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32),
-                Event::EnterNotify(m) => dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32),
+                Event::MotionNotify(m) => {
+                    dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32)
+                }
+                Event::EnterNotify(m) => {
+                    dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32)
+                }
                 Event::LeaveNotify(_) => dirty |= app.pointer_leave(),
                 Event::ButtonPress(b) => {
                     let btn = match b.detail {
@@ -117,7 +162,13 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
 }
 
 /// Uploads the pixmap as premultiplied BGRA, splitting into row bands when a request would be too large.
-fn present<C: Connection>(conn: &C, win: Window, gc: Gcontext, pm: &Pixmap, max_bytes: usize) -> Result<(), Error> {
+fn present<C: Connection>(
+    conn: &C,
+    win: Window,
+    gc: Gcontext,
+    pm: &Pixmap,
+    max_bytes: usize,
+) -> Result<(), Error> {
     let (w, h) = (pm.width() as usize, pm.height() as usize);
     let rows_per = (max_bytes / (w * 4)).clamp(1, h);
     let mut buf = vec![0u8; w * rows_per * 4];
@@ -125,13 +176,28 @@ fn present<C: Connection>(conn: &C, win: Window, gc: Gcontext, pm: &Pixmap, max_
     while y < h {
         let rows = rows_per.min(h - y);
         let src = &pm.data()[y * w * 4..(y + rows) * w * 4];
-        for (d, s) in buf[..rows * w * 4].chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        for (d, s) in buf[..rows * w * 4]
+            .chunks_exact_mut(4)
+            .zip(src.chunks_exact(4))
+        {
             d[0] = s[2];
             d[1] = s[1];
             d[2] = s[0];
             d[3] = s[3];
         }
-        conn.put_image(ImageFormat::Z_PIXMAP, win, gc, w as u16, rows as u16, 0, y as i16, 0, 32, &buf[..rows * w * 4]).map_err(err)?;
+        conn.put_image(
+            ImageFormat::Z_PIXMAP,
+            win,
+            gc,
+            w as u16,
+            rows as u16,
+            0,
+            y as i16,
+            0,
+            32,
+            &buf[..rows * w * 4],
+        )
+        .map_err(err)?;
         y += rows;
     }
     conn.flush().map_err(err)?;

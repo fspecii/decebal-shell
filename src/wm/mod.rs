@@ -88,11 +88,15 @@ impl Tracker {
         let forced = std::env::var("MACSHELL_BACKEND").ok();
         let mut started = false;
         #[cfg(feature = "wayland")]
-        if !started && forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        if !started
+            && forced.as_deref() != Some("x11")
+            && std::env::var_os("WAYLAND_DISPLAY").is_some()
+        {
             started = wayland::spawn(tracker.clone(), notify.clone());
         }
         #[cfg(feature = "x11")]
-        if !started && forced.as_deref() != Some("wayland") && std::env::var_os("DISPLAY").is_some() {
+        if !started && forced.as_deref() != Some("wayland") && std::env::var_os("DISPLAY").is_some()
+        {
             started = x11::spawn(tracker.clone(), notify.clone());
         }
         let _ = (started, forced, &notify);
@@ -109,7 +113,11 @@ impl ActiveWindow for Tracker {
     }
 
     fn running_ids(&self) -> Vec<String> {
-        self.lock().windows.iter().map(|w| w.app_id.clone()).collect()
+        self.lock()
+            .windows
+            .iter()
+            .map(|w| w.app_id.clone())
+            .collect()
     }
 }
 
@@ -136,7 +144,11 @@ mod tests {
     #[test]
     fn tracker_reports_changes_once() {
         let t = Tracker::default();
-        let w = vec![Window { app_id: "foot".into(), title: "x".into(), active: true }];
+        let w = vec![Window {
+            app_id: "foot".into(),
+            title: "x".into(),
+            active: true,
+        }];
         assert!(t.replace(w.clone()));
         assert!(!t.replace(w));
         assert_eq!(t.active_app_name().as_deref(), Some("Foot"));
