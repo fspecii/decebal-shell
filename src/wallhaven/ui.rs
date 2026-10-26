@@ -116,7 +116,7 @@ impl WallhavenApp {
             pending: HashSet::new(),
             failed: HashSet::new(),
             applying: None,
-            applied: None,
+            applied: super::wallpaper::current_wallpaper_id(),
             notice: String::new(),
             layer: None,
             mask: None,
@@ -480,7 +480,9 @@ impl WallhavenApp {
     fn draw_cell(&mut self, layer: &mut Pixmap, item: &Item, frame: Rect, hovered: bool) {
         let (x, y, w, h) = frame;
         fill_rounded(layer, x, y, w, h, CELL_RADIUS, field_color());
-        let applied = self.applied.as_deref() == Some(item.id.as_str());
+        // Local files are named `wallhaven-<id>`, remote items just `<id>`: compare the bare ids.
+        let bare = |s: &str| s.trim_start_matches("wallhaven-").to_string();
+        let applied = self.applied.as_deref().map(bare) == Some(bare(&item.id));
         let busy = self.applying.as_deref() == Some(item.id.as_str());
         let bw = if applied { 3.0 } else { 0.0 };
         if let Some(thumb) = self.thumbs.get(&item.id) {

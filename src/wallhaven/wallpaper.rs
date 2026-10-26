@@ -41,6 +41,18 @@ fn home() -> PathBuf {
 }
 
 /// Where downloads go: `$MACHAVEN_DOWNLOAD_DIR` if set, else `~/Pictures/Wallpapers/Wallhaven`.
+/// Wallhaven id of the wallpaper currently in use, taken from the file name (`wallhaven-<id>.<ext>`) of the
+/// current-background symlink. `MACHAVEN_CURRENT_BG` overrides the path; unknown or non-wallhaven files give `None`.
+pub fn current_wallpaper_id() -> Option<String> {
+    let path = std::env::var_os("MACHAVEN_CURRENT_BG").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/omarchy/current/background")))?;
+    id_from_file_name(path.canonicalize().ok()?.file_name()?.to_str()?)
+}
+
+fn id_from_file_name(name: &str) -> Option<String> {
+    let id = name.strip_prefix("wallhaven-")?.rsplit_once('.')?.0;
+    valid_id(id).then(|| id.to_string())
+}
+
 pub fn download_dir() -> PathBuf {
     match std::env::var_os("MACHAVEN_DOWNLOAD_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
@@ -236,6 +248,14 @@ pub fn local_item(path: &Path) -> Item {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn current_id_comes_from_file_name() {
+        assert_eq!(super::id_from_file_name("wallhaven-eo6e3r.png").as_deref(), Some("eo6e3r"));
+        assert_eq!(super::id_from_file_name("holiday.jpg"), None);
+        assert_eq!(super::id_from_file_name("wallhaven-.png"), None);
+        assert_eq!(super::id_from_file_name("wallhaven-../x.png"), None);
+    }
+
     use super::*;
 
     #[test]
