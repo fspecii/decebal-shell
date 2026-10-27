@@ -109,7 +109,7 @@ fn intern_atoms(conn: &RustConnection) -> Result<Atoms, Error> {
 }
 
 /// The monitor panels live on: RandR's primary, else the first active one, else the whole screen.
-fn panel_monitor(conn: &RustConnection, root: Window, screen: (i32, i32)) -> Rect {
+pub(crate) fn panel_monitor(conn: &RustConnection, root: Window, screen: (i32, i32)) -> Rect {
     let whole = Rect { x: 0, y: 0, w: screen.0, h: screen.1 };
     let Some(reply) = conn.randr_get_monitors(root, true).ok().and_then(|c| c.reply().ok()) else { return whole };
     let pick = reply.monitors.iter().find(|m| m.primary && m.width > 0).or_else(|| reply.monitors.iter().find(|m| m.width > 0));
@@ -127,7 +127,7 @@ fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
 /// Clicks go only to `rects` (all of the window when empty).
 /// Rectangles covering the pixels of `pm` that are not (nearly) transparent, merged vertically.
 /// Capped: a pathological image degrades to its bounding box.
-fn visible_rects(pm: &Pixmap) -> Vec<Rectangle> {
+pub(crate) fn visible_rects(pm: &Pixmap) -> Vec<Rectangle> {
     let (w, h) = (pm.width() as usize, pm.height() as usize);
     let data = pm.data();
     let mut out: Vec<Rectangle> = Vec::new();

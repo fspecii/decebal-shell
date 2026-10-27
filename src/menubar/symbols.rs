@@ -109,6 +109,9 @@ pub fn shapes(name: &str) -> Option<String> {
         "globe" => "<circle cx=\"12\" cy=\"12\" r=\"8.5\" fill=\"none\" stroke=\"C\" stroke-width=\"2\"/>".to_string() + &stroke("M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17", None),
         "grid" => fill("M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z", None),
         "picture" => stroke("M4 6h16v12H4zM4 16l5-5 4 4 3-3 4 4", None),
+        "doc" => stroke("M7 3.5h6.5L18 8v12.5H7zM13.5 3.5V8H18M9.5 12.5h5M9.5 15.5h5", None),
+        "folder" => stroke("M3.5 6.5h6l2 2.5h9v9.5h-17z", None),
+        "terminal" => stroke("M4 5.5h16v13H4zM7.5 10l3 2.5-3 2.5M12.5 15h4", None),
         "chevron-left" => stroke("M14.5 5.5L8 12l6.5 6.5", None),
         "switches" => {
             "<rect x=\"2.5\" y=\"3.8\" width=\"19\" height=\"7\" rx=\"3.5\" fill=\"none\" stroke=\"C\" stroke-width=\"1.8\"/>".to_string()

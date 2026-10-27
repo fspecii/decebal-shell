@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tiny_skia::Pixmap;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::properties::WmSizeHints;
+use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
@@ -121,12 +122,25 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let keymap = Keymap::load(&conn)?;
 
     let (sw, sh) = (u32::from(screen.width_in_pixels), u32::from(screen.height_in_pixels));
+    let popup = app.overlay();
+    let mon = if popup { super::x11::panel_monitor(&conn, screen.root, (sw as i32, sh as i32)) } else { super::x11::Rect { x: 0, y: 0, w: sw as i32, h: sh as i32 } };
+    if popup {
+        app.set_popup(true);
+    }
     let (iw, ih) = app.initial_size();
-    let (w, h) = (iw.min(sw.saturating_sub(40)).max(320), ih.min(sh.saturating_sub(60)).max(240));
+    let (w, h) = if popup {
+        let (cw, ch) = app.content_size().unwrap_or((iw, ih));
+        (cw.min((mon.w as u32).saturating_sub(40)).max(200), ch.max(1))
+    } else {
+        (iw.min(sw.saturating_sub(40)).max(320), ih.min(sh.saturating_sub(60)).max(240))
+    };
+    // Popup: centred horizontally on the primary monitor, a fifth of the way down.
+    let (px, py) = if popup { (mon.x + (mon.w - w as i32) / 2, mon.y + mon.h / 5) } else { (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32) };
 
     let win = conn.generate_id().map_err(err)?;
-    let aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(
-        EventMask::EXPOSURE
+    let mut aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(
+        EventMask::FOCUS_CHANGE
+            | EventMask::EXPOSURE
             | EventMask::STRUCTURE_NOTIFY
             | EventMask::POINTER_MOTION
             | EventMask::BUTTON_PRESS
@@ -135,17 +149,22 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             | EventMask::ENTER_WINDOW
             | EventMask::KEY_PRESS,
     );
-    conn.create_window(COPY_DEPTH, win, screen.root, ((sw.saturating_sub(w)) / 2) as i16, ((sh.saturating_sub(h)) / 2) as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux)
-        .map_err(err)?;
+    if popup {
+        // No window manager involvement at all: rdwm and other tiling WMs never see the window.
+        aux = aux.override_redirect(1);
+    }
+    conn.create_window(COPY_DEPTH, win, screen.root, px as i16, py as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux).map_err(err)?;
 
     let title = app.title();
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, title.as_bytes()).map_err(err)?;
     conn.change_property8(PropMode::REPLACE, win, at.net_wm_name, at.utf8, title.as_bytes()).map_err(err)?;
-    conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"machaven\0Machaven\0").map_err(err)?;
+    conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, if popup { b"macspot\0Macspot\0" } else { b"machaven\0Machaven\0" }).map_err(err)?;
     conn.change_property32(PropMode::REPLACE, win, at.wm_protocols, AtomEnum::ATOM, &[at.wm_delete]).map_err(err)?;
-    let mut hints = WmSizeHints::new();
-    hints.min_size = Some((480, 360));
-    hints.set_normal_hints(&conn, win).map_err(err)?;
+    if !popup {
+        let mut hints = WmSizeHints::new();
+        hints.min_size = Some((480, 360));
+        hints.set_normal_hints(&conn, win).map_err(err)?;
+    }
 
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, win, &CreateGCAux::new()).map_err(err)?;
@@ -163,7 +182,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     };
 
     app.set_screen(sw, sh);
-    app.set_rounded(false);
+    app.set_rounded(popup);
     app.resize(w, h);
     app.set_waker(waker);
 
@@ -175,6 +194,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     let mut dirty = true;
     let depth = screen.root_depth;
+    let mut grabbed = !popup;
 
     loop {
         if dirty {
@@ -184,6 +204,16 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             }
             app.draw(&mut pm);
             present(&conn, win, gc, &pm, depth, max_bytes)?;
+            if popup {
+                // Rounded corners without a compositor: clip the window to the opaque pixels.
+                let rects = super::x11::visible_rects(&pm);
+                conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &rects).map_err(err)?;
+                conn.flush().map_err(err)?;
+            }
+        }
+        if popup && !grabbed {
+            grabbed = true;
+            grab_input(&conn, win, screen.root);
         }
 
         let mut next = Some(conn.wait_for_event().map_err(err)?);
@@ -202,6 +232,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 Event::MotionNotify(m) => resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y)),
                 Event::EnterNotify(m) => resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y)),
                 Event::LeaveNotify(_) => resp = app.pointer_leave(),
+                Event::ButtonPress(b) if popup && (b.event_x < 0 || b.event_y < 0 || b.event_x as u32 >= size.0 || b.event_y as u32 >= size.1 || b.event != win) => return Ok(()),
                 Event::ButtonPress(b) => {
                     let (x, y) = (f32::from(b.event_x), f32::from(b.event_y));
                     resp = match b.detail {
@@ -226,8 +257,14 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         _ => Response::NONE,
                     };
                 }
+                Event::FocusOut(f) if popup && f.mode == NotifyMode::NORMAL && f.detail != NotifyDetail::INFERIOR => return Ok(()),
                 Event::KeyPress(k) => {
                     let state: u16 = k.state.into();
+                    // The hotkey that opened us (Super+Space) pressed again: toggle off. Our own grab swallows it
+                    // before the WM's binding sees it. (A Super+letter typed while Super is still down is just text.)
+                    if popup && state & 0x40 != 0 && keymap.lookup(k.detail, 0) == 0x20 {
+                        return Ok(());
+                    }
                     let sym = keymap.lookup(k.detail, state);
                     let plain = keymap.lookup(k.detail, 0);
                     let (shift, ctrl, alt) = (state & 1 != 0, state & 4 != 0, state & 8 != 0);
@@ -248,6 +285,18 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 _ => {}
             }
             dirty |= resp.redraw;
+            if popup {
+                if let Some((cw, ch)) = app.content_size() {
+                    let cw = cw.min((mon.w as u32).saturating_sub(40)).max(200);
+                    if (cw, ch) != size {
+                        size = (cw, ch);
+                        let x = mon.x + (mon.w - cw as i32) / 2;
+                        conn.configure_window(win, &ConfigureWindowAux::new().x(x).width(cw).height(ch)).map_err(err)?;
+                        app.resize(cw, ch);
+                        dirty = true;
+                    }
+                }
+            }
             match resp.action {
                 Some(Action::Close) => return Ok(()),
                 Some(Action::Minimize) => send_root(&conn, &at, screen.root, win, at.wm_change_state, [3, 0, 0, 0, 0])?,
@@ -257,6 +306,23 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             next = conn.poll_for_event().map_err(err)?;
         }
     }
+}
+
+/// Takes the keyboard and pointer so typing and clicking outside work whatever the WM thinks has focus.
+/// The hotkey that launched us may still hold a passive keyboard grab, so retry for a moment.
+fn grab_input(conn: &RustConnection, win: Window, root: Window) {
+    let _ = conn.set_input_focus(InputFocus::POINTER_ROOT, win, x11rb::CURRENT_TIME);
+    for _ in 0..100 {
+        let ok = conn.grab_keyboard(true, win, x11rb::CURRENT_TIME, GrabMode::ASYNC, GrabMode::ASYNC).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.status == GrabStatus::SUCCESS);
+        if ok {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION;
+    let _ = conn.grab_pointer(true, win, mask, GrabMode::ASYNC, GrabMode::ASYNC, x11rb::NONE, x11rb::NONE, x11rb::CURRENT_TIME);
+    let _ = root;
+    let _ = conn.flush();
 }
 
 /// `CopyFromParent` depth for `create_window`.
