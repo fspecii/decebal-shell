@@ -197,6 +197,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let mut dirty = true;
     let depth = screen.root_depth;
     let mut grabbed = !popup;
+    let mut bg = 0u32;
 
     loop {
         if dirty {
@@ -206,6 +207,14 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             }
             app.draw(&mut pm);
             present(&conn, win, gc, &pm, depth, max_bytes)?;
+            // Unpainted areas (a resize in flight, a window being dragged) show the window background:
+            // follow the app's own backdrop instead of black.
+            if let Some(px) = backdrop(&pm) {
+                if px != bg {
+                    bg = px;
+                    conn.change_window_attributes(win, &ChangeWindowAttributesAux::new().background_pixel(px)).map_err(err)?;
+                }
+            }
             if popup {
                 // Rounded corners without a compositor: clip the window to the opaque pixels.
                 let rects = super::x11::visible_rects(&pm);
@@ -360,6 +369,18 @@ fn start_move(conn: &RustConnection, at: &Atoms, root: Window, win: Window, b: &
     conn.ungrab_pointer(x11rb::CURRENT_TIME).map_err(err)?;
     // 8 = _NET_WM_MOVERESIZE_MOVE, button 1, source indication 1 (normal application).
     send_root(conn, at, root, win, at.moveresize, [b.root_x as u32, b.root_y as u32, 8, 1, 1])
+}
+
+/// The backdrop colour of a frame: the pixel just inside the bottom-right corner, where windows have
+/// plain content background (rounded corners and the sidebar are elsewhere).
+fn backdrop(pm: &Pixmap) -> Option<u32> {
+    let (w, h) = (pm.width() as usize, pm.height() as usize);
+    if w < 16 || h < 16 {
+        return None;
+    }
+    let i = ((h - 8) * w + (w - 8)) * 4;
+    let d = pm.data();
+    (d[i + 3] == 0xff).then(|| u32::from(d[i]) << 16 | u32::from(d[i + 1]) << 8 | u32::from(d[i + 2]))
 }
 
 /// Uploads the pixmap as premultiplied BGRX, splitting into row bands when a request would be too large.
