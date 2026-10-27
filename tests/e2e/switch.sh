@@ -102,7 +102,7 @@ eq "newest window is focused" "$(focused)" "$G"
 
 # Expected switching order, kept in step with what macswitch does: focused first, then the order macswitch
 # last left (the chosen window moves to the front), then creation order.
-ORDER=("$G" "$A" "$B")
+ORDER=("$G" "$B" "$A")   # rdwm reports real focus recency: newest first, then Beta (focused before Gamma), then Alpha
 choose() { # choose INDEX: the window at INDEX becomes the first
     local c=${ORDER[$1]} o=()
     for w in "${ORDER[@]}"; do [ "$w" != "$c" ] && o+=("$w"); done
@@ -111,7 +111,9 @@ choose() { # choose INDEX: the window at INDEX becomes the first
 focus_is() { [ "$(focused)" = "$1" ]; }
 dbg() { echo "      order=(${ORDER[*]}) focused=$(focused) saved=$(tr '\n' ' ' < "$XDG_RUNTIME_DIR/macswitch-mru" 2>/dev/null)"; }
 
+sync_order() { mapfile -t ORDER < <(state | jq -r '.state.mru[]'); }   # rdwm's real focus recency: what macswitch lists
 alt_tab() { # alt_tab [extra key presses...]: hold Alt, tap Tab (rdwm spawns macswitch), wait until it is up, then the extras
+    sync_order
     xdotool keydown alt
     xdotool key Tab
     wait_for 5 sw_win || return 1
@@ -202,7 +204,7 @@ fake delta "Delta Window" cccc33
 D=$(id_of "Delta Window")
 ctl action view 1 >/dev/null; sleep 0.3
 eq "back on tag 1" "$(view)" "1"
-xdotool keydown alt keydown shift; xdotool key Tab; xdotool keyup shift
+xdotool keydown alt; xdotool key Tab
 wait_for 5 sw_win || fail "Alt+Shift+Tab did not start macswitch (tags)"
 sleep 0.25
 shot tags
@@ -212,7 +214,7 @@ echo "overlay with 4 windows: ${WW}x${HH}+$X+$Y"
 [ "$WW" -gt 300 ] && pass "four windows -> wider card" || fail "four windows -> wider card" "$WW"
 release
 ok_within "exit" 3 sw_gone
-ok_within "Alt+Shift+Tab reached the window on tag 2" 3 focus_is "$D"
+ok_within "Alt+Tab reached the window on tag 2 (recently used there)" 3 focus_is "$D"
 eq "the view followed to tag 2" "$(view)" "2"
 shot after-tag-switch
 

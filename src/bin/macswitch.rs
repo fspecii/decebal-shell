@@ -72,5 +72,9 @@ fn main() {
             let _ = rdwm::request(&line);
         }
         switcher::save_mru(&switcher::mru_after(&all, e.id));
+    } else if let Some(first) = all.first().filter(|e| e.on_view && !e.minimized) {
+        // Cancelled: closing the overlay can move the pointer-focus (focus-follows-mouse) onto whatever is under
+        // the card, so put the focus back where it was.
+        let _ = rdwm::request(&rdwm::action_request("focuswindow", &[&first.id.to_string()]));
     }
 }
