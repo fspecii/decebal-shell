@@ -259,21 +259,43 @@ pub fn running_dnd() -> Option<bool> {
 
 /// Sends a notification through the bus like `notify-send` would.
 pub fn send_test(summary: &str, body: &str) -> Result<u32, String> {
+    send_with("macnotify", "dialog-information", summary, body, true)
+}
+
+/// Sends a notification from `app` (with a theme icon name) through the bus; the daemon's default timeout applies.
+pub fn send(app: &str, icon: &str, summary: &str, body: &str) -> Result<u32, String> {
+    send_with(app, icon, summary, body, false)
+}
+
+fn send_with(app: &str, icon: &str, summary: &str, body: &str, default_action: bool) -> Result<u32, String> {
     let mut conn = Conn::session().map_err(|e| format!("session bus: {e}"))?;
     let mut w = Writer::default();
-    w.string("macnotify");
+    w.string(app);
     w.u32(0);
-    w.string("dialog-information");
+    w.string(icon);
     w.string(summary);
     w.string(body);
     w.array(4, |w| {
-        w.string("default");
-        w.string("Open");
+        if default_action {
+            w.string("default");
+            w.string("Open");
+        }
     });
     w.array(8, |_| {});
     w.u32(u32::MAX); // -1: server default
     let r = conn.call_blocking(Message::call(BUS_NAME, PATH, BUS_NAME, "Notify", "susssasa{sv}i", w.buf)).map_err(|e| e.to_string())?;
     r.args().map_err(|e| e.to_string())?.first().and_then(Value::as_u32).ok_or_else(|| "bad reply".into())
+}
+
+/// Sets do-not-disturb on the running macnotify daemon, or in its settings file when none runs.
+pub fn set_dnd(on: bool) -> Result<(), String> {
+    if running_dnd().is_some() {
+        let mut w = Writer::default();
+        w.u32(u32::from(on));
+        ext_call("SetDnd", "b", w.buf).map(|_| ())
+    } else {
+        Config::save_dnd(on).map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]

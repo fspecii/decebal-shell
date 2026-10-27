@@ -127,6 +127,11 @@ pub fn shapes(name: &str) -> Option<String> {
                 + "<rect x=\"2.5\" y=\"13.2\" width=\"19\" height=\"7\" rx=\"3.5\" fill=\"none\" stroke=\"C\" stroke-width=\"1.8\"/>"
                 + &fill("M6.1 18.7a2 2 0 1 0 0-4a2 2 0 1 0 0 4z", None)
         }
+        "snowflake" => stroke("M12 3.5v17M4.6 7.75l14.8 8.5M4.6 16.25l14.8-8.5M9.8 5.4L12 7.6l2.2-2.2M9.8 18.6l2.2-2.2 2.2 2.2", None),
+        "gamepad" => stroke("M7.5 8h9a4.5 4.5 0 0 1 4.4 5.3l-.7 3.8a2.3 2.3 0 0 1-4 1L14.5 16h-5l-2.2 2.1a2.3 2.3 0 0 1-4-1l-.7-3.8A4.5 4.5 0 0 1 7.5 8zM8 10.5v3M6.5 12h3", None) + &fill("M15.6 11.1a.9.9 0 1 0 0 1.8a.9.9 0 1 0 0-1.8zM17.9 12.9a.9.9 0 1 0 0 1.8a.9.9 0 1 0 0-1.8z", None),
+        "bell" => stroke("M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0", None),
+        "bell-off" => stroke("M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0", Some(0.45)) + &stroke("M4.5 4.5L19.5 19.5", None),
+        "eye" => stroke("M2.5 12s3.6-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.6 6.5-9.5 6.5S2.5 12 2.5 12z", None) + "<circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"C\"/>",
         "moon" => fill("M19.6 14.7A8.3 8.3 0 1 1 9.3 4.4a6.6 6.6 0 0 0 10.3 10.3z", None),
         "sun" => sun_shape(false),
         "sun-small" => sun_shape(true),
@@ -314,6 +319,11 @@ mod tests {
         "night-shift",
         "dark-mode",
         "cup",
+        "snowflake",
+        "gamepad",
+        "bell",
+        "bell-off",
+        "eye",
         "screenshot",
         "record",
         "play",

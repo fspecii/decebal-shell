@@ -48,6 +48,7 @@ pub fn build(app: &str, light: bool) -> Vec<Menu> {
                 sep(),
                 item(&format!("Force Quit {app}"), "force-quit", ""),
                 sep(),
+                item("Session…", "session", ""),
                 item("Sleep", "sleep", ""),
                 item("Restart…", "restart", ""),
                 item("Shut Down…", "shutdown", ""),
@@ -239,6 +240,7 @@ pub fn fallback_command(action: &str) -> Option<Vec<String>> {
         "lock" => c(&["loginctl", "lock-session"]),
         "logout" => c(&["loginctl", "terminate-user", &std::env::var("USER").unwrap_or_default()]),
         "settings" => c(&["macsettings"]),
+        "session" => c(&["macsession"]),
         "manual" => c(&["xdg-open", "https://learn.omacom.io/2/the-omarchy-manual"]),
         _ => None,
     }
@@ -275,6 +277,10 @@ impl Runner {
         // "System Settings…" opens macsettings when it is installed (the helper's menu is Omarchy's own).
         if action == "settings" && find_in_path("macsettings").is_some() {
             return spawn_detached(&["macsettings".to_string()]);
+        }
+        // "Session…" is macshell's own overlay; the helper's menu is Omarchy's.
+        if action == "session" {
+            return spawn_detached(&[crate::launch::sibling_or_path("macsession")]);
         }
         let argv = match &self.helper {
             Some(h) => vec![h.to_string_lossy().into_owned(), action.to_string()],
