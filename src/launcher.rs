@@ -474,4 +474,20 @@ mod tests {
         l.draw(&mut pm);
         assert!(pm.pixel(500, 300).unwrap().alpha() > 0);
     }
+
+    /// `THEME_SHOTS=dir cargo test --lib -- --ignored launchpad_in_three_themes` writes the Launchpad in three themes.
+    #[test]
+    #[ignore]
+    fn launchpad_in_three_themes() {
+        use crate::theme::{builtin, model::Selection};
+        let Some(dir) = std::env::var_os("THEME_SHOTS") else { return };
+        for (id, dark, tag) in [("macos", true, "dark"), ("macos", false, "light"), ("windows11", true, "windows")] {
+            crate::theme::live::publish_theme(builtin::def(id).unwrap().resolve(id, dark, &Selection::default()));
+            let mut l = launcher(40);
+            let mut pm = Pixmap::new(1000, 680).unwrap();
+            pm.fill(tiny_skia::Color::from_rgba8(70, 96, 122, 255));
+            l.draw(&mut pm);
+            pm.save_png(std::path::Path::new(&dir).join(format!("13-{tag}-launchpad.png"))).unwrap();
+        }
+    }
 }

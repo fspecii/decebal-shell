@@ -435,7 +435,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
             fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::green() } else { crate::theme::th().ink(0.18) }));
             let kx = if *on { rect.0 + tw - th / 2.0 } else { rect.0 + th / 2.0 };
             fill_circle(pm, kx, cy + u(0.6), th / 2.0 - u(2.0), color(0, 0, 0, 0.25 * dim));
-            fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(crate::theme::th().accent_text_c()));
+            fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(color(255, 255, 255, 1.0)));
         }
         Kind::Slider { v, min, max, unit, step } => {
             let shown = it.drag.as_ref().filter(|(id, _)| id == &c.id).map_or(*v, |(_, d)| *d);

@@ -766,7 +766,7 @@ impl Spotlight {
             let text_x = ix + ICON as f32 + 14.0;
             let max_w = w - text_x - kind_w - 40.0;
             let danger_armed = self.confirm == Some(pos);
-            let (main, sub) = if selected { (crate::theme::th().accent_text_c(), crate::theme::th().ink(0.78)) } else { (text_color(), subtext_color()) };
+            let (main, sub) = if selected { (crate::theme::th().accent_text_c(), crate::theme::th().accent_text.color(0.78)) } else { (text_color(), subtext_color()) };
             let sub_text = if item.danger && !danger_armed { String::new() } else { item.subtitle.clone() };
             let sub_color = if danger_armed && !selected { crate::theme::th().danger.over(crate::theme::th().text, 0.8).color(1.0) } else { sub };
             if sub_text.is_empty() {
@@ -778,7 +778,7 @@ impl Spotlight {
                 self.text_at(pm, &title, text_x, y + ROW_H / 2.0 - 8.0, 15.0, Weight::Regular, main);
                 self.text_at(pm, &subt, text_x, y + ROW_H / 2.0 + 10.0, 11.5, Weight::Regular, sub_color);
             }
-            self.text_at(pm, item.kind, w - 20.0 - kind_w, y + ROW_H / 2.0, 12.0, Weight::Regular, if selected { crate::theme::th().ink(0.8) } else { subtext_color() });
+            self.text_at(pm, item.kind, w - 20.0 - kind_w, y + ROW_H / 2.0, 12.0, Weight::Regular, if selected { crate::theme::th().accent_text.color(0.8) } else { subtext_color() });
         }
         if !self.overlay || !self.items.is_empty() || !self.field.text().is_empty() {
             stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);

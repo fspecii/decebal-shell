@@ -35,6 +35,8 @@ pub struct Fonts {
     specs: RefCell<[FaceSpec; 4]>,
     /// Theme generation the specs/glyphs were built for (a theme change can switch family and scale).
     theme_gen: Cell<u64>,
+    /// Font family the specs were picked for (colours and text scale changes keep the glyph cache).
+    family: RefCell<String>,
     loaded: RefCell<[Option<Font>; 4]>,
     glyphs: RefCell<HashMap<(char, u32, Weight), Rc<Glyph>>>,
     ascents: RefCell<HashMap<(u32, Weight), f32>>,
@@ -114,7 +116,7 @@ impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
         let specs = pick_specs()?;
-        Some(Self { specs: RefCell::new(specs), theme_gen: Cell::new(crate::theme::generation()), loaded: RefCell::new([None, None, None, None]), glyphs: RefCell::new(HashMap::new()), ascents: RefCell::new(HashMap::new()) })
+        Some(Self { specs: RefCell::new(specs), theme_gen: Cell::new(crate::theme::generation()), family: RefCell::new(crate::theme::current().font_family.clone()), loaded: RefCell::new([None, None, None, None]), glyphs: RefCell::new(HashMap::new()), ascents: RefCell::new(HashMap::new()) })
     }
 
     /// Rebuilds faces and drops cached glyphs when the theme (family, text scale) changed since the last call.
@@ -124,6 +126,11 @@ impl Fonts {
             return;
         }
         self.theme_gen.set(g);
+        let family = crate::theme::current().font_family.clone();
+        if *self.family.borrow() == family {
+            return; // only colours / sizes changed: glyph keys already include the scaled size
+        }
+        *self.family.borrow_mut() = family;
         if let Some(specs) = pick_specs() {
             *self.specs.borrow_mut() = specs;
         }

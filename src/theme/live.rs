@@ -267,6 +267,12 @@ pub fn current() -> Arc<Theme> {
     t
 }
 
+/// Makes `t` the current theme without touching any file (previews, screenshots, tests).
+/// A later [`reload`] with changed files replaces it again.
+pub fn publish_theme(t: Theme) {
+    publish(Arc::new(t));
+}
+
 /// Changes whenever [`current`] changed; compare with the value seen at the last draw.
 pub fn generation() -> u64 {
     GEN.load(Ordering::Relaxed)
