@@ -26,6 +26,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macwm` | debug tool: prints the window list whenever it changes | CLI |
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
+| `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -188,6 +189,27 @@ age such as `3m`). It grabs the keyboard and pointer like `macspot`; it also wor
 
 Terminals paste with Ctrl+Shift+V: use Shift+Return there and paste by hand. `tests/e2e/clip.sh` (`make e2e-clip`) runs the daemon and the picker against a private
 Xvfb with `xclip`, a fake password manager window and a window that receives the Ctrl+V.
+
+## Dashboard (`macdash`)
+
+A port of caelestia-shell's dashboard: a card hanging under the menu bar with three tabs (click them, or Left / Right / `1` `2` `3`).
+
+* **Overview**: avatar (`~/.face`, else an initial tile), name, `user@host`, uptime, the clock and date, a month calendar, the current weather
+  (the bar's cached reading in `~/.cache/macshell/weather.json`, fetched only when stale), CPU / memory / disk rings and a now-playing card
+  that opens the Media tab.
+* **Media**: any MPRIS player (`org.mpris.MediaPlayer2.*`, found and watched over macshell's own D-Bus client, no `playerctl`): cover art
+  (`file://` or `http(s)` URLs, the latter fetched once with `curl` into `~/.cache/macshell/dash-art/`), title / artist / album, a progress bar
+  you can click or drag to seek (the position is polled once a second, only while the tab shows), previous / play-pause / next, a volume slider
+  when the player has a `Volume` property (Up / Down or the wheel too), and a picker when several players run (click a chip, or Tab).
+* **Performance**: CPU (total ring, per-core meters, history, package temperature from hwmon, load), memory and swap, root filesystem, network
+  rates with a history graph, and an NVIDIA GPU card (`nvidia-smi --query-gpu`; hidden when the tool is missing). Rings and sparklines are tiny-skia paths.
+
+Bind **one** key to the bare command `macdash` (or `macdash media` / `macdash performance` to open on a tab): running it again while the card is open closes it
+(single instance via `$XDG_RUNTIME_DIR/macdash.lock`). Escape, a click outside, or focus moving elsewhere also close it. `--x PX` centres the card on that x offset
+(macbar passes the position of its chart icon), `--top PX` moves it off the default 30 px. It is an override-redirect X11 popup that grabs the keyboard and
+pointer like `macspot`, follows the shared theme and is translucent under a compositor. Nothing runs while it is closed: sampling threads and the D-Bus
+connection only exist while the card is open. `tests/e2e/dash.sh` (`make e2e-dash`) runs it on a private Xvfb with a private D-Bus session and fake players
+(`examples/fake_mpris.rs`); it needs `tesseract` to read the card.
 
 ## Window rules for the wallpaper browser
 

@@ -64,6 +64,14 @@ impl Value {
             _ => return None,
         })
     }
+    /// Any number as f64 (a player may send a volume as an integer).
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::F64(v) => Some(*v),
+            Value::Variant(v) => v.as_f64(),
+            other => other.as_int().map(|i| i as f64),
+        }
+    }
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -244,6 +252,14 @@ impl Writer {
     }
     pub fn u32(&mut self, v: u32) {
         self.align(4);
+        self.buf.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn i64(&mut self, v: i64) {
+        self.align(8);
+        self.buf.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn f64(&mut self, v: f64) {
+        self.align(8);
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
     pub fn string(&mut self, s: &str) {

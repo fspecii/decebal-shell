@@ -117,12 +117,22 @@ impl Keymap {
 
 /// Top edge of a popup of height `h` on the monitor `mon`: above the bottom by the app's margin, centred, or a fifth down.
 fn popup_top<A: WindowApp>(app: &A, mon: &super::x11::Rect, h: u32) -> i32 {
-    if let Some(f) = app.popup_bottom_margin() {
+    if let Some(a) = app.popup_anchor() {
+        mon.y + a.top
+    } else if let Some(f) = app.popup_bottom_margin() {
         (mon.y + mon.h - h as i32 - (mon.h as f32 * f).round() as i32).max(mon.y)
     } else if app.popup_centered() {
         mon.y + (mon.h - h as i32) / 2
     } else {
         mon.y + mon.h / 5
+    }
+}
+
+/// Left edge of a popup `w` wide: centred on the monitor, or where the app anchors it.
+fn popup_left<A: WindowApp>(app: &A, mon: &super::x11::Rect, w: u32) -> i32 {
+    match app.popup_anchor() {
+        Some(a) => mon.x + a.left(mon.w, w as i32),
+        None => mon.x + (mon.w - w as i32) / 2,
     }
 }
 
@@ -158,7 +168,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let (px, py) = if full {
         (mon.x, mon.y)
     } else if popup {
-        (mon.x + (mon.w - w as i32) / 2, popup_y)
+        (popup_left(&app, &mon, w), popup_y)
     } else {
         (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32)
     };
@@ -366,9 +376,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                     let cw = cw.min((mon.w as u32).saturating_sub(40)).max(200);
                     if (cw, ch) != size {
                         size = (cw, ch);
-                        let x = mon.x + (mon.w - cw as i32) / 2;
+                        let x = popup_left(&app, &mon, cw);
                         let mut cfg = ConfigureWindowAux::new().x(x).width(cw).height(ch);
-                        if app.popup_centered() || app.popup_bottom_margin().is_some() {
+                        if app.popup_centered() || app.popup_bottom_margin().is_some() || app.popup_anchor().is_some() {
                             cfg = cfg.y(popup_top(&app, &mon, ch));
                         }
                         conn.configure_window(win, &cfg).map_err(err)?;
