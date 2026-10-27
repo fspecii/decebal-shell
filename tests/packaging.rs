@@ -45,3 +45,18 @@ fn readme_mentions_every_cargo_bin() {
         assert!(readme.contains(&format!("`{b}`")) || readme.contains(&b), "README does not mention {b}");
     }
 }
+
+#[test]
+fn macexpose_is_registered_everywhere() {
+    let doc: toml_edit::DocumentMut = read("Cargo.toml").parse().expect("Cargo.toml parses");
+    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("macexpose")).expect("macexpose [[bin]]");
+    assert_eq!(bin["path"].as_str(), Some("src/bin/macexpose.rs"));
+    let features: Vec<&str> = bin["required-features"].as_array().expect("required-features").iter().filter_map(|f| f.as_str()).collect();
+    assert_eq!(features, ["x11"], "it is an X11 popup");
+    assert!(listed(&read("Makefile"), "BINS =").contains("macexpose"));
+    assert!(listed(&read("PKGBUILD"), "for bin in").contains("macexpose"));
+    let readme = read("README.md");
+    assert!(readme.contains("## Window overview (`macexpose`)") && readme.contains("macexpose --all"), "README section");
+    assert!(readme.contains("tests/e2e/expose.sh"));
+    assert!(std::path::Path::new(&format!("{}/tests/e2e/expose.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
+}
