@@ -132,6 +132,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         slider("th:fontscale", "Text size", "All macshell text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
         Row::new("Reset customisations").detail("Back to the theme's own accent, translucency, radius and text size").ctl(Ctl::new("th:reset", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
+    out.extend(super::fontpane::items(&sel, &now));
     let mut note =
         format!("Your own themes: put .toml files in {} (macthemectl export nord > mine.toml is a good start). macthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
     if !broken.is_empty() {
@@ -186,6 +187,12 @@ pub fn follow_wallpaper(m: &mut Model, path: &str) {
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     let src = source(m);
     let mut sel = src.selection();
+    if let Some(changed) = super::fontpane::apply(parts, &v, &mut sel) {
+        if changed {
+            commit(m, sel);
+        }
+        return;
+    }
     match (parts, v) {
         (["l", "theme", id], CtlVal::Click) => {
             let mode = src.find(id).and_then(|f| f.1);
@@ -249,7 +256,9 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["th", "radius"], CtlVal::Reset) => sel.radius = None,
         (["th", "fontscale"], CtlVal::Num(n)) => sel.font_scale = Some((n / 100.0).clamp(0.8, 1.4) as f32),
         (["th", "fontscale"], CtlVal::Reset) => sel.font_scale = None,
-        (["th", "reset"], CtlVal::Click) => sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, ..Selection::default() },
+        (["th", "reset"], CtlVal::Click) => {
+            sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, font: sel.font.clone(), fonts: sel.fonts.clone(), ..Selection::default() }
+        }
         _ => return,
     }
     commit(m, sel);
@@ -290,7 +299,7 @@ mod tests {
         assert!(text.contains("focused_bg") && text.contains("[decoration.bar]"));
         m.apply("l:theme:windows11", CtlVal::Click);
         let text = std::fs::read_to_string(&cfg).unwrap();
-        assert!(text.contains("style = \"classic\"") && text.contains("font = \"Segoe UI\""), "{text}");
+        assert!(text.contains("style = \"classic\""), "{text}");
     }
 
     #[test]

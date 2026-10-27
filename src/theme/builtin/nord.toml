@@ -9,6 +9,9 @@ popup_alpha = 0.96
 panel_alpha = 0.97
 outline = 0.12
 
+[font]
+preset = "inter"
+
 [dark]
 background = "#2e3440"
 sidebar = "#272c36"

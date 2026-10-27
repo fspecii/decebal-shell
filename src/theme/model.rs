@@ -133,8 +133,11 @@ pub struct Theme {
     /// `flat` (a full-width strip), `floating` (a horizontal pill with a margin around it) or `vertical`
     /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
+    /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
     pub font_family: String,
     pub font_scale: f32,
+    /// The fonts per role with their fallback chains (see [`super::fonts`]).
+    pub fonts: super::fonts::FontPlan,
 }
 
 impl Theme {
@@ -196,6 +199,8 @@ pub enum V {
     S(String),
     N(f64),
     B(bool),
+    /// A list of names (font chains).
+    L(Vec<String>),
 }
 
 pub type Tokens = BTreeMap<String, V>;
@@ -205,6 +210,8 @@ pub enum Kind {
     Color,
     Num(f64, f64),
     Str,
+    /// A string or an array of strings (font chains).
+    List,
     Choice(&'static [&'static str]),
 }
 
@@ -243,8 +250,17 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("bar_style", Kind::Choice(&["flat", "floating", "vertical"]), "menu bar shape: a full-width strip, a floating pill, or a vertical bar on the left screen edge (the dock hides with it)"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
-    ("font_family", Kind::Str, "UI font name (fontconfig); unavailable fonts fall back to Inter / sans-serif"),
+    ("font_family", Kind::Str, "the font of text, titles and display numbers (fontconfig family); unavailable fonts fall back to the preset, Inter and sans-serif"),
     ("font_scale", Kind::Num(0.8, 1.4), "text size multiplier"),
+    (
+        "font_preset",
+        Kind::Choice(super::fonts::PRESET_IDS),
+        "font preset: the fonts and fallbacks of every role (system, inter, segoe, cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui)",
+    ),
+    ("font_ui", Kind::List, "default text: a family or a list (first installed wins, later ones draw characters it lacks)"),
+    ("font_title", Kind::List, "window and popup titles (default: the preset's)"),
+    ("font_mono", Kind::List, "terminal-like text, aligned numbers"),
+    ("font_display", Kind::List, "large numbers: clock and workspace digits"),
 ];
 
 fn kind_of(key: &str) -> Option<&'static Kind> {
@@ -282,6 +298,18 @@ fn read_value(table: &toml_edit::Table, key: &str, label: &str, out: &mut Tokens
             V::N(n)
         }
         Kind::Str => V::S(v.as_str().ok_or_else(|| format!("`{label}` must be a string"))?.to_string()),
+        Kind::List => {
+            let bad = || format!("`{label}` must be a font name or a list of font names");
+            let list: Vec<String> = match (v.as_str(), v.as_array()) {
+                (Some(s), _) => super::fonts::parse_chain(s),
+                (_, Some(a)) => a.iter().map(|x| x.as_str().map(super::fonts::parse_chain).ok_or_else(bad)).collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect(),
+                _ => return Err(bad()),
+            };
+            if list.is_empty() {
+                return Err(format!("`{label}` needs at least one font name"));
+            }
+            V::L(list)
+        }
         Kind::Choice(opts) => {
             let s = v.as_str().ok_or_else(|| format!("`{label}` must be a string"))?;
             if !opts.contains(&s) {
@@ -296,7 +324,10 @@ fn read_value(table: &toml_edit::Table, key: &str, label: &str, out: &mut Tokens
 
 /// Reads every key of `table` as a token, `prefix` mapping `[font] family` to `font_family`.
 fn read_table(table: &toml_edit::Table, prefix: &str, out: &mut Tokens) -> Result<(), String> {
-    for (k, _) in table.iter() {
+    for (k, item) in table.iter() {
+        if prefix.is_empty() && k == "font" && item.is_table() {
+            continue; // a font table inside [dark] / [light]: read by the caller
+        }
         let label = if prefix.is_empty() { k.to_string() } else { format!("{prefix}_{k}") };
         read_value(table, k, &label, out)?;
     }
@@ -425,7 +456,16 @@ impl Def {
         let titlebar = col("titlebar").unwrap_or(surface);
         let opacity = o.opacity.unwrap_or(1.0).clamp(0.4, 1.0);
         let clampf = |v: f64, lo: f64, hi: f64| v.clamp(lo, hi) as f32;
-        let font_family = o.font.clone().or_else(|| text_of("font_family")).unwrap_or_default();
+        let list_of = |k: &str| match get(k) {
+            Some(V::L(l)) => Some(l.clone()),
+            _ => None,
+        };
+        let theme_fonts = super::fonts::ThemeFonts {
+            preset: text_of("font_preset"),
+            family: text_of("font_family").filter(|f| !f.is_empty()),
+            roles: [list_of("font_ui"), list_of("font_title"), list_of("font_mono"), list_of("font_display")],
+        };
+        let fonts = super::fonts::FontPlan::build(&theme_fonts, &o.fonts, o.font.as_deref().filter(|f| !f.is_empty()));
         let font_scale = o.font_scale.map(f64::from).unwrap_or_else(|| num("font_scale", 1.0));
         Theme {
             id: id.to_string(),
@@ -464,8 +504,9 @@ impl Def {
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
-            font_family,
+            font_family: fonts.primary_ui().to_string(),
             font_scale: (font_scale as f32).clamp(0.8, 1.4),
+            fonts,
         }
     }
 }
@@ -543,8 +584,11 @@ pub struct Selection {
     /// Multiplies the translucency-capable surfaces (0.4..1).
     pub opacity: Option<f32>,
     pub radius: Option<f32>,
+    /// The old single font family (`"font": "Inter"`): the font of text, titles and display numbers.
     pub font: Option<String>,
     pub font_scale: Option<f32>,
+    /// Font preset and per-role chains (the `font` object).
+    pub fonts: super::fonts::FontChoice,
     /// Also restyle rdwm's titlebars when applying (macthemectl / macsettings).
     pub sync_rdwm: bool,
     /// Colours derived from the wallpaper; only the Caelestia theme uses them.
@@ -553,7 +597,18 @@ pub struct Selection {
 
 impl Default for Selection {
     fn default() -> Self {
-        Selection { name: crate::theme::builtin::DEFAULT_ID.into(), mode: Mode::Dark, accent: None, opacity: None, radius: None, font: None, font_scale: None, sync_rdwm: true, dynamic: None }
+        Selection {
+            name: crate::theme::builtin::DEFAULT_ID.into(),
+            mode: Mode::Dark,
+            accent: None,
+            opacity: None,
+            radius: None,
+            font: None,
+            font_scale: None,
+            fonts: Default::default(),
+            sync_rdwm: true,
+            dynamic: None,
+        }
     }
 }
 
@@ -575,8 +630,18 @@ impl Selection {
         s.accent = o.get("accent").and_then(|x| x.as_str()).and_then(Rgb::parse);
         s.opacity = o.get("opacity").and_then(|x| x.as_f64()).map(|x| x.clamp(0.4, 1.0) as f32);
         s.radius = o.get("radius").and_then(|x| x.as_f64()).map(|x| x.clamp(0.0, 24.0) as f32);
-        s.font = o.get("font").and_then(|x| x.as_str()).filter(|f| !f.is_empty()).map(String::from);
-        s.font_scale = o.get("fontScale").and_then(|x| x.as_f64()).map(|x| x.clamp(0.8, 1.4) as f32);
+        // `"font": "Inter"` (old) or `"font": {"preset": "segoe", "ui": [...], "title": ..., "mono": ..., "display": ..., "scale": 1.1}`
+        let mut scale = o.get("fontScale").and_then(|x| x.as_f64());
+        match o.get("font") {
+            Some(serde_json::Value::String(f)) => s.font = Some(f.clone()).filter(|f| !f.is_empty()),
+            Some(serde_json::Value::Object(f)) => {
+                s.font = f.get("family").and_then(|x| x.as_str()).filter(|f| !f.is_empty()).map(String::from);
+                s.fonts = super::fonts::FontChoice::from_json(f);
+                scale = f.get("scale").and_then(|x| x.as_f64()).or(scale);
+            }
+            _ => {}
+        }
+        s.font_scale = scale.map(|x| x.clamp(0.8, 1.4) as f32);
         if let Some(b) = o.get("syncRdwm").and_then(|x| x.as_bool()) {
             s.sync_rdwm = b;
         }
@@ -599,11 +664,24 @@ impl Selection {
         if let Some(x) = self.radius {
             o.insert("radius".into(), r3(x).into());
         }
-        if let Some(f) = &self.font {
-            o.insert("font".into(), f.clone().into());
-        }
-        if let Some(x) = self.font_scale {
-            o.insert("fontScale".into(), r3(x).into());
+        if self.fonts.is_empty() {
+            // old form: stays readable by older builds
+            if let Some(f) = &self.font {
+                o.insert("font".into(), f.clone().into());
+            }
+            if let Some(x) = self.font_scale {
+                o.insert("fontScale".into(), r3(x).into());
+            }
+        } else {
+            let mut f = serde_json::Map::new();
+            self.fonts.write_json(&mut f);
+            if let Some(fam) = &self.font {
+                f.insert("family".into(), fam.clone().into());
+            }
+            if let Some(x) = self.font_scale {
+                f.insert("scale".into(), r3(x).into());
+            }
+            o.insert("font".into(), f.into());
         }
         if !self.sync_rdwm {
             o.insert("syncRdwm".into(), false.into());
@@ -715,6 +793,64 @@ mod tests {
     }
 
     #[test]
+    fn old_font_keys_still_work() {
+        // macshell.json from before font roles: `font` is a string, `fontScale` a top-level number
+        let sel = Selection::from_json(&serde_json::json!({"name": "nord", "font": "Rubik", "fontScale": 1.2}));
+        assert_eq!((sel.font.as_deref(), sel.font_scale, sel.fonts.is_empty()), (Some("Rubik"), Some(1.2), true));
+        let d = Def::parse(MINI).unwrap();
+        let t = d.resolve("m", true, &sel);
+        assert_eq!(t.font_family, "Rubik");
+        assert_eq!((t.fonts.chain(crate::theme::Role::Ui)[0].as_str(), t.fonts.chain(crate::theme::Role::Title)[0].as_str()), ("Rubik", "Rubik"), "the single font leads text and titles");
+        assert_ne!(t.fonts.chain(crate::theme::Role::Mono)[0], "Rubik");
+        assert_eq!(t.fonts.preset, "inter", "a theme with no font keys keeps the original Inter look");
+        // theme files: `[font] family` is the same single font
+        let old = Def::parse("name = \"o\"\n[font]\nfamily = \"Segoe UI\"\nscale = 1.1\n").unwrap().resolve("o", true, &Selection::default());
+        assert_eq!((old.font_family.as_str(), old.font_scale), ("Segoe UI", 1.1));
+        // the new object form
+        let sel = Selection::from_json(&serde_json::json!({"name": "nord", "font": {"preset": "rubik", "ui": ["Inter", "Noto Sans CJK"], "scale": 1.3}}));
+        assert_eq!((sel.fonts.preset.as_deref(), sel.font_scale), (Some("rubik"), Some(1.3)));
+        let t = d.resolve("m", true, &sel);
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Ui)[..3], ["Inter", "Noto Sans CJK", "Rubik"]);
+    }
+
+    #[test]
+    fn theme_files_accept_font_roles_and_presets() {
+        let d = Def::parse("name = \"f\"\n[font]\npreset = \"segoe\"\nui = [\"Foo\", \"Bar\"]\nmono = \"Baz, Qux\"\n").unwrap();
+        let t = d.resolve("f", true, &Selection::default());
+        assert_eq!(t.fonts.preset, "segoe");
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Ui)[..3], ["Foo", "Bar", "Segoe UI Variable"]);
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Mono)[..2], ["Baz", "Qux"]);
+        assert!(Def::parse("name = \"x\"\n[font]\npreset = \"comic\"\n").unwrap_err().contains("one of"));
+        assert!(Def::parse("name = \"x\"\n[font]\nui = 5\n").unwrap_err().contains("font name"));
+        assert!(Def::parse("name = \"x\"\n[font]\nui = []\n").unwrap_err().contains("at least one"));
+        // variants can have their own fonts
+        let d = Def::parse("name = \"v\"\n[dark.font]\npreset = \"fira\"\n[light.font]\npreset = \"noto\"\n").unwrap();
+        assert_eq!(d.resolve("v", true, &Selection::default()).fonts.preset, "fira");
+        assert_eq!(d.resolve("v", false, &Selection::default()).fonts.preset, "noto");
+    }
+
+    #[test]
+    fn every_builtin_theme_has_a_sensible_font_preset() {
+        let want = [
+            ("macos", "inter"),
+            ("graphite", "inter"),
+            ("nord", "inter"),
+            ("dracula", "jetbrains"),
+            ("solarized", "ibm-plex"),
+            ("windows11", "segoe"),
+            ("caelestia", "rubik"),
+            ("high-contrast", "system"),
+        ];
+        for (id, preset) in want {
+            let t = crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default());
+            assert_eq!(t.fonts.preset, preset, "{id}");
+        }
+        // the user's choice beats the theme's
+        let sel = Selection { fonts: crate::theme::fonts::FontChoice { preset: Some("fira".into()), ..Default::default() }, ..Selection::default() };
+        assert_eq!(crate::theme::builtin::def("windows11").unwrap().resolve("windows11", true, &sel).fonts.preset, "fira");
+    }
+
+    #[test]
     fn selection_json_round_trip() {
         let sel = Selection {
             name: "nord".into(),
@@ -724,10 +860,23 @@ mod tests {
             radius: Some(6.0),
             font: Some("Inter".into()),
             font_scale: Some(1.1),
+            fonts: Default::default(),
             sync_rdwm: false,
             dynamic: Some(Dynamic { seed: Rgb(1, 2, 3), variant: crate::theme::material::Variant::Vibrant, wallpaper: Some("/w.png".into()), follow: false }),
         };
         assert_eq!(Selection::from_json(&sel.to_json()), sel);
+        // old form stays old: a plain string and a top-level fontScale
+        let j = sel.to_json();
+        assert_eq!((j["font"].as_str(), j["fontScale"].as_f64()), (Some("Inter"), Some(1.1)));
+        // new form: a font object with the scale inside
+        let mut with_fonts = sel.clone();
+        with_fonts.fonts.preset = Some("segoe".into());
+        with_fonts.fonts.roles[2] = Some(vec!["Fira Code".into()]);
+        let j = with_fonts.to_json();
+        assert_eq!(j["font"]["preset"], "segoe");
+        assert_eq!((j["font"]["family"].as_str(), j["font"]["mono"].as_str(), j["font"]["scale"].as_f64()), (Some("Inter"), Some("Fira Code"), Some(1.1)));
+        assert!(j.get("fontScale").is_none());
+        assert_eq!(Selection::from_json(&j), with_fonts);
         assert_eq!(Selection::from_json(&serde_json::json!("dracula")).name, "dracula");
         assert_eq!(Selection::from_json(&serde_json::json!(5)), Selection::default());
         let junk = Selection::from_json(&serde_json::json!({"name": "", "mode": "purple", "accent": "nope", "opacity": 9}));

@@ -6,7 +6,7 @@
 //! focus and in-progress edits survive a rebuild (which happens whenever the file changes).
 
 use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
-use crate::text::{Fonts, Weight};
+use crate::text::{Fonts, Role, Weight};
 use tiny_skia::{Color, Pixmap};
 
 pub type Rect = (f32, f32, f32, f32);
@@ -187,7 +187,19 @@ pub enum Item {
         id: String,
         caption: String,
     },
+    /// Font preview: one line per role, drawn in that role's font.
+    FontSamples(Vec<FontSample>),
     Space(f32),
+}
+
+/// A line of the font preview card.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontSample {
+    pub label: String,
+    pub role: Role,
+    pub text: String,
+    pub px: f32,
+    pub weight: Weight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -247,12 +259,25 @@ impl Painter<'_> {
 
     /// Text with its visual vertical centre at `cy`.
     pub fn text(&mut self, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
+        self.text_as(Role::Ui, pm, t, x, cy, px, w, c)
+    }
+
+    /// [`Self::text`] in the font of `role`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_as(&mut self, role: Role, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
         match &mut self.fonts {
             Some(f) => {
-                let top = cy + 0.36 * px - f.ascent(px, w);
-                f.draw(pm, t, x, top, px, w, c)
+                let top = cy + 0.36 * px - f.ascent_as(role, px, w);
+                f.draw_as(role, pm, t, x, top, px, w, c)
             }
             None => 0.0,
+        }
+    }
+
+    pub fn measure_as(&self, role: Role, t: &str, px: f32, w: Weight) -> f32 {
+        match &self.fonts {
+            Some(f) => f.measure_as(role, t, px, w),
+            None => t.chars().count() as f32 * px * 0.55,
         }
     }
 
@@ -629,7 +654,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     let cw = (width - 2.0 * side).min(u(700.0));
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
     let mut y = u(20.0) - scroll;
-    p.text(pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
+    p.text_as(Role::Title, pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
     y += u(52.0);
     for item in items {
         match item {
@@ -789,6 +814,26 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 }
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(34.0)) + u(8.0);
+            }
+            Item::FontSamples(lines) => {
+                let lh = u(46.0);
+                let h = lines.len() as f32 * lh;
+                fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
+                for (i, l) in lines.iter().enumerate() {
+                    let ry = y + i as f32 * lh;
+                    if i > 0 {
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                    }
+                    p.text(pm, &l.label, x0 + u(CARD_PAD), ry + u(13.0), u(11.0), Weight::Regular, pal::faint());
+                    // the sample is cut at the card's right edge instead of wrapping
+                    let avail = cw - 2.0 * u(CARD_PAD);
+                    let mut shown = l.text.clone();
+                    while shown.chars().count() > 1 && p.measure_as(l.role, &shown, u(l.px), l.weight) > avail {
+                        shown.pop();
+                    }
+                    p.text_as(l.role, pm, &shown, x0 + u(CARD_PAD), ry + u(31.0), u(l.px), l.weight, pal::text());
+                }
+                y += h + u(18.0);
             }
             Item::Themes(list) => {
                 let gap = u(14.0);

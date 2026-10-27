@@ -35,6 +35,7 @@ pub mod spotlight;
 pub mod switcher;
 pub mod taskbar;
 pub mod text;
+pub mod textface;
 pub mod theme;
 pub mod units;
 pub mod util;

@@ -20,6 +20,9 @@ macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme tonalspot|vibr
                                  Without --wallpaper: the wallpaper on screen (rdwm, its config, Omarchy's current/background).
 macthemectl dynamic refresh      re-read the wallpaper (run it after changing the wallpaper by other means)
 macthemectl dynamic off          Caelestia keeps its own palette again
+macthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale N|reset
+                                 fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
+                                 cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (macthemectl font list)
 macthemectl sync                 re-apply the current theme to rdwm's config
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
@@ -118,10 +121,10 @@ fn main() {
                 .map(|(k, c)| (k.to_string(), c.hex().into()))
                 .collect();
                 let st = style::current(&src, &Paths::discover()).map(|s| s.as_str());
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"theme": t.id, "name": t.name, "dark": t.dark, "style": st, "selection": sel.to_json(), "problem": problem, "colors": colors, "radius": t.radius, "font_scale": t.font_scale, "bar_style": t.bar_style})).unwrap());
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"theme": t.id, "name": t.name, "dark": t.dark, "style": st, "selection": sel.to_json(), "problem": problem, "colors": colors, "radius": t.radius, "font_scale": t.font_scale, "bar_style": t.bar_style, "fonts": {"preset": t.fonts.preset, "ui": t.fonts.chain(macshell::theme::Role::Ui), "title": t.fonts.chain(macshell::theme::Role::Title), "mono": t.fonts.chain(macshell::theme::Role::Mono), "display": t.fonts.chain(macshell::theme::Role::Display)}})).unwrap());
             } else {
                 println!(
-                    "{} ({}) mode={} accent={} radius={} opacity={} font={} font-scale={}",
+                    "{} ({}) mode={} accent={} radius={} opacity={} font={} preset={} font-scale={}",
                     t.id,
                     if t.dark { "dark" } else { "light" },
                     sel.mode.as_str(),
@@ -129,6 +132,7 @@ fn main() {
                     t.radius,
                     sel.opacity.map_or("theme".into(), |o| o.to_string()),
                     if t.font_family.is_empty() { "default" } else { &t.font_family },
+                    t.fonts.preset,
                     t.font_scale
                 );
                 if let Some(p) = problem {
@@ -261,6 +265,30 @@ fn main() {
             };
             println!("seed {} ({}) from {}", d.seed.hex(), d.variant.as_str(), d.wallpaper.as_deref().unwrap_or("--seed"));
             apply(&src, &dynamic::enable(&sel, d));
+        }
+        Some("font") => {
+            let cmd = macshell::theme::fonts::parse_cmd(&args[1..]).unwrap_or_else(|e| die(&format!("{e}\n{}", macshell::theme::fonts::HELP)));
+            let db = macshell::theme::fontdb::get();
+            let mut sel = src.selection();
+            match &cmd {
+                macshell::theme::fonts::Cmd::List => print!("{}", macshell::theme::fonts::render_list(&db, &src.build(&sel, system_dark()).0.fonts.preset)),
+                macshell::theme::fonts::Cmd::Families => {
+                    for f in db.picker_families() {
+                        println!("{f}{}", if db.is_mono(&f) { "  (mono)" } else { "" });
+                    }
+                }
+                macshell::theme::fonts::Cmd::Status => print!("{}", macshell::theme::fonts::render_status(&src.build(&sel, system_dark()).0, &db)),
+                changing => {
+                    if let macshell::theme::fonts::Cmd::Set(_, Some(chain)) = changing {
+                        for f in chain.iter().filter(|f| !db.has_family(f)) {
+                            eprintln!("macthemectl: note: `{f}` is not installed (kept; it is skipped until it is)");
+                        }
+                    }
+                    macshell::theme::fonts::apply_cmd(&mut sel, changing);
+                    apply(&src, &sel);
+                    print!("{}", macshell::theme::fonts::render_status(&src.build(&sel, system_dark()).0, &db));
+                }
+            }
         }
         Some("sync") => {
             let sel = src.selection();

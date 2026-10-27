@@ -9,7 +9,7 @@ use super::Shared;
 use crate::backend::x11::{panel_monitor, visible_rects, Rect as MonRect};
 use crate::gfx::{self, color};
 use crate::icons;
-use crate::text::{Fonts, Weight};
+use crate::text::{Fonts, Role, Weight};
 use std::collections::{HashMap, VecDeque};
 use std::os::fd::{AsRawFd, RawFd};
 use std::time::{Duration, Instant};
@@ -772,7 +772,7 @@ fn paint_banner(fonts: &mut Fonts, pal: &Palette, s: f32, b: &Banner) -> Pixmap 
         gfx::stroke_rounded(&mut pm, 0.5, 0.5, w - 1.0, h - 1.0, 16.0 * s, pal.border, 1.0);
         draw_icon(fonts, &mut pm, b.icon.as_ref(), &b.n.app, b.icon_at.x, b.icon_at.y, b.icon_at.w);
         let tx = 14.0 * s + 36.0 * s + 10.0 * s;
-        fonts.draw(&mut pm, &b.title, tx, 12.0 * s, 13.0 * s, Weight::SemiBold, pal.title);
+        fonts.draw_as(Role::Title, &mut pm, &b.title, tx, 12.0 * s, 13.0 * s, Weight::SemiBold, pal.title);
         for (i, line) in b.body.iter().enumerate() {
             fonts.draw(&mut pm, line, tx, 12.0 * s + 17.0 * s + i as f32 * 15.0 * s, 12.0 * s, Weight::Regular, pal.body);
         }
@@ -802,7 +802,7 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     gfx::fill_rounded(&mut pm, 0.0, 0.0, w as f32, h as f32, 16.0 * s, pal.bg_color());
     gfx::stroke_rounded(&mut pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, 16.0 * s, pal.border, 1.0);
     let (clear, dnd, rows) = hist_rects(s, hw.map_or(0, |h| h.scroll), sh);
-    fonts.draw(&mut pm, "Notifications", 16.0 * s, 13.0 * s, 16.0 * s, Weight::Bold, pal.title);
+    fonts.draw_as(Role::Title, &mut pm, "Notifications", 16.0 * s, 13.0 * s, 16.0 * s, Weight::Bold, pal.title);
     let (ar, ag, ab) = pal.accent;
     fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + 3.0 * s, 12.0 * s, Weight::Medium, color(ar, ag, ab, 1.0));
     // Do Not Disturb row with a switch.
