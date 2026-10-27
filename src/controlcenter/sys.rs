@@ -500,6 +500,12 @@ pub fn media_command(cmd: &str) {
 
 /// DND state from whichever notification daemon is running.
 pub fn probe_dnd() -> Option<bool> {
+    // macnotify answers only while it is the running daemon (non-zero exit otherwise).
+    if have("macnotify") {
+        if let Some(out) = run(&["macnotify", "dnd", "status"], PROBE_TIMEOUT) {
+            return Some(out.trim() == "on");
+        }
+    }
     if have("dunstctl") {
         return Some(run(&["dunstctl", "is-paused"], PROBE_TIMEOUT)?.trim() == "true");
     }
@@ -510,7 +516,9 @@ pub fn probe_dnd() -> Option<bool> {
 }
 
 pub fn toggle_dnd() {
-    if have("dunstctl") {
+    if have("macnotify") && run(&["macnotify", "dnd", "status"], PROBE_TIMEOUT).is_some() {
+        spawn(&["macnotify", "dnd", "toggle"]);
+    } else if have("dunstctl") {
         spawn(&["dunstctl", "set-paused", "toggle"]);
     } else if have("makoctl") {
         spawn(&["makoctl", "mode", "-t", "do-not-disturb"]);

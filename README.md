@@ -17,6 +17,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
 | `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing) | ~7 MB RSS |
 | `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~33 MB RSS with a page of thumbnails |
+| `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); see `docs/theming.md` | CLI |
 
@@ -122,6 +123,40 @@ windowrule = center, class:^(machaven)$
 
 dwm: add `{ "machaven", NULL, NULL, 0, 1, -1 }` to the `rules[]` table in `config.h` (floating = 1).
 
+## Notifications (`macnotify`)
+
+X11 only (Wayland sessions keep mako/dunst). `macnotify` owns `org.freedesktop.Notifications` on the session
+bus, so `notify-send`, Chrome, Telegram, ... show up as banners below the menu bar, top right, newest first,
+at most five at a time (the rest wait). Hover pauses the countdown and shows a close button; click a banner
+to run its `default` action and dismiss it, click an action button to invoke it, right click to dismiss,
+middle click to dismiss all. Urgency `critical` never expires. It speaks D-Bus through a small
+hand-written client (`src/dbus.rs`, no libdbus, no async runtime) and draws override-redirect windows
+clipped with the Shape extension, so it needs no compositor and never paints black corners.
+
+If another daemon already owns the name (mako, dunst) it exits quietly, so it is safe to start from any
+X11 session script. Under a Wayland session it refuses to start (`MACNOTIFY_FORCE=1` overrides).
+
+```
+macnotify                      run the daemon (autostart: contrib/macshell-notify.desktop or .service)
+macnotify history              toggle the history panel (bind it to a key); click an entry to remove it
+macnotify dnd on|off|toggle    Do Not Disturb (also the Focus tile of the Control Center)
+macnotify test                 send a sample notification
+```
+
+Settings, `~/.config/macshell/notifications.toml` (re-read on every notification, edited by macsettings):
+
+```toml
+dnd = false            # banners hidden while true; history still records; critical ones still show
+banner_seconds = 5     # default lifetime when the app does not ask for one
+muted_apps = []        # app names or desktop-entry ids that never show or record
+```
+
+History lives in `~/.local/state/macshell/notification-history.json` (last 100). Colours come from
+`notify::ui::Palette` (dark, light when `desktop-style` says light): the single place to hook the theme module.
+Markup in bodies is stripped (macnotify does not advertise `body-markup`).
+
+Test without touching your session: `make e2e-notify` (private `dbus-daemon` and Xvfb).
+
 ## Develop
 
 ```sh
@@ -133,7 +168,7 @@ macdock --png dock.png           # render the dock to a PNG without any display
 Tested on: Hyprland (live), nested sway and niri (Wayland), and dwm + picom (X11).
 
 Known limits: on X11 the panels publish `_NET_WM_STRUT_PARTIAL` and the DOCK window type, which rdwm
-honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale factor 1 only. The Focus tile needs `dunstctl` or `makoctl`. The bar is dark-only.
+honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale factor 1 only. The Focus tile needs `macnotify`, `dunstctl` or `makoctl`. The bar is dark-only.
 
 ## License
 
