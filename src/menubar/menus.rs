@@ -127,6 +127,11 @@ pub fn build(app: &str, light: bool) -> Vec<Menu> {
                 item("Minimize", "minimize", "⌘⌥S"),
                 item("Zoom", "zoom", "⌘⌥F"),
                 item("Float / Tile", "float", "⌘T"),
+                item("Tile All Windows", "tile-all", "⌘⇧T"),
+                item("Snap Left", "snap-left", ""),
+                item("Snap Right", "snap-right", ""),
+                item("Snap Top / Fill Screen", "snap-up", ""),
+                item("Restore Size", "snap-restore", ""),
                 item("Center", "center", ""),
                 item("Keep on Top", "pin", ""),
                 item("Switch Tiling / Floating Windows", "windows-mode", ""),
@@ -207,6 +212,23 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|d| d.join(name)).find(|p| p.is_file()))
 }
 
+/// The rdwm action behind a Window-menu row.
+fn rdwm_action(action: &str) -> Option<&'static str> {
+    Some(match action {
+        "minimize" => "minimize",
+        "zoom" => "togglemaximize",
+        "fullscreen" => "togglefullscreen",
+        "float" => "togglefloating",
+        "pin" => "togglesticky",
+        "tile-all" => "tileall",
+        "snap-left" => "snap_left",
+        "snap-right" => "snap_right",
+        "snap-up" => "snap_up",
+        "snap-restore" => "snap_restore",
+        _ => return None,
+    })
+}
+
 /// Portable command for an action without the helper, if one exists.
 pub fn fallback_command(action: &str) -> Option<Vec<String>> {
     let c = |args: &[&str]| Some(args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
@@ -235,7 +257,7 @@ impl Runner {
 
     /// Whether the action can do anything on this system (otherwise the row is dimmed).
     pub fn available(&self, action: &str) -> bool {
-        self.helper.is_some() || fallback_command(action).is_some()
+        (rdwm_action(action).is_some() && super::rdwm::socket_path().exists()) || self.helper.is_some() || fallback_command(action).is_some()
     }
 
     /// Destructive actions ask for a second click when no helper (which confirms itself) is installed.
@@ -245,6 +267,11 @@ impl Runner {
 
     /// Starts the action detached. Returns false if nothing could be started.
     pub fn run(&self, action: &str) -> bool {
+        // Window-menu rows drive rdwm directly (the helper below speaks Hyprland).
+        if let Some(a) = rdwm_action(action).filter(|_| super::rdwm::socket_path().exists()) {
+            super::rdwm::send_action(a, &[]);
+            return true;
+        }
         // "System Settings…" opens macsettings when it is installed (the helper's menu is Omarchy's own).
         if action == "settings" && find_in_path("macsettings").is_some() {
             return spawn_detached(&["macsettings".to_string()]);
