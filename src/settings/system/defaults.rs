@@ -187,7 +187,14 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
                 }
                 let mut s = h.session.clone();
                 s.terminal = (!t.is_empty()).then(|| t.clone());
-                h.run_session(Action::new(Dom::Defaults, "Terminal", vec![]).msg(if t.is_empty() { "Terminal: automatic (from the next login)".to_string() } else { format!("Terminal set to {t} (from the next login)") }), s);
+                h.run_session(
+                    Action::new(Dom::Defaults, "Terminal", vec![]).msg(if t.is_empty() {
+                        "Terminal: automatic (from the next login)".to_string()
+                    } else {
+                        format!("Terminal set to {t} (from the next login)")
+                    }),
+                    s,
+                );
             }
             _ => return Err("Unsupported change".into()),
         }

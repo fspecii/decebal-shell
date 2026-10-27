@@ -81,11 +81,19 @@ pub fn items(h: &Hub, hour12: bool, datefmt: &str) -> Vec<Item> {
             let sel = opts.iter().position(|(_, v)| *v == st.timezone);
             v.push(Item::Card(vec![
                 Row::new("Time zone").detail("Needs administrator approval (polkit); a refusal is shown here").ctl(Ctl::new("s:dt:zone:", Kind::Popup(opts, sel))),
-                Row::new("Set time automatically").detail(if !st.can_ntp { "No network time service is available".to_string() } else if st.synced { "Synchronised".to_string() } else { "Not synchronised yet".to_string() }).ctl({
-                    let mut c = Ctl::new("s:dt:ntp:", Kind::Toggle(st.ntp));
-                    c.enabled = st.can_ntp;
-                    c
-                }),
+                Row::new("Set time automatically")
+                    .detail(if !st.can_ntp {
+                        "No network time service is available".to_string()
+                    } else if st.synced {
+                        "Synchronised".to_string()
+                    } else {
+                        "Not synchronised yet".to_string()
+                    })
+                    .ctl({
+                        let mut c = Ctl::new("s:dt:ntp:", Kind::Toggle(st.ntp));
+                        c.enabled = st.can_ntp;
+                        c
+                    }),
             ]));
         }
     }

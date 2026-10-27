@@ -557,11 +557,16 @@ pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
     // confirmation banner
     if let Some(left) = h.sh.confirm.lock().unwrap().seconds_left(Instant::now()) {
         v.push(Item::Header("Keep these display settings?".into()));
-        v.push(Item::Card(vec![Row::new(format!("Reverting in {left} s")).detail("The previous layout comes back automatically unless you keep this one").ctl(Ctl::new("s:disp:revert:", Kind::Button { label: "Revert".into(), danger: true })).ctl(Ctl::new("s:disp:keep:", Kind::Button { label: "Keep changes".into(), danger: false }))]));
+        v.push(Item::Card(vec![Row::new(format!("Reverting in {left} s"))
+            .detail("The previous layout comes back automatically unless you keep this one")
+            .ctl(Ctl::new("s:disp:revert:", Kind::Button { label: "Revert".into(), danger: true }))
+            .ctl(Ctl::new("s:disp:keep:", Kind::Button { label: "Keep changes".into(), danger: false }))]));
     }
     match &h.disp.data {
         None => v.push(Item::Note { text: "Reading display layout...".into(), warn: false }),
-        Some(st) if !st.available => v.extend(super::sound::unavailable("Display settings", st.error.as_deref().unwrap_or("xrandr is not available (Wayland sessions configure displays in the compositor)."))),
+        Some(st) if !st.available => {
+            v.extend(super::sound::unavailable("Display settings", st.error.as_deref().unwrap_or("xrandr is not available (Wayland sessions configure displays in the compositor).")))
+        }
         Some(st) => {
             let conn = st.connected();
             let multi = conn.len() > 1;
@@ -602,7 +607,11 @@ pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
                         rows.push(Row::new("Position").detail(format!("Now at {x}, {y}")).ctl(Ctl::new(format!("s:disp:pos:{}", o.name), Kind::Popup(pos, None))));
                     }
                     if !o.primary {
-                        rows.push(Row::new("Make primary").detail("Where the menu bar and dock go").ctl(Ctl::new(format!("s:disp:primary:{}", o.name), Kind::Button { label: "Make primary".into(), danger: false })));
+                        rows.push(
+                            Row::new("Make primary")
+                                .detail("Where the menu bar and dock go")
+                                .ctl(Ctl::new(format!("s:disp:primary:{}", o.name), Kind::Button { label: "Make primary".into(), danger: false })),
+                        );
                     }
                 } else {
                     rows.push(Row::new("This display is off"));
@@ -783,7 +792,10 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
     #[test]
     fn layout_args_roundtrip_current_state() {
         let a = layout_args(&st());
-        assert_eq!(a.join(" "), "--output DP-1 --mode 2560x1440 --rate 143.97 --pos 0x0 --rotate normal --primary --output HDMI-1 --mode 1920x1080 --rate 60.00 --pos 2560x0 --rotate normal --output HDMI-2 --off");
+        assert_eq!(
+            a.join(" "),
+            "--output DP-1 --mode 2560x1440 --rate 143.97 --pos 0x0 --rotate normal --primary --output HDMI-1 --mode 1920x1080 --rate 60.00 --pos 2560x0 --rotate normal --output HDMI-2 --off"
+        );
     }
 
     #[test]

@@ -80,12 +80,19 @@ fn pick_specs() -> Option<[FaceSpec; 4]> {
         }
         find_font(fallback)
     };
-    let regular = try_family("", &["Inter", "Inter Variable", "sans-serif"])?;
+    // Each lookup runs fc-match (a process, ~10 ms): do the three other weights alongside the regular one.
+    let (regular, [medium, semibold, bold]) = std::thread::scope(|sc| {
+        let others = [
+            sc.spawn(|| try_family(":weight=medium", &["Inter:weight=medium", "sans-serif:weight=medium"])),
+            sc.spawn(|| try_family(":weight=demibold", &["Inter:weight=demibold", "sans-serif:weight=demibold"])),
+            sc.spawn(|| try_family(":weight=bold", &["Inter:weight=bold", "sans-serif:weight=bold"])),
+        ];
+        let regular = try_family("", &["Inter", "Inter Variable", "sans-serif"]);
+        (regular, others.map(|h| h.join().ok().flatten()))
+    });
+    let regular = regular?;
     load(&regular)?; // fail early (and free it again) if the file is unreadable
-    let pick = |style: &str, fb: &[&str]| try_family(style, fb).unwrap_or_else(|| regular.clone());
-    let medium = pick(":weight=medium", &["Inter:weight=medium", "sans-serif:weight=medium"]);
-    let semibold = pick(":weight=demibold", &["Inter:weight=demibold", "sans-serif:weight=demibold"]);
-    let bold = pick(":weight=bold", &["Inter:weight=bold", "sans-serif:weight=bold"]);
+    let [medium, semibold, bold] = [medium, semibold, bold].map(|f| f.unwrap_or_else(|| regular.clone()));
     Some([regular, medium, semibold, bold])
 }
 

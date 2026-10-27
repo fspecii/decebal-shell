@@ -76,7 +76,12 @@ pub fn draw(pm: &mut Pixmap, k: u8, bg: (u8, u8, u8), cx: f32, cy: f32, u: f32) 
             fill_circle(pm, cx, cy + 6.5 * u, 1.8 * u, white);
         }
         BLUETOOTH => {
-            stroke(pm, &[(cx - 5.0 * u, cy - 5.0 * u), (cx + 5.0 * u, cy + 4.0 * u), (cx, cy + 9.0 * u), (cx, cy - 9.0 * u), (cx + 5.0 * u, cy - 4.0 * u), (cx - 5.0 * u, cy + 5.0 * u)], 1.9 * u, white);
+            stroke(
+                pm,
+                &[(cx - 5.0 * u, cy - 5.0 * u), (cx + 5.0 * u, cy + 4.0 * u), (cx, cy + 9.0 * u), (cx, cy - 9.0 * u), (cx + 5.0 * u, cy - 4.0 * u), (cx - 5.0 * u, cy + 5.0 * u)],
+                1.9 * u,
+                white,
+            );
         }
         BELL => {
             let mut pb = PathBuilder::new();

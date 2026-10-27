@@ -51,7 +51,9 @@ impl NotifCfg {
     pub fn render(&self, old: &str) -> String {
         let mut doc = old.parse::<DocumentMut>().unwrap_or_default();
         if old.trim().is_empty() {
-            doc.decor_mut().set_prefix("# Notification settings, written by macsettings and read by macnotify.\n# dnd: do not disturb. banner_seconds: 1..60 (0 = until clicked). muted_apps: app names, case-insensitive.\n");
+            doc.decor_mut().set_prefix(
+                "# Notification settings, written by macsettings and read by macnotify.\n# dnd: do not disturb. banner_seconds: 1..60 (0 = until clicked). muted_apps: app names, case-insensitive.\n",
+            );
         }
         let mut arr = Array::new();
         for a in &self.muted_apps {
@@ -103,15 +105,23 @@ pub fn items(h: &Hub) -> Vec<Item> {
     v.push(Item::Card(vec![Row::new("Do Not Disturb").detail("Silence banners and sounds; notifications are still kept").ctl(Ctl::new("s:not:dnd:", Kind::Toggle(c.dnd)))]));
     v.push(Item::Header("Banners".into()));
     v.push(Item::Card(vec![
-        Row::new("Banner duration").detail(if c.banner_seconds == 0 { "Banners stay until you click them".to_string() } else { "How long a banner stays on screen".to_string() }).ctl(Ctl::new("s:not:secs:", Kind::Stepper { v: c.banner_seconds as f64, min: 0.0, max: 60.0, step: 1.0, unit: " s".into() })),
+        Row::new("Banner duration")
+            .detail(if c.banner_seconds == 0 { "Banners stay until you click them".to_string() } else { "How long a banner stays on screen".to_string() })
+            .ctl(Ctl::new("s:not:secs:", Kind::Stepper { v: c.banner_seconds as f64, min: 0.0, max: 60.0, step: 1.0, unit: " s".into() })),
         Row::new("Send a test notification").detail("Needs notify-send and a running notification daemon").ctl(Ctl::new("s:not:test:", Kind::Button { label: "Send test".into(), danger: false })),
     ]));
     v.push(Item::Header("Muted apps".into()));
-    let mut rows: Vec<Row> = c.muted_apps.iter().enumerate().map(|(i, a)| Row::new(a.clone()).ctl(Ctl::new(format!("s:not:unmute:{i}"), Kind::Button { label: "Unmute".into(), danger: false }))).collect();
+    let mut rows: Vec<Row> =
+        c.muted_apps.iter().enumerate().map(|(i, a)| Row::new(a.clone()).ctl(Ctl::new(format!("s:not:unmute:{i}"), Kind::Button { label: "Unmute".into(), danger: false }))).collect();
     if rows.is_empty() {
         rows.push(Row::new("No muted apps").detail("Muted apps never show banners"));
     }
-    rows.push(Row::new("Mute an app").detail("The name the app uses in its notifications").ctl(Ctl::new("s:not:newapp:", Kind::Text { val: h.ui_not.new_app.clone(), hint: "e.g. Slack".into() })).ctl(Ctl::new("s:not:mute:", Kind::Button { label: "Mute".into(), danger: false })));
+    rows.push(
+        Row::new("Mute an app")
+            .detail("The name the app uses in its notifications")
+            .ctl(Ctl::new("s:not:newapp:", Kind::Text { val: h.ui_not.new_app.clone(), hint: "e.g. Slack".into() }))
+            .ctl(Ctl::new("s:not:mute:", Kind::Button { label: "Mute".into(), danger: false })),
+    );
     v.push(Item::Card(rows));
     v.push(Item::Note { text: format!("Saved in {}. The notification daemon (macnotify) reads it.", h.sh.dir.join(FILE).display()), warn: false });
     v

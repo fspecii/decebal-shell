@@ -7,7 +7,15 @@ use super::{Action, Dom, Hub};
 use crate::settings::model::CtlVal;
 use crate::settings::ui::{Ctl, Item, Kind, Opt, Row};
 
-pub const LOCKERS: &[(&str, &str)] = &[("Hyprlock", "hyprlock"), ("Swaylock", "swaylock"), ("i3lock", "i3lock"), ("XSecureLock", "xsecurelock"), ("slock", "slock"), ("betterlockscreen", "betterlockscreen -l"), ("Lock the session (loginctl)", "loginctl lock-session")];
+pub const LOCKERS: &[(&str, &str)] = &[
+    ("Hyprlock", "hyprlock"),
+    ("Swaylock", "swaylock"),
+    ("i3lock", "i3lock"),
+    ("XSecureLock", "xsecurelock"),
+    ("slock", "slock"),
+    ("betterlockscreen", "betterlockscreen -l"),
+    ("Lock the session (loginctl)", "loginctl lock-session"),
+];
 
 pub fn installed_lockers(have: &dyn Fn(&str) -> bool) -> Vec<Opt> {
     LOCKERS.iter().filter(|(_, c)| have(c.split(' ').next().unwrap_or(c))).map(|(l, c)| (l.to_string(), c.to_string())).collect()
@@ -26,7 +34,10 @@ pub fn valid_lock_cmd(c: &str, have: &dyn Fn(&str) -> bool) -> Result<(), String
 }
 
 pub fn lock_timeouts() -> Vec<Opt> {
-    [(0, "Never"), (60, "1 minute"), (120, "2 minutes"), (300, "5 minutes"), (600, "10 minutes"), (900, "15 minutes"), (1800, "30 minutes")].iter().map(|(s, l)| (l.to_string(), s.to_string())).collect()
+    [(0, "Never"), (60, "1 minute"), (120, "2 minutes"), (300, "5 minutes"), (600, "10 minutes"), (900, "15 minutes"), (1800, "30 minutes")]
+        .iter()
+        .map(|(s, l)| (l.to_string(), s.to_string()))
+        .collect()
 }
 
 fn have(p: &str) -> bool {
@@ -62,7 +73,13 @@ pub fn privacy_items(h: &Hub) -> Vec<Item> {
     v.push(Item::Card(rows));
     v.push(Item::Note { text: "macsettings saves these preferences and exports them at login (MACSHELL_LOCK_CMD, MACSHELL_LOCK_SECS, MACSHELL_LOCK_ON_SUSPEND). The program that watches for idle time and suspend (hypridle, xss-lock, ...) is part of your session setup.".into(), warn: false });
     v.push(Item::Header("Good to know".into()));
-    let session = if std::env::var_os("WAYLAND_DISPLAY").is_some() { "Wayland" } else if std::env::var_os("DISPLAY").is_some() { "X11" } else { "no graphical session detected" };
+    let session = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        "Wayland"
+    } else if std::env::var_os("DISPLAY").is_some() {
+        "X11"
+    } else {
+        "no graphical session detected"
+    };
     v.push(Item::Card(vec![
         Row::new("Display server").ctl(Ctl::new("lbl:ds", Kind::Label(session.into()))),
         Row::new("Disk encryption and firewall").detail("Managed by the system (cryptsetup, nftables/ufw); they need administrator rights and are not changed here"),
@@ -72,38 +89,36 @@ pub fn privacy_items(h: &Hub) -> Vec<Item> {
 
 pub fn privacy_apply(h: &mut Hub, act: &str, val: CtlVal) {
     let mut s = h.session.clone();
-    let r: Result<String, String> = (|| {
-        match (act, &val) {
-            ("cmd", CtlVal::Str(c)) => {
-                valid_lock_cmd(c, &have)?;
-                s.lock_cmd = Some(c.clone());
-                Ok(format!("Lock command: {c}"))
-            }
-            ("custom", CtlVal::Str(c)) => {
-                h.ui_access.custom = c.clone();
-                if c.trim().is_empty() {
-                    h.dirty = true;
-                    return Err(String::new());
-                }
-                valid_lock_cmd(c, &have)?;
-                s.lock_cmd = Some(c.trim().to_string());
-                h.ui_access.custom.clear();
-                Ok(format!("Lock command: {}", c.trim()))
-            }
-            ("secs", CtlVal::Str(n)) => {
-                let n: u32 = n.parse().map_err(|_| "Invalid time")?;
-                if n > 86400 {
-                    return Err("Time is too long".into());
-                }
-                s.lock_secs = Some(n);
-                Ok("Lock timeout saved".into())
-            }
-            ("suspend", CtlVal::Bool(b)) => {
-                s.lock_on_suspend = *b;
-                Ok("Saved".into())
-            }
-            _ => Err("Unsupported privacy change".into()),
+    let r: Result<String, String> = (|| match (act, &val) {
+        ("cmd", CtlVal::Str(c)) => {
+            valid_lock_cmd(c, &have)?;
+            s.lock_cmd = Some(c.clone());
+            Ok(format!("Lock command: {c}"))
         }
+        ("custom", CtlVal::Str(c)) => {
+            h.ui_access.custom = c.clone();
+            if c.trim().is_empty() {
+                h.dirty = true;
+                return Err(String::new());
+            }
+            valid_lock_cmd(c, &have)?;
+            s.lock_cmd = Some(c.trim().to_string());
+            h.ui_access.custom.clear();
+            Ok(format!("Lock command: {}", c.trim()))
+        }
+        ("secs", CtlVal::Str(n)) => {
+            let n: u32 = n.parse().map_err(|_| "Invalid time")?;
+            if n > 86400 {
+                return Err("Time is too long".into());
+            }
+            s.lock_secs = Some(n);
+            Ok("Lock timeout saved".into())
+        }
+        ("suspend", CtlVal::Bool(b)) => {
+            s.lock_on_suspend = *b;
+            Ok("Saved".into())
+        }
+        _ => Err("Unsupported privacy change".into()),
     })();
     match r {
         Ok(m) => h.run_session(Action::new(Dom::Privacy, "Screen lock", vec![]).msg(m), s),
@@ -135,10 +150,16 @@ pub fn access_items(h: &Hub) -> Vec<Item> {
         Item::Header("Motion and text".into()),
         Item::Card(vec![
             Row::new("Reduce motion").detail("Fewer animations in macshell apps (MACSHELL_REDUCE_MOTION)").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
-            Row::new("Text size").detail("Scales text in macshell apps (MACSHELL_FONT_SCALE)").ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() })),
+            Row::new("Text size")
+                .detail("Scales text in macshell apps (MACSHELL_FONT_SCALE)")
+                .ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() })),
             Row::new("High contrast").detail("Asks the theme for its high-contrast variant (MACSHELL_HIGH_CONTRAST)").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
         ]),
-        Item::Note { text: "These are saved in ~/.config/macshell/session-settings.sh and take effect for programs started after your next login. The theme and appearance settings read the same switches.".into(), warn: false },
+        Item::Note {
+            text: "These are saved in ~/.config/macshell/session-settings.sh and take effect for programs started after your next login. The theme and appearance settings read the same switches."
+                .into(),
+            warn: false,
+        },
     ]
 }
 

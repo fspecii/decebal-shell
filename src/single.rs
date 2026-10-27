@@ -13,6 +13,12 @@ fn lock_path(name: &str) -> PathBuf {
 /// `Some(guard)` when this is the only instance (keep the guard alive for the whole run). When another
 /// instance already holds the lock it is asked to quit (SIGTERM) and `None` is returned: just exit.
 pub fn acquire(name: &str) -> Option<File> {
+    acquire_signalling(name, libc::SIGTERM)
+}
+
+/// Like [`acquire`], but a running instance gets `sig` instead of SIGTERM (macswitch: SIGUSR1 = next, SIGUSR2 = previous).
+/// The caller should have blocked `sig` (see [`block_signals`]) before this, so a signal that arrives early is held, not fatal.
+pub fn acquire_signalling(name: &str, sig: i32) -> Option<File> {
     let mut file = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(name)).ok()?;
     // SAFETY: flock on a descriptor we own; it only takes or refuses an advisory lock.
     let got = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
@@ -27,10 +33,37 @@ pub fn acquire(name: &str) -> Option<File> {
     if let Ok(pid) = pid.trim().parse::<i32>() {
         if pid > 1 && pid as u32 != std::process::id() {
             // SAFETY: plain kill(2) with the pid the running instance recorded.
-            unsafe { libc::kill(pid, libc::SIGTERM) };
+            unsafe { libc::kill(pid, sig) };
         }
     }
     None
+}
+
+/// Blocks `sigs` in the calling thread (and so in every thread it spawns later); a thread then collects them with [`wait_signal`].
+pub fn block_signals(sigs: &[i32]) {
+    // SAFETY: builds a signal set on the stack and applies it with pthread_sigmask; no handlers are touched.
+    unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut set);
+        for s in sigs {
+            libc::sigaddset(&mut set, *s);
+        }
+        libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut());
+    }
+}
+
+/// Blocks until one of `sigs` (which must be blocked) is delivered and returns it.
+pub fn wait_signal(sigs: &[i32]) -> Option<i32> {
+    // SAFETY: sigwait on a set built here; it only reads the set and writes `got`.
+    unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut set);
+        for s in sigs {
+            libc::sigaddset(&mut set, *s);
+        }
+        let mut got: libc::c_int = 0;
+        (libc::sigwait(&set, &mut got) == 0).then_some(got)
+    }
 }
 
 #[cfg(test)]

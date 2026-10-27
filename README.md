@@ -19,6 +19,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~33 MB RSS with a page of thumbnails |
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
+| `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -94,6 +95,36 @@ the box opens at once) and usage counts live in `~/.local/state/macshell/spotlig
 `xclip`: on X11 a tiny helper process owns the selection; on Wayland `wl-copy` is used.
 
 `tests/e2e_spot.sh [macspot] [display]` runs the whole thing on a private Xvfb (under `rdwm` when installed) with stub apps.
+
+## Window switcher (`macswitch`)
+
+Alt+Tab for the rdwm X11 session. rdwm starts it from its binding (`macswitch` = forward, `macswitch --back` = Alt+Shift+Tab):
+
+```toml
+[[bind]]
+mods = ["alt"]
+key = "Tab"
+action = "spawn"
+args = ["macswitch"]
+
+[[bind]]
+mods = ["alt", "shift"]
+key = "Tab"
+action = "spawn"
+args = ["macswitch", "--back"]
+```
+
+A centred card shows one icon per window (the same icon lookup as the dock, a coloured letter tile when there is none) and the
+selected window's full title below. Windows of every tag are listed; the ones not in view are dimmed and say which desktop they are
+on. The first selection is the previous window (the last one with `--back`). While it is shown it holds the keyboard:
+Tab/Right/Down next, Shift+Tab/Left/Up previous, Return, a click on a cell or **letting go of Alt** switches, Esc cancels,
+`q`/`w` closes the selected window. Switching sends rdwm `view` (when the window is on another tag), `unminimize` (when it is
+minimised) and `focuswindow`. A second `macswitch` while one is open only moves its selection (SIGUSR1/SIGUSR2). `--mod super|ctrl`
+changes the held modifier. The list comes from `rdwmctl state` over the IPC socket, most recently used first: rdwm's own `mru`
+array when `get_state` has one, else the focused window followed by the order macswitch itself last left
+(`$XDG_RUNTIME_DIR/macswitch-mru`), then rdwm's list order. With a compositor the card is translucent; without one it is opaque.
+
+`tests/e2e/switch.sh` runs it against a private Xvfb and rdwm (xdotool holds Alt, taps Tab; also checks Escape, clicks, tags and screenshots).
 
 ## Window rules for the wallpaper browser
 

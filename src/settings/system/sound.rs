@@ -288,7 +288,9 @@ pub fn items(h: &Hub) -> Vec<Item> {
         }
         let opts: Vec<(String, String)> = devs.iter().map(|d| (d.desc.clone(), d.id.clone())).collect();
         let sel = devs.iter().position(|d| d.default);
-        let mut rows = vec![Row::new(if id == "out" { "Output device" } else { "Input device" }).detail("Used by apps that do not choose their own").ctl(Ctl::new(format!("s:snd:default{p}:{id}"), Kind::Popup(opts, sel)))];
+        let mut rows = vec![Row::new(if id == "out" { "Output device" } else { "Input device" })
+            .detail("Used by apps that do not choose their own")
+            .ctl(Ctl::new(format!("s:snd:default{p}:{id}"), Kind::Popup(opts, sel)))];
         for d in devs {
             rows.push(dev_row(p, d, d.desc.clone(), if d.default { "Default" } else { "" }));
         }

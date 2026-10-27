@@ -30,7 +30,8 @@ pub struct UsersUi {
 pub fn parse_passwd(text: &str, uid: u32) -> Option<(String, u32, String, String, String)> {
     text.lines().find_map(|l| {
         let f: Vec<&str> = l.split(':').collect();
-        (f.len() >= 7 && f[2].parse::<u32>().ok() == Some(uid)).then(|| (f[0].to_string(), f[3].parse().unwrap_or(0), f[4].split(',').next().unwrap_or("").to_string(), f[5].to_string(), f[6].to_string()))
+        (f.len() >= 7 && f[2].parse::<u32>().ok() == Some(uid))
+            .then(|| (f[0].to_string(), f[3].parse().unwrap_or(0), f[4].split(',').next().unwrap_or("").to_string(), f[5].to_string(), f[6].to_string()))
     })
 }
 
@@ -56,7 +57,8 @@ pub fn parse_groups(text: &str, user: &str, gid: u32) -> Vec<String> {
 pub fn load_users() -> Users {
     let uid = unsafe { libc::getuid() };
     let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
-    let (name, gid, real, home, shell) = parse_passwd(&passwd, uid).unwrap_or_else(|| (std::env::var("USER").unwrap_or_default(), 0, String::new(), std::env::var("HOME").unwrap_or_default(), std::env::var("SHELL").unwrap_or_default()));
+    let (name, gid, real, home, shell) = parse_passwd(&passwd, uid)
+        .unwrap_or_else(|| (std::env::var("USER").unwrap_or_default(), 0, String::new(), std::env::var("HOME").unwrap_or_default(), std::env::var("SHELL").unwrap_or_default()));
     let groups = parse_groups(&std::fs::read_to_string("/etc/group").unwrap_or_default(), &name, gid);
     let face = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".face")).and_then(|p| std::fs::metadata(&p).ok().filter(|m| m.is_file()).map(|m| (p, m.len())));
     let display_manager = std::fs::read_link("/etc/systemd/system/display-manager.service").ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().trim_end_matches(".service").to_string()));
@@ -72,7 +74,12 @@ pub fn install_face(src: &Path, dest: &Path) -> Result<(), String> {
     if meta.len() > 40 << 20 {
         return Err("That picture is too large (limit 40 MB)".into());
     }
-    let img = image::ImageReader::open(src).map_err(|e| e.to_string())?.with_guessed_format().map_err(|e| e.to_string())?.decode().map_err(|_| "That file is not a picture macsettings can read (PNG, JPEG or WebP)".to_string())?;
+    let img = image::ImageReader::open(src)
+        .map_err(|e| e.to_string())?
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|_| "That file is not a picture macsettings can read (PNG, JPEG or WebP)".to_string())?;
     let sq = img.resize_to_fill(256, 256, image::imageops::FilterType::Triangle);
     let tmp = dest.with_extension(format!("tmp{}", std::process::id()));
     {
@@ -101,14 +108,20 @@ pub fn users_items(h: &Hub) -> Vec<Item> {
             Some((p, n)) => format!("{} ({} KB)", p.display(), n / 1024),
             None => "None: ~/.face is not set".into(),
         }),
-        Row::new("Use this image file").detail("Path to a PNG, JPEG or WebP; it is cropped to a square and saved as ~/.face").ctl(Ctl::new("s:usr:path:", Kind::Text { val: h.ui_users.path.clone(), hint: "/path/to/picture.png".into() })).ctl(Ctl::new("s:usr:setface:", Kind::Button { label: "Set".into(), danger: false })),
+        Row::new("Use this image file")
+            .detail("Path to a PNG, JPEG or WebP; it is cropped to a square and saved as ~/.face")
+            .ctl(Ctl::new("s:usr:path:", Kind::Text { val: h.ui_users.path.clone(), hint: "/path/to/picture.png".into() }))
+            .ctl(Ctl::new("s:usr:setface:", Kind::Button { label: "Set".into(), danger: false })),
     ]));
     v.push(Item::Header("Login screen".into()));
     v.push(Item::Note {
-        text: format!("{} The login screen's theme belongs to the display manager and is not changed here.", match &u.display_manager {
-            Some(d) => format!("Your login screen is {d}."),
-            None => "No display manager service was found.".to_string(),
-        }),
+        text: format!(
+            "{} The login screen's theme belongs to the display manager and is not changed here.",
+            match &u.display_manager {
+                Some(d) => format!("Your login screen is {d}."),
+                None => "No display manager service was found.".to_string(),
+            }
+        ),
         warn: false,
     });
     v
@@ -184,7 +197,8 @@ pub fn parse_lspci_gpus(text: &str) -> Vec<String> {
             let q: Vec<&str> = l.split('"').collect();
             // slot "class" "vendor" "device" ...
             let (class, vendor, dev) = (q.get(1)?, q.get(3)?, q.get(5)?);
-            (class.contains("VGA") || class.contains("3D controller") || class.contains("Display controller")).then(|| format!("{} {}", vendor.replace("Corporation", "").replace("[AMD/ATI]", "AMD").replace("Advanced Micro Devices, Inc.", "AMD").trim(), dev))
+            (class.contains("VGA") || class.contains("3D controller") || class.contains("Display controller"))
+                .then(|| format!("{} {}", vendor.replace("Corporation", "").replace("[AMD/ATI]", "AMD").replace("Advanced Micro Devices, Inc.", "AMD").trim(), dev))
         })
         .collect()
 }
@@ -278,7 +292,9 @@ pub fn storage_items(h: &Hub, rdwm_version: Option<&str>) -> Vec<Item> {
     }
     v.push(Item::Card(rows));
     v.push(Item::Header("Configuration".into()));
-    v.push(Item::Card(vec![Row::new("Check configuration").detail("Validate rdwm's config.toml with rdwm's own parser").ctl(Ctl::new("s:sto:check:", Kind::Button { label: "Check config".into(), danger: false }))]));
+    v.push(Item::Card(vec![Row::new("Check configuration")
+        .detail("Validate rdwm's config.toml with rdwm's own parser")
+        .ctl(Ctl::new("s:sto:check:", Kind::Button { label: "Check config".into(), danger: false }))]));
     v
 }
 

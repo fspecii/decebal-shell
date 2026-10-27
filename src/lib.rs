@@ -26,6 +26,7 @@ pub mod notify;
 pub mod settings;
 pub mod single;
 pub mod spotlight;
+pub mod switcher;
 pub mod taskbar;
 pub mod text;
 pub mod theme;

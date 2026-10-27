@@ -37,7 +37,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock macbar machaven maclaunch macspot macsettings macthemectl macnotify macwm; do
+  for bin in macdock macbar machaven maclaunch macspot macswitch macsettings macthemectl macnotify macwm; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"

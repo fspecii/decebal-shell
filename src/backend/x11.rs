@@ -40,7 +40,7 @@ fn err<E: fmt::Display>(e: E) -> Error {
 }
 
 /// Finds a depth-32 TrueColor visual for real alpha.
-fn argb_visual(screen: &Screen) -> Option<Visualid> {
+pub(crate) fn argb_visual(screen: &Screen) -> Option<Visualid> {
     screen.allowed_depths.iter().find(|d| d.depth == 32).and_then(|d| d.visuals.iter().find(|v| v.class == VisualClass::TRUE_COLOR)).map(|v| v.visual_id)
 }
 
@@ -129,7 +129,7 @@ pub(crate) fn panel_monitor(conn: &RustConnection, root: Window, screen: (i32, i
 
 /// True when a compositing manager owns `_NET_WM_CM_S<screen>`; without one the transparent part of
 /// a 32-bit window is drawn solid black, so the visible shape has to be clipped as well.
-fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
+pub(crate) fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
     let name = format!("_NET_WM_CM_S{screen_num}");
     let Some(atom) = conn.intern_atom(true, name.as_bytes()).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0) else { return false };
     conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
