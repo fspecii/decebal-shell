@@ -532,7 +532,7 @@ impl Switcher {
 }
 
 /// A stable pleasant colour per app class for the letter tile.
-fn tile_color(class: &str) -> (u8, u8, u8) {
+pub fn tile_color(class: &str) -> (u8, u8, u8) {
     let mut h: u32 = 2166136261;
     for b in class.to_lowercase().bytes() {
         h = (h ^ u32::from(b)).wrapping_mul(16777619);

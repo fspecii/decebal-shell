@@ -20,6 +20,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
+| `macexpose` | Exposé / Mission Control window overview for rdwm (X11): thumbnails of the current workspace, or `--all` grouped by workspace; see below | starts and paints in ~100 ms, exits on commit |
 | `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
 | `macclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
 | `machot` | Hot Corners for X11: the pointer resting in a screen corner runs an action (Dashboard, Spotlight, Launchpad, Lock, ...); a daemon with `get` / `set` CLI; see below | daemon ~3 MB RSS, 0 % CPU idle |
@@ -133,6 +134,46 @@ array when `get_state` has one, else the focused window followed by the order ma
 (`$XDG_RUNTIME_DIR/macswitch-mru`), then rdwm's list order. With a compositor the card is translucent; without one it is opaque.
 
 `tests/e2e/switch.sh` runs it against a private Xvfb and rdwm (xdotool holds Alt, taps Tab; also checks Escape, clicks, tags and screenshots).
+
+## Window overview (`macexpose`)
+
+A Mission Control / Exposé style overview for the rdwm X11 session. `macexpose` dims the screen (full-screen, override-redirect,
+keyboard and pointer grabbed, like `macsession`) and shows the windows of the **current workspace** as a grid of thumbnails;
+`macexpose --all` shows every window grouped by workspace in rows, under a strip of workspace chips 1-9 (the occupied ones are
+highlighted, the current one is outlined; clicking a chip switches to that workspace). Bind it in rdwm:
+
+```toml
+[[bind]]
+mods = ["super"]
+key = "Up"
+action = "spawn"
+args = ["macexpose"]
+
+[[bind]]
+mods = ["super", "shift"]
+key = "Up"
+action = "spawn"
+args = ["macexpose", "--all"]
+```
+
+Each window is captured once, before the overlay appears: Composite `NameWindowPixmap` when the server has it (and the window is
+redirected), else a plain `GetImage` on the window (so a window hidden behind another one can come out wrong without a
+compositor), box-filtered down to what the grid needs. Windows that are not mapped (minimised, on another workspace in `--all`)
+get a card with the app icon (the dock's icon lookup) instead. Cells have rounded corners, the app icon and title underneath; the
+hovered/selected cell is highlighted and the focused window is outlined. The layout is one uniform scale for all windows, the
+largest at which everything fits, with the number of rows chosen by aspect ratio (it reads like macOS). The window list is rdwm's
+`get_state` in creation order.
+
+Keys: Return or a click switches to the window (`view` first when it is on another workspace, `unminimize` when minimised, then
+`focuswindow`, the same requests as `macswitch`); arrows move the selection (up/down jump to the row above/below), Tab/Shift+Tab step,
+Home/End; typing filters by title or class (a search pill appears, several words must all match, Backspace edits; `/` starts a filter
+explicitly); `w`, Delete or a middle click closes the selected window (`WM_DELETE_WINDOW`; `w` is an ordinary letter once a filter is
+started, Ctrl+W always closes); Escape or a click on empty space cancels and puts the focus back where it was. Running `macexpose`
+again while it is open closes it. Everything is captured synchronously, so ten windows start and paint in about 100 ms
+(`MACEXPOSE_TIMING=1` prints the time to the first frame). Without a compositor the dimmer is opaque; with one it is translucent.
+
+`tests/e2e/expose.sh` runs it against a private Xvfb and rdwm with coloured test windows (screenshot-checks the thumbnails, click,
+Escape, filter, `--all` with a chip and a window on another tag, close with `w`).
 
 ## On-screen display (`machud`)
 
