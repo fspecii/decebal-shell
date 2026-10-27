@@ -28,7 +28,10 @@ click_xy() { xdotool mousemove --window "$WID" "$1" "$2"; sleep 0.05; xdotool cl
 click_id() { local c; c=$(center "$1"); [ -z "$c" ] || [ "$c" = "null null" ] && { bad "no control $1"; return 1; }; click_xy $c; }
 click_part() { # id part-index fraction-of-part(0..1)
   local r; r=$(jq -r "[.ctls[]|select(.id==\"$1\")][0].parts[$2]|\"\(.[0]+.[2]*${3:-0.5}|floor) \(.[1]+.[3]/2|floor)\"" "$DUMP"); click_xy $r; }
-goto() { local c; c=$(jq -r "[.panes[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DUMP"); click_xy $c; wait_for "pane $1 shown" ".pane==\"$1\"" 3; sleep 0.4; }
+goto() { # scrolls the sidebar until the pane row is visible, then clicks it
+  local n=0 c
+  while [ "$(jq -r "[.panes[]|select(.id==\"$1\")][0].visible" "$DUMP")" != "true" ] && [ $n -lt 20 ]; do xdotool mousemove --window "$WID" 100 300; xdotool click --window "$WID" 5; sleep 0.15; n=$((n+1)); done
+  c=$(jq -r "[.panes[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DUMP"); click_xy $c; wait_for "pane $1 shown" ".pane==\"$1\"" 3; sleep 0.4; }
 shot() { [ -n "${SHOTS:-}" ] && { mkdir -p "$SHOTS"; e2e_shot "$SHOTS/$1.png"; }; }
 cpu_ticks() { awk '{print $14+$15}' /proc/$1/stat; }
 
@@ -143,9 +146,9 @@ xdotool key --window "$WID" Tab; sleep 0.2
 xdotool key --window "$WID" Tab; sleep 0.2
 xdotool key --window "$WID" ctrl+f; sleep 0.2
 xdotool key --window "$WID" g a p; sleep 0.4
-check "search filters the sidebar to Tiling ($(q '.panes|map(.id)|join(",")'))" test "$(q '.panes|map(.id)|join(",")')" = "tiling"
+check "search puts Tiling first ($(q '.panes|map(.id)|join(",")'))" test "$(q '.panes[0].id')" = "tiling"
 xdotool key --window "$WID" Escape; sleep 0.3
-check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" = "11"
+check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" -ge 23
 
 echo "== offline: rdwm stopped, the file is still edited"
 kill $E2E_RDWM; wait $E2E_RDWM 2>/dev/null; sleep 1.5

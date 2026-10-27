@@ -284,6 +284,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         resp = app.tick();
                     }
                 }
+                Event::MapNotify(m) if m.window == win => app.set_visible(true),
+                Event::UnmapNotify(m) if m.window == win => app.set_visible(false),
                 Event::DestroyNotify(_) => return Ok(()),
                 Event::Error(e) => return Err(Error(format!("server error: {e:?}"))),
                 _ => {}

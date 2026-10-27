@@ -3,6 +3,7 @@
 
 use super::binds::{self, BindRow, Src};
 use super::icons::Glyph;
+use super::system::glyphs;
 use super::model::{cap, rid, CtlVal, Model};
 use super::tomlcfg::Val;
 use super::ui::{Ctl, Item, Kind, LayoutTile, Opt, Row, Thumb};
@@ -50,7 +51,7 @@ pub const PANES: &[PaneDef] = &[
         keywords: "focus follows mouse snap zones activate pertag size hints fullscreen preview retile shift",
     },
     PaneDef { id: "rules", title: "Rules", glyph: Glyph::Rules, color: (255, 69, 58), keywords: "window rules class instance title floating tag monitor sticky decorate" },
-    PaneDef { id: "keyboard", title: "Keyboard", glyph: Glyph::Keyboard, color: (99, 99, 102), keywords: "shortcuts keys bindings hotkeys modes chords record conflicts bind" },
+    PaneDef { id: "keyboard", title: "Shortcuts", glyph: Glyph::Keyboard, color: (99, 99, 102), keywords: "shortcuts keys bindings hotkeys modes chords record conflicts bind" },
     PaneDef { id: "autostart", title: "Autostart & Plugins", glyph: Glyph::Rocket, color: (191, 90, 242), keywords: "autostart startup plugins scratchpad commands programs" },
     PaneDef { id: "displays", title: "Displays", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "monitors outputs screens resolution scale per output wallpaper" },
     PaneDef {
@@ -60,6 +61,19 @@ pub const PANES: &[PaneDef] = &[
         color: (255, 55, 95),
         keywords: "theme appearance dark light auto mode accent colour color swatches transparency translucency corner radius font text size dracula nord solarized windows graphite high contrast",
     },
+    // system panes (src/settings/system); the sidebar groups come from system::registry::SECTIONS
+    PaneDef { id: "sound", title: "Sound", glyph: Glyph::Sys(glyphs::SPEAKER), color: (255, 69, 58), keywords: "audio speakers microphone volume output input mute pipewire pulseaudio" },
+    PaneDef { id: "network", title: "Network", glyph: Glyph::Sys(glyphs::WIFI), color: (10, 132, 255), keywords: "wifi wi-fi wireless ethernet vpn internet ip dns networkmanager nmcli" },
+    PaneDef { id: "bluetooth", title: "Bluetooth", glyph: Glyph::Sys(glyphs::BLUETOOTH), color: (10, 132, 255), keywords: "pair devices headset mouse keyboard discoverable bluez" },
+    PaneDef { id: "notifications", title: "Notifications", glyph: Glyph::Sys(glyphs::BELL), color: (255, 59, 48), keywords: "do not disturb dnd banner mute alerts macnotify" },
+    PaneDef { id: "inputdev", title: "Keyboard & Input", glyph: Glyph::Sys(glyphs::MOUSE), color: (99, 99, 102), keywords: "layout repeat caps lock pointer mouse touchpad scrolling tap speed xkb" },
+    PaneDef { id: "power", title: "Power & Battery", glyph: Glyph::Sys(glyphs::BATTERY), color: (48, 209, 88), keywords: "battery profile performance saver screen blank sleep dpms lid suspend" },
+    PaneDef { id: "defaults", title: "Default Apps", glyph: Glyph::Sys(glyphs::APPS), color: (255, 159, 10), keywords: "browser mail terminal file manager media player editor pdf xdg" },
+    PaneDef { id: "datetime", title: "Date & Time", glyph: Glyph::Sys(glyphs::CLOCK), color: (142, 142, 147), keywords: "timezone clock 24 hour ntp format menu bar" },
+    PaneDef { id: "users", title: "Users & Login", glyph: Glyph::Sys(glyphs::USER), color: (100, 210, 255), keywords: "account avatar picture shell groups login screen" },
+    PaneDef { id: "privacy", title: "Privacy & Security", glyph: Glyph::Sys(glyphs::LOCK), color: (88, 86, 214), keywords: "lock screen locker timeout suspend encryption" },
+    PaneDef { id: "storage", title: "About & Storage", glyph: Glyph::Sys(glyphs::INFO), color: (142, 142, 147), keywords: "system info cpu gpu ram disk usage versions kernel distro check config" },
+    PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
 ];
 
 pub fn pane_matches(p: &PaneDef, q: &str) -> bool {
@@ -306,6 +320,9 @@ impl Model {
 
     /// Lazy data the panes need (called before painting a pane).
     pub fn prepare(&mut self, pane: usize) {
+        if let Some(p) = PANES.get(pane) {
+            self.sys_prepare(p.id);
+        }
         match PANES.get(pane).map(|p| p.id) {
             Some("desktop") if self.apps.is_none() => self.apps = Some(installed_apps()),
             Some("wallpaper") if self.walls.is_none() => self.walls = Some(list_images(&self.paths.backgrounds(), 3, 400)),
@@ -330,6 +347,10 @@ impl Model {
     pub fn items(&self, pane: usize) -> Vec<Item> {
         let mut items = self.banners();
         let id = PANES.get(pane).map(|p| p.id).unwrap_or("general");
+        if let Some(v) = self.sys_items(id) {
+            items.extend(v);
+            return items;
+        }
         items.extend(match id {
             "theme" => super::themepane::items(self),
             "general" => self.pane_general(),
@@ -341,6 +362,11 @@ impl Model {
             "rules" => self.pane_rules(),
             "keyboard" => self.pane_keyboard(),
             "autostart" => self.pane_autostart(),
+            "displays" => {
+                let mut v = self.sys_display_items();
+                v.extend(self.pane_displays());
+                v
+            }
             _ => self.pane_displays(),
         });
         items

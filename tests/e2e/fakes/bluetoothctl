@@ -1,0 +1,10 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "bluetoothctl $*" >> "$FS/log"
+[ -f "$FS/bt" ] || echo yes > "$FS/bt"
+case "$1" in
+show) printf 'Controller 00:1A:7D:DA:71:13 (public)\n\tName: fakebox\n\tPowered: %s\n\tDiscoverable: no\n\tPairable: yes\n\tDiscovering: no\n' "$(cat $FS/bt)";;
+devices) printf 'Device 11:22:33:44:55:66 Sony WH-1000XM4\nDevice AA:BB:CC:DD:EE:FF Keyboard K380\nDevice 12:34:56:78:9A:BC New Speaker\n';;
+info) case "$2" in 11:*) printf 'Device %s\n\tPaired: yes\n\tTrusted: yes\n\tConnected: yes\n\tIcon: audio-headset\n' "$2";; AA:*) printf 'Device %s\n\tPaired: yes\n\tTrusted: no\n\tConnected: no\n' "$2";; *) printf 'Device %s\n\tPaired: no\n\tConnected: no\n' "$2";; esac;;
+power) echo "$2" | sed 's/on/yes/;s/off/no/' > "$FS/bt";;
+esac
+exit 0

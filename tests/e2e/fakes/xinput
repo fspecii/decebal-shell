@@ -1,0 +1,8 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "xinput $*" >> "$FS/log"
+case "$1" in
+list) printf '⎡ Virtual core pointer                    \tid=2\t[master pointer  (3)]\n⎜   ↳ Virtual core XTEST pointer              \tid=4\t[slave  pointer  (2)]\n⎜   ↳ SYNA Touchpad                           \tid=11\t[slave  pointer  (2)]\n⎜   ↳ Logitech MX Master                      \tid=10\t[slave  pointer  (2)]\n⎣ Virtual core keyboard                   \tid=3\t[master keyboard (2)]\n    ↳ AT keyboard                             \tid=12\t[slave  keyboard (3)]\n';;
+list-props) if [ "$2" = 11 ]; then printf "Device 'SYNA Touchpad':\n\tDevice Enabled (178):\t1\n\tlibinput Tapping Enabled (320):\t%s\n\tlibinput Natural Scrolling Enabled (330):\t0\n\tlibinput Accel Speed (340):\t-0.250000\n" "$(cat $FS/tap 2>/dev/null || echo 1)"; else printf "Device 'Logitech MX Master':\n\tlibinput Accel Speed (300):\t0.000000\n"; fi;;
+set-prop) [ "$3" = "libinput Tapping Enabled" ] && echo "$4" > "$FS/tap";;
+esac
+exit 0

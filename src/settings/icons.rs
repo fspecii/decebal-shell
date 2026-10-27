@@ -149,6 +149,8 @@ pub enum Glyph {
     Keyboard,
     Rocket,
     Monitor,
+    /// Glyph of a system pane (`system::glyphs`).
+    Sys(u8),
 }
 
 fn line(pm: &mut Pixmap, pts: &[(f32, f32)], w: f32, c: Color) {
@@ -239,6 +241,7 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
             fill_circle(pm, cx, cy - 2.5 * u, 2.2 * u, color(bg.0, bg.1, bg.2, 1.0));
             line(pm, &[(cx - 3.0 * u, cy + 10.0 * u), (cx + 3.0 * u, cy + 10.0 * u)], 2.0 * u, color(255, 255, 255, 0.7));
         }
+        Glyph::Sys(k) => super::system::glyphs::draw(pm, k, bg, cx, cy, u),
         Glyph::Monitor => {
             fill_rounded(pm, cx - 10.0 * u, cy - 8.0 * u, 20.0 * u, 13.5 * u, 2.5 * u, white);
             line(pm, &[(cx, cy + 5.5 * u), (cx, cy + 8.5 * u)], 2.0 * u, white);

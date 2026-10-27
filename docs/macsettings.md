@@ -6,6 +6,7 @@ Window class `MacSettings` (rdwm draws the titlebar). Launch again to toggle it 
 
 ```
 macsettings [PANE]          # general appearance desktop wallpaper tiling windows rules keyboard autostart displays
+                            # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility (see "System panes" below)
 macsettings --config PATH   # edit another rdwm config
 ```
 Environment: `MACSETTINGS_CONFIG`/`RDWM_CONFIG` (config file), `MACSHELL_CONFIG` (omarchy folder with the JSON files),
@@ -71,3 +72,80 @@ combinations that are already bound (they never reach the window). Function keys
 ## Tests
 `cargo test` (unit: TOML editor, atomic writes, sync, widgets, panes, binds, schema), and
 `tests/e2e/macsettings.sh` (Xvfb :95 + rdwm x11 + xdotool, private HOME/XDG dirs; `SHOTS=dir` saves screenshots).
+
+# System panes (branch `macsettings-system`)
+
+macsettings also covers the system side of the desktop. All of it lives in `src/settings/system/` and is registered through
+the pane list (`panes::PANES`, ids below) and the sidebar sections (`system::registry::SECTIONS`).
+
+| Pane (id) | Backend | Notes |
+|---|---|---|
+| Sound (`sound`) | `pactl -f json` (preferred) or `wpctl status/get-volume` | default in/out, volume + mute per device, per-app streams |
+| Network (`network`) | `nmcli -t` | Wi-Fi radio, scan, join (password sheet for secured networks), saved/forget, VPN toggles, ethernet + IP/DNS |
+| Bluetooth (`bluetooth`) | `bluetoothctl` | power, discoverable, 8 s scan, pair (+trust+connect), connect, disconnect, forget |
+| Displays (`displays`, extended) | `xrandr --query` + `xrandr --output ...` | resolution, refresh, rotation, position, primary, mirror/extend, enable; **15 s keep/revert**; scale (rdwm `[decoration] scale` + `Xft.dpi`); Night Shift when gammastep/redshift exist |
+| Keyboard & Input (`inputdev`) | `setxkbmap`, `localectl list-x11-keymap-layouts`, `xset r rate`, `xinput list/list-props/set-prop` | layout, Caps Lock behaviour (XKB option), key repeat, pointer speed / natural scrolling / tap-to-click per device (libinput properties). The old key-binding editor is now "Shortcuts" (`keyboard`) |
+| Notifications (`notifications`) | file `~/.config/macshell/notifications.toml` | see schema below |
+| Power & Battery (`power`) | `powerprofilesctl`, `xset q/s/dpms`, sysfs `power_supply`, logind.conf (read-only) | battery card only when a battery exists |
+| Default Apps (`defaults`) | `xdg-mime query/default`, `xdg-settings`, `.desktop` files | candidates are the installed apps whose `MimeType=` claims the type |
+| Date & Time (`datetime`) | `timedatectl show/list-timezones/set-timezone/set-ntp`; `macshell.json` | polkit refusals are shown inline, a password is never asked |
+| Users & Login (`users`) | /etc/passwd, /etc/group, `~/.face` | picture: path of an image, cropped to 256x256 PNG |
+| Privacy & Security (`privacy`) | session settings | screen-lock command / idle time / lock on suspend |
+| About & Storage (`storage`) | /proc, /etc/os-release, `lspci -mm`, `statvfs` | "Check config" runs `rdwmctl check-config` |
+| Accessibility (`accessibility`) | session settings | cursor size, reduce motion, text size, high contrast |
+
+## Rules every system pane follows
+* External tools only through `system::run::Runner` (real: spawn + hard timeout, 8 s default, kills a hung tool; fake: recording, used by
+  the unit tests). Nothing runs on the UI thread: loads and changes are jobs on short-lived worker threads whose results come back through a
+  queue drained in `tick()`. Optimistic updates keep sliders from jumping back.
+* A missing tool or a failing backend shows "Not available" plus the reason (never a crash or a hang): e.g. no `nmcli` -> "NetworkManager's nmcli is not installed", `bluetoothctl show` hanging -> "The Bluetooth service did not answer".
+* Polling: one poller thread, parked unless the visible pane has a poll interval (sound 3 s, network 6 s, bluetooth 5 s, displays 10 s, power 5 s, date/time 30 s; the others load when opened and after each change).
+  It also stops while the window is unmapped (`WindowApp::set_visible`, driven by Map/UnmapNotify on X11).
+* Every setter validates its input (ranges, names against what the backend reported, MAC addresses, timezone names, XKB option syntax ...) and reports errors inline.
+* The last change of a pane can be undone (an "Undo" row at the top of the pane runs the inverse commands and restores the session file).
+
+## Display confirmation
+Every layout change (mode, rate, rotation, position, primary, enable, mirror) starts a countdown (`system::confirm::Confirm`, a pure state machine;
+15 s, `MACSETTINGS_CONFIRM_SECS` overrides it for tests). The pane shows "Keep changes" / "Revert"; when the countdown ends the previous
+layout is restored by re-applying the layout captured *before* the first unconfirmed change. A second change while one is pending keeps the original revert.
+As a backstop that survives a crashed or closed window, a detached `sh` waits `secs+3` and re-applies the old layout unless a flag file
+(`$XDG_RUNTIME_DIR/macsettings-keep-*`) says it was kept. Keeping a layout stores the full `xrandr` argument list in the session settings.
+
+## Session settings (applied at login)
+`~/.config/macshell/session-settings.json` is the source of truth (keys: `kbd_layout`, `kbd_variant`, `kbd_options`, `repeat_delay`, `repeat_rate`,
+`xinput[]` (`device`, `prop`, `value`), `blank_secs`, `dpms_secs`, `cursor_size`, `xft_dpi`, `terminal`, `reduce_motion`, `font_scale`, `high_contrast`,
+`lock_cmd`, `lock_secs`, `lock_on_suspend`, `xrandr[]`, `night`). From it macsettings generates **`~/.config/macshell/session-settings.sh`**, a POSIX
+shell snippet. It exports `RDWM_TERMINAL`, `XCURSOR_SIZE`, `MACSHELL_REDUCE_MOTION`, `MACSHELL_HIGH_CONTRAST`, `MACSHELL_FONT_SCALE`, `MACSHELL_LOCK_CMD`,
+`MACSHELL_LOCK_SECS`, `MACSHELL_LOCK_ON_SUSPEND` and, when `DISPLAY` is set, runs the guarded `xrandr` / `setxkbmap` / `xset` / `xinput --set-prop` /
+`xrdb -merge` / night-shift commands (each skipped if its tool is missing). **The login session must source it**:
+```sh
+f="${XDG_CONFIG_HOME:-$HOME/.config}/macshell/session-settings.sh"; [ -r "$f" ] && . "$f"
+```
+(`rdwm-macshell-session` should do this after the X server and rdwm are up and before autostart.) Both files are written atomically; the `.sh` always
+reflects the latest in-memory settings even when several changes happen quickly.
+
+Terminal choice: `rdwm-terminal` honours `RDWM_TERMINAL` (a command name); the pane exports it from the session file, so it applies from the next login.
+"Automatic" removes the override (rdwm-terminal then picks the first terminal that works in the session).
+
+## Notifications schema (`~/.config/macshell/notifications.toml`)
+```toml
+dnd = false                 # do not disturb: no banners or sounds (notifications still go to the history)
+banner_seconds = 5          # 1..=60, 0 = until clicked
+muted_apps = ["Slack"]      # notification app_name, matched case-insensitively: no banner, no sound
+```
+Missing file = defaults above; comments and unknown keys are kept when macsettings rewrites the file; written atomically. macnotify reads it
+(re-reading on change is up to the daemon).
+
+## Menu bar clock
+`macshell.json` (in the omarchy config dir) gets `clockHour12` (bool, default false) and `clockDate` (`weekday-day-month` default, `day-month`,
+`weekday-day`, `none`). macbar reads them once a minute (`menubar::clock::format_with`); the defaults give exactly the old `Mon 26 Oct  03:08`.
+
+## Sidebar and search
+Panes are grouped by `registry::SECTIONS` (Network & Connectivity, Display & Appearance, Sound, Notifications, Keyboard & Input, Windows, Apps, System).
+The sidebar scrolls. Search (Ctrl+F) matches pane titles/keywords first, then individual settings: the static index `registry::SETTINGS` for the system
+panes and the live row labels of the older panes ("volume" -> Sound > Volume, "gap" -> Tiling > Gap between windows). Results show as `Pane > Setting` rows; Enter/click jumps to the pane.
+
+## Tests
+`cargo test --lib` has parser tests for pactl/wpctl/nmcli/bluetoothctl/xrandr/xinput/xset/timedatectl/powerprofilesctl/lspci/passwd fixtures, command-line tests with a recording
+`FakeRunner`, the confirm state machine, the search index and the session file generator. `tests/e2e/macsettings_system.sh [display]` drives every new pane on a
+private Xvfb with rdwm and the fake tools in `tests/e2e/fakes/` (screenshots in `$SHOTS`); `tests/e2e/macsettings.sh` still covers the original panes.

@@ -1,0 +1,11 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "xset $*" >> "$FS/log"
+case "$1" in
+q) d=660; r=25; [ -f "$FS/repeat" ] && read -r d r < "$FS/repeat"
+   printf 'Keyboard Control:\n  auto repeat:  on    key click percent:  0    LED mask:  00000000\n  auto repeat delay:  %s    repeat rate:  %s\nScreen Saver:\n  prefer blanking:  yes    allow exposures:  yes\n  timeout:  %s    cycle:  600\nDPMS (Energy Star):\n  Standby: 0    Suspend: 0    Off: %s\n  DPMS is Enabled\n' "$d" "$r" "$(cat $FS/blank 2>/dev/null || echo 600)" "$(cat $FS/dpms 2>/dev/null || echo 900)";;
+r) [ "$2" = rate ] && echo "$3 $4" > "$FS/repeat";;
+s) [ "$2" != on ] && [ "$2" != off ] && echo "$2" > "$FS/blank"; [ "$2" = off ] && echo 0 > "$FS/blank";;
+dpms) echo "$2" > "$FS/dpms";;
+-dpms) echo 0 > "$FS/dpms";;
+esac
+exit 0

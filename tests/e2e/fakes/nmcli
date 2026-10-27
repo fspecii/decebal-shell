@@ -1,0 +1,13 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "nmcli $*" >> "$FS/log"
+[ -f "$FS/wifi" ] || echo enabled > "$FS/wifi"
+case "$*" in
+"-t -f WIFI radio") cat "$FS/wifi";;
+"radio wifi on") echo enabled > "$FS/wifi";;
+"radio wifi off") echo disabled > "$FS/wifi";;
+"-t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list") printf '*:HomeNet:82:WPA2\n :CafeFree:55:--\n :Neighbor\\:5G:71:WPA2 WPA3\n :HomeNet:40:WPA2\n';;
+"-t -f NAME,UUID,TYPE,DEVICE connection show") printf 'Wired connection 1:9f83:802-3-ethernet:enp5s0\nHomeNet:aaaa-1111:802-11-wireless:wlan0\nOldCafe:bbbb-2222:802-11-wireless:\nWork VPN:cccc-3333:vpn:\n';;
+*"device show"*) printf 'GENERAL.DEVICE:enp5s0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.CONNECTION:Wired connection 1\nGENERAL.HWADDR:9C\\:6B\\:00\\:22\\:DD\\:D8\nIP4.ADDRESS[1]:192.168.1.150/24\nIP4.GATEWAY:192.168.1.1\nIP4.DNS[1]:8.8.8.8\nIP4.DNS[2]:8.8.4.4\n\nGENERAL.DEVICE:wlan0\nGENERAL.TYPE:wifi\nGENERAL.STATE:100 (connected)\nGENERAL.CONNECTION:HomeNet\nGENERAL.HWADDR:AA\\:BB\\:CC\\:DD\\:EE\\:FF\nIP4.ADDRESS[1]:192.168.1.77/24\nIP4.GATEWAY:192.168.1.1\nIP4.DNS[1]:1.1.1.1\n';;
+"device wifi connect Neighbor:5G password "*) [ "$6" = wrongpassword ] && { echo "Error: Connection activation failed: (7) Secrets were required, but not provided." >&2; exit 4; }; echo "Device 'wlan0' successfully activated";;
+esac
+exit 0

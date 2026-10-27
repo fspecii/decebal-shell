@@ -193,11 +193,15 @@ pub struct ShellSettings {
     /// Workspace/tag dots in the menu bar. "auto" = only under rdwm.
     pub workspaces: Toggle,
     pub bar: BarSettings,
+    /// Menu bar clock: 12-hour format (macsettings: Date & Time).
+    pub clock_hour12: bool,
+    /// `weekday-day-month` (default), `day-month`, `weekday-day`, `none`.
+    pub clock_date: String,
 }
 
 impl Default for ShellSettings {
     fn default() -> Self {
-        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default() }
+        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default(), clock_hour12: false, clock_date: "weekday-day-month".into() }
     }
 }
 

@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "localectl $*" >> "${FAKE_STATE:?}/log"
+[ "$1" = list-x11-keymap-layouts ] && printf 'us\nde\nfr\nro\nes\n'
+exit 0

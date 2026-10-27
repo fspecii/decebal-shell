@@ -110,6 +110,8 @@ pub trait WindowApp {
     fn unmapped_key(&mut self, _sym: u32, _shift: bool, _ctrl: bool, _alt: bool) -> Response {
         Response::NONE
     }
+    /// The window was mapped (true) or unmapped (false), e.g. moved to a hidden tag. Apps that poll stop while hidden.
+    fn set_visible(&mut self, _visible: bool) {}
     /// Called after the waker fired: drain results from worker threads here.
     fn tick(&mut self) -> Response;
 }

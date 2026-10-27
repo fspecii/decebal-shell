@@ -23,6 +23,24 @@ pub fn format(tm: &Tm) -> String {
     format!("{} {} {}  {:02}:{:02}", DAYS[(tm.wday % 7) as usize], tm.mday, MONTHS[(tm.mon % 12) as usize], tm.hour, tm.min)
 }
 
+/// The bar clock with the user's choices (`macshell.json`: `clockHour12`, `clockDate`). The defaults give exactly [`format`].
+/// `date` is `weekday-day-month` (default), `day-month`, `weekday-day` or `none`.
+pub fn format_with(tm: &Tm, hour12: bool, date: &str) -> String {
+    let time = if hour12 {
+        let h = tm.hour % 12;
+        format!("{}:{:02} {}", if h == 0 { 12 } else { h }, tm.min, if tm.hour >= 12 { "PM" } else { "AM" })
+    } else {
+        format!("{:02}:{:02}", tm.hour, tm.min)
+    };
+    let (wd, mon) = (DAYS[(tm.wday % 7) as usize], MONTHS[(tm.mon % 12) as usize]);
+    match date {
+        "none" => time,
+        "day-month" => format!("{} {}  {}", tm.mday, mon, time),
+        "weekday-day" => format!("{} {}  {}", wd, tm.mday, time),
+        _ => format!("{} {} {}  {}", wd, tm.mday, mon, time),
+    }
+}
+
 /// Local time for a unix timestamp, via the C library so the system timezone is honoured.
 pub fn local_tm(unix_secs: i64) -> Option<Tm> {
     let t: libc::time_t = unix_secs as libc::time_t;
@@ -70,6 +88,17 @@ mod tests {
     #[test]
     fn formats_like_the_original_bar() {
         assert_eq!(format(&tm(1, 26, 9, 3, 8, 0)), "Mon 26 Oct  03:08");
+    }
+
+    #[test]
+    fn user_clock_formats() {
+        let t = tm(1, 26, 9, 15, 8, 0);
+        assert_eq!(format_with(&t, false, "weekday-day-month"), format(&t), "defaults equal the original format");
+        assert_eq!(format_with(&t, true, "weekday-day-month"), "Mon 26 Oct  3:08 PM");
+        assert_eq!(format_with(&tm(1, 26, 9, 0, 5, 0), true, "day-month"), "26 Oct  12:05 AM");
+        assert_eq!(format_with(&tm(1, 26, 9, 12, 5, 0), true, "weekday-day"), "Mon 26  12:05 PM");
+        assert_eq!(format_with(&t, false, "none"), "15:08");
+        assert_eq!(format_with(&t, false, "bogus"), format(&t));
     }
 
     #[test]

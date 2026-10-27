@@ -520,6 +520,8 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 Some((_, t, cur)) => (t.clone(), Some(*cur)),
                 None => (val.clone(), None),
             };
+            // password fields (id contains ":secret") show bullets
+            let shown = if c.id.contains(":secret") { "•".repeat(shown.chars().count()) } else { shown };
             let inner = w - u(16.0);
             if shown.is_empty() && cur.is_none() {
                 p.text(pm, &p.fit(hint, inner, u(12.5), Weight::Regular), x + u(8.0), cy, u(12.5), Weight::Regular, a(pal::faint()));

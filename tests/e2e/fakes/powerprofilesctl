@@ -1,0 +1,9 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "powerprofilesctl $*" >> "$FS/log"
+cur=$(cat "$FS/profile" 2>/dev/null || echo balanced)
+case "$1" in
+list) for p in performance balanced power-saver; do [ "$p" = "$cur" ] && echo "* $p:" || echo "  $p:"; echo "    CpuDriver:	amd_pstate"; echo; done;;
+get) echo "$cur";;
+set) echo "$2" > "$FS/profile";;
+esac
+exit 0

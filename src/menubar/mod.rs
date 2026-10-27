@@ -1254,7 +1254,8 @@ impl MacBar {
         let minute = (tm.hour, tm.min);
         if self.last_minute != Some(minute) {
             self.last_minute = Some(minute);
-            self.clock_text = clock::format(&tm);
+            let cs = crate::config::shell_settings();
+            self.clock_text = clock::format_with(&tm, cs.clock_hour12, &cs.clock_date);
             redraw = true;
             // Once a minute: a cheap data refresh, the active app name, and stale weather.
             self.spawn_snapshot(false);
