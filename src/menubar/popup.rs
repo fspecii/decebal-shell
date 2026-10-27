@@ -347,11 +347,11 @@ impl Calendar {
         if !(8.0..40.0).contains(&ly) {
             return None;
         }
-        if lx >= Self::W - 66.0 && lx < Self::W - 38.0 {
+        if (Self::W - 66.0..Self::W - 38.0).contains(&lx) {
             Some(CalHit::Prev)
-        } else if lx >= Self::W - 38.0 && lx < Self::W - 8.0 {
+        } else if (Self::W - 38.0..Self::W - 8.0).contains(&lx) {
             Some(CalHit::Next)
-        } else if lx >= 8.0 && lx < Self::W - 66.0 {
+        } else if (8.0..Self::W - 66.0).contains(&lx) {
             Some(CalHit::Today)
         } else {
             None

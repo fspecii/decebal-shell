@@ -281,6 +281,7 @@ impl MacBar {
         }
         self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
+            Some("calendar") => self.open_popup(Tray::Clock),
             Some("control") => {
                 self.relayout_control();
                 self.open = Open::Control;
@@ -613,7 +614,8 @@ impl MacBar {
     }
 
     fn spotlight(&self) {
-        let cmds: [&[&str]; 4] = [&["omarchy-menu", "toggle"], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
+        let macspot = crate::launch::sibling_or_path("macspot");
+        let cmds: [&[&str]; 4] = [&[&macspot], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
         for c in cmds {
             if sys::have(c[0]) {
                 sys::spawn(c);
@@ -1673,7 +1675,7 @@ mod tests {
 
     #[test]
     fn network_and_bluetooth_popups_list_what_the_workers_found() {
-        let mut bar = status_bar();
+        let bar = status_bar();
         *bar.shared.wifi.lock().unwrap() = vec![sys::WifiNet { ssid: "Cafe".into(), signal: 60, secure: false, active: false }];
         *bar.shared.bt.lock().unwrap() = vec![sys::BtDevice { mac: "AA".into(), name: "Buds".into(), connected: true }];
         let (rows, _, _) = bar.build_popup(Tray::Network).unwrap();

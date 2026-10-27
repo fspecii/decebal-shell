@@ -47,6 +47,42 @@ Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
 Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed.
 
+## Spotlight (`macspot`)
+
+A search box centred on the primary monitor. Bind **one** key to the bare command `macspot`; running it
+again while the box is open closes it (a toggle, single instance via `$XDG_RUNTIME_DIR/macspot.lock`).
+
+```
+# rdwm / dwm-style X11 session
+Super+Space  ->  macspot
+# Hyprland
+bind = SUPER, SPACE, exec, macspot
+```
+
+On X11 it is an override-redirect popup (no window manager involvement) that grabs the keyboard and pointer,
+so typing works whatever the WM focuses, and Esc, a click outside, or pressing the hotkey again closes it.
+On Wayland it is a layer-shell overlay with exclusive keyboard focus.
+
+| Type | Result |
+| --- | --- |
+| `fire`, `vsc` | applications, fuzzy-ranked; the ones you open often or recently rank higher. An empty box lists recent apps |
+| `report` (3+ chars) | files under `$HOME` via `plocate`, else `fd` (skipped when neither is installed) |
+| `2+3*4` | calculator, Enter copies the result |
+| `5 km to mi`, `100 f in c` | unit conversion (length, mass, volume, data, time, speed, temperature) |
+| `> cmd` | run a command in a terminal |
+| `lock`, `sleep`, `restart`, `shut down`, `log out`, `screenshot` | system commands (restart, shut down and log out need a second Enter; commands whose program is missing are hidden) |
+| `install foo`, `remove foo` | Arch packages |
+| anything else | web search (`MACSPOT_SEARCH_URL`, `%s` is the query; default DuckDuckGo) |
+
+Enter opens. Ctrl+Enter or Alt+Enter is the alternative: an app runs in a terminal, a file shows its folder,
+a calculation copies `expr = result`, `> cmd` runs in the background. Up/Down, Tab, Ctrl+N/P choose.
+
+State: the app index is cached in `~/.cache/macshell/apps.tsv` (rescanned in the background on every start, so
+the box opens at once) and usage counts live in `~/.local/state/macshell/spotlight-history`. Copying needs no
+`xclip`: on X11 a tiny helper process owns the selection; on Wayland `wl-copy` is used.
+
+`tests/e2e_spot.sh [macspot] [display]` runs the whole thing on a private Xvfb (under `rdwm` when installed) with stub apps.
+
 ## Window rules for the wallpaper browser
 
 `machaven` is a normal window (app id / class `machaven`, 1280x820). Tiling compositors tile it unless you

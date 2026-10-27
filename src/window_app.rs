@@ -79,6 +79,13 @@ pub trait WindowApp {
     }
     /// The backend really is showing the app as a full-screen overlay.
     fn set_overlay(&mut self, _overlay: bool) {}
+    /// X11 only: the app is shown as a borderless popup (override-redirect, keyboard and pointer grabbed)
+    /// whose window is exactly the card; there is no full-screen dimmer.
+    fn set_popup(&mut self, _popup: bool) {}
+    /// Popup mode: the size the window should have right now (the backend resizes it when this changes).
+    fn content_size(&self) -> Option<(u32, u32)> {
+        None
+    }
     /// Preferred window size on first map.
     fn initial_size(&self) -> (u32, u32);
     /// Called once before the event loop starts; clone and keep it for worker threads.

@@ -78,6 +78,38 @@ fn read_entry(path: &Path) -> Option<AppEntry> {
     parse_entry(&std::fs::read_to_string(path).ok()?)
 }
 
+fn cache_file() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
+    Some(base.join("macshell/apps.tsv"))
+}
+
+fn esc(s: &str) -> String {
+    s.replace(['\t', '\n'], " ")
+}
+
+/// The app list saved by [`save_cache`]; empty when there is none yet.
+pub fn load_cache() -> Vec<AppEntry> {
+    let Some(text) = cache_file().and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
+    text.lines()
+        .filter_map(|l| {
+            let mut p = l.splitn(3, '\t');
+            Some(AppEntry { name: p.next()?.to_string(), exec: p.next()?.to_string(), icon: p.next()?.to_string() })
+        })
+        .collect()
+}
+
+pub fn save_cache(apps: &[AppEntry]) {
+    let Some(path) = cache_file() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let text: String = apps.iter().map(|a| format!("{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon))).collect();
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, text).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
 /// Indices of `apps` matching `query` (case-insensitive): name prefixes first, then other substrings.
 pub fn filter(apps: &[AppEntry], query: &str) -> Vec<usize> {
     let q = query.trim().to_lowercase();

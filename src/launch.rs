@@ -171,7 +171,7 @@ pub fn launch(id: &str) -> bool {
 }
 
 /// `name` next to our own executable when it is there (an uninstalled build), otherwise the bare name for `PATH`.
-fn sibling_or_path(name: &str) -> String {
+pub fn sibling_or_path(name: &str) -> String {
     std::env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.join(name))).filter(|p| p.is_file()).map_or_else(|| name.to_string(), |p| p.to_string_lossy().into_owned())
 }
 
