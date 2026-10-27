@@ -92,13 +92,34 @@ fn main() {
             let sel = src.selection();
             let (t, problem) = src.build(&sel, system_dark());
             if json {
-                let colors: serde_json::Map<String, serde_json::Value> = [("background", t.background), ("surface", t.surface), ("bar", t.bar), ("popup", t.popup), ("dock", t.dock), ("text", t.text), ("text_secondary", t.text_secondary), ("accent", t.accent), ("accent_text", t.accent_text), ("danger", t.danger)]
-                    .into_iter()
-                    .map(|(k, c)| (k.to_string(), c.hex().into()))
-                    .collect();
+                let colors: serde_json::Map<String, serde_json::Value> = [
+                    ("background", t.background),
+                    ("surface", t.surface),
+                    ("bar", t.bar),
+                    ("popup", t.popup),
+                    ("dock", t.dock),
+                    ("text", t.text),
+                    ("text_secondary", t.text_secondary),
+                    ("accent", t.accent),
+                    ("accent_text", t.accent_text),
+                    ("danger", t.danger),
+                ]
+                .into_iter()
+                .map(|(k, c)| (k.to_string(), c.hex().into()))
+                .collect();
                 println!("{}", serde_json::to_string_pretty(&serde_json::json!({"theme": t.id, "name": t.name, "dark": t.dark, "selection": sel.to_json(), "problem": problem, "colors": colors, "radius": t.radius, "font_scale": t.font_scale})).unwrap());
             } else {
-                println!("{} ({}) mode={} accent={} radius={} opacity={} font={} font-scale={}", t.id, if t.dark { "dark" } else { "light" }, sel.mode.as_str(), t.accent.hex(), t.radius, sel.opacity.map_or("theme".into(), |o| o.to_string()), if t.font_family.is_empty() { "default" } else { &t.font_family }, t.font_scale);
+                println!(
+                    "{} ({}) mode={} accent={} radius={} opacity={} font={} font-scale={}",
+                    t.id,
+                    if t.dark { "dark" } else { "light" },
+                    sel.mode.as_str(),
+                    t.accent.hex(),
+                    t.radius,
+                    sel.opacity.map_or("theme".into(), |o| o.to_string()),
+                    if t.font_family.is_empty() { "default" } else { &t.font_family },
+                    t.font_scale
+                );
                 if let Some(p) = problem {
                     println!("problem: {p} (showing the default theme)");
                 }
@@ -147,11 +168,15 @@ fn main() {
             let Some(file) = args.get(1) else { die("validate needs a file") };
             let text = std::fs::read_to_string(file).unwrap_or_else(|e| die(&format!("{file}: {e}")));
             match Def::parse(&text) {
-                Ok(d) => println!("ok: {} ({})", d.name, match (d.has_dark(), d.has_light()) {
-                    (true, true) => "dark+light",
-                    (true, false) => "dark",
-                    _ => "light",
-                }),
+                Ok(d) => println!(
+                    "ok: {} ({})",
+                    d.name,
+                    match (d.has_dark(), d.has_light()) {
+                        (true, true) => "dark+light",
+                        (true, false) => "dark",
+                        _ => "light",
+                    }
+                ),
                 Err(e) => die(&format!("{file}: {e}")),
             }
         }

@@ -808,9 +808,29 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         stroke_rounded(pm, r.0 - u(5.0), r.1 - u(5.0), r.2 + u(10.0), r.3 + u(10.0), u(12.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
                     let name = p.fit(&t.name, tw, u(12.0), Weight::Regular);
-                    p.text_center(pm, &name, r.0 + tw / 2.0, r.1 + th + u(15.0), u(12.0), if t.selected { Weight::Medium } else { Weight::Regular }, if t.error { pal::red() } else if t.selected { pal::text() } else { pal::sub() });
+                    p.text_center(
+                        pm,
+                        &name,
+                        r.0 + tw / 2.0,
+                        r.1 + th + u(15.0),
+                        u(12.0),
+                        if t.selected { Weight::Medium } else { Weight::Regular },
+                        if t.error {
+                            pal::red()
+                        } else if t.selected {
+                            pal::text()
+                        } else {
+                            pal::sub()
+                        },
+                    );
                     fr.layouts.push((r, t.id.clone()));
-                    fr.placed.push(Placed { rect: r, ctl: Ctl::new(t.id.clone(), Kind::Button { label: t.name.clone(), danger: false }), parts: vec![], row_rect: (x0, r.1, cw, r.3), label: t.name.clone() });
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(t.id.clone(), Kind::Button { label: t.name.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, r.1, cw, r.3),
+                        label: t.name.clone(),
+                    });
                 }
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(36.0)) + u(6.0);
@@ -844,7 +864,13 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         stroke_rounded(pm, x - u(5.5), yy - u(5.5), d + u(11.0), d + u(11.0), (d + u(11.0)) / 2.0, crate::theme::th().accent.color(0.85), u(2.0));
                     }
                     fr.layouts.push((r, sw.id.clone()));
-                    fr.placed.push(Placed { rect: r, ctl: Ctl::new(sw.id.clone(), Kind::Button { label: sw.name.clone(), danger: false }), parts: vec![], row_rect: (x0, yy, cw, d), label: sw.name.clone() });
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(sw.id.clone(), Kind::Button { label: sw.name.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, yy, cw, d),
+                        label: sw.name.clone(),
+                    });
                     x += d + gap;
                 }
                 y = yy + row_h + u(6.0);

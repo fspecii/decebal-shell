@@ -386,7 +386,8 @@ impl Def {
             Some(V::S(s)) => Some(s.clone()),
             _ => None,
         };
-        let (fb_bg, fb_text, fb_accent) = if dark { (Rgb(0x1e, 0x1e, 0x1e), Rgb(0xf5, 0xf5, 0xf7), Rgb(0x0a, 0x84, 0xff)) } else { (Rgb(0xf2, 0xf2, 0xf4), Rgb(0x1c, 0x1c, 0x1e), Rgb(0x00, 0x62, 0xcc)) };
+        let (fb_bg, fb_text, fb_accent) =
+            if dark { (Rgb(0x1e, 0x1e, 0x1e), Rgb(0xf5, 0xf5, 0xf7), Rgb(0x0a, 0x84, 0xff)) } else { (Rgb(0xf2, 0xf2, 0xf4), Rgb(0x1c, 0x1c, 0x1e), Rgb(0x00, 0x62, 0xcc)) };
         let background = col("background").unwrap_or(fb_bg);
         let text = col("text").unwrap_or(fb_text);
         let mut accent = col("accent").unwrap_or(fb_accent);
@@ -637,7 +638,16 @@ mod tests {
 
     #[test]
     fn selection_json_round_trip() {
-        let sel = Selection { name: "nord".into(), mode: Mode::Auto, accent: Rgb::parse("#123456"), opacity: Some(0.85), radius: Some(6.0), font: Some("Inter".into()), font_scale: Some(1.1), sync_rdwm: false };
+        let sel = Selection {
+            name: "nord".into(),
+            mode: Mode::Auto,
+            accent: Rgb::parse("#123456"),
+            opacity: Some(0.85),
+            radius: Some(6.0),
+            font: Some("Inter".into()),
+            font_scale: Some(1.1),
+            sync_rdwm: false,
+        };
         assert_eq!(Selection::from_json(&sel.to_json()), sel);
         assert_eq!(Selection::from_json(&serde_json::json!("dracula")).name, "dracula");
         assert_eq!(Selection::from_json(&serde_json::json!(5)), Selection::default());

@@ -116,7 +116,14 @@ impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
         let specs = pick_specs()?;
-        Some(Self { specs: RefCell::new(specs), theme_gen: Cell::new(crate::theme::generation()), family: RefCell::new(crate::theme::current().font_family.clone()), loaded: RefCell::new([None, None, None, None]), glyphs: RefCell::new(HashMap::new()), ascents: RefCell::new(HashMap::new()) })
+        Some(Self {
+            specs: RefCell::new(specs),
+            theme_gen: Cell::new(crate::theme::generation()),
+            family: RefCell::new(crate::theme::current().font_family.clone()),
+            loaded: RefCell::new([None, None, None, None]),
+            glyphs: RefCell::new(HashMap::new()),
+            ascents: RefCell::new(HashMap::new()),
+        })
     }
 
     /// Rebuilds faces and drops cached glyphs when the theme (family, text scale) changed since the last call.

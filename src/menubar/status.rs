@@ -365,7 +365,13 @@ impl MacBar {
         stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 3.0, crate::theme::th().bar_text.color(0.7), 1.0);
         crate::gfx::fill_rect(pm, x + w + 0.5, y + 3.5, 1.5, 4.0, crate::theme::th().bar_text.color(0.7));
         let th = crate::theme::th();
-        let fill = if b.charging { th.ok.t() } else if b.percent <= 15 { th.danger.t() } else { ink() };
+        let fill = if b.charging {
+            th.ok.t()
+        } else if b.percent <= 15 {
+            th.danger.t()
+        } else {
+            ink()
+        };
         let fw = ((w - 4.0) * b.percent as f32 / 100.0).max(1.0);
         fill_rounded(pm, x + 2.0, y + 2.0, fw, h - 4.0, 1.5, color(fill.0, fill.1, fill.2, 0.95));
         let t = format!("{}%", b.percent);

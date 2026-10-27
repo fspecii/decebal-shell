@@ -93,7 +93,21 @@ impl DockApp {
     pub fn new(dock: Dock) -> Self {
         let surface = dock.canvas_size();
         let pinned = dock.items.iter().filter(|i| i.pinned).map(|i| i.id.clone()).collect();
-        Self { dock, pinned, surface, tracker: None, track_windows: false, waker: None, effects: Box::new(System), watch: None, theme_gen: crate::theme::generation(), menu: None, press: None, desktops: HashMap::new(), animating: false }
+        Self {
+            dock,
+            pinned,
+            surface,
+            tracker: None,
+            track_windows: false,
+            waker: None,
+            effects: Box::new(System),
+            watch: None,
+            theme_gen: crate::theme::generation(),
+            menu: None,
+            press: None,
+            desktops: HashMap::new(),
+            animating: false,
+        }
     }
 
     /// Show a running dot under every pinned app that has an open window (tracker starts with the event loop).

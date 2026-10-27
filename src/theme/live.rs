@@ -119,7 +119,15 @@ impl Source {
 
     fn entry(&self, id: &str, builtin_slot: bool) -> Option<Entry> {
         match self.load_def(id) {
-            Ok(d) => Some(Entry { id: id.into(), name: d.name.clone(), description: d.description.clone(), builtin: builtin_slot && !self.user_file(id).exists(), has_dark: d.has_dark(), has_light: d.has_light(), error: None }),
+            Ok(d) => Some(Entry {
+                id: id.into(),
+                name: d.name.clone(),
+                description: d.description.clone(),
+                builtin: builtin_slot && !self.user_file(id).exists(),
+                has_dark: d.has_dark(),
+                has_light: d.has_light(),
+                error: None,
+            }),
             Err(e) if builtin_slot => {
                 // a broken override of a built-in: keep the built-in usable
                 let d = builtin::def(id)?;

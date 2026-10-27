@@ -32,7 +32,6 @@ const THUMB_MAX_W: u32 = 260;
 const MAX_CACHED_THUMBS: usize = 100;
 const MAX_PENDING_THUMBS: usize = 24;
 
-
 fn inside(r: Rect, x: f32, y: f32) -> bool {
     x >= r.0 && x < r.0 + r.2 && y >= r.1 && y < r.1 + r.3
 }

@@ -358,7 +358,8 @@ pub fn connect_wifi(ssid: &str) {
     }
     let ssid = ssid.to_string();
     std::thread::spawn(move || {
-        let ok = run(&["nmcli", "-w", "20", "connection", "up", "id", &ssid], Duration::from_secs(25)).is_some() || run(&["nmcli", "-w", "20", "dev", "wifi", "connect", &ssid], Duration::from_secs(25)).is_some();
+        let ok = run(&["nmcli", "-w", "20", "connection", "up", "id", &ssid], Duration::from_secs(25)).is_some()
+            || run(&["nmcli", "-w", "20", "dev", "wifi", "connect", &ssid], Duration::from_secs(25)).is_some();
         if !ok && have("notify-send") {
             let _ = run(&["notify-send", "-a", "macbar", "Wi-Fi", &format!("Could not connect to {ssid}. Enter its password in the network editor first.")], Duration::from_secs(3));
         }

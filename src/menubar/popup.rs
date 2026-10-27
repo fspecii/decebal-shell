@@ -390,7 +390,15 @@ impl Calendar {
                 let s = d.to_string();
                 let w = fonts.measure(&s, TEXT_PX, Weight::Regular);
                 let a = if is_today || c < 5 { 1.0 } else { 0.55 };
-                fonts.draw(pm, &s, cx - w / 2.0, cy - 7.0, TEXT_PX, if is_today { Weight::Bold } else { Weight::Regular }, if is_today { crate::theme::th().accent_text_c() } else { crate::theme::th().ink(a) });
+                fonts.draw(
+                    pm,
+                    &s,
+                    cx - w / 2.0,
+                    cy - 7.0,
+                    TEXT_PX,
+                    if is_today { Weight::Bold } else { Weight::Regular },
+                    if is_today { crate::theme::th().accent_text_c() } else { crate::theme::th().ink(a) },
+                );
             }
         }
     }
