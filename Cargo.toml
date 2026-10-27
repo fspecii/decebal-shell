@@ -55,6 +55,11 @@ name = "macsettings"
 path = "src/bin/macsettings.rs"
 
 [[bin]]
+name = "macnotify"
+path = "src/bin/macnotify.rs"
+required-features = ["x11"]
+
+[[bin]]
 name = "macwm"
 path = "src/bin/macwm.rs"
 
