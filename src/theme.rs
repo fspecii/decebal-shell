@@ -37,5 +37,6 @@ pub mod material;
 pub mod model;
 pub mod rdwm;
 pub mod style;
+pub mod system;
 pub use live::{current, current as th, generation, take_changed};
 pub use model::{Dynamic, Mode, Rgb, Selection, Theme};

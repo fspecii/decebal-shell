@@ -138,6 +138,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         note.push_str(&format!("\nIgnored: {}", broken.join("; ")));
     }
     out.push(Item::Note { text: note, warn: !broken.is_empty() });
+    out.extend(super::systempane::items(m));
     out
 }
 
@@ -159,6 +160,7 @@ fn commit(m: &mut Model, sel: Selection) -> bool {
     match src.write_selection(&sel) {
         Ok(()) => {
             crate::theme::live::reload();
+            crate::theme::system::request(&m.paths.shell_json()); // "Apply to all apps", when on
             m.dirty = true;
             if m.notice.is_none() {
                 m.say(format!("Theme: {}", theme.name), false);

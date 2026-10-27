@@ -113,6 +113,7 @@ pub fn apply(src: &super::live::Source, paths: &Paths, sel: &super::model::Selec
         rdwm = Some(write_config(paths, &theme)?);
     }
     src.write_selection(sel)?;
+    super::system::request(&src.shell_json); // "Apply to all apps", when the user switched it on
     let reloaded = if rdwm == Some(Wrote::Changed) { reload(paths).unwrap_or(false) } else { false };
     Ok(Report { theme_id: theme.id.clone(), dark: theme.dark, rdwm, reloaded })
 }
