@@ -93,9 +93,16 @@ pub(crate) fn strut_partial(spec: &SurfaceSpec, win: (i32, i32, u32, u32), mon: 
 /// Publishes the panel's EWMH hints: window type DOCK, the strut and its legacy 4-value form.
 fn set_panel_hints(conn: &RustConnection, win: Window, atoms: &Atoms, strut: Option<[u32; 12]>) -> Result<(), Error> {
     conn.change_property32(PropMode::REPLACE, win, atoms.window_type, AtomEnum::ATOM, &[atoms.dock]).map_err(err)?;
-    if let Some(s) = strut {
-        conn.change_property32(PropMode::REPLACE, win, atoms.strut_partial, AtomEnum::CARDINAL, &s).map_err(err)?;
-        conn.change_property32(PropMode::REPLACE, win, atoms.strut, AtomEnum::CARDINAL, &s[..4]).map_err(err)?;
+    match strut {
+        Some(s) => {
+            conn.change_property32(PropMode::REPLACE, win, atoms.strut_partial, AtomEnum::CARDINAL, &s).map_err(err)?;
+            conn.change_property32(PropMode::REPLACE, win, atoms.strut, AtomEnum::CARDINAL, &s[..4]).map_err(err)?;
+        }
+        None => {
+            // A surface that stopped reserving space (a floating dock after being a bar) drops its strut.
+            conn.delete_property(win, atoms.strut_partial).map_err(err)?;
+            conn.delete_property(win, atoms.strut).map_err(err)?;
+        }
     }
     Ok(())
 }
@@ -193,7 +200,16 @@ fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size
     Ok(())
 }
 
+/// `Xft.dpi / 96` of the default display (1.0 when unset or unreachable).
+pub fn xft_scale_of_display() -> f32 {
+    match x11rb::connect(None) {
+        Ok((conn, n)) => super::x11_window::xft_scale(&conn, conn.setup().roots[n].root),
+        Err(_) => 1.0,
+    }
+}
+
 pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
+    let mut spec = app.surface_spec().unwrap_or(spec);
     let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let visual = argb_visual(&screen).ok_or_else(|| Error("no 32-bit ARGB visual".into()))?;
@@ -223,7 +239,8 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     conn.create_window(32, win, screen.root, x as i16, y as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, visual, &aux).map_err(err)?;
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, spec.namespace.as_bytes()).map_err(err)?;
 
-    set_panel_hints(&conn, win, &atoms, strut_partial(&spec, (x, y, w, h), mon, screen_size))?;
+    let mut strut = strut_partial(&spec, (x, y, w, h), mon, screen_size);
+    set_panel_hints(&conn, win, &atoms, strut)?;
     let mut rects = app.input_rects();
     let clip = !has_compositor(&conn, screen_num);
     set_input_shape(&conn, win, &rects, (w, h))?;
@@ -245,13 +262,21 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut next_tick: Option<Instant> = Some(Instant::now());
 
     loop {
+        if app.quit_requested() {
+            return Ok(());
+        }
         // Follow app-driven changes: size, input region, keyboard grab.
+        if let Some(s) = app.surface_spec() {
+            spec = s;
+        }
         let wanted = place(&spec, app.size(), mon);
-        if (wanted.2, wanted.3) != size || (wanted.0, wanted.1) != pos {
+        let wanted_strut = strut_partial(&spec, wanted, mon, screen_size);
+        if (wanted.2, wanted.3) != size || (wanted.0, wanted.1) != pos || wanted_strut != strut {
             size = (wanted.2, wanted.3);
             pos = (wanted.0, wanted.1);
+            strut = wanted_strut;
             conn.configure_window(win, &ConfigureWindowAux::new().x(wanted.0).y(wanted.1).width(size.0).height(size.1)).map_err(err)?;
-            set_panel_hints(&conn, win, &atoms, strut_partial(&spec, wanted, mon, screen_size))?;
+            set_panel_hints(&conn, win, &atoms, strut)?;
             if let Some(p) = Pixmap::new(size.0.max(1), size.1.max(1)) {
                 pm = p;
             }

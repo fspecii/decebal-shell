@@ -3,6 +3,9 @@
 
 pub mod active;
 pub mod clock;
+mod embed;
+pub mod gate;
+pub use embed::GAP as STATUS_GAP;
 pub mod menus;
 pub mod popup;
 pub mod rdwm;
@@ -200,6 +203,10 @@ pub struct MacBar {
     /// When the heap was last churned (drawing, font parsing); cleared once it has been trimmed.
     heap_dirty: Option<Instant>,
     heap_rechecked: bool,
+    /// Where an embedded host (the Windows taskbar) put the open popup; see [`embed`].
+    embed: embed::Place,
+    /// Set by [`MacBar::with_gate`]: lets the bar close itself while `bar.enabled` is off.
+    gate: Option<gate::Gate>,
 }
 
 impl MacBar {
@@ -248,9 +255,18 @@ impl MacBar {
             workspaces: Vec::new(),
             heap_dirty: None,
             heap_rechecked: false,
+            embed: embed::Place::default(),
+            gate: None,
         };
         bar.refresh_app_name();
         bar
+    }
+
+    /// Lets the bar close itself (the backend returns) while `bar.enabled` in `macshell.json` says it is off;
+    /// see [`gate`]. `closed` is set to true when that happens.
+    pub fn with_gate(mut self, closed: Arc<AtomicBool>) -> Self {
+        self.gate = Some(gate::Gate::new(closed));
+        self
     }
 
     /// Show the workspace/tag dots when the window manager reports more than one workspace.
@@ -296,6 +312,32 @@ impl MacBar {
         let mut pm = Pixmap::new(width.max(1), h.max(1)).ok_or("cannot allocate pixmap")?;
         self.draw(&mut pm);
         pm.save_png(path).map_err(|e| e.to_string())
+    }
+
+    /// Starts the push sources (layout changes from rdwm, volume changes) that wake the loop through `waker`.
+    fn start_watchers(&mut self, waker: Waker) {
+        self.waker = Some(waker.clone());
+        let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
+        rdwm::spawn_watcher(Arc::clone(&self.shared.layout), move || {
+            sh.changed.store(true, Ordering::SeqCst);
+            w.wake();
+        });
+        // Volume changes made elsewhere (keys, other apps) show up without polling.
+        let (shared, w) = (Arc::clone(&self.shared), waker);
+        sys::watch_volume(move || {
+            let recently_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_millis(500));
+            if recently_set {
+                return;
+            }
+            if let Some((v, name)) = sys::probe_volume() {
+                if let Ok(mut s) = shared.snap.lock() {
+                    s.volume = Some(v);
+                    s.sink = name;
+                }
+                shared.changed.store(true, Ordering::SeqCst);
+                w.wake();
+            }
+        });
     }
 
     fn snapshot(&self) -> Snapshot {
@@ -1106,28 +1148,7 @@ impl App for MacBar {
 
     fn set_waker(&mut self, waker: Waker) {
         self.active.set_waker(waker.clone());
-        self.waker = Some(waker.clone());
-        let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
-        rdwm::spawn_watcher(Arc::clone(&self.shared.layout), move || {
-            sh.changed.store(true, Ordering::SeqCst);
-            w.wake();
-        });
-        // Volume changes made elsewhere (keys, other apps) show up without polling.
-        let (shared, w) = (Arc::clone(&self.shared), waker);
-        sys::watch_volume(move || {
-            let recently_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_millis(500));
-            if recently_set {
-                return;
-            }
-            if let Some((v, name)) = sys::probe_volume() {
-                if let Ok(mut s) = shared.snap.lock() {
-                    s.volume = Some(v);
-                    s.sink = name;
-                }
-                shared.changed.store(true, Ordering::SeqCst);
-                w.wake();
-            }
-        });
+        self.start_watchers(waker);
         // First data: weather (cached or fetched) and a light system snapshot.
         if self.weather_stale() {
             self.spawn_weather();
@@ -1135,7 +1156,22 @@ impl App for MacBar {
         self.spawn_snapshot(false);
     }
 
+    fn quit_requested(&self) -> bool {
+        self.gate.as_ref().is_some_and(|g| g.closed())
+    }
+
     fn tick(&mut self) -> Tick {
+        let mut t = self.tick_inner();
+        if let Some(g) = self.gate.as_mut() {
+            g.poll();
+            t.next = Some(t.next.map_or(gate::POLL, |n| n.min(gate::POLL)));
+        }
+        t
+    }
+}
+
+impl MacBar {
+    fn tick_inner(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
         if redraw && self.open == Open::Control && self.cc_drag.is_none() {
             self.relayout_control();

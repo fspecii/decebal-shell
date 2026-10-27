@@ -338,7 +338,7 @@ fn wm_class(app_id: &str) -> String {
 }
 
 /// `Xft.dpi / 96` from the root window's resource database (1.0 when unset).
-fn xft_scale(conn: &RustConnection, root: Window) -> f32 {
+pub(crate) fn xft_scale(conn: &RustConnection, root: Window) -> f32 {
     let Ok(Ok(r)) = conn.get_property(false, root, AtomEnum::RESOURCE_MANAGER, AtomEnum::STRING, 0, 65536).map(|c| c.reply()) else { return 1.0 };
     let text = String::from_utf8_lossy(&r.value);
     text.lines().find_map(|l| l.strip_prefix("Xft.dpi:")).and_then(|v| v.trim().parse::<f32>().ok()).map_or(1.0, |d| (d / 96.0).clamp(1.0, 4.0))

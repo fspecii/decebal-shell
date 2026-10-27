@@ -607,4 +607,16 @@ mod tests {
         m.apply("j:shell:workspaces", CtlVal::Str("off".into()));
         assert_eq!(io::json_load(&m.paths.shell_json())["workspaces"], false);
     }
+
+    #[test]
+    fn dock_style_row_writes_the_style_word_macdock_reads() {
+        let (mut m, _) = model_with("");
+        m.apply("j:dock:style", CtlVal::Str("windows".into()));
+        let v = io::json_load(&m.paths.dock_settings());
+        assert_eq!(v["style"], "windows");
+        let parsed: crate::config::DockSettings = serde_json::from_value(v).unwrap();
+        assert_eq!(parsed.style, crate::config::DockStyle::Windows);
+        m.apply("j:dock:style", CtlVal::Reset);
+        assert!(io::json_load(&m.paths.dock_settings()).get("style").is_none(), "reset removes the key");
+    }
 }

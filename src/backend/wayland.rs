@@ -91,6 +91,7 @@ fn would_block(e: &WaylandError) -> bool {
 }
 
 pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
+    let spec = app.surface_spec().unwrap_or(spec);
     let conn = Connection::connect_to_env().map_err(|e| Error::Connect(e.to_string()))?;
     let (globals, mut queue) = registry_queue_init(&conn).map_err(|e| Error::Connect(e.to_string()))?;
     let qh = queue.handle();
@@ -131,6 +132,7 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
         keyboard: None,
         app,
         requested: (w, h),
+        spec,
         width: w.max(1),
         height: h.max(1),
         configured: false,
@@ -207,6 +209,8 @@ struct State<A: App + 'static> {
     app: A,
     /// Size last sent to the compositor with set_size.
     requested: (u32, u32),
+    /// Edge, margin and reserved space last sent to the compositor.
+    spec: SurfaceSpec,
     /// Size the compositor actually gave us.
     width: u32,
     height: u32,
@@ -252,6 +256,23 @@ impl<A: App + 'static> State<A> {
 
     /// Pushes app-driven changes (size, keyboard focus mode, input region) to the compositor.
     fn sync(&mut self) {
+        if let Some(spec) = self.app.surface_spec() {
+            if (spec.anchor, spec.margin, spec.reserve, spec.stretch) != (self.spec.anchor, self.spec.margin, self.spec.reserve, self.spec.stretch) {
+                self.spec = spec;
+                let (edge, margins) = match spec.anchor {
+                    SpecAnchor::Bottom => (Anchor::BOTTOM, (0, 0, spec.margin, 0)),
+                    SpecAnchor::Top => (Anchor::TOP, (spec.margin, 0, 0, 0)),
+                };
+                self.layer.set_anchor(if spec.stretch { edge | Anchor::LEFT | Anchor::RIGHT } else { edge });
+                self.layer.set_margin(margins.0, margins.1, margins.2, margins.3);
+                self.layer.set_exclusive_zone(if spec.reserve > 0 { spec.reserve } else { -1 });
+                self.layer.commit();
+                self.dirty = true;
+            }
+        }
+        if self.app.quit_requested() {
+            self.exit = true;
+        }
         let want = self.app.size();
         if want != self.requested {
             self.requested = want;

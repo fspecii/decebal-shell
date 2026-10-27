@@ -24,6 +24,7 @@ pub mod menubar;
 pub mod settings;
 pub mod single;
 pub mod spotlight;
+pub mod taskbar;
 pub mod text;
 pub mod theme;
 pub mod units;

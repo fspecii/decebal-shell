@@ -3,7 +3,86 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-/// `dock-settings.json`
+/// Which look the dock has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DockStyle {
+    /// The floating, magnifying macOS dock.
+    #[default]
+    #[serde(alias = "macos", alias = "Mac", alias = "macOS")]
+    Mac,
+    /// A full-width Windows 10/11 style taskbar.
+    #[serde(alias = "Windows", alias = "win", alias = "taskbar")]
+    Windows,
+}
+
+impl DockStyle {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DockStyle::Mac => "mac",
+            DockStyle::Windows => "windows",
+        }
+    }
+}
+
+/// Where the taskbar's icons sit (Windows 11 centres them, Windows 10 and classic shells go left).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WinAlign {
+    #[default]
+    Center,
+    Left,
+}
+
+impl WinAlign {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WinAlign::Center => "center",
+            WinAlign::Left => "left",
+        }
+    }
+}
+
+/// Window titles next to the taskbar icons. `Always` is "never combine": one labelled button per window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WinLabels {
+    #[default]
+    Never,
+    Always,
+}
+
+/// The taskbar's search entry next to the Start button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WinSearch {
+    None,
+    Button,
+    #[default]
+    Box,
+}
+
+/// Screen edge of the taskbar. Left and right are not drawn yet (unknown words give the bottom).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WinPosition {
+    #[default]
+    Bottom,
+    Top,
+}
+
+/// Taskbar colour scheme: follow the system (`auto`), or force one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WinTheme {
+    #[default]
+    Auto,
+    Dark,
+    Light,
+}
+
+/// `dock-settings.json`. Keys are camelCase; the snake_case spellings (`windows_align`) are accepted too.
+/// Unknown values of the Windows options fall back to their defaults instead of voiding the file.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DockSettings {
@@ -11,11 +90,49 @@ pub struct DockSettings {
     pub magnification: f32,
     pub transparency: f32,
     pub roundness: f32,
+    /// `"mac"` (default) or `"windows"`.
+    #[serde(deserialize_with = "lenient")]
+    pub style: DockStyle,
+    /// `"center"` (default) or `"left"`; Windows style only.
+    #[serde(alias = "windows_align", deserialize_with = "lenient")]
+    pub windows_align: WinAlign,
+    /// `"never"` (default, icons only) or `"always"` (a titled button per window).
+    #[serde(alias = "windows_labels", deserialize_with = "lenient")]
+    pub windows_labels: WinLabels,
+    /// `"box"` (default), `"button"` or `"none"`.
+    #[serde(alias = "windows_search", deserialize_with = "lenient")]
+    pub windows_search: WinSearch,
+    /// `"bottom"` (default) or `"top"`.
+    #[serde(alias = "windows_position", deserialize_with = "lenient")]
+    pub windows_position: WinPosition,
+    /// `"auto"` (default, follows the system theme), `"dark"` or `"light"`.
+    #[serde(alias = "windows_theme", deserialize_with = "lenient")]
+    pub windows_theme: WinTheme,
+}
+
+/// A value that falls back to the type's default when it is not one of the known words.
+fn lenient<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(T::deserialize(serde_json::Value::deserialize(d)?).unwrap_or_default())
 }
 
 impl Default for DockSettings {
     fn default() -> Self {
-        Self { app_spacing: 6.0, magnification: 1.4, transparency: 0.4, roundness: 0.45 }
+        Self {
+            app_spacing: 6.0,
+            magnification: 1.4,
+            transparency: 0.4,
+            roundness: 0.45,
+            style: DockStyle::Mac,
+            windows_align: WinAlign::Center,
+            windows_labels: WinLabels::Never,
+            windows_search: WinSearch::Box,
+            windows_position: WinPosition::Bottom,
+            windows_theme: WinTheme::Auto,
+        }
     }
 }
 
@@ -74,11 +191,33 @@ impl Toggle {
 pub struct ShellSettings {
     /// Workspace/tag dots in the menu bar. "auto" = only under rdwm.
     pub workspaces: Toggle,
+    pub bar: BarSettings,
 }
 
 impl Default for ShellSettings {
     fn default() -> Self {
-        Self { workspaces: Toggle::Word(Word::Auto) }
+        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default() }
+    }
+}
+
+/// `macshell.json` -> `"bar": { "enabled": true | false | "auto" }`: whether macbar shows at all.
+/// `"auto"` hides it while the dock is in the Windows style (a Windows-only layout).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct BarSettings {
+    pub enabled: Toggle,
+}
+
+impl Default for BarSettings {
+    fn default() -> Self {
+        Self { enabled: Toggle::Flag(true) }
+    }
+}
+
+impl ShellSettings {
+    /// Whether the macOS menu bar should be on screen given the dock's style.
+    pub fn bar_visible(&self, dock: DockStyle) -> bool {
+        self.bar.enabled.resolve(dock != DockStyle::Windows)
     }
 }
 
@@ -161,6 +300,23 @@ pub fn write_pinned(path: &std::path::Path, list: &[String]) -> std::io::Result<
         std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({ "version": 1 }));
     doc["pinned"] = serde_json::json!(list);
     doc["order"] = serde_json::json!(list);
+    let mut text = serde_json::to_string_pretty(&doc).map_err(std::io::Error::other)?;
+    text.push('\n');
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension(format!("json.tmp{}", std::process::id()));
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
+/// Sets one key of the JSON object in `path` (creating the file), keeping every other key. Atomic like
+/// [`write_pinned`].
+pub fn write_setting(path: &std::path::Path, key: &str, value: serde_json::Value) -> std::io::Result<()> {
+    let mut doc: serde_json::Value = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({}));
+    doc[key] = value;
     let mut text = serde_json::to_string_pretty(&doc).map_err(std::io::Error::other)?;
     text.push('\n');
     if let Some(dir) = path.parent() {
@@ -319,6 +475,60 @@ mod tests {
         let mut empty: Vec<String> = vec![];
         add(&mut empty, "z");
         assert_eq!(empty, list(&["z"]));
+    }
+
+    #[test]
+    fn style_defaults_to_mac_and_old_files_still_parse() {
+        let s: DockSettings = serde_json::from_str(r#"{"appSpacing": 8, "magnification": 1.2, "transparency": 0.1, "roundness": 0.3}"#).unwrap();
+        assert_eq!((s.style, s.windows_align, s.windows_labels, s.windows_search), (DockStyle::Mac, WinAlign::Center, WinLabels::Never, WinSearch::Box));
+        assert_eq!(s.app_spacing, 8.0);
+        assert_eq!(DockSettings::default().style, DockStyle::Mac);
+    }
+
+    #[test]
+    fn windows_options_parse_in_both_spellings() {
+        let s: DockSettings =
+            serde_json::from_str(r#"{"style":"windows","windowsAlign":"left","windows_labels":"always","windowsSearch":"button","windowsPosition":"top","windowsTheme":"light"}"#).unwrap();
+        assert_eq!(s.style, DockStyle::Windows);
+        assert_eq!(
+            (s.windows_align, s.windows_labels, s.windows_search, s.windows_position, s.windows_theme),
+            (WinAlign::Left, WinLabels::Always, WinSearch::Button, WinPosition::Top, WinTheme::Light)
+        );
+    }
+
+    #[test]
+    fn unknown_option_words_fall_back_without_voiding_the_file() {
+        let s: DockSettings = serde_json::from_str(r#"{"style":"beos","windowsAlign":"right","magnification":2.0,"windowsLabels":3}"#).unwrap();
+        assert_eq!((s.style, s.windows_align, s.windows_labels), (DockStyle::Mac, WinAlign::Center, WinLabels::Never));
+        assert_eq!(s.magnification, 2.0, "the other settings survive");
+        let s: DockSettings = serde_json::from_str(r#"{"style":"macos"}"#).unwrap();
+        assert_eq!(s.style, DockStyle::Mac);
+        let s: DockSettings = serde_json::from_str(r#"{"windowsPosition":"left"}"#).unwrap();
+        assert_eq!(s.windows_position, WinPosition::Bottom);
+    }
+
+    #[test]
+    fn style_round_trips_through_write_setting() {
+        let d = tmp_dir("style");
+        let f = d.join(SETTINGS_FILE);
+        std::fs::write(&f, r#"{"appSpacing": 9, "custom": [1]}"#).unwrap();
+        write_setting(&f, "style", serde_json::json!(DockStyle::Windows.as_str())).unwrap();
+        write_setting(&f, "windowsAlign", serde_json::json!("left")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!(v["custom"], serde_json::json!([1]));
+        let s: DockSettings = serde_json::from_value(v).unwrap();
+        assert_eq!((s.style, s.windows_align, s.app_spacing), (DockStyle::Windows, WinAlign::Left, 9.0));
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn bar_enabled_defaults_on_and_auto_follows_the_dock_style() {
+        let parse = |j: &str| serde_json::from_str::<ShellSettings>(j).unwrap();
+        assert!(parse("{}").bar_visible(DockStyle::Windows));
+        assert!(!parse(r#"{"bar":{"enabled":false}}"#).bar_visible(DockStyle::Mac));
+        let auto = parse(r#"{"bar":{"enabled":"auto"}}"#);
+        assert!(auto.bar_visible(DockStyle::Mac) && !auto.bar_visible(DockStyle::Windows));
+        assert!(parse(r#"{"workspaces":"on","bar":{}}"#).bar_visible(DockStyle::Mac));
     }
 
     #[test]

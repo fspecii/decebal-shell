@@ -37,8 +37,8 @@ On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
 `macdock` reads the same files as the original dock, from `$MACSHELL_CONFIG` or `~/.config/omarchy/`:
 
 * `dock-pinned-macos.json` - `{"pinned": [...], "order": [...]}` (desktop-file ids; `launchpad` and `trash` are built in)
-* `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`
-* `macshell.json` - `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
+* `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`, and the Windows taskbar options `style` (`"mac"` default / `"windows"`), `windowsAlign`, `windowsLabels`, `windowsSearch`, `windowsPosition`, `windowsTheme` (see [docs/dock-style.md](docs/dock-style.md))
+* `macshell.json` - `{"bar": {"enabled": true}}` hides `macbar` (`false`, or `"auto"` = hidden while the dock is a Windows taskbar); `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
 
 The dock re-reads `dock-pinned-macos.json` and `dock-settings.json` within about a second of an external edit (a `stat` twice a second, no restart); its own changes are written atomically.
 

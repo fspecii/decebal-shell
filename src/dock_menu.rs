@@ -4,6 +4,7 @@
 //! Row geometry and hit-testing come from [`crate::menubar::menus::Dropdown`], so the dock menu and
 //! the bar menus lay out identically; [`draw_dropdown`] is the shared painter (the bar can adopt it).
 
+use crate::config::{DockStyle, WinAlign, WinLabels};
 use crate::gfx::{color, fill_rect, fill_rounded, stroke_rounded};
 use crate::menubar::menus::{Dropdown, Item, Menu, PAD};
 use crate::text::{Fonts, Weight};
@@ -29,6 +30,14 @@ pub enum Action {
     /// Ask every window of the app to close.
     Quit,
     EmptyTrash,
+    /// Close one window (a taskbar button of a single window).
+    CloseWindow(u64),
+    /// Switch the dock between its macOS and Windows looks.
+    SetStyle(DockStyle),
+    SetAlign(WinAlign),
+    SetLabels(WinLabels),
+    /// Open the Desktop & Dock pane of the settings app.
+    OpenSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +113,62 @@ pub fn build_entries(ctx: &Ctx) -> Vec<Entry> {
         }
     }
     out
+}
+
+/// Entries for a taskbar button (Windows wording): windows, the app, pin/unpin, minimise, close.
+pub fn build_entries_windows(ctx: &Ctx) -> Vec<Entry> {
+    let mut out = Vec::new();
+    let name = if ctx.display_name.is_empty() { ctx.id.clone() } else { ctx.display_name.clone() };
+    if ctx.running && ctx.windows.len() > 1 {
+        for (id, title) in ctx.windows.iter().take(MAX_WINDOWS) {
+            let label = if title.trim().is_empty() { name.clone() } else { title.trim().to_string() };
+            out.push(Entry::new(&label, Action::Focus(*id)));
+        }
+        out.push(Entry::sep());
+    }
+    out.push(Entry::new(&name, Action::Open));
+    out.push(Entry::sep());
+    out.push(if ctx.pinned { Entry::new("Unpin from taskbar", Action::RemoveFromDock) } else { Entry::new("Pin to taskbar", Action::KeepInDock) });
+    if ctx.has_desktop {
+        out.push(Entry::new("Open file location", Action::ShowInFinder));
+    }
+    if ctx.running {
+        out.push(Entry::sep());
+        out.push(Entry::new("Minimize", Action::Hide));
+        match ctx.windows.as_slice() {
+            [(id, _)] => out.push(Entry::new("Close window", Action::CloseWindow(*id))),
+            _ => out.push(Entry::new("Close all windows", Action::Quit)),
+        }
+    }
+    out
+}
+
+/// The dock's own menu (right click on the empty part of the dock or taskbar): style and, in the
+/// Windows style, alignment and window titles. The current choice is shown greyed out.
+pub fn build_entries_dock(style: DockStyle, align: WinAlign, labels: WinLabels) -> Vec<Entry> {
+    let mut out = vec![
+        Entry { enabled: style != DockStyle::Mac, ..Entry::new("Dock Style: macOS", Action::SetStyle(DockStyle::Mac)) },
+        Entry { enabled: style != DockStyle::Windows, ..Entry::new("Dock Style: Windows", Action::SetStyle(DockStyle::Windows)) },
+    ];
+    if style == DockStyle::Windows {
+        out.push(Entry::sep());
+        out.push(match align {
+            WinAlign::Center => Entry::new("Taskbar Alignment: Left", Action::SetAlign(WinAlign::Left)),
+            WinAlign::Left => Entry::new("Taskbar Alignment: Center", Action::SetAlign(WinAlign::Center)),
+        });
+        out.push(match labels {
+            WinLabels::Never => Entry::new("Show Window Titles", Action::SetLabels(WinLabels::Always)),
+            WinLabels::Always => Entry::new("Hide Window Titles", Action::SetLabels(WinLabels::Never)),
+        });
+    }
+    out.push(Entry::sep());
+    out.push(Entry::new(if style == DockStyle::Windows { "Taskbar Settings…" } else { "Dock Settings…" }, Action::OpenSettings));
+    out
+}
+
+/// The style switch appended to an item's menu in the macOS style.
+pub fn style_entries() -> Vec<Entry> {
+    vec![Entry::sep(), Entry::new("Dock Style: Windows", Action::SetStyle(DockStyle::Windows))]
 }
 
 /// What the owner should do after feeding the menu an input.
@@ -333,6 +398,38 @@ mod tests {
 
     fn w(s: &str) -> f32 {
         s.chars().count() as f32 * 7.0
+    }
+
+    #[test]
+    fn windows_menu_uses_taskbar_wording() {
+        let mut c = ctx("foot", true, true);
+        c.windows = vec![(7, "shell".into())];
+        let labels = |e: &[Entry]| e.iter().filter(|e| !e.is_sep()).map(|e| e.label.clone()).collect::<Vec<_>>();
+        assert_eq!(labels(&build_entries_windows(&c)), vec!["Foot", "Unpin from taskbar", "Open file location", "Minimize", "Close window"]);
+        c.pinned = false;
+        c.windows.push((8, "other".into()));
+        let l = labels(&build_entries_windows(&c));
+        assert_eq!(l[..2], ["shell", "other"], "several windows are listed first");
+        assert!(l.contains(&"Pin to taskbar".to_string()) && l.contains(&"Close all windows".to_string()));
+        c.running = false;
+        assert!(!labels(&build_entries_windows(&c)).iter().any(|l| l == "Minimize"));
+        let e = build_entries_windows(&ctx("foot", true, true));
+        assert!(e.iter().any(|e| e.action == Some(Action::Quit)), "no window list means close all");
+    }
+
+    #[test]
+    fn dock_menu_offers_the_style_switch() {
+        let e = build_entries_dock(DockStyle::Mac, WinAlign::Center, WinLabels::Never);
+        let mac = e.iter().find(|e| e.label == "Dock Style: macOS").unwrap();
+        let win = e.iter().find(|e| e.label == "Dock Style: Windows").unwrap();
+        assert!(!mac.enabled && win.enabled, "the current style is greyed out");
+        assert_eq!(win.action, Some(Action::SetStyle(DockStyle::Windows)));
+        assert!(!e.iter().any(|e| e.label.starts_with("Taskbar Alignment")));
+        let e = build_entries_dock(DockStyle::Windows, WinAlign::Left, WinLabels::Always);
+        assert!(e.iter().any(|e| e.action == Some(Action::SetAlign(WinAlign::Center))));
+        assert!(e.iter().any(|e| e.action == Some(Action::SetLabels(WinLabels::Never))));
+        assert!(e.iter().any(|e| e.action == Some(Action::OpenSettings)));
+        assert_eq!(style_entries().len(), 2);
     }
 
     fn ctx(id: &str, running: bool, pinned: bool) -> Ctx {
