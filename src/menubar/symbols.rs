@@ -56,6 +56,12 @@ fn speaker(level: u32, muted: bool) -> String {
     out
 }
 
+fn mic(muted: bool) -> String {
+    // Capsule on a stand; muted dims it and strikes it through like macOS.
+    let capsule = fill("M12 3a3.2 3.2 0 0 0-3.2 3.2v5.6a3.2 3.2 0 0 0 6.4 0V6.2A3.2 3.2 0 0 0 12 3z", muted.then_some(0.45));
+    capsule + &stroke("M6.2 11.2a5.8 5.8 0 0 0 11.6 0M12 17v3.5M8.6 20.5h6.8", muted.then_some(0.45)) + &if muted { stroke("M4.5 4.5L19.5 19.5", None) } else { String::new() }
+}
+
 fn bluetooth(state: &str) -> String {
     let mut rune = stroke("M7 7.6l9.6 8.6L12 20.3V3.7l4.6 4.1L7 16.4", (state == "off").then_some(0.4));
     if state == "connected" {
@@ -91,6 +97,8 @@ pub fn shapes(name: &str) -> Option<String> {
         "speaker-2" => speaker(2, false),
         "speaker-3" => speaker(3, false),
         "speaker-muted" => speaker(0, true),
+        "mic" => mic(false),
+        "mic-muted" => mic(true),
         "headphones" => {
             stroke("M4 15V12a8 8 0 0 1 16 0v3", None)
                 + "<rect x=\"2.6\" y=\"12.6\" width=\"4.8\" height=\"7.6\" rx=\"1.8\" fill=\"C\"/><rect x=\"16.6\" y=\"12.6\" width=\"4.8\" height=\"7.6\" rx=\"1.8\" fill=\"C\"/>"
@@ -292,6 +300,8 @@ mod tests {
         "speaker-2",
         "speaker-3",
         "speaker-muted",
+        "mic",
+        "mic-muted",
         "headphones",
         "bluetooth",
         "bluetooth-connected",

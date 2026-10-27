@@ -5,9 +5,14 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 
-fn lock_path(name: &str) -> PathBuf {
+/// `file` inside `$XDG_RUNTIME_DIR` (the temp dir when that is unset): where instances keep their lock and mailbox files.
+pub fn runtime_file(file: &str) -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|d| d.is_dir()).unwrap_or_else(std::env::temp_dir);
-    dir.join(format!("{name}.lock"))
+    dir.join(file)
+}
+
+fn lock_path(name: &str) -> PathBuf {
+    runtime_file(&format!("{name}.lock"))
 }
 
 /// `Some(guard)` when this is the only instance (keep the guard alive for the whole run). When another

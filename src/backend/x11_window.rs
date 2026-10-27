@@ -115,6 +115,17 @@ impl Keymap {
 
 // ---------------------------------------------------------------- window
 
+/// Top edge of a popup of height `h` on the monitor `mon`: above the bottom by the app's margin, centred, or a fifth down.
+fn popup_top<A: WindowApp>(app: &A, mon: &super::x11::Rect, h: u32) -> i32 {
+    if let Some(f) = app.popup_bottom_margin() {
+        (mon.y + mon.h - h as i32 - (mon.h as f32 * f).round() as i32).max(mon.y)
+    } else if app.popup_centered() {
+        mon.y + (mon.h - h as i32) / 2
+    } else {
+        mon.y + mon.h / 5
+    }
+}
+
 pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
@@ -123,6 +134,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
 
     let (sw, sh) = (u32::from(screen.width_in_pixels), u32::from(screen.height_in_pixels));
     let popup = app.overlay();
+    let passive = popup && app.popup_passive();
+    // The size a popup takes depends on the UI scale, so tell the app before asking for it.
+    app.set_scale(xft_scale(&conn, screen.root));
     let mon = if popup { super::x11::panel_monitor(&conn, screen.root, (sw as i32, sh as i32)) } else { super::x11::Rect { x: 0, y: 0, w: sw as i32, h: sh as i32 } };
     if popup {
         app.set_popup(true);
@@ -136,12 +150,14 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     } else {
         (iw.min(sw.saturating_sub(40)).max(320), ih.min(sh.saturating_sub(60)).max(240))
     };
-    // Popup: centred horizontally on the primary monitor, a fifth of the way down.
-    let popup_y = if popup && app.popup_centered() { mon.y + (mon.h - h as i32) / 2 } else { mon.y + mon.h / 5 };
+    // Popup: centred horizontally on the primary monitor.
+    let popup_y = popup_top(&app, &mon, h);
     let (px, py) = if popup { (mon.x + (mon.w - w as i32) / 2, popup_y) } else { (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32) };
 
     let win = conn.generate_id().map_err(err)?;
-    let mut aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(
+    let mut aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(if passive {
+        EventMask::EXPOSURE | EventMask::STRUCTURE_NOTIFY
+    } else {
         EventMask::FOCUS_CHANGE
             | EventMask::EXPOSURE
             | EventMask::STRUCTURE_NOTIFY
@@ -151,8 +167,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             | EventMask::LEAVE_WINDOW
             | EventMask::ENTER_WINDOW
             | EventMask::KEY_PRESS
-            | EventMask::KEY_RELEASE,
-    );
+            | EventMask::KEY_RELEASE
+    });
     if popup {
         // No window manager involvement at all: rdwm and other tiling WMs never see the window.
         aux = aux.override_redirect(1);
@@ -201,21 +217,33 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     if !popup {
         app.set_screen(sw, sh);
     }
-    app.set_scale(xft_scale(&conn, screen.root));
     app.set_rounded(popup);
     app.resize(w, h);
     app.set_waker(waker);
-
-    conn.map_window(win).map_err(err)?;
-    conn.flush().map_err(err)?;
 
     let max_bytes = conn.maximum_request_bytes().saturating_sub(64);
     let mut size = (w, h);
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     let mut dirty = true;
     let depth = if argb.is_some() { 32 } else { screen.root_depth };
-    let mut grabbed = !popup;
+    let mut grabbed = !popup || passive;
     let mut bg = 0u32;
+
+    if passive {
+        // Click-through: an empty input region (nothing is ever hit, so no crossing, focus or button events either).
+        conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[]).map_err(err)?;
+        if argb.is_none() {
+            // No compositor: shape the window and give it the card's colour before it is mapped, so it never flashes black.
+            app.draw(&mut pm);
+            if let Some(px) = backdrop(&pm) {
+                bg = px;
+                conn.change_window_attributes(win, &ChangeWindowAttributesAux::new().background_pixel(px)).map_err(err)?;
+            }
+            conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &super::x11::visible_rects(&pm)).map_err(err)?;
+        }
+    }
+    conn.map_window(win).map_err(err)?;
+    conn.flush().map_err(err)?;
 
     loop {
         if dirty {
@@ -331,8 +359,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         size = (cw, ch);
                         let x = mon.x + (mon.w - cw as i32) / 2;
                         let mut cfg = ConfigureWindowAux::new().x(x).width(cw).height(ch);
-                        if app.popup_centered() {
-                            cfg = cfg.y(mon.y + (mon.h - ch as i32) / 2);
+                        if app.popup_centered() || app.popup_bottom_margin().is_some() {
+                            cfg = cfg.y(popup_top(&app, &mon, ch));
                         }
                         conn.configure_window(win, &cfg).map_err(err)?;
                         app.resize(cw, ch);

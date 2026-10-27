@@ -90,6 +90,16 @@ pub trait WindowApp {
     fn popup_centered(&self) -> bool {
         false
     }
+    /// Popup mode: a passive indicator (a HUD). The window takes no input at all: an empty input shape lets every
+    /// click through, no event but exposure is selected, and neither the keyboard nor the pointer is grabbed or focused.
+    fn popup_passive(&self) -> bool {
+        false
+    }
+    /// Popup mode: place the window's bottom edge this fraction of the monitor height above the monitor's bottom
+    /// instead of centring it (`popup_centered`) or a fifth of the way down.
+    fn popup_bottom_margin(&self) -> Option<f32> {
+        None
+    }
     /// Popup mode: the card has translucent pixels. The backend uses a 32-bit visual when a compositor runs
     /// and tells the app through [`WindowApp::set_popup_alpha`]; without one the app must paint opaque.
     fn popup_translucent(&self) -> bool {

@@ -20,6 +20,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
+| `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -125,6 +126,28 @@ array when `get_state` has one, else the focused window followed by the order ma
 (`$XDG_RUNTIME_DIR/macswitch-mru`), then rdwm's list order. With a compositor the card is translucent; without one it is opaque.
 
 `tests/e2e/switch.sh` runs it against a private Xvfb and rdwm (xdotool holds Alt, taps Tab; also checks Escape, clicks, tags and screenshots).
+
+## On-screen display (`machud`)
+
+The little rounded card macOS shows when you press a volume or brightness key: an icon (speaker with waves, crossed speaker when muted,
+sun, microphone), a label (`Volume 45%`, `Muted`, `Brightness 70%`, `Microphone muted`) and a 16-segment bar. Call it after the key's own action:
+
+```toml
+# rdwm: wpctl/brightnessctl change the value, machud reads it back and shows it
+[[bind]]
+mods = []
+key = "XF86AudioRaiseVolume"
+action = "spawn"
+args = ["sh", "-c", "wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+; machud volume"]
+```
+
+`machud volume` / `machud mic` read the default sink / source with `wpctl get-volume` (`pactl` as a fallback), `machud brightness` uses
+`brightnessctl -m` and falls back to `/sys/class/backlight`. A value that cannot be read shows nothing and exits 0. The card sits horizontally
+centred on the primary monitor, a tenth of its height above the bottom edge, as an override-redirect window with an empty input region: it never
+takes focus, keys or clicks. It disappears 1.4 s after the last call; calling again while it is up updates the value and restarts the timer
+(single instance via `$XDG_RUNTIME_DIR/machud.lock`; the new value travels in `$XDG_RUNTIME_DIR/machud.msg` plus SIGUSR1). It follows the shared theme, is
+translucent under a compositor and opaque without one, and costs nothing while idle because the process exits. X11 only (no Wayland layer-shell
+version yet). `tests/e2e/hud.sh` runs it on a private Xvfb with shimmed `wpctl` / `brightnessctl`.
 
 ## Window rules for the wallpaper browser
 
