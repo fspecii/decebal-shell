@@ -30,6 +30,16 @@ impl Rgb {
         }
     }
 
+    /// `(r, g, b)` for the tuple-based drawing helpers.
+    pub fn t(self) -> (u8, u8, u8) {
+        (self.0, self.1, self.2)
+    }
+
+    /// `(r, g, b, alpha)` for the tuple-based drawing helpers.
+    pub fn a(self, alpha: f32) -> (u8, u8, u8, f32) {
+        (self.0, self.1, self.2, alpha)
+    }
+
     pub fn hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.0, self.1, self.2)
     }

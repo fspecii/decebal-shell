@@ -31,10 +31,10 @@ const MAX_PACKAGES: usize = 30;
 const MAX_FILES: usize = 4;
 
 fn text_color() -> Color {
-    color(245, 245, 247, 1.0)
+    crate::theme::th().text_c()
 }
 fn subtext_color() -> Color {
-    color(255, 255, 255, 0.55)
+    crate::theme::th().ink(0.55)
 }
 
 /// What Enter does for a result.
@@ -719,11 +719,11 @@ impl Spotlight {
     fn draw_card(&mut self, pm: &mut Pixmap) {
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         pm.fill(Color::TRANSPARENT);
-        let radius = if self.rounded || self.overlay { 16.0 } else { 0.0 };
-        fill_rounded(pm, 0.0, 0.0, w, h, radius, color(33, 33, 38, 0.97));
+        let radius = if self.rounded || self.overlay { crate::theme::th().r(1.6) } else { 0.0 };
+        fill_rounded(pm, 0.0, 0.0, w, h, radius, crate::theme::th().overlay_c());
 
         // Search line.
-        if let Some(sym) = self.symbols.get("magnifyingglass", (160, 160, 168), 44) {
+        if let Some(sym) = self.symbols.get("magnifyingglass", crate::theme::th().text_faint.t(), 44) {
             blit_scaled(pm, sym, PAD + 10.0, HEADER_H / 2.0 - 11.0, 22.0, 22.0, 1.0);
         }
         let tx = PAD + 46.0;
@@ -737,7 +737,7 @@ impl Spotlight {
             fill_rect(pm, cx, cy - 12.0, 1.5, 24.0, text_color());
         }
         if !self.items.is_empty() {
-            fill_rect(pm, 0.0, HEADER_H - 1.0, w, 1.0, color(255, 255, 255, 0.10));
+            fill_rect(pm, 0.0, HEADER_H - 1.0, w, 1.0, crate::theme::th().ink(0.10));
         }
 
         let end = (self.scroll + self.visible_rows()).min(self.items.len());
@@ -746,7 +746,7 @@ impl Spotlight {
             let item = self.items[pos].clone();
             let selected = pos == self.sel;
             if selected {
-                fill_rounded(pm, 8.0, y + 2.0, w - 16.0, ROW_H - 4.0, 9.0, color(10, 132, 255, 1.0));
+                fill_rounded(pm, 8.0, y + 2.0, w - 16.0, ROW_H - 4.0, crate::theme::th().r(0.9), crate::theme::th().accent_c());
             }
             let ix = 20.0;
             let iy = y + (ROW_H - ICON as f32) / 2.0;
@@ -766,9 +766,9 @@ impl Spotlight {
             let text_x = ix + ICON as f32 + 14.0;
             let max_w = w - text_x - kind_w - 40.0;
             let danger_armed = self.confirm == Some(pos);
-            let (main, sub) = if selected { (color(255, 255, 255, 1.0), color(255, 255, 255, 0.78)) } else { (text_color(), subtext_color()) };
+            let (main, sub) = if selected { (crate::theme::th().accent_text_c(), crate::theme::th().ink(0.78)) } else { (text_color(), subtext_color()) };
             let sub_text = if item.danger && !danger_armed { String::new() } else { item.subtitle.clone() };
-            let sub_color = if danger_armed && !selected { color(255, 120, 110, 1.0) } else { sub };
+            let sub_color = if danger_armed && !selected { crate::theme::th().danger.over(crate::theme::th().text, 0.8).color(1.0) } else { sub };
             if sub_text.is_empty() {
                 let title = self.fit(&item.title, 15.0, max_w);
                 self.text_at(pm, &title, text_x, y + ROW_H / 2.0, 15.0, Weight::Regular, main);
@@ -778,10 +778,10 @@ impl Spotlight {
                 self.text_at(pm, &title, text_x, y + ROW_H / 2.0 - 8.0, 15.0, Weight::Regular, main);
                 self.text_at(pm, &subt, text_x, y + ROW_H / 2.0 + 10.0, 11.5, Weight::Regular, sub_color);
             }
-            self.text_at(pm, item.kind, w - 20.0 - kind_w, y + ROW_H / 2.0, 12.0, Weight::Regular, if selected { color(255, 255, 255, 0.8) } else { subtext_color() });
+            self.text_at(pm, item.kind, w - 20.0 - kind_w, y + ROW_H / 2.0, 12.0, Weight::Regular, if selected { crate::theme::th().ink(0.8) } else { subtext_color() });
         }
         if !self.overlay || !self.items.is_empty() || !self.field.text().is_empty() {
-            stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), color(255, 255, 255, 0.12), 1.0);
+            stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
         }
         if let Some(f) = &self.fonts {
             f.trim();
@@ -825,6 +825,8 @@ impl WindowApp for Spotlight {
     }
 
     fn set_waker(&mut self, waker: Waker) {
+        let w = waker.clone();
+        crate::theme::live::start_watcher(move || w());
         self.waker = Some(waker);
         if self.search_files {
             self.refresh_apps_in_background();
@@ -968,7 +970,7 @@ impl WindowApp for Spotlight {
     }
 
     fn tick(&mut self) -> Response {
-        let mut changed = false;
+        let mut changed = crate::theme::take_changed();
         if let Some(fresh) = self.shared.apps.lock().unwrap_or_else(|e| e.into_inner()).take() {
             self.apps = fresh;
             self.base = search_with(self.field.text(), &self.apps, &self.hist, crate::fuzzy::now());

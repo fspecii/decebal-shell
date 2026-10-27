@@ -1,0 +1,218 @@
+//! The "Theme" pane: gallery of themes with live miniature previews, light/dark/auto, accent
+//! swatches, translucency / corner radius / text size, and "also style rdwm".
+//!
+//! Choosing anything runs one transaction (see [`crate::theme::rdwm`]): validate rdwm's colour edit,
+//! write it through the model's atomic store, then write the selection to `macshell.json`. Every
+//! running macshell program notices that file within half a second.
+
+use super::model::{CtlVal, Model};
+use super::ui::{Ctl, Item, Kind, Row, Swatch, ThemeTile};
+use crate::theme::live::{system_dark, Source};
+use crate::theme::model::{Mode, Rgb, Selection};
+use crate::theme::rdwm;
+
+/// macOS accent colours, in the order System Settings shows them.
+pub const ACCENTS: &[(&str, &str)] = &[("Blue", "#0a84ff"), ("Purple", "#bf5af2"), ("Pink", "#ff375f"), ("Red", "#ff453a"), ("Orange", "#ff9f0a"), ("Yellow", "#ffd60a"), ("Green", "#30d158"), ("Graphite", "#8e8e93")];
+
+fn source(m: &Model) -> Source {
+    Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }
+}
+
+pub fn items(m: &Model) -> Vec<Item> {
+    let src = source(m);
+    let sel = src.selection();
+    let sys = system_dark();
+    let (now, problem) = src.build(&sel, sys);
+    let current_id = src.find(&sel.name).map(|f| f.0).unwrap_or_default();
+
+    let mut tiles = Vec::new();
+    let mut broken: Vec<String> = Vec::new();
+    for e in src.list() {
+        let selected = e.id == current_id;
+        if let Some(err) = &e.error {
+            broken.push(format!("{}: {err}", e.id));
+            if !e.builtin {
+                tiles.push(ThemeTile { id: format!("l:theme:{}", e.id), name: format!("{} (error)", e.name), selected: false, error: true, colors: [(60, 20, 20); 7] });
+                continue;
+            }
+        }
+        let Ok(def) = src.load_def(&e.id) else { continue };
+        let dark = def.pick_dark(sel.mode, sys);
+        let t = def.resolve(&e.id, dark, &if selected { sel.clone() } else { Selection::default() });
+        tiles.push(ThemeTile { id: format!("l:theme:{}", e.id), name: e.name.clone(), selected, error: false, colors: [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()] });
+    }
+
+    let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
+    let mode_sel = Some(match sel.mode {
+        Mode::Light => 0,
+        Mode::Dark => 1,
+        Mode::Auto => 2,
+    });
+    let mut swatches = vec![Swatch { id: "l:accent:none".into(), name: "Theme default".into(), color: src.build(&Selection { accent: None, ..sel.clone() }, sys).0.accent.t(), selected: sel.accent.is_none(), unset: true }];
+    for (name, hex) in ACCENTS {
+        let c = Rgb::parse(hex).unwrap();
+        swatches.push(Swatch { id: format!("l:accent:{hex}"), name: (*name).into(), color: c.t(), selected: sel.accent == Some(c), unset: false });
+    }
+    let slider = |id: &str, label: &str, detail: &str, v: f64, min: f64, max: f64, unit: &str| Row::new(label).detail(detail).ctl(Ctl::new(id, Kind::Slider { v, min, max, step: 1.0, unit: unit.into() }));
+    let mut out = Vec::new();
+    if let Some(p) = problem {
+        out.push(Item::Note { text: format!("The selected theme could not be loaded ({p}); the default theme is shown instead."), warn: true });
+    }
+    out.push(Item::Header("Theme".into()));
+    out.push(Item::Themes(tiles));
+    out.push(Item::Header("Appearance".into()));
+    out.push(Item::Card(vec![
+        Row::new("Mode").detail(if sel.mode == Mode::Auto { format!("Following the system: {} right now", if sys { "dark" } else { "light" }) } else { "Themes with both variants switch; single-variant themes keep their look".into() }).ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel))),
+        Row::new("Window titlebars").detail("Also restyle rdwm's titlebars, borders and bar with the theme").ctl(Ctl::new("th:sync", Kind::Toggle(sel.sync_rdwm))),
+    ]));
+    out.push(Item::Header("Accent colour".into()));
+    out.push(Item::Swatches(swatches));
+    out.push(Item::Card(vec![Row::new("Custom accent").detail("A hex colour; empty = the theme's own").ctl(Ctl::new("th:accenthex", Kind::Text { val: sel.accent.map(|c| c.hex()).unwrap_or_default(), hint: "#0a84ff".into() }))]));
+    out.push(Item::Header("Customise".into()));
+    out.push(Item::Card(vec![
+        slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
+        slider("th:radius", "Corner radius", "Menus, cards and window titlebars", f64::from(now.radius), 0.0, 24.0, " px"),
+        slider("th:fontscale", "Text size", "All macshell text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
+        Row::new("Reset customisations").detail("Back to the theme's own accent, translucency, radius and text size").ctl(Ctl::new("th:reset", Kind::Button { label: "Reset".into(), danger: false })),
+    ]));
+    let mut note = format!("Your own themes: put .toml files in {} (macthemectl export nord > mine.toml is a good start). macthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
+    if !broken.is_empty() {
+        note.push_str(&format!("\nIgnored: {}", broken.join("; ")));
+    }
+    out.push(Item::Note { text: note, warn: !broken.is_empty() });
+    out
+}
+
+/// Runs the transaction for a changed selection.
+fn commit(m: &mut Model, sel: Selection) {
+    let src = source(m);
+    let (theme, problem) = src.build(&sel, system_dark());
+    if let Some(p) = problem {
+        m.say(format!("Not applied: {p}"), true);
+        return;
+    }
+    if sel.sync_rdwm {
+        m.notice = None;
+        m.edit(|c| rdwm::apply_to(c, &theme));
+        if m.notice.as_ref().is_some_and(|n| n.error) {
+            return; // rdwm's file would be invalid: nothing was written, the selection stays as it was
+        }
+    }
+    match src.write_selection(&sel) {
+        Ok(()) => {
+            crate::theme::live::reload();
+            m.dirty = true;
+            if m.notice.is_none() {
+                m.say(format!("Theme: {}", theme.name), false);
+            }
+        }
+        Err(e) => m.say(format!("Not saved: {e}"), true),
+    }
+}
+
+pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
+    let src = source(m);
+    let mut sel = src.selection();
+    match (parts, v) {
+        (["l", "theme", id], CtlVal::Click) => {
+            let mode = src.find(id).and_then(|f| f.1);
+            sel.name = (*id).to_string();
+            if let Some(mode) = mode {
+                sel.mode = mode;
+            }
+        }
+        (["l", "accent", "none"], CtlVal::Click) => sel.accent = None,
+        (["l", "accent", hex], CtlVal::Click) => sel.accent = Rgb::parse(hex),
+        (["th", "mode"], CtlVal::Str(s)) => sel.mode = Mode::parse(&s).unwrap_or(sel.mode),
+        (["th", "sync"], CtlVal::Bool(b)) => sel.sync_rdwm = b,
+        (["th", "accenthex"], CtlVal::Str(s)) => {
+            if s.trim().is_empty() {
+                sel.accent = None;
+            } else if let Some(c) = Rgb::parse(&s) {
+                sel.accent = Some(c);
+            } else {
+                m.say(format!("`{s}` is not a colour; use #rrggbb"), true);
+                return;
+            }
+        }
+        (["th", "accenthex"], CtlVal::Reset) => sel.accent = None,
+        (["th", "opacity"], CtlVal::Num(n)) => sel.opacity = Some((n / 100.0).clamp(0.4, 1.0) as f32),
+        (["th", "opacity"], CtlVal::Reset) => sel.opacity = None,
+        (["th", "radius"], CtlVal::Num(n)) => sel.radius = Some(n.clamp(0.0, 24.0) as f32),
+        (["th", "radius"], CtlVal::Reset) => sel.radius = None,
+        (["th", "fontscale"], CtlVal::Num(n)) => sel.font_scale = Some((n / 100.0).clamp(0.8, 1.4) as f32),
+        (["th", "fontscale"], CtlVal::Reset) => sel.font_scale = None,
+        (["th", "reset"], CtlVal::Click) => sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, ..Selection::default() },
+        _ => return,
+    }
+    commit(m, sel);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::model::tests_support::model_with;
+
+    fn selection(m: &Model) -> Selection {
+        source(m).selection()
+    }
+
+    #[test]
+    fn gallery_lists_every_builtin_and_marks_the_current_one() {
+        let (m, _) = model_with("[general]\n");
+        let items = items(&m);
+        let Some(Item::Themes(tiles)) = items.iter().find(|i| matches!(i, Item::Themes(_))) else { panic!("no gallery") };
+        assert!(tiles.len() >= crate::theme::builtin::BUILTIN.len());
+        assert_eq!(tiles.iter().filter(|t| t.selected).count(), 1);
+        assert!(tiles.iter().any(|t| t.id == "l:theme:windows11" && t.name == "Windows 11"));
+        assert!(items.iter().any(|i| matches!(i, Item::Swatches(s) if s.len() == ACCENTS.len() + 1)));
+    }
+
+    #[test]
+    fn choosing_a_theme_writes_selection_and_rdwm_colours_in_one_go() {
+        let (mut m, cfg) = model_with("# keep me\n[general]\ntags = [\"a\"]\n");
+        m.apply("l:theme:nord", CtlVal::Click);
+        assert_eq!(selection(&m).name, "nord");
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert!(text.starts_with("# keep me\n"), "{text}");
+        assert!(text.contains("focused_bg") && text.contains("[decoration.bar]"));
+        m.apply("l:theme:windows11", CtlVal::Click);
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert!(text.contains("style = \"classic\"") && text.contains("font = \"Segoe UI\""), "{text}");
+    }
+
+    #[test]
+    fn controls_set_overrides_and_reset_clears_them() {
+        let (mut m, _) = model_with("");
+        m.apply("th:mode", CtlVal::Str("light".into()));
+        m.apply("l:accent:#ff9f0a", CtlVal::Click);
+        m.apply("th:opacity", CtlVal::Num(80.0));
+        m.apply("th:radius", CtlVal::Num(4.0));
+        m.apply("th:fontscale", CtlVal::Num(110.0));
+        let s = selection(&m);
+        assert_eq!((s.mode, s.accent, s.radius), (Mode::Light, Rgb::parse("#ff9f0a"), Some(4.0)));
+        assert!((s.opacity.unwrap() - 0.8).abs() < 1e-3 && (s.font_scale.unwrap() - 1.1).abs() < 1e-3);
+        m.apply("th:accenthex", CtlVal::Str("nonsense".into()));
+        assert_eq!(selection(&m).accent, Rgb::parse("#ff9f0a"), "a bad colour is refused and keeps the old one");
+        assert!(m.notice.as_ref().unwrap().error);
+        m.apply("th:reset", CtlVal::Click);
+        let s = selection(&m);
+        assert_eq!((s.mode, s.accent, s.opacity, s.radius, s.font_scale), (Mode::Light, None, None, None, None));
+        m.apply("th:sync", CtlVal::Bool(false));
+        assert!(!selection(&m).sync_rdwm);
+    }
+
+    #[test]
+    fn a_broken_rdwm_file_blocks_the_whole_change() {
+        let (mut m, cfg) = model_with("[general]\n");
+        m.apply("l:theme:dracula", CtlVal::Click);
+        assert_eq!(selection(&m).name, "dracula");
+        // simulate a file rdwm would reject by pointing the store at a checker that always fails
+        m.store.rdwmctl = "/bin/false".into();
+        let before = std::fs::read_to_string(&cfg).unwrap();
+        m.apply("l:theme:nord", CtlVal::Click);
+        assert_eq!(selection(&m).name, "dracula", "selection unchanged when rdwm's file would be invalid");
+        assert_eq!(std::fs::read_to_string(&cfg).unwrap(), before);
+        assert!(m.notice.as_ref().unwrap().error);
+    }
+}

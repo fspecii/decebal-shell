@@ -32,24 +32,22 @@ const THUMB_MAX_W: u32 = 260;
 const MAX_CACHED_THUMBS: usize = 100;
 const MAX_PENDING_THUMBS: usize = 24;
 
-const TEXT: (u8, u8, u8) = (245, 245, 247);
-const ACCENT: (u8, u8, u8) = (10, 132, 255);
 
 fn inside(r: Rect, x: f32, y: f32) -> bool {
     x >= r.0 && x < r.0 + r.2 && y >= r.1 && y < r.1 + r.3
 }
 
 fn text_color() -> Color {
-    color(TEXT.0, TEXT.1, TEXT.2, 1.0)
+    crate::theme::th().text_c()
 }
 fn subtext_color() -> Color {
-    color(255, 255, 255, 0.55)
+    crate::theme::th().ink(0.55)
 }
 fn field_color() -> Color {
-    color(255, 255, 255, 0.08)
+    crate::theme::th().ink(0.08)
 }
 fn accent(a: f32) -> Color {
-    color(ACCENT.0, ACCENT.1, ACCENT.2, a)
+    crate::theme::th().accent.color(a)
 }
 
 /// Clickable areas of the title bar and toolbar, in window coordinates.
@@ -422,7 +420,7 @@ impl WallhavenApp {
         for (s, (x, y, w, h)) in &ch.segs {
             let selected = *s == self.search.sorting;
             if selected {
-                fill_rounded(pm, *x, *y, *w, *h, 6.0, color(255, 255, 255, 0.18));
+                fill_rounded(pm, *x, *y, *w, *h, 6.0, crate::theme::th().ink(0.18));
             }
             let weight = if selected { Weight::Bold } else { Weight::Regular };
             let tw = self.measure(s.label(), 12.0, weight);
@@ -504,12 +502,12 @@ impl WallhavenApp {
             }
             let cy = y + h - 13.0;
             let left = if busy { "Setting wallpaper…".to_string() } else { item.resolution.clone() };
-            self.text_at(layer, &left, x + 8.0, cy, 11.0, Weight::Regular, color(255, 255, 255, 1.0));
+            self.text_at(layer, &left, x + 8.0, cy, 11.0, Weight::Regular, crate::theme::th().accent_text_c());
             if let (false, Some(fav)) = (busy, item.favorites) {
                 let label = fav.to_string();
                 let tw = self.measure(&label, 11.0, Weight::Regular);
-                self.text_at(layer, &label, x + w - 8.0 - tw, cy, 11.0, Weight::Regular, color(255, 255, 255, 1.0));
-                draw_heart(layer, x + w - 8.0 - tw - 14.0, cy - 4.5, 11.0, color(255, 255, 255, 1.0));
+                self.text_at(layer, &label, x + w - 8.0 - tw, cy, 11.0, Weight::Regular, crate::theme::th().accent_text_c());
+                draw_heart(layer, x + w - 8.0 - tw - 14.0, cy - 4.5, 11.0, crate::theme::th().accent_text_c());
             }
         }
     }
@@ -573,6 +571,8 @@ impl WindowApp for WallhavenApp {
 
     fn set_waker(&mut self, waker: Waker) {
         self.net = Some(Net::start(waker.clone()));
+        let tw = waker.clone();
+        crate::theme::live::start_watcher(move || tw());
         self.waker = Some(waker);
         self.start_search();
         self.housekeeping();
@@ -602,13 +602,13 @@ impl WindowApp for WallhavenApp {
         }
         pm.fill(Color::TRANSPARENT);
         let radius = if self.rounded { WINDOW_RADIUS } else { 0.0 };
-        fill_rounded(pm, 0.0, 0.0, w as f32, h as f32, radius, color(33, 33, 38, 0.97));
+        fill_rounded(pm, 0.0, 0.0, w as f32, h as f32, radius, crate::theme::th().overlay_c());
 
         let ch = self.chrome();
         self.draw_titlebar(pm, &ch);
         self.draw_toolbar(pm, &ch);
         let mut line = Paint::default();
-        line.set_color(color(255, 255, 255, 0.08));
+        line.set_color(crate::theme::th().ink(0.08));
         if let Some(r) = tiny_skia::Rect::from_xywh(0.0, TITLEBAR_H + TOOLBAR_H, w as f32, 1.0) {
             pm.fill_rect(r, &line, Transform::identity(), None);
         }
@@ -620,7 +620,7 @@ impl WindowApp for WallhavenApp {
                 pm.apply_mask(&m);
             }
         }
-        stroke_rounded(pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, (radius - 0.5).max(0.0), color(255, 255, 255, 0.12), 1.0);
+        stroke_rounded(pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, (radius - 0.5).max(0.0), crate::theme::th().ink(0.12), 1.0);
         self.dirty = false;
         if let Some(f) = &self.fonts {
             f.trim();
@@ -707,7 +707,7 @@ impl WindowApp for WallhavenApp {
             Some(n) => n.poll(),
             None => Vec::new(),
         };
-        let mut redraw = false;
+        let mut redraw = crate::theme::take_changed();
         let got_thumbs = msgs.iter().any(|m| matches!(m, Msg::Thumb { .. }));
         for m in msgs {
             redraw |= self.handle_msg(m);
@@ -789,7 +789,7 @@ fn draw_check(pm: &mut Pixmap, x: f32, y: f32, size: f32) {
     pb.line_to(x + 12.2 * s, y + 4.8 * s);
     let stroke = Stroke { width: 2.0 * s, line_cap: tiny_skia::LineCap::Round, line_join: tiny_skia::LineJoin::Round, ..Stroke::default() };
     if let Some(p) = pb.finish() {
-        pm.stroke_path(&p, &stroke_paint(color(255, 255, 255, 1.0)), &stroke, Transform::identity(), None);
+        pm.stroke_path(&p, &stroke_paint(crate::theme::th().accent_text_c()), &stroke, Transform::identity(), None);
     }
 }
 

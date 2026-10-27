@@ -272,6 +272,13 @@ pub fn generation() -> u64 {
     GEN.load(Ordering::Relaxed)
 }
 
+static SEEN: AtomicU64 = AtomicU64::new(0);
+
+/// True once per theme change, for the single UI of a process (call it from `tick`, then redraw).
+pub fn take_changed() -> bool {
+    SEEN.swap(generation(), Ordering::Relaxed) != generation()
+}
+
 /// Text size multiplier of the current theme (read by the font code on every glyph, so it is an atomic).
 pub fn font_scale() -> f32 {
     f32::from_bits(SCALE_BITS.load(Ordering::Relaxed))

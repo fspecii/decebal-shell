@@ -15,6 +15,14 @@ fn hex(c: super::model::Rgb) -> Val {
     Val::Str(c.hex())
 }
 
+/// `rdwmctl check-config`; an rdwmctl too old to have it (it answers with its usage text) counts as "syntax only".
+fn validate(paths: &Paths, text: &str) -> Result<(), String> {
+    match io::validate(&paths.rdwmctl, &paths.rdwm_config, text) {
+        Err(e) if e.contains("usage: rdwmctl") => Ok(()),
+        r => r,
+    }
+}
+
 /// The keys a theme owns. Everything else in the file is left alone.
 pub fn edits(t: &Theme) -> Vec<Edit> {
     let size = (13.0 * t.font_scale * 2.0).round() as f64 / 2.0;
@@ -71,7 +79,7 @@ pub fn write_config(paths: &Paths, t: &Theme) -> Result<Wrote, String> {
     if text == old {
         return Ok(Wrote::Unchanged);
     }
-    io::validate(&paths.rdwmctl, &paths.rdwm_config, &text)?;
+    validate(paths, &text)?;
     let bak = paths.rdwm_config.with_file_name(format!("{}.{}", paths.rdwm_config.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), io::BACKUP_SUFFIX));
     if paths.rdwm_config.exists() && !bak.exists() {
         let _ = std::fs::copy(&paths.rdwm_config, &bak);
@@ -101,7 +109,7 @@ pub fn apply(src: &super::live::Source, paths: &Paths, sel: &super::model::Selec
         let old = std::fs::read_to_string(&paths.rdwm_config).unwrap_or_default();
         let mut cfg = Cfg::parse(&old).map_err(|e| format!("{}: {e}", paths.rdwm_config.display()))?;
         apply_to(&mut cfg, &theme)?;
-        io::validate(&paths.rdwmctl, &paths.rdwm_config, &cfg.text())?;
+        validate(paths, &cfg.text())?;
         rdwm = Some(write_config(paths, &theme)?);
     }
     src.write_selection(sel)?;

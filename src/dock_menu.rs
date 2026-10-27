@@ -298,26 +298,26 @@ pub struct RowView {
 /// Paints a macOS-style dropdown: rounded dark panel, hairline border, blue hover row. The look matches
 /// the menu bar's dropdowns.
 pub fn draw_dropdown(pm: &mut Pixmap, d: &Dropdown, rows: &[RowView], fonts: &mut Fonts) {
-    fill_rounded(pm, d.x, d.y, d.w, d.h, 10.0, color(36, 36, 41, 0.96));
-    stroke_rounded(pm, d.x + 0.5, d.y + 0.5, d.w - 1.0, d.h - 1.0, 9.5, color(255, 255, 255, 0.14), 1.0);
+    fill_rounded(pm, d.x, d.y, d.w, d.h, crate::theme::th().radius, crate::theme::th().popup_c());
+    stroke_rounded(pm, d.x + 0.5, d.y + 0.5, d.w - 1.0, d.h - 1.0, crate::theme::th().radius - 0.5, crate::theme::th().outline_c(), 1.0);
     for row in &d.rows {
         let Some(r) = rows.get(row.index) else { continue };
         if r.separator {
-            fill_rect(pm, d.x + 8.0, row.y + row.h / 2.0, d.w - 16.0, 1.0, color(255, 255, 255, 0.12));
+            fill_rect(pm, d.x + 8.0, row.y + row.h / 2.0, d.w - 16.0, 1.0, crate::theme::th().ink(0.12));
             continue;
         }
         if r.hovered {
-            fill_rounded(pm, d.x + PAD, row.y, d.w - 2.0 * PAD, row.h, 5.0, color(10, 132, 255, 1.0));
+            fill_rounded(pm, d.x + PAD, row.y, d.w - 2.0 * PAD, row.h, crate::theme::th().r(0.5), crate::theme::th().accent_c());
         }
         let alpha = if r.enabled { 1.0 } else { 0.35 };
         let main = if r.hovered {
-            color(255, 255, 255, 1.0)
+            crate::theme::th().accent_text_c()
         } else if r.danger {
             color(255, 105, 97, 1.0)
         } else {
-            color(245, 245, 247, alpha)
+            crate::theme::th().text.color(alpha)
         };
-        let sub = if r.hovered { color(255, 255, 255, 1.0) } else { color(255, 255, 255, 0.45 * alpha) };
+        let sub = if r.hovered { crate::theme::th().accent_text_c() } else { crate::theme::th().ink(0.45 * alpha) };
         let top = row.y + (row.h - TEXT_PX) / 2.0 - 1.0;
         fonts.draw(pm, &r.label, d.x + 12.0, top, TEXT_PX, Weight::Regular, main);
         if !r.shortcut.is_empty() {

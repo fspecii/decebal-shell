@@ -34,5 +34,5 @@ pub mod builtin;
 pub mod live;
 pub mod model;
 pub mod rdwm;
-pub use live::{current, generation};
+pub use live::{current, current as th, generation, take_changed};
 pub use model::{Mode, Rgb, Selection, Theme};

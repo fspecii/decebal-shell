@@ -1,7 +1,7 @@
 //! Text rendering with fontdue: glyph cache, measuring and drawing into a tiny-skia pixmap.
 
 use fontdue::{Font, FontSettings};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -32,7 +32,9 @@ const MAX_GLYPHS: usize = 4096;
 /// loaded lazily the first time a glyph is missing from the cache and dropped again by [`Fonts::trim`].
 /// Steady-state drawing then only touches the small glyph cache.
 pub struct Fonts {
-    specs: [FaceSpec; 4],
+    specs: RefCell<[FaceSpec; 4]>,
+    /// Theme generation the specs/glyphs were built for (a theme change can switch family and scale).
+    theme_gen: Cell<u64>,
     loaded: RefCell<[Option<Font>; 4]>,
     glyphs: RefCell<HashMap<(char, u32, Weight), Rc<Glyph>>>,
     ascents: RefCell<HashMap<(u32, Weight), f32>>,
@@ -51,6 +53,38 @@ fn find_font(patterns: &[&str]) -> Option<FaceSpec> {
         }
     }
     None
+}
+
+/// Like [`find_font`] but only accepts a font whose family really is `family` (fc-match always answers with something).
+fn find_family(family: &str, style: &str) -> Option<FaceSpec> {
+    let pat = format!("{family}{style}");
+    let out = std::process::Command::new("fc-match").args(["-f", "%{file}\n%{index}\n%{family}", &pat]).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut lines = text.lines();
+    let path = lines.next()?.trim().to_string();
+    let index = lines.next().and_then(|i| i.trim().parse().ok()).unwrap_or(0);
+    let fam = lines.next().unwrap_or("").to_lowercase();
+    (fam.split(',').any(|f| f.trim() == family.to_lowercase()) && Path::new(&path).is_file()).then(|| (PathBuf::from(path), index))
+}
+
+/// The four faces for the theme's font family, falling back to Inter and then any sans font.
+fn pick_specs() -> Option<[FaceSpec; 4]> {
+    let family = crate::theme::current().font_family.clone();
+    let try_family = |style: &str, fallback: &[&str]| -> Option<FaceSpec> {
+        if !family.is_empty() {
+            if let Some(f) = find_family(&family, style) {
+                return Some(f);
+            }
+        }
+        find_font(fallback)
+    };
+    let regular = try_family("", &["Inter", "Inter Variable", "sans-serif"])?;
+    load(&regular)?; // fail early (and free it again) if the file is unreadable
+    let pick = |style: &str, fb: &[&str]| try_family(style, fb).unwrap_or_else(|| regular.clone());
+    let medium = pick(":weight=medium", &["Inter:weight=medium", "sans-serif:weight=medium"]);
+    let semibold = pick(":weight=demibold", &["Inter:weight=demibold", "sans-serif:weight=demibold"]);
+    let bold = pick(":weight=bold", &["Inter:weight=bold", "sans-serif:weight=bold"]);
+    Some([regular, medium, semibold, bold])
 }
 
 fn load(face: &FaceSpec) -> Option<Font> {
@@ -79,13 +113,24 @@ fn slot(w: Weight) -> usize {
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
-        let regular = find_font(&["Inter", "Inter Variable", "sans-serif"])?;
-        load(&regular)?; // fail early (and free it again) if the file is unreadable
-        let pick = |patterns: &[&str]| find_font(patterns).unwrap_or_else(|| regular.clone());
-        let medium = pick(&["Inter:weight=medium", "sans-serif:weight=medium"]);
-        let semibold = pick(&["Inter:weight=demibold", "sans-serif:weight=demibold"]);
-        let bold = pick(&["Inter:weight=bold", "sans-serif:weight=bold"]);
-        Some(Self { specs: [regular, medium, semibold, bold], loaded: RefCell::new([None, None, None, None]), glyphs: RefCell::new(HashMap::new()), ascents: RefCell::new(HashMap::new()) })
+        let specs = pick_specs()?;
+        Some(Self { specs: RefCell::new(specs), theme_gen: Cell::new(crate::theme::generation()), loaded: RefCell::new([None, None, None, None]), glyphs: RefCell::new(HashMap::new()), ascents: RefCell::new(HashMap::new()) })
+    }
+
+    /// Rebuilds faces and drops cached glyphs when the theme (family, text scale) changed since the last call.
+    fn sync_theme(&self) {
+        let g = crate::theme::generation();
+        if self.theme_gen.get() == g {
+            return;
+        }
+        self.theme_gen.set(g);
+        if let Some(specs) = pick_specs() {
+            *self.specs.borrow_mut() = specs;
+        }
+        *self.loaded.borrow_mut() = [None, None, None, None];
+        self.glyphs.borrow_mut().clear();
+        self.ascents.borrow_mut().clear();
+        release_heap();
     }
 
     /// Runs `f` with the face for `weight`, loading it if needed. `None` if the file became unreadable.
@@ -95,7 +140,7 @@ impl Fonts {
         if loaded[i].is_none() {
             // One parsed face is ~12 MB: never keep two at once.
             *loaded = [None, None, None, None];
-            loaded[i] = load(&self.specs[i]);
+            loaded[i] = load(&self.specs.borrow()[i]);
         }
         loaded[i].as_ref().map(f)
     }
@@ -116,6 +161,8 @@ impl Fonts {
     }
 
     fn glyph(&self, ch: char, px: f32, weight: Weight) -> Option<Rc<Glyph>> {
+        self.sync_theme();
+        let px = px * crate::theme::live::font_scale();
         let key = (ch, (px * 4.0).round() as u32, weight);
         if let Some(g) = self.glyphs.borrow().get(&key) {
             return Some(Rc::clone(g));
@@ -132,6 +179,8 @@ impl Fonts {
 
     /// Distance from the top of the line box to the baseline at pixel size `px`.
     pub fn ascent(&self, px: f32, weight: Weight) -> f32 {
+        self.sync_theme();
+        let px = px * crate::theme::live::font_scale();
         let key = ((px * 4.0).round() as u32, weight);
         if let Some(a) = self.ascents.borrow().get(&key) {
             return *a;

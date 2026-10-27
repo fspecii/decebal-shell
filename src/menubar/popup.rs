@@ -11,7 +11,6 @@ use tiny_skia::{Paint, PathBuilder, Pixmap, Stroke, Transform};
 
 const TEXT_PX: f32 = 12.0;
 const PAD: f32 = 5.0;
-const ACCENT: (u8, u8, u8) = (10, 132, 255);
 
 /// What a row does when clicked.
 #[derive(Debug, Clone, PartialEq)]
@@ -168,8 +167,8 @@ impl Popup {
     }
 
     pub fn draw(&self, pm: &mut Pixmap, fonts: &mut Fonts, symbols: &mut SymbolCache, hover: Option<usize>) {
-        fill_rounded(pm, self.x, self.y, self.w, self.h, 10.0, color(36, 36, 41, 0.96));
-        stroke_rounded(pm, self.x + 0.5, self.y + 0.5, self.w - 1.0, self.h - 1.0, 9.5, color(255, 255, 255, 0.14), 1.0);
+        fill_rounded(pm, self.x, self.y, self.w, self.h, crate::theme::th().radius, crate::theme::th().popup_c());
+        stroke_rounded(pm, self.x + 0.5, self.y + 0.5, self.w - 1.0, self.h - 1.0, crate::theme::th().radius - 0.5, crate::theme::th().outline_c(), 1.0);
         for (i, r) in self.rows.iter().enumerate() {
             let (ly, h) = self.row_span(i);
             let y = self.y + ly;
@@ -177,40 +176,42 @@ impl Popup {
             let alpha = if r.enabled { 1.0 } else { 0.4 };
             let top = y + (h - TEXT_PX) / 2.0 - 1.0;
             match &r.kind {
-                Kind::Separator => fill_rect(pm, self.x + 8.0, y + h / 2.0, self.w - 16.0, 1.0, color(255, 255, 255, 0.12)),
+                Kind::Separator => fill_rect(pm, self.x + 8.0, y + h / 2.0, self.w - 16.0, 1.0, crate::theme::th().ink(0.12)),
                 Kind::Header => {
-                    fonts.draw(pm, &r.label, self.x + 12.0, top, TEXT_PX, Weight::Bold, color(245, 245, 247, 1.0));
+                    fonts.draw(pm, &r.label, self.x + 12.0, top, TEXT_PX, Weight::Bold, crate::theme::th().text_c());
                     if !r.detail.is_empty() {
                         let shown = controlcenter::fit(&r.detail, self.w * 0.55, 11.0, Weight::Regular, fonts);
                         let dw = fonts.measure(&shown, 11.0, Weight::Regular);
-                        fonts.draw(pm, &shown, self.x + self.w - 12.0 - dw, top + 0.5, 11.0, Weight::Regular, color(255, 255, 255, 0.5));
+                        fonts.draw(pm, &shown, self.x + self.w - 12.0 - dw, top + 0.5, 11.0, Weight::Regular, crate::theme::th().ink(0.55));
                     }
                 }
                 Kind::Text => {
                     let shown = controlcenter::fit(&r.label, self.w - 24.0, TEXT_PX, Weight::Regular, fonts);
-                    fonts.draw(pm, &shown, self.x + 12.0, top, TEXT_PX, Weight::Regular, color(255, 255, 255, 0.55));
+                    fonts.draw(pm, &shown, self.x + 12.0, top, TEXT_PX, Weight::Regular, crate::theme::th().ink(0.55));
                 }
                 Kind::Slider(v) => {
                     let cy = y + h / 2.0;
                     if let Icon::Symbol(name) = &r.icon {
-                        if let Some(sym) = symbols.get(name, (230, 230, 235), 32) {
+                        if let Some(sym) = symbols.get(name, crate::theme::th().text.t(), 32) {
                             crate::gfx::blit_scaled(pm, sym, self.x + 12.0, cy - 8.0, 16.0, 16.0, 1.0);
                         }
                     }
                     let (sx, sw) = self.slider_track();
-                    fill_rounded(pm, sx, cy - 3.0, sw, 6.0, 3.0, color(255, 255, 255, 0.2));
+                    fill_rounded(pm, sx, cy - 3.0, sw, 6.0, 3.0, crate::theme::th().ink(0.2));
                     let fw = (sw * v.clamp(0.0, 1.0)).max(0.0);
                     if fw > 0.5 {
-                        fill_rounded(pm, sx, cy - 3.0, fw.max(6.0), 6.0, 3.0, color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0));
+                        fill_rounded(pm, sx, cy - 3.0, fw.max(6.0), 6.0, 3.0, crate::theme::th().accent_c());
                     }
-                    fill_circle(pm, sx + fw, cy, 8.0, color(245, 245, 247, 1.0));
+                    fill_circle(pm, sx + fw, cy, 8.0, crate::theme::th().text_c());
                 }
                 Kind::Item => {
                     if hovered {
-                        fill_rounded(pm, self.x + PAD, y, self.w - 2.0 * PAD, h, 5.0, color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0));
+                        fill_rounded(pm, self.x + PAD, y, self.w - 2.0 * PAD, h, crate::theme::th().r(0.5), crate::theme::th().accent_c());
                     }
-                    let (main, sub) = if hovered { ((255, 255, 255, 1.0), (255, 255, 255, 0.85)) } else { ((245, 245, 247, alpha), (255, 255, 255, 0.45 * alpha)) };
-                    let ink = if hovered { (255, 255, 255) } else { (245, 245, 247) };
+                    let th = crate::theme::th();
+                    let on = if hovered { th.accent_text } else { th.text };
+                    let (main, sub) = if hovered { (on.a(1.0), on.a(0.85)) } else { (on.a(alpha), on.a(0.45 * alpha)) };
+                    let ink = on.t();
                     if r.checked {
                         draw_check(pm, self.x + 17.0, y + h / 2.0, ink);
                     }
@@ -363,18 +364,18 @@ impl Calendar {
     }
 
     pub fn draw(&self, pm: &mut Pixmap, fonts: &mut Fonts) {
-        fill_rounded(pm, self.x, self.y, Self::W, Self::H, 12.0, color(36, 36, 41, 0.96));
-        stroke_rounded(pm, self.x + 0.5, self.y + 0.5, Self::W - 1.0, Self::H - 1.0, 11.5, color(255, 255, 255, 0.14), 1.0);
-        fonts.draw(pm, &self.title(), self.x + 16.0, self.y + 15.0, 14.0, Weight::Bold, color(245, 245, 247, 1.0));
+        fill_rounded(pm, self.x, self.y, Self::W, Self::H, crate::theme::th().r(1.2), crate::theme::th().popup_c());
+        stroke_rounded(pm, self.x + 0.5, self.y + 0.5, Self::W - 1.0, Self::H - 1.0, crate::theme::th().r(1.2) - 0.5, crate::theme::th().outline_c(), 1.0);
+        fonts.draw(pm, &self.title(), self.x + 16.0, self.y + 15.0, 14.0, Weight::Bold, crate::theme::th().text_c());
         for (label, off) in [("‹", 52.0), ("›", 24.0)] {
             let w = fonts.measure(label, 18.0, Weight::Medium);
-            fonts.draw(pm, label, self.x + Self::W - off - w / 2.0 - 4.0, self.y + 11.0, 18.0, Weight::Medium, color(245, 245, 247, 0.85));
+            fonts.draw(pm, label, self.x + Self::W - off - w / 2.0 - 4.0, self.y + 11.0, 18.0, Weight::Medium, crate::theme::th().text.color(0.85));
         }
         let cell_w = (Self::W - 24.0) / 7.0;
         for (i, d) in WEEKDAYS.iter().enumerate() {
             let w = fonts.measure(d, 11.0, Weight::Medium);
             let col = if i >= 5 { 0.35 } else { 0.5 };
-            fonts.draw(pm, d, self.x + 12.0 + cell_w * (i as f32 + 0.5) - w / 2.0, self.y + 44.0, 11.0, Weight::Medium, color(255, 255, 255, col));
+            fonts.draw(pm, d, self.x + 12.0 + cell_w * (i as f32 + 0.5) - w / 2.0, self.y + 44.0, 11.0, Weight::Medium, crate::theme::th().ink(col));
         }
         let grid = month_grid(self.year, self.mon0);
         for (r, row) in grid.iter().enumerate() {
@@ -384,12 +385,12 @@ impl Calendar {
                 let cy = self.y + 62.0 + r as f32 * 28.0 + 14.0;
                 let is_today = (self.year, self.mon0, *d) == self.today;
                 if is_today {
-                    fill_circle(pm, cx, cy, 12.0, color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0));
+                    fill_circle(pm, cx, cy, 12.0, crate::theme::th().accent_c());
                 }
                 let s = d.to_string();
                 let w = fonts.measure(&s, TEXT_PX, Weight::Regular);
                 let a = if is_today || c < 5 { 1.0 } else { 0.55 };
-                fonts.draw(pm, &s, cx - w / 2.0, cy - 7.0, TEXT_PX, if is_today { Weight::Bold } else { Weight::Regular }, color(255, 255, 255, a));
+                fonts.draw(pm, &s, cx - w / 2.0, cy - 7.0, TEXT_PX, if is_today { Weight::Bold } else { Weight::Regular }, if is_today { crate::theme::th().accent_text_c() } else { crate::theme::th().ink(a) });
             }
         }
     }

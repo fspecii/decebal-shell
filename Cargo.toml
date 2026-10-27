@@ -65,6 +65,10 @@ path = "src/bin/maclaunch.rs"
 [[bin]]
 name = "macspot"
 path = "src/bin/macspot.rs"
+
+[[bin]]
+name = "macthemectl"
+path = "src/bin/macthemectl.rs"
 # Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).
 [profile.dev.package.image]
 opt-level = 3

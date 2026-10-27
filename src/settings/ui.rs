@@ -25,49 +25,54 @@ pub fn fill_px(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
 
 // ---------------------------------------------------------------- theme
 
-/// Palette: window and bar greys from macdock / macbar (`theme.rs`), macOS accent colours.
+/// Palette: every colour comes from the shared theme ([`crate::theme`]), read at paint time so a
+/// theme change shows on the next frame.
 pub mod pal {
     use super::*;
-    use crate::theme::{BAR_BG, DOCK_BG};
+    fn th() -> std::sync::Arc<crate::theme::Theme> {
+        crate::theme::th()
+    }
     pub fn window() -> Color {
-        color(DOCK_BG.0, DOCK_BG.1, DOCK_BG.2, 1.0)
+        th().background.color(1.0)
     }
     pub fn sidebar() -> Color {
-        color(BAR_BG.0 + 6, BAR_BG.1 + 6, BAR_BG.2 + 6, 1.0)
+        th().sidebar.color(1.0)
     }
     pub fn card() -> Color {
-        color(44, 44, 46, 1.0)
+        th().surface.color(1.0)
     }
     pub fn text() -> Color {
-        color(245, 245, 247, 1.0)
+        th().text_c()
     }
     pub fn sub() -> Color {
-        color(255, 255, 255, 0.55)
+        th().sub()
     }
     pub fn faint() -> Color {
-        color(255, 255, 255, 0.32)
+        th().faint()
     }
     pub fn sep() -> Color {
-        color(255, 255, 255, 0.08)
+        th().ink(0.10)
     }
     pub fn field() -> Color {
-        color(255, 255, 255, 0.09)
+        th().ink(0.09)
     }
     pub fn field_hover() -> Color {
-        color(255, 255, 255, 0.15)
+        th().ink(0.15)
     }
-    pub const ACCENT: (u8, u8, u8) = (10, 132, 255);
     pub fn accent() -> Color {
-        color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0)
+        th().accent_c()
+    }
+    pub fn accent_text() -> Color {
+        th().accent_text_c()
     }
     pub fn green() -> Color {
-        color(48, 209, 88, 1.0)
+        th().ok.color(1.0)
     }
     pub fn red() -> Color {
-        color(255, 69, 58, 1.0)
+        th().danger.color(1.0)
     }
     pub fn orange() -> Color {
-        color(255, 159, 10, 1.0)
+        th().warn.color(1.0)
     }
 }
 
@@ -173,6 +178,10 @@ pub enum Item {
     Thumbs(Vec<Thumb>),
     /// Layout pictogram grid.
     Layouts(Vec<LayoutTile>),
+    /// Theme gallery: miniature desktops painted in each theme's own colours.
+    Themes(Vec<ThemeTile>),
+    /// Row of round colour swatches (accent picker).
+    Swatches(Vec<Swatch>),
     /// Large preview of the current wallpaper (id of a thumbnail) with caption.
     Preview {
         id: String,
@@ -186,6 +195,27 @@ pub struct Thumb {
     pub id: String,
     pub caption: String,
     pub selected: bool,
+}
+
+/// One gallery entry. `id` is the control id (`l:theme:<theme id>`); colours are the resolved variant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThemeTile {
+    pub id: String,
+    pub name: String,
+    pub selected: bool,
+    pub error: bool,
+    /// background, bar, surface, titlebar, text, accent, dock
+    pub colors: [Color4; 7],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Swatch {
+    pub id: String,
+    pub name: String,
+    pub color: Color4,
+    pub selected: bool,
+    /// The "no override" swatch: drawn with a diagonal stroke.
+    pub unset: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -402,10 +432,10 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Toggle(on) => {
             let (tw, th) = (u(40.0), u(24.0));
             rect = (right - tw, cy - th / 2.0, tw, th);
-            fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::green() } else { color(255, 255, 255, 0.18) }));
+            fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::green() } else { crate::theme::th().ink(0.18) }));
             let kx = if *on { rect.0 + tw - th / 2.0 } else { rect.0 + th / 2.0 };
             fill_circle(pm, kx, cy + u(0.6), th / 2.0 - u(2.0), color(0, 0, 0, 0.25 * dim));
-            fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(color(255, 255, 255, 1.0)));
+            fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(crate::theme::th().accent_text_c()));
         }
         Kind::Slider { v, min, max, unit, step } => {
             let shown = it.drag.as_ref().filter(|(id, _)| id == &c.id).map_or(*v, |(_, d)| *d);
@@ -415,7 +445,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
             let tx = x + lw + u(12.0);
             let tw = (right - tx).max(u(20.0));
             let t = if max > min { ((shown - min) / (max - min)).clamp(0.0, 1.0) as f32 } else { 0.0 };
-            fill_rounded(pm, tx, cy - u(2.0), tw, u(4.0), u(2.0), a(color(255, 255, 255, 0.18)));
+            fill_rounded(pm, tx, cy - u(2.0), tw, u(4.0), u(2.0), a(crate::theme::th().ink(0.18)));
             fill_rounded(pm, tx, cy - u(2.0), tw * t, u(4.0), u(2.0), a(pal::accent()));
             let kx = tx + tw * t;
             fill_circle(pm, kx, cy + u(1.0), u(9.0), color(0, 0, 0, 0.3 * dim));
@@ -443,7 +473,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 let sw = p.measure(l, u(12.0), Weight::Regular) + u(22.0);
                 let r = (sx, rect.1 + u(2.0), sw, h_field - u(4.0));
                 if *sel == Some(i) {
-                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(color(255, 255, 255, 0.22)));
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(crate::theme::th().ink(0.22)));
                 }
                 p.text_center(pm, l, r.0 + r.2 / 2.0, cy, u(12.0), if *sel == Some(i) { Weight::Medium } else { Weight::Regular }, a(pal::text()));
                 parts.push(r);
@@ -464,11 +494,11 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
             match col {
                 Some((cr, cg, cb)) => fill_circle(pm, r.0 + sw / 2.0, cy, sw / 2.0, a(color(cr, cg, cb, 1.0))),
                 None => {
-                    fill_circle(pm, r.0 + sw / 2.0, cy, sw / 2.0, a(color(255, 255, 255, 0.1)));
+                    fill_circle(pm, r.0 + sw / 2.0, cy, sw / 2.0, a(crate::theme::th().ink(0.1)));
                     p.text_center(pm, "·", r.0 + sw / 2.0, cy, u(14.0), Weight::Bold, a(pal::sub()));
                 }
             }
-            stroke_rounded(pm, r.0, r.1, sw, sw, sw / 2.0, color(255, 255, 255, 0.35 * dim), u(1.0));
+            stroke_rounded(pm, r.0, r.1, sw, sw, sw / 2.0, crate::theme::th().ink(0.35 * dim), u(1.0));
             let t = if hex.is_empty() { "default".to_string() } else { hex.clone() };
             p.text_right(pm, &t, r.0 - u(10.0), cy, u(12.5), Weight::Regular, a(pal::sub()));
             rect = (x, rect.1, w, h_field);
@@ -519,7 +549,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 h_field,
                 u(6.0),
                 if rec.is_some() {
-                    color(10, 132, 255, 0.28)
+                    crate::theme::th().accent.color(0.28)
                 } else if hover {
                     pal::field_hover()
                 } else {
@@ -555,14 +585,14 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                     pal::field()
                 }),
             );
-            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), if *on { Weight::Medium } else { Weight::Regular }, a(pal::text()));
+            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), if *on { Weight::Medium } else { Weight::Regular }, a(if *on { pal::accent_text() } else { pal::text() }));
         }
         Kind::Label(t) => {
             p.text_right(pm, t, right, cy, u(13.0), Weight::Regular, pal::sub());
         }
     }
     if focus && it.ring && c.enabled {
-        stroke_rounded(pm, rect.0 - u(2.0), rect.1 - u(2.0), rect.2 + u(4.0), rect.3 + u(4.0), u(8.0), color(10, 132, 255, 0.85), u(2.0));
+        stroke_rounded(pm, rect.0 - u(2.0), rect.1 - u(2.0), rect.2 + u(4.0), rect.3 + u(4.0), u(8.0), crate::theme::th().accent.color(0.85), u(2.0));
     }
     Placed { rect, ctl: c.clone(), parts, row_rect, label: String::new() }
 }
@@ -612,9 +642,9 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let lh = u(16.0);
                 if *warn {
                     let h = lines.len() as f32 * lh + u(16.0);
-                    fill_rounded(pm, x0, y, cw, h, u(8.0), color(255, 69, 58, 0.16));
+                    fill_rounded(pm, x0, y, cw, h, u(8.0), crate::theme::th().danger.color(0.16));
                     for (i, l) in lines.iter().enumerate() {
-                        p.text(pm, l, x0 + u(14.0), y + u(8.0) + lh * (i as f32 + 0.5), u(12.0), Weight::Regular, color(255, 140, 130, 1.0));
+                        p.text(pm, l, x0 + u(14.0), y + u(8.0) + lh * (i as f32 + 0.5), u(12.0), Weight::Regular, crate::theme::th().danger.over(crate::theme::th().text, 0.75).color(1.0));
                     }
                     y += h + u(10.0);
                 } else {
@@ -633,7 +663,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let cy = ry + rh / 2.0;
                     let row_rect = (x0, ry, cw, rh);
                     if r.selected {
-                        fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, color(10, 132, 255, 0.22));
+                        fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, crate::theme::th().accent.color(0.22));
                     }
                     if i > 0 {
                         fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
@@ -678,7 +708,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let ph = cw * 0.38;
                 let pw = ph * 16.0 / 10.0;
                 let px0 = x0 + (cw - pw) / 2.0;
-                fill_rounded(pm, px0 - u(2.0), y - u(2.0), pw + u(4.0), ph + u(4.0), u(10.0), color(255, 255, 255, 0.10));
+                fill_rounded(pm, px0 - u(2.0), y - u(2.0), pw + u(4.0), ph + u(4.0), u(10.0), crate::theme::th().ink(0.10));
                 match thumb(id) {
                     Some(t) => draw_cover(pm, &t, px0, y, pw, ph, u(8.0)),
                     None => {
@@ -704,14 +734,14 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     if t.selected {
                         stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), pal::accent(), u(2.5));
                     } else if hover {
-                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), color(255, 255, 255, 0.3), u(2.0));
+                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), crate::theme::th().ink(0.3), u(2.0));
                     }
                     match thumb(&t.id) {
                         Some(img) => draw_cover(pm, &img, r.0, r.1, r.2, r.3, u(7.0)),
-                        None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), color(255, 255, 255, 0.07)),
+                        None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), crate::theme::th().ink(0.07)),
                     }
                     if it.focus.as_deref() == Some(cid.as_str()) && it.ring {
-                        stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), color(10, 132, 255, 0.85), u(2.0));
+                        stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
                     let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
                     p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0), u(11.0), Weight::Regular, pal::sub());
@@ -737,13 +767,13 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
                     let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
                     let hover = it.hover.as_deref() == Some(t.id.as_str());
-                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), if hover { color(255, 255, 255, 0.14) } else { pal::card() });
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), if hover { crate::theme::th().ink(0.14) } else { pal::card() });
                     if t.selected {
                         stroke_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), pal::accent(), u(2.5));
                     }
-                    super::icons::layout_icon(pm, &t.name, (r.0 + u(10.0), r.1 + u(9.0), r.2 - u(20.0), r.3 - u(18.0)), s, if t.selected { pal::accent() } else { color(255, 255, 255, 0.55) });
+                    super::icons::layout_icon(pm, &t.name, (r.0 + u(10.0), r.1 + u(9.0), r.2 - u(20.0), r.3 - u(18.0)), s, if t.selected { pal::accent() } else { crate::theme::th().ink(0.55) });
                     if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
-                        stroke_rounded(pm, r.0 - u(2.0), r.1 - u(2.0), r.2 + u(4.0), r.3 + u(4.0), u(10.0), color(10, 132, 255, 0.85), u(2.0));
+                        stroke_rounded(pm, r.0 - u(2.0), r.1 - u(2.0), r.2 + u(4.0), r.3 + u(4.0), u(10.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
                     p.text_center(pm, &t.name, r.0 + tw / 2.0, r.1 + th + u(13.0), u(11.0), Weight::Regular, if t.selected { pal::text() } else { pal::sub() });
                     fr.layouts.push((r, t.id.clone()));
@@ -758,10 +788,114 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(34.0)) + u(8.0);
             }
+            Item::Themes(list) => {
+                let gap = u(14.0);
+                let tw0 = u(150.0);
+                let cols = (((cw + gap) / (tw0 + gap)).floor() as usize).max(1);
+                let tw = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
+                let th = tw * 0.66;
+                for (i, t) in list.iter().enumerate() {
+                    let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(36.0)), tw, th);
+                    let hover = it.hover.as_deref() == Some(t.id.as_str());
+                    draw_theme_preview(pm, r, s, t);
+                    if t.selected {
+                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(11.0), pal::accent(), u(2.5));
+                    } else if hover {
+                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(11.0), crate::theme::th().ink(0.3), u(2.0));
+                    }
+                    if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
+                        stroke_rounded(pm, r.0 - u(5.0), r.1 - u(5.0), r.2 + u(10.0), r.3 + u(10.0), u(12.0), crate::theme::th().accent.color(0.85), u(2.0));
+                    }
+                    let name = p.fit(&t.name, tw, u(12.0), Weight::Regular);
+                    p.text_center(pm, &name, r.0 + tw / 2.0, r.1 + th + u(15.0), u(12.0), if t.selected { Weight::Medium } else { Weight::Regular }, if t.error { pal::red() } else if t.selected { pal::text() } else { pal::sub() });
+                    fr.layouts.push((r, t.id.clone()));
+                    fr.placed.push(Placed { rect: r, ctl: Ctl::new(t.id.clone(), Kind::Button { label: t.name.clone(), danger: false }), parts: vec![], row_rect: (x0, r.1, cw, r.3), label: t.name.clone() });
+                }
+                let rows = list.len().div_ceil(cols);
+                y += rows as f32 * (th + u(36.0)) + u(6.0);
+            }
+            Item::Swatches(list) => {
+                let d = u(26.0);
+                let gap = u(12.0);
+                let row_h = d + u(16.0);
+                let mut x = x0 + u(4.0);
+                let mut yy = y + u(6.0);
+                for sw in list {
+                    if x + d > x0 + cw {
+                        x = x0 + u(4.0);
+                        yy += d + gap;
+                    }
+                    let r = (x, yy, d, d);
+                    let hover = it.hover.as_deref() == Some(sw.id.as_str());
+                    let (cr, cg, cb) = sw.color;
+                    fill_circle(pm, x + d / 2.0, yy + d / 2.0, d / 2.0, color(cr, cg, cb, 1.0));
+                    stroke_rounded(pm, x, yy, d, d, d / 2.0, crate::theme::th().ink(0.25), u(1.0));
+                    if sw.unset {
+                        let ink = crate::theme::th().text_c();
+                        super::app::stroke_line(pm, x + d * 0.25, yy + d * 0.75, x + d * 0.75, yy + d * 0.25, ink, u(1.8));
+                    }
+                    if sw.selected {
+                        stroke_rounded(pm, x - u(3.5), yy - u(3.5), d + u(7.0), d + u(7.0), (d + u(7.0)) / 2.0, crate::theme::th().text_c(), u(2.0));
+                    } else if hover {
+                        stroke_rounded(pm, x - u(3.0), yy - u(3.0), d + u(6.0), d + u(6.0), (d + u(6.0)) / 2.0, crate::theme::th().ink(0.4), u(1.5));
+                    }
+                    if it.focus.as_deref() == Some(sw.id.as_str()) && it.ring {
+                        stroke_rounded(pm, x - u(5.5), yy - u(5.5), d + u(11.0), d + u(11.0), (d + u(11.0)) / 2.0, crate::theme::th().accent.color(0.85), u(2.0));
+                    }
+                    fr.layouts.push((r, sw.id.clone()));
+                    fr.placed.push(Placed { rect: r, ctl: Ctl::new(sw.id.clone(), Kind::Button { label: sw.name.clone(), danger: false }), parts: vec![], row_rect: (x0, yy, cw, d), label: sw.name.clone() });
+                    x += d + gap;
+                }
+                y = yy + row_h + u(6.0);
+            }
         }
     }
     fr.height = y + scroll + u(24.0);
     fr
+}
+
+/// A miniature desktop in the tile's own colours: menu bar, a window with traffic lights, a dock.
+fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile) {
+    let u = |v: f32| v * s;
+    let c = |i: usize, a: f32| color(t.colors[i].0, t.colors[i].1, t.colors[i].2, a);
+    let (x, y, w, h) = r;
+    fill_rounded(pm, x, y, w, h, u(8.0), c(0, 1.0));
+    // menu bar
+    let bh = h * 0.13;
+    fill_rounded(pm, x, y, w, bh + u(4.0), u(8.0), c(1, 1.0));
+    fill_rect_px(pm, x, y + u(6.0), w, bh - u(2.0), c(1, 1.0));
+    for k in 0..3 {
+        fill_rounded(pm, x + w * 0.05 + k as f32 * w * 0.09, y + bh * 0.38, w * 0.06, bh * 0.28, u(1.5), c(4, 0.75));
+    }
+    fill_rounded(pm, x + w * 0.86, y + bh * 0.38, w * 0.09, bh * 0.28, u(1.5), c(4, 0.75));
+    // window
+    let (wx, wy, ww, wh) = (x + w * 0.14, y + h * 0.26, w * 0.62, h * 0.50);
+    fill_rounded(pm, wx, wy, ww, wh, u(4.0), c(2, 1.0));
+    let tb = wh * 0.24;
+    fill_rounded(pm, wx, wy, ww, tb + u(3.0), u(4.0), c(3, 1.0));
+    fill_rect_px(pm, wx, wy + tb - u(2.0), ww, u(5.0), c(3, 1.0));
+    for (k, col) in [(255u8, 95u8, 87u8), (254, 188, 46), (40, 200, 64)].iter().enumerate() {
+        fill_circle(pm, wx + u(6.0) + k as f32 * u(6.5), wy + tb / 2.0, u(2.2), color(col.0, col.1, col.2, 1.0));
+    }
+    fill_rounded(pm, wx + ww * 0.1, wy + tb + wh * 0.14, ww * 0.55, u(3.0), u(1.5), c(4, 0.8));
+    fill_rounded(pm, wx + ww * 0.1, wy + tb + wh * 0.30, ww * 0.38, u(3.0), u(1.5), c(4, 0.45));
+    fill_rounded(pm, wx + ww * 0.58, wy + wh - u(11.0), ww * 0.32, u(6.5), u(3.2), c(5, 1.0));
+    // second window peeking in, accent coloured selection chip
+    fill_rounded(pm, x + w * 0.70, y + h * 0.40, w * 0.22, h * 0.26, u(4.0), c(2, 0.9));
+    fill_rounded(pm, x + w * 0.72, y + h * 0.46, w * 0.18, u(4.0), u(2.0), c(5, 1.0));
+    // dock
+    let (dw, dh) = (w * 0.46, h * 0.12);
+    fill_rounded(pm, x + (w - dw) / 2.0, y + h - dh - u(4.0), dw, dh, dh / 2.2, c(6, 0.95));
+    stroke_rounded(pm, x + (w - dw) / 2.0 + 0.5, y + h - dh - u(4.0) + 0.5, dw - 1.0, dh - 1.0, dh / 2.2, c(4, 0.18), 1.0);
+    for k in 0..4 {
+        fill_rounded(pm, x + (w - dw) / 2.0 + dw * (0.12 + 0.2 * k as f32), y + h - dh - u(4.0) + dh * 0.2, dh * 0.6, dh * 0.6, dh * 0.16, if k == 3 { c(5, 1.0) } else { c(4, 0.5) });
+    }
+    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, u(8.0), crate::theme::th().ink(0.18), 1.0);
+}
+
+fn fill_rect_px(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
+    fill_px(pm, x, y, w, h, c);
 }
 
 /// Draws `img` scaled to cover the rounded rect (centre crop).

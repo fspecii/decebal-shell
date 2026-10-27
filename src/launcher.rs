@@ -22,10 +22,10 @@ const PANEL_MAX_W: u32 = 1100;
 const PANEL_MAX_H: u32 = 720;
 
 fn text_color() -> Color {
-    color(245, 245, 247, 1.0)
+    crate::theme::th().text_c()
 }
 fn subtext_color() -> Color {
-    color(255, 255, 255, 0.55)
+    crate::theme::th().ink(0.55)
 }
 
 pub struct Launcher {
@@ -156,13 +156,13 @@ impl Launcher {
     fn draw_panel(&mut self, pm: &mut Pixmap) {
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         pm.fill(Color::TRANSPARENT);
-        let radius = if self.rounded || self.overlay { RADIUS } else { 0.0 };
-        fill_rounded(pm, 0.0, 0.0, w, h, radius, color(33, 33, 38, 0.97));
+        let radius = if self.rounded || self.overlay { RADIUS * crate::theme::th().radius / 10.0 } else { 0.0 };
+        fill_rounded(pm, 0.0, 0.0, w, h, radius, crate::theme::th().overlay_c());
 
         // Search field.
         let (sx, sw) = (PAD, w - 2.0 * PAD);
-        fill_rounded(pm, sx, SEARCH_Y, sw, SEARCH_H, 9.0, color(255, 255, 255, 0.08));
-        stroke_rounded(pm, sx + 1.0, SEARCH_Y + 1.0, sw - 2.0, SEARCH_H - 2.0, 8.0, color(10, 132, 255, 0.8), 2.0);
+        fill_rounded(pm, sx, SEARCH_Y, sw, SEARCH_H, 9.0, crate::theme::th().ink(0.08));
+        stroke_rounded(pm, sx + 1.0, SEARCH_Y + 1.0, sw - 2.0, SEARCH_H - 2.0, 8.0, crate::theme::th().accent.color(0.8), 2.0);
         let cy = SEARCH_Y + SEARCH_H / 2.0;
         if self.field.text().is_empty() {
             self.text_at(pm, "Search apps", sx + 14.0, cy, 14.0, Weight::Regular, subtext_color());
@@ -179,7 +179,7 @@ impl Launcher {
         for pos in first..last {
             let (x, y, cw, ch) = self.cell_rect(pos);
             if pos == self.sel {
-                fill_rounded(pm, x + 4.0, y + 2.0, cw - 8.0, ch - 4.0, 12.0, color(255, 255, 255, 0.12));
+                fill_rounded(pm, x + 4.0, y + 2.0, cw - 8.0, ch - 4.0, 12.0, crate::theme::th().ink(0.12));
             }
             let Some(app) = self.shown.get(pos).and_then(|&i| self.apps.get(i)).cloned() else { continue };
             let icon = self.icons.get(&app.icon, ICON);
@@ -193,7 +193,7 @@ impl Launcher {
             let tw = self.measure(msg, 14.0, Weight::Regular);
             self.text_at(pm, msg, (w - tw) / 2.0, GRID_Y + 40.0, 14.0, Weight::Regular, subtext_color());
         }
-        stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), color(255, 255, 255, 0.12), 1.0);
+        stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), crate::theme::th().ink(0.12), 1.0);
         if let Some(f) = &self.fonts {
             f.trim();
         }
@@ -247,7 +247,9 @@ impl WindowApp for Launcher {
         self.overlay = overlay;
     }
 
-    fn set_waker(&mut self, _: Waker) {}
+    fn set_waker(&mut self, waker: Waker) {
+        crate::theme::live::start_watcher(move || waker());
+    }
 
     fn set_screen(&mut self, _: u32, _: u32) {}
 
@@ -354,7 +356,11 @@ impl WindowApp for Launcher {
     }
 
     fn tick(&mut self) -> Response {
-        Response::NONE
+        if crate::theme::take_changed() {
+            Response::REDRAW
+        } else {
+            Response::NONE
+        }
     }
 }
 

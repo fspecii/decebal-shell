@@ -218,7 +218,7 @@ impl SettingsApp {
         let sr = (u(12.0), u(14.0), sbw - u(24.0), u(30.0));
         self.search_rect = sr;
         let focused = self.zone == Zone::Search;
-        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), if focused { color(0, 0, 0, 0.35) } else { pal::field() });
+        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), if focused { pal::window() } else { pal::field() });
         if focused {
             stroke_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), pal::accent(), u(1.5));
         }
@@ -247,12 +247,13 @@ impl SettingsApp {
             let selected = self.m.sel.pane == i;
             let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
             if selected {
-                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), if self.zone == Zone::Sidebar { pal::accent() } else { color(255, 255, 255, 0.14) });
+                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), if self.zone == Zone::Sidebar { pal::accent() } else { crate::theme::th().ink(0.14) });
             } else if hover {
-                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), color(255, 255, 255, 0.06));
+                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), crate::theme::th().ink(0.06));
             }
             pane_icon(pm, def.glyph, def.color, r.0 + u(8.0), r.1 + (r.3 - u(24.0)) / 2.0, u(24.0));
-            p.text(pm, def.title, r.0 + u(42.0), r.1 + r.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
+            let on_accent = selected && self.zone == Zone::Sidebar;
+            p.text(pm, def.title, r.0 + u(42.0), r.1 + r.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, if on_accent { pal::accent_text() } else { pal::text() });
             self.sidebar_hits.push((r, i));
             y += ih;
         }
@@ -304,7 +305,7 @@ impl SettingsApp {
         if total > h + 1.0 {
             let th = (h * h / total).max(30.0 * s);
             let ty = (h - th) * (self.scroll / (total - h));
-            fill_rounded(pm, sbw + w - 7.0 * s, ty + 2.0 * s, 4.0 * s, th - 4.0 * s, 2.0 * s, color(255, 255, 255, 0.22));
+            fill_rounded(pm, sbw + w - 7.0 * s, ty + 2.0 * s, 4.0 * s, th - 4.0 * s, 2.0 * s, crate::theme::th().ink(0.22));
         }
     }
 
@@ -349,7 +350,7 @@ impl SettingsApp {
         let w = p.measure(&n.text, 12.5 * s, Weight::Medium) + 44.0 * s;
         let (x, y) = (sbw + (pm.width() as f32 - sbw - w) / 2.0, pm.height() as f32 - 52.0 * s);
         soft_shadow(pm, x, y, w, 32.0 * s, 16.0 * s, 8.0 * s, 0.35);
-        fill_rounded(pm, x, y, w, 32.0 * s, 16.0 * s, color(58, 58, 60, 0.98));
+        fill_rounded(pm, x, y, w, 32.0 * s, 16.0 * s, crate::theme::th().popup.color(0.98));
         fill_circle(pm, x + 16.0 * s, y + 16.0 * s, 4.0 * s, pal::green());
         p.text(pm, &n.text, x + 28.0 * s, y + 16.0 * s, 12.5 * s, Weight::Medium, pal::text());
     }
@@ -359,8 +360,8 @@ impl SettingsApp {
         if let Some(pp) = &self.popup {
             let r = pp.rect;
             soft_shadow(pm, r.0, r.1, r.2, r.3, 8.0 * s, 10.0 * s, 0.45);
-            fill_rounded(pm, r.0, r.1, r.2, r.3, 8.0 * s, color(52, 52, 54, 0.99));
-            stroke_rounded(pm, r.0, r.1, r.2, r.3, 8.0 * s, color(255, 255, 255, 0.12), 1.0);
+            fill_rounded(pm, r.0, r.1, r.2, r.3, 8.0 * s, crate::theme::th().popup.color(0.99));
+            stroke_rounded(pm, r.0, r.1, r.2, r.3, 8.0 * s, crate::theme::th().ink(0.12), 1.0);
             let ih = 26.0 * s;
             let mut p = Painter { fonts: self.fonts.as_mut(), s };
             for (row, i) in (pp.top..(pp.top + pp.visible).min(pp.opts.len())).enumerate() {
@@ -374,7 +375,7 @@ impl SettingsApp {
                     stroke_line(pm, cx - 1.0 * s, cy + 3.0 * s, cx + 4.0 * s, cy - 3.5 * s, pal::text(), 1.6 * s);
                 }
                 let t = p.fit(&pp.opts[i].0, r.2 - 36.0 * s, 13.0 * s, Weight::Regular);
-                p.text(pm, &t, r.0 + 26.0 * s, y + ih / 2.0, 13.0 * s, Weight::Regular, pal::text());
+                p.text(pm, &t, r.0 + 26.0 * s, y + ih / 2.0, 13.0 * s, Weight::Regular, if pp.hover == Some(i) { pal::accent_text() } else { pal::text() });
             }
             if pp.opts.is_empty() {
                 p.text(pm, "Nothing to choose", r.0 + 12.0 * s, r.1 + 18.0 * s, 12.5 * s, Weight::Regular, pal::faint());
@@ -383,14 +384,14 @@ impl SettingsApp {
         if let Some(cp) = &self.colorpop {
             let r = cp.rect;
             soft_shadow(pm, r.0, r.1, r.2, r.3, 10.0 * s, 10.0 * s, 0.45);
-            fill_rounded(pm, r.0, r.1, r.2, r.3, 10.0 * s, color(52, 52, 54, 0.99));
-            stroke_rounded(pm, r.0, r.1, r.2, r.3, 10.0 * s, color(255, 255, 255, 0.12), 1.0);
+            fill_rounded(pm, r.0, r.1, r.2, r.3, 10.0 * s, crate::theme::th().popup.color(0.99));
+            stroke_rounded(pm, r.0, r.1, r.2, r.3, 10.0 * s, crate::theme::th().ink(0.12), 1.0);
             for (i, hex) in SWATCHES.iter().enumerate() {
                 let (c, rr) = (i % 6, i / 6);
                 let (cx, cy) = (r.0 + 22.0 * s + c as f32 * 30.0 * s, r.1 + 22.0 * s + rr as f32 * 30.0 * s);
                 let (cr, cg, cb) = ui::parse_hex(hex).unwrap_or((0, 0, 0));
                 fill_circle(pm, cx, cy, 11.0 * s, color(cr, cg, cb, 1.0));
-                stroke_rounded(pm, cx - 11.0 * s, cy - 11.0 * s, 22.0 * s, 22.0 * s, 11.0 * s, color(255, 255, 255, 0.3), 1.0);
+                stroke_rounded(pm, cx - 11.0 * s, cy - 11.0 * s, 22.0 * s, 22.0 * s, 11.0 * s, crate::theme::th().ink(0.3), 1.0);
             }
             let fy = r.1 + 22.0 * s + 3.0 * 30.0 * s - 6.0 * s;
             let fr = (r.0 + 10.0 * s, fy, r.2 - 20.0 * s - 70.0 * s, 26.0 * s);
@@ -818,7 +819,7 @@ fn stroke_circle(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: tiny_skia::Color,
     stroke_rounded(pm, cx - r, cy - r, 2.0 * r, 2.0 * r, r, c, w);
 }
 
-fn stroke_line(pm: &mut Pixmap, x0: f32, y0: f32, x1: f32, y1: f32, c: tiny_skia::Color, w: f32) {
+pub(super) fn stroke_line(pm: &mut Pixmap, x0: f32, y0: f32, x1: f32, y1: f32, c: tiny_skia::Color, w: f32) {
     let mut pb = tiny_skia::PathBuilder::new();
     pb.move_to(x0, y0);
     pb.line_to(x1, y1);
@@ -871,6 +872,8 @@ impl WindowApp for SettingsApp {
         *self.wake_slot.lock().unwrap() = Some(waker.clone());
         self.waker = Some(waker.clone());
         self.start_thumb_worker();
+        let tw = waker.clone();
+        crate::theme::live::start_watcher(move || tw());
         let files = self.m.watched_files();
         io::spawn_watcher(files, self.m.paths.socket.clone(), self.m.queue.clone(), waker);
     }
@@ -1145,6 +1148,9 @@ impl WindowApp for SettingsApp {
             }
         }
         redraw |= self.m.expire_notice();
+        if crate::theme::take_changed() {
+            self.m.dirty = true; // the theme pane and every colour follow the file
+        }
         redraw |= self.m.dirty;
         Response { redraw, action: None }
     }

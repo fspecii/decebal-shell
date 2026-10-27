@@ -15,7 +15,8 @@ pub struct DockSettings {
 
 impl Default for DockSettings {
     fn default() -> Self {
-        Self { app_spacing: 6.0, magnification: 1.4, transparency: 0.4, roundness: 0.45 }
+        // roundness follows the theme until dock-settings.json sets it
+        Self { app_spacing: 6.0, magnification: 1.4, transparency: 0.4, roundness: crate::theme::th().dock_roundness }
     }
 }
 
@@ -216,7 +217,7 @@ mod tests {
     #[test]
     fn defaults_match_original() {
         let s = DockSettings::default();
-        assert_eq!((s.app_spacing, s.magnification, s.transparency, s.roundness), (6.0, 1.4, 0.4, 0.45));
+        assert_eq!((s.app_spacing, s.magnification, s.transparency, s.roundness), (6.0, 1.4, 0.4, crate::theme::th().dock_roundness));
     }
 
     #[test]
