@@ -761,9 +761,9 @@ impl Model {
         let rec = self.sel.recording.as_deref();
         if rec.is_some() {
             let on = |m: &str| self.sel.rec_mods.contains(&m);
-            let mut r = Row::new("Modifiers").detail("Toggle the modifiers, then press the key. Esc cancels. Keys another program already grabs cannot be recorded; type those in the list instead.");
+            let mut r = Row::new("Modifiers").detail("Toggle modifiers, then press the key. Esc cancels.");
             for m in ["super", "ctrl", "alt", "shift"] {
-                r = r.ctl(Ctl::new(format!("mod:{m}"), Kind::Button { label: format!("{}{}", if on(m) { "✓ " } else { "" }, cap(m)), danger: false }));
+                r = r.ctl(Ctl::new(format!("mod:{m}"), Kind::Chip { label: cap(m), on: on(m) }));
             }
             cards.push(r);
         }

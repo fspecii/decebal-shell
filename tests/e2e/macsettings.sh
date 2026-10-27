@@ -124,6 +124,13 @@ wait_file "bind rewritten to F9" 'key = "F9"'
 check "args kept" grep -A4 'key = "F9"' "$E2E_CFG" | grep -q 'args = \["true"\]'
 sleep 0.8
 check "rdwm knows the new key" bash -c "rdwmctl config | jq -e '[.config.binds[]|select(.keys|ascii_downcase==\"f9\")]|length==1' >/dev/null"
+echo "== recorder with modifier chips"
+click_id "$KID"; sleep 0.3
+click_id mod:super; click_id mod:shift
+shot recorder
+xdotool key --window "$WID" F7
+wait_file "chips + F7 recorded" 'mods = \["super", "shift"\]' 
+check "key F7 stored" grep -q 'key = "F7"' "$E2E_CFG"
 echo "== rules: add"
 goto rules
 click_id t:rule:@add

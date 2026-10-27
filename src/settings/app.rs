@@ -321,7 +321,7 @@ impl SettingsApp {
                     Kind::Slider { v, .. } | Kind::Stepper { v, .. } => json!(v),
                     Kind::Seg(o, s) | Kind::Popup(o, s) => json!(s.and_then(|i| o.get(i)).map(|x| x.1.clone())),
                     Kind::Color(t) | Kind::Text { val: t, .. } | Kind::Key(t) | Kind::Label(t) => json!(t),
-                    Kind::Button { label, .. } => json!(label),
+                    Kind::Button { label, .. } | Kind::Chip { label, .. } => json!(label),
                 };
                 json!({"id": p.ctl.id, "label": p.label, "value": value, "enabled": p.ctl.enabled, "rect": [p.rect.0, p.rect.1, p.rect.2, p.rect.3], "parts": p.parts.iter().map(|r| json!([r.0, r.1, r.2, r.3])).collect::<Vec<_>>()})
             })
@@ -368,8 +368,11 @@ impl SettingsApp {
                 if pp.hover == Some(i) {
                     fill_rounded(pm, r.0 + 4.0 * s, y, r.2 - 8.0 * s, ih, 5.0 * s, pal::accent());
                 }
-                let mark = if pp.sel == Some(i) { "✓" } else { "" };
-                p.text(pm, mark, r.0 + 9.0 * s, y + ih / 2.0, 12.0 * s, Weight::Medium, pal::text());
+                if pp.sel == Some(i) {
+                    let (cx, cy) = (r.0 + 14.0 * s, y + ih / 2.0);
+                    stroke_line(pm, cx - 3.5 * s, cy, cx - 1.0 * s, cy + 3.0 * s, pal::text(), 1.6 * s);
+                    stroke_line(pm, cx - 1.0 * s, cy + 3.0 * s, cx + 4.0 * s, cy - 3.5 * s, pal::text(), 1.6 * s);
+                }
                 let t = p.fit(&pp.opts[i].0, r.2 - 36.0 * s, 13.0 * s, Weight::Regular);
                 p.text(pm, &t, r.0 + 26.0 * s, y + ih / 2.0, 13.0 * s, Weight::Regular, pal::text());
             }
@@ -504,7 +507,7 @@ impl SettingsApp {
             Kind::Popup(..) => self.open_popup(p),
             Kind::Color(_) => self.open_color(p),
             Kind::Text { .. } => self.begin_edit(p),
-            Kind::Key(_) | Kind::Button { .. } => self.m.apply(&id, CtlVal::Click),
+            Kind::Key(_) | Kind::Button { .. } | Kind::Chip { .. } => self.m.apply(&id, CtlVal::Click),
             Kind::Label(_) => {}
         }
     }
@@ -612,7 +615,7 @@ impl SettingsApp {
             Kind::Popup(..) if go => self.open_popup(&p),
             Kind::Color(_) if go => self.open_color(&p),
             Kind::Text { .. } if go => self.begin_edit(&p),
-            Kind::Key(_) | Kind::Button { .. } if go => self.m.apply(&id, CtlVal::Click),
+            Kind::Key(_) | Kind::Button { .. } | Kind::Chip { .. } if go => self.m.apply(&id, CtlVal::Click),
             _ => {
                 if ev.key == Key::Escape {
                     self.it.focus = None;
@@ -994,7 +997,7 @@ impl WindowApp for SettingsApp {
             self.colorpop = None;
             return Response::REDRAW;
         }
-        if self.m.sel.recording.is_some() {
+        if self.m.sel.recording.is_some() && !self.frame.at(x, y).is_some_and(|p| p.ctl.id.starts_with("mod:")) {
             self.m.sel.recording = None;
         }
         // sidebar

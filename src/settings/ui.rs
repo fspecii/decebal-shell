@@ -107,6 +107,11 @@ pub enum Kind {
         label: String,
         danger: bool,
     },
+    /// A button that stays highlighted while `on` (modifier toggles of the shortcut recorder).
+    Chip {
+        label: String,
+        on: bool,
+    },
     Label(String),
 }
 
@@ -347,7 +352,7 @@ fn ctl_width(p: &Painter, c: &Ctl) -> f32 {
         Kind::Color(_) => u(96.0),
         Kind::Text { .. } => u(210.0),
         Kind::Key(k) => (p.measure(k, u(12.0), Weight::Medium) + u(28.0)).max(u(96.0)),
-        Kind::Button { label, .. } => p.measure(label, u(12.5), Weight::Regular) + u(26.0),
+        Kind::Button { label, .. } | Kind::Chip { label, .. } => p.measure(label, u(12.5), Weight::Regular) + u(26.0),
         Kind::Label(t) => p.measure(t, u(13.0), Weight::Regular),
     }
 }
@@ -533,6 +538,24 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Button { label, danger } => {
             fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(if hover { pal::field_hover() } else { pal::field() }));
             p.text_center(pm, label, x + w / 2.0, cy, u(12.5), Weight::Regular, a(if *danger { pal::red() } else { pal::text() }));
+        }
+        Kind::Chip { label, on } => {
+            fill_rounded(
+                pm,
+                x,
+                rect.1,
+                w,
+                h_field,
+                u(6.0),
+                a(if *on {
+                    pal::accent()
+                } else if hover {
+                    pal::field_hover()
+                } else {
+                    pal::field()
+                }),
+            );
+            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), if *on { Weight::Medium } else { Weight::Regular }, a(pal::text()));
         }
         Kind::Label(t) => {
             p.text_right(pm, t, right, cy, u(13.0), Weight::Regular, pal::sub());
