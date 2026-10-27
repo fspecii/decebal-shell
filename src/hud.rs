@@ -27,6 +27,8 @@ pub const LOCK_NAME: &str = "machud";
 pub const MAILBOX: &str = "machud.msg";
 /// Number of bar segments.
 pub const SEGMENTS: usize = 16;
+/// Number of workspace dots (rdwm's tags).
+pub const WORKSPACES: usize = 9;
 /// The card's bottom edge sits this fraction of the monitor height above the monitor's bottom.
 pub const BOTTOM_MARGIN: f32 = 0.10;
 
@@ -40,6 +42,8 @@ pub enum Kind {
     Volume,
     Brightness,
     Mic,
+    /// The workspace rdwm switched to (`Reading::level` holds its number, 1-based).
+    Workspace,
 }
 
 impl Kind {
@@ -48,6 +52,7 @@ impl Kind {
             "volume" => Some(Kind::Volume),
             "brightness" => Some(Kind::Brightness),
             "mic" | "microphone" => Some(Kind::Mic),
+            "workspace" => Some(Kind::Workspace),
             _ => None,
         }
     }
@@ -57,6 +62,7 @@ impl Kind {
             Kind::Volume => "volume",
             Kind::Brightness => "brightness",
             Kind::Mic => "mic",
+            Kind::Workspace => "workspace",
         }
     }
 }
@@ -81,7 +87,13 @@ impl Reading {
             (Kind::Volume, false) => format!("Volume {}%", self.percent()),
             (Kind::Mic, false) => format!("Microphone {}%", self.percent()),
             (Kind::Brightness, _) => format!("Brightness {}%", self.percent()),
+            (Kind::Workspace, _) => format!("Workspace {}", self.workspace()),
         }
+    }
+
+    /// Workspace number of a `Kind::Workspace` reading, clamped to 1..=WORKSPACES.
+    pub fn workspace(&self) -> usize {
+        (self.level.round().max(1.0) as usize).min(WORKSPACES)
     }
 
     /// Symbol name (see `menubar::symbols`).
@@ -95,6 +107,7 @@ impl Reading {
             Kind::Mic if self.muted => "mic-muted",
             Kind::Mic => "mic",
             Kind::Brightness => "sun",
+            Kind::Workspace => "grid",
         }
     }
 
@@ -158,6 +171,53 @@ pub fn probe(kind: Kind) -> Option<Reading> {
     match kind {
         Kind::Brightness => probe_brightness(),
         Kind::Volume | Kind::Mic => probe_audio(kind),
+        Kind::Workspace => probe_workspace(),
+    }
+}
+
+/// Lowest tag of the selected monitor's view in a `get_state` reply (1-based).
+pub fn workspace_from_state(line: &str) -> Option<usize> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    let st = v.get("state")?;
+    let mons = st.get("monitors")?.as_array()?;
+    let sel = st.get("selected_mon").and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let m = mons.iter().find(|m| m.get("id").and_then(serde_json::Value::as_i64) == Some(sel)).or_else(|| mons.first())?;
+    let view = m.get("view")?.as_u64()?;
+    (view != 0).then(|| view.trailing_zeros() as usize + 1)
+}
+
+/// The workspace rdwm is showing now.
+pub fn probe_workspace() -> Option<Reading> {
+    let n = crate::menubar::rdwm::request(r#"{"cmd":"get_state"}"#).and_then(|l| workspace_from_state(&l))?;
+    Some(Reading { kind: Kind::Workspace, level: n as f32, muted: false })
+}
+
+/// Long-running: shows the card whenever rdwm changes the workspace. Blocks; reconnects when rdwm restarts.
+pub fn watch_workspaces() {
+    use std::io::{BufRead, BufReader, Write};
+    let mut last: Option<usize> = None;
+    loop {
+        let conn = std::os::unix::net::UnixStream::connect(crate::menubar::rdwm::socket_path());
+        if let Ok(mut s) = conn {
+            last = crate::menubar::rdwm::request(r#"{"cmd":"get_state"}"#).and_then(|l| workspace_from_state(&l));
+            if s.write_all(b"{\"cmd\":\"subscribe\",\"events\":[\"tag_view\"]}\n").is_ok() {
+                for line in BufReader::new(&mut s).lines() {
+                    let Ok(line) = line else { break };
+                    if !line.contains("\"event\"") {
+                        continue;
+                    }
+                    let now = crate::menubar::rdwm::request(r#"{"cmd":"get_state"}"#).and_then(|l| workspace_from_state(&l));
+                    if now.is_some() && now != last {
+                        last = now;
+                        if let Ok(exe) = std::env::current_exe() {
+                            let _ = std::process::Command::new(exe).arg("workspace").stdin(std::process::Stdio::null()).spawn().map(|mut c| std::thread::spawn(move || c.wait()));
+                        }
+                    }
+                }
+            }
+        }
+        let _ = last;
+        std::thread::sleep(Duration::from_secs(2));
     }
 }
 
@@ -301,7 +361,15 @@ impl Hud {
 
         let r = self.reading;
         let px = l.icon_px;
-        if let Some(icon) = self.symbols.get(r.icon(), th.text.t(), px) {
+        if r.kind == Kind::Workspace {
+            // The number itself, big, where the other cards have their icon.
+            let digit = r.workspace().to_string();
+            let size = 54.0 * self.scale;
+            let tw = self.measure(&digit, size);
+            if let Some(f) = &mut self.fonts {
+                f.draw(pm, &digit, (w / 2.0 - tw / 2.0).round(), l.icon_y - size * 0.05, size, Weight::Medium, th.text_c());
+            }
+        } else if let Some(icon) = self.symbols.get(r.icon(), th.text.t(), px) {
             blit_scaled(pm, icon, l.icon_x, l.icon_y, px as f32, px as f32, 1.0);
         }
 
@@ -312,6 +380,19 @@ impl Hud {
             f.draw(pm, &label, (w / 2.0 - tw / 2.0).round(), l.label_cy - size * 0.62, size, Weight::Medium, th.text_c());
         }
 
+        if r.kind == Kind::Workspace {
+            let (dot, gap) = (10.0 * self.scale, 8.0 * self.scale);
+            let x0 = (w - (WORKSPACES as f32 * dot + (WORKSPACES as f32 - 1.0) * gap)) / 2.0;
+            for i in 0..WORKSPACES {
+                let c = if i + 1 == r.workspace() { th.text.color(0.95) } else { th.ink(0.24) };
+                fill_rounded(pm, (x0 + i as f32 * (dot + gap)).round(), l.bar_y, dot, l.seg_h.max(dot * 0.8), dot / 2.0, c);
+            }
+            stroke_rounded(pm, 0.5, 0.5, w - 1.0, h - 1.0, (radius - 0.5).max(0.0), th.outline_c(), 1.0);
+            if let Some(f) = &self.fonts {
+                f.trim();
+            }
+            return;
+        }
         let lit = r.lit();
         let unlit = th.ink(if r.muted { 0.12 } else { 0.24 });
         for i in 0..SEGMENTS {
@@ -503,6 +584,22 @@ mod tests {
         assert_eq!(Reading::decode("volume NaN 0"), None);
         assert_eq!(Reading::decode("nonsense 0.5 0"), None);
         assert_eq!(Reading::decode("volume 0.5"), None);
+    }
+
+    #[test]
+    fn workspace_card_and_state() {
+        let w = r(Kind::Workspace, 3.0, false);
+        assert_eq!((w.label().as_str(), w.workspace()), ("Workspace 3", 3));
+        assert_eq!(r(Kind::Workspace, 40.0, false).workspace(), WORKSPACES, "clamped");
+        assert_eq!(Reading::decode(&w.encode()).unwrap().workspace(), 3);
+        assert_eq!(Kind::parse("workspace"), Some(Kind::Workspace));
+        assert!(crate::menubar::symbols::shapes(w.icon()).is_some());
+        let st = |view: u64| format!(r#"{{"ok":true,"state":{{"selected_mon":1,"monitors":[{{"id":0,"view":1}},{{"id":1,"view":{view}}}]}}}}"#);
+        assert_eq!(workspace_from_state(&st(1)), Some(1));
+        assert_eq!(workspace_from_state(&st(8)), Some(4));
+        assert_eq!(workspace_from_state(&st(12)), Some(3), "several tags: the lowest");
+        assert_eq!(workspace_from_state(&st(0)), None);
+        assert_eq!(workspace_from_state("nonsense"), None);
     }
 
     #[test]

@@ -21,7 +21,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `macexpose` | Exposé / Mission Control window overview for rdwm (X11): thumbnails of the current workspace, or `--all` grouped by workspace; see below | starts and paints in ~100 ms, exits on commit |
-| `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
+| `machud` | on-screen display for volume / mute / brightness / mic mute and workspace switches (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
 | `macclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
 | `machot` | Hot Corners for X11: the pointer resting in a screen corner runs an action (Dashboard, Spotlight, Launchpad, Lock, ...); a daemon with `get` / `set` CLI; see below | daemon ~3 MB RSS, 0 % CPU idle |
 | `maclaunch` | Launchpad: a searchable grid of installed apps (type to filter, arrows, Enter, Esc) | ~20 MB RSS while open |
@@ -176,6 +176,8 @@ again while it is open closes it. Everything is captured synchronously, so ten w
 Escape, filter, `--all` with a chip and a window on another tag, close with `w`).
 
 ## On-screen display (`machud`)
+
+`machud workspace` shows the current rdwm workspace as a big number with nine dots; `machud watch` runs for the whole session and shows it on every workspace switch (rdwm's `tag_view` event; `rdwm-macshell-session` starts it as the `wsosd` service).
 
 The little rounded card macOS shows when you press a volume or brightness key: an icon (speaker with waves, crossed speaker when muted,
 sun, microphone), a label (`Volume 45%`, `Muted`, `Brightness 70%`, `Microphone muted`) and a 16-segment bar. Call it after the key's own action:
