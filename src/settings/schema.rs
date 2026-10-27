@@ -61,7 +61,13 @@ impl Schema {
 
     /// Asks the installed rdwmctl; falls back to the bundled snapshot.
     pub fn load(rdwmctl: &Path) -> Schema {
-        let live = Command::new(rdwmctl).args(["schema", "--offline"]).output().ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok()).and_then(|v| Schema::from_json(&v));
+        let live = Command::new(rdwmctl)
+            .args(["schema", "--offline"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
+            .and_then(|v| Schema::from_json(&v));
         match live {
             Some(mut s) if !s.keys.is_empty() => {
                 s.live = true;
@@ -98,7 +104,11 @@ mod tests {
     /// `rdwmctl schema --offline > src/settings/rdwm-schema.json`.
     #[test]
     fn snapshot_matches_installed_rdwmctl_if_any() {
-        let candidates = [std::env::var_os("RDWMCTL").map(Into::into), Some(std::path::PathBuf::from("rdwmctl")), std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Projects/rdwm-settings/target/debug/rdwmctl"))];
+        let candidates = [
+            std::env::var_os("RDWMCTL").map(Into::into),
+            Some(std::path::PathBuf::from("rdwmctl")),
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Projects/rdwm-settings/target/debug/rdwmctl")),
+        ];
         for c in candidates.into_iter().flatten() {
             let Some(out) = Command::new(&c).args(["schema", "--offline"]).output().ok().filter(|o| o.status.success()) else { continue };
             let Ok(live) = serde_json::from_slice::<Value>(&out.stdout) else { continue };

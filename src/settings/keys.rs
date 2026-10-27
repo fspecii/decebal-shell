@@ -172,7 +172,7 @@ mod tests {
     fn rebinding_or_removing_a_default_overrides_it() {
         let (mut m, cfg) = model_with("");
         m.rt.running = true;
-        m.rt.binds = json!([{"keys":"Super+Return","action":"spawn","source":"config","args":["foot"]}, {"keys":"Super+q","action":"close","source":"config"}]);
+        m.rt.binds = json!([{"keys":["super+return"],"action":"spawn","source":"config","args":["foot"]}, {"keys":["super+q"],"action":"close","source":"config"}]);
         apply(&mut m, "k:0", CtlVal::Str("super+t".into()));
         let t = text(&cfg);
         assert!(t.contains("action = \"none\"") && t.contains("key = \"Return\""), "{t}");

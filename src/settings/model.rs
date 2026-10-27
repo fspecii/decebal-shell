@@ -501,7 +501,6 @@ pub mod tests_support {
         let m = Model::new(paths, Schema::snapshot(), q, Arc::new(|| {}));
         (m, cfg)
     }
-
 }
 
 #[cfg(test)]

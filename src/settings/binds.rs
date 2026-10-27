@@ -122,7 +122,12 @@ pub fn collect(cfg: &Cfg, runtime: &Value) -> Vec<BindRow> {
     let mut seen_file: Vec<usize> = Vec::new();
     if let Some(list) = runtime.as_array() {
         for b in list {
-            let spec = b["keys"].as_str().unwrap_or("").to_string();
+            // rdwm sends the sequence as an array of chords (`["super+x","r"]`)
+            let spec = match &b["keys"] {
+                Value::String(s) => s.clone(),
+                Value::Array(a) => a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" "),
+                _ => String::new(),
+            };
             let norm = norm_keys(&spec);
             let action = b["action"].as_str().unwrap_or("").to_string();
             let args: Vec<String> = b["args"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
@@ -172,7 +177,11 @@ pub fn conflicts(rows: &[BindRow]) -> Vec<String> {
             if a.norm == b.norm {
                 out.push(format!("{} is bound twice: {} and {}", a.keys, a.action, b.action));
             } else if b.norm.starts_with(&format!("{} ", a.norm)) || a.norm.starts_with(&format!("{} ", b.norm)) {
-                out.push(format!("{} starts the sequence {}: one of them cannot work", if a.norm.len() < b.norm.len() { &a.keys } else { &b.keys }, if a.norm.len() < b.norm.len() { &b.keys } else { &a.keys }));
+                out.push(format!(
+                    "{} starts the sequence {}: one of them cannot work",
+                    if a.norm.len() < b.norm.len() { &a.keys } else { &b.keys },
+                    if a.norm.len() < b.norm.len() { &b.keys } else { &a.keys }
+                ));
             }
         }
     }
@@ -292,13 +301,15 @@ args = ["-0.05"]
     fn runtime_list_marks_defaults_files_ipc_and_modes() {
         let cfg = Cfg::parse("[[bind]]\nkeys = \"super+w\"\naction = \"close\"\n").unwrap();
         let rt = json!([
-            {"keys":"Super+w","action":"close","source":"config"},
-            {"keys":"Super+Return","action":"spawn","source":"config","args":["foot"]},
+            {"keys":["super+w"],"action":"close","source":"config","mode":"default"},
+            {"keys":["super+Return"],"action":"spawn","source":"config","args":["foot"],"mode":"default"},
             {"keys":"super+F1","action":"spawn","source":"ipc","args":["x"]},
-            {"keys":"h","action":"setmfact","source":"config","mode":"resize"},
+            {"keys":["h"],"action":"setmfact","source":"config","mode":"resize"},
+            {"keys":["super+x","r"],"action":"reload","source":"config","mode":"default"},
         ]);
         let rows = collect(&cfg, &rt);
-        assert_eq!(rows.iter().map(|r| r.src.clone()).collect::<Vec<_>>(), [Src::File(0), Src::Default, Src::Ipc, Src::Mode]);
+        assert_eq!(rows.iter().map(|r| r.src.clone()).collect::<Vec<_>>(), [Src::File(0), Src::Default, Src::Ipc, Src::Mode, Src::Default]);
+        assert_eq!(rows[4].norm, "super+x r");
     }
 
     #[test]

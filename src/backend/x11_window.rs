@@ -235,6 +235,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                     let (shift, ctrl, alt) = (state & 1 != 0, state & 4 != 0, state & 8 != 0);
                     if let Some(ke) = key_event(sym, plain, None, shift, ctrl, alt) {
                         resp = app.key(&ke);
+                    } else {
+                        resp = app.unmapped_key(sym, shift, ctrl, alt);
                     }
                 }
                 Event::ClientMessage(m) => {

@@ -221,6 +221,9 @@ impl<A: WindowApp + 'static> State<A> {
         if let Some(ev) = key_event(raw, plain, event.utf8.as_deref(), self.mods.shift, self.mods.ctrl, self.mods.alt) {
             let resp = self.app.key(&ev);
             self.apply(resp);
+        } else {
+            let resp = self.app.unmapped_key(raw, self.mods.shift, self.mods.ctrl, self.mods.alt);
+            self.apply(resp);
         }
     }
 

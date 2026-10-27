@@ -3,7 +3,8 @@
 //! [`layout_rects`] is the single description of what each rdwm layout looks like; macbar's layout
 //! switcher can draw the same pictograms through [`layout_icon`].
 
-use crate::gfx::{color, fill_circle, fill_rect, fill_rounded, stroke_rounded};
+use super::ui::fill_px;
+use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
 use tiny_skia::{Color, Paint, PathBuilder, Pixmap, Stroke, Transform};
 
 pub type R = (f32, f32, f32, f32);
@@ -32,7 +33,7 @@ fn fib(n: usize, spiral: bool) -> Vec<R> {
             break;
         }
         let (x, y, w, h) = rest;
-        let dir = if spiral { i % 4 } else { (i % 2) * 2 + (i % 2) * 0 };
+        let dir = if spiral { i % 4 } else { (i % 2) * 2 };
         let (win, next) = match (spiral, dir) {
             (false, d) if d % 2 == 0 => ((x, y, w / 2.0, h), (x + w / 2.0, y, w / 2.0, h)),
             (false, _) => ((x, y, w, h / 2.0), (x, y + h / 2.0, w, h / 2.0)),
@@ -204,7 +205,7 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
         Glyph::Windows => {
             stroke_rounded(pm, cx - 9.0 * u, cy - 7.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, color(255, 255, 255, 0.7), 1.8 * u);
             fill_rounded(pm, cx - 3.0 * u, cy - 3.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, white);
-            fill_rect(pm, cx - 3.0 * u, cy - 0.5 * u, 12.0 * u, 1.6 * u, color(bg.0, bg.1, bg.2, 1.0));
+            fill_px(pm, cx - 3.0 * u, cy - 0.5 * u, 12.0 * u, 1.6 * u, color(bg.0, bg.1, bg.2, 1.0));
         }
         Glyph::Rules => {
             for i in 0..3 {
@@ -217,10 +218,10 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
             stroke_rounded(pm, cx - 10.0 * u, cy - 6.5 * u, 20.0 * u, 13.0 * u, 3.0 * u, white, 1.8 * u);
             for row in 0..2 {
                 for i in 0..4 {
-                    fill_rect(pm, cx - 6.5 * u + i as f32 * 3.6 * u, cy - 3.0 * u + row as f32 * 3.6 * u, 2.2 * u, 2.0 * u, white);
+                    fill_px(pm, cx - 6.5 * u + i as f32 * 3.6 * u, cy - 3.0 * u + row as f32 * 3.6 * u, 2.2 * u, 2.0 * u, white);
                 }
             }
-            fill_rect(pm, cx - 4.0 * u, cy + 3.6 * u, 8.0 * u, 1.8 * u, white);
+            fill_px(pm, cx - 4.0 * u, cy + 3.6 * u, 8.0 * u, 1.8 * u, white);
         }
         Glyph::Rocket => {
             let mut pb = PathBuilder::new();
@@ -264,7 +265,31 @@ mod tests {
         }
     }
 
-    const LAYOUT_NAMES: &[(&str, &str)] = &[("tile", ""), ("monocle", ""), ("floating", ""), ("bottomstack", ""), ("bstackhoriz", ""), ("rtile", ""), ("grid", ""), ("gaplessgrid", ""), ("horizgrid", ""), ("nrowgrid", ""), ("deck", ""), ("centeredmaster", ""), ("centeredfloatingmaster", ""), ("dwindle", ""), ("spiral", ""), ("tatami", ""), ("columns", ""), ("rows", ""), ("threecol", ""), ("bsp", ""), ("scroll", ""), ("tabbed", ""), ("stacked", "")];
+    const LAYOUT_NAMES: &[(&str, &str)] = &[
+        ("tile", ""),
+        ("monocle", ""),
+        ("floating", ""),
+        ("bottomstack", ""),
+        ("bstackhoriz", ""),
+        ("rtile", ""),
+        ("grid", ""),
+        ("gaplessgrid", ""),
+        ("horizgrid", ""),
+        ("nrowgrid", ""),
+        ("deck", ""),
+        ("centeredmaster", ""),
+        ("centeredfloatingmaster", ""),
+        ("dwindle", ""),
+        ("spiral", ""),
+        ("tatami", ""),
+        ("columns", ""),
+        ("rows", ""),
+        ("threecol", ""),
+        ("bsp", ""),
+        ("scroll", ""),
+        ("tabbed", ""),
+        ("stacked", ""),
+    ];
 
     #[test]
     fn icons_draw() {

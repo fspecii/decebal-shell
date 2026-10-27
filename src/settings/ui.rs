@@ -5,7 +5,7 @@
 //! that the event handlers use until the next paint. Controls have stable string ids so keyboard
 //! focus and in-progress edits survive a rebuild (which happens whenever the file changes).
 
-use crate::gfx::{color, fill_circle, fill_rect, fill_rounded, stroke_rounded};
+use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
 use crate::text::{Fonts, Weight};
 use tiny_skia::{Color, Pixmap};
 
@@ -13,6 +13,14 @@ pub type Rect = (f32, f32, f32, f32);
 
 pub fn inside(r: Rect, x: f32, y: f32) -> bool {
     x >= r.0 && x < r.0 + r.2 && y >= r.1 && y < r.1 + r.3
+}
+
+/// Axis-aligned rectangle snapped to whole pixels (at least 1x1). tiny-skia's anti-aliased path for
+/// thin fractional rectangles asserts, so carets and separators go through here.
+pub fn fill_px(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
+    let (x0, y0) = (x.round(), y.round());
+    let (w, h) = ((x + w).round().max(x0 + 1.0) - x0, (y + h).round().max(y0 + 1.0) - y0);
+    crate::gfx::fill_rect(pm, x0, y0, w, h, c);
 }
 
 // ---------------------------------------------------------------- theme
@@ -71,16 +79,34 @@ pub type Opt = (String, String);
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Toggle(bool),
-    Slider { v: f64, min: f64, max: f64, step: f64, unit: String },
-    Stepper { v: f64, min: f64, max: f64, step: f64, unit: String },
+    Slider {
+        v: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        unit: String,
+    },
+    Stepper {
+        v: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        unit: String,
+    },
     Seg(Vec<Opt>, Option<usize>),
     Popup(Vec<Opt>, Option<usize>),
     /// Hex colour text (`#rrggbb`), may be empty (unset).
     Color(String),
-    Text { val: String, hint: String },
+    Text {
+        val: String,
+        hint: String,
+    },
     /// Shortcut display / recorder.
     Key(String),
-    Button { label: String, danger: bool },
+    Button {
+        label: String,
+        danger: bool,
+    },
     Label(String),
 }
 
@@ -134,13 +160,19 @@ pub enum Item {
     Header(String),
     Card(Vec<Row>),
     /// Wrapped explanatory text under a card (or an inline error when `warn`).
-    Note { text: String, warn: bool },
+    Note {
+        text: String,
+        warn: bool,
+    },
     /// Thumbnail grid: (id, caption, selected). Pixmaps come from the app's thumbnail cache by id.
     Thumbs(Vec<Thumb>),
     /// Layout pictogram grid.
     Layouts(Vec<LayoutTile>),
     /// Large preview of the current wallpaper (id of a thumbnail) with caption.
-    Preview { id: String, caption: String },
+    Preview {
+        id: String,
+        caption: String,
+    },
     Space(f32),
 }
 
@@ -260,6 +292,7 @@ pub struct Placed {
     /// Sub-rects of the control: segment/stepper button rectangles.
     pub parts: Vec<Rect>,
     pub row_rect: Rect,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -414,7 +447,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         }
         Kind::Popup(opts, sel) => {
             fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(if hover { pal::field_hover() } else { pal::field() }));
-            let label = sel.and_then(|i| opts.get(i)).map_or("—", |o| o.0.as_str());
+            let label = sel.and_then(|i| opts.get(i)).map_or("Choose…", |o| o.0.as_str());
             let label = p.fit(label, w - u(36.0), u(13.0), Weight::Regular);
             p.text(pm, &label, x + u(10.0), cy, u(13.0), Weight::Regular, a(pal::text()));
             chevrons(pm, x + w - u(14.0), cy, u(3.2), a(pal::sub()));
@@ -437,7 +470,13 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         }
         Kind::Text { val, hint } => {
             let editing = it.edit.as_ref().filter(|(id, _, _)| id == &c.id);
-            let bg = if editing.is_some() { color(0, 0, 0, 0.35) } else if hover { pal::field_hover() } else { pal::field() };
+            let bg = if editing.is_some() {
+                color(0, 0, 0, 0.35)
+            } else if hover {
+                pal::field_hover()
+            } else {
+                pal::field()
+            };
             fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(bg));
             if editing.is_some() {
                 stroke_rounded(pm, x, rect.1, w, h_field, u(6.0), pal::accent(), u(1.5));
@@ -460,14 +499,28 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 let vis = p.fit(&vis, inner, u(12.5), Weight::Regular);
                 p.text(pm, &vis, x + u(8.0), cy, u(12.5), Weight::Regular, pal::text());
                 let cx = x + u(8.0) + p.measure(&chars[start..cur].iter().collect::<String>(), u(12.5), Weight::Regular);
-                fill_rect(pm, cx, cy - u(8.0), u(1.2), u(16.0), pal::accent());
+                fill_px(pm, cx, cy - u(8.0), u(1.2), u(16.0), pal::accent());
             } else {
                 p.text(pm, &p.fit(&shown, inner, u(12.5), Weight::Regular), x + u(8.0), cy, u(12.5), Weight::Regular, a(pal::text()));
             }
         }
         Kind::Key(k) => {
             let rec = it.recording.as_ref().filter(|(id, _)| id == &c.id);
-            fill_rounded(pm, x, rect.1, w, h_field, u(6.0), if rec.is_some() { color(10, 132, 255, 0.28) } else if hover { pal::field_hover() } else { pal::field() });
+            fill_rounded(
+                pm,
+                x,
+                rect.1,
+                w,
+                h_field,
+                u(6.0),
+                if rec.is_some() {
+                    color(10, 132, 255, 0.28)
+                } else if hover {
+                    pal::field_hover()
+                } else {
+                    pal::field()
+                },
+            );
             if rec.is_some() {
                 stroke_rounded(pm, x, rect.1, w, h_field, u(6.0), pal::accent(), u(1.5));
                 let mods = rec.map(|(_, m)| m.join("+")).unwrap_or_default();
@@ -488,7 +541,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
     if focus && it.ring && c.enabled {
         stroke_rounded(pm, rect.0 - u(2.0), rect.1 - u(2.0), rect.2 + u(4.0), rect.3 + u(4.0), u(8.0), color(10, 132, 255, 0.85), u(2.0));
     }
-    Placed { rect, ctl: c.clone(), parts, row_rect }
+    Placed { rect, ctl: c.clone(), parts, row_rect, label: String::new() }
 }
 
 fn chevrons(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
@@ -510,16 +563,16 @@ fn chevrons(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
 
 // ---------------------------------------------------------------- items
 
-/// Lays out and paints `items` into `pm` (a layer the size of the visible content area).
-/// `scroll` is subtracted from y. Thumbnails are looked up by `thumb`.
+/// Lays out and paints `items` into `pm`, in the column starting at x = `ox` and `width` wide.
+/// `scroll` is subtracted from y; the frame's rectangles are in `pm` coordinates. Thumbnails are looked up by `thumb`.
 #[allow(clippy::too_many_arguments)]
-pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item], scroll: f32, width: f32, it: &Interact, thumb: &dyn Fn(&str) -> Option<std::rc::Rc<Pixmap>>) -> Frame {
+pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item], scroll: f32, ox: f32, width: f32, it: &Interact, thumb: &dyn Fn(&str) -> Option<std::rc::Rc<Pixmap>>) -> Frame {
     let s = p.s;
     let u = |v: f32| v * s;
     let mut fr = Frame::default();
     let side = u(28.0);
     let cw = (width - 2.0 * side).min(u(700.0));
-    let x0 = ((width - cw) / 2.0).max(side.min(width / 2.0));
+    let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
     let mut y = u(20.0) - scroll;
     p.text(pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
     y += u(52.0);
@@ -557,10 +610,10 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let cy = ry + rh / 2.0;
                     let row_rect = (x0, ry, cw, rh);
                     if r.selected {
-                        fill_rect(pm, x0 + u(2.0), ry, cw - u(4.0), rh, color(10, 132, 255, 0.22));
+                        fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, color(10, 132, 255, 0.22));
                     }
                     if i > 0 {
-                        fill_rect(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
                     }
                     let mut lx = x0 + u(CARD_PAD);
                     if let Some((cr, cg, cb)) = r.chip {
@@ -571,7 +624,8 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let mut right = x0 + cw - u(CARD_PAD);
                     let mut first_id = None;
                     for c in r.ctls.iter().rev() {
-                        let placed = draw_ctl(pm, p, c, right, cy, it, row_rect);
+                        let mut placed = draw_ctl(pm, p, c, right, cy, it, row_rect);
+                        placed.label = r.label.clone();
                         right = placed.rect.0 - u(10.0);
                         if c.focusable() {
                             first_id = Some(c.id.clone());
@@ -622,7 +676,8 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 for (i, t) in list.iter().enumerate() {
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
                     let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
-                    let hover = it.hover.as_deref() == Some(t.id.as_str());
+                    let cid = format!("w:{}", t.id);
+                    let hover = it.hover.as_deref() == Some(cid.as_str());
                     if t.selected {
                         stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), pal::accent(), u(2.5));
                     } else if hover {
@@ -632,12 +687,19 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         Some(img) => draw_cover(pm, &img, r.0, r.1, r.2, r.3, u(7.0)),
                         None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), color(255, 255, 255, 0.07)),
                     }
-                    if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
+                    if it.focus.as_deref() == Some(cid.as_str()) && it.ring {
                         stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), color(10, 132, 255, 0.85), u(2.0));
                     }
                     let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
                     p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0), u(11.0), Weight::Regular, pal::sub());
                     fr.thumbs.push((r, t.id.clone()));
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(cid, Kind::Button { label: t.caption.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, r.1, cw, r.3),
+                        label: t.caption.clone(),
+                    });
                 }
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(34.0)) + u(8.0);
@@ -662,6 +724,13 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     }
                     p.text_center(pm, &t.name, r.0 + tw / 2.0, r.1 + th + u(13.0), u(11.0), Weight::Regular, if t.selected { pal::text() } else { pal::sub() });
                     fr.layouts.push((r, t.id.clone()));
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(t.id.clone(), Kind::Button { label: t.name.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, r.1, cw, r.3),
+                        label: t.name.clone(),
+                    });
                 }
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(34.0)) + u(8.0);
@@ -746,7 +815,8 @@ mod tests {
     #[test]
     fn frame_focus_order_skips_labels_and_disabled() {
         let mut f = Frame::default();
-        let mk = |id: &str, kind: Kind, en: bool| Placed { rect: (0.0, 0.0, 1.0, 1.0), ctl: Ctl { id: id.into(), kind, enabled: en }, parts: vec![], row_rect: (0.0, 0.0, 1.0, 1.0) };
+        let mk =
+            |id: &str, kind: Kind, en: bool| Placed { rect: (0.0, 0.0, 1.0, 1.0), ctl: Ctl { id: id.into(), kind, enabled: en }, parts: vec![], row_rect: (0.0, 0.0, 1.0, 1.0), label: String::new() };
         f.placed.push(mk("a", Kind::Toggle(true), true));
         f.placed.push(mk("b", Kind::Label("x".into()), true));
         f.placed.push(mk("c", Kind::Toggle(true), false));
@@ -758,8 +828,11 @@ mod tests {
     fn items_draw_and_record_hits() {
         let mut pm = Pixmap::new(700, 600).unwrap();
         let mut p = Painter { fonts: None, s: 1.0 };
-        let items = vec![Item::Card(vec![Row::new("A").ctl(Ctl::new("t", Kind::Toggle(true))), Row::new("B").detail("d").ctl(Ctl::new("s", Kind::Slider { v: 3.0, min: 0.0, max: 10.0, step: 1.0, unit: "px".into() }))])];
-        let fr = draw_items(&mut pm, &mut p, "T", &items, 0.0, 700.0, &Interact::default(), &|_| None);
+        let items = vec![Item::Card(vec![
+            Row::new("A").ctl(Ctl::new("t", Kind::Toggle(true))),
+            Row::new("B").detail("d").ctl(Ctl::new("s", Kind::Slider { v: 3.0, min: 0.0, max: 10.0, step: 1.0, unit: "px".into() })),
+        ])];
+        let fr = draw_items(&mut pm, &mut p, "T", &items, 0.0, 0.0, 700.0, &Interact::default(), &|_| None);
         assert_eq!(fr.placed.len(), 2);
         let t = fr.find("t").unwrap();
         assert!(fr.at(t.rect.0 + 3.0, t.rect.1 + 3.0).is_some_and(|p| p.ctl.id == "t"));

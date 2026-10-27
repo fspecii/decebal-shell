@@ -99,6 +99,10 @@ pub trait WindowApp {
     /// Vertical scroll in pixels (positive = content moves up, i.e. scroll down).
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response;
     fn key(&mut self, ev: &KeyEvent) -> Response;
+    /// A key press the toolkit has no [`Key`] for (function keys, ...): raw keysym and modifiers.
+    fn unmapped_key(&mut self, _sym: u32, _shift: bool, _ctrl: bool, _alt: bool) -> Response {
+        Response::NONE
+    }
     /// Called after the waker fired: drain results from worker threads here.
     fn tick(&mut self) -> Response;
 }

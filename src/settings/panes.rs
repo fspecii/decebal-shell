@@ -20,11 +20,35 @@ pub struct PaneDef {
 
 pub const PANES: &[PaneDef] = &[
     PaneDef { id: "general", title: "General", glyph: Glyph::Gear, color: (142, 142, 147), keywords: "about version config file reload editor backup restore tags chord timeout" },
-    PaneDef { id: "appearance", title: "Appearance", glyph: Glyph::Brush, color: (88, 86, 214), keywords: "titlebar decoration style classic macos height radius border colors traffic lights zoom button double click font bar" },
-    PaneDef { id: "desktop", title: "Desktop & Dock", glyph: Glyph::Dock, color: (10, 132, 255), keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces macdock macbar" },
+    PaneDef {
+        id: "appearance",
+        title: "Appearance",
+        glyph: Glyph::Brush,
+        color: (88, 86, 214),
+        keywords: "titlebar decoration style classic macos height radius border colors traffic lights zoom button double click font bar",
+    },
+    PaneDef {
+        id: "desktop",
+        title: "Desktop & Dock",
+        glyph: Glyph::Dock,
+        color: (10, 132, 255),
+        keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces macdock macbar",
+    },
     PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Photo, color: (50, 173, 230), keywords: "background image fill fit stretch center tile color picture" },
-    PaneDef { id: "tiling", title: "Tiling & Layouts", glyph: Glyph::Tiles, color: (255, 159, 10), keywords: "layout tile master stack nmaster mfact gaps smart borders bsp spiral grid monocle floating per tag" },
-    PaneDef { id: "windows", title: "Windows & Snapping", glyph: Glyph::Windows, color: (48, 209, 88), keywords: "focus follows mouse snap zones activate pertag size hints fullscreen preview retile shift" },
+    PaneDef {
+        id: "tiling",
+        title: "Tiling & Layouts",
+        glyph: Glyph::Tiles,
+        color: (255, 159, 10),
+        keywords: "layout tile master stack nmaster mfact gaps smart borders bsp spiral grid monocle floating per tag",
+    },
+    PaneDef {
+        id: "windows",
+        title: "Windows & Snapping",
+        glyph: Glyph::Windows,
+        color: (48, 209, 88),
+        keywords: "focus follows mouse snap zones activate pertag size hints fullscreen preview retile shift",
+    },
     PaneDef { id: "rules", title: "Rules", glyph: Glyph::Rules, color: (255, 69, 58), keywords: "window rules class instance title floating tag monitor sticky decorate" },
     PaneDef { id: "keyboard", title: "Keyboard", glyph: Glyph::Keyboard, color: (99, 99, 102), keywords: "shortcuts keys bindings hotkeys modes chords record conflicts bind" },
     PaneDef { id: "autostart", title: "Autostart & Plugins", glyph: Glyph::Rocket, color: (191, 90, 242), keywords: "autostart startup plugins scratchpad commands programs" },
@@ -44,8 +68,16 @@ pub enum Ft {
     /// Comma separated list of strings.
     List,
     /// Integer shown as `stored + offset`; shown 0 = unset.
-    Int { min: i64, max: i64, offset: i64 },
-    Float { min: f64, max: f64, step: f64 },
+    Int {
+        min: i64,
+        max: i64,
+        offset: i64,
+    },
+    Float {
+        min: f64,
+        max: f64,
+        step: f64,
+    },
     /// true / false / unset
     Bool3,
     Bool,
@@ -69,6 +101,19 @@ pub struct TableSpec {
 
 fn f(key: &'static str, label: &'static str, ft: Ft) -> Field {
     Field { key, label, ft }
+}
+
+fn button(id: String, label: &str, danger: bool, enabled: bool) -> Ctl {
+    let mut c = Ctl::new(id, Kind::Button { label: label.into(), danger });
+    c.enabled = enabled;
+    c
+}
+
+pub fn expand_tilde(p: &str) -> String {
+    match (p.strip_prefix("~/"), std::env::var_os("HOME")) {
+        (Some(rest), Some(h)) => format!("{}/{rest}", h.to_string_lossy().trim_end_matches('/')),
+        _ => p.to_string(),
+    }
 }
 
 fn opts(list: &[(&str, &str)]) -> Vec<Opt> {
@@ -123,7 +168,13 @@ impl Model {
                 name: "scratchpad",
                 title: "Scratchpads",
                 noun: "scratchpad",
-                fields: vec![f("name", "Name", Ft::Text), f("command", "Command", Ft::Text), f("class", "Window class", Ft::Text), f("instance", "Window instance", Ft::Text), f("title", "Window title", Ft::Text)],
+                fields: vec![
+                    f("name", "Name", Ft::Text),
+                    f("command", "Command", Ft::Text),
+                    f("class", "Window class", Ft::Text),
+                    f("instance", "Window instance", Ft::Text),
+                    f("title", "Window title", Ft::Text),
+                ],
                 new: vec![("name", Val::Str("term".into())), ("command", Val::Str("foot".into())), ("class", Val::Str("foot".into()))],
                 footer: "Toggle with the togglescratch action and the scratchpad's name.",
             },
@@ -162,7 +213,10 @@ impl Model {
     fn entry_summary(&self, spec: &TableSpec, i: usize) -> (String, String) {
         let g = |k: &str| self.store.cfg.array_get(spec.name, i, k);
         let s = |k: &str| g(k).and_then(|v| v.as_str().map(String::from)).filter(|x| !x.is_empty());
-        let label = ["name", "class", "instance", "title", "match", "command"].iter().find_map(|k| s(k).map(|v| if *k == "command" { v } else { format!("{k}: {v}") })).unwrap_or_else(|| format!("({} {})", spec.noun, i + 1));
+        let label = ["name", "class", "instance", "title", "match", "command"]
+            .iter()
+            .find_map(|k| s(k).map(|v| if *k == "command" { v } else { format!("{k}: {v}") }))
+            .unwrap_or_else(|| format!("({} {})", spec.noun, i + 1));
         let mut eff = Vec::new();
         for fld in &spec.fields {
             if let Some(v) = g(fld.key) {
@@ -226,17 +280,14 @@ impl Model {
                     rows.push(Row::new(fld.label).ctl(self.field_ctl(spec, i, fld)));
                 }
                 let mut tools = Row::new("");
-                if i > 0 {
-                    tools = tools.ctl(Ctl::new(format!("t:{}:{}:@up", spec.name, i), Kind::Button { label: "Move up".into(), danger: false }));
-                }
-                if i + 1 < n {
-                    tools = tools.ctl(Ctl::new(format!("t:{}:{}:@down", spec.name, i), Kind::Button { label: "Move down".into(), danger: false }));
-                }
-                tools = tools.ctl(Ctl::new(format!("t:{}:{}:@del", spec.name, i), Kind::Button { label: format!("Delete {}", spec.noun), danger: true }));
+                tools = tools.ctl(button(format!("t:{}:{}:@up", spec.name, i), "Move up", false, i > 0));
+                tools = tools.ctl(button(format!("t:{}:{}:@down", spec.name, i), "Move down", false, i + 1 < n));
+                tools = tools.ctl(button(format!("t:{}:{}:@del", spec.name, i), &format!("Delete {}", spec.noun), true, true));
                 rows.push(tools);
             }
         }
-        let mut add = Row::new(if n == 0 { format!("No {}s yet", spec.noun) } else { String::new() }).ctl(Ctl::new(format!("t:{}:@add", spec.name), Kind::Button { label: format!("Add {}", spec.noun), danger: false }));
+        let mut add = Row::new(if n == 0 { format!("No {}s yet", spec.noun) } else { String::new() })
+            .ctl(Ctl::new(format!("t:{}:@add", spec.name), Kind::Button { label: format!("Add {}", spec.noun), danger: false }));
         if let Some(e) = extra_add {
             add = add.ctl(e);
         }
@@ -293,9 +344,13 @@ impl Model {
         let bak = self.store.path.with_file_name(format!("{}.{}", self.store.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), super::io::BACKUP_SUFFIX));
         let mut about = vec![
             Row::new("macsettings").ctl(Ctl::new("lbl:v", Kind::Label(env!("CARGO_PKG_VERSION").into()))),
-            Row::new("Window manager").detail(if running { "rdwm is running and follows every change instantly" } else { "rdwm is not running: changes are saved to the file and apply when it starts" }).ctl(Ctl::new("lbl:rdwm", Kind::Label(if running { format!("rdwm {}", self.rt.version.clone().unwrap_or_default()) } else { "not running".into() }))),
+            Row::new("Window manager")
+                .detail(if running { "rdwm is running and follows every change instantly" } else { "rdwm is not running: changes are saved to the file and apply when it starts" })
+                .ctl(Ctl::new("lbl:rdwm", Kind::Label(if running { format!("rdwm {}", self.rt.version.clone().unwrap_or_default()) } else { "not running".into() }))),
             Row::new("Configuration file").detail(self.store.path.display().to_string()),
-            Row::new("Key table").detail("Defaults and ranges are read from rdwm's parser").ctl(Ctl::new("lbl:schema", Kind::Label(if self.schema.live { "from rdwmctl".into() } else { "bundled copy".into() }))),
+            Row::new("Key table")
+                .detail("Defaults and ranges are read from rdwm's parser")
+                .ctl(Ctl::new("lbl:schema", Kind::Label(if self.schema.live { "from rdwmctl".into() } else { "bundled copy".into() }))),
         ];
         about.retain(|r| !r.label.is_empty());
         let mut act = vec![
@@ -321,10 +376,24 @@ impl Model {
         deco.extend(self.r_seg("decoration", "title_align", "Title alignment", "", Some(&[("Center", "center"), ("Left", "left")])));
         deco.extend(self.r_stepper("decoration", "font_size", "Title font size", "", 0.5, " px", None));
         deco.extend(self.r_toggle("decoration", "buttons", "Window buttons", "Close, minimise and zoom"));
-        deco.extend(self.r_popup("decoration", "zoom_button", "Green button", "", Some(&[("Fullscreen", "fullscreen"), ("Maximize", "maximize"), ("Monocle", "monocle"), ("Float", "float"), ("Nothing", "none")]), None));
-        deco.extend(self.r_popup("decoration", "double_click", "Double-click on title", "", Some(&[("Maximize", "maximize"), ("Fullscreen", "fullscreen"), ("Monocle", "monocle"), ("Float", "float"), ("Nothing", "none")]), None));
-        deco.extend(self.r_toggle("decoration", "middle_click_close", "Middle click closes", "Middle click on a title closes the window", ));
-        deco.extend(self.r_toggle("decoration", "in_monocle", "Titlebars in monocle", "", ));
+        deco.extend(self.r_popup(
+            "decoration",
+            "zoom_button",
+            "Green button",
+            "",
+            Some(&[("Fullscreen", "fullscreen"), ("Maximize", "maximize"), ("Monocle", "monocle"), ("Float", "float"), ("Nothing", "none")]),
+            None,
+        ));
+        deco.extend(self.r_popup(
+            "decoration",
+            "double_click",
+            "Double-click on title",
+            "",
+            Some(&[("Maximize", "maximize"), ("Fullscreen", "fullscreen"), ("Monocle", "monocle"), ("Float", "float"), ("Nothing", "none")]),
+            None,
+        ));
+        deco.extend(self.r_toggle("decoration", "middle_click_close", "Middle click closes", "Middle click on a title closes the window"));
+        deco.extend(self.r_toggle("decoration", "in_monocle", "Titlebars in monocle", ""));
         let mut border = Vec::new();
         border.extend(self.r_slider("general", "border_px", "Window border", "Width around every window", 1.0, " px", Some(16.0)));
         border.extend(self.r_color("colors", "focused", "Focused border", ""));
@@ -397,20 +466,18 @@ impl Model {
             _ => 0,
         };
         let bar = vec![
-            Row::new("Workspace dots").detail("Show rdwm's tags in the menu bar. Auto shows them only under rdwm").ctl(Ctl::new("j:shell:workspaces", Kind::Seg(opts(&[("Auto", "auto"), ("On", "on"), ("Off", "off")]), Some(ws)))),
+            Row::new("Workspace dots")
+                .detail("Show rdwm's tags in the menu bar. Auto shows them only under rdwm")
+                .ctl(Ctl::new("j:shell:workspaces", Kind::Seg(opts(&[("Auto", "auto"), ("On", "on"), ("Off", "off")]), Some(ws)))),
             Row::new("Apply").detail("macbar reads this when it starts").ctl(Ctl::new("a:restart-bar", Kind::Button { label: "Restart Menu Bar".into(), danger: false })),
         ];
         let pins = self.pinned_list();
         let mut rows: Vec<Row> = Vec::new();
         for (i, id) in pins.iter().enumerate() {
             let mut r = Row::new(self.app_name(id)).detail(id.clone());
-            if i > 0 {
-                r = r.ctl(Ctl::new(format!("p:up:{i}"), Kind::Button { label: "Up".into(), danger: false }));
-            }
-            if i + 1 < pins.len() {
-                r = r.ctl(Ctl::new(format!("p:down:{i}"), Kind::Button { label: "Down".into(), danger: false }));
-            }
-            r = r.ctl(Ctl::new(format!("p:del:{i}"), Kind::Button { label: "Remove".into(), danger: true }));
+            r = r.ctl(button(format!("p:up:{i}"), "Up", false, i > 0));
+            r = r.ctl(button(format!("p:down:{i}"), "Down", false, i + 1 < pins.len()));
+            r = r.ctl(button(format!("p:del:{i}"), "Remove", true, true));
             rows.push(r);
         }
         let choices: Vec<Opt> = self.apps.as_ref().map(|a| a.iter().filter(|x| !pins.contains(&x.0)).map(|x| (x.1.clone(), x.0.clone())).collect()).unwrap_or_default();
@@ -426,8 +493,11 @@ impl Model {
         ]
     }
 
+    /// What is on screen: rdwm's live wallpaper when it runs (it may differ from the file after
+    /// `rdwmctl wallpaper`), else the file's.
     pub fn current_wallpaper(&self) -> Option<String> {
-        self.string("wallpaper", "image").filter(|s| !s.is_empty()).or_else(|| self.rt.state["wallpaper"]["image"].as_str().map(String::from))
+        let live = if self.rt.running { self.rt.state["wallpaper"]["image"].as_str().map(String::from) } else { None };
+        live.or_else(|| self.string("wallpaper", "image").filter(|s| !s.is_empty())).map(|p| expand_tilde(&p))
     }
 
     fn pane_wallpaper(&self) -> Vec<Item> {
@@ -440,11 +510,22 @@ impl Model {
         if cur.is_some() {
             rows.push(Row::new("Remove wallpaper").ctl(Ctl::new("w:clear", Kind::Button { label: "Remove".into(), danger: true })));
         }
-        let mut items = vec![Item::Preview { id: cur.as_ref().map(|c| format!("{c}#big")).unwrap_or_default(), caption: cur.as_deref().map(|p| format!("{} · {}", Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), cap(&mode))).unwrap_or_else(|| "No image set".into()) }, Item::Space(6.0), Item::Card(rows)];
+        let mut items = vec![
+            Item::Preview {
+                id: cur.as_ref().map(|c| format!("{c}#big")).unwrap_or_default(),
+                caption: cur
+                    .as_deref()
+                    .map(|p| format!("{} · {}", Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), cap(&mode)))
+                    .unwrap_or_else(|| "No image set".into()),
+            },
+            Item::Space(6.0),
+            Item::Card(rows),
+        ];
         // changed through `rdwmctl wallpaper` since the last reload
-        let live = self.rt.state["wallpaper"]["image"].as_str();
-        let filev = self.string("wallpaper", "image");
-        if self.rt.running && live.is_some() && live != filev.as_deref() {
+        let live = self.rt.state["wallpaper"]["image"].as_str().map(expand_tilde);
+        let filev = self.string("wallpaper", "image").map(|p| expand_tilde(&p));
+        if self.rt.running && live.is_some() && live != filev {
+            let live = live.as_deref();
             items.push(Item::Note { text: format!("rdwm currently shows {} (set with rdwmctl). The next reload goes back to the file.", live.unwrap_or_default()), warn: false });
             items.push(Item::Card(vec![Row::new("Keep this wallpaper").ctl(Ctl::new("w:save-live", Kind::Button { label: "Save to config".into(), danger: false }))]));
         }
@@ -476,8 +557,22 @@ impl Model {
         let mut master = Vec::new();
         master.extend(self.r_slider("general", "mfact", "Master area", "Share of the screen the master column gets", 0.01, "", None));
         master.extend(self.r_stepper("general", "nmaster", "Windows in master", "", 1.0, "", Some(12.0)));
-        master.extend(self.r_popup("general", "master_side", "Master side", "Restyles the plain tile layout", Some(&[("Left", "left"), ("Right", "right"), ("Top", "top"), ("Bottom", "bottom")]), Some("Default (left)")));
-        master.extend(self.r_popup("general", "stack_style", "Stack style", "", Some(&[("Vertical", "vertical"), ("Horizontal", "horizontal"), ("Deck", "deck"), ("Tabbed", "tabbed")]), Some("Default (vertical)")));
+        master.extend(self.r_popup(
+            "general",
+            "master_side",
+            "Master side",
+            "Restyles the plain tile layout",
+            Some(&[("Left", "left"), ("Right", "right"), ("Top", "top"), ("Bottom", "bottom")]),
+            Some("Default (left)"),
+        ));
+        master.extend(self.r_popup(
+            "general",
+            "stack_style",
+            "Stack style",
+            "",
+            Some(&[("Vertical", "vertical"), ("Horizontal", "horizontal"), ("Deck", "deck"), ("Tabbed", "tabbed")]),
+            Some("Default (vertical)"),
+        ));
         let mut gaps = Vec::new();
         gaps.extend(self.r_slider("general", "gap_inner", "Gap between windows", "", 1.0, " px", Some(64.0)));
         gaps.extend(self.r_slider("general", "gap_outer", "Gap around the screen", "", 1.0, " px", Some(64.0)));
@@ -489,15 +584,9 @@ impl Model {
         for (i, n) in order.iter().enumerate() {
             let sym = self.schema.layouts.iter().find(|l| &l.0 == n).map(|l| l.1.clone()).unwrap_or_else(|| "plugin".into());
             let mut r = Row::new(n.clone()).detail(if i == 0 { format!("{sym}  ·  default") } else { sym });
-            if i > 0 {
-                r = r.ctl(Ctl::new(format!("l:up:{i}"), Kind::Button { label: "Up".into(), danger: false }));
-            }
-            if i + 1 < order.len() {
-                r = r.ctl(Ctl::new(format!("l:down:{i}"), Kind::Button { label: "Down".into(), danger: false }));
-            }
-            if order.len() > 1 {
-                r = r.ctl(Ctl::new(format!("l:del:{i}"), Kind::Button { label: "Remove".into(), danger: true }));
-            }
+            r = r.ctl(button(format!("l:up:{i}"), "Up", false, i > 0));
+            r = r.ctl(button(format!("l:down:{i}"), "Down", false, i + 1 < order.len()));
+            r = r.ctl(button(format!("l:del:{i}"), "Remove", true, order.len() > 1));
             ord_rows.push(r);
         }
         let addable: Vec<Opt> = self.schema.layouts.iter().filter(|l| !order.contains(&l.0)).map(|l| (format!("{}  {}", l.0, l.1), l.0.clone())).collect();
@@ -508,7 +597,11 @@ impl Model {
         let mut lopts: Vec<Opt> = vec![("Default".into(), String::new())];
         lopts.extend(self.schema.layouts.iter().map(|l| (l.0.clone(), l.0.clone())));
         for (i, name) in tags.iter().enumerate().take(12) {
-            let cur = (0..self.store.cfg.array_len("tag_layout")).find(|&j| self.store.cfg.array_get("tag_layout", j, "tag").and_then(|v| v.as_i64()) == Some(i as i64 + 1)).and_then(|j| self.store.cfg.array_get("tag_layout", j, "layout")).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+            let cur = (0..self.store.cfg.array_len("tag_layout"))
+                .find(|&j| self.store.cfg.array_get("tag_layout", j, "tag").and_then(|v| v.as_i64()) == Some(i as i64 + 1))
+                .and_then(|j| self.store.cfg.array_get("tag_layout", j, "layout"))
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default();
             let sel = lopts.iter().position(|o| o.1 == cur);
             tag_rows.push(Row::new(format!("Tag {name}")).ctl(Ctl::new(format!("l:tag:{}", i + 1), Kind::Popup(lopts.clone(), sel))));
         }
@@ -526,7 +619,9 @@ impl Model {
             Row::new("Layout").ctl(Ctl::new("lo:@pick", Kind::Popup(all.clone(), all.iter().position(|o| o.1 == target)))),
             Row::new("Master side").ctl(Ctl::new(format!("lo:{target}:master_side"), Kind::Popup(side_opts.clone(), pos(&side_opts, lo("master_side"))))),
             Row::new("Stack style").ctl(Ctl::new(format!("lo:{target}:stack_style"), Kind::Popup(stack_opts.clone(), pos(&stack_opts, lo("stack_style"))))),
-            Row::new("Inner gap").detail("Overrides the general gap for this layout; 0 = inherit").ctl(Ctl::new(format!("lo:{target}:gap_inner"), Kind::Stepper { v: lo("gap_inner").and_then(|v| v.as_f64()).unwrap_or(0.0), min: 0.0, max: 64.0, step: 1.0, unit: " px".into() })),
+            Row::new("Inner gap")
+                .detail("Overrides the general gap for this layout; 0 = inherit")
+                .ctl(Ctl::new(format!("lo:{target}:gap_inner"), Kind::Stepper { v: lo("gap_inner").and_then(|v| v.as_f64()).unwrap_or(0.0), min: 0.0, max: 64.0, step: 1.0, unit: " px".into() })),
         ];
         vec![
             Item::Header("Default layout".into()),
@@ -564,14 +659,30 @@ impl Model {
         snap.extend(self.r_slider("snap", "edge", "Edge zone thickness", "", 1.0, " px", Some(32.0)));
         snap.extend(self.r_slider("snap", "corner", "Corner zone length", "", 4.0, " px", Some(256.0)));
         snap.extend(self.r_toggle("snap", "restore", "Restore size when dragged away", ""));
-        snap.extend(self.r_popup("snap", "retile_on_drop", "Dropping a tiled window", "Where a tiled window goes when released over the tiles", Some(&[("Swap with window", "swap"), ("Insert", "insert"), ("Stay floating", "float"), ("Off", "off")]), None));
+        snap.extend(self.r_popup(
+            "snap",
+            "retile_on_drop",
+            "Dropping a tiled window",
+            "Where a tiled window goes when released over the tiles",
+            Some(&[("Swap with window", "swap"), ("Insert", "insert"), ("Stay floating", "float"), ("Off", "off")]),
+            None,
+        ));
         let mut prev = Vec::new();
         prev.extend(self.r_toggle("snap", "preview", "Zone preview", "Translucent outline while dragging"));
         prev.extend(self.r_color("snap", "preview_color", "Preview colour", ""));
         prev.extend(self.r_slider("snap", "preview_border", "Preview outline", "", 1.0, " px", None));
         let mut edge = Vec::new();
         edge.extend(self.r_stepper("general", "snap", "Edge snap while dragging", "Distance at which windows stick to the screen edge or float", 4.0, " px", Some(256.0)));
-        vec![Item::Header("Focus".into()), Item::Card(focus), Item::Header("Snapping".into()), Item::Card(snap), Item::Header("Preview".into()), Item::Card(prev), Item::Header("Dragging".into()), Item::Card(edge)]
+        vec![
+            Item::Header("Focus".into()),
+            Item::Card(focus),
+            Item::Header("Snapping".into()),
+            Item::Card(snap),
+            Item::Header("Preview".into()),
+            Item::Card(prev),
+            Item::Header("Dragging".into()),
+            Item::Card(edge),
+        ]
     }
 
     fn pane_rules(&self) -> Vec<Item> {
@@ -605,7 +716,11 @@ impl Model {
             let size = format!("{} × {}", wa["w"], wa["h"]);
             let at = format!("at {}, {}", wa["x"], wa["y"]);
             let layout = m["layout"].as_str().unwrap_or("?");
-            rows.push(Row::new(format!("Display {}", m["id"])).detail(format!("{at} · layout {layout} {}", m["symbol"].as_str().unwrap_or(""))).ctl(Ctl::new(format!("lbl:mon{}", m["id"]), Kind::Label(size))));
+            rows.push(
+                Row::new(format!("Display {}", m["id"]))
+                    .detail(format!("{at} · layout {layout} {}", m["symbol"].as_str().unwrap_or("")))
+                    .ctl(Ctl::new(format!("lbl:mon{}", m["id"]), Kind::Label(size))),
+            );
         }
         if !rows.is_empty() {
             items.push(Item::Header("Connected displays".into()));
@@ -617,7 +732,10 @@ impl Model {
         let wp = &self.rt.state["wallpaper"];
         if wp.is_object() {
             items.push(Item::Header("Wallpaper right now".into()));
-            items.push(Item::Card(vec![Row::new(wp["image"].as_str().map(|p| Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).unwrap_or_else(|| "No image".into())).detail(format!("mode {} · colour {}", wp["mode"].as_str().unwrap_or("fill"), wp["color"].as_str().unwrap_or("")))]));
+            items.push(Item::Card(vec![Row::new(
+                wp["image"].as_str().map(|p| Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).unwrap_or_else(|| "No image".into()),
+            )
+            .detail(format!("mode {} · colour {}", wp["mode"].as_str().unwrap_or("fill"), wp["color"].as_str().unwrap_or("")))]));
         }
         items.extend(self.table_items(&self.table_spec("wallpaper.output").expect("spec"), None));
         items.extend(self.table_items(&self.table_spec("output").expect("spec"), None));
@@ -673,8 +791,7 @@ impl Model {
             let mut r = Row::new(label).detail(detail);
             let editable = matches!(b.src, Src::File(_) | Src::Default);
             let kid = format!("k:{n}");
-            let shown_keys = if rec == Some(kid.as_str()) { b.keys.clone() } else { b.keys.clone() };
-            let mut kc = Ctl::new(kid, Kind::Key(shown_keys));
+            let mut kc = Ctl::new(kid, Kind::Key(b.keys.clone()));
             kc.enabled = editable;
             r = r.ctl(kc);
             if editable {
@@ -701,7 +818,10 @@ impl Model {
             Row::new("Arguments").detail("Separated by spaces, e.g. foot -e htop for spawn").ctl(Ctl::new("k:new:args", Kind::Text { val: nb.args.clone(), hint: "optional".into() })),
             Row::new("").ctl(Ctl::new("k:new:add", Kind::Button { label: "Add shortcut".into(), danger: false })),
         ]));
-        out.push(Item::Note { text: "Changes apply immediately. Chord sequences (Super+x then r) and mode bindings from your file are listed too; sequences and modes are edited in the file for now.".into(), warn: false });
+        out.push(Item::Note {
+            text: "Changes apply immediately. Chord sequences (Super+x then r) and mode bindings from your file are listed too; sequences and modes are edited in the file for now.".into(),
+            warn: false,
+        });
         out
     }
 }
@@ -1084,4 +1204,144 @@ fn table_op(m: &mut Model, id: &str, v: CtlVal) {
 #[allow(dead_code)]
 fn _use(_: &dyn Fn(&str, &str) -> String) {
     let _ = rid;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::model::tests_support::model_with;
+    use super::*;
+    use std::collections::HashSet;
+
+    const BIG: &str = "# c\n[general]\nlayouts = [\"bsp\", \"tile\"]\ntags = [\"a\", \"b\"]\n[[tag_layout]]\ntag = 2\nlayout = \"grid\"\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\n[[bind]]\nkeys = [\"super+x\", \"r\"]\naction = \"reload\"\n[[rule]]\nclass = \"mpv\"\nfloating = true\n[[autostart]]\ncommand = \"macbar &\"\n[[plugin]]\ncommand = \"p\"\n[[scratchpad]]\nname = \"t\"\ncommand = \"foot\"\n[[wallpaper.output]]\nmatch = \"*\"\n[[output]]\nname = \"DP-1\"\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"setmfact\"\n";
+
+    #[test]
+    fn every_key_the_panes_use_exists_in_rdwms_key_table() {
+        let (mut m, _) = model_with(BIG);
+        for i in 0..PANES.len() {
+            m.prepare(i);
+            let _ = m.items(i);
+        }
+        let missing = m.missing.borrow();
+        assert!(missing.is_empty(), "panes use keys rdwm does not know: {missing:?}");
+        let used: HashSet<_> = m.used.borrow().iter().cloned().collect();
+        assert!(used.len() > 45, "only {} keys used", used.len());
+        // and each of them really parses in rdwm's config (checked by rdwm's own test when rdwmctl is around)
+        for (s, k) in &used {
+            assert!(m.schema.has(s, k), "{s}.{k}");
+        }
+    }
+
+    #[test]
+    fn control_ids_are_unique_within_a_pane_and_every_pane_builds_with_rdwm_down() {
+        let (mut m, _) = model_with(BIG);
+        m.sel.table.insert("rule".into(), 0);
+        for i in 0..PANES.len() {
+            m.prepare(i);
+            let items = m.items(i);
+            assert!(!items.is_empty(), "{}", PANES[i].id);
+            let mut ids = HashSet::new();
+            for it in &items {
+                let rows: Vec<&Row> = if let Item::Card(r) = it { r.iter().collect() } else { vec![] };
+                for r in rows {
+                    for c in &r.ctls {
+                        if matches!(c.kind, Kind::Label(_)) {
+                            continue;
+                        }
+                        assert!(ids.insert(c.id.clone()), "duplicate control id {} in {}", c.id, PANES[i].id);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn search_finds_panes_by_title_and_keyword() {
+        let find = |q: &str| PANES.iter().filter(|p| pane_matches(p, q)).map(|p| p.id).collect::<Vec<_>>();
+        assert_eq!(find("wallp"), ["wallpaper", "displays"]);
+        assert_eq!(find("gap"), ["tiling"]);
+        assert!(find("snap").contains(&"windows"));
+        assert_eq!(find("").len(), PANES.len());
+        assert!(find("zzzz").is_empty());
+    }
+
+    #[test]
+    fn tiling_pane_edits_layouts_and_per_tag_setup() {
+        let (mut m, cfg) = model_with(BIG);
+        apply_special(&mut m, "l:set:grid", CtlVal::Click);
+        assert_eq!(m.list("general", "layouts"), ["grid", "bsp", "tile"]);
+        apply_special(&mut m, "l:tag:1", CtlVal::Str("monocle".into()));
+        apply_special(&mut m, "l:tag:2", CtlVal::Str(String::new()));
+        let t = std::fs::read_to_string(&cfg).unwrap();
+        assert!(t.contains("layout = \"monocle\"") && !t.contains("layout = \"grid\"\n[[bind]]"), "{t}");
+        assert!(!t.contains("tag = 2"), "an empty per-tag entry is removed: {t}");
+        apply_special(&mut m, "lo:@pick", CtlVal::Str("rtile".into()));
+        apply_special(&mut m, "lo:rtile:master_side", CtlVal::Str("right".into()));
+        assert!(std::fs::read_to_string(&cfg).unwrap().contains("[layout.rtile]\nmaster_side = \"right\""));
+        assert!(super::super::tomlcfg::Cfg::parse(&std::fs::read_to_string(&cfg).unwrap()).is_ok());
+    }
+
+    #[test]
+    fn rules_add_edit_move_delete() {
+        let (mut m, cfg) = model_with(BIG);
+        apply_special(&mut m, "t:rule:@add", CtlVal::Click);
+        assert_eq!(m.sel.table.get("rule"), Some(&1));
+        apply_special(&mut m, "t:rule:1:class", CtlVal::Str("firefox".into()));
+        apply_special(&mut m, "t:rule:1:tag", CtlVal::Num(3.0));
+        apply_special(&mut m, "t:rule:1:floating", CtlVal::Str("no".into()));
+        apply_special(&mut m, "t:rule:1:monitor", CtlVal::Num(2.0));
+        let t = std::fs::read_to_string(&cfg).unwrap();
+        assert!(t.contains("class = \"firefox\"") && t.contains("tag = 3") && t.contains("floating = false") && t.contains("monitor = 1"), "{t}");
+        apply_special(&mut m, "t:rule:1:tag", CtlVal::Num(0.0));
+        assert!(!std::fs::read_to_string(&cfg).unwrap().contains("tag = 3"));
+        apply_special(&mut m, "t:rule:1:@up", CtlVal::Click);
+        assert_eq!(m.store.cfg.array_get("rule", 0, "class"), Some(Val::Str("firefox".into())));
+        apply_special(&mut m, "t:rule:0:@del", CtlVal::Click);
+        apply_special(&mut m, "t:rule:0:@del", CtlVal::Click);
+        assert_eq!(m.store.cfg.array_len("rule"), 0);
+        apply_special(&mut m, "t:rule:9:@del", CtlVal::Click); // out of range: ignored
+        apply_special(&mut m, "t:nosuch:0:@del", CtlVal::Click);
+    }
+
+    #[test]
+    fn pinned_apps_edit_the_json_and_keep_other_keys() {
+        let (mut m, _) = model_with("");
+        std::fs::write(m.paths.dock_pinned(), "{\"pinned\":[\"a\",\"b\",\"c\"],\"order\":[\"a\",\"b\",\"c\"],\"extra\":1}").unwrap();
+        m.pinned = super::super::io::json_load(&m.paths.dock_pinned());
+        apply_special(&mut m, "p:down:0", CtlVal::Click);
+        apply_special(&mut m, "p:del:2", CtlVal::Click);
+        apply_special(&mut m, "p:add", CtlVal::Str("firefox".into()));
+        let v = super::super::io::json_load(&m.paths.dock_pinned());
+        assert_eq!(v["order"], json!(["b", "a", "firefox"]));
+        assert_eq!(v["pinned"], v["order"]);
+        assert_eq!(v["extra"], 1);
+    }
+
+    #[test]
+    fn current_wallpaper_prefers_what_rdwm_shows() {
+        let (mut m, _) = model_with("[wallpaper]\nimage = \"/a.png\"\n");
+        assert_eq!(m.current_wallpaper().as_deref(), Some("/a.png"));
+        m.rt.running = true;
+        m.rt.state = json!({"wallpaper": {"image": "/b.png"}});
+        assert_eq!(m.current_wallpaper().as_deref(), Some("/b.png"));
+        let items = m.items(3);
+        assert!(items.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("/b.png"))));
+    }
+
+    #[test]
+    fn schema_activation_key_is_shown_only_when_rdwm_has_it() {
+        let (mut m, _) = model_with("");
+        let has = |m: &Model| m.items(5).iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "r:snap:activation"))));
+        assert!(!has(&m));
+        m.schema.keys.push(super::super::schema::KeyMeta {
+            section: "snap".into(),
+            key: "activation".into(),
+            ty: "enum".into(),
+            default: json!("always"),
+            min: None,
+            max: None,
+            choices: vec!["always".into(), "shift".into()],
+            desc: String::new(),
+        });
+        assert!(has(&m));
+    }
 }

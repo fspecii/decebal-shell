@@ -28,10 +28,9 @@ pub struct Paths {
 impl Paths {
     pub fn discover() -> Paths {
         let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-        let rdwm_config = std::env::var_os("MACSETTINGS_CONFIG")
-            .or_else(|| std::env::var_os("RDWM_CONFIG"))
-            .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("rdwm/config.toml")).unwrap_or_else(|| home.join(".config/rdwm/config.toml")));
+        let rdwm_config = std::env::var_os("MACSETTINGS_CONFIG").or_else(|| std::env::var_os("RDWM_CONFIG")).map(PathBuf::from).unwrap_or_else(|| {
+            std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("rdwm/config.toml")).unwrap_or_else(|| home.join(".config/rdwm/config.toml"))
+        });
         let socket = match std::env::var_os("RDWM_SOCK").filter(|s| !s.is_empty()) {
             Some(p) => PathBuf::from(p),
             None => std::env::var_os("XDG_RUNTIME_DIR").filter(|s| !s.is_empty()).map(|d| PathBuf::from(d).join("rdwm.sock")).unwrap_or_else(|| PathBuf::from("/nonexistent/rdwm.sock")),
@@ -271,7 +270,14 @@ pub fn poll_runtime(sock: &Path) -> Runtime {
     let Ok(state) = ipc_call(sock, &serde_json::json!({"cmd":"get_state"})) else { return Runtime::default() };
     let config = ipc_call(sock, &serde_json::json!({"cmd":"get_config"})).unwrap_or(Value::Null);
     let binds = ipc_call(sock, &serde_json::json!({"cmd":"bind","op":"list"})).unwrap_or(Value::Null);
-    Runtime { running: true, version: config["version"].as_str().map(String::from), error: config["error"].as_str().map(String::from), state: state["state"].clone(), config: config["config"].clone(), binds: binds["binds"].clone() }
+    Runtime {
+        running: true,
+        version: config["version"].as_str().map(String::from),
+        error: config["error"].as_str().map(String::from),
+        state: state["state"].clone(),
+        config: config["config"].clone(),
+        binds: binds["binds"].clone(),
+    }
 }
 
 /// Polls file stamps every 500 ms and rdwm's state every second; wakes the UI only on change.
@@ -310,7 +316,18 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
 
 pub fn spawn_detached(cmd: &str, args: &[&str]) -> bool {
     use std::process::Stdio;
-    Command::new(cmd).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map(|mut c| { std::thread::spawn(move || { let _ = c.wait(); }); }).is_ok()
+    Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|mut c| {
+            std::thread::spawn(move || {
+                let _ = c.wait();
+            });
+        })
+        .is_ok()
 }
 
 #[cfg(test)]

@@ -61,3 +61,19 @@ path = "src/bin/macwm.rs"
 [[bin]]
 name = "maclaunch"
 path = "src/bin/maclaunch.rs"
+
+# Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+[profile.dev.package.zune-core]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.image-webp]
+opt-level = 3

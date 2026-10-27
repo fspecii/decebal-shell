@@ -6,9 +6,10 @@ use super::io::{self, Ev, Paths};
 use super::model::{CtlVal, Model};
 use super::panes::{pane_matches, PANES};
 use super::schema::Schema;
+use super::ui::fill_px;
 use super::ui::{self, draw_items, inside, pal, part_at, Frame, Interact, Item, Kind, Opt, Painter, Placed, Rect};
 use crate::app::Button;
-use crate::gfx::{color, fill_circle, fill_rect, fill_rounded, soft_shadow, stroke_rounded};
+use crate::gfx::{color, fill_circle, fill_rounded, soft_shadow, stroke_rounded};
 use crate::text::{Fonts, Weight};
 use crate::wallhaven::cache::Lru;
 use crate::wallhaven::textfield::TextField;
@@ -21,8 +22,11 @@ use std::sync::{Arc, Mutex};
 use tiny_skia::Pixmap;
 
 const SIDEBAR_W: f32 = 236.0;
-const MAX_THUMBS: usize = 48;
-const SWATCHES: [&str; 18] = ["#ff453a", "#ff9f0a", "#ffd60a", "#30d158", "#63e6e2", "#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ac8e68", "#ffffff", "#d1d1d6", "#8e8e93", "#636366", "#48484a", "#2c2c2e", "#1c1c1e", "#000000"];
+const MAX_THUMBS: usize = 32;
+const SWATCHES: [&str; 18] = [
+    "#ff453a", "#ff9f0a", "#ffd60a", "#30d158", "#63e6e2", "#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ac8e68", "#ffffff", "#d1d1d6", "#8e8e93", "#636366", "#48484a", "#2c2c2e", "#1c1c1e",
+    "#000000",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Zone {
@@ -54,7 +58,6 @@ pub struct SettingsApp {
     size: (u32, u32),
     s: f32,
     frame: Frame,
-    layer: Option<Pixmap>,
     scroll: f32,
     it: Interact,
     zone: Zone,
@@ -71,6 +74,9 @@ pub struct SettingsApp {
     sidebar_hits: Vec<(Rect, usize)>,
     search_rect: Rect,
     first_draw: bool,
+    /// `MACSETTINGS_DEBUG_LAYOUT=file`: write the control map after every paint (end-to-end tests).
+    dump: Option<std::path::PathBuf>,
+    dump_meta: (Option<String>, Vec<String>),
 }
 
 fn pane_index(id: &str) -> usize {
@@ -99,7 +105,6 @@ impl SettingsApp {
             size: (940, 680),
             s,
             frame: Frame::default(),
-            layer: None,
             scroll: 0.0,
             it: Interact::default(),
             zone: Zone::Sidebar,
@@ -116,6 +121,8 @@ impl SettingsApp {
             sidebar_hits: Vec::new(),
             search_rect: (0.0, 0.0, 0.0, 0.0),
             first_draw: true,
+            dump: std::env::var_os("MACSETTINGS_DEBUG_LAYOUT").map(Into::into),
+            dump_meta: (None, Vec::new()),
         }
     }
 
@@ -169,7 +176,7 @@ impl SettingsApp {
                 while let Ok(id) = req_rx.recv() {
                     let big = id.ends_with("#big");
                     let path = id.trim_end_matches("#big");
-                    let px = load_thumb(std::path::Path::new(path), if big { (560, 350) } else { (200, 126) });
+                    let px = load_thumb(std::path::Path::new(path), if big { (560, 350) } else { (176, 111) });
                     crate::mem::trim();
                     let _ = res_tx.send((id, px));
                     if let Some(w) = &waker {
@@ -203,8 +210,8 @@ impl SettingsApp {
         let u = |v: f32| v * s;
         let sbw = self.sb();
         let h = pm.height() as f32;
-        fill_rect(pm, 0.0, 0.0, sbw, h, pal::sidebar());
-        fill_rect(pm, sbw - 1.0, 0.0, 1.0, h, pal::sep());
+        fill_px(pm, 0.0, 0.0, sbw, h, pal::sidebar());
+        fill_px(pm, sbw - 1.0, 0.0, 1.0, h, pal::sep());
         let visible = self.visible_panes();
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // search field
@@ -228,7 +235,7 @@ impl SettingsApp {
         }
         if focused {
             let cx = sr.0 + u(28.0) + p.measure(self.search.before_cursor(), u(13.0), Weight::Regular);
-            fill_rect(pm, cx, sr.1 + u(7.0), u(1.2), sr.3 - u(14.0), pal::accent());
+            fill_px(pm, cx, sr.1 + u(7.0), u(1.2), sr.3 - u(14.0), pal::accent());
         }
         // pane list
         self.sidebar_hits.clear();
@@ -258,12 +265,6 @@ impl SettingsApp {
         let s = self.s;
         let sbw = self.sb();
         let (w, h) = (pm.width() as f32 - sbw, pm.height() as f32);
-        let (lw, lh) = (w.max(1.0) as u32, h.max(1.0) as u32);
-        let mut layer = match self.layer.take() {
-            Some(l) if l.width() == lw && l.height() == lh => l,
-            _ => Pixmap::new(lw, lh).expect("layer"),
-        };
-        layer.fill(pal::window());
         self.m.prepare(self.m.sel.pane);
         let items = self.m.items(self.m.sel.pane);
         let title = PANES[self.m.sel.pane.min(PANES.len() - 1)].title;
@@ -275,31 +276,68 @@ impl SettingsApp {
         let thumbs = &self.thumbs;
         let lookup = |id: &str| -> Option<Rc<Pixmap>> { thumbs.borrow_mut().get(&id.to_string()).filter(|p| p.width() > 1).cloned() };
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
-        let frame = draw_items(&mut layer, &mut p, title, &items, self.scroll, w, &self.it, &lookup);
-        // lazy thumbnails: only what is visible (plus one row of margin)
+        // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
+        // a separate content layer would cost a second full-window pixmap.
+        let frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        // lazy thumbnails: only what is visible (plus one row of margin); the big preview goes first
         let mut wanted: Vec<String> = Vec::new();
-        for (r, id) in &frame.thumbs {
-            if r.1 + r.3 > -r.3 && r.1 < h + r.3 {
-                wanted.push(id.clone());
-            }
-        }
         for it in &items {
             if let Item::Preview { id, .. } = it {
                 wanted.push(id.clone());
             }
         }
+        for (r, id) in &frame.thumbs {
+            if r.1 + r.3 > -r.3 && r.1 < h + r.3 {
+                wanted.push(id.clone());
+            }
+        }
         self.frame = frame;
+        self.dump_meta = (
+            items.iter().find_map(|i| if let Item::Preview { id, .. } = i { Some(id.clone()) } else { None }),
+            items.iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text.clone()) } else { None }).collect(),
+        );
         for id in wanted {
             self.request_thumb(&id);
         }
-        pm.draw_pixmap(sbw as i32, 0, layer.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
-        self.layer = Some(layer);
         // scrollbar
         let total = self.frame.height;
         if total > h + 1.0 {
             let th = (h * h / total).max(30.0 * s);
             let ty = (h - th) * (self.scroll / (total - h));
             fill_rounded(pm, sbw + w - 7.0 * s, ty + 2.0 * s, 4.0 * s, th - 4.0 * s, 2.0 * s, color(255, 255, 255, 0.22));
+        }
+    }
+
+    fn write_dump(&self) {
+        let Some(path) = &self.dump else { return };
+        use serde_json::json;
+        let ctls: Vec<_> = self
+            .frame
+            .placed
+            .iter()
+            .map(|p| {
+                let value = match &p.ctl.kind {
+                    Kind::Toggle(b) => json!(b),
+                    Kind::Slider { v, .. } | Kind::Stepper { v, .. } => json!(v),
+                    Kind::Seg(o, s) | Kind::Popup(o, s) => json!(s.and_then(|i| o.get(i)).map(|x| x.1.clone())),
+                    Kind::Color(t) | Kind::Text { val: t, .. } | Kind::Key(t) | Kind::Label(t) => json!(t),
+                    Kind::Button { label, .. } => json!(label),
+                };
+                json!({"id": p.ctl.id, "label": p.label, "value": value, "enabled": p.ctl.enabled, "rect": [p.rect.0, p.rect.1, p.rect.2, p.rect.3], "parts": p.parts.iter().map(|r| json!([r.0, r.1, r.2, r.3])).collect::<Vec<_>>()})
+            })
+            .collect();
+        let rects = |v: &[(Rect, String)]| v.iter().map(|(r, id)| json!({"id": id, "rect": [r.0, r.1, r.2, r.3]})).collect::<Vec<_>>();
+        let (preview, warns) = self.dump_meta.clone();
+        let doc = json!({
+            "pane": PANES[self.m.sel.pane].id, "scroll": self.scroll, "ctls": ctls,
+            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3]})).collect::<Vec<_>>(),
+            "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
+            "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
+            "loaded_thumbs": self.thumbs.borrow().len(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+        });
+        let tmp = path.with_extension("tmp");
+        if std::fs::write(&tmp, doc.to_string()).is_ok() {
+            let _ = std::fs::rename(&tmp, path);
         }
     }
 
@@ -358,7 +396,7 @@ impl SettingsApp {
             let mut p = Painter { fonts: self.fonts.as_mut(), s };
             p.text(pm, cp.hex.text(), fr.0 + 8.0 * s, fr.1 + fr.3 / 2.0, 12.5 * s, Weight::Regular, pal::text());
             let cx = fr.0 + 8.0 * s + p.measure(cp.hex.before_cursor(), 12.5 * s, Weight::Regular);
-            fill_rect(pm, cx, fr.1 + 6.0 * s, 1.2, fr.3 - 12.0 * s, pal::accent());
+            fill_px(pm, cx, fr.1 + 6.0 * s, 1.2, fr.3 - 12.0 * s, pal::accent());
             let br = (fr.0 + fr.2 + 8.0 * s, fy, 52.0 * s, 26.0 * s);
             fill_rounded(pm, br.0, br.1, br.2, br.3, 6.0 * s, pal::field_hover());
             p.text_center(pm, "Default", br.0 + br.2 / 2.0, br.1 + br.3 / 2.0, 12.0 * s, Weight::Regular, pal::text());
@@ -368,7 +406,7 @@ impl SettingsApp {
     // ------------------------------------------------------------ helpers for events
 
     fn to_content(&self, x: f32, y: f32) -> (f32, f32) {
-        (x - self.sb(), y)
+        (x, y)
     }
 
     fn content_h(&self) -> f32 {
@@ -378,8 +416,7 @@ impl SettingsApp {
     fn open_popup(&mut self, p: &Placed) {
         let Kind::Popup(opts, sel) = &p.ctl.kind else { return };
         let s = self.s;
-        let sbw = self.sb();
-        let anchor = (p.rect.0 + sbw, p.rect.1, p.rect.2, p.rect.3);
+        let anchor = (p.rect.0, p.rect.1, p.rect.2, p.rect.3);
         let ih = 26.0 * s;
         let wmax = self.size.0 as f32;
         let hmax = (self.size.1 as f32 - 40.0 * s).min(380.0 * s);
@@ -406,7 +443,7 @@ impl SettingsApp {
         let Kind::Color(hex) = &p.ctl.kind else { return };
         let s = self.s;
         let (w, h) = (210.0 * s, 3.0 * 30.0 * s + 50.0 * s);
-        let anchor = (p.rect.0 + self.sb(), p.rect.1, p.rect.2, p.rect.3);
+        let anchor = (p.rect.0, p.rect.1, p.rect.2, p.rect.3);
         let x = (anchor.0 + anchor.2 - w).clamp(8.0 * s, (self.size.0 as f32 - w - 8.0 * s).max(8.0 * s));
         let mut y = anchor.1 + anchor.3 + 4.0 * s;
         if y + h > self.size.1 as f32 - 8.0 * s {
@@ -854,6 +891,7 @@ impl WindowApp for SettingsApp {
         self.size = (pm.width(), pm.height());
         self.draw_content(pm);
         self.draw_sidebar(pm);
+        self.write_dump();
         self.draw_toast(pm);
         self.draw_popup(pm);
         if let Some(f) = &self.fonts {
@@ -999,7 +1037,9 @@ impl WindowApp for SettingsApp {
         if let Some((_, id)) = self.frame.thumbs.iter().chain(self.frame.layouts.iter()).find(|(r, _)| inside(*r, cx, cy)).cloned() {
             self.commit_edit();
             self.it.focus = Some(id.clone());
-            self.m.apply(&id, CtlVal::Click);
+            // thumbnails carry the bare file path; layout tiles already are `l:set:<name>`
+            let target = if id.starts_with("l:") { id } else { format!("w:{id}") };
+            self.m.apply(&target, CtlVal::Click);
             return Response::REDRAW;
         }
         self.commit_edit();
@@ -1065,19 +1105,27 @@ impl WindowApp for SettingsApp {
         match self.zone {
             Zone::Search => self.key_search(ev),
             Zone::Sidebar => self.key_sidebar(ev),
-            Zone::Content => {
-                // thumbnails and layout tiles are keyboard targets through the hit lists
-                let r = self.key_content(ev);
-                if matches!(ev.key, Key::Enter) || (ev.key == Key::Char && ev.ch == Some(' ')) {
-                    if let Some(id) = self.it.focus.clone() {
-                        if id.starts_with("l:set:") || id.starts_with("w:") {
-                            self.m.apply(&id, CtlVal::Click);
-                        }
-                    }
-                }
-                r
-            }
+            Zone::Content => self.key_content(ev),
         }
+    }
+
+    fn unmapped_key(&mut self, sym: u32, shift: bool, ctrl: bool, alt: bool) -> Response {
+        // function keys (F1..F35) can be recorded as shortcuts
+        if self.m.sel.recording.is_some() && (0xffbe..=0xffe0).contains(&sym) {
+            let ev_mods = (ctrl, alt, shift);
+            let name = format!("F{}", sym - 0xffbd);
+            let mut mods: Vec<&'static str> = self.m.sel.rec_mods.clone();
+            for (on, n) in [(ev_mods.0, "ctrl"), (ev_mods.1, "alt"), (ev_mods.2, "shift")] {
+                if on && !mods.contains(&n) {
+                    mods.push(n);
+                }
+            }
+            let spec = super::binds::build_spec(&mods, &name);
+            let id = self.m.sel.recording.take().unwrap_or_default();
+            self.m.apply(&if id == "new" { "k:new:keys".to_string() } else { id }, CtlVal::Str(spec));
+            return Response::REDRAW;
+        }
+        Response::NONE
     }
 
     fn tick(&mut self) -> Response {
@@ -1096,5 +1144,62 @@ impl WindowApp for SettingsApp {
         redraw |= self.m.expire_notice();
         redraw |= self.m.dirty;
         Response { redraw, action: None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thumbnails_decode_and_crop() {
+        let d = std::env::temp_dir().join(format!("macsettings-thumb-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("a.png");
+        let mut img = image::RgbaImage::new(400, 100);
+        for px in img.pixels_mut() {
+            *px = image::Rgba([200, 10, 10, 255]);
+        }
+        img.save(&p).unwrap();
+        let t = load_thumb(&p, (176, 111)).expect("decodes");
+        assert_eq!((t.width(), t.height()), (176, 111));
+        assert!(t.pixel(100, 60).unwrap().red() > 150);
+        assert!(load_thumb(&d.join("missing.png"), (10, 10)).is_none());
+        std::fs::write(d.join("junk.png"), b"not an image").unwrap();
+        assert!(load_thumb(&d.join("junk.png"), (10, 10)).is_none());
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    fn app() -> SettingsApp {
+        let d = std::env::temp_dir().join(format!("macsettings-app-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent".into(), socket: d.join("none.sock") };
+        SettingsApp::new(paths, None)
+    }
+
+    fn ev(key: Key, ch: Option<char>) -> KeyEvent {
+        KeyEvent { key, text: ch.map(String::from).unwrap_or_default(), ch, ctrl: false, shift: false, alt: false }
+    }
+
+    #[test]
+    fn typing_in_search_filters_panes() {
+        let mut a = app();
+        let mut f = ev(Key::Char, Some('f'));
+        f.ctrl = true;
+        f.text.clear();
+        a.key(&f);
+        assert_eq!(a.zone, Zone::Search);
+        for c in "gap".chars() {
+            a.key(&ev(Key::Char, Some(c)));
+        }
+        assert_eq!(a.search.text(), "gap");
+        assert_eq!(a.visible_panes().iter().map(|&i| PANES[i].id).collect::<Vec<_>>(), ["tiling"]);
+        a.key(&ev(Key::Escape, None));
+        assert_eq!(a.search.text(), "");
     }
 }
