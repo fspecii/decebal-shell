@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=System Settings
+GenericName=Settings
+Comment=Configure the rdwm window manager, the dock and the menu bar
+Exec=macsettings
+Icon=preferences-system
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=settings;preferences;rdwm;dock;wallpaper;keyboard;layout;tiling;
+StartupWMClass=MacSettings
