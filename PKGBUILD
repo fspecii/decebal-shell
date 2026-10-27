@@ -37,13 +37,15 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm; do
+  for bin in macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm macclip; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"
   install -Dm644 contrib/macshell-bar.service "$pkgdir/usr/lib/systemd/user/macshell-bar.service"
   install -Dm644 contrib/macshell-notify.service "$pkgdir/usr/lib/systemd/user/macshell-notify.service"
   install -Dm644 contrib/macshell-dock.desktop "$pkgdir/etc/xdg/autostart/macshell-dock.desktop"
+  install -Dm644 contrib/macshell-clip.service "$pkgdir/usr/lib/systemd/user/macshell-clip.service"
+  install -Dm644 contrib/macshell-clip.desktop "$pkgdir/etc/xdg/autostart/macshell-clip.desktop"
   install -Dm644 contrib/macshell-bar.desktop "$pkgdir/etc/xdg/autostart/macshell-bar.desktop"
   install -Dm644 contrib/macshell-notify.desktop "$pkgdir/etc/xdg/autostart/macshell-notify.desktop"
   install -Dm644 contrib/dbus/org.freedesktop.Notifications.service "$pkgdir/usr/share/macshell/dbus/org.freedesktop.Notifications.service"
