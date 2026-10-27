@@ -191,7 +191,7 @@ mod caelestia_tests {
     #[test]
     fn caelestia_shape_metrics() {
         let t = def("caelestia").unwrap().resolve("caelestia", true, &Selection::default());
-        assert!(t.bar_floating());
+        assert!(t.bar_vertical() && !t.bar_floating(), "caelestia is a vertical bar");
         assert_eq!(t.dock_roundness, 1.0, "pill dock");
         assert!(t.radius >= 16.0, "generous radii");
         assert_eq!(t.name, "Caelestia");

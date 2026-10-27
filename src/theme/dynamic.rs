@@ -133,7 +133,7 @@ mod tests {
         let (hue, plain_hue) = (material::oklch(t.accent).2, material::oklch(plain.accent).2);
         assert!((hue - plain_hue).abs() > 10.0, "hue {hue} vs {plain_hue}");
         // metrics (shape) are untouched by the wallpaper colours
-        assert_eq!((t.radius, t.dock_roundness, t.bar_floating()), (plain.radius, plain.dock_roundness, true));
+        assert_eq!((t.radius, t.dock_roundness, t.bar_vertical()), (plain.radius, plain.dock_roundness, true));
         // light variant is derived too
         assert!(!src.build(&Selection { mode: crate::theme::model::Mode::Light, ..src.selection() }, true).0.dark);
     }

@@ -21,6 +21,9 @@ pub enum Act {
     Mfact(f32),
     ToggleGaps,
     ToggleFloat,
+    /// Close / minimise the focused window (the vertical bar's window popout).
+    CloseWindow,
+    MinimizeWindow,
     VolumeSlider,
     BrightnessSlider,
     ToggleMute,
@@ -28,7 +31,10 @@ pub enum Act {
     WifiConnect(String),
     NetworkEditor,
     BtToggle,
-    BtDevice { mac: String, connect: bool },
+    BtDevice {
+        mac: String,
+        connect: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

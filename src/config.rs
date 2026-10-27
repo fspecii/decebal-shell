@@ -193,6 +193,7 @@ pub struct ShellSettings {
     /// Workspace/tag dots in the menu bar. "auto" = only under rdwm.
     pub workspaces: Toggle,
     pub bar: BarSettings,
+    pub dock: DockGateSettings,
     /// Menu bar clock: 12-hour format (macsettings: Date & Time).
     pub clock_hour12: bool,
     /// `weekday-day-month` (default), `day-month`, `weekday-day`, `none`.
@@ -201,7 +202,7 @@ pub struct ShellSettings {
 
 impl Default for ShellSettings {
     fn default() -> Self {
-        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default(), clock_hour12: false, clock_date: "weekday-day-month".into() }
+        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default(), dock: DockGateSettings::default(), clock_hour12: false, clock_date: "weekday-day-month".into() }
     }
 }
 
@@ -219,10 +220,29 @@ impl Default for BarSettings {
     }
 }
 
+/// `macshell.json` -> `"dock": { "enabled": true | false | "auto" }`: whether macdock shows at all. `"auto"` hides it while the
+/// theme's bar is the vertical one (`bar_style = "vertical"`: Caelestia has no dock). Default `true`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct DockGateSettings {
+    pub enabled: Toggle,
+}
+
+impl Default for DockGateSettings {
+    fn default() -> Self {
+        Self { enabled: Toggle::Flag(true) }
+    }
+}
+
 impl ShellSettings {
     /// Whether the macOS menu bar should be on screen given the dock's style.
     pub fn bar_visible(&self, dock: DockStyle) -> bool {
         self.bar.enabled.resolve(dock != DockStyle::Windows)
+    }
+
+    /// Whether the dock should be on screen given whether the current theme has a vertical bar.
+    pub fn dock_visible(&self, vertical_bar: bool) -> bool {
+        self.dock.enabled.resolve(!vertical_bar)
     }
 }
 
@@ -524,6 +544,17 @@ mod tests {
         let s: DockSettings = serde_json::from_value(v).unwrap();
         assert_eq!((s.style, s.windows_align, s.app_spacing), (DockStyle::Windows, WinAlign::Left, 9.0));
         assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn dock_enabled_defaults_on_and_auto_follows_the_vertical_bar() {
+        let parse = |s: &str| serde_json::from_str::<ShellSettings>(s).unwrap();
+        assert!(parse("{}").dock_visible(false) && parse("{}").dock_visible(true), "on by default, whatever the theme");
+        assert!(!parse(r#"{"dock":{"enabled":false}}"#).dock_visible(false));
+        let auto = parse(r#"{"dock":{"enabled":"auto"}}"#);
+        assert!(auto.dock_visible(false) && !auto.dock_visible(true), "hidden while the theme has a vertical bar");
+        assert!(parse(r#"{"dock":{"enabled":true}}"#).dock_visible(true));
+        assert!(parse(r#"{"dock":{}}"#).dock_visible(true), "a missing key keeps the dock");
     }
 
     #[test]

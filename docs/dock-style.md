@@ -26,7 +26,8 @@ Heights scale with `Xft.dpi / 96` (or `MACSHELL_SCALE`): 48 px (center) / 44 px 
 
 `macshell.json`: `{"bar": {"enabled": true | false | "auto"}}`, see "macbar hiding" below.
 
-`macthemectl style windows|macos|caelestia` writes `style` (and `windowsAlign`) here together with the theme and `bar.enabled`; see
+`macthemectl style windows|macos|caelestia` writes `style` (and `windowsAlign`) here together with the theme, `bar.enabled` and `dock.enabled`
+(`"auto"` under Caelestia: the dock hides while the theme has a vertical bar, see [caelestia.md](caelestia.md)); see
 [theming.md](theming.md#shell-styles-macos-windows-caelestia).
 
 ## What the taskbar does

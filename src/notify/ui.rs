@@ -361,7 +361,9 @@ impl Ui {
     }
 
     fn top(&self) -> i32 {
-        self.mon.y + self.px(crate::theme::BAR_HEIGHT + 8.0).round() as i32
+        // below the horizontal bar; with a vertical one (Caelestia) nothing is at the top edge
+        let below = if crate::theme::th().bar_vertical() { 12.0 } else { crate::theme::BAR_HEIGHT + 8.0 };
+        self.mon.y + self.px(below).round() as i32
     }
 
     fn make_window(&self, x: i32, y: i32, w: u32, h: u32, keys: bool) -> Result<Window, String> {

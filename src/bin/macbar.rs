@@ -8,15 +8,17 @@ use macshell::theme::BAR_HEIGHT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-const USAGE: &str = "macbar [--dry-run] [--app ID] [--png FILE [--width N] [--open KEY|control]]\n\
-Runs the menu bar. With --png it renders one frame to a file (for testing) instead.\n\
-KEY is one of apple, app, file, edit, view, window, help.";
+const USAGE: &str = "macbar [--dry-run] [--app ID] [--png FILE [--width N] [--height N] [--open KEY|control]]\n\
+Runs the menu bar (a vertical bar down the left edge when the theme says bar_style = \"vertical\", as Caelestia does).\n\
+With --png it renders one frame to a file (for testing) instead; --height is the screen height of the vertical layout.\n\
+KEY is one of apple, app, file, edit, view, window, help, calendar; for the vertical layout one of audio, network, bluetooth, battery, window, layout.";
 
 fn main() {
     macshell::mem::limit_arenas();
     let args: Vec<String> = std::env::args().collect();
     let mut png: Option<String> = None;
     let mut width: u32 = 1920;
+    let mut height: u32 = 900;
     let mut open: Option<String> = None;
     let mut app_id: Option<String> = None;
     let mut i = 1;
@@ -29,6 +31,10 @@ fn main() {
             "--width" => {
                 i += 1;
                 width = args.get(i).and_then(|v| v.parse().ok()).unwrap_or(width);
+            }
+            "--height" => {
+                i += 1;
+                height = args.get(i).and_then(|v| v.parse().ok()).unwrap_or(height);
             }
             "--app" => {
                 i += 1;
@@ -53,7 +59,7 @@ fn main() {
 
     let show_workspaces = macshell::config::shell_settings().workspaces.resolve(macshell::wm::is_rdwm());
     if let Some(path) = png {
-        let mut bar = MacBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces);
+        let mut bar = MacBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces).with_height(height);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
             eprintln!("macbar: {e}");
             std::process::exit(1);

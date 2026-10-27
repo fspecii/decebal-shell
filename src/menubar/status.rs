@@ -89,6 +89,20 @@ impl MacBar {
                 }
                 Some((rows, 280.0, false))
             }
+            Tray::Window => {
+                let (id, title) = self.v_win.clone()?;
+                let mut rows = vec![Row::header(&active::display_name(&id))];
+                if !title.is_empty() {
+                    rows.push(Row::text(&title));
+                }
+                rows.push(Row::sep());
+                rows.push(Row::item("Close window", Act::CloseWindow));
+                rows.push(Row::item("Minimise", Act::MinimizeWindow));
+                if self.layout_state().is_some() {
+                    rows.push(Row::item("Float or tile", Act::ToggleFloat));
+                }
+                Some((rows, 300.0, false))
+            }
             Tray::Battery => {
                 let b = snap.battery.as_ref()?;
                 Some((vec![Row::header("Battery").detail(&format!("{}%", b.percent)), Row::text(if b.status.is_empty() { "Unknown" } else { &b.status })], 220.0, false))
@@ -98,6 +112,9 @@ impl MacBar {
     }
 
     pub(super) fn open_popup(&mut self, kind: Tray) {
+        if self.vertical() {
+            return self.v_open_popup(kind);
+        }
         self.close();
         let Some(span) = self.tray_span(kind) else { return };
         let y = BAR_HEIGHT + MENU_GAP;
@@ -130,6 +147,9 @@ impl MacBar {
         match self.build_popup(kind) {
             Some((rows, w, compact)) => {
                 self.popup = Some(Popup::layout(rows, old.0, old.1, w, compact));
+                if self.vertical() {
+                    self.v_clamp_popup();
+                }
                 let n = self.popup.as_ref().map(|p| p.rows.len()).unwrap_or(0);
                 if self.popup_hover.is_some_and(|h| h >= n) {
                     self.popup_hover = None;
@@ -291,7 +311,8 @@ impl MacBar {
                 rdwm::send_action("setlayout", &[&name]);
                 let sym = rdwm::LAYOUTS.iter().find(|l| l.0 == name).map(|l| l.2.to_string()).unwrap_or_default();
                 if let Ok(mut l) = self.shared.layout.lock() {
-                    *l = Some(rdwm::LayoutState { name, symbol: sym });
+                    let tags = l.as_ref().map(|s| s.tags.clone()).unwrap_or_default();
+                    *l = Some(rdwm::LayoutState { name, symbol: sym, tags });
                 }
                 self.close();
             }
@@ -299,6 +320,14 @@ impl MacBar {
             Act::Mfact(d) => rdwm::send_action("setmfact", &[&format!("{d:.2}")]),
             Act::ToggleGaps => rdwm::send_action("togglegaps", &[]),
             Act::ToggleFloat => rdwm::send_action("togglefloating", &[]),
+            Act::CloseWindow => {
+                self.close();
+                self.active.close_active();
+            }
+            Act::MinimizeWindow => {
+                self.close();
+                self.active.minimize_active();
+            }
             Act::ToggleMute => self.toggle_mute_now(),
             Act::WifiToggle => {
                 let on = self.snapshot().net.map(|n| n.wifi_enabled).unwrap_or(false);

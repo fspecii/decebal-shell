@@ -146,18 +146,25 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     // One connection for both directions: this thread reads, the UI thread sends client messages.
     let conn = Arc::new(Ewmh { close_atom: atom(&conn, "_NET_CLOSE_WINDOW"), change_state_atom: atom(&conn, "WM_CHANGE_STATE"), conn, root, active_atom: active, desktop_atom: current });
     tracker.set_control(conn.clone());
+    let (wm_state, demands) = (atom(&conn.conn, "_NET_WM_STATE"), atom(&conn.conn, "_NET_WM_STATE_DEMANDS_ATTENTION"));
 
     std::thread::spawn(move || {
         let conn = &conn.conn;
         loop {
             let (windows, workspaces) = {
                 let active_win = prop32(conn, root, active, AtomEnum::WINDOW).first().copied().unwrap_or(0);
+                let mut urgent_desktops: Vec<u32> = Vec::new();
                 let windows = prop32(conn, root, client_list, AtomEnum::WINDOW)
                     .into_iter()
                     .map(|w| {
                         // Tag moves of a window arrive as property changes on the window itself.
                         let _ = conn.change_window_attributes(w, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE));
                         let desktop = prop32(conn, w, wm_desktop, AtomEnum::CARDINAL).first().copied().filter(|d| *d != u32::MAX);
+                        if let (Some(ws), Some(dm), Some(d)) = (wm_state, demands, desktop) {
+                            if prop32(conn, w, ws, AtomEnum::ATOM).contains(&dm) {
+                                urgent_desktops.push(d);
+                            }
+                        }
                         Window {
                             id: w as u64,
                             app_id: parse_wm_class(&text_prop(conn, w, AtomEnum::WM_CLASS.into(), AtomEnum::STRING)),
@@ -170,7 +177,7 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                 let count = prop32(conn, root, number, AtomEnum::CARDINAL).first().copied().unwrap_or(0) as usize;
                 let cur = prop32(conn, root, current, AtomEnum::CARDINAL).first().copied();
                 let mut workspaces: Vec<Workspace> = if count > 1 {
-                    desktop_names(&text_prop(conn, root, names, utf8), count).into_iter().map(|name| Workspace { name, active: false, occupied: false }).collect()
+                    desktop_names(&text_prop(conn, root, names, utf8), count).into_iter().map(|name| Workspace { name, ..Default::default() }).collect()
                 } else {
                     Vec::new() // a single desktop is not worth an indicator
                 };
@@ -178,6 +185,9 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                     ws.active = true;
                 }
                 mark_occupied(&mut workspaces, &windows);
+                for (i, ws) in workspaces.iter_mut().enumerate() {
+                    ws.urgent = !ws.active && urgent_desktops.contains(&(i as u32));
+                }
                 (windows, workspaces)
             };
             if tracker.replace(windows, workspaces) {
@@ -186,7 +196,7 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
             // Block until something we display changes.
             loop {
                 match conn.wait_for_event() {
-                    Ok(Event::PropertyNotify(e)) if [client_list, active, current, names, number, wm_desktop].contains(&e.atom) => break,
+                    Ok(Event::PropertyNotify(e)) if [client_list, active, current, names, number, wm_desktop].contains(&e.atom) || Some(e.atom) == wm_state => break,
                     Ok(_) => {}
                     Err(_) => return,
                 }

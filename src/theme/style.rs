@@ -1,12 +1,12 @@
 //! Shell style presets: one word that sets the theme, the dock style and the menu bar coherently.
 //!
-//! | style | theme | dock (`dock-settings.json`) | menu bar (`macshell.json` `bar.enabled`) |
-//! |---|---|---|---|
-//! | `macos` | macOS | `style: mac`, theme-driven roundness | `true` |
-//! | `windows` | Windows 11 | `style: windows`, `windowsAlign: center` (the Windows 11 taskbar) | `"auto"` (hidden while the taskbar is up) |
-//! | `caelestia` | Caelestia | `style: mac`, theme-driven roundness (pill) | `true` (a floating pill, `bar_style`) |
+//! | style | theme | dock (`dock-settings.json`) | dock shown (`macshell.json` `dock.enabled`) | menu bar (`macshell.json` `bar.enabled`) |
+//! |---|---|---|---|---|
+//! | `macos` | macOS | `style: mac`, theme-driven roundness | `true` | `true` |
+//! | `windows` | Windows 11 | `style: windows`, `windowsAlign: center` (the Windows 11 taskbar) | `true` | `"auto"` (hidden while the taskbar is up) |
+//! | `caelestia` | Caelestia | `style: mac`, theme-driven roundness (pill) | `"auto"`: hidden, Caelestia has no dock | `true`, drawn as a vertical bar on the left edge (`bar_style = "vertical"`) |
 //!
-//! The pure parts ([`selection_for`], [`dock_edits`], [`bar_value`], [`detect`]) are shared by `macthemectl style`
+//! The pure parts ([`selection_for`], [`dock_edits`], [`bar_value`], [`dock_value`], [`detect`]) are shared by `macthemectl style`
 //! and the Theme pane; [`apply`] is the CLI's transaction.
 
 use super::live::Source;
@@ -83,6 +83,15 @@ pub fn bar_value(style: Style, current: Option<&Value>) -> Value {
     Value::Object(bar)
 }
 
+/// `macshell.json` `dock` object with `enabled` set for `style`; other keys of `dock` are kept. Caelestia has no dock, so it
+/// writes `"auto"` (the dock hides while the theme's bar is the vertical one and returns with any other theme); the other
+/// styles write `true`, so going back brings the dock back.
+pub fn dock_value(style: Style, current: Option<&Value>) -> Value {
+    let mut dock = current.and_then(Value::as_object).cloned().unwrap_or_default();
+    dock.insert("enabled".into(), if style == Style::Caelestia { json!("auto") } else { json!(true) });
+    Value::Object(dock)
+}
+
 /// Which preset the current files describe; `None` for anything custom (another theme, a mixed state).
 pub fn detect(theme_id: &str, dock: DockStyle) -> Option<Style> {
     match (dock, theme_id) {
@@ -115,6 +124,8 @@ pub fn apply(src: &Source, paths: &Paths, style: Style, sel: &Selection) -> Resu
     }
     let bar = bar_value(style, io::json_load(&paths.shell_json()).get("bar"));
     io::json_set(&paths.shell_json(), "bar", Some(bar))?;
+    let dock = dock_value(style, io::json_load(&paths.shell_json()).get("dock"));
+    io::json_set(&paths.shell_json(), "dock", Some(dock))?;
     Ok(report)
 }
 
@@ -150,7 +161,7 @@ mod tests {
     fn each_style_sets_theme_dock_and_bar() {
         let (_d, src, paths) = sandbox("each");
         std::fs::write(paths.dock_settings(), r#"{"magnification": 1.8, "roundness": 0.2, "style": "windows"}"#).unwrap();
-        std::fs::write(paths.shell_json(), r#"{"workspaces": "off", "bar": {"enabled": "auto", "x": 1}}"#).unwrap();
+        std::fs::write(paths.shell_json(), r#"{"workspaces": "off", "bar": {"enabled": "auto", "x": 1}, "dock": {"enabled": true, "y": 2}}"#).unwrap();
         let sel = Selection::default();
 
         apply(&src, &paths, Style::Caelestia, &Selection { sync_rdwm: false, ..sel.clone() }).unwrap();
@@ -162,6 +173,8 @@ mod tests {
         let shell = io::json_load(&paths.shell_json());
         assert_eq!(shell["bar"]["enabled"], true);
         assert_eq!(shell["bar"]["x"], 1, "other bar keys are kept");
+        assert_eq!(shell["dock"]["enabled"], "auto", "Caelestia has no dock");
+        assert_eq!(shell["dock"]["y"], 2, "other dock keys are kept");
         assert_eq!(shell["workspaces"], "off");
         assert_eq!(current(&src, &paths), Some(Style::Caelestia));
 
@@ -170,13 +183,29 @@ mod tests {
         let dock = io::json_load(&paths.dock_settings());
         assert_eq!((dock["style"].as_str(), dock["windowsAlign"].as_str()), (Some("windows"), Some("center")));
         assert_eq!(io::json_load(&paths.shell_json())["bar"]["enabled"], "auto");
+        assert_eq!(io::json_load(&paths.shell_json())["dock"]["enabled"], true, "the dock comes back");
         assert_eq!(current(&src, &paths), Some(Style::Windows));
 
         apply(&src, &paths, Style::Macos, &Selection { sync_rdwm: false, ..src.selection() }).unwrap();
         assert_eq!(src.selection().name, "macos");
         assert_eq!(io::json_load(&paths.dock_settings())["style"], "mac");
         assert_eq!(io::json_load(&paths.shell_json())["bar"]["enabled"], true);
+        assert_eq!(io::json_load(&paths.shell_json())["dock"]["enabled"], true);
         assert_eq!(current(&src, &paths), Some(Style::Macos));
+    }
+
+    #[test]
+    fn the_dock_is_hidden_by_the_vertical_bar_theme_only_for_caelestia() {
+        use crate::theme::builtin;
+        let shell: crate::config::ShellSettings = serde_json::from_value(json!({"dock": dock_value(Style::Caelestia, None)})).unwrap();
+        let vertical = |id: &str| builtin::def(id).unwrap().resolve(id, true, &Selection::default()).bar_vertical();
+        assert!(vertical("caelestia") && !vertical("macos") && !vertical("windows11"));
+        assert!(!shell.dock_visible(vertical("caelestia")), "Caelestia: no dock");
+        assert!(shell.dock_visible(vertical("nord")), "auto brings the dock back with a flat-bar theme");
+        for st in [Style::Macos, Style::Windows] {
+            let s: crate::config::ShellSettings = serde_json::from_value(json!({"dock": dock_value(st, Some(&json!({"enabled": false})))})).unwrap();
+            assert!(s.dock_visible(false), "{st:?} shows the dock again");
+        }
     }
 
     #[test]

@@ -15,7 +15,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | Program | What | Idle memory (release) |
 |---|---|---|
 | `macdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
-| `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing) | ~7 MB RSS |
+| `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing); a vertical bar down the left edge (workspace pills, window, status icons, stacked clock, power) under the Caelestia style, see [docs/caelestia.md](docs/caelestia.md) | ~7 MB RSS |
 | `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~33 MB RSS with a page of thumbnails |
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
@@ -50,7 +50,7 @@ On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
 
 * `dock-pinned-macos.json` - `{"pinned": [...], "order": [...]}` (desktop-file ids; `launchpad` and `trash` are built in)
 * `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`, and the Windows taskbar options `style` (`"mac"` default / `"windows"`), `windowsAlign`, `windowsLabels`, `windowsSearch`, `windowsPosition`, `windowsTheme` (see [docs/dock-style.md](docs/dock-style.md))
-* `macshell.json` - `{"bar": {"enabled": true}}` hides `macbar` (`false`, or `"auto"` = hidden while the dock is a Windows taskbar); `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
+* `macshell.json` - `{"bar": {"enabled": true}}` hides `macbar` (`false`, or `"auto"` = hidden while the dock is a Windows taskbar); `{"dock": {"enabled": true}}` hides `macdock` (`false`, or `"auto"` = hidden while the theme's bar is the vertical one, i.e. under the Caelestia style, which has no dock); `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
 
 The dock re-reads `dock-pinned-macos.json` and `dock-settings.json` within about a second of an external edit (a `stat` twice a second, no restart); its own changes are written atomically.
 
@@ -367,6 +367,16 @@ honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale fact
 ## License
 
 MIT
+
+## Caelestia style (vertical bar)
+
+`macthemectl style caelestia` makes the shell a port of caelestia-shell for rdwm/X11: its Material You colours and a **vertical bar** on the left screen edge
+(`bar_style = "vertical"` in a theme; `macbar` anchors left and publishes a `_NET_WM_STRUT_PARTIAL` left strut, so windows tile to its right) with the OS icon (launcher),
+rdwm workspace pills (occupied / active / urgent, click or wheel to switch), the focused window, the layout / quick-settings tray, status icons (sound, Wi-Fi,
+Bluetooth, battery, lock keys) whose popups open on hover, the clock stacked as `HH` over `MM` (opens the dashboard) and the power button (opens the session menu).
+The dock is hidden while that bar is up (`"dock": {"enabled": "auto"}`); `macthemectl style macos` brings the horizontal bar and the dock back without restarting anything.
+The dashboard, launcher, session menu, OSD, notification history and utilities are the existing programs under the Caelestia colours.
+See [docs/caelestia.md](docs/caelestia.md) for the layout, hotkeys and limits, and `tests/e2e/vbar.sh` (`make e2e-vbar`) for the end-to-end check on a private Xvfb and rdwm.
 
 ## Status items (macbar)
 

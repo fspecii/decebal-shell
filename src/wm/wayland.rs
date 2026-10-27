@@ -101,7 +101,7 @@ fn visible_workspaces(all: &HashMap<u32, WsPending>) -> Vec<(u32, Workspace)> {
     let mut ids: Vec<u32> = all.keys().copied().collect();
     ids.sort_unstable();
     let group = ids.iter().filter_map(|id| all[id].group).min();
-    ids.into_iter().filter(|id| all[id].group == group).map(|id| (id, Workspace { name: all[&id].name.clone(), active: all[&id].active, occupied: false })).collect()
+    ids.into_iter().filter(|id| all[id].group == group).map(|id| (id, Workspace { name: all[&id].name.clone(), active: all[&id].active, ..Default::default() })).collect()
 }
 
 impl Wm {

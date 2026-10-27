@@ -19,6 +19,9 @@ use std::time::Duration;
 pub enum Anchor {
     Bottom,
     Top,
+    /// The left screen edge: a vertical panel (caelestia's bar). `stretch` then means full output height
+    /// and an app height of 0 asks for that.
+    Left,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,7 +31,8 @@ pub struct SurfaceSpec {
     pub margin: i32,
     /// Space other windows must leave free (0 = float above them).
     pub reserve: i32,
-    /// Stretch across the whole output (a bar) instead of being centred (a dock).
+    /// Stretch across the whole output (a bar) instead of being centred (a dock); along the edge for
+    /// [`Anchor::Left`].
     pub stretch: bool,
     pub namespace: &'static str,
 }

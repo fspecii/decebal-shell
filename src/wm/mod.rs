@@ -28,6 +28,8 @@ pub struct Workspace {
     pub active: bool,
     /// At least one window lives here (unknown on Wayland, where it stays false).
     pub occupied: bool,
+    /// A window here asks for attention (EWMH `_NET_WM_STATE_DEMANDS_ATTENTION`); never set on the active workspace.
+    pub urgent: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -248,7 +250,7 @@ mod tests {
     #[test]
     fn workspace_changes_count_as_changes() {
         let t = Tracker::default();
-        let ws = |a| vec![Workspace { name: "1".into(), active: a, occupied: false }];
+        let ws = |a| vec![Workspace { name: "1".into(), active: a, ..Default::default() }];
         assert!(t.replace(vec![], ws(true)));
         assert!(!t.replace(vec![], ws(true)));
         assert!(t.replace(vec![], ws(false)));

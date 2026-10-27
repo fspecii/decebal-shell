@@ -2,6 +2,12 @@ use macshell::backend::{self, Anchor, SurfaceSpec};
 use macshell::config;
 use macshell::dock::{Dock, DockItem};
 use macshell::dock_app::DockApp;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+fn dock_items(running: &[String]) -> Vec<DockItem> {
+    config::pinned().or_default(&|id| macshell::launch::find_exec(id).is_some()).into_iter().map(|id| DockItem::pinned(&id, running.contains(&id))).collect()
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -35,8 +41,7 @@ fn main() {
         i += 1;
     }
 
-    let items: Vec<DockItem> = config::pinned().or_default(&|id| macshell::launch::find_exec(id).is_some()).into_iter().map(|id| DockItem::pinned(&id, running.contains(&id))).collect();
-    let mut dock = Dock::new(items, config::dock_settings());
+    let mut dock = Dock::new(dock_items(&running), config::dock_settings());
     dock.hover_x = hover;
     let (w, h) = dock.canvas_size();
     let Some(mut pm) = tiny_skia::Pixmap::new(w, h) else {
@@ -56,9 +61,23 @@ fn main() {
             let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" };
             // The style can change at runtime (dock-settings.json, the dock's menu); the app then re-specifies its surface.
             let scale = backend::ui_scale();
-            if let Err(e) = backend::run(DockApp::new(dock).with_scale(scale).track_windows().watch_config(), spec) {
-                eprintln!("macdock: {e}");
-                std::process::exit(1);
+            // `dock.enabled` (macshell.json) can switch the dock off, and `"auto"` does so while the theme has a vertical bar
+            // (Caelestia has no dock). A hidden dock keeps its process, because the session supervisor restarts a missing one;
+            // only its surface goes away, and it comes back by itself when the setting or the theme changes.
+            loop {
+                macshell::menubar::gate::wait_until_dock_visible();
+                let closed = Arc::new(AtomicBool::new(false));
+                let mut dock = Dock::new(dock_items(&running), config::dock_settings());
+                dock.hover_x = hover;
+                let app = DockApp::new(dock).with_scale(scale).track_windows().watch_config().with_gate(closed.clone());
+                if let Err(e) = backend::run(app, spec) {
+                    eprintln!("macdock: {e}");
+                    std::process::exit(1);
+                }
+                if !closed.load(Ordering::SeqCst) {
+                    break;
+                }
+                macshell::mem::trim();
             }
         }
     }

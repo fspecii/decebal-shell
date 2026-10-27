@@ -194,8 +194,16 @@ fn main() {
                     st.as_str(),
                     r.theme_id,
                     if r.dark { "dark" } else { "light" },
-                    if st == style::Style::Windows { "windows taskbar" } else { "macOS dock" },
-                    if st == style::Style::Windows { "hidden while the taskbar is up" } else { "shown" }
+                    match st {
+                        style::Style::Windows => "windows taskbar",
+                        style::Style::Caelestia => "hidden (Caelestia has no dock)",
+                        style::Style::Macos => "macOS dock",
+                    },
+                    match st {
+                        style::Style::Windows => "hidden while the taskbar is up",
+                        style::Style::Caelestia => "vertical bar on the left edge",
+                        style::Style::Macos => "shown",
+                    }
                 ),
                 Err(e) => die(&e),
             }

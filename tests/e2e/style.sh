@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shell styles end to end: the real macbar and macdock under the macOS, Windows and Caelestia styles on a private
 # Xvfb + rdwm. `macthemectl style X` switches the running programs; pixels of the bar and the dock are checked per style,
-# the pill geometry of the Caelestia bar and dock, wallpaper colours (`macthemectl dynamic`), and that the macOS style is
+# the Caelestia bar (a vertical strip with pills, the dock hidden; tests/e2e/vbar.sh covers it in depth), wallpaper colours (`macthemectl dynamic`), and that the macOS style is
 # pixel-identical to the binaries built before the Caelestia theme existed (BASELINE_BIN=dir with those binaries; skipped
 # when unset).
 #   tests/e2e/style.sh                  (SHOTS=dir keeps the PNGs; E2E_DISPLAY=:137 by default)
@@ -104,21 +104,18 @@ echo "== Caelestia style"
 style caelestia; settle
 eq "style reads back" "$(macthemectl style)" caelestia
 eq "theme is caelestia" "$(macthemectl get --json | jq -r .theme)" caelestia
-eq "bar style is floating" "$(macthemectl get --json | jq -r .bar_style)" floating
-eqpx "Caelestia bar pill is the surface container" 900 13 "#261d20"
-nepx "...and the strip corner is outside the pill" 2 13 "#261d20"
-nepx "...margin above the pill is empty" 900 0 "#261d20"
-nepx "Caelestia bar differs from the macOS bar" 900 13 "$MAC_BAR"
-CAE_DOCK=$(px 760 975)
-ne "Caelestia dock panel colour differs from macOS" "$CAE_DOCK" "$MAC_DOCK"
+eq "bar style is vertical" "$(macthemectl get --json | jq -r .bar_style)" vertical
+# the vertical bar: the OS icon's pill (a circle) is the surface container, the strip around it the theme background
+eqpx "Caelestia bar pill is the surface container" 26 12 "#261d20"
+nepx "...and the strip corner is outside the pill" 2 12 "#261d20"
+nepx "...the top of the old horizontal bar is empty (wallpaper)" 900 13 "$MAC_BAR"
+eqpx "the room right of the strip belongs to the windows" 900 13 "#46607a"
+wait_for 10 bash -c '! xdotool search --onlyvisible --name "^macshell-dock\$" 2>/dev/null | grep -q .' && pass "Caelestia has no dock: it hid itself" || fail "the dock is still on screen"
 eq "dock-settings has no roundness override (the pill is the theme's)" "$(jq -r '.roundness // "none"' "$MACSHELL_CONFIG/dock-settings.json")" none
 shot 20-caelestia-dark
-# the dock is a pill: its left end is round, so the panel's top-left corner pixel is not the panel colour
-DOCK_L=$(for x in $(seq 560 960); do c=$(px $x 975); [ "$c" != "$(px 400 975)" ] && { echo $x; break; }; done)
-ne "pill dock starts further out than..." "${DOCK_L:-0}" 0
 
 macthemectl apply caelestia --mode light >/dev/null; settle
-eqpx "Caelestia light bar" 900 13 "#f8eaee"
+eqpx "Caelestia light bar" 26 12 "#f8eaee"
 shot 21-caelestia-light
 macthemectl apply caelestia --mode dark >/dev/null; settle
 
@@ -148,25 +145,25 @@ convert -size 400x300 xc:'#e63946' "$TMP/red.png"
 barcol() { macthemectl get --json | jq -r .colors.bar; }
 style caelestia; settle
 BAR_PLAIN=$(barcol)
-eqpx "plain Caelestia bar" 900 13 "$BAR_PLAIN"
+eqpx "plain Caelestia bar" 26 12 "$BAR_PLAIN"
 macthemectl dynamic --wallpaper "$TMP/teal.png" --dark | grep -q "seed #2a9d8f" && pass "dynamic: seed taken from the teal wallpaper" || fail "dynamic seed"
 TEAL_BAR=$(barcol)
 ne "teal palette differs from the plain Caelestia surface" "$TEAL_BAR" "$BAR_PLAIN"
-eqpx "the running bar follows the wallpaper (teal)" 900 13 "$TEAL_BAR"
+eqpx "the running bar follows the wallpaper (teal)" 26 12 "$TEAL_BAR"
 eq "selection stores the seed" "$(jq -r .theme.dynamic.seed "$MACSHELL_CONFIG/macshell.json")" "#2a9d8f"
 shot 40-dynamic-teal
 macthemectl dynamic --wallpaper "$TMP/red.png" --scheme vibrant >/dev/null
 RED_BAR=$(barcol)
 ne "a red wallpaper gives another bar colour" "$RED_BAR" "$TEAL_BAR"
-eqpx "the running bar follows (red, vibrant)" 900 13 "$RED_BAR"
+eqpx "the running bar follows (red, vibrant)" 26 12 "$RED_BAR"
 shot 41-dynamic-red-vibrant
 macthemectl dynamic --wallpaper "$TMP/teal.png" --light >/dev/null
 LIGHT_BAR=$(barcol)
-eqpx "light wallpaper palette: the running bar follows" 900 13 "$LIGHT_BAR"
+eqpx "light wallpaper palette: the running bar follows" 26 12 "$LIGHT_BAR"
 eq "...and it is a light colour" "$([ $((16#${LIGHT_BAR:1:2})) -gt 200 ] && echo light)" light
 shot 42-dynamic-teal-light
 macthemectl dynamic off >/dev/null; macthemectl apply caelestia --mode dark >/dev/null
-eqpx "dynamic off: Caelestia's own surface again" 900 13 "#261d20"
+eqpx "dynamic off: Caelestia's own surface again" 26 12 "#261d20"
 macthemectl dynamic --wallpaper "$TMP/nope.png" >/dev/null 2>&1 && fail "missing wallpaper accepted" || pass "missing wallpaper refused"
 macthemectl dynamic --scheme bogus --wallpaper "$TMP/red.png" >/dev/null 2>&1 && fail "bad scheme accepted" || pass "bad scheme refused"
 macthemectl style nonsense >/dev/null 2>&1 && fail "bad style accepted" || pass "bad style refused"

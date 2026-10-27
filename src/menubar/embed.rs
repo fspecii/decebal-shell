@@ -28,7 +28,10 @@ pub struct Place {
 impl MacBar {
     /// A bar that only serves as a status engine: no menus, no weather, no focused-window tracking.
     pub fn status_engine() -> MacBar {
-        MacBar::new(Box::new(StaticApp(String::new())))
+        let mut bar = MacBar::new(Box::new(StaticApp(String::new())));
+        bar.embedded = true;
+        bar.was_vertical = false;
+        bar
     }
 
     /// Starts the data sources; `waker` makes the host's loop call [`MacBar::status_tick`].

@@ -130,7 +130,8 @@ pub struct Theme {
     pub bar_height: f32,
     pub titlebar_style: String,
     pub titlebar_height: i64,
-    /// `flat` (a full-width strip) or `floating` (a pill with a margin around it, caelestia's look).
+    /// `flat` (a full-width strip), `floating` (a horizontal pill with a margin around it) or `vertical`
+    /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
     pub font_family: String,
     pub font_scale: f32,
@@ -181,6 +182,10 @@ impl Theme {
     /// The menu bar is a floating pill instead of a full-width strip.
     pub fn bar_floating(&self) -> bool {
         self.bar_style == "floating"
+    }
+    /// The bar runs down the left screen edge (caelestia's layout) instead of across the top.
+    pub fn bar_vertical(&self) -> bool {
+        self.bar_style == "vertical"
     }
 }
 
@@ -235,7 +240,7 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
     ("dock_padding", Kind::Num(4.0, 40.0), "dock panel padding in px (consumed by the dock layout)"),
     ("bar_height", Kind::Num(20.0, 40.0), "menu bar height in px (consumed by the bar layout)"),
-    ("bar_style", Kind::Choice(&["flat", "floating"]), "menu bar shape: a full-width strip or a floating pill"),
+    ("bar_style", Kind::Choice(&["flat", "floating", "vertical"]), "menu bar shape: a full-width strip, a floating pill, or a vertical bar on the left screen edge (the dock hides with it)"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
     ("font_family", Kind::Str, "UI font name (fontconfig); unavailable fonts fall back to Inter / sans-serif"),
@@ -654,6 +659,9 @@ mod tests {
         assert!(!d.resolve("m", true, &Selection::default()).bar_floating());
         let f = Def::parse("name = \"f\"\n[metrics]\nbar_style = \"floating\"\n").unwrap();
         assert!(f.resolve("f", true, &Selection::default()).bar_floating());
+        let v = Def::parse("name = \"v\"\n[metrics]\nbar_style = \"vertical\"\n").unwrap().resolve("v", true, &Selection::default());
+        assert!(v.bar_vertical() && !v.bar_floating());
+        assert!(!d.resolve("m", true, &Selection::default()).bar_vertical());
     }
 
     #[test]
@@ -664,7 +672,7 @@ mod tests {
         assert!(Def::parse("name = \"x\"\nfoo = 1\n").unwrap_err().contains("unknown section"));
         assert!(Def::parse("[dark]\ntext = \"#fff\"\n").unwrap_err().contains("name"));
         assert!(Def::parse("name = \"x\"\n[metrics]\ntitlebar_style = \"gnome\"\n").unwrap_err().contains("one of"));
-        assert!(Def::parse("name = \"x\"\n[metrics]\nbar_style = \"round\"\n").unwrap_err().contains("flat, floating"));
+        assert!(Def::parse("name = \"x\"\n[metrics]\nbar_style = \"round\"\n").unwrap_err().contains("flat, floating, vertical"));
         assert!(Def::parse("name = ").unwrap_err().contains("invalid TOML"));
     }
 

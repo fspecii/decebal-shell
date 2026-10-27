@@ -50,10 +50,22 @@ pub fn title_of(name: &str) -> String {
     LAYOUTS.iter().find(|l| l.0 == canon).map(|l| l.1.to_string()).unwrap_or_else(|| name.to_string())
 }
 
+/// One rdwm tag (workspace) of the selected monitor, as the vertical bar's workspace pills show it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TagState {
+    pub name: String,
+    /// In the monitor's view (selected).
+    pub active: bool,
+    pub occupied: bool,
+    pub urgent: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayoutState {
     pub name: String,
     pub symbol: String,
+    /// Tags 1..n of the selected monitor (empty when the reply carries none).
+    pub tags: Vec<TagState>,
 }
 
 impl LayoutState {
@@ -82,7 +94,15 @@ pub fn parse_state(line: &str) -> Option<LayoutState> {
     let mons = st.get("monitors")?.as_array()?;
     let sel = st.get("selected_mon").and_then(Value::as_i64).unwrap_or(0);
     let m = mons.iter().find(|m| m.get("id").and_then(Value::as_i64) == Some(sel)).or_else(|| mons.first())?;
-    Some(LayoutState { name: m.get("layout")?.as_str()?.to_string(), symbol: m.get("symbol").and_then(Value::as_str).unwrap_or("").to_string() })
+    Some(LayoutState { name: m.get("layout")?.as_str()?.to_string(), symbol: m.get("symbol").and_then(Value::as_str).unwrap_or("").to_string(), tags: parse_tags(st, m) })
+}
+
+/// The tags of monitor `m` in a `get_state` reply: names from `tag_names`, the `view` / `occupied` / `urgent` bitmasks of the monitor.
+fn parse_tags(st: &Value, m: &Value) -> Vec<TagState> {
+    let mask = |k: &str| m.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let (view, occ, urg) = (mask("view"), mask("occupied"), mask("urgent"));
+    let names: Vec<&str> = st.get("tag_names").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    names.iter().take(32).enumerate().map(|(i, n)| TagState { name: (*n).to_string(), active: view >> i & 1 == 1, occupied: occ >> i & 1 == 1, urgent: urg >> i & 1 == 1 }).collect()
 }
 
 /// JSON line for an rdwm action.
@@ -140,7 +160,7 @@ pub fn spawn_watcher<F: Fn() + Send + 'static>(shared: Shared, on_change: F) {
                 continue;
             };
             set(request(r#"{"cmd":"get_state"}"#).and_then(|l| parse_state(&l)));
-            if s.write_all(b"{\"cmd\":\"subscribe\",\"events\":[\"layout\",\"tag_view\",\"focus\"]}\n").is_err() {
+            if s.write_all(b"{\"cmd\":\"subscribe\",\"events\":[\"layout\",\"tag_view\",\"focus\",\"urgent\",\"window_new\",\"window_gone\"]}\n").is_err() {
                 std::thread::sleep(Duration::from_secs(3));
                 continue;
             }
@@ -247,9 +267,22 @@ mod tests {
 
     #[test]
     fn state_uses_the_selected_monitor() {
-        assert_eq!(parse_state(STATE), Some(LayoutState { name: "bsp".into(), symbol: "[+]".into() }));
+        assert_eq!(parse_state(STATE), Some(LayoutState { name: "bsp".into(), symbol: "[+]".into(), tags: vec![] }));
         let first = r#"{"ok":true,"state":{"monitors":[{"id":0,"layout":"grid","symbol":"HHH"}]}}"#;
         assert_eq!(parse_state(first).map(|s| s.name), Some("grid".into()));
+    }
+
+    #[test]
+    fn tags_come_from_the_selected_monitors_masks() {
+        let reply = r#"{"ok":true,"state":{"tag_names":["1","2","3","4"],"selected_mon":1,"monitors":[
+            {"id":0,"layout":"tile","symbol":"[]=","view":1,"occupied":1,"urgent":0},
+            {"id":1,"layout":"bsp","symbol":"[+]","view":4,"occupied":5,"urgent":8}]}}"#;
+        let tags = parse_state(reply).unwrap().tags;
+        let flags: Vec<(bool, bool, bool)> = tags.iter().map(|t| (t.active, t.occupied, t.urgent)).collect();
+        assert_eq!(flags, [(false, true, false), (false, false, false), (true, true, false), (false, false, true)]);
+        assert_eq!(tags[2].name, "3");
+        // no tag_names in the reply: no pills, the bar falls back to the EWMH desktops
+        assert!(parse_state(STATE).unwrap().tags.is_empty());
     }
 
     #[test]
@@ -283,7 +316,7 @@ mod tests {
 
     #[test]
     fn aliases_resolve_to_the_checked_entry() {
-        let s = LayoutState { name: "bstack".into(), symbol: "TTT".into() };
+        let s = LayoutState { name: "bstack".into(), symbol: "TTT".into(), tags: vec![] };
         assert_eq!(s.canonical(), "bottomstack");
         assert_eq!(title_of("bstack"), "Bottom stack");
         assert_eq!(title_of("myplugin"), "myplugin");

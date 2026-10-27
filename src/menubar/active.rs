@@ -18,6 +18,13 @@ pub trait ActiveWindow {
     }
     /// Ask the window manager to show workspace `index`.
     fn switch_workspace(&self, _index: usize) {}
+    /// Title of the focused window (the vertical bar shows it next to the app icon).
+    fn active_title(&self) -> Option<String> {
+        None
+    }
+    /// Ask the focused window to close / minimise (the active-window popout of the vertical bar).
+    fn close_active(&self) {}
+    fn minimize_active(&self) {}
 }
 
 /// The real source: the compositor/EWMH window tracker from [`crate::wm`].
@@ -44,6 +51,26 @@ impl ActiveWindow for WmActive {
     fn switch_workspace(&self, index: usize) {
         if let Some(t) = &self.tracker {
             t.switch_workspace(index);
+        }
+    }
+
+    fn active_title(&self) -> Option<String> {
+        self.tracker.as_ref()?.snapshot().active().map(|w| w.title.clone()).filter(|t| !t.is_empty())
+    }
+
+    fn close_active(&self) {
+        if let Some(t) = &self.tracker {
+            if let Some(w) = t.snapshot().active() {
+                t.close(w.id);
+            }
+        }
+    }
+
+    fn minimize_active(&self) {
+        if let Some(t) = &self.tracker {
+            if let Some(w) = t.snapshot().active() {
+                t.minimize(w.id);
+            }
         }
     }
 }

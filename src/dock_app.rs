@@ -94,6 +94,8 @@ pub struct DockApp {
     win: Option<Box<windows::WinState>>,
     /// DPI scale for the taskbar, read once.
     scale: Option<f32>,
+    /// Lets the dock close itself while `dock.enabled` (macshell.json) says it is off; see [`DockApp::with_gate`].
+    gate: std::cell::RefCell<Option<crate::menubar::gate::Gate>>,
 }
 
 impl DockApp {
@@ -116,7 +118,15 @@ impl DockApp {
             animating: false,
             win: None,
             scale: None,
+            gate: std::cell::RefCell::new(None),
         }
+    }
+
+    /// Lets the dock close itself (the backend returns) while `dock.enabled` in `macshell.json` says it is off, which under
+    /// `"auto"` is the case with a theme that has a vertical bar (Caelestia has no dock). `closed` is set when that happens.
+    pub fn with_gate(self, closed: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+        *self.gate.borrow_mut() = Some(crate::menubar::gate::Gate::with_check(closed, Box::new(crate::menubar::gate::dock_visible_now)));
+        self
     }
 
     /// Forces the taskbar's DPI scale (tests; normally `MACSHELL_SCALE` or `Xft.dpi`).
@@ -526,6 +536,17 @@ impl App for DockApp {
             return self.win_spec();
         }
         Some(SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" })
+    }
+
+    fn quit_requested(&self) -> bool {
+        let mut gate = self.gate.borrow_mut();
+        match gate.as_mut() {
+            Some(g) => {
+                g.poll();
+                g.closed()
+            }
+            None => false,
+        }
     }
 
     fn tick(&mut self) -> Tick {

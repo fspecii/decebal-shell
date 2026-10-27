@@ -5,12 +5,14 @@ pub mod active;
 pub mod clock;
 mod embed;
 pub mod gate;
+pub mod lock;
 pub use embed::GAP as STATUS_GAP;
 pub mod menus;
 pub mod popup;
 pub mod rdwm;
 mod status;
 pub mod symbols;
+pub mod vbar;
 pub mod weather;
 
 use crate::app::{App, Button, InputRect, Key, Tick, Waker};
@@ -44,6 +46,8 @@ const PILL_INSET: f32 = 10.0;
 thread_local! {
     /// Tests never read the developer's real theme: floating is off unless a test switches it on.
     static TEST_FLOATING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Likewise the vertical layout.
+    static TEST_VERTICAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn floating() -> bool {
@@ -131,6 +135,11 @@ pub enum Tray {
     Spotlight,
     Control,
     Clock,
+    // Only the vertical bar has these: the OS icon, the focused window, the power button, caps/num lock.
+    Logo,
+    Window,
+    Power,
+    Lock,
 }
 
 /// Width of one workspace dot cell and the padding around the group.
@@ -257,6 +266,20 @@ pub struct MacBar {
     embed: embed::Place,
     /// Set by [`MacBar::with_gate`]: lets the bar close itself while `bar.enabled` is off.
     gate: Option<gate::Gate>,
+    /// A status engine inside another host (the Windows taskbar): never draws the vertical layout.
+    embedded: bool,
+    // The vertical layout (see [`vbar`]).
+    was_vertical: bool,
+    v_hover: Option<Tray>,
+    v_hover_ws: Option<usize>,
+    v_hover_open: Option<(Tray, Instant)>,
+    v_icons: crate::icons::IconCache,
+    /// Focused window: (app id, title), and the width of its title run.
+    v_win: Option<(String, String)>,
+    v_win_len: f32,
+    logo_symbol: String,
+    locks: lock::Locks,
+    lock_watcher: bool,
 }
 
 impl MacBar {
@@ -308,7 +331,22 @@ impl MacBar {
             heap_rechecked: false,
             embed: embed::Place::default(),
             gate: None,
+            embedded: false,
+            was_vertical: false,
+            v_hover: None,
+            v_hover_ws: None,
+            v_hover_open: None,
+            v_icons: crate::icons::IconCache::default(),
+            v_win: None,
+            v_win_len: 0.0,
+            logo_symbol: String::new(),
+            locks: lock::Locks::default(),
+            lock_watcher: false,
         };
+        bar.was_vertical = bar.vertical();
+        if bar.was_vertical {
+            bar.logo_symbol = vbar::logo_symbol();
+        }
         bar.refresh_app_name();
         bar
     }
@@ -317,6 +355,12 @@ impl MacBar {
     /// see [`gate`]. `closed` is set to true when that happens.
     pub fn with_gate(mut self, closed: Arc<AtomicBool>) -> Self {
         self.gate = Some(gate::Gate::new(closed));
+        self
+    }
+
+    /// Screen height for `--png` renders of the vertical layout (the live bar takes it from the output).
+    pub fn with_height(mut self, height: u32) -> Self {
+        self.height = height;
         self
     }
 
@@ -346,6 +390,9 @@ impl MacBar {
         if let Ok(mut s) = self.shared.snap.lock() {
             *s = Snapshot::collect();
         }
+        if self.vertical() {
+            return self.v_render_png(path, open);
+        }
         self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
             Some("calendar") => self.open_popup(Tray::Clock),
@@ -368,6 +415,7 @@ impl MacBar {
     /// Starts the push sources (layout changes from rdwm, volume changes) that wake the loop through `waker`.
     fn start_watchers(&mut self, waker: Waker) {
         self.waker = Some(waker.clone());
+        self.ensure_lock_watcher();
         let tw = waker.clone();
         crate::theme::live::start_watcher(move || tw.wake());
         let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
@@ -490,6 +538,9 @@ impl MacBar {
     }
 
     fn panel_origin(&self) -> (f32, f32) {
+        if self.vertical() {
+            return self.v_panel_origin();
+        }
         let right = self.tray().iter().find(|(k, _)| *k == Tray::Control).map(|(_, s)| s.x + s.w).unwrap_or(self.width as f32);
         ((right - controlcenter::PANEL_W).max(0.0), BAR_HEIGHT + PANEL_GAP)
     }
@@ -570,6 +621,7 @@ impl MacBar {
         self.popup_hover = None;
         self.popup_drag = None;
         self.leave_at = None;
+        self.v_hover_open = None;
         was
     }
 
@@ -873,6 +925,7 @@ impl MacBar {
                     };
                     self.symbol(pm, icon, ICON_PX, cx, 12.5);
                 }
+                Tray::Logo | Tray::Window | Tray::Power | Tray::Lock => {}
                 Tray::Dash => self.symbol(pm, "chart", ICON_PX, cx, 12.5),
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
@@ -947,7 +1000,21 @@ fn collect_light(prev: &Snapshot) -> Snapshot {
 
 impl App for MacBar {
     fn size(&self) -> (u32, u32) {
+        if self.vertical() {
+            return (vbar::SURFACE_W, 0);
+        }
         (0, surface_height(self.open_bottom()))
+    }
+
+    fn surface_spec(&self) -> Option<crate::backend::SurfaceSpec> {
+        if self.embedded {
+            return None;
+        }
+        Some(if self.vertical() {
+            MacBar::v_spec()
+        } else {
+            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "macshell-bar" }
+        })
     }
 
     fn resized(&mut self, w: u32, h: u32) {
@@ -957,6 +1024,15 @@ impl App for MacBar {
 
     fn draw(&mut self, pm: &mut Pixmap) {
         crate::gfx::clear(pm);
+        if self.vertical() {
+            self.v_draw(pm);
+            if let Some(f) = &self.fonts {
+                f.trim();
+            }
+            self.heap_dirty = Some(Instant::now());
+            self.heap_rechecked = false;
+            return;
+        }
         self.width = pm.width();
         self.draw_bar(pm);
         if self.debug_tray.is_some() {
@@ -996,6 +1072,9 @@ impl App for MacBar {
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
+        if self.vertical() {
+            return self.v_motion(x, y);
+        }
         let mut redraw = false;
         self.leave_at = None;
         // Dragging a slider keeps tracking even outside its rectangle.
@@ -1062,6 +1141,9 @@ impl App for MacBar {
 
     fn pointer_leave(&mut self) -> bool {
         let redraw = self.hover_title.take().is_some();
+        let redraw = self.v_hover.take().is_some() || redraw;
+        self.v_hover_ws = None;
+        self.v_hover_open = None;
         if self.cc_drag.is_some() || self.popup_drag.is_some() {
             return redraw;
         }
@@ -1073,6 +1155,9 @@ impl App for MacBar {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
+        if self.vertical() {
+            return self.v_button(x, y, button);
+        }
         self.leave_at = None;
         // A click anywhere else (the pointer is grabbed on X11, so such clicks reach us) closes.
         if self.open != Open::None && !self.over_open_ui(x, y) {
@@ -1195,7 +1280,10 @@ impl App for MacBar {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
-        if y < BAR_HEIGHT && self.tray_scroll(x, dy) {
+        if self.vertical() && self.v_scroll(x, y, dy) {
+            return true;
+        }
+        if !self.vertical() && y < BAR_HEIGHT && self.tray_scroll(x, dy) {
             return true;
         }
         if self.open != Open::Control {
@@ -1231,6 +1319,9 @@ impl App for MacBar {
     }
 
     fn input_rects(&self) -> Vec<InputRect> {
+        if self.vertical() {
+            return self.v_input_rects();
+        }
         let w = self.width.max(1) as i32;
         let mut rects = vec![InputRect { x: 0, y: 0, w, h: BAR_HEIGHT as i32 }];
         match self.open {
@@ -1306,7 +1397,12 @@ impl App for MacBar {
     }
 
     fn tick_in(&self) -> Option<Duration> {
-        self.leave_at.map(|t| CLOSE_DELAY.saturating_sub(t.elapsed()))
+        let leave = self.leave_at.map(|t| CLOSE_DELAY.saturating_sub(t.elapsed()));
+        let hover = self.v_hover_open.map(|(_, t)| vbar::HOVER_DELAY.saturating_sub(t.elapsed()));
+        match (leave, hover) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     fn quit_requested(&self) -> bool {
@@ -1327,13 +1423,35 @@ impl MacBar {
     fn tick_inner(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
         let mut close_in = None;
+        let vertical = self.vertical();
+        if vertical != self.was_vertical {
+            // The theme switched layouts: what was open belongs to the old one. The backend moves and resizes the surface.
+            self.was_vertical = vertical;
+            self.close();
+            self.v_hover = None;
+            self.v_hover_ws = None;
+            if vertical && self.logo_symbol.is_empty() {
+                self.logo_symbol = vbar::logo_symbol();
+            }
+            if vertical {
+                self.ensure_lock_watcher();
+            }
+            redraw = true;
+        }
+        if vertical {
+            let (r, hover_in) = self.v_tick();
+            redraw |= r;
+            close_in = hover_in;
+            redraw |= self.v_refresh_window();
+        }
         if let Some(t) = self.leave_at {
             if self.cc_drag.is_some() || self.popup_drag.is_some() {
                 self.leave_at = None;
             } else if t.elapsed() >= CLOSE_DELAY {
                 redraw |= self.close();
             } else {
-                close_in = Some(CLOSE_DELAY - t.elapsed());
+                let left = CLOSE_DELAY - t.elapsed();
+                close_in = Some(close_in.map_or(left, |c| c.min(left)));
             }
         }
         redraw |= crate::theme::take_changed();
@@ -1567,7 +1685,7 @@ mod tests {
     }
     // ---- Control Center interaction (dry-run: setters are recorded, never executed) ----
 
-    static LOG_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(super) static LOG_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn control_bar() -> MacBar {
         let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
@@ -1770,7 +1888,7 @@ mod tests {
     }
 
     fn spaces(n: usize) -> Vec<Workspace> {
-        (0..n).map(|i| Workspace { name: (i + 1).to_string(), active: i == 1, occupied: i == 2 }).collect()
+        (0..n).map(|i| Workspace { name: (i + 1).to_string(), active: i == 1, occupied: i == 2, urgent: false }).collect()
     }
 
     #[test]
@@ -1832,7 +1950,7 @@ mod tests {
                 ..Snapshot::default()
             }
         });
-        *bar.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into() });
+        *bar.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into(), tags: Vec::new() });
         bar
     }
 

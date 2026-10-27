@@ -17,6 +17,20 @@ pub fn visible_now() -> bool {
     config::shell_settings().bar_visible(config::dock_settings().style)
 }
 
+/// True when macdock should be on screen: `dock.enabled` (macshell.json) with `"auto"` meaning "unless the theme has a
+/// vertical bar". Re-reads the theme files first, because a hidden dock has no watcher thread running.
+pub fn dock_visible_now() -> bool {
+    crate::theme::live::reload();
+    config::shell_settings().dock_visible(crate::theme::th().bar_vertical())
+}
+
+/// Blocks (sleeping, no surface, no threads) until the dock is wanted again.
+pub fn wait_until_dock_visible() {
+    while !dock_visible_now() {
+        std::thread::sleep(POLL);
+    }
+}
+
 /// Polled from the bar's tick; raises `closed` when the bar has been switched off.
 pub struct Gate {
     closed: Arc<AtomicBool>,

@@ -55,11 +55,16 @@ pub(crate) struct Rect {
 
 /// Window geometry for a requested app size on the monitor `mon`.
 pub(crate) fn place(spec: &SurfaceSpec, (w, h): (u32, u32), mon: Rect) -> (i32, i32, u32, u32) {
+    if spec.anchor == Anchor::Left {
+        // A vertical panel: flush with the monitor's left edge, as tall as the monitor when it asks for 0.
+        let height = if h == 0 { mon.h.max(1) as u32 } else { h };
+        return (mon.x + spec.margin, mon.y, w.max(1), height);
+    }
     let width = if w == 0 { mon.w.max(1) as u32 } else { w };
     let x = mon.x + ((mon.w - width as i32) / 2).max(0);
     let y = match spec.anchor {
         Anchor::Bottom => mon.y + mon.h - h as i32 - spec.margin,
-        Anchor::Top => mon.y + spec.margin,
+        Anchor::Top | Anchor::Left => mon.y + spec.margin,
     };
     (x, y, width, h.max(1))
 }
@@ -85,6 +90,12 @@ pub(crate) fn strut_partial(spec: &SurfaceSpec, win: (i32, i32, u32, u32), mon: 
             s[3] = (screen.1 - (mon.y + mon.h) + size).max(0) as u32;
             s[10] = x0 as u32;
             s[11] = x1 as u32;
+        }
+        Anchor::Left => {
+            // left, then left_start_y / left_end_y (slots 4 and 5): the strut covers the panel's rows only
+            s[0] = (mon.x + size).max(0) as u32;
+            s[4] = win.1.max(0) as u32;
+            s[5] = (win.1 + win.3 as i32 - 1).max(0) as u32;
         }
     }
     Some(s)
@@ -492,6 +503,30 @@ mod tests {
         let dw = place(&dock, (400, 100), m);
         // monitor bottom is flush with the screen bottom
         assert_eq!(strut_partial(&dock, dw, m, (3200, 1080)).unwrap()[3], 84);
+    }
+
+    #[test]
+    fn a_left_panel_is_flush_with_the_monitor_and_as_tall_as_it() {
+        let s = SurfaceSpec { anchor: Anchor::Left, margin: 0, reserve: 52, stretch: true, namespace: "t" };
+        assert_eq!(place(&s, (432, 0), mon(0, 0, 1600, 900)), (0, 0, 432, 900));
+        // a second monitor to the right: the panel follows it
+        assert_eq!(place(&s, (432, 0), mon(1920, 40, 1280, 720)), (1920, 40, 432, 720));
+        // an explicit height is respected (not stretched)
+        assert_eq!(place(&s, (60, 300), mon(0, 0, 1600, 900)), (0, 0, 60, 300));
+    }
+
+    #[test]
+    fn left_strut_reserves_the_bar_width_over_the_bar_rows_only() {
+        let s = SurfaceSpec { anchor: Anchor::Left, margin: 0, reserve: 52, stretch: true, namespace: "t" };
+        let m = mon(0, 0, 1600, 900);
+        // the surface is wider than the strut (it holds the popouts), the strut is only the bar
+        let win = place(&s, (432, 0), m);
+        assert_eq!(strut_partial(&s, win, m, (1600, 900)), Some([52, 0, 0, 0, 0, 899, 0, 0, 0, 0, 0, 0]));
+        // a monitor that does not start at x = 0 measures the strut from the screen edge
+        let m2 = mon(1920, 0, 1280, 720);
+        let win2 = place(&s, (432, 0), m2);
+        let st = strut_partial(&s, win2, m2, (3200, 720)).unwrap();
+        assert_eq!((st[0], st[4], st[5]), (1920 + 52, 0, 719));
     }
 
     #[test]

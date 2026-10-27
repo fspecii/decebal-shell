@@ -73,3 +73,18 @@ fn macexpose_is_registered_everywhere() {
     assert!(readme.contains("tests/e2e/expose.sh"));
     assert!(std::path::Path::new(&format!("{}/tests/e2e/expose.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
 }
+
+#[test]
+fn the_caelestia_style_is_documented_and_has_its_e2e() {
+    let readme = read("README.md");
+    assert!(readme.contains("## Caelestia style (vertical bar)") && readme.contains("docs/caelestia.md"), "README section");
+    assert!(readme.contains("tests/e2e/vbar.sh"));
+    let doc = read("docs/caelestia.md");
+    for needle in ["bar_style = \"vertical\"", "dock.enabled", "macspot", "macdash", "macsession", "macutil", "machud", "macnotify", "_NET_WM_STRUT_PARTIAL", "[[bind]]"] {
+        assert!(doc.contains(needle), "docs/caelestia.md does not mention {needle}");
+    }
+    assert!(read("Makefile").contains("e2e-vbar:"), "Makefile target");
+    assert!(std::path::Path::new(&format!("{}/tests/e2e/vbar.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
+    // the theme that uses the layout
+    assert!(read("src/theme/builtin/caelestia.toml").contains("bar_style = \"vertical\""));
+}

@@ -82,7 +82,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         .detail(match cur_style {
             Some(Style::Macos) => "macOS: menu bar and floating dock, macOS theme",
             Some(Style::Windows) => "Windows: Windows 11 theme and taskbar (the menu bar hides)",
-            Some(Style::Caelestia) => "Caelestia: Material You colours, pill-shaped bar and dock",
+            Some(Style::Caelestia) => "Caelestia: Material You colours, a vertical bar on the left edge, no dock",
             None => "Custom: pick one to set theme, dock and menu bar together",
         })
         .ctl(Ctl::new("th:style", Kind::Seg(style_opts, cur_style.map(|s| Style::ALL.iter().position(|x| *x == s).unwrap_or(0)))))]));
@@ -206,6 +206,8 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 }
                 let bar = style::bar_value(st, m.shell.get("bar"));
                 m.edit_json("shell", "bar", Some(bar));
+                let dock = style::dock_value(st, m.shell.get("dock"));
+                m.edit_json("shell", "dock", Some(dock));
                 m.say(format!("Shell style: {}", st.title()), false);
             }
             return;
@@ -327,17 +329,20 @@ mod tests {
         assert_eq!(m.dock["style"], "mac");
         assert_eq!(m.shell["bar"]["enabled"], true);
         assert!(std::fs::read_to_string(&cfg).unwrap().contains("focused_bg"), "rdwm follows too");
+        assert_eq!(m.shell["dock"]["enabled"], "auto", "Caelestia has no dock: it hides under the vertical bar");
 
         m.apply("th:style", CtlVal::Str("windows".into()));
         assert_eq!(selection(&m).name, "windows11");
         assert_eq!((m.dock["style"].as_str(), m.dock["windowsAlign"].as_str()), (Some("windows"), Some("center")));
         assert_eq!(m.shell["bar"]["enabled"], "auto");
+        assert_eq!(m.shell["dock"]["enabled"], true, "the dock is back");
         let file = crate::settings::io::json_load(&m.paths.dock_settings());
         assert_eq!(file["style"], "windows", "written to dock-settings.json");
 
         m.apply("th:style", CtlVal::Str("macos".into()));
         assert_eq!(selection(&m).name, "macos");
         assert_eq!(crate::settings::io::json_load(&m.paths.dock_settings())["style"], "mac");
+        assert_eq!(m.shell["dock"]["enabled"], true);
         let sel_idx = |m: &Model| match items(m).iter().find(|i| matches!(i, Item::Card(_))) {
             Some(Item::Card(rows)) => match rows.first().and_then(|r| r.ctls.first()).map(|c| &c.kind) {
                 Some(Kind::Seg(_, s)) => *s,

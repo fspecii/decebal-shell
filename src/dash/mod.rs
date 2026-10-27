@@ -74,6 +74,16 @@ pub struct Dash {
     theme_seen: u64,
 }
 
+/// Where the card hangs by default: just under the horizontal bar, or near the top edge when the theme's bar runs down
+/// the left side (Caelestia) and nothing is at the top.
+fn default_top() -> i32 {
+    if crate::theme::th().bar_vertical() {
+        10
+    } else {
+        crate::theme::BAR_HEIGHT as i32 + layout::BAR_GAP as i32
+    }
+}
+
 impl Dash {
     /// `center_x`: where under the bar the card hangs (the monitor's middle when `None`).
     pub fn new(tab: Tab, center_x: Option<i32>, top: Option<i32>) -> Dash {
@@ -81,7 +91,7 @@ impl Dash {
         Dash {
             tab,
             alpha: false,
-            anchor: PopupAnchor { top: top.unwrap_or(crate::theme::BAR_HEIGHT as i32 + layout::BAR_GAP as i32), center_x },
+            anchor: PopupAnchor { top: top.unwrap_or_else(default_top), center_x },
             fonts: Fonts::load(),
             symbols: SymbolCache::default(),
             waker: None,
@@ -634,7 +644,8 @@ mod tests {
         let d = Dash::new(Tab::Media, Some(640), None);
         let a = d.popup_anchor().unwrap();
         assert_eq!(a.center_x, Some(640));
-        assert!(a.top >= crate::theme::BAR_HEIGHT as i32, "below the bar: {}", a.top);
+        // below the horizontal bar, or near the top edge when the theme's bar is the vertical one
+        assert!(a.top >= if crate::theme::th().bar_vertical() { 0 } else { crate::theme::BAR_HEIGHT as i32 }, "below the bar: {}", a.top);
         assert_eq!(d.tab(), Tab::Media);
         assert_eq!(Dash::new(Tab::Overview, None, Some(40)).popup_anchor().unwrap().top, 40);
         assert_eq!(d.content_size(), Some((layout::CARD_W as u32, layout::CARD_H as u32)));

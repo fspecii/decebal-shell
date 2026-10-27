@@ -81,6 +81,16 @@ impl
     }
 }
 
+/// Layer-shell anchor and margins (top, right, bottom, left) for a surface spec; `stretch` spans the edge.
+fn layer_anchor(spec: &SurfaceSpec) -> (Anchor, (i32, i32, i32, i32)) {
+    let (edge, margins, along) = match spec.anchor {
+        SpecAnchor::Bottom => (Anchor::BOTTOM, (0, 0, spec.margin, 0), Anchor::LEFT | Anchor::RIGHT),
+        SpecAnchor::Top => (Anchor::TOP, (spec.margin, 0, 0, 0), Anchor::LEFT | Anchor::RIGHT),
+        SpecAnchor::Left => (Anchor::LEFT, (0, 0, 0, spec.margin), Anchor::TOP | Anchor::BOTTOM),
+    };
+    (if spec.stretch { edge | along } else { edge }, margins)
+}
+
 fn dispatch_err<E: fmt::Display>(e: E) -> Error {
     Error::Dispatch(e.to_string())
 }
@@ -106,11 +116,8 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
     let (w, h) = app.size();
     let surface = compositor.create_surface(&qh);
     let layer = layer_shell.create_layer_surface(&qh, surface, Layer::Top, Some(spec.namespace), None);
-    let (edge, margins) = match spec.anchor {
-        SpecAnchor::Bottom => (Anchor::BOTTOM, (0, 0, spec.margin, 0)),
-        SpecAnchor::Top => (Anchor::TOP, (spec.margin, 0, 0, 0)),
-    };
-    layer.set_anchor(if spec.stretch { edge | Anchor::LEFT | Anchor::RIGHT } else { edge });
+    let (anchor, margins) = layer_anchor(&spec);
+    layer.set_anchor(anchor);
     layer.set_margin(margins.0, margins.1, margins.2, margins.3);
     layer.set_size(w, h);
     // -1 floats above other panels' reserved space; a positive value keeps windows clear of the bar
@@ -263,11 +270,8 @@ impl<A: App + 'static> State<A> {
         if let Some(spec) = self.app.surface_spec() {
             if (spec.anchor, spec.margin, spec.reserve, spec.stretch) != (self.spec.anchor, self.spec.margin, self.spec.reserve, self.spec.stretch) {
                 self.spec = spec;
-                let (edge, margins) = match spec.anchor {
-                    SpecAnchor::Bottom => (Anchor::BOTTOM, (0, 0, spec.margin, 0)),
-                    SpecAnchor::Top => (Anchor::TOP, (spec.margin, 0, 0, 0)),
-                };
-                self.layer.set_anchor(if spec.stretch { edge | Anchor::LEFT | Anchor::RIGHT } else { edge });
+                let (anchor, margins) = layer_anchor(&spec);
+                self.layer.set_anchor(anchor);
                 self.layer.set_margin(margins.0, margins.1, margins.2, margins.3);
                 self.layer.set_exclusive_zone(if spec.reserve > 0 { spec.reserve } else { -1 });
                 self.layer.commit();
@@ -283,8 +287,13 @@ impl<A: App + 'static> State<A> {
             self.layer.set_size(want.0, want.1);
             if self.configured {
                 // Attach a buffer of the new size in the same commit so the compositor never stretches the old
-                // one over the resized surface (visible as a glitchy open/close).
-                self.height = want.1;
+                // one over the resized surface (visible as a glitchy open/close). A 0 means "the output's size".
+                if want.0 != 0 && self.spec.anchor == SpecAnchor::Left {
+                    self.width = want.0;
+                }
+                if want.1 != 0 {
+                    self.height = want.1;
+                }
                 self.app.resized(self.width, self.height);
                 self.dirty = false;
                 self.draw();
@@ -309,7 +318,7 @@ impl<A: App + 'static> State<A> {
 
     fn size_matches(&self) -> bool {
         // A stretched surface (width 0) matches whatever width the compositor chose.
-        (self.requested.0 == 0 || self.requested.0 == self.width) && self.requested.1 == self.height
+        (self.requested.0 == 0 || self.requested.0 == self.width) && (self.requested.1 == 0 || self.requested.1 == self.height)
     }
 
     fn maybe_draw(&mut self) {
