@@ -58,11 +58,33 @@ pub fn desktop_message(root: u32, index: u32, desktop_atom: Atom) -> ClientMessa
     ClientMessageEvent::new(32, root, desktop_atom, [index, x11rb::CURRENT_TIME, 0, 0, 0])
 }
 
+/// Client message asking the window manager to close `win` (`_NET_CLOSE_WINDOW`).
+pub fn close_message(win: u32, close_atom: Atom) -> ClientMessageEvent {
+    ClientMessageEvent::new(32, win, close_atom, [x11rb::CURRENT_TIME, SOURCE_PAGER, 0, 0, 0])
+}
+
+/// ICCCM `WM_CHANGE_STATE` to IconicState: asks the window manager to minimise `win`.
+pub fn iconify_message(win: u32, change_state_atom: Atom) -> ClientMessageEvent {
+    ClientMessageEvent::new(32, win, change_state_atom, [ICONIC_STATE, 0, 0, 0, 0])
+}
+
+const ICONIC_STATE: u32 = 3;
+
 struct Ewmh {
     conn: RustConnection,
     root: u32,
     active_atom: Atom,
     desktop_atom: Atom,
+    close_atom: Option<Atom>,
+    change_state_atom: Option<Atom>,
+}
+
+impl Ewmh {
+    fn to_root(&self, ev: ClientMessageEvent) {
+        let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;
+        let _ = self.conn.send_event(false, self.root, mask, ev);
+        let _ = self.conn.flush();
+    }
 }
 
 impl Control for Ewmh {
@@ -71,6 +93,18 @@ impl Control for Ewmh {
         let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;
         let _ = self.conn.send_event(false, self.root, mask, ev);
         let _ = self.conn.flush();
+    }
+
+    fn minimize(&self, id: u64) {
+        if let Some(a) = self.change_state_atom {
+            self.to_root(iconify_message(id as u32, a));
+        }
+    }
+
+    fn close(&self, id: u64) {
+        if let Some(a) = self.close_atom {
+            self.to_root(close_message(id as u32, a));
+        }
     }
 
     fn switch_workspace(&self, index: usize) {
@@ -110,7 +144,7 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     }
     let _ = conn.flush();
     // One connection for both directions: this thread reads, the UI thread sends client messages.
-    let conn = Arc::new(Ewmh { conn, root, active_atom: active, desktop_atom: current });
+    let conn = Arc::new(Ewmh { close_atom: atom(&conn, "_NET_CLOSE_WINDOW"), change_state_atom: atom(&conn, "WM_CHANGE_STATE"), conn, root, active_atom: active, desktop_atom: current });
     tracker.set_control(conn.clone());
 
     std::thread::spawn(move || {
@@ -190,5 +224,9 @@ mod tests {
         assert_eq!(m.data.as_data32()[0], SOURCE_PAGER);
         let d = desktop_message(1, 4, 9);
         assert_eq!((d.window, d.type_, d.data.as_data32()[0]), (1, 9, 4));
+        let c = close_message(5, 11);
+        assert_eq!((c.window, c.type_, c.format), (5, 11, 32));
+        let i = iconify_message(5, 12);
+        assert_eq!((i.window, i.type_, i.data.as_data32()[0]), (5, 12, ICONIC_STATE));
     }
 }

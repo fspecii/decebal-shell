@@ -35,7 +35,7 @@ fn main() {
         i += 1;
     }
 
-    let items: Vec<DockItem> = config::pinned().or_default(&|id| macshell::launch::find_exec(id).is_some()).into_iter().map(|id| DockItem { running: running.contains(&id), id }).collect();
+    let items: Vec<DockItem> = config::pinned().or_default(&|id| macshell::launch::find_exec(id).is_some()).into_iter().map(|id| DockItem::pinned(&id, running.contains(&id))).collect();
     let mut dock = Dock::new(items, config::dock_settings());
     dock.hover_x = hover;
     let (w, h) = dock.canvas_size();
@@ -54,7 +54,7 @@ fn main() {
         }
         None => {
             let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" };
-            if let Err(e) = backend::run(DockApp::new(dock).track_windows(), spec) {
+            if let Err(e) = backend::run(DockApp::new(dock).track_windows().watch_config(), spec) {
                 eprintln!("macdock: {e}");
                 std::process::exit(1);
             }

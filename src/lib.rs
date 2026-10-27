@@ -10,6 +10,7 @@ pub mod config;
 pub mod controlcenter;
 pub mod dock;
 pub mod dock_app;
+pub mod dock_menu;
 pub mod gfx;
 pub mod icons;
 pub mod keysym;

@@ -4,12 +4,33 @@ use crate::config::DockSettings;
 use crate::gfx::{self, blit_scaled, color, fill_circle, fill_rounded, stroke_rounded};
 use crate::icons::IconCache;
 use crate::theme::*;
+use std::time::{Duration, Instant};
 use tiny_skia::Pixmap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DockItem {
     pub id: String,
     pub running: bool,
+    /// In the pinned list (kept in the dock); false for an app that is only here because it runs.
+    pub pinned: bool,
+}
+
+impl DockItem {
+    pub fn pinned(id: &str, running: bool) -> Self {
+        Self { id: id.to_string(), running, pinned: true }
+    }
+
+    /// Launchpad and Trash are fixed ends of the dock: they cannot be dragged or removed.
+    pub fn is_builtin(&self) -> bool {
+        matches!(self.id.as_str(), "launchpad" | "trash")
+    }
+}
+
+/// An icon being dragged: its index in [`Dock::items`] and the pointer x (canvas coordinates).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Drag {
+    pub index: usize,
+    pub x: f32,
 }
 
 /// One laid-out cell: left edge, width and magnification scale.
@@ -32,6 +53,10 @@ pub struct Dock {
     pub settings: DockSettings,
     /// Pointer x in canvas coordinates while hovering the dock.
     pub hover_x: Option<f32>,
+    /// Icon currently being dragged to a new place.
+    pub drag: Option<Drag>,
+    /// Items that were just launched and bounce until their window appears (or a timeout).
+    bounce: Vec<(String, Instant)>,
     /// Smoothed per-item scales; empty until the first animation step.
     eased: Vec<f32>,
     icons: IconCache,
@@ -42,10 +67,16 @@ const REACH: f32 = 150.0;
 /// Extra transparent room above the panel for magnified icons and the launch bounce.
 const HEADROOM: f32 = 40.0;
 const SIDE_MARGIN: f32 = 24.0;
+/// The canvas is never narrower than this, so a context menu always fits above even a tiny dock.
+const MIN_CANVAS_W: f32 = 300.0;
+/// Height of one bounce, period of one bounce, and how long an app may bounce while it starts.
+const BOUNCE_H: f32 = 16.0;
+const BOUNCE_PERIOD: f32 = 0.7;
+const BOUNCE_MAX: Duration = Duration::from_secs(8);
 
 impl Dock {
     pub fn new(items: Vec<DockItem>, settings: DockSettings) -> Self {
-        Self { items, settings, hover_x: None, eased: Vec::new(), icons: IconCache::default() }
+        Self { items, settings, hover_x: None, drag: None, bounce: Vec::new(), eased: Vec::new(), icons: IconCache::default() }
     }
 
     fn base_cell_w() -> f32 {
@@ -64,9 +95,29 @@ impl Dock {
     /// Canvas (window) size that always fits the fully magnified dock.
     pub fn canvas_size(&self) -> (u32, u32) {
         let extra = self.items.len() as f32 * Self::base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
-        let w = self.rest_width() + extra + 2.0 * SIDE_MARGIN;
+        let w = (self.rest_width() + extra + 2.0 * SIDE_MARGIN).max(MIN_CANVAS_W);
         let h = PANEL_HEIGHT + HEADROOM;
         (w.ceil() as u32, h.ceil() as u32)
+    }
+
+    /// Starts the launch bounce for `id`.
+    pub fn start_bounce(&mut self, id: &str) {
+        self.bounce.retain(|(b, _)| b != id);
+        self.bounce.push((id.to_string(), Instant::now()));
+    }
+
+    /// Drops finished bounces (the app's window appeared, or it took too long). True while any remain.
+    pub fn bouncing(&mut self) -> bool {
+        let items = &self.items;
+        self.bounce.retain(|(id, t)| t.elapsed() < BOUNCE_MAX && !items.iter().any(|i| &i.id == id && i.running));
+        !self.bounce.is_empty()
+    }
+
+    fn bounce_offset(&self, id: &str) -> f32 {
+        match self.bounce.iter().find(|(b, _)| b == id) {
+            Some((_, t)) => BOUNCE_H * (t.elapsed().as_secs_f32() * std::f32::consts::PI / BOUNCE_PERIOD).sin().abs(),
+            None => 0.0,
+        }
     }
 
     fn falloff(distance: f32) -> f32 {
@@ -104,6 +155,7 @@ impl Dock {
     /// Moves the displayed scales toward the pointer's target (about 110 ms to settle, like the
     /// original). Returns true while still animating so the caller keeps ticking.
     pub fn step(&mut self, canvas_w: f32) -> bool {
+        let bouncing = self.bouncing();
         let n = self.items.len();
         let rest_x = (canvas_w - self.rest_width()) / 2.0;
         let target = self.target_scales(rest_x, n);
@@ -119,7 +171,7 @@ impl Dock {
                 moving = true;
             }
         }
-        moving
+        moving || bouncing
     }
 
     /// Computes cell positions for a canvas of width `canvas_w`.
@@ -171,14 +223,30 @@ impl Dock {
         stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, PANEL_HEIGHT - 1.0, radius - 0.5, color(255, 255, 255, DOCK_BORDER_ALPHA), 1.0);
 
         let icon_bottom = panel_y + PANEL_PAD_TOP + ICON_SIZE;
-        for (item, cell) in self.items.iter().zip(&layout.cells) {
+        let dragged = self.drag.map(|d| d.index);
+        for (i, (item, cell)) in self.items.iter().zip(&layout.cells).enumerate() {
+            if dragged == Some(i) {
+                // The slot stays empty; the icon follows the pointer (drawn last).
+                if item.running {
+                    fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, color(255, 255, 255, 0.85));
+                }
+                continue;
+            }
             let size = ICON_SIZE * cell.scale;
             let px = (size.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
+            let lift = self.bounce_offset(&item.id);
             let icon = self.icons.get(&item.id, px);
             let ix = cell.x + (cell.w - size) / 2.0;
-            blit_scaled(pm, icon, ix, icon_bottom - size, size, size, 1.0);
+            blit_scaled(pm, icon, ix, icon_bottom - size - lift, size, size, 1.0);
             if item.running {
                 fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, color(255, 255, 255, 0.85));
+            }
+        }
+        if let Some(d) = self.drag {
+            if let Some(item) = self.items.get(d.index) {
+                let size = ICON_SIZE * 1.1;
+                let icon = self.icons.get(&item.id, (size.ceil() as u32) * 2);
+                blit_scaled(pm, icon, d.x - size / 2.0, icon_bottom - size - 8.0, size, size, 0.9);
             }
         }
     }
@@ -194,7 +262,7 @@ mod tests {
     use super::*;
 
     fn dock(n: usize) -> Dock {
-        let items = (0..n).map(|i| DockItem { id: format!("app{i}"), running: i == 0 }).collect();
+        let items = (0..n).map(|i| DockItem::pinned(&format!("app{i}"), i == 0)).collect();
         Dock::new(items, DockSettings::default())
     }
 
@@ -272,6 +340,41 @@ mod tests {
         let (w, h) = d.canvas_size();
         let mut pm = Pixmap::new(w, h).unwrap();
         d.draw(&mut pm);
+    }
+
+    #[test]
+    fn canvas_has_room_for_a_menu_even_with_two_icons() {
+        assert!(dock(2).canvas_size().0 >= 300);
+    }
+
+    #[test]
+    fn bounce_runs_until_the_app_is_running() {
+        let mut d = dock(3);
+        d.start_bounce("app1");
+        assert!(d.bouncing());
+        assert!(d.step(400.0), "keeps the animation ticking");
+        d.items[1].running = true;
+        assert!(!d.bouncing());
+        assert_eq!(d.bounce_offset("app1"), 0.0);
+        d.start_bounce("app2");
+        assert!(d.bounce_offset("app2") >= 0.0);
+        d.start_bounce("app2");
+        assert_eq!(d.bounce.len(), 1, "restarting does not stack");
+    }
+
+    #[test]
+    fn dragged_icon_draws() {
+        let mut d = dock(4);
+        let (w, h) = d.canvas_size();
+        d.drag = Some(Drag { index: 1, x: 150.0 });
+        let mut pm = Pixmap::new(w, h).unwrap();
+        d.draw(&mut pm);
+    }
+
+    #[test]
+    fn builtin_items_are_fixed() {
+        assert!(DockItem::pinned("trash", false).is_builtin() && DockItem::pinned("launchpad", false).is_builtin());
+        assert!(!DockItem::pinned("foot", false).is_builtin());
     }
 
     #[test]

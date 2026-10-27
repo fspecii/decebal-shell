@@ -39,6 +39,10 @@ On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
 * `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`
 * `macshell.json` - `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
 
+The dock re-reads `dock-pinned-macos.json` and `dock-settings.json` within about a second of an external edit (a `stat` twice a second, no restart); its own changes are written atomically.
+
+Dock interaction: click focuses a running app (restoring a minimised window) or launches it with a bounce; middle click starts a new instance; drag a pinned icon sideways to reorder; right click opens the context menu (windows, New Window, Keep in / Remove from Dock, Show in Finder, Hide, Quit; Open / Empty Trash for the Trash). The menu closes on Escape, an outside click or activation, and supports hover and Up / Down / Enter. Running apps that are not pinned appear before the Trash. `MACSHELL_OPEN` (default `xdg-open`) and `MACSHELL_TRASH_EMPTY` (default `gio trash --empty`) override the helper commands.
+
 Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
 Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed.
@@ -75,6 +79,7 @@ dwm: add `{ "machaven", NULL, NULL, 0, 1, -1 }` to the `rules[]` table in `confi
 
 ```sh
 cargo test                       # unit tests
+tests/e2e/dock_menu.sh           # dock menu / reorder / live reload against rdwm on a private Xvfb (:93)
 macdock --png dock.png           # render the dock to a PNG without any display
 ```
 

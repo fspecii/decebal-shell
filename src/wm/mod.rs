@@ -42,6 +42,10 @@ pub trait Control: Send + Sync {
     fn activate(&self, id: u64);
     /// Switch to workspace `index` (position in [`WmState::workspaces`]).
     fn switch_workspace(&self, index: usize);
+    /// Minimise (hide) the window; focusing it again restores it.
+    fn minimize(&self, _id: u64) {}
+    /// Ask the window to close (like its close button); the app may still ask to save.
+    fn close(&self, _id: u64) {}
 }
 
 /// True when the running window manager is rdwm (the Wayland session sets `XDG_CURRENT_DESKTOP`,
@@ -135,6 +139,25 @@ impl Tracker {
         if let Some(c) = self.controller() {
             c.activate(id);
         }
+    }
+
+    /// Asks the window manager to minimise a window.
+    pub fn minimize(&self, id: u64) {
+        if let Some(c) = self.controller() {
+            c.minimize(id);
+        }
+    }
+
+    /// Asks a window to close.
+    pub fn close(&self, id: u64) {
+        if let Some(c) = self.controller() {
+            c.close(id);
+        }
+    }
+
+    /// Every window of an app (matched like the dock matches ids), in window-list order.
+    pub fn windows_for(&self, dock_id: &str) -> Vec<Window> {
+        self.lock().windows.iter().filter(|w| app_matches(dock_id, &w.app_id)).cloned().collect()
     }
 
     /// Asks the window manager to switch to workspace `index`.

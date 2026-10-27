@@ -19,6 +19,14 @@ pub enum Key {
     Escape,
 }
 
+/// Navigation keys for menus (kept apart from [`Key`] so existing exhaustive matches keep compiling).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavKey {
+    Up,
+    Down,
+    Enter,
+}
+
 /// A rectangle in surface coordinates that should receive pointer input.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InputRect {
@@ -71,6 +79,15 @@ pub trait App {
         false
     }
     fn key(&mut self, _key: Key) -> bool {
+        false
+    }
+    /// Up / Down / Enter while [`App::wants_keyboard`] is true.
+    fn nav_key(&mut self, _key: NavKey) -> bool {
+        false
+    }
+    /// True while a popup is open that must see clicks anywhere on screen (to close on an outside click).
+    /// X11 grabs the pointer for it; Wayland cannot, so the UI closes when the pointer leaves instead.
+    fn wants_pointer_grab(&self) -> bool {
         false
     }
     /// True while the UI needs keyboard input (a menu is open).

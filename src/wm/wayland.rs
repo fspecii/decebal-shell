@@ -59,6 +59,24 @@ impl Control for Remote {
         let _ = self.conn.flush();
     }
 
+    fn minimize(&self, id: u64) {
+        let h = self.handles.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(t) = h.toplevels.get(&(id as u32)) {
+            t.set_minimized();
+        }
+        drop(h);
+        let _ = self.conn.flush();
+    }
+
+    fn close(&self, id: u64) {
+        let h = self.handles.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(t) = h.toplevels.get(&(id as u32)) {
+            t.close();
+        }
+        drop(h);
+        let _ = self.conn.flush();
+    }
+
     fn switch_workspace(&self, index: usize) {
         let h = self.handles.lock().unwrap_or_else(|p| p.into_inner());
         if let (Some(ws), Some(m)) = (h.workspaces.get(index), &h.manager) {

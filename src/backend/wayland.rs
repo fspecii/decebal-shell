@@ -4,7 +4,7 @@
 //! (`App::tick`) and worker threads (`Waker`) without busy-waiting.
 
 use super::{poll_readable, poll_writable, Anchor as SpecAnchor, SurfaceSpec, WakePipe};
-use crate::app::{App, Button, InputRect, Key};
+use crate::app::{App, Button, InputRect, Key, NavKey};
 use smithay_client_toolkit::reexports::client::backend::WaylandError;
 use smithay_client_toolkit::reexports::client::{
     globals::registry_queue_init,
@@ -450,6 +450,12 @@ impl<A: App + 'static> KeyboardHandler for State<A> {
     fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, event: KeyEvent) {
         if event.keysym == Keysym::Escape {
             self.dirty |= self.app.key(Key::Escape);
+        } else if event.keysym == Keysym::Up {
+            self.dirty |= self.app.nav_key(NavKey::Up);
+        } else if event.keysym == Keysym::Down {
+            self.dirty |= self.app.nav_key(NavKey::Down);
+        } else if event.keysym == Keysym::Return || event.keysym == Keysym::KP_Enter {
+            self.dirty |= self.app.nav_key(NavKey::Enter);
         }
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, _: KeyEvent) {}

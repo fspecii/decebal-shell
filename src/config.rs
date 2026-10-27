@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 /// `dock-settings.json`
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DockSettings {
     pub app_spacing: f32,
@@ -138,8 +138,79 @@ pub fn pinned() -> Pinned {
     load("dock-pinned-macos.json")
 }
 
+/// File name of the pinned list inside [`config_dir`].
+pub const PINNED_FILE: &str = "dock-pinned-macos.json";
+/// File name of the dock settings inside [`config_dir`].
+pub const SETTINGS_FILE: &str = "dock-settings.json";
+
+/// Cheap change detector for a config file: modification time and length (`None` = missing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Stamp(Option<(std::time::SystemTime, u64)>);
+
+impl Stamp {
+    pub fn of(path: &std::path::Path) -> Stamp {
+        Stamp(std::fs::metadata(path).ok().and_then(|m| m.modified().ok().map(|t| (t, m.len()))))
+    }
+}
+
+/// Writes the pinned list (both `pinned` and `order`) to `path`, keeping any other keys of an
+/// existing file. The write is atomic (temporary file in the same directory, then rename) so
+/// a reader never sees a half-written file.
+pub fn write_pinned(path: &std::path::Path, list: &[String]) -> std::io::Result<()> {
+    let mut doc: serde_json::Value =
+        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({ "version": 1 }));
+    doc["pinned"] = serde_json::json!(list);
+    doc["order"] = serde_json::json!(list);
+    let mut text = serde_json::to_string_pretty(&doc).map_err(std::io::Error::other)?;
+    text.push('\n');
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension(format!("json.tmp{}", std::process::id()));
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
+/// Pure list edits behind the dock menu and drag-and-drop.
+pub mod edit {
+    /// Adds `id` (before the trash when that is last); no-op when already present.
+    pub fn add(list: &mut Vec<String>, id: &str) {
+        if list.iter().any(|x| x == id) {
+            return;
+        }
+        match list.last() {
+            Some(last) if last == "trash" => list.insert(list.len() - 1, id.to_string()),
+            _ => list.push(id.to_string()),
+        }
+    }
+
+    /// Removes every entry equal to `id`; true when something was removed.
+    pub fn remove(list: &mut Vec<String>, id: &str) -> bool {
+        let before = list.len();
+        list.retain(|x| x != id);
+        list.len() != before
+    }
+
+    /// Moves the entry at `from` so it ends up at index `to` (both clamped); true when the order changed.
+    pub fn move_to(list: &mut Vec<String>, from: usize, to: usize) -> bool {
+        if from >= list.len() {
+            return false;
+        }
+        let to = to.min(list.len() - 1);
+        if from == to {
+            return false;
+        }
+        let item = list.remove(from);
+        list.insert(to, item);
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::edit::add;
     use super::*;
 
     #[test]
@@ -175,6 +246,79 @@ mod tests {
     fn order_skips_unknown_and_appends_missing() {
         let p = Pinned { pinned: vec!["a".into(), "b".into(), "c".into()], order: vec!["c".into(), "x".into(), "a".into()] };
         assert_eq!(p.ordered(), vec!["c", "a", "b"]);
+    }
+
+    fn tmp_dir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("macshell-cfg-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn list(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn write_pinned_is_atomic_and_keeps_other_keys() {
+        let d = tmp_dir("write");
+        let f = d.join(PINNED_FILE);
+        std::fs::write(&f, r#"{"version": 1, "extra": {"a": 1}, "pinned": ["x"], "order": ["x"]}"#).unwrap();
+        write_pinned(&f, &list(&["launchpad", "foot", "trash"])).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!(v["extra"]["a"], 1);
+        assert_eq!(v["pinned"], serde_json::json!(["launchpad", "foot", "trash"]));
+        assert_eq!(v["order"], v["pinned"]);
+        // no temporary files are left behind
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
+        let p: Pinned = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!(p.ordered(), list(&["launchpad", "foot", "trash"]));
+    }
+
+    #[test]
+    fn write_pinned_creates_missing_file_and_replaces_garbage() {
+        let d = tmp_dir("create");
+        let f = d.join("sub/dock-pinned-macos.json");
+        write_pinned(&f, &list(&["a"])).unwrap();
+        assert!(f.is_file());
+        std::fs::write(&f, "not json").unwrap();
+        write_pinned(&f, &list(&["b"])).unwrap();
+        let p: Pinned = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!(p.ordered(), list(&["b"]));
+    }
+
+    #[test]
+    fn stamp_changes_with_the_file() {
+        let d = tmp_dir("stamp");
+        let f = d.join("x.json");
+        let missing = Stamp::of(&f);
+        std::fs::write(&f, "{}").unwrap();
+        let one = Stamp::of(&f);
+        assert_ne!(missing, one);
+        assert_eq!(one, Stamp::of(&f));
+        std::fs::write(&f, "{ }").unwrap();
+        assert_ne!(one, Stamp::of(&f));
+    }
+
+    #[test]
+    fn list_edits() {
+        let mut l = list(&["launchpad", "a", "trash"]);
+        add(&mut l, "b");
+        assert_eq!(l, list(&["launchpad", "a", "b", "trash"]));
+        add(&mut l, "b");
+        assert_eq!(l.len(), 4, "no duplicates");
+        assert!(edit::remove(&mut l, "a"));
+        assert!(!edit::remove(&mut l, "a"));
+        assert_eq!(l, list(&["launchpad", "b", "trash"]));
+        assert!(edit::move_to(&mut l, 2, 1));
+        assert_eq!(l, list(&["launchpad", "trash", "b"]));
+        assert!(!edit::move_to(&mut l, 1, 1));
+        assert!(!edit::move_to(&mut l, 9, 0));
+        assert!(edit::move_to(&mut l, 0, 99), "target clamps to the end");
+        assert_eq!(l, list(&["trash", "b", "launchpad"]));
+        let mut empty: Vec<String> = vec![];
+        add(&mut empty, "z");
+        assert_eq!(empty, list(&["z"]));
     }
 
     #[test]

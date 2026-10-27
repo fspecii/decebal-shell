@@ -15,6 +15,82 @@ fn app_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+/// Path of `<id>.desktop` (also tried lowercase) in the first applications directory that has it.
+pub fn find_desktop_file(id: &str) -> Option<PathBuf> {
+    if id.is_empty() || id.contains('/') {
+        return None;
+    }
+    for dir in app_dirs() {
+        for name in [format!("{id}.desktop"), format!("{}.desktop", id.to_lowercase())] {
+            let p = dir.join(name);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// `StartupWMClass=` of the `[Desktop Entry]` group.
+pub fn parse_wm_class(desktop: &str) -> Option<String> {
+    let mut in_entry = false;
+    for line in desktop.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_entry = line == "[Desktop Entry]";
+        } else if in_entry {
+            if let Some(v) = line.strip_prefix("StartupWMClass=") {
+                return Some(v.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Desktop-file id (`org.gnome.Nautilus`) for a window's app id / WM_CLASS: a file named like it, else one
+/// whose `StartupWMClass` or trailing name component matches. `None` for windows without an installed app.
+pub fn resolve_desktop_id(app_id: &str) -> Option<String> {
+    if app_id.is_empty() {
+        return None;
+    }
+    if let Some(p) = find_desktop_file(app_id) {
+        return p.file_stem().map(|s| s.to_string_lossy().into_owned());
+    }
+    let want = app_id.to_lowercase();
+    for dir in app_dirs() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "desktop")).collect();
+        files.sort();
+        for path in files {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let by_name = stem.to_lowercase().ends_with(&format!(".{want}"));
+            let by_class = std::fs::read_to_string(&path).ok().and_then(|t| parse_wm_class(&t)).is_some_and(|c| c.to_lowercase() == want);
+            if by_name || by_class {
+                return Some(stem);
+            }
+        }
+    }
+    None
+}
+
+/// Command that opens a file, folder or URL: `$MACSHELL_OPEN` (tests, custom file managers) or `xdg-open`.
+pub fn open_argv(target: &str) -> Vec<String> {
+    let mut argv = match std::env::var("MACSHELL_OPEN") {
+        Ok(c) if !c.trim().is_empty() => exec_argv(&c),
+        _ => vec!["xdg-open".to_string()],
+    };
+    argv.push(target.to_string());
+    argv
+}
+
+/// Command that empties the trash: `$MACSHELL_TRASH_EMPTY` or `gio trash --empty`.
+pub fn empty_trash_argv() -> Vec<String> {
+    match std::env::var("MACSHELL_TRASH_EMPTY") {
+        Ok(c) if !c.trim().is_empty() => exec_argv(&c),
+        _ => vec!["gio".to_string(), "trash".to_string(), "--empty".to_string()],
+    }
+}
+
 /// Finds `<id>.desktop` and returns its `Exec=` line.
 pub fn find_exec(id: &str) -> Option<String> {
     for dir in app_dirs() {
@@ -81,7 +157,7 @@ pub fn exec_argv(exec: &str) -> Vec<String> {
 /// Starts the app detached from us. Returns false if it could not be found or spawned.
 pub fn launch(id: &str) -> bool {
     let argv = match id {
-        "trash" => vec!["xdg-open".to_string(), "trash:///".to_string()],
+        "trash" => open_argv("trash:///"),
         "launchpad" => match std::env::var("MACSHELL_LAUNCHPAD") {
             Ok(cmd) if !cmd.is_empty() => exec_argv(&cmd),
             _ => vec![sibling_or_path("maclaunch")],
@@ -104,7 +180,7 @@ pub fn spawn_exec(exec: &str) -> bool {
     spawn_argv(&exec_argv(exec))
 }
 
-fn spawn_argv(argv: &[String]) -> bool {
+pub fn spawn_argv(argv: &[String]) -> bool {
     let Some((prog, args)) = argv.split_first() else {
         return false;
     };
@@ -146,6 +222,31 @@ mod tests {
     #[test]
     fn literal_percent() {
         assert_eq!(exec_argv("printf 100%%"), vec!["printf", "100%"]);
+    }
+
+    #[test]
+    fn wm_class_from_desktop_entry() {
+        assert_eq!(parse_wm_class("[Desktop Entry]\nName=A\nStartupWMClass=Foo\n").as_deref(), Some("Foo"));
+        assert_eq!(parse_wm_class("[Desktop Action x]\nStartupWMClass=No\n"), None);
+    }
+
+    #[test]
+    fn open_and_trash_commands_can_be_overridden() {
+        // Only this test touches these variables.
+        std::env::set_var("MACSHELL_OPEN", "my-open --flag");
+        assert_eq!(open_argv("/tmp"), vec!["my-open", "--flag", "/tmp"]);
+        std::env::remove_var("MACSHELL_OPEN");
+        assert_eq!(open_argv("/tmp"), vec!["xdg-open", "/tmp"]);
+        std::env::set_var("MACSHELL_TRASH_EMPTY", "true");
+        assert_eq!(empty_trash_argv(), vec!["true"]);
+        std::env::remove_var("MACSHELL_TRASH_EMPTY");
+        assert_eq!(empty_trash_argv(), vec!["gio", "trash", "--empty"]);
+    }
+
+    #[test]
+    fn path_like_ids_never_resolve() {
+        assert_eq!(find_desktop_file("../etc/passwd"), None);
+        assert_eq!(resolve_desktop_id(""), None);
     }
 
     #[test]

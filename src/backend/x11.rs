@@ -5,7 +5,7 @@
 //! and worker threads (`Waker`).
 
 use super::{poll_readable, Anchor, SurfaceSpec, WakePipe};
-use crate::app::{App, Button, InputRect, Key};
+use crate::app::{App, Button, InputRect, Key, NavKey};
 use std::fmt;
 use std::os::fd::AsRawFd;
 use std::time::Instant;
@@ -18,8 +18,12 @@ use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
-/// evdev/xkb keycode for Escape on virtually every X11 setup.
+/// evdev/xkb keycodes (8 + evdev code) on virtually every X11 setup.
 const KEYCODE_ESCAPE: u8 = 9;
+const KEYCODE_RETURN: u8 = 36;
+const KEYCODE_KP_ENTER: u8 = 104;
+const KEYCODE_UP: u8 = 111;
+const KEYCODE_DOWN: u8 = 116;
 
 #[derive(Debug)]
 pub struct Error(String);
@@ -237,6 +241,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut dirty = true;
     let mut last_visible: Vec<Rectangle> = Vec::new();
     let mut grabbed = false;
+    let mut ptr_grabbed = false;
     let mut next_tick: Option<Instant> = Some(Instant::now());
 
     loop {
@@ -268,6 +273,18 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
             grabbed = false;
         }
 
+        // A popup open: take the pointer so a click anywhere (even on another window) reaches us and
+        // closes it. owner_events keeps normal delivery for clicks on our own window.
+        let want_ptr = app.wants_pointer_grab();
+        if want_ptr && !ptr_grabbed {
+            let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION;
+            let reply = conn.grab_pointer(true, win, mask, GrabMode::ASYNC, GrabMode::ASYNC, x11rb::NONE, x11rb::NONE, x11rb::CURRENT_TIME).map_err(err)?.reply().map_err(err)?;
+            ptr_grabbed = reply.status == GrabStatus::SUCCESS;
+        } else if !want_ptr && ptr_grabbed {
+            conn.ungrab_pointer(x11rb::CURRENT_TIME).map_err(err)?;
+            ptr_grabbed = false;
+        }
+
         if dirty {
             dirty = false;
             app.draw(&mut pm);
@@ -292,7 +309,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 Event::Expose(_) => dirty = true,
                 Event::MotionNotify(m) => dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32),
                 Event::EnterNotify(m) => dirty |= app.pointer_motion(m.event_x as f32, m.event_y as f32),
-                Event::LeaveNotify(_) => dirty |= app.pointer_leave(),
+                Event::LeaveNotify(_) if !ptr_grabbed => dirty |= app.pointer_leave(),
                 Event::ButtonPress(b) => {
                     let (ex, ey) = (b.event_x as f32, b.event_y as f32);
                     dirty |= match b.detail {
@@ -314,6 +331,9 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                     };
                 }
                 Event::KeyPress(k) if k.detail == KEYCODE_ESCAPE => dirty |= app.key(Key::Escape),
+                Event::KeyPress(k) if k.detail == KEYCODE_UP => dirty |= app.nav_key(NavKey::Up),
+                Event::KeyPress(k) if k.detail == KEYCODE_DOWN => dirty |= app.nav_key(NavKey::Down),
+                Event::KeyPress(k) if k.detail == KEYCODE_RETURN || k.detail == KEYCODE_KP_ENTER => dirty |= app.nav_key(NavKey::Enter),
                 Event::RandrScreenChangeNotify(_) => {
                     // Re-read the screen and monitor; the placement check at the top of the loop moves
                     // the window and republishes the strut.
