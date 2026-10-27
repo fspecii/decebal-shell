@@ -116,13 +116,26 @@ fn panel_monitor(conn: &RustConnection, root: Window, screen: (i32, i32)) -> Rec
     pick.map(|m| Rect { x: m.x as i32, y: m.y as i32, w: m.width as i32, h: m.height as i32 }).unwrap_or(whole)
 }
 
-fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size: (u32, u32)) -> Result<(), Error> {
+/// True when a compositing manager owns `_NET_WM_CM_S<screen>`; without one the transparent part of
+/// a 32-bit window is drawn solid black, so the visible shape has to be clipped as well.
+fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
+    let name = format!("_NET_WM_CM_S{screen_num}");
+    let Some(atom) = conn.intern_atom(true, name.as_bytes()).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0) else { return false };
+    conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
+}
+
+/// Clicks go only to `rects` (all of the window when empty). With `clip` the visible area is cut to
+/// the same rectangles.
+fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size: (u32, u32), clip: bool) -> Result<(), Error> {
     let list: Vec<Rectangle> = if rects.is_empty() {
         vec![Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]
     } else {
         rects.iter().map(|r| Rectangle { x: r.x as i16, y: r.y as i16, width: r.w.max(1) as u16, height: r.h.max(1) as u16 }).collect()
     };
     conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &list).map_err(err)?;
+    if clip {
+        conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &list).map_err(err)?;
+    }
     Ok(())
 }
 
@@ -158,7 +171,8 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
 
     set_panel_hints(&conn, win, &atoms, strut_partial(&spec, (x, y, w, h), mon, screen_size))?;
     let mut rects = app.input_rects();
-    set_input_shape(&conn, win, &rects, (w, h))?;
+    let clip = !has_compositor(&conn, screen_num);
+    set_input_shape(&conn, win, &rects, (w, h), clip)?;
 
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, win, &CreateGCAux::new()).map_err(err)?;
@@ -191,7 +205,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         let new_rects = app.input_rects();
         if new_rects != rects {
             rects = new_rects;
-            set_input_shape(&conn, win, &rects, size)?;
+            set_input_shape(&conn, win, &rects, size, clip)?;
             dirty = true;
         }
         let want_kb = app.wants_keyboard();
