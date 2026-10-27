@@ -170,18 +170,21 @@ impl Cfg {
     // ---------------------------------------------------------------- [[arrays of tables]]
 
     fn aot(&self, name: &str) -> Option<&ArrayOfTables> {
-        self.doc.as_table().get(name)?.as_array_of_tables()
+        let (parent, last) = name.rsplit_once('.').unwrap_or(("", name));
+        table_at(self.doc.as_table(), parent)?.get(last)?.as_array_of_tables()
     }
 
+    /// `name` may be dotted (`wallpaper.output` for `[[wallpaper.output]]`).
     fn aot_mut(&mut self, name: &str, create: bool) -> Result<&mut ArrayOfTables, String> {
-        let root = self.doc.as_table_mut();
-        if !root.contains_key(name) {
+        let (parent, last) = name.rsplit_once('.').unwrap_or(("", name));
+        let t = table_at_mut(self.doc.as_table_mut(), parent, create)?;
+        if !t.contains_key(last) {
             if !create {
                 return Err(format!("no [[{name}]]"));
             }
-            root.insert(name, Item::ArrayOfTables(ArrayOfTables::new()));
+            t.insert(last, Item::ArrayOfTables(ArrayOfTables::new()));
         }
-        root.get_mut(name).and_then(Item::as_array_of_tables_mut).ok_or_else(|| format!("`{name}` is not an array of tables (inline arrays are not editable here)"))
+        t.get_mut(last).and_then(Item::as_array_of_tables_mut).ok_or_else(|| format!("`{name}` is not an array of tables (inline arrays are not editable here)"))
     }
 
     pub fn array_len(&self, name: &str) -> usize {
@@ -220,11 +223,13 @@ impl Cfg {
 
     pub fn array_remove(&mut self, name: &str, i: usize) -> Result<(), String> {
         self.aot_len_check(name, i)?;
-        let root = self.doc.as_table_mut();
-        let arr = root.get_mut(name).and_then(Item::as_array_of_tables_mut).ok_or("not an array of tables")?;
+        let arr = self.aot_mut(name, false)?;
         arr.remove(i);
         if arr.is_empty() {
-            root.remove(name);
+            let (parent, last) = name.rsplit_once('.').unwrap_or(("", name));
+            if let Ok(t) = table_at_mut(self.doc.as_table_mut(), parent, false) {
+                t.remove(last);
+            }
         }
         Ok(())
     }
@@ -404,6 +409,17 @@ action = "setmfact"
         assert_eq!(c.nested_get("mode", 0, "bind", 0, "action"), Some(Val::Str("setmfact".into())));
         c.array_push("rule", &[("class", Val::Str("mpv".into())), ("floating", Val::Bool(true))]).unwrap();
         assert!(c.text().contains("[[mode.bind]]"));
+    }
+
+    #[test]
+    fn dotted_array_names() {
+        let mut c = Cfg::parse("[wallpaper]\nmode = \"fit\"\n").unwrap();
+        c.array_push("wallpaper.output", &[("name", Val::Str("DP-1".into())), ("mode", Val::Str("fill".into()))]).unwrap();
+        assert!(c.text().contains("[[wallpaper.output]]"), "{}", c.text());
+        assert_eq!(c.array_get("wallpaper.output", 0, "name"), Some(Val::Str("DP-1".into())));
+        c.array_remove("wallpaper.output", 0).unwrap();
+        assert_eq!(c.array_len("wallpaper.output"), 0);
+        assert_eq!(c.get("wallpaper", "mode"), Some(Val::Str("fit".into())));
     }
 
     #[test]

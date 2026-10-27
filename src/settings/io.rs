@@ -21,6 +21,8 @@ pub struct Paths {
     /// `~/.config/omarchy` (or `$MACSHELL_CONFIG`): dock-settings.json etc.
     pub shell_dir: PathBuf,
     pub rdwmctl: PathBuf,
+    /// rdwm's IPC socket (`RDWM_SOCK`, else `$XDG_RUNTIME_DIR/rdwm.sock`).
+    pub socket: PathBuf,
 }
 
 impl Paths {
@@ -30,17 +32,11 @@ impl Paths {
             .or_else(|| std::env::var_os("RDWM_CONFIG"))
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("rdwm/config.toml")).unwrap_or_else(|| home.join(".config/rdwm/config.toml")));
-        Paths { rdwm_config, shell_dir: crate::config::config_dir(), rdwmctl: std::env::var_os("RDWMCTL").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("rdwmctl")) }
-    }
-
-    pub fn socket(&self) -> PathBuf {
-        if let Some(p) = std::env::var_os("RDWM_SOCK").filter(|s| !s.is_empty()) {
-            return PathBuf::from(p);
-        }
-        match std::env::var_os("XDG_RUNTIME_DIR").filter(|s| !s.is_empty()) {
-            Some(d) => PathBuf::from(d).join("rdwm.sock"),
-            None => PathBuf::from("/nonexistent/rdwm.sock"),
-        }
+        let socket = match std::env::var_os("RDWM_SOCK").filter(|s| !s.is_empty()) {
+            Some(p) => PathBuf::from(p),
+            None => std::env::var_os("XDG_RUNTIME_DIR").filter(|s| !s.is_empty()).map(|d| PathBuf::from(d).join("rdwm.sock")).unwrap_or_else(|| PathBuf::from("/nonexistent/rdwm.sock")),
+        };
+        Paths { rdwm_config, shell_dir: crate::config::config_dir(), rdwmctl: std::env::var_os("RDWMCTL").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("rdwmctl")), socket }
     }
 
     pub fn dock_settings(&self) -> PathBuf {
@@ -254,6 +250,8 @@ pub enum Ev {
     FilesChanged,
     /// rdwm's runtime view changed (or appeared / vanished).
     Runtime(Box<Runtime>),
+    /// Result of a `reload` request to rdwm.
+    Reload(Result<(), String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -264,6 +262,7 @@ pub struct Runtime {
     pub binds: Value,
     /// Error text of the last failed reload, if rdwm still holds one.
     pub error: Option<String>,
+    pub version: Option<String>,
 }
 
 pub type Queue = Arc<Mutex<VecDeque<Ev>>>;
@@ -272,7 +271,7 @@ pub fn poll_runtime(sock: &Path) -> Runtime {
     let Ok(state) = ipc_call(sock, &serde_json::json!({"cmd":"get_state"})) else { return Runtime::default() };
     let config = ipc_call(sock, &serde_json::json!({"cmd":"get_config"})).unwrap_or(Value::Null);
     let binds = ipc_call(sock, &serde_json::json!({"cmd":"bind","op":"list"})).unwrap_or(Value::Null);
-    Runtime { running: true, error: config["error"].as_str().map(String::from), state: state["state"].clone(), config: config["config"].clone(), binds: binds["binds"].clone() }
+    Runtime { running: true, version: config["version"].as_str().map(String::from), error: config["error"].as_str().map(String::from), state: state["state"].clone(), config: config["config"].clone(), binds: binds["binds"].clone() }
 }
 
 /// Polls file stamps every 500 ms and rdwm's state every second; wakes the UI only on change.
