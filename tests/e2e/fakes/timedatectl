@@ -1,0 +1,10 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "timedatectl $*" >> "$FS/log"
+tz=$(cat "$FS/tz" 2>/dev/null || echo Europe/Bucharest); ntp=$(cat "$FS/ntp" 2>/dev/null || echo yes)
+case "$1" in
+show) printf 'Timezone=%s\nLocalRTC=no\nCanNTP=yes\nNTP=%s\nNTPSynchronized=yes\n' "$tz" "$ntp";;
+list-timezones) printf 'Africa/Accra\nAmerica/New_York\nAsia/Tokyo\nEurope/Berlin\nEurope/Bucharest\nUTC\n';;
+set-timezone) [ -f "$FS/polkit_deny" ] && { echo "Failed to set time zone: Interactive authentication required." >&2; exit 1; }; echo "$2" > "$FS/tz";;
+set-ntp) [ "$2" = true ] && echo yes > "$FS/ntp" || echo no > "$FS/ntp";;
+esac
+exit 0

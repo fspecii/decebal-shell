@@ -217,6 +217,9 @@ pub fn items(h: &Hub) -> Vec<Item> {
     if let Some(e) = &st.error {
         v.push(Item::Note { text: e.clone(), warn: true });
     }
+    if super::run::wayland_session() {
+        v.push(Item::Note { text: "This is a Wayland session: layout, key repeat and pointer settings below only reach X11 apps (XWayland). Configure the compositor for native apps.".into(), warn: false });
+    }
     v.push(Item::Header("Keyboard".into()));
     let mut rows = Vec::new();
     if st.has_xkb && st.error.is_none() {

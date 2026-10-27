@@ -182,6 +182,13 @@ pub fn parse_xrandr(text: &str) -> Vec<Output> {
 }
 
 pub fn load(r: &dyn Runner) -> State {
+    load_env(r, super::run::wayland_session())
+}
+
+pub fn load_env(r: &dyn Runner, wayland: bool) -> State {
+    if wayland {
+        return State { error: Some("This is a Wayland session: displays are arranged by the compositor (xrandr only reaches XWayland), so they are not changed here.".into()), ..State::default() };
+    }
     let night = ["gammastep", "redshift"].iter().find(|t| r.exists(t)).map(|t| t.to_string());
     if !r.exists("xrandr") {
         return State { error: Some("xrandr is not installed.".into()), night_tool: night, ..State::default() };
@@ -848,13 +855,33 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
     #[test]
     fn load_degrades() {
         let r = FakeRunner::new().ok("xrandr --query", XVFB);
-        let s = load(&r);
+        let s = load_env(&r, false);
         assert!(s.available && s.night_tool.is_none());
         let r = FakeRunner::new().ok("xrandr --query", XVFB).have("redshift");
-        assert_eq!(load(&r).night_tool.as_deref(), Some("redshift"));
-        assert!(load(&FakeRunner::new()).error.unwrap().contains("not installed"));
+        assert_eq!(load_env(&r, false).night_tool.as_deref(), Some("redshift"));
+        assert!(load_env(&FakeRunner::new(), false).error.unwrap().contains("not installed"));
         let r = FakeRunner::new().on("xrandr --query", Out::fail("Can't open display"));
-        assert!(load(&r).error.unwrap().contains("Can't open display"));
+        assert!(load_env(&r, false).error.unwrap().contains("Can't open display"));
+        assert!(load_env(&FakeRunner::new().ok("xrandr --query", XVFB), true).error.unwrap().contains("Wayland"));
+    }
+
+    /// Read-only run of the real xrandr against a private Xvfb. Opt in with
+    /// `MACSETTINGS_REAL_XRANDR=1 DISPLAY=:148 cargo test real_xrandr` (only displays :145-:149 are accepted).
+    #[test]
+    fn real_xrandr_reads_a_private_display() {
+        if std::env::var("MACSETTINGS_REAL_XRANDR").is_err() {
+            return;
+        }
+        let d = std::env::var("DISPLAY").unwrap_or_default();
+        assert!((145..=149).any(|n| d == format!(":{n}")), "refusing to run against DISPLAY={d}");
+        let st = load_env(&super::super::run::RealRunner::default(), false);
+        assert!(st.available, "{:?}", st.error);
+        let o = st.connected();
+        assert!(!o.is_empty(), "{st:?}");
+        assert!(o[0].active() && o[0].current_mode().is_some(), "{:?}", o[0]);
+        // planning against the real state builds a command but never runs it
+        let (ap, rv) = plan(&st, &o[0].name, &Change::Rotate(Rot::Left)).unwrap();
+        assert!(ap[0].line().contains("--rotate left") && rv[0].line().contains("--mode"));
     }
 
     #[test]

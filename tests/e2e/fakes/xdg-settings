@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "xdg-settings $*" >> "${FAKE_STATE:?}/log"
+if [ "$1" = set ] && [ "$2" = default-web-browser ]; then for m in x-scheme-handler_https x-scheme-handler_http text_html; do echo "$3" > "$FAKE_STATE/mime-$m"; done; fi
+exit 0

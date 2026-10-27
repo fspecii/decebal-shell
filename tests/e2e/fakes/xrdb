@@ -1,0 +1,2 @@
+#!/bin/bash
+{ echo "xrdb $*"; cat; } >> "${FAKE_STATE:?}/log"

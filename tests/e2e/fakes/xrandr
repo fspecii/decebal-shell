@@ -1,0 +1,66 @@
+#!/bin/bash
+# Stateful fake xrandr with two outputs. State lines: NAME connected(1/0) w h x y rate rot primary(0/1) on(0/1)
+FS=${FAKE_STATE:?}; echo "xrandr $*" >> "$FS/log"
+S="$FS/xr.state"
+[ -f "$S" ] || printf 'DP-1 1 2560 1440 0 0 143.97 normal 1 1\nHDMI-1 1 1920 1080 2560 0 60.00 normal 0 1\nDP-2 0 0 0 0 0 0 normal 0 0\n' > "$S"
+if [ "$*" = "--query" ]; then
+  echo "Screen 0: minimum 320 x 200, current 4480 x 1440, maximum 16384 x 16384"
+  while read -r n c w h x y r rot p on; do
+    if [ "$c" = 0 ]; then echo "$n disconnected (normal left inverted right x axis y axis)"; continue; fi
+    pri=""; [ "$p" = 1 ] && pri=" primary"
+    rt=""; [ "$rot" != normal ] && rt=" $rot"
+    gw=$w; gh=$h; { [ "$rot" = left ] || [ "$rot" = right ]; } && { gw=$h; gh=$w; }
+    if [ "$on" = 1 ]; then echo "$n connected$pri ${gw}x${gh}+$x+$y$rt (normal left inverted right x axis y axis) 597mm x 336mm"
+    else echo "$n connected (normal left inverted right x axis y axis) 597mm x 336mm"; fi
+    mark() { [ "$on" = 1 ] && [ "$w" = "$1" ] && [ "$h" = "$2" ] && [ "$r" = "$3" ] && echo -n '*' || echo -n ' '; }
+    if [ "$n" = DP-1 ]; then
+      echo "   2560x1440     143.97$(mark 2560 1440 143.97)+ 120.00$(mark 2560 1440 120.00)   59.95$(mark 2560 1440 59.95)"
+      echo "   1920x1080     144.00$(mark 1920 1080 144.00)   60.00$(mark 1920 1080 60.00)"
+    else
+      echo "   1920x1080     60.00$(mark 1920 1080 60.00)+  50.00$(mark 1920 1080 50.00)"
+      echo "   1280x720      60.00$(mark 1280 720 60.00)"
+    fi
+  done < "$S"
+  exit 0
+fi
+[ -f "$FS/xr_fail" ] && { echo "xrandr: Configure crtc failed" >&2; exit 1; }
+# apply options
+out=""; declare -A mode rate rot pos pri off rel
+args=("$@"); i=0
+while [ $i -lt ${#args[@]} ]; do
+  a=${args[$i]}
+  case "$a" in
+    --output) out=${args[$((i+1))]}; i=$((i+1));;
+    --mode) mode[$out]=${args[$((i+1))]}; i=$((i+1));;
+    --rate) rate[$out]=${args[$((i+1))]}; i=$((i+1));;
+    --rotate) rot[$out]=${args[$((i+1))]}; i=$((i+1));;
+    --pos) pos[$out]=${args[$((i+1))]}; i=$((i+1));;
+    --right-of|--left-of|--above|--below|--same-as) rel[$out]="$a ${args[$((i+1))]}"; i=$((i+1));;
+    --primary) pri[$out]=1;;
+    --off) off[$out]=1;;
+    --auto) mode[$out]=${mode[$out]:-auto};;
+  esac
+  i=$((i+1))
+done
+tmp=$(mktemp)
+declare -A W H X Y
+while read -r n c w h x y r ro p on; do W[$n]=$w; H[$n]=$h; X[$n]=$x; Y[$n]=$y; done < "$S"
+while read -r n c w h x y r ro p on; do
+  [ "$c" = 1 ] || { echo "$n $c $w $h $x $y $r $ro $p $on" >> "$tmp"; continue; }
+  if [ -n "${mode[$n]:-}" ]; then
+    if [ "${mode[$n]}" = auto ]; then w=1920; h=1080; r=60.00; else w=${mode[$n]%x*}; h=${mode[$n]#*x}; fi
+    on=1; [ -z "${rate[$n]:-}" ] && { if [ "$n" = DP-1 ] && [ "$w" = 2560 ]; then r=143.97; elif [ "$n" = DP-1 ]; then r=144.00; else r=60.00; fi; }
+  fi
+  [ -n "${rate[$n]:-}" ] && r=${rate[$n]}
+  [ -n "${rot[$n]:-}" ] && ro=${rot[$n]}
+  [ -n "${pos[$n]:-}" ] && { x=${pos[$n]%x*}; y=${pos[$n]#*x}; }
+  if [ -n "${rel[$n]:-}" ]; then
+    set -- ${rel[$n]}; o=$2; ow=${W[$o]}; oh=${H[$o]}
+    case "$1" in --right-of) x=$((${X[$o]}+ow)); y=${Y[$o]};; --left-of) x=$((${X[$o]}-w)); y=${Y[$o]};; --below) x=${X[$o]}; y=$((${Y[$o]}+oh));; --above) x=${X[$o]}; y=$((${Y[$o]}-h));; --same-as) x=${X[$o]}; y=${Y[$o]};; esac
+  fi
+  [ -n "${pri[$n]:-}" ] && p=1 || { [ ${#pri[@]} -gt 0 ] && p=0; }
+  [ -n "${off[$n]:-}" ] && on=0
+  echo "$n $c $w $h $x $y $r $ro $p $on" >> "$tmp"
+done < "$S"
+mv "$tmp" "$S"
+exit 0

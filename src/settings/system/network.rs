@@ -217,12 +217,12 @@ pub fn vpn_toggle(c: &Conn, up: bool) -> Vec<Cmd> {
 
 // ---------------------------------------------------------------- pane
 
-fn bars(s: u32) -> &'static str {
+fn strength(s: u32) -> &'static str {
     match s {
-        0..=24 => "▁",
-        25..=49 => "▂▃",
-        50..=74 => "▂▃▅",
-        _ => "▂▃▅▇",
+        0..=24 => "Weak",
+        25..=49 => "Fair",
+        50..=74 => "Good",
+        _ => "Excellent",
     }
 }
 
@@ -264,7 +264,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
             .iter()
             .map(|a| {
                 let known = st.conns.iter().any(|c| c.kind == "802-11-wireless" && c.name == a.ssid);
-                let detail = format!("{} {}%{}{}", bars(a.signal), a.signal, if a.secured() { format!(" · {}", a.security.trim()) } else { " · open".into() }, if known { " · saved" } else { "" });
+                let detail = format!("{} signal ({}%){}{}", strength(a.signal), a.signal, if a.secured() { format!(" · {}", a.security.trim()) } else { " · open".into() }, if known { " · saved" } else { "" });
                 let mut r = Row::new(a.ssid.clone()).detail(detail);
                 if a.in_use {
                     r.selected = true;

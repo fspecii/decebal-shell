@@ -1,0 +1,7 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "xdg-mime $*" >> "$FS/log"
+case "$1" in
+query) f="$FS/mime-$(echo "$3" | tr '/' '_')"; [ -f "$f" ] && cat "$f" || { case "$3" in x-scheme-handler/https) echo firefox.desktop;; *) echo;; esac; };;
+default) shift; app=$1; shift; for m in "$@"; do echo "$app" > "$FS/mime-$(echo "$m" | tr '/' '_')"; done;;
+esac
+exit 0

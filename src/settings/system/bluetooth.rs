@@ -117,7 +117,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
     if !st.available {
         return super::sound::unavailable("Bluetooth", st.error.as_deref().unwrap_or("Bluetooth is not available."));
     }
-    let mut v = vec![Item::Header("Bluetooth".into())];
+    let mut v = vec![Item::Header("Adapter".into())];
     let mut rows = vec![Row::new("Bluetooth").detail(if st.powered { "On" } else { "Off" }).ctl(Ctl::new("s:bt:power:", Kind::Toggle(st.powered)))];
     if st.powered {
         rows.push(Row::new("Discoverable").detail("Let other devices find this computer").ctl(Ctl::new("s:bt:disc:", Kind::Toggle(st.discoverable))));

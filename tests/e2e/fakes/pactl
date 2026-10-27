@@ -1,0 +1,18 @@
+#!/bin/bash
+# Fake pactl: state in $FAKE_STATE (vol, mute, svol-firefox ...). Logs every call to $FAKE_STATE/log.
+FS=${FAKE_STATE:?}; echo "pactl $*" >> "$FS/log"
+vol=$(cat "$FS/vol" 2>/dev/null || echo 50); mute=$(cat "$FS/mute" 2>/dev/null || echo false)
+case "$*" in
+"-f json list sinks") cat <<J
+[{"index":1,"name":"fake_speakers","description":"Fake Speakers","mute":$mute,"volume":{"front-left":{"value_percent":"$vol%"},"front-right":{"value_percent":"$vol%"}},"properties":{}},
+{"index":2,"name":"fake_hdmi","description":"Fake HDMI Monitor","mute":false,"volume":{"mono":{"value_percent":"40%"}},"properties":{}}]
+J
+;;
+"get-default-sink") echo fake_speakers;;
+"get-default-source") echo fake_mic;;
+"-f json list sources") echo '[{"index":9,"name":"fake_speakers.monitor","description":"Monitor","mute":false,"volume":{},"properties":{"device.class":"monitor"}},{"index":3,"name":"fake_mic","description":"Fake Microphone","mute":false,"volume":{"mono":{"value_percent":"69%"}},"properties":{}}]';;
+"-f json list sink-inputs") echo '[{"index":77,"mute":false,"volume":{"front-left":{"value_percent":"100%"}},"properties":{"application.name":"Firefox"}},{"index":78,"mute":false,"volume":{"front-left":{"value_percent":"35%"}},"properties":{"application.name":"Spotify"}}]';;
+set-sink-volume\ fake_speakers\ *) v=${3%\%}; echo "$v" > "$FS/vol";;
+set-sink-mute\ fake_speakers\ *) [ "$3" = 1 ] && echo true > "$FS/mute" || echo false > "$FS/mute";;
+esac
+exit 0

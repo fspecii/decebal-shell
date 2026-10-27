@@ -266,7 +266,7 @@ pub fn storage_items(h: &Hub, rdwm_version: Option<&str>) -> Vec<Item> {
             .iter()
             .map(|d| {
                 let used = d.total.saturating_sub(d.free);
-                Row::new(d.path.clone()).detail(format!("{} used of {}", human(used), human(d.total))).ctl(Ctl::new(format!("s:sto:disk:{}", d.path), Kind::Slider { v: if d.total > 0 { (used as f64 * 100.0 / d.total as f64).round() } else { 0.0 }, min: 0.0, max: 100.0, step: 1.0, unit: " %".into() }).tap(|c| c.enabled = false))
+                Row::new(d.path.clone()).detail(format!("{} used of {}", human(used), human(d.total))).ctl(Ctl::new(format!("lbl:disk:{}", d.path), Kind::Label(format!("{} free", human(d.free)))))
             })
             .collect(),
     ));
@@ -280,16 +280,6 @@ pub fn storage_items(h: &Hub, rdwm_version: Option<&str>) -> Vec<Item> {
     v.push(Item::Header("Configuration".into()));
     v.push(Item::Card(vec![Row::new("Check configuration").detail("Validate rdwm's config.toml with rdwm's own parser").ctl(Ctl::new("s:sto:check:", Kind::Button { label: "Check config".into(), danger: false }))]));
     v
-}
-
-trait Tap: Sized {
-    fn tap(self, f: impl FnOnce(&mut Self)) -> Self;
-}
-impl Tap for Ctl {
-    fn tap(mut self, f: impl FnOnce(&mut Self)) -> Self {
-        f(&mut self);
-        self
-    }
 }
 
 #[cfg(test)]

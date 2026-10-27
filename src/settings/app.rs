@@ -4,7 +4,8 @@
 use super::icons::pane_icon;
 use super::io::{self, Ev, Paths};
 use super::model::{CtlVal, Model};
-use super::panes::{pane_matches, PANES};
+use super::panes::PANES;
+use super::system::registry::{self, Hit, SECTIONS};
 use super::schema::Schema;
 use super::ui::fill_px;
 use super::ui::{self, draw_items, inside, pal, part_at, Frame, Interact, Item, Kind, Opt, Painter, Placed, Rect};
@@ -72,11 +73,27 @@ pub struct SettingsApp {
     waker: Option<Waker>,
     wake_slot: Arc<Mutex<Option<Waker>>>,
     sidebar_hits: Vec<(Rect, usize)>,
+    /// Sidebar scroll offset (px, unscaled by nothing: already in pixels) and whether to keep the selection in view.
+    sb_scroll: f32,
+    sb_follow: bool,
+    sb_total: f32,
+    /// Search hits for `hits_for` (panes and individual settings).
+    hits: Vec<Hit>,
+    hits_for: String,
+    /// Row labels of the older panes, built once per search session (building them per keystroke is slow).
+    legacy_rows: Option<Vec<(usize, String)>>,
     search_rect: Rect,
     first_draw: bool,
     /// `MACSETTINGS_DEBUG_LAYOUT=file`: write the control map after every paint (end-to-end tests).
     dump: Option<std::path::PathBuf>,
     dump_meta: (Option<String>, Vec<String>),
+}
+
+enum SbRow {
+    Header(&'static str),
+    Pane(usize),
+    /// One setting inside a pane (search result).
+    Hit(usize, String),
 }
 
 fn pane_index(id: &str) -> usize {
@@ -119,6 +136,12 @@ impl SettingsApp {
             waker: None,
             wake_slot,
             sidebar_hits: Vec::new(),
+            sb_scroll: 0.0,
+            sb_follow: true,
+            sb_total: 0.0,
+            hits: Vec::new(),
+            hits_for: String::new(),
+            legacy_rows: None,
             search_rect: (0.0, 0.0, 0.0, 0.0),
             first_draw: true,
             dump: std::env::var_os("MACSETTINGS_DEBUG_LAYOUT").map(Into::into),
@@ -134,13 +157,70 @@ impl SettingsApp {
         SIDEBAR_W * self.s
     }
 
-    fn visible_panes(&self) -> Vec<usize> {
-        (0..PANES.len()).filter(|&i| pane_matches(&PANES[i], self.search.text())).collect()
+    /// Search hits for the current query (recomputed only when the query changes).
+    fn refresh_hits(&mut self) {
+        let q = self.search.text().to_string();
+        if q == self.hits_for {
+            return;
+        }
+        self.hits_for = q.clone();
+        // rows of the older (rdwm) panes are searched live, the system panes through the static index
+        const LEGACY: &[&str] = &["general", "appearance", "desktop", "wallpaper", "tiling", "windows", "rules", "keyboard", "autostart"];
+        if q.trim().is_empty() {
+            self.legacy_rows = None;
+        } else if self.legacy_rows.is_none() {
+            let mut extra: Vec<(usize, String)> = Vec::new();
+            for (i, _) in PANES.iter().enumerate().filter(|(_, p)| LEGACY.contains(&p.id)) {
+                for it in self.m.items(i) {
+                    if let Item::Card(rows) = it {
+                        extra.extend(rows.into_iter().filter(|r| !r.label.is_empty()).map(|r| (i, format!("{}\n{}", r.label, r.detail))));
+                    }
+                }
+            }
+            self.legacy_rows = Some(extra);
+        }
+        let extra = self.legacy_rows.clone().unwrap_or_default();
+        self.hits = registry::search(&q, &extra);
+        self.hits.truncate(60);
+    }
+
+    /// What the sidebar shows, top to bottom.
+    fn sidebar_rows(&mut self) -> Vec<SbRow> {
+        self.refresh_hits();
+        let mut rows = Vec::new();
+        if self.search.text().trim().is_empty() {
+            for s in SECTIONS {
+                rows.push(SbRow::Header(s.title));
+                rows.extend(s.panes.iter().filter_map(|id| registry::pane_index(id)).map(SbRow::Pane));
+            }
+        } else {
+            for h in &self.hits {
+                rows.push(match &h.label {
+                    None => SbRow::Pane(h.pane),
+                    Some(l) => SbRow::Hit(h.pane, l.clone()),
+                });
+            }
+        }
+        rows
+    }
+
+    /// Panes in sidebar order (for keyboard navigation); with a search, only panes with a hit.
+    fn visible_panes(&mut self) -> Vec<usize> {
+        let mut v: Vec<usize> = Vec::new();
+        for r in self.sidebar_rows() {
+            if let SbRow::Pane(i) | SbRow::Hit(i, _) = r {
+                if !v.contains(&i) {
+                    v.push(i);
+                }
+            }
+        }
+        v
     }
 
     fn select_pane(&mut self, i: usize) {
         if self.m.sel.pane != i {
             self.m.sel.pane = i;
+            self.sb_follow = true;
             self.scroll = 0.0;
             self.it.focus = None;
             self.edit = None;
@@ -212,9 +292,83 @@ impl SettingsApp {
         let h = pm.height() as f32;
         fill_px(pm, 0.0, 0.0, sbw, h, pal::sidebar());
         fill_px(pm, sbw - 1.0, 0.0, 1.0, h, pal::sep());
-        let visible = self.visible_panes();
+        let rows = self.sidebar_rows();
+        let top = u(58.0);
+        // layout pass: y of every row relative to the list top
+        let heights: Vec<f32> = rows
+            .iter()
+            .enumerate()
+            .map(|(n, r)| match r {
+                SbRow::Header(_) => u(if n == 0 { 22.0 } else { 30.0 }),
+                SbRow::Pane(_) => u(34.0),
+                SbRow::Hit(..) => u(28.0),
+            })
+            .collect();
+        let total: f32 = heights.iter().sum::<f32>() + u(10.0);
+        self.sb_total = total;
+        let view = (h - top).max(1.0);
+        if self.sb_follow {
+            self.sb_follow = false;
+            let mut y = 0.0;
+            for (r, hh) in rows.iter().zip(&heights) {
+                if matches!(r, SbRow::Pane(i) if *i == self.m.sel.pane) {
+                    if y < self.sb_scroll + u(30.0) {
+                        self.sb_scroll = (y - u(30.0)).max(0.0);
+                    } else if y + hh > self.sb_scroll + view {
+                        self.sb_scroll = y + hh - view + u(6.0);
+                    }
+                    break;
+                }
+                y += hh;
+            }
+        }
+        self.sb_scroll = self.sb_scroll.clamp(0.0, (total - view).max(0.0));
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
-        // search field
+        self.sidebar_hits.clear();
+        let mut y = top - self.sb_scroll;
+        for (r, hh) in rows.iter().zip(&heights) {
+            let ry = y;
+            y += hh;
+            match r {
+                SbRow::Header(t) => {
+                    if ry + hh > top && ry < h {
+                        p.text(pm, &t.to_uppercase(), u(20.0), ry + hh - u(10.0), u(10.5), Weight::Medium, pal::faint());
+                    }
+                }
+                SbRow::Pane(i) => {
+                    let def = &PANES[*i];
+                    let rect = (u(8.0), ry, sbw - u(16.0), hh - u(2.0));
+                    let selected = self.m.sel.pane == *i;
+                    let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
+                    if ry + hh > top && ry < h {
+                        if selected {
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), if self.zone == Zone::Sidebar { pal::accent() } else { color(255, 255, 255, 0.14) });
+                        } else if hover {
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), color(255, 255, 255, 0.06));
+                        }
+                        pane_icon(pm, def.glyph, def.color, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
+                        p.text(pm, def.title, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
+                    }
+                    self.sidebar_hits.push((rect, *i));
+                }
+                SbRow::Hit(i, label) => {
+                    let rect = (u(8.0), ry, sbw - u(16.0), hh - u(2.0));
+                    if ry + hh > top && ry < h {
+                        if self.it.hover.as_deref() == Some(&format!("pane:{i}")) {
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), color(255, 255, 255, 0.06));
+                        }
+                        let t = p.fit(&format!("{}  \u{203a}  {}", PANES[*i].title, label), rect.2 - u(52.0), u(12.0), Weight::Regular);
+                        p.text(pm, &t, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(12.0), Weight::Regular, pal::sub());
+                    }
+                    self.sidebar_hits.push((rect, *i));
+                }
+            }
+        }
+        if rows.is_empty() {
+            p.text(pm, "No results", u(24.0), top + u(14.0), u(13.0), Weight::Regular, pal::faint());
+        }
+        // search field on top of the scrolled list
+        fill_px(pm, 0.0, 0.0, sbw - 1.0, top, pal::sidebar());
         let sr = (u(12.0), u(14.0), sbw - u(24.0), u(30.0));
         self.search_rect = sr;
         let focused = self.zone == Zone::Search;
@@ -237,27 +391,11 @@ impl SettingsApp {
             let cx = sr.0 + u(28.0) + p.measure(self.search.before_cursor(), u(13.0), Weight::Regular);
             fill_px(pm, cx, sr.1 + u(7.0), u(1.2), sr.3 - u(14.0), pal::accent());
         }
-        // pane list
-        self.sidebar_hits.clear();
-        let mut y = u(58.0);
-        let ih = u(36.0);
-        for &i in &visible {
-            let def = &PANES[i];
-            let r = (u(8.0), y, sbw - u(16.0), ih - u(2.0));
-            let selected = self.m.sel.pane == i;
-            let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
-            if selected {
-                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), if self.zone == Zone::Sidebar { pal::accent() } else { color(255, 255, 255, 0.14) });
-            } else if hover {
-                fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), color(255, 255, 255, 0.06));
-            }
-            pane_icon(pm, def.glyph, def.color, r.0 + u(8.0), r.1 + (r.3 - u(24.0)) / 2.0, u(24.0));
-            p.text(pm, def.title, r.0 + u(42.0), r.1 + r.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
-            self.sidebar_hits.push((r, i));
-            y += ih;
-        }
-        if visible.is_empty() {
-            p.text(pm, "No results", u(24.0), y + u(12.0), u(13.0), Weight::Regular, pal::faint());
+        // sidebar scrollbar
+        if total > h - top + 1.0 {
+            let th = ((h - top) * (h - top) / total).max(30.0 * s);
+            let ty = top + (h - top - th) * (self.sb_scroll / (total - (h - top)));
+            fill_rounded(pm, sbw - 7.0 * s, ty, 3.0 * s, th, 1.5 * s, color(255, 255, 255, 0.2));
         }
     }
 
@@ -330,7 +468,7 @@ impl SettingsApp {
         let (preview, warns) = self.dump_meta.clone();
         let doc = json!({
             "pane": PANES[self.m.sel.pane].id, "scroll": self.scroll, "ctls": ctls,
-            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3]})).collect::<Vec<_>>(),
+            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 58.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
             "loaded_thumbs": self.thumbs.borrow().len(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
@@ -407,6 +545,13 @@ impl SettingsApp {
     }
 
     // ------------------------------------------------------------ helpers for events
+
+    fn sidebar_hit(&self, x: f32, y: f32) -> Option<usize> {
+        if y < 58.0 * self.s {
+            return None;
+        }
+        self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).map(|(_, i)| *i)
+    }
 
     fn to_content(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y)
@@ -936,7 +1081,7 @@ impl WindowApp for SettingsApp {
             }
         }
         self.it.hover = if x < self.sb() {
-            self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).map(|(_, i)| format!("pane:{i}"))
+            self.sidebar_hit(x, y).map(|i| format!("pane:{i}"))
         } else {
             self.frame.at(cx, cy).map(|p| p.ctl.id.clone()).or_else(|| self.frame.thumbs.iter().chain(self.frame.layouts.iter()).find(|(r, _)| inside(*r, cx, cy)).map(|(_, id)| id.clone()))
         };
@@ -1012,7 +1157,7 @@ impl WindowApp for SettingsApp {
                 self.zone = Zone::Search;
                 return Response::REDRAW;
             }
-            if let Some((_, i)) = self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).cloned() {
+            if let Some(i) = self.sidebar_hit(x, y) {
                 self.zone = Zone::Sidebar;
                 self.select_pane(i);
             }
@@ -1063,7 +1208,10 @@ impl WindowApp for SettingsApp {
             return Response::REDRAW;
         }
         if x < self.sb() {
-            return Response::NONE;
+            let max = (self.sb_total - (self.size.1 as f32 - 58.0 * self.s)).max(0.0);
+            let old = self.sb_scroll;
+            self.sb_scroll = (self.sb_scroll + dy * self.s * 0.6).clamp(0.0, max);
+            return if (old - self.sb_scroll).abs() > 0.1 { Response::REDRAW } else { Response::NONE };
         }
         let max = (self.frame.height - self.content_h()).max(0.0);
         let old = self.scroll;
@@ -1207,7 +1355,9 @@ mod key_tests {
             a.key(&ev(Key::Char, Some(c)));
         }
         assert_eq!(a.search.text(), "gap");
-        assert_eq!(a.visible_panes().iter().map(|&i| PANES[i].id).collect::<Vec<_>>(), ["tiling"]);
+        // individual settings are searched too: the pane with the best match comes first
+        let ids = a.visible_panes().iter().map(|&i| PANES[i].id).collect::<Vec<_>>();
+        assert_eq!(ids[0], "tiling", "{ids:?}");
         a.key(&ev(Key::Escape, None));
         assert_eq!(a.search.text(), "");
     }

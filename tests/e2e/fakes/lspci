@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "lspci $*" >> "${FAKE_STATE:?}/log"
+printf '01:00.0 "VGA compatible controller" "NVIDIA Corporation" "GA106 [GeForce RTX 3060]" -ra1 "Gigabyte" "x"\n00:14.0 "USB controller" "AMD" "x"\n'

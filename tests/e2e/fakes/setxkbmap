@@ -1,0 +1,10 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}; echo "setxkbmap $*" >> "$FS/log"
+if [ "$1" = -query ]; then
+  l=us; o=""; [ -f "$FS/xkb" ] && { l=$(sed -n 1p "$FS/xkb"); o=$(sed -n 2p "$FS/xkb"); }
+  printf 'rules:      evdev\nmodel:      pc105\nlayout:     %s\n' "$l"; [ -n "$o" ] && printf 'options:    %s\n' "$o"; exit 0
+fi
+lay=us; opts=""
+while [ $# -gt 0 ]; do case "$1" in -layout) lay=$2; shift;; -option) [ -n "$2" ] && opts="${opts:+$opts,}$2"; shift;; esac; shift; done
+printf '%s\n%s\n' "$lay" "$opts" > "$FS/xkb"
+exit 0
