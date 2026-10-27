@@ -53,6 +53,13 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "keyboard", title: "Keyboard", glyph: Glyph::Keyboard, color: (99, 99, 102), keywords: "shortcuts keys bindings hotkeys modes chords record conflicts bind" },
     PaneDef { id: "autostart", title: "Autostart & Plugins", glyph: Glyph::Rocket, color: (191, 90, 242), keywords: "autostart startup plugins scratchpad commands programs" },
     PaneDef { id: "displays", title: "Displays", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "monitors outputs screens resolution scale per output wallpaper" },
+    PaneDef {
+        id: "theme",
+        title: "Theme",
+        glyph: Glyph::Brush,
+        color: (255, 55, 95),
+        keywords: "theme appearance dark light auto mode accent colour color swatches transparency translucency corner radius font text size dracula nord solarized windows graphite high contrast",
+    },
 ];
 
 pub fn pane_matches(p: &PaneDef, q: &str) -> bool {
@@ -324,6 +331,7 @@ impl Model {
         let mut items = self.banners();
         let id = PANES.get(pane).map(|p| p.id).unwrap_or("general");
         items.extend(match id {
+            "theme" => super::themepane::items(self),
             "general" => self.pane_general(),
             "appearance" => self.pane_appearance(),
             "desktop" => self.pane_desktop(),
@@ -912,6 +920,9 @@ fn parse_tid(id: &str) -> Option<(String, String, String)> {
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
+        return super::themepane::apply(m, &parts, v);
+    }
     match parts.as_slice() {
         ["a", "reload"] => {
             m.on_files_changed();

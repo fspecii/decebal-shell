@@ -13,7 +13,6 @@ use tiny_skia::Pixmap;
 pub const PANEL_W: f32 = 340.0;
 const PAD: f32 = 12.0;
 const GAP: f32 = 10.0;
-const ACCENT: (u8, u8, u8) = (10, 132, 255);
 
 /// Everything the panel shows, gathered off the UI thread.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -347,10 +346,11 @@ pub fn hit(items: &[Item], px: f32, py: f32) -> Option<(Target, R)> {
 }
 
 fn ink_rgba(ink: Ink) -> (u8, u8, u8, f32) {
+    let th = crate::theme::th();
     match ink {
-        Ink::Primary => (245, 245, 247, 1.0),
-        Ink::Secondary => (255, 255, 255, 0.55),
-        Ink::White => (255, 255, 255, 1.0),
+        Ink::Primary => th.text.a(1.0),
+        Ink::Secondary => th.text.a(0.55),
+        Ink::White => th.accent_text.a(1.0),
     }
 }
 
@@ -366,8 +366,8 @@ pub struct View<'a> {
 /// Paints the panel described by `view` into `pm`.
 pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut SymbolCache) {
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
-    fill_rounded(pm, ox, oy, PANEL_W, height, 20.0, color(31, 31, 36, 0.88));
-    stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, 19.5, color(255, 255, 255, 0.12), 1.0);
+    fill_rounded(pm, ox, oy, PANEL_W, height, crate::theme::th().r(2.0), crate::theme::th().overlay.color(crate::theme::th().panel_alpha * 0.9));
+    stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, crate::theme::th().r(2.0) - 0.5, crate::theme::th().outline_c(), 1.0);
 
     for it in items {
         let (x, y, w, h) = (ox + it.r.x, oy + it.r.y, it.r.w, it.r.h);
@@ -375,26 +375,26 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
         let hovered = it.target.is_some() && it.target == hover;
         match &it.draw {
             Draw::Tile => {
-                fill_rounded(pm, x, y, w, h, 16.0, color(255, 255, 255, 0.09));
-                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, color(255, 255, 255, 0.07), 1.0);
+                fill_rounded(pm, x, y, w, h, 16.0, crate::theme::th().ink(0.09));
+                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, crate::theme::th().ink(0.07), 1.0);
             }
             Draw::SmallTile { on } => {
-                let c = if *on { color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0) } else { color(255, 255, 255, if hovered { 0.14 } else { 0.09 }) };
+                let c = if *on { crate::theme::th().accent_c() } else { crate::theme::th().ink(if hovered { 0.14 } else { 0.09 }) };
                 fill_rounded(pm, x, y, w, h, 16.0, c);
                 if !on {
-                    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, color(255, 255, 255, 0.07), 1.0);
+                    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, crate::theme::th().ink(0.07), 1.0);
                 }
             }
             Draw::Circle { icon, on } => {
-                let c = if *on { color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0) } else { color(255, 255, 255, if hovered { 0.2 } else { 0.14 }) };
+                let c = if *on { crate::theme::th().accent_c() } else { crate::theme::th().ink(if hovered { 0.2 } else { 0.14 }) };
                 fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, c);
-                let ink = if *on { (255, 255, 255) } else { (245, 245, 247) };
+                let ink = if *on { crate::theme::th().accent_text.t() } else { crate::theme::th().text.t() };
                 blit_symbol(pm, symbols, icon, ink, 17.0, x + w / 2.0, y + h / 2.0);
             }
             Draw::Hit => {}
             Draw::Glyph { icon, size, ink } => {
                 if hovered && it.target.is_some() && *size >= 16.0 && w <= 28.0 {
-                    fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, color(255, 255, 255, 0.14));
+                    fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, crate::theme::th().ink(0.14));
                 }
                 let (r, g, b, _) = ink_rgba(*ink);
                 blit_symbol(pm, symbols, icon, (r, g, b), *size, x + w / 2.0, y + h / 2.0);
@@ -411,10 +411,10 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 fonts.draw(pm, &shown, tx, y, *size, *weight, color(r, g, b, a));
             }
             Draw::Slider { value, icon } => {
-                fill_rounded(pm, x, y, w, h, h / 2.0, color(255, 255, 255, 0.14));
+                fill_rounded(pm, x, y, w, h, h / 2.0, crate::theme::th().ink(0.14));
                 let fw = (w * value.clamp(0.0, 1.0)).max(h);
-                fill_rounded(pm, x, y, fw, h, h / 2.0, color(233, 233, 238, 1.0));
-                blit_symbol(pm, symbols, icon, (90, 90, 97), 15.0, x + 6.0 + 7.5, y + h / 2.0);
+                fill_rounded(pm, x, y, fw, h, h / 2.0, crate::theme::th().text.color(0.92));
+                blit_symbol(pm, symbols, icon, crate::theme::th().overlay.t(), 15.0, x + 6.0 + 7.5, y + h / 2.0);
             }
         }
     }

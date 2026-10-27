@@ -1,0 +1,26 @@
+name = "Dracula"
+description = "Dark theme with vivid purple and pink."
+
+[metrics]
+radius = 10
+dock_roundness = 0.45
+dock_alpha = 0.75
+popup_alpha = 0.97
+panel_alpha = 0.98
+
+[dark]
+background = "#282a36"
+sidebar = "#21222c"
+surface = "#343746"
+bar = "#1e1f29"
+popup = "#282a36"
+dock = "#282a36"
+overlay = "#282a36"
+titlebar = "#343746"
+titlebar_inactive = "#282a36"
+text = "#f8f8f2"
+accent = "#bd93f9"
+accent_text = "#1e1f29"
+danger = "#ff5555"
+ok = "#50fa7b"
+warn = "#ffb86c"

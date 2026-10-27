@@ -1,7 +1,7 @@
 //! Dock model, magnification layout and drawing. Pure logic plus CPU rendering, no windowing.
 
 use crate::config::DockSettings;
-use crate::gfx::{self, blit_scaled, color, fill_circle, fill_rounded, stroke_rounded};
+use crate::gfx::{self, blit_scaled, fill_circle, fill_rounded, stroke_rounded};
 use crate::icons::IconCache;
 use crate::theme::*;
 use std::time::{Duration, Instant};
@@ -218,9 +218,11 @@ impl Dock {
         let panel_y = ch - PANEL_HEIGHT;
 
         let radius = layout_radius(layout.panel_w, PANEL_HEIGHT, self.settings.roundness);
-        let (r, g, b) = DOCK_BG;
-        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, PANEL_HEIGHT, radius, color(r, g, b, 1.0 - self.settings.transparency));
-        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, PANEL_HEIGHT - 1.0, radius - 0.5, color(255, 255, 255, DOCK_BORDER_ALPHA), 1.0);
+        // Theme colours: panel colour, opacity (`dock_alpha` 0.6 = the original look at default settings) and outline.
+        let th = crate::theme::th();
+        let alpha = ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0);
+        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, PANEL_HEIGHT, radius, th.dock.color(alpha));
+        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, PANEL_HEIGHT - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
 
         let icon_bottom = panel_y + PANEL_PAD_TOP + ICON_SIZE;
         let dragged = self.drag.map(|d| d.index);
@@ -228,7 +230,7 @@ impl Dock {
             if dragged == Some(i) {
                 // The slot stays empty; the icon follows the pointer (drawn last).
                 if item.running {
-                    fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, color(255, 255, 255, 0.85));
+                    fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, crate::theme::th().ink(0.85));
                 }
                 continue;
             }
@@ -239,7 +241,7 @@ impl Dock {
             let ix = cell.x + (cell.w - size) / 2.0;
             blit_scaled(pm, icon, ix, icon_bottom - size - lift, size, size, 1.0);
             if item.running {
-                fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, color(255, 255, 255, 0.85));
+                fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, crate::theme::th().ink(0.85));
             }
         }
         if let Some(d) = self.drag {

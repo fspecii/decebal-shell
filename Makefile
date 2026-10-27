@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macsettings
+BINS = macdock macbar machaven maclaunch macspot macsettings macthemectl
 UNITS = macshell-dock.service macshell-bar.service
 AUTOSTART = macshell-dock.desktop macshell-bar.desktop
 
@@ -32,7 +32,10 @@ install-session:
 	for f in hyprland-layers.lua hyprland-machaven.lua hyprland-maclaunch.lua; do install -Dm644 contrib/$$f $(DESTDIR)$(PREFIX)/share/macshell/$$f; done
 	install -Dm644 contrib/session/hyprland-macshell.desktop $(DESTDIR)$(PREFIX)/share/wayland-sessions/hyprland-macshell.desktop
 
-# End-to-end test of macsettings against rdwm on a private Xvfb (needs Xvfb, xdotool, jq and a built rdwm; see the script).
+# End-to-end tests against rdwm on a private Xvfb (need Xvfb, xdotool, jq and a built rdwm; see the scripts).
+e2e-theme: all
+	tests/e2e/theme.sh
+
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
 
@@ -41,4 +44,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme

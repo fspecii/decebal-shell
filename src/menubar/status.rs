@@ -362,17 +362,24 @@ impl MacBar {
 
     pub(super) fn draw_battery(&mut self, pm: &mut Pixmap, s: Span, b: &sys::Battery) {
         let (x, y, w, h) = (s.x + 3.0, 7.5, 20.0, 11.0);
-        stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 3.0, color(INK.0, INK.1, INK.2, 0.7), 1.0);
-        crate::gfx::fill_rect(pm, x + w + 0.5, y + 3.5, 1.5, 4.0, color(INK.0, INK.1, INK.2, 0.7));
-        let fill = if b.charging { (48, 209, 88) } else if b.percent <= 15 { (255, 69, 58) } else { (INK.0, INK.1, INK.2) };
+        stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 3.0, crate::theme::th().bar_text.color(0.7), 1.0);
+        crate::gfx::fill_rect(pm, x + w + 0.5, y + 3.5, 1.5, 4.0, crate::theme::th().bar_text.color(0.7));
+        let th = crate::theme::th();
+        let fill = if b.charging {
+            th.ok.t()
+        } else if b.percent <= 15 {
+            th.danger.t()
+        } else {
+            ink()
+        };
         let fw = ((w - 4.0) * b.percent as f32 / 100.0).max(1.0);
         fill_rounded(pm, x + 2.0, y + 2.0, fw, h - 4.0, 1.5, color(fill.0, fill.1, fill.2, 0.95));
         let t = format!("{}%", b.percent);
-        self.text(pm, &t, x + w + 6.0, 11.0, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
+        self.text(pm, &t, x + w + 6.0, 11.0, Weight::Regular, (ink().0, ink().1, ink().2, 1.0));
     }
 
     pub(super) fn draw_layout_item(&mut self, pm: &mut Pixmap, s: Span) {
         let Some(l) = self.layout_state() else { return };
-        popup::draw_layout_icon(pm, l.canonical(), s.x + s.w / 2.0 - 11.0, 6.0, 22.0, 14.0, (INK.0, INK.1, INK.2, 0.95));
+        popup::draw_layout_icon(pm, l.canonical(), s.x + s.w / 2.0 - 11.0, 6.0, 22.0, 14.0, (ink().0, ink().1, ink().2, 0.95));
     }
 }

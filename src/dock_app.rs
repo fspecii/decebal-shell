@@ -80,6 +80,8 @@ pub struct DockApp {
     waker: Option<Waker>,
     effects: Box<dyn Effects>,
     watch: Option<Watch>,
+    /// Theme generation last drawn (see `theme::generation`).
+    theme_gen: u64,
     menu: Option<MenuState>,
     press: Option<Press>,
     /// window app id -> desktop id (None = no installed app), so `.desktop` files are scanned once.
@@ -91,7 +93,21 @@ impl DockApp {
     pub fn new(dock: Dock) -> Self {
         let surface = dock.canvas_size();
         let pinned = dock.items.iter().filter(|i| i.pinned).map(|i| i.id.clone()).collect();
-        Self { dock, pinned, surface, tracker: None, track_windows: false, waker: None, effects: Box::new(System), watch: None, menu: None, press: None, desktops: HashMap::new(), animating: false }
+        Self {
+            dock,
+            pinned,
+            surface,
+            tracker: None,
+            track_windows: false,
+            waker: None,
+            effects: Box::new(System),
+            watch: None,
+            theme_gen: crate::theme::generation(),
+            menu: None,
+            press: None,
+            desktops: HashMap::new(),
+            animating: false,
+        }
     }
 
     /// Show a running dot under every pinned app that has an open window (tracker starts with the event loop).
@@ -442,11 +458,22 @@ impl App for DockApp {
             let w = waker.clone();
             self.tracker = Some(Tracker::start(move || w.wake()));
         }
+        let w = waker.clone();
+        crate::theme::live::start_watcher(move || w.wake());
         self.waker = Some(waker);
     }
 
     fn tick(&mut self) -> Tick {
         let mut changed = self.poll_config();
+        let theme_gen = crate::theme::generation();
+        if theme_gen != self.theme_gen {
+            // repaint with the new colours; settings keys the file leaves out default to the theme's values
+            self.theme_gen = theme_gen;
+            if let Some(w) = &self.watch {
+                self.dock.settings = std::fs::read_to_string(&w.settings_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            }
+            changed = true;
+        }
         changed |= self.sync_items();
         let moving = self.dock.step(self.surface.0 as f32);
         let redraw = changed || moving || self.animating;

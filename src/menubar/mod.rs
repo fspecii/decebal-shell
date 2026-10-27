@@ -14,7 +14,7 @@ use crate::app::{App, Button, InputRect, Key, Tick, Waker};
 use crate::controlcenter::{self, sys, Snapshot, Target};
 use crate::gfx::{color, fill_rounded, stroke_rounded};
 use crate::text::{Fonts, Weight};
-use crate::theme::{BAR_BG, BAR_HEIGHT};
+use crate::theme::BAR_HEIGHT;
 use crate::wm::Workspace;
 use active::ActiveWindow;
 use menus::{Dropdown, Menu, Runner};
@@ -33,7 +33,10 @@ const LEFT_PAD: f32 = 7.0;
 const RIGHT_PAD: f32 = 7.0;
 const BTN_W: f32 = 27.0;
 const ICON_PX: f32 = 16.0;
-const INK: (u8, u8, u8) = (222, 222, 222);
+/// Menu bar text colour (from the theme).
+fn ink() -> (u8, u8, u8) {
+    crate::theme::th().bar_text.t()
+}
 const MENU_GAP: f32 = 2.0;
 const PANEL_GAP: f32 = 4.0;
 const BOTTOM_MARGIN: f32 = 8.0;
@@ -646,15 +649,14 @@ impl MacBar {
 
     fn symbol(&mut self, pm: &mut Pixmap, name: &str, size: f32, cx: f32, cy: f32) {
         let px = (size * 2.0).ceil() as u32;
-        if let Some(sym) = self.symbols.get(name, INK, px) {
+        if let Some(sym) = self.symbols.get(name, ink(), px) {
             crate::gfx::blit_scaled(pm, sym, (cx - size / 2.0).round(), (cy - size / 2.0).round(), size, size, 1.0);
         }
     }
 
     fn draw_bar(&mut self, pm: &mut Pixmap) {
         let w = pm.width() as f32;
-        let (r, g, b) = BAR_BG;
-        crate::gfx::fill_rect(pm, 0.0, 0.0, w, BAR_HEIGHT, color(r, g, b, 1.0));
+        crate::gfx::fill_rect(pm, 0.0, 0.0, w, BAR_HEIGHT, crate::theme::th().bar_c());
 
         // Left: titles.
         let spans = self.spans();
@@ -670,13 +672,13 @@ impl MacBar {
                 0.0
             };
             if alpha > 0.0 {
-                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, color(255, 255, 255, alpha));
+                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(alpha));
             }
             if m.icon {
                 self.symbol(pm, "apple", 12.0, s.x + s.w / 2.0, 11.5);
             } else {
                 let weight = if m.bold { Weight::Bold } else { Weight::Medium };
-                self.text(pm, &m.title, s.x + 9.0, TEXT_PX, weight, (INK.0, INK.1, INK.2, 1.0));
+                self.text(pm, &m.title, s.x + 9.0, TEXT_PX, weight, (ink().0, ink().1, ink().2, 1.0));
             }
         }
 
@@ -686,7 +688,7 @@ impl MacBar {
         for (kind, s) in self.tray() {
             let cx = s.x + s.w / 2.0;
             if self.open == Open::Popup(kind) {
-                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, color(255, 255, 255, 0.18));
+                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(0.18));
             }
             match kind {
                 Tray::Layout => self.draw_layout_item(pm, s),
@@ -699,18 +701,18 @@ impl MacBar {
                     if let Some(wx) = &weather {
                         let glyph = format!("wx:{:x}", weather::nerd_codepoint(wx.code, wx.night));
                         self.symbol(pm, &glyph, 17.0, s.x + 9.0 + ICON_PX / 2.0, 12.5);
-                        self.text(pm, &format!("{}°", wx.temp_c), s.x + 9.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
+                        self.text(pm, &format!("{}°", wx.temp_c), s.x + 9.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (ink().0, ink().1, ink().2, 1.0));
                     }
                 }
                 Tray::Workspaces => {
                     for (i, ws) in self.workspaces.iter().enumerate() {
                         let cx = s.x + WS_PAD / 2.0 + WS_SLOT * (i as f32 + 0.5);
                         if ws.active {
-                            fill_rounded(pm, cx - 5.0, 10.0, 10.0, 6.0, 3.0, color(INK.0, INK.1, INK.2, 0.95));
+                            fill_rounded(pm, cx - 5.0, 10.0, 10.0, 6.0, 3.0, crate::theme::th().bar_text.color(0.95));
                         } else if ws.occupied {
-                            crate::gfx::fill_circle(pm, cx, 13.0, 2.5, color(INK.0, INK.1, INK.2, 0.6));
+                            crate::gfx::fill_circle(pm, cx, 13.0, 2.5, crate::theme::th().bar_text.color(0.6));
                         } else {
-                            crate::gfx::fill_circle(pm, cx, 13.0, 2.0, color(INK.0, INK.1, INK.2, 0.22));
+                            crate::gfx::fill_circle(pm, cx, 13.0, 2.0, crate::theme::th().bar_text.color(0.22));
                         }
                     }
                 }
@@ -742,13 +744,13 @@ impl MacBar {
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
                     if self.open == Open::Control {
-                        fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, color(255, 255, 255, 0.18));
+                        fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(0.18));
                     }
                     self.symbol(pm, "switches", ICON_PX, cx, 12.5);
                 }
                 Tray::Clock => {
                     let t = self.clock_text.clone();
-                    self.text(pm, &t, s.x + 8.0, TEXT_PX, Weight::Regular, (INK.0, INK.1, INK.2, 1.0));
+                    self.text(pm, &t, s.x + 8.0, TEXT_PX, Weight::Regular, (ink().0, ink().1, ink().2, 1.0));
                 }
             }
         }
@@ -757,29 +759,30 @@ impl MacBar {
     fn draw_dropdown(&mut self, pm: &mut Pixmap, idx: usize) {
         let Some(d) = self.dropdown(idx) else { return };
         let menu = self.menus[idx].clone();
-        fill_rounded(pm, d.x, d.y, d.w, d.h, 10.0, color(36, 36, 41, 0.96));
-        stroke_rounded(pm, d.x + 0.5, d.y + 0.5, d.w - 1.0, d.h - 1.0, 9.5, color(255, 255, 255, 0.14), 1.0);
+        fill_rounded(pm, d.x, d.y, d.w, d.h, crate::theme::th().radius, crate::theme::th().popup_c());
+        stroke_rounded(pm, d.x + 0.5, d.y + 0.5, d.w - 1.0, d.h - 1.0, crate::theme::th().radius - 0.5, crate::theme::th().outline_c(), 1.0);
         for row in &d.rows {
             let it = &menu.items[row.index];
             if it.separator {
-                crate::gfx::fill_rect(pm, d.x + PAD_SEP, row.y + row.h / 2.0, d.w - 2.0 * PAD_SEP, 1.0, color(255, 255, 255, 0.12));
+                crate::gfx::fill_rect(pm, d.x + PAD_SEP, row.y + row.h / 2.0, d.w - 2.0 * PAD_SEP, 1.0, crate::theme::th().ink(0.12));
                 continue;
             }
             let available = self.runner.available(it.action);
             let hovered = self.hover_row == Some(row.index) && available;
             if hovered {
-                fill_rounded(pm, d.x + menus::PAD, row.y, d.w - 2.0 * menus::PAD, row.h, 5.0, color(10, 132, 255, 1.0));
+                fill_rounded(pm, d.x + menus::PAD, row.y, d.w - 2.0 * menus::PAD, row.h, crate::theme::th().r(0.5), crate::theme::th().accent_c());
             }
             let alpha = if available { 1.0 } else { 0.35 };
             let (label, red) = if self.confirm == Some(it.action) { (format!("{}?", it.label.trim_end_matches('…')), true) } else { (it.label.clone(), false) };
+            let th = crate::theme::th();
             let main = if hovered {
-                (255, 255, 255, 1.0)
+                th.accent_text.a(1.0)
             } else if red {
-                (255, 105, 97, 1.0)
+                th.danger.a(1.0)
             } else {
-                (245, 245, 247, alpha)
+                th.text.a(alpha)
             };
-            let sub = if hovered { (255, 255, 255, 1.0) } else { (255, 255, 255, 0.45 * alpha) };
+            let sub = if hovered { th.accent_text.a(1.0) } else { th.text.a(0.45 * alpha) };
             // Vertically centre in the 24px row.
             let Some(f) = self.fonts.as_mut() else { continue };
             let top = row.y + (row.h - TEXT_PX) / 2.0 - 1.0;
@@ -1157,6 +1160,8 @@ impl App for MacBar {
     fn set_waker(&mut self, waker: Waker) {
         self.active.set_waker(waker.clone());
         self.waker = Some(waker.clone());
+        let tw = waker.clone();
+        crate::theme::live::start_watcher(move || tw.wake());
         let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
         rdwm::spawn_watcher(Arc::clone(&self.shared.layout), move || {
             sh.changed.store(true, Ordering::SeqCst);
@@ -1201,6 +1206,7 @@ impl App for MacBar {
                 close_in = Some(CLOSE_DELAY - t.elapsed());
             }
         }
+        redraw |= crate::theme::take_changed();
         if redraw && self.open == Open::Control && self.cc_drag.is_none() {
             self.relayout_control();
         }
