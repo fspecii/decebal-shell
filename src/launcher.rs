@@ -114,7 +114,7 @@ impl Launcher {
 
     fn launch_selected(&mut self) -> Response {
         match self.shown.get(self.sel).and_then(|&i| self.apps.get(i)) {
-            Some(a) if launch::spawn_exec(&a.exec) => Response::act(Action::Close),
+            Some(a) if launch::spawn_app(a) => Response::act(Action::Close),
             _ => Response::NONE,
         }
     }
@@ -363,7 +363,7 @@ mod tests {
     use super::*;
 
     fn app(name: &str) -> AppEntry {
-        AppEntry { name: name.into(), exec: "true".into(), icon: String::new() }
+        AppEntry { name: name.into(), exec: "true".into(), ..Default::default() }
     }
 
     fn key(k: Key, text: &str) -> KeyEvent {

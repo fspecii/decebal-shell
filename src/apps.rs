@@ -3,11 +3,19 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AppEntry {
     pub name: String,
     pub exec: String,
     pub icon: String,
+    /// `Path=`: working directory of the program.
+    pub path: String,
+    /// `Terminal=true`: needs a terminal window.
+    pub terminal: bool,
+    /// `TryExec=`: the app is not installed when this program is missing.
+    pub try_exec: String,
+    /// The `.desktop` file (for `%k`); empty when unknown.
+    pub file: String,
 }
 
 fn app_dirs() -> Vec<PathBuf> {
@@ -24,30 +32,47 @@ fn app_dirs() -> Vec<PathBuf> {
 
 /// Parses one `.desktop` file; `None` for entries that should not be listed.
 pub fn parse_entry(text: &str) -> Option<AppEntry> {
-    let (mut name, mut exec, mut icon) = (None, None, String::new());
-    let (mut in_entry, mut is_app) = (false, true);
+    let (e, hidden) = parse_any(text)?;
+    (!hidden && !e.exec.is_empty()).then_some(e)
+}
+
+/// Parses an application entry including hidden ones and ones without `Exec=` (D-Bus activatable);
+/// the flag says `NoDisplay`/`Hidden`. `None` for non-applications or entries without a name.
+pub fn parse_any(text: &str) -> Option<(AppEntry, bool)> {
+    let mut e = AppEntry::default();
+    let (mut name, mut have_exec) = (false, false);
+    let (mut in_entry, mut is_app, mut hidden) = (false, true, false);
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with('[') {
             in_entry = line == "[Desktop Entry]";
         } else if in_entry {
             if let Some(v) = line.strip_prefix("Name=") {
-                name.get_or_insert_with(|| v.to_string());
+                if !name {
+                    e.name = v.to_string();
+                    name = true;
+                }
             } else if let Some(v) = line.strip_prefix("Exec=") {
-                exec.get_or_insert_with(|| v.to_string());
+                if !have_exec {
+                    e.exec = v.to_string();
+                    have_exec = true;
+                }
             } else if let Some(v) = line.strip_prefix("Icon=") {
-                icon = v.to_string();
+                e.icon = v.to_string();
+            } else if let Some(v) = line.strip_prefix("Path=") {
+                e.path = v.to_string();
+            } else if let Some(v) = line.strip_prefix("TryExec=") {
+                e.try_exec = v.to_string();
+            } else if let Some(v) = line.strip_prefix("Terminal=") {
+                e.terminal = v == "true";
             } else if let Some(v) = line.strip_prefix("Type=") {
                 is_app = v == "Application";
             } else if line == "NoDisplay=true" || line == "Hidden=true" {
-                return None;
+                hidden = true;
             }
         }
     }
-    if !is_app {
-        return None;
-    }
-    Some(AppEntry { name: name?, exec: exec?, icon })
+    (is_app && name).then_some((e, hidden))
 }
 
 /// Every visible application, sorted by name. An earlier directory shadows a later one with the same file name.
@@ -65,7 +90,8 @@ pub fn list() -> Vec<AppEntry> {
             if !seen.insert(id) {
                 continue;
             }
-            if let Some(entry) = read_entry(&path) {
+            if let Some(mut entry) = read_entry(&path) {
+                entry.file = path.to_string_lossy().into_owned();
                 out.push(entry);
             }
         }
@@ -92,8 +118,12 @@ pub fn load_cache() -> Vec<AppEntry> {
     let Some(text) = cache_file().and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
     text.lines()
         .filter_map(|l| {
-            let mut p = l.splitn(3, '\t');
-            Some(AppEntry { name: p.next()?.to_string(), exec: p.next()?.to_string(), icon: p.next()?.to_string() })
+            let mut p = l.splitn(7, '\t');
+            let (name, exec, icon) = (p.next()?.to_string(), p.next()?.to_string(), p.next()?.to_string());
+            // Older caches have three columns only.
+            let mut rest = || p.next().unwrap_or("").to_string();
+            let (path, terminal, try_exec, file) = (rest(), rest() == "1", rest(), rest());
+            Some(AppEntry { name, exec, icon, path, terminal, try_exec, file })
         })
         .collect()
 }
@@ -103,7 +133,7 @@ pub fn save_cache(apps: &[AppEntry]) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let text: String = apps.iter().map(|a| format!("{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon))).collect();
+    let text: String = apps.iter().map(|a| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon), esc(&a.path), u8::from(a.terminal), esc(&a.try_exec), esc(&a.file))).collect();
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, text).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
@@ -134,13 +164,13 @@ mod tests {
     use super::*;
 
     fn app(name: &str) -> AppEntry {
-        AppEntry { name: name.into(), exec: "x".into(), icon: String::new() }
+        AppEntry { name: name.into(), exec: "x".into(), ..Default::default() }
     }
 
     #[test]
     fn parses_a_normal_entry() {
         let t = "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot %U\nIcon=foot\n[Desktop Action x]\nName=Other\n";
-        assert_eq!(parse_entry(t), Some(AppEntry { name: "Foot".into(), exec: "foot %U".into(), icon: "foot".into() }));
+        assert_eq!(parse_entry(t), Some(AppEntry { name: "Foot".into(), exec: "foot %U".into(), icon: "foot".into(), ..Default::default() }));
     }
 
     #[test]

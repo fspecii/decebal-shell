@@ -42,6 +42,8 @@ fn subtext_color() -> Color {
 pub enum Act {
     /// A `.desktop` `Exec=` line.
     Exec(String),
+    /// An installed application (keeps `Path=`, `Terminal=`, `TryExec=`, `%i`/`%c`/`%k`).
+    App(AppEntry),
     Argv(Vec<String>),
     /// A shell command shown in a terminal window (package installs need sudo and a password prompt).
     Terminal(String),
@@ -272,7 +274,7 @@ fn app_item(a: &AppEntry) -> Item {
     Item {
         alt: if cmdline.is_empty() { None } else { Some(Act::Terminal(cmdline)) },
         key: Some(app_key(&a.name)),
-        ..Item::new(a.name.clone(), String::new(), "Application", Icon::App(a.icon.clone()), Act::Exec(a.exec.clone()))
+        ..Item::new(a.name.clone(), String::new(), "Application", Icon::App(a.icon.clone()), Act::App(a.clone()))
     }
 }
 
@@ -463,6 +465,9 @@ fn run(act: &Act) {
     match act {
         Act::Exec(e) => {
             launch::spawn_exec(e);
+        }
+        Act::App(a) => {
+            launch::spawn_app(a);
         }
         Act::Argv(a) => {
             if let Some((p, rest)) = a.split_first() {
@@ -996,7 +1001,7 @@ mod tests {
     use super::*;
 
     fn app(name: &str) -> AppEntry {
-        AppEntry { name: name.into(), exec: format!("{}-bin", name.to_lowercase()), icon: String::new() }
+        AppEntry { name: name.into(), exec: format!("{}-bin", name.to_lowercase()), ..Default::default() }
     }
 
     fn key(k: Key, text: &str) -> KeyEvent {
@@ -1165,7 +1170,7 @@ mod tests {
     fn alt_actions() {
         let r = search("2+2", &[]);
         assert_eq!(r[0].alt, Some(Act::Copy("2+2 = 4".into())));
-        let r = search("fire", &[AppEntry { name: "Firefox".into(), exec: "firefox --new-window %U".into(), icon: String::new() }]);
+        let r = search("fire", &[AppEntry { name: "Firefox".into(), exec: "firefox --new-window %U".into(), ..Default::default() }]);
         assert_eq!(r[0].alt, Some(Act::Terminal("firefox --new-window".into())));
         assert_eq!(r[0].key.as_deref(), Some("app:Firefox"));
     }
