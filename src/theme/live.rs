@@ -179,15 +179,18 @@ impl Source {
 fn system_scheme_files() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     let cfg = std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".config"));
-    vec![cfg.join("gtk-3.0/settings.ini"), cfg.join("omarchy/current/theme/light.mode")]
+    vec![cfg.join("gtk-3.0/settings.ini"), cfg.join("omarchy/current/theme/light.mode"), cfg.join("omarchy/desktop-styles/appearance")]
 }
 
-/// "auto" mode: `MACSHELL_COLOR_SCHEME`, Omarchy's `light.mode` marker, GTK's dark preference; dark otherwise.
+/// "auto" mode: `MACSHELL_COLOR_SCHEME`, `desktop-style appearance`, Omarchy's `light.mode` marker, GTK's dark preference; dark otherwise.
 pub fn system_dark() -> bool {
     if let Some(v) = std::env::var_os("MACSHELL_COLOR_SCHEME") {
         return !v.to_string_lossy().eq_ignore_ascii_case("light");
     }
     let files = system_scheme_files();
+    if let Ok(v) = std::fs::read_to_string(&files[2]) {
+        return v.trim() != "light"; // `desktop-style appearance`: the file this desktop's toggle writes
+    }
     if files[1].exists() {
         return false;
     }

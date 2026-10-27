@@ -44,6 +44,12 @@ with the field list serde reports for an unknown key, and compare defaults with 
 table at start (`rdwmctl schema --offline`, bundled snapshot `src/settings/rdwm-schema.json` as fallback) and a test checks
 that every key the panes use exists in it (and the snapshot against an installed rdwmctl).
 
+## Theme pane
+The last pane (`macsettings theme`) is the gallery of the shared macshell theme: miniature desktops for every theme, light/dark/auto,
+accent swatches, translucency, corner radius and text size. A choice edits rdwm's colour keys through the same
+comment-preserving store (validated, one reload) and writes `macshell.json`; every running macshell program follows within
+half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
+
 ## Panes
 General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (titlebars, borders, colours,
 traffic lights, rdwm's own bar) · Desktop & Dock (dock sliders, menu-bar workspaces, pinned apps add/remove/reorder) ·

@@ -549,12 +549,22 @@ pub fn toggle_stay_awake() {
     }
 }
 
-/// `desktop-style appearance` state file: `dark` / `light`.
+/// Whether the shell is showing a light theme variant right now (the shared theme decides: an explicit
+/// mode, or `desktop-style appearance` when the mode is "auto").
 pub fn is_light() -> bool {
-    std::env::var_os("HOME").and_then(|h| std::fs::read_to_string(std::path::PathBuf::from(h).join(".config/omarchy/desktop-styles/appearance")).ok()).map(|s| s.trim() == "light").unwrap_or(false)
+    !crate::theme::th().dark
 }
 
+/// "Switch to Light/Dark Appearance": flips the theme mode (explicit modes) and keeps Omarchy's
+/// `desktop-style appearance` in step when it exists (in "auto" mode that alone changes the theme).
 pub fn toggle_appearance() {
+    use crate::theme::Mode;
+    let mode = crate::theme::live::Source::discover().selection().mode;
+    if mode != Mode::Auto {
+        let next = if is_light() { "dark" } else { "light" };
+        let ctl = crate::launch::sibling_or_path("macthemectl");
+        spawn(&[&ctl, "set", "mode", next]);
+    }
     if have("desktop-style") {
         spawn(&["desktop-style", "appearance", "toggle"]);
     }
