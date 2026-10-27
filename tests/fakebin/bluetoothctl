@@ -1,0 +1,11 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}
+echo "bluetoothctl $*" >> $FS/log
+case "$1 $2" in
+"show ") printf 'Controller AA:BB (public)\n\tPowered: %s\n' "$(cat $FS/btpower)";;
+"devices Connected") echo "Device 11:22:33:44:55:66 Fake Headphones";;
+"devices Paired") echo "Device 11:22:33:44:55:66 Fake Headphones"; echo "Device 77:88:99:AA:BB:CC Fake Mouse";;
+"power on") echo yes > $FS/btpower;;
+"power off") echo no > $FS/btpower;;
+esac
+exit 0

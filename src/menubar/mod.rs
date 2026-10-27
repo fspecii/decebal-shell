@@ -4,6 +4,9 @@
 pub mod active;
 pub mod clock;
 pub mod menus;
+pub mod popup;
+pub mod rdwm;
+mod status;
 pub mod symbols;
 pub mod weather;
 
@@ -15,6 +18,7 @@ use crate::theme::{BAR_BG, BAR_HEIGHT};
 use crate::wm::Workspace;
 use active::ActiveWindow;
 use menus::{Dropdown, Menu, Runner};
+use popup::{Calendar, Popup};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -65,9 +69,11 @@ pub fn title_spans(menus: &[Menu], label_w: impl Fn(&Menu) -> f32) -> Vec<Span> 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tray {
     Workspaces,
+    Layout,
     Weather,
     Awake,
     Agents,
+    Battery,
     Bluetooth,
     Audio,
     Network,
@@ -139,6 +145,8 @@ enum Open {
     None,
     Menu(usize),
     Control,
+    /// A popup under a status item (layouts, sound, Wi-Fi, Bluetooth, battery, calendar).
+    Popup(Tray),
 }
 
 struct Shared {
@@ -147,6 +155,12 @@ struct Shared {
     changed: AtomicBool,
     snap_busy: AtomicBool,
     weather_busy: AtomicBool,
+    layout: rdwm::Shared,
+    wifi: Mutex<Vec<sys::WifiNet>>,
+    bt: Mutex<Vec<sys::BtDevice>>,
+    lists_busy: AtomicBool,
+    /// When this process last changed the volume itself (probe results right after are stale).
+    vol_set_at: Mutex<Option<Instant>>,
 }
 
 pub struct MacBar {
@@ -173,6 +187,12 @@ pub struct MacBar {
     cc_hover: Option<Target>,
     cc_drag: Option<Target>,
     cc_last_send: Instant,
+    popup: Option<Popup>,
+    calendar: Option<Calendar>,
+    popup_hover: Option<usize>,
+    popup_drag: Option<usize>,
+    /// Test hook (`MACBAR_DEBUG_TRAY=file`): where the status items' centres are written after each draw.
+    debug_tray: Option<(std::path::PathBuf, String)>,
     last_full_refresh: Instant,
     // Window-manager workspaces (optional indicator)
     show_workspaces: bool,
@@ -190,6 +210,11 @@ impl MacBar {
             changed: AtomicBool::new(false),
             snap_busy: AtomicBool::new(false),
             weather_busy: AtomicBool::new(false),
+            layout: Arc::new(Mutex::new(None)),
+            wifi: Mutex::new(Vec::new()),
+            bt: Mutex::new(Vec::new()),
+            lists_busy: AtomicBool::new(false),
+            vol_set_at: Mutex::new(None),
         });
         let mut bar = MacBar {
             fonts: Fonts::load(),
@@ -213,6 +238,11 @@ impl MacBar {
             cc_hover: None,
             cc_drag: None,
             cc_last_send: Instant::now(),
+            popup: None,
+            calendar: None,
+            popup_hover: None,
+            popup_drag: None,
+            debug_tray: std::env::var_os("MACBAR_DEBUG_TRAY").map(|p| (std::path::PathBuf::from(p), String::new())),
             last_full_refresh: Instant::now(),
             show_workspaces: false,
             workspaces: Vec::new(),
@@ -306,6 +336,9 @@ impl MacBar {
         if self.show_workspaces && !self.workspaces.is_empty() {
             items.push((Tray::Workspaces, workspaces_width(self.workspaces.len())));
         }
+        if self.layout_state().is_some() {
+            items.push((Tray::Layout, 30.0));
+        }
         let weather = self.shared.weather.lock().ok().and_then(|w| w.clone());
         if let Some(w) = &weather {
             let tw = self.fonts.as_ref().map(|f| f.measure(&format!("{}°", w.temp_c), TEXT_PX, Weight::Regular)).unwrap_or(14.0);
@@ -317,7 +350,11 @@ impl MacBar {
         if symbols::agents_available() {
             items.push((Tray::Agents, BTN_W));
         }
-        if snap.bluetooth.as_ref().map(|b| b.powered && b.connected > 0).unwrap_or(false) {
+        if let Some(b) = &snap.battery {
+            let tw = self.fonts.as_ref().map(|f| f.measure(&format!("{}%", b.percent), 11.0, Weight::Regular)).unwrap_or(24.0);
+            items.push((Tray::Battery, 30.0 + tw + 6.0));
+        }
+        if snap.bluetooth.is_some() {
             items.push((Tray::Bluetooth, BTN_W));
         }
         if snap.volume.is_some() {
@@ -360,7 +397,12 @@ impl MacBar {
             Open::None => None,
             Open::Menu(i) => self.dropdown(i).map(|d| d.y + d.h),
             Open::Control => Some(BAR_HEIGHT + PANEL_GAP + self.cc_height),
+            Open::Popup(_) => self.popup.as_ref().map(|p| p.y + p.h).or(self.calendar.as_ref().map(|c| c.y + Calendar::H)),
         }
+    }
+
+    fn layout_state(&self) -> Option<rdwm::LayoutState> {
+        self.shared.layout.lock().ok().and_then(|l| l.clone())
     }
 
     // --------------------------------------------------------- data workers
@@ -421,6 +463,10 @@ impl MacBar {
         self.confirm = None;
         self.cc_hover = None;
         self.cc_drag = None;
+        self.popup = None;
+        self.calendar = None;
+        self.popup_hover = None;
+        self.popup_drag = None;
         was
     }
 
@@ -625,7 +671,16 @@ impl MacBar {
         let weather = self.shared.weather.lock().ok().and_then(|w| w.clone());
         for (kind, s) in self.tray() {
             let cx = s.x + s.w / 2.0;
+            if self.open == Open::Popup(kind) {
+                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, color(255, 255, 255, 0.18));
+            }
             match kind {
+                Tray::Layout => self.draw_layout_item(pm, s),
+                Tray::Battery => {
+                    if let Some(b) = &snap.battery {
+                        self.draw_battery(pm, s, b);
+                    }
+                }
                 Tray::Weather => {
                     if let Some(wx) = &weather {
                         let glyph = format!("wx:{:x}", weather::nerd_codepoint(wx.code, wx.night));
@@ -647,7 +702,14 @@ impl MacBar {
                 }
                 Tray::Awake => self.symbol(pm, "awake", 12.0, cx, 12.5),
                 Tray::Agents => self.symbol(pm, "agents", 14.0, cx, 12.5),
-                Tray::Bluetooth => self.symbol(pm, "bluetooth-connected", ICON_PX, cx, 12.5),
+                Tray::Bluetooth => {
+                    let icon = match &snap.bluetooth {
+                        Some(b) if !b.powered => "bluetooth-off",
+                        Some(b) if b.connected > 0 => "bluetooth-connected",
+                        _ => "bluetooth",
+                    };
+                    self.symbol(pm, icon, ICON_PX, cx, 12.5)
+                }
                 Tray::Audio => {
                     let icon = snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-2");
                     self.symbol(pm, icon, ICON_PX, cx, 12.5);
@@ -726,7 +788,8 @@ fn collect_light(prev: &Snapshot) -> Snapshot {
     }
     s.awake = sys::stay_awake();
     s.light = sys::is_light();
-    if prev.bluetooth.is_some() {
+    s.battery = sys::probe_battery();
+    if prev.bluetooth.is_some() || sys::have("bluetoothctl") {
         s.bluetooth = sys::probe_bluetooth();
     }
     s
@@ -746,6 +809,15 @@ impl App for MacBar {
         crate::gfx::clear(pm);
         self.width = pm.width();
         self.draw_bar(pm);
+        if self.debug_tray.is_some() {
+            let text: String = self.tray().iter().map(|(k, s)| format!("{:?} {}\n", k, (s.x + s.w / 2.0).round())).collect();
+            if let Some((path, last)) = self.debug_tray.as_mut() {
+                if *last != text {
+                    let _ = std::fs::write(&*path, &text);
+                    *last = text;
+                }
+            }
+        }
         match self.open {
             Open::Menu(i) => self.draw_dropdown(pm, i),
             Open::Control => {
@@ -753,6 +825,15 @@ impl App for MacBar {
                 if let Some(f) = self.fonts.as_mut() {
                     let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover };
                     controlcenter::draw(pm, &view, f, &mut self.symbols);
+                }
+            }
+            Open::Popup(_) => {
+                if let Some(f) = self.fonts.as_mut() {
+                    if let Some(p) = &self.popup {
+                        p.draw(pm, f, &mut self.symbols, self.popup_hover);
+                    } else if let Some(c) = &self.calendar {
+                        c.draw(pm, f);
+                    }
                 }
             }
             Open::None => {}
@@ -774,6 +855,10 @@ impl App for MacBar {
                 self.slide(t, rx, rw, x - ox, false);
                 return true;
             }
+        }
+        if let Some(row) = self.popup_drag {
+            self.popup_slide(row, x, false);
+            return true;
         }
         let title = if y < BAR_HEIGHT { self.spans().iter().position(|s| x >= s.x && x < s.x + s.w) } else { None };
         if title != self.hover_title {
@@ -803,6 +888,13 @@ impl App for MacBar {
                     redraw = true;
                 }
             }
+            Open::Popup(_) => {
+                let hover = self.popup.as_ref().and_then(|p| p.hit(x, y));
+                if hover != self.popup_hover {
+                    self.popup_hover = hover;
+                    redraw = true;
+                }
+            }
             Open::None => {}
         }
         redraw
@@ -810,7 +902,7 @@ impl App for MacBar {
 
     fn pointer_leave(&mut self) -> bool {
         let mut redraw = self.hover_title.take().is_some();
-        if self.cc_drag.is_some() {
+        if self.cc_drag.is_some() || self.popup_drag.is_some() {
             return redraw;
         }
         redraw |= self.close();
@@ -818,6 +910,16 @@ impl App for MacBar {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
+        if button == Button::Middle && y < BAR_HEIGHT {
+            // Middle click on the sound icon mutes.
+            if self.tray().iter().any(|(k, s)| *k == Tray::Audio && x >= s.x && x < s.x + s.w) {
+                self.toggle_mute_now();
+                if matches!(self.open, Open::Popup(Tray::Audio)) {
+                    self.rebuild_popup();
+                }
+                return true;
+            }
+        }
         if button != Button::Left {
             return false;
         }
@@ -861,6 +963,14 @@ impl App for MacBar {
                         self.spawn_weather();
                         return false;
                     }
+                    Tray::Layout | Tray::Battery | Tray::Bluetooth | Tray::Audio | Tray::Network | Tray::Clock => {
+                        if self.open == Open::Popup(kind) {
+                            self.close();
+                        } else {
+                            self.open_popup(kind);
+                        }
+                        return true;
+                    }
                     _ => {}
                 }
             }
@@ -882,6 +992,7 @@ impl App for MacBar {
                 }
                 false
             }
+            Open::Popup(_) => self.popup_press(x, y),
             Open::None => false,
         }
     }
@@ -889,6 +1000,10 @@ impl App for MacBar {
     fn pointer_release(&mut self, x: f32, _y: f32, button: Button) -> bool {
         if button != Button::Left {
             return false;
+        }
+        if let Some(row) = self.popup_drag.take() {
+            self.popup_slide(row, x, true);
+            return true;
         }
         if let Some(t) = self.cc_drag.take() {
             let (ox, _) = self.panel_origin();
@@ -902,6 +1017,9 @@ impl App for MacBar {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if y < BAR_HEIGHT && self.tray_scroll(x, dy) {
+            return true;
+        }
         if self.open != Open::Control {
             return false;
         }
@@ -941,6 +1059,13 @@ impl App for MacBar {
                 let (ox, oy) = self.panel_origin();
                 rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: controlcenter::PANEL_W as i32, h: (oy + self.cc_height - BAR_HEIGHT).ceil() as i32 });
             }
+            Open::Popup(_) => {
+                if let Some(p) = &self.popup {
+                    rects.push(InputRect { x: p.x.floor() as i32, y: BAR_HEIGHT as i32, w: p.w.ceil() as i32, h: (p.y + p.h - BAR_HEIGHT).ceil() as i32 });
+                } else if let Some(c) = &self.calendar {
+                    rects.push(InputRect { x: c.x.floor() as i32, y: BAR_HEIGHT as i32, w: Calendar::W.ceil() as i32, h: (c.y + Calendar::H - BAR_HEIGHT).ceil() as i32 });
+                }
+            }
             Open::None => {}
         }
         rects
@@ -979,7 +1104,28 @@ impl App for MacBar {
 
     fn set_waker(&mut self, waker: Waker) {
         self.active.set_waker(waker.clone());
-        self.waker = Some(waker);
+        self.waker = Some(waker.clone());
+        let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
+        rdwm::spawn_watcher(Arc::clone(&self.shared.layout), move || {
+            sh.changed.store(true, Ordering::SeqCst);
+            w.wake();
+        });
+        // Volume changes made elsewhere (keys, other apps) show up without polling.
+        let (shared, w) = (Arc::clone(&self.shared), waker);
+        sys::watch_volume(move || {
+            let recently_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_millis(500));
+            if recently_set {
+                return;
+            }
+            if let Some((v, name)) = sys::probe_volume() {
+                if let Ok(mut s) = shared.snap.lock() {
+                    s.volume = Some(v);
+                    s.sink = name;
+                }
+                shared.changed.store(true, Ordering::SeqCst);
+                w.wake();
+            }
+        });
         // First data: weather (cached or fetched) and a light system snapshot.
         if self.weather_stale() {
             self.spawn_weather();
@@ -992,6 +1138,10 @@ impl App for MacBar {
         if redraw && self.open == Open::Control && self.cc_drag.is_none() {
             self.relayout_control();
         }
+        if redraw && matches!(self.open, Open::Popup(_)) && self.popup_drag.is_none() {
+            self.rebuild_popup();
+        }
+        self.refresh_open_popup();
         let Some(tm) = clock::now() else { return Tick { redraw, next: Some(Duration::from_secs(30)) } };
         let minute = (tm.hour, tm.min);
         if self.last_minute != Some(minute) {
@@ -1014,7 +1164,7 @@ impl App for MacBar {
             self.last_full_refresh = Instant::now();
             self.spawn_snapshot(true);
         }
-        Tick { redraw, next: Some(next_wake(&tm, self.open == Open::Control)) }
+        Tick { redraw, next: Some(next_wake(&tm, matches!(self.open, Open::Control | Open::Popup(_)))) }
     }
 }
 
@@ -1400,5 +1550,171 @@ mod tests {
         assert!(f.has_loaded_face());
         assert!(bar.idle().is_some(), "a deferred trim is pending");
         assert!(!bar.fonts.as_ref().unwrap().has_loaded_face());
+    }
+
+    // ---- status popups ----
+
+    fn status_bar() -> MacBar {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.clock_text = "Tue 27 Oct  12:00".into();
+        bar.update_snapshot(|s| {
+            *s = Snapshot {
+                net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: String::new() }),
+                bluetooth: Some(sys::Bluetooth { powered: true, connected: 0 }),
+                volume: Some(sys::Volume { level: 0.5, muted: false }),
+                battery: Some(sys::Battery { percent: 80, charging: false, status: "Discharging".into() }),
+                ..Snapshot::default()
+            }
+        });
+        *bar.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into() });
+        bar
+    }
+
+    fn click_tray(bar: &mut MacBar, kind: Tray) -> bool {
+        let s = bar.tray_span(kind).expect("item visible");
+        bar.pointer_button(s.x + s.w / 2.0, 10.0, Button::Left)
+    }
+
+    #[test]
+    fn items_without_their_tool_are_hidden() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.update_snapshot(|s| *s = Snapshot::default());
+        let kinds: Vec<Tray> = bar.tray().into_iter().map(|t| t.0).collect();
+        for hidden in [Tray::Layout, Tray::Battery, Tray::Bluetooth, Tray::Audio, Tray::Network] {
+            assert!(!kinds.contains(&hidden), "{hidden:?} should be hidden");
+        }
+        assert!(kinds.contains(&Tray::Clock) && kinds.contains(&Tray::Control));
+        // Clicking where nothing is does not open anything.
+        assert!(bar.tray_span(Tray::Layout).is_none());
+    }
+
+    #[test]
+    fn layout_item_opens_a_popup_and_picking_a_row_applies_it() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = status_bar();
+        assert!(click_tray(&mut bar, Tray::Layout));
+        assert_eq!(bar.open, Open::Popup(Tray::Layout));
+        let p = bar.popup.clone().expect("popup");
+        let rows = &p.rows;
+        assert!(rows.iter().filter(|r| r.checked).count() == 1 && rows.iter().any(|r| r.checked && r.label == "Tile"));
+        assert_eq!(rows.iter().filter(|r| matches!(r.act, popup::Act::SetLayout(_))).count(), rdwm::LAYOUTS.len());
+        assert_eq!(bar.input_rects().len(), 2);
+        let idx = rows.iter().position(|r| r.act == popup::Act::SetLayout("bsp".into())).unwrap();
+        let (ry, rh) = p.row_span(idx);
+        sys::take_log();
+        assert!(bar.pointer_button(p.x + 40.0, p.y + ry + rh / 2.0, Button::Left));
+        assert!(sys::take_log().contains(&"rdwmctl action setlayout bsp".to_string()));
+        assert_eq!(bar.open, Open::None);
+        // The bar shows the new layout at once, before rdwm's event arrives.
+        assert_eq!(bar.layout_state().map(|l| l.name), Some("bsp".into()));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn wheel_over_the_layout_item_cycles_layouts() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = status_bar();
+        let s = bar.tray_span(Tray::Layout).unwrap();
+        sys::take_log();
+        bar.scroll(s.x + 5.0, 10.0, 1.0);
+        bar.scroll(s.x + 5.0, 10.0, -1.0);
+        assert_eq!(sys::take_log(), vec!["rdwmctl action cyclelayout".to_string(), "rdwmctl action cyclelayout_back".to_string()]);
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn wheel_over_the_sound_icon_steps_five_percent() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = status_bar();
+        let s = bar.tray_span(Tray::Audio).unwrap();
+        assert!(bar.scroll(s.x + 5.0, 10.0, -1.0));
+        assert!((bar.snapshot().volume.unwrap().level - 0.55).abs() < 1e-4);
+        assert!(bar.scroll(s.x + 5.0, 10.0, 1.0) && bar.scroll(s.x + 5.0, 10.0, 1.0));
+        assert!((bar.snapshot().volume.unwrap().level - 0.45).abs() < 1e-4);
+        // Scrolling elsewhere on the bar does nothing.
+        assert!(!bar.scroll(5.0, 10.0, 1.0));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn sound_popup_slider_and_mute() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = status_bar();
+        click_tray(&mut bar, Tray::Audio);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        let p = bar.popup.clone().unwrap();
+        let slider = p.rows.iter().position(|r| matches!(r.kind, popup::Kind::Slider(_))).unwrap();
+        let (ry, rh) = p.row_span(slider);
+        let (tx, tw) = p.slider_track();
+        let y = p.y + ry + rh / 2.0;
+        assert!(bar.pointer_button(tx + tw * 0.8, y, Button::Left));
+        assert!(bar.popup_drag.is_some());
+        bar.pointer_motion(tx + tw * 0.2, y);
+        bar.pointer_release(tx + tw * 0.2, y, Button::Left);
+        assert!(bar.popup_drag.is_none());
+        assert!((bar.snapshot().volume.unwrap().level - 0.2).abs() < 0.01);
+        // Leaving the surface mid-drag must not close the popup.
+        bar.pointer_button(tx + tw * 0.5, y, Button::Left);
+        assert!(!bar.pointer_leave() || bar.open != Open::None);
+        bar.pointer_release(tx + tw * 0.5, y, Button::Left);
+        let mute = bar.popup.as_ref().unwrap().rows.iter().position(|r| r.act == popup::Act::ToggleMute).unwrap();
+        let (my, mh) = bar.popup.as_ref().unwrap().row_span(mute);
+        bar.pointer_button(p.x + 30.0, p.y + my + mh / 2.0, Button::Left);
+        assert!(bar.snapshot().volume.unwrap().muted);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn network_and_bluetooth_popups_list_what_the_workers_found() {
+        let mut bar = status_bar();
+        *bar.shared.wifi.lock().unwrap() = vec![sys::WifiNet { ssid: "Cafe".into(), signal: 60, secure: false, active: false }];
+        *bar.shared.bt.lock().unwrap() = vec![sys::BtDevice { mac: "AA".into(), name: "Buds".into(), connected: true }];
+        let (rows, _, _) = bar.build_popup(Tray::Network).unwrap();
+        assert!(rows.iter().any(|r| r.act == popup::Act::WifiConnect("Cafe".into())));
+        assert!(rows.iter().any(|r| r.act == popup::Act::WifiToggle && r.checked));
+        let (rows, _, _) = bar.build_popup(Tray::Bluetooth).unwrap();
+        assert!(rows.iter().any(|r| r.act == (popup::Act::BtDevice { mac: "AA".into(), connect: false }) && r.checked));
+        bar.update_snapshot(|s| s.bluetooth = Some(sys::Bluetooth { powered: false, connected: 0 }));
+        let (rows, _, _) = bar.build_popup(Tray::Bluetooth).unwrap();
+        assert!(!rows.iter().any(|r| matches!(r.act, popup::Act::BtDevice { .. })));
+    }
+
+    #[test]
+    fn clock_opens_a_calendar_that_navigates_and_escape_closes() {
+        let mut bar = status_bar();
+        assert!(click_tray(&mut bar, Tray::Clock));
+        assert_eq!(bar.open, Open::Popup(Tray::Clock));
+        let c = bar.calendar.clone().expect("calendar");
+        assert_eq!(bar.input_rects().len(), 2);
+        assert!(bar.size().1 as f32 >= c.y + Calendar::H);
+        let before = (c.year, c.mon0);
+        assert!(bar.pointer_button(c.x + Calendar::W - 20.0, c.y + 20.0, Button::Left));
+        let after = bar.calendar.as_ref().map(|c| (c.year, c.mon0)).unwrap();
+        assert_ne!(before, after);
+        assert!(bar.key(Key::Escape));
+        assert_eq!(bar.open, Open::None);
+        assert!(bar.calendar.is_none() && bar.popup.is_none());
+    }
+
+    #[test]
+    fn popups_toggle_and_replace_each_other() {
+        let mut bar = status_bar();
+        click_tray(&mut bar, Tray::Audio);
+        click_tray(&mut bar, Tray::Network);
+        assert_eq!(bar.open, Open::Popup(Tray::Network));
+        click_tray(&mut bar, Tray::Network);
+        assert_eq!(bar.open, Open::None);
+        // A battery popup mentions the percentage.
+        click_tray(&mut bar, Tray::Battery);
+        assert!(bar.popup.as_ref().unwrap().rows[0].detail.contains("80%"));
+        assert!(bar.pointer_leave());
+        assert_eq!(bar.open, Open::None);
     }
 }

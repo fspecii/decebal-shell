@@ -46,6 +46,10 @@ pub fn set_dry_run(on: bool) {
     DRY_RUN.store(on, Ordering::SeqCst);
 }
 
+pub fn is_dry_run() -> bool {
+    DRY_RUN.load(Ordering::SeqCst)
+}
+
 /// Commands recorded since the last call (dry-run only).
 pub fn take_log() -> Vec<String> {
     LOG.lock().map(|mut l| std::mem::take(&mut *l)).unwrap_or_default()
@@ -197,18 +201,235 @@ pub fn probe_volume() -> Option<(Volume, String)> {
     Some((parse_pactl_volume(&vol, &mute)?, String::new()))
 }
 
+/// The commands that set the default output to `level` (and unmute when audible).
+fn volume_cmds(level: f32) -> Vec<Vec<String>> {
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    if have("wpctl") {
+        let mut c = vec![s(&["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{level:.2}")])];
+        if level > 0.0 {
+            c.push(s(&["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"]));
+        }
+        c
+    } else if have("pactl") {
+        let mut c = vec![s(&["pactl", "set-sink-volume", "@DEFAULT_SINK@", &format!("{}%", (level * 100.0).round() as u32)])];
+        if level > 0.0 {
+            c.push(s(&["pactl", "set-sink-mute", "@DEFAULT_SINK@", "0"]));
+        }
+        c
+    } else {
+        Vec::new()
+    }
+}
+
+static VOL_PENDING: Mutex<Option<f32>> = Mutex::new(None);
+static VOL_WORKER: AtomicBool = AtomicBool::new(false);
+
+/// Sets the output volume. Requests are coalesced onto one worker so rapid scrolling or dragging
+/// applies in order and only the latest value matters; the caller never blocks.
 pub fn set_volume(level: f32) {
     let level = level.clamp(0.0, 1.0);
+    if DRY_RUN.load(Ordering::SeqCst) {
+        for c in volume_cmds(level) {
+            let refs: Vec<&str> = c.iter().map(String::as_str).collect();
+            spawn(&refs);
+        }
+        return;
+    }
+    *VOL_PENDING.lock().unwrap_or_else(|p| p.into_inner()) = Some(level);
+    if VOL_WORKER.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| loop {
+        let next = VOL_PENDING.lock().unwrap_or_else(|p| p.into_inner()).take();
+        match next {
+            Some(l) => {
+                for c in volume_cmds(l) {
+                    let refs: Vec<&str> = c.iter().map(String::as_str).collect();
+                    let _ = run(&refs, Duration::from_secs(5));
+                }
+            }
+            None => {
+                VOL_WORKER.store(false, Ordering::SeqCst);
+                // A request that slipped in between the take and the store needs a worker too.
+                if VOL_PENDING.lock().unwrap_or_else(|p| p.into_inner()).is_none() || VOL_WORKER.swap(true, Ordering::SeqCst) {
+                    break;
+                }
+            }
+        }
+    });
+}
+
+/// Toggles mute on the default output.
+pub fn toggle_mute() {
     if have("wpctl") {
-        spawn(&["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{level:.2}")]);
-        if level > 0.0 {
-            spawn(&["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"]);
-        }
+        spawn(&["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
     } else if have("pactl") {
-        spawn(&["pactl", "set-sink-volume", "@DEFAULT_SINK@", &format!("{}%", (level * 100.0).round() as u32)]);
-        if level > 0.0 {
-            spawn(&["pactl", "set-sink-mute", "@DEFAULT_SINK@", "0"]);
+        spawn(&["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]);
+    }
+}
+
+/// True when a line of `pactl subscribe` output concerns the default output's volume or identity.
+pub fn is_sink_event(line: &str) -> bool {
+    line.starts_with("Event 'change' on sink #") || line.starts_with("Event 'change' on server") || line.starts_with("Event 'new' on sink #") || line.starts_with("Event 'remove' on sink #")
+}
+
+/// Calls `on_event` (from a worker thread) whenever the output volume may have changed, so volume
+/// keys pressed elsewhere show up at once. Uses `pactl subscribe` (a blocking read, zero polling);
+/// without it the volume is re-read every few seconds.
+pub fn watch_volume<F: Fn() + Send + 'static>(on_event: F) {
+    if !have("pactl") {
+        if have("wpctl") {
+            std::thread::spawn(move || {
+                let mut last = probe_volume().map(|v| v.0);
+                loop {
+                    std::thread::sleep(Duration::from_secs(3));
+                    let now = probe_volume().map(|v| v.0);
+                    if now != last {
+                        last = now;
+                        on_event();
+                    }
+                }
+            });
         }
+        return;
+    }
+    std::thread::spawn(move || loop {
+        if let Ok(mut child) = Command::new("pactl").arg("subscribe").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
+            if let Some(out) = child.stdout.take() {
+                for line in std::io::BufRead::lines(std::io::BufReader::new(out)).map_while(Result::ok) {
+                    if is_sink_event(&line) {
+                        on_event();
+                    }
+                }
+            }
+            let _ = child.wait();
+        }
+        std::thread::sleep(Duration::from_secs(5));
+    });
+}
+
+// ----------------------------------------------------------- wi-fi networks
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WifiNet {
+    pub ssid: String,
+    pub signal: u32,
+    pub secure: bool,
+    pub active: bool,
+}
+
+/// `nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list`: strongest entry per SSID, active first.
+pub fn parse_wifi_list(out: &str) -> Vec<WifiNet> {
+    let mut nets: Vec<WifiNet> = Vec::new();
+    for line in out.lines() {
+        let f = split_terse(line);
+        if f.len() < 4 || f[1].is_empty() {
+            continue;
+        }
+        let net = WifiNet { ssid: f[1].clone(), signal: f[2].trim().parse().unwrap_or(0), secure: !f[3].trim().is_empty() && f[3].trim() != "--", active: f[0].trim() == "*" };
+        match nets.iter_mut().find(|n| n.ssid == net.ssid) {
+            Some(old) => {
+                if net.active || (!old.active && net.signal > old.signal) {
+                    *old = net;
+                }
+            }
+            None => nets.push(net),
+        }
+    }
+    nets.sort_by(|a, b| b.active.cmp(&a.active).then(b.signal.cmp(&a.signal)));
+    nets
+}
+
+pub fn probe_wifi_list() -> Vec<WifiNet> {
+    run(&["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "no"], PROBE_TIMEOUT).map(|o| parse_wifi_list(&o)).unwrap_or_default()
+}
+
+/// Asks NetworkManager to rescan (result shows on the next refresh).
+pub fn rescan_wifi() {
+    spawn(&["nmcli", "dev", "wifi", "rescan"]);
+}
+
+/// Connects to a network (saved profile or open network); posts a notification when that fails,
+/// e.g. a secured network without a saved password.
+pub fn connect_wifi(ssid: &str) {
+    if is_dry_run() {
+        spawn(&["nmcli", "dev", "wifi", "connect", ssid]);
+        return;
+    }
+    let ssid = ssid.to_string();
+    std::thread::spawn(move || {
+        let ok = run(&["nmcli", "-w", "20", "connection", "up", "id", &ssid], Duration::from_secs(25)).is_some() || run(&["nmcli", "-w", "20", "dev", "wifi", "connect", &ssid], Duration::from_secs(25)).is_some();
+        if !ok && have("notify-send") {
+            let _ = run(&["notify-send", "-a", "macbar", "Wi-Fi", &format!("Could not connect to {ssid}. Enter its password in the network editor first.")], Duration::from_secs(3));
+        }
+    });
+}
+
+// ------------------------------------------------------- bluetooth devices
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BtDevice {
+    pub mac: String,
+    pub name: String,
+    pub connected: bool,
+}
+
+/// `bluetoothctl devices` lines (`Device AA:BB:.. Name`) plus the MACs of `devices Connected`.
+pub fn parse_bt_devices(all: &str, connected: &str) -> Vec<BtDevice> {
+    let conn: Vec<&str> = connected.lines().filter_map(|l| l.strip_prefix("Device ")).filter_map(|r| r.split_whitespace().next()).collect();
+    let mut v: Vec<BtDevice> = all
+        .lines()
+        .filter_map(|l| l.strip_prefix("Device "))
+        .filter_map(|r| {
+            let (mac, name) = r.split_once(' ')?;
+            Some(BtDevice { mac: mac.to_string(), name: name.trim().to_string(), connected: conn.contains(&mac) })
+        })
+        .collect();
+    v.sort_by(|a, b| b.connected.cmp(&a.connected).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    v
+}
+
+pub fn probe_bt_devices() -> Vec<BtDevice> {
+    let all = run(&["bluetoothctl", "devices", "Paired"], PROBE_TIMEOUT).filter(|o| !o.trim().is_empty()).or_else(|| run(&["bluetoothctl", "devices"], PROBE_TIMEOUT)).unwrap_or_default();
+    let conn = run(&["bluetoothctl", "devices", "Connected"], PROBE_TIMEOUT).unwrap_or_default();
+    parse_bt_devices(&all, &conn)
+}
+
+pub fn set_bt_device(mac: &str, connect: bool) {
+    spawn(&["bluetoothctl", if connect { "connect" } else { "disconnect" }, mac]);
+}
+
+// ------------------------------------------------------------------ battery
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Battery {
+    pub percent: u32,
+    pub charging: bool,
+    pub status: String,
+}
+
+/// Reads the first system battery under `root` (normally `/sys/class/power_supply`). Peripheral
+/// batteries (`scope` = Device: mice, headsets) are skipped. `None` on desktops.
+pub fn probe_battery_in(root: &std::path::Path) -> Option<Battery> {
+    let mut dirs: Vec<_> = std::fs::read_dir(root).ok()?.flatten().map(|e| e.path()).collect();
+    dirs.sort();
+    for d in dirs {
+        let read = |f: &str| std::fs::read_to_string(d.join(f)).ok().map(|s| s.trim().to_string());
+        if read("type").as_deref() != Some("Battery") || read("scope").as_deref() == Some("Device") {
+            continue;
+        }
+        let Some(percent) = read("capacity").and_then(|c| c.parse::<u32>().ok()) else { continue };
+        let status = read("status").unwrap_or_default();
+        return Some(Battery { percent: percent.min(100), charging: status == "Charging", status });
+    }
+    None
+}
+
+pub fn probe_battery() -> Option<Battery> {
+    // MACBAR_POWER_SUPPLY lets tests point at a fake tree.
+    match std::env::var_os("MACBAR_POWER_SUPPLY") {
+        Some(p) => probe_battery_in(std::path::Path::new(&p)),
+        None => probe_battery_in(std::path::Path::new("/sys/class/power_supply")),
     }
 }
 
@@ -412,6 +633,51 @@ mod tests {
         assert_eq!(parse_nightlight("{\"enabled\":false,\"temperature\":null}\n"), Some(false));
         assert_eq!(parse_nightlight("{\"enabled\":true}"), Some(true));
         assert_eq!(parse_nightlight("oops"), None);
+    }
+
+    #[test]
+    fn wifi_list_keeps_the_strongest_entry_per_ssid_and_active_first() {
+        let out = " :Cafe:40:WPA2\n *:Home\\:5G:70:WPA2\n :Home\\:5G:90:WPA2\n :Open:55:\n :--hidden:10:WPA2\n ::30:WPA2\n";
+        let v = parse_wifi_list(out);
+        assert_eq!(v.iter().map(|n| n.ssid.as_str()).collect::<Vec<_>>(), vec!["Home:5G", "Open", "Cafe", "--hidden"]);
+        assert!(v[0].active && v[0].secure);
+        assert!(!v[1].secure);
+        assert_eq!(parse_wifi_list("garbage"), vec![]);
+    }
+
+    #[test]
+    fn bluetooth_device_list_marks_connected_ones() {
+        let all = "Device 11:22 Zeta Buds\nDevice 33:44 Alpha Mouse\nDevice 55:66 Headset\n";
+        let v = parse_bt_devices(all, "Device 55:66 Headset\n");
+        assert_eq!(v.iter().map(|d| (d.name.as_str(), d.connected)).collect::<Vec<_>>(), vec![("Headset", true), ("Alpha Mouse", false), ("Zeta Buds", false)]);
+        assert_eq!(parse_bt_devices("", ""), vec![]);
+    }
+
+    #[test]
+    fn battery_probe_skips_mains_and_peripherals_and_desktops() {
+        let root = std::env::temp_dir().join(format!("macbar-ps-{}", std::process::id()));
+        let mk = |name: &str, files: &[(&str, &str)]| {
+            let d = root.join(name);
+            std::fs::create_dir_all(&d).unwrap();
+            for (f, c) in files {
+                std::fs::write(d.join(f), c).unwrap();
+            }
+        };
+        mk("AC", &[("type", "Mains\n")]);
+        mk("hid-1", &[("type", "Battery\n"), ("scope", "Device\n"), ("capacity", "12\n")]);
+        assert_eq!(probe_battery_in(&root), None);
+        mk("BAT0", &[("type", "Battery\n"), ("capacity", "87\n"), ("status", "Charging\n")]);
+        assert_eq!(probe_battery_in(&root), Some(Battery { percent: 87, charging: true, status: "Charging".into() }));
+        assert_eq!(probe_battery_in(&root.join("nope")), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_sink_and_server_events_count_as_volume_changes() {
+        assert!(is_sink_event("Event 'change' on sink #52"));
+        assert!(is_sink_event("Event 'change' on server #1"));
+        assert!(!is_sink_event("Event 'change' on source #3"));
+        assert!(!is_sink_event("Event 'new' on sink-input #9"));
     }
 
     #[test]

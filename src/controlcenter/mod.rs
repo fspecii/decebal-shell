@@ -28,6 +28,7 @@ pub struct Snapshot {
     pub media: Option<sys::Media>,
     pub awake: bool,
     pub light: bool,
+    pub battery: Option<sys::Battery>,
 }
 
 impl Snapshot {
@@ -44,6 +45,7 @@ impl Snapshot {
             media: sys::probe_media(),
             awake: sys::stay_awake(),
             light: sys::is_light(),
+            battery: sys::probe_battery(),
         }
         .with_volume()
     }
@@ -453,6 +455,7 @@ mod tests {
             media: Some(sys::Media { playing: true, title: "Song".into(), artist: "Artist".into() }),
             awake: false,
             light: false,
+            battery: None,
         }
     }
 
