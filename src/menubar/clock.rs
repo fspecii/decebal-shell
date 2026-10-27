@@ -16,6 +16,7 @@ pub struct Tm {
     pub hour: u32,
     pub min: u32,
     pub sec: u32,
+    pub year: i32,
 }
 
 /// `Mon 26 Oct  03:08` (day of month is not zero-padded, two spaces before the time).
@@ -37,6 +38,7 @@ pub fn local_tm(unix_secs: i64) -> Option<Tm> {
         hour: tm.tm_hour.max(0) as u32,
         min: tm.tm_min.max(0) as u32,
         sec: tm.tm_sec.max(0) as u32,
+        year: tm.tm_year + 1900,
     })
 }
 
@@ -55,7 +57,7 @@ mod tests {
     use super::*;
 
     fn tm(wday: u32, mday: u32, mon: u32, hour: u32, min: u32, sec: u32) -> Tm {
-        Tm { wday, mday, mon, hour, min, sec }
+        Tm { wday, mday, mon, hour, min, sec, year: 2026 }
     }
 
     #[test]

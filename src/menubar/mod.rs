@@ -2,6 +2,7 @@
 //! Control Center. One surface that grows downward while a menu or the panel is open.
 
 pub mod active;
+pub mod calendar;
 pub mod clock;
 pub mod menus;
 pub mod symbols;
@@ -139,6 +140,7 @@ enum Open {
     None,
     Menu(usize),
     Control,
+    Calendar,
 }
 
 struct Shared {
@@ -173,6 +175,9 @@ pub struct MacBar {
     cc_hover: Option<Target>,
     cc_drag: Option<Target>,
     cc_last_send: Instant,
+    // Calendar
+    cal_month: calendar::Month,
+    cal_hover: Option<calendar::Hit>,
     last_full_refresh: Instant,
     // Window-manager workspaces (optional indicator)
     show_workspaces: bool,
@@ -213,6 +218,8 @@ impl MacBar {
             cc_hover: None,
             cc_drag: None,
             cc_last_send: Instant::now(),
+            cal_month: clock::now().map_or(calendar::Month { year: 2026, month: 0 }, |t| calendar::Month { year: t.year, month: t.mon }),
+            cal_hover: None,
             last_full_refresh: Instant::now(),
             show_workspaces: false,
             workspaces: Vec::new(),
@@ -251,6 +258,7 @@ impl MacBar {
         }
         self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
+            Some("calendar") => self.open_calendar(),
             Some("control") => {
                 self.relayout_control();
                 self.open = Open::Control;
@@ -355,11 +363,26 @@ impl MacBar {
         ((right - controlcenter::PANEL_W).max(0.0), BAR_HEIGHT + PANEL_GAP)
     }
 
+    /// The calendar hangs from the clock's right edge.
+    fn calendar_origin(&self) -> (f32, f32) {
+        let right = self.tray().iter().find(|(k, _)| *k == Tray::Clock).map(|(_, s)| s.x + s.w).unwrap_or(self.width as f32);
+        ((right - calendar::PANEL_W).max(0.0), BAR_HEIGHT + PANEL_GAP)
+    }
+
+    fn open_calendar(&mut self) {
+        if let Some(t) = clock::now() {
+            self.cal_month = calendar::Month { year: t.year, month: t.mon };
+        }
+        self.cal_hover = None;
+        self.open = Open::Calendar;
+    }
+
     fn open_bottom(&self) -> Option<f32> {
         match self.open {
             Open::None => None,
             Open::Menu(i) => self.dropdown(i).map(|d| d.y + d.h),
             Open::Control => Some(BAR_HEIGHT + PANEL_GAP + self.cc_height),
+            Open::Calendar => Some(BAR_HEIGHT + PANEL_GAP + calendar::PANEL_H),
         }
     }
 
@@ -421,6 +444,7 @@ impl MacBar {
         self.confirm = None;
         self.cc_hover = None;
         self.cc_drag = None;
+        self.cal_hover = None;
         was
     }
 
@@ -567,7 +591,8 @@ impl MacBar {
     }
 
     fn spotlight(&self) {
-        let cmds: [&[&str]; 4] = [&["omarchy-menu", "toggle"], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
+        let macspot = crate::launch::sibling_or_path("macspot");
+        let cmds: [&[&str]; 4] = [&[&macspot], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
         for c in cmds {
             if sys::have(c[0]) {
                 sys::spawn(c);
@@ -755,6 +780,13 @@ impl App for MacBar {
                     controlcenter::draw(pm, &view, f, &mut self.symbols);
                 }
             }
+            Open::Calendar => {
+                let origin = self.calendar_origin();
+                let today = clock::now().map(|t| (t.year, t.mon, t.mday));
+                if let Some(f) = self.fonts.as_mut() {
+                    calendar::draw(pm, &calendar::View { origin, month: self.cal_month, today, hover: self.cal_hover }, f, &mut self.symbols);
+                }
+            }
             Open::None => {}
         }
         if let Some(f) = &self.fonts {
@@ -800,6 +832,14 @@ impl App for MacBar {
                 let hover = controlcenter::hit(&self.cc_items, x - ox, y - oy).map(|h| h.0);
                 if hover != self.cc_hover {
                     self.cc_hover = hover;
+                    redraw = true;
+                }
+            }
+            Open::Calendar => {
+                let (ox, oy) = self.calendar_origin();
+                let hover = calendar::hit(x - ox, y - oy);
+                if hover != self.cal_hover {
+                    self.cal_hover = hover;
                     redraw = true;
                 }
             }
@@ -861,6 +901,15 @@ impl App for MacBar {
                         self.spawn_weather();
                         return false;
                     }
+                    Tray::Clock => {
+                        if self.open == Open::Calendar {
+                            self.close();
+                        } else {
+                            self.close();
+                            self.open_calendar();
+                        }
+                        return true;
+                    }
                     _ => {}
                 }
             }
@@ -882,6 +931,20 @@ impl App for MacBar {
                 }
                 false
             }
+            Open::Calendar => {
+                let (ox, oy) = self.calendar_origin();
+                match calendar::hit(x - ox, y - oy) {
+                    Some(calendar::Hit::Prev) => self.cal_month = self.cal_month.shifted(-1),
+                    Some(calendar::Hit::Next) => self.cal_month = self.cal_month.shifted(1),
+                    Some(calendar::Hit::Today) => {
+                        if let Some(t) = clock::now() {
+                            self.cal_month = calendar::Month { year: t.year, month: t.mon };
+                        }
+                    }
+                    None => return false,
+                }
+                true
+            }
             Open::None => false,
         }
     }
@@ -902,6 +965,10 @@ impl App for MacBar {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if self.open == Open::Calendar {
+            self.cal_month = self.cal_month.shifted(if dy > 0.0 { 1 } else { -1 });
+            return true;
+        }
         if self.open != Open::Control {
             return false;
         }
@@ -940,6 +1007,10 @@ impl App for MacBar {
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
                 rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: controlcenter::PANEL_W as i32, h: (oy + self.cc_height - BAR_HEIGHT).ceil() as i32 });
+            }
+            Open::Calendar => {
+                let (ox, oy) = self.calendar_origin();
+                rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: calendar::PANEL_W as i32, h: (oy + calendar::PANEL_H - BAR_HEIGHT).ceil() as i32 });
             }
             Open::None => {}
         }
@@ -1067,7 +1138,7 @@ mod tests {
 
     #[test]
     fn wake_is_at_most_a_minute_and_faster_with_the_panel_open() {
-        let tm = clock::Tm { wday: 1, mday: 1, mon: 0, hour: 1, min: 1, sec: 10 };
+        let tm = clock::Tm { wday: 1, mday: 1, mon: 0, hour: 1, min: 1, sec: 10, year: 2026 };
         assert_eq!(next_wake(&tm, false), Duration::from_secs(50));
         assert_eq!(next_wake(&tm, true), PANEL_REFRESH);
         let tm = clock::Tm { sec: 58, ..tm };

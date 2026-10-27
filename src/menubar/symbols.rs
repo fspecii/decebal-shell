@@ -99,6 +99,17 @@ pub fn shapes(name: &str) -> Option<String> {
         "bluetooth-connected" => bluetooth("connected"),
         "bluetooth-off" => bluetooth("off"),
         "magnifyingglass" => stroke("M10.5 17a6.5 6.5 0 1 0 0-13a6.5 6.5 0 1 0 0 13zM15.4 15.4L20.5 20.5", None),
+        "lock" => stroke("M8 11V8a4 4 0 0 1 8 0v3", None) + &fill("M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5v-6A1.5 1.5 0 0 1 6.5 11z", None),
+        "power" => stroke("M12 3.5v8M7.1 6.6a8 8 0 1 0 9.8 0", None),
+        "logout" => stroke("M10 4.5H6A1.5 1.5 0 0 0 4.5 6v12A1.5 1.5 0 0 0 6 19.5h4M15 8l4 4-4 4M19 12H9", None),
+        "download" => stroke("M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14", None),
+        "trash-can" => stroke("M5 7h14M9 7V4.5h6V7M7 7l1 12.5h8L17 7M10 11v5M14 11v5", None),
+        "refresh" => stroke("M19 12a7 7 0 1 1-2.1-5M19 4.5V8h-3.5", None),
+        "equal" => stroke("M5 9h14M5 15h14", None),
+        "globe" => "<circle cx=\"12\" cy=\"12\" r=\"8.5\" fill=\"none\" stroke=\"C\" stroke-width=\"2\"/>".to_string() + &stroke("M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17", None),
+        "grid" => fill("M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z", None),
+        "picture" => stroke("M4 6h16v12H4zM4 16l5-5 4 4 3-3 4 4", None),
+        "chevron-left" => stroke("M14.5 5.5L8 12l6.5 6.5", None),
         "switches" => {
             "<rect x=\"2.5\" y=\"3.8\" width=\"19\" height=\"7\" rx=\"3.5\" fill=\"none\" stroke=\"C\" stroke-width=\"1.8\"/>".to_string()
                 + &fill("M17.9 9.3a2 2 0 1 0 0-4a2 2 0 1 0 0 4z", None)

@@ -56,3 +56,7 @@ path = "src/bin/macwm.rs"
 [[bin]]
 name = "maclaunch"
 path = "src/bin/maclaunch.rs"
+
+[[bin]]
+name = "macspot"
+path = "src/bin/macspot.rs"

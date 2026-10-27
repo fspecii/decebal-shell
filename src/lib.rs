@@ -6,6 +6,7 @@
 pub mod app;
 pub mod apps;
 pub mod backend;
+pub mod calc;
 pub mod config;
 pub mod controlcenter;
 pub mod dock;
@@ -18,6 +19,7 @@ pub mod launcher;
 pub mod mem;
 pub mod menubar;
 pub mod single;
+pub mod spotlight;
 pub mod text;
 pub mod theme;
 pub mod wallhaven;
