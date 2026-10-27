@@ -23,10 +23,15 @@ pub fn run(argv: &[&str], timeout: Duration) -> Option<String> {
         buf
     });
     let start = Instant::now();
+    // Poll quickly at first (these tools usually answer within a few ms), then settle at 15 ms.
+    let mut nap = 1;
     let status = loop {
         match child.try_wait() {
             Ok(Some(s)) => break Some(s),
-            Ok(None) if start.elapsed() < timeout => std::thread::sleep(Duration::from_millis(15)),
+            Ok(None) if start.elapsed() < timeout => {
+                std::thread::sleep(Duration::from_millis(nap));
+                nap = (nap * 2).min(15);
+            }
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
