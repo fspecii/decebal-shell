@@ -1,0 +1,6 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}
+if [ "$1" = subscribe ]; then
+  last=$(stat -c %Y.%N $FS/evt 2>/dev/null)
+  while true; do sleep 0.2; n=$(stat -c %Y.%N $FS/evt 2>/dev/null); if [ "$n" != "$last" ]; then last=$n; echo "Event 'change' on sink #52"; fi; done
+fi

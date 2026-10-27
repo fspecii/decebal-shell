@@ -86,3 +86,21 @@ honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale fact
 ## License
 
 MIT
+
+## Status items (macbar)
+
+Right side of the bar, all with graceful degradation (an item is hidden when its tool or hardware is missing):
+
+| item | click | wheel / middle click |
+|---|---|---|
+| window layout (rdwm only) | popup with every rdwm layout (icon, checkmark), master count/width, gaps, float toggle | wheel cycles layouts |
+| battery (laptops) | status popup | |
+| Bluetooth (`bluetoothctl`) | power toggle, paired devices, connect/disconnect | |
+| sound (`wpctl` or `pactl`) | volume slider, mute, display brightness | wheel +-5%, middle click mutes |
+| Wi-Fi (`nmcli`) | toggle, scan list, connect | |
+| clock | month calendar | |
+| control centre | quick-settings panel | |
+
+External commands run on worker threads; volume changes made elsewhere are followed through `pactl subscribe`
+(no polling), rdwm layout changes through an rdwm IPC subscription. `tests/e2e_status.sh` drives it all on a private Xvfb
+with a real rdwm and fake tools from `tests/fakebin`.

@@ -45,6 +45,15 @@ pub fn now() -> Option<Tm> {
     local_tm(secs as i64)
 }
 
+/// Today's local date as (year, month 0-based, day of month).
+pub fn today() -> Option<(i32, u32, u32)> {
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as libc::time_t;
+    // SAFETY: see `local_tm`.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let ok = unsafe { !libc::localtime_r(&secs, &mut tm).is_null() };
+    ok.then(|| (tm.tm_year + 1900, tm.tm_mon.max(0) as u32, tm.tm_mday.max(1) as u32))
+}
+
 /// Time until the next minute boundary (at least 1 s so a tick never spins).
 pub fn until_next_minute(tm: &Tm) -> Duration {
     Duration::from_secs(u64::from(60u32.saturating_sub(tm.sec)).max(1))

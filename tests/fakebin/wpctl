@@ -1,0 +1,9 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}
+echo "wpctl $*" >> $FS/log
+case "$1" in
+get-volume) v=$(cat $FS/vol); [ "$(cat $FS/mute)" = 1 ] && echo "Volume: $v [MUTED]" || echo "Volume: $v";;
+set-volume) echo "$3" > $FS/vol; touch $FS/evt;;
+set-mute) case "$3" in toggle) [ "$(cat $FS/mute)" = 1 ] && echo 0 > $FS/mute || echo 1 > $FS/mute;; *) echo "$3" > $FS/mute;; esac; touch $FS/evt;;
+inspect) echo '  * node.description = "Fake Speakers"';;
+esac

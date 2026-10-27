@@ -1,0 +1,7 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}
+echo "brightnessctl $*" >> $FS/log
+case "$*" in
+"-m -c backlight") echo "fake,backlight,$(cat $FS/bright),$(cat $FS/bright)%,100";;
+*set*) v=${@: -1}; echo "${v%\%}" > $FS/bright;;
+esac

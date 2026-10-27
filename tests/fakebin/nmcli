@@ -1,0 +1,13 @@
+#!/bin/bash
+FS=${FAKE_STATE:?}
+echo "nmcli $*" >> $FS/log
+a="$*"
+case "$a" in
+"-t -f WIFI radio") cat $FS/wifi;;
+"-t -f TYPE,STATE,CONNECTION device") echo "wifi:connected:HomeNet"; echo "ethernet:unavailable:";;
+"radio wifi on") echo enabled > $FS/wifi;;
+"radio wifi off") echo disabled > $FS/wifi;;
+*"dev wifi list"*) printf '*:HomeNet:82:WPA2\n :CafeFree:55:\n :Neighbor\\:5G:71:WPA2\n :HomeNet:40:WPA2\n';;
+*"connection up"*) exit 1;;
+esac
+exit 0
