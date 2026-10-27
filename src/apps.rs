@@ -133,7 +133,8 @@ pub fn save_cache(apps: &[AppEntry]) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let text: String = apps.iter().map(|a| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon), esc(&a.path), u8::from(a.terminal), esc(&a.try_exec), esc(&a.file))).collect();
+    let text: String =
+        apps.iter().map(|a| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon), esc(&a.path), u8::from(a.terminal), esc(&a.try_exec), esc(&a.file))).collect();
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, text).is_ok() {
         let _ = std::fs::rename(&tmp, &path);

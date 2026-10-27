@@ -348,24 +348,39 @@ impl Rule {
 /// there), which cannot start without a Wayland compositor. A switch given later on the command line wins over the
 /// flags file (the wrappers put the file first), so `--ozone-platform=x11` fixes it; the env hint covers Electron
 /// builds that choose from `ELECTRON_OZONE_PLATFORM_HINT`.
-const CHROMIUM: &[&str] = &[
-    "google-chrome*", "chromium*", "chrome", "brave*", "vivaldi*", "opera*", "microsoft-edge*", "thorium*", "ungoogled-chromium*", "helium*",
-];
+const CHROMIUM: &[&str] = &["google-chrome*", "chromium*", "chrome", "brave*", "vivaldi*", "opera*", "microsoft-edge*", "thorium*", "ungoogled-chromium*", "helium*"];
 const ELECTRON: &[&str] = &[
-    "electron*", "code", "code-oss", "code-insiders", "codium", "vscodium", "cursor", "discord*", "vesktop", "slack", "signal-desktop", "obsidian", "element-desktop",
-    "teams-for-linux", "logseq*", "bitwarden", "1password", "notion-app*", "postman", "insomnia", "zed-electron", "t3code", "heroic", "simplenote",
+    "electron*",
+    "code",
+    "code-oss",
+    "code-insiders",
+    "codium",
+    "vscodium",
+    "cursor",
+    "discord*",
+    "vesktop",
+    "slack",
+    "signal-desktop",
+    "obsidian",
+    "element-desktop",
+    "teams-for-linux",
+    "logseq*",
+    "bitwarden",
+    "1password",
+    "notion-app*",
+    "postman",
+    "insomnia",
+    "zed-electron",
+    "t3code",
+    "heroic",
+    "simplenote",
 ];
 
 pub fn builtin_rules() -> Vec<Rule> {
     let names = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     vec![
         Rule { names: names(CHROMIUM), when: When::X11, args: vec!["--ozone-platform=x11".into()], env: vec![] },
-        Rule {
-            names: names(ELECTRON),
-            when: When::X11,
-            args: vec!["--ozone-platform=x11".into()],
-            env: vec![("ELECTRON_OZONE_PLATFORM_HINT".into(), Some("x11".into()))],
-        },
+        Rule { names: names(ELECTRON), when: When::X11, args: vec!["--ozone-platform=x11".into()], env: vec![("ELECTRON_OZONE_PLATFORM_HINT".into(), Some("x11".into()))] },
     ]
 }
 

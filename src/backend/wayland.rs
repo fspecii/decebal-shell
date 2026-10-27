@@ -165,6 +165,10 @@ pub fn run<A: App + 'static>(mut app: A, spec: SurfaceSpec) -> Result<(), Error>
         }
 
         let idle_wait = state.app.idle();
+        if let Some(d) = state.app.tick_in() {
+            let t = Instant::now() + d;
+            next_tick = Some(next_tick.map_or(t, |n| n.min(t)));
+        }
         state.shrink_pool();
         let Some(guard) = queue.prepare_read() else { continue };
         let mut timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));

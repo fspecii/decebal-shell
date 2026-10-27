@@ -112,6 +112,11 @@ pub trait App {
     fn idle(&mut self) -> Option<Duration> {
         None
     }
+    /// A tick wanted sooner than the last [`Tick::next`] said, because input started a timer (e.g. a close
+    /// delay). Asked before the backend blocks; `None` = nothing pending.
+    fn tick_in(&self) -> Option<Duration> {
+        None
+    }
     /// Called on wake-ups and timeouts.
     fn tick(&mut self) -> Tick {
         Tick::default()

@@ -38,6 +38,9 @@ const MENU_GAP: f32 = 2.0;
 const PANEL_GAP: f32 = 4.0;
 const BOTTOM_MARGIN: f32 = 8.0;
 /// While the Control Center is open its data is refreshed this often.
+/// How long the pointer may be off the bar and its open menu/popup before that closes (a hand
+/// moving from an icon to a slider often clips an edge; coming back in cancels the close).
+const CLOSE_DELAY: Duration = Duration::from_millis(300);
 const PANEL_REFRESH: Duration = Duration::from_secs(4);
 /// How long drawing must stay quiet before the heap is trimmed.
 const HEAP_QUIET: Duration = Duration::from_millis(750);
@@ -191,6 +194,8 @@ pub struct MacBar {
     calendar: Option<Calendar>,
     popup_hover: Option<usize>,
     popup_drag: Option<usize>,
+    /// When the pointer left the surface with something open; it closes [`CLOSE_DELAY`] later unless the pointer returns.
+    leave_at: Option<Instant>,
     /// Test hook (`MACBAR_DEBUG_TRAY=file`): where the status items' centres are written after each draw.
     debug_tray: Option<(std::path::PathBuf, String)>,
     last_full_refresh: Instant,
@@ -242,6 +247,7 @@ impl MacBar {
             calendar: None,
             popup_hover: None,
             popup_drag: None,
+            leave_at: None,
             debug_tray: std::env::var_os("MACBAR_DEBUG_TRAY").map(|p| (std::path::PathBuf::from(p), String::new())),
             last_full_refresh: Instant::now(),
             show_workspaces: false,
@@ -468,7 +474,13 @@ impl MacBar {
         self.calendar = None;
         self.popup_hover = None;
         self.popup_drag = None;
+        self.leave_at = None;
         was
+    }
+
+    /// Whether (x, y) is on the bar strip or on what is open below it (menu, panel, popup, and the bridge to it).
+    fn over_open_ui(&self, x: f32, y: f32) -> bool {
+        self.input_rects().iter().any(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32)
     }
 
     fn open_menu(&mut self, idx: usize) {
@@ -849,6 +861,7 @@ impl App for MacBar {
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
         let mut redraw = false;
+        self.leave_at = None;
         // Dragging a slider keeps tracking even outside its rectangle.
         if let (Some(t), Open::Control) = (self.cc_drag, self.open) {
             let (ox, _) = self.panel_origin();
@@ -861,6 +874,15 @@ impl App for MacBar {
         if let Some(row) = self.popup_drag {
             self.popup_slide(row, x, false);
             return true;
+        }
+        // Off the bar and what is open (the pointer is grabbed on X11, so motion keeps coming): the close delay runs,
+        // and coming back cancels it.
+        if self.open != Open::None {
+            if self.over_open_ui(x, y) {
+                self.leave_at = None;
+            } else if self.leave_at.is_none() {
+                self.leave_at = Some(Instant::now());
+            }
         }
         let title = if y < BAR_HEIGHT { self.spans().iter().position(|s| x >= s.x && x < s.x + s.w) } else { None };
         if title != self.hover_title {
@@ -903,15 +925,24 @@ impl App for MacBar {
     }
 
     fn pointer_leave(&mut self) -> bool {
-        let mut redraw = self.hover_title.take().is_some();
+        let redraw = self.hover_title.take().is_some();
         if self.cc_drag.is_some() || self.popup_drag.is_some() {
             return redraw;
         }
-        redraw |= self.close();
+        // Not at once: see CLOSE_DELAY. `tick` does the closing.
+        if self.open != Open::None && self.leave_at.is_none() {
+            self.leave_at = Some(Instant::now());
+        }
         redraw
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
+        self.leave_at = None;
+        // A click anywhere else (the pointer is grabbed on X11, so such clicks reach us) closes.
+        if self.open != Open::None && !self.over_open_ui(x, y) {
+            self.close();
+            return true;
+        }
         if button == Button::Middle && y < BAR_HEIGHT {
             // Middle click on the sound icon mutes.
             if self.tray().iter().any(|(k, s)| *k == Tray::Audio && x >= s.x && x < s.x + s.w) {
@@ -999,9 +1030,13 @@ impl App for MacBar {
         }
     }
 
-    fn pointer_release(&mut self, x: f32, _y: f32, button: Button) -> bool {
+    fn pointer_release(&mut self, x: f32, y: f32, button: Button) -> bool {
         if button != Button::Left {
             return false;
+        }
+        // A drag that ended off the surface: the usual close delay starts now.
+        if (self.popup_drag.is_some() || self.cc_drag.is_some()) && !self.over_open_ui(x, y) {
+            self.leave_at = Some(Instant::now());
         }
         if let Some(row) = self.popup_drag.take() {
             self.popup_slide(row, x, true);
@@ -1047,6 +1082,13 @@ impl App for MacBar {
         self.open != Open::None
     }
 
+    /// While anything is open the pointer is grabbed (X11): the strip's shape has gaps (without a compositor
+    /// transparent pixels are cut out of the window), so a pointer on its way from an icon to a popup would
+    /// otherwise "leave" and close it, and clicks on other windows would never reach us.
+    fn wants_pointer_grab(&self) -> bool {
+        self.open != Open::None
+    }
+
     fn input_rects(&self) -> Vec<InputRect> {
         let w = self.width.max(1) as i32;
         let mut rects = vec![InputRect { x: 0, y: 0, w, h: BAR_HEIGHT as i32 }];
@@ -1061,7 +1103,15 @@ impl App for MacBar {
                 let (ox, oy) = self.panel_origin();
                 rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: controlcenter::PANEL_W as i32, h: (oy + self.cc_height - BAR_HEIGHT).ceil() as i32 });
             }
-            Open::Popup(_) => {
+            Open::Popup(kind) => {
+                // The gap between the item and the popup belongs to the popup, so the pointer stays on
+                // the surface on its way down (the popup may be clamped away from the item).
+                if let Some(span) = self.tray_span(kind) {
+                    let top = self.popup.as_ref().map(|p| p.y).or(self.calendar.as_ref().map(|c| c.y)).unwrap_or(BAR_HEIGHT);
+                    if top > BAR_HEIGHT {
+                        rects.push(InputRect { x: span.x.floor() as i32, y: BAR_HEIGHT as i32, w: span.w.ceil() as i32, h: (top - BAR_HEIGHT).ceil() as i32 });
+                    }
+                }
                 if let Some(p) = &self.popup {
                     rects.push(InputRect { x: p.x.floor() as i32, y: BAR_HEIGHT as i32, w: p.w.ceil() as i32, h: (p.y + p.h - BAR_HEIGHT).ceil() as i32 });
                 } else if let Some(c) = &self.calendar {
@@ -1135,8 +1185,22 @@ impl App for MacBar {
         self.spawn_snapshot(false);
     }
 
+    fn tick_in(&self) -> Option<Duration> {
+        self.leave_at.map(|t| CLOSE_DELAY.saturating_sub(t.elapsed()))
+    }
+
     fn tick(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        let mut close_in = None;
+        if let Some(t) = self.leave_at {
+            if self.cc_drag.is_some() || self.popup_drag.is_some() {
+                self.leave_at = None;
+            } else if t.elapsed() >= CLOSE_DELAY {
+                redraw |= self.close();
+            } else {
+                close_in = Some(CLOSE_DELAY - t.elapsed());
+            }
+        }
         if redraw && self.open == Open::Control && self.cc_drag.is_none() {
             self.relayout_control();
         }
@@ -1144,7 +1208,7 @@ impl App for MacBar {
             self.rebuild_popup();
         }
         self.refresh_open_popup();
-        let Some(tm) = clock::now() else { return Tick { redraw, next: Some(Duration::from_secs(30)) } };
+        let Some(tm) = clock::now() else { return Tick { redraw, next: Some(close_in.map_or(Duration::from_secs(30), |c| c.min(Duration::from_secs(30)))) } };
         let minute = (tm.hour, tm.min);
         if self.last_minute != Some(minute) {
             self.last_minute = Some(minute);
@@ -1166,7 +1230,8 @@ impl App for MacBar {
             self.last_full_refresh = Instant::now();
             self.spawn_snapshot(true);
         }
-        Tick { redraw, next: Some(next_wake(&tm, matches!(self.open, Open::Control | Open::Popup(_)))) }
+        let wake = next_wake(&tm, matches!(self.open, Open::Control | Open::Popup(_)));
+        Tick { redraw, next: Some(close_in.map_or(wake, |c| c.min(wake))) }
     }
 }
 
@@ -1299,7 +1364,9 @@ mod tests {
         bar.width = 1920;
         let s = bar.spans()[2];
         bar.pointer_button(s.x + 2.0, 10.0, Button::Left);
-        assert!(bar.pointer_leave());
+        bar.pointer_leave();
+        assert_eq!(bar.open, Open::Menu(2), "not at once");
+        expire_leave(&mut bar);
         assert_eq!(bar.open, Open::None);
     }
 
@@ -1421,7 +1488,8 @@ mod tests {
         bar.pointer_leave();
         assert_eq!(bar.open, Open::Control);
         bar.pointer_release(x, y, Button::Left);
-        assert!(bar.pointer_leave());
+        bar.pointer_leave();
+        expire_leave(&mut bar);
         assert_eq!(bar.open, Open::None);
         sys::set_dry_run(false);
     }
@@ -1603,7 +1671,7 @@ mod tests {
         let rows = &p.rows;
         assert!(rows.iter().filter(|r| r.checked).count() == 1 && rows.iter().any(|r| r.checked && r.label == "Tile"));
         assert_eq!(rows.iter().filter(|r| matches!(r.act, popup::Act::SetLayout(_))).count(), rdwm::LAYOUTS.len());
-        assert_eq!(bar.input_rects().len(), 2);
+        assert!(bar.input_rects().len() >= 2);
         let idx = rows.iter().position(|r| r.act == popup::Act::SetLayout("bsp".into())).unwrap();
         let (ry, rh) = p.row_span(idx);
         sys::take_log();
@@ -1694,7 +1762,7 @@ mod tests {
         assert!(click_tray(&mut bar, Tray::Clock));
         assert_eq!(bar.open, Open::Popup(Tray::Clock));
         let c = bar.calendar.clone().expect("calendar");
-        assert_eq!(bar.input_rects().len(), 2);
+        assert!(bar.input_rects().len() >= 2);
         assert!(bar.size().1 as f32 >= c.y + Calendar::H);
         let before = (c.year, c.mon0);
         assert!(bar.pointer_button(c.x + Calendar::W - 20.0, c.y + 20.0, Button::Left));
@@ -1716,7 +1784,102 @@ mod tests {
         // A battery popup mentions the percentage.
         click_tray(&mut bar, Tray::Battery);
         assert!(bar.popup.as_ref().unwrap().rows[0].detail.contains("80%"));
-        assert!(bar.pointer_leave());
+        bar.pointer_leave();
+        expire_leave(&mut bar);
         assert_eq!(bar.open, Open::None);
+    }
+
+    /// Pretends the close delay has passed and runs the tick that closes.
+    fn expire_leave(bar: &mut MacBar) {
+        bar.leave_at = bar.leave_at.map(|_| Instant::now() - CLOSE_DELAY - Duration::from_millis(5));
+        bar.tick();
+    }
+
+    #[test]
+    fn popup_survives_a_short_trip_off_the_surface() {
+        let mut bar = status_bar();
+        click_tray(&mut bar, Tray::Audio);
+        let p = bar.popup.clone().unwrap();
+        bar.pointer_leave();
+        assert!(bar.tick_in().is_some_and(|d| d <= CLOSE_DELAY), "the backend is asked to tick when the delay ends");
+        let t = bar.tick();
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        assert!(t.next.is_some_and(|d| d <= CLOSE_DELAY), "a tick is scheduled to do the closing");
+        // The pointer comes back before the delay is up: nothing closes, later or ever.
+        bar.pointer_motion(p.x + 40.0, p.y + 30.0);
+        assert!(bar.leave_at.is_none());
+        expire_leave(&mut bar);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        // Wandering off while grabbed (X11 reports motion, not leave) starts the delay too.
+        bar.pointer_motion(p.x + p.w + 300.0, p.y + 400.0);
+        assert!(bar.leave_at.is_some());
+        bar.pointer_motion(p.x + 40.0, p.y + 30.0);
+        assert!(bar.leave_at.is_none());
+        // Gone for good: closes after the delay.
+        bar.pointer_leave();
+        expire_leave(&mut bar);
+        assert_eq!(bar.open, Open::None);
+    }
+
+    #[test]
+    fn the_gap_between_item_and_popup_is_part_of_the_popup() {
+        let mut bar = status_bar();
+        for kind in [Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Layout, Tray::Battery, Tray::Clock] {
+            bar.close();
+            click_tray(&mut bar, kind);
+            if bar.open != Open::Popup(kind) {
+                continue;
+            }
+            let span = bar.tray_span(kind).unwrap();
+            let top = bar.popup.as_ref().map(|p| p.y).or(bar.calendar.as_ref().map(|c| c.y)).unwrap();
+            // Straight down from the icon, row by row, never off the interactive area.
+            let mut y = 0.0;
+            while y < top + 40.0 {
+                assert!(bar.over_open_ui(span.x + span.w / 2.0, y), "{kind:?}: pointer at y={y} left the surface");
+                y += 1.0;
+            }
+        }
+    }
+
+    #[test]
+    fn clicks_outside_close_and_clicks_inside_do_not() {
+        let mut bar = status_bar();
+        click_tray(&mut bar, Tray::Audio);
+        let p = bar.popup.clone().unwrap();
+        assert!(bar.wants_pointer_grab(), "the pointer is grabbed while open (X11)");
+        // On the popup's header: nothing to do, but it stays open.
+        bar.pointer_button(p.x + 20.0, p.y + 12.0, Button::Left);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        bar.pointer_button(p.x + p.w + 80.0, p.y + 60.0, Button::Left);
+        assert_eq!(bar.open, Open::None);
+        assert!(!bar.wants_pointer_grab());
+        // Outside our surface altogether (negative coordinates of a grabbed pointer).
+        click_tray(&mut bar, Tray::Network);
+        bar.pointer_button(-50.0, 300.0, Button::Left);
+        assert_eq!(bar.open, Open::None);
+    }
+
+    #[test]
+    fn a_slider_drag_keeps_working_outside_the_popup() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let mut bar = status_bar();
+        click_tray(&mut bar, Tray::Audio);
+        let p = bar.popup.clone().unwrap();
+        let slider = p.rows.iter().position(|r| matches!(r.kind, popup::Kind::Slider(_))).unwrap();
+        let (sy, sh) = p.row_span(slider);
+        let (tx, tw) = p.slider_track();
+        bar.pointer_button(tx + tw * 0.2, p.y + sy + sh / 2.0, Button::Left);
+        bar.pointer_leave();
+        bar.pointer_motion(tx + tw * 0.9, p.y + p.h + 200.0);
+        expire_leave(&mut bar);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio), "dragging holds the popup open");
+        let v = bar.snapshot().volume.unwrap().level;
+        assert!((v - 0.9).abs() < 0.02, "{v}");
+        bar.pointer_release(tx + tw * 0.9, p.y + p.h + 200.0, Button::Left);
+        assert_eq!(bar.open, Open::Popup(Tray::Audio));
+        expire_leave(&mut bar);
+        assert_eq!(bar.open, Open::None, "released outside: closes after the delay");
+        sys::set_dry_run(false);
     }
 }

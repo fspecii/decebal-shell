@@ -352,6 +352,10 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         }
 
         let idle_wait = app.idle();
+        if let Some(d) = app.tick_in() {
+            let t = Instant::now() + d;
+            next_tick = Some(next_tick.map_or(t, |n| n.min(t)));
+        }
         let mut timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
         if let Some(wait) = idle_wait {
             timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
