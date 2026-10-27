@@ -623,4 +623,34 @@ mod tests {
         m.apply("j:dock:style", CtlVal::Reset);
         assert!(io::json_load(&m.paths.dock_settings()).get("style").is_none(), "reset removes the key");
     }
+
+    #[test]
+    fn hot_corner_rows_write_the_section_machot_reads() {
+        use crate::hot::{Action, Corner, HotConfig};
+        let (mut m, _) = model_with("");
+        std::fs::write(m.paths.shell_json(), "{\"workspaces\":true}").unwrap();
+        m.apply("hc:top_right", CtlVal::Str("spotlight".into()));
+        m.apply("hc:bottom_left", CtlVal::Str("custom:notify-send hi".into()));
+        m.apply("hc:dwell_ms", CtlVal::Num(225.0));
+        let v = io::json_load(&m.paths.shell_json());
+        assert_eq!(v["workspaces"], true, "other keys stay");
+        let cfg = HotConfig::from_json(&v);
+        assert_eq!(*cfg.action(Corner::TopRight), Action::Spotlight);
+        assert_eq!(*cfg.action(Corner::BottomLeft), Action::Custom("notify-send hi".into()));
+        assert_eq!(*cfg.action(Corner::TopLeft), Action::None);
+        assert_eq!(cfg.dwell_ms, 225);
+        assert_eq!(m.shell, v, "the model's copy follows");
+        // the pane shows what was written, a custom command included
+        let rows = m.hot_corner_rows();
+        assert_eq!(rows.len(), 5);
+        let sel = |i: usize| match &rows[i].ctls[0].kind {
+            Kind::Popup(o, Some(s)) => o[*s].1.clone(),
+            _ => String::new(),
+        };
+        assert_eq!(sel(1), "spotlight");
+        assert_eq!(sel(2), "custom:notify-send hi");
+        assert_eq!(sel(0), "none");
+        m.apply("hc:top_left", CtlVal::Str("teleport".into()));
+        assert!(m.notice.as_ref().is_some_and(|n| n.error), "an unknown action is refused");
+    }
 }

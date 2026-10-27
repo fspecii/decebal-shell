@@ -137,6 +137,29 @@ pub fn expand_tilde(p: &str) -> String {
     }
 }
 
+/// What a hot corner can do: label in the dropdown, action name in `macshell.json`.
+const HOT_ACTIONS: [(&str, &str); 9] = [
+    ("None", "none"),
+    ("Dashboard", "dashboard"),
+    ("Spotlight", "spotlight"),
+    ("Launchpad", "launchpad"),
+    ("Overview", "overview"),
+    ("Session menu", "session"),
+    ("Lock screen", "lock"),
+    ("Tile all windows", "tile-all"),
+    ("Notification history", "notifications"),
+];
+
+/// Under the corner rows: whether the daemon that applies them is running.
+fn hot_corner_note() -> String {
+    let pid = std::fs::read_to_string(crate::single::runtime_file(&format!("{}.lock", crate::hot::LOCK_NAME))).ok().and_then(|t| t.trim().parse::<u32>().ok());
+    if pid.is_some_and(|p| std::path::Path::new(&format!("/proc/{p}")).exists()) {
+        "Changes apply at once. Nothing fires while a mouse button is held, so dragging a window to a corner is safe.".into()
+    } else {
+        "machot is not running (X11 only): start it with `machot daemon` or enable its autostart entry. Overview needs macexpose.".into()
+    }
+}
+
 fn opts(list: &[(&str, &str)]) -> Vec<Opt> {
     list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
 }
@@ -484,6 +507,28 @@ impl Model {
         }
     }
 
+    /// Four dropdowns (one per corner) and the dwell time: stored in `macshell.json` under `hot_corners`, picked up by `machot`.
+    pub(super) fn hot_corner_rows(&self) -> Vec<Row> {
+        use crate::hot::{Action, Corner, HotConfig};
+        let cfg = HotConfig::from_json(&self.shell);
+        let mut rows = Vec::new();
+        for c in Corner::ALL {
+            let cur = cfg.action(c).name();
+            let mut choices: Vec<Opt> = HOT_ACTIONS.iter().map(|(label, name)| (label.to_string(), name.to_string())).collect();
+            if let Action::Custom(cmd) = cfg.action(c) {
+                choices.push((format!("Custom: {cmd}"), cur.clone()));
+            }
+            let sel = choices.iter().position(|o| o.1 == cur);
+            rows.push(Row::new(c.label()).ctl(Ctl::new(format!("hc:{}", c.key()), Kind::Popup(choices, sel))));
+        }
+        rows.push(
+            Row::new("Dwell time")
+                .detail("How long the pointer rests in a corner before it acts")
+                .ctl(Ctl::new("hc:dwell_ms", Kind::Slider { v: cfg.dwell_ms.min(1000) as f64, min: 0.0, max: 1000.0, step: 25.0, unit: " ms".into() })),
+        );
+        rows
+    }
+
     fn pane_desktop(&self) -> Vec<Item> {
         let style = match self.dock.get("style").and_then(Value::as_str) {
             Some("windows") => 1,
@@ -528,6 +573,9 @@ impl Model {
             Item::Card(dock),
             Item::Header("Menu bar".into()),
             Item::Card(bar),
+            Item::Header("Hot corners".into()),
+            Item::Card(self.hot_corner_rows()),
+            Item::Note { text: hot_corner_note(), warn: false },
             Item::Header("Pinned apps".into()),
             Item::Card(rows),
             Item::Note { text: "Settings are stored in the omarchy config folder next to dock-settings.json; unknown keys in those files are left alone.".into(), warn: false },
@@ -951,6 +999,23 @@ fn parse_tid(id: &str) -> Option<(String, String, String)> {
     Some((it.next()?.to_string(), it.next()?.to_string(), it.next().unwrap_or("").to_string()))
 }
 
+/// A hot corner dropdown or the dwell slider: writes `macshell.json`; the running machot notices the file at once.
+fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
+    let value = match v {
+        CtlVal::Str(s) => s,
+        CtlVal::Num(n) => format!("{}", n.round().max(0.0) as u64),
+        _ => return,
+    };
+    match crate::hot::set_in(&m.paths.shell_json(), key, &value) {
+        Ok(_) => {
+            m.shell = super::io::json_load(&m.paths.shell_json());
+            m.say("Hot corners saved", false);
+        }
+        Err(e) => m.say(format!("Not saved: {e}"), true),
+    }
+    m.dirty = true;
+}
+
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
@@ -978,6 +1043,7 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
             }
             Err(e) => m.say(format!("Not restored: {e}"), true),
         },
+        ["hc", key] => apply_hot_corner(m, key, v),
         ["a", "restart-dock"] => {
             let ok = restart_process("macdock");
             m.say(if ok { "Dock restarted" } else { "Could not start macdock" }, !ok);

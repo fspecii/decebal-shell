@@ -1,0 +1,14 @@
+[Unit]
+Description=macshell hot corners daemon (X11)
+PartOf=graphical-session.target
+After=graphical-session.target
+# X11 sessions only: the corners are X windows.
+ConditionEnvironment=!WAYLAND_DISPLAY
+
+[Service]
+ExecStart=/usr/bin/machot daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
