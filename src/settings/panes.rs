@@ -3,8 +3,8 @@
 
 use super::binds::{self, BindRow, Src};
 use super::icons::Glyph;
-use super::system::glyphs;
 use super::model::{cap, rid, CtlVal, Model};
+use super::system::glyphs;
 use super::tomlcfg::Val;
 use super::ui::{Ctl, Item, Kind, LayoutTile, Opt, Row, Thumb};
 use serde_json::{json, Value};

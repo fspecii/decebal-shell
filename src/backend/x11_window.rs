@@ -126,6 +126,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let mon = if popup { super::x11::panel_monitor(&conn, screen.root, (sw as i32, sh as i32)) } else { super::x11::Rect { x: 0, y: 0, w: sw as i32, h: sh as i32 } };
     if popup {
         app.set_popup(true);
+        // Popups are placed on the primary monitor, so that is the "screen" they can use.
+        app.set_screen(mon.w as u32, mon.h as u32);
     }
     let (iw, ih) = app.initial_size();
     let (w, h) = if popup {
@@ -135,7 +137,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
         (iw.min(sw.saturating_sub(40)).max(320), ih.min(sh.saturating_sub(60)).max(240))
     };
     // Popup: centred horizontally on the primary monitor, a fifth of the way down.
-    let (px, py) = if popup { (mon.x + (mon.w - w as i32) / 2, mon.y + mon.h / 5) } else { (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32) };
+    let popup_y = if popup && app.popup_centered() { mon.y + (mon.h - h as i32) / 2 } else { mon.y + mon.h / 5 };
+    let (px, py) = if popup { (mon.x + (mon.w - w as i32) / 2, popup_y) } else { (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32) };
 
     let win = conn.generate_id().map_err(err)?;
     let mut aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(
@@ -147,18 +150,31 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             | EventMask::BUTTON_RELEASE
             | EventMask::LEAVE_WINDOW
             | EventMask::ENTER_WINDOW
-            | EventMask::KEY_PRESS,
+            | EventMask::KEY_PRESS
+            | EventMask::KEY_RELEASE,
     );
     if popup {
         // No window manager involvement at all: rdwm and other tiling WMs never see the window.
         aux = aux.override_redirect(1);
     }
-    conn.create_window(COPY_DEPTH, win, screen.root, px as i16, py as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux).map_err(err)?;
+    // A translucent popup needs a 32-bit visual and a compositor; otherwise it stays on the root visual and opaque.
+    let argb = if popup && app.popup_translucent() && super::x11::has_compositor(&conn, screen_num) { super::x11::argb_visual(&screen) } else { None };
+    if popup {
+        app.set_popup_alpha(argb.is_some());
+    }
+    if let Some(visual) = argb {
+        let colormap = conn.generate_id().map_err(err)?;
+        conn.create_colormap(ColormapAlloc::NONE, colormap, screen.root, visual).map_err(err)?;
+        aux = aux.background_pixel(0).border_pixel(0).colormap(colormap);
+        conn.create_window(32, win, screen.root, px as i16, py as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, visual, &aux).map_err(err)?;
+    } else {
+        conn.create_window(COPY_DEPTH, win, screen.root, px as i16, py as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux).map_err(err)?;
+    }
 
     let title = app.title();
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, title.as_bytes()).map_err(err)?;
     conn.change_property8(PropMode::REPLACE, win, at.net_wm_name, at.utf8, title.as_bytes()).map_err(err)?;
-    let class = if popup { "macspot\0Macspot\0".to_string() } else { wm_class(app.app_id()) };
+    let class = wm_class(app.app_id());
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, class.as_bytes()).map_err(err)?;
     conn.change_property32(PropMode::REPLACE, win, at.wm_protocols, AtomEnum::ATOM, &[at.wm_delete]).map_err(err)?;
     if !popup {
@@ -182,7 +198,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
         })
     };
 
-    app.set_screen(sw, sh);
+    if !popup {
+        app.set_screen(sw, sh);
+    }
     app.set_scale(xft_scale(&conn, screen.root));
     app.set_rounded(popup);
     app.resize(w, h);
@@ -195,7 +213,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let mut size = (w, h);
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     let mut dirty = true;
-    let depth = screen.root_depth;
+    let depth = if argb.is_some() { 32 } else { screen.root_depth };
     let mut grabbed = !popup;
     let mut bg = 0u32;
 
@@ -206,16 +224,16 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 pm = Pixmap::new(size.0.max(1), size.1.max(1)).ok_or_else(|| Error("pixmap".into()))?;
             }
             app.draw(&mut pm);
-            present(&conn, win, gc, &pm, depth, max_bytes)?;
+            present(&conn, win, gc, &pm, depth, argb.is_some(), max_bytes)?;
             // Unpainted areas (a resize in flight, a window being dragged) show the window background:
             // follow the app's own backdrop instead of black.
-            if let Some(px) = backdrop(&pm) {
+            if let Some(px) = backdrop(&pm).filter(|_| argb.is_none()) {
                 if px != bg {
                     bg = px;
                     conn.change_window_attributes(win, &ChangeWindowAttributesAux::new().background_pixel(px)).map_err(err)?;
                 }
             }
-            if popup {
+            if popup && argb.is_none() {
                 // Rounded corners without a compositor: clip the window to the opaque pixels.
                 let rects = super::x11::visible_rects(&pm);
                 conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &rects).map_err(err)?;
@@ -224,7 +242,12 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
         }
         if popup && !grabbed {
             grabbed = true;
-            grab_input(&conn, win, screen.root);
+            let mods = grab_input(&conn, win, screen.root);
+            let r = app.input_grabbed(mods);
+            if r.action == Some(Action::Close) {
+                return Ok(());
+            }
+            dirty |= r.redraw;
         }
 
         let mut next = Some(conn.wait_for_event().map_err(err)?);
@@ -268,7 +291,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         _ => Response::NONE,
                     };
                 }
-                Event::FocusOut(f) if popup && f.mode == NotifyMode::NORMAL && f.detail != NotifyDetail::INFERIOR => return Ok(()),
+                Event::FocusOut(f) if popup && app.popup_closes_on_focus_loss() && f.mode == NotifyMode::NORMAL && f.detail != NotifyDetail::INFERIOR => return Ok(()),
+                Event::KeyRelease(k) => resp = app.key_release(keymap.lookup(k.detail, 0)),
                 Event::KeyPress(k) => {
                     let state: u16 = k.state.into();
                     // The hotkey that opened us (Super+Space) pressed again: toggle off. Our own grab swallows it
@@ -306,7 +330,11 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                     if (cw, ch) != size {
                         size = (cw, ch);
                         let x = mon.x + (mon.w - cw as i32) / 2;
-                        conn.configure_window(win, &ConfigureWindowAux::new().x(x).width(cw).height(ch)).map_err(err)?;
+                        let mut cfg = ConfigureWindowAux::new().x(x).width(cw).height(ch);
+                        if app.popup_centered() {
+                            cfg = cfg.y(mon.y + (mon.h - ch as i32) / 2);
+                        }
+                        conn.configure_window(win, &cfg).map_err(err)?;
                         app.resize(cw, ch);
                         dirty = true;
                     }
@@ -325,19 +353,40 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
 
 /// Takes the keyboard and pointer so typing and clicking outside work whatever the WM thinks has focus.
 /// The hotkey that launched us may still hold a passive keyboard grab, so retry for a moment.
-fn grab_input(conn: &RustConnection, win: Window, root: Window) {
+/// Returns the modifier state once the keyboard is ours (`None` when it could not be grabbed).
+fn grab_input(conn: &RustConnection, win: Window, _root: Window) -> Option<u16> {
     let _ = conn.set_input_focus(InputFocus::POINTER_ROOT, win, x11rb::CURRENT_TIME);
+    let mut got = false;
     for _ in 0..100 {
-        let ok = conn.grab_keyboard(true, win, x11rb::CURRENT_TIME, GrabMode::ASYNC, GrabMode::ASYNC).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.status == GrabStatus::SUCCESS);
-        if ok {
+        got = conn.grab_keyboard(true, win, x11rb::CURRENT_TIME, GrabMode::ASYNC, GrabMode::ASYNC).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.status == GrabStatus::SUCCESS);
+        if got {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
     let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION;
     let _ = conn.grab_pointer(true, win, mask, GrabMode::ASYNC, GrabMode::ASYNC, x11rb::NONE, x11rb::NONE, x11rb::CURRENT_TIME);
-    let _ = root;
+    // The modifiers held right now (a quick tap may have let go of them already).
+    let mods = got.then(|| conn.query_pointer(win).ok().and_then(|c| c.reply().ok()).map_or(0, |r| u16::from(r.mask)));
     let _ = conn.flush();
+    mods
+}
+
+/// Politely closes another client's window (`WM_DELETE_WINDOW` when it supports it, else kills the client),
+/// on its own short-lived connection.
+pub fn close_window(id: u32) {
+    let Ok((conn, _)) = x11rb::connect(None) else { return };
+    let (Ok(protocols), Ok(delete)) = (intern(&conn, "WM_PROTOCOLS"), intern(&conn, "WM_DELETE_WINDOW")) else { return };
+    let supports = conn.get_property(false, id, protocols, AtomEnum::ATOM, 0, 64).ok().and_then(|c| c.reply().ok()).and_then(|r| r.value32().map(|mut v| v.any(|a| a == delete))).unwrap_or(false);
+    if supports {
+        let ev = ClientMessageEvent::new(32, id, protocols, [delete, x11rb::CURRENT_TIME, 0, 0, 0]);
+        let _ = conn.send_event(false, id, EventMask::NO_EVENT, ev);
+    } else {
+        let _ = conn.kill_client(id);
+    }
+    let _ = conn.flush();
+    // Make sure the requests were processed before the connection (and so our pending close) goes away.
+    let _ = conn.get_input_focus().map(|c| c.reply());
 }
 
 /// `WM_CLASS` value: instance (lower case) and class (first letter upper case) of an application id.
@@ -384,7 +433,7 @@ fn backdrop(pm: &Pixmap) -> Option<u32> {
 }
 
 /// Uploads the pixmap as premultiplied BGRX, splitting into row bands when a request would be too large.
-fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth: u8, max_bytes: usize) -> Result<(), Error> {
+fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth: u8, alpha: bool, max_bytes: usize) -> Result<(), Error> {
     let (w, h) = (pm.width() as usize, pm.height() as usize);
     let rows_per = (max_bytes / (w * 4)).clamp(1, h.min(128));
     let mut buf = vec![0u8; w * rows_per * 4];
@@ -396,7 +445,7 @@ fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth:
             d[0] = s[2];
             d[1] = s[1];
             d[2] = s[0];
-            d[3] = 0xff;
+            d[3] = if alpha { s[3] } else { 0xff };
         }
         conn.put_image(ImageFormat::Z_PIXMAP, win, gc, w as u16, rows as u16, 0, y as i16, 0, depth, &buf[..rows * w * 4]).map_err(err)?;
         y += rows;

@@ -75,13 +75,7 @@ pub fn parse_xinput_list(text: &str) -> Vec<(u32, String)> {
 /// `xinput list-props ID` -> libinput properties we care about.
 pub fn parse_props(id: u32, name: &str, text: &str) -> Pointer {
     let val = |p: &str| text.lines().find(|l| l.trim_start().starts_with(p)).and_then(|l| l.rsplit(':').next()).map(|v| v.trim().to_string());
-    Pointer {
-        id,
-        name: name.into(),
-        accel: val(P_ACCEL).and_then(|v| v.parse().ok()),
-        natural: val(P_NATURAL).map(|v| v.starts_with('1')),
-        tap: val(P_TAP).map(|v| v.starts_with('1')),
-    }
+    Pointer { id, name: name.into(), accel: val(P_ACCEL).and_then(|v| v.parse().ok()), natural: val(P_NATURAL).map(|v| v.starts_with('1')), tap: val(P_TAP).map(|v| v.starts_with('1')) }
 }
 
 pub fn load(r: &dyn Runner) -> State {
@@ -218,7 +212,10 @@ pub fn items(h: &Hub) -> Vec<Item> {
         v.push(Item::Note { text: e.clone(), warn: true });
     }
     if super::run::wayland_session() {
-        v.push(Item::Note { text: "This is a Wayland session: layout, key repeat and pointer settings below only reach X11 apps (XWayland). Configure the compositor for native apps.".into(), warn: false });
+        v.push(Item::Note {
+            text: "This is a Wayland session: layout, key repeat and pointer settings below only reach X11 apps (XWayland). Configure the compositor for native apps.".into(),
+            warn: false,
+        });
     }
     v.push(Item::Header("Keyboard".into()));
     let mut rows = Vec::new();
@@ -240,7 +237,11 @@ pub fn items(h: &Hub) -> Vec<Item> {
     if st.has_xset {
         match st.repeat {
             Some((d, r)) => {
-                rows.push(Row::new("Key repeat delay").detail("How long to hold a key before it repeats").ctl(Ctl::new("s:inp:delay:", Kind::Slider { v: d as f64, min: 150.0, max: 1000.0, step: 10.0, unit: " ms".into() })));
+                rows.push(
+                    Row::new("Key repeat delay")
+                        .detail("How long to hold a key before it repeats")
+                        .ctl(Ctl::new("s:inp:delay:", Kind::Slider { v: d as f64, min: 150.0, max: 1000.0, step: 10.0, unit: " ms".into() })),
+                );
                 rows.push(Row::new("Key repeat rate").detail("Repeats per second").ctl(Ctl::new("s:inp:rate:", Kind::Slider { v: r as f64, min: 5.0, max: 60.0, step: 1.0, unit: "/s".into() })));
             }
             None => rows.push(Row::new("Key repeat").detail("Not available: xset could not read the X server")),
@@ -353,7 +354,8 @@ mod tests {
     const XKB: &str = "rules:      evdev\nmodel:      pc105\nlayout:     us,de\nvariant:    ,nodeadkeys\noptions:    ctrl:nocaps,compose:ralt\n";
     const XSET: &str = "Keyboard Control:\n  auto repeat:  on    key click percent:  0    LED mask:  00000000\n  auto repeat delay:  660    repeat rate:  25\nScreen Saver:\n  prefer blanking:  yes    allow exposures:  yes\n  timeout:  600    cycle:  600\nDPMS (Energy Star):\n  Standby: 0    Suspend: 0    Off: 900\n  DPMS is Enabled\n";
     const XLIST: &str = "⎡ Virtual core pointer                    \tid=2\t[master pointer  (3)]\n⎜   ↳ Virtual core XTEST pointer              \tid=4\t[slave  pointer  (2)]\n⎜   ↳ Logitech MX Master                      \tid=10\t[slave  pointer  (2)]\n⎜   ↳ SYNA Touchpad                           \tid=11\t[slave  pointer  (2)]\n⎣ Virtual core keyboard                   \tid=3\t[master keyboard (2)]\n    ↳ AT keyboard                             \tid=12\t[slave  keyboard (3)]\n";
-    const PROPS: &str = "Device 'SYNA Touchpad':\n\tDevice Enabled (178):\t1\n\tlibinput Tapping Enabled (320):\t1\n\tlibinput Natural Scrolling Enabled (330):\t0\n\tlibinput Accel Speed (340):\t-0.250000\n";
+    const PROPS: &str =
+        "Device 'SYNA Touchpad':\n\tDevice Enabled (178):\t1\n\tlibinput Tapping Enabled (320):\t1\n\tlibinput Natural Scrolling Enabled (330):\t0\n\tlibinput Accel Speed (340):\t-0.250000\n";
 
     #[test]
     fn parses_xkb_and_xset() {
@@ -449,7 +451,17 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         let fr = std::sync::Arc::new(FakeRunner::lenient());
         let mut h = Hub::with(fr.clone(), d.clone(), std::sync::Arc::new(|| {}));
-        h.input.data = Some(State { has_xkb: true, has_xset: true, has_xinput: true, layout: "us".into(), options: vec!["compose:ralt".into()], layouts: vec!["us".into(), "de".into()], repeat: Some((660, 25)), pointers: vec![parse_props(11, "SYNA Touchpad", PROPS)], ..State::default() });
+        h.input.data = Some(State {
+            has_xkb: true,
+            has_xset: true,
+            has_xinput: true,
+            layout: "us".into(),
+            options: vec!["compose:ralt".into()],
+            layouts: vec!["us".into(), "de".into()],
+            repeat: Some((660, 25)),
+            pointers: vec![parse_props(11, "SYNA Touchpad", PROPS)],
+            ..State::default()
+        });
         apply(&mut h, "caps", "", CtlVal::Str("ctrl:nocaps".into()));
         apply(&mut h, "delay", "", CtlVal::Num(250.0));
         apply(&mut h, "tap", "11", CtlVal::Bool(false));

@@ -61,7 +61,14 @@ pub fn parse_devices(text: &str) -> Vec<(String, String)> {
 /// `bluetoothctl info MAC`.
 pub fn parse_info(mac: &str, name: &str, text: &str) -> Device {
     let icon = text.lines().find_map(|l| l.trim().strip_prefix("Icon:")).map(|s| s.trim().to_string()).unwrap_or_default();
-    Device { mac: mac.into(), name: name.into(), paired: yes(text, "Paired").unwrap_or(false), connected: yes(text, "Connected").unwrap_or(false), trusted: yes(text, "Trusted").unwrap_or(false), icon }
+    Device {
+        mac: mac.into(),
+        name: name.into(),
+        paired: yes(text, "Paired").unwrap_or(false),
+        connected: yes(text, "Connected").unwrap_or(false),
+        trusted: yes(text, "Trusted").unwrap_or(false),
+        icon,
+    }
 }
 
 pub fn load(r: &dyn Runner) -> State {
@@ -156,7 +163,11 @@ pub fn items(h: &Hub) -> Vec<Item> {
     if rows.is_empty() {
         rows.push(Row::new("No devices yet").detail("Put your device in pairing mode and scan"));
     }
-    rows.push(Row::new("Scan for devices").detail("Looks for eight seconds").ctl(Ctl::new("s:bt:scan:", Kind::Button { label: if h.ui_bt.scanning || st.discovering { "Scanning...".into() } else { "Scan".into() }, danger: false })));
+    rows.push(
+        Row::new("Scan for devices")
+            .detail("Looks for eight seconds")
+            .ctl(Ctl::new("s:bt:scan:", Kind::Button { label: if h.ui_bt.scanning || st.discovering { "Scanning...".into() } else { "Scan".into() }, danger: false })),
+    );
     v.push(Item::Card(rows));
     v
 }

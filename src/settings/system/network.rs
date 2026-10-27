@@ -153,7 +153,9 @@ pub fn load(r: &dyn Runner) -> State {
     let wifi = Some(radio.stdout.trim() == "enabled");
     let aps = if wifi == Some(true) { parse_wifi_list(&r.run(&Cmd::new("nmcli", &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"])).stdout) } else { vec![] };
     let conns = parse_connections(&r.run(&Cmd::new("nmcli", &["-t", "-f", "NAME,UUID,TYPE,DEVICE", "connection", "show"])).stdout);
-    let devs = parse_device_show(&r.run(&Cmd::new("nmcli", &["-t", "-f", "GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.CONNECTION,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS", "device", "show"])).stdout);
+    let devs = parse_device_show(
+        &r.run(&Cmd::new("nmcli", &["-t", "-f", "GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.CONNECTION,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS", "device", "show"])).stdout,
+    );
     State { available: true, error: None, wifi, aps, conns, devs }
 }
 
@@ -241,7 +243,9 @@ pub fn items(h: &Hub) -> Vec<Item> {
     if let Some(ssid) = &ui.join {
         v.push(Item::Header(format!("Join \"{ssid}\"")));
         v.push(Item::Card(vec![
-            Row::new("Password").detail("8 to 63 characters (or 64 hex digits)").ctl(Ctl::new("s:net:pw:secret", Kind::Text { val: if ui.password.is_empty() { String::new() } else { "•".repeat(ui.password.chars().count()) }, hint: "Wi-Fi password".into() })),
+            Row::new("Password")
+                .detail("8 to 63 characters (or 64 hex digits)")
+                .ctl(Ctl::new("s:net:pw:secret", Kind::Text { val: if ui.password.is_empty() { String::new() } else { "•".repeat(ui.password.chars().count()) }, hint: "Wi-Fi password".into() })),
             Row::new("").ctl(Ctl::new("s:net:cancel:", Kind::Button { label: "Cancel".into(), danger: false })).ctl(Ctl::new("s:net:joinpw:", Kind::Button { label: "Join".into(), danger: false })),
         ]));
     }
@@ -264,7 +268,8 @@ pub fn items(h: &Hub) -> Vec<Item> {
             .iter()
             .map(|a| {
                 let known = st.conns.iter().any(|c| c.kind == "802-11-wireless" && c.name == a.ssid);
-                let detail = format!("{} signal ({}%){}{}", strength(a.signal), a.signal, if a.secured() { format!(" · {}", a.security.trim()) } else { " · open".into() }, if known { " · saved" } else { "" });
+                let detail =
+                    format!("{} signal ({}%){}{}", strength(a.signal), a.signal, if a.secured() { format!(" · {}", a.security.trim()) } else { " · open".into() }, if known { " · saved" } else { "" });
                 let mut r = Row::new(a.ssid.clone()).detail(detail);
                 if a.in_use {
                     r.selected = true;
@@ -280,14 +285,27 @@ pub fn items(h: &Hub) -> Vec<Item> {
         if rows.is_empty() {
             rows.push(Row::new(if ui.scanning { "Scanning..." } else { "No networks found" }));
         }
-        rows.push(Row::new("Scan again").detail("Look for networks now").ctl(Ctl::new("s:net:rescan:", Kind::Button { label: if ui.scanning { "Scanning...".into() } else { "Scan".into() }, danger: false })));
+        rows.push(
+            Row::new("Scan again")
+                .detail("Look for networks now")
+                .ctl(Ctl::new("s:net:rescan:", Kind::Button { label: if ui.scanning { "Scanning...".into() } else { "Scan".into() }, danger: false })),
+        );
         v.push(Item::Card(rows));
     }
     // saved
     let saved: Vec<&Conn> = st.conns.iter().filter(|c| c.kind == "802-11-wireless").collect();
     if !saved.is_empty() {
         v.push(Item::Header("Saved networks".into()));
-        v.push(Item::Card(saved.iter().map(|c| Row::new(c.name.clone()).detail(if c.device.is_empty() { "" } else { "Connected" }).ctl(Ctl::new(format!("s:net:forget:{}", c.uuid), Kind::Button { label: "Forget".into(), danger: true }))).collect()));
+        v.push(Item::Card(
+            saved
+                .iter()
+                .map(|c| {
+                    Row::new(c.name.clone())
+                        .detail(if c.device.is_empty() { "" } else { "Connected" })
+                        .ctl(Ctl::new(format!("s:net:forget:{}", c.uuid), Kind::Button { label: "Forget".into(), danger: true }))
+                })
+                .collect(),
+        ));
     }
     // vpn
     let vpns: Vec<&Conn> = st.conns.iter().filter(|c| is_vpn(c)).collect();

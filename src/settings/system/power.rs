@@ -1,7 +1,7 @@
 //! Power & Battery: power profile (powerprofilesctl), screen blank / display sleep (xset, persisted in the session
 //! file), battery (sysfs, hidden on desktops), lid/suspend behaviour (read-only, from logind configuration).
 
-use super::input::{parse_xset_screen};
+use super::input::parse_xset_screen;
 use super::run::{Cmd, Runner};
 use super::{Action, Dom, Hub};
 use crate::settings::model::CtlVal;
@@ -133,7 +133,10 @@ pub fn profile_cmd(st: &State, p: &str) -> Result<Vec<Cmd>, String> {
 
 /// Timeout choices in seconds (0 = never).
 pub fn timeouts() -> Vec<Opt> {
-    [(0, "Never"), (60, "1 minute"), (120, "2 minutes"), (300, "5 minutes"), (600, "10 minutes"), (900, "15 minutes"), (1800, "30 minutes"), (3600, "1 hour")].iter().map(|(s, l)| (l.to_string(), s.to_string())).collect()
+    [(0, "Never"), (60, "1 minute"), (120, "2 minutes"), (300, "5 minutes"), (600, "10 minutes"), (900, "15 minutes"), (1800, "30 minutes"), (3600, "1 hour")]
+        .iter()
+        .map(|(s, l)| (l.to_string(), s.to_string()))
+        .collect()
 }
 
 pub fn blank_cmds(secs: u32) -> Result<Vec<Cmd>, String> {
@@ -162,7 +165,8 @@ pub fn items(h: &Hub) -> Vec<Item> {
     let mut v = Vec::new();
     if !st.batteries.is_empty() {
         v.push(Item::Header("Battery".into()));
-        let mut rows: Vec<Row> = st.batteries.iter().map(|b| Row::new(b.name.clone()).detail(b.status.clone()).ctl(Ctl::new(format!("lbl:bat:{}", b.name), Kind::Label(format!("{} %", b.percent))))).collect();
+        let mut rows: Vec<Row> =
+            st.batteries.iter().map(|b| Row::new(b.name.clone()).detail(b.status.clone()).ctl(Ctl::new(format!("lbl:bat:{}", b.name), Kind::Label(format!("{} %", b.percent))))).collect();
         if let Some(ac) = st.on_ac {
             rows.push(Row::new("Power source").ctl(Ctl::new("lbl:ac", Kind::Label(if ac { "Power adapter".into() } else { "Battery".into() }))));
         }
@@ -201,7 +205,10 @@ pub fn items(h: &Hub) -> Vec<Item> {
         Row::new("Close the lid on external power").ctl(Ctl::new("lbl:lidac", Kind::Label(show(&st.lid_ac)))),
         Row::new("When idle").ctl(Ctl::new("lbl:idle", Kind::Label(show(&st.idle_action)))),
     ]));
-    v.push(Item::Note { text: "These are set by systemd-logind (/etc/systemd/logind.conf and logind.conf.d). macsettings only reads them: changing them needs administrator rights.".into(), warn: false });
+    v.push(Item::Note {
+        text: "These are set by systemd-logind (/etc/systemd/logind.conf and logind.conf.d). macsettings only reads them: changing them needs administrator rights.".into(),
+        warn: false,
+    });
     v
 }
 
@@ -247,7 +254,8 @@ mod tests {
     use super::*;
     use crate::settings::system::run::FakeRunner;
 
-    const LIST: &str = "* performance:\n    CpuDriver:\tamd_pstate\n    Degraded:   no\n\n  balanced:\n    CpuDriver:\tamd_pstate\n    PlatformDriver:\tplaceholder\n\n  power-saver:\n    CpuDriver:\tamd_pstate\n";
+    const LIST: &str =
+        "* performance:\n    CpuDriver:\tamd_pstate\n    Degraded:   no\n\n  balanced:\n    CpuDriver:\tamd_pstate\n    PlatformDriver:\tplaceholder\n\n  power-saver:\n    CpuDriver:\tamd_pstate\n";
 
     fn tmp(n: &str) -> std::path::PathBuf {
         let d = std::env::temp_dir().join(format!("ms-pwr-{n}-{}", std::process::id()));
@@ -265,7 +273,11 @@ mod tests {
     #[test]
     fn reads_batteries_and_ac() {
         let d = tmp("bat");
-        for (n, t, extra) in [("BAT0", "Battery", &[("capacity", "73"), ("status", "Discharging")][..]), ("AC", "Mains", &[("online", "1")][..]), ("hidpp_battery_0", "Battery", &[("capacity", "50"), ("scope", "Device")][..])] {
+        for (n, t, extra) in [
+            ("BAT0", "Battery", &[("capacity", "73"), ("status", "Discharging")][..]),
+            ("AC", "Mains", &[("online", "1")][..]),
+            ("hidpp_battery_0", "Battery", &[("capacity", "50"), ("scope", "Device")][..]),
+        ] {
             std::fs::create_dir_all(d.join(n)).unwrap();
             std::fs::write(d.join(n).join("type"), t).unwrap();
             for (k, v) in extra {
@@ -293,7 +305,10 @@ mod tests {
     fn load_reads_everything_and_hides_missing() {
         let sys = tmp("sys");
         let etc = tmp("etc");
-        let r = FakeRunner::new().ok("powerprofilesctl list", LIST).ok("powerprofilesctl get", "balanced\n").ok("xset q", "  timeout:  300    cycle:  300\nDPMS (Energy Star):\n  Standby: 0    Suspend: 0    Off: 600\n  DPMS is Enabled\n");
+        let r = FakeRunner::new()
+            .ok("powerprofilesctl list", LIST)
+            .ok("powerprofilesctl get", "balanced\n")
+            .ok("xset q", "  timeout:  300    cycle:  300\nDPMS (Energy Star):\n  Standby: 0    Suspend: 0    Off: 600\n  DPMS is Enabled\n");
         let s = load_from(&r, &sys, &etc);
         assert_eq!(s.profile.as_deref(), Some("balanced"));
         assert_eq!(s.blank_secs, Some(300));
@@ -324,7 +339,13 @@ mod tests {
         let t = format!("{:?}", items(&h));
         assert!(!t.contains("Battery\""));
         assert!(t.contains("power-profiles-daemon") && t.contains("xset is not installed"));
-        h.power.data = Some(State { profiles: vec!["balanced".into()], profile: Some("balanced".into()), has_xset: true, batteries: vec![Battery { name: "BAT0".into(), percent: 80, status: "Charging".into() }], ..State::default() });
+        h.power.data = Some(State {
+            profiles: vec!["balanced".into()],
+            profile: Some("balanced".into()),
+            has_xset: true,
+            batteries: vec![Battery { name: "BAT0".into(), percent: 80, status: "Charging".into() }],
+            ..State::default()
+        });
         let t = format!("{:?}", items(&h));
         assert!(t.contains("BAT0") && t.contains("80 %") && t.contains("s:pwr:profile:") && t.contains("s:pwr:blank:"));
     }

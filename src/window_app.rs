@@ -86,6 +86,27 @@ pub trait WindowApp {
     fn content_size(&self) -> Option<(u32, u32)> {
         None
     }
+    /// Popup mode: centre the window vertically on the monitor instead of a fifth of the way down.
+    fn popup_centered(&self) -> bool {
+        false
+    }
+    /// Popup mode: the card has translucent pixels. The backend uses a 32-bit visual when a compositor runs
+    /// and tells the app through [`WindowApp::set_popup_alpha`]; without one the app must paint opaque.
+    fn popup_translucent(&self) -> bool {
+        false
+    }
+    /// Popup mode: whether the window really has an alpha channel (see [`WindowApp::popup_translucent`]).
+    fn set_popup_alpha(&mut self, _alpha: bool) {}
+    /// Popup mode, once the keyboard grab was tried: the X modifier state at that moment (`None` = the grab
+    /// failed, e.g. another client holds it). An app that cannot work without the keyboard closes here.
+    fn input_grabbed(&mut self, _mods: Option<u16>) -> Response {
+        Response::NONE
+    }
+    /// Popup mode: close when another window takes the input focus (a click elsewhere). Apps that hold the
+    /// keyboard grab on purpose return false: the window manager may move the focus (focus follows mouse) under them.
+    fn popup_closes_on_focus_loss(&self) -> bool {
+        true
+    }
     /// Preferred window size on first map.
     fn initial_size(&self) -> (u32, u32);
     /// Called once before the event loop starts; clone and keep it for worker threads.
@@ -106,6 +127,10 @@ pub trait WindowApp {
     /// Vertical scroll in pixels (positive = content moves up, i.e. scroll down).
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response;
     fn key(&mut self, ev: &KeyEvent) -> Response;
+    /// A key was released: its keysym (unshifted). Rarely needed; used for "commit when Alt is let go".
+    fn key_release(&mut self, _sym: u32) -> Response {
+        Response::NONE
+    }
     /// A key press the toolkit has no [`Key`] for (function keys, ...): raw keysym and modifiers.
     fn unmapped_key(&mut self, _sym: u32, _shift: bool, _ctrl: bool, _alt: bool) -> Response {
         Response::NONE

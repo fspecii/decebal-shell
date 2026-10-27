@@ -5,8 +5,8 @@ use super::icons::pane_icon;
 use super::io::{self, Ev, Paths};
 use super::model::{CtlVal, Model};
 use super::panes::PANES;
-use super::system::registry::{self, Hit, SECTIONS};
 use super::schema::Schema;
+use super::system::registry::{self, Hit, SECTIONS};
 use super::ui::fill_px;
 use super::ui::{self, draw_items, inside, pal, part_at, Frame, Interact, Item, Kind, Opt, Painter, Placed, Rect};
 use crate::app::Button;
@@ -347,7 +347,15 @@ impl SettingsApp {
                             fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
                         }
                         pane_icon(pm, def.glyph, def.color, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
-                        p.text(pm, def.title, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, if selected && self.zone == Zone::Sidebar { pal::accent_text() } else { pal::text() });
+                        p.text(
+                            pm,
+                            def.title,
+                            rect.0 + u(42.0),
+                            rect.1 + rect.3 / 2.0,
+                            u(13.0),
+                            if selected { Weight::Medium } else { Weight::Regular },
+                            if selected && self.zone == Zone::Sidebar { pal::accent_text() } else { pal::text() },
+                        );
                     }
                     self.sidebar_hits.push((rect, *i));
                 }

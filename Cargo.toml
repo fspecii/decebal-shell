@@ -72,6 +72,11 @@ name = "macspot"
 path = "src/bin/macspot.rs"
 
 [[bin]]
+name = "macswitch"
+path = "src/bin/macswitch.rs"
+required-features = ["x11"]
+
+[[bin]]
 name = "macthemectl"
 path = "src/bin/macthemectl.rs"
 # Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).
