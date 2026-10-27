@@ -45,3 +45,16 @@ fn readme_mentions_every_cargo_bin() {
         assert!(readme.contains(&format!("`{b}`")) || readme.contains(&b), "README does not mention {b}");
     }
 }
+
+#[test]
+fn hot_corners_autostart_is_installed() {
+    let make = read("Makefile");
+    let pkg = read("PKGBUILD");
+    for f in ["macshell-hot.desktop", "macshell-hot.service"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contrib").join(f).exists(), "contrib/{f} missing");
+        assert!(make.contains(f), "Makefile does not install {f}");
+        assert!(pkg.contains(f), "PKGBUILD does not install {f}");
+    }
+    assert!(read("contrib/macshell-hot.desktop").contains("Exec=machot daemon"));
+    assert!(cargo_bins().contains("machot"));
+}

@@ -1,8 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macswitch machud macdash macsession macutil macsettings macthemectl macnotify macwm macclip
-UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service
-AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop
+BINS = macdock macbar machaven maclaunch macspot macswitch machud macdash macsession macutil macsettings macthemectl macnotify macwm macclip machot
+UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service macshell-hot.service
+AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop macshell-hot.desktop
 
 all:
 	cargo build --release --locked
@@ -55,6 +55,10 @@ e2e-notify:
 e2e-clip:
 	tests/e2e/clip.sh
 
+# machot (hot corners) on a private Xvfb with shimmed commands (needs Xvfb, xdotool, xrandr, xprop).
+e2e-hot:
+	tests/e2e/hot.sh
+
 # macsession + macutil on a private Xvfb with shimmed systemctl/loginctl/ffmpeg/xset/picom/powerprofilesctl (Xvfb, xdotool, import).
 e2e-session: all
 	tests/e2e/session.sh
@@ -64,4 +68,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-session e2e-dash
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-hot e2e-session e2e-dash

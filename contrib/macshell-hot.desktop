@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=macshell hot corners
+Comment=Runs an action when the pointer rests in a screen corner (X11); set the corners in System Settings or with `machot set`
+Exec=machot daemon
+NotShowIn=rdwm;GNOME;KDE;
+X-GNOME-Autostart-enabled=true

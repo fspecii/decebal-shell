@@ -22,6 +22,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
 | `macclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
+| `machot` | Hot Corners for X11: the pointer resting in a screen corner runs an action (Dashboard, Spotlight, Launchpad, Lock, ...); a daemon with `get` / `set` CLI; see below | daemon ~3 MB RSS, 0 % CPU idle |
 | `maclaunch` | Launchpad: a searchable grid of installed apps (type to filter, arrows, Enter, Esc) | ~20 MB RSS while open |
 | `macwm` | debug tool: prints the window list whenever it changes | CLI |
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
@@ -189,6 +190,40 @@ age such as `3m`). It grabs the keyboard and pointer like `macspot`; it also wor
 
 Terminals paste with Ctrl+Shift+V: use Shift+Return there and paste by hand. `tests/e2e/clip.sh` (`make e2e-clip`) runs the daemon and the picker against a private
 Xvfb with `xclip`, a fake password manager window and a window that receives the Ctrl+V.
+
+## Hot corners (`machot`)
+
+X11 only. `machot daemon` runs for the whole session and puts a 2x2 px InputOnly window in each configured corner of every monitor (RandR
+monitors; rebuilt on screen changes). When the pointer has stayed in a corner for `dwell_ms` (default 150), the corner's action runs; it
+cannot fire again until the pointer has left the corner and a short cooldown (400 ms) has passed. Nothing fires while a mouse button is
+held, so dragging a window to a corner (or into rdwm's edge snap zones) is safe. The daemon grabs nothing, never takes the focus and sleeps
+in `poll(2)` while idle (no timers; the only wake-ups are pointer crossings, restacks and config changes). The corner where two monitors
+touch is not a corner and stays inactive; the corner windows sit above everything else, so those 2x2 px do not reach the window below.
+
+Settings live in `macshell.json` and are applied at once (inotify), also when you edit the file by hand:
+
+```json
+{ "hot_corners": { "top_left": "none", "top_right": "dashboard", "bottom_left": "lock",
+                   "bottom_right": "custom:notify-send 'hello'", "dwell_ms": 150 } }
+```
+
+| Action | Runs |
+| --- | --- |
+| `none` | nothing (the corner gets no window) |
+| `dashboard` / `session` / `spotlight` / `launchpad` | `macdash` / `macsession` / `macspot` / `maclaunch` (they toggle, so re-entering closes them) |
+| `overview` | `macexpose` when it is in `PATH`, else nothing |
+| `lock` | `rdwm-lock` |
+| `tile-all` | `rdwmctl action tileall` |
+| `notifications` | `macnotify history` |
+| `show-desktop` | accepted but does nothing yet: rdwm has no action for it |
+| `custom:<shell command>` | the command through `sh -c`, detached |
+
+`machot get` prints the corners, `machot set top-right spotlight` changes one (`machot set dwell_ms 200` the dwell time), `machot actions`
+lists the names. System Settings has the same four dropdowns and a dwell slider under Desktop & Dock > Hot corners.
+
+**Starting it.** Autostart with `contrib/macshell-hot.desktop` (installed to `/etc/xdg/autostart`; it is skipped under rdwm, which starts
+its services itself: add `machot daemon` there, like `macclip daemon`) or `contrib/macshell-hot.service` (systemd user unit, X11 sessions
+only). `tests/e2e/hot.sh` (`make e2e-hot`) runs it on a private Xvfb with shimmed commands and xdotool as the pointer.
 
 ## Dashboard (`macdash`)
 
