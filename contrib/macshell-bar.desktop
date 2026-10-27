@@ -2,3 +2,4 @@
 Type=Application
 Name=macshell menu bar
 Exec=macbar
+NotShowIn=rdwm;

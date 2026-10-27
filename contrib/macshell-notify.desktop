@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=macshell notifications
+Comment=Notification daemon with macOS-style banners (X11; exits when another daemon owns the name)
+Exec=macnotify
+NotShowIn=rdwm;GNOME;KDE;
+X-GNOME-Autostart-enabled=true

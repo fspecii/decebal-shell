@@ -1,8 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macsettings
-UNITS = macshell-dock.service macshell-bar.service
-AUTOSTART = macshell-dock.desktop macshell-bar.desktop
+BINS = macdock macbar machaven maclaunch macspot macsettings macnotify macwm
+UNITS = macshell-dock.service macshell-bar.service macshell-notify.service
+AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop
 
 all:
 	cargo build --release --locked
@@ -13,6 +13,8 @@ install: all
 	for d in $(AUTOSTART); do install -Dm644 contrib/$$d $(DESTDIR)/etc/xdg/autostart/$$d; done
 	install -Dm644 contrib/machaven.desktop $(DESTDIR)$(PREFIX)/share/applications/machaven.desktop
 	install -Dm644 contrib/macsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/macsettings.desktop
+	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/macshell/dbus/org.freedesktop.Notifications.service
+	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/macshell/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/macshell/LICENSE
 
 uninstall:
@@ -21,6 +23,7 @@ uninstall:
 	for d in $(AUTOSTART); do rm -f $(DESTDIR)/etc/xdg/autostart/$$d; done
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/machaven.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/macsettings.desktop
+	rm -rf $(DESTDIR)$(PREFIX)/share/macshell/dbus $(DESTDIR)$(PREFIX)/share/doc/macshell
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/macshell
 
 # Extra login session "Hyprland (macshell)": the Rust shell without Quickshell (Omarchy + SDDM + hyprlock/hypridle/mako).
@@ -36,9 +39,14 @@ install-session:
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
 
+# macnotify on a private session bus + Xvfb (needs Xvfb, dbus-daemon, busctl, xdotool, import).
+e2e-notify:
+	cargo build --release --locked --bin macnotify
+	MACNOTIFY_BIN=$(CURDIR)/target/release/macnotify tests/e2e/notify.sh
+
 test:
 	cargo fmt --all -- --check
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-notify
