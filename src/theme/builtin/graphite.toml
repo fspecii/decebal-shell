@@ -1,0 +1,11 @@
+name = "Graphite"
+description = "macOS with the monochrome graphite accent."
+inherit = "macos"
+
+[dark]
+accent = "#8e8e93"
+accent_text = "#000000"
+
+[light]
+accent = "#5f5f65"
+accent_text = "#ffffff"

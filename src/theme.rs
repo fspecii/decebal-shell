@@ -27,3 +27,12 @@ pub const DOCK_BORDER_ALPHA: f32 = 0.05;
 /// Menu bar height and background (`#131313`).
 pub const BAR_HEIGHT: f32 = 26.0;
 pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
+
+// Shared, switchable theme (colours, metrics, fonts): see docs/theming.md. Kept in `theme/` so this
+// file (the dock's layout tokens) stays untouched by it.
+pub mod builtin;
+pub mod live;
+pub mod model;
+pub mod rdwm;
+pub use live::{current, generation};
+pub use model::{Mode, Rgb, Selection, Theme};
