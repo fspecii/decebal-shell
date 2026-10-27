@@ -75,6 +75,8 @@ pub struct Model {
     pub missing: RefCell<Vec<(String, String)>>,
     /// Wallpaper change made through rdwmctl that the file does not know.
     pub synced_at: Option<Instant>,
+    /// System panes (sound, network, ...): see `system/mod.rs`.
+    pub sys: super::system::Hub,
 }
 
 pub fn cap(s: &str) -> String {
@@ -89,6 +91,7 @@ impl Model {
             dock: io::json_load(&paths.dock_settings()),
             pinned: io::json_load(&paths.dock_pinned()),
             shell: io::json_load(&paths.shell_json()),
+            sys: super::system::Hub::new(wake.clone()),
             paths,
             store,
             schema,
@@ -369,6 +372,7 @@ impl Model {
         match parts.as_slice() {
             ["r", sec, key] => self.apply_key(sec, key, v),
             ["j", file, key] => self.apply_json(file, key, v),
+            _ if id.starts_with("s:") => self.sys_apply(id, v),
             _ => super::panes::apply_special(self, id, v),
         }
     }

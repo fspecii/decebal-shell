@@ -476,7 +476,8 @@ impl SettingsApp {
     fn begin_edit(&mut self, p: &Placed) {
         if let Kind::Text { val, .. } = &p.ctl.kind {
             self.commit_edit();
-            self.edit = Some((p.ctl.id.clone(), TextField::new(val)));
+            // password fields start empty (the stored text is never shown or copied)
+            self.edit = Some((p.ctl.id.clone(), TextField::new(if p.ctl.id.contains(":secret") { "" } else { val })));
             self.it.focus = Some(p.ctl.id.clone());
         }
     }
@@ -875,6 +876,10 @@ impl WindowApp for SettingsApp {
         io::spawn_watcher(files, self.m.paths.socket.clone(), self.m.queue.clone(), waker);
     }
 
+    fn set_visible(&mut self, visible: bool) {
+        self.m.sys_visible(visible);
+    }
+
     fn set_screen(&mut self, _w: u32, _h: u32) {}
 
     fn set_scale(&mut self, scale: f32) {
@@ -1144,6 +1149,7 @@ impl WindowApp for SettingsApp {
                 None => break,
             }
         }
+        redraw |= self.m.sys_poll();
         redraw |= self.m.expire_notice();
         redraw |= self.m.dirty;
         Response { redraw, action: None }
