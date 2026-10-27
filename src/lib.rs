@@ -23,3 +23,4 @@ pub mod theme;
 pub mod wallhaven;
 pub mod window_app;
 pub mod wm;
+pub mod settings;
