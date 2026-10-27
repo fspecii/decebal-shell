@@ -92,6 +92,8 @@ pub trait WindowApp {
     fn set_waker(&mut self, waker: Waker);
     /// Size of the output the window is on, when the backend can tell (0 x 0 = unknown).
     fn set_screen(&mut self, w: u32, h: u32);
+    /// UI scale factor (1.0 = 96 dpi) when the backend can tell; default no-op.
+    fn set_scale(&mut self, _scale: f32) {}
     /// The drawable area changed.
     fn resize(&mut self, w: u32, h: u32);
     /// Whether the window should draw rounded outer corners (false when tiled/maximised).
@@ -104,6 +106,10 @@ pub trait WindowApp {
     /// Vertical scroll in pixels (positive = content moves up, i.e. scroll down).
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response;
     fn key(&mut self, ev: &KeyEvent) -> Response;
+    /// A key press the toolkit has no [`Key`] for (function keys, ...): raw keysym and modifiers.
+    fn unmapped_key(&mut self, _sym: u32, _shift: bool, _ctrl: bool, _alt: bool) -> Response {
+        Response::NONE
+    }
     /// Called after the waker fired: drain results from worker threads here.
     fn tick(&mut self) -> Response;
 }

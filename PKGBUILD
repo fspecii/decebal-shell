@@ -35,7 +35,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock macbar machaven; do
+  for bin in macdock macbar machaven macsettings; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"
@@ -43,5 +43,6 @@ package() {
   install -Dm644 contrib/macshell-dock.desktop "$pkgdir/etc/xdg/autostart/macshell-dock.desktop"
   install -Dm644 contrib/macshell-bar.desktop "$pkgdir/etc/xdg/autostart/macshell-bar.desktop"
   install -Dm644 contrib/machaven.desktop "$pkgdir/usr/share/applications/machaven.desktop"
+  install -Dm644 contrib/macsettings.desktop "$pkgdir/usr/share/applications/macsettings.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

@@ -6,7 +6,7 @@ use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 
 fn lock_path(name: &str) -> PathBuf {
-    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|d| d.is_dir()).unwrap_or_else(std::env::temp_dir);
     dir.join(format!("{name}.lock"))
 }
 
@@ -38,7 +38,15 @@ mod tests {
     #[test]
     fn second_acquire_is_refused_while_the_first_is_held() {
         let name = format!("macshell-test-{}", std::process::id());
-        let first = super::acquire(&name);
+        // Another test may have a child between fork and exec that still shares the descriptor for a moment.
+        let mut first = None;
+        for _ in 0..50 {
+            first = super::acquire(&name);
+            if first.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         assert!(first.is_some());
         // The same process asking again would signal itself; the pid check keeps that a no-op.
         assert!(super::acquire(&name).is_none());

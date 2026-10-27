@@ -25,10 +25,11 @@ name = "machaven"
 path = "src/bin/machaven.rs"
 
 [dependencies]
+toml_edit = { version = "0.22", default-features = false, features = ["parse", "display"] }
 tiny-skia = "0.11"
 resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 fontdue = "0.9"
 libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
@@ -50,6 +51,10 @@ panic = "abort"
 strip = true
 
 [[bin]]
+name = "macsettings"
+path = "src/bin/macsettings.rs"
+
+[[bin]]
 name = "macwm"
 path = "src/bin/macwm.rs"
 
@@ -60,3 +65,18 @@ path = "src/bin/maclaunch.rs"
 [[bin]]
 name = "macspot"
 path = "src/bin/macspot.rs"
+# Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+[profile.dev.package.zune-core]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.image-webp]
+opt-level = 3

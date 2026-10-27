@@ -1,0 +1,865 @@
+//! A tiny retained-description / immediate-draw widget layer for the settings window.
+//!
+//! Panes describe themselves as [`Item`]s (cards of [`Row`]s holding [`Ctl`]s). [`draw_items`]
+//! lays them out, paints them with tiny-skia + fontdue and records a [`Frame`] of hit rectangles
+//! that the event handlers use until the next paint. Controls have stable string ids so keyboard
+//! focus and in-progress edits survive a rebuild (which happens whenever the file changes).
+
+use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
+use crate::text::{Fonts, Weight};
+use tiny_skia::{Color, Pixmap};
+
+pub type Rect = (f32, f32, f32, f32);
+
+pub fn inside(r: Rect, x: f32, y: f32) -> bool {
+    x >= r.0 && x < r.0 + r.2 && y >= r.1 && y < r.1 + r.3
+}
+
+/// Axis-aligned rectangle snapped to whole pixels (at least 1x1). tiny-skia's anti-aliased path for
+/// thin fractional rectangles asserts, so carets and separators go through here.
+pub fn fill_px(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
+    let (x0, y0) = (x.round(), y.round());
+    let (w, h) = ((x + w).round().max(x0 + 1.0) - x0, (y + h).round().max(y0 + 1.0) - y0);
+    crate::gfx::fill_rect(pm, x0, y0, w, h, c);
+}
+
+// ---------------------------------------------------------------- theme
+
+/// Palette: window and bar greys from macdock / macbar (`theme.rs`), macOS accent colours.
+pub mod pal {
+    use super::*;
+    use crate::theme::{BAR_BG, DOCK_BG};
+    pub fn window() -> Color {
+        color(DOCK_BG.0, DOCK_BG.1, DOCK_BG.2, 1.0)
+    }
+    pub fn sidebar() -> Color {
+        color(BAR_BG.0 + 6, BAR_BG.1 + 6, BAR_BG.2 + 6, 1.0)
+    }
+    pub fn card() -> Color {
+        color(44, 44, 46, 1.0)
+    }
+    pub fn text() -> Color {
+        color(245, 245, 247, 1.0)
+    }
+    pub fn sub() -> Color {
+        color(255, 255, 255, 0.55)
+    }
+    pub fn faint() -> Color {
+        color(255, 255, 255, 0.32)
+    }
+    pub fn sep() -> Color {
+        color(255, 255, 255, 0.08)
+    }
+    pub fn field() -> Color {
+        color(255, 255, 255, 0.09)
+    }
+    pub fn field_hover() -> Color {
+        color(255, 255, 255, 0.15)
+    }
+    pub const ACCENT: (u8, u8, u8) = (10, 132, 255);
+    pub fn accent() -> Color {
+        color(ACCENT.0, ACCENT.1, ACCENT.2, 1.0)
+    }
+    pub fn green() -> Color {
+        color(48, 209, 88, 1.0)
+    }
+    pub fn red() -> Color {
+        color(255, 69, 58, 1.0)
+    }
+    pub fn orange() -> Color {
+        color(255, 159, 10, 1.0)
+    }
+}
+
+// ---------------------------------------------------------------- description
+
+/// A choice: (label, value).
+pub type Opt = (String, String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Kind {
+    Toggle(bool),
+    Slider {
+        v: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        unit: String,
+    },
+    Stepper {
+        v: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        unit: String,
+    },
+    Seg(Vec<Opt>, Option<usize>),
+    Popup(Vec<Opt>, Option<usize>),
+    /// Hex colour text (`#rrggbb`), may be empty (unset).
+    Color(String),
+    Text {
+        val: String,
+        hint: String,
+    },
+    /// Shortcut display / recorder.
+    Key(String),
+    Button {
+        label: String,
+        danger: bool,
+    },
+    /// A button that stays highlighted while `on` (modifier toggles of the shortcut recorder).
+    Chip {
+        label: String,
+        on: bool,
+    },
+    Label(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ctl {
+    pub id: String,
+    pub kind: Kind,
+    pub enabled: bool,
+}
+
+impl Ctl {
+    pub fn new(id: impl Into<String>, kind: Kind) -> Ctl {
+        Ctl { id: id.into(), kind, enabled: true }
+    }
+    pub fn focusable(&self) -> bool {
+        self.enabled && !matches!(self.kind, Kind::Label(_))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Row {
+    pub label: String,
+    pub detail: String,
+    /// Controls, drawn right to left in this order's reverse (first = leftmost).
+    pub ctls: Vec<Ctl>,
+    /// Optional leading colour chip (a small rounded square).
+    pub chip: Option<Color4>,
+    /// Row is highlighted (selected list entry).
+    pub selected: bool,
+}
+
+pub type Color4 = (u8, u8, u8);
+
+impl Row {
+    pub fn new(label: impl Into<String>) -> Row {
+        Row { label: label.into(), ..Row::default() }
+    }
+    pub fn detail(mut self, d: impl Into<String>) -> Row {
+        self.detail = d.into();
+        self
+    }
+    pub fn ctl(mut self, c: Ctl) -> Row {
+        self.ctls.push(c);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Item {
+    /// Small caption above a card.
+    Header(String),
+    Card(Vec<Row>),
+    /// Wrapped explanatory text under a card (or an inline error when `warn`).
+    Note {
+        text: String,
+        warn: bool,
+    },
+    /// Thumbnail grid: (id, caption, selected). Pixmaps come from the app's thumbnail cache by id.
+    Thumbs(Vec<Thumb>),
+    /// Layout pictogram grid.
+    Layouts(Vec<LayoutTile>),
+    /// Large preview of the current wallpaper (id of a thumbnail) with caption.
+    Preview {
+        id: String,
+        caption: String,
+    },
+    Space(f32),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Thumb {
+    pub id: String,
+    pub caption: String,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayoutTile {
+    pub id: String,
+    pub name: String,
+    pub symbol: String,
+    pub selected: bool,
+}
+
+// ---------------------------------------------------------------- text helper
+
+pub struct Painter<'a> {
+    pub fonts: Option<&'a mut Fonts>,
+    pub s: f32,
+}
+
+impl Painter<'_> {
+    pub fn u(&self, v: f32) -> f32 {
+        v * self.s
+    }
+
+    pub fn measure(&self, t: &str, px: f32, w: Weight) -> f32 {
+        match &self.fonts {
+            Some(f) => f.measure(t, px, w),
+            None => t.chars().count() as f32 * px * 0.55,
+        }
+    }
+
+    /// Text with its visual vertical centre at `cy`.
+    pub fn text(&mut self, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
+        match &mut self.fonts {
+            Some(f) => {
+                let top = cy + 0.36 * px - f.ascent(px, w);
+                f.draw(pm, t, x, top, px, w, c)
+            }
+            None => 0.0,
+        }
+    }
+
+    pub fn text_right(&mut self, pm: &mut Pixmap, t: &str, right: f32, cy: f32, px: f32, w: Weight, c: Color) {
+        let m = self.measure(t, px, w);
+        self.text(pm, t, right - m, cy, px, w, c);
+    }
+
+    pub fn text_center(&mut self, pm: &mut Pixmap, t: &str, cx: f32, cy: f32, px: f32, w: Weight, c: Color) {
+        let m = self.measure(t, px, w);
+        self.text(pm, t, cx - m / 2.0, cy, px, w, c);
+    }
+
+    /// Shortens `t` with an ellipsis to fit `max` pixels.
+    pub fn fit(&self, t: &str, max: f32, px: f32, w: Weight) -> String {
+        if self.measure(t, px, w) <= max {
+            return t.to_string();
+        }
+        let mut out: Vec<char> = t.chars().collect();
+        while !out.is_empty() {
+            out.pop();
+            let cand: String = out.iter().collect::<String>() + "…";
+            if self.measure(&cand, px, w) <= max {
+                return cand;
+            }
+        }
+        String::new()
+    }
+
+    /// Greedy word wrap.
+    pub fn wrap(&self, t: &str, max: f32, px: f32, w: Weight) -> Vec<String> {
+        let mut lines = Vec::new();
+        for para in t.split('\n') {
+            let mut cur = String::new();
+            for word in para.split_whitespace() {
+                let cand = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
+                if !cur.is_empty() && self.measure(&cand, px, w) > max {
+                    lines.push(std::mem::take(&mut cur));
+                    cur = word.to_string();
+                } else {
+                    cur = cand;
+                }
+            }
+            lines.push(cur);
+        }
+        lines
+    }
+}
+
+// ---------------------------------------------------------------- interaction state used while drawing
+
+#[derive(Debug, Clone, Default)]
+pub struct Interact {
+    pub hover: Option<String>,
+    pub focus: Option<String>,
+    /// Slider being dragged: id and the value shown meanwhile.
+    pub drag: Option<(String, f64)>,
+    /// Text control being edited: id, text, cursor (chars).
+    pub edit: Option<(String, String, usize)>,
+    /// Key recorder: id and the modifier chips toggled so far.
+    pub recording: Option<(String, Vec<&'static str>)>,
+    /// Show the keyboard focus ring (only after keyboard use).
+    pub ring: bool,
+}
+
+// ---------------------------------------------------------------- frame (hit map)
+
+#[derive(Debug, Clone)]
+pub struct Placed {
+    pub rect: Rect,
+    pub ctl: Ctl,
+    /// Sub-rects of the control: segment/stepper button rectangles.
+    pub parts: Vec<Rect>,
+    pub row_rect: Rect,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Frame {
+    pub placed: Vec<Placed>,
+    pub thumbs: Vec<(Rect, String)>,
+    pub layouts: Vec<(Rect, String)>,
+    /// Total height of the laid-out content.
+    pub height: f32,
+    /// Rows hit rectangles (for right-click reset): row rect and first control id.
+    pub rows: Vec<(Rect, String)>,
+}
+
+impl Frame {
+    pub fn find(&self, id: &str) -> Option<&Placed> {
+        self.placed.iter().find(|p| p.ctl.id == id)
+    }
+    pub fn at(&self, x: f32, y: f32) -> Option<&Placed> {
+        self.placed.iter().rev().find(|p| p.ctl.enabled && inside(p.rect, x, y))
+    }
+    pub fn focus_order(&self) -> Vec<String> {
+        self.placed.iter().filter(|p| p.ctl.focusable()).map(|p| p.ctl.id.clone()).collect()
+    }
+}
+
+// ---------------------------------------------------------------- metrics
+
+pub const ROW_H: f32 = 44.0;
+pub const ROW_H_DETAIL: f32 = 56.0;
+pub const CARD_R: f32 = 10.0;
+pub const CARD_PAD: f32 = 14.0;
+pub const TH_W: f32 = 132.0;
+pub const TH_H: f32 = 84.0;
+
+pub fn row_h(r: &Row) -> f32 {
+    if r.detail.is_empty() {
+        ROW_H
+    } else {
+        ROW_H_DETAIL
+    }
+}
+
+/// Width in px a control wants (before scaling by `s`, measured with the painter).
+fn ctl_width(p: &Painter, c: &Ctl) -> f32 {
+    let u = |v| p.u(v);
+    match &c.kind {
+        Kind::Toggle(_) => u(40.0),
+        Kind::Slider { .. } => u(230.0),
+        Kind::Stepper { .. } => u(120.0),
+        Kind::Seg(o, _) => o.iter().map(|(l, _)| p.measure(l, u(12.0), Weight::Regular) + u(22.0)).sum::<f32>() + u(4.0),
+        Kind::Popup(o, _) => o.iter().map(|(l, _)| p.measure(l, u(13.0), Weight::Regular)).fold(0.0, f32::max).max(u(60.0)) + u(40.0),
+        Kind::Color(_) => u(96.0),
+        Kind::Text { .. } => u(210.0),
+        Kind::Key(k) => (p.measure(k, u(12.0), Weight::Medium) + u(28.0)).max(u(96.0)),
+        Kind::Button { label, .. } | Kind::Chip { label, .. } => p.measure(label, u(12.5), Weight::Regular) + u(26.0),
+        Kind::Label(t) => p.measure(t, u(13.0), Weight::Regular),
+    }
+}
+
+pub fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() < 6 || !h.is_ascii() {
+        return None;
+    }
+    let v = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some((v(0)?, v(2)?, v(4)?))
+}
+
+pub fn format_num(v: f64, step: f64) -> String {
+    if step >= 1.0 || (v - v.round()).abs() < 1e-9 && step.fract() == 0.0 {
+        format!("{}", v.round() as i64)
+    } else if step >= 0.1 {
+        format!("{v:.1}")
+    } else if step >= 0.01 {
+        format!("{v:.2}")
+    } else {
+        format!("{v:.3}")
+    }
+}
+
+// ---------------------------------------------------------------- drawing controls
+
+/// Draws one control inside `r` (its slot, vertically centred) and returns its [`Placed`] entry.
+#[allow(clippy::too_many_arguments)]
+fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: &Interact, row_rect: Rect) -> Placed {
+    let s = p.s;
+    let u = |v: f32| v * s;
+    let w = ctl_width(p, c);
+    let x = right - w;
+    let hover = it.hover.as_deref() == Some(c.id.as_str());
+    let focus = it.focus.as_deref() == Some(c.id.as_str());
+    let dim = if c.enabled { 1.0 } else { 0.4 };
+    let mut parts = Vec::new();
+    let h_field = u(26.0);
+    let mut rect: Rect = (x, cy - h_field / 2.0, w, h_field);
+    let a = |col: Color| {
+        let mut col = col;
+        col.apply_opacity(dim);
+        col
+    };
+    match &c.kind {
+        Kind::Toggle(on) => {
+            let (tw, th) = (u(40.0), u(24.0));
+            rect = (right - tw, cy - th / 2.0, tw, th);
+            fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::green() } else { color(255, 255, 255, 0.18) }));
+            let kx = if *on { rect.0 + tw - th / 2.0 } else { rect.0 + th / 2.0 };
+            fill_circle(pm, kx, cy + u(0.6), th / 2.0 - u(2.0), color(0, 0, 0, 0.25 * dim));
+            fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(color(255, 255, 255, 1.0)));
+        }
+        Kind::Slider { v, min, max, unit, step } => {
+            let shown = it.drag.as_ref().filter(|(id, _)| id == &c.id).map_or(*v, |(_, d)| *d);
+            let label = format!("{}{}", format_num(shown, *step), unit);
+            let lw = u(58.0);
+            p.text_right(pm, &label, x + lw, cy, u(12.5), Weight::Regular, a(pal::sub()));
+            let tx = x + lw + u(12.0);
+            let tw = (right - tx).max(u(20.0));
+            let t = if max > min { ((shown - min) / (max - min)).clamp(0.0, 1.0) as f32 } else { 0.0 };
+            fill_rounded(pm, tx, cy - u(2.0), tw, u(4.0), u(2.0), a(color(255, 255, 255, 0.18)));
+            fill_rounded(pm, tx, cy - u(2.0), tw * t, u(4.0), u(2.0), a(pal::accent()));
+            let kx = tx + tw * t;
+            fill_circle(pm, kx, cy + u(1.0), u(9.0), color(0, 0, 0, 0.3 * dim));
+            fill_circle(pm, kx, cy, u(8.5), a(color(250, 250, 250, 1.0)));
+            rect = (tx - u(8.0), cy - u(12.0), tw + u(16.0), u(24.0));
+            parts.push((tx, cy - u(12.0), tw, u(24.0)));
+        }
+        Kind::Stepper { v, step, unit, .. } => {
+            let bw = u(26.0);
+            let label = format!("{}{}", format_num(*v, *step), unit);
+            let minus = (right - 2.0 * bw - u(4.0), cy - h_field / 2.0, bw, h_field);
+            let plus = (right - bw, cy - h_field / 2.0, bw, h_field);
+            p.text_right(pm, &label, minus.0 - u(10.0), cy, u(13.0), Weight::Regular, a(pal::text()));
+            for (r, glyph) in [(minus, "−"), (plus, "+")] {
+                fill_rounded(pm, r.0, r.1, r.2, r.3, u(6.0), a(pal::field()));
+                p.text_center(pm, glyph, r.0 + r.2 / 2.0, cy, u(15.0), Weight::Medium, a(pal::text()));
+                parts.push(r);
+            }
+            rect = (x, rect.1, w, h_field);
+        }
+        Kind::Seg(opts, sel) => {
+            fill_rounded(pm, x, rect.1, w, h_field, u(7.0), a(pal::field()));
+            let mut sx = x + u(2.0);
+            for (i, (l, _)) in opts.iter().enumerate() {
+                let sw = p.measure(l, u(12.0), Weight::Regular) + u(22.0);
+                let r = (sx, rect.1 + u(2.0), sw, h_field - u(4.0));
+                if *sel == Some(i) {
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(color(255, 255, 255, 0.22)));
+                }
+                p.text_center(pm, l, r.0 + r.2 / 2.0, cy, u(12.0), if *sel == Some(i) { Weight::Medium } else { Weight::Regular }, a(pal::text()));
+                parts.push(r);
+                sx += sw;
+            }
+        }
+        Kind::Popup(opts, sel) => {
+            fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(if hover { pal::field_hover() } else { pal::field() }));
+            let label = sel.and_then(|i| opts.get(i)).map_or("Choose…", |o| o.0.as_str());
+            let label = p.fit(label, w - u(36.0), u(13.0), Weight::Regular);
+            p.text(pm, &label, x + u(10.0), cy, u(13.0), Weight::Regular, a(pal::text()));
+            chevrons(pm, x + w - u(14.0), cy, u(3.2), a(pal::sub()));
+        }
+        Kind::Color(hex) => {
+            let sw = u(24.0);
+            let col = parse_hex(hex);
+            let r = (right - sw, cy - sw / 2.0, sw, sw);
+            match col {
+                Some((cr, cg, cb)) => fill_circle(pm, r.0 + sw / 2.0, cy, sw / 2.0, a(color(cr, cg, cb, 1.0))),
+                None => {
+                    fill_circle(pm, r.0 + sw / 2.0, cy, sw / 2.0, a(color(255, 255, 255, 0.1)));
+                    p.text_center(pm, "·", r.0 + sw / 2.0, cy, u(14.0), Weight::Bold, a(pal::sub()));
+                }
+            }
+            stroke_rounded(pm, r.0, r.1, sw, sw, sw / 2.0, color(255, 255, 255, 0.35 * dim), u(1.0));
+            let t = if hex.is_empty() { "default".to_string() } else { hex.clone() };
+            p.text_right(pm, &t, r.0 - u(10.0), cy, u(12.5), Weight::Regular, a(pal::sub()));
+            rect = (x, rect.1, w, h_field);
+        }
+        Kind::Text { val, hint } => {
+            let editing = it.edit.as_ref().filter(|(id, _, _)| id == &c.id);
+            let bg = if editing.is_some() {
+                color(0, 0, 0, 0.35)
+            } else if hover {
+                pal::field_hover()
+            } else {
+                pal::field()
+            };
+            fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(bg));
+            if editing.is_some() {
+                stroke_rounded(pm, x, rect.1, w, h_field, u(6.0), pal::accent(), u(1.5));
+            }
+            let (shown, cur) = match editing {
+                Some((_, t, cur)) => (t.clone(), Some(*cur)),
+                None => (val.clone(), None),
+            };
+            let inner = w - u(16.0);
+            if shown.is_empty() && cur.is_none() {
+                p.text(pm, &p.fit(hint, inner, u(12.5), Weight::Regular), x + u(8.0), cy, u(12.5), Weight::Regular, a(pal::faint()));
+            } else if let Some(cur) = cur {
+                // keep the cursor visible: show the tail that fits
+                let chars: Vec<char> = shown.chars().collect();
+                let mut start = 0;
+                while start < cur && p.measure(&chars[start..cur].iter().collect::<String>(), u(12.5), Weight::Regular) > inner - u(4.0) {
+                    start += 1;
+                }
+                let vis: String = chars[start..].iter().collect();
+                let vis = p.fit(&vis, inner, u(12.5), Weight::Regular);
+                p.text(pm, &vis, x + u(8.0), cy, u(12.5), Weight::Regular, pal::text());
+                let cx = x + u(8.0) + p.measure(&chars[start..cur].iter().collect::<String>(), u(12.5), Weight::Regular);
+                fill_px(pm, cx, cy - u(8.0), u(1.2), u(16.0), pal::accent());
+            } else {
+                p.text(pm, &p.fit(&shown, inner, u(12.5), Weight::Regular), x + u(8.0), cy, u(12.5), Weight::Regular, a(pal::text()));
+            }
+        }
+        Kind::Key(k) => {
+            let rec = it.recording.as_ref().filter(|(id, _)| id == &c.id);
+            fill_rounded(
+                pm,
+                x,
+                rect.1,
+                w,
+                h_field,
+                u(6.0),
+                if rec.is_some() {
+                    color(10, 132, 255, 0.28)
+                } else if hover {
+                    pal::field_hover()
+                } else {
+                    pal::field()
+                },
+            );
+            if rec.is_some() {
+                stroke_rounded(pm, x, rect.1, w, h_field, u(6.0), pal::accent(), u(1.5));
+                let mods = rec.map(|(_, m)| m.join("+")).unwrap_or_default();
+                let t = if mods.is_empty() { "Type shortcut…".to_string() } else { format!("{mods}+…") };
+                p.text_center(pm, &t, x + w / 2.0, cy, u(12.0), Weight::Medium, pal::text());
+            } else {
+                p.text_center(pm, &p.fit(k, w - u(12.0), u(12.0), Weight::Medium), x + w / 2.0, cy, u(12.0), Weight::Medium, a(pal::text()));
+            }
+        }
+        Kind::Button { label, danger } => {
+            fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(if hover { pal::field_hover() } else { pal::field() }));
+            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), Weight::Regular, a(if *danger { pal::red() } else { pal::text() }));
+        }
+        Kind::Chip { label, on } => {
+            fill_rounded(
+                pm,
+                x,
+                rect.1,
+                w,
+                h_field,
+                u(6.0),
+                a(if *on {
+                    pal::accent()
+                } else if hover {
+                    pal::field_hover()
+                } else {
+                    pal::field()
+                }),
+            );
+            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), if *on { Weight::Medium } else { Weight::Regular }, a(pal::text()));
+        }
+        Kind::Label(t) => {
+            p.text_right(pm, t, right, cy, u(13.0), Weight::Regular, pal::sub());
+        }
+    }
+    if focus && it.ring && c.enabled {
+        stroke_rounded(pm, rect.0 - u(2.0), rect.1 - u(2.0), rect.2 + u(4.0), rect.3 + u(4.0), u(8.0), color(10, 132, 255, 0.85), u(2.0));
+    }
+    Placed { rect, ctl: c.clone(), parts, row_rect, label: String::new() }
+}
+
+fn chevrons(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
+    use tiny_skia::{Paint, PathBuilder, Stroke, Transform};
+    let mut pb = PathBuilder::new();
+    pb.move_to(cx - r, cy - r * 0.9);
+    pb.line_to(cx, cy - r * 1.9);
+    pb.line_to(cx + r, cy - r * 0.9);
+    pb.move_to(cx - r, cy + r * 0.9);
+    pb.line_to(cx, cy + r * 1.9);
+    pb.line_to(cx + r, cy + r * 0.9);
+    if let Some(path) = pb.finish() {
+        let mut paint = Paint::default();
+        paint.set_color(c);
+        paint.anti_alias = true;
+        pm.stroke_path(&path, &paint, &Stroke { width: r * 0.5, line_cap: tiny_skia::LineCap::Round, line_join: tiny_skia::LineJoin::Round, ..Stroke::default() }, Transform::identity(), None);
+    }
+}
+
+// ---------------------------------------------------------------- items
+
+/// Lays out and paints `items` into `pm`, in the column starting at x = `ox` and `width` wide.
+/// `scroll` is subtracted from y; the frame's rectangles are in `pm` coordinates. Thumbnails are looked up by `thumb`.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item], scroll: f32, ox: f32, width: f32, it: &Interact, thumb: &dyn Fn(&str) -> Option<std::rc::Rc<Pixmap>>) -> Frame {
+    let s = p.s;
+    let u = |v: f32| v * s;
+    let mut fr = Frame::default();
+    let side = u(28.0);
+    let cw = (width - 2.0 * side).min(u(700.0));
+    let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
+    let mut y = u(20.0) - scroll;
+    p.text(pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
+    y += u(52.0);
+    for item in items {
+        match item {
+            Item::Space(h) => y += u(*h),
+            Item::Header(t) => {
+                y += u(6.0);
+                p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
+                y += u(22.0);
+            }
+            Item::Note { text, warn } => {
+                let lines = p.wrap(text, cw - u(28.0), u(12.0), Weight::Regular);
+                let lh = u(16.0);
+                if *warn {
+                    let h = lines.len() as f32 * lh + u(16.0);
+                    fill_rounded(pm, x0, y, cw, h, u(8.0), color(255, 69, 58, 0.16));
+                    for (i, l) in lines.iter().enumerate() {
+                        p.text(pm, l, x0 + u(14.0), y + u(8.0) + lh * (i as f32 + 0.5), u(12.0), Weight::Regular, color(255, 140, 130, 1.0));
+                    }
+                    y += h + u(10.0);
+                } else {
+                    for (i, l) in lines.iter().enumerate() {
+                        p.text(pm, l, x0 + u(14.0), y + u(4.0) + lh * (i as f32 + 0.5), u(12.0), Weight::Regular, pal::faint());
+                    }
+                    y += lines.len() as f32 * lh + u(12.0);
+                }
+            }
+            Item::Card(rows) => {
+                let h: f32 = rows.iter().map(|r| u(row_h(r))).sum();
+                fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
+                let mut ry = y;
+                for (i, r) in rows.iter().enumerate() {
+                    let rh = u(row_h(r));
+                    let cy = ry + rh / 2.0;
+                    let row_rect = (x0, ry, cw, rh);
+                    if r.selected {
+                        fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, color(10, 132, 255, 0.22));
+                    }
+                    if i > 0 {
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                    }
+                    let mut lx = x0 + u(CARD_PAD);
+                    if let Some((cr, cg, cb)) = r.chip {
+                        fill_rounded(pm, lx, cy - u(9.0), u(18.0), u(18.0), u(5.0), color(cr, cg, cb, 1.0));
+                        lx += u(28.0);
+                    }
+                    // controls, right to left
+                    let mut right = x0 + cw - u(CARD_PAD);
+                    let mut first_id = None;
+                    for c in r.ctls.iter().rev() {
+                        let mut placed = draw_ctl(pm, p, c, right, cy, it, row_rect);
+                        placed.label = r.label.clone();
+                        right = placed.rect.0 - u(10.0);
+                        if c.focusable() {
+                            first_id = Some(c.id.clone());
+                        }
+                        fr.placed.push(placed);
+                    }
+                    // restore left-to-right order for focus: reverse the slice we just pushed
+                    let n = r.ctls.len();
+                    let len = fr.placed.len();
+                    fr.placed[len - n..].reverse();
+                    if let Some(id) = first_id {
+                        fr.rows.push((row_rect, id));
+                    }
+                    let avail = (right - lx).max(u(40.0));
+                    let ly = if r.detail.is_empty() { cy } else { cy - u(8.0) };
+                    let label = p.fit(&r.label, avail, u(13.0), Weight::Regular);
+                    p.text(pm, &label, lx, ly, u(13.0), Weight::Regular, pal::text());
+                    if !r.detail.is_empty() {
+                        let d = p.fit(&r.detail, avail, u(11.0), Weight::Regular);
+                        p.text(pm, &d, lx, cy + u(10.0), u(11.0), Weight::Regular, pal::sub());
+                    }
+                    ry += rh;
+                }
+                y += h + u(18.0);
+            }
+            Item::Preview { id, caption } => {
+                let ph = cw * 0.38;
+                let pw = ph * 16.0 / 10.0;
+                let px0 = x0 + (cw - pw) / 2.0;
+                fill_rounded(pm, px0 - u(2.0), y - u(2.0), pw + u(4.0), ph + u(4.0), u(10.0), color(255, 255, 255, 0.10));
+                match thumb(id) {
+                    Some(t) => draw_cover(pm, &t, px0, y, pw, ph, u(8.0)),
+                    None => {
+                        fill_rounded(pm, px0, y, pw, ph, u(8.0), pal::card());
+                        p.text_center(pm, "No wallpaper image", px0 + pw / 2.0, y + ph / 2.0, u(12.0), Weight::Regular, pal::faint());
+                    }
+                }
+                y += ph + u(14.0);
+                p.text_center(pm, caption, x0 + cw / 2.0, y + u(2.0), u(12.0), Weight::Regular, pal::sub());
+                y += u(30.0);
+            }
+            Item::Thumbs(list) => {
+                let gap = u(14.0);
+                let tw0 = u(TH_W);
+                let cols = (((cw + gap) / (tw0 + gap)).floor() as usize).max(1);
+                let tw = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
+                let th = tw * TH_H / TH_W;
+                for (i, t) in list.iter().enumerate() {
+                    let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
+                    let cid = format!("w:{}", t.id);
+                    let hover = it.hover.as_deref() == Some(cid.as_str());
+                    if t.selected {
+                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), pal::accent(), u(2.5));
+                    } else if hover {
+                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), color(255, 255, 255, 0.3), u(2.0));
+                    }
+                    match thumb(&t.id) {
+                        Some(img) => draw_cover(pm, &img, r.0, r.1, r.2, r.3, u(7.0)),
+                        None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), color(255, 255, 255, 0.07)),
+                    }
+                    if it.focus.as_deref() == Some(cid.as_str()) && it.ring {
+                        stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), color(10, 132, 255, 0.85), u(2.0));
+                    }
+                    let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
+                    p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0), u(11.0), Weight::Regular, pal::sub());
+                    fr.thumbs.push((r, t.id.clone()));
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(cid, Kind::Button { label: t.caption.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, r.1, cw, r.3),
+                        label: t.caption.clone(),
+                    });
+                }
+                let rows = list.len().div_ceil(cols);
+                y += rows as f32 * (th + u(34.0)) + u(8.0);
+            }
+            Item::Layouts(list) => {
+                let gap = u(12.0);
+                let tw0 = u(96.0);
+                let cols = (((cw + gap) / (tw0 + gap)).floor() as usize).max(1);
+                let tw = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
+                let th = tw * 0.78;
+                for (i, t) in list.iter().enumerate() {
+                    let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
+                    let hover = it.hover.as_deref() == Some(t.id.as_str());
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), if hover { color(255, 255, 255, 0.14) } else { pal::card() });
+                    if t.selected {
+                        stroke_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), pal::accent(), u(2.5));
+                    }
+                    super::icons::layout_icon(pm, &t.name, (r.0 + u(10.0), r.1 + u(9.0), r.2 - u(20.0), r.3 - u(18.0)), s, if t.selected { pal::accent() } else { color(255, 255, 255, 0.55) });
+                    if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
+                        stroke_rounded(pm, r.0 - u(2.0), r.1 - u(2.0), r.2 + u(4.0), r.3 + u(4.0), u(10.0), color(10, 132, 255, 0.85), u(2.0));
+                    }
+                    p.text_center(pm, &t.name, r.0 + tw / 2.0, r.1 + th + u(13.0), u(11.0), Weight::Regular, if t.selected { pal::text() } else { pal::sub() });
+                    fr.layouts.push((r, t.id.clone()));
+                    fr.placed.push(Placed {
+                        rect: r,
+                        ctl: Ctl::new(t.id.clone(), Kind::Button { label: t.name.clone(), danger: false }),
+                        parts: vec![],
+                        row_rect: (x0, r.1, cw, r.3),
+                        label: t.name.clone(),
+                    });
+                }
+                let rows = list.len().div_ceil(cols);
+                y += rows as f32 * (th + u(34.0)) + u(8.0);
+            }
+        }
+    }
+    fr.height = y + scroll + u(24.0);
+    fr
+}
+
+/// Draws `img` scaled to cover the rounded rect (centre crop).
+pub fn draw_cover(pm: &mut Pixmap, img: &Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32) {
+    use tiny_skia::{FillRule, FilterQuality, Paint, Pattern, SpreadMode, Transform};
+    let sc = (w / img.width() as f32).max(h / img.height() as f32);
+    let tx = x + (w - img.width() as f32 * sc) / 2.0;
+    let ty = y + (h - img.height() as f32 * sc) / 2.0;
+    let pattern = Pattern::new(img.as_ref(), SpreadMode::Pad, FilterQuality::Bilinear, 1.0, Transform::from_scale(sc, sc).post_translate(tx, ty));
+    let paint = Paint { shader: pattern, anti_alias: true, ..Paint::default() };
+    if let Some(path) = crate::gfx::rounded_rect(x, y, w, h, r) {
+        pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+    }
+}
+
+// ---------------------------------------------------------------- control logic (pure, testable)
+
+/// New value after a click at `x` on a slider track `(tx, tw)`.
+pub fn slider_value(x: f32, track: (f32, f32, f32, f32), min: f64, max: f64, step: f64) -> f64 {
+    let t = ((x - track.0) / track.2).clamp(0.0, 1.0) as f64;
+    snap(min + t * (max - min), min, max, step)
+}
+
+pub fn snap(v: f64, min: f64, max: f64, step: f64) -> f64 {
+    let v = if step > 0.0 { (v / step).round() * step } else { v };
+    // avoid 0.30000000000000004
+    ((v.clamp(min, max)) * 1e6).round() / 1e6
+}
+
+/// Which option a click at `x` hit in a segmented control (its parts are the segment rects).
+pub fn part_at(parts: &[Rect], x: f32, y: f32) -> Option<usize> {
+    parts.iter().position(|r| inside(*r, x, y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slider_maps_and_snaps() {
+        let track = (100.0, 0.0, 200.0, 10.0);
+        assert_eq!(slider_value(100.0, track, 0.0, 10.0, 1.0), 0.0);
+        assert_eq!(slider_value(300.0, track, 0.0, 10.0, 1.0), 10.0);
+        assert_eq!(slider_value(200.0, track, 0.0, 10.0, 1.0), 5.0);
+        assert_eq!(slider_value(-50.0, track, 2.0, 10.0, 1.0), 2.0, "clamped");
+        assert_eq!(slider_value(9999.0, track, 2.0, 10.0, 1.0), 10.0);
+        let v = slider_value(152.0, track, 0.0, 1.0, 0.05);
+        assert!((v * 20.0 - (v * 20.0).round()).abs() < 1e-6, "{v}");
+    }
+
+    #[test]
+    fn snap_has_no_float_noise() {
+        assert_eq!(snap(0.1 + 0.2, 0.0, 1.0, 0.05), 0.3);
+        assert_eq!(snap(7.4, 0.0, 10.0, 1.0), 7.0);
+        assert_eq!(snap(-1.0, 0.0, 10.0, 1.0), 0.0);
+    }
+
+    #[test]
+    fn hex_parsing() {
+        assert_eq!(parse_hex("#ff8000"), Some((255, 128, 0)));
+        assert_eq!(parse_hex("ff8000aa"), Some((255, 128, 0)));
+        assert_eq!(parse_hex("#12"), None);
+        assert_eq!(parse_hex(""), None);
+        assert_eq!(parse_hex("#gg0000"), None);
+    }
+
+    #[test]
+    fn number_formatting() {
+        assert_eq!(format_num(5.0, 1.0), "5");
+        assert_eq!(format_num(0.55, 0.05), "0.55");
+        assert_eq!(format_num(1.4, 0.1), "1.4");
+    }
+
+    #[test]
+    fn frame_focus_order_skips_labels_and_disabled() {
+        let mut f = Frame::default();
+        let mk =
+            |id: &str, kind: Kind, en: bool| Placed { rect: (0.0, 0.0, 1.0, 1.0), ctl: Ctl { id: id.into(), kind, enabled: en }, parts: vec![], row_rect: (0.0, 0.0, 1.0, 1.0), label: String::new() };
+        f.placed.push(mk("a", Kind::Toggle(true), true));
+        f.placed.push(mk("b", Kind::Label("x".into()), true));
+        f.placed.push(mk("c", Kind::Toggle(true), false));
+        f.placed.push(mk("d", Kind::Toggle(true), true));
+        assert_eq!(f.focus_order(), ["a", "d"]);
+    }
+
+    #[test]
+    fn items_draw_and_record_hits() {
+        let mut pm = Pixmap::new(700, 600).unwrap();
+        let mut p = Painter { fonts: None, s: 1.0 };
+        let items = vec![Item::Card(vec![
+            Row::new("A").ctl(Ctl::new("t", Kind::Toggle(true))),
+            Row::new("B").detail("d").ctl(Ctl::new("s", Kind::Slider { v: 3.0, min: 0.0, max: 10.0, step: 1.0, unit: "px".into() })),
+        ])];
+        let fr = draw_items(&mut pm, &mut p, "T", &items, 0.0, 0.0, 700.0, &Interact::default(), &|_| None);
+        assert_eq!(fr.placed.len(), 2);
+        let t = fr.find("t").unwrap();
+        assert!(fr.at(t.rect.0 + 3.0, t.rect.1 + 3.0).is_some_and(|p| p.ctl.id == "t"));
+        assert!(fr.height > 100.0);
+        assert!(pm.data().chunks_exact(4).any(|px| px[3] > 0));
+    }
+}

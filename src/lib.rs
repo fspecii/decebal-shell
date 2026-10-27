@@ -21,6 +21,7 @@ pub mod launch;
 pub mod launcher;
 pub mod mem;
 pub mod menubar;
+pub mod settings;
 pub mod single;
 pub mod spotlight;
 pub mod text;
