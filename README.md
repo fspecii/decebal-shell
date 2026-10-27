@@ -22,6 +22,10 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
 | `macclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
+| `maclaunch` | Launchpad: a searchable grid of installed apps (type to filter, arrows, Enter, Esc) | ~20 MB RSS while open |
+| `macwm` | debug tool: prints the window list whenever it changes | CLI |
+| `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
+| `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -281,3 +285,48 @@ Right side of the bar, all with graceful degradation (an item is hidden when its
 External commands run on worker threads; volume changes made elsewhere are followed through `pactl subscribe`
 (no polling), rdwm layout changes through an rdwm IPC subscription. `tests/e2e_status.sh` drives it all on a private Xvfb
 with a real rdwm and fake tools from `tests/fakebin`.
+
+## Session menu (`macsession`)
+
+Ported from caelestia-shell's session drawer. A full-screen dimmer on the primary monitor (override-redirect X11 window, keyboard and pointer grabbed)
+with a centred row of big rounded buttons. It is opened from the Apple menu ("Session…") and from any key you bind:
+
+```toml
+# rdwm
+[[bind]]
+mods = ["super", "shift"]
+key = "e"
+action = "spawn"
+args = ["macsession"]
+```
+
+| Key | Button | Command |
+|---|---|---|
+| `L` | Lock | `rdwm-lock` (else `loginctl lock-session`) |
+| `O` | Log Out | `rdwmctl action quit` while rdwm runs, else `loginctl terminate-user $USER` |
+| `S` | Suspend | `systemctl suspend` |
+| `H` | Hibernate (only when `/sys/power/state` offers `disk`) | `systemctl hibernate` |
+| `R` | Restart | `systemctl reboot` |
+| `P` | Shut Down | `systemctl poweroff` |
+
+Arrows / Tab move the selection, Return runs it, Escape (or a click on the dimmed background) cancels, a second `macsession` closes the first.
+Log Out, Restart and Shut Down are armed by the first key press or click ("Press again" in red) and run on the second one on the same button;
+moving to another button disarms. The command starts after the overlay is gone, so a screen locker can grab the keyboard. The buttons are drawn
+before any font is loaded and the labels follow a frame later, which keeps the overlay up in well under 80 ms (`MACSESSION_TIMING=1` prints the time to the first frame).
+The dimmer is translucent under a compositor and opaque without one; with several monitors only the primary one is covered.
+
+## Utilities (`macutil`)
+
+Ported from caelestia-shell's utilities drawer (screen recorder, idle inhibitor, game mode, toasts). Every command needs no daemon of its own and is idempotent; `status` prints `on` or `off`.
+State lives in `$XDG_RUNTIME_DIR/macutil/`; toasts go through the notification daemon (macnotify, D-Bus, else `notify-send`); `-q` or `MACUTIL_QUIET=1` silences them.
+
+| Command | What it does |
+|---|---|
+| `macutil record start\|stop\|toggle\|status [--region]` | `ffmpeg -f x11grab` (libx264, 30 fps) on X11, `wf-recorder` on Wayland, into `~/Videos/Recordings/recording-DATE.mp4` (`$MACUTIL_RECORD_DIR`). `--region` asks for an area with `slop` (`slurp` on Wayland). Stopping sends SIGINT, waits for the file to be finished and notifies "Recording saved" with its path; a recorder that dies shows as `off` |
+| `macutil idle-inhibit on\|off\|toggle\|status` | `xset s off -dpms`, so `xss-lock` never fires and the monitors never blank; the values read from `xset q` (timeout, cycle, DPMS timeouts) are put back on `off` |
+| `macutil gamemode on\|off\|toggle\|status` | stops `picom` and sets the `performance` power profile (`powerprofilesctl`, when it offers it); `off` starts picom again with its old command line (found with `pgrep -ax picom`; a supervisor that restarts picom itself will undo this) and restores the previous profile |
+| `macutil dnd on\|off\|toggle\|status` | do-not-disturb of macnotify (its `dnd` flag in `~/.config/macshell/notifications.toml` when it is not running); `dunstctl` / `makoctl` when one of those is the daemon |
+| `macutil status` | `record=off idle-inhibit=on gamemode=off dnd=off` |
+
+The Control Center has a row of four tiles for these (Record, Inhibit Idle, Game Mode, DND) with live state read from the state files, and a Notifications tile that opens the macnotify history panel.
+`tests/e2e/session.sh` (`make e2e-session`) drives macsession and macutil on a private Xvfb with shimmed `systemctl`, `loginctl`, `ffmpeg`, `xset`, `picom` and friends.

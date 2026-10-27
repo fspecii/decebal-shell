@@ -28,6 +28,8 @@ pub struct Snapshot {
     pub awake: bool,
     pub light: bool,
     pub battery: Option<sys::Battery>,
+    /// `macutil` toggles; `None` when macutil is not installed (the row is hidden).
+    pub util: Option<sys::Utils>,
 }
 
 impl Snapshot {
@@ -45,6 +47,7 @@ impl Snapshot {
             awake: sys::stay_awake(),
             light: sys::is_light(),
             battery: sys::probe_battery(),
+            util: sys::probe_utils(),
         }
         .with_volume()
     }
@@ -74,6 +77,10 @@ pub enum Target {
     StayAwake,
     Screenshot,
     Record,
+    IdleInhibit,
+    GameMode,
+    Dnd,
+    Notifications,
     Settings,
 }
 
@@ -321,12 +328,30 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         y += 64.0 + GAP;
     }
 
-    // Quick actions.
+    // macutil quick toggles: Recording, Idle inhibit, Game mode, Do not disturb.
     let qw = (inner - 3.0 * GAP) / 4.0;
+    if let Some(u) = &s.util {
+        let toggles: [(&'static str, &str, bool, Option<Target>); 4] = [
+            ("record", if u.record { "Recording" } else { "Record" }, u.record, Some(Target::Record)),
+            ("eye", "Inhibit Idle", u.idle, Some(Target::IdleInhibit)),
+            ("gamepad", "Game Mode", u.game, Some(Target::GameMode)),
+            (if s.dnd == Some(true) { "bell-off" } else { "bell" }, "DND", s.dnd == Some(true), s.dnd.map(|_| Target::Dnd)),
+        ];
+        for (i, (icon, label, on, t)) in toggles.into_iter().enumerate() {
+            let x = PAD + i as f32 * (qw + GAP);
+            out.push(item(x, y, qw, 66.0, Draw::SmallTile { on }, t));
+            out.push(item(x + qw / 2.0 - 10.0, y + 13.0, 20.0, 20.0, Draw::Glyph { icon, size: 20.0, ink: if on { Ink::White } else { Ink::Primary } }, None));
+            out.push(caption(x + 2.0, y + 43.0, qw - 4.0, label, if on { Ink::White } else { Ink::Primary }));
+        }
+        y += 66.0 + GAP;
+    }
+
+    // Quick actions. With macutil the third tile opens the notification history (Record moved into the row above).
+    let third: (&'static str, &str, Target) = if s.util.is_some() { ("bell", "Notifications", Target::Notifications) } else { ("record", "Record", Target::Record) };
     let actions: [(&'static str, &str, bool, Target); 4] = [
         ("cup", "Stay Awake", s.awake, Target::StayAwake),
         ("screenshot", "Screenshot", false, Target::Screenshot),
-        ("record", "Record", false, Target::Record),
+        (third.0, third.1, false, third.2),
         ("switches", "Settings", false, Target::Settings),
     ];
     for (i, (icon, label, on, t)) in actions.into_iter().enumerate() {
@@ -456,13 +481,17 @@ mod tests {
             awake: false,
             light: false,
             battery: None,
+            util: Some(sys::Utils::default()),
         }
     }
 
     #[test]
     fn full_panel_height_matches_the_original_stack() {
-        // 12 pad + 128 + 10 + 64 + 10 + 64 + 10 + 64 + 10 + 66 + 12 pad
+        // 12 pad + 128 + 10 + 64 + 10 + 64 + 10 + 64 + 10 + 66 (macutil toggles) + 10 + 66 + 12 pad
         let (_, h) = layout(&full());
+        assert_eq!(h, 12.0 + 128.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 66.0 + 10.0 + 66.0 + 12.0);
+        // Without macutil the panel is the original stack.
+        let (_, h) = layout(&Snapshot { util: None, ..full() });
         assert_eq!(h, 12.0 + 128.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 66.0 + 12.0);
     }
 
@@ -492,10 +521,43 @@ mod tests {
             Target::StayAwake,
             Target::Screenshot,
             Target::Record,
+            Target::IdleInhibit,
+            Target::GameMode,
+            Target::Dnd,
+            Target::Notifications,
             Target::Settings,
         ] {
             assert!(items.iter().any(|i| i.target == Some(t)), "{t:?} missing");
         }
+    }
+
+    #[test]
+    fn utility_tiles_show_live_state() {
+        let mut s = full();
+        s.util = Some(sys::Utils { record: true, idle: false, game: true });
+        s.dnd = Some(true);
+        let (items, _) = layout(&s);
+        let on = |t: Target| {
+            let tile = items.iter().position(|i| i.target == Some(t)).unwrap();
+            matches!(items[tile].draw, Draw::SmallTile { on: true })
+        };
+        assert!(on(Target::Record) && on(Target::GameMode) && on(Target::Dnd));
+        assert!(!on(Target::IdleInhibit));
+        assert!(items.iter().any(|i| matches!(&i.draw, Draw::Text { text, .. } if text == "Recording")));
+        s.util = Some(sys::Utils::default());
+        let (items, _) = layout(&s);
+        assert!(items.iter().any(|i| matches!(&i.draw, Draw::Text { text, .. } if text == "Record")));
+        // The tile of an unavailable DND daemon is not clickable.
+        s.dnd = None;
+        let (items, _) = layout(&s);
+        assert!(!items.iter().any(|i| i.target == Some(Target::Dnd)));
+    }
+
+    #[test]
+    fn without_macutil_the_legacy_record_tile_stays() {
+        let (items, _) = layout(&Snapshot { util: None, ..full() });
+        assert!(items.iter().any(|i| i.target == Some(Target::Record)));
+        assert!(!items.iter().any(|i| matches!(i.target, Some(Target::IdleInhibit | Target::GameMode | Target::Dnd | Target::Notifications))));
     }
 
     #[test]

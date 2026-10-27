@@ -100,6 +100,10 @@ pub trait WindowApp {
     fn popup_bottom_margin(&self) -> Option<f32> {
         None
     }
+    /// Popup mode: cover the whole monitor (a dimmer with the UI centred on it) instead of being just the card.
+    fn popup_fullscreen(&self) -> bool {
+        false
+    }
     /// Popup mode: the card has translucent pixels. The backend uses a 32-bit visual when a compositor runs
     /// and tells the app through [`WindowApp::set_popup_alpha`]; without one the app must paint opaque.
     fn popup_translucent(&self) -> bool {

@@ -14,6 +14,11 @@ optdepends=('picom: translucency and blur on X11'
             'wireplumber: volume (wpctl)'
             'brightnessctl: brightness slider'
             'playerctl: Now Playing'
+            'ffmpeg: screen recording on X11 (macutil record)'
+            'slop: region selection for macutil record --region'
+            'wf-recorder: screen recording on Wayland'
+            'power-profiles-daemon: performance profile for macutil gamemode'
+            'xorg-xset: macutil idle-inhibit'
             'rdwm: the tiling window manager these panels are made for (see the macdesktop meta package)'
             'adwaita-icon-theme: fallback icons')
 source=("$pkgname-$pkgver.tar.gz")
@@ -37,7 +42,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm macclip; do
+  for bin in macdock macbar machaven maclaunch macspot macswitch machud macsession macutil macsettings macthemectl macnotify macwm macclip; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"

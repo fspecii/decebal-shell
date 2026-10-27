@@ -530,6 +530,37 @@ pub fn toggle_dnd() {
     }
 }
 
+// ------------------------------------------------------- macutil quick toggles
+
+/// State of the `macutil` toggles (screen recording, idle inhibit, game mode).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Utils {
+    pub record: bool,
+    pub idle: bool,
+    pub game: bool,
+}
+
+/// Where `macutil` is (next to the running binary, else on `PATH`); `None` when it is not installed.
+pub fn macutil() -> Option<String> {
+    let p = crate::launch::sibling_or_path("macutil");
+    // Dry runs (tests) only record commands, so they do not need the real thing.
+    (is_dry_run() || (p.contains('/') && std::path::Path::new(&p).is_file()) || have("macutil")).then_some(p)
+}
+
+/// Reads macutil's state files directly (no process is started); `None` when macutil is not installed.
+pub fn probe_utils() -> Option<Utils> {
+    macutil()?;
+    let ctx = crate::util::Ctx::from_env();
+    Some(Utils { record: crate::util::record::status(&ctx, &crate::util::RealSys).is_some(), idle: crate::util::idle::status(&ctx), game: crate::util::game::status(&ctx) })
+}
+
+/// `macutil FEATURE toggle` in the background (`feature`: `record`, `idle-inhibit`, `gamemode`, `dnd`).
+pub fn util_toggle(feature: &str) {
+    if let Some(m) = macutil() {
+        spawn(&[&m, feature, "toggle"]);
+    }
+}
+
 /// `{"enabled":false,"temperature":null}` from `omarchy toggle nightlight --status`.
 pub fn parse_nightlight(out: &str) -> Option<bool> {
     serde_json::from_str::<serde_json::Value>(out.trim()).ok()?.get("enabled")?.as_bool()

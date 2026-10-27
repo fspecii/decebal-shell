@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm macclip
+BINS = macdock macbar machaven maclaunch macspot macswitch machud macsession macutil macsettings macthemectl macnotify macwm macclip
 UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service
 AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop
 
@@ -51,9 +51,13 @@ e2e-notify:
 e2e-clip:
 	tests/e2e/clip.sh
 
+# macsession + macutil on a private Xvfb with shimmed systemctl/loginctl/ffmpeg/xset/picom/powerprofilesctl (Xvfb, xdotool, import).
+e2e-session: all
+	tests/e2e/session.sh
+
 test:
 	cargo fmt --all -- --check
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-session

@@ -675,9 +675,37 @@ impl MacBar {
             }
             Target::Record => {
                 self.close();
-                if sys::have("omarchy") {
+                if let Some(m) = sys::macutil() {
+                    // Let the panel disappear before the first frame is grabbed.
+                    sys::spawn(&["sh", "-c", &format!("sleep 0.25; '{m}' record toggle")]);
+                } else if sys::have("omarchy") {
                     sys::spawn(&["sh", "-c", "sleep 0.15; omarchy capture screenrecording"]);
                 }
+            }
+            Target::IdleInhibit => {
+                sys::util_toggle("idle-inhibit");
+                self.update_snapshot(|s| {
+                    if let Some(u) = s.util.as_mut() {
+                        u.idle = !u.idle;
+                    }
+                });
+            }
+            Target::GameMode => {
+                sys::util_toggle("gamemode");
+                self.update_snapshot(|s| {
+                    if let Some(u) = s.util.as_mut() {
+                        u.game = !u.game;
+                    }
+                });
+            }
+            Target::Dnd => {
+                sys::util_toggle("dnd");
+                self.update_snapshot(|s| s.dnd = s.dnd.map(|d| !d));
+            }
+            Target::Notifications => {
+                self.close();
+                // The history panel of macnotify (a toggle), once the control center is gone.
+                sys::spawn(&["sh", "-c", "sleep 0.15; macnotify history"]);
             }
             Target::Settings => {
                 self.close();
@@ -1533,6 +1561,7 @@ mod tests {
                 brightness: Some(40),
                 night_shift: Some(false),
                 dnd: Some(false),
+                util: Some(sys::Utils::default()),
                 ..Snapshot::default()
             }
         });
@@ -1571,6 +1600,36 @@ mod tests {
         let (x, y, _) = centre_of(&bar, Target::Focus);
         bar.pointer_button(x, y, Button::Left);
         assert_eq!(bar.snapshot().dnd, Some(true));
+        sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn utility_tiles_run_macutil_and_flip_their_state() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let _ = sys::take_log();
+        let mut bar = control_bar();
+        for t in [Target::IdleInhibit, Target::GameMode, Target::Dnd] {
+            let (x, y, _) = centre_of(&bar, t);
+            assert!(bar.pointer_button(x, y, Button::Left));
+        }
+        let u = bar.snapshot().util.unwrap();
+        assert!(u.idle && u.game, "optimistic update");
+        assert_eq!(bar.snapshot().dnd, Some(true));
+        let log = sys::take_log();
+        for want in ["idle-inhibit toggle", "gamemode toggle", "dnd toggle"] {
+            assert!(log.iter().any(|l| l.contains("macutil") && l.ends_with(want)), "{want} missing in {log:?}");
+        }
+        // Record closes the panel (so it is not in the first frames) and starts macutil a moment later.
+        let (x, y, _) = centre_of(&bar, Target::Record);
+        bar.pointer_button(x, y, Button::Left);
+        assert_eq!(bar.open, Open::None);
+        assert!(sys::take_log().iter().any(|l| l.contains("macutil") && l.contains("record toggle")));
+        // The notification history tile opens macnotify's panel.
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::Notifications);
+        bar.pointer_button(x, y, Button::Left);
+        assert!(sys::take_log().iter().any(|l| l.contains("macnotify history")));
         sys::set_dry_run(false);
     }
 

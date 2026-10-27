@@ -144,7 +144,10 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
         app.set_screen(mon.w as u32, mon.h as u32);
     }
     let (iw, ih) = app.initial_size();
-    let (w, h) = if popup {
+    let full = popup && app.popup_fullscreen();
+    let (w, h) = if full {
+        (mon.w as u32, mon.h as u32)
+    } else if popup {
         let (cw, ch) = app.content_size().unwrap_or((iw, ih));
         (cw.min((mon.w as u32).saturating_sub(40)).max(200), ch.max(1))
     } else {
@@ -152,7 +155,13 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     };
     // Popup: centred horizontally on the primary monitor.
     let popup_y = popup_top(&app, &mon, h);
-    let (px, py) = if popup { (mon.x + (mon.w - w as i32) / 2, popup_y) } else { (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32) };
+    let (px, py) = if full {
+        (mon.x, mon.y)
+    } else if popup {
+        (mon.x + (mon.w - w as i32) / 2, popup_y)
+    } else {
+        (((sw.saturating_sub(w)) / 2) as i32, ((sh.saturating_sub(h)) / 2) as i32)
+    };
 
     let win = conn.generate_id().map_err(err)?;
     let mut aux = CreateWindowAux::new().background_pixel(screen.black_pixel).event_mask(if passive {
@@ -352,7 +361,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 _ => {}
             }
             dirty |= resp.redraw;
-            if popup {
+            if popup && !full {
                 if let Some((cw, ch)) = app.content_size() {
                     let cw = cw.min((mon.w as u32).saturating_sub(40)).max(200);
                     if (cw, ch) != size {
