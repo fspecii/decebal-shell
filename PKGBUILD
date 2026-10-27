@@ -14,6 +14,8 @@ optdepends=('picom: translucency and blur on X11'
             'wireplumber: volume (wpctl)'
             'brightnessctl: brightness slider'
             'playerctl: Now Playing'
+            'nvidia-utils: GPU card in the macdash dashboard (nvidia-smi)'
+            'curl: weather and remote album art'
             'rdwm: the tiling window manager these panels are made for (see the macdesktop meta package)'
             'adwaita-icon-theme: fallback icons')
 source=("$pkgname-$pkgver.tar.gz")
@@ -37,7 +39,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm; do
+  for bin in macdock macbar machaven maclaunch macspot macswitch machud macdash macsettings macthemectl macnotify macwm; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   install -Dm644 contrib/macshell-dock.service "$pkgdir/usr/lib/systemd/user/macshell-dock.service"

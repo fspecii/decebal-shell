@@ -10,6 +10,7 @@ pub mod calc;
 pub mod clipboard;
 pub mod config;
 pub mod controlcenter;
+pub mod dash;
 pub mod dbus;
 pub mod dock;
 pub mod dock_app;

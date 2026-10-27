@@ -82,6 +82,11 @@ path = "src/bin/machud.rs"
 required-features = ["x11"]
 
 [[bin]]
+name = "macdash"
+path = "src/bin/macdash.rs"
+required-features = ["x11"]
+
+[[bin]]
 name = "macthemectl"
 path = "src/bin/macthemectl.rs"
 # Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).

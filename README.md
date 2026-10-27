@@ -21,6 +21,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
+| `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -148,6 +149,27 @@ takes focus, keys or clicks. It disappears 1.4 s after the last call; calling ag
 (single instance via `$XDG_RUNTIME_DIR/machud.lock`; the new value travels in `$XDG_RUNTIME_DIR/machud.msg` plus SIGUSR1). It follows the shared theme, is
 translucent under a compositor and opaque without one, and costs nothing while idle because the process exits. X11 only (no Wayland layer-shell
 version yet). `tests/e2e/hud.sh` runs it on a private Xvfb with shimmed `wpctl` / `brightnessctl`.
+
+## Dashboard (`macdash`)
+
+A port of caelestia-shell's dashboard: a card hanging under the menu bar with three tabs (click them, or Left / Right / `1` `2` `3`).
+
+* **Overview**: avatar (`~/.face`, else an initial tile), name, `user@host`, uptime, the clock and date, a month calendar, the current weather
+  (the bar's cached reading in `~/.cache/macshell/weather.json`, fetched only when stale), CPU / memory / disk rings and a now-playing card
+  that opens the Media tab.
+* **Media**: any MPRIS player (`org.mpris.MediaPlayer2.*`, found and watched over macshell's own D-Bus client, no `playerctl`): cover art
+  (`file://` or `http(s)` URLs, the latter fetched once with `curl` into `~/.cache/macshell/dash-art/`), title / artist / album, a progress bar
+  you can click or drag to seek (the position is polled once a second, only while the tab shows), previous / play-pause / next, a volume slider
+  when the player has a `Volume` property (Up / Down or the wheel too), and a picker when several players run (click a chip, or Tab).
+* **Performance**: CPU (total ring, per-core meters, history, package temperature from hwmon, load), memory and swap, root filesystem, network
+  rates with a history graph, and an NVIDIA GPU card (`nvidia-smi --query-gpu`; hidden when the tool is missing). Rings and sparklines are tiny-skia paths.
+
+Bind **one** key to the bare command `macdash` (or `macdash media` / `macdash performance` to open on a tab): running it again while the card is open closes it
+(single instance via `$XDG_RUNTIME_DIR/macdash.lock`). Escape, a click outside, or focus moving elsewhere also close it. `--x PX` centres the card on that x offset
+(macbar passes the position of its chart icon), `--top PX` moves it off the default 30 px. It is an override-redirect X11 popup that grabs the keyboard and
+pointer like `macspot`, follows the shared theme and is translucent under a compositor. Nothing runs while it is closed: sampling threads and the D-Bus
+connection only exist while the card is open. `tests/e2e/dash.sh` (`make e2e-dash`) runs it on a private Xvfb with a private D-Bus session and fake players
+(`examples/fake_mpris.rs`); it needs `tesseract` to read the card.
 
 ## Window rules for the wallpaper browser
 

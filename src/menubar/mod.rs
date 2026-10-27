@@ -75,6 +75,11 @@ pub fn title_spans(menus: &[Menu], label_w: impl Fn(&Menu) -> f32) -> Vec<Span> 
         .collect()
 }
 
+/// Command line that opens the dashboard hanging under the bar item `item`.
+fn dash_argv(program: &str, item: Span) -> Vec<String> {
+    vec![program.to_string(), "--x".to_string(), format!("{}", (item.x + item.w / 2.0).round() as i32)]
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tray {
     Workspaces,
@@ -86,6 +91,7 @@ pub enum Tray {
     Bluetooth,
     Audio,
     Network,
+    Dash,
     Spotlight,
     Control,
     Clock,
@@ -417,6 +423,7 @@ impl MacBar {
         if snap.net.is_some() {
             items.push((Tray::Network, BTN_W));
         }
+        items.push((Tray::Dash, BTN_W));
         items.push((Tray::Spotlight, BTN_W));
         items.push((Tray::Control, BTN_W));
         let clock_w = self.fonts.as_ref().map(|f| f.measure(&self.clock_text, TEXT_PX, Weight::Regular)).unwrap_or(100.0) + 17.0;
@@ -683,6 +690,11 @@ impl MacBar {
         }
     }
 
+    /// Opens `macdash` centred under the bar item (it toggles itself closed when already open).
+    fn dashboard(&self, item: Span) {
+        crate::launch::spawn_argv(&dash_argv(&crate::launch::sibling_or_path("macdash"), item));
+    }
+
     // ---------------------------------------------------------------- draw
 
     fn text(&mut self, pm: &mut Pixmap, s: &str, x: f32, px: f32, weight: Weight, rgba: (u8, u8, u8, f32)) -> f32 {
@@ -785,6 +797,7 @@ impl MacBar {
                     };
                     self.symbol(pm, icon, ICON_PX, cx, 12.5);
                 }
+                Tray::Dash => self.symbol(pm, "chart", ICON_PX, cx, 12.5),
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
                     if self.open == Open::Control {
@@ -1032,6 +1045,11 @@ impl App for MacBar {
                             self.close();
                             self.open_control();
                         }
+                        return true;
+                    }
+                    Tray::Dash => {
+                        self.close();
+                        self.dashboard(s);
                         return true;
                     }
                     Tray::Spotlight => {
@@ -1687,6 +1705,19 @@ mod tests {
     fn click_tray(bar: &mut MacBar, kind: Tray) -> bool {
         let s = bar.tray_span(kind).expect("item visible");
         bar.pointer_button(s.x + s.w / 2.0, 10.0, Button::Left)
+    }
+
+    #[test]
+    fn dashboard_item_sits_before_spotlight_and_opens_macdash_under_itself() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1920;
+        bar.update_snapshot(|s| *s = Snapshot::default());
+        let kinds: Vec<Tray> = bar.tray().into_iter().map(|t| t.0).collect();
+        let at = |k: Tray| kinds.iter().position(|x| *x == k).unwrap();
+        assert_eq!(at(Tray::Dash) + 1, at(Tray::Spotlight), "the dashboard glyph is left of the search glyph");
+        let span = bar.tray_span(Tray::Dash).unwrap();
+        assert_eq!(dash_argv("macdash", span), ["macdash".to_string(), "--x".to_string(), format!("{}", (span.x + span.w / 2.0).round() as i32)]);
+        assert_eq!(dash_argv("/opt/macdash", Span { x: 100.0, w: 27.0 })[2], "114", "the middle of the item, rounded");
     }
 
     #[test]

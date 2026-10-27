@@ -41,6 +41,22 @@ pub struct KeyEvent {
     pub alt: bool,
 }
 
+/// Where a popup hangs under a bar, see [`WindowApp::popup_anchor`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PopupAnchor {
+    pub top: i32,
+    pub center_x: Option<i32>,
+}
+
+impl PopupAnchor {
+    /// Left edge of a window `w` wide on a monitor `mon_w` wide: centred on `center_x` (the monitor's middle when unset), 8 px from the edges at most.
+    pub fn left(&self, mon_w: i32, w: i32) -> i32 {
+        let cx = self.center_x.unwrap_or(mon_w / 2);
+        let max = (mon_w - w - 8).max(0);
+        (cx - w / 2).clamp(8.min(max), max)
+    }
+}
+
 /// Things the app can ask the window system to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -89,6 +105,11 @@ pub trait WindowApp {
     /// Popup mode: centre the window vertically on the monitor instead of a fifth of the way down.
     fn popup_centered(&self) -> bool {
         false
+    }
+    /// Popup mode: hang the window under a bar instead: `top` pixels below the monitor's top edge and, when `center_x`
+    /// is set, centred on that x offset from the monitor's left edge (kept on screen). Takes precedence over the other placements.
+    fn popup_anchor(&self) -> Option<PopupAnchor> {
+        None
     }
     /// Popup mode: a passive indicator (a HUD). The window takes no input at all: an empty input shape lets every
     /// click through, no event but exposure is selected, and neither the keyboard nor the pointer is grabbed or focused.
@@ -165,4 +186,20 @@ pub fn run_window<A: WindowApp + 'static>(app: A) -> Result<(), String> {
     }
     let _ = (app, forced);
     Err("no usable display: need a Wayland compositor with xdg-shell, or an X11 DISPLAY".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn anchor_centres_and_stays_on_screen() {
+        let a = PopupAnchor { top: 30, center_x: Some(800) };
+        assert_eq!(a.left(1600, 400), 600);
+        assert_eq!(PopupAnchor { top: 30, center_x: Some(10) }.left(1600, 400), 8, "kept 8 px from the left edge");
+        assert_eq!(PopupAnchor { top: 30, center_x: Some(1590) }.left(1600, 400), 1192, "kept 8 px from the right edge");
+        assert_eq!(PopupAnchor { top: 30, center_x: None }.left(1000, 400), 300, "centred on the monitor when unset");
+        // A window wider than the monitor must not panic.
+        assert_eq!(PopupAnchor { top: 0, center_x: Some(50) }.left(300, 400), 0);
+    }
 }

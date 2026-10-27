@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm
+BINS = macdock macbar machaven maclaunch macspot macswitch machud macdash macsettings macthemectl macnotify macwm
 UNITS = macshell-dock.service macshell-bar.service macshell-notify.service
 AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop
 
@@ -42,6 +42,10 @@ e2e-theme: all
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
 
+# macdash on a private Xvfb + private session bus with fake MPRIS players (needs Xvfb, xdotool, import, dbus-daemon, tesseract).
+e2e-dash:
+	tests/e2e/dash.sh
+
 # macnotify on a private session bus + Xvfb (needs Xvfb, dbus-daemon, busctl, xdotool, import).
 e2e-notify:
 	cargo build --release --locked --bin macnotify
@@ -52,4 +56,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-dash
