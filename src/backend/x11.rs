@@ -124,18 +124,68 @@ fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
     conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
 }
 
-/// Clicks go only to `rects` (all of the window when empty). With `clip` the visible area is cut to
-/// the same rectangles.
-fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size: (u32, u32), clip: bool) -> Result<(), Error> {
+/// Clicks go only to `rects` (all of the window when empty).
+/// Rectangles covering the pixels of `pm` that are not (nearly) transparent, merged vertically.
+/// Capped: a pathological image degrades to its bounding box.
+fn visible_rects(pm: &Pixmap) -> Vec<Rectangle> {
+    let (w, h) = (pm.width() as usize, pm.height() as usize);
+    let data = pm.data();
+    let mut out: Vec<Rectangle> = Vec::new();
+    let mut open: Vec<(i16, u16, i16)> = Vec::new(); // x, width, first row
+    let (mut minx, mut maxx, mut miny, mut maxy) = (w, 0usize, h, 0usize);
+    for y in 0..=h {
+        let mut runs: Vec<(i16, u16)> = Vec::new();
+        if y < h {
+            let row = &data[y * w * 4..(y + 1) * w * 4];
+            let mut x = 0;
+            while x < w {
+                if row[x * 4 + 3] > 16 {
+                    let x0 = x;
+                    while x < w && row[x * 4 + 3] > 16 {
+                        x += 1;
+                    }
+                    runs.push((x0 as i16, (x - x0) as u16));
+                    minx = minx.min(x0);
+                    maxx = maxx.max(x);
+                    miny = miny.min(y);
+                    maxy = maxy.max(y + 1);
+                } else {
+                    x += 1;
+                }
+            }
+        }
+        let mut next: Vec<(i16, u16, i16)> = Vec::new();
+        for r in &runs {
+            match open.iter().position(|o| o.0 == r.0 && o.1 == r.1) {
+                Some(i) => next.push(open.swap_remove(i)),
+                None => next.push((r.0, r.1, y as i16)),
+            }
+        }
+        for o in open.drain(..) {
+            out.push(Rectangle { x: o.0, y: o.2, width: o.1, height: (y as i16 - o.2) as u16 });
+        }
+        open = next;
+        if out.len() > 4096 {
+            break;
+        }
+    }
+    if out.len() > 4096 || out.is_empty() {
+        return if maxx > minx && maxy > miny {
+            vec![Rectangle { x: minx as i16, y: miny as i16, width: (maxx - minx) as u16, height: (maxy - miny) as u16 }]
+        } else {
+            vec![Rectangle { x: 0, y: 0, width: 1, height: 1 }]
+        };
+    }
+    out
+}
+
+fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size: (u32, u32)) -> Result<(), Error> {
     let list: Vec<Rectangle> = if rects.is_empty() {
         vec![Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]
     } else {
         rects.iter().map(|r| Rectangle { x: r.x as i16, y: r.y as i16, width: r.w.max(1) as u16, height: r.h.max(1) as u16 }).collect()
     };
     conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &list).map_err(err)?;
-    if clip {
-        conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &list).map_err(err)?;
-    }
     Ok(())
 }
 
@@ -172,7 +222,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     set_panel_hints(&conn, win, &atoms, strut_partial(&spec, (x, y, w, h), mon, screen_size))?;
     let mut rects = app.input_rects();
     let clip = !has_compositor(&conn, screen_num);
-    set_input_shape(&conn, win, &rects, (w, h), clip)?;
+    set_input_shape(&conn, win, &rects, (w, h))?;
 
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, win, &CreateGCAux::new()).map_err(err)?;
@@ -185,6 +235,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     app.resized(w, h);
     let mut dirty = true;
+    let mut last_visible: Vec<Rectangle> = Vec::new();
     let mut grabbed = false;
     let mut next_tick: Option<Instant> = Some(Instant::now());
 
@@ -205,7 +256,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         let new_rects = app.input_rects();
         if new_rects != rects {
             rects = new_rects;
-            set_input_shape(&conn, win, &rects, size, clip)?;
+            set_input_shape(&conn, win, &rects, size)?;
             dirty = true;
         }
         let want_kb = app.wants_keyboard();
@@ -220,6 +271,14 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         if dirty {
             dirty = false;
             app.draw(&mut pm);
+            if clip {
+                // No compositor: transparent pixels would show as black, so only the drawn area is shown.
+                let vis = visible_rects(&pm);
+                if vis.len() != last_visible.len() || vis.iter().zip(&last_visible).any(|(a, b)| (a.x, a.y, a.width, a.height) != (b.x, b.y, b.width, b.height)) {
+                    conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &vis).map_err(err)?;
+                    last_visible = vis;
+                }
+            }
             present(&conn, win, gc, &pm, max_bytes)?;
         } else {
             conn.flush().map_err(err)?;
