@@ -48,6 +48,15 @@ Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
 Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed.
 
+## Launching apps
+
+Every launcher (dock, Launchpad, Spotlight, macsettings) starts apps through one code path: Exec field codes, `Path=`, `Terminal=true` (in a terminal), `TryExec=`, detached in their own session, errors logged to `~/.local/state/macshell/launch.log` and shown as a notification.
+Without `WAYLAND_DISPLAY` (an X11 session) Chromium-family browsers and Electron apps get `--ozone-platform=x11` appended, since the flags files Omarchy ships (`~/.config/chrome-flags.conf`, ...) ask for Wayland. Add your own rules in `macshell.json`:
+
+```json
+{"launch": {"builtin": true, "rules": [{"match": ["myapp", "foo*"], "when": "x11", "args": ["--flag"], "env": {"K": "v", "DROP": null}}]}}
+```
+
 ## Spotlight (`macspot`)
 
 A search box centred on the primary monitor. Bind **one** key to the bare command `macspot`; running it
