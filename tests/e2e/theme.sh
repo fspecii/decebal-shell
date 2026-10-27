@@ -5,11 +5,11 @@
 # Everything is private: own HOME/XDG dirs, XDG_RUNTIME_DIR passed explicitly, only PIDs started here are killed.
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-BIN=${CARGO_TARGET_DIR:-$HERE/target}/debug
-RDWM_DIR=${RDWM_BIN_DIR:-$HOME/Projects/rdwm/target/debug}
+BIN=${CARGO_TARGET_DIR:-$HERE/target}/release
+RDWM_DIR=${RDWM_BIN_DIR:-$HOME/Projects/rdwm/target/release}
 [ -x "$RDWM_DIR/rdwm" ] || { echo "rdwm not found (set RDWM_BIN_DIR)"; exit 77; }
 for t in Xvfb xdotool import jq convert; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
-(cd "$HERE" && cargo build -q --offline --bins --examples) || { echo "build failed"; exit 2; }
+(cd "$HERE" && cargo build -q --offline --release --bins --examples) || { echo "build failed"; exit 2; }
 N=${E2E_DISPLAY:-:135}
 [ "$N" = ":1" ] && { echo "refusing the live display"; exit 2; }
 

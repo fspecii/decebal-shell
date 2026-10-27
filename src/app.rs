@@ -102,6 +102,16 @@ pub trait App {
     fn input_rects(&self) -> Vec<InputRect> {
         self.input_rect().into_iter().collect()
     }
+    /// Where the surface wants to sit (edge, margin, reserved space). Asked on every loop turn, so an app
+    /// can change shape at runtime (the dock switching between its macOS and Windows styles); the backend
+    /// then moves the surface and republishes the reserved space. `None` keeps the spec given at start.
+    fn surface_spec(&self) -> Option<crate::backend::SurfaceSpec> {
+        None
+    }
+    /// True when the backend should close the surface and return from `run` (the menu bar switched off).
+    fn quit_requested(&self) -> bool {
+        false
+    }
     /// Called once at start; keep it to wake the loop from threads.
     fn set_waker(&mut self, _waker: Waker) {}
     /// The backend is about to block waiting for events: drop transient memory (parsed fonts and the

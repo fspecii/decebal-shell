@@ -2,6 +2,7 @@
 //! context menu, drag-to-reorder and live reload of the pinned list.
 
 use crate::app::{App, Button, InputRect, Key, NavKey, Tick, Waker};
+use crate::backend::{Anchor, SurfaceSpec};
 use crate::config::{self, edit, Stamp};
 use crate::dock::{Dock, DockItem, Drag};
 use crate::dock_menu::{self, Action, Ctx, DockMenu, Outcome, TEXT_PX};
@@ -13,6 +14,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tiny_skia::Pixmap;
+
+mod windows;
 
 /// Side effects of the dock (starting programs), replaceable in tests.
 pub trait Effects {
@@ -87,6 +90,10 @@ pub struct DockApp {
     /// window app id -> desktop id (None = no installed app), so `.desktop` files are scanned once.
     desktops: HashMap<String, Option<String>>,
     animating: bool,
+    /// State of the Windows-style taskbar; created the first time that style is shown.
+    win: Option<Box<windows::WinState>>,
+    /// DPI scale for the taskbar, read once.
+    scale: Option<f32>,
 }
 
 impl DockApp {
@@ -107,7 +114,18 @@ impl DockApp {
             press: None,
             desktops: HashMap::new(),
             animating: false,
+            win: None,
+            scale: None,
         }
+    }
+
+    /// Forces the taskbar's DPI scale (tests; normally `MACSHELL_SCALE` or `Xft.dpi`).
+    pub fn with_scale(mut self, scale: f32) -> Self {
+        self.scale = Some(scale);
+        if self.is_windows() {
+            self.win_init();
+        }
+        self
     }
 
     /// Show a running dot under every pinned app that has an open window (tracker starts with the event loop).
@@ -221,10 +239,15 @@ impl DockApp {
         let stamp = Stamp::of(&w.settings_path);
         if stamp != w.settings_stamp {
             w.settings_stamp = stamp;
-            let s = std::fs::read_to_string(&w.settings_path).ok().and_then(|t| serde_json::from_str::<config::DockSettings>(&t).ok()).unwrap_or_default();
-            if s != self.dock.settings {
-                self.dock.settings = s;
-                changed = true;
+            // A file that does not parse (half-written by another tool) keeps the current look; a missing one resets it.
+            let parsed = match std::fs::read_to_string(&w.settings_path) {
+                Ok(t) => serde_json::from_str::<config::DockSettings>(&t).ok(),
+                Err(_) => Some(config::DockSettings::default()),
+            };
+            if let Some(s) = parsed {
+                if self.apply_settings(s) {
+                    changed = true;
+                }
             }
         }
         changed
@@ -246,7 +269,7 @@ impl DockApp {
             eprintln!("macdock: could not launch {id}");
             return;
         }
-        if id != "launchpad" && id != "trash" {
+        if id != "launchpad" && id != "trash" && !self.is_windows() {
             self.dock.start_bounce(id);
             self.wake();
         }
@@ -283,7 +306,24 @@ impl DockApp {
         };
         let fonts = Fonts::load();
         let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| f.measure(s, TEXT_PX, Weight::Regular));
-        let menu = DockMenu::new(&item.id, dock_menu::build_entries(&ctx), cell.x + cell.w / 2.0, &measure);
+        let mut entries = dock_menu::build_entries(&ctx);
+        entries.extend(dock_menu::style_entries());
+        let menu = DockMenu::new(&item.id, entries, cell.x + cell.w / 2.0, &measure);
+        if let Some(f) = &fonts {
+            f.trim();
+        }
+        self.dock.hover_x = None;
+        self.menu = Some(MenuState { menu, fonts });
+        self.wake();
+    }
+
+    /// The macOS dock's own menu (style switch, settings), opened on the panel's empty parts.
+    fn open_dock_menu(&mut self, x: f32) {
+        let s = &self.dock.settings;
+        let entries = dock_menu::build_entries_dock(s.style, s.windows_align, s.windows_labels);
+        let fonts = Fonts::load();
+        let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| f.measure(s, TEXT_PX, Weight::Regular));
+        let menu = DockMenu::new("dock", entries, x, &measure);
         if let Some(f) = &fonts {
             f.trim();
         }
@@ -332,6 +372,9 @@ impl DockApp {
             }
             Action::EmptyTrash => {
                 self.effects.spawn(&launch::empty_trash_argv());
+            }
+            other => {
+                self.win_run_action(other);
             }
         }
     }
@@ -386,6 +429,9 @@ impl DockApp {
 
 impl App for DockApp {
     fn size(&self) -> (u32, u32) {
+        if self.is_windows() && self.win.is_some() {
+            return self.win_size();
+        }
         let (w, h) = self.dock.canvas_size();
         match &self.menu {
             Some(m) => {
@@ -401,6 +447,9 @@ impl App for DockApp {
     }
 
     fn draw(&mut self, pm: &mut Pixmap) {
+        if self.is_windows() && self.win.is_some() {
+            return self.win_draw(pm);
+        }
         self.dock.draw(pm);
         let bottom = menu_bottom(pm.height());
         if let Some(m) = &mut self.menu {
@@ -413,6 +462,9 @@ impl App for DockApp {
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
+        if self.is_windows() {
+            return self.win_motion(x, y);
+        }
         if let Some(p) = &self.press {
             if self.dock.drag.is_none() && (x - p.x).abs() > DRAG_THRESHOLD && self.draggable(p.index) && self.menu.is_none() {
                 self.dock.drag = Some(Drag { index: p.index, x });
@@ -442,6 +494,9 @@ impl App for DockApp {
     }
 
     fn pointer_leave(&mut self) -> bool {
+        if self.is_windows() {
+            return self.win_leave();
+        }
         if self.menu.is_some() {
             // Only reached without a pointer grab (Wayland): moving away closes the menu.
             return self.close_menu();
@@ -461,9 +516,22 @@ impl App for DockApp {
         let w = waker.clone();
         crate::theme::live::start_watcher(move || w.wake());
         self.waker = Some(waker);
+        if self.is_windows() {
+            self.win_init();
+        }
+    }
+
+    fn surface_spec(&self) -> Option<SurfaceSpec> {
+        if self.is_windows() {
+            return self.win_spec();
+        }
+        Some(SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" })
     }
 
     fn tick(&mut self) -> Tick {
+        if self.is_windows() {
+            return self.win_tick();
+        }
         let mut changed = self.poll_config();
         let theme_gen = crate::theme::generation();
         if theme_gen != self.theme_gen {
@@ -471,6 +539,9 @@ impl App for DockApp {
             self.theme_gen = theme_gen;
             if let Some(w) = &self.watch {
                 self.dock.settings = std::fs::read_to_string(&w.settings_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            }
+            if self.is_windows() {
+                self.win_apply_settings();
             }
             changed = true;
         }
@@ -487,6 +558,9 @@ impl App for DockApp {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
+        if self.is_windows() {
+            return self.win_button(x, y, button);
+        }
         let (w, h) = self.surface;
         if let Some(m) = &mut self.menu {
             let d = m.menu.placed(w as f32, menu_bottom(h));
@@ -515,6 +589,15 @@ impl App for DockApp {
                 self.open_menu(i);
                 true
             }
+            (Button::Right, None) => {
+                // The dock's own menu: right click on the panel between or around the icons.
+                let l = self.dock.layout(w as f32);
+                if x >= l.panel_x && x <= l.panel_x + l.panel_w && y >= h as f32 - PANEL_HEIGHT {
+                    self.open_dock_menu(x);
+                    return true;
+                }
+                false
+            }
             (Button::Middle, Some(i)) => {
                 // Middle click always starts a new instance.
                 let id = self.dock.items[i].id.clone();
@@ -526,6 +609,9 @@ impl App for DockApp {
     }
 
     fn pointer_release(&mut self, x: f32, y: f32, button: Button) -> bool {
+        if self.is_windows() {
+            return self.win_release(x, y, button);
+        }
         if button != Button::Left {
             return false;
         }
@@ -554,7 +640,14 @@ impl App for DockApp {
         false
     }
 
+    fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        self.is_windows() && self.win_scroll(x, y, dy)
+    }
+
     fn key(&mut self, key: Key) -> bool {
+        if self.is_windows() {
+            return matches!(key, Key::Escape) && self.win_escape();
+        }
         match key {
             Key::Escape => self.close_menu(),
         }
@@ -571,10 +664,16 @@ impl App for DockApp {
     }
 
     fn wants_keyboard(&self) -> bool {
+        if self.is_windows() {
+            return self.win_wants_keyboard();
+        }
         self.menu.is_some()
     }
 
     fn wants_pointer_grab(&self) -> bool {
+        if self.is_windows() {
+            return self.win_wants_keyboard();
+        }
         self.menu.is_some()
     }
 
@@ -583,6 +682,9 @@ impl App for DockApp {
     }
 
     fn input_rects(&self) -> Vec<InputRect> {
+        if self.is_windows() && self.win.is_some() {
+            return self.win_input_rects();
+        }
         let (w, h) = self.surface;
         let strip = (PANEL_HEIGHT + 8.0) as i32;
         let mut rects = vec![InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip }];
@@ -998,5 +1100,233 @@ mod tests {
         let argv = r.fx.borrow().argv.clone();
         assert_eq!(argv.len(), 1);
         assert_eq!(argv[0].last().unwrap(), &dir.join("applications").to_string_lossy().into_owned());
+    }
+
+    // ------------------------------------------------------------ Windows style
+
+    fn active_win(id: u64, app: &str, title: &str) -> Window {
+        Window { active: true, ..win(id, app, title) }
+    }
+
+    /// A rig in the Windows style on a 1280 px wide surface (no display needed: the scale is fixed).
+    fn win_rig(name: &str, pinned: &[&str], windows: Vec<Window>) -> Rig {
+        let mut r = rig(name, pinned, windows);
+        r.app.pinned = pinned.iter().map(|s| s.to_string()).collect();
+        r.app.scale = Some(1.0);
+        r.set_settings(r#"{"style":"windows"}"#);
+        r.app.surface = (1280, 48);
+        r
+    }
+
+    impl Rig {
+        fn set_settings(&mut self, json: &str) {
+            std::fs::write(self.dir.join("settings.json"), json).unwrap();
+            // the file watcher compares size + mtime: make sure a quick rewrite is noticed
+            self.app.watch.as_mut().unwrap().settings_stamp = Stamp::of(&self.dir.join("nonexistent"));
+            self.app.tick();
+        }
+
+        fn strip_y(&self) -> f32 {
+            self.app.surface.1 as f32 - self.app.win.as_ref().unwrap().m.bar_h / 2.0
+        }
+
+        fn zone(&self, hit: crate::taskbar::Hit) -> (f32, f32) {
+            let r = self.app.win_layout().unwrap().rect_of(hit).unwrap_or_else(|| panic!("no zone {hit:?}"));
+            (r.cx(), self.strip_y())
+        }
+
+        fn task_of(&self, app: &str) -> usize {
+            self.app.win.as_ref().unwrap().buttons.iter().position(|b| b.app_id == app).unwrap_or_else(|| panic!("no task {app}"))
+        }
+
+        fn wclick(&mut self, hit: crate::taskbar::Hit, b: Button) {
+            let (x, y) = self.zone(hit);
+            self.app.pointer_button(x, y, b);
+            self.app.pointer_release(x, y, b);
+        }
+    }
+
+    #[test]
+    fn style_switches_at_runtime_through_the_settings_file() {
+        let mut r = rig("style", &["launchpad", "a", "trash"], vec![]);
+        r.app.scale = Some(1.0);
+        let mac = r.app.surface_spec().unwrap();
+        assert_eq!((mac.anchor, mac.margin, mac.reserve, mac.stretch), (Anchor::Bottom, 13, 71, false));
+        assert!(!r.app.is_windows());
+        r.set_settings(r#"{"style":"windows"}"#);
+        assert!(r.app.is_windows());
+        let spec = r.app.surface_spec().unwrap();
+        assert_eq!((spec.anchor, spec.margin, spec.reserve, spec.stretch), (Anchor::Bottom, 0, 48, true));
+        assert_eq!(r.app.size(), (0, 48), "monitor wide, 48 px high");
+        r.set_settings(r#"{"style":"windows","windowsAlign":"left"}"#);
+        assert_eq!(r.app.surface_spec().unwrap().reserve, 44, "the left aligned look is a little lower");
+        r.set_settings(r#"{"style":"windows","windowsPosition":"top"}"#);
+        assert_eq!(r.app.surface_spec().unwrap().anchor, Anchor::Top);
+        r.set_settings(r#"{"style":"mac"}"#);
+        assert!(!r.app.is_windows());
+        assert_eq!(r.app.surface_spec().unwrap().reserve, 71);
+        assert_eq!(r.app.size(), r.app.dock.canvas_size());
+        // a half written file keeps the current look, a removed one resets it
+        r.set_settings(r#"{"style":"windows"}"#);
+        r.set_settings("{ not json");
+        assert!(r.app.is_windows());
+        std::fs::remove_file(r.dir.join("settings.json")).unwrap();
+        r.app.tick();
+        assert!(!r.app.is_windows());
+    }
+
+    #[test]
+    fn taskbar_buttons_start_search_and_tasks_behave_like_windows() {
+        use crate::taskbar::Hit;
+        let mut r = win_rig("wtask", &["launchpad", "foot", "beta", "trash"], vec![active_win(1, "foot", "shell"), win(2, "mpv", "movie")]);
+        let names: Vec<String> = r.app.win.as_ref().unwrap().buttons.iter().map(|b| b.app_id.clone()).collect();
+        assert_eq!(&names[..2], ["foot", "beta"], "launchpad and trash are not task buttons");
+        r.wclick(Hit::Start, Button::Left);
+        r.wclick(Hit::Search, Button::Left);
+        assert_eq!(r.fx.borrow().launched, vec!["launchpad"]);
+        assert_eq!(r.fx.borrow().argv.len(), 1, "search starts spotlight");
+        // the focused app's button minimises, a background app's button focuses, a closed one launches
+        let foot = r.task_of("foot");
+        r.wclick(Hit::Task(foot), Button::Left);
+        assert_eq!(r.calls.lock().unwrap().minimized, vec![1]);
+        let beta = r.task_of("beta");
+        r.wclick(Hit::Task(beta), Button::Left);
+        assert_eq!(r.fx.borrow().launched, vec!["launchpad", "beta"]);
+        let mpv = r.task_of("mpv");
+        r.wclick(Hit::Task(mpv), Button::Left);
+        assert_eq!(r.calls.lock().unwrap().activated, vec![2]);
+        // middle click always starts another instance
+        r.wclick(Hit::Task(foot), Button::Middle);
+        assert_eq!(r.fx.borrow().launched.last().unwrap(), "foot");
+        assert!(r.fx.borrow().launched.iter().filter(|l| *l == "foot").count() == 1);
+    }
+
+    #[test]
+    fn taskbar_context_menu_uses_pin_and_unpin_wording_and_saves() {
+        use crate::taskbar::Hit;
+        let mut r = win_rig("wmenu", &["launchpad", "foot", "beta", "trash"], vec![active_win(1, "foot", "shell")]);
+        let foot = r.task_of("foot");
+        r.wclick(Hit::Task(foot), Button::Right);
+        let labels = r.menu_labels();
+        assert!(labels.contains(&"Unpin from taskbar".to_string()) && labels.contains(&"Close window".to_string()), "{labels:?}");
+        assert!(r.app.size().1 > 48, "the surface grows for the menu");
+        assert_eq!(r.app.input_rects().len(), 2);
+        r.app.key(Key::Escape);
+        assert!(r.app.menu.is_none());
+        r.app.surface = (1280, 48);
+        let beta = r.task_of("beta");
+        r.wclick(Hit::Task(beta), Button::Right);
+        assert!(r.menu_labels().contains(&"Unpin from taskbar".to_string()));
+        r.app.run_action("beta", Action::RemoveFromDock);
+        assert_eq!(r.app.pinned, vec!["launchpad", "foot", "trash"]);
+        assert!(r.dir.join("pinned.json").exists());
+        r.app.run_action("beta", Action::CloseWindow(7));
+        assert_eq!(r.calls.lock().unwrap().closed, vec![7]);
+    }
+
+    #[test]
+    fn dock_menu_actions_write_the_settings_and_restyle_at_once() {
+        let mut r = win_rig("wstyle", &["launchpad", "foot", "trash"], vec![]);
+        r.app.run_action("dock", Action::SetAlign(config::WinAlign::Left));
+        assert_eq!(r.app.dock.settings.windows_align, config::WinAlign::Left);
+        assert_eq!(r.app.surface_spec().unwrap().reserve, 44);
+        r.app.run_action("dock", Action::SetLabels(config::WinLabels::Always));
+        let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(r.dir.join("settings.json")).unwrap()).unwrap();
+        assert_eq!((saved["style"].as_str(), saved["windowsAlign"].as_str(), saved["windowsLabels"].as_str()), (Some("windows"), Some("left"), Some("always")));
+        r.app.run_action("dock", Action::SetStyle(config::DockStyle::Mac));
+        assert!(!r.app.is_windows() && r.app.menu.is_none());
+        assert_eq!(r.app.surface_spec().unwrap().reserve, 71);
+        r.app.run_action("dock", Action::OpenSettings);
+        assert!(r.fx.borrow().argv.iter().any(|a| a.last().map(String::as_str) == Some("desktop")));
+    }
+
+    #[test]
+    fn right_click_on_the_empty_bar_or_mac_panel_opens_the_dock_menu() {
+        let mut r = win_rig("wbg", &["launchpad", "foot", "trash"], vec![]);
+        r.app.pointer_button(40.0, 20.0, Button::Right);
+        let labels = r.menu_labels();
+        assert!(labels.iter().any(|l| l == "Dock Style: macOS") && labels.iter().any(|l| l == "Taskbar Alignment: Left"), "{labels:?}");
+        r.app.run_action("dock", Action::SetStyle(config::DockStyle::Mac));
+        r.app.close_menu();
+        r.set_settings(r#"{"style":"mac"}"#);
+        r.app.surface = r.app.dock.canvas_size();
+        let l = r.app.dock.layout(r.app.surface.0 as f32);
+        r.app.pointer_button(l.panel_x + 2.0, r.app.surface.1 as f32 - 30.0, Button::Right);
+        assert!(r.menu_labels().iter().any(|l| l == "Dock Style: Windows"), "{:?}", r.menu_labels());
+    }
+
+    #[test]
+    fn dragging_a_pinned_button_reorders_and_saves_on_release() {
+        use crate::taskbar::Hit;
+        let mut r = win_rig("wdrag", &["launchpad", "a", "b", "c", "trash"], vec![]);
+        let (ax, y) = r.zone(Hit::Task(r.task_of("a")));
+        let (cx, _) = r.zone(Hit::Task(r.task_of("c")));
+        r.app.pointer_button(ax, y, Button::Left);
+        r.app.pointer_motion(ax + 4.0, y);
+        assert!(r.app.win.as_ref().unwrap().drag.is_none(), "below the drag threshold");
+        r.app.pointer_motion(ax + 20.0, y);
+        assert!(r.app.win.as_ref().unwrap().drag.is_some());
+        r.app.pointer_motion(cx, y);
+        assert_eq!(r.app.pinned, vec!["launchpad", "b", "c", "a", "trash"]);
+        assert!(!r.dir.join("pinned.json").exists(), "saved on release, not while dragging");
+        r.app.pointer_release(cx, y, Button::Left);
+        assert!(r.dir.join("pinned.json").exists());
+        assert!(r.fx.borrow().launched.is_empty(), "a drag is not a click");
+    }
+
+    #[test]
+    fn many_windows_shrink_then_scroll_and_clipped_buttons_cannot_be_hit() {
+        use crate::taskbar::Hit;
+        let ids: Vec<String> = (0..60).map(|i| format!("app{i}")).collect();
+        let pinned: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut r = win_rig("wscroll", &pinned, vec![]);
+        r.app.surface = (900, 48);
+        let l = r.app.win_layout().unwrap();
+        assert!(l.scroll_max > 0.0 && l.task_w == r.app.win.as_ref().unwrap().m.icon_min);
+        let first = l.tasks[0].cx();
+        let last = l.tasks[59].cx();
+        assert!(r.app.win_hit(first, 20.0 + r.app.win_strip_top()).is_some());
+        assert_eq!(r.app.win_hit(last, 20.0 + r.app.win_strip_top()), None);
+        // the wheel works over any visible task button
+        let over_a_task = |r: &Rig| {
+            let l = r.app.win_layout().unwrap();
+            l.tasks.iter().map(|t| t.cx()).find(|cx| *cx > l.clip.0 + 4.0 && *cx < l.clip.1 - 4.0).unwrap()
+        };
+        for _ in 0..200 {
+            let x = over_a_task(&r);
+            r.app.scroll(x, 20.0, 1.0);
+        }
+        let l2 = r.app.win_layout().unwrap();
+        assert!((l2.scroll_max - r.app.win.as_ref().unwrap().scroll).abs() < 0.5, "clamped to the end");
+        assert!(matches!(r.app.win_hit(l2.tasks[59].cx(), 20.0 + r.app.win_strip_top()), Some(Hit::Task(59))));
+        let x = over_a_task(&r);
+        r.app.scroll(x, 20.0, -1.0);
+        assert!(r.app.win.as_ref().unwrap().scroll < l2.scroll_max);
+    }
+
+    #[test]
+    fn show_desktop_minimises_everything_then_restores_it() {
+        use crate::taskbar::Hit;
+        let mut r = win_rig("wdesk", &["launchpad", "trash"], vec![active_win(1, "foot", "a"), win(2, "mpv", "b")]);
+        r.wclick(Hit::Desktop, Button::Left);
+        assert_eq!(r.calls.lock().unwrap().minimized, vec![1, 2]);
+        // nothing has focus any more: the second click brings them back
+        r.app.tracker.as_ref().unwrap().replace(vec![win(1, "foot", "a"), win(2, "mpv", "b")], vec![]);
+        r.wclick(Hit::Desktop, Button::Left);
+        assert_eq!(r.calls.lock().unwrap().activated, vec![1, 2]);
+    }
+
+    #[test]
+    fn strip_input_follows_the_edge_and_titled_mode_makes_a_button_per_window() {
+        let mut r = win_rig("wedge", &["launchpad", "foot", "trash"], vec![win(1, "foot", "one"), win(2, "foot", "two")]);
+        r.app.surface = (1280, 300);
+        let rects = r.app.input_rects();
+        assert_eq!((rects[0].y, rects[0].h, rects[0].w), (252, 48, 1280), "bottom strip");
+        r.set_settings(r#"{"style":"windows","windowsPosition":"top"}"#);
+        assert_eq!(r.app.input_rects()[0].y, 0);
+        r.set_settings(r#"{"style":"windows","windowsLabels":"always"}"#);
+        let w = r.app.win.as_ref().unwrap();
+        assert_eq!(w.buttons.iter().filter(|b| b.app_id == "foot").count(), 2, "one button per window");
+        assert_eq!(w.buttons[1].title, "two");
     }
 }

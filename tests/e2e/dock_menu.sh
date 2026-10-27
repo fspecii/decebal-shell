@@ -7,7 +7,7 @@
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 TARGET=${CARGO_TARGET_DIR:-$HERE/target}
-PROFILE=${PROFILE:-debug}
+PROFILE=${PROFILE:-release}
 BIN=$TARGET/$PROFILE
 RDWM=${RDWM:-$(ls "$HERE"/../rdwm/target/release/rdwm "$HERE"/../rdwm/target/debug/rdwm 2>/dev/null | head -1)}
 [ -x "$RDWM" ] || { echo "rdwm binary not found (set RDWM)"; exit 77; }
@@ -109,7 +109,7 @@ eq "width unchanged" "$(gw)" "$base_w"
 # input pass-through: a client window must receive clicks in the transparent area beside the menu
 "$FAKE" bg "Background" 666666 & PIDS+=($!)
 wait_for 4 has_win bg
-click_row 1 4 RSRR 0       # Open -> launches alpha
+click_row 1 4 RSRRSR 0       # Open -> launches alpha
 ok_within "Open launches the app" 5 has_win alpha
 sleep 0.6
 shot 02-alpha-running
@@ -119,8 +119,8 @@ eq "strut unchanged after close" "$(strut)" "$base_strut"
 echo "== menu on a running app"
 click_cell 1 4 3
 shot 03-menu-running-app
-# alpha running: windows(1) sep New sep Remove Show sep Hide Quit => R S R S R R S R R
-SPEC=RSRSRRSRR
+# alpha running: windows(1) sep New sep Remove Show sep Hide Quit + sep Dock Style => R S R S R R S R R S R
+SPEC=RSRSRRSRRSR
 # Show in Finder (row 5) is keyboard/pointer reachable
 click_row 1 4 $SPEC 5
 sleep 0.3
@@ -146,7 +146,7 @@ shot 06-two-windows
 click_cell 1 4 3
 shot 07-menu-two-windows
 # two windows: w w sep New sep Remove Show sep Hide Quit
-click_row 1 4 RRSRSRRSRR 9  # Quit
+click_row 1 4 RRSRSRRSRRSR 9  # Quit
 ok_within "Quit closes every window of the app" 5 bash -c "! xdotool search --class '^alpha\$' >/dev/null 2>&1"
 sleep 0.5
 
@@ -179,7 +179,7 @@ sleep 0.8
 shot 09-transient-gamma
 # dock now: launchpad alpha gamma trash
 click_cell 2 4 3
-click_row 2 4 RSRSRRSRR 4    # windows(1) sep New sep -> Keep in Dock at row 4
+click_row 2 4 RSRSRRSRRSR 4    # windows(1) sep New sep -> Keep in Dock at row 4
 sleep 0.5
 python3 - "$PINNED" <<'PY' && pass "Keep in Dock pinned gamma before the trash" || fail "Keep in Dock" "$(cat "$PINNED")"
 import json,sys
@@ -197,10 +197,10 @@ echo "== trash and launchpad"
 COUNT=5
 click_cell 4 5 3
 shot 11-trash-menu
-click_row 4 5 RSR 2          # Empty Trash? (first click arms)
+click_row 4 5 RSRSR 2          # Empty Trash? (first click arms)
 [ -f "$TMP/trash.log" ] && fail "empty trash ran without confirmation" || pass "first click only asks for confirmation"
 shot 12-trash-confirm
-click_row 4 5 RSR 2
+click_row 4 5 RSRSR 2
 sleep 0.3
 [ -f "$TMP/trash.log" ] && pass "second click empties the trash" || fail "empty trash did not run"
 eq "menu closed" "$(gh)" "$base_h"

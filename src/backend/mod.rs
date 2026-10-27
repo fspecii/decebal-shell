@@ -33,6 +33,18 @@ pub struct SurfaceSpec {
     pub namespace: &'static str,
 }
 
+/// UI scale factor: `MACSHELL_SCALE`, else `Xft.dpi / 96` on X11, else 1.
+pub fn ui_scale() -> f32 {
+    if let Some(v) = std::env::var("MACSHELL_SCALE").ok().and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite() && *v > 0.0) {
+        return v.clamp(0.75, 4.0);
+    }
+    #[cfg(feature = "x11")]
+    if std::env::var_os("DISPLAY").is_some() && std::env::var("MACSHELL_BACKEND").as_deref() != Ok("wayland") {
+        return x11::xft_scale_of_display();
+    }
+    1.0
+}
+
 /// Picks Wayland when a compositor with layer-shell is reachable, otherwise X11.
 /// Set `MACSHELL_BACKEND=x11` or `wayland` to force one.
 pub fn run<A: App + 'static>(app: A, spec: SurfaceSpec) -> Result<(), String> {

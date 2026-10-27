@@ -459,7 +459,14 @@ impl Model {
     }
 
     fn pane_desktop(&self) -> Vec<Item> {
+        let style = match self.dock.get("style").and_then(Value::as_str) {
+            Some("windows") => 1,
+            _ => 0,
+        };
         let dock = vec![
+            Row::new("Style")
+                .detail("macOS dock, or a Windows 10/11 taskbar. Applies at once")
+                .ctl(Ctl::new("j:dock:style", Kind::Seg(opts(&[("macOS", "mac"), ("Windows", "windows")]), Some(style)))),
             self.dock_row("appSpacing", "Icon spacing", "", 0.0, 24.0, 1.0, 6.0),
             self.dock_row("magnification", "Magnification", "1.0 = off", 1.0, 2.5, 0.05, 1.4),
             self.dock_row("transparency", "Transparency", "", 0.0, 1.0, 0.05, 0.4),

@@ -2,8 +2,8 @@
 # Private test desktop for macsettings: Xvfb + rdwm (x11 backend) with its own HOME, config and runtime dir.
 # Never touches the real session: DISPLAY is a private Xvfb, WAYLAND_DISPLAY is unset, every path is a temp copy.
 # usage: source env.sh; e2e_up [display]; ...; e2e_down
-RDWM_BIN_DIR=${RDWM_BIN_DIR:-$HOME/Projects/rdwm-settings/target/debug}
-MS_BIN_DIR=${MS_BIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/target/debug}
+RDWM_BIN_DIR=${RDWM_BIN_DIR:-$HOME/Projects/rdwm/target/release}
+MS_BIN_DIR=${MS_BIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/target/release}
 E2E_PIDS=()
 
 e2e_up() {

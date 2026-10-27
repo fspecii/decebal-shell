@@ -54,7 +54,9 @@ fn main() {
         }
         None => {
             let spec = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" };
-            if let Err(e) = backend::run(DockApp::new(dock).track_windows().watch_config(), spec) {
+            // The style can change at runtime (dock-settings.json, the dock's menu); the app then re-specifies its surface.
+            let scale = backend::ui_scale();
+            if let Err(e) = backend::run(DockApp::new(dock).with_scale(scale).track_windows().watch_config(), spec) {
                 eprintln!("macdock: {e}");
                 std::process::exit(1);
             }

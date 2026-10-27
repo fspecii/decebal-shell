@@ -33,8 +33,8 @@ $RDWM --backend x11 >$T/rdwm.log 2>&1 & PIDS+=($!)
 sleep 1.5
 fail=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
-LA=$ROOT/target/debug/examples/launchapp
-[ -x $LA ] || (cd $ROOT && cargo build --offline --example launchapp -q) || exit 1
+LA=$ROOT/target/release/examples/launchapp
+[ -x $LA ] || (cd $ROOT && cargo build --offline --release --example launchapp -q) || exit 1
 
 # control: with the built-in rules off Chrome follows the flags file and cannot start on X11
 echo '{"launch":{"builtin":false}}' > $T/cfg/macshell.json

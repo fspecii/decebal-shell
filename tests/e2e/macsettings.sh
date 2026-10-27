@@ -145,7 +145,7 @@ xdotool key --window "$WID" ctrl+f; sleep 0.2
 xdotool key --window "$WID" g a p; sleep 0.4
 check "search filters the sidebar to Tiling ($(q '.panes|map(.id)|join(",")'))" test "$(q '.panes|map(.id)|join(",")')" = "tiling"
 xdotool key --window "$WID" Escape; sleep 0.3
-check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" = "10"
+check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" = "11"
 
 echo "== offline: rdwm stopped, the file is still edited"
 kill $E2E_RDWM; wait $E2E_RDWM 2>/dev/null; sleep 1.5
@@ -155,8 +155,8 @@ wait_file "edit saved without rdwm" "lock_fullscreen = false"
 wait_for "notice says rdwm is not running" '(.notice|tostring|test("not running"))' 3
 
 echo "== idle cost"
-APP=$(pgrep -n -x macsettings)
-for p in general appearance desktop wallpaper tiling windows rules keyboard autostart displays; do goto $p; done
+APP=$E2E_APP   # the instance this script started (pgrep -x also matches other sessions' macsettings)
+for p in general appearance theme desktop wallpaper tiling windows rules keyboard autostart displays; do goto $p; done
 sleep 8
 T0=$(cpu_ticks $APP); sleep 10; T1=$(cpu_ticks $APP)
 RSS=$(awk '/VmRSS/{print int($2/1024)}' /proc/$APP/status)

@@ -5,6 +5,8 @@ use macshell::backend::{self, Anchor, SurfaceSpec};
 use macshell::menubar::active::{ActiveWindow, StaticApp, WmActive};
 use macshell::menubar::MacBar;
 use macshell::theme::BAR_HEIGHT;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const USAGE: &str = "macbar [--dry-run] [--app ID] [--png FILE [--width N] [--open KEY|control]]\n\
 Runs the menu bar. With --png it renders one frame to a file (for testing) instead.\n\
@@ -49,13 +51,9 @@ fn main() {
         i += 1;
     }
 
-    let active: Box<dyn ActiveWindow> = match app_id {
-        Some(id) => Box::new(StaticApp(id)),
-        None => Box::new(WmActive::default()),
-    };
     let show_workspaces = macshell::config::shell_settings().workspaces.resolve(macshell::wm::is_rdwm());
-    let mut bar = MacBar::new(active).with_workspaces(show_workspaces);
     if let Some(path) = png {
+        let mut bar = MacBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
             eprintln!("macbar: {e}");
             std::process::exit(1);
@@ -64,10 +62,35 @@ fn main() {
         return;
     }
 
-    let spec = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "macshell-bar" };
-    let _: &dyn App = &bar;
-    if let Err(e) = backend::run(bar, spec) {
-        eprintln!("macbar: {e}");
-        std::process::exit(1);
+    // `bar.enabled` (macshell.json) can switch the bar off, e.g. for the Windows-only layout. A hidden bar
+    // keeps its process (the session supervisor would restart a missing one) but has no surface; it comes back
+    // by itself when the setting changes. `--png` and `--app` runs ignore the setting.
+    let gated = app_id.is_none();
+    loop {
+        if gated {
+            macshell::menubar::gate::wait_until_visible();
+        }
+        let closed = Arc::new(AtomicBool::new(false));
+        let mut bar = MacBar::new(make_active(app_id.clone())).with_workspaces(macshell::config::shell_settings().workspaces.resolve(macshell::wm::is_rdwm()));
+        if gated {
+            bar = bar.with_gate(closed.clone());
+        }
+        let spec = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "macshell-bar" };
+        let _: &dyn App = &bar;
+        if let Err(e) = backend::run(bar, spec) {
+            eprintln!("macbar: {e}");
+            std::process::exit(1);
+        }
+        if !closed.load(Ordering::SeqCst) {
+            break;
+        }
+        macshell::mem::trim();
+    }
+}
+
+fn make_active(app_id: Option<String>) -> Box<dyn ActiveWindow> {
+    match app_id {
+        Some(id) => Box::new(StaticApp(id)),
+        None => Box::new(WmActive::default()),
     }
 }
