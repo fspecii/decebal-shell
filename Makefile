@@ -1,8 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm
-UNITS = macshell-dock.service macshell-bar.service macshell-notify.service
-AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop
+BINS = macdock macbar machaven maclaunch macspot macswitch machud macsettings macthemectl macnotify macwm macclip
+UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service
+AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop
 
 all:
 	cargo build --release --locked
@@ -47,9 +47,13 @@ e2e-notify:
 	cargo build --release --locked --bin macnotify
 	MACNOTIFY_BIN=$(CURDIR)/target/release/macnotify tests/e2e/notify.sh
 
+# macclip (clipboard history) on a private Xvfb (needs Xvfb, xclip, xdotool, xprop, import, jq).
+e2e-clip:
+	tests/e2e/clip.sh
+
 test:
 	cargo fmt --all -- --check
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip

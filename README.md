@@ -21,6 +21,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `machud` | on-screen display for volume / mute / brightness / mic mute (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
+| `macclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
@@ -148,6 +149,41 @@ takes focus, keys or clicks. It disappears 1.4 s after the last call; calling ag
 (single instance via `$XDG_RUNTIME_DIR/machud.lock`; the new value travels in `$XDG_RUNTIME_DIR/machud.msg` plus SIGUSR1). It follows the shared theme, is
 translucent under a compositor and opaque without one, and costs nothing while idle because the process exits. X11 only (no Wayland layer-shell
 version yet). `tests/e2e/hud.sh` runs it on a private Xvfb with shimmed `wpctl` / `brightnessctl`.
+
+## Clipboard history (`macclip`)
+
+X11 only. `macclip daemon` runs for the whole session (autostart: `contrib/macshell-clip.desktop` or `.service`; under the rdwm
+session add `macclip daemon` to its services). `macclip` (alias `macclip pick`) opens the picker; bind it to a key:
+
+```
+# rdwm / dwm-style X11 session
+Super+V  ->  macclip
+```
+
+**Daemon.** It waits for XFixes selection-owner events on CLIPBOARD, so it costs nothing while you are not copying; PRIMARY is ignored.
+It asks the new owner for `TARGETS` and the text (`UTF8_STRING`, else `STRING`) and keeps up to 100 entries, newest first, in
+`$XDG_STATE_HOME/macshell/clipboard-history` (JSON, mode 0600, written atomically). Copying an entry again moves it to the top; empty or
+whitespace-only text and anything over 100 KB is skipped. **Privacy:** nothing is recorded when the owner's window (or the focused window) has
+a class containing `1password`, `bitwarden`, `keepassxc` or `keepass`, or when the selection offers the `x-kde-passwordManagerHint` target.
+When the application that owns the clipboard exits and nobody took over, the daemon owns it and serves the newest recorded text
+(`TARGETS`, `UTF8_STRING`, `STRING`, `TEXT`, `text/plain`), so copied text survives closing the app; a secret that was skipped is not resurrected.
+`macclip clear` forgets the history and empties the clipboard.
+
+**Picker.** A centred card like Spotlight: a search field and the entries (first line cut with an ellipsis, `⏎ N lines` for multi-line text, a small
+age such as `3m`). It grabs the keyboard and pointer like `macspot`; it also works when the daemon is not running (it reads the file).
+
+| Key | |
+| --- | --- |
+| type | filter (case-insensitive substring) |
+| Up / Down / Tab (Shift+Tab back) | choose |
+| Return | paste: make it the clipboard, close, give the focus back and press Ctrl+V (XTest; without the extension it only sets the clipboard) |
+| Shift+Return | copy only |
+| Alt+1 .. Alt+9 | paste that entry (Alt+Shift+digit copies only) |
+| Delete | remove the entry from the history |
+| Esc, click outside, `macclip` again | close |
+
+Terminals paste with Ctrl+Shift+V: use Shift+Return there and paste by hand. `tests/e2e/clip.sh` (`make e2e-clip`) runs the daemon and the picker against a private
+Xvfb with `xclip`, a fake password manager window and a window that receives the Ctrl+V.
 
 ## Window rules for the wallpaper browser
 

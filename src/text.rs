@@ -91,7 +91,8 @@ fn pick_specs() -> Option<[FaceSpec; 4]> {
         (regular, others.map(|h| h.join().ok().flatten()))
     });
     let regular = regular?;
-    load(&regular)?; // fail early (and free it again) if the file is unreadable
+    // Fail early if the file is unreadable. (Not by parsing it: that costs ~15 ms and the first glyph parses it anyway.)
+    std::fs::File::open(&regular.0).ok()?;
     let [medium, semibold, bold] = [medium, semibold, bold].map(|f| f.unwrap_or_else(|| regular.clone()));
     Some([regular, medium, semibold, bold])
 }

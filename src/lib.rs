@@ -7,6 +7,7 @@ pub mod app;
 pub mod apps;
 pub mod backend;
 pub mod calc;
+pub mod clip;
 pub mod clipboard;
 pub mod config;
 pub mod controlcenter;

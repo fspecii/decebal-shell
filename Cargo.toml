@@ -36,7 +36,7 @@ ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 smithay-client-toolkit = { version = "0.19", default-features = false, features = ["calloop", "xkbcommon"], optional = true }
 wayland-protocols = { version = "0.32", default-features = false, features = ["client", "staging"], optional = true }
-x11rb = { version = "0.13", optional = true, features = ["shape", "randr"] }
+x11rb = { version = "0.13", optional = true, features = ["shape", "randr", "xfixes", "xtest"] }
 
 [features]
 default = ["wayland", "x11"]
@@ -79,6 +79,11 @@ required-features = ["x11"]
 [[bin]]
 name = "machud"
 path = "src/bin/machud.rs"
+required-features = ["x11"]
+
+[[bin]]
+name = "macclip"
+path = "src/bin/macclip.rs"
 required-features = ["x11"]
 
 [[bin]]

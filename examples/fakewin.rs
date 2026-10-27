@@ -14,7 +14,7 @@ fn main() {
     let (conn, n) = x11rb::connect(None).expect("connect");
     let screen = &conn.setup().roots[n];
     let win = conn.generate_id().unwrap();
-    let aux = CreateWindowAux::new().background_pixel(rgb).event_mask(EventMask::EXPOSURE | EventMask::STRUCTURE_NOTIFY | EventMask::BUTTON_PRESS);
+    let aux = CreateWindowAux::new().background_pixel(rgb).event_mask(EventMask::EXPOSURE | EventMask::STRUCTURE_NOTIFY | EventMask::BUTTON_PRESS | EventMask::KEY_PRESS);
     conn.create_window(0, win, screen.root, 0, 0, 480, 300, 0, WindowClass::INPUT_OUTPUT, 0, &aux).unwrap();
     let wm_class = format!("{class}\0{class}\0");
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, wm_class.as_bytes()).unwrap();
@@ -35,6 +35,14 @@ fn main() {
                     use std::io::Write;
                     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
                         let _ = writeln!(f, "{title} button {}", b.detail);
+                    }
+                }
+            }
+            Ok(Event::KeyPress(k)) => {
+                if let Some(path) = std::env::var_os("FAKEWIN_LOG") {
+                    use std::io::Write;
+                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                        let _ = writeln!(f, "{title} key {} state {}", k.detail, u16::from(k.state));
                     }
                 }
             }
