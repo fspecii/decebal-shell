@@ -440,7 +440,7 @@ impl Model {
         if cur.is_some() {
             rows.push(Row::new("Remove wallpaper").ctl(Ctl::new("w:clear", Kind::Button { label: "Remove".into(), danger: true })));
         }
-        let mut items = vec![Item::Preview { id: cur.clone().unwrap_or_default(), caption: cur.as_deref().map(|p| format!("{} · {}", Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), cap(&mode))).unwrap_or_else(|| "No image set".into()) }, Item::Space(6.0), Item::Card(rows)];
+        let mut items = vec![Item::Preview { id: cur.as_ref().map(|c| format!("{c}#big")).unwrap_or_default(), caption: cur.as_deref().map(|p| format!("{} · {}", Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), cap(&mode))).unwrap_or_else(|| "No image set".into()) }, Item::Space(6.0), Item::Card(rows)];
         // changed through `rdwmctl wallpaper` since the last reload
         let live = self.rt.state["wallpaper"]["image"].as_str();
         let filev = self.string("wallpaper", "image");

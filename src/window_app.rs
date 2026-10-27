@@ -85,6 +85,8 @@ pub trait WindowApp {
     fn set_waker(&mut self, waker: Waker);
     /// Size of the output the window is on, when the backend can tell (0 x 0 = unknown).
     fn set_screen(&mut self, w: u32, h: u32);
+    /// UI scale factor (1.0 = 96 dpi) when the backend can tell; default no-op.
+    fn set_scale(&mut self, _scale: f32) {}
     /// The drawable area changed.
     fn resize(&mut self, w: u32, h: u32);
     /// Whether the window should draw rounded outer corners (false when tiled/maximised).

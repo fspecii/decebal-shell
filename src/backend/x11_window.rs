@@ -141,7 +141,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let title = app.title();
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, title.as_bytes()).map_err(err)?;
     conn.change_property8(PropMode::REPLACE, win, at.net_wm_name, at.utf8, title.as_bytes()).map_err(err)?;
-    conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"machaven\0Machaven\0").map_err(err)?;
+    let class = wm_class(app.app_id());
+    conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, class.as_bytes()).map_err(err)?;
     conn.change_property32(PropMode::REPLACE, win, at.wm_protocols, AtomEnum::ATOM, &[at.wm_delete]).map_err(err)?;
     let mut hints = WmSizeHints::new();
     hints.min_size = Some((480, 360));
@@ -163,6 +164,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     };
 
     app.set_screen(sw, sh);
+    app.set_scale(xft_scale(&conn, screen.root));
     app.set_rounded(false);
     app.resize(w, h);
     app.set_waker(waker);
@@ -259,6 +261,21 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     }
 }
 
+/// `WM_CLASS` value: instance (lower case) and class (first letter upper case) of an application id.
+fn wm_class(app_id: &str) -> String {
+    let inst = app_id.to_lowercase();
+    let mut c = app_id.chars();
+    let class = c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default();
+    format!("{inst}\0{class}\0")
+}
+
+/// `Xft.dpi / 96` from the root window's resource database (1.0 when unset).
+fn xft_scale(conn: &RustConnection, root: Window) -> f32 {
+    let Ok(Ok(r)) = conn.get_property(false, root, AtomEnum::RESOURCE_MANAGER, AtomEnum::STRING, 0, 65536).map(|c| c.reply()) else { return 1.0 };
+    let text = String::from_utf8_lossy(&r.value);
+    text.lines().find_map(|l| l.strip_prefix("Xft.dpi:")).and_then(|v| v.trim().parse::<f32>().ok()).map_or(1.0, |d| (d / 96.0).clamp(1.0, 4.0))
+}
+
 /// `CopyFromParent` depth for `create_window`.
 const COPY_DEPTH: u8 = 0;
 
@@ -299,6 +316,12 @@ fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wm_class_from_app_id() {
+        assert_eq!(wm_class("MacSettings"), "macsettings\0MacSettings\0");
+        assert_eq!(wm_class("machaven"), "machaven\0Machaven\0");
+    }
 
     #[test]
     fn keymap_shift_and_caps() {
