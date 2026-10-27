@@ -34,6 +34,42 @@ const TEXT_PX: f32 = 12.0;
 const BASELINE: f32 = 17.0;
 const LEFT_PAD: f32 = 7.0;
 const RIGHT_PAD: f32 = 7.0;
+/// Floating bar (`bar_style = "floating"`): gap between the screen edge and the pill, and the extra
+/// space the content keeps from the pill's rounded ends.
+const PILL_MARGIN_X: f32 = 8.0;
+const PILL_MARGIN_Y: f32 = 2.0;
+const PILL_INSET: f32 = 10.0;
+
+#[cfg(test)]
+thread_local! {
+    /// Tests never read the developer's real theme: floating is off unless a test switches it on.
+    static TEST_FLOATING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn floating() -> bool {
+    #[cfg(test)]
+    return TEST_FLOATING.with(|f| f.get());
+    #[cfg(not(test))]
+    crate::theme::th().bar_floating()
+}
+
+/// How far the content sits inside the strip: 0 for the flat bar, the pill's end cap for the floating one.
+fn inset() -> f32 {
+    if floating() {
+        PILL_INSET
+    } else {
+        0.0
+    }
+}
+
+/// Corner radius of the hover and open-menu highlights: slightly rounded on the strip, a pill on the floating bar.
+fn item_radius() -> f32 {
+    if floating() {
+        (BAR_HEIGHT - 6.0) / 2.0
+    } else {
+        5.0
+    }
+}
 const BTN_W: f32 = 27.0;
 const ICON_PX: f32 = 16.0;
 /// Menu bar text colour (from the theme).
@@ -381,7 +417,12 @@ impl MacBar {
     }
 
     fn spans(&self) -> Vec<Span> {
-        title_spans(&self.menus, |m| self.label_w(m))
+        let dx = inset();
+        let mut spans = title_spans(&self.menus, |m| self.label_w(m));
+        if dx > 0.0 {
+            spans.iter_mut().for_each(|s| s.x += dx);
+        }
+        spans
     }
 
     fn tray_items(&self) -> Vec<(Tray, f32)> {
@@ -425,7 +466,7 @@ impl MacBar {
     }
 
     fn tray(&self) -> Vec<(Tray, Span)> {
-        tray_spans(self.width as f32, &self.tray_items())
+        tray_spans(self.width as f32 - inset(), &self.tray_items())
     }
 
     fn dropdown(&self, idx: usize) -> Option<Dropdown> {
@@ -700,7 +741,14 @@ impl MacBar {
 
     fn draw_bar(&mut self, pm: &mut Pixmap) {
         let w = pm.width() as f32;
-        crate::gfx::fill_rect(pm, 0.0, 0.0, w, BAR_HEIGHT, crate::theme::th().bar_c());
+        if floating() {
+            let th = crate::theme::th();
+            let (x, y, pw, ph) = (PILL_MARGIN_X, PILL_MARGIN_Y, w - 2.0 * PILL_MARGIN_X, BAR_HEIGHT - 2.0 * PILL_MARGIN_Y);
+            fill_rounded(pm, x, y, pw, ph, ph / 2.0, th.bar_c());
+            stroke_rounded(pm, x + 0.5, y + 0.5, pw - 1.0, ph - 1.0, ph / 2.0 - 0.5, th.outline_c(), 1.0);
+        } else {
+            crate::gfx::fill_rect(pm, 0.0, 0.0, w, BAR_HEIGHT, crate::theme::th().bar_c());
+        }
 
         // Left: titles.
         let spans = self.spans();
@@ -716,7 +764,7 @@ impl MacBar {
                 0.0
             };
             if alpha > 0.0 {
-                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(alpha));
+                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(alpha));
             }
             if m.icon {
                 self.symbol(pm, "apple", 12.0, s.x + s.w / 2.0, 11.5);
@@ -732,7 +780,7 @@ impl MacBar {
         for (kind, s) in self.tray() {
             let cx = s.x + s.w / 2.0;
             if self.open == Open::Popup(kind) {
-                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(0.18));
+                fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(0.18));
             }
             match kind {
                 Tray::Layout => self.draw_layout_item(pm, s),
@@ -788,7 +836,7 @@ impl MacBar {
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
                     if self.open == Open::Control {
-                        fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, 5.0, crate::theme::th().ink(0.18));
+                        fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(0.18));
                     }
                     self.symbol(pm, "switches", ICON_PX, cx, 12.5);
                 }
@@ -1347,6 +1395,33 @@ mod tests {
         assert!(bar.menus[1].bold);
         assert_eq!(bar.app_name, "App");
         assert!(!bar.refresh_app_name(), "unchanged name needs no rebuild");
+    }
+
+    #[test]
+    fn floating_bar_is_a_pill_with_content_inset_and_the_flat_bar_is_unchanged() {
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        bar.width = 1000;
+        let flat_spans = bar.spans();
+        let flat_tray = bar.tray();
+        let mut pm = crate::gfx::pixmap(1000, 26).unwrap();
+        bar.draw_bar(&mut pm);
+        assert_eq!(pm.pixel(0, 0).unwrap().alpha(), 255, "flat: the strip reaches the corner");
+        assert_eq!(flat_spans[0].x, LEFT_PAD);
+
+        TEST_FLOATING.with(|f| f.set(true));
+        let (spans, tray) = (bar.spans(), bar.tray());
+        let mut pill = crate::gfx::pixmap(1000, 26).unwrap();
+        bar.draw_bar(&mut pill);
+        TEST_FLOATING.with(|f| f.set(false));
+        assert_eq!(pill.pixel(0, 0).unwrap().alpha(), 0, "floating: the corner is transparent");
+        assert_eq!(pill.pixel(500, 0).unwrap().alpha(), 0, "...and so is the margin above the pill");
+        assert_eq!(pill.pixel(500, 13).unwrap().alpha(), 255, "the pill itself is painted");
+        assert_eq!(pill.pixel(500, 13), pm.pixel(500, 13), "same colour as the strip");
+        assert_eq!(pill.pixel(3, 13).unwrap().alpha(), 0, "margin left of the pill");
+        assert_eq!(spans[0].x, LEFT_PAD + PILL_INSET);
+        let (last, flat_last) = (tray.last().unwrap().1, flat_tray.last().unwrap().1);
+        assert_eq!(last.x + last.w, flat_last.x + flat_last.w - PILL_INSET);
+        assert!(spans.iter().zip(&flat_spans).all(|(a, b)| a.w == b.w), "widths do not change");
     }
 
     #[test]

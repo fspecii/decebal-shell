@@ -130,6 +130,8 @@ pub struct Theme {
     pub bar_height: f32,
     pub titlebar_style: String,
     pub titlebar_height: i64,
+    /// `flat` (a full-width strip) or `floating` (a pill with a margin around it, caelestia's look).
+    pub bar_style: String,
     pub font_family: String,
     pub font_scale: f32,
 }
@@ -175,6 +177,10 @@ impl Theme {
     /// Corner radius for a surface that is `factor` times a popup (popup = 1.0).
     pub fn r(&self, factor: f32) -> f32 {
         self.radius * factor
+    }
+    /// The menu bar is a floating pill instead of a full-width strip.
+    pub fn bar_floating(&self) -> bool {
+        self.bar_style == "floating"
     }
 }
 
@@ -229,6 +235,7 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
     ("dock_padding", Kind::Num(4.0, 40.0), "dock panel padding in px (consumed by the dock layout)"),
     ("bar_height", Kind::Num(20.0, 40.0), "menu bar height in px (consumed by the bar layout)"),
+    ("bar_style", Kind::Choice(&["flat", "floating"]), "menu bar shape: a full-width strip or a floating pill"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
     ("font_family", Kind::Str, "UI font name (fontconfig); unavailable fonts fall back to Inter / sans-serif"),
@@ -350,6 +357,17 @@ impl Def {
         }
     }
 
+    /// This theme with its colours replaced by the Material palette of `d` (both variants; metrics stay).
+    pub fn with_dynamic(&self, d: &Dynamic) -> Def {
+        let mut out = self.clone();
+        for dark in [true, false] {
+            let colours = super::material::generate(d.seed, d.variant, dark).tokens();
+            let slot = if dark { &mut out.dark } else { &mut out.light };
+            slot.get_or_insert_with(Tokens::new).extend(colours);
+        }
+        out
+    }
+
     pub fn has_dark(&self) -> bool {
         self.dark.is_some() || (self.light.is_none() && self.dark_default)
     }
@@ -438,6 +456,7 @@ impl Def {
             dock_icon_size: clampf(num("dock_icon_size", 47.0), 24.0, 128.0),
             dock_padding: clampf(num("dock_padding", 16.0), 4.0, 40.0),
             bar_height: clampf(num("bar_height", 26.0), 20.0, 40.0),
+            bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
             font_family,
@@ -474,6 +493,42 @@ impl Mode {
     }
 }
 
+/// "Colours from wallpaper": the Material palette of a seed colour replaces the Caelestia theme's colours.
+/// The seed is taken from the wallpaper once (by `macthemectl dynamic` or the Theme pane) and stored here,
+/// so every program derives the same palette from three words of JSON instead of decoding an image.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dynamic {
+    pub seed: Rgb,
+    pub variant: super::material::Variant,
+    /// The image the seed came from (shown in the UI; the seed is not re-read from it by the programs).
+    pub wallpaper: Option<String>,
+    /// Re-derive the seed when macshell changes the wallpaper (machaven, the settings Wallpaper pane).
+    pub follow: bool,
+}
+
+impl Dynamic {
+    pub fn from_json(v: &serde_json::Value) -> Option<Dynamic> {
+        let o = v.as_object()?;
+        Some(Dynamic {
+            seed: o.get("seed").and_then(|x| x.as_str()).and_then(Rgb::parse)?,
+            variant: o.get("scheme").and_then(|x| x.as_str()).and_then(super::material::Variant::parse).unwrap_or_default(),
+            wallpaper: o.get("wallpaper").and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(String::from),
+            follow: o.get("follow").and_then(|x| x.as_bool()).unwrap_or(true),
+        })
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut o = serde_json::Map::new();
+        o.insert("seed".into(), self.seed.hex().into());
+        o.insert("scheme".into(), self.variant.as_str().into());
+        if let Some(w) = &self.wallpaper {
+            o.insert("wallpaper".into(), w.clone().into());
+        }
+        o.insert("follow".into(), self.follow.into());
+        serde_json::Value::Object(o)
+    }
+}
+
 /// The user's choice: a theme, a mode, and optional per-key overrides. Stored under `"theme"` in `macshell.json`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Selection {
@@ -487,11 +542,13 @@ pub struct Selection {
     pub font_scale: Option<f32>,
     /// Also restyle rdwm's titlebars when applying (macthemectl / macsettings).
     pub sync_rdwm: bool,
+    /// Colours derived from the wallpaper; only the Caelestia theme uses them.
+    pub dynamic: Option<Dynamic>,
 }
 
 impl Default for Selection {
     fn default() -> Self {
-        Selection { name: crate::theme::builtin::DEFAULT_ID.into(), mode: Mode::Dark, accent: None, opacity: None, radius: None, font: None, font_scale: None, sync_rdwm: true }
+        Selection { name: crate::theme::builtin::DEFAULT_ID.into(), mode: Mode::Dark, accent: None, opacity: None, radius: None, font: None, font_scale: None, sync_rdwm: true, dynamic: None }
     }
 }
 
@@ -518,6 +575,7 @@ impl Selection {
         if let Some(b) = o.get("syncRdwm").and_then(|x| x.as_bool()) {
             s.sync_rdwm = b;
         }
+        s.dynamic = o.get("dynamic").and_then(Dynamic::from_json);
         s
     }
 
@@ -544,6 +602,9 @@ impl Selection {
         }
         if !self.sync_rdwm {
             o.insert("syncRdwm".into(), false.into());
+        }
+        if let Some(d) = &self.dynamic {
+            o.insert("dynamic".into(), d.to_json());
         }
         serde_json::Value::Object(o)
     }
@@ -588,6 +649,14 @@ mod tests {
     }
 
     #[test]
+    fn bar_style_defaults_to_flat_and_only_floating_themes_float() {
+        let d = Def::parse(MINI).unwrap();
+        assert!(!d.resolve("m", true, &Selection::default()).bar_floating());
+        let f = Def::parse("name = \"f\"\n[metrics]\nbar_style = \"floating\"\n").unwrap();
+        assert!(f.resolve("f", true, &Selection::default()).bar_floating());
+    }
+
+    #[test]
     fn rejects_bad_files() {
         assert!(Def::parse("name = \"x\"\n[dark]\nbackground = \"red\"\n").unwrap_err().contains("not a colour"));
         assert!(Def::parse("name = \"x\"\n[metrics]\nradius = 99\n").unwrap_err().contains("outside"));
@@ -595,6 +664,7 @@ mod tests {
         assert!(Def::parse("name = \"x\"\nfoo = 1\n").unwrap_err().contains("unknown section"));
         assert!(Def::parse("[dark]\ntext = \"#fff\"\n").unwrap_err().contains("name"));
         assert!(Def::parse("name = \"x\"\n[metrics]\ntitlebar_style = \"gnome\"\n").unwrap_err().contains("one of"));
+        assert!(Def::parse("name = \"x\"\n[metrics]\nbar_style = \"round\"\n").unwrap_err().contains("flat, floating"));
         assert!(Def::parse("name = ").unwrap_err().contains("invalid TOML"));
     }
 
@@ -647,6 +717,7 @@ mod tests {
             font: Some("Inter".into()),
             font_scale: Some(1.1),
             sync_rdwm: false,
+            dynamic: Some(Dynamic { seed: Rgb(1, 2, 3), variant: crate::theme::material::Variant::Vibrant, wallpaper: Some("/w.png".into()), follow: false }),
         };
         assert_eq!(Selection::from_json(&sel.to_json()), sel);
         assert_eq!(Selection::from_json(&serde_json::json!("dracula")).name, "dracula");

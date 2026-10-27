@@ -148,6 +148,15 @@ impl Source {
         mode.and_then(|m| lookup(&base).map(|id| (id, Some(m))))
     }
 
+    /// [`Self::load_def`] plus "colours from wallpaper": the Caelestia theme gets its palette from the stored seed.
+    pub fn def_for(&self, id: &str, sel: &Selection) -> Result<Def, String> {
+        let def = self.load_def(id)?;
+        Ok(match (&sel.dynamic, id == builtin::DYNAMIC_THEME) {
+            (Some(d), true) => def.with_dynamic(d),
+            _ => def,
+        })
+    }
+
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
     pub fn build(&self, sel: &Selection, system_dark: bool) -> (Theme, Option<String>) {
         let (id, implied) = self.find(&sel.name).unwrap_or_else(|| (sel.name.clone(), None));
@@ -155,7 +164,7 @@ impl Source {
         if let Some(m) = implied {
             sel.mode = m;
         }
-        match self.load_def(&id) {
+        match self.def_for(&id, &sel) {
             Ok(def) => {
                 let dark = def.pick_dark(sel.mode, system_dark);
                 (def.resolve(&id, dark, &sel), None)

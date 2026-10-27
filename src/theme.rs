@@ -31,8 +31,11 @@ pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
 // Shared, switchable theme (colours, metrics, fonts): see docs/theming.md. Kept in `theme/` so this
 // file (the dock's layout tokens) stays untouched by it.
 pub mod builtin;
+pub mod dynamic;
 pub mod live;
+pub mod material;
 pub mod model;
 pub mod rdwm;
+pub mod style;
 pub use live::{current, current as th, generation, take_changed};
-pub use model::{Mode, Rgb, Selection, Theme};
+pub use model::{Dynamic, Mode, Rgb, Selection, Theme};

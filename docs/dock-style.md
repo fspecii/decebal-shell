@@ -26,6 +26,9 @@ Heights scale with `Xft.dpi / 96` (or `MACSHELL_SCALE`): 48 px (center) / 44 px 
 
 `macshell.json`: `{"bar": {"enabled": true | false | "auto"}}`, see "macbar hiding" below.
 
+`macthemectl style windows|macos|caelestia` writes `style` (and `windowsAlign`) here together with the theme and `bar.enabled`; see
+[theming.md](theming.md#shell-styles-macos-windows-caelestia).
+
 ## What the taskbar does
 
 * **Start**: a four-pane logo drawn in code; opens Launchpad (`maclaunch`, `MACSHELL_LAUNCHPAD` overrides). **Search**: opens macspot.
