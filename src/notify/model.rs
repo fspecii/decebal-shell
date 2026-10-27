@@ -29,12 +29,20 @@ impl Default for Config {
 }
 
 pub fn config_path() -> PathBuf {
-    let base = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).filter(|p| p.is_absolute()).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))).unwrap_or_else(|| PathBuf::from("/tmp"));
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("/tmp"));
     base.join("macshell/notifications.toml")
 }
 
 pub fn state_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from).filter(|p| p.is_absolute()).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state"))).unwrap_or_else(|| PathBuf::from("/tmp"));
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
+        .unwrap_or_else(|| PathBuf::from("/tmp"));
     base.join("macshell")
 }
 
@@ -217,11 +225,7 @@ pub fn parse_notify(args: &[Value]) -> Option<Notification> {
                 "resident" => n.resident = v.as_bool().unwrap_or(false),
                 "image-data" => n.image = image_from_struct(inner),
                 "image_data" | "icon_data" => legacy_image = legacy_image.or_else(|| image_from_struct(inner)),
-                "image-path" | "image_path" => {
-                    if n.icon.is_empty() {
-                        n.icon = v.as_str().unwrap_or("").to_string();
-                    }
-                }
+                "image-path" | "image_path" if n.icon.is_empty() => n.icon = v.as_str().unwrap_or("").to_string(),
                 _ => {}
             }
         }

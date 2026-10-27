@@ -334,7 +334,22 @@ impl Ui {
         let mon = panel_monitor(&conn, root, (i32::from(screen.width_in_pixels), i32::from(screen.height_in_pixels)));
         let s = xft_scale(&conn, root);
         let fonts = Fonts::load().ok_or("no usable font found")?;
-        Ok(Ui { conn, root, gc, depth: screen.root_depth, mon, s, fonts, pal: Palette::current(), at, banners: Vec::new(), pending: VecDeque::new(), hist: None, icon_cache: HashMap::new(), default_secs: 5 })
+        Ok(Ui {
+            conn,
+            root,
+            gc,
+            depth: screen.root_depth,
+            mon,
+            s,
+            fonts,
+            pal: Palette::current(),
+            at,
+            banners: Vec::new(),
+            pending: VecDeque::new(),
+            hist: None,
+            icon_cache: HashMap::new(),
+            default_secs: 5,
+        })
     }
 
     pub fn fd(&self) -> RawFd {
@@ -403,6 +418,7 @@ impl Ui {
         self.create_banner(n, secs);
     }
 
+    #[allow(clippy::type_complexity)]
     fn layout(&mut self, n: &Notification) -> (u32, u32, String, Vec<String>, Vec<(R, String, String)>, R, R) {
         let s = self.s;
         let w = BANNER_W * s;
@@ -609,8 +625,7 @@ impl Ui {
     /// Drains pending X events; returns what to tell the bus.
     pub fn pump(&mut self, sh: &mut Shared) -> Result<Vec<UiEvent>, String> {
         let mut out = Vec::new();
-        loop {
-            let Some(ev) = self.conn.poll_for_event().map_err(cerr)? else { break };
+        while let Some(ev) = self.conn.poll_for_event().map_err(cerr)? {
             self.handle(ev, sh, &mut out);
         }
         let _ = self.conn.flush();
@@ -779,7 +794,7 @@ fn paint_banner(fonts: &mut Fonts, pal: &Palette, s: f32, b: &Banner) -> Pixmap 
     }
 }
 
-    fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Option<&HistWin>, icons: &HashMap<String, Option<Pixmap>>) -> Pixmap {
+fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Option<&HistWin>, icons: &HashMap<String, Option<Pixmap>>) -> Pixmap {
     let (w, h) = hw.map_or((1, 1), |h| (h.w, h.h));
     let mut pm = Pixmap::new(w, h).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"));
     gfx::fill_rounded(&mut pm, 0.0, 0.0, w as f32, h as f32, 16.0 * s, pal.bg_color());
@@ -828,8 +843,7 @@ fn paint_banner(fonts: &mut Fonts, pal: &Palette, s: f32, b: &Banner) -> Pixmap 
     pm
 }
 
-
-    fn hist_rects(s: f32, scroll: usize, sh: &Shared) -> (R, R, Vec<R>) {
+fn hist_rects(s: f32, scroll: usize, sh: &Shared) -> (R, R, Vec<R>) {
     let w = HIST_W * s;
     let clear = R { x: w - 70.0 * s, y: 14.0 * s, w: 56.0 * s, h: 22.0 * s };
     let dnd = R { x: 12.0 * s, y: 44.0 * s, w: w - 24.0 * s, h: 30.0 * s };
@@ -837,7 +851,6 @@ fn paint_banner(fonts: &mut Fonts, pal: &Palette, s: f32, b: &Banner) -> Pixmap 
     let rows = (0..n).map(|i| R { x: 0.0, y: (HIST_HEADER + i as f32 * HIST_ROW) * s, w, h: HIST_ROW * s }).collect();
     (clear, dnd, rows)
 }
-
 
 #[cfg(test)]
 mod tests {

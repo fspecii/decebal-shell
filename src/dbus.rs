@@ -554,7 +554,7 @@ impl Conn {
     }
 
     /// Next complete buffered message, if any.
-    pub fn next(&mut self) -> io::Result<Option<Message>> {
+    pub fn next_message(&mut self) -> io::Result<Option<Message>> {
         match Message::decode(&self.inbuf)? {
             Some((m, used)) => {
                 self.inbuf.drain(..used);
@@ -569,7 +569,7 @@ impl Conn {
     pub fn call_blocking(&mut self, m: Message) -> io::Result<Message> {
         let serial = self.send(&m)?;
         loop {
-            while let Some(r) = self.next()? {
+            while let Some(r) = self.next_message()? {
                 if r.reply_serial == serial && (r.kind == RETURN || r.kind == ERROR) {
                     if r.kind == ERROR {
                         let text = r.args().ok().and_then(|a| a.first().and_then(|v| v.as_str().map(str::to_string))).unwrap_or_default();

@@ -209,7 +209,7 @@ pub fn run_daemon() -> Result<Start, String> {
             if !conn.fill().map_err(|e| e.to_string())? {
                 return Ok(Start::Ran); // bus went away: the session is ending
             }
-            while let Some(msg) = conn.next().map_err(|e| e.to_string())? {
+            while let Some(msg) = conn.next_message().map_err(|e| e.to_string())? {
                 if msg.kind != dbus::CALL {
                     if msg.kind == dbus::SIGNAL && msg.member == "NameLost" {
                         return Ok(Start::Ran);
