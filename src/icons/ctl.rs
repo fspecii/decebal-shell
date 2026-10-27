@@ -1,0 +1,193 @@
+//! `macthemectl icons ...`: the command line of the icon settings (also what the tests drive).
+
+use super::config::IconConfig;
+use super::live::State;
+use super::resolve::{self, Roots, ThemeInfo};
+use serde_json::json;
+use std::path::Path;
+
+pub const HELP: &str = "macthemectl icons list [--json]           installed icon themes (* = in use; symbolic-only / cursor-only ones cannot be chosen)
+macthemectl icons set NAME|auto          use a theme (directory or display name); auto follows GSettings / GTK
+macthemectl icons status [--json]        configured theme, what is in use, lookup chain, scale, tint
+macthemectl icons reset                  remove the `icons` settings (automatic, scale 1, no tint, fallback Adwaita)
+macthemectl icons scale 0.6-1.25         size of the artwork inside its square (1 = fill it)
+macthemectl icons tint on|off            repaint symbolic icons in the theme's text colour
+macthemectl icons fallback NAME|none     theme tried after the chosen one, its parents and hicolor
+Stored in macshell.json under \"icons\"; running programs follow within half a second.";
+
+/// Runs one subcommand against `file` (macshell.json) and `roots`; the text to print, or an error message.
+pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String> {
+    let json = args.iter().any(|a| a == "--json");
+    let args: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    let themes = resolve::list_themes(roots);
+    let mut cfg = IconConfig::read(file);
+    match args.first().copied() {
+        Some("list") => Ok(list(file, roots, &themes, json)),
+        Some("status") => Ok(status(file, roots, json)),
+        Some("set") => {
+            let name = args.get(1).ok_or("set needs a theme name (macthemectl icons list)")?;
+            if name.eq_ignore_ascii_case("auto") {
+                cfg.theme = "auto".into();
+            } else {
+                let id = resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))?;
+                let t = themes.iter().find(|t| t.id == id).expect("listed");
+                if !t.kind.selectable() {
+                    return Err(format!("`{}` cannot be used for application icons ({})", t.id, t.kind.label()));
+                }
+                cfg.theme = id;
+            }
+            cfg.write(file)?;
+            Ok(format!("icon theme: {}", if cfg.is_auto() { "auto".to_string() } else { cfg.theme.clone() }))
+        }
+        Some("reset") => {
+            IconConfig::reset(file)?;
+            Ok("icon settings reset".into())
+        }
+        Some("scale") => {
+            let v: f32 = args.get(1).and_then(|v| v.parse().ok()).ok_or("scale needs a number")?;
+            if !(super::config::SCALE_MIN..=super::config::SCALE_MAX).contains(&v) {
+                return Err(format!("scale must be between {} and {}", super::config::SCALE_MIN, super::config::SCALE_MAX));
+            }
+            cfg.size_scale = v;
+            cfg.write(file)?;
+            Ok(format!("icon size scale: {v}"))
+        }
+        Some("tint") => {
+            cfg.monochrome_tint = match args.get(1).copied() {
+                Some("on" | "true" | "1") => true,
+                Some("off" | "false" | "0") => false,
+                _ => return Err("tint needs on or off".into()),
+            };
+            cfg.write(file)?;
+            Ok(format!("symbolic icon tint: {}", if cfg.monochrome_tint { "on" } else { "off" }))
+        }
+        Some("fallback") => {
+            let name = args.get(1).ok_or("fallback needs a theme name or none")?;
+            cfg.fallback = if name.eq_ignore_ascii_case("none") { "none".into() } else { resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))? };
+            cfg.write(file)?;
+            Ok(format!("fallback theme: {}", cfg.fallback))
+        }
+        Some("-h" | "--help" | "help") | None => Ok(HELP.into()),
+        Some(other) => Err(format!("unknown icons command `{other}`\n{HELP}")),
+    }
+}
+
+fn current(file: &Path, roots: &Roots) -> Option<String> {
+    State::new(file.to_path_buf(), roots.clone()).choice.active
+}
+
+fn list(file: &Path, roots: &Roots, themes: &[ThemeInfo], json: bool) -> String {
+    let cur = current(file, roots);
+    let cfg = IconConfig::read(file);
+    if json {
+        let v: Vec<_> = themes
+            .iter()
+            .map(|t| {
+                json!({"id": t.id, "name": t.name, "comment": t.comment, "kind": t.kind.label(), "selectable": t.kind.selectable(), "inherits": t.inherits, "path": t.path,
+                       "current": cur.as_deref() == Some(t.id.as_str()), "configured": !cfg.is_auto() && resolve::find_installed(themes, &cfg.theme).as_deref() == Some(t.id.as_str())})
+            })
+            .collect();
+        return serde_json::to_string_pretty(&v).unwrap_or_default();
+    }
+    let mut out = String::new();
+    for t in themes {
+        let mark = if cur.as_deref() == Some(t.id.as_str()) { '*' } else { ' ' };
+        let note = if t.kind.selectable() { String::new() } else { format!("  [{}: not selectable]", t.kind.label()) };
+        out.push_str(&format!("{mark} {:<28} {:<28}{note}\n", t.id, t.name));
+    }
+    out.trim_end().to_string()
+}
+
+fn status(file: &Path, roots: &Roots, json: bool) -> String {
+    let s = State::new(file.to_path_buf(), roots.clone());
+    if json {
+        return serde_json::to_string_pretty(&json!({
+            "configured": if s.cfg.is_auto() { "auto" } else { s.cfg.theme.as_str() },
+            "desktop": s.desktop, "active": s.choice.active, "problem": s.choice.problem, "chain": s.chain(),
+            "size_scale": s.cfg.size_scale, "monochrome_tint": s.cfg.monochrome_tint, "fallback": s.cfg.fallback,
+        }))
+        .unwrap_or_default();
+    }
+    let mut out = format!(
+        "theme:      {} (configured: {}{})\nchain:      {}\nsize scale: {}\ntint:       {}\nfallback:   {}",
+        s.choice.active.as_deref().unwrap_or("none (hicolor only)"),
+        if s.cfg.is_auto() { "auto" } else { &s.cfg.theme },
+        if s.cfg.is_auto() { format!(", desktop says {}", s.desktop.as_deref().unwrap_or("nothing")) } else { String::new() },
+        s.chain().join(" > "),
+        s.cfg.size_scale,
+        if s.cfg.monochrome_tint { "on" } else { "off" },
+        s.cfg.fallback
+    );
+    if let Some(p) = &s.choice.problem {
+        out.push_str(&format!("\nproblem:    {p}"));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve::testkit::*;
+    use super::*;
+
+    fn setup() -> (Tree, std::path::PathBuf) {
+        let t = Tree::new("ctl");
+        t.theme("hicolor", PLAIN).theme("Adwaita", PLAIN).theme("Tela", &PLAIN.replace("Plain", "Tela blue"));
+        t.theme("Mono", "[Icon Theme]\nName=Mono\nDirectories=symbolic/apps\n[symbolic/apps]\nSize=16\nType=Scalable\n");
+        let f = t.root.join("macshell.json");
+        (t, f)
+    }
+
+    fn go(t: &Tree, f: &Path, a: &[&str]) -> Result<String, String> {
+        run(f, &t.roots(), &a.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn set_status_reset_cycle() {
+        let (t, f) = setup();
+        assert_eq!(go(&t, &f, &["set", "tela blue"]).unwrap(), "icon theme: Tela");
+        assert_eq!(IconConfig::read(&f).theme, "Tela");
+        let st = go(&t, &f, &["status"]).unwrap();
+        assert!(st.contains("theme:      Tela") && st.contains("Tela > hicolor > Adwaita"), "{st}");
+        let j: serde_json::Value = serde_json::from_str(&go(&t, &f, &["status", "--json"]).unwrap()).unwrap();
+        assert_eq!((j["active"].as_str(), j["configured"].as_str()), (Some("Tela"), Some("Tela")));
+        go(&t, &f, &["scale", "0.9"]).unwrap();
+        go(&t, &f, &["tint", "on"]).unwrap();
+        go(&t, &f, &["fallback", "none"]).unwrap();
+        let c = IconConfig::read(&f);
+        assert_eq!((c.size_scale, c.monochrome_tint, c.fallback.as_str(), c.theme.as_str()), (0.9, true, "none", "Tela"));
+        assert!(go(&t, &f, &["status"]).unwrap().contains("Tela > hicolor\n"));
+        go(&t, &f, &["set", "auto"]).unwrap();
+        assert!(IconConfig::read(&f).is_auto());
+        assert_eq!(IconConfig::read(&f).size_scale, 0.9, "the other settings stay");
+        go(&t, &f, &["reset"]).unwrap();
+        assert_eq!(IconConfig::read(&f), IconConfig::default());
+    }
+
+    #[test]
+    fn refusals_change_nothing() {
+        let (t, f) = setup();
+        std::fs::write(&f, "{}").unwrap();
+        assert!(go(&t, &f, &["set", "Nope"]).unwrap_err().contains("no icon theme"));
+        assert!(go(&t, &f, &["set", "Mono"]).unwrap_err().contains("symbolic"));
+        assert!(go(&t, &f, &["set"]).is_err());
+        assert!(go(&t, &f, &["scale", "5"]).is_err() && go(&t, &f, &["scale", "x"]).is_err());
+        assert!(go(&t, &f, &["tint", "maybe"]).is_err());
+        assert!(go(&t, &f, &["fallback", "Nope"]).is_err());
+        assert!(go(&t, &f, &["bogus"]).unwrap_err().contains("unknown"));
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "{}");
+    }
+
+    #[test]
+    fn list_marks_the_current_theme_and_flags_unusable_ones() {
+        let (t, f) = setup();
+        go(&t, &f, &["set", "Tela"]).unwrap();
+        let l = go(&t, &f, &["list"]).unwrap();
+        let tela = l.lines().find(|x| x.contains("Tela")).unwrap();
+        assert!(tela.starts_with('*'), "{l}");
+        assert!(l.lines().find(|x| x.contains("Mono")).unwrap().contains("not selectable"));
+        let j: serde_json::Value = serde_json::from_str(&go(&t, &f, &["list", "--json"]).unwrap()).unwrap();
+        let tela = j.as_array().unwrap().iter().find(|x| x["id"] == "Tela").unwrap();
+        assert_eq!((tela["current"].as_bool(), tela["selectable"].as_bool()), (Some(true), Some(true)));
+        assert!(go(&t, &f, &["help"]).unwrap().contains("icons set"));
+    }
+}

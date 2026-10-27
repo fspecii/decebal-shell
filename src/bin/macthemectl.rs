@@ -20,6 +20,7 @@ macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme tonalspot|vibr
                                  Without --wallpaper: the wallpaper on screen (rdwm, its config, Omarchy's current/background).
 macthemectl dynamic refresh      re-read the wallpaper (run it after changing the wallpaper by other means)
 macthemectl dynamic off          Caelestia keeps its own palette again
+macthemectl icons list|set NAME|status|reset|scale N|tint on|off|fallback NAME   icon theme settings (macthemectl icons help)
 macthemectl sync                 re-apply the current theme to rdwm's config
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
@@ -262,6 +263,10 @@ fn main() {
             println!("seed {} ({}) from {}", d.seed.hex(), d.variant.as_str(), d.wallpaper.as_deref().unwrap_or("--seed"));
             apply(&src, &dynamic::enable(&sel, d));
         }
+        Some("icons") => match macshell::icons::ctl::run(&macshell::icons::config::shell_json(), &macshell::icons::resolve::Roots::from_env(), &args[1..]) {
+            Ok(out) => println!("{out}"),
+            Err(e) => die(&e),
+        },
         Some("sync") => {
             let sel = src.selection();
             apply(&src, &Selection { sync_rdwm: true, ..sel });

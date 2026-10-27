@@ -3,6 +3,7 @@
 pub mod app;
 pub mod binds;
 pub mod icons;
+pub mod iconspane;
 pub mod io;
 pub mod keys;
 pub mod model;

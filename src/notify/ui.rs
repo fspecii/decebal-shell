@@ -214,10 +214,7 @@ fn lookup_icon(icon: &str, app: &str, entry: &str, size: u32) -> Option<Pixmap> 
         if name.is_empty() || name.starts_with('/') || name.contains("..") {
             continue;
         }
-        if let Some(p) = icons::find_svg(name).and_then(|p| icons::render_svg(&p, size)) {
-            return Some(p);
-        }
-        if let Some(p) = icons::find_png(name).and_then(|p| icons::load_png_scaled(&p, size)) {
+        if let Some(p) = icons::load_named(name, size) {
             return Some(p);
         }
     }

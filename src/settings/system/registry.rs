@@ -13,7 +13,7 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Display & Appearance", panes: &["displays", "appearance", "theme", "wallpaper", "desktop"] },
+    Section { title: "Display & Appearance", panes: &["displays", "appearance", "theme", "icons", "wallpaper", "desktop"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
     Section { title: "Keyboard & Input", panes: &["inputdev", "keyboard"] },
@@ -88,6 +88,10 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
     ("storage", "Disk usage", "storage space free df"),
     ("storage", "Software versions", "rdwm macshell macbar macdock"),
     ("storage", "Check configuration", "validate config.toml"),
+    ("icons", "Icon theme", "papirus tela whitesur adwaita breeze yaru auto gtk gsettings"),
+    ("icons", "Icon size", "scale artwork padding dock"),
+    ("icons", "Tint symbolic icons", "monochrome text colour"),
+    ("icons", "Fallback theme", "hicolor missing icons"),
     ("accessibility", "Cursor size", "large pointer xcursor"),
     ("accessibility", "Reduce motion", "animations"),
     ("accessibility", "Text size", "font scale larger"),
