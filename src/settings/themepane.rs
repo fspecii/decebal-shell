@@ -8,8 +8,10 @@
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row, Swatch, ThemeTile};
 use crate::theme::live::{system_dark, Source};
+use crate::theme::material::Variant;
 use crate::theme::model::{Mode, Rgb, Selection};
-use crate::theme::rdwm;
+use crate::theme::style::{self, Style};
+use crate::theme::{dynamic, rdwm};
 
 /// macOS accent colours, in the order System Settings shows them.
 pub const ACCENTS: &[(&str, &str)] =
@@ -37,9 +39,10 @@ pub fn items(m: &Model) -> Vec<Item> {
                 continue;
             }
         }
-        let Ok(def) = src.load_def(&e.id) else { continue };
+        let tile_sel = if selected { sel.clone() } else { Selection::default() };
+        let Ok(def) = src.def_for(&e.id, &tile_sel) else { continue };
         let dark = def.pick_dark(sel.mode, sys);
-        let t = def.resolve(&e.id, dark, &if selected { sel.clone() } else { Selection::default() });
+        let t = def.resolve(&e.id, dark, &tile_sel);
         tiles.push(ThemeTile {
             id: format!("l:theme:{}", e.id),
             name: e.name.clone(),
@@ -72,6 +75,17 @@ pub fn items(m: &Model) -> Vec<Item> {
     if let Some(p) = problem {
         out.push(Item::Note { text: format!("The selected theme could not be loaded ({p}); the default theme is shown instead."), warn: true });
     }
+    let style_opts: Vec<(String, String)> = Style::ALL.iter().map(|s| (s.title().to_string(), s.as_str().to_string())).collect();
+    let cur_style = style::detect(&current_id, style::dock_style(&m.dock));
+    out.push(Item::Header("Shell style".into()));
+    out.push(Item::Card(vec![Row::new("Style")
+        .detail(match cur_style {
+            Some(Style::Macos) => "macOS: menu bar and floating dock, macOS theme",
+            Some(Style::Windows) => "Windows: Windows 11 theme and taskbar (the menu bar hides)",
+            Some(Style::Caelestia) => "Caelestia: Material You colours, pill-shaped bar and dock",
+            None => "Custom: pick one to set theme, dock and menu bar together",
+        })
+        .ctl(Ctl::new("th:style", Kind::Seg(style_opts, cur_style.map(|s| Style::ALL.iter().position(|x| *x == s).unwrap_or(0)))))]));
     out.push(Item::Header("Theme".into()));
     out.push(Item::Themes(tiles));
     out.push(Item::Header("Appearance".into()));
@@ -85,6 +99,27 @@ pub fn items(m: &Model) -> Vec<Item> {
             .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel))),
         Row::new("Window titlebars").detail("Also restyle rdwm's titlebars, borders and bar with the theme").ctl(Ctl::new("th:sync", Kind::Toggle(sel.sync_rdwm))),
     ]));
+    let on = sel.dynamic.is_some() && current_id == crate::theme::builtin::DYNAMIC_THEME;
+    let mut wall = vec![Row::new("Colours from wallpaper")
+        .detail(match (&sel.dynamic, on) {
+            (Some(d), true) => format!(
+                "Caelestia colours from {} (seed {}); follows wallpaper changes made here",
+                d.wallpaper.as_deref().map(|w| std::path::Path::new(w).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).unwrap_or_else(|| "a fixed colour".into()),
+                d.seed.hex()
+            ),
+            _ => "Turns on the Caelestia theme with a Material You palette taken from the wallpaper".into(),
+        })
+        .ctl(Ctl::new("th:dynamic", Kind::Toggle(on)))];
+    if let (Some(d), true) = (&sel.dynamic, on) {
+        let opts: Vec<(String, String)> = Variant::ALL.iter().map(|v| (v.title().to_string(), v.as_str().to_string())).collect();
+        let idx = Variant::ALL.iter().position(|v| *v == d.variant);
+        wall.push(
+            Row::new("Palette")
+                .detail("Tonal spot is Material's default; Vibrant is more colourful, Neutral nearly grey, Content keeps the wallpaper's own chroma")
+                .ctl(Ctl::new("th:scheme", Kind::Seg(opts, idx))),
+        );
+    }
+    out.push(Item::Card(wall));
     out.push(Item::Header("Accent colour".into()));
     out.push(Item::Swatches(swatches));
     out.push(Item::Card(vec![Row::new("Custom accent")
@@ -106,19 +141,19 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-/// Runs the transaction for a changed selection.
-fn commit(m: &mut Model, sel: Selection) {
+/// Runs the transaction for a changed selection; true when it was written.
+fn commit(m: &mut Model, sel: Selection) -> bool {
     let src = source(m);
     let (theme, problem) = src.build(&sel, system_dark());
     if let Some(p) = problem {
         m.say(format!("Not applied: {p}"), true);
-        return;
+        return false;
     }
     if sel.sync_rdwm {
         m.notice = None;
         m.edit(|c| rdwm::apply_to(c, &theme));
         if m.notice.as_ref().is_some_and(|n| n.error) {
-            return; // rdwm's file would be invalid: nothing was written, the selection stays as it was
+            return false; // rdwm's file would be invalid: nothing was written, the selection stays as it was
         }
     }
     match src.write_selection(&sel) {
@@ -128,8 +163,23 @@ fn commit(m: &mut Model, sel: Selection) {
             if m.notice.is_none() {
                 m.say(format!("Theme: {}", theme.name), false);
             }
+            true
         }
-        Err(e) => m.say(format!("Not saved: {e}"), true),
+        Err(e) => {
+            m.say(format!("Not saved: {e}"), true);
+            false
+        }
+    }
+}
+
+/// A new wallpaper was chosen in the Wallpaper pane: re-derive the colours when "Colours from wallpaper" follows it.
+pub fn follow_wallpaper(m: &mut Model, path: &str) {
+    let sel = source(m).selection();
+    let Some(cur) = sel.dynamic.clone().filter(|d| d.follow) else { return };
+    if let Ok(d) = dynamic::derive(std::path::Path::new(&super::panes::expand_tilde(path)), cur.variant, true) {
+        if d != cur {
+            commit(m, Selection { dynamic: Some(d), ..sel });
+        }
     }
 }
 
@@ -148,6 +198,38 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["l", "accent", hex], CtlVal::Click) => sel.accent = Rgb::parse(hex),
         (["th", "mode"], CtlVal::Str(s)) => sel.mode = Mode::parse(&s).unwrap_or(sel.mode),
         (["th", "sync"], CtlVal::Bool(b)) => sel.sync_rdwm = b,
+        (["th", "style"], CtlVal::Str(s)) => {
+            let Some(st) = Style::parse(&s) else { return };
+            if commit(m, style::selection_for(st, &sel)) {
+                for (key, val) in style::dock_edits(st) {
+                    m.edit_json("dock", key, val);
+                }
+                let bar = style::bar_value(st, m.shell.get("bar"));
+                m.edit_json("shell", "bar", Some(bar));
+                m.say(format!("Shell style: {}", st.title()), false);
+            }
+            return;
+        }
+        (["th", "dynamic"], CtlVal::Bool(true)) => {
+            let wall = m.current_wallpaper().map(std::path::PathBuf::from).or_else(|| dynamic::find_wallpaper(&m.paths));
+            let Some(wall) = wall else {
+                m.say("No wallpaper to take colours from; set one in the Wallpaper pane", true);
+                return;
+            };
+            let variant = sel.dynamic.as_ref().map(|d| d.variant).unwrap_or_default();
+            match dynamic::derive(&wall, variant, true) {
+                Ok(d) => sel = dynamic::enable(&sel, d),
+                Err(e) => {
+                    m.say(format!("Not applied: {e}"), true);
+                    return;
+                }
+            }
+        }
+        (["th", "dynamic"], CtlVal::Bool(false)) => sel = dynamic::disable(&sel),
+        (["th", "scheme"], CtlVal::Str(s)) => {
+            let (Some(v), Some(d)) = (Variant::parse(&s), sel.dynamic.as_mut()) else { return };
+            d.variant = v;
+        }
         (["th", "accenthex"], CtlVal::Str(s)) => {
             if s.trim().is_empty() {
                 sel.accent = None;
@@ -178,6 +260,11 @@ mod tests {
 
     fn selection(m: &Model) -> Selection {
         source(m).selection()
+    }
+
+    /// Image resizing may move a flat colour by a step.
+    fn near(a: Rgb, b: Rgb) -> bool {
+        [(a.0, b.0), (a.1, b.1), (a.2, b.2)].iter().all(|(x, y)| x.abs_diff(*y) <= 2)
     }
 
     #[test]
@@ -223,6 +310,79 @@ mod tests {
         assert_eq!((s.mode, s.accent, s.opacity, s.radius, s.font_scale), (Mode::Light, None, None, None, None));
         m.apply("th:sync", CtlVal::Bool(false));
         assert!(!selection(&m).sync_rdwm);
+    }
+
+    #[test]
+    fn the_shell_style_picker_leads_the_pane_and_sets_theme_dock_and_bar() {
+        let (mut m, cfg) = model_with("[general]\n");
+        let its = items(&m);
+        let first_ctl =
+            its.iter()
+                .find_map(|i| if let Item::Card(rows) = i { rows.first().and_then(|r| r.ctls.first()).map(|c| (c.id.clone(), matches!(&c.kind, Kind::Seg(o, _) if o.len() == 3))) } else { None });
+        assert_eq!(first_ctl, Some(("th:style".to_string(), true)), "the first control is the three-way style picker");
+        assert!(matches!(its.iter().position(|i| matches!(i, Item::Header(h) if h == "Shell style")), Some(p) if p < 2), "it is at the top");
+
+        m.apply("th:style", CtlVal::Str("caelestia".into()));
+        assert_eq!(selection(&m).name, "caelestia");
+        assert_eq!(m.dock["style"], "mac");
+        assert_eq!(m.shell["bar"]["enabled"], true);
+        assert!(std::fs::read_to_string(&cfg).unwrap().contains("focused_bg"), "rdwm follows too");
+
+        m.apply("th:style", CtlVal::Str("windows".into()));
+        assert_eq!(selection(&m).name, "windows11");
+        assert_eq!((m.dock["style"].as_str(), m.dock["windowsAlign"].as_str()), (Some("windows"), Some("center")));
+        assert_eq!(m.shell["bar"]["enabled"], "auto");
+        let file = crate::settings::io::json_load(&m.paths.dock_settings());
+        assert_eq!(file["style"], "windows", "written to dock-settings.json");
+
+        m.apply("th:style", CtlVal::Str("macos".into()));
+        assert_eq!(selection(&m).name, "macos");
+        assert_eq!(crate::settings::io::json_load(&m.paths.dock_settings())["style"], "mac");
+        let sel_idx = |m: &Model| match items(m).iter().find(|i| matches!(i, Item::Card(_))) {
+            Some(Item::Card(rows)) => match rows.first().and_then(|r| r.ctls.first()).map(|c| &c.kind) {
+                Some(Kind::Seg(_, s)) => *s,
+                _ => panic!("not a segmented control"),
+            },
+            _ => panic!("no card"),
+        };
+        assert_eq!(sel_idx(&m), Some(0), "macOS is highlighted");
+        m.apply("l:theme:nord", CtlVal::Click);
+        assert_eq!(sel_idx(&m), None, "a hand-picked theme is Custom");
+    }
+
+    #[test]
+    fn colours_from_wallpaper_switch_on_and_off() {
+        let (mut m, _) = model_with("[general]\n");
+        let img = std::env::temp_dir().join(format!("macshell-pane-wall-{}.png", std::process::id()));
+        image::RgbImage::from_pixel(32, 20, image::Rgb([30, 150, 90])).save(&img).unwrap();
+        m.apply("th:dynamic", CtlVal::Bool(true));
+        assert!(selection(&m).dynamic.is_none(), "no wallpaper yet: refused");
+        assert!(m.notice.as_ref().unwrap().error);
+        std::fs::write(&m.paths.rdwm_config, format!("[wallpaper]\nimage = \"{}\"\n", img.display())).unwrap();
+        m.store = crate::settings::io::Store::load(&m.paths.rdwm_config, &m.paths.rdwmctl);
+        m.apply("th:dynamic", CtlVal::Bool(true));
+        let s = selection(&m);
+        assert_eq!(s.name, "caelestia");
+        let d = s.dynamic.clone().expect("on");
+        assert!(near(d.seed, Rgb(30, 150, 90)), "{}", d.seed.hex());
+        m.apply("th:scheme", CtlVal::Str("vibrant".into()));
+        assert_eq!(selection(&m).dynamic.unwrap().variant, Variant::Vibrant);
+        // the gallery tile of Caelestia shows the derived colours
+        let its = items(&m);
+        let Some(Item::Themes(tiles)) = its.iter().find(|i| matches!(i, Item::Themes(_))) else { panic!() };
+        let tile = tiles.iter().find(|t| t.id == "l:theme:caelestia").unwrap();
+        assert_ne!(tile.colors[5], (0xff, 0xb0, 0xca), "accent is no longer caelestia's rose");
+        // a new wallpaper chosen in the Wallpaper pane re-seeds the colours
+        let img2 = std::env::temp_dir().join(format!("macshell-pane-wall2-{}.png", std::process::id()));
+        image::RgbImage::from_pixel(32, 20, image::Rgb([220, 40, 40])).save(&img2).unwrap();
+        follow_wallpaper(&mut m, img2.to_str().unwrap());
+        assert!(near(selection(&m).dynamic.unwrap().seed, Rgb(220, 40, 40)));
+        m.apply("th:dynamic", CtlVal::Bool(false));
+        assert!(selection(&m).dynamic.is_none());
+        follow_wallpaper(&mut m, img.to_str().unwrap());
+        assert!(selection(&m).dynamic.is_none(), "off means off");
+        let _ = std::fs::remove_file(img);
+        let _ = std::fs::remove_file(img2);
     }
 
     #[test]

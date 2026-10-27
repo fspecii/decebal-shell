@@ -157,6 +157,8 @@ click $(tile l:theme:dracula); settle
 eq "clicking Dracula applies it" "$(theme_name)" dracula
 eqpx "bar follows the UI choice" 900 3 "#1e1f29"
 eq "rdwm titlebar follows the UI choice" "$(rdcfg .config.decoration.focused_bg)" "#343746"
+# the Shell style card at the top pushed the swatches down: scroll them into view first
+for i in 1 2 3 4; do xdotool mousemove --window "$WID" 500 500; xdotool click --window "$WID" 5; done; sleep 0.6
 click $(tile l:accent:#30d158); settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green

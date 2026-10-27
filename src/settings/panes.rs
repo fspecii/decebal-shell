@@ -992,12 +992,14 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
         ["w", "save-live"] => {
             let img = m.rt.state["wallpaper"]["image"].as_str().map(String::from);
             if let Some(i) = img {
-                m.apply("r:wallpaper:image", CtlVal::Str(i));
+                m.apply("r:wallpaper:image", CtlVal::Str(i.clone()));
+                super::themepane::follow_wallpaper(m, &i);
             }
         }
         ["w", ..] => {
             let path = id.strip_prefix("w:").unwrap_or("").to_string();
-            m.apply("r:wallpaper:image", CtlVal::Str(path));
+            m.apply("r:wallpaper:image", CtlVal::Str(path.clone()));
+            super::themepane::follow_wallpaper(m, &path);
         }
         ["p", op, i] => pinned_op(m, op, i.parse().unwrap_or(usize::MAX)),
         ["p", "add"] => {

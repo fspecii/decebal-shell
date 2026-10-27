@@ -3,6 +3,8 @@
 use super::model::{Def, Mode};
 
 pub const DEFAULT_ID: &str = "macos";
+/// The theme "colours from wallpaper" recolours.
+pub const DYNAMIC_THEME: &str = "caelestia";
 
 /// (id, theme file). The first entry is the default.
 pub const BUILTIN: &[(&str, &str)] = &[
@@ -12,6 +14,7 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("dracula", include_str!("builtin/dracula.toml")),
     ("solarized", include_str!("builtin/solarized.toml")),
     ("windows11", include_str!("builtin/windows11.toml")),
+    ("caelestia", include_str!("builtin/caelestia.toml")),
     ("high-contrast", include_str!("builtin/high-contrast.toml")),
 ];
 
@@ -120,10 +123,79 @@ mod contrast_tests {
     #[test]
     fn the_shipped_set_is_complete() {
         let ids: Vec<&str> = BUILTIN.iter().map(|b| b.0).collect();
-        for want in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "high-contrast"] {
+        for want in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"] {
             assert!(ids.contains(&want), "{want}");
         }
         assert!(def("macos").unwrap().has_dark() && def("macos").unwrap().has_light());
         assert!(def("windows11").unwrap().has_light() && def("windows11").unwrap().has_dark());
+        assert!(def("caelestia").unwrap().has_light() && def("caelestia").unwrap().has_dark());
+    }
+}
+
+#[cfg(test)]
+mod caelestia_tests {
+    use super::super::material::{self, Variant};
+    use super::super::model::{Selection, Tokens, V};
+    use super::*;
+
+    fn colours(t: &Tokens) -> Vec<(String, String)> {
+        t.iter().filter_map(|(k, v)| if let V::S(s) = v { s.starts_with('#').then(|| (k.clone(), s.clone())) } else { None }).collect()
+    }
+
+    /// `cargo test --lib print_caelestia_toml -- --ignored --nocapture` prints the two colour tables of caelestia.toml.
+    #[test]
+    #[ignore]
+    fn print_caelestia_toml() {
+        for (name, roles) in [("dark", material::CAELESTIA_DARK), ("light", material::generate(material::DEFAULT_SEED, Variant::TonalSpot, false))] {
+            println!("[{name}]");
+            let t = roles.tokens();
+            for key in [
+                "background",
+                "sidebar",
+                "surface",
+                "bar",
+                "bar_text",
+                "popup",
+                "dock",
+                "overlay",
+                "titlebar",
+                "titlebar_inactive",
+                "border",
+                "text",
+                "text_secondary",
+                "text_faint",
+                "accent",
+                "accent_text",
+                "danger",
+                "ok",
+                "warn",
+            ] {
+                if let V::S(s) = &t[key] {
+                    println!("{key} = \"{s}\"");
+                }
+            }
+            println!();
+        }
+    }
+
+    #[test]
+    fn caelestia_colours_are_the_material_roles() {
+        let d = def("caelestia").unwrap();
+        let dark = d.dark.clone().unwrap();
+        let light = d.light.clone().unwrap();
+        // dark: caelestia-shell's shipped default scheme, light: the same seed's tonal-spot light scheme
+        assert_eq!(colours(&dark), colours(&material::CAELESTIA_DARK.tokens()));
+        assert_eq!(colours(&light), colours(&material::generate(material::DEFAULT_SEED, Variant::TonalSpot, false).tokens()));
+    }
+
+    #[test]
+    fn caelestia_shape_metrics() {
+        let t = def("caelestia").unwrap().resolve("caelestia", true, &Selection::default());
+        assert!(t.bar_floating());
+        assert_eq!(t.dock_roundness, 1.0, "pill dock");
+        assert!(t.radius >= 16.0, "generous radii");
+        assert_eq!(t.name, "Caelestia");
+        assert!(!def("macos").unwrap().resolve("macos", true, &Selection::default()).bar_floating());
+        assert!(!def("windows11").unwrap().resolve("w", true, &Selection::default()).bar_floating());
     }
 }

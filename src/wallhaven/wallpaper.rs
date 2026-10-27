@@ -140,7 +140,12 @@ pub fn apply(item: &Item) -> Result<String, String> {
         return Err(format!("Not a wallhaven image: {}", item.full));
     }
     if have("wallhaven") && have("omarchy") {
-        return run_helper(&["--set", &item.id, &item.full]).map(|_| "Wallpaper set".into());
+        let done = run_helper(&["--set", &item.id, &item.full]).map(|_| "Wallpaper set".into());
+        if done.is_ok() {
+            // the helper saves the image itself: the colours follow whatever the shell now shows as the wallpaper
+            crate::theme::dynamic::on_wallpaper_set(None);
+        }
+        return done;
     }
     let path = download(&item.id, &item.full)?;
     apply_file(&path)
@@ -148,6 +153,7 @@ pub fn apply(item: &Item) -> Result<String, String> {
 
 pub fn apply_local(path: &str) -> Result<String, String> {
     if have("wallhaven") && have("omarchy") && run_helper(&["--use", path]).is_ok() {
+        crate::theme::dynamic::on_wallpaper_set(Some(Path::new(path)));
         return Ok("Wallpaper set".into());
     }
     apply_file(Path::new(path))
@@ -181,10 +187,12 @@ pub fn apply_file(path: &Path) -> Result<String, String> {
         for pid in old {
             let _ = Command::new("kill").arg(pid.to_string()).status();
         }
+        crate::theme::dynamic::on_wallpaper_set(Some(path));
         return Ok("Wallpaper set".into());
     }
     let status = Command::new(prog).args(&args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status().map_err(|e| format!("{prog}: {e}"))?;
     if status.success() {
+        crate::theme::dynamic::on_wallpaper_set(Some(path));
         Ok("Wallpaper set".into())
     } else {
         Err(format!("{prog} failed"))

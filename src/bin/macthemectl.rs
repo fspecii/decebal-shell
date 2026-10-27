@@ -2,14 +2,24 @@
 
 use macshell::settings::io::Paths;
 use macshell::theme::live::{system_dark, Source};
+use macshell::theme::material::Variant;
 use macshell::theme::model::{Def, Mode, Rgb, Selection};
-use macshell::theme::{builtin, rdwm};
+use macshell::theme::{builtin, dynamic, rdwm, style};
 
 const HELP: &str = "macthemectl list [--json]
 macthemectl get [--json]
 macthemectl apply NAME [--mode light|dark|auto] [--accent #rrggbb|none] [--opacity 0.4-1] [--radius 0-24]
                        [--font NAME|none] [--font-scale 0.8-1.4] [--reset] [--no-rdwm]
 macthemectl set KEY VALUE        KEY: mode accent opacity radius font font-scale sync-rdwm  (VALUE none = unset)
+macthemectl style [macos|windows|caelestia]   the shell style preset: theme + dock style + menu bar together
+                                 (windows: Windows 11 theme + taskbar dock; caelestia: Caelestia theme + pill dock and bar;
+                                 macos: macOS theme + macOS dock). Without a name: print the current one.
+macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme tonalspot|vibrant|neutral|content]
+                    [--seed #rrggbb] [--no-follow] [--no-rdwm]
+                                 Caelestia colours from the wallpaper's dominant colour (Material You tonal palettes).
+                                 Without --wallpaper: the wallpaper on screen (rdwm, its config, Omarchy's current/background).
+macthemectl dynamic refresh      re-read the wallpaper (run it after changing the wallpaper by other means)
+macthemectl dynamic off          Caelestia keeps its own palette again
 macthemectl sync                 re-apply the current theme to rdwm's config
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
@@ -107,7 +117,8 @@ fn main() {
                 .into_iter()
                 .map(|(k, c)| (k.to_string(), c.hex().into()))
                 .collect();
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"theme": t.id, "name": t.name, "dark": t.dark, "selection": sel.to_json(), "problem": problem, "colors": colors, "radius": t.radius, "font_scale": t.font_scale})).unwrap());
+                let st = style::current(&src, &Paths::discover()).map(|s| s.as_str());
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"theme": t.id, "name": t.name, "dark": t.dark, "style": st, "selection": sel.to_json(), "problem": problem, "colors": colors, "radius": t.radius, "font_scale": t.font_scale, "bar_style": t.bar_style})).unwrap());
             } else {
                 println!(
                     "{} ({}) mode={} accent={} radius={} opacity={} font={} font-scale={}",
@@ -159,6 +170,89 @@ fn main() {
             let mut sel = src.selection();
             set_key(&mut sel, k, v);
             apply(&src, &sel);
+        }
+        Some("style") => {
+            let paths = Paths::discover();
+            let Some(name) = args.get(1).filter(|a| !a.starts_with("--")) else {
+                match style::current(&src, &paths) {
+                    Some(s) => println!("{}", s.as_str()),
+                    None => println!("custom"),
+                }
+                return;
+            };
+            let st = style::Style::parse(name).unwrap_or_else(|| die(&format!("unknown style `{name}` (macos, windows or caelestia)")));
+            let mut sel = src.selection();
+            for a in &args[2..] {
+                match a.as_str() {
+                    "--no-rdwm" => sel.sync_rdwm = false,
+                    other => die(&format!("unknown option {other}")),
+                }
+            }
+            match style::apply(&src, &paths, st, &sel) {
+                Ok(r) => println!(
+                    "style {}: theme {} ({}), dock {}, menu bar {}",
+                    st.as_str(),
+                    r.theme_id,
+                    if r.dark { "dark" } else { "light" },
+                    if st == style::Style::Windows { "windows taskbar" } else { "macOS dock" },
+                    if st == style::Style::Windows { "hidden while the taskbar is up" } else { "shown" }
+                ),
+                Err(e) => die(&e),
+            }
+        }
+        Some("dynamic") => {
+            let paths = Paths::discover();
+            let mut sel = src.selection();
+            match args.get(1).map(String::as_str) {
+                Some("off") => {
+                    apply(&src, &dynamic::disable(&sel));
+                    return;
+                }
+                Some("refresh") => {
+                    match dynamic::refresh(&src, &paths, None) {
+                        Ok(true) => println!("wallpaper colours updated"),
+                        Ok(false) => println!("wallpaper colours unchanged (or switched off)"),
+                        Err(e) => die(&e),
+                    }
+                    return;
+                }
+                _ => {}
+            }
+            let (mut wall, mut seed, mut follow) = (None::<String>, None::<Rgb>, true);
+            let mut variant = sel.dynamic.as_ref().map(|d| d.variant).unwrap_or_default();
+            let mut i = 1;
+            while i < args.len() {
+                let a = args[i].as_str();
+                match a {
+                    "--light" => sel.mode = Mode::Light,
+                    "--dark" => sel.mode = Mode::Dark,
+                    "--no-follow" => follow = false,
+                    "--no-rdwm" => sel.sync_rdwm = false,
+                    "--wallpaper" | "--scheme" | "--seed" => {
+                        i += 1;
+                        let v = args.get(i).unwrap_or_else(|| die(&format!("{a} needs a value")));
+                        match a {
+                            "--wallpaper" => wall = Some(v.clone()),
+                            "--scheme" => variant = Variant::parse(v).unwrap_or_else(|| die("scheme must be tonalspot, vibrant, neutral or content")),
+                            _ => seed = Some(Rgb::parse(v).unwrap_or_else(|| die("seed must look like #a8627b"))),
+                        }
+                    }
+                    other => die(&format!("unknown option {other}")),
+                }
+                i += 1;
+            }
+            let d = match (seed, wall) {
+                (Some(seed), w) => macshell::theme::Dynamic { seed, variant, wallpaper: w, follow },
+                (None, w) => {
+                    let path = match w {
+                        Some(w) => std::path::PathBuf::from(w),
+                        None => dynamic::find_wallpaper(&paths).unwrap_or_else(|| die("no wallpaper found; pass --wallpaper PATH")),
+                    };
+                    dynamic::derive(&path, variant, follow).unwrap_or_else(|e| die(&e))
+                }
+            };
+            println!("seed {} ({}) from {}", d.seed.hex(), d.variant.as_str(), d.wallpaper.as_deref().unwrap_or("--seed"));
+            apply(&src, &dynamic::enable(&sel, d));
         }
         Some("sync") => {
             let sel = src.selection();
