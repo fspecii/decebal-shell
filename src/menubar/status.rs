@@ -12,6 +12,33 @@ impl DecBar {
         self.tray().into_iter().find(|(k, _)| *k == kind).map(|(_, s)| s)
     }
 
+    /// Stay Awake off (the coffee cup was clicked): the same switch as the Control Center tile; the icon goes with it.
+    pub(super) fn awake_off(&mut self) {
+        awake::set(false);
+        self.update_snapshot(|s| s.awake = false);
+    }
+
+    /// Right click on the coffee cup of the horizontal bar: the options popup. True when it was over the cup.
+    pub(super) fn awake_options(&mut self, x: f32) -> bool {
+        if !self.tray_span(Tray::Awake).is_some_and(|s| x >= s.x && x < s.x + s.w) {
+            return false;
+        }
+        self.open_popup(Tray::Awake);
+        true
+    }
+
+    /// Opens the process manager popup (`decmon --popup`, a toggle) with `placement` arguments (`--x` / `--top`).
+    pub(super) fn process_monitor(&self, placement: Vec<String>) {
+        let mut argv = vec![crate::launch::sibling_or_path("decmon"), "--popup".to_string()];
+        argv.extend(placement);
+        if sys::is_dry_run() {
+            let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
+            sys::spawn(&refs);
+        } else {
+            crate::launch::spawn_argv(&argv);
+        }
+    }
+
     /// Rows, width and compactness of the popup for `kind`.
     pub(super) fn build_popup(&self, kind: Tray) -> Option<(Vec<Row>, f32, bool)> {
         let snap = self.snapshot();
@@ -102,6 +129,20 @@ impl DecBar {
                     rows.push(Row::item("Float or tile", Act::ToggleFloat));
                 }
                 Some((rows, 300.0, false))
+            }
+            Tray::Awake => {
+                if !snap.awake {
+                    return None;
+                }
+                let (on, end) = awake::status_lines(awake::since(), awake::until(), awake::now_secs());
+                let until = awake::until();
+                let mut rows = vec![Row::header("Stay Awake").detail(&on), Row::text(&end), Row::sep(), Row::item("Turn off Stay Awake", Act::AwakeOff).detail("click")];
+                rows.push(Row::sep());
+                rows.push(Row::header("Keep awake for"));
+                for (secs, label) in awake::DURATIONS {
+                    rows.push(Row::item(label, Act::AwakeFor(secs)).checked(secs.is_none() && until.is_none()));
+                }
+                Some((rows, 264.0, true))
             }
             Tray::Battery => {
                 let b = snap.battery.as_ref()?;
@@ -307,6 +348,14 @@ impl DecBar {
     pub(super) fn run_act(&mut self, act: Act) {
         match act {
             Act::None | Act::VolumeSlider | Act::BrightnessSlider => {}
+            Act::AwakeOff => {
+                self.close();
+                self.awake_off();
+            }
+            Act::AwakeFor(secs) => {
+                awake::start(secs);
+                self.update_snapshot(|s| s.awake = true);
+            }
             Act::SetLayout(name) => {
                 rdwm::send_action("setlayout", &[&name]);
                 let sym = rdwm::LAYOUTS.iter().find(|l| l.0 == name).map(|l| l.2.to_string()).unwrap_or_default();

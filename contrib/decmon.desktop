@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Activity Monitor
+GenericName=Task Manager
+Comment=Processes, CPU, memory, disk, network and GPU usage; end or force quit applications
+Exec=decmon
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=task manager;processes;cpu;memory;kill;force quit;activity;monitor;performance;
+StartupWMClass=decmon

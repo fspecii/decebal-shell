@@ -35,6 +35,7 @@ The backend is picked automatically (`DECEBAL_BACKEND=wayland|x11` forces one).
 | `decsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `decutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `decdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
+| `decmon` | Activity Monitor / Task Manager: processes (apps with their children folded in, sortable, searchable, End task / Force quit) and live performance graphs (CPU per core, memory, disk, network, GPU, battery); opened from the bar's agents icon or as a window; see below | exits when closed; samples once a second only while open |
 | `decwidgets` | declarative desktop widgets written in TOML (clock card, CPU/RAM rings, now playing, workspace dots, graphs...), styled by the theme; theme packages ship them and can only use safe click actions; see [docs/theme-engine.md](docs/theme-engine.md) | ~8 MB RSS, wakes once a second |
 | `decthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; `font PRESET\|list\|set ROLE FAMILY,...` picks the fonts (presets `inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system`, roles `ui title mono display`, per-character fallback for CJK / emoji / icons); `system on\|off\|status` and `apply-system` carry the theme to GTK/Nautilus, Qt, terminals (via Omarchy's templates), the browser colour and X11 (optional, reversible, off by default); `layout left\|right\|top\|bottom\|split` places the Caelestia bar; see `docs/theming.md`; `wallpaper wallhaven random\|search WORDS` sets a wallpaper from wallhaven.cc (docs/wallpapers.md) | CLI |
 
@@ -316,6 +317,21 @@ Bind **one** key to the bare command `decdash` (or `decdash media` / `decdash pe
 pointer like `decspot`, follows the shared theme and is translucent under a compositor. Nothing runs while it is closed: sampling threads and the D-Bus
 connection only exist while the card is open. `tests/e2e/dash.sh` (`make e2e-dash`) runs it on a private Xvfb with a private D-Bus session and fake players
 (`examples/fake_mpris.rs`); it needs `tesseract` to read the card.
+
+## Activity Monitor (`decmon`)
+
+The agents icon on the bar opens a process manager hanging under it (the same style and placement as the dashboard); `decmon` alone opens the same thing as a normal
+resizable window ("Activity Monitor" in the launcher, `contrib/decmon.desktop`). Full description in [`docs/procmon.md`](docs/procmon.md).
+
+* **Processes**: apps (matched to their `.desktop` file, with its icon) with all child processes folded in, then background processes; sort by CPU, memory, disk, PID
+  or name, just type to search, End task (SIGTERM) and Force quit (SIGKILL, asks first) per row or for the selection. Only your own processes (all of them as root);
+  PID 1 and decmon itself are never signalled, session programs (rdwm, decbar, ...) and kernel threads need an extra confirmation, and the process' start time is checked
+  before every signal so a recycled PID is never hit.
+* **Performance**: CPU total and per core, memory and swap, disk read / write, network per interface, GPU (NVIDIA through `nvidia-smi`, AMD and Intel through sysfs),
+  CPU and GPU temperature, battery power draw, as 60-second graphs.
+
+Data comes straight from `/proc` and `/sys` on a thread that exists only while the window is open (once a second, delta based); nothing runs, polls or grows while it is
+closed, and `decbar` itself does not change (it only spawns `decmon --popup`). `tests/e2e/procmon.sh` runs it on a private Xvfb with dummy processes.
 
 ## Window rules for the wallpaper browser
 

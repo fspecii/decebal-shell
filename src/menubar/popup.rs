@@ -24,6 +24,9 @@ pub enum Act {
     /// Close / minimise the focused window (the vertical bar's window popout).
     CloseWindow,
     MinimizeWindow,
+    /// Turn Stay Awake off / on for a while (`None` = until turned off), see [`super::awake`].
+    AwakeOff,
+    AwakeFor(Option<u64>),
     VolumeSlider,
     BrightnessSlider,
     ToggleMute,

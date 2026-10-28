@@ -2,6 +2,7 @@
 //! Control Center. One surface that grows downward while a menu or the panel is open.
 
 pub mod active;
+pub mod awake;
 pub mod clock;
 mod embed;
 pub mod gate;
@@ -780,6 +781,7 @@ impl DecBar {
             Target::MediaToggle => sys::media_command("play-pause"),
             Target::MediaNext => sys::media_command("next"),
             Target::StayAwake => {
+                awake::clear_until();
                 sys::toggle_stay_awake();
                 self.update_snapshot(|s| s.awake = !s.awake);
             }
@@ -1046,7 +1048,7 @@ fn collect_light(prev: &Snapshot) -> Snapshot {
         s.volume = Some(v);
         s.sink = name;
     }
-    s.awake = sys::stay_awake();
+    s.awake = awake::refresh();
     s.light = sys::is_light();
     s.battery = sys::probe_battery();
     if prev.bluetooth.is_some() || sys::have("bluetoothctl") {
@@ -1232,6 +1234,9 @@ impl App for DecBar {
                 return true;
             }
         }
+        if button == Button::Right && y < BAR_HEIGHT && self.awake_options(x) {
+            return true;
+        }
         if button != Button::Left {
             return false;
         }
@@ -1274,6 +1279,16 @@ impl App for DecBar {
                     Tray::Spotlight => {
                         self.close();
                         self.spotlight();
+                        return true;
+                    }
+                    Tray::Awake => {
+                        self.close();
+                        self.awake_off();
+                        return true;
+                    }
+                    Tray::Agents => {
+                        self.close();
+                        self.process_monitor(vec!["--x".to_string(), format!("{}", (s.x + s.w / 2.0).round() as i32)]);
                         return true;
                     }
                     Tray::Weather => {
@@ -2034,6 +2049,57 @@ mod tests {
         let span = bar.tray_span(Tray::Dash).unwrap();
         assert_eq!(dash_argv("decdash", span), ["decdash".to_string(), "--x".to_string(), format!("{}", (span.x + span.w / 2.0).round() as i32)]);
         assert_eq!(dash_argv("/opt/decdash", Span { x: 100.0, w: 27.0 })[2], "114", "the middle of the item, rounded");
+    }
+
+    #[test]
+    fn clicking_the_coffee_cup_turns_stay_awake_off_and_right_click_offers_timers() {
+        let (_state, dir) = awake::tests::private_state("bar");
+        std::fs::write(dir.join("omarchy/indicators/stay-awake"), "").unwrap();
+        let mut bar = status_bar();
+        bar.update_snapshot(|s| s.awake = true);
+        assert!(bar.tray_span(Tray::Awake).is_some(), "the cup is shown while Stay Awake is on");
+        // right click: the options popup, with the explanation and the durations
+        let s = bar.tray_span(Tray::Awake).unwrap();
+        assert!(bar.pointer_button(s.x + s.w / 2.0, 10.0, Button::Right));
+        assert_eq!(bar.open, Open::Popup(Tray::Awake));
+        let rows = bar.popup.clone().unwrap().rows;
+        assert!(rows[0].label == "Stay Awake" && rows[0].detail.starts_with("On"), "{:?}", rows[0]);
+        assert!(rows.iter().any(|r| r.act == popup::Act::AwakeOff));
+        for (secs, _) in awake::DURATIONS {
+            assert!(rows.iter().any(|r| r.act == popup::Act::AwakeFor(secs)));
+        }
+        // a timed session is recorded and the popup stays open
+        bar.run_act(popup::Act::AwakeFor(Some(3600)));
+        assert!(awake::until().is_some());
+        assert_eq!(bar.open, Open::Popup(Tray::Awake));
+        assert!(bar.popup.as_ref().unwrap().rows.iter().any(|r| r.label.starts_with("Turns off in")));
+        bar.close();
+        // left click: off, at once, for the whole bar (the icon is gone), and the timer with it
+        assert!(click_tray(&mut bar, Tray::Awake));
+        assert!(!bar.snapshot().awake);
+        assert!(bar.tray_span(Tray::Awake).is_none());
+        assert!(!awake::is_on(), "the real switch was flipped, not just the icon");
+        assert_eq!(awake::until(), None);
+        assert_eq!(bar.open, Open::None);
+        // the options popup's "Turn off" row does the same
+        std::fs::write(dir.join("omarchy/indicators/stay-awake"), "").unwrap();
+        bar.update_snapshot(|s| s.awake = true);
+        bar.open_popup(Tray::Awake);
+        bar.run_act(popup::Act::AwakeOff);
+        assert!(!awake::is_on() && !bar.snapshot().awake && bar.open == Open::None);
+        *awake::TEST_DIR.lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_agents_item_opens_the_process_monitor_popup() {
+        let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        sys::set_dry_run(true);
+        let _ = sys::take_log();
+        let bar = status_bar();
+        bar.process_monitor(vec!["--x".into(), "700".into()]);
+        assert!(sys::take_log().iter().any(|l| l.contains("decmon --popup --x 700")));
+        sys::set_dry_run(false);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
+BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
@@ -15,6 +15,7 @@ install: all
 	for d in $(AUTOSTART); do install -Dm644 contrib/$$d $(DESTDIR)/etc/xdg/autostart/$$d; done
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	install -Dm644 contrib/decsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
+	install -Dm644 contrib/decmon.desktop $(DESTDIR)$(PREFIX)/share/applications/decmon.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
@@ -26,6 +27,7 @@ uninstall:
 	for d in $(AUTOSTART); do rm -f $(DESTDIR)/etc/xdg/autostart/$$d; done
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/decmon.desktop
 	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/doc/decebal
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/decebal
 
@@ -71,6 +73,12 @@ e2e-hot:
 	tests/e2e/hot.sh
 
 # The Caelestia bar (left edge) on a private Xvfb + rdwm (needs Xvfb, xdotool, xprop, import, jq, convert).
+e2e-procmon:
+	tests/e2e/procmon.sh
+
+e2e-awake:
+	tests/e2e/awake.sh
+
 e2e-vbar:
 	tests/e2e/vbar.sh
 
@@ -87,4 +95,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-decsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar e2e-layouts
+.PHONY: all install install-session uninstall test e2e-decsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar e2e-procmon e2e-awake e2e-layouts

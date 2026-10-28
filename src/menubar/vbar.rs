@@ -430,6 +430,10 @@ pub enum Click {
     Dashboard,
     /// The power button: the session menu (decsession).
     Session,
+    /// The coffee cup: turn Stay Awake off (hover shows how long it was on; right click offers timed sessions).
+    StayAwakeOff,
+    /// The agents glyph: the process manager (decmon).
+    Monitor,
     Nothing,
 }
 
@@ -440,6 +444,8 @@ pub fn click_for(kind: Tray, workspace: Option<usize>) -> Click {
         Tray::Clock => Click::Dashboard,
         Tray::Power => Click::Session,
         Tray::Control => Click::Control,
+        Tray::Awake => Click::StayAwakeOff,
+        Tray::Agents => Click::Monitor,
         k if popout(k) => Click::Popout(k),
         _ => Click::Nothing,
     }
@@ -803,7 +809,7 @@ impl DecBar {
             self.v_hover_ws = ws;
             redraw = true;
             self.v_hover_open = None;
-            if let Some(kind) = hover.filter(|k| popout(*k)) {
+            if let Some(kind) = hover.filter(|k| popout(*k) || *k == Tray::Awake) {
                 match self.open {
                     // sliding from one icon to the next switches at once, like sliding along the macOS menu bar
                     Open::Popup(cur) if cur != kind => {
@@ -855,6 +861,10 @@ impl DecBar {
             }
             return false;
         }
+        if button == Button::Right && matches!(target, Some((Tray::Awake, _))) {
+            self.v_open_popup(Tray::Awake);
+            return true;
+        }
         if button != Button::Left {
             return false;
         }
@@ -889,6 +899,15 @@ impl DecBar {
                 Click::Session => {
                     self.close();
                     launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
+                }
+                Click::StayAwakeOff => {
+                    self.close();
+                    self.awake_off();
+                }
+                Click::Monitor => {
+                    self.close();
+                    let top = 10 + if top_bar_exists(self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All })) { THICK as i32 } else { 0 };
+                    self.process_monitor(vec!["--top".to_string(), top.to_string()]);
                 }
                 Click::Nothing => {
                     return self.close();
@@ -1637,7 +1656,8 @@ mod tests {
         for k in [Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery, Tray::Window, Tray::Layout] {
             assert_eq!(click_for(k, None), Click::Popout(k));
         }
-        assert_eq!(click_for(Tray::Awake, None), Click::Nothing);
+        assert_eq!(click_for(Tray::Awake, None), Click::StayAwakeOff);
+        assert_eq!(click_for(Tray::Agents, None), Click::Monitor);
         assert_eq!(view_request(0), r#"{"action":"view","args":["1"]}"#);
         assert_eq!(view_request(8), r#"{"action":"view","args":["9"]}"#);
     }
@@ -1820,6 +1840,49 @@ mod tests {
             let logo = lay.item(Tray::Logo).unwrap();
             b.pointer_motion(logo.cx(), logo.cy());
             assert_eq!(b.open, Open::None, "{pos:?}");
+        }
+    }
+
+    #[test]
+    fn the_coffee_cup_of_the_pill_bar_shows_since_when_on_hover_and_turns_off_on_click() {
+        let (_state, dir) = super::super::awake::tests::private_state("vbar");
+        for pos in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            std::fs::write(dir.join("omarchy/indicators/stay-awake"), "").unwrap();
+            let mut b = bar_at(pos, Process::Main);
+            b.update_snapshot(|s| s.awake = true);
+            let cup = b.v_layout().item(Tray::Awake).unwrap_or_else(|| panic!("{pos:?}: the cup is in the tray"));
+            // hover: the popup after the delay says what it is and for how long it has been on
+            b.pointer_motion(cup.cx(), cup.cy());
+            b.v_hover_open = Some((Tray::Awake, Instant::now() - HOVER_DELAY));
+            assert!(b.tick().redraw);
+            assert_eq!(b.open, Open::Popup(Tray::Awake), "{pos:?}");
+            let rows = b.popup.as_ref().unwrap().rows.clone();
+            assert_eq!(rows[0].label, "Stay Awake");
+            assert!(rows[0].detail.starts_with("On for"), "{pos:?}: {}", rows[0].detail);
+            // clicking the icon itself turns it off (it does not just keep the popup open)
+            assert!(b.pointer_button(cup.cx(), cup.cy(), Button::Left), "{pos:?}");
+            assert_eq!(b.open, Open::None);
+            assert!(!awake::is_on() && !b.snapshot().awake, "{pos:?}");
+            assert!(b.v_layout().item(Tray::Awake).is_none(), "the cup is gone");
+            // right click on it opens the options at once
+            std::fs::write(dir.join("omarchy/indicators/stay-awake"), "").unwrap();
+            b.update_snapshot(|s| s.awake = true);
+            let cup = b.v_layout().item(Tray::Awake).unwrap();
+            assert!(b.pointer_button(cup.cx(), cup.cy(), Button::Right));
+            assert_eq!(b.open, Open::Popup(Tray::Awake), "{pos:?}");
+            let _ = std::fs::remove_file(dir.join("omarchy/indicators/stay-awake"));
+        }
+        *awake::TEST_DIR.lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_agents_item_runs_the_monitor() {
+        let b = bar();
+        if let Some(a) = b.v_layout().item(Tray::Agents) {
+            // only with a Nerd Font on the machine; then a click is routed to the monitor
+            assert_eq!(click_for(Tray::Agents, None), Click::Monitor);
+            assert!(a.w > 0.0);
         }
     }
 

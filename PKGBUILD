@@ -47,11 +47,11 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for bin in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   # DEPRECATED compatibility names (macbar -> decbar, ...), kept for one release so existing keybinds keep working
-  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
     install -Dm755 contrib/compat/mac-compat "$pkgdir/usr/bin/mac${b#dec}"
   done
   install -Dm644 contrib/decebal-dock.service "$pkgdir/usr/lib/systemd/user/decebal-dock.service"
@@ -70,5 +70,6 @@ package() {
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 contrib/dechaven.desktop "$pkgdir/usr/share/applications/dechaven.desktop"
   install -Dm644 contrib/decsettings.desktop "$pkgdir/usr/share/applications/decsettings.desktop"
+  install -Dm644 contrib/decmon.desktop "$pkgdir/usr/share/applications/decmon.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

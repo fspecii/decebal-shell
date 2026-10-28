@@ -140,3 +140,7 @@ required-features = ["x11"]
 opt-level = 3
 [profile.dev.package.ttf-parser]
 opt-level = 3
+
+[[bin]]
+name = "decmon"
+path = "src/bin/decmon.rs"
