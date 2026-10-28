@@ -77,6 +77,8 @@ pub struct Model {
     pub synced_at: Option<Instant>,
     /// System panes (sound, network, ...): see `system/mod.rs`.
     pub sys: super::system::Hub,
+    /// The Configuration pane (text editor + presets): see `configpane.rs`.
+    pub cfg: super::configpane::State,
 }
 
 pub fn cap(s: &str) -> String {
@@ -92,6 +94,7 @@ impl Model {
             pinned: io::json_load(&paths.dock_pinned()),
             shell: io::json_load(&paths.shell_json()),
             sys: super::system::Hub::new(wake.clone()),
+            cfg: super::configpane::State::new(crate::preset::Env::from_paths(&paths), wake.clone()),
             paths,
             store,
             schema,

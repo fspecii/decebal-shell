@@ -21,6 +21,7 @@ macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme tonalspot|vibr
 macthemectl dynamic refresh      re-read the wallpaper (run it after changing the wallpaper by other means)
 macthemectl dynamic off          Caelestia keeps its own palette again
 macthemectl sync                 re-apply the current theme to rdwm's config
+macthemectl profile ...          presets of the whole setup: list save apply undo export import (macthemectl profile --help)
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
 
@@ -98,6 +99,14 @@ fn main() {
                 }
             }
         }
+        Some("profile") => match args.get(1).map(String::as_str) {
+            None | Some("-h") | Some("--help") | Some("help") => println!("{}", macshell::preset::cli::HELP),
+            Some(_) => {
+                if let Err(e) = macshell::preset::cli::run(&args[1..]) {
+                    die(&e);
+                }
+            }
+        },
         Some("get") => {
             let sel = src.selection();
             let (t, problem) = src.build(&sel, system_dark());

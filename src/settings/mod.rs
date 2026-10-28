@@ -2,6 +2,8 @@
 //! macsettings: native settings app for rdwm and the macshell panels.
 pub mod app;
 pub mod binds;
+pub mod configpane;
+pub mod editor;
 pub mod icons;
 pub mod io;
 pub mod keys;

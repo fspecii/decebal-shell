@@ -19,7 +19,7 @@ pub const SECTIONS: &[Section] = &[
     Section { title: "Keyboard & Input", panes: &["inputdev", "keyboard"] },
     Section { title: "Windows", panes: &["tiling", "windows", "rules"] },
     Section { title: "Apps", panes: &["defaults", "autostart"] },
-    Section { title: "System", panes: &["general", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
+    Section { title: "System", panes: &["general", "config", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
 ];
 
 /// (pane id, setting, extra words)

@@ -188,6 +188,8 @@ pub enum Item {
         caption: String,
     },
     Space(f32),
+    /// The multi-line text editor of the Configuration pane (see `editor.rs`).
+    Editor(super::editor::View),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -339,6 +341,8 @@ pub struct Frame {
     pub height: f32,
     /// Rows hit rectangles (for right-click reset): row rect and first control id.
     pub rows: Vec<(Rect, String)>,
+    /// Text editors on screen: control rect and what the painter measured.
+    pub editors: Vec<(Rect, super::editor::Geo)>,
 }
 
 impl Frame {
@@ -634,6 +638,18 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
+            Item::Editor(v) => {
+                let r = (x0, y, cw, u(v.height));
+                let hover = it.hover.as_deref() == Some(v.id.as_str());
+                let (mut placed, geo) = super::editor::draw(pm, p, v, r, hover);
+                if it.focus.as_deref() == Some(v.id.as_str()) && it.ring && !v.active {
+                    stroke_rounded(pm, r.0 - u(2.0), r.1 - u(2.0), r.2 + u(4.0), r.3 + u(4.0), u(10.0), crate::theme::th().accent.color(0.85), u(2.0));
+                }
+                placed.row_rect = r;
+                fr.placed.push(placed);
+                fr.editors.push((r, geo));
+                y += r.3 + u(14.0);
+            }
             Item::Header(t) => {
                 y += u(6.0);
                 p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
