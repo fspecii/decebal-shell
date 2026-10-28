@@ -57,13 +57,10 @@ impl Style {
     }
 }
 
-/// The selection after choosing `style`: its theme, every override kept, the wallpaper colours kept only for Caelestia.
+/// The selection after choosing `style`: its theme, every override kept (including "match wallpaper", which works with every style).
 pub fn selection_for(style: Style, sel: &Selection) -> Selection {
     let mut s = sel.clone();
     s.name = style.theme_id().into();
-    if style != Style::Caelestia {
-        s.dynamic = None;
-    }
     s
 }
 
@@ -217,13 +214,13 @@ mod tests {
     }
 
     #[test]
-    fn overrides_survive_and_wallpaper_colours_belong_to_caelestia() {
-        let dynamic = Dynamic { seed: Rgb(1, 2, 3), variant: Variant::Vibrant, wallpaper: None, follow: true };
+    fn overrides_and_match_wallpaper_survive_every_style() {
+        let dynamic = Dynamic { enabled: true, scheme: Variant::Vibrant, ..Dynamic::default() };
         let sel = Selection { accent: Some(Rgb(9, 9, 9)), mode: Mode::Light, dynamic: Some(dynamic.clone()), ..Selection::default() };
-        let c = selection_for(Style::Caelestia, &sel);
-        assert_eq!((c.name.as_str(), c.accent, c.mode, c.dynamic.as_ref()), ("caelestia", Some(Rgb(9, 9, 9)), Mode::Light, Some(&dynamic)));
-        assert!(selection_for(Style::Windows, &sel).dynamic.is_none());
-        assert!(selection_for(Style::Macos, &sel).dynamic.is_none());
+        for (style, id) in [(Style::Caelestia, "caelestia"), (Style::Windows, "windows11"), (Style::Macos, "macos")] {
+            let c = selection_for(style, &sel);
+            assert_eq!((c.name.as_str(), c.accent, c.mode, c.dynamic.as_ref()), (id, Some(Rgb(9, 9, 9)), Mode::Light, Some(&dynamic)));
+        }
     }
 
     #[test]

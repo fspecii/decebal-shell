@@ -34,6 +34,7 @@ pub mod builtin;
 pub mod dynamic;
 pub mod fontdb;
 pub mod fonts;
+pub mod extract;
 pub mod live;
 pub mod material;
 pub mod model;

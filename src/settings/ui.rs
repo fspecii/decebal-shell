@@ -182,6 +182,8 @@ pub enum Item {
     Themes(Vec<ThemeTile>),
     /// Row of round colour swatches (accent picker).
     Swatches(Vec<Swatch>),
+    /// A strip of labelled colour chips, not clickable (the "Match wallpaper" palette preview).
+    Palette(Vec<Chip>),
     /// Large preview of the current wallpaper (id of a thumbnail) with caption.
     Preview {
         id: String,
@@ -218,6 +220,12 @@ pub struct ThemeTile {
     pub error: bool,
     /// background, bar, surface, titlebar, text, accent, dock
     pub colors: [Color4; 7],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Chip {
+    pub name: String,
+    pub color: Color4,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -746,6 +754,22 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 y += ph + u(14.0);
                 p.text_center(pm, caption, x0 + cw / 2.0, y + u(2.0), u(12.0), Weight::Regular, pal::sub());
                 y += u(30.0);
+            }
+            Item::Palette(list) => {
+                let gap = u(8.0);
+                let cols = list.len().clamp(1, (((cw + gap) / (u(60.0) + gap)).floor() as usize).max(1));
+                let w = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
+                let (h, row_h) = (u(40.0), u(70.0));
+                for (i, chip) in list.iter().enumerate() {
+                    let r = (x0 + (i % cols) as f32 * (w + gap), y + (i / cols) as f32 * row_h, w, h);
+                    let (cr, cg, cb) = chip.color;
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), color(cr, cg, cb, 1.0));
+                    stroke_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), crate::theme::th().ink(0.22), u(1.0));
+                    let name = p.fit(&chip.name, w + gap, u(10.5), Weight::Regular);
+                    p.text_center(pm, &name, r.0 + w / 2.0, r.1 + h + u(11.0), u(10.5), Weight::Regular, pal::sub());
+                    p.text_center(pm, &format!("#{cr:02x}{cg:02x}{cb:02x}"), r.0 + w / 2.0, r.1 + h + u(24.0), u(9.5), Weight::Regular, pal::faint());
+                }
+                y += list.len().div_ceil(cols) as f32 * row_h + u(4.0);
             }
             Item::Thumbs(list) => {
                 let gap = u(14.0);

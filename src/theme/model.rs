@@ -393,17 +393,6 @@ impl Def {
         }
     }
 
-    /// This theme with its colours replaced by the Material palette of `d` (both variants; metrics stay).
-    pub fn with_dynamic(&self, d: &Dynamic) -> Def {
-        let mut out = self.clone();
-        for dark in [true, false] {
-            let colours = super::material::generate(d.seed, d.variant, dark).tokens();
-            let slot = if dark { &mut out.dark } else { &mut out.light };
-            slot.get_or_insert_with(Tokens::new).extend(colours);
-        }
-        out
-    }
-
     pub fn has_dark(&self) -> bool {
         self.dark.is_some() || (self.light.is_none() && self.dark_default)
     }
@@ -539,39 +528,169 @@ impl Mode {
     }
 }
 
-/// "Colours from wallpaper": the Material palette of a seed colour replaces the Caelestia theme's colours.
-/// The seed is taken from the wallpaper once (by `macthemectl dynamic` or the Theme pane) and stored here,
-/// so every program derives the same palette from three words of JSON instead of decoding an image.
+/// How far "match wallpaper" reaches into the theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Surfaces {
+    /// Only the accent (and the text on it); every surface keeps the theme's own colour.
+    Accent,
+    /// The accent plus surfaces, borders and text tinted towards the wallpaper's hue: the theme keeps its own
+    /// light and dark tones (a white Windows 11 stays white) and gains a wallpaper-coloured cast.
+    #[default]
+    Tint,
+    /// The theme's colours blend into the wallpaper's whole Material palette (at full strength: replaced by it).
+    Full,
+}
+
+impl Surfaces {
+    pub const ALL: [Surfaces; 3] = [Surfaces::Accent, Surfaces::Tint, Surfaces::Full];
+    pub fn parse(s: &str) -> Option<Surfaces> {
+        match s.trim().to_ascii_lowercase().replace(['-', '_', ' '], "").as_str() {
+            "accent" | "accentonly" => Some(Surfaces::Accent),
+            "tint" | "tinted" => Some(Surfaces::Tint),
+            "full" | "all" | "palette" | "fullsurface" => Some(Surfaces::Full),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Surfaces::Accent => "accent",
+            Surfaces::Tint => "tint",
+            Surfaces::Full => "full",
+        }
+    }
+    pub fn title(self) -> &'static str {
+        match self {
+            Surfaces::Accent => "Accent only",
+            Surfaces::Tint => "Tinted surfaces",
+            Surfaces::Full => "Full palette",
+        }
+    }
+}
+
+/// Where the colours come from.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum Origin {
+    /// Whatever wallpaper rdwm shows (else the one in rdwm's config, else Omarchy's current background).
+    #[default]
+    Wallpaper,
+    /// A fixed image file.
+    File(String),
+    /// A fixed colour.
+    Color(Rgb),
+}
+
+impl Origin {
+    pub fn parse(s: &str) -> Option<Origin> {
+        let s = s.trim();
+        if s.is_empty() || s.eq_ignore_ascii_case("wallpaper") || s.eq_ignore_ascii_case("current") {
+            return Some(Origin::Wallpaper);
+        }
+        if s.starts_with('#') {
+            return Rgb::parse(s).map(Origin::Color);
+        }
+        Some(Origin::File(s.to_string()))
+    }
+    pub fn to_text(&self) -> String {
+        match self {
+            Origin::Wallpaper => "wallpaper".into(),
+            Origin::File(p) => p.clone(),
+            Origin::Color(c) => c.hex(),
+        }
+    }
+}
+
+/// "Match wallpaper": an optional layer on top of any theme. The colours of a wallpaper (or an image, or one colour)
+/// are turned into a Material-style palette that recolours the accent and, depending on [`Surfaces`], the surfaces.
+///
+/// What is stored is the *result of looking at the picture* (`colors`) next to the settings, so every program
+/// derives the same palette from a few words of JSON instead of decoding an image. Whoever changes the wallpaper
+/// (`macthemectl watch`, `refresh`, the Theme pane, machaven) refreshes `colors`; the settings can be changed
+/// without touching the image again. Off by default: with no `dynamic` key, or `enabled: false`, nothing changes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dynamic {
-    pub seed: Rgb,
-    pub variant: super::material::Variant,
-    /// The image the seed came from (shown in the UI; the seed is not re-read from it by the programs).
-    pub wallpaper: Option<String>,
-    /// Re-derive the seed when macshell changes the wallpaper (machaven, the settings Wallpaper pane).
-    pub follow: bool,
+    pub enabled: bool,
+    pub scheme: super::material::Variant,
+    pub source: Origin,
+    pub surfaces: Surfaces,
+    /// 0..1: how far surfaces move (towards the tint or the full palette). Accent-only ignores it.
+    pub strength: f32,
+    /// -1..1: Material's contrast level for the derived palette.
+    pub contrast: f32,
+    /// Light or dark follows the picture's brightness instead of the Mode setting.
+    pub follow_mode: bool,
+    /// What the picture looked like when it was last read.
+    pub colors: super::extract::Extracted,
+    /// The image `colors` came from.
+    pub image: Option<String>,
+}
+
+impl Default for Dynamic {
+    fn default() -> Self {
+        Dynamic {
+            enabled: false,
+            scheme: Default::default(),
+            source: Origin::Wallpaper,
+            surfaces: Surfaces::Tint,
+            strength: 0.5,
+            contrast: 0.0,
+            follow_mode: false,
+            colors: Default::default(),
+            image: None,
+        }
+    }
 }
 
 impl Dynamic {
-    pub fn from_json(v: &serde_json::Value) -> Option<Dynamic> {
+    /// `legacy_on` is what an old file (written before the feature could be switched off: it has no `enabled` key)
+    /// means for the theme it sits next to: it only ever recoloured Caelestia.
+    pub fn from_json(v: &serde_json::Value, legacy_on: bool) -> Option<Dynamic> {
         let o = v.as_object()?;
+        let colors = super::extract::Extracted::from_json_fields(o)?;
+        let legacy = !o.contains_key("enabled") && !o.contains_key("surfaces");
+        let mut source = o.get("source").and_then(|x| x.as_str()).and_then(Origin::parse).unwrap_or_default();
+        // old files: `follow: false` pinned the seed to the image it came from
+        if o.get("follow").and_then(|x| x.as_bool()) == Some(false) && source == Origin::Wallpaper {
+            source = o.get("wallpaper").and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(|w| Origin::File(w.into())).unwrap_or(Origin::Color(colors.seed));
+        }
         Some(Dynamic {
-            seed: o.get("seed").and_then(|x| x.as_str()).and_then(Rgb::parse)?,
-            variant: o.get("scheme").and_then(|x| x.as_str()).and_then(super::material::Variant::parse).unwrap_or_default(),
-            wallpaper: o.get("wallpaper").and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(String::from),
-            follow: o.get("follow").and_then(|x| x.as_bool()).unwrap_or(true),
+            enabled: o.get("enabled").and_then(|x| x.as_bool()).unwrap_or(legacy && legacy_on),
+            scheme: o.get("scheme").and_then(|x| x.as_str()).and_then(super::material::Variant::parse).unwrap_or_default(),
+            source,
+            surfaces: o.get("surfaces").and_then(|x| x.as_str()).and_then(Surfaces::parse).unwrap_or(if legacy { Surfaces::Full } else { Surfaces::Tint }),
+            strength: o.get("strength").and_then(|x| x.as_f64()).map_or(if legacy { 1.0 } else { 0.5 }, |x| x.clamp(0.0, 1.0) as f32),
+            contrast: o.get("contrast").and_then(|x| x.as_f64()).map_or(0.0, |x| x.clamp(-1.0, 1.0) as f32),
+            follow_mode: o.get("mode").and_then(|x| x.as_str()) == Some("wallpaper"),
+            image: o.get("image").or_else(|| o.get("wallpaper")).and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(String::from),
+            colors,
         })
     }
 
     pub fn to_json(&self) -> serde_json::Value {
         let mut o = serde_json::Map::new();
-        o.insert("seed".into(), self.seed.hex().into());
-        o.insert("scheme".into(), self.variant.as_str().into());
-        if let Some(w) = &self.wallpaper {
-            o.insert("wallpaper".into(), w.clone().into());
+        o.insert("enabled".into(), self.enabled.into());
+        o.insert("scheme".into(), self.scheme.as_str().into());
+        o.insert("source".into(), self.source.to_text().into());
+        o.insert("surfaces".into(), self.surfaces.as_str().into());
+        let r2 = |x: f32| (f64::from(x) * 100.0).round() / 100.0;
+        o.insert("strength".into(), r2(self.strength).into());
+        o.insert("contrast".into(), r2(self.contrast).into());
+        o.insert("mode".into(), (if self.follow_mode { "wallpaper" } else { "keep" }).into());
+        self.colors.to_json_fields(&mut o);
+        if let Some(w) = &self.image {
+            o.insert("image".into(), w.clone().into());
         }
-        o.insert("follow".into(), self.follow.into());
         serde_json::Value::Object(o)
+    }
+
+    /// The palette of the stored colours for one variant: what the Theme pane previews and what recolours the theme.
+    pub fn roles(&self, dark: bool) -> super::material::Roles {
+        // a hand-picked colour is never "grey"; a grey picture only matters for the monochrome scheme
+        super::material::generate_with(self.colors.seed, &self.colors.others, self.scheme, dark, f64::from(self.contrast))
+    }
+
+    /// True when the picture has colour to match, or the scheme needs none (monochrome).
+    pub fn has_colour(&self) -> bool {
+        !self.colors.grey || self.scheme == super::material::Variant::Monochrome
     }
 }
 
@@ -591,7 +710,7 @@ pub struct Selection {
     pub fonts: super::fonts::FontChoice,
     /// Also restyle rdwm's titlebars when applying (macthemectl / macsettings).
     pub sync_rdwm: bool,
-    /// Colours derived from the wallpaper; only the Caelestia theme uses them.
+    /// "Match wallpaper" (any theme); `None` or `enabled: false` = off, the default.
     pub dynamic: Option<Dynamic>,
 }
 
@@ -645,7 +764,8 @@ impl Selection {
         if let Some(b) = o.get("syncRdwm").and_then(|x| x.as_bool()) {
             s.sync_rdwm = b;
         }
-        s.dynamic = o.get("dynamic").and_then(Dynamic::from_json);
+        let on_caelestia = crate::theme::builtin::norm(&s.name) == crate::theme::builtin::DYNAMIC_THEME;
+        s.dynamic = o.get("dynamic").and_then(|d| Dynamic::from_json(d, on_caelestia));
         s
     }
 
@@ -862,7 +982,17 @@ mod tests {
             font_scale: Some(1.1),
             fonts: Default::default(),
             sync_rdwm: false,
-            dynamic: Some(Dynamic { seed: Rgb(1, 2, 3), variant: crate::theme::material::Variant::Vibrant, wallpaper: Some("/w.png".into()), follow: false }),
+            dynamic: Some(Dynamic {
+                enabled: true,
+                scheme: crate::theme::material::Variant::Palette,
+                source: Origin::File("/w.png".into()),
+                surfaces: Surfaces::Full,
+                strength: 0.75,
+                contrast: -0.5,
+                follow_mode: true,
+                colors: crate::theme::extract::Extracted { seed: Rgb(1, 2, 3), others: vec![Rgb(4, 5, 6)], tone: 33.5, grey: false },
+                image: Some("/w.png".into()),
+            }),
         };
         assert_eq!(Selection::from_json(&sel.to_json()), sel);
         // old form stays old: a plain string and a top-level fontScale
@@ -877,6 +1007,25 @@ mod tests {
         assert_eq!((j["font"]["family"].as_str(), j["font"]["mono"].as_str(), j["font"]["scale"].as_f64()), (Some("Inter"), Some("Fira Code"), Some(1.1)));
         assert!(j.get("fontScale").is_none());
         assert_eq!(Selection::from_json(&j), with_fonts);
+        // off and default: nothing is written until it is turned on
+        assert!(Selection::default().dynamic.is_none());
+        assert!(!Dynamic::default().enabled);
+        // files written before the feature could be switched off: on only for Caelestia, as a full palette
+        let old = serde_json::json!({"name": "caelestia", "dynamic": {"seed": "#2a9d8f", "scheme": "vibrant", "wallpaper": "/old.png", "follow": true}});
+        let d = Selection::from_json(&old).dynamic.unwrap();
+        assert!(d.enabled && d.surfaces == Surfaces::Full && d.strength == 1.0 && d.scheme == crate::theme::material::Variant::Vibrant);
+        assert_eq!((d.colors.seed, d.image.as_deref(), &d.source), (Rgb(0x2a, 0x9d, 0x8f), Some("/old.png"), &Origin::Wallpaper));
+        let old_nord = serde_json::json!({"name": "nord", "dynamic": {"seed": "#2a9d8f", "follow": false, "wallpaper": "/old.png"}});
+        let d = Selection::from_json(&old_nord).dynamic.unwrap();
+        assert!(!d.enabled, "an old file never recoloured nord");
+        assert_eq!(d.source, Origin::File("/old.png".into()), "follow: false pinned the image");
+        // sources
+        assert_eq!(Origin::parse("wallpaper"), Some(Origin::Wallpaper));
+        assert_eq!(Origin::parse("#112233"), Some(Origin::Color(Rgb(0x11, 0x22, 0x33))));
+        assert_eq!(Origin::parse("~/Pictures/a.png"), Some(Origin::File("~/Pictures/a.png".into())));
+        assert_eq!(Origin::parse("#nope"), None);
+        assert_eq!(Surfaces::parse("Accent-only"), Some(Surfaces::Accent));
+        assert_eq!(Surfaces::parse("nope"), None);
         assert_eq!(Selection::from_json(&serde_json::json!("dracula")).name, "dracula");
         assert_eq!(Selection::from_json(&serde_json::json!(5)), Selection::default());
         let junk = Selection::from_json(&serde_json::json!({"name": "", "mode": "purple", "accent": "nope", "opacity": 9}));

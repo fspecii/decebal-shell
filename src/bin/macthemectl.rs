@@ -3,7 +3,7 @@
 use macshell::settings::io::Paths;
 use macshell::theme::live::{system_dark, Source};
 use macshell::theme::material::Variant;
-use macshell::theme::model::{Def, Mode, Rgb, Selection};
+use macshell::theme::model::{Def, Dynamic, Mode, Origin, Rgb, Selection, Surfaces};
 use macshell::theme::{builtin, dynamic, rdwm, style};
 
 const HELP: &str = "macthemectl list [--json]
@@ -14,16 +14,33 @@ macthemectl set KEY VALUE        KEY: mode accent opacity radius font font-scale
 macthemectl style [macos|windows|caelestia]   the shell style preset: theme + dock style + menu bar together
                                  (windows: Windows 11 theme + taskbar dock; caelestia: Caelestia theme + pill dock and bar;
                                  macos: macOS theme + macOS dock). Without a name: print the current one.
-macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme tonalspot|vibrant|neutral|content]
-                    [--seed #rrggbb] [--no-follow] [--no-rdwm]
-                                 Caelestia colours from the wallpaper's dominant colour (Material You tonal palettes).
-                                 Without --wallpaper: the wallpaper on screen (rdwm, its config, Omarchy's current/background).
-macthemectl dynamic refresh      re-read the wallpaper (run it after changing the wallpaper by other means)
-macthemectl dynamic off          Caelestia keeps its own palette again
+macthemectl dynamic on [OPTIONS]  \"Match wallpaper\": recolour the current theme (any theme) from the wallpaper. Off by default.
+macthemectl dynamic off          back to the theme's own colours (the settings are kept)
+macthemectl dynamic [status] [--json]
+macthemectl dynamic scheme NAME  tonal-spot | vibrant | expressive | monochrome | neutral | content | palette
+macthemectl dynamic source wallpaper|PATH|#rrggbb
+                                 wallpaper = what rdwm shows (else its config's [wallpaper] image, else Omarchy's
+                                 current/background); PATH = a fixed image; #rrggbb = a fixed colour
+macthemectl dynamic surfaces accent|tint|full
+                                 accent = only the accent; tint = accent + surfaces/text tinted towards the wallpaper's
+                                 hue, the theme keeping its own light and dark tones; full = the whole Material palette
+macthemectl dynamic strength 0-100   how far surfaces move (tint/full; default 50)
+macthemectl dynamic contrast -100..100  Material contrast level of the palette (default 0)
+macthemectl dynamic mode keep|wallpaper   wallpaper = light or dark follows the picture's brightness
+macthemectl dynamic refresh      re-read the wallpaper now (a no-op while off)
+macthemectl dynamic preview [--wallpaper PATH] [--scheme S] [--surfaces K] [--strength N] [--json]
+                                 show the palette those settings give, without applying anything
+                    OPTIONS (for `on`): --scheme --source --surfaces --strength --contrast --mode --light|--dark --no-rdwm
+macthemectl dynamic --wallpaper PATH [--scheme S] [--light|--dark] [--seed #rrggbb]
+                                 the older form: the Caelestia theme with a full palette from PATH
+macthemectl watch [--interval MS] [--once]
+                                 follow wallpaper changes: while match wallpaper is on, re-derives the colours whenever
+                                 the wallpaper (path or file) changes. One tiny process; run it from the session
+                                 (e.g. `exec-once = macthemectl watch`). Costs a stat per second while idle.
 macthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale N|reset
                                  fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
                                  cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (macthemectl font list)
-macthemectl sync                 re-apply the current theme to rdwm's config
+macthemectl sync                re-apply the current theme to rdwm's config
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
 
@@ -71,6 +88,281 @@ fn apply(src: &Source, sel: &Selection) {
         }
         Err(e) => die(&e),
     }
+}
+
+// ---------------------------------------------------------------- match wallpaper
+
+/// What the `dynamic` options ask for; `None` leaves a setting as it is.
+#[derive(Default)]
+struct DynOpts {
+    scheme: Option<Variant>,
+    source: Option<Origin>,
+    surfaces: Option<Surfaces>,
+    strength: Option<f32>,
+    contrast: Option<f32>,
+    follow_mode: Option<bool>,
+    mode: Option<Mode>,
+    no_rdwm: bool,
+    json: bool,
+}
+
+impl DynOpts {
+    fn apply(&self, d: &mut Dynamic) {
+        if let Some(v) = self.scheme {
+            d.scheme = v;
+        }
+        if let Some(v) = &self.source {
+            d.source = v.clone();
+        }
+        if let Some(v) = self.surfaces {
+            d.surfaces = v;
+        }
+        if let Some(v) = self.strength {
+            d.strength = v;
+        }
+        if let Some(v) = self.contrast {
+            d.contrast = v;
+        }
+        if let Some(v) = self.follow_mode {
+            d.follow_mode = v;
+        }
+    }
+}
+
+fn percent(s: &str, what: &str, lo: f32, hi: f32) -> f32 {
+    let v: f32 = s.trim_end_matches('%').parse().unwrap_or_else(|_| die(&format!("{what} must be a number from {lo} to {hi} (percent)")));
+    if !(lo..=hi).contains(&v) {
+        die(&format!("{what} must be from {lo} to {hi} (percent)"));
+    }
+    v / 100.0
+}
+
+fn parse_source(v: &str) -> Origin {
+    Origin::parse(v).unwrap_or_else(|| die("source must be `wallpaper`, an image path or a colour like #2a9d8f"))
+}
+
+fn parse_opts(args: &[String]) -> DynOpts {
+    let mut o = DynOpts::default();
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        let mut value = || {
+            i += 1;
+            args.get(i).cloned().unwrap_or_else(|| die(&format!("{a} needs a value")))
+        };
+        match a {
+            "--scheme" => o.scheme = Some(Variant::parse(&value()).unwrap_or_else(|| die("scheme must be tonal-spot, vibrant, expressive, monochrome, neutral, content or palette"))),
+            "--source" => o.source = Some(parse_source(&value())),
+            // the older spellings of --source
+            "--wallpaper" => o.source = Some(Origin::File(value())),
+            "--seed" => o.source = Some(Origin::Color(Rgb::parse(&value()).unwrap_or_else(|| die("seed must look like #a8627b")))),
+            "--surfaces" => o.surfaces = Some(Surfaces::parse(&value()).unwrap_or_else(|| die("surfaces must be accent, tint or full"))),
+            "--strength" => o.strength = Some(percent(&value(), "strength", 0.0, 100.0)),
+            "--contrast" => o.contrast = Some(percent(&value(), "contrast", -100.0, 100.0)),
+            "--mode" => match value().as_str() {
+                "wallpaper" | "follow" => o.follow_mode = Some(true),
+                "keep" | "fixed" => o.follow_mode = Some(false),
+                _ => die("mode must be `keep` (use the Mode setting) or `wallpaper` (light or dark follows the picture)"),
+            },
+            "--light" => o.mode = Some(Mode::Light),
+            "--dark" => o.mode = Some(Mode::Dark),
+            "--no-rdwm" => o.no_rdwm = true,
+            "--no-follow" => {} // older option: a fixed image is `--source PATH`
+            "--json" => o.json = true,
+            other => die(&format!("unknown option {other}")),
+        }
+        i += 1;
+    }
+    o
+}
+
+fn scheme_text(d: &Dynamic) -> String {
+    format!("{} / {}{}", d.scheme.as_str(), d.surfaces.as_str(), if d.surfaces == Surfaces::Accent { String::new() } else { format!(" {:.0}%", d.strength * 100.0) })
+}
+
+fn print_status(src: &Source, paths: &Paths, json: bool) {
+    let sel = src.selection();
+    let (t, _) = src.build(&sel, system_dark());
+    let d = sel.dynamic.clone();
+    if json {
+        let on = d.as_ref().is_some_and(|d| d.enabled);
+        let wall = dynamic::find_wallpaper(paths).map(|p| p.to_string_lossy().into_owned());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "enabled": on,
+                "settings": d.as_ref().map(|d| d.to_json()),
+                "wallpaper": wall,
+                "result": {"theme": t.id, "dark": t.dark, "accent": t.accent.hex(), "background": t.background.hex(), "surface": t.surface.hex(), "text": t.text.hex()},
+            }))
+            .unwrap()
+        );
+        return;
+    }
+    let Some(d) = d else {
+        println!("match wallpaper: off (never turned on; `macthemectl dynamic on`)");
+        return;
+    };
+    println!("match wallpaper: {}", if d.enabled { "on" } else { "off (settings kept)" });
+    println!("  scheme       {}", scheme_text(&d));
+    println!("  contrast     {:+.0}%", d.contrast * 100.0);
+    println!(
+        "  light/dark   {}",
+        if d.follow_mode {
+            format!("follows the picture (mean tone {:.0}: {})", d.colors.tone, if d.colors.tone >= dynamic::LIGHT_TONE { "light" } else { "dark" })
+        } else {
+            "the Mode setting rules".into()
+        }
+    );
+    println!(
+        "  source       {}{}",
+        d.source.to_text(),
+        if d.source == Origin::Wallpaper { dynamic::find_wallpaper(paths).map(|p| format!("  ({})", p.display())).unwrap_or_else(|| "  (none found)".into()) } else { String::new() }
+    );
+    let others: String = d.colors.others.iter().map(|c| format!(" {}", c.hex())).collect();
+    println!(
+        "  picture      {} seed {}{}, mean tone {:.0}{}",
+        d.image.as_deref().unwrap_or("-"),
+        d.colors.seed.hex(),
+        others,
+        d.colors.tone,
+        if d.colors.grey { " (no colour: the theme keeps its own)" } else { "" }
+    );
+    if d.enabled {
+        println!("  result       {} {}: accent {} background {} text {}", t.id, if t.dark { "dark" } else { "light" }, t.accent.hex(), t.background.hex(), t.text.hex());
+    }
+}
+
+fn print_preview(d: &Dynamic, t: &macshell::theme::Theme, json: bool) {
+    use std::io::IsTerminal;
+    let chips = dynamic::preview(d, t);
+    if json {
+        let m: serde_json::Map<String, serde_json::Value> = chips.iter().map(|(n, c)| (n.to_lowercase(), c.hex().into())).collect();
+        println!("{}", serde_json::to_string_pretty(&m).unwrap());
+        return;
+    }
+    let tty = std::io::stdout().is_terminal();
+    for (name, c) in chips {
+        let block = if tty { format!("\x1b[48;2;{};{};{}m      \x1b[0m ", c.0, c.1, c.2) } else { String::new() };
+        println!("{block}{:<11}{}", name, c.hex());
+    }
+}
+
+fn cmd_dynamic(src: &Source, args: &[String]) {
+    let paths = Paths::discover();
+    let sel = src.selection();
+    let rest = |n: usize| args.get(n..).unwrap_or(&[]).to_vec();
+    // `scheme X`, `strength N` ... are options with a verb in front
+    let verb = |flag: &str| {
+        let v = args.get(1).unwrap_or_else(|| die(&format!("`dynamic {}` needs a value", args[0])));
+        let mut a = vec![flag.to_string(), v.clone()];
+        a.extend(rest(2));
+        parse_opts(&a)
+    };
+    let (opts, kind) = match args.first().map(String::as_str) {
+        None | Some("status") => {
+            print_status(src, &paths, parse_opts(&rest(1)).json);
+            return;
+        }
+        Some("off") => (parse_opts(&rest(1)), "off"),
+        Some("on") => (parse_opts(&rest(1)), "on"),
+        Some("refresh") => {
+            match dynamic::refresh(src, &paths, None) {
+                Ok(dynamic::Refresh::Updated) => println!("wallpaper colours updated"),
+                Ok(dynamic::Refresh::Unchanged) => println!("wallpaper colours unchanged"),
+                Ok(dynamic::Refresh::Off) => println!("match wallpaper is off"),
+                Err(e) => die(&e),
+            }
+            return;
+        }
+        Some("preview") => {
+            let opts = parse_opts(&rest(1));
+            let mut d = sel.dynamic.clone().unwrap_or_default();
+            d.enabled = true;
+            opts.apply(&mut d);
+            let (x, image) = dynamic::read(&dynamic::input_of(&d, &paths, None).unwrap_or_else(|e| die(&e))).unwrap_or_else(|e| die(&e));
+            d.colors = x;
+            d.image = image;
+            let (t, _) = src.build(&Selection { dynamic: Some(d.clone()), ..sel }, system_dark());
+            print_preview(&d, &t, opts.json);
+            return;
+        }
+        Some("scheme") => (verb("--scheme"), "set"),
+        Some("source") => (verb("--source"), "set"),
+        Some("surfaces") => (verb("--surfaces"), "set"),
+        Some("strength") => (verb("--strength"), "set"),
+        Some("contrast") => (verb("--contrast"), "set"),
+        Some("mode") => (verb("--mode"), "set"),
+        // the older form: `dynamic --wallpaper PATH --scheme vibrant [--light]` = Caelestia with a full palette
+        Some(f) if f.starts_with("--") => (parse_opts(args), "legacy"),
+        Some(other) => die(&format!("unknown dynamic command `{other}` (on, off, status, scheme, source, surfaces, strength, contrast, mode, refresh, preview)")),
+    };
+    let mut sel = sel;
+    if let Some(m) = opts.mode {
+        sel.mode = m;
+    }
+    if opts.no_rdwm {
+        sel.sync_rdwm = false;
+    }
+    let new = match kind {
+        "off" => dynamic::disable(&sel),
+        "set" | "on" | "legacy" => {
+            if kind == "legacy" {
+                sel.name = macshell::theme::builtin::DYNAMIC_THEME.into();
+            }
+            let was_on = sel.dynamic.as_ref().is_some_and(|d| d.enabled);
+            let legacy_defaults = kind == "legacy" && opts.surfaces.is_none();
+            dynamic::update(&sel, &paths, |d| {
+                // changing a setting does not switch the feature on by itself; `on` and the older form do
+                d.enabled = d.enabled || kind != "set";
+                if legacy_defaults {
+                    d.surfaces = Surfaces::Full;
+                    d.strength = 1.0;
+                }
+                opts.apply(d);
+            })
+            .inspect(|_| {
+                if !was_on && kind == "set" {
+                    eprintln!("macthemectl: saved; match wallpaper is still off (`macthemectl dynamic on`)");
+                }
+            })
+            .unwrap_or_else(|e| die(&e))
+        }
+        _ => unreachable!(),
+    };
+    if let Some(d) = new.dynamic.as_ref().filter(|d| d.enabled) {
+        println!("match wallpaper: {} from {}, seed {}", scheme_text(d), d.image.as_deref().unwrap_or(&d.source.to_text()), d.colors.seed.hex());
+        if d.colors.grey {
+            println!("  (that picture has no colour to match: the theme keeps its own)");
+        }
+    }
+    apply(src, &new);
+}
+
+fn cmd_watch(src: &Source, args: &[String]) {
+    let (mut interval, mut once) = (1500u64, false);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--once" => once = true,
+            "--interval" => interval = it.next().and_then(|v| v.parse::<u64>().ok()).filter(|v| (200..=60_000).contains(v)).unwrap_or_else(|| die("--interval needs milliseconds (200-60000)")),
+            other => die(&format!("unknown option {other}")),
+        }
+    }
+    let paths = Paths::discover();
+    if once {
+        match dynamic::watch_tick(src, &paths, &mut dynamic::WatchState::default()) {
+            Some(Ok(dynamic::Refresh::Updated)) => println!("wallpaper colours updated"),
+            Some(Err(e)) => die(&e),
+            _ => println!("nothing to do"),
+        }
+        return;
+    }
+    let Some(_lock) = dynamic::watch_lock() else {
+        eprintln!("macthemectl: a watcher is already running");
+        return;
+    };
+    dynamic::watch(src, &paths, std::time::Duration::from_millis(interval), |m| eprintln!("macthemectl watch: {m}"));
 }
 
 fn main() {
@@ -212,60 +504,8 @@ fn main() {
                 Err(e) => die(&e),
             }
         }
-        Some("dynamic") => {
-            let paths = Paths::discover();
-            let mut sel = src.selection();
-            match args.get(1).map(String::as_str) {
-                Some("off") => {
-                    apply(&src, &dynamic::disable(&sel));
-                    return;
-                }
-                Some("refresh") => {
-                    match dynamic::refresh(&src, &paths, None) {
-                        Ok(true) => println!("wallpaper colours updated"),
-                        Ok(false) => println!("wallpaper colours unchanged (or switched off)"),
-                        Err(e) => die(&e),
-                    }
-                    return;
-                }
-                _ => {}
-            }
-            let (mut wall, mut seed, mut follow) = (None::<String>, None::<Rgb>, true);
-            let mut variant = sel.dynamic.as_ref().map(|d| d.variant).unwrap_or_default();
-            let mut i = 1;
-            while i < args.len() {
-                let a = args[i].as_str();
-                match a {
-                    "--light" => sel.mode = Mode::Light,
-                    "--dark" => sel.mode = Mode::Dark,
-                    "--no-follow" => follow = false,
-                    "--no-rdwm" => sel.sync_rdwm = false,
-                    "--wallpaper" | "--scheme" | "--seed" => {
-                        i += 1;
-                        let v = args.get(i).unwrap_or_else(|| die(&format!("{a} needs a value")));
-                        match a {
-                            "--wallpaper" => wall = Some(v.clone()),
-                            "--scheme" => variant = Variant::parse(v).unwrap_or_else(|| die("scheme must be tonalspot, vibrant, neutral or content")),
-                            _ => seed = Some(Rgb::parse(v).unwrap_or_else(|| die("seed must look like #a8627b"))),
-                        }
-                    }
-                    other => die(&format!("unknown option {other}")),
-                }
-                i += 1;
-            }
-            let d = match (seed, wall) {
-                (Some(seed), w) => macshell::theme::Dynamic { seed, variant, wallpaper: w, follow },
-                (None, w) => {
-                    let path = match w {
-                        Some(w) => std::path::PathBuf::from(w),
-                        None => dynamic::find_wallpaper(&paths).unwrap_or_else(|| die("no wallpaper found; pass --wallpaper PATH")),
-                    };
-                    dynamic::derive(&path, variant, follow).unwrap_or_else(|e| die(&e))
-                }
-            };
-            println!("seed {} ({}) from {}", d.seed.hex(), d.variant.as_str(), d.wallpaper.as_deref().unwrap_or("--seed"));
-            apply(&src, &dynamic::enable(&sel, d));
-        }
+        Some("dynamic") => cmd_dynamic(&src, &args[1..]),
+        Some("watch") => cmd_watch(&src, &args[1..]),
         Some("font") => {
             let cmd = macshell::theme::fonts::parse_cmd(&args[1..]).unwrap_or_else(|e| die(&format!("{e}\n{}", macshell::theme::fonts::HELP)));
             let db = macshell::theme::fontdb::get();
