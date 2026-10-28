@@ -12,6 +12,8 @@ BIN=${MACSHELL_BIN:-$T/${PROFILE:-$([ -x "$T/release/macthemectl" ] && echo rele
 [ -x "$BIN/macthemectl" ] || { (cd "$HERE" && cargo build -q --offline --bins) || { echo "build failed"; exit 2; }; }
 N=${E2E_DISPLAY:-:92}
 [ "$N" = ":1" ] && { echo "refusing the live display"; exit 2; }
+# never share a display with somebody else's server
+if [ -e "/tmp/.X11-unix/X${N#:}" ] || [ -e "/tmp/.X${N#:}-lock" ]; then echo "display $N is in use; set E2E_DISPLAY to a free one"; exit 77; fi
 for t in Xvfb xrdb import dbus-run-session gsettings python3; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
 OMARCHY=${OMARCHY_PATH:-/usr/share/omarchy}
 [ -d "$OMARCHY/default/themed" ] || OMARCHY=
@@ -20,8 +22,7 @@ PASS=0; FAIL=0; PIDS=()
 TMP=$(mktemp -d /tmp/macshell-system-e2e.XXXXXX)
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; sleep 0.3; for p in "${PIDS[@]}"; do kill -9 "$p" 2>/dev/null; done; wait 2>/dev/null
-  rm -f "/tmp/.X11-unix/X${N#:}" "/tmp/.X${N#:}-lock" 2>/dev/null
-  [ "$SHOTS" = "$TMP/shots" ] && rm -rf "$TMP" || find "$TMP" -mindepth 1 -maxdepth 1 ! -path "$SHOTS" -exec rm -rf {} +; }
+  [ "$SHOTS" = "$TMP/shots" ] && rm -rf "$TMP" || { find "$TMP" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; rmdir "$TMP" 2>/dev/null; }; }
 trap cleanup EXIT
 pass() { PASS=$((PASS + 1)); echo "  ok   $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1${2:+  ($2)}"; }
@@ -120,6 +121,7 @@ eq "the last change won" "$(ctl system status --json | python3 -c 'import json,s
 # ---- real GTK 4 / libadwaita and GTK 3 windows + Nautilus on a private Xvfb
 Xvfb $N -screen 0 1600x900x24 -noreset -nolisten tcp >"$TMP/xvfb.log" 2>&1 & PIDS+=($!)
 for i in $(seq 100); do [ -e /tmp/.X11-unix/X${N#:} ] && break; sleep 0.2; done; sleep 1
+kill -0 "${PIDS[-1]}" 2>/dev/null || { echo "Xvfb $N did not start"; tail -3 "$TMP/xvfb.log"; exit 2; }
 export DISPLAY=$N GDK_BACKEND=x11
 px() { import -window root -crop 1x1+$1+$2 +repage -depth 8 txt:- 2>/dev/null | tail -1 | grep -o '#[0-9A-F]\{6\}' | head -1 | tr 'A-F' 'a-f'; }
 echo "== X resources and GTK windows on $N"
