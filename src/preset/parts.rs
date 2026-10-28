@@ -317,7 +317,7 @@ pub fn parse_toml(text: &str) -> Result<DocumentMut, String> {
 pub fn extract_toml(text: &str, parts: &PartSet) -> Result<String, String> {
     let doc = parse_toml(text)?;
     let mut out = DocumentMut::new();
-    let mut next = 0usize;
+    let mut next = 0isize;
     for (k, item) in doc.as_table().iter() {
         if !owned(k, parts) {
             continue;
@@ -332,7 +332,7 @@ pub fn extract_toml(text: &str, parts: &PartSet) -> Result<String, String> {
 }
 
 /// Largest table position in `item` (document order of `[headers]`).
-fn max_position(item: &Item) -> usize {
+fn max_position(item: &Item) -> isize {
     let mut m = 0;
     match item {
         Item::Table(t) => {
@@ -355,10 +355,10 @@ fn max_position(item: &Item) -> usize {
 }
 
 /// Moves every table position of `item` up by `base` so a table inserted from another document sorts after the existing ones.
-fn renumber(item: &mut Item, base: &mut usize, offset: usize) {
-    fn shift(t: &mut Table, offset: usize) {
+fn renumber(item: &mut Item, base: &mut isize, offset: isize) {
+    fn shift(t: &mut Table, offset: isize) {
         if let Some(p) = t.position() {
-            t.set_position(p + offset);
+            t.set_position(Some(p + offset));
         }
         for (_, i) in t.iter_mut() {
             renumber(i, &mut 0, offset);

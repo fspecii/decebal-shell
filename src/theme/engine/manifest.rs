@@ -6,7 +6,7 @@
 use super::schema::{self, AssetKind, Elem, Field, Status, Ty};
 use crate::theme::model::{Def, Kind, Rgb, Tokens, TOKENS, V};
 use serde_json::{json, Map, Value};
-use toml_edit::{ImDocument, Item, Table};
+use toml_edit::{Document, Item, Table};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -414,7 +414,7 @@ fn lift_tokens(extra: &Map<String, Value>, common: &mut Tokens) {
 /// Reads and validates a format-1 manifest.
 pub fn analyze(text: &str) -> Analysis {
     let mut cx = Ctx { text, diags: Vec::new() };
-    let doc = match ImDocument::parse(text.to_string()) {
+    let doc = match Document::parse(text.to_string()) {
         Ok(d) => d,
         Err(e) => {
             let line = e.span().map(|s| text[..s.start.min(text.len())].matches('\n').count() + 1).unwrap_or(0);

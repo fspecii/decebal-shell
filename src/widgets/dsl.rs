@@ -25,7 +25,7 @@ use super::fmt::Fmt;
 use super::Trust;
 use crate::theme::model::Rgb;
 use std::collections::BTreeSet;
-use toml_edit::{ImDocument, Item, Table};
+use toml_edit::{Document, Item, Table};
 
 pub const MAX_NODES: usize = 200;
 pub const MAX_DEPTH: usize = 8;
@@ -537,7 +537,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
     if text.len() > 64 << 10 {
         return Err("widget file is larger than 64 KiB".into());
     }
-    let doc = ImDocument::parse(text.to_string()).map_err(|e| {
+    let doc = Document::parse(text.to_string()).map_err(|e| {
         let line = e.span().map(|s| text[..s.start.min(text.len())].matches('\n').count() + 1).unwrap_or(0);
         format!("line {line}: invalid TOML: {}", e.message())
     })?;
