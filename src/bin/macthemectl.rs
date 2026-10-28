@@ -48,6 +48,7 @@ macthemectl watch [--interval MS] [--once]
 macthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale N|reset
                                  fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
                                  cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (macthemectl font list)
+macthemectl icons list|set NAME|status|reset|scale N|tint on|off|fallback NAME   icon theme settings (macthemectl icons help)
 macthemectl sync                re-apply the current theme to rdwm's config
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
@@ -557,6 +558,10 @@ fn main() {
                 }
             }
         }
+        Some("icons") => match macshell::icons::ctl::run(&macshell::icons::config::shell_json(), &macshell::icons::resolve::Roots::from_env(), &args[1..]) {
+            Ok(out) => println!("{out}"),
+            Err(e) => die(&e),
+        },
         Some("sync") => {
             let sel = src.selection();
             apply(&src, &Selection { sync_rdwm: true, ..sel });

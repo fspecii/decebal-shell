@@ -334,8 +334,13 @@ pub fn font_scale() -> f32 {
 pub fn reload() -> bool {
     let mut live = LIVE.lock().unwrap();
     let l = live.get_or_insert_with(|| Live::new(Source::discover()));
+    // icon settings (macshell.json `icons`) ride on the same watcher: a change repaints like a theme change
+    let icons = crate::icons::live::poll_now();
     if l.poll() {
         publish(l.theme.clone());
+        true
+    } else if icons {
+        GEN.fetch_add(1, Ordering::Relaxed);
         true
     } else {
         false

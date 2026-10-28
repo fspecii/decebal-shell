@@ -51,6 +51,11 @@ accent swatches, translucency, corner radius and text size. A choice edits rdwm'
 comment-preserving store (validated, one reload) and writes `macshell.json`; every running macshell program follows within
 half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
 
+## Icons pane
+`macsettings icons` (`src/settings/iconspane.rs`): the installed icon themes (Auto first; symbolic-only and cursor-only ones
+greyed out), a 4 x 4 preview of common icons for the highlighted theme, Use this theme, icon size, symbolic tint, fallback
+theme and reset. It edits the `icons` object of `macshell.json` (`docs/icons.md`).
+
 ## Panes
 General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (titlebars, borders, colours,
 traffic lights, rdwm's own bar) · Desktop & Dock (dock sliders, menu-bar workspaces, pinned apps add/remove/reorder) ·

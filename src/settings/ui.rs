@@ -191,6 +191,10 @@ pub enum Item {
     },
     /// Font preview: one line per role, drawn in that role's font.
     FontSamples(Vec<FontSample>),
+    /// Icon theme list (src/settings/iconspane.rs).
+    IconThemes(Vec<super::iconspane::ThemeRow>),
+    /// Preview grid of sample icons of one theme (src/settings/iconspane.rs).
+    IconGrid(super::iconspane::Grid),
     Space(f32),
 }
 
@@ -667,6 +671,8 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
+            Item::IconThemes(rows) => y = super::iconspane::draw_list(pm, p, rows, x0, y, cw, it, &mut fr),
+            Item::IconGrid(g) => y = super::iconspane::draw_grid(pm, p, g, x0, y, cw),
             Item::Header(t) => {
                 y += u(6.0);
                 p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
