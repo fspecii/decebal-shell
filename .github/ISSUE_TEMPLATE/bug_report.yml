@@ -1,0 +1,37 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal config helps most. `rdwmctl config` prints the one in use.
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: rdwm version (`rdwm --version`)
+    validations: {required: true}
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options: [X11, Wayland (standalone), Wayland (nested), Not sure]
+    validations: {required: true}
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution, GPU and driver
+      placeholder: Arch, NVIDIA 580, ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl --user -u rdwm -b` or the terminal output. Remove anything private."
+      render: text
