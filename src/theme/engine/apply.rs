@@ -807,12 +807,14 @@ y = -30
         install_entries(&entries, &src.themes_dir, false, &Limits::default()).unwrap();
         apply(&src, &paths, "sunset", &Selection::default()).unwrap();
         let sel = src.selection();
-        assert!(sel.dynamic.is_some(), "a seed was stored");
+        assert!(sel.dynamic.as_ref().is_some_and(|d| d.enabled), "Match wallpaper is on, with colours read from the bundled image");
+        assert_eq!(io::json_load(&paths.shell_json())["theme_dynamic"], "sunset");
         let (t, _) = src.build(&sel, true);
         assert_ne!(t.accent, crate::theme::Rgb(0xff, 0x78, 0x49), "the palette replaced the manifest's accent");
         // another theme drops it again
-        apply(&src, &paths, "nord", &Selection::default()).unwrap();
-        assert!(src.selection().dynamic.is_none());
+        apply(&src, &paths, "nord", &src.selection()).unwrap();
+        assert!(src.selection().dynamic.is_none_or(|d| !d.enabled), "the next theme does not keep it on");
+        assert!(io::json_load(&paths.shell_json()).get("theme_dynamic").is_none());
         let _ = std::fs::remove_dir_all(d);
     }
 
