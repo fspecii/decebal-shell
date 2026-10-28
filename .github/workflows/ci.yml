@@ -32,7 +32,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --locked
       - run: sh packaging/deb/build.sh dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: decebal-deb
           path: dist/*.deb
