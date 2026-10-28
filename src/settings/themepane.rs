@@ -21,63 +21,37 @@ pub(super) fn source(m: &Model) -> Source {
     Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }
 }
 
-pub fn items(m: &Model) -> Vec<Item> {
-    let src = source(m);
-    let sel = src.selection();
-    let sys = system_dark();
-    let (now, problem) = src.build(&sel, sys);
-    let current_id = src.find(&sel.name).map(|f| f.0).unwrap_or_default();
+/// What the pieces of the Appearance tabs share: the stored selection, the theme built from it and the system's light/dark.
+pub struct Ctx {
+    pub src: Source,
+    pub sel: Selection,
+    pub sys: bool,
+    pub now: crate::theme::model::Theme,
+    pub problem: Option<String>,
+    pub current_id: String,
+}
 
-    let mut tiles = Vec::new();
-    let mut broken: Vec<String> = Vec::new();
-    for e in src.list() {
-        let selected = e.id == current_id;
-        if let Some(err) = &e.error {
-            broken.push(format!("{}: {err}", e.id));
-            if !e.builtin {
-                tiles.push(ThemeTile { id: format!("l:theme:{}", e.id), name: format!("{} (error)", e.name), selected: false, error: true, colors: [(60, 20, 20); 7] });
-                continue;
-            }
-        }
-        // every tile previews its theme the way it would look right now: with "match wallpaper" applied when it is on
-        let tile_sel = if selected { sel.clone() } else { Selection { mode: sel.mode, dynamic: sel.dynamic.clone(), ..Selection::default() } };
-        let Ok(t) = src.theme_for(&e.id, &tile_sel, sys) else { continue };
-        tiles.push(ThemeTile {
-            id: format!("l:theme:{}", e.id),
-            name: e.name.clone(),
-            selected,
-            error: false,
-            colors: [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()],
-        });
+impl Ctx {
+    pub fn new(m: &Model) -> Ctx {
+        let src = source(m);
+        let sel = src.selection();
+        let sys = system_dark();
+        let (now, problem) = src.build(&sel, sys);
+        let current_id = src.find(&sel.name).map(|f| f.0).unwrap_or_default();
+        Ctx { src, sel, sys, now, problem, current_id }
     }
+}
 
-    let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
-    let mode_sel = Some(match sel.mode {
-        Mode::Light => 0,
-        Mode::Dark => 1,
-        Mode::Auto => 2,
-    });
-    let mut swatches = vec![Swatch {
-        id: "l:accent:none".into(),
-        name: "Theme default".into(),
-        color: src.build(&Selection { accent: None, ..sel.clone() }, sys).0.accent.t(),
-        selected: sel.accent.is_none(),
-        unset: true,
-    }];
-    for (name, hex) in ACCENTS {
-        let c = Rgb::parse(hex).unwrap();
-        swatches.push(Swatch { id: format!("l:accent:{hex}"), name: (*name).into(), color: c.t(), selected: sel.accent == Some(c), unset: false });
-    }
-    let slider =
-        |id: &str, label: &str, detail: &str, v: f64, min: f64, max: f64, unit: &str| Row::new(label).detail(detail).ctl(Ctl::new(id, Kind::Slider { v, min, max, step: 1.0, unit: unit.into() }));
+/// Theme tab: the Style picker (theme, dock and menu bar together).
+pub fn style_items(m: &Model, c: &Ctx) -> Vec<Item> {
     let mut out = Vec::new();
-    if let Some(p) = problem {
+    if let Some(p) = &c.problem {
         out.push(Item::Note { text: format!("The selected theme could not be loaded ({p}); the default theme is shown instead."), warn: true });
     }
     let style_opts: Vec<(String, String)> = Style::ALL.iter().map(|s| (s.title().to_string(), s.as_str().to_string())).collect();
-    let cur_style = style::detect(&current_id, style::dock_style(&m.dock));
-    out.push(Item::Header("Shell style".into()));
-    let mut shell_rows = vec![Row::new("Style")
+    let cur_style = style::detect(&c.current_id, style::dock_style(&m.dock));
+    out.push(Item::Header("Style".into()));
+    let mut shell_rows = vec![Row::new("Desktop style")
         .detail(match cur_style {
             Some(Style::Macos) => "macOS: menu bar and floating dock, macOS theme",
             Some(Style::Windows) => "Windows: Windows 11 theme and taskbar (the menu bar hides)",
@@ -101,40 +75,135 @@ pub fn items(m: &Model) -> Vec<Item> {
         );
     }
     out.push(Item::Card(shell_rows));
-    out.push(Item::Header("Theme".into()));
-    out.push(Item::Themes(tiles));
-    out.extend(super::packages::items(m));
-    out.push(Item::Header("Appearance".into()));
-    out.push(Item::Card(vec![
-        Row::new("Mode")
-            .detail(if sel.mode == Mode::Auto {
-                format!("Following the system: {} right now", if sys { "dark" } else { "light" })
+    out
+}
+
+/// Theme tab: light / dark / auto.
+pub fn mode_items(c: &Ctx) -> Vec<Item> {
+    let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
+    let mode_sel = Some(match c.sel.mode {
+        Mode::Light => 0,
+        Mode::Dark => 1,
+        Mode::Auto => 2,
+    });
+    vec![
+        Item::Header("Light or dark".into()),
+        Item::Card(vec![Row::new("Mode")
+            .detail(if c.sel.mode == Mode::Auto {
+                format!("Following the system: {} right now", if c.sys { "dark" } else { "light" })
             } else {
                 "Themes with both variants switch; single-variant themes keep their look".into()
             })
-            .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel))),
-        Row::new("Window titlebars").detail("Also restyle rdwm's titlebars, borders and bar with the theme").ctl(Ctl::new("th:sync", Kind::Toggle(sel.sync_rdwm))),
-    ]));
-    out.extend(super::wallpapercolors::items(&sel, &now));
-    out.push(Item::Header("Accent colour".into()));
-    out.push(Item::Swatches(swatches));
-    out.push(Item::Card(vec![Row::new("Custom accent")
-        .detail("A hex colour; empty = the theme's own")
-        .ctl(Ctl::new("th:accenthex", Kind::Text { val: sel.accent.map(|c| c.hex()).unwrap_or_default(), hint: "#0a84ff".into() }))]));
-    out.push(Item::Header("Customise".into()));
-    out.push(Item::Card(vec![
-        slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
-        slider("th:radius", "Corner radius", "Menus, cards and window titlebars", f64::from(now.radius), 0.0, 24.0, " px"),
-        slider("th:fontscale", "Text size", "All decebal text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
-        Row::new("Reset customisations").detail("Back to the theme's own accent, translucency, radius and text size").ctl(Ctl::new("th:reset", Kind::Button { label: "Reset".into(), danger: false })),
-    ]));
-    out.extend(super::fontpane::items(&sel, &now));
-    let mut note =
-        format!("Your own themes: put .toml files in {} (decthemectl export nord > mine.toml is a good start). decthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
+            .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel)))]),
+    ]
+}
+
+/// Customise > Colours: the colour scheme tiles (colours only, not the whole package).
+pub fn scheme_items(c: &Ctx) -> Vec<Item> {
+    let mut tiles = Vec::new();
+    for e in c.src.list() {
+        let selected = e.id == c.current_id;
+        if let Some(err) = &e.error {
+            if !e.builtin {
+                let _ = err;
+                tiles.push(ThemeTile { id: format!("l:theme:{}", e.id), name: format!("{} (error)", e.name), selected: false, error: true, colors: [(60, 20, 20); 7] });
+                continue;
+            }
+        }
+        // every tile previews its theme the way it would look right now: with "match wallpaper" applied when it is on
+        let tile_sel = if selected { c.sel.clone() } else { Selection { mode: c.sel.mode, dynamic: c.sel.dynamic.clone(), ..Selection::default() } };
+        let Ok(t) = c.src.theme_for(&e.id, &tile_sel, c.sys) else { continue };
+        tiles.push(ThemeTile {
+            id: format!("l:theme:{}", e.id),
+            name: e.name.clone(),
+            selected,
+            error: false,
+            colors: [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()],
+        });
+    }
+    vec![
+        Item::Header("Colour scheme".into()),
+        Item::Note { text: "Changes only the colours. To switch the whole look (fonts, windows, dock, wallpaper) pick a theme on the Theme tab.".into(), warn: false },
+        Item::Themes(tiles),
+    ]
+}
+
+/// Customise > Colours: accent swatches and the custom accent.
+pub fn accent_items(c: &Ctx) -> Vec<Item> {
+    let mut swatches = vec![Swatch {
+        id: "l:accent:none".into(),
+        name: "Theme default".into(),
+        color: c.src.build(&Selection { accent: None, ..c.sel.clone() }, c.sys).0.accent.t(),
+        selected: c.sel.accent.is_none(),
+        unset: true,
+    }];
+    for (name, hex) in ACCENTS {
+        let col = Rgb::parse(hex).unwrap();
+        swatches.push(Swatch { id: format!("l:accent:{hex}"), name: (*name).into(), color: col.t(), selected: c.sel.accent == Some(col), unset: false });
+    }
+    vec![
+        Item::Header("Accent colour".into()),
+        Item::Swatches(swatches),
+        Item::Card(vec![Row::new("Custom accent")
+            .detail("A hex colour; empty = the theme's own")
+            .ctl(Ctl::new("th:accenthex", Kind::Text { val: c.sel.accent.map(|x| x.hex()).unwrap_or_default(), hint: "#0a84ff".into() }))]),
+    ]
+}
+
+fn slider(id: &str, label: &str, detail: &str, v: f64, min: f64, max: f64, unit: &str) -> Row {
+    Row::new(label).detail(detail).ctl(Ctl::new(id, Kind::Slider { v, min, max, step: 1.0, unit: unit.into() }))
+}
+
+/// Customise > Colours: translucency and corner radius.
+pub fn surface_items(c: &Ctx) -> Vec<Item> {
+    vec![
+        Item::Header("Menus, dock and corners".into()),
+        Item::Card(vec![
+            slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(c.sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
+            slider("th:radius", "Corner radius", "Menus, cards and window title bars", f64::from(c.now.radius), 0.0, 24.0, " px"),
+        ]),
+    ]
+}
+
+/// Customise > Fonts: the text size slider (the font pickers are [`super::fontpane`]).
+pub fn text_size_items(c: &Ctx) -> Vec<Item> {
+    vec![Item::Card(vec![slider("th:fontscale", "Text size", "All decebal text", f64::from(c.sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %")])]
+}
+
+/// Customise > Window style: should rdwm's title bars, borders and strip follow the theme.
+pub fn frame_sync_rows(c: &Ctx) -> Vec<Item> {
+    vec![Item::Card(vec![Row::new("Windows follow the theme")
+        .detail("Colour window title bars, borders and the window manager strip with the theme")
+        .ctl(Ctl::new("th:sync", Kind::Toggle(c.sel.sync_rdwm)))])]
+}
+
+/// Theme tab: where the theme files live and the ones that failed to load.
+pub fn library_note(c: &Ctx) -> Vec<Item> {
+    let broken: Vec<String> = c.src.list().iter().filter_map(|e| e.error.as_ref().map(|err| format!("{}: {err}", e.id))).collect();
+    let mut note = format!(
+        "Your own themes: put .toml files in {} (decthemectl export nord > mine.toml is a good start). decthemectl list, apply and get do the same from a terminal.",
+        c.src.themes_dir.display()
+    );
     if !broken.is_empty() {
         note.push_str(&format!("\nIgnored: {}", broken.join("; ")));
     }
-    out.push(Item::Note { text: note, warn: !broken.is_empty() });
+    vec![Item::Note { text: note, warn: !broken.is_empty() }]
+}
+
+/// Every piece of the old Theme pane in one list (the tabs of [`super::appearance`] show them split up; tests use this).
+pub fn items(m: &Model) -> Vec<Item> {
+    let c = Ctx::new(m);
+    let mut out = style_items(m, &c);
+    out.extend(scheme_items(&c));
+    out.extend(super::packages::items(m));
+    out.extend(mode_items(&c));
+    out.extend(frame_sync_rows(&c));
+    out.extend(super::wallpapercolors::items(&c.sel, &c.now));
+    out.extend(accent_items(&c));
+    out.extend(surface_items(&c));
+    out.extend(text_size_items(&c));
+    out.extend(super::fontpane::items(&c.sel, &c.now));
+    out.extend(library_note(&c));
     out.extend(super::systempane::items(m));
     out
 }
@@ -247,6 +316,11 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["th", "radius"], CtlVal::Reset) => sel.radius = None,
         (["th", "fontscale"], CtlVal::Num(n)) => sel.font_scale = Some((n / 100.0).clamp(0.8, 1.4) as f32),
         (["th", "fontscale"], CtlVal::Reset) => sel.font_scale = None,
+        (["th", "reset-colours"], CtlVal::Click) => {
+            sel.accent = None;
+            sel.opacity = None;
+            sel.radius = None;
+        }
         (["th", "reset"], CtlVal::Click) => {
             sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, font: sel.font.clone(), fonts: sel.fonts.clone(), ..Selection::default() }
         }
@@ -317,7 +391,7 @@ mod tests {
             its.iter()
                 .find_map(|i| if let Item::Card(rows) = i { rows.first().and_then(|r| r.ctls.first()).map(|c| (c.id.clone(), matches!(&c.kind, Kind::Seg(o, _) if o.len() == 3))) } else { None });
         assert_eq!(first_ctl, Some(("th:style".to_string(), true)), "the first control is the three-way style picker");
-        assert!(matches!(its.iter().position(|i| matches!(i, Item::Header(h) if h == "Shell style")), Some(p) if p < 2), "it is at the top");
+        assert!(matches!(its.iter().position(|i| matches!(i, Item::Header(h) if h == "Style")), Some(p) if p < 2), "it is at the top");
 
         m.apply("th:style", CtlVal::Str("caelestia".into()));
         assert_eq!(selection(&m).name, "caelestia");
@@ -372,7 +446,7 @@ mod tests {
         assert_eq!(sel, Some(0), "left is the default");
         // it sits in the Shell style card, right under the style picker
         let first_card = items(&m).into_iter().find_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).unwrap();
-        assert_eq!(first_card.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Style", "Layout"]);
+        assert_eq!(first_card.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Desktop style", "Layout"]);
         for (i, word) in ["left", "right", "top", "bottom", "split"].iter().enumerate() {
             m.apply("th:layout", CtlVal::Str((*word).into()));
             assert_eq!(m.shell["bar"]["position"], *word);

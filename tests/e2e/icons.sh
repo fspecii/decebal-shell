@@ -141,7 +141,7 @@ sleep 1
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 [ -n "$WID" ] && pass "settings window up" || fail "no settings window"
 q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
-eq "icons pane is shown" "$(q .pane)" icons
+eq "the old name opens Appearance > Customise > Icons" "$(q '.pane + "/" + .tab + "/" + .section')" appearance/customise/icons
 shot 30-settings-icons-breeze
 tile() { jq -r "[.layouts[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DECSETTINGS_DEBUG_LAYOUT"; }
 ctl() { jq -r "[.ctls[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DECSETTINGS_DEBUG_LAYOUT"; }

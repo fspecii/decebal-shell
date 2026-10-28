@@ -121,7 +121,7 @@ done
 echo "== settings UI: Fonts section"
 decthemectl font reset >/dev/null; decthemectl apply macos >/dev/null
 export DECSETTINGS_DEBUG_LAYOUT=$TMP/dump.json
-decsettings --config "$CFG" theme >"$TMP/ms.log" 2>&1 & MS=$!; PIDS+=($MS)
+decsettings --config "$CFG" appearance/fonts >"$TMP/ms.log" 2>&1 & MS=$!; PIDS+=($MS)
 wait_for 8 test -s "$DECSETTINGS_DEBUG_LAYOUT" || fail "settings dump never written"
 sleep 1
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)

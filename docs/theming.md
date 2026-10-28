@@ -19,7 +19,7 @@ decthemectl layout left|right|top|bottom|split   # where the Caelestia bar sits
 decthemectl dynamic on                # "Match wallpaper": recolour the current theme from the wallpaper (off by default, see below)
 decthemectl system on|off|status       # also theme GTK/Nautilus, Qt, terminals, the browser, X11 (see "Apply to all apps")
 ```
-Or open **System Settings -> Theme** (`decsettings theme`).
+Or open **System Settings -> Appearance** (`decsettings appearance`; `decsettings theme` still works).
 
 > **Theme packages.** Themes are now packages of format 1 (`theme.toml` plus wallpapers, widgets and screenshots, or one `.dtheme` file) that
 > also carry fonts, the titlebar style, bar, dock, icons, hot corners and desktop widgets, with install / pack / apply / undo / preview commands:

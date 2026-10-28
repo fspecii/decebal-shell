@@ -38,3 +38,20 @@ click_ctl() {
   c=$(reveal "$1") || return 1
   click $c
 }
+
+# click_seg ID INDEX: click the INDEX-th segment (0-based) of a segmented control
+click_seg() {
+  reveal "$1" >/dev/null || { fail "segmented control $1 not found"; return 1; }
+  local r; r=$(jq -r --arg id "$1" --argjson i "$2" '[.ctls[]|select(.id==$id)][0].parts[$i]|"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)"' "$DECSETTINGS_DEBUG_LAYOUT")
+  click $r
+}
+
+# Appearance pane: open_tab theme|customise|wallpaper|apps, open_section colours|fonts|window|dock|icons
+open_tab() {
+  local i; case $1 in theme) i=0;; customise) i=1;; wallpaper) i=2;; apps) i=3;; *) fail "unknown tab $1"; return 1;; esac
+  click_seg ap:tab $i; sleep 0.4
+}
+open_section() {
+  local i; case $1 in colours) i=0;; fonts) i=1;; window) i=2;; dock) i=3;; icons) i=4;; *) fail "unknown section $1"; return 1;; esac
+  open_tab customise; click_seg ap:sec $i; sleep 0.4
+}

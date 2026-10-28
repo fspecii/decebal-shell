@@ -149,9 +149,10 @@ sleep 1
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 [ -n "$WID" ] && pass "settings window up" || fail "no settings window"
 q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
-eq "theme pane is shown" "$(q .pane)" theme
+eq "the old name opens Appearance > Theme" "$(q '.pane + "/" + .tab')" appearance/theme
 shot 20-settings-dark
 . "$HERE/tests/e2e/settings_ui.sh"
+open_section colours
 click_ctl l:theme:dracula; settle
 eq "clicking Dracula applies it" "$(theme_name)" dracula
 eqpx "bar follows the UI choice" 900 3 "#1e1f29"
@@ -160,11 +161,13 @@ click_ctl l:accent:#30d158; settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green
 click_ctl l:theme:windows11; sleep 0.5
+open_tab theme
 click_ctl th:mode; settle
 eq "selection json mode light" "$(jq -r .theme.mode "$DECEBAL_CONFIG/decebal.json")" light
 eqpx "windows light bar in the running bar" 900 3 "#e9eef6"
 shot 22-settings-windows-light
-click_ctl th:reset; settle
+open_section colours
+click_ctl ap:reset:colours; settle
 eq "reset clears the accent override" "$(jq -r '.theme.accent // "none"' "$DECEBAL_CONFIG/decebal.json")" none
 
 shot 24-settings-scrolled
