@@ -26,8 +26,8 @@ path = "src/bin/dechaven.rs"
 
 [dependencies]
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
-tiny-skia = "0.11"
-resvg = { version = "0.45", default-features = false }
+tiny-skia = "0.12"
+resvg = { version = "0.49", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 # gzip for the .decebal-preset bundles (already in the tree through png/resvg)
