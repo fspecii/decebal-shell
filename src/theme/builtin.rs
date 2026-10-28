@@ -21,6 +21,11 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("tokyo-night", include_str!("../../themes/tokyo-night/theme.toml")),
     ("kanagawa", include_str!("../../themes/kanagawa/theme.toml")),
     ("material-you-dynamic", include_str!("../../themes/material-you-dynamic/theme.toml")),
+    ("nothing-dot", include_str!("../../themes/nothing-dot/theme.toml")),
+    ("nothing-light", include_str!("../../themes/nothing-light/theme.toml")),
+    ("brutalist", include_str!("../../themes/brutalist/theme.toml")),
+    ("terminal-minimal", include_str!("../../themes/terminal-minimal/theme.toml")),
+    ("terminal-amber", include_str!("../../themes/terminal-amber/theme.toml")),
 ];
 
 pub fn source(id: &str) -> Option<&'static str> {

@@ -1,0 +1,31 @@
+format = 1
+id = "slab-clock"
+name = "Slab clock"
+description = "A hard black slab with an offset border: huge time, date in capitals."
+size = [300, 150]
+refresh = 1000
+
+[root]
+type = "col"
+padding = [14, 20]
+gap = 0
+justify = "center"
+background = "accent"
+radius = 0
+border = "#000000"
+border_width = 6
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 64
+weight = "bold"
+color = "accent_text"
+
+[[root.children]]
+type = "text"
+text = "{clock:%A %d %B|upper}"
+size = 13
+weight = "bold"
+color = "accent_text"

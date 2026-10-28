@@ -1,0 +1,40 @@
+format = 1
+id = "dot-battery"
+name = "Dot battery"
+description = "Battery as a Glyph ring with the percentage in the middle; shows -- on machines without a battery."
+size = [120, 120]
+refresh = 5000
+
+[root]
+type = "stack"
+background = "surface"
+radius = 0
+border = "text@0.9"
+border_width = 1
+
+[[root.children]]
+type = "ring"
+value = "battery.level"
+size = 96
+thickness = 8
+color = "text"
+track = "text@0.14"
+
+[[root.children]]
+type = "col"
+justify = "center"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{battery.level:pct|--}"
+size = 20
+weight = "bold"
+text_align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "BATT"
+size = 9
+color = "accent"
+text_align = "center"

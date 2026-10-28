@@ -1,0 +1,25 @@
+format = 1
+id = "tty-clock"
+name = "TTY clock"
+description = "Plain monospace time and load on the desktop, no card, like a tty banner."
+size = [220, 90]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 6
+gap = 2
+justify = "start"
+
+[[root.children]]
+type = "text"
+text = "{clock:%H:%M:%S}"
+size = 40
+weight = "bold"
+color = "accent"
+
+[[root.children]]
+type = "text"
+text = "$ {user.name}@{host.name}   load {cpu.load}"
+size = 12
+color = "text_secondary"

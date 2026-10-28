@@ -3,6 +3,8 @@ DESTDIR ?=
 SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
 BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
+# Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
+ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
 all:
@@ -17,12 +19,10 @@ install: all
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	install -Dm644 contrib/decsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
-	# theme packages with bundled wallpapers (the built-in copy of the manifest has no folder to find them in)
-	for t in caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic; do for f in themes/$$t/theme.toml themes/$$t/wallpapers/*; do install -Dm644 $$f $(DESTDIR)$(PREFIX)/share/decebal/$$f; done; done
+	# every theme package (manifest, wallpapers, widgets, screenshots): /usr/share/decebal/themes/<id>/
+	for f in $$(cd themes && find . -type f); do install -Dm644 themes/$$f $(DESTDIR)$(PREFIX)/share/decebal/themes/$${f#./}; done
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
-	# showcase themes with wallpapers (the built-in ones are compiled in): /usr/share/decebal/themes/<id>/
-	for t in $(SHOWCASE_THEMES); do for f in $$(cd themes/$$t && find . -type f); do install -Dm644 themes/$$t/$$f $(DESTDIR)$(PREFIX)/share/decebal/themes/$$t/$${f#./}; done; done
 
 uninstall:
 	for b in $(BINS); do rm -f $(DESTDIR)$(PREFIX)/bin/$$b $(DESTDIR)$(PREFIX)/bin/mac$${b#dec}; done
