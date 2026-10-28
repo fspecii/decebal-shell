@@ -1,0 +1,67 @@
+format = 1
+id = "windows11"
+name = "Windows 11"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "Fluent look: squarer corners, Mica greys, classic caption buttons."
+min_shell_version = "0.1.0"
+tags = ["windows", "fluent"]
+
+[metrics]
+radius = 8
+dock_roundness = 0.22
+dock_alpha = 0.85
+popup_alpha = 0.97
+panel_alpha = 0.98
+shadow = 0.8
+outline = 0.1
+
+[font]
+preset = "segoe"
+
+[decoration]
+style = "classic"
+height = 32
+
+[dock]
+enabled = true
+style = "windows"
+align = "center"
+
+[bar]
+enabled = "auto"
+
+[colors.dark]
+background = "#202020"
+sidebar = "#1b1b1b"
+surface = "#2b2b2b"
+bar = "#1c1c1c"
+popup = "#2c2c2c"
+dock = "#202020"
+overlay = "#2c2c2c"
+titlebar = "#2b2b2b"
+titlebar_inactive = "#202020"
+text = "#ffffff"
+accent = "#4cc2ff"
+accent_text = "#000000"
+danger = "#ff99a4"
+ok = "#6ccb5f"
+warn = "#fce100"
+
+[colors.light]
+background = "#f3f3f3"
+sidebar = "#eeeeee"
+surface = "#ffffff"
+bar = "#e9eef6"
+popup = "#fcfcfc"
+dock = "#f3f3f3"
+overlay = "#fcfcfc"
+titlebar = "#ffffff"
+titlebar_inactive = "#f3f3f3"
+text = "#1a1a1a"
+accent = "#005fb8"
+accent_text = "#ffffff"
+danger = "#c42b1c"
+ok = "#0f7b0f"
+warn = "#805a00"

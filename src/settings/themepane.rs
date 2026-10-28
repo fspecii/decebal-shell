@@ -103,6 +103,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     out.push(Item::Card(shell_rows));
     out.push(Item::Header("Theme".into()));
     out.push(Item::Themes(tiles));
+    out.extend(super::packages::items(m));
     out.push(Item::Header("Appearance".into()));
     out.push(Item::Card(vec![
         Row::new("Mode")
@@ -176,6 +177,9 @@ pub fn follow_wallpaper(m: &mut Model, path: &str) {
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
+    if super::packages::apply(m, parts, &v) {
+        return;
+    }
     let src = source(m);
     let mut sel = src.selection();
     if let Some(changed) = super::fontpane::apply(parts, &v, &mut sel) {

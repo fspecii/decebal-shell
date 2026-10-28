@@ -1,0 +1,91 @@
+format = 1
+id = "now-playing-mini"
+name = "Now playing"
+description = "Cover, title and artist of the current MPRIS player, with play/pause and skip buttons."
+size = [310, 76]
+
+[root]
+type = "row"
+padding = 12
+gap = 10
+align = "center"
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+
+[[root.children]]
+type = "image"
+source = "media.art"
+width = 52
+height = 52
+radius_px = 10
+show_if = "media.art"
+
+[[root.children]]
+type = "col"
+grow = 1
+gap = 2
+justify = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{media.title|Nothing playing}"
+size = 14
+weight = "bold"
+max_chars = 20
+
+[[root.children.children]]
+type = "text"
+text = "{media.artist}"
+size = 12
+color = "text_secondary"
+max_chars = 24
+
+[[root.children]]
+type = "button"
+width = 30
+height = 30
+radius = 15
+on_click = "media prev"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "icon"
+name = "backward"
+size = 14
+
+[[root.children]]
+type = "button"
+width = 36
+height = 36
+radius = 18
+background = "accent"
+on_click = "media play-pause"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "icon"
+name = "pause"
+size = 16
+color = "accent_text"
+show_if = "media.playing"
+
+[[root.children.children]]
+type = "icon"
+name = "play"
+size = 16
+color = "accent_text"
+show_if = "!media.playing"
+
+[[root.children]]
+type = "button"
+width = 30
+height = 30
+radius = 15
+on_click = "media next"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "icon"
+name = "forward"
+size = 14

@@ -86,7 +86,7 @@ fn the_caelestia_style_is_documented_and_has_its_e2e() {
     assert!(read("Makefile").contains("e2e-vbar:") && read("Makefile").contains("e2e-layouts:"), "Makefile targets");
     assert!(std::path::Path::new(&format!("{}/tests/e2e/vbar.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
     // the theme that uses the layout
-    assert!(read("src/theme/builtin/caelestia.toml").contains("bar_style = \"vertical\""));
+    assert!(read("themes/caelestia/theme.toml").contains("style = \"vertical\""));
 }
 
 #[test]
@@ -128,4 +128,22 @@ fn icon_themes_are_documented_and_have_their_e2e() {
     }
     assert!(read("contrib/icon-themes.md").contains("papirus-icon-theme"));
     assert!(read("src/bin/macthemectl.rs").contains("macthemectl icons"));
+}
+
+#[test]
+fn macwidgets_and_the_theme_engine_are_registered_everywhere() {
+    let doc: toml_edit::DocumentMut = read("Cargo.toml").parse().expect("Cargo.toml parses");
+    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("macwidgets")).expect("macwidgets [[bin]]");
+    assert_eq!(bin["path"].as_str(), Some("src/bin/macwidgets.rs"));
+    assert!(listed(&read("Makefile"), "BINS =").contains("macwidgets"));
+    assert!(listed(&read("PKGBUILD"), "for bin in").contains("macwidgets"));
+    let readme = read("README.md");
+    assert!(readme.contains("## Theme packages and widgets") && readme.contains("docs/theme-engine.md") && readme.contains("tests/e2e/theme-engine.sh"));
+    for f in ["docs/theme-engine.md", "tests/e2e/theme-engine.sh", "widgets/clock-card.toml", "themes/nord/theme.toml"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
+    }
+    // every built-in theme is a bundled package
+    for id in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"] {
+        assert!(read(&format!("themes/{id}/theme.toml")).starts_with("format = 1"), "{id}");
+    }
 }

@@ -1,0 +1,54 @@
+format = 1
+id = "nord"
+name = "Nord"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "Arctic, north-bluish palette."
+min_shell_version = "0.1.0"
+tags = ["cool", "popular"]
+
+[metrics]
+radius = 8
+dock_roundness = 0.4
+dock_alpha = 0.7
+popup_alpha = 0.96
+panel_alpha = 0.97
+outline = 0.12
+
+[font]
+preset = "inter"
+
+[colors.dark]
+background = "#2e3440"
+sidebar = "#272c36"
+surface = "#3b4252"
+bar = "#242933"
+popup = "#2e3440"
+dock = "#2e3440"
+overlay = "#2e3440"
+titlebar = "#3b4252"
+titlebar_inactive = "#2e3440"
+text = "#eceff4"
+accent = "#88c0d0"
+accent_text = "#1f2430"
+danger = "#bf616a"
+ok = "#a3be8c"
+warn = "#ebcb8b"
+
+[colors.light]
+background = "#eceff4"
+sidebar = "#e5e9f0"
+surface = "#ffffff"
+bar = "#e5e9f0"
+popup = "#f4f6fa"
+dock = "#e5e9f0"
+overlay = "#f4f6fa"
+titlebar = "#d8dee9"
+titlebar_inactive = "#e5e9f0"
+text = "#2e3440"
+accent = "#3b6a85"
+accent_text = "#ffffff"
+danger = "#a8323e"
+ok = "#4c7a34"
+warn = "#8a6a1f"

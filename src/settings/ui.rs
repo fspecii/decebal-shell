@@ -193,6 +193,8 @@ pub enum Item {
     FontSamples(Vec<FontSample>),
     /// Icon theme list (src/settings/iconspane.rs).
     IconThemes(Vec<super::iconspane::ThemeRow>),
+    /// Theme package cards with Apply / Preview / Duplicate / Export / Delete (src/settings/themecards.rs).
+    ThemeCards(Vec<super::themecards::Card>),
     /// Preview grid of sample icons of one theme (src/settings/iconspane.rs).
     IconGrid(super::iconspane::Grid),
     Space(f32),
@@ -689,6 +691,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
             }
             Item::IconThemes(rows) => y = super::iconspane::draw_list(pm, p, rows, x0, y, cw, it, &mut fr),
             Item::IconGrid(g) => y = super::iconspane::draw_grid(pm, p, g, x0, y, cw),
+            Item::ThemeCards(cards) => y = super::themecards::draw(pm, p, cards, x0, y, cw, it, &mut fr),
             Item::Header(t) => {
                 y += u(6.0);
                 p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
@@ -975,7 +978,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
 }
 
 /// A miniature desktop in the tile's own colours: menu bar, a window with traffic lights, a dock.
-fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile) {
+pub(super) fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile) {
     let u = |v: f32| v * s;
     let c = |i: usize, a: f32| color(t.colors[i].0, t.colors[i].1, t.colors[i].2, a);
     let (x, y, w, h) = r;

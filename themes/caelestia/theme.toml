@@ -1,0 +1,74 @@
+format = 1
+id = "caelestia"
+name = "Caelestia"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "Material You: tonal surfaces, pill shapes and large radii, from caelestia-shell."
+min_shell_version = "0.1.0"
+tags = ["material", "pill", "vertical-bar"]
+
+[metrics]
+radius = 20
+dock_roundness = 1.0
+dock_alpha = 0.9
+popup_alpha = 0.97
+panel_alpha = 0.97
+shadow = 1.0
+outline = 0.07
+
+[font]
+preset = "rubik"
+
+[decoration]
+height = 32
+
+[dock]
+enabled = "auto"
+style = "mac"
+
+[bar]
+style = "vertical"
+enabled = true
+
+[colors.dark]
+background = "#191114"
+sidebar = "#22191c"
+surface = "#261d20"
+bar = "#261d20"
+bar_text = "#efdfe2"
+popup = "#31282a"
+dock = "#261d20"
+overlay = "#31282a"
+titlebar = "#31282a"
+titlebar_inactive = "#22191c"
+border = "#514347"
+text = "#efdfe2"
+text_secondary = "#d5c2c6"
+text_faint = "#9e8c91"
+accent = "#ffb0ca"
+accent_text = "#541d34"
+danger = "#ffb4ab"
+ok = "#b5ccba"
+warn = "#f0bc95"
+
+[colors.light]
+background = "#fff7fa"
+sidebar = "#fef0f4"
+surface = "#f8eaee"
+bar = "#f8eaee"
+bar_text = "#22191c"
+popup = "#f2e5e9"
+dock = "#f8eaee"
+overlay = "#f2e5e9"
+titlebar = "#f2e5e9"
+titlebar_inactive = "#fef0f4"
+border = "#d4c2c7"
+text = "#22191c"
+text_secondary = "#514347"
+text_faint = "#837378"
+accent = "#8c4962"
+accent_text = "#ffffff"
+danger = "#c0001d"
+ok = "#4f6354"
+warn = "#7b573b"

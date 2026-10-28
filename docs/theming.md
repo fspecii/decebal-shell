@@ -21,12 +21,17 @@ macthemectl system on|off|status       # also theme GTK/Nautilus, Qt, terminals,
 ```
 Or open **System Settings -> Theme** (`macsettings theme`).
 
+> **Theme packages.** Themes are now packages of format 1 (`theme.toml` plus wallpapers, widgets and screenshots, or one `.dtheme` file) that
+> also carry fonts, the titlebar style, bar, dock, icons, hot corners and desktop widgets, with install / pack / apply / undo / preview commands:
+> see [theme-engine.md](theme-engine.md). The single-file format described below still works unchanged, and `macthemectl theme duplicate`
+> turns one into a package. The built-in themes are packages in `themes/<id>/theme.toml`.
+
 ## Where things live
 | What | Where |
 |---|---|
 | Selection and overrides | `"theme"` key of `macshell.json` in the macshell config folder (`$MACSHELL_CONFIG`, default `~/.config/omarchy`), the file macbar already reads for `workspaces`. Other keys are kept. |
 | User themes | `~/.config/macshell/themes/*.toml` (`$MACSHELL_THEMES`, else `$XDG_CONFIG_HOME/macshell/themes`). The file name is the theme id; a user file with a built-in id replaces it. |
-| Built-in themes | compiled in (`src/theme/builtin/*.toml`): `macos`, `graphite`, `nord`, `dracula`, `solarized`, `windows11`, `caelestia`, `high-contrast` (all but Dracula have a light and a dark variant) |
+| Built-in themes | compiled in (`themes/<id>/theme.toml`, theme packages of format 1): `macos`, `graphite`, `nord`, `dracula`, `solarized`, `windows11`, `caelestia`, `high-contrast` (all but Dracula have a light and a dark variant) |
 
 `macshell.json`:
 ```json

@@ -1,0 +1,11 @@
+row [0.0 0.0 216.0 112.0] bg r=10 click
+  stack [21.0 16.0 80.0 80.0]
+    ring [21.0 16.0 80.0 80.0] frac=0.37 size=80 thick=8
+    col [21.0 16.0 80.0 80.0]
+      text [47.0 38.5 28.1 22.0] text="37%" size=17 bold
+      text [52.8 60.5 16.5 13.0] text="CPU" size=10
+  stack [115.0 16.0 80.0 80.0]
+    ring [115.0 16.0 80.0 80.0] frac=0.62 size=80 thick=8
+    col [115.0 16.0 80.0 80.0]
+      text [141.0 38.5 28.1 22.0] text="62%" size=17 bold
+      text [146.8 60.5 16.5 13.0] text="RAM" size=10

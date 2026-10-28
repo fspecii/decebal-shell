@@ -1,0 +1,75 @@
+format = 1
+id = "cpu-ram-ring"
+name = "CPU and RAM rings"
+description = "Two gauges: processor load and memory in use."
+size = [216, 112]
+
+[root]
+type = "row"
+padding = 14
+gap = 14
+justify = "center"
+align = "center"
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "stack"
+width = 80
+height = 80
+
+[[root.children.children]]
+type = "ring"
+value = "cpu.usage"
+size = 80
+thickness = 8
+color = "accent"
+
+[[root.children.children]]
+type = "col"
+justify = "center"
+align = "center"
+
+[[root.children.children.children]]
+type = "text"
+text = "{cpu.usage:pct}"
+size = 17
+weight = "bold"
+text_align = "center"
+
+[[root.children.children.children]]
+type = "text"
+text = "CPU"
+size = 10
+color = "text_faint"
+
+[[root.children]]
+type = "stack"
+width = 80
+height = 80
+
+[[root.children.children]]
+type = "ring"
+value = "mem.usage"
+size = 80
+thickness = 8
+color = "ok"
+
+[[root.children.children]]
+type = "col"
+justify = "center"
+align = "center"
+
+[[root.children.children.children]]
+type = "text"
+text = "{mem.usage:pct}"
+size = 17
+weight = "bold"
+
+[[root.children.children.children]]
+type = "text"
+text = "RAM"
+size = 10
+color = "text_faint"

@@ -1,0 +1,54 @@
+format = 1
+id = "solarized"
+name = "Solarized"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "Precision colors for machines and people (dark and light)."
+min_shell_version = "0.1.0"
+tags = ["classic"]
+
+[metrics]
+radius = 6
+dock_roundness = 0.3
+dock_alpha = 0.8
+popup_alpha = 0.98
+panel_alpha = 0.98
+outline = 0.2
+
+[font]
+preset = "ibm-plex"
+
+[colors.dark]
+background = "#002b36"
+sidebar = "#00222b"
+surface = "#073642"
+bar = "#00212b"
+popup = "#073642"
+dock = "#002b36"
+overlay = "#073642"
+titlebar = "#073642"
+titlebar_inactive = "#002b36"
+text = "#eee8d5"
+accent = "#268bd2"
+accent_text = "#00212b"
+danger = "#dc322f"
+ok = "#859900"
+warn = "#b58900"
+
+[colors.light]
+background = "#fdf6e3"
+sidebar = "#eee8d5"
+surface = "#fffaf0"
+bar = "#eee8d5"
+popup = "#fdf6e3"
+dock = "#eee8d5"
+overlay = "#fdf6e3"
+titlebar = "#eee8d5"
+titlebar_inactive = "#f5efdc"
+text = "#40505a"
+accent = "#1f6fa8"
+accent_text = "#ffffff"
+danger = "#b8201d"
+ok = "#5c6b00"
+warn = "#7c5c00"

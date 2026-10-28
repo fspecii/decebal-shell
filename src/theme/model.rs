@@ -313,6 +313,9 @@ pub struct Def {
     pub common: Tokens,
     pub dark: Option<Tokens>,
     pub light: Option<Tokens>,
+    /// Everything a format-1 theme package says beyond colours and metrics (`decoration`, `bar`, `dock`, `widgets`...),
+    /// as JSON; see `theme::engine`. Empty for legacy theme files.
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 fn read_value(table: &toml_edit::Table, key: &str, label: &str, out: &mut Tokens) -> Result<(), String> {
@@ -371,6 +374,9 @@ fn read_table(table: &toml_edit::Table, prefix: &str, out: &mut Tokens) -> Resul
 
 impl Def {
     pub fn parse(text: &str) -> Result<Def, String> {
+        if super::engine::manifest::is_v1(text) {
+            return super::engine::manifest::parse_def(text);
+        }
         let doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| format!("invalid TOML: {e}"))?;
         let root = doc.as_table();
         let mut d = Def { dark_default: true, ..Def::default() };
@@ -425,6 +431,7 @@ impl Def {
             common,
             dark: merge(&self.dark, &base.dark),
             light: merge(&self.light, &base.light),
+            extra: super::engine::manifest::merge_extra(&base.extra, &self.extra),
         }
     }
 

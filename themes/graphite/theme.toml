@@ -1,0 +1,21 @@
+format = 1
+id = "graphite"
+name = "Graphite"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "macOS with the monochrome graphite accent."
+min_shell_version = "0.1.0"
+tags = ["mac", "monochrome"]
+extends = "macos"
+
+[font]
+preset = "inter"
+
+[colors.dark]
+accent = "#8e8e93"
+accent_text = "#000000"
+
+[colors.light]
+accent = "#5f5f65"
+accent_text = "#ffffff"

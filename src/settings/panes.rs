@@ -1066,7 +1066,7 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     if matches!(parts.as_slice(), ["sy", ..]) {
         return super::systempane::apply(m, &parts, v);
     }
-    if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
+    if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _] | ["l", "tcard", ..]) {
         return super::themepane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {

@@ -1,0 +1,77 @@
+format = 1
+id = "sysmon-graph"
+name = "System monitor"
+description = "CPU history graph with memory, disk and network figures."
+size = [270, 150]
+
+[root]
+type = "col"
+padding = 14
+gap = 8
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "row"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "CPU"
+size = 12
+weight = "bold"
+color = "text_secondary"
+
+[[root.children.children]]
+type = "spacer"
+
+[[root.children.children]]
+type = "text"
+text = "{cpu.usage:pct}  {cpu.temp:int}°C"
+size = 12
+
+[[root.children]]
+type = "graph"
+series = "cpu.history"
+height = 44
+color = "accent"
+
+[[root.children]]
+type = "row"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "RAM {mem.used:bytes}"
+size = 11
+color = "text_secondary"
+
+[[root.children.children]]
+type = "spacer"
+
+[[root.children.children]]
+type = "text"
+text = "disk {disk.usage:pct}"
+size = 11
+color = "text_secondary"
+
+[[root.children]]
+type = "row"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "down {net.rx:rate}"
+size = 11
+color = "ok"
+
+[[root.children.children]]
+type = "spacer"
+
+[[root.children.children]]
+type = "text"
+text = "up {net.tx:rate}"
+size = 11
+color = "warn"

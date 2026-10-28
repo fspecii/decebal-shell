@@ -480,7 +480,7 @@ fn backdrop(pm: &Pixmap) -> Option<u32> {
 }
 
 /// Uploads the pixmap as premultiplied BGRX, splitting into row bands when a request would be too large.
-fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth: u8, alpha: bool, max_bytes: usize) -> Result<(), Error> {
+pub(crate) fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth: u8, alpha: bool, max_bytes: usize) -> Result<(), Error> {
     let (w, h) = (pm.width() as usize, pm.height() as usize);
     let rows_per = (max_bytes / (w * 4)).clamp(1, h.min(128));
     let mut buf = vec![0u8; w * rows_per * 4];

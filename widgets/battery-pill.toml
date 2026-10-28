@@ -1,0 +1,26 @@
+format = 1
+id = "battery-pill"
+name = "Battery pill"
+description = "Charge level with a bar; hidden on machines without a battery. Made for the bar."
+size = [92, 24]
+
+[root]
+type = "row"
+padding = [0, 10]
+gap = 8
+align = "center"
+background = "text@0.09"
+radius = 12
+show_if = "battery.present"
+
+[[root.children]]
+type = "bar"
+value = "battery.level"
+width = 32
+height = 8
+color = "ok"
+
+[[root.children]]
+type = "text"
+text = "{battery.level:pct}"
+size = 12

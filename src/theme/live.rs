@@ -6,6 +6,7 @@
 //!   [`generation`] (bumped on every change; `tick` compares it with the last one drawn).
 
 use super::builtin;
+use super::engine;
 use super::model::{Def, Mode, Selection, Theme};
 use crate::config::Stamp;
 use std::path::PathBuf;
@@ -61,21 +62,37 @@ impl Source {
         crate::settings::io::json_set(&self.shell_json, "theme", Some(sel.to_json()))
     }
 
+    /// The file a theme id is read from: `<id>/theme.toml` of a package (user folder, then the system one), else the flat `<id>.toml`.
     fn user_file(&self, id: &str) -> PathBuf {
-        self.themes_dir.join(format!("{id}.toml"))
+        let pkg = self.themes_dir.join(id).join("theme.toml");
+        if pkg.is_file() {
+            return pkg;
+        }
+        let flat = self.themes_dir.join(format!("{id}.toml"));
+        let sys = engine::store::system_dir().join(id).join("theme.toml");
+        if !flat.exists() && engine::schema::valid_ident(id) && sys.is_file() {
+            return sys;
+        }
+        flat
     }
 
     fn user_ids(&self) -> Vec<String> {
-        let mut v: Vec<String> = std::fs::read_dir(&self.themes_dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|e| {
+        let mut v: Vec<String> = Vec::new();
+        for dir in [&self.themes_dir, &engine::store::system_dir()] {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let p = e.path();
-                (p.extension().is_some_and(|x| x == "toml")).then(|| p.file_stem().map(|s| s.to_string_lossy().into_owned())).flatten()
-            })
-            .collect();
+                let id = if p.extension().is_some_and(|x| x == "toml") {
+                    p.file_stem().map(|s| s.to_string_lossy().into_owned())
+                } else if p.join("theme.toml").is_file() {
+                    p.file_name().map(|s| s.to_string_lossy().into_owned()).filter(|n| !n.starts_with('.'))
+                } else {
+                    None
+                };
+                v.extend(id);
+            }
+        }
         v.sort();
+        v.dedup();
         v
     }
 

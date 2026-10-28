@@ -34,6 +34,7 @@ pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
 // file (the dock's layout tokens) stays untouched by it.
 pub mod builtin;
 pub mod dynamic;
+pub mod engine;
 pub mod extract;
 pub mod fontdb;
 pub mod fonts;

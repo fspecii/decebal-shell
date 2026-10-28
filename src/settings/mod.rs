@@ -10,10 +10,14 @@ pub mod iconspane;
 pub mod io;
 pub mod keys;
 pub mod model;
+pub mod packages;
+#[cfg(test)]
+mod packages_tests;
 pub mod panes;
 pub mod schema;
 pub mod system;
 pub mod systempane;
+pub mod themecards;
 pub mod themepane;
 pub mod tomlcfg;
 pub mod ui;

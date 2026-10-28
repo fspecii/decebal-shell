@@ -54,6 +54,8 @@ macthemectl sync                re-apply the current theme to rdwm's config
 macthemectl profile ...          presets of the whole setup: list save apply undo export import (macthemectl profile --help)
 macthemectl validate FILE        check a theme file
 macthemectl export NAME          print a built-in theme file (a starting point for ~/.config/macshell/themes)
+macthemectl theme ...            the theme engine: packages (.dtheme), install/pack/validate/new, apply with undo and preview,
+                                 snapshot the current look (macthemectl theme help, docs/theme-engine.md)
 
 NAME is a theme id or title (\"nord\", \"Windows 11\"); \"macOS Light\" / \"windows-11-dark\" also pick the mode.
 apply writes the selection to macshell.json and the matching colours to rdwm's config.toml
@@ -601,6 +603,10 @@ fn main() {
             let id = src.find(name).map(|f| f.0).unwrap_or_else(|| name.clone());
             print!("{}", builtin::source(&id).unwrap_or_else(|| die(&format!("`{name}` is not a built-in theme"))));
         }
+        Some("theme") => match macshell::theme::engine::cli::run(&args[1..], &src, &Paths::discover()) {
+            Ok(text) => print!("{text}"),
+            Err(e) => die(&e),
+        },
         Some("apply-system") | Some("system") => {
             if let Err(e) = system::cli::run(&args, &src) {
                 die(&e);
