@@ -250,7 +250,9 @@ mod tests {
         assert_eq!(layout(&p), "close,minimize,maximize:");
         let s = settings(&p, &Config::default());
         assert!(s.contains(&("Settings".into(), "gtk-application-prefer-dark-theme".into(), "1".into())));
-        assert!(!s.iter().any(|(_, k, _)| k == "gtk-icon-theme-name" || k == "gtk-font-name"), "unset optional keys are not written");
+        assert!(!s.iter().any(|(_, k, _)| k == "gtk-icon-theme-name"), "unset optional keys are not written");
+        // the font only comes from the theme (its preset, since themes name fonts now), never from this config
+        assert_eq!(s.iter().any(|(_, k, _)| k == "gtk-font-name"), p.font.is_some());
         p.classic_buttons = true;
         p.dark = false;
         p.font = Some("Segoe UI".into());
