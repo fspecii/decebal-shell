@@ -49,8 +49,9 @@ pub struct Applied {
     pub undo_id: String,
 }
 
-pub fn undo_dir(src: &Source) -> PathBuf {
-    src.themes_dir.parent().map(|p| p.join("undo")).unwrap_or_else(|| PathBuf::from("undo"))
+/// Where undo records live: next to `macshell.json` (so a test or a private HOME never touches the real one).
+pub fn undo_dir(paths: &Paths) -> PathBuf {
+    paths.shell_dir.join("theme-undo")
 }
 
 // ---------------------------------------------------------------- JSON helpers
@@ -473,7 +474,7 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
         return Ok(applied);
     }
     let uid = stamp_id();
-    let rec = undo_dir(src).join(&uid);
+    let rec = undo_dir(paths).join(&uid);
     std::fs::create_dir_all(&rec).map_err(|e| format!("{}: {e}", rec.display()))?;
     let mut files = Vec::new();
     for (i, w) in plan.writes.iter().enumerate() {
@@ -496,7 +497,7 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
         applied.files.push(w.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
     }
     applied.undo_id = uid;
-    prune(&undo_dir(src), 10);
+    prune(&undo_dir(paths), 10);
     if plan.rdwm_changed {
         applied.reloaded = rdwm::reload(paths).unwrap_or(false);
     }
@@ -526,21 +527,21 @@ pub fn apply(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Resul
 }
 
 /// The undo records, oldest first.
-pub fn undo_ids(src: &Source) -> Vec<String> {
+pub fn undo_ids(paths: &Paths) -> Vec<String> {
     let mut v: Vec<String> =
-        std::fs::read_dir(undo_dir(src)).into_iter().flatten().flatten().filter(|e| e.path().join("meta.json").is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        std::fs::read_dir(undo_dir(paths)).into_iter().flatten().flatten().filter(|e| e.path().join("meta.json").is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
     v.sort();
     v
 }
 
 /// Restores the files of the latest apply (or of `only`, when it is still the latest) and removes the record.
 pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
-    let ids = undo_ids(src);
+    let ids = undo_ids(paths);
     let Some(last) = ids.last() else { return Err("nothing to undo".into()) };
     if only.is_some_and(|o| o != last) {
         return Err("the theme was changed again since; not undoing".into());
     }
-    let rec = undo_dir(src).join(last);
+    let rec = undo_dir(paths).join(last);
     let meta: Value = serde_json::from_str(&std::fs::read_to_string(rec.join("meta.json")).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     let mut rdwm_touched = false;
     for f in meta["files"].as_array().into_iter().flatten() {
@@ -748,7 +749,7 @@ y = -30
         assert!(e.contains("nothing was changed"), "{e}");
         assert_eq!(std::fs::read_to_string(&paths.rdwm_config).unwrap(), before[0]);
         assert_eq!(std::fs::read_to_string(paths.shell_json()).unwrap(), before[1]);
-        assert!(undo_ids(&src).is_empty(), "no stale record");
+        assert!(undo_ids(&paths).is_empty(), "no stale record");
         let _ = std::fs::remove_dir_all(d);
     }
 

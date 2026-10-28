@@ -13,6 +13,8 @@ pub mod apply;
 pub mod archive;
 pub mod capture;
 pub mod cli;
+#[cfg(test)]
+mod golden;
 pub mod manifest;
 pub mod package;
 pub mod schema;
