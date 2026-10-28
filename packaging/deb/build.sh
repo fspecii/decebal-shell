@@ -24,7 +24,7 @@ Recommends: rdwm
 Conflicts: macshell
 Replaces: macshell
 Provides: macshell
-Homepage: https://github.com/fspecii/macshell
+Homepage: https://github.com/fspecii/decebal-shell
 Description: Decebal desktop shell: bar, dock, launcher, notifications, settings
  A lightweight, themeable desktop shell for X11 window managers such as rdwm.
  Ships decbar, decdock, decspot, decnotify, decsettings, decthemectl and more,
