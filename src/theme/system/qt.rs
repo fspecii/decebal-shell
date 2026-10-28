@@ -24,27 +24,27 @@ fn roles(p: &Palette, group: &str) -> Vec<Rgb> {
         _ => (p.text, p.accent, p.accent_text),
     };
     vec![
-        text,                    // WindowText
-        button,                  // Button
-        light,                   // Light
-        midlight,                // Midlight
-        dark,                    // Dark
-        mid,                     // Mid
-        text,                    // Text
-        p.text,                  // BrightText
-        text,                    // ButtonText
-        p.bg,                    // Base
-        p.bg,                    // Window
-        black,                   // Shadow
-        hl,                      // Highlight
-        hl_text,                 // HighlightedText
-        p.accent_on_bg(),        // Link
-        p.magenta,               // LinkVisited
-        p.surface,               // AlternateBase
-        p.bg,                    // NoRole
-        p.popup,                 // ToolTipBase
-        p.text,                  // ToolTipText
-        p.text_faint,            // PlaceholderText
+        text,             // WindowText
+        button,           // Button
+        light,            // Light
+        midlight,         // Midlight
+        dark,             // Dark
+        mid,              // Mid
+        text,             // Text
+        p.text,           // BrightText
+        text,             // ButtonText
+        p.bg,             // Base
+        p.bg,             // Window
+        black,            // Shadow
+        hl,               // Highlight
+        hl_text,          // HighlightedText
+        p.accent_on_bg(), // Link
+        p.magenta,        // LinkVisited
+        p.surface,        // AlternateBase
+        p.bg,             // NoRole
+        p.popup,          // ToolTipBase
+        p.text,           // ToolTipText
+        p.text_faint,     // PlaceholderText
     ]
 }
 

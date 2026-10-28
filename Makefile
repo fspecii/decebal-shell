@@ -39,6 +39,10 @@ install-session:
 e2e-theme: all
 	tests/e2e/theme.sh
 
+# "Apply to all apps" in a private HOME, Xvfb and D-Bus session (needs Xvfb, xdotool, import, xrdb, dbus-run-session, PyGObject; nautilus and Omarchy are used when present).
+e2e-system: all
+	tests/e2e/system-theme.sh
+
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
 
@@ -72,4 +76,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar
+.PHONY: all install install-session uninstall test e2e-system e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar

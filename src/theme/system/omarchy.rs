@@ -349,8 +349,32 @@ mod tests {
     use super::*;
 
     const ALL: [&str; 26] = [
-        "mode", "accent", "selection", "muted", "background", "dark_background", "darker_background", "lighter_background", "foreground", "dark_foreground", "light_foreground", "bright_foreground", "red", "yellow", "orange", "green",
-        "cyan", "blue", "magenta", "brown", "bright_red", "bright_yellow", "bright_green", "bright_cyan", "bright_blue", "bright_magenta",
+        "mode",
+        "accent",
+        "selection",
+        "muted",
+        "background",
+        "dark_background",
+        "darker_background",
+        "lighter_background",
+        "foreground",
+        "dark_foreground",
+        "light_foreground",
+        "bright_foreground",
+        "red",
+        "yellow",
+        "orange",
+        "green",
+        "cyan",
+        "blue",
+        "magenta",
+        "brown",
+        "bright_red",
+        "bright_yellow",
+        "bright_green",
+        "bright_cyan",
+        "bright_blue",
+        "bright_magenta",
     ];
 
     #[test]
@@ -385,7 +409,18 @@ mod tests {
     }
 
     fn omarchy_env(root: &std::path::Path, extra: &[&str]) -> (super::super::Env, super::super::testutil::Fake) {
-        let mut present = vec!["omarchy-theme-set", "foot", "btop", "omarchy-theme-set-foot", "omarchy-restart-btop", "omarchy-theme-set-vscode", "omarchy-theme-set-obsidian", "omarchy-hook", "omarchy-restart-terminal", "omarchy-restart-helix"];
+        let mut present = vec![
+            "omarchy-theme-set",
+            "foot",
+            "btop",
+            "omarchy-theme-set-foot",
+            "omarchy-restart-btop",
+            "omarchy-theme-set-vscode",
+            "omarchy-theme-set-obsidian",
+            "omarchy-hook",
+            "omarchy-restart-terminal",
+            "omarchy-restart-helix",
+        ];
         present.extend(extra);
         let (mut e, fake) = env(root, &present);
         e.omarchy_path = Some(root.join("omarchy"));
@@ -433,7 +468,10 @@ mod tests {
         apply(&env, &cfg, &palette(false), &Opts::default()).unwrap();
         let calls = fake.calls.borrow().clone();
         assert!(calls.iter().any(|c| c.starts_with("omarchy-theme-set-browser")), "passwordless sudo: the browser follows");
-        assert!(!calls.iter().any(|c| c.starts_with("omarchy-theme-set-vscode") || c.starts_with("omarchy-hook") || c.contains("restart-terminal")), "editors, hooks and signals are off by default: {calls:?}");
+        assert!(
+            !calls.iter().any(|c| c.starts_with("omarchy-theme-set-vscode") || c.starts_with("omarchy-hook") || c.contains("restart-terminal")),
+            "editors, hooks and signals are off by default: {calls:?}"
+        );
         cfg.targets.insert("editors".into(), true);
         cfg.targets.insert("hooks".into(), true);
         cfg.signals = true;

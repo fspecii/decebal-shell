@@ -2,8 +2,8 @@
 //!
 //! The file sets the terminal colours (`*.foreground`, `*.background`, `*.cursorColor`, `*.color0` .. `*.color15`) and, when configured,
 //! `Xcursor.theme`. The include lives in a managed block of `~/.Xresources`, so a session that runs `xrdb -merge ~/.Xresources` at login keeps
-//! the theme. `off` merges the values the server held before and removes the block; keys that did not exist stay in the running server
-//! until the next `xrdb -load`.
+//! the theme. `off` removes the block and loads the server's database back without the keys macshell added (and with the old values of
+//! the ones it changed).
 
 use super::files::{Comment, Edit};
 use super::{Config, Ctx, Env, Palette, Plan, Target};
@@ -101,13 +101,17 @@ impl Target for X11 {
         if cx.env.display.is_none() || !cx.env.has("xrdb") {
             return;
         }
-        let text: String = saved.iter().filter_map(|(k, v)| v.as_str().map(|o| format!("{k}: {o}\n"))).collect();
-        if text.is_empty() {
-            return;
+        // the server's database now, minus the keys macshell added, plus the old values of the keys it changed
+        let now = cx.env.run.run("xrdb", &["-query"], &[]).stdout;
+        let mut text: String = now.lines().filter(|l| !saved.keys().any(|k| l.starts_with(&format!("{k}:")))).map(|l| format!("{l}\n")).collect();
+        for (k, v) in &saved {
+            if let Some(o) = v.as_str() {
+                text.push_str(&format!("{k}: {o}\n"));
+            }
         }
         let f = cx.env.state_dir.join("xrdb-restore");
         if super::files::write_atomic(&f, &text).is_ok() {
-            cx.env.run.run("xrdb", &["-merge", &f.to_string_lossy()], &[]);
+            cx.env.run.run("xrdb", &["-nocpp", "-load", &f.to_string_lossy()], &[]);
             let _ = std::fs::remove_file(&f);
         }
     }
@@ -145,6 +149,6 @@ mod tests {
         assert!(std::fs::read_to_string(env.home.join(".Xresources")).unwrap().contains("#include \""));
         super::super::off(&env, &cfg, &palette(true)).unwrap();
         assert!(!env.home.join(".Xresources").exists(), "the file macshell created is gone");
-        assert!(fake.calls.borrow().iter().filter(|c| c.starts_with("xrdb -merge ")).count() >= 2, "the old background is merged back");
+        assert!(fake.calls.borrow().iter().any(|c| c.starts_with("xrdb -nocpp -load ")), "the database is loaded back without our keys");
     }
 }

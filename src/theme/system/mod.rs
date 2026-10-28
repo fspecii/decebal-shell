@@ -282,7 +282,8 @@ impl Env {
         let home = var("HOME").unwrap_or_else(|| PathBuf::from("/nonexistent"));
         let config_home = var("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"));
         let state_home = var("XDG_STATE_HOME").unwrap_or_else(|| home.join(".local/state"));
-        let omarchy_path = var("OMARCHY_PATH").filter(|p| p.is_dir()).or_else(|| ["/usr/share/omarchy".into(), home.join(".local/share/omarchy")].into_iter().find(|p: &PathBuf| p.join("default/themed").is_dir()));
+        let omarchy_path =
+            var("OMARCHY_PATH").filter(|p| p.is_dir()).or_else(|| ["/usr/share/omarchy".into(), home.join(".local/share/omarchy")].into_iter().find(|p: &PathBuf| p.join("default/themed").is_dir()));
         Env {
             state_dir: var("MACSHELL_SYSTEM_STATE").unwrap_or_else(|| state_home.join("macshell/system")),
             gen_dir: config_home.join("macshell/system"),
@@ -691,11 +692,33 @@ pub mod testutil {
         }
     }
 
-    pub fn tmp(name: &str) -> PathBuf {
+    /// A temp directory removed when dropped.
+    pub struct TmpDir(PathBuf);
+
+    impl std::ops::Deref for TmpDir {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl AsRef<Path> for TmpDir {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TmpDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    pub fn tmp(name: &str) -> TmpDir {
         let d = std::env::temp_dir().join(format!("macshell-system-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d
+        TmpDir(d)
     }
 
     /// A private machine under `root` with the given programs "installed".

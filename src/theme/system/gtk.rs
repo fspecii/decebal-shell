@@ -102,17 +102,35 @@ pub fn colors(p: &Palette) -> String {
     s
 }
 
-/// GTK 3 draws its header bars from `theme_bg_color` through gradients; a flat rule makes them follow the titlebar colour.
+/// GTK 3's Adwaita theme exports the `theme_*` names but paints widgets with literal colours, so named colours alone change little:
+/// these rules recolour the common widgets (window, views, entries, buttons, selection, menus, header bars, scrollbars).
 fn gtk3_extras(p: &Palette) -> String {
-    format!(
-        "headerbar, .titlebar {{ background-color: {bg}; background-image: none; color: {fg}; border-color: {bd}; }}\n\
-         headerbar:backdrop, .titlebar:backdrop {{ background-color: {bk}; color: {fg2}; }}\n",
-        bg = p.titlebar.hex(),
-        fg = p.text.hex(),
-        bd = p.border.hex(),
-        bk = p.titlebar_inactive.hex(),
-        fg2 = p.text_secondary.hex(),
-    )
+    let hover = p.text.over(p.surface, 0.08).hex();
+    let active = p.text.over(p.surface, 0.16).hex();
+    let rules = [
+        ("window, .background", format!("background-color: {}; color: {};", p.bg.hex(), p.text.hex())),
+        (".view, textview text, iconview, treeview.view", format!("background-color: {}; color: {};", p.bg.hex(), p.text.hex())),
+        (".sidebar, placessidebar, .sidebar row", format!("background-color: {};", p.sidebar.hex())),
+        ("headerbar, .titlebar", format!("background-color: {}; background-image: none; color: {}; border-color: {}; box-shadow: none;", p.titlebar.hex(), p.text.hex(), p.border.hex())),
+        ("headerbar:backdrop, .titlebar:backdrop", format!("background-color: {}; color: {};", p.titlebar_inactive.hex(), p.text_secondary.hex())),
+        ("entry, spinbutton", format!("background-color: {}; background-image: none; color: {}; border-color: {};", p.surface.hex(), p.text.hex(), p.border.hex())),
+        ("button", format!("background-color: {}; background-image: none; color: {}; border-color: {}; box-shadow: none; text-shadow: none;", p.surface.hex(), p.text.hex(), p.border.hex())),
+        ("button:hover", format!("background-color: {hover};")),
+        ("button:active, button:checked", format!("background-color: {active};")),
+        ("button.suggested-action", format!("background-color: {}; color: {};", p.accent.hex(), p.accent_text.hex())),
+        ("button.destructive-action", format!("background-color: {}; color: {};", p.red.hex(), p.red.readable_on().hex())),
+        ("selection, *:selected, row:selected, .view:selected", format!("background-color: {}; color: {};", p.accent.hex(), p.accent_text.hex())),
+        ("progressbar progress, scale highlight, switch:checked", format!("background-color: {}; background-image: none;", p.accent.hex())),
+        ("progressbar trough, scale trough, switch", format!("background-color: {}; background-image: none; border-color: {};", p.surface.hex(), p.border.hex())),
+        ("menu, .menu, .popup, popover.background, popover.background > contents", format!("background-color: {}; color: {}; border-color: {};", p.popup.hex(), p.text.hex(), p.border.hex())),
+        ("menuitem:hover, modelbutton:hover", format!("background-color: {};", p.accent.hex())),
+        ("tooltip.background", format!("background-color: {}; color: {};", p.popup.hex(), p.text.hex())),
+        ("separator", format!("background-color: {};", p.border.hex())),
+        ("scrollbar slider", format!("background-color: {};", p.text_faint.hex())),
+        ("notebook > header", format!("background-color: {}; border-color: {};", p.surface.hex(), p.border.hex())),
+        (".dim-label", format!("color: {};", p.text_secondary.hex())),
+    ];
+    rules.iter().map(|(sel, body)| format!("{sel} {{ {body} }}\n")).collect()
 }
 
 pub fn css(p: &Palette, gtk4: bool) -> String {
@@ -206,14 +224,16 @@ mod tests {
         let p = palette(true);
         let g4 = css(&p, true);
         let g3 = css(&p, false);
-        for name in ["accent_bg_color", "window_bg_color", "view_bg_color", "headerbar_bg_color", "sidebar_bg_color", "card_bg_color", "popover_bg_color", "theme_bg_color", "theme_selected_bg_color"] {
+        for name in ["accent_bg_color", "window_bg_color", "view_bg_color", "headerbar_bg_color", "sidebar_bg_color", "card_bg_color", "popover_bg_color", "theme_bg_color", "theme_selected_bg_color"]
+        {
             assert!(g4.contains(&format!("@define-color {name} ")), "{name}");
         }
         assert!(g4.contains(&format!("@define-color window_bg_color {};", p.bg.hex())));
         assert!(g4.contains(&format!("@define-color accent_bg_color {};", p.accent.hex())));
         assert!(g4.contains(&format!("@define-color headerbar_bg_color {};", p.titlebar.hex())));
         assert!(!g4.contains("headerbar, .titlebar"), "gtk 4 keeps libadwaita's own header bar rules");
-        assert!(g3.contains(&format!("headerbar, .titlebar {{ background-color: {};", p.titlebar.hex())));
+        assert!(g3.contains(&format!("headerbar, .titlebar {{ background-color: {}; background-image: none;", p.titlebar.hex())));
+        assert!(g3.contains(&format!("window, .background {{ background-color: {};", p.bg.hex())));
         assert_eq!(g4.lines().filter(|l| l.starts_with("@define-color")).count(), g4.matches(";\n").count());
     }
 
@@ -237,7 +257,13 @@ mod tests {
         p.font_pt = 10.5;
         let cfg = Config { icon_theme: Some("Papirus".into()), cursor_theme: Some("Bibata".into()), ..Config::default() };
         let s = settings(&p, &cfg);
-        for want in [("gtk-application-prefer-dark-theme", "0"), ("gtk-decoration-layout", "appmenu:minimize,maximize,close"), ("gtk-font-name", "Segoe UI 10.5"), ("gtk-icon-theme-name", "Papirus"), ("gtk-cursor-theme-name", "Bibata")] {
+        for want in [
+            ("gtk-application-prefer-dark-theme", "0"),
+            ("gtk-decoration-layout", "appmenu:minimize,maximize,close"),
+            ("gtk-font-name", "Segoe UI 10.5"),
+            ("gtk-icon-theme-name", "Papirus"),
+            ("gtk-cursor-theme-name", "Bibata"),
+        ] {
             assert!(s.iter().any(|(_, k, v)| k == want.0 && v == want.1), "{want:?} in {s:?}");
         }
     }

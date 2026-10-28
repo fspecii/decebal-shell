@@ -113,7 +113,10 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 let t: Vec<_> = st.iter().map(|s| serde_json::json!({"id": s.id, "title": s.title, "on": s.on, "unavailable": s.unavailable, "files": s.files})).collect();
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "targets": t})).unwrap()
+                    serde_json::to_string_pretty(
+                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "targets": t})
+                    )
+                    .unwrap()
                 );
             } else {
                 println!("Apply to all apps: {}  (last applied theme: {})", if cfg.enabled { "on" } else { "off" }, applied.as_deref().unwrap_or("never"));

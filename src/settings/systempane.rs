@@ -35,8 +35,12 @@ pub fn items(m: &Model) -> Vec<Item> {
     out.push(Item::Header("Apply to".into()));
     out.push(Item::Card(rows));
     out.push(Item::Card(vec![
-        Row::new("Icon theme").detail("Optional: set this icon theme in GTK and Qt apps (empty = leave it alone)").ctl(Ctl::new("sy:icon", Kind::Text { val: cfg.icon_theme.clone().unwrap_or_default(), hint: "Papirus".into() })),
-        Row::new("Cursor theme").detail("Optional: set this cursor theme for GTK and X11 clients").ctl(Ctl::new("sy:cursor", Kind::Text { val: cfg.cursor_theme.clone().unwrap_or_default(), hint: "Bibata-Modern-Classic".into() })),
+        Row::new("Icon theme")
+            .detail("Optional: set this icon theme in GTK and Qt apps (empty = leave it alone)")
+            .ctl(Ctl::new("sy:icon", Kind::Text { val: cfg.icon_theme.clone().unwrap_or_default(), hint: "Papirus".into() })),
+        Row::new("Cursor theme")
+            .detail("Optional: set this cursor theme for GTK and X11 clients")
+            .ctl(Ctl::new("sy:cursor", Kind::Text { val: cfg.cursor_theme.clone().unwrap_or_default(), hint: "Bibata-Modern-Classic".into() })),
         Row::new("Apply now").detail("Run it again right away").ctl(Ctl::new("sy:now", Kind::Button { label: "Apply".into(), danger: false })),
     ]));
     out.push(Item::Note {

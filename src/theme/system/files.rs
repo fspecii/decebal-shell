@@ -139,6 +139,7 @@ pub fn ini_set(text: &str, section: &str, key: &str, value: &str) -> String {
     let mut in_sec = false;
     let mut sec_end: Option<usize> = None;
     let mut found = false;
+    #[allow(clippy::needless_range_loop)] // lines[i] is rewritten in place
     for i in 0..lines.len() {
         if let Some(s) = is_section(&lines[i]) {
             if in_sec {
@@ -481,12 +482,7 @@ pub fn restore(state_dir: &Path, st: &mut State, owner: Option<&str>) -> Vec<(St
 mod tests {
     use super::*;
 
-    fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macshell-sysfiles-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        d
-    }
+    use crate::theme::system::testutil::tmp;
 
     #[test]
     fn blocks_append_replace_and_strip_cleanly() {
