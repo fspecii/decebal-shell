@@ -6,7 +6,7 @@
 //! focus and in-progress edits survive a rebuild (which happens whenever the file changes).
 
 use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
-use crate::text::{Fonts, Weight};
+use crate::text::{Fonts, Role, Weight};
 use tiny_skia::{Color, Pixmap};
 
 pub type Rect = (f32, f32, f32, f32);
@@ -182,14 +182,32 @@ pub enum Item {
     Themes(Vec<ThemeTile>),
     /// Row of round colour swatches (accent picker).
     Swatches(Vec<Swatch>),
+    /// A strip of labelled colour chips, not clickable (the "Match wallpaper" palette preview).
+    Palette(Vec<Chip>),
     /// Large preview of the current wallpaper (id of a thumbnail) with caption.
     Preview {
         id: String,
         caption: String,
     },
+    /// Font preview: one line per role, drawn in that role's font.
+    FontSamples(Vec<FontSample>),
+    /// Icon theme list (src/settings/iconspane.rs).
+    IconThemes(Vec<super::iconspane::ThemeRow>),
+    /// Preview grid of sample icons of one theme (src/settings/iconspane.rs).
+    IconGrid(super::iconspane::Grid),
     Space(f32),
     /// The multi-line text editor of the Configuration pane (see `editor.rs`).
     Editor(super::editor::View),
+}
+
+/// A line of the font preview card.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontSample {
+    pub label: String,
+    pub role: Role,
+    pub text: String,
+    pub px: f32,
+    pub weight: Weight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -208,6 +226,12 @@ pub struct ThemeTile {
     pub error: bool,
     /// background, bar, surface, titlebar, text, accent, dock
     pub colors: [Color4; 7],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Chip {
+    pub name: String,
+    pub color: Color4,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -249,12 +273,25 @@ impl Painter<'_> {
 
     /// Text with its visual vertical centre at `cy`.
     pub fn text(&mut self, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
+        self.text_as(Role::Ui, pm, t, x, cy, px, w, c)
+    }
+
+    /// [`Self::text`] in the font of `role`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_as(&mut self, role: Role, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
         match &mut self.fonts {
             Some(f) => {
-                let top = cy + 0.36 * px - f.ascent(px, w);
-                f.draw(pm, t, x, top, px, w, c)
+                let top = cy + 0.36 * px - f.ascent_as(role, px, w);
+                f.draw_as(role, pm, t, x, top, px, w, c)
             }
             None => 0.0,
+        }
+    }
+
+    pub fn measure_as(&self, role: Role, t: &str, px: f32, w: Weight) -> f32 {
+        match &self.fonts {
+            Some(f) => f.measure_as(role, t, px, w),
+            None => t.chars().count() as f32 * px * 0.55,
         }
     }
 
@@ -633,7 +670,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     let cw = (width - 2.0 * side).min(u(700.0));
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
     let mut y = u(20.0) - scroll;
-    p.text(pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
+    p.text_as(Role::Title, pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
     y += u(52.0);
     for item in items {
         match item {
@@ -650,6 +687,8 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 fr.editors.push((r, geo));
                 y += r.3 + u(14.0);
             }
+            Item::IconThemes(rows) => y = super::iconspane::draw_list(pm, p, rows, x0, y, cw, it, &mut fr),
+            Item::IconGrid(g) => y = super::iconspane::draw_grid(pm, p, g, x0, y, cw),
             Item::Header(t) => {
                 y += u(6.0);
                 p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
@@ -738,6 +777,22 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 p.text_center(pm, caption, x0 + cw / 2.0, y + u(2.0), u(12.0), Weight::Regular, pal::sub());
                 y += u(30.0);
             }
+            Item::Palette(list) => {
+                let gap = u(8.0);
+                let cols = list.len().clamp(1, (((cw + gap) / (u(60.0) + gap)).floor() as usize).max(1));
+                let w = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
+                let (h, row_h) = (u(40.0), u(70.0));
+                for (i, chip) in list.iter().enumerate() {
+                    let r = (x0 + (i % cols) as f32 * (w + gap), y + (i / cols) as f32 * row_h, w, h);
+                    let (cr, cg, cb) = chip.color;
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), color(cr, cg, cb, 1.0));
+                    stroke_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), crate::theme::th().ink(0.22), u(1.0));
+                    let name = p.fit(&chip.name, w + gap, u(10.5), Weight::Regular);
+                    p.text_center(pm, &name, r.0 + w / 2.0, r.1 + h + u(11.0), u(10.5), Weight::Regular, pal::sub());
+                    p.text_center(pm, &format!("#{cr:02x}{cg:02x}{cb:02x}"), r.0 + w / 2.0, r.1 + h + u(24.0), u(9.5), Weight::Regular, pal::faint());
+                }
+                y += list.len().div_ceil(cols) as f32 * row_h + u(4.0);
+            }
             Item::Thumbs(list) => {
                 let gap = u(14.0);
                 let tw0 = u(TH_W);
@@ -805,6 +860,26 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 }
                 let rows = list.len().div_ceil(cols);
                 y += rows as f32 * (th + u(34.0)) + u(8.0);
+            }
+            Item::FontSamples(lines) => {
+                let lh = u(46.0);
+                let h = lines.len() as f32 * lh;
+                fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
+                for (i, l) in lines.iter().enumerate() {
+                    let ry = y + i as f32 * lh;
+                    if i > 0 {
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                    }
+                    p.text(pm, &l.label, x0 + u(CARD_PAD), ry + u(13.0), u(11.0), Weight::Regular, pal::faint());
+                    // the sample is cut at the card's right edge instead of wrapping
+                    let avail = cw - 2.0 * u(CARD_PAD);
+                    let mut shown = l.text.clone();
+                    while shown.chars().count() > 1 && p.measure_as(l.role, &shown, u(l.px), l.weight) > avail {
+                        shown.pop();
+                    }
+                    p.text_as(l.role, pm, &shown, x0 + u(CARD_PAD), ry + u(31.0), u(l.px), l.weight, pal::text());
+                }
+                y += h + u(18.0);
             }
             Item::Themes(list) => {
                 let gap = u(14.0);

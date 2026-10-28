@@ -23,6 +23,9 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+/// Presets and the folders that did not load (folder, reason).
+type Listing = (Vec<Preset>, Vec<(String, String)>);
+
 pub const EDITOR_ID: &str = "cfg:editor";
 const EDITOR_H: f32 = 400.0;
 
@@ -133,7 +136,7 @@ pub struct State {
     pub drag: bool,
     last_click: Option<(std::time::Instant, f32, f32, u8)>,
     env: Env,
-    listing: Option<(Vec<Preset>, Vec<(String, String)>)>,
+    listing: Option<Listing>,
     pub selected: Option<String>,
     pub form: SaveForm,
     rename_text: String,
@@ -176,7 +179,7 @@ impl State {
         &self.env
     }
 
-    fn presets(&mut self) -> &(Vec<Preset>, Vec<(String, String)>) {
+    fn presets(&mut self) -> &Listing {
         if self.listing.is_none() {
             self.listing = Some(store::list(&self.env));
         }
@@ -518,6 +521,10 @@ fn preset_items(m: &Model, out: &mut Vec<Item>) {
     out.push(Item::Note { text: format!("Presets are folders in {}. They can be shared as one file (Export). Command line: macthemectl profile --help.", st.env.presets_dir.display()), warn: false });
 }
 
+fn has_icons(shell: &serde_json::Value) -> bool {
+    ["icons", "iconTheme", "icon_theme", "icon-theme", "iconPack"].iter().any(|k| shell.get(*k).is_some())
+}
+
 fn save_items(m: &Model, out: &mut Vec<Item>) {
     let f = &m.cfg.form;
     out.push(Item::Header("Save the current setup as a preset".into()));
@@ -527,7 +534,7 @@ fn save_items(m: &Model, out: &mut Vec<Item>) {
         Row::new("Save").detail("Pick what to include below first if you like").ctl(btn("cfg:form-save", "Save preset")).ctl(btn("cfg:form-cancel", "Cancel")),
     ]));
     out.push(Item::Header("What to include".into()));
-    let has_icons = ["icons", "iconTheme", "icon_theme", "icon-theme", "iconPack"].iter().any(|k| m.shell.get(*k).is_some());
+    let has_icons = has_icons(&m.shell);
     let rows: Vec<Row> = Part::ALL
         .into_iter()
         .filter(|p| *p != Part::Icons || has_icons)
@@ -1245,7 +1252,10 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
         "revert" => revert_tab(m),
         "format" => format_tab(m),
         "new" => {
-            m.cfg.form = SaveForm { name: String::new(), description: String::new(), parts: PartSet::defaults(), embed: false };
+            let mut parts = PartSet::defaults();
+            // the icon theme is part of the setup as soon as the shell has one
+            parts.toggle(Part::Icons, has_icons(&m.shell));
+            m.cfg.form = SaveForm { name: String::new(), description: String::new(), parts, embed: false };
             m.cfg.screen = Screen::Save;
         }
         "form-name" => m.cfg.form.name = s,
@@ -1598,6 +1608,24 @@ mod tests {
         apply(&mut m, "cfg:dup", CtlVal::Click);
         apply(&mut m, "cfg:delete", CtlVal::Click);
         assert!(store::find(&m.cfg.env, "renamed-copy").is_none());
+    }
+
+    #[test]
+    fn typing_a_whole_object_ends_without_errors() {
+        let mut m = model("whole");
+        std::fs::write(m.paths.shell_json(), "{\"a\": 1}").unwrap();
+        m.cfg.tab = Tab::Shell;
+        prepare(&mut m);
+        m.cfg.active = true;
+        editor_key(&mut m, &key(Key::Char, Some('a'), true));
+        for line in ["{", "\"workspaces\": \"off\",", "\"clockHour12\": true", "}"] {
+            type_text(&mut m, line);
+            if line != "}" {
+                editor_key(&mut m, &key(Key::Enter, None, false));
+            }
+        }
+        let b = buf_mut(&mut m);
+        assert!(b.errors.is_empty(), "{:?} {:?}", b.errors, b.ed.text());
     }
 
     #[test]

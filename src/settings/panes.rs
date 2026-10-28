@@ -61,6 +61,13 @@ pub const PANES: &[PaneDef] = &[
         color: (255, 55, 95),
         keywords: "theme appearance dark light auto mode accent colour color swatches transparency translucency corner radius font text size dracula nord solarized windows graphite high contrast",
     },
+    PaneDef {
+        id: "icons",
+        title: "Icons",
+        glyph: Glyph::Sys(glyphs::APPS),
+        color: (175, 82, 222),
+        keywords: "icon theme papirus tela whitesur adwaita hicolor symbolic tint size dock launcher freedesktop gtk",
+    },
     // system panes (src/settings/system); the sidebar groups come from system::registry::SECTIONS
     PaneDef { id: "sound", title: "Sound", glyph: Glyph::Sys(glyphs::SPEAKER), color: (255, 69, 58), keywords: "audio speakers microphone volume output input mute pipewire pulseaudio" },
     PaneDef { id: "network", title: "Network", glyph: Glyph::Sys(glyphs::WIFI), color: (10, 132, 255), keywords: "wifi wi-fi wireless ethernet vpn internet ip dns networkmanager nmcli" },
@@ -385,6 +392,7 @@ impl Model {
         items.extend(match id {
             "theme" => super::themepane::items(self),
             "config" => super::configpane::items(self),
+            "icons" => super::iconspane::items(self),
             "general" => self.pane_general(),
             "appearance" => self.pane_appearance(),
             "desktop" => self.pane_desktop(),
@@ -619,6 +627,7 @@ impl Model {
             Item::Space(6.0),
             Item::Card(rows),
         ];
+        items.extend(super::wallpapercolors::wallpaper_pane_note(self));
         // changed through `rdwmctl wallpaper` since the last reload
         let live = self.rt.state["wallpaper"]["image"].as_str().map(expand_tilde);
         let filev = self.string("wallpaper", "image").map(|p| expand_tilde(&p));
@@ -1027,11 +1036,17 @@ fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if matches!(parts.as_slice(), ["sy", ..]) {
+        return super::systempane::apply(m, &parts, v);
+    }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
         return super::themepane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);
+    }
+    if matches!(parts.as_slice(), ["ic", ..] | ["l", "icons", ..]) {
+        return super::iconspane::apply(m, &parts, v);
     }
     match parts.as_slice() {
         ["a", "reload"] => {

@@ -147,7 +147,7 @@ DUMP2="$T2/dump.json"
 env2 MACSETTINGS_DEBUG_LAYOUT="$DUMP2" macsettings --config "$T2/cfg/rdwm/config.toml" config >"$T2/app.log" 2>&1 &
 APP2=$!; E2E_PIDS+=($APP2)
 sleep 3
-WID=$(xdotool search --sync --pid $APP2 2>/dev/null | head -1)
+WID=$(xdotool search --sync --class MacSettings 2>/dev/null | head -1)
 DUMP="$DUMP2"
 check "second instance is up" test -n "$WID"
 click_part cfg:view 1

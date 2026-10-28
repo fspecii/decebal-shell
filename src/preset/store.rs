@@ -316,7 +316,8 @@ pub fn capture(env: &Env, opts: &CaptureOpts) -> Result<(Preset, Vec<String>), S
     }
     for (part, file) in [(Part::Dock, "dock-settings.json"), (Part::Pinned, "dock-pinned-macos.json")] {
         if opts.parts.has(part) {
-            let doc = read_json(&env.target(file))?;
+            let mut doc = read_json(&env.target(file))?;
+            parts::strip_secrets_json(&mut doc);
             files.insert(file.into(), parts::pretty_json(&doc).into_bytes());
         }
     }

@@ -18,7 +18,7 @@
 use super::model::{Rgb, Tokens, V};
 
 /// OKLCH chroma per unit of HCT chroma (calibrated on caelestia's default scheme).
-const CHROMA_SCALE: f64 = 0.00262;
+pub const CHROMA_SCALE: f64 = 0.00262;
 /// The seed of caelestia's default scheme (its `m3primary_paletteKeyColor`).
 pub const DEFAULT_SEED: Rgb = Rgb(0xa8, 0x62, 0x7b);
 
@@ -156,7 +156,9 @@ impl Tonal {
     }
 }
 
-/// The scheme variants of caelestia (`caelestia scheme set -v`) that macshell can generate.
+/// The colour schemes ("variants") macshell can generate: Material You's tonal-spot, vibrant, expressive,
+/// monochrome, neutral and fidelity ("content") schemes, plus a pywal-like `Palette` that keeps the wallpaper's
+/// own distinct colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Variant {
     /// Material's default: a pastel palette with low chroma.
@@ -164,38 +166,65 @@ pub enum Variant {
     TonalSpot,
     /// A high chroma palette; secondary and tertiary hues rotate away from the seed.
     Vibrant,
+    /// The accent hue sits far from the seed (a +240 degree turn) with strongly rotated companions.
+    Expressive,
+    /// No colour at all: greys only.
+    Monochrome,
     /// Close to greyscale with a hint of the seed hue.
     Neutral,
-    /// Keeps the seed's own chroma.
+    /// Keeps the seed's own chroma (Material's "fidelity").
     Content,
+    /// pywal / wallust style: the accent, secondary and tertiary colours are the wallpaper's own most distinct colours.
+    Palette,
 }
 
 impl Variant {
-    pub const ALL: [Variant; 4] = [Variant::TonalSpot, Variant::Vibrant, Variant::Neutral, Variant::Content];
+    pub const ALL: [Variant; 7] = [Variant::TonalSpot, Variant::Vibrant, Variant::Expressive, Variant::Monochrome, Variant::Neutral, Variant::Content, Variant::Palette];
 
     pub fn parse(s: &str) -> Option<Variant> {
         match s.trim().to_ascii_lowercase().replace(['-', '_', ' '], "").as_str() {
             "tonalspot" | "tonal" | "default" => Some(Variant::TonalSpot),
             "vibrant" => Some(Variant::Vibrant),
+            "expressive" => Some(Variant::Expressive),
+            "monochrome" | "mono" | "grey" | "gray" => Some(Variant::Monochrome),
             "neutral" => Some(Variant::Neutral),
             "content" | "fidelity" => Some(Variant::Content),
+            "palette" | "pywal" | "wal" | "wallust" => Some(Variant::Palette),
             _ => None,
         }
     }
     pub fn as_str(self) -> &'static str {
         match self {
-            Variant::TonalSpot => "tonalspot",
+            Variant::TonalSpot => "tonal-spot",
             Variant::Vibrant => "vibrant",
+            Variant::Expressive => "expressive",
+            Variant::Monochrome => "monochrome",
             Variant::Neutral => "neutral",
             Variant::Content => "content",
+            Variant::Palette => "palette",
         }
     }
     pub fn title(self) -> &'static str {
         match self {
             Variant::TonalSpot => "Tonal spot",
             Variant::Vibrant => "Vibrant",
+            Variant::Expressive => "Expressive",
+            Variant::Monochrome => "Monochrome",
             Variant::Neutral => "Neutral",
             Variant::Content => "Content",
+            Variant::Palette => "Palette",
+        }
+    }
+    /// One line for the settings pane.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Variant::TonalSpot => "Material's default: a soft pastel accent from the wallpaper's main colour",
+            Variant::Vibrant => "A saturated accent with companions turned away from it",
+            Variant::Expressive => "The accent hue is turned away from the wallpaper's: playful",
+            Variant::Monochrome => "Greys only, no colour",
+            Variant::Neutral => "Nearly grey with a hint of the wallpaper",
+            Variant::Content => "Keeps the wallpaper's own saturation",
+            Variant::Palette => "Like pywal: accents are the wallpaper's own distinct colours",
         }
     }
 }
@@ -226,17 +255,47 @@ pub struct Palettes {
     pub success: Tonal,
 }
 
+/// Expressive's rotation tables: `SchemeExpressive`.
+const EXPRESSIVE_SECONDARY: [(f64, f64); 9] = [(0.0, 45.0), (21.0, 95.0), (51.0, 45.0), (121.0, 20.0), (151.0, 45.0), (191.0, 90.0), (271.0, 45.0), (321.0, 45.0), (361.0, 45.0)];
+const EXPRESSIVE_TERTIARY: [(f64, f64); 9] = [(0.0, 120.0), (21.0, 120.0), (51.0, 20.0), (121.0, 45.0), (151.0, 20.0), (191.0, 15.0), (271.0, 20.0), (321.0, 120.0), (361.0, 120.0)];
+
+/// [`palettes_with`] without further wallpaper colours.
 pub fn palettes(seed: Rgb, variant: Variant) -> Palettes {
+    palettes_with(seed, &[], variant)
+}
+
+/// The palettes of `variant`. `others` are further distinct colours of the wallpaper (most important first);
+/// only [`Variant::Palette`] reads them.
+pub fn palettes_with(seed: Rgb, others: &[Rgb], variant: Variant) -> Palettes {
     let (_, c, h) = oklch(seed);
     let seed_chroma = c / CHROMA_SCALE;
     let (primary, secondary, tertiary, neutral, neutral_variant) = match variant {
         Variant::TonalSpot => (Tonal::new(h, 36.0), Tonal::new(h, 16.0), Tonal::new(h + 60.0, 24.0), Tonal::new(h, 6.0), Tonal::new(h, 8.0)),
         Variant::Vibrant => (Tonal::new(h, 200.0), Tonal::new(rotated(h, &VIBRANT_SECONDARY), 24.0), Tonal::new(rotated(h, &VIBRANT_TERTIARY), 32.0), Tonal::new(h, 10.0), Tonal::new(h, 12.0)),
+        Variant::Expressive => (
+            Tonal::new(h + 240.0, 40.0),
+            Tonal::new(rotated(h, &EXPRESSIVE_SECONDARY), 24.0),
+            Tonal::new(rotated(h, &EXPRESSIVE_TERTIARY), 32.0),
+            Tonal::new(h + 15.0, 8.0),
+            Tonal::new(h + 15.0, 12.0),
+        ),
+        Variant::Monochrome => (Tonal::new(h, 0.0), Tonal::new(h, 0.0), Tonal::new(h, 0.0), Tonal::new(h, 0.0), Tonal::new(h, 0.0)),
         Variant::Neutral => (Tonal::new(h, 12.0), Tonal::new(h, 8.0), Tonal::new(h, 16.0), Tonal::new(h, 2.0), Tonal::new(h, 2.0)),
         // the seed's own chroma, with a floor so a grey seed still gives a usable accent
         Variant::Content => {
             let c = seed_chroma.max(10.0);
             (Tonal::new(h, c), Tonal::new(h, (c - 32.0).max(c * 0.5)), Tonal::new(h + 60.0, c * 0.75), Tonal::new(h, c / 8.0), Tonal::new(h, c / 8.0 + 4.0))
+        }
+        // the wallpaper's own colours: each companion keeps its hue and a bounded chroma
+        Variant::Palette => {
+            let own = |c: Option<&Rgb>, fallback_turn: f64| match c {
+                Some(c) => {
+                    let (_, cc, hh) = oklch(*c);
+                    Tonal::new(hh, (cc / CHROMA_SCALE).clamp(20.0, 70.0))
+                }
+                None => Tonal::new(h + fallback_turn, 28.0),
+            };
+            (Tonal::new(h, seed_chroma.clamp(32.0, 90.0)), own(others.first(), 50.0), own(others.get(1), 110.0), Tonal::new(h, 5.0), Tonal::new(h, 8.0))
         }
     };
     Palettes { primary, secondary, tertiary, neutral, neutral_variant, error: Tonal::new(25.0, 84.0), success: Tonal::new(152.0, 13.4) }
@@ -339,11 +398,60 @@ impl Roles {
 
 /// Builds the roles of `seed` for `variant` with Material's tone mapping for dark or light schemes.
 pub fn generate(seed: Rgb, variant: Variant, dark: bool) -> Roles {
-    let p = palettes(seed, variant);
-    // (accent, on-accent, container, on-container) tones, then the surface tones
-    let (a, on_a, c, on_c) = if dark { (80.0, 20.0, 30.0, 90.0) } else { (40.0, 100.0, 90.0, 10.0) };
-    let (surf, lowest, low, mid, high, highest) = if dark { (6.0, 4.0, 10.0, 12.0, 17.0, 22.0) } else { (98.0, 100.0, 96.0, 94.0, 92.0, 90.0) };
-    let (on_surf, on_var, outline, outline_var) = if dark { (90.0, 80.0, 60.0, 30.0) } else { (10.0, 30.0, 50.0, 80.0) };
+    generate_with(seed, &[], variant, dark, 0.0)
+}
+
+/// Material's tone mapping at a contrast level: `contrast` runs from -1 (softer) over 0 (Material's standard)
+/// to 1 (high contrast: text and accent tones move away from their surfaces). Every `on*` role keeps 4.5:1.
+/// Order: accent, on-accent, container, on-container, surface, lowest, low, container, high, highest,
+/// on-surface, on-surface-variant, outline, outline-variant.
+fn tones(dark: bool, contrast: f64) -> [f64; 14] {
+    let c = contrast.clamp(-1.0, 1.0);
+    // the soft side moves less: the roles must stay readable
+    let k = if c >= 0.0 { c } else { c * 0.4 };
+    // a surface tone moves towards the far end of the scale as contrast rises
+    let toward = |t: f64, end: f64, amount: f64| t + (end - t) * amount * k;
+    if dark {
+        [
+            (80.0 + 12.0 * k).min(95.0),
+            20.0 - 14.0 * k,
+            30.0 - 10.0 * k,
+            90.0 + 8.0 * k,
+            toward(6.0, 0.0, 0.5),
+            toward(4.0, 0.0, 0.5),
+            toward(10.0, 0.0, 0.4),
+            toward(12.0, 0.0, 0.4),
+            toward(17.0, 0.0, 0.35),
+            toward(22.0, 0.0, 0.35),
+            90.0 + 10.0 * k,
+            80.0 + 16.0 * k,
+            60.0 + 20.0 * k,
+            30.0 + 10.0 * k,
+        ]
+    } else {
+        [
+            40.0 - 14.0 * k,
+            100.0,
+            90.0 + 5.0 * k,
+            10.0 - 8.0 * k,
+            toward(98.0, 100.0, 0.4),
+            100.0,
+            toward(96.0, 100.0, 0.4),
+            toward(94.0, 100.0, 0.4),
+            toward(92.0, 100.0, 0.4),
+            toward(90.0, 100.0, 0.4),
+            10.0 - 8.0 * k,
+            30.0 - 18.0 * k,
+            50.0 - 20.0 * k,
+            80.0 + 8.0 * k,
+        ]
+    }
+}
+
+/// [`generate`] with the wallpaper's further colours (for [`Variant::Palette`]) and a contrast level (-1..1).
+pub fn generate_with(seed: Rgb, others: &[Rgb], variant: Variant, dark: bool, contrast: f64) -> Roles {
+    let p = palettes_with(seed, others, variant);
+    let [a, on_a, c, on_c, surf, lowest, low, mid, high, highest, on_surf, on_var, outline, outline_var] = tones(dark, contrast);
     Roles {
         dark,
         primary: p.primary.at(a),
@@ -425,8 +533,13 @@ pub const CAELESTIA_DARK: Roles = {
 /// +-15 degrees); a bin scores by the popularity of its hue and by its own chroma. Returns the best bin.
 /// `pixels` are sRGB triples. A wallpaper with no colour at all gives its average (or [`DEFAULT_SEED`]).
 pub fn seed_from_pixels(pixels: &[[u8; 3]]) -> Rgb {
+    seed_scored(pixels).0
+}
+
+/// [`seed_from_pixels`] plus whether the image is colourless (no colour worth matching; the seed is then only a fallback).
+pub fn seed_scored(pixels: &[[u8; 3]]) -> (Rgb, bool) {
     if pixels.is_empty() {
-        return DEFAULT_SEED;
+        return (DEFAULT_SEED, true);
     }
     // 4 bits per channel; each bin remembers the sum of its pixels so the colour is their average
     let mut bins: Vec<(u64, [u64; 3])> = vec![(0, [0; 3]); 4096];
@@ -452,14 +565,14 @@ pub fn seed_from_pixels(pixels: &[[u8; 3]]) -> Rgb {
         let rgb = Rgb((sum[0] / count) as u8, (sum[1] / count) as u8, (sum[2] / count) as u8);
         let (l, c, h) = oklch(rgb);
         let chroma = c / CHROMA_SCALE;
-        if chroma >= 5.0 && (0.15..=0.97).contains(&l) {
+        if chroma >= 5.0 && (0.08..=0.985).contains(&l) {
             cands.push(Cand { rgb, count: *count, chroma, hue: h });
         }
     }
     let colourful: u64 = cands.iter().map(|c| c.count).sum();
     if cands.is_empty() || colourful * 100 < n {
         // (almost) grey: keep a hint of the average colour's hue, else the default
-        return if oklch(mean).1 / CHROMA_SCALE >= 1.0 { mean } else { DEFAULT_SEED };
+        return (if oklch(mean).1 / CHROMA_SCALE >= 1.0 { mean } else { DEFAULT_SEED }, true);
     }
     let mut hue_pop = [0f64; 360];
     for c in &cands {
@@ -479,7 +592,52 @@ pub fn seed_from_pixels(pixels: &[[u8; 3]]) -> Rgb {
             best = Some((score, c.rgb));
         }
     }
-    best.map(|b| b.1).unwrap_or(DEFAULT_SEED)
+    (best.map(|b| b.1).unwrap_or(DEFAULT_SEED), false)
+}
+
+// ---------------------------------------------------------------- tinting an existing colour
+
+/// The colour at OKLab lightness `l` and hue `h` whose chroma is `c`, or the largest chroma that fits sRGB.
+pub fn fit_oklch(l: f64, c: f64, h: f64) -> Rgb {
+    let to_rgb = |rgb: (f64, f64, f64)| Rgb(from_linear(rgb.0), from_linear(rgb.1), from_linear(rgb.2));
+    let l = l.clamp(0.0, 1.0);
+    let full = oklch_linear(l, c, h);
+    if in_gamut(full) {
+        return to_rgb(full);
+    }
+    let (mut lo, mut hi) = (0.0, c);
+    for _ in 0..24 {
+        let mid = (lo + hi) / 2.0;
+        if in_gamut(oklch_linear(l, mid, h)) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    to_rgb(oklch_linear(l, lo, h))
+}
+
+/// Smallest signed turn from hue `a` to hue `b` (degrees, -180..180).
+pub fn hue_turn(a: f64, b: f64) -> f64 {
+    let d = (b - a).rem_euclid(360.0);
+    if d > 180.0 {
+        d - 360.0
+    } else {
+        d
+    }
+}
+
+/// `c` with its hue pulled towards `hue` and its chroma towards `goal` (OKLCH chroma), both by `amount` (0..1);
+/// the lightness is untouched, so a tinted surface keeps its place on the light/dark scale and its contrast.
+pub fn retint(c: Rgb, hue: f64, goal: f64, amount: f64) -> Rgb {
+    let amount = amount.clamp(0.0, 1.0);
+    if amount == 0.0 {
+        return c; // no round trip through OKLCH: the colour stays byte for byte
+    }
+    let (l, ch, h) = oklch(c);
+    // a colour with no hue of its own (a grey) takes the target hue outright
+    let h2 = if ch < 0.004 { hue } else { h + hue_turn(h, hue) * amount };
+    fit_oklch(l, ch * (1.0 - amount) + goal * amount, h2.rem_euclid(360.0))
 }
 
 /// The seed colour of an image file (PNG, JPEG, WebP), looking at a 96 px thumbnail.

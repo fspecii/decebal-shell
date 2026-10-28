@@ -6,7 +6,7 @@ Window class `MacSettings` (rdwm draws the titlebar). Launch again to toggle it 
 
 ```
 macsettings [PANE]          # general appearance desktop wallpaper tiling windows rules keyboard autostart displays
-                            # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility (see "System panes" below)
+                            # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility config (see "System panes" below; `config` = text editor + presets, docs/presets.md)
 macsettings --config PATH   # edit another rdwm config
 ```
 Environment: `MACSETTINGS_CONFIG`/`RDWM_CONFIG` (config file), `MACSHELL_CONFIG` (omarchy folder with the JSON files),
@@ -50,6 +50,11 @@ The last pane (`macsettings theme`) is the gallery of the shared macshell theme:
 accent swatches, translucency, corner radius and text size. A choice edits rdwm's colour keys through the same
 comment-preserving store (validated, one reload) and writes `macshell.json`; every running macshell program follows within
 half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
+
+## Icons pane
+`macsettings icons` (`src/settings/iconspane.rs`): the installed icon themes (Auto first; symbolic-only and cursor-only ones
+greyed out), a 4 x 4 preview of common icons for the highlighted theme, Use this theme, icon size, symbolic tint, fallback
+theme and reset. It edits the `icons` object of `macshell.json` (`docs/icons.md`).
 
 ## Panes
 General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (titlebars, borders, colours,

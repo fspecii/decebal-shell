@@ -15,7 +15,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | Program | What | Idle memory (release) |
 |---|---|---|
 | `macdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
-| `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing); a vertical bar down the left edge (workspace pills, window, status icons, stacked clock, power) under the Caelestia style, see [docs/caelestia.md](docs/caelestia.md) | ~7 MB RSS |
+| `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing); under the Caelestia style a pill bar on the left, right, top or bottom edge, or split into a top and a bottom bar (workspace pills, window, status icons, clock, power), see [docs/caelestia.md](docs/caelestia.md) | ~7 MB RSS |
 | `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~33 MB RSS with a page of thumbnails |
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
@@ -29,7 +29,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
-| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md` | CLI |
+| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; `font PRESET\|list\|set ROLE FAMILY,...` picks the fonts (presets `inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system`, roles `ui title mono display`, per-character fallback for CJK / emoji / icons); `system on\|off\|status` and `apply-system` carry the theme to GTK/Nautilus, Qt, terminals (via Omarchy's templates), the browser colour and X11 (optional, reversible, off by default); `layout left\|right\|top\|bottom\|split` places the Caelestia bar; see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
@@ -50,7 +50,7 @@ On X11 run a compositor (e.g. `picom`) for the translucent, rounded look.
 
 * `dock-pinned-macos.json` - `{"pinned": [...], "order": [...]}` (desktop-file ids; `launchpad` and `trash` are built in)
 * `dock-settings.json` - `appSpacing`, `magnification`, `transparency`, `roundness`, and the Windows taskbar options `style` (`"mac"` default / `"windows"`), `windowsAlign`, `windowsLabels`, `windowsSearch`, `windowsPosition`, `windowsTheme` (see [docs/dock-style.md](docs/dock-style.md))
-* `macshell.json` - `{"bar": {"enabled": true}}` hides `macbar` (`false`, or `"auto"` = hidden while the dock is a Windows taskbar); `{"dock": {"enabled": true}}` hides `macdock` (`false`, or `"auto"` = hidden while the theme's bar is the vertical one, i.e. under the Caelestia style, which has no dock); `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
+* `macshell.json` - `{"bar": {"enabled": true, "position": "left"}}`: `enabled` hides `macbar` (`false`, or `"auto"` = hidden while the dock is a Windows taskbar), `position` (`left` default, `right`, `top`, `bottom`, `split`; `macthemectl layout`) is where the Caelestia pill bar sits and applies to the Caelestia theme only; `{"dock": {"enabled": true}}` hides `macdock` (`false`, or `"auto"` = hidden while the theme has the Caelestia pill bar, at any position, which has no dock); `{"workspaces": "auto"}`: workspace/tag dots in `macbar` (`true`, `false` or `"auto"` = only under rdwm). Clicking a dot switches workspace (EWMH `_NET_CURRENT_DESKTOP` on X11, ext-workspace-v1 on Wayland)
 
 The dock re-reads `dock-pinned-macos.json` and `dock-settings.json` within about a second of an external edit (a `stat` twice a second, no restart); its own changes are written atomically.
 
@@ -58,7 +58,7 @@ Dock interaction: click focuses a running app (restoring a minimised window) or 
 
 Environment: `MACSHELL_LAUNCHPAD` - command the Launchpad tile runs.
 
-Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed.
+Icons come from the WhiteSur icon theme if installed (then Adwaita/hicolor); text uses Inter if installed (font presets, per-role fonts and CJK / emoji fallbacks: `macthemectl font list`, `docs/theming.md#fonts`).
 
 ## Launching apps
 
@@ -351,6 +351,27 @@ Markup in bodies is stripped (macnotify does not advertise `body-markup`).
 
 Test without touching your session: `make e2e-notify` (private `dbus-daemon` and Xvfb).
 
+## Icon themes
+
+Application, folder and MIME icons follow the freedesktop icon theme of your choice: System Settings -> Icons
+(`macsettings icons`, a list of the installed themes with a preview grid), or `macthemectl icons list|set NAME|status|reset`.
+`Auto` (the default) follows `gsettings` / GTK's `settings.ini`. The settings live in `macshell.json` under `icons`
+(`theme`, `size_scale`, `monochrome_tint`, `fallback`); programs follow within half a second. Lookup rules, caches and
+the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
+End-to-end test: `tests/e2e/icons.sh`.
+
+## Configuration and presets (`macsettings config`)
+
+System Settings > System > Configuration edits the raw files as text (macshell.json, dock-settings.json, the pinned apps, rdwm's
+config.toml, plus a read-only "All settings" listing with the defaults): line numbers, colouring, undo, clipboard, validation with
+line numbers (an invalid file is never written), atomic saves with a timestamped `.bak.<date>` and a one-click Revert, and rdwm
+reloaded right after. **Presets** keep named snapshots of the whole setup (shell + theme, fonts, icons, hot corners, dock,
+rdwm settings, shortcuts, autostart, wallpaper) in `~/.config/macshell/presets/`: apply (with a preview and an automatic restore
+point, so it is always reversible), rename, duplicate, delete, and export/import a single `.macshell-preset` file to share.
+Imports are strictly checked (no path traversal, links, unknown files or oversized data) and every command the preset would run is
+listed and removed unless you allow it. Built-in presets: macOS default, Caelestia, Windows-like, Minimal tiling. Same from a
+terminal: `macthemectl profile --help`. Details: [docs/presets.md](docs/presets.md); `tests/e2e/configpane.sh`.
+
 ## Develop
 
 ```sh
@@ -368,15 +389,35 @@ honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale fact
 
 MIT
 
-## Caelestia style (vertical bar)
+## Apply to all apps
 
-`macthemectl style caelestia` makes the shell a port of caelestia-shell for rdwm/X11: its Material You colours and a **vertical bar** on the left screen edge
-(`bar_style = "vertical"` in a theme; `macbar` anchors left and publishes a `_NET_WM_STRUT_PARTIAL` left strut, so windows tile to its right) with the OS icon (launcher),
+`macthemectl system on` (or System Settings -> Theme -> Apply to all apps) makes the macshell theme, style and wallpaper colours reach the rest of
+the desktop: GTK 3/4 and libadwaita apps such as Nautilus, Qt (qt5ct/qt6ct), the terminals and btop/helix/neovim through an Omarchy theme made from
+the palette (Omarchy's own template engine), the browser colour and X11 clients (xrdb). Every file is saved before it is changed and
+`macthemectl system off` restores it; `macthemectl system status` shows what runs and what was skipped. See [docs/theming.md](docs/theming.md#apply-to-all-apps).
+
+
+## Caelestia style (pill bar)
+
+`macthemectl style caelestia` makes the shell a port of caelestia-shell for rdwm/X11: its Material You colours and a **pill bar** on a screen edge
+(`bar_style = "vertical"` in a theme; `macbar` anchors to the edge `bar.position` names and publishes a `_NET_WM_STRUT_PARTIAL`, so windows tile beside it) with the OS icon (launcher),
 rdwm workspace pills (occupied / active / urgent, click or wheel to switch), the focused window, the layout / quick-settings tray, status icons (sound, Wi-Fi,
-Bluetooth, battery, lock keys) whose popups open on hover, the clock stacked as `HH` over `MM` (opens the dashboard) and the power button (opens the session menu).
-The dock is hidden while that bar is up (`"dock": {"enabled": "auto"}`); `macthemectl style macos` brings the horizontal bar and the dock back without restarting anything.
+Bluetooth, battery, lock keys) whose popups open on hover, the clock (opens the dashboard) and the power button (opens the session menu).
+The dock is hidden while that bar is up (`"dock": {"enabled": "auto"}`); `macthemectl style macos` brings the classic bar and the dock back without restarting anything.
 The dashboard, launcher, session menu, OSD, notification history and utilities are the existing programs under the Caelestia colours.
-See [docs/caelestia.md](docs/caelestia.md) for the layout, hotkeys and limits, and `tests/e2e/vbar.sh` (`make e2e-vbar`) for the end-to-end check on a private Xvfb and rdwm.
+
+Five layouts, chosen at runtime with `macthemectl layout left|right|top|bottom|split` (or `macthemectl style caelestia-top` and the like, or **Layout** under Shell style in the Theme pane;
+`bar.position` in `macshell.json`, default `left`); running bars re-lay out within about a second:
+
+| layout | what it is |
+|---|---|
+| `left` | a vertical bar down the left edge, popouts open to the right (the default) |
+| `right` | the same on the right edge, popouts open to the left |
+| `top` | a horizontal bar along the top edge with the same content turned 90 degrees, popouts open downwards |
+| `bottom` | the same along the bottom edge, popouts open upwards |
+| `split` | two bars, Windows-like: on top the OS icon, workspaces and window title, at the bottom the tray, status icons, clock and power; two struts. `macbar` draws the top one and starts a second `macbar --role bottom` for the bottom one; each role holds its own single-instance lock |
+
+See [docs/caelestia.md](docs/caelestia.md) for the details, hotkeys and limits, and `tests/e2e/layouts.sh` (`make e2e-layouts`) and `tests/e2e/vbar.sh` (`make e2e-vbar`) for the end-to-end checks on a private Xvfb and rdwm.
 
 ## Status items (macbar)
 

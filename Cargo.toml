@@ -33,6 +33,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # gzip for the .macshell-preset bundles (already in the tree through png/resvg)
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 fontdue = "0.9"
+ttf-parser = "0.21"
 libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
@@ -128,4 +129,9 @@ opt-level = 3
 [profile.dev.package.miniz_oxide]
 opt-level = 3
 [profile.dev.package.image-webp]
+opt-level = 3
+# fontdue parses every glyph of a face when it is opened (a 13 MB Inter collection): unusably slow unoptimised.
+[profile.dev.package.fontdue]
+opt-level = 3
+[profile.dev.package.ttf-parser]
 opt-level = 3

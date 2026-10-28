@@ -26,16 +26,23 @@ pub const DOCK_BORDER_ALPHA: f32 = 0.05;
 
 /// Menu bar height and background (`#131313`).
 pub const BAR_HEIGHT: f32 = 26.0;
+/// Thickness of the Caelestia pill bar (the strut it reserves) whichever edge it sits on.
+pub const PILL_BAR_THICKNESS: f32 = 52.0;
 pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
 
 // Shared, switchable theme (colours, metrics, fonts): see docs/theming.md. Kept in `theme/` so this
 // file (the dock's layout tokens) stays untouched by it.
 pub mod builtin;
 pub mod dynamic;
+pub mod extract;
+pub mod fontdb;
+pub mod fonts;
 pub mod live;
 pub mod material;
 pub mod model;
 pub mod rdwm;
 pub mod style;
+pub use fonts::Role;
+pub mod system;
 pub use live::{current, current as th, generation, take_changed};
-pub use model::{Dynamic, Mode, Rgb, Selection, Theme};
+pub use model::{Dynamic, Insets, Mode, Rgb, Selection, Theme};

@@ -430,7 +430,7 @@ mod tests {
         let e = read_tar_gz(&tar_with("rdwm.toml", b'1', b"", "macshell.json")).unwrap_err();
         assert!(e.contains("hard link"), "{e}");
         // devices, fifos
-        for flag in [b'3', b'4', b'6'] {
+        for flag in *b"346" {
             assert!(read_tar_gz(&tar_with("rdwm.toml", flag, b"", "")).is_err());
         }
         // unknown names

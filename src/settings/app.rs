@@ -425,7 +425,15 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
         // a separate content layer would cost a second full-window pixmap.
-        let frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        let mut frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        // A shorter page than the last one (another tab, a collapsed list): the scroll was clamped with the old height,
+        // so paint again at the right offset instead of leaving the page shifted until the next event.
+        let max_now = (frame.height - h).max(0.0);
+        if self.scroll > max_now + 0.5 {
+            self.scroll = max_now;
+            pm.fill(pal::window());
+            frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        }
         // lazy thumbnails: only what is visible (plus one row of margin); the big preview goes first
         let mut wanted: Vec<String> = Vec::new();
         for it in &items {

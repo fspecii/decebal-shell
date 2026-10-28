@@ -4,14 +4,14 @@
 //! tar) holding `manifest.toml` and up to four fixed files plus an optional custom theme and wallpaper. See
 //! `docs/presets.md`.
 //!
-//! * [`parts`]: which keys belong to which selectable part; cutting a part out of a file and putting it back.
-//! * [`bundle`]: the strict bundle reader and the writer.
-//! * [`manifest`]: `manifest.toml`.
-//! * [`validate`]: file checks with line numbers (shared with the settings editor).
-//! * [`fsx`]: atomic saves with timestamped backups and revert.
-//! * [`store`]: capture, list, save, import, plan (preview) and apply.
-//! * [`builtin`]: the presets that ship with macshell.
-//! * [`cli`]: `macthemectl profile ...`.
+//! * `parts`: which keys belong to which selectable part; cutting a part out of a file and putting it back.
+//! * `bundle`: the strict bundle reader and the writer.
+//! * `manifest`: `manifest.toml`.
+//! * `validate`: file checks with line numbers (shared with the settings editor).
+//! * `fsx`: atomic saves with timestamped backups and revert.
+//! * `store`: capture, list, save, import, plan (preview) and apply.
+//! * `builtin`: the presets that ship with macshell.
+//! * `cli`: `macthemectl profile ...`.
 
 pub mod builtin;
 pub mod bundle;

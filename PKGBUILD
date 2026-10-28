@@ -55,6 +55,8 @@ package() {
   install -Dm644 contrib/macshell-clip.desktop "$pkgdir/etc/xdg/autostart/macshell-clip.desktop"
   install -Dm644 contrib/macshell-hot.service "$pkgdir/usr/lib/systemd/user/macshell-hot.service"
   install -Dm644 contrib/macshell-hot.desktop "$pkgdir/etc/xdg/autostart/macshell-hot.desktop"
+  install -Dm644 contrib/macshell-wallpaper-colors.service "$pkgdir/usr/lib/systemd/user/macshell-wallpaper-colors.service"
+  install -Dm644 contrib/macshell-wallpaper-colors.desktop "$pkgdir/etc/xdg/autostart/macshell-wallpaper-colors.desktop"
   install -Dm644 contrib/macshell-bar.desktop "$pkgdir/etc/xdg/autostart/macshell-bar.desktop"
   install -Dm644 contrib/macshell-notify.desktop "$pkgdir/etc/xdg/autostart/macshell-notify.desktop"
   install -Dm644 contrib/dbus/org.freedesktop.Notifications.service "$pkgdir/usr/share/macshell/dbus/org.freedesktop.Notifications.service"

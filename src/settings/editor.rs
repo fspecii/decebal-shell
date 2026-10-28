@@ -1486,7 +1486,7 @@ mod tests {
         assert_eq!(tokens(Lang::Toml, "# only a comment"), vec![(0, 16, Tok::Comment)]);
         assert_eq!(tokens(Lang::Toml, "image = \"a # b\"").iter().filter(|x| x.2 == Tok::Comment).count(), 0, "a # inside a string is not a comment");
         assert!(tokens(Lang::Toml, "key = 'lit'").iter().any(|x| x.2 == Tok::Str));
-        assert!(tokens(Lang::Json, "").is_empty() && tokens(Lang::Toml, "   ").is_empty());
+        assert!(tokens(Lang::Json, "").is_empty() && tokens(Lang::Toml, "   ") == vec![(0, 3, Tok::Plain)]);
         // an unterminated string does not panic
         let _ = tokens(Lang::Json, "\"abc");
         let _ = tokens(Lang::Toml, "k = \"abc");

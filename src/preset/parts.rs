@@ -186,7 +186,9 @@ pub fn extract_json(doc: &Value, parts: &PartSet) -> Value {
             out.insert(k.clone(), v.clone());
         }
     }
-    Value::Object(out)
+    let mut out = Value::Object(out);
+    strip_secrets_json(&mut out);
+    out
 }
 
 /// Applies a preset's `macshell.json` share on top of `current`.
@@ -325,6 +327,7 @@ pub fn extract_toml(text: &str, parts: &PartSet) -> Result<String, String> {
         let key = doc.as_table().get_key_value(k).map(|(key, _)| key.clone()).unwrap_or_else(|| Key::new(k));
         out.as_table_mut().insert_formatted(&key, item);
     }
+    strip_secrets_table(out.as_table_mut());
     Ok(out.to_string())
 }
 
@@ -392,7 +395,7 @@ pub fn merge_toml(current: &str, preset: &str, parts: &PartSet, merge: bool) -> 
         renumber(&mut item, &mut 0, base);
         if merge {
             if let (Some(Item::Table(old)), Item::Table(new)) = (cur.as_table_mut().get_mut(k), &item) {
-                overlay_table(old, new, base);
+                overlay_table(old, new);
                 continue;
             }
         }
@@ -404,10 +407,10 @@ pub fn merge_toml(current: &str, preset: &str, parts: &PartSet, merge: bool) -> 
     Ok(text)
 }
 
-fn overlay_table(old: &mut Table, new: &Table, base: usize) {
+fn overlay_table(old: &mut Table, new: &Table) {
     for (k, v) in new.iter() {
         match (old.get_mut(k), v) {
-            (Some(Item::Table(o)), Item::Table(n)) => overlay_table(o, n, base),
+            (Some(Item::Table(o)), Item::Table(n)) => overlay_table(o, n),
             _ => {
                 let key = new.get_key_value(k).map(|(key, _)| key.clone()).unwrap_or_else(|| Key::new(k));
                 old.insert_formatted(&key, v.clone());
@@ -506,6 +509,62 @@ pub fn diff_lines(old: &BTreeMap<String, String>, new: &BTreeMap<String, String>
     (lines, total)
 }
 
+// ---------------------------------------------------------------- secrets
+
+/// Key names that hold credentials (API keys, tokens, passwords). They never go into a preset.
+pub fn is_secret_key(k: &str) -> bool {
+    let k = k.to_ascii_lowercase().replace(['-', '_', ' '], "");
+    ["apikey", "token", "password", "passwd", "passphrase", "secret", "credential", "privatekey", "accesskey"].iter().any(|w| k.contains(w))
+}
+
+/// Removes every secret-looking key (at any depth) from a JSON value. Returns how many were removed.
+pub fn strip_secrets_json(v: &mut Value) -> usize {
+    match v {
+        Value::Object(o) => {
+            let secret: Vec<String> = o.keys().filter(|k| is_secret_key(k)).cloned().collect();
+            let mut n = secret.len();
+            for k in secret {
+                o.shift_remove(&k);
+            }
+            for x in o.values_mut() {
+                n += strip_secrets_json(x);
+            }
+            n
+        }
+        Value::Array(a) => a.iter_mut().map(strip_secrets_json).sum(),
+        _ => 0,
+    }
+}
+
+fn strip_secrets_table(t: &mut dyn TableLike) -> usize {
+    let secret: Vec<String> = t.iter().map(|(k, _)| k.to_string()).filter(|k| is_secret_key(k)).collect();
+    let mut n = secret.len();
+    for k in secret {
+        t.remove(&k);
+    }
+    for (_, item) in t.iter_mut() {
+        n += strip_secrets_item(item);
+    }
+    n
+}
+
+fn strip_secrets_item(item: &mut Item) -> usize {
+    match item {
+        Item::Table(t) => strip_secrets_table(t),
+        Item::ArrayOfTables(a) => a.iter_mut().map(|t| strip_secrets_table(t)).sum(),
+        Item::Value(toml_edit::Value::InlineTable(t)) => strip_secrets_table(t),
+        Item::Value(toml_edit::Value::Array(a)) => a.iter_mut().filter_map(|v| v.as_inline_table_mut()).map(|t| strip_secrets_table(t)).sum(),
+        _ => 0,
+    }
+}
+
+/// [`strip_secrets_json`] for TOML text. Returns the text without secrets (unchanged when there are none).
+pub fn strip_secrets_toml(text: &str) -> Result<String, String> {
+    let mut doc = parse_toml(text)?;
+    let n = strip_secrets_table(doc.as_table_mut());
+    Ok(if n == 0 { text.to_string() } else { doc.to_string() })
+}
+
 // ---------------------------------------------------------------- commands
 
 /// Something that makes the desktop run a program.
@@ -530,7 +589,7 @@ fn join_args(t: &dyn TableLike) -> String {
     words.join(" ")
 }
 
-fn entries<'a>(item: &'a Item) -> Vec<&'a dyn TableLike> {
+fn entries(item: &Item) -> Vec<&dyn TableLike> {
     match item {
         Item::ArrayOfTables(a) => a.iter().map(|t| t as &dyn TableLike).collect(),
         Item::Value(toml_edit::Value::Array(a)) => a.iter().filter_map(|v| v.as_inline_table().map(|t| t as &dyn TableLike)).collect(),
@@ -847,6 +906,21 @@ mod tests {
         // inline-array spelling
         let out = strip_toml_commands("bind = [{ key = \"a\", action = \"spawn\", args = [\"x\"] }, { key = \"b\", action = \"close\" }]\n").unwrap();
         assert!(out.contains("close") && !out.contains("spawn"), "{out}");
+    }
+
+    #[test]
+    fn secrets_never_leave() {
+        let doc = json!({"theme": {"name": "x"}, "wallhaven": {"apiKey": "SECRET1", "q": "cats"}, "widgets": [{"auth_token": "SECRET2", "n": 1}], "password": "SECRET3"});
+        let out = extract_json(&doc, &ps(&[Part::Shell]));
+        assert!(!out.to_string().contains("SECRET"), "{out}");
+        assert_eq!(out["wallhaven"]["q"], "cats");
+        assert_eq!(out["widgets"][0]["n"], 1);
+        let t = "[general]\nborder_px = 1\n[net]\napi_key = \"SECRET\"\nhost = \"h\"\n[[bind]]\nkey = \"Return\"\naction = \"spawn\"\n";
+        let out = extract_toml(t, &ps(&[Part::Rdwm, Part::Keys])).unwrap();
+        assert!(!out.contains("SECRET") && out.contains("host") && out.contains("key = \"Return\""), "{out}");
+        assert_eq!(strip_secrets_toml("a = 1\n").unwrap(), "a = 1\n");
+        assert!(!strip_secrets_toml("[x]\ntoken = \"t\"\nok = 1\n").unwrap().contains("token"));
+        assert!(is_secret_key("API-Key") && is_secret_key("wallhavenToken") && !is_secret_key("key") && !is_secret_key("keys"));
     }
 
     #[test]
