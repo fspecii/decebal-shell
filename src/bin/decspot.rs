@@ -57,6 +57,7 @@ fn main() {
         return;
     };
     if let Err(e) = run_window(Spotlight::new()) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decspot: {e}");
         std::process::exit(1);
     }

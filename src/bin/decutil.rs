@@ -58,6 +58,7 @@ fn main() {
         _ => match util::execute(&cmd, &Ctx::from_env(), &RealSys) {
             Ok(text) => println!("{text}"),
             Err(e) => {
+                decebal::log_error!("fatal: {e}");
                 eprintln!("decutil: {e}");
                 std::process::exit(1);
             }

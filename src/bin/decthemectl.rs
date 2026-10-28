@@ -613,7 +613,8 @@ fn main() {
                 die(&e);
             }
         }
-        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}", system::cli::HELP),
+        Some("log") => std::process::exit(decebal::dlog::cli(&args[1..])),
+        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}\n\n{}", system::cli::HELP, decebal::dlog::HELP),
         Some(other) => die(&format!("unknown command `{other}`\n{HELP}\n\n{}", system::cli::HELP)),
     }
 }

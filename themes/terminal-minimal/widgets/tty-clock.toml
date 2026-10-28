@@ -1,15 +1,18 @@
 format = 1
 id = "tty-clock"
 name = "TTY clock"
-description = "Plain monospace time and load on the desktop, no card, like a tty banner."
-size = [220, 90]
+description = "Plain monospace time and load on the desktop, a thin bordered box like a tty banner."
+size = [250, 96]
 refresh = 1000
 
 [root]
 type = "col"
-padding = 6
+padding = [8, 12]
 gap = 2
 justify = "start"
+background = "surface@0.9"
+radius = 0
+border = "border"
 
 [[root.children]]
 type = "text"

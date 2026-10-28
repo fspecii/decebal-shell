@@ -58,6 +58,7 @@ fn main() {
         return;
     };
     if let Err(e) = decebal::backend::x11_window::run(Dash::new(tab, x, top)) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decdash: {e}");
         std::process::exit(1);
     }

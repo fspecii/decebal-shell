@@ -60,6 +60,7 @@ fn main() {
     };
     let app = WallhavenApp::new(&words.join(" "), recent, screen);
     if let Err(e) = run_window(app) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("dechaven: {e}");
         std::process::exit(1);
     }

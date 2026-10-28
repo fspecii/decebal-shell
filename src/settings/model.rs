@@ -137,7 +137,13 @@ impl Model {
     // ------------------------------------------------------------ notices
 
     pub fn say(&mut self, text: impl Into<String>, error: bool) {
-        self.notice = Some(Notice { text: text.into(), error, at: Instant::now() });
+        let text = text.into();
+        if error {
+            crate::log_warn!("notice (error): {text}");
+        } else {
+            crate::log_info!("notice: {text}");
+        }
+        self.notice = Some(Notice { text, error, at: Instant::now() });
         self.dirty = true;
         let wake = self.wake.clone();
         std::thread::spawn(move || {
@@ -186,7 +192,10 @@ impl Model {
 
     pub fn on_event(&mut self, ev: Ev) {
         match ev {
-            Ev::FilesChanged => self.on_files_changed(),
+            Ev::FilesChanged => {
+                crate::log_debug!("watched config file changed on disk");
+                self.on_files_changed()
+            }
             Ev::Runtime(rt) => {
                 let before = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
                 self.rt = *rt;

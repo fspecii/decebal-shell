@@ -526,7 +526,18 @@ fn prune(dir: &Path, keep: usize) {
 
 /// Plan and execute.
 pub fn apply(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result<Applied, String> {
-    execute(src, paths, plan(src, paths, name, base)?)
+    crate::log_info!("theme apply `{name}`");
+    let plan = plan(src, paths, name, base).inspect_err(|e| crate::log_warn!("theme `{name}` not applied: {e}"))?;
+    for n in &plan.notes {
+        crate::log_info!("theme `{}` note: {n}", plan.id);
+    }
+    crate::log_debug!("theme `{}` ({}): {} file(s) to write, rdwm reload {}", plan.id, if plan.dark { "dark" } else { "light" }, plan.writes.len(), plan.rdwm_changed);
+    let r = execute(src, paths, plan);
+    match &r {
+        Ok(a) => crate::log_info!("theme `{}` applied: files {:?}, rdwm reloaded {}, undo `{}`", a.theme_id, a.files, a.reloaded, a.undo_id),
+        Err(e) => crate::log_error!("theme apply failed: {e}"),
+    }
+    r
 }
 
 /// The undo records, oldest first.
@@ -539,6 +550,7 @@ pub fn undo_ids(paths: &Paths) -> Vec<String> {
 
 /// Restores the files of the latest apply (or of `only`, when it is still the latest) and removes the record.
 pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
+    crate::log_info!("theme undo");
     let ids = undo_ids(paths);
     let Some(last) = ids.last() else { return Err("nothing to undo".into()) };
     if only.is_some_and(|o| o != last) {

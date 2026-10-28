@@ -28,6 +28,7 @@ fn main() {
         return;
     };
     if let Err(e) = run_window(Launcher::new()) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("declaunch: {e}");
         std::process::exit(1);
     }
