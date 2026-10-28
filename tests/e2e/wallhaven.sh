@@ -65,9 +65,10 @@ start_server
 export WALLHAVEN_API_BASE="http://127.0.0.1:$PORT/api/v1"
 check "fake server answers" bash -c "curl -s '$WALLHAVEN_API_BASE/search?page=1' | jq -e '.data|length==24' >/dev/null"
 rm -f "$REQ"
-# "Colours from wallpaper" is on, so a wallpaper set from wallhaven must re-seed it
+# "Match wallpaper" is on, so a wallpaper set from wallhaven must re-seed it
 convert -size 64x64 xc:'#d02020' "$E2E_T/red.png"
-macthemectl dynamic --wallpaper "$E2E_T/red.png" --no-rdwm >/dev/null 2>&1
+rdwmctl wallpaper "$E2E_T/red.png" >/dev/null 2>&1; sleep 0.5
+macthemectl dynamic on --source wallpaper --no-rdwm >/dev/null 2>&1
 SEED0=$(macthemectl get --json 2>/dev/null | jq -r '.selection.dynamic.seed|tostring')
 
 echo "== open the Wallhaven tab"
@@ -110,7 +111,7 @@ check "rdwm shows it" test "$(rdwmctl state | jq -r .state.wallpaper.image)" = "
 check "rest of config.toml untouched" grep -q "smart_gaps = true" "$E2E_CFG"
 SEED1=$(macthemectl get --json 2>/dev/null | jq -r '.selection.dynamic.seed|tostring')
 check "Match wallpaper colours followed ($SEED0 -> $SEED1)" bash -c "[ '$SEED0' != null ] && [ '$SEED1' != '$SEED0' ]"
-check "dynamic colours now come from the wallhaven file" bash -c "macthemectl get --json | jq -e '.selection.dynamic.wallpaper|endswith(\"wallhaven-d8vvlo.png\")' >/dev/null"
+check "dynamic colours now come from the wallhaven file" bash -c "macthemectl get --json | jq -e '.selection.dynamic.image|endswith(\"wallhaven-d8vvlo.png\")' >/dev/null"
 shot wh-4-set
 
 echo "== download only"
@@ -214,7 +215,7 @@ echo 429 > "$E2E_T/srv/mode"
 rm -f "$REQ"
 click_id wh:retry
 wait_for "429 explained" '(.warnings|map(test("45 requests"))|any)' 8 || { tail -5 "$REQ"; cat "$E2E_T/srv.log"; tail -5 "$E2E_T/macsettings.log"; }
-for _ in 1 2 3 4; do click_id wh:retry 2>/dev/null; done
+for _ in 1 2 3 4; do c=$(center wh:retry); { [ -n "$c" ] && [ "$c" != "null null" ]; } && click_xy $c; sleep 0.4; done
 sleep 0.5
 shot wh-13-ratelimited
 check "exactly one request reached the server (cool-down, no retry storm)" test "$(nreq "$API")" = 1
