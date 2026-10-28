@@ -1,0 +1,108 @@
+format = 1
+id = "gnome-adwaita-like"
+name = "Adwaita-like"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A clean libadwaita-inspired look in light and dark: rounded headerbar-style titlebars with a centred title and round flat buttons, the familiar blue/grey Adwaita palette, a slim top panel with a centred-feeling clock, soft blurred-colour wallpapers (one per variant) and Cantarell/Inter type. Not affiliated with or endorsing any GNOME project; no logos used."
+min_shell_version = "0.1.0"
+screenshots = ["screenshots/main.jpg"]
+tags = ["adwaita", "libadwaita", "clean", "light", "dark", "rounded"]
+
+[colors.light]
+background = "#fafafa"
+sidebar = "#ebebeb"
+surface = "#ffffff"
+bar = "#ebebeb"
+bar_text = "#2e3436"
+popup = "#ffffff"
+dock = "#f0f0f0"
+overlay = "#ffffff"
+titlebar = "#ebebeb"
+titlebar_inactive = "#fafafa"
+border = "#d5d0cc"
+text = "#2e3436"
+text_secondary = "#5e5c64"
+text_faint = "#77767b"
+accent = "#3584e4"
+accent_text = "#ffffff"
+danger = "#e01b24"
+ok = "#26a269"
+warn = "#c64600"
+
+[colors.dark]
+background = "#242424"
+sidebar = "#303030"
+surface = "#2b2b2b"
+bar = "#1e1e1e"
+bar_text = "#ffffff"
+popup = "#383838"
+dock = "#303030"
+overlay = "#383838"
+titlebar = "#303030"
+titlebar_inactive = "#242424"
+border = "#454545"
+text = "#ffffff"
+text_secondary = "#deddda"
+text_faint = "#9a9996"
+accent = "#78aeed"
+accent_text = "#1a1a1a"
+danger = "#ff7b63"
+ok = "#8ff0a4"
+warn = "#f8e45c"
+
+[metrics]
+radius = 12
+dock_roundness = 0.5
+dock_alpha = 0.95
+popup_alpha = 1.0
+panel_alpha = 1.0
+shadow = 1.0
+outline = 0.08
+dock_padding = 10
+
+[font]
+ui = ["Cantarell", "Inter", "Noto Sans"]
+title = ["Cantarell", "Inter", "Noto Sans"]
+mono = ["JetBrains Mono", "DejaVu Sans Mono"]
+scale = 1.0
+
+[wallpaper]
+images = ["wallpapers/soft-dark.jpg", "wallpapers/soft-light.jpg"]
+mode = "fill"
+color = "#242424"
+
+[decoration]
+style = "adwaita"
+height = 38
+radius = 12
+title_align = "center"
+
+[rdwm]
+gap_inner = 8
+gap_outer = 8
+border_px = 1
+smart_gaps = true
+mfact = 0.55
+layouts = ["tile", "monocle"]
+focused_border = "#3584e4"
+normal_border = "#454545"
+urgent_border = "#e01b24"
+
+[bar]
+enabled = true
+style = "flat"
+height = 28
+
+[dock]
+enabled = true
+style = "mac"
+size = 48
+roundness = 0.5
+magnification = 1.0
+
+[icons]
+theme = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"

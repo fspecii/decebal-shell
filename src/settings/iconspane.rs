@@ -151,7 +151,7 @@ pub fn items(m: &Model) -> Vec<Item> {
             .ctl(Ctl::new("ic:scale", Kind::Slider { v: f64::from(cfg.size_scale) * 100.0, min: f64::from(SCALE_MIN) * 100.0, max: f64::from(SCALE_MAX) * 100.0, step: 5.0, unit: " %".into() })),
         Row::new("Tint symbolic icons").detail("Repaint monochrome (symbolic) icons in the theme's text colour").ctl(Ctl::new("ic:tint", Kind::Toggle(cfg.monochrome_tint))),
         Row::new("Fallback theme").detail("Tried after the theme, its parents and hicolor, for icons they lack").ctl(Ctl::new("ic:fallback", Kind::Popup(fb_opts, fb_sel))),
-        Row::new("Reset icon settings").detail("Automatic theme, full size, no tint").ctl(Ctl::new("ic:reset", Kind::Button { label: "Reset".into(), danger: false })),
+        Row::new("Reset to default").detail("Automatic theme, full size, no tint").ctl(Ctl::new("ic:reset", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
     out.push(Item::Note {
         text: "Icon themes are read from ~/.local/share/icons, ~/.icons and the system's icons folders (see docs/icons.md for Arch packages such as papirus-icon-theme). decthemectl icons list, set and status do the same from a terminal.".into(),
@@ -290,6 +290,9 @@ pub fn draw_grid(pm: &mut Pixmap, p: &mut Painter, g: &Grid, x0: f32, y: f32, cw
     let pad = u(10.0);
     let rows = preview::SAMPLES.len().div_ceil(cols);
     let h = rows as f32 * cell_h + 2.0 * pad;
+    if y + h < 0.0 || y > pm.height() as f32 {
+        return y + h + u(14.0); // scrolled out of view: nothing to paint (and no icons to look up)
+    }
     fill_rounded(pm, x0, y, cw, h, u(10.0), pal::card());
     for (i, (caption, name)) in preview::SAMPLES.iter().enumerate() {
         let (col, row) = ((i % cols) as f32, (i / cols) as f32);

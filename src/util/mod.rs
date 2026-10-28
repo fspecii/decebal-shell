@@ -57,6 +57,32 @@ pub enum Cmd {
     },
 }
 
+/// `decutil control-center [toggle|open|close] [--corner C]`: the arguments of the `decbar --control-center` it runs, or `None` when
+/// `args` is not that command. The panel is decbar's (one program for every theme); decutil is just where the command lives.
+pub fn control_center_args(args: &[String]) -> Option<Result<Vec<String>, String>> {
+    let mut it = args.iter().map(String::as_str).filter(|a| !matches!(*a, "-q" | "--quiet"));
+    if !matches!(it.next(), Some("control-center" | "controlcenter" | "cc")) {
+        return None;
+    }
+    let mut out = vec!["--control-center".to_string()];
+    let mut verb = None;
+    while let Some(a) = it.next() {
+        match a {
+            "toggle" | "open" | "close" if verb.is_none() => verb = Some(a),
+            "--corner" => match it.next() {
+                Some(c) if crate::controlcenter::settings::Corner::parse(c).is_some() => {
+                    out.push("--corner".into());
+                    out.push(c.into());
+                }
+                _ => return Some(Err("--corner needs auto, top-right, top-left, bottom-right or bottom-left".into())),
+            },
+            other => return Some(Err(format!("control-center: expected toggle, open or close, not {other}"))),
+        }
+    }
+    out.insert(1, verb.unwrap_or("toggle").to_string());
+    Some(Ok(out))
+}
+
 /// Parses the arguments after the program name.
 pub fn parse_args(args: &[String]) -> Result<Cmd, String> {
     let mut words: Vec<&str> = Vec::new();
@@ -473,6 +499,17 @@ pub mod mock {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn control_center_command_maps_to_decbar_arguments() {
+        let a = |v: &[&str]| super::control_center_args(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(a(&["record", "on"]), None);
+        assert_eq!(a(&["control-center"]), Some(Ok(vec!["--control-center".into(), "toggle".into()])));
+        assert_eq!(a(&["control-center", "open", "--corner", "top-left"]), Some(Ok(vec!["--control-center".into(), "open".into(), "--corner".into(), "top-left".into()])));
+        assert!(matches!(a(&["cc", "close"]), Some(Ok(_))));
+        assert!(matches!(a(&["control-center", "explode"]), Some(Err(_))));
+        assert!(matches!(a(&["control-center", "--corner", "middle"]), Some(Err(_))));
+    }
+
     use super::mock::*;
     use super::*;
 

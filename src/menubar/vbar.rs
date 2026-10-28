@@ -610,7 +610,9 @@ impl DecBar {
         if symbols::agents_available() {
             tray.push(Tray::Agents);
         }
-        tray.push(Tray::Control);
+        if crate::theme::th().control_center.enabled {
+            tray.push(Tray::Control);
+        }
         let mut status = Vec::new();
         if self.locks.caps() || self.locks.num() {
             status.push(Tray::Lock);
@@ -1110,8 +1112,9 @@ impl DecBar {
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
+                let style = self.cc_style();
                 if let Some(f) = self.fonts.as_mut() {
-                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover };
+                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
                     controlcenter::draw(pm, &view, f, &mut self.symbols);
                 }
             }

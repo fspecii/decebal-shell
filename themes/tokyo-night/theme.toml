@@ -1,0 +1,103 @@
+format = 1
+id = "tokyo-night"
+name = "Tokyo Night"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Tokyo Night (Day in light mode): electric blue and violet on deep navy with a neon skyline wallpaper, a split bar (top and bottom pills), a compact dock and rounded dot-button titlebars."
+min_shell_version = "0.1.0"
+tags = ["tokyo-night", "neon", "split-bar", "dark", "light"]
+
+[metrics]
+radius = 14
+dock_roundness = 0.55
+dock_alpha = 0.88
+popup_alpha = 0.97
+panel_alpha = 0.97
+shadow = 1.2
+outline = 0.1
+
+[font]
+preset = "jetbrains"
+ui = ["Inter", "Noto Sans"]
+title = ["JetBrains Mono", "Inter"]
+
+[wallpaper]
+image = "wallpapers/neon-grid.jpg"
+mode = "fill"
+color = "#16161e"
+
+[decoration]
+style = "nord"
+height = 30
+radius = 10
+
+[rdwm]
+gap_inner = 8
+gap_outer = 10
+border_px = 2
+focused_border = "#7aa2f7"
+normal_border = "#292e42"
+urgent_border = "#f7768e"
+
+[bar]
+enabled = true
+style = "vertical"
+position = "split"
+
+[dock]
+enabled = true
+style = "mac"
+size = 44
+roundness = 0.55
+magnification = 1.4
+
+[icons]
+fallback = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+top_left = "spotlight"
+dwell_ms = 200
+
+[colors.dark]
+background = "#1a1b26"
+sidebar = "#16161e"
+surface = "#24283b"
+bar = "#16161e"
+bar_text = "#c0caf5"
+popup = "#24283b"
+dock = "#24283b"
+overlay = "#24283b"
+titlebar = "#24283b"
+titlebar_inactive = "#16161e"
+border = "#3b4261"
+text = "#c0caf5"
+text_secondary = "#a9b1d6"
+text_faint = "#6b739b"
+accent = "#7aa2f7"
+accent_text = "#16161e"
+danger = "#f7768e"
+ok = "#9ece6a"
+warn = "#ff9e64"
+
+[colors.light]
+background = "#e1e2e7"
+sidebar = "#d0d5e3"
+surface = "#d5d6db"
+bar = "#d0d5e3"
+bar_text = "#2c3453"
+popup = "#e9e9ed"
+dock = "#d5d6db"
+overlay = "#e9e9ed"
+titlebar = "#e9e9ed"
+titlebar_inactive = "#d0d5e3"
+border = "#a8aecb"
+text = "#2c3453"
+text_secondary = "#4a5688"
+text_faint = "#6a76a6"
+accent = "#2e5fc2"
+accent_text = "#e1e2e7"
+danger = "#c8203f"
+ok = "#3f6b1c"
+warn = "#8f4a00"

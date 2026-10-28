@@ -13,13 +13,14 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Display & Appearance", panes: &["displays", "appearance", "theme", "colours", "typography", "icons", "wallpaper", "desktop"] },
+    Section { title: "Appearance", panes: &["appearance", "config"] },
+    Section { title: "Displays", panes: &["displays"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
     Section { title: "Keyboard & Input", panes: &["inputdev", "keyboard"] },
     Section { title: "Windows", panes: &["tiling", "windows", "rules"] },
     Section { title: "Apps", panes: &["defaults", "autostart"] },
-    Section { title: "System", panes: &["general", "config", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
+    Section { title: "System", panes: &["general", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
 ];
 
 /// (pane id, setting, extra words)
@@ -91,10 +92,6 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
     ("config", "Edit configuration files", "text editor json toml raw decebal.json dock-settings config.toml"),
     ("config", "Presets", "profiles save as preset apply export import share backup restore undo"),
     ("config", "Revert", "previous version backup restore file"),
-    ("icons", "Icon theme", "papirus tela whitesur adwaita breeze yaru auto gtk gsettings"),
-    ("icons", "Icon size", "scale artwork padding dock"),
-    ("icons", "Tint symbolic icons", "monochrome text colour"),
-    ("icons", "Fallback theme", "hicolor missing icons"),
     ("accessibility", "Cursor size", "large pointer xcursor"),
     ("accessibility", "Reduce motion", "animations"),
     ("accessibility", "Text size", "font scale larger"),
@@ -143,7 +140,8 @@ pub fn search(q: &str, extra: &[(usize, String)]) -> Vec<Hit> {
     let mut per_pane = std::collections::HashMap::<usize, usize>::new();
     let mut add = |hits: &mut Vec<Hit>, pane: usize, label: &str| {
         let n = per_pane.entry(pane).or_default();
-        if *n >= 4 || hits.iter().any(|h| h.pane == pane && h.label.as_deref() == Some(label)) {
+        let limit = if PANES[pane].id == "appearance" { 8 } else { 4 };
+        if *n >= limit || hits.iter().any(|h| h.pane == pane && h.label.as_deref() == Some(label)) {
             return;
         }
         *n += 1;
@@ -154,6 +152,21 @@ pub fn search(q: &str, extra: &[(usize, String)]) -> Vec<Hit> {
             if all_match(&format!("{label} {words}"), &ts) && !PANES[pane].title.eq_ignore_ascii_case(label) {
                 add(&mut hits, pane, label);
             }
+        }
+    }
+    if let Some(pane) = pane_index("appearance") {
+        for (_, _, label, words) in crate::settings::appearance::INDEX {
+            if all_match(&format!("{label} {words}"), &ts) && !PANES[pane].title.eq_ignore_ascii_case(label) {
+                add(&mut hits, pane, label);
+            }
+        }
+    }
+    // The Appearance pane's keywords match almost anything about looks; when its own settings match, show those (the first
+    // result then opens the right tab and section) instead of a bare pane row.
+    if let Some(app) = pane_index("appearance") {
+        let by_title = all_match(PANES[app].title, &ts);
+        if !by_title && hits.iter().any(|h| h.pane == app && h.label.is_some()) {
+            hits.retain(|h| !(h.pane == app && h.label.is_none()));
         }
     }
     for (pane, text) in extra {

@@ -26,21 +26,8 @@ pub const PANES: &[PaneDef] = &[
         title: "Appearance",
         glyph: Glyph::Brush,
         color: (88, 86, 214),
-        keywords: "titlebar decoration style classic macos height radius border colors traffic lights zoom button double click font bar",
-    },
-    PaneDef {
-        id: "desktop",
-        title: "Desktop & Dock",
-        glyph: Glyph::Dock,
-        color: (10, 132, 255),
-        keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces decdock decbar",
-    },
-    PaneDef {
-        id: "wallpaper",
-        title: "Wallpaper",
-        glyph: Glyph::Photo,
-        color: (50, 173, 230),
-        keywords: "background image fill fit stretch center tile color picture wallhaven online download search random favourites",
+        // the words of every tab (Theme, Customise, Wallpaper, All apps); the individual settings are indexed in `appearance::INDEX`
+        keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
     },
     PaneDef {
         id: "tiling",
@@ -60,34 +47,6 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "keyboard", title: "Shortcuts", glyph: Glyph::Keyboard, color: (99, 99, 102), keywords: "shortcuts keys bindings hotkeys modes chords record conflicts bind" },
     PaneDef { id: "autostart", title: "Autostart & Plugins", glyph: Glyph::Rocket, color: (191, 90, 242), keywords: "autostart startup plugins scratchpad commands programs" },
     PaneDef { id: "displays", title: "Displays", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "monitors outputs screens resolution scale per output wallpaper" },
-    PaneDef {
-        id: "theme",
-        title: "Theme",
-        glyph: Glyph::Brush,
-        color: (255, 55, 95),
-        keywords: "theme shape shell style titlebar corner radius transparency translucency windows graphite high contrast macos caelestia brutalist nothing terminal gallery packages",
-    },
-    PaneDef {
-        id: "colours",
-        title: "Colours",
-        glyph: Glyph::Brush,
-        color: (255, 159, 10),
-        keywords: "palette colours colors catppuccin rose pine gruvbox tokyo night everforest kanagawa nord dracula solarized monochrome dark light mode accent swatches match wallpaper material you",
-    },
-    PaneDef {
-        id: "typography",
-        title: "Fonts",
-        glyph: Glyph::Brush,
-        color: (142, 142, 147),
-        keywords: "fonts typography text size scale family preset inter jetbrains mono ui title display fallback",
-    },
-    PaneDef {
-        id: "icons",
-        title: "Icons",
-        glyph: Glyph::Sys(glyphs::APPS),
-        color: (175, 82, 222),
-        keywords: "icon theme papirus tela whitesur adwaita hicolor symbolic tint size dock launcher freedesktop gtk",
-    },
     // system panes (src/settings/system); the sidebar groups come from system::registry::SECTIONS
     PaneDef { id: "sound", title: "Sound", glyph: Glyph::Sys(glyphs::SPEAKER), color: (255, 69, 58), keywords: "audio speakers microphone volume output input mute pipewire pulseaudio" },
     PaneDef { id: "network", title: "Network", glyph: Glyph::Sys(glyphs::WIFI), color: (10, 132, 255), keywords: "wifi wi-fi wireless ethernet vpn internet ip dns networkmanager nmcli" },
@@ -102,10 +61,10 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "storage", title: "About & Storage", glyph: Glyph::Sys(glyphs::INFO), color: (142, 142, 147), keywords: "system info cpu gpu ram disk usage versions kernel distro check config" },
     PaneDef {
         id: "config",
-        title: "Configuration",
+        title: "Config & Presets",
         glyph: Glyph::Rules,
         color: (120, 120, 128),
-        keywords: "config edit text file json toml raw presets profiles export import share backup restore revert save as preset decebal.json dock-settings config.toml",
+        keywords: "advanced config configuration edit text file json toml raw presets profiles export import share backup restore revert save as preset decebal.json dock-settings config.toml",
     },
     PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
 ];
@@ -172,7 +131,7 @@ pub fn expand_tilde(p: &str) -> String {
 }
 
 /// What a hot corner can do: label in the dropdown, action name in `decebal.json`.
-const HOT_ACTIONS: [(&str, &str); 9] = [
+const HOT_ACTIONS: [(&str, &str); 10] = [
     ("None", "none"),
     ("Dashboard", "dashboard"),
     ("Spotlight", "spotlight"),
@@ -182,6 +141,7 @@ const HOT_ACTIONS: [(&str, &str); 9] = [
     ("Lock screen", "lock"),
     ("Tile all windows", "tile-all"),
     ("Notification history", "notifications"),
+    ("Control Center", "control-center"),
 ];
 
 /// Under the corner rows: whether the daemon that applies them is running.
@@ -382,9 +342,7 @@ impl Model {
         }
         match PANES.get(pane).map(|p| p.id) {
             Some("config") => super::configpane::prepare(self),
-            Some("desktop") if self.apps.is_none() => self.apps = Some(installed_apps()),
-            Some("wallpaper") if self.wh.tab == super::wallhaven::Tab::Wallhaven => super::wallhaven::prepare(self),
-            Some("wallpaper") if self.walls.is_none() => self.walls = Some(list_images(&self.paths.backgrounds(), 3, 400)),
+            Some("appearance") => super::appearance::prepare(self),
             _ => {}
         }
     }
@@ -411,15 +369,9 @@ impl Model {
             return items;
         }
         items.extend(match id {
-            "theme" => super::themepane::items(self),
-            "colours" => super::themepane::colour_items(self),
-            "typography" => super::themepane::type_items(self),
             "config" => super::configpane::items(self),
-            "icons" => super::iconspane::items(self),
             "general" => self.pane_general(),
-            "appearance" => self.pane_appearance(),
-            "desktop" => self.pane_desktop(),
-            "wallpaper" => self.pane_wallpaper(),
+            "appearance" => super::appearance::items(self),
             "tiling" => self.pane_tiling(),
             "windows" => self.pane_windows(),
             "rules" => self.pane_rules(),
@@ -464,14 +416,15 @@ impl Model {
         vec![Item::Header("About".into()), Item::Card(about), Item::Header("Configuration".into()), Item::Card(act), Item::Header("Behaviour".into()), Item::Card(beh)]
     }
 
-    fn pane_appearance(&self) -> Vec<Item> {
+    /// Appearance > Customise > Window style: title bars, window buttons, borders and their colours.
+    pub(super) fn window_style_items(&self) -> Vec<Item> {
         let mut deco = Vec::new();
-        deco.extend(self.r_toggle("decoration", "enabled", "Window titlebars", "Draw server-side titlebars with traffic-light buttons"));
-        deco.extend(self.r_seg("decoration", "style", "Style", "macOS: rounded, buttons on the left. Classic: flat dwm strip", Some(&[("macOS", "macos"), ("Classic", "classic")])));
-        deco.extend(self.r_slider("decoration", "height", "Titlebar height", "", 1.0, " px", Some(64.0)));
-        deco.extend(self.r_slider("decoration", "radius", "Corner radius", "macOS style only", 1.0, " px", Some(30.0)));
+        deco.extend(self.r_toggle("decoration", "enabled", "Window title bars", "Show a title bar with close, minimise and zoom buttons on every window"));
+        deco.extend(self.r_seg("decoration", "style", "Window style", "macOS: rounded, buttons on the left. Classic: a flat strip", Some(&[("macOS", "macos"), ("Classic", "classic")])));
+        deco.extend(self.r_slider("decoration", "height", "Title bar height", "", 1.0, " px", Some(64.0)));
+        deco.extend(self.r_slider("decoration", "radius", "Window corner radius", "macOS style only", 1.0, " px", Some(30.0)));
         deco.extend(self.r_seg("decoration", "title_align", "Title alignment", "", Some(&[("Center", "center"), ("Left", "left")])));
-        deco.extend(self.r_stepper("decoration", "font_size", "Title font size", "", 0.5, " px", None));
+        deco.extend(self.r_stepper("decoration", "font_size", "Title text size", "", 0.5, " px", None));
         deco.extend(self.r_toggle("decoration", "buttons", "Window buttons", "Close, minimise and zoom"));
         deco.extend(self.r_popup(
             "decoration",
@@ -490,43 +443,46 @@ impl Model {
             None,
         ));
         deco.extend(self.r_toggle("decoration", "middle_click_close", "Middle click closes", "Middle click on a title closes the window"));
-        deco.extend(self.r_toggle("decoration", "in_monocle", "Titlebars in monocle", ""));
+        deco.extend(self.r_toggle("decoration", "in_monocle", "Title bars in full-screen stacking", ""));
         let mut border = Vec::new();
         border.extend(self.r_slider("general", "border_px", "Window border", "Width around every window", 1.0, " px", Some(16.0)));
         border.extend(self.r_color("colors", "focused", "Focused border", ""));
         border.extend(self.r_color("colors", "normal", "Unfocused border", ""));
         border.extend(self.r_color("colors", "urgent", "Urgent border", ""));
-        border.extend(self.r_slider("decoration", "border_px", "Titlebar border", "", 1.0, " px", Some(8.0)));
+        border.extend(self.r_slider("decoration", "border_px", "Title bar border", "", 1.0, " px", Some(8.0)));
         let mut cols = Vec::new();
         cols.extend(self.r_color("decoration", "close_color", "Close button", ""));
         cols.extend(self.r_color("decoration", "minimize_color", "Minimise button", ""));
         cols.extend(self.r_color("decoration", "zoom_color", "Zoom button", ""));
         cols.extend(self.r_color("decoration", "inactive_button_color", "Buttons of unfocused windows", ""));
-        cols.extend(self.r_color("decoration", "focused_bg", "Focused titlebar", "Empty = style default"));
+        cols.extend(self.r_color("decoration", "focused_bg", "Focused title bar", "Empty = style default"));
         cols.extend(self.r_color("decoration", "focused_fg", "Focused title text", ""));
-        cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused titlebar", ""));
+        cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused title bar", ""));
         cols.extend(self.r_color("decoration", "unfocused_fg", "Unfocused title text", ""));
-        let mut bar = Vec::new();
-        bar.extend(self.r_toggle("bar", "show", "rdwm's own bar", "dwm-style bar drawn by the window manager. Leave off while decbar runs"));
-        bar.extend(self.r_seg("bar", "top", "Position", "", None).map(|mut r| {
-            if let Some(Ctl { kind: Kind::Seg(o, s), .. }) = r.ctls.first_mut() {
-                *o = opts(&[("Top", "true"), ("Bottom", "false")]);
-                *s = Some(if self.flag("bar", "top") { 0 } else { 1 });
-            }
-            r
-        }));
-        bar.extend(self.r_stepper("bar", "height", "Height", "Also the smallest a window can get", 1.0, " px", Some(80.0)));
         vec![
-            Item::Header("Titlebars".into()),
+            Item::Header("Title bars".into()),
             Item::Card(deco),
             Item::Header("Borders".into()),
             Item::Card(border),
             Item::Header("Colours".into()),
             Item::Card(cols),
             Item::Note { text: "Right-click a control to reset it to its default.".into(), warn: false },
-            Item::Header("Built-in bar".into()),
-            Item::Card(bar),
         ]
+    }
+
+    /// The window manager's own strip (off while the menu bar runs): shown under Dock & Bar.
+    pub(super) fn builtin_bar_rows(&self) -> Vec<Row> {
+        let mut bar = Vec::new();
+        bar.extend(self.r_toggle("bar", "show", "Window manager strip", "A plain bar drawn by the window manager itself. Leave it off while the menu bar runs"));
+        bar.extend(self.r_seg("bar", "top", "Strip position", "", None).map(|mut r| {
+            if let Some(Ctl { kind: Kind::Seg(o, s), .. }) = r.ctls.first_mut() {
+                *o = opts(&[("Top", "true"), ("Bottom", "false")]);
+                *s = Some(if self.flag("bar", "top") { 0 } else { 1 });
+            }
+            r
+        }));
+        bar.extend(self.r_stepper("bar", "height", "Strip height", "Also the smallest a window can get", 1.0, " px", Some(80.0)));
+        bar
     }
 
     pub fn dock_row(&self, key: &str, label: &str, detail: &str, min: f64, max: f64, step: f64, def: f64) -> Row {
@@ -569,14 +525,15 @@ impl Model {
         rows
     }
 
-    fn pane_desktop(&self) -> Vec<Item> {
+    /// Appearance > Customise > Dock & Bar.
+    pub(super) fn dock_bar_items(&self) -> Vec<Item> {
         let style = match self.dock.get("style").and_then(Value::as_str) {
             Some("windows") => 1,
             _ => 0,
         };
         let dock = vec![
-            Row::new("Style")
-                .detail("macOS dock, or a Windows 10/11 taskbar. Applies at once")
+            Row::new("Dock style")
+                .detail("macOS dock, or a Windows 10/11 taskbar. Only the dock: Theme > Style sets theme, dock and menu bar together")
                 .ctl(Ctl::new("j:dock:style", Kind::Seg(opts(&[("macOS", "mac"), ("Windows", "windows")]), Some(style)))),
             self.dock_row("appSpacing", "Icon spacing", "", 0.0, 24.0, 1.0, 6.0),
             self.dock_row("magnification", "Magnification", "1.0 = off", 1.0, 2.5, 0.05, 1.4),
@@ -608,18 +565,22 @@ impl Model {
         }
         let choices: Vec<Opt> = self.apps.as_ref().map(|a| a.iter().filter(|x| !pins.contains(&x.0)).map(|x| (x.1.clone(), x.0.clone())).collect()).unwrap_or_default();
         rows.push(Row::new("Add an app").ctl(Ctl::new("p:add", Kind::Popup(choices, None))));
-        vec![
+        let mut out = vec![
             Item::Header("Dock".into()),
             Item::Card(dock),
             Item::Header("Menu bar".into()),
             Item::Card(bar),
+            Item::Header("Window manager strip".into()),
+            Item::Card(self.builtin_bar_rows()),
             Item::Header("Hot corners".into()),
             Item::Card(self.hot_corner_rows()),
             Item::Note { text: hot_corner_note(), warn: false },
             Item::Header("Pinned apps".into()),
             Item::Card(rows),
             Item::Note { text: "Settings are stored in the omarchy config folder next to dock-settings.json; unknown keys in those files are left alone.".into(), warn: false },
-        ]
+        ];
+        out.extend(super::ccpane::items(self));
+        out
     }
 
     /// What is on screen: rdwm's live wallpaper when it runs (it may differ from the file after
@@ -629,7 +590,7 @@ impl Model {
         live.or_else(|| self.string("wallpaper", "image").filter(|s| !s.is_empty())).map(|p| expand_tilde(&p))
     }
 
-    fn pane_wallpaper(&self) -> Vec<Item> {
+    pub(super) fn pane_wallpaper(&self) -> Vec<Item> {
         if self.wh.tab == super::wallhaven::Tab::Wallhaven {
             return super::wallhaven::items(self);
         }
@@ -967,7 +928,7 @@ impl Model {
 
 // ---------------------------------------------------------------- file helpers
 
-pub fn list_images(dir: &Path, depth: usize, limit: usize) -> Vec<PathBuf> {
+pub(super) fn list_images(dir: &Path, depth: usize, limit: usize) -> Vec<PathBuf> {
     fn walk(dir: &Path, depth: usize, out: &mut Vec<PathBuf>, limit: usize) {
         let Ok(rd) = std::fs::read_dir(dir) else { return };
         let mut entries: Vec<_> = rd.flatten().collect();
@@ -991,7 +952,7 @@ pub fn list_images(dir: &Path, depth: usize, limit: usize) -> Vec<PathBuf> {
 }
 
 /// (desktop file id, name) of every visible application.
-pub fn installed_apps() -> Vec<(String, String)> {
+pub(super) fn installed_apps() -> Vec<(String, String)> {
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(h) = std::env::var_os("XDG_DATA_HOME") {
         dirs.push(PathBuf::from(h).join("applications"));
@@ -1079,11 +1040,17 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     if matches!(parts.as_slice(), ["wh", ..] | ["w", "wh", _]) {
         return super::wallhaven::apply(m, &parts, v);
     }
+    if matches!(parts.as_slice(), ["ap", ..]) {
+        return super::appearance::apply(m, &parts, v);
+    }
     if matches!(parts.as_slice(), ["sy", ..]) {
         return super::systempane::apply(m, &parts, v);
     }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent" | "palette", _] | ["l", "tcard", ..]) {
         return super::themepane::apply(m, &parts, v);
+    }
+    if matches!(parts.as_slice(), ["cc", ..]) {
+        return super::ccpane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);
@@ -1395,12 +1362,28 @@ mod tests {
 
     const BIG: &str = "# c\n[general]\nlayouts = [\"bsp\", \"tile\"]\ntags = [\"a\", \"b\"]\n[[tag_layout]]\ntag = 2\nlayout = \"grid\"\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\n[[bind]]\nkeys = [\"super+x\", \"r\"]\naction = \"reload\"\n[[rule]]\nclass = \"mpv\"\nfloating = true\n[[autostart]]\ncommand = \"decbar &\"\n[[plugin]]\ncommand = \"p\"\n[[scratchpad]]\nname = \"t\"\ncommand = \"foot\"\n[[wallpaper.output]]\nmatch = \"*\"\n[[output]]\nname = \"DP-1\"\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"setmfact\"\n";
 
+    fn pane_of(id: &str) -> usize {
+        PANES.iter().position(|p| p.id == id).unwrap()
+    }
+
+    /// Every tab / section of the Appearance pane; one default view for the other panes.
+    fn views_of(pane: usize) -> Vec<crate::settings::appearance::View> {
+        if PANES[pane].id == "appearance" {
+            crate::settings::appearance::views()
+        } else {
+            vec![Default::default()]
+        }
+    }
+
     #[test]
     fn every_key_the_panes_use_exists_in_rdwms_key_table() {
         let (mut m, _) = model_with(BIG);
         for i in 0..PANES.len() {
-            m.prepare(i);
-            let _ = m.items(i);
+            for v in views_of(i) {
+                crate::settings::appearance::show(&mut m, v);
+                m.prepare(i);
+                let _ = m.items(i);
+            }
         }
         let missing = m.missing.borrow();
         assert!(missing.is_empty(), "panes use keys rdwm does not know: {missing:?}");
@@ -1416,7 +1399,8 @@ mod tests {
     fn control_ids_are_unique_within_a_pane_and_every_pane_builds_with_rdwm_down() {
         let (mut m, _) = model_with(BIG);
         m.sel.table.insert("rule".into(), 0);
-        for i in 0..PANES.len() {
+        for (i, v) in (0..PANES.len()).flat_map(|i| views_of(i).into_iter().map(move |v| (i, v))) {
+            crate::settings::appearance::show(&mut m, v);
             m.prepare(i);
             let items = m.items(i);
             assert!(!items.is_empty(), "{}", PANES[i].id);
@@ -1438,7 +1422,7 @@ mod tests {
     #[test]
     fn search_finds_panes_by_title_and_keyword() {
         let find = |q: &str| PANES.iter().filter(|p| pane_matches(p, q)).map(|p| p.id).collect::<Vec<_>>();
-        assert_eq!(find("wallp"), ["wallpaper", "displays", "colours"]);
+        assert_eq!(find("wallp"), ["appearance", "displays"]);
         assert_eq!(find("gap"), ["tiling"]);
         assert!(find("snap").contains(&"windows"));
         assert_eq!(find("").len(), PANES.len());
@@ -1504,14 +1488,15 @@ mod tests {
         m.rt.running = true;
         m.rt.state = json!({"wallpaper": {"image": "/b.png"}});
         assert_eq!(m.current_wallpaper().as_deref(), Some("/b.png"));
-        let items = m.items(3);
+        crate::settings::appearance::show(&mut m, crate::settings::appearance::resolve("wallpaper").unwrap());
+        let items = m.items(pane_of("appearance"));
         assert!(items.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("/b.png"))));
     }
 
     #[test]
     fn schema_activation_key_is_shown_only_when_rdwm_has_it() {
         let (mut m, _) = model_with("");
-        let has = |m: &Model| m.items(5).iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "r:snap:activation"))));
+        let has = |m: &Model| m.items(pane_of("windows")).iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "r:snap:activation"))));
         assert!(!has(&m));
         m.schema.keys.push(super::super::schema::KeyMeta {
             section: "snap".into(),

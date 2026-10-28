@@ -100,7 +100,9 @@ sleep 1.2
 
 echo "  (app alive: $(kill -0 $E2E_APP 2>&1 && echo yes); log: $(tail -3 $E2E_T/decsettings.log | tr '\n' ' '))"
 echo "== rdwm state -> UI (wallpaper via rdwmctl)"
-goto wallpaper
+goto appearance
+click_part ap:tab 2 0.5
+wait_for "Wallpaper tab shown" '.tab=="wallpaper"' 3
 wait_for "thumbnails load lazily" '.loaded_thumbs>=2' 15
 IMG=$(ls "$E2E_T"/cfg/omarchy/backgrounds/* | sed -n 3p)
 click_xy $(jq -r "[.thumbs[]|select(.id==\"$IMG\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DUMP")
@@ -148,7 +150,7 @@ xdotool key --window "$WID" ctrl+f; sleep 0.2
 xdotool key --window "$WID" g a p; sleep 0.4
 check "search puts Tiling first ($(q '.panes|map(.id)|join(",")'))" test "$(q '.panes[0].id')" = "tiling"
 xdotool key --window "$WID" Escape; sleep 0.3
-check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" -ge 23
+check "Escape cleared the search (all panes back)" test "$(q '.panes|length')" -ge 20
 
 echo "== offline: rdwm stopped, the file is still edited"
 kill $E2E_RDWM; wait $E2E_RDWM 2>/dev/null; sleep 1.5
@@ -159,7 +161,8 @@ wait_for "notice says rdwm is not running" '(.notice|tostring|test("not running"
 
 echo "== idle cost"
 APP=$E2E_APP   # the instance this script started (pgrep -x also matches other sessions' decsettings)
-for p in general appearance theme desktop wallpaper tiling windows rules keyboard autostart displays; do goto $p; done
+for p in general appearance tiling windows rules keyboard autostart displays config; do goto $p; done
+for t in 1 2 3 0; do goto appearance; click_part ap:tab $t 0.5; sleep 0.4; done
 sleep 8
 T0=$(cpu_ticks $APP); sleep 10; T1=$(cpu_ticks $APP)
 RSS=$(awk '/VmRSS/{print int($2/1024)}' /proc/$APP/status)

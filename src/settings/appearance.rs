@@ -1,0 +1,578 @@
+//! The "Appearance" pane: the one home of how the desktop looks.
+//!
+//! Four tabs, in the order a person needs them:
+//!
+//! * **Theme**: pick a theme (cards with a live preview), light / dark / auto, "Match wallpaper colours".
+//! * **Customise**: one section at a time (Colours, Fonts, Window style, Dock & Bar, Icons and, once it exists, Control Center),
+//!   each with a one-line explanation and a "Reset to theme default".
+//! * **Wallpaper**: the pictures (My backgrounds and Wallhaven).
+//! * **All apps**: one switch that themes GTK, Qt, terminals and the browser; the per-app choices sit under "Advanced".
+//!
+//! Config & Presets (text editing, presets, import and export) is the separate "Advanced" pane next to it.
+//!
+//! Nothing here stores anything new: the tabs only arrange the builders of the older panes (themepane, fontpane, iconspane,
+//! systempane, wallhaven, the window-style and dock builders in panes.rs). Old pane names (`decsettings theme`, `icons`,
+//! `wallpaper`, `desktop`) resolve to a tab through [`resolve`]. The static [`INDEX`] makes every setting findable by search.
+
+use super::model::{CtlVal, Model};
+use super::themepane::Ctx;
+use super::ui::{Ctl, Item, Kind, Row};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tab {
+    #[default]
+    Theme,
+    Customise,
+    Wallpaper,
+    Apps,
+}
+
+impl Tab {
+    pub const ALL: [Tab; 4] = [Tab::Theme, Tab::Customise, Tab::Wallpaper, Tab::Apps];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Tab::Theme => "theme",
+            Tab::Customise => "customise",
+            Tab::Wallpaper => "wallpaper",
+            Tab::Apps => "apps",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Tab::Theme => "Theme",
+            Tab::Customise => "Customise",
+            Tab::Wallpaper => "Wallpaper",
+            Tab::Apps => "All apps",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Tab> {
+        Tab::ALL.into_iter().find(|t| t.id() == s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Section {
+    #[default]
+    Colours,
+    Fonts,
+    WindowStyle,
+    DockBar,
+    Icons,
+    /// Filled in by [`control_center_items`] when the Control Center has settings; hidden until then.
+    ControlCenter,
+}
+
+impl Section {
+    pub const ALL: [Section; 6] = [Section::Colours, Section::Fonts, Section::WindowStyle, Section::DockBar, Section::Icons, Section::ControlCenter];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Section::Colours => "colours",
+            Section::Fonts => "fonts",
+            Section::WindowStyle => "window",
+            Section::DockBar => "dock",
+            Section::Icons => "icons",
+            Section::ControlCenter => "control",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Section::Colours => "Colours",
+            Section::Fonts => "Fonts",
+            Section::WindowStyle => "Window style",
+            Section::DockBar => "Dock & Bar",
+            Section::Icons => "Icons",
+            Section::ControlCenter => "Control Center",
+        }
+    }
+
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Section::Colours => "The accent colour, the colour scheme, and how see-through and round menus and the dock are.",
+            Section::Fonts => "Which fonts the desktop uses and how big its text is.",
+            Section::WindowStyle => "How windows look: title bars, the close / minimise / zoom buttons and borders.",
+            Section::DockBar => "The dock, the menu bar, hot corners and which apps are pinned.",
+            Section::Icons => "Which icon set the dock, launchers and menus use.",
+            Section::ControlCenter => "What the Control Center shows.",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Section> {
+        Section::ALL.into_iter().find(|t| t.id() == s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct View {
+    pub tab: Tab,
+    pub section: Section,
+}
+
+/// Where a pane name given to `decsettings NAME` (or any link) opens. `None` = not an Appearance name.
+///
+/// Old names keep working: `theme`, `icons`, `wallpaper`, `desktop` (and `dock`, `fonts`, `windowstyle`, `colours`, `allapps`) open
+/// the tab / section that now holds them; `appearance` opens the Theme tab; `appearance/fonts`, `appearance/customise` and so on
+/// are the explicit forms.
+pub fn resolve(name: &str) -> Option<View> {
+    let n = name.trim().to_lowercase();
+    let n = n.strip_prefix("appearance/").unwrap_or(&n);
+    let v = |tab, section| Some(View { tab, section });
+    match n {
+        "appearance" | "theme" | "themes" => v(Tab::Theme, Section::Colours),
+        "customise" | "customize" | "customization" => v(Tab::Customise, Section::Colours),
+        "colours" | "colors" | "colour" | "color" | "accent" => v(Tab::Customise, Section::Colours),
+        "fonts" | "font" => v(Tab::Customise, Section::Fonts),
+        "window" | "windows-style" | "windowstyle" | "titlebars" | "decoration" => v(Tab::Customise, Section::WindowStyle),
+        "dock" | "desktop" | "bar" | "menubar" => v(Tab::Customise, Section::DockBar),
+        "icons" | "icon" => v(Tab::Customise, Section::Icons),
+        "control" | "controlcenter" | "control-center" => v(Tab::Customise, Section::ControlCenter),
+        "wallpaper" | "wallpapers" | "background" | "wallhaven" => v(Tab::Wallpaper, Section::Colours),
+        "apps" | "allapps" | "all-apps" | "system" | "system-theme" => v(Tab::Apps, Section::Colours),
+        _ => None,
+    }
+}
+
+/// Every tab, and every section of Customise (tests and the screenshot tour).
+pub fn views() -> Vec<View> {
+    let mut v: Vec<View> = Tab::ALL.iter().filter(|t| **t != Tab::Customise).map(|t| View { tab: *t, section: Section::Colours }).collect();
+    v.extend(Section::ALL.iter().map(|s| View { tab: Tab::Customise, section: *s }));
+    v
+}
+
+/// The Control Center's own settings (toggles and tiles). `None` = nothing to show yet, the section stays hidden.
+///
+/// This is the slot for the Control Center work: return `Some(items)` and the "Control Center" section appears under
+/// Appearance > Customise; nothing else needs to change.
+pub fn control_center_items(_m: &Model) -> Option<Vec<Item>> {
+    None
+}
+
+fn sections(m: &Model) -> Vec<Section> {
+    Section::ALL.into_iter().filter(|s| *s != Section::ControlCenter || control_center_items(m).is_some()).collect()
+}
+
+/// Lazy data for the visible tab (called before every paint).
+pub fn prepare(m: &mut Model) {
+    match m.sel.tab {
+        Tab::Customise if m.sel.section == Section::DockBar && m.apps.is_none() => m.apps = Some(super::panes::installed_apps()),
+        Tab::Wallpaper if m.wh.tab == super::wallhaven::Tab::Wallhaven => super::wallhaven::prepare(m),
+        Tab::Wallpaper if m.walls.is_none() => m.walls = Some(super::panes::list_images(&m.paths.backgrounds(), 3, 400)),
+        _ => {}
+    }
+}
+
+fn tab_bar(m: &Model) -> Item {
+    let opts: Vec<(String, String)> = Tab::ALL.iter().map(|t| (t.title().to_string(), t.id().to_string())).collect();
+    let sel = Tab::ALL.iter().position(|t| *t == m.sel.tab);
+    Item::Card(vec![Row::new("").ctl(Ctl::new("ap:tab", Kind::Seg(opts, sel)))])
+}
+
+fn section_bar(m: &Model) -> Vec<Item> {
+    let secs = sections(m);
+    let opts: Vec<(String, String)> = secs.iter().map(|t| (t.title().to_string(), t.id().to_string())).collect();
+    let sel = secs.iter().position(|t| *t == m.sel.section);
+    vec![Item::Card(vec![Row::new("Customise").ctl(Ctl::new("ap:sec", Kind::Seg(opts, sel)))]), Item::Note { text: m.sel.section.blurb().into(), warn: false }]
+}
+
+fn go_button(id: &str, label: &str) -> Ctl {
+    Ctl::new(id, Kind::Button { label: label.into(), danger: false })
+}
+
+pub fn items(m: &Model) -> Vec<Item> {
+    let mut out = vec![tab_bar(m), Item::Space(6.0)];
+    match m.sel.tab {
+        Tab::Theme => out.extend(theme_tab(m)),
+        Tab::Customise => out.extend(customise_tab(m)),
+        Tab::Wallpaper => out.extend(wallpaper_tab(m)),
+        Tab::Apps => out.extend(super::systempane::items(m)),
+    }
+    out
+}
+
+fn theme_tab(m: &Model) -> Vec<Item> {
+    let c = Ctx::new(m);
+    let mut out = super::themepane::style_items(m, &c);
+    out.extend(super::packages::items(m));
+    out.extend(super::themepane::mode_items(&c));
+    out.extend(super::wallpapercolors::items(&c.sel, &c.now));
+    out.push(Item::Header("More".into()));
+    out.push(Item::Card(vec![
+        Row::new("Accent, fonts, window style, dock").detail("Change single things on top of the theme").ctl(go_button("ap:go:customise", "Customise")),
+        Row::new("Presets, import and export, edit as text").detail("For advanced users").ctl(go_button("ap:go:config", "Config & Presets")),
+    ]));
+    out.extend(super::themepane::library_note(&c));
+    out
+}
+
+fn reset_card(id: &str, what: &str) -> Item {
+    Item::Card(vec![Row::new("Reset to theme default").detail(what.to_string()).ctl(Ctl::new(id, Kind::Button { label: "Reset".into(), danger: false }))])
+}
+
+fn customise_tab(m: &Model) -> Vec<Item> {
+    let mut out = section_bar(m);
+    let c = Ctx::new(m);
+    match m.sel.section {
+        Section::Colours => {
+            out.extend(super::themepane::accent_items(&c));
+            out.extend(super::themepane::scheme_items(&c));
+            out.extend(super::themepane::surface_items(&c));
+            out.push(reset_card("ap:reset:colours", "Back to the theme's own palette, accent, translucency and corner radius"));
+        }
+        Section::Fonts => {
+            out.extend(super::themepane::text_size_items(&c));
+            out.extend(super::fontpane::items(&c.sel, &c.now));
+        }
+        Section::WindowStyle => {
+            out.extend(super::themepane::frame_sync_rows(&c));
+            out.extend(m.window_style_items());
+            out.push(reset_card("ap:reset:window", "Window style, title bar, border and button settings go back to their defaults, then the theme colours the windows again"));
+        }
+        Section::DockBar => {
+            out.extend(m.dock_bar_items());
+            out.push(reset_card("ap:reset:dock", "Dock spacing, magnification, transparency, roundness and style go back to their defaults"));
+        }
+        Section::Icons => out.extend(super::iconspane::items(m)),
+        Section::ControlCenter => out.extend(control_center_items(m).unwrap_or_default()),
+    }
+    out
+}
+
+fn wallpaper_tab(m: &Model) -> Vec<Item> {
+    let mut out = m.pane_wallpaper();
+    out.push(Item::Header("Colours".into()));
+    out.push(Item::Card(vec![Row::new("Match wallpaper colours").detail("Recolour the theme from the picture you choose. Set it on the Theme tab").ctl(go_button("ap:go:theme", "Open Theme"))]));
+    out
+}
+
+// ---------------------------------------------------------------- events
+
+/// Settings a "Reset to theme default" of Window style removes from rdwm's file (the look, not the behaviour).
+const WINDOW_STYLE_KEYS: &[(&str, &str)] = &[
+    ("decoration", "style"),
+    ("decoration", "height"),
+    ("decoration", "radius"),
+    ("decoration", "title_align"),
+    ("decoration", "font_size"),
+    ("decoration", "border_px"),
+    ("decoration", "close_color"),
+    ("decoration", "minimize_color"),
+    ("decoration", "zoom_color"),
+    ("decoration", "inactive_button_color"),
+    ("decoration", "focused_bg"),
+    ("decoration", "focused_fg"),
+    ("decoration", "unfocused_bg"),
+    ("decoration", "unfocused_fg"),
+    ("general", "border_px"),
+    ("colors", "focused"),
+    ("colors", "normal"),
+    ("colors", "urgent"),
+];
+
+const DOCK_KEYS: &[&str] = &["appSpacing", "magnification", "transparency", "roundness", "style"];
+
+/// Opens `view`: the tab, the section and the top of the page.
+pub fn show(m: &mut Model, view: View) {
+    if m.sel.tab != view.tab || m.sel.section != view.section {
+        m.sel.reset_scroll = true;
+    }
+    m.sel.tab = view.tab;
+    if view.tab == Tab::Customise {
+        m.sel.section = view.section;
+    }
+    m.dirty = true;
+}
+
+/// Selects the Appearance pane (by index in `PANES`) on `view`.
+pub fn open(m: &mut Model, view: View) {
+    if let Some(i) = super::system::registry::pane_index("appearance") {
+        m.sel.goto = Some(i);
+    }
+    show(m, view);
+}
+
+pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
+    match (parts, v) {
+        (["ap", "tab"], CtlVal::Str(s)) => {
+            if let Some(t) = Tab::parse(&s) {
+                show(m, View { tab: t, section: m.sel.section });
+            }
+        }
+        (["ap", "sec"], CtlVal::Str(s)) => {
+            if let Some(sec) = Section::parse(&s) {
+                show(m, View { tab: Tab::Customise, section: sec });
+            }
+        }
+        (["ap", "adv"], CtlVal::Click) => {
+            m.sel.adv = !m.sel.adv;
+            m.dirty = true;
+        }
+        (["ap", "go", "config"], CtlVal::Click) => {
+            if let Some(i) = super::system::registry::pane_index("config") {
+                m.sel.goto = Some(i);
+                m.sel.reset_scroll = true;
+                m.dirty = true;
+            }
+        }
+        (["ap", "go", name], CtlVal::Click) => {
+            if let Some(view) = resolve(name) {
+                show(m, view);
+            }
+        }
+        (["ap", "reset", "colours"], CtlVal::Click) => super::themepane::apply(m, &["th", "reset-colours"], CtlVal::Click),
+        (["ap", "reset", "window"], CtlVal::Click) => {
+            m.edit(|c| {
+                for (sec, key) in WINDOW_STYLE_KEYS {
+                    c.remove(sec, key);
+                }
+                Ok(())
+            });
+            // the theme paints rdwm's colours again (when "Windows follow the theme" is on)
+            let src = super::themepane::source(m);
+            super::themepane::commit(m, src.selection());
+        }
+        (["ap", "reset", "dock"], CtlVal::Click) => {
+            for k in DOCK_KEYS {
+                if m.dock.get(*k).is_some() {
+                    m.edit_json("dock", k, None);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------- search
+
+/// Every setting of the tabs, for the search box: (view, label, extra words). The pane test below checks that every row the
+/// tabs draw is covered, so a new setting cannot silently be unfindable.
+pub const INDEX: &[(Tab, Section, &str, &str)] = &[
+    // Theme
+    (Tab::Theme, Section::Colours, "Desktop style", "style macos windows caelestia shell layout bar dock look"),
+    (Tab::Theme, Section::Colours, "Themes", "theme packages cards apply preview export duplicate delete install create nord dracula solarized graphite windows 11 high contrast catalog"),
+    (Tab::Theme, Section::Colours, "Mode", "light dark auto system night day appearance"),
+    (Tab::Theme, Section::Colours, "Match wallpaper colours", "dynamic material you colours from wallpaper recolour scheme strength contrast"),
+    (Tab::Theme, Section::Colours, "Get more themes", "market community download"),
+    (Tab::Theme, Section::Colours, "Create theme from current settings", "save snapshot new theme package"),
+    (Tab::Theme, Section::Colours, "Install a theme file", "import dtheme package folder"),
+    // Customise > Colours
+    (Tab::Customise, Section::Colours, "Accent colour", "blue purple pink red orange yellow green graphite highlight swatches hex"),
+    (Tab::Customise, Section::Colours, "Custom accent", "hex colour #rrggbb own accent"),
+    (
+        Tab::Customise,
+        Section::Colours,
+        "Colour palette",
+        "colour scheme colors palette catppuccin rose pine gruvbox tokyo night everforest kanagawa nord dracula solarized monochrome recolour theme tiles",
+    ),
+    (Tab::Customise, Section::Colours, "Translucency", "opacity transparent see through menus dock launchers"),
+    (Tab::Customise, Section::Colours, "Corner radius", "rounded corners round menus cards title bars"),
+    // Customise > Fonts
+    (Tab::Customise, Section::Fonts, "Text size", "font scale larger smaller zoom text"),
+    (Tab::Customise, Section::Fonts, "Font preset", "inter sf pro segoe typeface family"),
+    (Tab::Customise, Section::Fonts, "Interface font", "ui text typeface family sans"),
+    (Tab::Customise, Section::Fonts, "Title font", "titles window titles typeface"),
+    (Tab::Customise, Section::Fonts, "Monospace font", "mono code terminal nerd font typeface"),
+    (Tab::Customise, Section::Fonts, "Clock and numbers", "display digits typeface clock font"),
+    // Customise > Window style
+    (Tab::Customise, Section::WindowStyle, "Windows follow the theme", "sync rdwm title bars borders colours theme"),
+    (Tab::Customise, Section::WindowStyle, "Window title bars", "titlebar decoration enabled show hide"),
+    (Tab::Customise, Section::WindowStyle, "Window style", "macos classic titlebar decoration look"),
+    (Tab::Customise, Section::WindowStyle, "Title bar height", "titlebar size thick"),
+    (Tab::Customise, Section::WindowStyle, "Window corner radius", "rounded titlebar radius"),
+    (Tab::Customise, Section::WindowStyle, "Title alignment", "center left title text"),
+    (Tab::Customise, Section::WindowStyle, "Title text size", "titlebar font size"),
+    (Tab::Customise, Section::WindowStyle, "Window buttons", "close minimise minimize zoom traffic lights"),
+    (Tab::Customise, Section::WindowStyle, "Green button", "zoom fullscreen maximize maximise monocle float traffic light"),
+    (Tab::Customise, Section::WindowStyle, "Double-click on title", "maximize fullscreen titlebar action"),
+    (Tab::Customise, Section::WindowStyle, "Middle click closes", "close title"),
+    (Tab::Customise, Section::WindowStyle, "Title bars in full-screen stacking", "monocle titlebars"),
+    (Tab::Customise, Section::WindowStyle, "Window border", "border width thickness px"),
+    (Tab::Customise, Section::WindowStyle, "Focused border", "active window border colour"),
+    (Tab::Customise, Section::WindowStyle, "Unfocused border", "inactive window border colour"),
+    (Tab::Customise, Section::WindowStyle, "Urgent border", "attention window border colour"),
+    (Tab::Customise, Section::WindowStyle, "Title bar border", "titlebar border width"),
+    (Tab::Customise, Section::WindowStyle, "Close button", "red colour traffic light"),
+    (Tab::Customise, Section::WindowStyle, "Minimise button", "yellow colour traffic light minimize"),
+    (Tab::Customise, Section::WindowStyle, "Zoom button", "green colour traffic light"),
+    (Tab::Customise, Section::WindowStyle, "Buttons of unfocused windows", "inactive traffic lights colour grey"),
+    (Tab::Customise, Section::WindowStyle, "Focused title bar", "titlebar background colour"),
+    (Tab::Customise, Section::WindowStyle, "Focused title text", "titlebar foreground colour"),
+    (Tab::Customise, Section::WindowStyle, "Unfocused title bar", "titlebar background colour inactive"),
+    (Tab::Customise, Section::WindowStyle, "Unfocused title text", "titlebar foreground colour inactive"),
+    // Customise > Dock & Bar
+    (Tab::Customise, Section::DockBar, "Dock style", "macos windows taskbar floating dock"),
+    (Tab::Customise, Section::DockBar, "Icon spacing", "dock gap app spacing"),
+    (Tab::Customise, Section::DockBar, "Magnification", "dock zoom hover grow"),
+    (Tab::Customise, Section::DockBar, "Transparency", "dock translucent opacity"),
+    (Tab::Customise, Section::DockBar, "Roundness", "dock rounded corners"),
+    (Tab::Customise, Section::DockBar, "Restart Dock", "apply decdock"),
+    (Tab::Customise, Section::DockBar, "Workspace dots", "menu bar workspaces tags indicator decbar"),
+    (Tab::Customise, Section::DockBar, "Restart Menu Bar", "apply decbar"),
+    (Tab::Customise, Section::DockBar, "Window manager strip", "builtin bar rdwm dwm bar show hide"),
+    (Tab::Customise, Section::DockBar, "Strip position", "bar top bottom position"),
+    (Tab::Customise, Section::DockBar, "Strip height", "bar height size"),
+    (Tab::Customise, Section::DockBar, "Hot corners", "screen corners expose launchpad desktop dwell"),
+    (Tab::Customise, Section::DockBar, "Show the Control Center", "control center quick settings panel enable disable tray button"),
+    (Tab::Customise, Section::DockBar, "Opens in", "control center position corner where the panel opens"),
+    (Tab::Customise, Section::DockBar, "Wi-Fi, Bluetooth, Network", "control center tiles connectivity wifi bluetooth network"),
+    (Tab::Customise, Section::DockBar, "Focus, Night Shift, Dark Mode", "control center tiles focus do not disturb night shift dark mode"),
+    (Tab::Customise, Section::DockBar, "Sound", "control center tiles volume sound slider output"),
+    (Tab::Customise, Section::DockBar, "Now Playing", "control center tiles media music player now playing"),
+    (Tab::Customise, Section::DockBar, "Stay Awake, Screenshot, Notifications, Settings", "control center tiles stay awake caffeine screenshot notifications settings"),
+    (Tab::Customise, Section::DockBar, "Record, Idle, Game Mode, DND", "control center tiles screen record idle inhibit game mode do not disturb"),
+    (Tab::Customise, Section::DockBar, "Top left", "hot corner"),
+    (Tab::Customise, Section::DockBar, "Top right", "hot corner"),
+    (Tab::Customise, Section::DockBar, "Bottom left", "hot corner"),
+    (Tab::Customise, Section::DockBar, "Bottom right", "hot corner"),
+    (Tab::Customise, Section::DockBar, "Dwell time", "hot corner delay"),
+    (Tab::Customise, Section::DockBar, "Add an app", "pin dock launcher favourites"),
+    (Tab::Customise, Section::DockBar, "Pinned apps", "dock favourites favorites add remove reorder launchers"),
+    // Customise > Icons
+    (Tab::Customise, Section::Icons, "Icon theme", "papirus tela whitesur adwaita breeze yaru auto gtk gsettings icon pack"),
+    (Tab::Customise, Section::Icons, "Icon size", "scale artwork padding dock"),
+    (Tab::Customise, Section::Icons, "Tint symbolic icons", "monochrome text colour"),
+    (Tab::Customise, Section::Icons, "Fallback theme", "hicolor missing icons"),
+    (Tab::Customise, Section::Icons, "Cursor theme", "mouse pointer cursor bibata adwaita"),
+    // Wallpaper
+    (Tab::Wallpaper, Section::Colours, "Wallpaper", "background picture image desktop wallhaven"),
+    (Tab::Wallpaper, Section::Colours, "Scaling", "fill fit stretch center tile wallpaper mode"),
+    (Tab::Wallpaper, Section::Colours, "Background colour", "wallpaper letterbox solid colour"),
+    (Tab::Wallpaper, Section::Colours, "Image file", "wallpaper path png jpeg webp"),
+    (Tab::Wallpaper, Section::Colours, "Wallhaven", "online download search random favourites wallpapers"),
+    // All apps
+    (Tab::Apps, Section::Colours, "Apply theme to all apps", "system wide theming gtk qt terminal chrome browser nautilus kvantum switch"),
+    (Tab::Apps, Section::Colours, "Apply now", "run again re-apply theme apps"),
+    (Tab::Apps, Section::Colours, "Browser colour", "chrome chromium brave theme color toolbar"),
+    (Tab::Apps, Section::Colours, "Omarchy theme hooks", "hooks omarchy theme-set scripts"),
+    (Tab::Apps, Section::Colours, "Qt apps", "qt5 qt6 qt6ct kvantum"),
+    (Tab::Apps, Section::Colours, "Terminals and Omarchy apps", "alacritty kitty foot ghostty waybar mako"),
+    (Tab::Apps, Section::Colours, "Theme font in GTK apps", "gtk font"),
+    (Tab::Apps, Section::Colours, "X11 terminals", "xterm urxvt xresources"),
+    (Tab::Apps, Section::Colours, "Choose what is themed", "advanced targets per app options"),
+    (Tab::Apps, Section::Colours, "GTK apps", "gtk3 gtk4 libadwaita nautilus omarchy hooks editors browser chrome qt kvantum x11 per app"),
+    (Tab::Apps, Section::Colours, "Icon theme for apps", "gtk qt icons papirus"),
+    (Tab::Apps, Section::Colours, "Cursor theme for apps", "xcursor gtk x11 pointer"),
+];
+
+/// The view a search hit labelled `label` opens (labels of [`INDEX`] are unique per view).
+pub fn view_of_label(label: &str) -> Option<View> {
+    INDEX.iter().find(|(_, _, l, _)| l.eq_ignore_ascii_case(label)).map(|(t, s, _, _)| View { tab: *t, section: *s })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::model::tests_support::model_with;
+
+    #[test]
+    fn old_pane_names_resolve_to_their_new_home() {
+        let v = |n: &str| resolve(n).unwrap_or_else(|| panic!("{n}"));
+        assert_eq!(v("theme"), View { tab: Tab::Theme, section: Section::Colours });
+        assert_eq!(v("appearance").tab, Tab::Theme);
+        assert_eq!(v("icons"), View { tab: Tab::Customise, section: Section::Icons });
+        assert_eq!(v("desktop"), View { tab: Tab::Customise, section: Section::DockBar });
+        assert_eq!(v("wallpaper").tab, Tab::Wallpaper);
+        assert_eq!(v("appearance/fonts"), View { tab: Tab::Customise, section: Section::Fonts });
+        assert_eq!(v("system-theme").tab, Tab::Apps);
+        assert!(resolve("tiling").is_none() && resolve("zzz").is_none());
+    }
+
+    #[test]
+    fn every_tab_and_section_builds_and_has_a_tab_bar() {
+        let (mut m, _) = model_with("[general]\n");
+        for t in Tab::ALL {
+            for s in Section::ALL {
+                m.sel.tab = t;
+                m.sel.section = s;
+                let its = items(&m);
+                assert!(!its.is_empty(), "{t:?}/{s:?}");
+                assert!(matches!(&its[0], Item::Card(r) if r[0].ctls[0].id == "ap:tab"), "the tab bar leads {t:?}/{s:?}");
+                if t != Tab::Customise {
+                    break; // sections only matter in Customise
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tabs_and_sections_switch_and_reset_the_scroll() {
+        let (mut m, _) = model_with("[general]\n");
+        m.apply("ap:tab", CtlVal::Str("customise".into()));
+        assert_eq!(m.sel.tab, Tab::Customise);
+        assert!(m.sel.reset_scroll);
+        m.apply("ap:sec", CtlVal::Str("fonts".into()));
+        assert_eq!((m.sel.tab, m.sel.section), (Tab::Customise, Section::Fonts));
+        m.apply("ap:go:wallpaper", CtlVal::Click);
+        assert_eq!(m.sel.tab, Tab::Wallpaper);
+        m.apply("ap:go:config", CtlVal::Click);
+        assert!(m.sel.goto.is_some());
+        m.apply("ap:tab", CtlVal::Str("nonsense".into()));
+        assert_eq!(m.sel.tab, Tab::Wallpaper);
+    }
+
+    #[test]
+    fn the_control_center_section_is_hidden_until_something_fills_the_slot() {
+        let (m, _) = model_with("[general]\n");
+        assert!(!sections(&m).contains(&Section::ControlCenter));
+    }
+
+    /// Every row the tabs draw must be findable: its label is an INDEX entry (or a prefix of one).
+    #[test]
+    fn every_row_of_every_tab_is_in_the_search_index() {
+        let (mut m, _) = model_with("[decoration]\nenabled = true\n");
+        m.sel.adv = true;
+        let mut missing = Vec::new();
+        for t in Tab::ALL {
+            for s in Section::ALL {
+                m.sel.tab = t;
+                m.sel.section = s;
+                m.apps = Some(vec![]);
+                for it in items(&m) {
+                    if let Item::Card(rows) = it {
+                        for r in rows {
+                            let l = r.label.trim().trim_end_matches('…');
+                            // tab / section selectors, the "Pictures from" switch, per-device and generated rows
+                            let generated = r.ctls.iter().any(|c| c.id.starts_with("p:") || c.id.starts_with("ap:") || c.id.starts_with("sy:t:") || c.id.starts_with("sy:o:"));
+                            if l.is_empty() || generated || l.starts_with("Reset") || l == "In use" || ["Customise", "Pictures from"].contains(&l) {
+                                continue;
+                            }
+                            let known = INDEX.iter().any(|(_, _, il, words)| il.eq_ignore_ascii_case(l) || il.to_lowercase().contains(&l.to_lowercase()) || words.contains(&l.to_lowercase()));
+                            if !known {
+                                missing.push(format!("{t:?}/{s:?}: {l}"));
+                            }
+                        }
+                    }
+                }
+                if t != Tab::Customise {
+                    break;
+                }
+            }
+        }
+        missing.sort();
+        missing.dedup();
+        assert!(missing.is_empty(), "settings missing from appearance::INDEX: {missing:#?}");
+    }
+
+    #[test]
+    fn index_labels_are_unique_and_found_by_search() {
+        let mut seen = std::collections::HashSet::new();
+        for (_, _, l, _) in INDEX {
+            assert!(seen.insert(l.to_lowercase()), "duplicate label {l}");
+        }
+        let h = crate::settings::system::registry::search("accent", &[]);
+        assert!(h.iter().any(|x| x.label.as_deref() == Some("Accent colour")), "{h:?}");
+    }
+
+    #[test]
+    fn window_style_reset_removes_the_look_but_not_the_behaviour() {
+        let (mut m, cfg) = model_with("[decoration]\nenabled = true\nheight = 40\nradius = 3\nmiddle_click_close = true\n[general]\nborder_px = 4\n");
+        m.apply("ap:reset:window", CtlVal::Click);
+        let t = std::fs::read_to_string(&cfg).unwrap();
+        // the theme paints rdwm's colours and sizes again, so what the user had typed in is gone
+        assert!(!t.contains("height = 40") && !t.contains("radius = 3\n") && !t.contains("border_px = 4"), "{t}");
+        assert!(t.contains("middle_click_close") && t.contains("enabled"), "{t}");
+    }
+}

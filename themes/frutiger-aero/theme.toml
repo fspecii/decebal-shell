@@ -1,0 +1,109 @@
+format = 1
+id = "frutiger-aero"
+name = "Frutiger Aero"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Early-2010s optimism: glossy light-aqua and sky-blue surfaces, big rounded glassy cards, a bubbles-and-hills sky wallpaper, a Windows 7 style taskbar with glass caption buttons on the right, and fresh green accents. Mostly a light theme; the dark variant is a deep-ocean version of the same look."
+min_shell_version = "0.1.0"
+screenshots = ["screenshots/main.jpg"]
+tags = ["frutiger-aero", "aqua", "glass", "light", "dark", "skeuomorphic", "windows7"]
+
+[colors.light]
+background = "#e3f4fc"
+sidebar = "#d2ecf9"
+surface = "#f5fbff"
+bar = "#cfe9f8"
+bar_text = "#0b3a5a"
+popup = "#f2faff"
+dock = "#c4e4f6"
+overlay = "#f2faff"
+titlebar = "#bfe3f6"
+titlebar_inactive = "#dbeef9"
+border = "#8ec9e8"
+text = "#0e2f47"
+text_secondary = "#2d5f82"
+text_faint = "#5f8ba8"
+accent = "#1a8fd8"
+accent_text = "#ffffff"
+danger = "#d6342c"
+ok = "#2a9d3a"
+warn = "#c27a00"
+
+[colors.dark]
+background = "#0a2b45"
+sidebar = "#08243b"
+surface = "#0f3a5c"
+bar = "#08243b"
+bar_text = "#d6f1ff"
+popup = "#124668"
+dock = "#0c3250"
+overlay = "#124668"
+titlebar = "#14507a"
+titlebar_inactive = "#0f3a5c"
+border = "#2a7aa8"
+text = "#e6f6ff"
+text_secondary = "#a9d6ee"
+text_faint = "#6fa3c2"
+accent = "#4cc9f0"
+accent_text = "#052235"
+danger = "#ff6b61"
+ok = "#6fdc7a"
+warn = "#ffc65a"
+
+[metrics]
+radius = 18
+dock_roundness = 0.8
+dock_alpha = 0.72
+popup_alpha = 0.88
+panel_alpha = 0.9
+bar_alpha = 0.85
+shadow = 1.4
+outline = 0.16
+dock_padding = 10
+
+[font]
+ui = ["Segoe UI", "Noto Sans", "DejaVu Sans"]
+title = ["Segoe UI", "Noto Sans"]
+mono = ["DejaVu Sans Mono"]
+scale = 1.0
+
+[wallpaper]
+image = "wallpapers/aqua-bubbles.jpg"
+mode = "fill"
+color = "#2f9fe8"
+
+[decoration]
+style = "windows-light"
+height = 30
+radius = 8
+title_align = "left"
+
+[rdwm]
+gap_inner = 8
+gap_outer = 8
+border_px = 2
+smart_gaps = true
+mfact = 0.55
+layouts = ["tile", "monocle"]
+focused_border = "#1a8fd8"
+normal_border = "#a9d8ee"
+urgent_border = "#d6342c"
+
+[bar]
+enabled = "auto"
+style = "flat"
+height = 30
+
+[dock]
+enabled = true
+style = "windows"
+size = 46
+align = "left"
+roundness = 0.8
+
+[icons]
+theme = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"

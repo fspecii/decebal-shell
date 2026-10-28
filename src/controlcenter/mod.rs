@@ -3,8 +3,10 @@
 //! `layout` turns a [`Snapshot`] of system state into a flat display list; `draw` paints it and
 //! `hit` maps pointer positions back to [`Target`]s, so drawing and input share one layout.
 
+pub mod settings;
 pub mod sys;
 
+use self::settings::{Style, Tiles};
 use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
 use crate::menubar::symbols::SymbolCache;
 use crate::text::{Fonts, Weight};
@@ -206,18 +208,11 @@ fn conn_row(out: &mut Vec<Item>, x: f32, y: f32, w: f32, row: ConnRow) {
     out.push(text(x + 40.0, y + 19.0, w - 40.0, row.status, 11.0, Weight::Regular, Ink::Secondary));
 }
 
-/// Builds the display list for `s`, with the panel's top-left at the origin. Returns the list and the panel height.
-pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
-    let mut out = Vec::new();
-    let inner = PANEL_W - 2.0 * PAD;
-    let mut y = PAD;
+const ROW_H: f32 = 128.0;
 
-    // Row 1: connectivity (left) and Focus / Night Shift / Dark Mode (right).
-    let left_w = (inner - GAP) * 0.55;
-    let right_w = (inner - GAP) * 0.45;
-    let right_x = PAD + left_w + GAP;
-    let row_h = 128.0;
-    out.push(item(PAD, y, left_w, row_h, Draw::Tile, None));
+/// The connectivity tile (Wi-Fi, Bluetooth, wired network) at `y`, `left_w` wide.
+fn conn_tiles(out: &mut Vec<Item>, s: &Snapshot, y: f32, left_w: f32) {
+    out.push(item(PAD, y, left_w, ROW_H, Draw::Tile, None));
     let mut cy = y + 10.0;
     let cw = left_w - 20.0;
     if let Some(net) = &s.net {
@@ -229,7 +224,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
             net.wifi_name.clone()
         };
         conn_row(
-            &mut out,
+            out,
             PAD + 10.0,
             cy,
             cw,
@@ -252,14 +247,17 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         } else {
             "On".into()
         };
-        conn_row(&mut out, PAD + 10.0, cy, cw, ConnRow { icon, on: bt.powered, title: "Bluetooth", status: &status, toggle: Some(Target::Bluetooth), open: None });
+        conn_row(out, PAD + 10.0, cy, cw, ConnRow { icon, on: bt.powered, title: "Bluetooth", status: &status, toggle: Some(Target::Bluetooth), open: None });
         cy += 40.0;
     }
     if let Some(net) = &s.net {
         let status = if net.wired_name.is_empty() { "Not Connected".to_string() } else { net.wired_name.clone() };
-        conn_row(&mut out, PAD + 10.0, cy, cw, ConnRow { icon: "ethernet", on: !net.wired_name.is_empty(), title: "Network", status: &status, toggle: None, open: Some(Target::Network) });
+        conn_row(out, PAD + 10.0, cy, cw, ConnRow { icon: "ethernet", on: !net.wired_name.is_empty(), title: "Network", status: &status, toggle: None, open: Some(Target::Network) });
     }
+}
 
+/// Focus, Night Shift and Dark Mode at `y`, in the column that starts at `right_x` and is `right_w` wide.
+fn focus_tiles(out: &mut Vec<Item>, s: &Snapshot, y: f32, right_x: f32, right_w: f32) {
     // Focus tile.
     out.push(item(right_x, y, right_w, 59.0, Draw::Tile, None));
     let focus_on = s.dnd == Some(true);
@@ -284,10 +282,38 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
     out.push(item(dx, sy, small_w, 59.0, Draw::SmallTile { on: dark_on }, Some(Target::DarkMode)));
     out.push(item(dx + small_w / 2.0 - 10.0, sy + 13.0, 20.0, 20.0, Draw::Glyph { icon: "dark-mode", size: 20.0, ink: if dark_on { Ink::White } else { Ink::Primary } }, None));
     out.push(caption(dx + 4.0, sy + 36.0, small_w - 8.0, if s.light { "Light" } else { "Dark" }, if dark_on { Ink::White } else { Ink::Primary }));
-    y += row_h + GAP;
+}
+
+/// Builds the display list for `s` with every tile group, the panel's top-left at the origin. Returns the list and the panel height.
+pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
+    layout_with(s, &Tiles::ALL)
+}
+
+/// [`layout`] with only the tile groups `tiles` names (a theme's or the user's `control_center.tiles`). When just one half of the
+/// first row is wanted it takes the whole width.
+pub fn layout_with(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
+    let mut out = Vec::new();
+    let inner = PANEL_W - 2.0 * PAD;
+    let mut y = PAD;
+
+    // Row 1: connectivity (left) and Focus / Night Shift / Dark Mode (right).
+    let (left_w, right_w, right_x) = match (tiles.connectivity, tiles.focus) {
+        (true, true) => ((inner - GAP) * 0.55, (inner - GAP) * 0.45, PAD + (inner - GAP) * 0.55 + GAP),
+        (true, false) => (inner, 0.0, PAD),
+        _ => (0.0, inner, PAD),
+    };
+    if tiles.connectivity {
+        conn_tiles(&mut out, s, y, left_w);
+    }
+    if tiles.focus {
+        focus_tiles(&mut out, s, y, right_x, right_w);
+    }
+    if tiles.connectivity || tiles.focus {
+        y += ROW_H + GAP;
+    }
 
     // Display brightness.
-    if let Some(b) = s.brightness {
+    if let Some(b) = s.brightness.filter(|_| tiles.display) {
         out.push(item(PAD, y, inner, 64.0, Draw::Tile, None));
         out.push(text(PAD + 12.0, y + 9.0, inner - 24.0, "Display", 13.0, Weight::SemiBold, Ink::Primary));
         out.push(item(PAD + 12.0, y + 30.0, inner - 24.0, 26.0, Draw::Slider { value: b as f32 / 100.0, icon: "sun-small" }, Some(Target::Brightness)));
@@ -295,7 +321,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
     }
 
     // Sound.
-    if let Some(v) = &s.volume {
+    if let Some(v) = s.volume.as_ref().filter(|_| tiles.sound) {
         out.push(item(PAD, y, inner, 64.0, Draw::Tile, None));
         out.push(text(PAD + 12.0, y + 9.0, inner * 0.4, "Sound", 13.0, Weight::SemiBold, Ink::Primary));
         let name = if s.sink.is_empty() { "Output" } else { s.sink.as_str() };
@@ -313,7 +339,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
     }
 
     // Now Playing.
-    if let Some(m) = &s.media {
+    if let Some(m) = s.media.as_ref().filter(|_| tiles.media) {
         out.push(item(PAD, y, inner, 64.0, Draw::Tile, None));
         out.push(item(PAD + 10.0, y + 10.0, 44.0, 44.0, Draw::SmallTile { on: false }, None));
         let controls_x = PAD + inner - 10.0 - 3.0 * 28.0 - 8.0;
@@ -330,7 +356,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
 
     // decutil quick toggles: Recording, Idle inhibit, Game mode, Do not disturb.
     let qw = (inner - 3.0 * GAP) / 4.0;
-    if let Some(u) = &s.util {
+    if let Some(u) = s.util.as_ref().filter(|_| tiles.toggles) {
         let toggles: [(&'static str, &str, bool, Option<Target>); 4] = [
             ("record", if u.record { "Recording" } else { "Record" }, u.record, Some(Target::Record)),
             ("eye", "Inhibit Idle", u.idle, Some(Target::IdleInhibit)),
@@ -354,13 +380,22 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         (third.0, third.1, false, third.2),
         ("switches", "Settings", false, Target::Settings),
     ];
-    for (i, (icon, label, on, t)) in actions.into_iter().enumerate() {
-        let x = PAD + i as f32 * (qw + GAP);
-        out.push(item(x, y, qw, 66.0, Draw::SmallTile { on }, Some(t)));
-        out.push(item(x + qw / 2.0 - 10.0, y + 13.0, 20.0, 20.0, Draw::Glyph { icon, size: 20.0, ink: if on { Ink::White } else { Ink::Primary } }, None));
-        out.push(caption(x + 2.0, y + 43.0, qw - 4.0, label, if on { Ink::White } else { Ink::Primary }));
+    if tiles.actions {
+        for (i, (icon, label, on, t)) in actions.into_iter().enumerate() {
+            let x = PAD + i as f32 * (qw + GAP);
+            out.push(item(x, y, qw, 66.0, Draw::SmallTile { on }, Some(t)));
+            out.push(item(x + qw / 2.0 - 10.0, y + 13.0, 20.0, 20.0, Draw::Glyph { icon, size: 20.0, ink: if on { Ink::White } else { Ink::Primary } }, None));
+            out.push(caption(x + 2.0, y + 43.0, qw - 4.0, label, if on { Ink::White } else { Ink::Primary }));
+        }
+        y += 66.0;
+    } else {
+        // the last group above ended with a gap
+        y = (y - GAP).max(PAD);
     }
-    y += 66.0;
+    if out.is_empty() && *tiles != Tiles::ALL {
+        // every chosen group is unavailable on this machine (no brightness control, no player): never show an empty box
+        return layout_with(s, &Tiles::ALL);
+    }
 
     (out, y + PAD)
 }
@@ -386,13 +421,16 @@ pub struct View<'a> {
     pub items: &'a [Item],
     pub height: f32,
     pub hover: Option<Target>,
+    /// Already resolved ([`Style::resolve`]): `Auto` is painted as `Card`.
+    pub style: Style,
 }
 
 /// Paints the panel described by `view` into `pm`.
 pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut SymbolCache) {
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
-    fill_rounded(pm, ox, oy, PANEL_W, height, crate::theme::th().r(2.0), crate::theme::th().overlay.color(crate::theme::th().panel_alpha * 0.9));
-    stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, crate::theme::th().r(2.0) - 0.5, crate::theme::th().outline_c(), 1.0);
+    let (panel_r, tile_r, fluent) = look(view.style);
+    fill_rounded(pm, ox, oy, PANEL_W, height, panel_r, crate::theme::th().overlay.color(crate::theme::th().panel_alpha * 0.9));
+    stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, (panel_r - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
 
     for it in items {
         let (x, y, w, h) = (ox + it.r.x, oy + it.r.y, it.r.w, it.r.h);
@@ -400,19 +438,23 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
         let hovered = it.target.is_some() && it.target == hover;
         match &it.draw {
             Draw::Tile => {
-                fill_rounded(pm, x, y, w, h, 16.0, crate::theme::th().ink(0.09));
-                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, crate::theme::th().ink(0.07), 1.0);
+                fill_rounded(pm, x, y, w, h, tile_r, crate::theme::th().ink(0.09));
+                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
             }
             Draw::SmallTile { on } => {
                 let c = if *on { crate::theme::th().accent_c() } else { crate::theme::th().ink(if hovered { 0.14 } else { 0.09 }) };
-                fill_rounded(pm, x, y, w, h, 16.0, c);
+                fill_rounded(pm, x, y, w, h, tile_r, c);
                 if !on {
-                    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 15.5, crate::theme::th().ink(0.07), 1.0);
+                    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
                 }
             }
             Draw::Circle { icon, on } => {
                 let c = if *on { crate::theme::th().accent_c() } else { crate::theme::th().ink(if hovered { 0.2 } else { 0.14 }) };
-                fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, c);
+                if fluent {
+                    fill_rounded(pm, x, y, w, h, tile_r.min(w * 0.3), c);
+                } else {
+                    fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, c);
+                }
                 let ink = if *on { crate::theme::th().accent_text.t() } else { crate::theme::th().text.t() };
                 blit_symbol(pm, symbols, icon, ink, 17.0, x + w / 2.0, y + h / 2.0);
             }
@@ -442,6 +484,16 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 blit_symbol(pm, symbols, icon, crate::theme::th().overlay.t(), 15.0, x + 6.0 + 7.5, y + h / 2.0);
             }
         }
+    }
+}
+
+/// (panel radius, tile radius, fluent) of a resolved style: the card look doubles the theme radius for the panel and rounds the
+/// tiles to 16 px; the Windows 11 flyout takes the theme radius as it is (8 px there) for both and squares the toggles off.
+pub fn look(style: Style) -> (f32, f32, bool) {
+    let th = crate::theme::th();
+    match style {
+        Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
+        _ => (th.r(2.0), 16.0, false),
     }
 }
 

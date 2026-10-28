@@ -43,6 +43,13 @@ pub struct Selection {
     /// Which shortcut is being recorded: "k:<n>" or "new".
     pub recording: Option<String>,
     pub rec_mods: Vec<&'static str>,
+    /// Appearance pane: the open tab, the open Customise section and whether the All apps tab shows its advanced options.
+    pub tab: super::appearance::Tab,
+    pub section: super::appearance::Section,
+    pub adv: bool,
+    /// A button asked to open another pane (index into `PANES`) / to scroll back to the top; the window acts on both.
+    pub goto: Option<usize>,
+    pub reset_scroll: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -116,6 +123,11 @@ impl Model {
         };
         m.rt = io::poll_runtime(&m.paths.socket);
         m
+    }
+
+    /// The Wallpaper tab of the Appearance pane is on screen.
+    pub fn wallpaper_open(&self) -> bool {
+        super::panes::PANES.get(self.sel.pane).is_some_and(|p| p.id == "appearance") && self.sel.tab == super::appearance::Tab::Wallpaper
     }
 
     pub fn watched_files(&self) -> Vec<std::path::PathBuf> {

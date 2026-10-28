@@ -137,6 +137,9 @@ pub struct Theme {
     /// Where the Caelestia pill bar sits (`decebal.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
     /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
     pub bar_position: crate::config::BarPosition,
+    /// The Control Center's settings (`decebal.json` `control_center`, which a theme's `[control_center]` fills): filled in by
+    /// [`super::live::Source::build`] like `bar_position`, so a change reaches every program through the theme watcher.
+    pub control_center: crate::controlcenter::settings::Settings,
     pub font_family: String,
     pub font_scale: f32,
     /// The fonts per role with their fallback chains (see [`super::fonts`]).
@@ -539,6 +542,7 @@ impl Def {
             bar_height: clampf(num("bar_height", 26.0), 20.0, 40.0),
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
             bar_position: crate::config::BarPosition::default(),
+            control_center: Default::default(),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
             font_family: fonts.primary_ui().to_string(),

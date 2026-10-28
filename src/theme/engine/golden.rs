@@ -20,7 +20,7 @@ fn legacy_def(id: &str) -> Def {
 /// The original eight themes, frozen in `tests/fixtures/legacy-builtin`.
 const LEGACY: [&str; 8] = ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"];
 /// Themes added after the engine: they have no legacy fixture, so they are checked as packages instead (see `new_themes_are_valid_packages`).
-const NEW: [&str; 5] = ["nothing-dot", "nothing-light", "brutalist", "terminal-minimal", "terminal-amber"];
+const NEW: [&str; 10] = ["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic", "nothing-dot", "nothing-light", "brutalist", "terminal-minimal", "terminal-amber"];
 
 fn selections() -> Vec<Selection> {
     vec![

@@ -1,4 +1,4 @@
-//! The "Theme packages" section of the Theme pane: the cards of [`super::themecards`], "create from current settings",
+//! The "Themes" section (theme packages) of Appearance > Theme: the cards of [`super::themecards`], "create from current settings",
 //! "install a file" and the market stub, and the clicks on them (`l:tcard:<action>:<id>`, `th:snapname`, `th:install`).
 
 use super::model::{CtlVal, Model};
@@ -55,7 +55,11 @@ pub fn items(m: &Model) -> Vec<Item> {
     let infos = store::list(&src);
     let mut cards: Vec<Card> = infos.iter().filter(|i| i.origin != store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)).collect();
     cards.extend(infos.iter().filter(|i| i.origin == store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)));
-    let mut out = vec![Item::Header("Theme packages".into()), Item::ThemeCards(cards)];
+    let mut out = vec![
+        Item::Header("Themes".into()),
+        Item::Note { text: "A theme sets colours, fonts, window style, dock and wallpaper together. Pick one to change the whole look; fine-tune it under Customise.".into(), warn: false },
+        Item::ThemeCards(cards),
+    ];
     out.push(Item::Card(vec![
         Row::new("Create theme from current settings…")
             .detail("Saves your colours, fonts, titlebars, gaps, wallpaper, dock and widgets as a new package. Type a name and press Enter.")

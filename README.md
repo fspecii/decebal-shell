@@ -28,6 +28,7 @@ The backend is picked automatically (`DECEBAL_BACKEND=wayland|x11` forces one).
 | `decswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `decexpose` | Exposé / Mission Control window overview for rdwm (X11): thumbnails of the current workspace, or `--all` grouped by workspace; see below | starts and paints in ~100 ms, exits on commit |
 | `dechud` | on-screen display for volume / mute / brightness / mic mute and workspace switches (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
+| `declock` | themed screen locker for X11: blurred dimmed backdrop, clock, avatar, rounded password field with dots, wrong-password shake and back-off, PAM; see [docs/lockscreen.md](docs/lockscreen.md) | ~7 MB RSS, wakes once a second |
 | `decclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
 | `dechot` | Hot Corners for X11: the pointer resting in a screen corner runs an action (Dashboard, Spotlight, Launchpad, Lock, ...); a daemon with `get` / `set` CLI; see below | daemon ~3 MB RSS, 0 % CPU idle |
 | `declaunch` | Launchpad: a searchable grid of installed apps (type to filter, arrows, Enter, Esc) | ~20 MB RSS while open |
@@ -60,6 +61,7 @@ decthemectl theme install mine.dtheme
 decthemectl theme snapshot my-desktop        # create a theme from the current settings
 decwidgets add clock-card --anchor top-right --x -40 --y 60
 ```
+Appearance > Theme in `decsettings` has the same as cards with a live preview. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md);
 The Theme pane of `decsettings` has the same as a gallery. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md); Ready-made looks: [docs/themes.md](docs/themes.md). Something misbehaving? Every program keeps a debug log: [docs/debugging.md](docs/debugging.md) (`decthemectl log`).
 end-to-end test: `tests/e2e/theme-engine.sh`.
 
@@ -382,13 +384,13 @@ Test without touching your session: `make e2e-notify` (private `dbus-daemon` and
 ## Icon themes
 
 Application, folder and MIME icons follow the freedesktop icon theme of your choice: System Settings -> Icons
-(`decsettings icons`, a list of the installed themes with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
+(Appearance > Customise > Icons, `decsettings icons`, a list of the installed themes with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
 `Auto` (the default) follows `gsettings` / GTK's `settings.ini`. The settings live in `decebal.json` under `icons`
 (`theme`, `size_scale`, `monochrome_tint`, `fallback`); programs follow within half a second. Lookup rules, caches and
 the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
 End-to-end test: `tests/e2e/icons.sh`.
 
-## Configuration and presets (`decsettings config`)
+## Configuration and presets (`decsettings config`, sidebar entry "Config & Presets")
 
 System Settings > System > Configuration edits the raw files as text (decebal.json, dock-settings.json, the pinned apps, rdwm's
 config.toml, plus a read-only "All settings" listing with the defaults): line numbers, colouring, undo, clipboard, validation with
@@ -435,7 +437,7 @@ Bluetooth, battery, lock keys) whose popups open on hover, the clock (opens the 
 The dock is hidden while that bar is up (`"dock": {"enabled": "auto"}`); `decthemectl style macos` brings the classic bar and the dock back without restarting anything.
 The dashboard, launcher, session menu, OSD, notification history and utilities are the existing programs under the Caelestia colours.
 
-Five layouts, chosen at runtime with `decthemectl layout left|right|top|bottom|split` (or `decthemectl style caelestia-top` and the like, or **Layout** under Shell style in the Theme pane;
+Five layouts, chosen at runtime with `decthemectl layout left|right|top|bottom|split` (or `decthemectl style caelestia-top` and the like, or **Layout** under Style in Appearance > Theme;
 `bar.position` in `decebal.json`, default `left`); running bars re-lay out within about a second:
 
 | layout | what it is |

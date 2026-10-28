@@ -230,7 +230,7 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "rdwm"];
+const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),
@@ -693,6 +693,27 @@ format = "%H:%M"
         assert!(e.iter().any(|m| m.contains("[colors.dark]")), "{e:?}");
         assert!(e.iter().any(|m| m.contains("font.ui")), "{e:?}");
         assert!(e.iter().any(|m| m.contains("`wat`") && m.contains("unknown key")), "{e:?}");
+    }
+
+    #[test]
+    fn control_center_section_is_validated() {
+        let ok = analyze("format = 1\nname = \"x\"\n[control_center]\nenabled = true\nposition = \"bottom-right\"\nstyle = \"fluent\"\ntiles = [\"sound\", \"actions\"]\n");
+        assert!(ok.ok(), "{:?}", ok.diags);
+        let def = ok.def.unwrap();
+        assert_eq!(def.extra["control_center"]["style"], "fluent");
+        assert_eq!(def.extra["control_center"]["tiles"], json!(["sound", "actions"]));
+        for (bad, key) in [
+            ("enabled = \"yes\"", "control_center.enabled"),
+            ("position = \"middle\"", "control_center.position"),
+            ("style = \"glass\"", "control_center.style"),
+            ("tiles = [\"sound\", \"wifi\"]", "control_center.tiles"),
+            ("colour = \"red\"", "control_center.colour"),
+        ] {
+            let a = analyze(&format!("format = 1\nname = \"x\"\n[control_center]\n{bad}\n"));
+            assert!(a.errors().any(|d| d.key.starts_with(key) || d.key == key), "{bad}: {:?}", a.diags);
+        }
+        // a theme without the section is valid: the shell default (present, every tile) applies
+        assert!(analyze("format = 1\nname = \"x\"\n").ok());
     }
 
     #[test]

@@ -57,6 +57,12 @@ impl Source {
         doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse).unwrap_or_default()
     }
 
+    /// `control_center` of the same file (every default when absent).
+    pub fn control_center(&self) -> crate::controlcenter::settings::Settings {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        doc.get("control_center").map(crate::controlcenter::settings::Settings::from_json).unwrap_or_default()
+    }
+
     /// Stores the selection under `"theme"` (atomic, every other key of the file is kept).
     pub fn write_selection(&self, sel: &Selection) -> Result<(), String> {
         crate::settings::io::json_set(&self.shell_json, "theme", Some(sel.to_json()))
@@ -186,10 +192,10 @@ impl Source {
             sel.mode = m;
         }
         match self.theme_for(&id, &sel, system_dark) {
-            Ok(t) => (Theme { bar_position: self.bar_position(), ..t }, None),
+            Ok(t) => (Theme { bar_position: self.bar_position(), control_center: self.control_center(), ..t }, None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                (Theme { bar_position: self.bar_position(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) }, Some(e))
+                (Theme { bar_position: self.bar_position(), control_center: self.control_center(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) }, Some(e))
             }
         }
     }

@@ -1,3 +1,5 @@
 /target
 *.png
 /.claude/
+!themes/**/*.png
+!docs/**/*.png
