@@ -412,6 +412,9 @@ impl SettingsApp {
         let sbw = self.sb();
         let (w, h) = (pm.width() as f32 - sbw, pm.height() as f32);
         self.m.prepare(self.m.sel.pane);
+        if self.m.wh.take_scroll_top() {
+            self.scroll = 0.0;
+        }
         let items = self.m.items(self.m.sel.pane);
         let title = PANES[self.m.sel.pane.min(PANES.len() - 1)].title;
         // sync interaction state
@@ -420,7 +423,13 @@ impl SettingsApp {
         let max_scroll = (self.frame.height - h).max(0.0);
         self.scroll = self.scroll.clamp(0.0, max_scroll);
         let thumbs = &self.thumbs;
-        let lookup = |id: &str| -> Option<Rc<Pixmap>> { thumbs.borrow_mut().get(&id.to_string()).filter(|p| p.width() > 1).cloned() };
+        let wh = &self.m.wh;
+        let lookup = |id: &str| -> Option<Rc<Pixmap>> {
+            if id.starts_with("wh:") {
+                return wh.thumb(id);
+            }
+            thumbs.borrow_mut().get(&id.to_string()).filter(|p| p.width() > 1).cloned()
+        };
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
         // a separate content layer would cost a second full-window pixmap.
@@ -442,8 +451,13 @@ impl SettingsApp {
             items.iter().find_map(|i| if let Item::Preview { id, .. } = i { Some(id.clone()) } else { None }),
             items.iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text.clone()) } else { None }).collect(),
         );
-        for id in wanted {
+        let (online, local): (Vec<String>, Vec<String>) = wanted.into_iter().partition(|id| id.starts_with("wh:"));
+        for id in local {
             self.request_thumb(&id);
+        }
+        if self.m.wh.tab == super::wallhaven::Tab::Wallhaven {
+            self.m.wh.set_visible(&online);
+            super::wallhaven::on_paint(&mut self.m, self.frame.height, self.scroll, h);
         }
         // scrollbar
         let total = self.frame.height;
@@ -479,7 +493,7 @@ impl SettingsApp {
             "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 58.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
-            "loaded_thumbs": self.thumbs.borrow().len(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+            "loaded_thumbs": self.thumbs.borrow().len(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
         });
         let tmp = path.with_extension("tmp");
         if std::fs::write(&tmp, doc.to_string()).is_ok() {
@@ -1035,7 +1049,9 @@ impl WindowApp for SettingsApp {
         self.m.sys_visible(visible);
     }
 
-    fn set_screen(&mut self, _w: u32, _h: u32) {}
+    fn set_screen(&mut self, w: u32, h: u32) {
+        self.m.wh.screen = (w, h);
+    }
 
     fn set_scale(&mut self, scale: f32) {
         if std::env::var_os("MACSETTINGS_SCALE").is_none() && (0.5..=4.0).contains(&scale) {
@@ -1308,6 +1324,7 @@ impl WindowApp for SettingsApp {
             }
         }
         redraw |= self.m.sys_poll();
+        redraw |= super::wallhaven::pump(&mut self.m);
         redraw |= self.m.expire_notice();
         if crate::theme::take_changed() {
             self.m.dirty = true; // the theme pane and every colour follow the file

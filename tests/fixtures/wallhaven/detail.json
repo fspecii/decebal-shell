@@ -1,0 +1,88 @@
+{
+ "data": {
+  "id": "d8vvlo",
+  "url": "https://wallhaven.cc/w/d8vvlo",
+  "short_url": "https://whvn.cc/d8vvlo",
+  "views": 58497,
+  "favorites": 436,
+  "source": "https://whvn.cc/d8vvlo",
+  "purity": "sfw",
+  "category": "general",
+  "dimension_x": 3840,
+  "dimension_y": 2160,
+  "resolution": "3840x2160",
+  "ratio": "1.78",
+  "file_size": 7063337,
+  "file_type": "image/png",
+  "created_at": "2026-10-02 17:37:45",
+  "colors": [
+   "#999999",
+   "#663300",
+   "#424153",
+   "#000000",
+   "#996633"
+  ],
+  "path": "https://w.wallhaven.cc/full/d8/wallhaven-d8vvlo.png",
+  "thumbs": {
+   "large": "https://th.wallhaven.cc/lg/d8/d8vvlo.jpg",
+   "original": "https://th.wallhaven.cc/orig/d8/d8vvlo.jpg",
+   "small": "https://th.wallhaven.cc/small/d8/d8vvlo.jpg"
+  },
+  "tags": [
+   {
+    "id": 314,
+    "name": "car",
+    "alias": "Anime Cars, auto, automobile, cars, carsofinstagram, Cool Cars, speed car, авто",
+    "category_id": 54,
+    "category": "Cars & Motorcycles",
+    "purity": "sfw",
+    "created_at": "2014-02-11 04:32:29"
+   },
+   {
+    "id": 613,
+    "name": "Ferrari",
+    "alias": "old ferrari",
+    "category_id": 54,
+    "category": "Cars & Motorcycles",
+    "purity": "sfw",
+    "created_at": "2014-02-24 15:46:39"
+   },
+   {
+    "id": 2884,
+    "name": "Ferrari F40",
+    "alias": "1987 Ferrari F40, F40, Ferrari F-40",
+    "category_id": 54,
+    "category": "Cars & Motorcycles",
+    "purity": "sfw",
+    "created_at": "2014-06-29 00:33:43"
+   },
+   {
+    "id": 1459,
+    "name": "supercars",
+    "alias": "Super Car, supercar",
+    "category_id": 54,
+    "category": "Cars & Motorcycles",
+    "purity": "sfw",
+    "created_at": "2014-04-14 23:52:43"
+   },
+   {
+    "id": 4186,
+    "name": "race cars",
+    "alias": "race car, racecar, racecars, racing car, racing cars",
+    "category_id": 54,
+    "category": "Cars & Motorcycles",
+    "purity": "sfw",
+    "created_at": "2014-09-09 23:33:17"
+   },
+   {
+    "id": 8654,
+    "name": "Marlboro",
+    "alias": "",
+    "category_id": 37,
+    "category": "Companies & Logos",
+    "purity": "sfw",
+    "created_at": "2014-09-28 15:36:49"
+   }
+  ]
+ }
+}

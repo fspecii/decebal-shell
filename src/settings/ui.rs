@@ -715,7 +715,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     Some(t) => draw_cover(pm, &t, px0, y, pw, ph, u(8.0)),
                     None => {
                         fill_rounded(pm, px0, y, pw, ph, u(8.0), pal::card());
-                        p.text_center(pm, "No wallpaper image", px0 + pw / 2.0, y + ph / 2.0, u(12.0), Weight::Regular, pal::faint());
+                        p.text_center(pm, if id.is_empty() { "No wallpaper image" } else { "Loading…" }, px0 + pw / 2.0, y + ph / 2.0, u(12.0), Weight::Regular, pal::faint());
                     }
                 }
                 y += ph + u(14.0);

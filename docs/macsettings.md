@@ -54,7 +54,7 @@ half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
 ## Panes
 General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (titlebars, borders, colours,
 traffic lights, rdwm's own bar) · Desktop & Dock (dock sliders, menu-bar workspaces, pinned apps add/remove/reorder) ·
-Wallpaper (live preview, mode, colour, path, lazily decoded thumbnails of `~/.config/omarchy/backgrounds/**`) ·
+Wallpaper (two tabs: My backgrounds and Wallhaven, see wallpapers.md; live preview, mode, colour, path, lazily decoded thumbnails of `~/.config/omarchy/backgrounds/**`) ·
 Tiling & Layouts (all layouts as pictograms, default/cycle order, mfact/nmaster/gaps, per-tag layout, per-layout options) ·
 Windows & Snapping (focus, `[snap]`; `snap.activation` appears as soon as rdwm's schema has it) · Rules (add/edit/reorder/delete,
 "from a running window") · Keyboard (all binds incl. chords and modes, search, conflicts, key recorder, add/remove) ·

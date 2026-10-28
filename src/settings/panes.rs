@@ -35,7 +35,13 @@ pub const PANES: &[PaneDef] = &[
         color: (10, 132, 255),
         keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces macdock macbar",
     },
-    PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Photo, color: (50, 173, 230), keywords: "background image fill fit stretch center tile color picture" },
+    PaneDef {
+        id: "wallpaper",
+        title: "Wallpaper",
+        glyph: Glyph::Photo,
+        color: (50, 173, 230),
+        keywords: "background image fill fit stretch center tile color picture wallhaven online download search random favourites",
+    },
     PaneDef {
         id: "tiling",
         title: "Tiling & Layouts",
@@ -348,6 +354,7 @@ impl Model {
         }
         match PANES.get(pane).map(|p| p.id) {
             Some("desktop") if self.apps.is_none() => self.apps = Some(installed_apps()),
+            Some("wallpaper") if self.wh.tab == super::wallhaven::Tab::Wallhaven => super::wallhaven::prepare(self),
             Some("wallpaper") if self.walls.is_none() => self.walls = Some(list_images(&self.paths.backgrounds(), 3, 400)),
             _ => {}
         }
@@ -590,6 +597,15 @@ impl Model {
     }
 
     fn pane_wallpaper(&self) -> Vec<Item> {
+        if self.wh.tab == super::wallhaven::Tab::Wallhaven {
+            return super::wallhaven::items(self);
+        }
+        let mut items = vec![super::wallhaven::tab_card(&self.wh), Item::Space(6.0)];
+        items.extend(self.pane_backgrounds());
+        items
+    }
+
+    fn pane_backgrounds(&self) -> Vec<Item> {
         let cur = self.current_wallpaper();
         let mode = self.string("wallpaper", "mode").unwrap_or_else(|| "fill".into());
         let mut rows = Vec::new();
@@ -1016,8 +1032,19 @@ fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
     m.dirty = true;
 }
 
+/// Makes `path` the wallpaper: written to `config.toml` (rdwm applies it) and followed by "Colours from wallpaper".
+/// The one code path for picking a picture in the Wallpaper pane, the Wallhaven tab and `macthemectl wallpaper`.
+pub fn set_wallpaper(m: &mut Model, path: &str) {
+    m.apply("r:wallpaper:image", CtlVal::Str(path.to_string()));
+    super::themepane::follow_wallpaper(m, path);
+    m.walls = None; // the folder may have a new picture
+}
+
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if matches!(parts.as_slice(), ["wh", ..] | ["w", "wh", _]) {
+        return super::wallhaven::apply(m, &parts, v);
+    }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
         return super::themepane::apply(m, &parts, v);
     }
@@ -1064,8 +1091,7 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
         }
         ["w", ..] => {
             let path = id.strip_prefix("w:").unwrap_or("").to_string();
-            m.apply("r:wallpaper:image", CtlVal::Str(path.clone()));
-            super::themepane::follow_wallpaper(m, &path);
+            set_wallpaper(m, &path);
         }
         ["p", op, i] => pinned_op(m, op, i.parse().unwrap_or(usize::MAX)),
         ["p", "add"] => {

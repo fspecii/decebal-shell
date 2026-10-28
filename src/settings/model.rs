@@ -70,6 +70,8 @@ pub struct Model {
     pub wake: Arc<dyn Fn() + Send + Sync>,
     pub apps: Option<Vec<(String, String)>>,
     pub walls: Option<Vec<std::path::PathBuf>>,
+    /// Wallpaper > Wallhaven tab (starts its workers only when opened).
+    pub wh: super::wallhaven::Wh,
     /// Keys the builders asked for / found missing in the schema (consistency test).
     pub used: RefCell<Vec<(String, String)>>,
     pub missing: RefCell<Vec<(String, String)>>,
@@ -104,6 +106,7 @@ impl Model {
             wake,
             apps: None,
             walls: None,
+            wh: super::wallhaven::Wh::default(),
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,

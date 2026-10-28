@@ -16,7 +16,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 |---|---|---|
 | `macdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
 | `macbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing); a vertical bar down the left edge (workspace pills, window, status icons, stacked clock, power) under the Caelestia style, see [docs/caelestia.md](docs/caelestia.md) | ~7 MB RSS |
-| `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download) | ~33 MB RSS with a page of thumbnails |
+| `machaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download); the same browser lives in System Settings > Wallpaper > Wallhaven, see [docs/wallpapers.md](docs/wallpapers.md) | ~33 MB RSS with a page of thumbnails |
 | `macnotify` | notification daemon (`org.freedesktop.Notifications`): macOS-style banners top-right, actions, history panel, Do Not Disturb | ~6 MB RSS, 0 % CPU idle |
 | `macsettings` | System Settings for rdwm + the panels: edits `~/.config/rdwm/config.toml` in place (comments kept), applies live, follows hand edits; see `docs/macsettings.md` | ~25 MB RSS, 0 % CPU idle |
 | `macswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
@@ -29,7 +29,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
-| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md` | CLI |
+| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md`; `wallpaper wallhaven random\|search WORDS` sets a wallpaper from wallhaven.cc (docs/wallpapers.md) | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
