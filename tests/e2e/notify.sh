@@ -3,7 +3,7 @@
 # usage: tests/e2e/notify.sh [display]   (needs Xvfb, dbus-daemon, import; busctl and notify-send are used when present)
 set -u
 cd "$(dirname "$0")/../.." || exit 1
-BIN=${DECNOTIFY_BIN:-$PWD/target/debug/decnotify}
+BIN=${DECNOTIFY_BIN:-${MS_BIN_DIR:-$PWD/target/${PROFILE:-debug}}/decnotify}
 D=${1:-:151}
 T=$(mktemp -d "${TMPDIR:-/tmp}/decnotify-e2e.XXXXXX")
 SHOTS=${SHOTS:-$T/shots}
