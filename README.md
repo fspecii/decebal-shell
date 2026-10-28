@@ -29,7 +29,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
-| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic` takes Caelestia's colours from the wallpaper; see `docs/theming.md` | CLI |
+| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are

@@ -12,3 +12,4 @@ pub mod system;
 pub mod themepane;
 pub mod tomlcfg;
 pub mod ui;
+pub mod wallpapercolors;

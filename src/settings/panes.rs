@@ -610,6 +610,7 @@ impl Model {
             Item::Space(6.0),
             Item::Card(rows),
         ];
+        items.extend(super::wallpapercolors::wallpaper_pane_note(self));
         // changed through `rdwmctl wallpaper` since the last reload
         let live = self.rt.state["wallpaper"]["image"].as_str().map(expand_tilde);
         let filev = self.string("wallpaper", "image").map(|p| expand_tilde(&p));

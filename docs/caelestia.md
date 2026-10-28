@@ -14,7 +14,7 @@ macthemectl style macos          # the horizontal bar and the floating dock agai
 
 | piece | Caelestia style |
 |---|---|
-| theme | `caelestia` (the shell's shipped scheme, or `macthemectl dynamic` for colours from the wallpaper) |
+| theme | `caelestia` (the shell's shipped scheme, or `macthemectl dynamic on` for Match wallpaper colours) |
 | bar | `bar_style = "vertical"`: `macbar` moves to the left edge (`Anchor::Left`), 52 px wide, and reserves that strip with `_NET_WM_STRUT_PARTIAL` (`left = 52`, `left_start_y`/`left_end_y` = the monitor's rows), so rdwm tiles windows to its right |
 | dock | `macshell.json` `dock.enabled = "auto"`: hidden while the theme's bar is the vertical one (see below) |
 | dashboard, launcher, session, OSD, notifications | unchanged programs, restyled by the theme; positioned for a bar that is not at the top |

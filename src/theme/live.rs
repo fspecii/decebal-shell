@@ -148,13 +148,11 @@ impl Source {
         mode.and_then(|m| lookup(&base).map(|id| (id, Some(m))))
     }
 
-    /// [`Self::load_def`] plus "colours from wallpaper": the Caelestia theme gets its palette from the stored seed.
-    pub fn def_for(&self, id: &str, sel: &Selection) -> Result<Def, String> {
+    /// The theme `id` resolved for `sel`: variant picked (the wallpaper's brightness decides when "match wallpaper"
+    /// follows light/dark), overrides applied, then "match wallpaper" recolours it when it is on.
+    pub fn theme_for(&self, id: &str, sel: &Selection, system_dark: bool) -> Result<Theme, String> {
         let def = self.load_def(id)?;
-        Ok(match (&sel.dynamic, id == builtin::DYNAMIC_THEME) {
-            (Some(d), true) => def.with_dynamic(d),
-            _ => def,
-        })
+        Ok(resolve_with(&def, id, sel, system_dark))
     }
 
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
@@ -164,15 +162,11 @@ impl Source {
         if let Some(m) = implied {
             sel.mode = m;
         }
-        match self.def_for(&id, &sel) {
-            Ok(def) => {
-                let dark = def.pick_dark(sel.mode, system_dark);
-                (def.resolve(&id, dark, &sel), None)
-            }
+        match self.theme_for(&id, &sel, system_dark) {
+            Ok(t) => (t, None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                let dark = def.pick_dark(sel.mode, system_dark);
-                (def.resolve(builtin::DEFAULT_ID, dark, &sel), Some(e))
+                (resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark), Some(e))
             }
         }
     }
@@ -190,6 +184,26 @@ impl Source {
             v.extend(system_scheme_files().iter().map(|p| Stamp::of(p)));
         }
         v
+    }
+}
+
+/// Variant choice, resolution and the optional "match wallpaper" layer, in one place.
+fn resolve_with(def: &Def, id: &str, sel: &Selection, system_dark: bool) -> Theme {
+    let dyn_on = sel.dynamic.as_ref().filter(|d| d.enabled);
+    let mode = match dyn_on {
+        Some(d) if d.follow_mode => {
+            if d.colors.tone >= super::dynamic::LIGHT_TONE {
+                Mode::Light
+            } else {
+                Mode::Dark
+            }
+        }
+        _ => sel.mode,
+    };
+    let theme = def.resolve(id, def.pick_dark(mode, system_dark), sel);
+    match dyn_on {
+        Some(d) => super::dynamic::apply_to(theme, d, sel.accent.is_some()),
+        None => theme,
     }
 }
 

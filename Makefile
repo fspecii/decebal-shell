@@ -1,8 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINS = macdock macbar machaven maclaunch macspot macswitch macexpose machud macdash macsession macutil macsettings macthemectl macnotify macwm macclip machot
-UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service macshell-hot.service
-AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop macshell-hot.desktop
+UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service macshell-hot.service macshell-wallpaper-colors.service
+AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop macshell-hot.desktop macshell-wallpaper-colors.desktop
 
 all:
 	cargo build --release --locked
