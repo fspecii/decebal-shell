@@ -175,6 +175,20 @@ Newly installed fonts are noticed when the theme's fonts change or the program r
 Accent, translucency, radius, font and text size overrides are kept, and so is Match wallpaper (it works with every style). `decthemectl style`
 without a name prints the current preset (`custom` when the theme and dock do not match one). Nothing else in the two JSON files is touched.
 
+## The Control Center in every style
+The quick-settings panel is part of the shell: the macOS menu bar has its icon, the Windows taskbar a quick-settings button in the tray (it opens
+the same panel, in the `fluent` look: the theme's radius as it is, squared toggles), the Caelestia bar its Control tile on every edge, and
+`decutil control-center toggle` (or `decbar --control-center`) opens it in any theme and with no bar at all: bind a key to it (rdwm:
+`action = "spawn"`, `args = ["decutil", "control-center", "toggle"]`) or choose **Control Center** for a hot corner. `decebal.json`:
+
+```json
+"control_center": { "enabled": true, "position": "auto", "style": "auto", "tiles": ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"] }
+```
+`position` (`auto`, `top-right`, `top-left`, `bottom-right`, `bottom-left`) is where a key or hot corner opens it (`auto`: beside the bar's own
+button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent` or `auto`; `tiles` lists the groups to show (an empty or
+unknown list means all). A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
+close|open|toggle [--corner C]`.
+
 ## The Caelestia theme
 Ported from [caelestia-shell](https://github.com/caelestia-dots/shell): the dark palette is its shipped default scheme
 (`services/Colours.qml`, the rose Material You scheme) role for role, the light palette is the same seed's tonal-spot light scheme,

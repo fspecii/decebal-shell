@@ -140,7 +140,7 @@ pub fn from_current(src: &Source, paths: &Paths, id: &str, name: &str) -> Result
         }
     }
     // everything below is read back from the live files, so the theme's own copies of these sections go
-    for sec in ["widgets", "wallpaper", "decoration", "rdwm", "dock", "bar", "hot_corners", "icons"] {
+    for sec in ["widgets", "wallpaper", "decoration", "rdwm", "dock", "bar", "hot_corners", "control_center", "icons"] {
         def.extra.shift_remove(sec);
     }
 
@@ -273,6 +273,10 @@ pub fn from_current(src: &Source, paths: &Paths, id: &str, name: &str) -> Result
         if !safe.is_empty() {
             def.extra.insert("hot_corners".into(), Value::Object(safe));
         }
+    }
+    if let Some(cc) = shell.get("control_center").filter(|c| c.is_object()) {
+        // canonical and validated: only the keys the format knows, with understood values
+        def.extra.insert("control_center".into(), crate::controlcenter::settings::Settings::from_json(cc).to_json());
     }
     if let Some(t) = shell.get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str) {
         def.extra.insert("icons".into(), json!({"theme": t}));

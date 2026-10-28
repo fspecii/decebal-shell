@@ -2,6 +2,7 @@
 //! decsettings: native settings app for rdwm and the decebal panels.
 pub mod app;
 pub mod binds;
+pub mod ccpane;
 pub mod configpane;
 pub mod editor;
 pub mod fontpane;

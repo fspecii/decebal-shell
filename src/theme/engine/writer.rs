@@ -187,7 +187,7 @@ pub fn def_to_manifest(def: &Def, h: &Header) -> String {
     if !metrics.is_empty() {
         r.insert("metrics", Item::Table(metrics));
     }
-    for name in ["font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "rdwm"] {
+    for name in ["font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm"] {
         if let Some(Value::Object(o)) = sections.shift_remove(name) {
             let mut t = Table::new();
             for (k, v) in &o {

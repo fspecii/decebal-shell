@@ -82,6 +82,22 @@ pub fn acquire_signalling(name: &str, sig: i32) -> Option<File> {
     None
 }
 
+/// Sends `sig` to the running instance that holds the lock `name`; false when none runs (or it is this process).
+pub fn signal(name: &str, sig: i32) -> bool {
+    let Ok(mut file) = OpenOptions::new().read(true).open(lock_path(name)) else { return false };
+    // SAFETY: flock on a descriptor we own; getting the lock means nobody holds it (it is released when `file` drops).
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        return false;
+    }
+    let mut pid = String::new();
+    let _ = file.read_to_string(&mut pid);
+    match pid.trim().parse::<i32>() {
+        // SAFETY: plain kill(2) with the pid the running instance recorded.
+        Ok(pid) if pid > 1 && pid as u32 != std::process::id() => unsafe { libc::kill(pid, sig) == 0 },
+        _ => false,
+    }
+}
+
 /// Blocks `sigs` in the calling thread (and so in every thread it spawns later); a thread then collects them with [`wait_signal`].
 pub fn block_signals(sigs: &[i32]) {
     // SAFETY: builds a signal set on the stack and applies it with pthread_sigmask; no handlers are touched.
