@@ -160,7 +160,7 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
             if !i.tags.is_empty() {
                 s.push_str(&format!("  tags: {}\n", i.tags.join(", ")));
             }
-            for sec in ["font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "rdwm", "widgets"] {
+            for sec in ["font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm", "widgets"] {
                 if let Some(v) = def.extra.get(sec) {
                     s.push_str(&format!("  [{sec}] {}\n", v.to_string().replace("\"", "")));
                 }

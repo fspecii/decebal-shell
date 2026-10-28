@@ -158,7 +158,7 @@ pub fn expand_tilde(p: &str) -> String {
 }
 
 /// What a hot corner can do: label in the dropdown, action name in `decebal.json`.
-const HOT_ACTIONS: [(&str, &str); 9] = [
+const HOT_ACTIONS: [(&str, &str); 10] = [
     ("None", "none"),
     ("Dashboard", "dashboard"),
     ("Spotlight", "spotlight"),
@@ -168,6 +168,7 @@ const HOT_ACTIONS: [(&str, &str); 9] = [
     ("Lock screen", "lock"),
     ("Tile all windows", "tile-all"),
     ("Notification history", "notifications"),
+    ("Control Center", "control-center"),
 ];
 
 /// Under the corner rows: whether the daemon that applies them is running.
@@ -592,7 +593,7 @@ impl Model {
         }
         let choices: Vec<Opt> = self.apps.as_ref().map(|a| a.iter().filter(|x| !pins.contains(&x.0)).map(|x| (x.1.clone(), x.0.clone())).collect()).unwrap_or_default();
         rows.push(Row::new("Add an app").ctl(Ctl::new("p:add", Kind::Popup(choices, None))));
-        vec![
+        let mut out = vec![
             Item::Header("Dock".into()),
             Item::Card(dock),
             Item::Header("Menu bar".into()),
@@ -603,7 +604,9 @@ impl Model {
             Item::Header("Pinned apps".into()),
             Item::Card(rows),
             Item::Note { text: "Settings are stored in the omarchy config folder next to dock-settings.json; unknown keys in those files are left alone.".into(), warn: false },
-        ]
+        ];
+        out.extend(super::ccpane::items(self));
+        out
     }
 
     /// What is on screen: rdwm's live wallpaper when it runs (it may differ from the file after
@@ -1068,6 +1071,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _] | ["l", "tcard", ..]) {
         return super::themepane::apply(m, &parts, v);
+    }
+    if matches!(parts.as_slice(), ["cc", ..]) {
+        return super::ccpane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);

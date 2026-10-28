@@ -83,11 +83,12 @@ pub enum Action {
     TileAll,
     ShowDesktop,
     Notifications,
+    ControlCenter,
     Custom(String),
 }
 
 /// The names of the built-in actions, in the order the settings app lists them.
-pub const ACTION_NAMES: [&str; 10] = ["none", "dashboard", "session", "spotlight", "launchpad", "overview", "lock", "tile-all", "show-desktop", "notifications"];
+pub const ACTION_NAMES: [&str; 11] = ["none", "dashboard", "session", "spotlight", "launchpad", "overview", "lock", "tile-all", "show-desktop", "notifications", "control-center"];
 
 /// A shell command line and the program it needs (checked in `PATH` right before it runs).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +116,7 @@ impl Action {
             "tile-all" | "tileall" => Action::TileAll,
             "show-desktop" | "desktop" => Action::ShowDesktop,
             "notifications" | "notification-center" => Action::Notifications,
+            "control-center" | "controlcenter" | "quick-settings" => Action::ControlCenter,
             _ => return Option::None,
         })
     }
@@ -132,6 +134,7 @@ impl Action {
             Action::TileAll => "tile-all".into(),
             Action::ShowDesktop => "show-desktop".into(),
             Action::Notifications => "notifications".into(),
+            Action::ControlCenter => "control-center".into(),
             Action::Custom(c) => format!("custom:{c}"),
         }
     }
@@ -150,6 +153,7 @@ impl Action {
             Action::Lock => ("rdwm-lock", Some("rdwm-lock")),
             Action::TileAll => ("rdwmctl action tileall", Some("rdwmctl")),
             Action::Notifications => ("decnotify history", Some("decnotify")),
+            Action::ControlCenter => ("decbar --control-center toggle", Some("decbar")),
             Action::Custom(c) => return Some(Command { line: c.clone(), needs: Option::None }),
         };
         Some(Command { line: line.into(), needs })
@@ -480,6 +484,8 @@ mod tests {
         assert_eq!(line("lock"), Some(("rdwm-lock".into(), Some("rdwm-lock"))));
         assert_eq!(line("tile-all"), Some(("rdwmctl action tileall".into(), Some("rdwmctl"))));
         assert_eq!(line("notifications"), Some(("decnotify history".into(), Some("decnotify"))));
+        assert_eq!(line("control-center"), Some(("decbar --control-center toggle".into(), Some("decbar"))));
+        assert_eq!(Action::parse("Quick_Settings"), Some(Action::ControlCenter));
         assert_eq!(line("custom:  touch /tmp/x && echo 'a b' "), Some(("touch /tmp/x && echo 'a b'".into(), None)));
         assert_eq!(line("none"), None);
         assert_eq!(line("show-desktop"), None, "accepted, but rdwm has nothing to run for it");

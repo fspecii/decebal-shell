@@ -110,8 +110,14 @@ size = 54   align = "center"   position = "bottom"   roundness = 0.6   magnifica
 theme = "WhiteSur-dark"  size_scale = 1.0  monochrome_tint = false  fallback = "Adwaita"
 
 [hot_corners]
-top_right = "dashboard"             # none dashboard session spotlight launchpad overview lock tile-all notifications
+top_right = "dashboard"             # none dashboard session spotlight launchpad overview lock tile-all notifications control-center
 dwell_ms = 200                      # `custom:<command>` is NOT accepted from a theme
+
+[control_center]                    # the quick-settings panel; every key optional, the defaults make it present in every theme
+enabled = true                      # false removes its buttons and turns `decutil control-center` into a no-op
+position = "auto"                   # auto | top-right | top-left | bottom-right | bottom-left: where a key or hot corner opens it
+style = "auto"                      # auto | card | fluent (auto = fluent under the Windows taskbar, card elsewhere)
+tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"]   # groups to show (default: all)
 
 [[widgets]]                         # up to 32 instances
 use = "sunset-clock"                # widgets/sunset-clock.toml of this package, or "builtin:cpu-ram-ring"
@@ -156,7 +162,7 @@ whole package.
 2. compute the new text of every file it owns: **rdwm `config.toml`** (colours, titlebar style/height/radius, `[rdwm]` keys, wallpaper
    image/mode/colour, validated with `rdwmctl check-config`; a titlebar style the installed rdwm rejects is dropped and reported, the
    rest still applies), **`dock-settings.json`** (style, align, position, magnification, roundness), **`decebal.json`** (theme selection,
-   `bar`, `dock`, `hot_corners`, `icons`, `widgets`, `theme_wallpaper`);
+   `bar`, `dock`, `hot_corners`, `control_center`, `icons`, `widgets`, `theme_wallpaper`);
 3. save the old contents as an undo record (`<shell config>/theme-undo/<time>/`, the last ten are kept);
 4. write the files atomically one by one; if any write fails, everything already written is put back;
 5. reload rdwm once; ask the "Apply to all apps" pipeline to follow, if the user switched that on.
@@ -167,6 +173,22 @@ file byte for byte (a file the apply created is removed again) and steps back th
 apply replaces them, the user's own instances stay. A theme with `match_colors` records it in `theme_dynamic` so the next theme switches
 "Match wallpaper" off again. Programs follow within half a second like for every theme change; `decwidgets` rebuilds when its widget files
 or `decebal.json` change.
+
+## The Control Center is part of the shell, not of a theme
+Every theme gets the quick-settings panel (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing, stay awake,
+screenshot, notifications, Settings) through the shell, so a theme package never has to ship it. Its entry points:
+
+| shell | button | panel opens |
+|---|---|---|
+| macOS menu bar | switches icon next to the clock | under the bar, right edge on the button |
+| Windows taskbar (`dock.style = "windows"`, top or bottom) | quick-settings button in the tray, left of the clock | against the right screen edge, above (below) the taskbar, in the `fluent` look |
+| Caelestia pill bar, left / right / top / bottom | the Control tile of the tray pill | beside the bar, on the screen side |
+| Caelestia split | the same tile, in the bottom bar | above the bottom bar |
+| any shell, or no bar at all | `decutil control-center toggle` (or `decbar --control-center`), the hot-corner action `control-center` | `control_center.position`; `auto` is beside the bar's own button |
+
+`[control_center]` only chooses what it shows and how: it never runs anything (the section holds names from fixed lists, validated like the
+rest). Applying a theme copies the section to `decebal.json` `control_center`, and the Desktop & Dock pane of decsettings edits the same object.
+`theme snapshot` exports it. Panels follow the monitor the bars are on (the primary one) and stay inside it on all four edges.
 
 ## Safety model
 
