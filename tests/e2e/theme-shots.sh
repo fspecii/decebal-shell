@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Screenshots of the bundled asset themes (docs/themes/<id>.png and themes/<id>/screenshots/main.png): private Xvfb + rdwm +
 # decbar + decdock + decwidgets + a small decsettings (Theme pane), each theme applied from the repository's themes/ folder.
+#   MODE=light OUT=/tmp/x tests/e2e/theme-shots.sh brutalist     (a light-variant shot; the bundled wallpaper stays the same)
 #   OUT=docs/themes PROFILE=release E2E_DISPLAY=:93 tests/e2e/theme-shots.sh [id...]
 # Only PIDs started here are killed; the live session is never touched.
 set -u
@@ -31,6 +32,7 @@ decdock >"$TMP/decdock.log" 2>&1 & PIDS+=($!)
 decwidgets >"$TMP/decwidgets.log" 2>&1 & PIDS+=($!)
 for id in $IDS; do
   decthemectl theme apply "$id" >/dev/null 2>&1 || { echo "apply $id failed"; continue; }
+  [ -n "${MODE:-}" ] && decthemectl apply "$id" --mode "$MODE" >/dev/null 2>&1
   sleep 4
   decsettings --config "$DECSETTINGS_CONFIG" theme >"$TMP/ds.log" 2>&1 & DP=$!
   sleep 3
