@@ -618,8 +618,15 @@ impl DecBar {
         std::thread::spawn(move || {
             let prev = shared.snap.lock().map(|s| s.clone()).unwrap_or_default();
             let next = if full { Snapshot::collect() } else { collect_light(&prev) };
+            // A volume the user just set (the wheel, a slider) is still being applied by the worker: a probe taken
+            // meanwhile reads the old value and would undo the next wheel step.
+            let just_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_secs(1));
             if let Ok(mut s) = shared.snap.lock() {
+                let volume = s.volume.clone();
                 *s = next;
+                if just_set {
+                    s.volume = volume;
+                }
             }
             shared.changed.store(true, Ordering::SeqCst);
             shared.snap_busy.store(false, Ordering::SeqCst);
