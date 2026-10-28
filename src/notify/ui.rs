@@ -361,9 +361,15 @@ impl Ui {
     }
 
     fn top(&self) -> i32 {
-        // below the horizontal bar; with a vertical one (Caelestia) nothing is at the top edge
-        let below = if crate::theme::th().bar_vertical() { 12.0 } else { crate::theme::BAR_HEIGHT + 8.0 };
+        // below the classic bar; with the Caelestia pill bar below it when it runs along the top (`top`, `split`), else near the edge
+        let th = crate::theme::th();
+        let below = if th.pill_bar().is_some() { 12.0 + th.bar_insets().top as f32 / self.s } else { crate::theme::BAR_HEIGHT + 8.0 };
         self.mon.y + self.px(below).round() as i32
+    }
+
+    /// Gap between the banners and the right screen edge: the margin, plus the pill bar when it sits on the right edge.
+    fn right_gap(&self) -> i32 {
+        self.px(MARGIN).round() as i32 + crate::theme::th().bar_insets().right
     }
 
     fn make_window(&self, x: i32, y: i32, w: u32, h: u32, keys: bool) -> Result<Window, String> {
@@ -456,7 +462,7 @@ impl Ui {
     fn create_banner(&mut self, n: Notification, secs: u32) {
         let (w, h, title, body, btns, close, icon_at) = self.layout(&n);
         let icon = self.resolve_icon(&n);
-        let x = self.mon.x + self.mon.w - w as i32 - self.px(MARGIN).round() as i32;
+        let x = self.mon.x + self.mon.w - w as i32 - self.right_gap();
         let Ok(win) = self.make_window(x, self.top(), w, h, false) else { return };
         let deadline = n.deadline(secs);
         let b = Banner { n, win, w, h, y: self.top(), deadline, hovered: false, hover_btn: None, hover_close: false, icon, title, body, btns, close, icon_at };
@@ -486,7 +492,7 @@ impl Ui {
         let mut y = self.top();
         let gap = self.px(GAP).round() as i32;
         let x_of = |w: u32, mon: &MonRect, m: i32| mon.x + mon.w - w as i32 - m;
-        let m = self.px(MARGIN).round() as i32;
+        let m = self.right_gap();
         for b in &mut self.banners {
             b.y = y;
             let _ = self.conn.configure_window(b.win, &ConfigureWindowAux::new().x(x_of(b.w, &self.mon, m)).y(y));
@@ -573,7 +579,7 @@ impl Ui {
         self.pal = Palette::current();
         let rows = sh.history.items.len().clamp(1, HIST_MAX_ROWS);
         let (w, h) = ((HIST_W * self.s).round() as u32, ((HIST_HEADER + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32);
-        let x = self.mon.x + self.mon.w - w as i32 - self.px(MARGIN).round() as i32;
+        let x = self.mon.x + self.mon.w - w as i32 - self.right_gap();
         let Ok(win) = self.make_window(x, self.top(), w, h, true) else { return events };
         self.hist = Some(HistWin { win, w, h, scroll: 0, hover: None });
         let pm = paint_history(&mut self.fonts, &self.pal, self.s, sh, self.hist.as_ref(), &self.icon_cache);

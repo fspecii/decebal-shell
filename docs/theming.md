@@ -14,6 +14,7 @@ macthemectl get [--json]               # current selection and resolved colours
 macthemectl export nord > ~/.config/macshell/themes/mine.toml
 macthemectl validate mine.toml
 macthemectl style macos|windows|caelestia   # the whole shell look at once (theme + dock + menu bar)
+macthemectl layout left|right|top|bottom|split   # where the Caelestia bar sits
 macthemectl dynamic [--wallpaper PATH] [--light|--dark] [--scheme vibrant]   # Caelestia colours from the wallpaper
 ```
 Or open **System Settings -> Theme** (`macsettings theme`).
@@ -87,8 +88,8 @@ and in `macthemectl list`; the shell falls back to the default theme and recover
 ### Metric keys
 `radius` (popup corner radius, px; other surfaces scale from it), `dock_roundness` (0..1; 1 = pill), `bar_style` (`flat`, the
 default full-width strip; `floating`, a horizontal pill with a margin, the bar content moving in so it clears the rounded ends; or `vertical`,
-a bar down the left screen edge with pills for its widgets, Caelestia's layout: see [caelestia.md](caelestia.md). A vertical bar reserves a
-left strut instead of a top one, and `dock.enabled = "auto"` hides the dock under it),
+the Caelestia pill bar with pills for its widgets, on the screen edge `bar.position` in `macshell.json` names (`left` by default; `right`, `top`, `bottom`
+or `split`, set with `macthemectl layout`): see [caelestia.md](caelestia.md). That bar reserves a strut on its own edge instead of a top one, and `dock.enabled = "auto"` hides the dock under it),
 `dock_alpha`, `popup_alpha`,
 `panel_alpha`, `bar_alpha`, `shadow`, `outline` (alpha of the 1 px outline), `dock_icon_size`, `dock_padding`, `bar_height`
 (these three are published for the layout code, which does not read them yet), `titlebar_style` (`macos`/`classic`),
@@ -103,7 +104,7 @@ The dock uses `dock_alpha` as its opacity at the default `dock-settings.json` (`
 |---|---|---|---|---|
 | `macos` | macOS | `style: mac`; `roundness` removed so the theme's `dock_roundness` rules | `true` | `true` |
 | `windows` | Windows 11 | `style: windows`, `windowsAlign: center` (the Windows 11 taskbar) | `true` | `"auto"`: hidden while the taskbar is up |
-| `caelestia` | Caelestia | `style: mac`; `roundness` removed (the theme's pill) | `"auto"`: hidden while the theme's bar is vertical | `true`, drawn as a vertical bar on the left edge |
+| `caelestia` | Caelestia | `style: mac`; `roundness` removed (the theme's pill) | `"auto"`: hidden while the theme has the pill bar | `true`, drawn as the pill bar on the edge `bar.position` names (left by default; `caelestia-top` and the like set it) |
 
 Accent, translucency, radius, font and text size overrides are kept; wallpaper colours stay only for `caelestia`. `macthemectl style`
 without a name prints the current preset (`custom` when the theme and dock do not match one). Nothing else in the two JSON files is touched.
@@ -184,5 +185,5 @@ variant, live reload, rdwm edits, the settings pane), `tests/e2e/theme.sh` (priv
 macsettings: macthemectl, user theme file edits, the UI, pixel checks, screenshots in `$SHOTS`),
 `THEME_SHOTS=dir cargo test --lib -- --ignored launchpad_in_three_themes`, `tests/e2e/style.sh` (the three shell styles on the real macbar and
 macdock, pixel checks per style, the pill geometry, wallpaper colours, and `BASELINE_BIN=dir` to prove the macOS style is pixel-identical to a build from before the Caelestia theme).
-`tests/e2e/vbar.sh` runs the vertical Caelestia bar for real (strut, geometry, workspace pills, popups, launching the widgets, the dock hiding, switching styles both ways).
+`tests/e2e/layouts.sh` runs every Caelestia layout (left, right, top, bottom, split) the same way; `tests/e2e/vbar.sh` runs the left Caelestia bar for real (strut, geometry, workspace pills, popups, launching the widgets, the dock hiding, switching styles both ways).
 The pieces are unit-tested too: `menubar::vbar` (geometry, hit-testing, clicks), `backend::x11` (left placement and strut), `theme::style`, `config`.
