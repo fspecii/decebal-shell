@@ -28,3 +28,7 @@ Keep the daemons light: `notify.sh` fails if `decnotify` idles above 10 MB RSS. 
 packages); see docs/theme-engine.md before changing the format, and bump `format` for incompatible changes.
 
 Commits: short imperative subject, explain why in the body. Open an issue before a large change.
+
+## Releases
+
+Pushing a tag `vX.Y.Z` builds the `.deb` and a `/usr` tarball with checksums and attaches them to a GitHub release (`.github/workflows/release.yml`). Move the Unreleased entries of CHANGELOG.md under the new version first.
