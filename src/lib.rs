@@ -28,6 +28,7 @@ pub mod launcher;
 pub mod mem;
 pub mod menubar;
 pub mod notify;
+pub mod preset;
 pub mod session;
 pub mod settings;
 pub mod single;

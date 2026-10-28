@@ -19,7 +19,7 @@ pub const SECTIONS: &[Section] = &[
     Section { title: "Keyboard & Input", panes: &["inputdev", "keyboard"] },
     Section { title: "Windows", panes: &["tiling", "windows", "rules"] },
     Section { title: "Apps", panes: &["defaults", "autostart"] },
-    Section { title: "System", panes: &["general", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
+    Section { title: "System", panes: &["general", "config", "power", "datetime", "users", "privacy", "accessibility", "storage"] },
 ];
 
 /// (pane id, setting, extra words)
@@ -88,6 +88,9 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
     ("storage", "Disk usage", "storage space free df"),
     ("storage", "Software versions", "rdwm macshell macbar macdock"),
     ("storage", "Check configuration", "validate config.toml"),
+    ("config", "Edit configuration files", "text editor json toml raw macshell.json dock-settings config.toml"),
+    ("config", "Presets", "profiles save as preset apply export import share backup restore undo"),
+    ("config", "Revert", "previous version backup restore file"),
     ("icons", "Icon theme", "papirus tela whitesur adwaita breeze yaru auto gtk gsettings"),
     ("icons", "Icon size", "scale artwork padding dock"),
     ("icons", "Tint symbolic icons", "monochrome text colour"),

@@ -6,7 +6,7 @@ Window class `MacSettings` (rdwm draws the titlebar). Launch again to toggle it 
 
 ```
 macsettings [PANE]          # general appearance desktop wallpaper tiling windows rules keyboard autostart displays
-                            # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility (see "System panes" below)
+                            # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility config (see "System panes" below; `config` = text editor + presets, docs/presets.md)
 macsettings --config PATH   # edit another rdwm config
 ```
 Environment: `MACSETTINGS_CONFIG`/`RDWM_CONFIG` (config file), `MACSHELL_CONFIG` (omarchy folder with the JSON files),

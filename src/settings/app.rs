@@ -227,6 +227,7 @@ impl SettingsApp {
             self.popup = None;
             self.colorpop = None;
             self.m.sel.recording = None;
+            self.m.cfg.leave();
             if self.m.notice.as_ref().is_some_and(|n| n.error) {
                 self.m.notice = None;
             }
@@ -433,7 +434,15 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
         // a separate content layer would cost a second full-window pixmap.
-        let frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        let mut frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        // A shorter page than the last one (another tab, a collapsed list): the scroll was clamped with the old height,
+        // so paint again at the right offset instead of leaving the page shifted until the next event.
+        let max_now = (frame.height - h).max(0.0);
+        if self.scroll > max_now + 0.5 {
+            self.scroll = max_now;
+            pm.fill(pal::window());
+            frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        }
         // lazy thumbnails: only what is visible (plus one row of margin); the big preview goes first
         let mut wanted: Vec<String> = Vec::new();
         for it in &items {
@@ -447,6 +456,7 @@ impl SettingsApp {
             }
         }
         self.frame = frame;
+        super::configpane::sync_geometry(&mut self.m, &self.frame);
         self.dump_meta = (
             items.iter().find_map(|i| if let Item::Preview { id, .. } = i { Some(id.clone()) } else { None }),
             items.iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text.clone()) } else { None }).collect(),
@@ -1096,6 +1106,12 @@ impl WindowApp for SettingsApp {
         if self.colorpop.is_some() {
             return Response::NONE;
         }
+        if self.m.cfg.drag {
+            let p = Painter { fonts: self.fonts.as_mut(), s: self.s };
+            if super::configpane::pointer_drag(&mut self.m, &self.frame, &p, x, y) {
+                return Response::REDRAW;
+            }
+        }
         let (cx, cy) = self.to_content(x, y);
         if let Some((id, _)) = self.it.drag.clone() {
             if let Some(p) = self.frame.find(&id).cloned() {
@@ -1129,6 +1145,7 @@ impl WindowApp for SettingsApp {
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
         self.it.ring = false;
         if !pressed {
+            super::configpane::pointer_release(&mut self.m);
             if let Some((id, v)) = self.it.drag.take() {
                 self.m.apply(&id, CtlVal::Num(v));
                 return Response::REDRAW;
@@ -1202,6 +1219,14 @@ impl WindowApp for SettingsApp {
             return Response::NONE;
         }
         self.zone = Zone::Content;
+        if PANES[self.m.sel.pane].id == "config" {
+            let p = Painter { fonts: self.fonts.as_mut(), s: self.s };
+            if super::configpane::pointer_press(&mut self.m, &self.frame, &p, cx, cy) {
+                self.commit_edit();
+                self.it.focus = Some(super::configpane::EDITOR_ID.to_string());
+                return Response::REDRAW;
+            }
+        }
         if let Some(p) = self.frame.at(cx, cy).cloned() {
             if !matches!(p.ctl.kind, Kind::Text { .. }) {
                 self.commit_edit();
@@ -1239,6 +1264,9 @@ impl WindowApp for SettingsApp {
             self.sb_scroll = (self.sb_scroll + dy * self.s * 0.6).clamp(0.0, max);
             return if (old - self.sb_scroll).abs() > 0.1 { Response::REDRAW } else { Response::NONE };
         }
+        if PANES[self.m.sel.pane].id == "config" && super::configpane::wheel(&mut self.m, &self.frame, x, y, dy) {
+            return Response::REDRAW;
+        }
         let max = (self.frame.height - self.content_h()).max(0.0);
         let old = self.scroll;
         self.scroll = (self.scroll + dy * self.s * 0.6).clamp(0.0, max);
@@ -1269,6 +1297,9 @@ impl WindowApp for SettingsApp {
         }
         if self.popup.is_some() {
             return self.key_popup(ev);
+        }
+        if self.m.cfg.active && PANES[self.m.sel.pane].id == "config" {
+            return super::configpane::editor_key(&mut self.m, ev);
         }
         if self.edit.is_some() {
             return self.key_edit(ev);
@@ -1325,6 +1356,7 @@ impl WindowApp for SettingsApp {
         }
         redraw |= self.m.sys_poll();
         redraw |= super::wallhaven::pump(&mut self.m);
+        redraw |= super::configpane::poll(&mut self.m);
         redraw |= self.m.expire_notice();
         if crate::theme::take_changed() {
             self.m.dirty = true; // the theme pane and every colour follow the file

@@ -30,6 +30,8 @@ tiny-skia = "0.11"
 resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+# gzip for the .macshell-preset bundles (already in the tree through png/resvg)
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 fontdue = "0.9"
 ttf-parser = "0.21"
 libc = "0.2"

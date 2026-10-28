@@ -9,7 +9,8 @@ const HELP: &str = "macsettings [OPTIONS] [PANE]
 Settings for the rdwm window manager and the macshell dock and menu bar. Edits ~/.config/rdwm/config.toml
 in place (comments and unknown keys are kept), applies changes live, and follows edits made by hand.
 
-PANE is one of: general appearance desktop wallpaper tiling windows rules keyboard autostart displays
+PANE is one of: general appearance desktop wallpaper tiling windows rules keyboard autostart displays config
+(config = the Configuration pane: edit the files as text, save/apply/export/import presets, see docs/presets.md)
 
 Options:
   --config PATH   rdwm config file to edit (default: $MACSETTINGS_CONFIG, $XDG_CONFIG_HOME/rdwm/config.toml)

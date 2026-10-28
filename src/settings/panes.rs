@@ -86,6 +86,13 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "users", title: "Users & Login", glyph: Glyph::Sys(glyphs::USER), color: (100, 210, 255), keywords: "account avatar picture shell groups login screen" },
     PaneDef { id: "privacy", title: "Privacy & Security", glyph: Glyph::Sys(glyphs::LOCK), color: (88, 86, 214), keywords: "lock screen locker timeout suspend encryption" },
     PaneDef { id: "storage", title: "About & Storage", glyph: Glyph::Sys(glyphs::INFO), color: (142, 142, 147), keywords: "system info cpu gpu ram disk usage versions kernel distro check config" },
+    PaneDef {
+        id: "config",
+        title: "Configuration",
+        glyph: Glyph::Rules,
+        color: (120, 120, 128),
+        keywords: "config edit text file json toml raw presets profiles export import share backup restore revert save as preset macshell.json dock-settings config.toml",
+    },
     PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
 ];
 
@@ -360,6 +367,7 @@ impl Model {
             self.sys_prepare(p.id);
         }
         match PANES.get(pane).map(|p| p.id) {
+            Some("config") => super::configpane::prepare(self),
             Some("desktop") if self.apps.is_none() => self.apps = Some(installed_apps()),
             Some("wallpaper") if self.wh.tab == super::wallhaven::Tab::Wallhaven => super::wallhaven::prepare(self),
             Some("wallpaper") if self.walls.is_none() => self.walls = Some(list_images(&self.paths.backgrounds(), 3, 400)),
@@ -390,6 +398,7 @@ impl Model {
         }
         items.extend(match id {
             "theme" => super::themepane::items(self),
+            "config" => super::configpane::items(self),
             "icons" => super::iconspane::items(self),
             "general" => self.pane_general(),
             "appearance" => self.pane_appearance(),
@@ -1059,6 +1068,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
         return super::themepane::apply(m, &parts, v);
+    }
+    if id.starts_with("cfg:") {
+        return super::configpane::apply(m, id, v);
     }
     if matches!(parts.as_slice(), ["ic", ..] | ["l", "icons", ..]) {
         return super::iconspane::apply(m, &parts, v);

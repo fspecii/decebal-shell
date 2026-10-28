@@ -360,6 +360,18 @@ Application, folder and MIME icons follow the freedesktop icon theme of your cho
 the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
 End-to-end test: `tests/e2e/icons.sh`.
 
+## Configuration and presets (`macsettings config`)
+
+System Settings > System > Configuration edits the raw files as text (macshell.json, dock-settings.json, the pinned apps, rdwm's
+config.toml, plus a read-only "All settings" listing with the defaults): line numbers, colouring, undo, clipboard, validation with
+line numbers (an invalid file is never written), atomic saves with a timestamped `.bak.<date>` and a one-click Revert, and rdwm
+reloaded right after. **Presets** keep named snapshots of the whole setup (shell + theme, fonts, icons, hot corners, dock,
+rdwm settings, shortcuts, autostart, wallpaper) in `~/.config/macshell/presets/`: apply (with a preview and an automatic restore
+point, so it is always reversible), rename, duplicate, delete, and export/import a single `.macshell-preset` file to share.
+Imports are strictly checked (no path traversal, links, unknown files or oversized data) and every command the preset would run is
+listed and removed unless you allow it. Built-in presets: macOS default, Caelestia, Windows-like, Minimal tiling. Same from a
+terminal: `macthemectl profile --help`. Details: [docs/presets.md](docs/presets.md); `tests/e2e/configpane.sh`.
+
 ## Develop
 
 ```sh
