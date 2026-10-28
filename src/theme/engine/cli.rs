@@ -270,7 +270,7 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
                 let secs: u64 = opt(rest, "--preview").and_then(|v| v.parse().ok()).unwrap_or(10).clamp(1, 600);
                 let cancel = std::sync::atomic::AtomicBool::new(false);
                 let a = apply::apply(src, paths, id, &sel)?;
-                eprint!("{}previewing for {secs} s (Ctrl-C keeps the preview off and restores now)...\n", paths_note(&a));
+                eprintln!("{}previewing for {secs} s (Ctrl-C keeps the preview off and restores now)...", paths_note(&a));
                 if !a.undo_id.is_empty() {
                     install_interrupt();
                     let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);

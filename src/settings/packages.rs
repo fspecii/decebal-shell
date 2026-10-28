@@ -70,7 +70,10 @@ pub fn items(m: &Model) -> Vec<Item> {
         }),
     ]));
     out.push(Item::Note {
-        text: format!("Themes live in {} (a folder each: theme.toml plus wallpapers, widgets, screenshots). macthemectl theme help lists the commands; docs/theme-engine.md describes the format.", src.themes_dir.display()),
+        text: format!(
+            "Themes live in {} (a folder each: theme.toml plus wallpapers, widgets, screenshots). macthemectl theme help lists the commands; docs/theme-engine.md describes the format.",
+            src.themes_dir.display()
+        ),
         warn: false,
     });
     out
@@ -181,7 +184,14 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             }
             let id = free_id(&src, &base);
             match capture::from_current(&src, &m.paths, &id, name) {
-                Ok(c) => m.say(format!("Created theme {id} in {}{}", c.dir.display(), if c.notes.is_empty() { String::new() } else { format!(" ({} note{})", c.notes.len(), if c.notes.len() == 1 { "" } else { "s" }) }), false),
+                Ok(c) => m.say(
+                    format!(
+                        "Created theme {id} in {}{}",
+                        c.dir.display(),
+                        if c.notes.is_empty() { String::new() } else { format!(" ({} note{})", c.notes.len(), if c.notes.len() == 1 { "" } else { "s" }) }
+                    ),
+                    false,
+                ),
                 Err(e) => m.say(format!("Not created: {e}"), true),
             }
             m.dirty = true;

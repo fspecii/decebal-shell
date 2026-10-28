@@ -290,7 +290,7 @@ pub fn layout(def: &WidgetDef, cx: &Ctx, fit: Option<(f32, f32)>) -> Item {
 }
 
 /// The deepest item under (x, y) that has `on_click`.
-pub fn hit<'a>(it: &'a Item, x: f32, y: f32) -> Option<&'a Item> {
+pub fn hit(it: &Item, x: f32, y: f32) -> Option<&Item> {
     if !it.rect.contains(x, y) {
         return None;
     }
@@ -298,7 +298,7 @@ pub fn hit<'a>(it: &'a Item, x: f32, y: f32) -> Option<&'a Item> {
 }
 
 /// The deepest item under (x, y) with a scroll action for `up`.
-pub fn hit_scroll<'a>(it: &'a Item, x: f32, y: f32, up: bool) -> Option<&'a Item> {
+pub fn hit_scroll(it: &Item, x: f32, y: f32, up: bool) -> Option<&Item> {
     if !it.rect.contains(x, y) {
         return None;
     }

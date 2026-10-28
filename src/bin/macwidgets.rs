@@ -3,7 +3,6 @@
 use macshell::theme::live::Source;
 use macshell::widgets::config::{self, Instance, Place, WidgetsConfig};
 use macshell::widgets::{data, dsl, samples, Trust};
-use serde_json::Value;
 use std::path::PathBuf;
 
 const HELP: &str = "macwidgets - declarative desktop widgets
@@ -39,8 +38,8 @@ fn main() {
             for s in data::SOURCES {
                 println!("{:<18} {:<9} {}", s.path, s.ty, s.desc);
             }
-            println!("{:<18} {:<9} {}", "opt.<key>", "any", "an option of the widget instance (\"options\" in macshell.json)");
-            println!("{:<18} {:<9} {}", "cmd.<name>", "text", "first line of a [commands.<name>] run (your own widgets with allow_exec only)");
+            println!("{:<18} {:<9} an option of the widget instance (\"options\" in macshell.json)", "opt.<key>", "any");
+            println!("{:<18} {:<9} first line of a [commands.<name>] run (your own widgets with allow_exec only)", "cmd.<name>", "text");
         }
         Some("list") => list(&src),
         Some("validate") => {
@@ -197,6 +196,6 @@ fn edit(src: &Source, args: &[String], add: bool) {
             die(&format!("`{name}` is not placed"));
         }
     }
-    macshell::settings::io::json_set(&src.shell_json, "widgets", Some(Value::from(cfg.to_json()))).unwrap_or_else(|e| die(&e));
+    macshell::settings::io::json_set(&src.shell_json, "widgets", Some(cfg.to_json())).unwrap_or_else(|e| die(&e));
     println!("{} {name}; macwidgets follows within half a second", if add { "placed" } else { "removed" });
 }

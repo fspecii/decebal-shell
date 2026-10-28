@@ -21,6 +21,11 @@ macthemectl system on|off|status       # also theme GTK/Nautilus, Qt, terminals,
 ```
 Or open **System Settings -> Theme** (`macsettings theme`).
 
+> **Theme packages.** Themes are now packages of format 1 (`theme.toml` plus wallpapers, widgets and screenshots, or one `.dtheme` file) that
+> also carry fonts, the titlebar style, bar, dock, icons, hot corners and desktop widgets, with install / pack / apply / undo / preview commands:
+> see [theme-engine.md](theme-engine.md). The single-file format described below still works unchanged, and `macthemectl theme duplicate`
+> turns one into a package. The built-in themes are packages in `themes/<id>/theme.toml`.
+
 ## Where things live
 | What | Where |
 |---|---|

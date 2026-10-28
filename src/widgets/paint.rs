@@ -191,13 +191,33 @@ fn draw_image(pm: &mut Pixmap, img: &Pixmap, r: Rect, radius: f32, cover: bool, 
     let s = if cover { (r.w / iw).max(r.h / ih) } else { (r.w / iw).min(r.h / ih) };
     let (w, h) = (iw * s, ih * s);
     let (x, y) = (r.x + (r.w - w) / 2.0, r.y + (r.h - h) / 2.0);
-    let mut paint = Paint::default();
-    paint.shader = Pattern::new(img.as_ref(), SpreadMode::Pad, FilterQuality::Bilinear, op, Transform::from_scale(s, s).post_translate(x, y));
-    paint.anti_alias = true;
+    let paint = Paint { shader: Pattern::new(img.as_ref(), SpreadMode::Pad, FilterQuality::Bilinear, op, Transform::from_scale(s, s).post_translate(x, y)), anti_alias: true, ..Paint::default() };
     // cover crops to the box; contain keeps the whole picture
     let (bx, by, bw, bh) = if cover { (r.x, r.y, r.w, r.h) } else { (x, y, w, h) };
     if let Some(path) = gfx::rounded_rect(bx, by, bw, bh, radius) {
         pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+    }
+}
+
+/// Renders `def` with `data` on a transparent pixmap `margin` px larger than the card on every side (room for a drop shadow).
+pub fn render(def: &super::dsl::WidgetDef, data: &super::data::Data, th: &Theme, fonts: &mut Fonts, base: &Path, margin: u32) -> Option<Pixmap> {
+    let it = super::layout::layout(def, &super::layout::Ctx { data, metrics: &FontMetrics(fonts), theme_radius: th.radius }, None);
+    let (w, h) = (it.rect.w.ceil() as u32 + 2 * margin, it.rect.h.ceil() as u32 + 2 * margin);
+    let mut pm = Pixmap::new(w, h)?;
+    let mut sym = SymbolCache::default();
+    let mut imgs = ImageCache::new(base);
+    let mut shifted = it;
+    shift(&mut shifted, margin as f32);
+    paint(&mut pm, &shifted, &mut Painter { fonts, symbols: &mut sym, images: &mut imgs, theme: th }, 1.0);
+    fonts.trim();
+    Some(pm)
+}
+
+fn shift(it: &mut Item, d: f32) {
+    it.rect.x += d;
+    it.rect.y += d;
+    for c in &mut it.children {
+        shift(c, d);
     }
 }
 
@@ -271,6 +291,10 @@ color = "warn"
         pm.data()[i..i + 4].try_into().unwrap()
     }
 
+    fn near(p: [u8; 4], c: Rgb) -> bool {
+        [(p[0], c.0), (p[1], c.1), (p[2], c.2)].iter().all(|(a, b)| a.abs_diff(*b) <= 3)
+    }
+
     #[test]
     fn rings_bars_and_graphs_land_where_the_layout_says() {
         let pm = render_shapes();
@@ -279,38 +303,29 @@ color = "warn"
             return;
         }
         let th = theme();
-        // card background at the left edge, transparent outside the rounded corner
+        // the card: rounded, so its corner is clear; its middle is the popup colour
         assert_eq!(px(&pm, 0, 0)[3], 0, "rounded corner is transparent");
-        let bg = px(&pm, 100, 5);
-        assert_eq!(&bg[..3], &[th.popup.0, th.popup.1, th.popup.2][..], "popup colour (alpha-premultiplied at 0.96 so approx)");
+        assert!(near(px(&pm, 100, 3), th.popup), "{:?}", px(&pm, 100, 3));
+        // the ring is 56 px at (10, 12), 8 thick: its arc starts at 12 o'clock, the centre of the stroke at (38, 16)
+        assert!(near(px(&pm, 38, 16), th.accent), "ring start {:?}", px(&pm, 38, 16));
+        // 37 % of a turn clockwise ends before 9 o'clock: the left of the ring is only the track
+        assert!(!near(px(&pm, 14, 40), th.accent), "ring is not full");
+        // the memory bar sits at (76, 20), 114 x 8: filled for 62 %, then the track
+        assert!(near(px(&pm, 82, 24), th.ok), "bar fill {:?}", px(&pm, 82, 24));
+        assert!(!near(px(&pm, 180, 24), th.ok), "bar track");
     }
 
+    /// A pixel hash of a text-free widget: tiny-skia is deterministic, so a change here is a change in drawing.
     #[test]
     fn shapes_render_is_deterministic() {
         let (a, b) = (render_shapes(), render_shapes());
-        assert_eq!(crate::theme::engine::sha256::digest_hex(a.data()), crate::theme::engine::sha256::digest_hex(b.data()));
+        let (ha, hb) = (crate::theme::engine::sha256::digest_hex(a.data()), crate::theme::engine::sha256::digest_hex(b.data()));
+        assert_eq!(ha, hb);
+        if cfg!(target_arch = "x86_64") && a.data().iter().any(|b| *b != 0) {
+            assert_eq!(ha, GOLDEN_SHAPES, "the shapes widget changed (update GOLDEN_SHAPES if intended)");
+        }
         let _ = Def::default();
     }
-}
 
-/// Renders `def` with `data` on a transparent pixmap `margin` px larger than the card on every side (room for a drop shadow).
-pub fn render(def: &super::dsl::WidgetDef, data: &super::data::Data, th: &Theme, fonts: &mut Fonts, base: &Path, margin: u32) -> Option<Pixmap> {
-    let it = super::layout::layout(def, &super::layout::Ctx { data, metrics: &FontMetrics(fonts), theme_radius: th.radius }, None);
-    let (w, h) = (it.rect.w.ceil() as u32 + 2 * margin, it.rect.h.ceil() as u32 + 2 * margin);
-    let mut pm = Pixmap::new(w, h)?;
-    let mut sym = SymbolCache::default();
-    let mut imgs = ImageCache::new(base);
-    let mut shifted = it;
-    shift(&mut shifted, margin as f32);
-    paint(&mut pm, &shifted, &mut Painter { fonts, symbols: &mut sym, images: &mut imgs, theme: th }, 1.0);
-    fonts.trim();
-    Some(pm)
-}
-
-fn shift(it: &mut Item, d: f32) {
-    it.rect.x += d;
-    it.rect.y += d;
-    for c in &mut it.children {
-        shift(c, d);
-    }
+    const GOLDEN_SHAPES: &str = "c60eb4ff6b70d864f1399c5002368ffc8622866ecc3b33f0aa7f2ac6ae265a0f";
 }

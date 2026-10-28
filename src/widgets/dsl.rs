@@ -206,8 +206,8 @@ impl Cx<'_> {
         let ok = super::data::known(p) || p.strip_prefix("cmd.").is_some_and(|c| self.commands.contains(c));
         if ok {
             self.paths.insert(p.to_string());
-        } else if p.starts_with("cmd.") {
-            self.err(item, key, format!("`{p}` is not a declared command (add [commands.{}])", &p[4..]));
+        } else if let Some(c) = p.strip_prefix("cmd.") {
+            self.err(item, key, format!("`{p}` is not a declared command (add [commands.{c}])"));
         } else {
             self.err(item, key, format!("unknown data `{p}`{}", super::data::suggest(p)));
         }

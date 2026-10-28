@@ -1,0 +1,35 @@
+format = 1
+id = "sunset-clock"
+name = "Sunset clock"
+description = "Time and date on a dusk-coloured card with an accent line; click for the dashboard."
+size = [236, 144]
+
+[root]
+type = "col"
+padding = [16, 22]
+gap = 2
+justify = "center"
+background = "popup"
+radius = "theme"
+border = "accent@0.45"
+border_width = 1.5
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 56
+weight = "bold"
+color = "accent"
+
+[[root.children]]
+type = "text"
+text = "{clock:%A}"
+size = 16
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "{clock:%e %B %Y}"
+size = 13
+color = "text_secondary"

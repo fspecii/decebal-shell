@@ -444,7 +444,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         }
         if text != old {
             rdwm_changed = true;
-            writes.push(Write { path: paths.rdwm_config.clone(), old: Some(old).filter(|_| paths.rdwm_config.exists()), new: text });
+            writes.push(Write { path: paths.rdwm_config.clone(), old: paths.rdwm_config.exists().then_some(old), new: text });
         }
     }
 
@@ -468,7 +468,7 @@ fn stamp_id() -> String {
 }
 
 /// Writes the plan: undo record first, then each file atomically; any failure restores what was already written.
-pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
+pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
     let mut applied = Applied { theme_id: plan.id.clone(), dark: plan.dark, files: Vec::new(), notes: plan.notes.clone(), reloaded: false, undo_id: String::new() };
     if plan.writes.is_empty() {
         return Ok(applied);
@@ -535,7 +535,7 @@ pub fn undo_ids(paths: &Paths) -> Vec<String> {
 }
 
 /// Restores the files of the latest apply (or of `only`, when it is still the latest) and removes the record.
-pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
+pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
     let ids = undo_ids(paths);
     let Some(last) = ids.last() else { return Err("nothing to undo".into()) };
     if only.is_some_and(|o| o != last) {

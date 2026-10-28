@@ -13,7 +13,8 @@ fn the_section_lists_a_card_per_theme_and_the_stub_rows() {
     assert_eq!(cards.iter().filter(|c| c.current).count(), 1);
     let nord = cards.iter().find(|c| c.id == "nord").unwrap();
     assert!(nord.meta.contains("1.0.0") && nord.meta.contains("built-in") && !nord.deletable, "{}", nord.meta);
-    let ctls: Vec<(String, bool)> = its.iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flat_map(|r| r.iter().flat_map(|r| r.ctls.iter().map(|c| (c.id.clone(), c.enabled)))).collect();
+    let ctls: Vec<(String, bool)> =
+        its.iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flat_map(|r| r.iter().flat_map(|r| r.ctls.iter().map(|c| (c.id.clone(), c.enabled)))).collect();
     for want in ["th:snapname", "th:install"] {
         assert!(ctls.iter().any(|(i, _)| i == want), "{want} in {ctls:?}");
     }

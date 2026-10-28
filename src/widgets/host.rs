@@ -35,6 +35,9 @@ struct Win {
     item: Option<Item>,
     images: ImageCache,
     argb: bool,
+    /// Without a compositor: what the root window showed under the card when it was created, so translucent parts blend with it.
+    backdrop: Option<Pixmap>,
+    depth: u8,
 }
 
 pub struct Paths {
@@ -202,6 +205,8 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     let item = lay(&res.def, &d, fonts);
     let (w, h) = (item.rect.w.ceil().max(8.0) as u32, item.rect.h.ceil().max(8.0) as u32);
     let (x, y) = config::place_at(&inst.anchor, inst.x, inst.y, (mon.x, mon.y, mon.w, mon.h), w as i32, h as i32);
+    // taken before the window exists, so the snapshot is the desktop and not our own black rectangle
+    let backdrop = if argb_visual.is_some() { None } else { snapshot(conn, screen.root, x, y, w, h) };
     let id = conn.generate_id().map_err(err)?;
     let mask = EventMask::EXPOSURE | EventMask::BUTTON_PRESS | EventMask::STRUCTURE_NOTIFY;
     let mut aux = CreateWindowAux::new().override_redirect(1).event_mask(mask).background_pixel(screen.black_pixel);
@@ -225,7 +230,7 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     conn.map_window(id).map_err(err)?;
     conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
     let base = res.base.clone();
-    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some() })
+    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -235,14 +240,35 @@ fn draw(conn: &RustConnection, w: &mut Win, base: &Data, th: &crate::theme::Them
     let mut pm = Pixmap::new(w.w, w.h).ok_or("pixmap")?;
     paint::paint(&mut pm, &item, &mut Painter { fonts, symbols, images: &mut w.images, theme: th }, 1.0);
     fonts.trim();
-    let depth = if w.argb { 32 } else { 24 };
+    let depth = if w.argb { 32 } else { w.depth };
     if !w.argb {
-        // no alpha channel: composite the card onto the black-less shape instead; the SHAPE cut-out hides the corners
+        // no alpha channel: blend the card over what the desktop showed there, and cut the window to the card's shape
         let rects = bx::visible_rects(&pm);
         conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, w.id, 0, 0, &rects).map_err(err)?;
+        let mut out = w.backdrop.clone().unwrap_or_else(|| {
+            let mut p = Pixmap::new(w.w, w.h).expect("size checked above");
+            p.fill(th.background.color(1.0));
+            p
+        });
+        out.draw_pixmap(0, 0, pm.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+        pm = out;
     }
     crate::backend::x11_window::present(conn, w.id, w.gc, &pm, depth, w.argb, max_bytes).map_err(err)?;
     let _ = compositor;
     w.item = Some(item);
     Ok(())
+}
+
+/// The pixels of the root window under (x, y, w, h), or `None` when the area is off screen or the format is unexpected.
+fn snapshot(conn: &RustConnection, root: Window, x: i32, y: i32, w: u32, h: u32) -> Option<Pixmap> {
+    let (x, y) = (i16::try_from(x).ok()?, i16::try_from(y).ok()?);
+    let img = conn.get_image(ImageFormat::Z_PIXMAP, root, x, y, w as u16, h as u16, !0).ok()?.reply().ok()?;
+    if img.data.len() != (w * h * 4) as usize {
+        return None;
+    }
+    let mut pm = Pixmap::new(w, h)?;
+    for (d, s) in pm.data_mut().chunks_exact_mut(4).zip(img.data.chunks_exact(4)) {
+        d.copy_from_slice(&[s[2], s[1], s[0], 255]);
+    }
+    Some(pm)
 }

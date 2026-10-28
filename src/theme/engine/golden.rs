@@ -87,3 +87,20 @@ fn applying_the_style_themes_matches_the_style_presets() {
         let _ = (std::fs::remove_dir_all(d), std::fs::remove_dir_all(d2));
     }
 }
+
+/// The community-style sample theme in `examples/themes/` passes the same checks a market upload would.
+#[test]
+fn the_example_package_is_valid_and_packs_reproducibly() {
+    use crate::theme::engine::{archive::Limits, package};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/themes/sunset-grid");
+    let entries = package::read_dir(&dir, &Limits::default()).unwrap();
+    let r = package::check(&entries, &Limits::default());
+    assert!(r.ok(), "{:?}", r.errors());
+    assert_eq!(r.id.as_deref(), Some("sunset-grid"));
+    let (a, _) = package::pack_dir(&dir, &Limits::default()).unwrap();
+    let (b, _) = package::pack_dir(&dir, &Limits::default()).unwrap();
+    assert_eq!(a, b);
+    let back = crate::theme::engine::archive::read_targz(&a, &Limits::default()).unwrap();
+    assert!(package::check(&back, &Limits::default()).ok());
+    assert!(back.iter().any(|e| e.path == "widgets/sunset-clock.toml"));
+}

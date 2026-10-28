@@ -185,11 +185,10 @@ pub fn suggest(path: &str) -> String {
     SOURCES
         .iter()
         .map(|s| s.path)
-        .filter(|k| {
+        .find(|k| {
             let (a, b): (Vec<char>, Vec<char>) = (path.chars().collect(), k.chars().collect());
             a.len().abs_diff(b.len()) <= 2 && a.iter().zip(&b).filter(|(x, y)| x != y).count() + a.len().abs_diff(b.len()) <= 2
         })
-        .next()
         .map(|k| format!(" (did you mean `{k}`?)"))
         .unwrap_or_default()
 }

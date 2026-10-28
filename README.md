@@ -29,11 +29,33 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
+| `macwidgets` | declarative desktop widgets written in TOML (clock card, CPU/RAM rings, now playing, workspace dots, graphs...), styled by the theme; theme packages ship them and can only use safe click actions; see [docs/theme-engine.md](docs/theme-engine.md) | ~8 MB RSS, wakes once a second |
 | `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; `font PRESET\|list\|set ROLE FAMILY,...` picks the fonts (presets `inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system`, roles `ui title mono display`, per-character fallback for CJK / emoji / icons); `system on\|off\|status` and `apply-system` carry the theme to GTK/Nautilus, Qt, terminals (via Omarchy's templates), the browser colour and X11 (optional, reversible, off by default); `layout left\|right\|top\|bottom\|split` places the Caelestia bar; see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
 2-4 MB.
+
+## Theme packages and widgets
+
+Themes are data packages (`format = 1`): a folder, or a single `.dtheme` file, with a `theme.toml` (colours for dark and light, metrics, fonts,
+wallpaper, titlebar style, bar, dock, icons, hot corners, safe rdwm keys, widgets) plus its wallpapers, screenshots and widget files. Every
+built-in theme (macOS, Windows 11, Caelestia, Nord, Dracula...) is such a package in `themes/`, so there is one engine and your own themes use the same
+keys. Packages cannot carry scripts, commands or files outside themselves; widgets from a theme can only use a fixed list of click actions.
+
+```sh
+macthemectl theme new mine --from nord       # ~/.config/macshell/themes/mine/theme.toml
+macthemectl theme validate ~/.config/macshell/themes/mine
+macthemectl theme apply mine --preview 10    # try it for 10 s, then everything is put back
+macthemectl theme apply mine                 # colours, fonts, titlebars, bar, dock, wallpaper, widgets in one undoable step
+macthemectl theme undo
+macthemectl theme pack ~/.config/macshell/themes/mine -o mine.dtheme   # share it
+macthemectl theme install mine.dtheme
+macthemectl theme snapshot my-desktop        # create a theme from the current settings
+macwidgets add clock-card --anchor top-right --x -40 --y 60
+```
+The Theme pane of `macsettings` has the same as a gallery. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md);
+end-to-end test: `tests/e2e/theme-engine.sh`.
 
 ## Install
 

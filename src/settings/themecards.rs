@@ -115,7 +115,13 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             let rect = (bx, by, w, bh);
             let hover = it.hover.as_deref() == Some(id.as_str());
             let primary = *act == "apply";
-            let bg = if primary { crate::theme::th().accent.color(if hover { 1.0 } else { 0.9 }) } else if hover { crate::theme::th().ink(0.16) } else { crate::theme::th().ink(0.08) };
+            let bg = if primary {
+                crate::theme::th().accent.color(if hover { 1.0 } else { 0.9 })
+            } else if hover {
+                crate::theme::th().ink(0.16)
+            } else {
+                crate::theme::th().ink(0.08)
+            };
             fill_rounded(pm, bx, by, w, bh, bh / 2.0, bg);
             let fg = if primary {
                 crate::theme::th().accent_text_c()
@@ -129,7 +135,13 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
                 stroke_rounded(pm, bx - u(2.0), by - u(2.0), w + u(4.0), bh + u(4.0), bh / 2.0 + u(2.0), crate::theme::th().accent.color(0.85), u(2.0));
             }
             fr.layouts.push((rect, id.clone()));
-            fr.placed.push(Placed { rect, ctl: Ctl::new(id, CtlKind::Button { label: label.clone(), danger: *danger }), parts: vec![], row_rect: (x0, y, cw, ch), label: format!("{label} {}", c.name) });
+            fr.placed.push(Placed {
+                rect,
+                ctl: Ctl::new(id, CtlKind::Button { label: label.clone(), danger: *danger }),
+                parts: vec![],
+                row_rect: (x0, y, cw, ch),
+                label: format!("{label} {}", c.name),
+            });
             bx -= u(8.0);
         }
         y += ch + u(10.0);

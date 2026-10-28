@@ -1,0 +1,103 @@
+format = 1
+id = "sunset-grid"
+name = "Sunset Grid"
+version = "1.0.0"
+author = "macshell examples"
+license = "MIT"
+description = "Dusk purples fading to orange: a floating bar, a big dock, GNOME-style titlebars, a clock card and two gauges on the desktop."
+min_shell_version = "0.1.0"
+tags = ["sunset", "purple", "dark", "light"]
+screenshots = ["screenshots/main.jpg"]
+
+[colors.dark]
+background = "#1b1230"
+sidebar = "#150e26"
+surface = "#2a1d47"
+bar = "#150e26"
+popup = "#2e2050"
+dock = "#241a3f"
+overlay = "#2e2050"
+titlebar = "#33245a"
+titlebar_inactive = "#241a3f"
+text = "#fbeee0"
+accent = "#ff8c42"
+accent_text = "#2a1205"
+danger = "#ff6b6b"
+ok = "#7bd88f"
+warn = "#ffc857"
+
+[colors.light]
+background = "#fff4ea"
+sidebar = "#fbe6d4"
+surface = "#ffffff"
+bar = "#fbe6d4"
+popup = "#fffaf5"
+dock = "#fbe6d4"
+overlay = "#fffaf5"
+titlebar = "#f6d9c1"
+titlebar_inactive = "#fbe6d4"
+text = "#2b1a3a"
+accent = "#c2410c"
+accent_text = "#ffffff"
+danger = "#b42318"
+ok = "#2f7d3e"
+warn = "#8a5a00"
+
+[metrics]
+radius = 14
+dock_roundness = 0.6
+dock_alpha = 0.78
+popup_alpha = 0.95
+shadow = 1.2
+outline = 0.1
+
+[font]
+preset = "inter"
+scale = 1.0
+
+[wallpaper]
+image = "wallpapers/sunset.jpg"
+mode = "fill"
+
+[decoration]
+style = "adwaita"
+height = 36
+
+[rdwm]
+gap_inner = 10
+gap_outer = 12
+border_px = 2
+
+[bar]
+enabled = true
+style = "floating"
+
+[dock]
+enabled = true
+style = "mac"
+size = 54
+
+[hot_corners]
+top_right = "dashboard"
+bottom_left = "overview"
+
+[[widgets]]
+use = "sunset-clock"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 64
+
+[[widgets]]
+use = "builtin:cpu-ram-ring"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 230
+
+[[widgets]]
+use = "builtin:workspace-dots"
+place = "desktop"
+anchor = "bottom"
+x = 0
+y = -120
