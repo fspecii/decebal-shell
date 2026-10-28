@@ -52,7 +52,7 @@ package() {
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   # DEPRECATED compatibility names (macbar -> decbar, ...), kept for one release so existing keybinds keep working
-  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
     install -Dm755 contrib/compat/mac-compat "$pkgdir/usr/bin/mac${b#dec}"
   done
   install -Dm644 contrib/decebal-dock.service "$pkgdir/usr/lib/systemd/user/decebal-dock.service"

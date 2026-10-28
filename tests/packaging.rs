@@ -158,7 +158,11 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
 
 #[test]
 fn the_old_mac_names_are_installed_as_deprecated_wrappers() {
-    let bins = cargo_bins();
+    // Programs added after the rename have no old name and get no wrapper.
+    let mut bins = cargo_bins();
+    for new in ["declock", "decmon"] {
+        bins.remove(new);
+    }
     assert!(read("Makefile").contains("contrib/compat/mac-compat"), "Makefile does not install the compatibility wrappers");
     assert_eq!(listed(&read("PKGBUILD"), "for b in"), bins, "PKGBUILD wrapper loop vs Cargo.toml [[bin]]");
     assert!(read("PKGBUILD").contains("contrib/compat/mac-compat") && read("PKGBUILD").contains("replaces=('macshell')"));

@@ -1,6 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
+# Programs that did not exist under the old macshell name get no mac* compatibility wrapper.
+NO_COMPAT = declock
 BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 # Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
@@ -13,7 +15,7 @@ all:
 install: all
 	for b in $(BINS); do install -Dm755 target/release/$$b $(DESTDIR)$(PREFIX)/bin/$$b; done
 	# DEPRECATED compatibility names: macbar -> decbar, ... (one release, so existing keybinds and autostart keep working)
-	for b in $(BINS); do install -Dm755 contrib/compat/mac-compat $(DESTDIR)$(PREFIX)/bin/mac$${b#dec}; done
+	for b in $(filter-out $(NO_COMPAT),$(BINS)); do install -Dm755 contrib/compat/mac-compat $(DESTDIR)$(PREFIX)/bin/mac$${b#dec}; done
 	for u in $(UNITS); do install -Dm644 contrib/$$u $(DESTDIR)$(PREFIX)/lib/systemd/user/$$u; sed -i 's|/usr/bin/|$(PREFIX)/bin/|' $(DESTDIR)$(PREFIX)/lib/systemd/user/$$u; done
 	for d in $(AUTOSTART); do install -Dm644 contrib/$$d $(DESTDIR)/etc/xdg/autostart/$$d; done
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
