@@ -22,6 +22,8 @@ cargo test --all-features
 bash tests/e2e/theme.sh      # needs Xvfb and an rdwm build (RDWM_BIN_DIR); set MS_BIN_DIR and PROFILE for release builds
 ```
 
+Several unit tests draw text and expect Inter, DejaVu and a CJK font to be installed (CI installs `fonts-inter`, `fonts-dejavu-core`, `fonts-noto-cjk`).
+
 Keep the daemons light: `notify.sh` fails if `decnotify` idles above 10 MB RSS. Themes are data only (no code in
 packages); see docs/theme-engine.md before changing the format, and bump `format` for incompatible changes.
 

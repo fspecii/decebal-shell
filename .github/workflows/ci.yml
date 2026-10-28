@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev pkg-config fontconfig
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
