@@ -30,7 +30,7 @@ impl MacBar {
     pub fn status_engine() -> MacBar {
         let mut bar = MacBar::new(Box::new(StaticApp(String::new())));
         bar.embedded = true;
-        bar.was_vertical = false;
+        bar.was_place = None;
         bar
     }
 

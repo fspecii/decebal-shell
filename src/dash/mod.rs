@@ -74,11 +74,12 @@ pub struct Dash {
     theme_seen: u64,
 }
 
-/// Where the card hangs by default: just under the horizontal bar, or near the top edge when the theme's bar runs down
-/// the left side (Caelestia) and nothing is at the top.
+/// Where the card hangs by default: just under the classic menu bar; with the Caelestia pill bar just under it when it runs
+/// along the top edge (`top`, `split`), else near the top edge of the screen.
 fn default_top() -> i32 {
-    if crate::theme::th().bar_vertical() {
-        10
+    let th = crate::theme::th();
+    if th.pill_bar().is_some() {
+        th.bar_insets().top + 10
     } else {
         crate::theme::BAR_HEIGHT as i32 + layout::BAR_GAP as i32
     }
@@ -644,8 +645,9 @@ mod tests {
         let d = Dash::new(Tab::Media, Some(640), None);
         let a = d.popup_anchor().unwrap();
         assert_eq!(a.center_x, Some(640));
-        // below the horizontal bar, or near the top edge when the theme's bar is the vertical one
-        assert!(a.top >= if crate::theme::th().bar_vertical() { 0 } else { crate::theme::BAR_HEIGHT as i32 }, "below the bar: {}", a.top);
+        // below the classic bar, or below the pill bar's top edge (nothing there for a side or bottom bar)
+        let th = crate::theme::th();
+        assert!(a.top >= if th.pill_bar().is_some() { th.bar_insets().top } else { crate::theme::BAR_HEIGHT as i32 }, "below the bar: {}", a.top);
         assert_eq!(d.tab(), Tab::Media);
         assert_eq!(Dash::new(Tab::Overview, None, Some(40)).popup_anchor().unwrap().top, 40);
         assert_eq!(d.content_size(), Some((layout::CARD_W as u32, layout::CARD_H as u32)));

@@ -50,6 +50,12 @@ impl Source {
         doc.get("theme").map(Selection::from_json).unwrap_or_default()
     }
 
+    /// `bar.position` of the same file: where the Caelestia pill bar sits (left when absent or misspelt).
+    pub fn bar_position(&self) -> crate::config::BarPosition {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse).unwrap_or_default()
+    }
+
     /// Stores the selection under `"theme"` (atomic, every other key of the file is kept).
     pub fn write_selection(&self, sel: &Selection) -> Result<(), String> {
         crate::settings::io::json_set(&self.shell_json, "theme", Some(sel.to_json()))
@@ -163,10 +169,10 @@ impl Source {
             sel.mode = m;
         }
         match self.theme_for(&id, &sel, system_dark) {
-            Ok(t) => (t, None),
+            Ok(t) => (Theme { bar_position: self.bar_position(), ..t }, None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                (resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark), Some(e))
+                (Theme { bar_position: self.bar_position(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) }, Some(e))
             }
         }
     }
@@ -435,6 +441,30 @@ mod tests {
         std::fs::write(src.themes_dir.join("a.toml"), "name = \"A\"\ninherit = \"b\"\n").unwrap();
         std::fs::write(src.themes_dir.join("b.toml"), "name = \"B\"\ninherit = \"a\"\n").unwrap();
         assert!(src.load_def("a").unwrap_err().contains("loop"));
+    }
+
+    #[test]
+    fn the_bar_position_reaches_the_theme_and_a_change_is_a_reload() {
+        use crate::config::BarPosition as P;
+        let (_d, src) = sandbox("position");
+        std::fs::write(&src.shell_json, r#"{"theme": "caelestia", "bar": {"enabled": true}}"#).unwrap();
+        let mut live = Live::new(src.clone());
+        assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (Some(P::Left), crate::theme::Insets { left: 52, ..Default::default() }), "left is the default");
+        for (word, want, insets) in [
+            ("right", P::Right, crate::theme::Insets { right: 52, ..Default::default() }),
+            ("top", P::Top, crate::theme::Insets { top: 52, ..Default::default() }),
+            ("bottom", P::Bottom, crate::theme::Insets { bottom: 52, ..Default::default() }),
+            ("split", P::Split, crate::theme::Insets { top: 52, bottom: 52, ..Default::default() }),
+        ] {
+            std::fs::write(&src.shell_json, format!(r#"{{"theme": "caelestia", "bar": {{"enabled": true, "position": "{word}"}}}}"#)).unwrap();
+            assert!(live.poll(), "{word}: the theme changed, so every program redraws");
+            assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (Some(want), insets), "{word}");
+            assert!(!live.poll());
+        }
+        // the ordinary menu bar has no pill bar and no insets, whatever the setting says
+        std::fs::write(&src.shell_json, r#"{"theme": "nord", "bar": {"position": "split"}}"#).unwrap();
+        assert!(live.poll());
+        assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (None, crate::theme::Insets::default()));
     }
 
     #[test]

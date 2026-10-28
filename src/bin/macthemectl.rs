@@ -1,5 +1,6 @@
 //! macthemectl: list, inspect and apply macshell themes from scripts.
 
+use macshell::config::BarPosition;
 use macshell::settings::io::Paths;
 use macshell::theme::live::{system_dark, Source};
 use macshell::theme::material::Variant;
@@ -11,9 +12,16 @@ macthemectl get [--json]
 macthemectl apply NAME [--mode light|dark|auto] [--accent #rrggbb|none] [--opacity 0.4-1] [--radius 0-24]
                        [--font NAME|none] [--font-scale 0.8-1.4] [--reset] [--no-rdwm]
 macthemectl set KEY VALUE        KEY: mode accent opacity radius font font-scale sync-rdwm  (VALUE none = unset)
-macthemectl style [macos|windows|caelestia]   the shell style preset: theme + dock style + menu bar together
-                                 (windows: Windows 11 theme + taskbar dock; caelestia: Caelestia theme + pill dock and bar;
-                                 macos: macOS theme + macOS dock). Without a name: print the current one.
+macthemectl style [macos|windows|caelestia[-left|-right|-top|-bottom|-split]]
+                                 the shell style preset: theme + dock style + menu bar together
+                                 (windows: Windows 11 theme + taskbar dock; caelestia: Caelestia theme + its pill bar, no dock;
+                                 macos: macOS theme + macOS dock). `caelestia` keeps the bar's current position, `caelestia-top`
+                                 and the like also set it. Without a name: print the current style.
+macthemectl layout [left|right|top|bottom|split]
+                                 where the Caelestia pill bar sits (`bar.position` in macshell.json, default left): a vertical bar on
+                                 the left or right edge, a horizontal one along the top or bottom edge, or split = a top bar (OS icon,
+                                 workspaces, window title) plus a bottom bar (tray, status icons, clock, power). Running bars re-lay out
+                                 within about a second; the setting only shows under the Caelestia style. Without a name: print it.
 macthemectl dynamic on [OPTIONS]  \"Match wallpaper\": recolour the current theme (any theme) from the wallpaper. Off by default.
 macthemectl dynamic off          back to the theme's own colours (the settings are kept)
 macthemectl dynamic [status] [--json]
@@ -476,7 +484,7 @@ fn main() {
                 }
                 return;
             };
-            let st = style::Style::parse(name).unwrap_or_else(|| die(&format!("unknown style `{name}` (macos, windows or caelestia)")));
+            let (st, pos) = style::parse_with_layout(name).unwrap_or_else(|| die(&format!("unknown style `{name}` (macos, windows, caelestia or caelestia-left|right|top|bottom|split)")));
             let mut sel = src.selection();
             for a in &args[2..] {
                 match a.as_str() {
@@ -484,25 +492,44 @@ fn main() {
                     other => die(&format!("unknown option {other}")),
                 }
             }
-            match style::apply(&src, &paths, st, &sel) {
-                Ok(r) => println!(
-                    "style {}: theme {} ({}), dock {}, menu bar {}",
-                    st.as_str(),
-                    r.theme_id,
-                    if r.dark { "dark" } else { "light" },
-                    match st {
-                        style::Style::Windows => "windows taskbar",
-                        style::Style::Caelestia => "hidden (Caelestia has no dock)",
-                        style::Style::Macos => "macOS dock",
-                    },
-                    match st {
-                        style::Style::Windows => "hidden while the taskbar is up",
-                        style::Style::Caelestia => "vertical bar on the left edge",
-                        style::Style::Macos => "shown",
-                    }
-                ),
+            match style::apply_with(&src, &paths, st, &sel, pos) {
+                Ok(r) => {
+                    let layout = style::position_of(&macshell::settings::io::json_load(&paths.shell_json()));
+                    println!(
+                        "style {}: theme {} ({}), dock {}, menu bar {}",
+                        st.as_str(),
+                        r.theme_id,
+                        if r.dark { "dark" } else { "light" },
+                        match st {
+                            style::Style::Windows => "windows taskbar",
+                            style::Style::Caelestia => "hidden (Caelestia has no dock)",
+                            style::Style::Macos => "macOS dock",
+                        },
+                        match st {
+                            style::Style::Windows => "hidden while the taskbar is up".to_string(),
+                            style::Style::Caelestia => layout_phrase(layout).to_string(),
+                            style::Style::Macos => "shown".to_string(),
+                        }
+                    );
+                }
                 Err(e) => die(&e),
             }
+        }
+        Some("layout") => {
+            let paths = Paths::discover();
+            let Some(name) = args.get(1).filter(|a| !a.starts_with("--")) else {
+                println!("{}", style::position_of(&macshell::settings::io::json_load(&paths.shell_json())).as_str());
+                return;
+            };
+            let pos = BarPosition::parse(name).unwrap_or_else(|| die(&format!("unknown layout `{name}` (left, right, top, bottom or split)")));
+            if let Some(extra) = args.get(2) {
+                die(&format!("unexpected argument {extra}"));
+            }
+            if let Err(e) = style::apply_layout(&paths, pos) {
+                die(&e);
+            }
+            let active = src.build(&src.selection(), system_dark()).0.pill_bar().is_some();
+            println!("layout {}: {}{}", pos.as_str(), layout_phrase(pos), if active { "" } else { " (shows once the Caelestia style is on: macthemectl style caelestia)" });
         }
         Some("dynamic") => cmd_dynamic(&src, &args[1..]),
         Some("watch") => cmd_watch(&src, &args[1..]),
@@ -562,5 +589,16 @@ fn main() {
         }
         Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}", system::cli::HELP),
         Some(other) => die(&format!("unknown command `{other}`\n{HELP}\n\n{}", system::cli::HELP)),
+    }
+}
+
+/// What the Caelestia bar looks like at `pos`, for the messages.
+fn layout_phrase(pos: BarPosition) -> &'static str {
+    match pos {
+        BarPosition::Left => "vertical bar on the left edge",
+        BarPosition::Right => "vertical bar on the right edge",
+        BarPosition::Top => "horizontal bar along the top edge",
+        BarPosition::Bottom => "horizontal bar along the bottom edge",
+        BarPosition::Split => "split: a bar on top (launcher, workspaces, window) and one at the bottom (tray, status, clock, power)",
     }
 }

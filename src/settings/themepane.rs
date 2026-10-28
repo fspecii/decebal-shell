@@ -7,6 +7,7 @@
 
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row, Swatch, ThemeTile};
+use crate::config::BarPosition;
 use crate::theme::live::{system_dark, Source};
 use crate::theme::model::{Mode, Rgb, Selection};
 use crate::theme::rdwm;
@@ -76,14 +77,30 @@ pub fn items(m: &Model) -> Vec<Item> {
     let style_opts: Vec<(String, String)> = Style::ALL.iter().map(|s| (s.title().to_string(), s.as_str().to_string())).collect();
     let cur_style = style::detect(&current_id, style::dock_style(&m.dock));
     out.push(Item::Header("Shell style".into()));
-    out.push(Item::Card(vec![Row::new("Style")
+    let mut shell_rows = vec![Row::new("Style")
         .detail(match cur_style {
             Some(Style::Macos) => "macOS: menu bar and floating dock, macOS theme",
             Some(Style::Windows) => "Windows: Windows 11 theme and taskbar (the menu bar hides)",
-            Some(Style::Caelestia) => "Caelestia: Material You colours, a vertical bar on the left edge, no dock",
+            Some(Style::Caelestia) => "Caelestia: Material You colours, a pill bar (see Layout), no dock",
             None => "Custom: pick one to set theme, dock and menu bar together",
         })
-        .ctl(Ctl::new("th:style", Kind::Seg(style_opts, cur_style.map(|s| Style::ALL.iter().position(|x| *x == s).unwrap_or(0)))))]));
+        .ctl(Ctl::new("th:style", Kind::Seg(style_opts, cur_style.map(|s| Style::ALL.iter().position(|x| *x == s).unwrap_or(0)))))];
+    if cur_style == Some(Style::Caelestia) {
+        let pos = style::position_of(&m.shell);
+        let opts: Vec<(String, String)> = BarPosition::ALL.iter().map(|p| (p.title().to_string(), p.as_str().to_string())).collect();
+        shell_rows.push(
+            Row::new("Layout")
+                .detail(match pos {
+                    BarPosition::Left => "Left: a vertical bar down the left edge; popouts open to the right",
+                    BarPosition::Right => "Right: a vertical bar down the right edge; popouts open to the left",
+                    BarPosition::Top => "Top: a horizontal bar along the top edge; popouts open downwards",
+                    BarPosition::Bottom => "Bottom: a horizontal bar along the bottom edge; popouts open upwards",
+                    BarPosition::Split => "Split: launcher and workspaces on top, tray and clock below",
+                })
+                .ctl(Ctl::new("th:layout", Kind::Seg(opts, BarPosition::ALL.iter().position(|p| *p == pos)))),
+        );
+    }
+    out.push(Item::Card(shell_rows));
     out.push(Item::Header("Theme".into()));
     out.push(Item::Themes(tiles));
     out.push(Item::Header("Appearance".into()));
@@ -191,6 +208,13 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 m.edit_json("shell", "dock", Some(dock));
                 m.say(format!("Shell style: {}", st.title()), false);
             }
+            return;
+        }
+        (["th", "layout"], CtlVal::Str(s)) => {
+            let Some(pos) = BarPosition::parse(&s) else { return };
+            let bar = style::position_value(pos, m.shell.get("bar"));
+            m.edit_json("shell", "bar", Some(bar));
+            m.say(format!("Caelestia layout: {}", pos.title()), false);
             return;
         }
         // the "Match wallpaper" section (th:dynamic, th:dyn-*) lives in wallpapercolors.rs
@@ -320,6 +344,85 @@ mod tests {
         assert_eq!(sel_idx(&m), Some(0), "macOS is highlighted");
         m.apply("l:theme:nord", CtlVal::Click);
         assert_eq!(sel_idx(&m), None, "a hand-picked theme is Custom");
+    }
+
+    fn layout_row(its: &[Item]) -> Option<(Vec<String>, Option<usize>)> {
+        its.iter().find_map(|i| match i {
+            Item::Card(rows) => rows.iter().find(|r| r.label == "Layout").and_then(|r| r.ctls.first()).and_then(|c| match &c.kind {
+                Kind::Seg(opts, sel) => Some((opts.iter().map(|o| o.1.clone()).collect(), *sel)),
+                _ => None,
+            }),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn the_layout_row_belongs_to_the_caelestia_style_and_sets_the_bar_position() {
+        let (mut m, _) = model_with("[general]\n");
+        assert!(layout_row(&items(&m)).is_none(), "macOS has no layouts");
+        m.apply("th:style", CtlVal::Str("windows".into()));
+        assert!(layout_row(&items(&m)).is_none(), "nor has Windows");
+        m.apply("th:style", CtlVal::Str("caelestia".into()));
+        let (values, sel) = layout_row(&items(&m)).expect("Caelestia shows the Layout row");
+        assert_eq!(values, ["left", "right", "top", "bottom", "split"]);
+        assert_eq!(sel, Some(0), "left is the default");
+        // it sits in the Shell style card, right under the style picker
+        let first_card = items(&m).into_iter().find_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).unwrap();
+        assert_eq!(first_card.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Style", "Layout"]);
+        for (i, word) in ["left", "right", "top", "bottom", "split"].iter().enumerate() {
+            m.apply("th:layout", CtlVal::Str((*word).into()));
+            assert_eq!(m.shell["bar"]["position"], *word);
+            assert_eq!(crate::settings::io::json_load(&m.paths.shell_json())["bar"]["position"], *word, "written to macshell.json");
+            assert_eq!(layout_row(&items(&m)).unwrap().1, Some(i));
+            assert_eq!(m.shell["bar"]["enabled"], true, "the other bar keys stay");
+            assert_eq!(selection(&m).name, "caelestia", "only the position changed");
+            assert_eq!(source(&m).build(&selection(&m), true).0.pill_bar(), BarPosition::parse(word), "and the live theme sees it");
+        }
+        m.apply("th:layout", CtlVal::Str("sideways".into()));
+        assert_eq!(m.shell["bar"]["position"], "split", "an unknown word is ignored");
+        // choosing the style again keeps the layout; another style hides the row but remembers it
+        m.apply("th:style", CtlVal::Str("caelestia".into()));
+        assert_eq!(layout_row(&items(&m)).unwrap().1, Some(4));
+        m.apply("th:style", CtlVal::Str("macos".into()));
+        assert!(layout_row(&items(&m)).is_none());
+        assert_eq!(m.shell["bar"]["position"], "split");
+    }
+
+    #[test]
+    fn every_theme_macthemectl_lists_loads_in_the_pane_without_the_could_not_be_loaded_note() {
+        // A long-running macsettings that predates a theme (an old binary has no "caelestia" in its table) reports
+        // "no theme caelestia"; a current one must load everything the CLI lists, in both modes.
+        let (mut m, _) = model_with("[general]\n");
+        let entries = source(&m).list();
+        assert!(entries.iter().any(|e| e.id == "caelestia"), "the listing has Caelestia");
+        for e in entries.iter().filter(|e| e.error.is_none()) {
+            for mode in ["light", "dark", "auto"] {
+                m.apply("l:theme:caelestia", CtlVal::Click); // start from somewhere else so every pick is a change
+                m.apply("th:mode", CtlVal::Str(mode.into()));
+                m.apply(&format!("l:theme:{}", e.id), CtlVal::Click);
+                let sel = selection(&m);
+                assert_eq!(sel.name, e.id, "{} / {mode}: the pick was stored", e.id);
+                let its = items(&m);
+                let warn = its.iter().find_map(|i| match i {
+                    Item::Note { text, warn: true } if text.contains("could not be loaded") => Some(text.clone()),
+                    _ => None,
+                });
+                assert!(warn.is_none(), "{} / {mode}: {warn:?}", e.id);
+                let Some(Item::Themes(tiles)) = its.iter().find(|i| matches!(i, Item::Themes(_))) else { panic!("no gallery") };
+                let chosen: Vec<&str> = tiles.iter().filter(|t| t.selected).map(|t| t.id.as_str()).collect();
+                assert_eq!(chosen, [format!("l:theme:{}", e.id)], "{} / {mode}: exactly its own tile is highlighted", e.id);
+                let (theme, problem) = source(&m).build(&sel, true);
+                assert!(problem.is_none() && theme.id == e.id, "{} / {mode}: {problem:?}", e.id);
+            }
+        }
+    }
+
+    #[test]
+    fn a_theme_that_really_does_not_exist_still_gets_the_note() {
+        let (m, _) = model_with("[general]\n");
+        source(&m).write_selection(&Selection { name: "no-such-theme".into(), ..Selection::default() }).unwrap();
+        let its = items(&m);
+        assert!(its.iter().any(|i| matches!(i, Item::Note { text, warn: true } if text.contains("no theme `no-such-theme`") && text.contains("default theme is shown instead"))));
     }
 
     #[test]

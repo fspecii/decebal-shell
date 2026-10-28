@@ -134,6 +134,9 @@ pub struct Theme {
     /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
     /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
+    /// Where the Caelestia pill bar sits (`macshell.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
+    /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
+    pub bar_position: crate::config::BarPosition,
     pub font_family: String,
     pub font_scale: f32,
     /// The fonts per role with their fallback chains (see [`super::fonts`]).
@@ -190,6 +193,34 @@ impl Theme {
     pub fn bar_vertical(&self) -> bool {
         self.bar_style == "vertical"
     }
+    /// Where the Caelestia pill bar sits, or `None` while the theme has the ordinary menu bar. (`bar_style = "vertical"` is
+    /// the theme's name for the pill bar; the edge comes from `bar.position`.)
+    pub fn pill_bar(&self) -> Option<crate::config::BarPosition> {
+        self.bar_vertical().then_some(self.bar_position)
+    }
+    /// Pixels the pill bar takes from each screen edge (all zero for the ordinary menu bar, whose strut the windows
+    /// already know): where other programs must keep clear of it.
+    pub fn bar_insets(&self) -> Insets {
+        use crate::config::BarPosition as P;
+        let t = crate::theme::PILL_BAR_THICKNESS as i32;
+        match self.pill_bar() {
+            None => Insets::default(),
+            Some(P::Left) => Insets { left: t, ..Insets::default() },
+            Some(P::Right) => Insets { right: t, ..Insets::default() },
+            Some(P::Top) => Insets { top: t, ..Insets::default() },
+            Some(P::Bottom) => Insets { bottom: t, ..Insets::default() },
+            Some(P::Split) => Insets { top: t, bottom: t, ..Insets::default() },
+        }
+    }
+}
+
+/// Space reserved at the edges of the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Insets {
+    pub left: i32,
+    pub right: i32,
+    pub top: i32,
+    pub bottom: i32,
 }
 
 // ---------------------------------------------------------------- raw definition (a theme file)
@@ -247,7 +278,11 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
     ("dock_padding", Kind::Num(4.0, 40.0), "dock panel padding in px (consumed by the dock layout)"),
     ("bar_height", Kind::Num(20.0, 40.0), "menu bar height in px (consumed by the bar layout)"),
-    ("bar_style", Kind::Choice(&["flat", "floating", "vertical"]), "menu bar shape: a full-width strip, a floating pill, or a vertical bar on the left screen edge (the dock hides with it)"),
+    (
+        "bar_style",
+        Kind::Choice(&["flat", "floating", "vertical"]),
+        "menu bar shape: a full-width strip, a floating pill, or the Caelestia pill bar on a screen edge (left by default, see `bar.position`; the dock hides with it)",
+    ),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
     ("font_family", Kind::Str, "the font of text, titles and display numbers (fontconfig family); unavailable fonts fall back to the preset, Inter and sans-serif"),
@@ -491,6 +526,7 @@ impl Def {
             dock_padding: clampf(num("dock_padding", 16.0), 4.0, 40.0),
             bar_height: clampf(num("bar_height", 26.0), 20.0, 40.0),
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
+            bar_position: crate::config::BarPosition::default(),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
             font_family: fonts.primary_ui().to_string(),

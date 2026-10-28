@@ -21,6 +21,20 @@ pub fn acquire(name: &str) -> Option<File> {
     acquire_signalling(name, libc::SIGTERM)
 }
 
+/// `Some(guard)` when no other instance holds the lock `name`; otherwise `None` and the running instance is left alone.
+/// For daemons a supervisor restarts (macbar and its bottom half): a second copy simply exits instead of replacing the first.
+pub fn hold(name: &str) -> Option<File> {
+    let file = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(name)).ok()?;
+    // SAFETY: flock on a descriptor we own; it only takes or refuses an advisory lock.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return None;
+    }
+    let mut file = file;
+    let _ = file.set_len(0);
+    let _ = write!(file, "{}", std::process::id());
+    Some(file)
+}
+
 /// Like [`acquire`], but a running instance gets `sig` instead of SIGTERM (macswitch: SIGUSR1 = next, SIGUSR2 = previous).
 /// The caller should have blocked `sig` (see [`block_signals`]) before this, so a signal that arrives early is held, not fatal.
 pub fn acquire_signalling(name: &str, sig: i32) -> Option<File> {
@@ -73,6 +87,32 @@ pub fn wait_signal(sigs: &[i32]) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hold_is_one_lock_per_role_and_never_signals_the_holder() {
+        let base = format!("macshell-test-hold-{}", std::process::id());
+        let (main, bottom) = (format!("{base}-macbar"), format!("{base}-macbar-bottom"));
+        let try_hold = |n: &str| {
+            for _ in 0..50 {
+                if let Some(f) = super::hold(n) {
+                    return Some(f);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            None
+        };
+        let a = try_hold(&main).expect("the main role is free");
+        assert!(super::hold(&main).is_none(), "a second main bar is refused");
+        let b = try_hold(&bottom).expect("the bottom role has a lock of its own");
+        assert!(super::hold(&bottom).is_none());
+        assert_eq!(std::fs::read_to_string(super::lock_path(&main)).unwrap(), std::process::id().to_string(), "the holder's pid is recorded");
+        drop(a);
+        let a2 = try_hold(&main);
+        assert!(a2.is_some(), "released with the guard");
+        drop((a2, b));
+        let _ = std::fs::remove_file(super::lock_path(&main));
+        let _ = std::fs::remove_file(super::lock_path(&bottom));
+    }
+
     #[test]
     fn second_acquire_is_refused_while_the_first_is_held() {
         let name = format!("macshell-test-{}", std::process::id());

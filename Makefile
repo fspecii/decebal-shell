@@ -66,9 +66,13 @@ e2e-clip:
 e2e-hot:
 	tests/e2e/hot.sh
 
-# The vertical Caelestia bar on a private Xvfb + rdwm (needs Xvfb, xdotool, xprop, import, jq, convert).
+# The Caelestia bar (left edge) on a private Xvfb + rdwm (needs Xvfb, xdotool, xprop, import, jq, convert).
 e2e-vbar:
 	tests/e2e/vbar.sh
+
+# Every Caelestia layout (left, right, top, bottom, split) on a private Xvfb :96 + rdwm (needs Xvfb, xdotool, xprop, import, jq).
+e2e-layouts:
+	tests/e2e/layouts.sh
 
 # macsession + macutil on a private Xvfb with shimmed systemctl/loginctl/ffmpeg/xset/picom/powerprofilesctl (Xvfb, xdotool, import).
 e2e-session: all
@@ -79,4 +83,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar e2e-layouts
