@@ -12,10 +12,31 @@ use std::time::{Duration, Instant};
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(2500);
 
+/// Makes the child die with the thread that spawned it (Linux `PR_SET_PDEATHSIG`), so a bar that is killed
+/// mid-probe, or restarted, never leaves a hung `bluetoothctl` or a `pactl subscribe` behind. Only for children
+/// that the spawning thread outlives (probes it waits for, watchers it reads from).
+#[cfg(target_os = "linux")]
+pub fn die_with_parent(cmd: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: prctl is async-signal-safe and touches no memory of ours.
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+            Ok(())
+        });
+    }
+    cmd
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn die_with_parent(cmd: &mut Command) -> &mut Command {
+    cmd
+}
+
 /// Runs `argv`, returning stdout if it exits successfully within `timeout`. The child is killed on timeout.
 pub fn run(argv: &[&str], timeout: Duration) -> Option<String> {
     let (prog, args) = argv.split_first()?;
-    let mut child = Command::new(prog).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut child = die_with_parent(Command::new(prog).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())).spawn().ok()?;
     let mut stdout = child.stdout.take()?;
     let reader = std::thread::spawn(move || {
         let mut buf = String::new();
@@ -299,7 +320,7 @@ pub fn watch_volume<F: Fn() + Send + 'static>(on_event: F) {
         return;
     }
     std::thread::spawn(move || loop {
-        if let Ok(mut child) = Command::new("pactl").arg("subscribe").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
+        if let Ok(mut child) = die_with_parent(Command::new("pactl").arg("subscribe").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())).spawn() {
             if let Some(out) = child.stdout.take() {
                 for line in std::io::BufRead::lines(std::io::BufReader::new(out)).map_while(Result::ok) {
                     if is_sink_event(&line) {
@@ -746,6 +767,18 @@ mod tests {
         let start = Instant::now();
         assert_eq!(run(&["sleep", "5"], Duration::from_millis(150)), None);
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_child_dies_with_the_thread_that_spawned_it() {
+        let pid = std::thread::spawn(|| die_with_parent(Command::new("sleep").arg("30")).spawn().map(|c| c.id()).unwrap()).join().unwrap();
+        let gone = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(30));
+            // A killed child that nobody waited for is a zombie: its state letter is Z (or the entry is gone).
+            std::fs::read_to_string(format!("/proc/{pid}/stat")).map(|s| s.rsplit(") ").next().unwrap_or("").starts_with('Z')).unwrap_or(true)
+        });
+        assert!(gone, "the sleep outlived the thread that spawned it");
     }
 
     #[test]
