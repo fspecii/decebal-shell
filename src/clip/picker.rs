@@ -4,7 +4,7 @@ use super::history::{self, History};
 use crate::app::Button;
 use crate::gfx::{blit_scaled, fill_rect, fill_rounded, stroke_rounded};
 use crate::menubar::symbols::SymbolCache;
-use crate::text::{Fonts, Weight};
+use crate::text::{Fonts, Role, Weight};
 use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use std::cell::RefCell;
@@ -160,7 +160,7 @@ impl Picker {
     }
 
     fn measure(&self, s: &str, px: f32) -> f32 {
-        self.fonts.as_ref().map_or(s.chars().count() as f32 * px * 0.55, |f| f.measure(s, px, Weight::Regular))
+        self.fonts.as_ref().map_or(s.chars().count() as f32 * px * 0.55, |f| f.measure_as(Role::Mono, s, px, Weight::Regular))
     }
 
     /// `s` cut with an ellipsis so it is at most `max_w` wide.
@@ -178,7 +178,7 @@ impl Picker {
 
     fn text_at(&mut self, pm: &mut Pixmap, s: &str, x: f32, cy: f32, px: f32, c: Color) {
         if let Some(f) = &mut self.fonts {
-            f.draw(pm, s, x, cy - px * 0.62, px, Weight::Regular, c);
+            f.draw_as(Role::Mono, pm, s, x, cy - px * 0.62, px, Weight::Regular, c);
         }
     }
 

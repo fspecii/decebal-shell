@@ -9,7 +9,7 @@ use super::Dash;
 use crate::gfx::{color, fill_circle, fill_rect, fill_rounded, stroke_rounded};
 use crate::menubar::clock;
 use crate::menubar::popup::month_grid;
-use crate::text::Weight;
+use crate::text::{Role, Weight};
 use crate::theme::Theme;
 use std::time::Instant;
 use tiny_skia::{Color, Pixmap};
@@ -30,7 +30,19 @@ impl Dash {
     /// Draws `s` with the top of its line box at `top`; returns the width.
     #[allow(clippy::too_many_arguments)] // a drawing helper: target, text, position, size, weight, colour
     fn text(&mut self, pm: &mut Pixmap, s: &str, x: f32, top: f32, px: f32, w: Weight, c: Color) -> f32 {
-        self.fonts.as_mut().map_or(0.0, |f| f.draw(pm, s, x.round(), top.round(), px, w, c))
+        self.text_in(Role::Ui, pm, s, x, top, px, w, c)
+    }
+
+    /// [`Self::text`] in the font of `role` (numbers are monospace, the clock a display face).
+    #[allow(clippy::too_many_arguments)]
+    fn text_in(&mut self, role: Role, pm: &mut Pixmap, s: &str, x: f32, top: f32, px: f32, w: Weight, c: Color) -> f32 {
+        self.fonts.as_mut().map_or(0.0, |f| f.draw_as(role, pm, s, x.round(), top.round(), px, w, c))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn text_c_in(&mut self, role: Role, pm: &mut Pixmap, s: &str, cx: f32, top: f32, px: f32, w: Weight, c: Color) {
+        let width = self.fonts.as_ref().map_or(px * 0.55 * s.chars().count() as f32, |f| f.measure_as(role, s, px, w));
+        self.text_in(role, pm, s, cx - width / 2.0, top, px, w, c);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -142,7 +154,7 @@ impl Dash {
         // Clock and date.
         if let Some(tm) = clock::now() {
             let face = info::clock_face(tm.hour, tm.min, self.hour12);
-            self.text(pm, &face, l.time.x - 1.0, l.time.y - 2.0, 42.0, Weight::Bold, th.text_c());
+            self.text_in(Role::Display, pm, &face, l.time.x - 1.0, l.time.y - 2.0, 42.0, Weight::Bold, th.text_c());
             self.text(pm, &info::long_date(tm.wday, tm.mday, tm.mon), l.date.x, l.date.y, 14.0, Weight::Medium, th.sub());
         }
 
@@ -389,7 +401,7 @@ impl Dash {
         ring(pm, cx, cy, radius, radius * 0.24, f, th.ink(0.12), load_color(th, f));
         let pct = frac.map_or("--".to_string(), |f| format!("{:.0}%", f * 100.0));
         let px = (radius * 0.52).clamp(11.0, 16.0);
-        self.text_c(pm, &pct, cx, cy - px * 0.62, px, Weight::SemiBold, th.text_c());
+        self.text_c_in(Role::Mono, pm, &pct, cx, cy - px * 0.62, px, Weight::SemiBold, th.text_c());
     }
 
     fn draw_cpu(&mut self, pm: &mut Pixmap, th: &Theme, r: Rect) {
@@ -398,10 +410,10 @@ impl Dash {
         self.gauge(pm, th, r.x + 52.0, r.y + 66.0, 31.0, Some(s.cpu));
         let tx = r.x + 108.0;
         let temp = s.cpu_temp.map_or("--".to_string(), |t| format!("{t:.0}°C"));
-        self.text(pm, &temp, tx, r.y + 34.0, 18.0, Weight::SemiBold, th.text_c());
+        self.text_in(Role::Mono, pm, &temp, tx, r.y + 34.0, 18.0, Weight::SemiBold, th.text_c());
         self.text(pm, "Temperature", tx, r.y + 56.0, 11.0, Weight::Regular, th.sub());
         let load = s.load1.map_or("--".to_string(), |l| format!("{l:.2}"));
-        self.text(pm, &load, tx, r.y + 76.0, 18.0, Weight::SemiBold, th.text_c());
+        self.text_in(Role::Mono, pm, &load, tx, r.y + 76.0, 18.0, Weight::SemiBold, th.text_c());
         self.text(pm, &format!("Load, {} threads", s.cores.len()), tx, r.y + 98.0, 11.0, Weight::Regular, th.sub());
         meters(pm, Rect::new(r.x + 14.0, r.y + 118.0, r.w - 28.0, 30.0), &s.cores, th.ink(0.10), th.accent_c());
         sparkline(pm, Rect::new(r.x + 14.0, r.y + 158.0, r.w - 28.0, 32.0), &s.cpu_hist, 1.0, HISTORY, th.accent_c(), true);
@@ -415,7 +427,7 @@ impl Dash {
         for (i, (label, rate, c)) in [("Down", s.rx, down), ("Up", s.tx, up)].into_iter().enumerate() {
             let x = r.x + 14.0 + i as f32 * half;
             arrow(pm, x + 5.0, r.y + 38.0, 9.0, i == 1, c);
-            self.text(pm, &sysinfo::human_rate(rate), x + 16.0, r.y + 28.0, 14.0, Weight::SemiBold, th.text_c());
+            self.text_in(Role::Mono, pm, &sysinfo::human_rate(rate), x + 16.0, r.y + 28.0, 14.0, Weight::SemiBold, th.text_c());
             self.text(pm, label, x + 16.0, r.y + 46.0, 10.0, Weight::Regular, th.sub());
         }
         let area = Rect::new(r.x + 14.0, r.y + 64.0, r.w - 28.0, r.h - 64.0 - 10.0);
@@ -435,9 +447,10 @@ impl Dash {
         let known = m.total_kb > 0;
         self.gauge(pm, th, r.x + 40.0, r.y + 46.0 + dy, 21.0, known.then(|| m.used_frac()));
         let tx = r.x + 78.0;
-        self.text(pm, &sysinfo::human_kb(m.used_kb()), tx, r.y + 24.0 + dy, 16.0, Weight::SemiBold, th.text_c());
+        self.text_in(Role::Mono, pm, &sysinfo::human_kb(m.used_kb()), tx, r.y + 24.0 + dy, 16.0, Weight::SemiBold, th.text_c());
         self.text(pm, &format!("of {}", sysinfo::human_kb(m.total_kb)), tx, r.y + 44.0 + dy, 11.0, Weight::Regular, th.sub());
         let swap = if m.swap_total_kb == 0 { "No swap".to_string() } else { format!("Swap {} / {}", sysinfo::human_kb(m.swap_used_kb()), sysinfo::human_kb(m.swap_total_kb)) };
+        let swap = self.fit(&swap, 11.0, Weight::Regular, r.right() - tx - 10.0);
         self.text(pm, &swap, tx, r.y + 62.0 + dy, 11.0, Weight::Regular, th.sub());
         bar(pm, Rect::new(tx, r.y + 80.0 + dy, r.right() - tx - 14.0, 4.0), m.swap_frac(), th.ink(0.12), load_color(th, m.swap_frac()));
     }
@@ -449,7 +462,7 @@ impl Dash {
         self.gauge(pm, th, r.x + 40.0, r.y + 46.0 + dy, 21.0, disk.map(|d| d.used_frac()));
         let tx = r.x + 78.0;
         if let Some(d) = disk {
-            self.text(pm, &sysinfo::human_bytes(d.used), tx, r.y + 24.0 + dy, 16.0, Weight::SemiBold, th.text_c());
+            self.text_in(Role::Mono, pm, &sysinfo::human_bytes(d.used), tx, r.y + 24.0 + dy, 16.0, Weight::SemiBold, th.text_c());
             self.text(pm, &format!("of {}", sysinfo::human_bytes(d.total)), tx, r.y + 44.0 + dy, 11.0, Weight::Regular, th.sub());
             self.text(pm, &format!("{} free", sysinfo::human_bytes(d.total.saturating_sub(d.used))), tx, r.y + 62.0 + dy, 11.0, Weight::Regular, th.sub());
             bar(pm, Rect::new(tx, r.y + 80.0 + dy, r.right() - tx - 14.0, 4.0), d.used_frac(), th.ink(0.12), load_color(th, d.used_frac()));
@@ -465,12 +478,13 @@ impl Dash {
         self.gauge(pm, th, r.x + 40.0, r.y + 58.0, 25.0, g.util.map(|u| u / 100.0));
         let tx = r.x + 82.0;
         let temp = g.temp.map_or("--".to_string(), |t| format!("{t:.0}°C"));
-        self.text(pm, &temp, tx, r.y + 30.0, 18.0, Weight::SemiBold, th.text_c());
+        self.text_in(Role::Mono, pm, &temp, tx, r.y + 30.0, 18.0, Weight::SemiBold, th.text_c());
         self.text(pm, "Temperature", tx, r.y + 52.0, 11.0, Weight::Regular, th.sub());
         let vram = match (g.mem_used_mib, g.mem_total_mib) {
             (Some(u), Some(t)) => format!("VRAM {} / {}", sysinfo::human_bytes(u << 20), sysinfo::human_bytes(t << 20)),
             _ => "VRAM --".to_string(),
         };
+        let vram = self.fit(&vram, 11.0, Weight::Regular, r.right() - tx - 10.0);
         self.text(pm, &vram, tx, r.y + 72.0, 11.0, Weight::Regular, th.sub());
         let f = g.mem_frac().unwrap_or(0.0);
         bar(pm, Rect::new(tx, r.y + 92.0, r.right() - tx - 14.0, 4.0), f, th.ink(0.12), load_color(th, f));

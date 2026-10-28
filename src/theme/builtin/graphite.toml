@@ -2,6 +2,9 @@ name = "Graphite"
 description = "macOS with the monochrome graphite accent."
 inherit = "macos"
 
+[font]
+preset = "inter"
+
 [dark]
 accent = "#8e8e93"
 accent_text = "#000000"

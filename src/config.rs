@@ -206,17 +206,83 @@ impl Default for ShellSettings {
     }
 }
 
-/// `macshell.json` -> `"bar": { "enabled": true | false | "auto" }`: whether macbar shows at all.
-/// `"auto"` hides it while the dock is in the Windows style (a Windows-only layout).
+/// Where the Caelestia pill bar sits (`macshell.json` -> `"bar": { "position": "left" }`). Only the Caelestia theme
+/// (`bar_style = "vertical"`) draws that bar; every other theme keeps the menu bar across the top and ignores it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BarPosition {
+    /// A vertical bar on the left screen edge (Caelestia's own layout).
+    #[default]
+    Left,
+    /// A vertical bar on the right edge; popouts open leftwards.
+    Right,
+    /// A horizontal pill bar along the top edge.
+    Top,
+    /// A horizontal pill bar along the bottom edge; popouts open upwards.
+    Bottom,
+    /// Both: the top bar holds the OS icon, workspaces and window title, the bottom bar the tray, status icons, clock and power.
+    Split,
+}
+
+impl BarPosition {
+    pub const ALL: [BarPosition; 5] = [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom, BarPosition::Split];
+
+    pub fn parse(s: &str) -> Option<BarPosition> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "left" => Some(BarPosition::Left),
+            "right" => Some(BarPosition::Right),
+            "top" => Some(BarPosition::Top),
+            "bottom" => Some(BarPosition::Bottom),
+            "split" | "both" | "top-bottom" | "top+bottom" => Some(BarPosition::Split),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BarPosition::Left => "left",
+            BarPosition::Right => "right",
+            BarPosition::Top => "top",
+            BarPosition::Bottom => "bottom",
+            BarPosition::Split => "split",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            BarPosition::Left => "Left",
+            BarPosition::Right => "Right",
+            BarPosition::Top => "Top",
+            BarPosition::Bottom => "Bottom",
+            BarPosition::Split => "Split",
+        }
+    }
+
+    /// The bar runs down a side edge.
+    pub fn is_vertical(self) -> bool {
+        matches!(self, BarPosition::Left | BarPosition::Right)
+    }
+}
+
+impl<'de> Deserialize<'de> for BarPosition {
+    /// Lenient: a misspelt value (or a number) must not make the whole `macshell.json` unreadable, it means the default.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_json::Value::deserialize(d)?;
+        Ok(v.as_str().and_then(BarPosition::parse).unwrap_or_default())
+    }
+}
+
+/// `macshell.json` -> `"bar": { "enabled": true | false | "auto", "position": "left" | ... }`: whether macbar shows at all,
+/// and where the Caelestia pill bar sits. `enabled = "auto"` hides it while the dock is in the Windows style.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct BarSettings {
     pub enabled: Toggle,
+    pub position: BarPosition,
 }
 
 impl Default for BarSettings {
     fn default() -> Self {
-        Self { enabled: Toggle::Flag(true) }
+        Self { enabled: Toggle::Flag(true), position: BarPosition::Left }
     }
 }
 
@@ -421,6 +487,34 @@ mod tests {
         assert_eq!(Pinned::default().or_default(&none), vec!["launchpad", "trash"]);
         let p = Pinned { pinned: vec!["a".into()], order: vec![] };
         assert_eq!(p.or_default(&none), vec!["a"]);
+    }
+
+    #[test]
+    fn bar_position_parses_every_spelling_and_defaults_to_left() {
+        for p in BarPosition::ALL {
+            assert_eq!(BarPosition::parse(p.as_str()), Some(p));
+            assert!(!p.title().is_empty());
+        }
+        assert_eq!(BarPosition::parse(" Top "), Some(BarPosition::Top));
+        assert_eq!(BarPosition::parse("both"), Some(BarPosition::Split));
+        assert_eq!(BarPosition::parse("diagonal"), None);
+        assert!(BarPosition::Left.is_vertical() && BarPosition::Right.is_vertical());
+        assert!(!BarPosition::Top.is_vertical() && !BarPosition::Bottom.is_vertical() && !BarPosition::Split.is_vertical());
+        assert_eq!(ShellSettings::default().bar.position, BarPosition::Left);
+    }
+
+    #[test]
+    fn bar_position_round_trips_through_macshell_json() {
+        for p in BarPosition::ALL {
+            let s: ShellSettings = serde_json::from_str(&format!(r#"{{"bar": {{"enabled": true, "position": "{}"}}, "dock": {{"enabled": "auto"}}}}"#, p.as_str())).unwrap();
+            assert_eq!(s.bar.position, p);
+            assert_eq!(s.bar.enabled, Toggle::Flag(true));
+        }
+        // a missing key, a misspelt value and a wrong type all mean left, and never spoil the other keys
+        for text in [r#"{"bar": {"enabled": false}}"#, r#"{"bar": {"enabled": false, "position": "sideways"}}"#, r#"{"bar": {"enabled": false, "position": 3}}"#] {
+            let s: ShellSettings = serde_json::from_str(text).unwrap();
+            assert_eq!((s.bar.position, s.bar.enabled), (BarPosition::Left, Toggle::Flag(false)), "{text}");
+        }
     }
 
     #[test]

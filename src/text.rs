@@ -1,11 +1,24 @@
-//! Text rendering with fontdue: glyph cache, measuring and drawing into a tiny-skia pixmap.
+//! Text rendering: per-role font chains with per-character fallback, a glyph cache, measuring and drawing
+//! into a tiny-skia pixmap.
+//!
+//! A [`Role`] (interface, title, monospace, display) names a chain of installed families (see
+//! [`crate::theme::fonts`]); each character is drawn by the first family of the chain that has a glyph for it,
+//! so CJK, emoji and icon glyphs show up whatever the primary font. Faces are opened lazily the first time a glyph
+//! is missing from the cache and dropped again by [`Fonts::trim`]; steady-state drawing only touches the small
+//! glyph cache. The chains are resolved against the installed fonts once per theme change (one `fc-list` per
+//! process, see [`crate::theme::fontdb`]), never per frame.
 
-use fontdue::{Font, FontSettings};
+use crate::textface::{self, Backing, Glyph, Kind, Spec};
+use crate::theme::fontdb::{self, FontDb, FC_BOLD, FC_MEDIUM, FC_REGULAR, FC_SEMIBOLD};
+use crate::theme::fonts::{FontPlan, Resolved};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use tiny_skia::{Color, Pixmap};
+
+pub use crate::theme::fonts::Role;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Weight {
@@ -15,91 +28,50 @@ pub enum Weight {
     Bold,
 }
 
-/// Rasterised glyph: metrics plus an 8-bit coverage bitmap.
-struct Glyph {
-    metrics: fontdue::Metrics,
-    bitmap: Vec<u8>,
-}
-
-type FaceSpec = (PathBuf, u32);
-
-/// Cap on cached glyphs (distinct char/size/weight combinations) so odd window titles cannot grow memory.
-const MAX_GLYPHS: usize = 4096;
-
-/// UI text: Inter when installed (the original look), otherwise a common sans font.
-///
-/// fontdue parses every glyph of a face up front (about 12 MB for one Inter face), so faces are
-/// loaded lazily the first time a glyph is missing from the cache and dropped again by [`Fonts::trim`].
-/// Steady-state drawing then only touches the small glyph cache.
-pub struct Fonts {
-    specs: RefCell<[FaceSpec; 4]>,
-    /// Theme generation the specs/glyphs were built for (a theme change can switch family and scale).
-    theme_gen: Cell<u64>,
-    /// Font family the specs were picked for (colours and text scale changes keep the glyph cache).
-    family: RefCell<String>,
-    loaded: RefCell<[Option<Font>; 4]>,
-    glyphs: RefCell<HashMap<(char, u32, Weight), Rc<Glyph>>>,
-    ascents: RefCell<HashMap<(u32, Weight), f32>>,
-}
-
-/// Resolves a fontconfig pattern to (file, face index inside a .ttc collection).
-fn find_font(patterns: &[&str]) -> Option<FaceSpec> {
-    for pat in patterns {
-        let out = std::process::Command::new("fc-match").args(["-f", "%{file}\n%{index}", pat]).output().ok()?;
-        let text = String::from_utf8_lossy(&out.stdout).to_string();
-        let mut lines = text.lines();
-        let path = lines.next().unwrap_or("").trim().to_string();
-        let index = lines.next().and_then(|i| i.trim().parse().ok()).unwrap_or(0);
-        if !path.is_empty() && Path::new(&path).is_file() {
-            return Some((PathBuf::from(path), index));
+impl Weight {
+    fn fc(self) -> i32 {
+        match self {
+            Weight::Regular => FC_REGULAR,
+            Weight::Medium => FC_MEDIUM,
+            Weight::SemiBold => FC_SEMIBOLD,
+            Weight::Bold => FC_BOLD,
         }
     }
-    None
 }
 
-/// Like [`find_font`] but only accepts a font whose family really is `family` (fc-match always answers with something).
-fn find_family(family: &str, style: &str) -> Option<FaceSpec> {
-    let pat = format!("{family}{style}");
-    let out = std::process::Command::new("fc-match").args(["-f", "%{file}\n%{index}\n%{family}", &pat]).output().ok()?;
-    let text = String::from_utf8_lossy(&out.stdout).to_string();
-    let mut lines = text.lines();
-    let path = lines.next()?.trim().to_string();
-    let index = lines.next().and_then(|i| i.trim().parse().ok()).unwrap_or(0);
-    let fam = lines.next().unwrap_or("").to_lowercase();
-    (fam.split(',').any(|f| f.trim() == family.to_lowercase()) && Path::new(&path).is_file()).then(|| (PathBuf::from(path), index))
+/// Cap on cached glyphs (distinct char/size/weight/role combinations) so odd window titles cannot grow memory.
+const MAX_GLYPHS: usize = 4096;
+/// Parsed fontdue faces kept at once (about 12 MB each) while a frame mixes Latin text with a second face.
+const MAX_PARSED: usize = 2;
+
+type SpecKey = (Role, usize, Weight);
+type GlyphKey = (char, u32, Weight, Role);
+
+/// What the current theme asked for, checked against the installed fonts.
+struct Setup {
+    plan: FontPlan,
+    db: Arc<FontDb>,
+    resolved: Resolved,
 }
 
-/// The four faces for the theme's font family, falling back to Inter and then any sans font.
-fn pick_specs() -> Option<[FaceSpec; 4]> {
-    let family = crate::theme::current().font_family.clone();
-    let try_family = |style: &str, fallback: &[&str]| -> Option<FaceSpec> {
-        if !family.is_empty() {
-            if let Some(f) = find_family(&family, style) {
-                return Some(f);
-            }
-        }
-        find_font(fallback)
-    };
-    // Each lookup runs fc-match (a process, ~10 ms): do the three other weights alongside the regular one.
-    let (regular, [medium, semibold, bold]) = std::thread::scope(|sc| {
-        let others = [
-            sc.spawn(|| try_family(":weight=medium", &["Inter:weight=medium", "sans-serif:weight=medium"])),
-            sc.spawn(|| try_family(":weight=demibold", &["Inter:weight=demibold", "sans-serif:weight=demibold"])),
-            sc.spawn(|| try_family(":weight=bold", &["Inter:weight=bold", "sans-serif:weight=bold"])),
-        ];
-        let regular = try_family("", &["Inter", "Inter Variable", "sans-serif"]);
-        (regular, others.map(|h| h.join().ok().flatten()))
-    });
-    let regular = regular?;
-    // Fail early if the file is unreadable. (Not by parsing it: that costs ~15 ms and the first glyph parses it anyway.)
-    std::fs::File::open(&regular.0).ok()?;
-    let [medium, semibold, bold] = [medium, semibold, bold].map(|f| f.unwrap_or_else(|| regular.clone()));
-    Some([regular, medium, semibold, bold])
+impl Setup {
+    fn new(plan: FontPlan, db: Arc<FontDb>) -> Setup {
+        let resolved = plan.resolve(&db);
+        Setup { plan, db, resolved }
+    }
 }
 
-fn load(face: &FaceSpec) -> Option<Font> {
-    let data = std::fs::read(&face.0).ok()?;
-    Font::from_bytes(data, FontSettings { collection_index: face.1, ..FontSettings::default() }).ok()
+/// UI text: the fonts of the current theme, per role, with per-character fallback.
+pub struct Fonts {
+    setup: RefCell<Setup>,
+    /// Theme generation the setup/glyphs were built for (a theme change can switch fonts and scale).
+    theme_gen: Cell<u64>,
+    /// Faces by (role, chain position, weight); `None` = that family has no usable file.
+    specs: RefCell<HashMap<SpecKey, Option<Rc<Spec>>>>,
+    backings: RefCell<HashMap<PathBuf, Rc<Backing>>>,
+    parsed: RefCell<Vec<(PathBuf, u32, Rc<fontdue::Font>)>>,
+    glyphs: RefCell<HashMap<GlyphKey, Option<Rc<Glyph>>>>,
+    ascents: RefCell<HashMap<(Role, u32, Weight), f32>>,
 }
 
 /// Hands freed heap pages back to the OS (glibc keeps them otherwise, which would defeat `trim`).
@@ -111,127 +83,248 @@ fn release_heap() {
     }
 }
 
-fn slot(w: Weight) -> usize {
-    match w {
-        Weight::Regular => 0,
-        Weight::Medium => 1,
-        Weight::SemiBold => 2,
-        Weight::Bold => 3,
-    }
+/// Characters that take no space and have no glyph of their own: joiners, variation selectors, zero-width space.
+fn is_invisible(ch: char) -> bool {
+    matches!(ch, '\u{200b}'..='\u{200f}' | '\u{2060}' | '\u{fe00}'..='\u{fe0f}' | '\u{feff}' | '\u{1f3fb}'..='\u{1f3ff}')
 }
 
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
-        let specs = pick_specs()?;
+        let db = fontdb::get();
+        let setup = Setup::new(crate::theme::current().fonts.clone(), db);
+        setup.resolved.primary(Role::Ui)?;
         Some(Self {
-            specs: RefCell::new(specs),
+            setup: RefCell::new(setup),
             theme_gen: Cell::new(crate::theme::generation()),
-            family: RefCell::new(crate::theme::current().font_family.clone()),
-            loaded: RefCell::new([None, None, None, None]),
+            specs: RefCell::new(HashMap::new()),
+            backings: RefCell::new(HashMap::new()),
+            parsed: RefCell::new(Vec::new()),
             glyphs: RefCell::new(HashMap::new()),
             ascents: RefCell::new(HashMap::new()),
         })
     }
 
-    /// Rebuilds faces and drops cached glyphs when the theme (family, text scale) changed since the last call.
+    /// Rebuilds the chains and drops cached glyphs when the theme's fonts (or the installed fonts) changed since the last call.
     fn sync_theme(&self) {
         let g = crate::theme::generation();
         if self.theme_gen.get() == g {
             return;
         }
         self.theme_gen.set(g);
-        let family = crate::theme::current().font_family.clone();
-        if *self.family.borrow() == family {
-            return; // only colours / sizes changed: glyph keys already include the scaled size
+        let plan = crate::theme::current().fonts.clone();
+        let db = fontdb::get();
+        {
+            let cur = self.setup.borrow();
+            if cur.plan == plan && cur.db.gen == db.gen {
+                return; // only colours / sizes changed: glyph keys already include the scaled size
+            }
         }
-        *self.family.borrow_mut() = family;
-        if let Some(specs) = pick_specs() {
-            *self.specs.borrow_mut() = specs;
-        }
-        *self.loaded.borrow_mut() = [None, None, None, None];
+        *self.setup.borrow_mut() = Setup::new(plan, db);
+        self.specs.borrow_mut().clear();
         self.glyphs.borrow_mut().clear();
         self.ascents.borrow_mut().clear();
-        release_heap();
+        self.trim();
     }
 
-    /// Runs `f` with the face for `weight`, loading it if needed. `None` if the file became unreadable.
-    fn with_font<R>(&self, weight: Weight, f: impl FnOnce(&Font) -> R) -> Option<R> {
-        let i = slot(weight);
-        let mut loaded = self.loaded.borrow_mut();
-        if loaded[i].is_none() {
-            // One parsed face is ~12 MB: never keep two at once.
-            *loaded = [None, None, None, None];
-            loaded[i] = load(&self.specs.borrow()[i]);
+    fn chain_len(&self, role: Role) -> usize {
+        self.setup.borrow().resolved.chain(role).len()
+    }
+
+    fn backing(&self, path: &PathBuf) -> Option<Rc<Backing>> {
+        if let Some(b) = self.backings.borrow().get(path) {
+            return Some(b.clone());
         }
-        loaded[i].as_ref().map(f)
+        let b = Rc::new(Backing::open(path)?);
+        self.backings.borrow_mut().insert(path.clone(), b.clone());
+        Some(b)
     }
 
-    /// Drops the parsed faces (tens of MB); cached glyphs stay. Call after a frame is drawn.
+    /// The face of the `i`-th family of `role`'s chain at `weight`.
+    fn spec(&self, role: Role, i: usize, weight: Weight) -> Option<Rc<Spec>> {
+        let key = (role, i, weight);
+        if let Some(s) = self.specs.borrow().get(&key) {
+            return s.clone();
+        }
+        let spec = (|| {
+            let face = {
+                let setup = self.setup.borrow();
+                let family = setup.resolved.chain(role).get(i)?;
+                setup.db.face(family, weight.fc())?
+            };
+            let backing = self.backing(&face.file)?;
+            let kind = textface::classify(backing.bytes(), &face)?;
+            Some(Rc::new(Spec { face, kind }))
+        })();
+        self.specs.borrow_mut().insert(key, spec.clone());
+        spec
+    }
+
+    /// The fontdue face for `spec`, parsing it if needed (at most [`MAX_PARSED`] stay in memory).
+    fn parsed_face(&self, spec: &Spec) -> Option<Rc<fontdue::Font>> {
+        let mut parsed = self.parsed.borrow_mut();
+        if let Some(pos) = parsed.iter().position(|(p, i, _)| *p == spec.face.file && *i == spec.face.index) {
+            let hit = parsed.remove(pos); // most recently used goes last
+            let font = hit.2.clone();
+            parsed.push(hit);
+            return Some(font);
+        }
+        let backing = self.backing(&spec.face.file)?;
+        let font = Rc::new(textface::load_fontdue(backing.bytes(), spec.face.index)?);
+        if parsed.len() >= MAX_PARSED {
+            parsed.remove(0);
+        }
+        parsed.push((spec.face.file.clone(), spec.face.index, font.clone()));
+        Some(font)
+    }
+
+    fn rasterize(&self, spec: &Spec, ch: char, px: f32) -> Option<Glyph> {
+        match spec.kind {
+            Kind::Fontdue => Some(textface::raster_fontdue(&*self.parsed_face(spec)?, ch, px)),
+            Kind::Outline => textface::raster_outline(self.backing(&spec.face.file)?.bytes(), &spec.face, ch, px),
+            Kind::Bitmap => textface::raster_bitmap(self.backing(&spec.face.file)?.bytes(), &spec.face, ch, px),
+        }
+    }
+
+    /// Drops the parsed faces and file mappings (tens of MB); cached glyphs stay. Call after a frame is drawn.
     pub fn trim(&self) {
-        let mut loaded = self.loaded.borrow_mut();
-        if loaded.iter().all(Option::is_none) {
-            return;
+        let had = !self.parsed.borrow().is_empty() || !self.backings.borrow().is_empty();
+        self.parsed.borrow_mut().clear();
+        self.backings.borrow_mut().clear();
+        if had {
+            release_heap();
         }
-        *loaded = [None, None, None, None];
-        release_heap();
     }
 
     /// True while a parsed face is held in memory.
     pub fn has_loaded_face(&self) -> bool {
-        self.loaded.borrow().iter().any(Option::is_some)
+        !self.parsed.borrow().is_empty()
     }
 
-    fn glyph(&self, ch: char, px: f32, weight: Weight) -> Option<Rc<Glyph>> {
+    fn glyph(&self, role: Role, ch: char, px: f32, weight: Weight) -> Option<Rc<Glyph>> {
+        if is_invisible(ch) {
+            return None;
+        }
         self.sync_theme();
         let px = px * crate::theme::live::font_scale();
-        let key = (ch, (px * 4.0).round() as u32, weight);
+        let key = (ch, (px * 4.0).round() as u32, weight, role);
         if let Some(g) = self.glyphs.borrow().get(&key) {
-            return Some(Rc::clone(g));
+            return g.clone();
         }
-        let (metrics, bitmap) = self.with_font(weight, |f| f.rasterize(ch, px))?;
-        let g = Rc::new(Glyph { metrics, bitmap });
+        let g = self.build_glyph(role, ch, px, weight).map(Rc::new);
         let mut cache = self.glyphs.borrow_mut();
         if cache.len() >= MAX_GLYPHS {
             cache.clear();
         }
-        cache.insert(key, Rc::clone(&g));
-        Some(g)
+        cache.insert(key, g.clone());
+        g
+    }
+
+    /// The first family of the chain with a glyph for `ch` draws it; a character nobody has shows the primary font's own
+    /// placeholder.
+    fn build_glyph(&self, role: Role, ch: char, px: f32, weight: Weight) -> Option<Glyph> {
+        let n = self.chain_len(role);
+        let owner = textface::first_covering(n, |i| self.spec(role, i, weight).and_then(|s| self.backing(&s.face.file).map(|b| textface::covers(b.bytes(), s.face.index, ch))).unwrap_or(false));
+        for i in owner.into_iter().chain(0..n) {
+            if let Some(spec) = self.spec(role, i, weight) {
+                if let Some(g) = self.rasterize(&spec, ch, px) {
+                    return Some(g);
+                }
+            }
+        }
+        None
+    }
+
+    /// Which family of `role`'s chain draws `ch` (the installed name), for the settings preview and tests.
+    pub fn family_for(&self, role: Role, ch: char) -> Option<String> {
+        self.sync_theme();
+        let n = self.chain_len(role);
+        let i = textface::first_covering(n, |i| self.spec(role, i, Weight::Regular).and_then(|s| self.backing(&s.face.file).map(|b| textface::covers(b.bytes(), s.face.index, ch))).unwrap_or(false))?;
+        self.setup.borrow().resolved.chain(role).get(i).cloned()
     }
 
     /// Distance from the top of the line box to the baseline at pixel size `px`.
     pub fn ascent(&self, px: f32, weight: Weight) -> f32 {
+        self.ascent_as(Role::Ui, px, weight)
+    }
+
+    /// [`Self::ascent`] in the primary face of `role`.
+    pub fn ascent_as(&self, role: Role, px: f32, weight: Weight) -> f32 {
         self.sync_theme();
         let px = px * crate::theme::live::font_scale();
-        let key = ((px * 4.0).round() as u32, weight);
+        let key = (role, (px * 4.0).round() as u32, weight);
         if let Some(a) = self.ascents.borrow().get(&key) {
             return *a;
         }
-        let a = self.with_font(weight, |f| f.horizontal_line_metrics(px).map(|m| m.ascent)).flatten().unwrap_or(px * 0.9);
+        let a = self.spec(role, 0, weight).and_then(|s| textface::ascent(self.backing(&s.face.file)?.bytes(), s.face.index, px)).unwrap_or(px * 0.9);
         self.ascents.borrow_mut().insert(key, a);
         a
     }
 
     /// Advance width of `text` at pixel size `px`.
     pub fn measure(&self, text: &str, px: f32, weight: Weight) -> f32 {
-        text.chars().filter_map(|c| self.glyph(c, px, weight)).map(|g| g.metrics.advance_width).sum()
+        self.measure_as(Role::Ui, text, px, weight)
+    }
+
+    /// [`Self::measure`] in the font of `role`.
+    pub fn measure_as(&self, role: Role, text: &str, px: f32, weight: Weight) -> f32 {
+        text.chars().filter_map(|c| self.glyph(role, c, px, weight)).map(|g| g.advance).sum()
     }
 
     /// Draws `text` with its baseline-box top-left at (`x`, `y`) and returns the width drawn.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(&mut self, pm: &mut Pixmap, text: &str, x: f32, y: f32, px: f32, weight: Weight, color: Color) -> f32 {
-        let baseline = y + self.ascent(px, weight);
+        self.draw_as(Role::Ui, pm, text, x, y, px, weight, color)
+    }
+
+    /// [`Self::draw`] in the font of `role`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_as(&mut self, role: Role, pm: &mut Pixmap, text: &str, x: f32, y: f32, px: f32, weight: Weight, color: Color) -> f32 {
+        let baseline = y + self.ascent_as(role, px, weight);
         let (cr, cg, cb, ca) = (color.red(), color.green(), color.blue(), color.alpha());
         let mut pen = x;
         for ch in text.chars() {
-            let Some(g) = self.glyph(ch, px, weight) else { continue };
-            let m = &g.metrics;
-            let gx = (pen + m.xmin as f32).round() as i32;
-            let gy = (baseline - m.height as f32 - m.ymin as f32).round() as i32;
-            blend_glyph(pm, &g.bitmap, m.width, m.height, gx, gy, (cr, cg, cb, ca));
-            pen += m.advance_width;
+            let Some(g) = self.glyph(role, ch, px, weight) else { continue };
+            let gx = (pen + g.xmin as f32).round() as i32;
+            let gy = (baseline - g.height as f32 - g.ymin as f32).round() as i32;
+            if g.color {
+                blend_color_glyph(pm, &g.bitmap, g.width, g.height, gx, gy, ca);
+            } else {
+                blend_glyph(pm, &g.bitmap, g.width, g.height, gx, gy, (cr, cg, cb, ca));
+            }
+            pen += g.advance;
         }
         pen - x
+    }
+}
+
+/// Source-over of a premultiplied RGBA glyph (colour emoji) scaled by `alpha`.
+fn blend_color_glyph(pm: &mut Pixmap, rgba: &[u8], gw: usize, gh: usize, gx: i32, gy: i32, alpha: f32) {
+    let (pw, ph) = (pm.width() as i32, pm.height() as i32);
+    let stride = pm.width() as usize * 4;
+    let data = pm.data_mut();
+    for row in 0..gh as i32 {
+        let py = gy + row;
+        if py < 0 || py >= ph {
+            continue;
+        }
+        for col in 0..gw as i32 {
+            let px = gx + col;
+            if px < 0 || px >= pw {
+                continue;
+            }
+            let s = (row as usize * gw + col as usize) * 4;
+            let a = rgba[s + 3] as f32 / 255.0 * alpha;
+            if a <= 0.0 {
+                continue;
+            }
+            let i = py as usize * stride + px as usize * 4;
+            let inv = 1.0 - a;
+            for c in 0..3 {
+                data[i + c] = (rgba[s + c] as f32 * alpha + data[i + c] as f32 * inv).round().min(255.0) as u8;
+            }
+            data[i + 3] = (255.0 * a + data[i + 3] as f32 * inv).round().min(255.0) as u8;
+        }
     }
 }
 
@@ -273,9 +366,10 @@ mod tests {
         let Some(f) = Fonts::load() else { return };
         assert!(!f.has_loaded_face());
         f.measure("zq unseen \u{2603} text", 12.0, Weight::Regular);
-        assert!(f.has_loaded_face());
+        // the face is a fontdue one unless the system font is variable or huge
         f.trim();
         assert!(!f.has_loaded_face());
+        assert!(f.backings.borrow().is_empty(), "mappings are released too");
     }
 
     #[test]
@@ -305,7 +399,7 @@ mod tests {
         let Some(mut f) = Fonts::load() else { return };
         let before = f.measure("Control Center", 12.0, Weight::Regular);
         f.trim();
-        assert!(f.loaded.borrow().iter().all(|x| x.is_none()), "faces are released");
+        assert!(!f.has_loaded_face(), "faces are released");
         assert_eq!(f.measure("Control Center", 12.0, Weight::Regular), before, "answered from the glyph cache");
         // A glyph never seen before reloads the face transparently.
         assert!(f.measure("Zq", 12.0, Weight::Regular) > 0.0);
@@ -329,5 +423,35 @@ mod tests {
     fn empty_text_is_zero_width() {
         let Some(f) = Fonts::load() else { return };
         assert_eq!(f.measure("", 13.0, Weight::Bold), 0.0);
+    }
+
+    #[test]
+    fn joiners_and_variation_selectors_take_no_space() {
+        let Some(f) = Fonts::load() else { return };
+        assert_eq!(f.measure("a\u{200d}\u{fe0f}", 13.0, Weight::Regular), f.measure("a", 13.0, Weight::Regular));
+    }
+
+    #[test]
+    fn missing_characters_come_from_a_later_family_when_one_has_them() {
+        let Some(f) = Fonts::load() else { return };
+        // Whatever the primary font is, a CJK character is drawn by a family that really has it, or shows the placeholder.
+        let w = f.measure("日", 16.0, Weight::Regular);
+        assert!(w > 0.0);
+        if let Some(fam) = f.family_for(Role::Ui, '日') {
+            let mut pm = Pixmap::new(40, 30).unwrap();
+            let mut f = f;
+            f.draw(&mut pm, "日", 4.0, 4.0, 16.0, Weight::Regular, Color::WHITE);
+            assert!(pm.data().chunks_exact(4).any(|p| p[3] > 0), "{fam} drew the glyph");
+        }
+    }
+
+    #[test]
+    fn roles_use_their_own_chains() {
+        let Some(f) = Fonts::load() else { return };
+        // the mono chain starts with a monospace family on any machine that has one: digits are all the same width
+        let w: Vec<f32> = "0189".chars().map(|c| f.measure_as(Role::Mono, &c.to_string(), 14.0, Weight::Regular)).collect();
+        if f.setup.borrow().db.is_mono(f.setup.borrow().resolved.primary(Role::Mono).unwrap_or("")) {
+            assert!(w.windows(2).all(|p| (p[0] - p[1]).abs() < 0.01), "{w:?}");
+        }
     }
 }

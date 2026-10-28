@@ -1,8 +1,8 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINS = macdock macbar machaven maclaunch macspot macswitch macexpose machud macdash macsession macutil macsettings macthemectl macnotify macwm macclip machot
-UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service macshell-hot.service
-AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop macshell-hot.desktop
+UNITS = macshell-dock.service macshell-bar.service macshell-notify.service macshell-clip.service macshell-hot.service macshell-wallpaper-colors.service
+AUTOSTART = macshell-dock.desktop macshell-bar.desktop macshell-notify.desktop macshell-clip.desktop macshell-hot.desktop macshell-wallpaper-colors.desktop
 
 all:
 	cargo build --release --locked
@@ -39,6 +39,13 @@ install-session:
 e2e-theme: all
 	tests/e2e/theme.sh
 
+# Font presets: macthemectl font, bar / dashboard / Theme pane screenshots (Xvfb, xdotool, import, jq, dbus-daemon).
+e2e-fonts:
+	PROFILE=release tests/e2e/fonts.sh
+# "Apply to all apps" in a private HOME, Xvfb and D-Bus session (needs Xvfb, xdotool, import, xrdb, dbus-run-session, PyGObject; nautilus and Omarchy are used when present).
+e2e-system: all
+	tests/e2e/system-theme.sh
+
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
 
@@ -59,9 +66,13 @@ e2e-clip:
 e2e-hot:
 	tests/e2e/hot.sh
 
-# The vertical Caelestia bar on a private Xvfb + rdwm (needs Xvfb, xdotool, xprop, import, jq, convert).
+# The Caelestia bar (left edge) on a private Xvfb + rdwm (needs Xvfb, xdotool, xprop, import, jq, convert).
 e2e-vbar:
 	tests/e2e/vbar.sh
+
+# Every Caelestia layout (left, right, top, bottom, split) on a private Xvfb :96 + rdwm (needs Xvfb, xdotool, xprop, import, jq).
+e2e-layouts:
+	tests/e2e/layouts.sh
 
 # macsession + macutil on a private Xvfb with shimmed systemctl/loginctl/ffmpeg/xset/picom/powerprofilesctl (Xvfb, xdotool, import).
 e2e-session: all
@@ -72,4 +83,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar e2e-layouts

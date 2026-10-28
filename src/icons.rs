@@ -1,92 +1,76 @@
-//! Freedesktop icon lookup (WhiteSur first) and SVG rasterisation.
+//! Icons: freedesktop theme lookup with a user-selectable theme, rasterisation and the per-window pixmap cache.
+//!
+//! * [`index`], [`resolve`]: `index.theme` parsing and the Icon Theme Specification lookup (inherits, hicolor, sizes, scales).
+//! * [`names`]: aliases and fallbacks (dock ids, reverse-DNS classes, MIME icons, the generic application icon).
+//! * [`config`], [`live`]: the `icons` object of `macshell.json` (theme, size scale, tint, fallback), the automatic
+//!   choice from GSettings / GTK and hot reload ([`generation`] changes when icons must be redrawn).
+//! * [`raster`], [`xpm`]: SVG / PNG / XPM to a crisp square pixmap. [`cache`]: the bounded LRU both caches use.
+//! * [`IconCache`]: what the dock, launchers, bar and switchers hold; it drops its pixmaps when the generation moves.
+//!
+//! See `docs/icons.md`.
 
-use std::collections::HashMap;
+pub mod cache;
+pub mod config;
+pub mod ctl;
+pub mod index;
+pub mod live;
+pub mod names;
+pub mod preview;
+pub mod raster;
+pub mod resolve;
+pub mod xpm;
+
+pub use live::{generation, status};
+
+use resolve::{Found, Kind};
 use std::path::{Path, PathBuf};
-use tiny_skia::{Pixmap, Transform};
+use tiny_skia::Pixmap;
 
-const THEMES: &[&str] = &["WhiteSur-dark", "WhiteSur", "hicolor", "Adwaita"];
-const SUBDIRS: &[&str] = &["apps/scalable", "places/scalable", "apps/512", "apps/256", "apps/128", "apps/96", "apps/64", "apps/48", "places/48", "places/64", "devices/scalable"];
+/// Pixel size the path-only helpers ([`find_svg`], [`find_png`]) look icons up for.
+const LOOKUP_PX: u32 = 128;
 
-fn icon_roots() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Some(h) = std::env::var_os("HOME") {
-        roots.push(Path::new(&h).join(".local/share/icons"));
-        roots.push(Path::new(&h).join(".icons"));
-    }
-    roots.push(PathBuf::from("/usr/share/icons"));
-    roots
-}
-
-/// Maps dock ids to the icon names themes actually use.
-fn alias(id: &str) -> &str {
-    match id {
-        "trash" => "user-trash",
-        other => other,
-    }
-}
-
-/// Finds an SVG for `id`, trying the id as given then lower-cased.
+/// The SVG for `id` in the current theme chain, if that is what the theme has for it.
 pub fn find_svg(id: &str) -> Option<PathBuf> {
-    let name = alias(id);
-    let candidates = [name.to_string(), name.to_lowercase()];
-    for root in icon_roots() {
-        for theme in THEMES {
-            for sub in SUBDIRS {
-                for cand in &candidates {
-                    let p = root.join(theme).join(sub).join(format!("{cand}.svg"));
-                    if p.is_file() {
-                        return Some(p);
-                    }
-                }
-            }
-        }
-    }
-    None
+    live::lookup(id, LOOKUP_PX, false).filter(|f| f.kind == Kind::Svg).map(|f| f.path)
 }
 
-/// Finds a PNG icon (hicolor/Adwaita bitmap sizes, then /usr/share/pixmaps) when no SVG exists.
+/// The bitmap (PNG or XPM, also from `pixmaps`) for `id` when the theme has no SVG for it.
 pub fn find_png(id: &str) -> Option<PathBuf> {
-    let name = alias(id);
-    let candidates = [name.to_string(), name.to_lowercase()];
-    const SIZES: &[&str] = &["256x256", "128x128", "96x96", "64x64", "48x48"];
-    for root in icon_roots() {
-        for theme in THEMES {
-            for size in SIZES {
-                for kind in ["apps", "places"] {
-                    for cand in &candidates {
-                        let p = root.join(theme).join(size).join(kind).join(format!("{cand}.png"));
-                        if p.is_file() {
-                            return Some(p);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    candidates.iter().map(|c| PathBuf::from("/usr/share/pixmaps").join(format!("{c}.png"))).find(|p| p.is_file())
+    live::lookup(id, LOOKUP_PX, false).filter(|f| f.kind != Kind::Svg).map(|f| f.path)
 }
 
-/// Loads a PNG and resamples it into a square pixmap of `size` px, keeping its aspect ratio.
+/// `id` rendered at `size` px (no generic fallback: `None` when the theme chain does not know the name).
+pub fn load_named(id: &str, size: u32) -> Option<Pixmap> {
+    let (scale, tint) = live::render_settings();
+    let content = content_px(size, scale);
+    live::lookup(id, content, false).and_then(|f| raster::render(&f, size, raster::Opts { content, tint: tint_colour(tint) }))
+}
+
+fn content_px(size: u32, scale: f32) -> u32 {
+    ((size as f32 * scale).round() as u32).max(1)
+}
+
+fn tint_colour(on: bool) -> Option<(u8, u8, u8)> {
+    on.then(|| crate::theme::th().text.t())
+}
+
+/// Loads a PNG and fits it into a square pixmap of `size` px, keeping its aspect ratio.
 pub fn load_png_scaled(path: &Path, size: u32) -> Option<Pixmap> {
-    let src = Pixmap::load_png(path).ok()?;
-    let mut out = Pixmap::new(size, size)?;
-    let scale = (size as f32 / src.width() as f32).min(size as f32 / src.height() as f32);
-    let (w, h) = (src.width() as f32 * scale, src.height() as f32 * scale);
-    crate::gfx::blit_scaled(&mut out, &src, (size as f32 - w) / 2.0, (size as f32 - h) / 2.0, w, h, 1.0);
-    Some(out)
+    raster::fit(&Pixmap::load_png(path).ok()?, size, size)
 }
 
 /// Rasterises an SVG file to a square pixmap of `size` px. Returns `None` on any error.
 pub fn render_svg(path: &Path, size: u32) -> Option<Pixmap> {
-    let data = std::fs::read(path).ok()?;
-    let tree = resvg::usvg::Tree::from_data(&data, &resvg::usvg::Options::default()).ok()?;
-    let mut pm = Pixmap::new(size, size)?;
-    let s = tree.size();
-    let scale = (size as f32 / s.width()).min(size as f32 / s.height());
-    let dx = (size as f32 - s.width() * scale) / 2.0;
-    let dy = (size as f32 - s.height() * scale) / 2.0;
-    resvg::render(&tree, Transform::from_scale(scale, scale).post_translate(dx, dy), &mut pm.as_mut());
-    Some(pm)
+    raster::svg(path, size, size)
+}
+
+fn render_file(path: &Path, size: u32, opts: raster::Opts) -> Option<Pixmap> {
+    let kind = match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("svg") => Kind::Svg,
+        Some("xpm") => Kind::Xpm,
+        _ => Kind::Png,
+    };
+    raster::render(&Found { path: path.to_path_buf(), kind }, size, opts)
 }
 
 /// The Launchpad tile: light rounded square with a 3x3 grid of coloured dots.
@@ -127,31 +111,60 @@ pub fn trash(size: u32) -> Option<Pixmap> {
     Some(pm)
 }
 
-/// Caches rasterised icons by (id, size). A missing icon yields a neutral placeholder.
-#[derive(Default)]
+/// Bounds of one [`IconCache`]: a launcher showing hundreds of apps or a magnifying dock must not grow without limit.
+pub const CACHE_ENTRIES: usize = 320;
+pub const CACHE_BYTES: usize = 10 << 20;
+
+/// Caches rasterised icons by (id, size), least recently used out first. A missing icon yields the theme's
+/// generic application icon, then a neutral placeholder. The cache empties itself when the icon settings or the
+/// shell theme change (the tint follows the theme's text colour).
 pub struct IconCache {
-    map: HashMap<(String, u32), Pixmap>,
+    lru: cache::Lru<(String, u32), Pixmap>,
+    gen: (u64, u64),
+}
+
+impl Default for IconCache {
+    fn default() -> Self {
+        IconCache { lru: cache::Lru::new(CACHE_ENTRIES, CACHE_BYTES), gen: (0, 0) }
+    }
 }
 
 impl IconCache {
     pub fn get(&mut self, id: &str, size: u32) -> &Pixmap {
-        self.map.entry((id.to_string(), size)).or_insert_with(|| {
-            let pm = if id == "launchpad" {
-                launchpad(size)
-            } else if id.starts_with('/') {
-                // An absolute path, as `Icon=` in a .desktop file may give.
-                let path = Path::new(id);
-                if path.extension().is_some_and(|e| e == "svg") {
-                    render_svg(path, size)
-                } else {
-                    load_png_scaled(path, size)
-                }
-            } else {
-                find_svg(id).and_then(|p| render_svg(&p, size)).or_else(|| find_png(id).and_then(|p| load_png_scaled(&p, size)))
-            };
-            pm.or_else(|| placeholder(size)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
-        })
+        let gen = (live::generation(), crate::theme::generation());
+        if gen != self.gen {
+            self.lru.clear();
+            self.gen = gen;
+        }
+        let key = (id.to_string(), size);
+        if !self.lru.contains(&key) {
+            let pm = build(id, size);
+            let bytes = pm.data().len();
+            self.lru.put(key.clone(), pm, bytes);
+        }
+        self.lru.get(&key).expect("stored above")
     }
+
+    /// Pixmaps held and their bytes (tests, `macthemectl icons status`).
+    pub fn usage(&self) -> (usize, usize) {
+        (self.lru.len(), self.lru.weight())
+    }
+}
+
+fn build(id: &str, size: u32) -> Pixmap {
+    let (scale, tint) = live::render_settings();
+    let content = content_px(size, scale);
+    let opts = raster::Opts { content, tint: tint_colour(tint) };
+    let pm = if id == "launchpad" {
+        launchpad(size)
+    } else if id.starts_with('/') {
+        // An absolute path, as `Icon=` in a .desktop file may give.
+        render_file(Path::new(id), size, opts)
+    } else {
+        let themed = |generic: bool| live::lookup(id, content, generic).and_then(|f| raster::render(&f, size, opts));
+        themed(false).or_else(|| matches!(id, "trash" | "trash-full").then(|| trash(size)).flatten()).or_else(|| themed(true))
+    };
+    pm.or_else(|| placeholder(size)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
 }
 
 fn placeholder(size: u32) -> Option<Pixmap> {
@@ -206,8 +219,32 @@ mod tests {
     }
 
     #[test]
-    fn trash_alias() {
-        assert_eq!(alias("trash"), "user-trash");
-        assert_eq!(alias("foot"), "foot");
+    fn the_pixmap_cache_stays_within_its_budget() {
+        let mut c = IconCache::default();
+        for i in 0..260 {
+            assert_eq!(c.get(&format!("no-such-icon-{i}"), 128).width(), 128);
+        }
+        let (n, bytes) = c.usage();
+        assert!(n <= CACHE_ENTRIES && bytes <= CACHE_BYTES, "{n} pixmaps, {bytes} bytes");
+        assert!(n >= 60, "but it does keep a useful number: {n}");
+    }
+
+    #[test]
+    fn absolute_paths_render_without_the_theme() {
+        let p = std::env::temp_dir().join(format!("macshell-abs-{}.png", std::process::id()));
+        launchpad(64).unwrap().save_png(&p).unwrap();
+        let mut c = IconCache::default();
+        let pm = c.get(p.to_str().unwrap(), 40);
+        assert_eq!((pm.width(), pm.height()), (40, 40));
+        assert!(pm.pixel(20, 20).unwrap().alpha() > 0);
+        let _ = std::fs::remove_file(p);
+    }
+
+    #[test]
+    fn unknown_ids_never_panic_and_the_builtin_trash_is_used_without_a_theme_icon() {
+        let mut c = IconCache::default();
+        assert_eq!(c.get("", 32).width(), 32);
+        assert_eq!(c.get("../../etc/passwd", 32).width(), 32);
+        assert_eq!(c.get("launchpad", 32).width(), 32);
     }
 }

@@ -77,14 +77,55 @@ fn macexpose_is_registered_everywhere() {
 #[test]
 fn the_caelestia_style_is_documented_and_has_its_e2e() {
     let readme = read("README.md");
-    assert!(readme.contains("## Caelestia style (vertical bar)") && readme.contains("docs/caelestia.md"), "README section");
-    assert!(readme.contains("tests/e2e/vbar.sh"));
+    assert!(readme.contains("## Caelestia style (pill bar)") && readme.contains("docs/caelestia.md"), "README section");
+    assert!(readme.contains("tests/e2e/vbar.sh") && readme.contains("tests/e2e/layouts.sh"));
     let doc = read("docs/caelestia.md");
     for needle in ["bar_style = \"vertical\"", "dock.enabled", "macspot", "macdash", "macsession", "macutil", "machud", "macnotify", "_NET_WM_STRUT_PARTIAL", "[[bind]]"] {
         assert!(doc.contains(needle), "docs/caelestia.md does not mention {needle}");
     }
-    assert!(read("Makefile").contains("e2e-vbar:"), "Makefile target");
+    assert!(read("Makefile").contains("e2e-vbar:") && read("Makefile").contains("e2e-layouts:"), "Makefile targets");
     assert!(std::path::Path::new(&format!("{}/tests/e2e/vbar.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
     // the theme that uses the layout
     assert!(read("src/theme/builtin/caelestia.toml").contains("bar_style = \"vertical\""));
+}
+
+#[test]
+fn the_caelestia_layouts_are_documented_everywhere_they_are_user_visible() {
+    let positions = ["left", "right", "top", "bottom", "split"];
+    let readme = read("README.md");
+    let doc = read("docs/caelestia.md");
+    for p in positions {
+        assert!(readme.contains(&format!("`{p}`")), "README does not describe the {p} layout");
+        assert!(doc.contains(&format!("`{p}`")), "docs/caelestia.md does not describe the {p} layout");
+    }
+    for needle in ["bar.position", "macthemectl layout", "caelestia-top", "--role bottom", "macbar-bottom", "Layout"] {
+        assert!(doc.contains(needle), "docs/caelestia.md does not mention {needle}");
+    }
+    assert!(readme.contains("macthemectl layout") && readme.contains("\"position\""), "README: command and setting");
+    // the --help texts name the commands, the setting values and the role
+    let ctl = read("src/bin/macthemectl.rs");
+    assert!(ctl.contains("macthemectl layout [left|right|top|bottom|split]") && ctl.contains("caelestia[-left|-right|-top|-bottom|-split]"), "macthemectl --help");
+    let bar = read("src/bin/macbar.rs");
+    assert!(bar.contains("--role main|bottom") && bar.contains("--position POS") && bar.contains("split"), "macbar --help");
+    // the end-to-end check and its Makefile target
+    let e2e = read("tests/e2e/layouts.sh");
+    for p in positions {
+        assert!(e2e.contains(&format!("check_layout {p} ")), "layouts.sh does not check {p}");
+    }
+    assert!(e2e.contains("_NET_WM_STRUT_PARTIAL") && e2e.contains("Xvfb"), "layouts.sh checks struts on a private Xvfb");
+}
+
+#[test]
+fn icon_themes_are_documented_and_have_their_e2e() {
+    let readme = read("README.md");
+    assert!(readme.contains("## Icon themes") && readme.contains("docs/icons.md") && readme.contains("tests/e2e/icons.sh"));
+    for f in ["docs/icons.md", "contrib/icon-themes.md", "tests/e2e/icons.sh"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
+    }
+    let doc = read("docs/icons.md");
+    for key in ["theme", "size_scale", "monochrome_tint", "fallback"] {
+        assert!(doc.contains(&format!("`{key}`")), "docs/icons.md does not describe `{key}`");
+    }
+    assert!(read("contrib/icon-themes.md").contains("papirus-icon-theme"));
+    assert!(read("src/bin/macthemectl.rs").contains("macthemectl icons"));
 }
