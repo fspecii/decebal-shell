@@ -28,6 +28,7 @@ The backend is picked automatically (`DECEBAL_BACKEND=wayland|x11` forces one).
 | `decswitch` | Alt+Tab window switcher for rdwm (X11): a card with one icon per window, all tags (other tags dimmed); see below | starts and paints in ~40 ms, exits on commit |
 | `decexpose` | Exposé / Mission Control window overview for rdwm (X11): thumbnails of the current workspace, or `--all` grouped by workspace; see below | starts and paints in ~100 ms, exits on commit |
 | `dechud` | on-screen display for volume / mute / brightness / mic mute and workspace switches (X11); click-through, gone after 1.4 s; see below | starts and paints in ~40 ms, exits when it hides |
+| `declock` | themed screen locker for X11: blurred dimmed backdrop, clock, avatar, rounded password field with dots, wrong-password shake and back-off, PAM; see [docs/lockscreen.md](docs/lockscreen.md) | ~7 MB RSS, wakes once a second |
 | `decclip` | clipboard history for X11: a daemon that records the CLIPBOARD (no polling) and a Spotlight-style picker that pastes with Ctrl+V; see below | daemon ~4 MB RSS, 0 % CPU idle; picker exits on commit |
 | `dechot` | Hot Corners for X11: the pointer resting in a screen corner runs an action (Dashboard, Spotlight, Launchpad, Lock, ...); a daemon with `get` / `set` CLI; see below | daemon ~3 MB RSS, 0 % CPU idle |
 | `declaunch` | Launchpad: a searchable grid of installed apps (type to filter, arrows, Enter, Esc) | ~20 MB RSS while open |

@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
+BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
