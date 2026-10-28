@@ -32,12 +32,13 @@ decdock >"$TMP/decdock.log" 2>&1 & PIDS+=($!)
 decwidgets >"$TMP/decwidgets.log" 2>&1 & PIDS+=($!)
 for id in $IDS; do
   decthemectl theme apply "$id" >/dev/null 2>&1 || { echo "apply $id failed"; continue; }
+  [ -n "${PALETTE:-}" ] && decthemectl palette "$PALETTE" >/dev/null 2>&1
   [ -n "${MODE:-}" ] && decthemectl apply "$id" --mode "$MODE" >/dev/null 2>&1
   sleep 4
-  decsettings --config "$DECSETTINGS_CONFIG" theme >"$TMP/ds.log" 2>&1 & DP=$!
+  decsettings --config "$DECSETTINGS_CONFIG" ${PANE:-theme} >"$TMP/ds.log" 2>&1 & DP=$!
   sleep 3
   W=$(xdotool search --class DecSettings 2>/dev/null | head -1)
-  [ -n "$W" ] && { rdwmctl action togglefloating >/dev/null 2>&1; sleep 0.5; xdotool windowsize "$W" 700 460; xdotool windowmove "$W" 90 120; }
+  [ -n "$W" ] && { rdwmctl action togglefloating >/dev/null 2>&1; sleep 0.5; xdotool windowsize "$W" ${WSIZE:-700 460}; xdotool windowmove "$W" 90 120; }
   sleep 2
   import -window root "$TMP/$id.png"
   kill $DP 2>/dev/null; wait $DP 2>/dev/null

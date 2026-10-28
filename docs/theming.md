@@ -42,6 +42,7 @@ Or open **System Settings -> Theme** (`decsettings theme`).
 `mode`: `dark` (default), `light`, or `auto` (`$DECEBAL_COLOR_SCHEME`, else `~/.config/omarchy/desktop-styles/appearance`,
 Omarchy's `light.mode` marker, GTK's `gtk-application-prefer-dark-theme`; dark when none says otherwise). A theme with only one
 variant ignores the mode. A name such as `macOS Light` or `windows-11-dark` also selects the mode.
+`palette` is an override too: a colour palette laid over any theme (see [themes.md](themes.md#palettes-colours-separate-from-themes), `decthemectl palette`).
 Overrides: `accent` (accent text colour is re-derived for contrast), `opacity` 0.4-1 (multiplies the translucency of menus,
 dock and launchers; the menu bar stays solid), `radius` 0-24, `font` (a family, or the font object described under [Fonts](#fonts)), `fontScale` 0.8-1.4.
 `syncRdwm: false` leaves rdwm's `config.toml` alone.

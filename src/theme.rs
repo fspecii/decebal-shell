@@ -41,6 +41,7 @@ pub mod fonts;
 pub mod live;
 pub mod material;
 pub mod model;
+pub mod palette;
 pub mod rdwm;
 pub mod style;
 pub use fonts::Role;

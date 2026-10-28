@@ -65,7 +65,21 @@ pub const PANES: &[PaneDef] = &[
         title: "Theme",
         glyph: Glyph::Brush,
         color: (255, 55, 95),
-        keywords: "theme appearance dark light auto mode accent colour color swatches transparency translucency corner radius font text size dracula nord solarized windows graphite high contrast",
+        keywords: "theme shape shell style titlebar corner radius transparency translucency windows graphite high contrast macos caelestia brutalist nothing terminal gallery packages",
+    },
+    PaneDef {
+        id: "colours",
+        title: "Colours",
+        glyph: Glyph::Brush,
+        color: (255, 159, 10),
+        keywords: "palette colours colors catppuccin rose pine gruvbox tokyo night everforest kanagawa nord dracula solarized monochrome dark light mode accent swatches match wallpaper material you",
+    },
+    PaneDef {
+        id: "typography",
+        title: "Fonts",
+        glyph: Glyph::Brush,
+        color: (142, 142, 147),
+        keywords: "fonts typography text size scale family preset inter jetbrains mono ui title display fallback",
     },
     PaneDef {
         id: "icons",
@@ -398,6 +412,8 @@ impl Model {
         }
         items.extend(match id {
             "theme" => super::themepane::items(self),
+            "colours" => super::themepane::colour_items(self),
+            "typography" => super::themepane::type_items(self),
             "config" => super::configpane::items(self),
             "icons" => super::iconspane::items(self),
             "general" => self.pane_general(),
@@ -1066,7 +1082,7 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     if matches!(parts.as_slice(), ["sy", ..]) {
         return super::systempane::apply(m, &parts, v);
     }
-    if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _] | ["l", "tcard", ..]) {
+    if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent" | "palette", _] | ["l", "tcard", ..]) {
         return super::themepane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
@@ -1422,7 +1438,7 @@ mod tests {
     #[test]
     fn search_finds_panes_by_title_and_keyword() {
         let find = |q: &str| PANES.iter().filter(|p| pane_matches(p, q)).map(|p| p.id).collect::<Vec<_>>();
-        assert_eq!(find("wallp"), ["wallpaper", "displays"]);
+        assert_eq!(find("wallp"), ["wallpaper", "displays", "colours"]);
         assert_eq!(find("gap"), ["tiling"]);
         assert!(find("snap").contains(&"windows"));
         assert_eq!(find("").len(), PANES.len());

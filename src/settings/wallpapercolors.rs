@@ -197,7 +197,7 @@ mod tests {
     }
 
     fn section(m: &Model) -> Vec<Item> {
-        let items = super::super::themepane::items(m);
+        let items = super::super::themepane::colour_items(m);
         let start = items.iter().position(|i| matches!(i, Item::Header(h) if h == "Match wallpaper")).expect("section present");
         let end = items[start + 1..].iter().position(|i| matches!(i, Item::Header(_))).map_or(items.len(), |e| start + 1 + e);
         items[start..end].to_vec()

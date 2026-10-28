@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Debug logs: one file per program under `~/.local/state/decebal/logs/`, `DECEBAL_LOG=debug`, `decthemectl log` (docs/debugging.md).
+- Colour palettes separate from themes (Catppuccin, Rose Pine, Gruvbox, Tokyo Night, Everforest, Kanagawa, Nord, Dracula, Solarized, Monochrome, your own), `decthemectl palette`; the Theme settings pane is split into Theme, Colours and Fonts pages.
 - New themes: Nothing Dot, Nothing Light, Brutalist, Terminal Minimal, Terminal Amber (docs/themes.md).
 - Renamed from macshell to Decebal; programs are now `dec*`, old names and settings keep working (docs/RENAME.md).
 - Theme engine with data-only theme packages, custom widgets, per-theme fonts and presets.

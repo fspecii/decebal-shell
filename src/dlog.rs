@@ -349,7 +349,8 @@ mod tests {
     #[test]
     fn the_file_is_written_only_when_a_record_passes_the_level() {
         set_level(Level::Warn);
-        let mine = |t: Vec<String>| t.into_iter().filter(|l| l.contains("dlog-test-marker")).collect::<Vec<_>>();
+        let pid = format!(" {} ", std::process::id());
+        let mine = |t: Vec<String>| t.into_iter().filter(|l| l.contains("dlog-test-marker") && l.contains(&pid)).collect::<Vec<_>>();
         crate::log_debug!("dlog-test-marker hidden {}", 1);
         crate::log_warn!("dlog-test-marker shown {}", 2);
         crate::log_error!("dlog-test-marker also shown");

@@ -235,6 +235,19 @@ for id in nothing-dot nothing-light brutalist terminal-minimal terminal-amber; d
 done
 decthemectl theme apply nord >/dev/null 2>&1; unset DECEBAL_SYSTEM_THEMES; export DECEBAL_SYSTEM_THEMES=$TMP/nosystem
 
+echo "== palettes are separate from themes"
+decthemectl palette list | grep -q "catppuccin.*dark+light.*built-in" && pass "palette list" || fail "palette list"
+for th in nord brutalist terminal-minimal; do
+  decthemectl apply "$th" --mode dark >/dev/null 2>&1; decthemectl palette catppuccin >/dev/null 2>&1
+  eq "$th under catppuccin: background" "$(decthemectl get --json | jq -r .colors.background)" "#1e1e2e"
+  eq "$th under catppuccin: rdwm focused border is the palette accent" "$(rdcfg .config.colors.focused)" "#cba6f7"
+done
+decthemectl apply nord --mode dark >/dev/null 2>&1
+eq "the palette survives a theme switch" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
+decthemectl palette nope >/dev/null 2>&1 && fail "an unknown palette was accepted" || pass "an unknown palette is refused"
+decthemectl palette none >/dev/null 2>&1
+eq "palette none gives the theme's own colours back" "$(decthemectl get --json | jq -r .colors.background)" "#2e3440"
+
 echo "== debug logs (DECEBAL_LOG=debug, one file per program)"
 out=$(decthemectl log status 2>&1); has "log status names the folder" "$out" "$TMP/logs"
 for prog in decthemectl decsettings decbar decdock decwidgets; do

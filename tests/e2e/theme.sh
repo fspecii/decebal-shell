@@ -152,23 +152,31 @@ q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
 eq "theme pane is shown" "$(q .pane)" theme
 shot 20-settings-dark
 . "$HERE/tests/e2e/settings_ui.sh"
+# the Theme settings are split into pages (Theme, Colours, Fonts): click the sidebar entry of PANE
+goto_pane() {
+  local r x y w h; r=$(jq -r --arg id "$1" '[.panes[]|select(.id==$id)|.rect][0] // empty|"\(.[0]|floor) \(.[1]|floor) \(.[2]|floor) \(.[3]|floor)"' "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null)
+  [ -z "$r" ] && { fail "no sidebar entry for pane $1"; return 1; }
+  read -r x y w h <<<"$r"; click $((x + w / 2)) $((y + h / 2)); sleep 0.8
+}
 click_ctl l:theme:dracula; settle
 eq "clicking Dracula applies it" "$(theme_name)" dracula
 eqpx "bar follows the UI choice" 900 3 "#1e1f29"
 eq "rdwm titlebar follows the UI choice" "$(rdcfg .config.decoration.focused_bg)" "#343746"
+goto_pane colours; eq "the Colours page opens from the sidebar" "$(q .pane)" colours
 click_ctl l:accent:#30d158; settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green
-click_ctl l:theme:windows11; sleep 0.5
-click_ctl th:mode; settle
+goto_pane theme; click_ctl l:theme:windows11; sleep 0.5
+goto_pane colours; click_ctl th:mode; settle
 eq "selection json mode light" "$(jq -r .theme.mode "$DECEBAL_CONFIG/decebal.json")" light
 eqpx "windows light bar in the running bar" 900 3 "#e9eef6"
 shot 22-settings-windows-light
-click_ctl th:reset; settle
-eq "reset clears the accent override" "$(jq -r '.theme.accent // "none"' "$DECEBAL_CONFIG/decebal.json")" none
+click_ctl th:reset-colours; settle
+eq "Reset colours clears the accent override" "$(jq -r '.theme.accent // "none"' "$DECEBAL_CONFIG/decebal.json")" none
 
 shot 24-settings-scrolled
 echo "== external change while settings is open"
+goto_pane theme
 decthemectl apply solarized --mode dark >/dev/null; sleep 1.6
 eq "settings window saw solarized (selected tile)" "$(q '[.layouts[]|select(.id=="l:theme:solarized")]|length')" 1
 shot 23-settings-after-external

@@ -223,6 +223,15 @@ fn resolve_with(def: &Def, id: &str, sel: &Selection, system_dark: bool) -> Them
         }
         _ => sel.mode,
     };
+    // with a palette the variants are the palette's too: a light-only theme can be dark under a palette that has a dark set
+    let laid;
+    let def = match sel.palette.as_deref().and_then(super::palette::load) {
+        Some(p) => {
+            laid = def.with_palette(&p);
+            &laid
+        }
+        None => def,
+    };
     let theme = def.resolve(id, def.pick_dark(mode, system_dark), sel);
     match dyn_on {
         Some(d) => super::dynamic::apply_to(theme, d, sel.accent.is_some()),

@@ -13,7 +13,7 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Display & Appearance", panes: &["displays", "appearance", "theme", "icons", "wallpaper", "desktop"] },
+    Section { title: "Display & Appearance", panes: &["displays", "appearance", "theme", "colours", "typography", "icons", "wallpaper", "desktop"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
     Section { title: "Keyboard & Input", panes: &["inputdev", "keyboard"] },

@@ -457,6 +457,11 @@ impl Def {
 
     /// Builds the theme for the chosen variant; `id` names it. Missing colours are derived.
     pub fn resolve(&self, id: &str, dark: bool, o: &Selection) -> Theme {
+        // a palette replaces the colours, the theme keeps everything else
+        if let Some(p) = o.palette.as_deref().and_then(super::palette::load) {
+            let o2 = Selection { palette: None, ..o.clone() };
+            return self.with_palette(&p).resolve(id, dark, &o2);
+        }
         let var = if dark { &self.dark } else { &self.light };
         let get = |k: &str| var.as_ref().and_then(|t| t.get(k)).or_else(|| self.common.get(k));
         let col = |k: &str| match get(k) {
@@ -743,6 +748,8 @@ pub struct Selection {
     pub name: String,
     pub mode: Mode,
     pub accent: Option<Rgb>,
+    /// A colour palette laid over the theme (see `theme::palette`); `None` = the theme's own colours.
+    pub palette: Option<String>,
     /// Multiplies the translucency-capable surfaces (0.4..1).
     pub opacity: Option<f32>,
     pub radius: Option<f32>,
@@ -763,6 +770,7 @@ impl Default for Selection {
             name: crate::theme::builtin::DEFAULT_ID.into(),
             mode: Mode::Dark,
             accent: None,
+            palette: None,
             opacity: None,
             radius: None,
             font: None,
@@ -790,6 +798,7 @@ impl Selection {
             s.mode = m;
         }
         s.accent = o.get("accent").and_then(|x| x.as_str()).and_then(Rgb::parse);
+        s.palette = o.get("palette").and_then(|x| x.as_str()).filter(|p| !p.is_empty() && *p != "none").map(String::from);
         s.opacity = o.get("opacity").and_then(|x| x.as_f64()).map(|x| x.clamp(0.4, 1.0) as f32);
         s.radius = o.get("radius").and_then(|x| x.as_f64()).map(|x| x.clamp(0.0, 24.0) as f32);
         // `"font": "Inter"` (old) or `"font": {"preset": "segoe", "ui": [...], "title": ..., "mono": ..., "display": ..., "scale": 1.1}`
@@ -819,6 +828,9 @@ impl Selection {
         o.insert("mode".into(), self.mode.as_str().into());
         if let Some(a) = self.accent {
             o.insert("accent".into(), a.hex().into());
+        }
+        if let Some(p) = &self.palette {
+            o.insert("palette".into(), p.clone().into());
         }
         let r3 = |x: f32| (x as f64 * 1000.0).round() / 1000.0;
         if let Some(x) = self.opacity {
@@ -1019,6 +1031,7 @@ mod tests {
             name: "nord".into(),
             mode: Mode::Auto,
             accent: Rgb::parse("#123456"),
+            palette: Some("catppuccin".into()),
             opacity: Some(0.85),
             radius: Some(6.0),
             font: Some("Inter".into()),

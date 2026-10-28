@@ -51,23 +51,6 @@ pub fn items(m: &Model) -> Vec<Item> {
         });
     }
 
-    let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
-    let mode_sel = Some(match sel.mode {
-        Mode::Light => 0,
-        Mode::Dark => 1,
-        Mode::Auto => 2,
-    });
-    let mut swatches = vec![Swatch {
-        id: "l:accent:none".into(),
-        name: "Theme default".into(),
-        color: src.build(&Selection { accent: None, ..sel.clone() }, sys).0.accent.t(),
-        selected: sel.accent.is_none(),
-        unset: true,
-    }];
-    for (name, hex) in ACCENTS {
-        let c = Rgb::parse(hex).unwrap();
-        swatches.push(Swatch { id: format!("l:accent:{hex}"), name: (*name).into(), color: c.t(), selected: sel.accent == Some(c), unset: false });
-    }
     let slider =
         |id: &str, label: &str, detail: &str, v: f64, min: f64, max: f64, unit: &str| Row::new(label).detail(detail).ctl(Ctl::new(id, Kind::Slider { v, min, max, step: 1.0, unit: unit.into() }));
     let mut out = Vec::new();
@@ -101,34 +84,20 @@ pub fn items(m: &Model) -> Vec<Item> {
         );
     }
     out.push(Item::Card(shell_rows));
+    out.push(Item::Note {
+        text: "A theme is the shape of the desktop: titlebars, bar, dock, wallpaper, widgets. Colours are separate: pick a palette on the Colours page and it follows you from theme to theme.".into(),
+        warn: false,
+    });
     out.push(Item::Header("Theme".into()));
     out.push(Item::Themes(tiles));
     out.extend(super::packages::items(m));
-    out.push(Item::Header("Appearance".into()));
+    out.push(Item::Header("Shape".into()));
     out.push(Item::Card(vec![
-        Row::new("Mode")
-            .detail(if sel.mode == Mode::Auto {
-                format!("Following the system: {} right now", if sys { "dark" } else { "light" })
-            } else {
-                "Themes with both variants switch; single-variant themes keep their look".into()
-            })
-            .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel))),
-        Row::new("Window titlebars").detail("Also restyle rdwm's titlebars, borders and bar with the theme").ctl(Ctl::new("th:sync", Kind::Toggle(sel.sync_rdwm))),
-    ]));
-    out.extend(super::wallpapercolors::items(&sel, &now));
-    out.push(Item::Header("Accent colour".into()));
-    out.push(Item::Swatches(swatches));
-    out.push(Item::Card(vec![Row::new("Custom accent")
-        .detail("A hex colour; empty = the theme's own")
-        .ctl(Ctl::new("th:accenthex", Kind::Text { val: sel.accent.map(|c| c.hex()).unwrap_or_default(), hint: "#0a84ff".into() }))]));
-    out.push(Item::Header("Customise".into()));
-    out.push(Item::Card(vec![
-        slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
         slider("th:radius", "Corner radius", "Menus, cards and window titlebars", f64::from(now.radius), 0.0, 24.0, " px"),
-        slider("th:fontscale", "Text size", "All decebal text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
-        Row::new("Reset customisations").detail("Back to the theme's own accent, translucency, radius and text size").ctl(Ctl::new("th:reset", Kind::Button { label: "Reset".into(), danger: false })),
+        slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
+        Row::new("Window titlebars").detail("Also restyle rdwm's titlebars, borders and bar with the theme").ctl(Ctl::new("th:sync", Kind::Toggle(sel.sync_rdwm))),
+        Row::new("Reset shape").detail("Back to the theme's own corner radius and translucency").ctl(Ctl::new("th:reset-shape", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
-    out.extend(super::fontpane::items(&sel, &now));
     let mut note =
         format!("Your own themes: put .toml files in {} (decthemectl export nord > mine.toml is a good start). decthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
     if !broken.is_empty() {
@@ -136,6 +105,101 @@ pub fn items(m: &Model) -> Vec<Item> {
     }
     out.push(Item::Note { text: note, warn: !broken.is_empty() });
     out.extend(super::systempane::items(m));
+    out
+}
+
+/// The Colours page: mode, palette (works on every theme), accent, match wallpaper.
+pub fn colour_items(m: &Model) -> Vec<Item> {
+    let src = source(m);
+    let sel = src.selection();
+    let sys = system_dark();
+    let (now, _) = src.build(&sel, sys);
+    let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
+    let mode_sel = Some(match sel.mode {
+        Mode::Light => 0,
+        Mode::Dark => 1,
+        Mode::Auto => 2,
+    });
+    let mut out = vec![Item::Header("Mode".into())];
+    out.push(Item::Card(vec![Row::new("Mode")
+        .detail(if sel.mode == Mode::Auto {
+            format!("Following the system: {} right now", if sys { "dark" } else { "light" })
+        } else {
+            "Themes and palettes with both variants switch; single-variant ones keep their look".into()
+        })
+        .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel)))]));
+
+    // palettes: a tile for "the theme's own colours", then every palette in the current mode
+    let dark_now = now.dark;
+    let mut tiles = vec![ThemeTile {
+        id: "l:palette:none".into(),
+        name: "Theme colours".into(),
+        selected: sel.palette.is_none(),
+        error: false,
+        colors: {
+            let t = src.build(&Selection { palette: None, accent: None, ..sel.clone() }, sys).0;
+            [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()]
+        },
+    }];
+    for p in crate::theme::palette::list() {
+        let Some(def) = crate::theme::palette::load(&p.id) else { continue };
+        let want_dark = if dark_now { p.has_dark } else { !p.has_light };
+        let t = def.resolve(&p.id, want_dark, &Selection::default());
+        tiles.push(ThemeTile {
+            id: format!("l:palette:{}", p.id),
+            name: p.name.clone(),
+            selected: sel.palette.as_deref() == Some(p.id.as_str()),
+            error: false,
+            colors: [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()],
+        });
+    }
+    out.push(Item::Header("Palette".into()));
+    out.push(Item::Themes(tiles));
+    out.push(Item::Note {
+        text: format!(
+            "A palette recolours every theme and stays when you switch themes. Your own: put .toml files in {} (see docs/themes.md). decthemectl palette list|NAME|none does the same.",
+            crate::theme::palette::user_dir().display()
+        ),
+        warn: false,
+    });
+
+    let mut swatches = vec![Swatch {
+        id: "l:accent:none".into(),
+        name: "Palette default".into(),
+        color: src.build(&Selection { accent: None, ..sel.clone() }, sys).0.accent.t(),
+        selected: sel.accent.is_none(),
+        unset: true,
+    }];
+    for (name, hex) in ACCENTS {
+        let c = Rgb::parse(hex).unwrap();
+        swatches.push(Swatch { id: format!("l:accent:{hex}"), name: (*name).into(), color: c.t(), selected: sel.accent == Some(c), unset: false });
+    }
+    out.push(Item::Header("Accent colour".into()));
+    out.push(Item::Swatches(swatches));
+    out.push(Item::Card(vec![Row::new("Custom accent")
+        .detail("A hex colour on top of the palette; empty = the palette's own")
+        .ctl(Ctl::new("th:accenthex", Kind::Text { val: sel.accent.map(|c| c.hex()).unwrap_or_default(), hint: "#0a84ff".into() }))]));
+    out.extend(super::wallpapercolors::items(&sel, &now));
+    out.push(Item::Header("Reset".into()));
+    out.push(Item::Card(vec![Row::new("Reset colours")
+        .detail("No palette, no custom accent: the theme's own colours")
+        .ctl(Ctl::new("th:reset-colours", Kind::Button { label: "Reset".into(), danger: false }))]));
+    out
+}
+
+/// The Fonts page: presets and per-role families, plus the text size.
+pub fn type_items(m: &Model) -> Vec<Item> {
+    let src = source(m);
+    let sel = src.selection();
+    let (now, _) = src.build(&sel, system_dark());
+    let mut out = super::fontpane::items(&sel, &now);
+    out.push(Item::Header("Text size".into()));
+    out.push(Item::Card(vec![
+        Row::new("Text size")
+            .detail("All decebal text")
+            .ctl(Ctl::new("th:fontscale", Kind::Slider { v: f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, min: 80.0, max: 140.0, step: 1.0, unit: " %".into() })),
+        Row::new("Reset text size").detail("Back to the theme's own size").ctl(Ctl::new("th:reset-type", Kind::Button { label: "Reset".into(), danger: false })),
+    ]));
     out
 }
 
@@ -196,6 +260,8 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 sel.mode = mode;
             }
         }
+        (["l", "palette", "none"], CtlVal::Click) => sel.palette = None,
+        (["l", "palette", id], CtlVal::Click) => sel.palette = Some((*id).to_string()),
         (["l", "accent", "none"], CtlVal::Click) => sel.accent = None,
         (["l", "accent", hex], CtlVal::Click) => sel.accent = Rgb::parse(hex),
         (["th", "mode"], CtlVal::Str(s)) => sel.mode = Mode::parse(&s).unwrap_or(sel.mode),
@@ -247,6 +313,15 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["th", "radius"], CtlVal::Reset) => sel.radius = None,
         (["th", "fontscale"], CtlVal::Num(n)) => sel.font_scale = Some((n / 100.0).clamp(0.8, 1.4) as f32),
         (["th", "fontscale"], CtlVal::Reset) => sel.font_scale = None,
+        (["th", "reset-colours"], CtlVal::Click) => {
+            sel.palette = None;
+            sel.accent = None;
+        }
+        (["th", "reset-shape"], CtlVal::Click) => {
+            sel.opacity = None;
+            sel.radius = None;
+        }
+        (["th", "reset-type"], CtlVal::Click) => sel.font_scale = None,
         (["th", "reset"], CtlVal::Click) => {
             sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, font: sel.font.clone(), fonts: sel.fonts.clone(), ..Selection::default() }
         }
@@ -272,7 +347,50 @@ mod tests {
         assert!(tiles.len() >= crate::theme::builtin::BUILTIN.len());
         assert_eq!(tiles.iter().filter(|t| t.selected).count(), 1);
         assert!(tiles.iter().any(|t| t.id == "l:theme:windows11" && t.name == "Windows 11"));
-        assert!(items.iter().any(|i| matches!(i, Item::Swatches(s) if s.len() == ACCENTS.len() + 1)));
+        // the accent swatches moved to the Colours page
+        assert!(colour_items(&m).iter().any(|i| matches!(i, Item::Swatches(s) if s.len() == ACCENTS.len() + 1)));
+    }
+
+    #[test]
+    fn the_pane_is_split_into_theme_colours_and_fonts_without_overlap() {
+        let (m, _) = model_with("[general]\n");
+        let headers = |its: Vec<Item>| its.into_iter().filter_map(|i| if let Item::Header(h) = i { Some(h) } else { None }).collect::<Vec<_>>();
+        let theme = headers(items(&m));
+        let colours = headers(colour_items(&m));
+        let fonts = headers(type_items(&m));
+        for h in ["Shell style", "Theme", "Shape"] {
+            assert!(theme.iter().any(|x| x == h), "Theme page lacks {h}: {theme:?}");
+        }
+        for h in ["Mode", "Palette", "Accent colour", "Match wallpaper"] {
+            assert!(colours.iter().any(|x| x == h), "Colours page lacks {h}: {colours:?}");
+            assert!(!theme.iter().any(|x| x == h), "{h} is on both pages");
+        }
+        assert!(fonts.iter().any(|x| x == "Text size") && !theme.iter().any(|x| x == "Text size"));
+    }
+
+    #[test]
+    fn a_palette_is_chosen_on_the_colours_page_and_survives_switching_themes() {
+        let (mut m, cfg) = model_with("[general]\n");
+        let Some(Item::Themes(tiles)) = colour_items(&m).into_iter().find(|i| matches!(i, Item::Themes(_))) else { panic!("no palette gallery") };
+        assert!(tiles.len() > crate::theme::palette::BUILTIN.len(), "a tile for the theme's own colours plus every palette");
+        assert!(tiles[0].id == "l:palette:none" && tiles[0].selected);
+        m.apply("l:palette:catppuccin", CtlVal::Click);
+        assert_eq!(selection(&m).palette.as_deref(), Some("catppuccin"));
+        for id in ["nord", "windows11", "brutalist"] {
+            m.apply(&format!("l:theme:{id}"), CtlVal::Click);
+            let s = selection(&m);
+            assert_eq!((s.name.as_str(), s.palette.as_deref()), (id, Some("catppuccin")));
+            let (t, _) = source(&m).build(&s, true);
+            assert_eq!(t.background.hex(), "#1e1e2e", "{id}: the palette's background");
+        }
+        // rdwm's colours follow the palette too
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert!(text.contains("#cba6f7") || text.contains("#CBA6F7"), "{text}");
+        m.apply("th:reset-colours", CtlVal::Click);
+        assert_eq!(selection(&m).palette, None);
+        m.apply("l:palette:gruvbox", CtlVal::Click);
+        m.apply("l:palette:none", CtlVal::Click);
+        assert_eq!(selection(&m).palette, None);
     }
 
     #[test]

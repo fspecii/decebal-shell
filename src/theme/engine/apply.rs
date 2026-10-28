@@ -417,6 +417,14 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         rdwm::apply_to(&mut cfg, &theme)?;
         let schema = Schema::load(&paths.rdwmctl);
         let mut attempt = extra.clone();
+        if sel.palette.is_some() {
+            // a palette colours the borders too: the theme's hard-coded border colours would fight it
+            if let Some(Value::Object(r)) = attempt.get_mut("rdwm") {
+                for k in ["focused_border", "normal_border", "urgent_border"] {
+                    r.shift_remove(k);
+                }
+            }
+        }
         let mut text;
         loop {
             let mut c = cfg.clone();
