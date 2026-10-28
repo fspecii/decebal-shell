@@ -16,6 +16,8 @@ install: all
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	install -Dm644 contrib/decsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
+	# theme packages with bundled wallpapers (the built-in copy of the manifest has no folder to find them in)
+	for t in caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic; do for f in themes/$$t/theme.toml themes/$$t/wallpapers/*; do install -Dm644 $$f $(DESTDIR)$(PREFIX)/share/decebal/$$f; done; done
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
 
@@ -26,7 +28,7 @@ uninstall:
 	for d in $(AUTOSTART); do rm -f $(DESTDIR)/etc/xdg/autostart/$$d; done
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
-	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/doc/decebal
+	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/decebal/themes $(DESTDIR)$(PREFIX)/share/doc/decebal
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/decebal
 
 # Extra login session "Hyprland (decebal)": the Rust shell without Quickshell (Omarchy + SDDM + hyprlock/hypridle/mako).

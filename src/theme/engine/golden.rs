@@ -17,6 +17,9 @@ fn legacy_def(id: &str) -> Def {
     }
 }
 
+/// Packages added after the engine; they have no legacy file to compare with.
+const LATER: &[&str] = &["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"];
+
 fn selections() -> Vec<Selection> {
     vec![
         Selection::default(),
@@ -28,9 +31,13 @@ fn selections() -> Vec<Selection> {
 
 #[test]
 fn every_builtin_resolves_to_the_same_theme_as_before() {
-    assert_eq!(BUILTIN.len(), 8);
+    // the original eight have frozen legacy fixtures; the later packages are format-1 only (checked below)
+    assert_eq!(BUILTIN.len(), 8 + LATER.len());
     for (id, text) in BUILTIN {
         assert!(crate::theme::engine::manifest::is_v1(text), "{id} is a format-1 package");
+        if LATER.contains(id) {
+            continue;
+        }
         // the new one goes through the production loader (chain included), the old one through the frozen files
         let empty = std::env::temp_dir().join("decebal-golden-empty");
         let src = crate::theme::live::Source { shell_json: empty.join("decebal.json"), themes_dir: empty };

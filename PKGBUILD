@@ -67,6 +67,9 @@ package() {
   install -Dm644 contrib/decebal-bar.desktop "$pkgdir/etc/xdg/autostart/decebal-bar.desktop"
   install -Dm644 contrib/decebal-notify.desktop "$pkgdir/etc/xdg/autostart/decebal-notify.desktop"
   install -Dm644 contrib/dbus/org.freedesktop.Notifications.service "$pkgdir/usr/share/decebal/dbus/org.freedesktop.Notifications.service"
+  for t in caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic; do
+    for f in themes/$t/theme.toml themes/$t/wallpapers/*; do install -Dm644 "$f" "$pkgdir/usr/share/decebal/$f"; done
+  done
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 contrib/dechaven.desktop "$pkgdir/usr/share/applications/dechaven.desktop"
   install -Dm644 contrib/decsettings.desktop "$pkgdir/usr/share/applications/decsettings.desktop"

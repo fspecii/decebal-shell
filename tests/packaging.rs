@@ -143,7 +143,7 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
         assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
     }
     // every built-in theme is a bundled package
-    for id in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"] {
+    for id in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast", "caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"] {
         assert!(read(&format!("themes/{id}/theme.toml")).starts_with("format = 1"), "{id}");
     }
 }
@@ -186,4 +186,15 @@ fn a_wrapper_runs_the_new_program_with_the_same_arguments() {
     assert_eq!(run("macshell-session", &["x"]).1, "session ran: x");
     assert_eq!(run("mac-compat", &[]).0, Some(127), "not installed under an old name");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_theme_gallery_lists_every_shipped_package_with_its_screenshot() {
+    let doc = read("docs/themes.md");
+    for id in ["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"] {
+        assert!(doc.contains(&format!("decthemectl theme apply {id}")) && doc.contains(&format!("themes/{id}.png")), "docs/themes.md does not show {id}");
+        let shot = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png"));
+        let len = std::fs::metadata(&shot).unwrap_or_else(|e| panic!("{}: {e}", shot.display())).len();
+        assert!(len < 400 * 1024, "{id}.png is {len} bytes");
+    }
 }

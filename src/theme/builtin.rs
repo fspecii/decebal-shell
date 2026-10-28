@@ -16,6 +16,11 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("windows11", include_str!("../../themes/windows11/theme.toml")),
     ("caelestia", include_str!("../../themes/caelestia/theme.toml")),
     ("high-contrast", include_str!("../../themes/high-contrast/theme.toml")),
+    ("caelestia-mocha", include_str!("../../themes/caelestia-mocha/theme.toml")),
+    ("rose-pine", include_str!("../../themes/rose-pine/theme.toml")),
+    ("tokyo-night", include_str!("../../themes/tokyo-night/theme.toml")),
+    ("kanagawa", include_str!("../../themes/kanagawa/theme.toml")),
+    ("material-you-dynamic", include_str!("../../themes/material-you-dynamic/theme.toml")),
 ];
 
 pub fn source(id: &str) -> Option<&'static str> {
@@ -129,6 +134,35 @@ mod contrast_tests {
         assert!(def("macos").unwrap().has_dark() && def("macos").unwrap().has_light());
         assert!(def("windows11").unwrap().has_light() && def("windows11").unwrap().has_dark());
         assert!(def("caelestia").unwrap().has_light() && def("caelestia").unwrap().has_dark());
+        for want in NEW_PACKAGES {
+            assert!(ids.contains(want), "{want}");
+            assert!(def(want).unwrap().has_light() && def(want).unwrap().has_dark(), "{want} has both variants");
+        }
+    }
+
+    /// The pill-bar theme packages added after the first eight: each one is a package folder with a wallpaper under `themes/<id>/`.
+    const NEW_PACKAGES: &[&str] = &["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"];
+
+    #[test]
+    fn the_pill_bar_packages_are_distinct_and_ship_their_wallpaper() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut seen = std::collections::HashSet::new();
+        for id in NEW_PACKAGES {
+            let d = def(id).unwrap();
+            let get = |sec: &str, key: &str| d.extra.get(sec).and_then(|s| s.get(key)).cloned().unwrap_or_default().to_string();
+            assert_eq!(get("bar", "style"), "\"vertical\"", "{id}: a pill bar");
+            assert!(seen.insert((get("bar", "position"), get("dock", "style"), get("decoration", "style"))), "{id}: bar position, dock and titlebar style must differ from the other themes");
+            let img = get("wallpaper", "image").trim_matches('"').to_string();
+            let f = root.join("themes").join(id).join(&img);
+            let len = std::fs::metadata(&f).unwrap_or_else(|e| panic!("{id}: {}: {e}", f.display())).len();
+            assert!(len > 1000 && len < 300 * 1024, "{id}: wallpaper is {len} bytes");
+            assert!(root.join("docs/themes").join(format!("{id}.png")).is_file(), "{id}: docs/themes/{id}.png (the screenshot) is missing");
+        }
+        assert_eq!(get_of("material-you-dynamic", "match_colors"), "true");
+    }
+
+    fn get_of(id: &str, key: &str) -> String {
+        def(id).unwrap().extra.get("wallpaper").and_then(|s| s.get(key)).cloned().unwrap_or_default().to_string()
     }
 }
 
