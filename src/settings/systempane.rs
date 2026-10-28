@@ -1,4 +1,4 @@
-//! "Apply to all apps" in System Settings > Theme: the master switch and one checkbox per target.
+//! "Apply to all apps" in System Settings > Appearance > All apps: the master switch and, under Advanced, one checkbox per target.
 //!
 //! The work is done by `decthemectl` (see [`crate::theme::system`]); the pane only writes the `"system"` key of `decebal.json` and asks for
 //! an apply (debounced, in a separate process, so a slow `omarchy-theme-set` never blocks the window).
@@ -12,14 +12,23 @@ pub fn items(m: &Model) -> Vec<Item> {
     let env = Env::discover();
     let st = system::status(&env, &cfg);
     let applied = system::applied_theme(&env);
-    let mut out = vec![Item::Header("Apply to all apps".into())];
-    out.push(Item::Card(vec![Row::new("Apply to all apps")
+    let mut out =
+        vec![Item::Header("Apply to all apps".into()), Item::Note { text: "One switch to make GTK, Qt, terminal and browser apps use the same colours and fonts as the desktop.".into(), warn: false }];
+    out.push(Item::Card(vec![Row::new("Apply theme to all apps")
         .detail(if cfg.enabled {
             format!("On: the theme also colours the apps below (last applied: {})", applied.as_deref().unwrap_or("not yet"))
         } else {
             "Off: nothing outside decebal and rdwm is changed. Turn on to theme GTK / Nautilus, Qt, terminals, the browser and more".into()
         })
         .ctl(Ctl::new("sy:on", Kind::Toggle(cfg.enabled)))]));
+    let adv = m.sel.adv;
+    out.push(Item::Header("Advanced".into()));
+    out.push(Item::Card(vec![Row::new("Choose what is themed")
+        .detail("GTK, Qt, terminals, the browser, editors and the icon and cursor themes one by one")
+        .ctl(Ctl::new("ap:adv", Kind::Button { label: if adv { "Hide options".into() } else { "Show options".into() }, danger: false }))]));
+    if !adv {
+        return out;
+    }
     let rows: Vec<Row> = st
         .iter()
         .map(|s| {
@@ -37,10 +46,10 @@ pub fn items(m: &Model) -> Vec<Item> {
     let opts: Vec<Row> = system::OPTIONS.iter().map(|(key, _, title, detail)| Row::new(*title).detail(*detail).ctl(Ctl::new(format!("sy:o:{key}"), Kind::Toggle(cfg.option(key))))).collect();
     out.push(Item::Card(opts));
     out.push(Item::Card(vec![
-        Row::new("Icon theme")
+        Row::new("Icon theme for apps")
             .detail("Optional: set this icon theme in GTK and Qt apps (empty = leave it alone)")
             .ctl(Ctl::new("sy:icon", Kind::Text { val: cfg.icon_theme.clone().unwrap_or_default(), hint: "Papirus".into() })),
-        Row::new("Cursor theme")
+        Row::new("Cursor theme for apps")
             .detail("Optional: set this cursor theme for GTK and X11 clients")
             .ctl(Ctl::new("sy:cursor", Kind::Text { val: cfg.cursor_theme.clone().unwrap_or_default(), hint: "Bibata-Modern-Classic".into() })),
         Row::new("Apply now").detail("Run it again right away").ctl(Ctl::new("sy:now", Kind::Button { label: "Apply".into(), danger: false })),
@@ -137,6 +146,7 @@ mod tests {
     #[test]
     fn switch_and_target_boxes_are_written_to_decebal_json() {
         let (mut m, _) = model_with("");
+        m.sel.adv = true;
         assert_eq!(toggle(&items(&m), "sy:on"), Some((false, true)), "off by default");
         for id in ["omarchy", "browser", "editors", "hooks", "gtk", "qt", "kvantum", "x11"] {
             assert!(toggle(&items(&m), &format!("sy:t:{id}")).is_some(), "{id} has a checkbox");
@@ -158,6 +168,7 @@ mod tests {
     #[test]
     fn the_gtk_font_option_is_on_until_turned_off() {
         let (mut m, _) = model_with("");
+        m.sel.adv = true;
         assert_eq!(toggle(&items(&m), "sy:o:gtk.font").map(|t| t.0), Some(true), "on by default");
         m.apply("sy:o:gtk.font", CtlVal::Bool(false));
         assert!(!Config::load(&m.paths.shell_json()).option("gtk.font"));

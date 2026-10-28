@@ -73,6 +73,8 @@ pub struct SettingsApp {
     waker: Option<Waker>,
     wake_slot: Arc<Mutex<Option<Waker>>>,
     sidebar_hits: Vec<(Rect, usize)>,
+    /// Per entry of `sidebar_hits`: the setting a search hit points at.
+    sidebar_labels: Vec<Option<String>>,
     /// Sidebar scroll offset (px, unscaled by nothing: already in pixels) and whether to keep the selection in view.
     sb_scroll: f32,
     sb_follow: bool,
@@ -87,6 +89,12 @@ pub struct SettingsApp {
     /// `DECSETTINGS_DEBUG_LAYOUT=file`: write the control map after every paint (end-to-end tests).
     dump: Option<std::path::PathBuf>,
     dump_meta: (Option<String>, Vec<String>),
+    /// Paint statistics for the scroll benchmark: (frames, microseconds spent building items, total microseconds painting).
+    stats: (u64, u64, u64),
+    /// The items of the last paint, reused while the only thing that happened since is scrolling or hovering
+    /// (building them reads theme folders, fonts and icon themes: ~27 ms for the Theme pane, per wheel notch).
+    items_cache: Option<(usize, Vec<Item>)>,
+    reuse_items: bool,
 }
 
 enum SbRow {
@@ -113,7 +121,15 @@ impl SettingsApp {
         });
         let mut m = Model::new(paths, schema, queue, wake);
         if let Some(p) = start_pane {
-            m.sel.pane = pane_index(p);
+            // the old names of the panes that became Appearance tabs (theme, icons, wallpaper, desktop) open that tab
+            match super::appearance::resolve(p) {
+                Some(v) => {
+                    m.sel.pane = pane_index("appearance");
+                    super::appearance::show(&mut m, v);
+                    m.sel.reset_scroll = false;
+                }
+                None => m.sel.pane = pane_index(p),
+            }
         }
         let s = std::env::var("DECSETTINGS_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.5..=4.0).contains(v)).unwrap_or(1.0);
         SettingsApp {
@@ -136,6 +152,7 @@ impl SettingsApp {
             waker: None,
             wake_slot,
             sidebar_hits: Vec::new(),
+            sidebar_labels: Vec::new(),
             sb_scroll: 0.0,
             sb_follow: true,
             sb_total: 0.0,
@@ -146,6 +163,9 @@ impl SettingsApp {
             first_draw: true,
             dump: std::env::var_os("DECSETTINGS_DEBUG_LAYOUT").map(Into::into),
             dump_meta: (None, Vec::new()),
+            stats: (0, 0, 0),
+            items_cache: None,
+            reuse_items: false,
         }
     }
 
@@ -165,7 +185,7 @@ impl SettingsApp {
         }
         self.hits_for = q.clone();
         // rows of the older (rdwm) panes are searched live, the system panes through the static index
-        const LEGACY: &[&str] = &["general", "appearance", "desktop", "wallpaper", "tiling", "windows", "rules", "keyboard", "autostart"];
+        const LEGACY: &[&str] = &["general", "tiling", "windows", "rules", "keyboard", "autostart"];
         if q.trim().is_empty() {
             self.legacy_rows = None;
         } else if self.legacy_rows.is_none() {
@@ -326,6 +346,7 @@ impl SettingsApp {
         self.sb_scroll = self.sb_scroll.clamp(0.0, (total - view).max(0.0));
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         self.sidebar_hits.clear();
+        self.sidebar_labels.clear();
         let mut y = top - self.sb_scroll;
         for (r, hh) in rows.iter().zip(&heights) {
             let ry = y;
@@ -359,6 +380,7 @@ impl SettingsApp {
                         );
                     }
                     self.sidebar_hits.push((rect, *i));
+                    self.sidebar_labels.push(None);
                 }
                 SbRow::Hit(i, label) => {
                     let rect = (u(8.0), ry, sbw - u(16.0), hh - u(2.0));
@@ -370,6 +392,7 @@ impl SettingsApp {
                         p.text(pm, &t, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(12.0), Weight::Regular, pal::sub());
                     }
                     self.sidebar_hits.push((rect, *i));
+                    self.sidebar_labels.push(Some(label.clone()));
                 }
             }
         }
@@ -412,11 +435,19 @@ impl SettingsApp {
         let s = self.s;
         let sbw = self.sb();
         let (w, h) = (pm.width() as f32 - sbw, pm.height() as f32);
+        self.follow_requests();
         self.m.prepare(self.m.sel.pane);
         if self.m.wh.take_scroll_top() {
             self.scroll = 0.0;
         }
-        let items = self.m.items(self.m.sel.pane);
+        let t_items = std::time::Instant::now();
+        let pane = self.m.sel.pane;
+        let reuse = std::mem::take(&mut self.reuse_items) && !self.m.dirty;
+        let items = match self.items_cache.take() {
+            Some((p, items)) if reuse && p == pane => items,
+            _ => self.m.items(pane),
+        };
+        self.stats.1 += t_items.elapsed().as_micros() as u64;
         let title = PANES[self.m.sel.pane.min(PANES.len() - 1)].title;
         // sync interaction state
         self.it.edit = self.edit.as_ref().map(|(id, f)| (id.clone(), f.text().to_string(), f.cursor()));
@@ -434,14 +465,14 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
         // a separate content layer would cost a second full-window pixmap.
-        let mut frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+        let mut frame = draw_items(pm, &mut p, title, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
         // A shorter page than the last one (another tab, a collapsed list): the scroll was clamped with the old height,
         // so paint again at the right offset instead of leaving the page shifted until the next event.
         let max_now = (frame.height - h).max(0.0);
         if self.scroll > max_now + 0.5 {
             self.scroll = max_now;
             pm.fill(pal::window());
-            frame = draw_items(pm, &mut p, title, &items, self.scroll, sbw, w, &self.it, &lookup);
+            frame = draw_items(pm, &mut p, title, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
         }
         // lazy thumbnails: only what is visible (plus one row of margin); the big preview goes first
         let mut wanted: Vec<String> = Vec::new();
@@ -465,10 +496,11 @@ impl SettingsApp {
         for id in local {
             self.request_thumb(&id);
         }
-        if self.m.wh.tab == super::wallhaven::Tab::Wallhaven {
+        if self.m.wallpaper_open() && self.m.wh.tab == super::wallhaven::Tab::Wallhaven {
             self.m.wh.set_visible(&online);
             super::wallhaven::on_paint(&mut self.m, self.frame.height, self.scroll, h);
         }
+        self.items_cache = Some((pane, items));
         // scrollbar
         let total = self.frame.height;
         if total > h + 1.0 {
@@ -499,11 +531,11 @@ impl SettingsApp {
         let rects = |v: &[(Rect, String)]| v.iter().map(|(r, id)| json!({"id": id, "rect": [r.0, r.1, r.2, r.3]})).collect::<Vec<_>>();
         let (preview, warns) = self.dump_meta.clone();
         let doc = json!({
-            "pane": PANES[self.m.sel.pane].id, "scroll": self.scroll, "ctls": ctls,
+            "pane": PANES[self.m.sel.pane].id, "tab": self.m.sel.tab.id(), "section": self.m.sel.section.id(), "scroll": self.scroll, "ctls": ctls,
             "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 58.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
-            "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
+            "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
-            "loaded_thumbs": self.thumbs.borrow().len(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
         });
         let tmp = path.with_extension("tmp");
         if std::fs::write(&tmp, doc.to_string()).is_ok() {
@@ -583,6 +615,33 @@ impl SettingsApp {
             return None;
         }
         self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).map(|(_, i)| *i)
+    }
+
+    /// The search hit's setting under the pointer (None for plain pane rows).
+    fn sidebar_label(&self, x: f32, y: f32) -> Option<String> {
+        let i = self.sidebar_hits.iter().position(|(r, _)| inside(*r, x, y))?;
+        self.sidebar_labels.get(i).cloned().flatten()
+    }
+
+    /// Opens pane `i`; a search hit for a setting of the Appearance tabs also opens the tab and section that hold it.
+    fn open_pane(&mut self, i: usize, label: Option<&str>) {
+        if PANES[i].id == "appearance" {
+            if let Some(v) = label.and_then(super::appearance::view_of_label) {
+                super::appearance::show(&mut self.m, v);
+            }
+        }
+        self.select_pane(i);
+    }
+
+    /// Follows what the model asked for: another pane (a button in a tab) and a scroll back to the top (another tab).
+    fn follow_requests(&mut self) {
+        if let Some(i) = self.m.sel.goto.take() {
+            self.select_pane(i);
+        }
+        if std::mem::take(&mut self.m.sel.reset_scroll) {
+            self.scroll = 0.0;
+            self.it.focus = None;
+        }
     }
 
     fn to_content(&self, x: f32, y: f32) -> (f32, f32) {
@@ -925,9 +984,14 @@ impl SettingsApp {
                 }
             }
             Key::Enter | Key::Down => {
-                if let Some(&first) = self.visible_panes().first() {
+                let first_hit = self.sidebar_rows().into_iter().find_map(|r| match r {
+                    SbRow::Pane(i) => Some((i, None)),
+                    SbRow::Hit(i, l) => Some((i, Some(l))),
+                    SbRow::Header(_) => None,
+                });
+                if let Some((first, label)) = first_hit {
                     if !self.visible_panes().contains(&self.m.sel.pane) || ev.key == Key::Enter {
-                        self.select_pane(first);
+                        self.open_pane(first, label.as_deref());
                     }
                 }
                 self.zone = Zone::Sidebar;
@@ -1076,6 +1140,7 @@ impl WindowApp for SettingsApp {
     fn set_rounded(&mut self, _rounded: bool) {}
 
     fn draw(&mut self, pm: &mut Pixmap) {
+        let t0 = std::time::Instant::now();
         pm.fill(pal::window());
         self.size = (pm.width(), pm.height());
         self.draw_content(pm);
@@ -1088,6 +1153,8 @@ impl WindowApp for SettingsApp {
         }
         self.m.dirty = false;
         self.first_draw = false;
+        self.stats.0 += 1;
+        self.stats.2 += t0.elapsed().as_micros() as u64;
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
@@ -1118,6 +1185,7 @@ impl WindowApp for SettingsApp {
                 if let Kind::Slider { min, max, step, .. } = p.ctl.kind {
                     let track = p.parts.first().copied().unwrap_or(p.rect);
                     self.it.drag = Some((id, ui::slider_value(cx, track, min, max, step)));
+                    self.reuse_items = true;
                     return Response::REDRAW;
                 }
             }
@@ -1128,6 +1196,7 @@ impl WindowApp for SettingsApp {
             self.frame.at(cx, cy).map(|p| p.ctl.id.clone()).or_else(|| self.frame.thumbs.iter().chain(self.frame.layouts.iter()).find(|(r, _)| inside(*r, cx, cy)).map(|(_, id)| id.clone()))
         };
         if before != self.it.hover || self.m.dirty {
+            self.reuse_items = !self.m.dirty;
             Response::REDRAW
         } else {
             Response::NONE
@@ -1136,6 +1205,7 @@ impl WindowApp for SettingsApp {
 
     fn pointer_leave(&mut self) -> Response {
         if self.it.hover.take().is_some() {
+            self.reuse_items = true;
             Response::REDRAW
         } else {
             Response::NONE
@@ -1143,6 +1213,7 @@ impl WindowApp for SettingsApp {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
+        self.reuse_items = false;
         self.it.ring = false;
         if !pressed {
             super::configpane::pointer_release(&mut self.m);
@@ -1202,7 +1273,8 @@ impl WindowApp for SettingsApp {
             }
             if let Some(i) = self.sidebar_hit(x, y) {
                 self.zone = Zone::Sidebar;
-                self.select_pane(i);
+                let label = self.sidebar_label(x, y);
+                self.open_pane(i, label.as_deref());
             }
             return Response::REDRAW;
         }
@@ -1273,6 +1345,7 @@ impl WindowApp for SettingsApp {
         let _ = y;
         if (old - self.scroll).abs() > 0.1 {
             // pointer is over something else now
+            self.reuse_items = true;
             Response { redraw: true, action: None }
         } else {
             Response::NONE
@@ -1281,6 +1354,7 @@ impl WindowApp for SettingsApp {
 
     fn key(&mut self, ev: &KeyEvent) -> Response {
         self.it.ring = true;
+        self.reuse_items = false;
         if ev.ctrl && ev.key == Key::Char && ev.ch == Some('w') {
             return Response::act(Action::Close);
         }
@@ -1323,6 +1397,7 @@ impl WindowApp for SettingsApp {
     }
 
     fn unmapped_key(&mut self, sym: u32, shift: bool, ctrl: bool, alt: bool) -> Response {
+        self.reuse_items = false;
         // function keys (F1..F35) can be recorded as shortcuts
         if self.m.sel.recording.is_some() && (0xffbe..=0xffe0).contains(&sym) {
             let ev_mods = (ctrl, alt, shift);
@@ -1362,6 +1437,13 @@ impl WindowApp for SettingsApp {
             self.m.dirty = true; // the theme pane and every colour follow the file
         }
         redraw |= self.m.dirty;
+        if self.m.sel.goto.is_some() {
+            self.follow_requests();
+            redraw = true;
+        }
+        if redraw {
+            self.reuse_items = false; // something other than the pointer or the wheel changed: rebuild the page
+        }
         Response { redraw, action: None }
     }
 }

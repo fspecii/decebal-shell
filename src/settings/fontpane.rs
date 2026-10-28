@@ -55,7 +55,7 @@ pub fn items_with(sel: &Selection, now: &Theme, db: &fontdb::FontDb) -> Vec<Item
     for r in Role::ALL {
         rows.push(role_row(r, sel, &res, &now.fonts, &families, current.is_some_and(|p| !p.installed(db))));
     }
-    rows.push(Row::new("Reset fonts").detail("Back to the theme's own fonts (the text size stays)").ctl(Ctl::new("th:fontreset", Kind::Button { label: "Reset".into(), danger: false })));
+    rows.push(Row::new("Reset to theme default").detail("Back to the theme's own fonts (the text size stays)").ctl(Ctl::new("th:fontreset", Kind::Button { label: "Reset".into(), danger: false })));
 
     let mono_digits = "0123456789 [] {} fn main() 日本語 😀  \u{f120} \u{f09b}";
     let samples = vec![

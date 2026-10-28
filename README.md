@@ -60,7 +60,7 @@ decthemectl theme install mine.dtheme
 decthemectl theme snapshot my-desktop        # create a theme from the current settings
 decwidgets add clock-card --anchor top-right --x -40 --y 60
 ```
-The Theme pane of `decsettings` has the same as a gallery. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md);
+Appearance > Theme in `decsettings` has the same as cards with a live preview. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md);
 end-to-end test: `tests/e2e/theme-engine.sh`.
 
 ## Install
@@ -382,13 +382,13 @@ Test without touching your session: `make e2e-notify` (private `dbus-daemon` and
 ## Icon themes
 
 Application, folder and MIME icons follow the freedesktop icon theme of your choice: System Settings -> Icons
-(`decsettings icons`, a list of the installed themes with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
+(Appearance > Customise > Icons, `decsettings icons`, a list of the installed themes with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
 `Auto` (the default) follows `gsettings` / GTK's `settings.ini`. The settings live in `decebal.json` under `icons`
 (`theme`, `size_scale`, `monochrome_tint`, `fallback`); programs follow within half a second. Lookup rules, caches and
 the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
 End-to-end test: `tests/e2e/icons.sh`.
 
-## Configuration and presets (`decsettings config`)
+## Configuration and presets (`decsettings config`, sidebar entry "Config & Presets")
 
 System Settings > System > Configuration edits the raw files as text (decebal.json, dock-settings.json, the pinned apps, rdwm's
 config.toml, plus a read-only "All settings" listing with the defaults): line numbers, colouring, undo, clipboard, validation with
@@ -435,7 +435,7 @@ Bluetooth, battery, lock keys) whose popups open on hover, the clock (opens the 
 The dock is hidden while that bar is up (`"dock": {"enabled": "auto"}`); `decthemectl style macos` brings the classic bar and the dock back without restarting anything.
 The dashboard, launcher, session menu, OSD, notification history and utilities are the existing programs under the Caelestia colours.
 
-Five layouts, chosen at runtime with `decthemectl layout left|right|top|bottom|split` (or `decthemectl style caelestia-top` and the like, or **Layout** under Shell style in the Theme pane;
+Five layouts, chosen at runtime with `decthemectl layout left|right|top|bottom|split` (or `decthemectl style caelestia-top` and the like, or **Layout** under Style in Appearance > Theme;
 `bar.position` in `decebal.json`, default `left`); running bars re-lay out within about a second:
 
 | layout | what it is |

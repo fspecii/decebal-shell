@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments, clippy::needless_range_loop)]
 //! decsettings: native settings app for rdwm and the decebal panels.
 pub mod app;
+pub mod appearance;
 pub mod binds;
 pub mod configpane;
 pub mod editor;
