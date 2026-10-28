@@ -42,6 +42,9 @@ e2e-theme: all
 # Font presets: macthemectl font, bar / dashboard / Theme pane screenshots (Xvfb, xdotool, import, jq, dbus-daemon).
 e2e-fonts:
 	PROFILE=release tests/e2e/fonts.sh
+# "Apply to all apps" in a private HOME, Xvfb and D-Bus session (needs Xvfb, xdotool, import, xrdb, dbus-run-session, PyGObject; nautilus and Omarchy are used when present).
+e2e-system: all
+	tests/e2e/system-theme.sh
 
 e2e-macsettings: all
 	tests/e2e/macsettings.sh
@@ -76,4 +79,4 @@ test:
 	cargo clippy --all-targets --all-features -- -D warnings
 	cargo test --all-features
 
-.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar
+.PHONY: all install install-session uninstall test e2e-macsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar

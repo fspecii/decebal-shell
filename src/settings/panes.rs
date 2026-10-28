@@ -1019,6 +1019,9 @@ fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if matches!(parts.as_slice(), ["sy", ..]) {
+        return super::systempane::apply(m, &parts, v);
+    }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent", _]) {
         return super::themepane::apply(m, &parts, v);
     }

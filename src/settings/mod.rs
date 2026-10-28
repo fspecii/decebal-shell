@@ -10,6 +10,7 @@ pub mod model;
 pub mod panes;
 pub mod schema;
 pub mod system;
+pub mod systempane;
 pub mod themepane;
 pub mod tomlcfg;
 pub mod ui;

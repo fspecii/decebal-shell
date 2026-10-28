@@ -4,7 +4,7 @@ use macshell::settings::io::Paths;
 use macshell::theme::live::{system_dark, Source};
 use macshell::theme::material::Variant;
 use macshell::theme::model::{Def, Dynamic, Mode, Origin, Rgb, Selection, Surfaces};
-use macshell::theme::{builtin, dynamic, rdwm, style};
+use macshell::theme::{builtin, dynamic, rdwm, style, system};
 
 const HELP: &str = "macthemectl list [--json]
 macthemectl get [--json]
@@ -555,7 +555,12 @@ fn main() {
             let id = src.find(name).map(|f| f.0).unwrap_or_else(|| name.clone());
             print!("{}", builtin::source(&id).unwrap_or_else(|| die(&format!("`{name}` is not a built-in theme"))));
         }
-        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}"),
-        Some(other) => die(&format!("unknown command `{other}`\n{HELP}")),
+        Some("apply-system") | Some("system") => {
+            if let Err(e) = system::cli::run(&args, &src) {
+                die(&e);
+            }
+        }
+        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}", system::cli::HELP),
+        Some(other) => die(&format!("unknown command `{other}`\n{HELP}\n\n{}", system::cli::HELP)),
     }
 }

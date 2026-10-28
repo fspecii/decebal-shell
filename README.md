@@ -29,7 +29,7 @@ The backend is picked automatically (`MACSHELL_BACKEND=wayland|x11` forces one).
 | `macsession` | session menu (X11): the screen dims and a row of big buttons offers Lock, Log Out, Suspend, Hibernate, Restart, Shut Down; opened from the Apple menu ("Session…") or a key; see below | starts and paints in ~40-60 ms, exits on commit |
 | `macutil` | CLI behind the Control Center's quick toggles: `record` (screen recording), `idle-inhibit`, `gamemode`, `dnd`; see below | CLI, no daemon |
 | `macdash` | dashboard popup under the bar (X11): overview (user, clock, calendar, weather, resource rings), MPRIS media player, live performance graphs; opened from the bar's chart icon; see below | exits when closed; samples once a second only while open |
-| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; `font PRESET\|list\|set ROLE FAMILY,...` picks the fonts (presets `inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system`, roles `ui title mono display`, per-character fallback for CJK / emoji / icons); see `docs/theming.md` | CLI |
+| `macthemectl` | `list`, `get`, `apply NAME` for the shared theme (one choice restyles bar, dock, Spotlight, Launchpad, settings and rdwm's titlebars); `style macos\|windows\|caelestia` sets theme, dock and bar together; `dynamic on` (optional "Match wallpaper": any theme recoloured from the wallpaper, schemes tonal-spot/vibrant/expressive/monochrome/neutral/content/palette, accent-only or tinted or full surfaces), `watch` follows wallpaper changes; `font PRESET\|list\|set ROLE FAMILY,...` picks the fonts (presets `inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system`, roles `ui title mono display`, per-character fallback for CJK / emoji / icons); `system on\|off\|status` and `apply-system` carry the theme to GTK/Nautilus, Qt, terminals (via Omarchy's templates), the browser colour and X11 (optional, reversible, off by default); see `docs/theming.md` | CLI |
 
 For comparison the Quickshell/QML shell this replaces used about 550 MB. All three draw on the CPU
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
@@ -367,6 +367,13 @@ honours; dwm ignores struts, so turn off its own bar (`showbar = 0`). Scale fact
 ## License
 
 MIT
+
+## Apply to all apps
+
+`macthemectl system on` (or System Settings -> Theme -> Apply to all apps) makes the macshell theme, style and wallpaper colours reach the rest of
+the desktop: GTK 3/4 and libadwaita apps such as Nautilus, Qt (qt5ct/qt6ct), the terminals and btop/helix/neovim through an Omarchy theme made from
+the palette (Omarchy's own template engine), the browser colour and X11 clients (xrdb). Every file is saved before it is changed and
+`macthemectl system off` restores it; `macthemectl system status` shows what runs and what was skipped. See [docs/theming.md](docs/theming.md#apply-to-all-apps).
 
 ## Caelestia style (vertical bar)
 

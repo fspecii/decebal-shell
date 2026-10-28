@@ -16,6 +16,7 @@ macthemectl export nord > ~/.config/macshell/themes/mine.toml
 macthemectl validate mine.toml
 macthemectl style macos|windows|caelestia   # the whole shell look at once (theme + dock + menu bar)
 macthemectl dynamic on                # "Match wallpaper": recolour the current theme from the wallpaper (off by default, see below)
+macthemectl system on|off|status       # also theme GTK/Nautilus, Qt, terminals, the browser, X11 (see "Apply to all apps")
 ```
 Or open **System Settings -> Theme** (`macsettings theme`).
 
@@ -282,6 +283,51 @@ A change made by other tools (`rdwmctl wallpaper`, `omarchy theme bg set`, ...) 
 If step 1 or 2 fails nothing is written. rdwm needs no changes: all these keys already exist in its `[decoration]` schema.
 Keys the theme owns are overwritten on every apply, a theme whose title role has only generic fonts removes `[decoration] font` and `fallback_fonts`.
 
+## Apply to all apps
+
+One optional pipeline carries the theme beyond macshell: GTK 3/4 and libadwaita apps (Nautilus), Qt apps, terminals, btop, editors,
+the browser colour and plain X11 clients. It is **off until you switch it on** (`macthemectl system on`, or **System Settings ->
+Theme -> Apply to all apps**); then every `macthemectl apply/set/style/dynamic`, every choice in the Theme pane and every wallpaper-colour
+change re-applies it (debounced: several changes in a row make one run, in a detached `macthemectl apply-system`).
+
+```
+macthemectl system on                  # apply now and after every theme change
+macthemectl system off                 # put every file and setting back, then switch off
+macthemectl system status [--json]     # which targets run, which are skipped and why
+macthemectl system target gtk off      # per-target checkbox: omarchy browser editors hooks gtk qt kvantum x11 (default = auto)
+macthemectl system set icon-theme Papirus     # optional: also set an icon / cursor theme (cursor-theme); `none` unsets
+macthemectl apply-system [--dry-run] [--only gtk,qt]   # run it by hand; --dry-run lists the files it would write
+```
+
+The palette comes from the resolved theme (background, sidebar, surface, popup, titlebar, text, accent, red/green/yellow/blue, dark or
+light). Each target renders from it (`src/theme/system/*.rs`):
+
+| target | default | what it changes |
+|---|---|---|
+| `omarchy` | on when Omarchy is installed | Writes `~/.config/omarchy/themes/macshell/colors.toml` (Omarchy's palette format) and runs `omarchy-theme-set macshell`, so **Omarchy's own template engine** makes alacritty, foot, kitty, ghostty, btop, helix, neovim, vscode, obsidian and chromium theme files from `$OMARCHY_PATH/default/themed/*.tpl` (and your `~/.config/omarchy/themed`). It runs headless with Omarchy's background step off (macshell owns the wallpaper). Live reload: alacritty (its config is touched; it watches it), foot (`omarchy-theme-set-foot`), kitty (`kitty @ set-colors` on the sockets it finds), btop (`omarchy-restart-btop`). **No signal is sent to any other process** unless `macthemectl system set signals on` (then Omarchy's `omarchy-restart-terminal` / `-helix`: SIGUSR1 kitty and helix, SIGUSR2 ghostty). Not run at all: Omarchy's keyboard-RGB, GNOME icon, Hyprland-reload, tmux and AI-tool helpers. |
+| `browser` | on only if sudo needs no password for `omarchy-theme-set-browser-policy` (Omarchy's own rule) | `omarchy-theme-set-browser`: the Chromium/Chrome/Edge/Brave `BrowserThemeColor` policy from `chromium.theme`. This writes root-owned policy files, so macshell never triggers a password prompt: without the rule the box stays off. |
+| `editors` | off | `omarchy-theme-set-vscode` and `-obsidian` (VS Code / Cursor settings, Obsidian vaults). Off restores the previous Omarchy theme through the same helpers. |
+| `hooks` | off | your `~/.config/omarchy/hooks/theme-set.d` scripts |
+| `gtk` | on | a marked block in `~/.config/gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` (libadwaita named colours: `window_bg_color`, `accent_bg_color`, `headerbar_*`, `sidebar_*`, `card_*`, `popover_*`, ... plus the `theme_*` names and widget rules for GTK 3, whose Adwaita theme ignores the names), `settings.ini` (`gtk-application-prefer-dark-theme`, `gtk-decoration-layout`: window buttons on the left for the macOS titlebar style, on the right for classic; `gtk-font-name` when the theme names a font) and gsettings `color-scheme` (dark/light), `font-name`, `button-layout`. Icon and cursor theme only if you set them. |
+| `qt` | on when qt5ct/qt6ct is installed | `qt5ct/colors/macshell.conf` and `qt6ct/colors/macshell.conf` and `color_scheme_path` + `custom_palette=true` in `qt5ct.conf` / `qt6ct.conf` (an existing `style` is kept; `Fusion` otherwise). Qt reads it with `QT_QPA_PLATFORMTHEME=qt6ct` (qt5ct for Qt 5) in the session environment; `macthemectl system status` warns when it is not set. |
+| `kvantum` | off | a colours-only Kvantum theme `~/.config/Kvantum/macshell` selected in `kvantum.kvconfig` (replaces your Kvantum theme while on). |
+| `x11` | on when xrdb is installed | `~/.config/macshell/system/Xresources` (`*.foreground`, `*.background`, `*.color0..15`, `Xcursor.theme` if set), included from a block in `~/.Xresources` and merged with `xrdb -merge` when `$DISPLAY` is set. st, xterm and urxvt pick it up when they start (st needs the Xresources patch). |
+
+rdwm's titlebars and borders are still written by `macthemectl apply` itself (see below); nothing changes there.
+
+**Safety.** Nothing outside macshell's own files is touched while the switch is off. When it is on, every file is first read, then all
+changes of a run are written together (temporary file + rename, symlinks followed, permissions kept; if one write fails the others are rolled back).
+Files shared with you (`gtk.css`, `~/.Xresources`) get one marked block appended, INI files (`settings.ini`, `qt6ct.conf`) get only their keys
+set. The first version of each file (or "did not exist") and the old gsettings / xrdb values are saved in
+`$XDG_STATE_HOME/macshell/system/` (`manifest.json`, `backups/`). `macthemectl system off` restores them exactly; a file you edited since is
+not overwritten (only a macshell block is cut out of it, anything else is reported and left). A target you uncheck gives its files back at once.
+Programs missing on the machine (no qt5ct, no xrdb, no Omarchy, no browser) are skipped and listed by `status`.
+Run `macthemectl apply-system --dry-run` first to see which files would be written.
+
+Limits: Kvantum was not run against a real Kvantum install; Qt colours were verified as files only (no qt6ct here); st needs the Xresources
+patch; ghostty and helix pick the new colours up at their next start unless `signals` is on. Environment: `MACSHELL_SYSTEM_SYNC=1` runs the
+apply inline instead of detached (scripts, tests), `MACSHELL_SYSTEM_STATE` moves the state directory, `OMARCHY_PATH` is read-only.
+
 ## Programs and how they follow
 Each process runs one 500 ms `stat` poll (`theme::live::start_watcher`) of `macshell.json`, the selected user theme file (and its
 parent) and the system scheme files (auto mode). On a change it rebuilds the theme, bumps `theme::generation()` and wakes the event
@@ -302,6 +348,7 @@ variant, live reload, rdwm edits, the settings pane), `tests/e2e/theme.sh` (priv
 macsettings: macthemectl, user theme file edits, the UI, pixel checks, screenshots in `$SHOTS`),
 `THEME_SHOTS=dir cargo test --lib -- --ignored launchpad_in_three_themes`, `tests/e2e/style.sh` (the three shell styles on the real macbar and
 macdock, pixel checks per style, the pill geometry, wallpaper colours, and `BASELINE_BIN=dir` to prove the macOS style is pixel-identical to a build from before the Caelestia theme).
+`tests/e2e/system-theme.sh` runs "Apply to all apps" for real in a private HOME, Xvfb and D-Bus session (GTK 4/libadwaita and GTK 3 windows, Nautilus, xrdb, Omarchy's template engine, off restoring every file; screenshots in `$SHOTS`).
 `tests/e2e/vbar.sh` runs the vertical Caelestia bar for real (strut, geometry, workspace pills, popups, launching the widgets, the dock hiding, switching styles both ways).
 `tests/e2e/wallpaper-colors.sh` is Match wallpaper end to end (wallpapers of different hues set through a private rdwm, `macthemectl watch`, the accent per hue and per theme, every scheme, grey and pale
 wallpapers, fixed sources, the Theme pane section, PNGs in `$SHOTS`; `PROFILE=debug` uses a debug build). Unit tests: `theme::extract` (known colour in, hue out; determinism; grey/black/white; cache), `theme::dynamic`
