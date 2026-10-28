@@ -19,5 +19,7 @@ pub mod manifest;
 pub mod package;
 pub mod schema;
 pub mod sha256;
+#[cfg(test)]
+mod shipped;
 pub mod store;
 pub mod writer;

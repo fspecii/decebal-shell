@@ -1,0 +1,115 @@
+format = 1
+id = "everforest"
+name = "Everforest"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A calm green-forest palette in soft rounded shapes: a bottom bar with a floating, rounded dock above it, gentle sage and moss accents on a deep slate-green base, soft Adwaita-style titlebars, and a layered misty-hills wallpaper with a pale moon. Light variant is a cream parchment."
+min_shell_version = "0.1.0"
+screenshots = ["screenshots/main.jpg"]
+tags = ["everforest", "green", "calm", "rounded", "dark", "light", "nature"]
+
+[colors.dark]
+background = "#2d353b"
+sidebar = "#232a2e"
+surface = "#343f44"
+bar = "#232a2e"
+bar_text = "#d3c6aa"
+popup = "#3d484d"
+dock = "#2d353b"
+overlay = "#3d484d"
+titlebar = "#3d484d"
+titlebar_inactive = "#343f44"
+border = "#475258"
+text = "#d3c6aa"
+text_secondary = "#9da9a0"
+text_faint = "#859289"
+accent = "#a7c080"
+accent_text = "#232a2e"
+danger = "#e67e80"
+ok = "#83c092"
+warn = "#dbbc7f"
+
+[colors.light]
+background = "#fdf6e3"
+sidebar = "#f4f0d9"
+surface = "#efebd4"
+bar = "#f4f0d9"
+bar_text = "#5c6a72"
+popup = "#f4f0d9"
+dock = "#f4f0d9"
+overlay = "#f4f0d9"
+titlebar = "#efebd4"
+titlebar_inactive = "#f4f0d9"
+border = "#e0dcc7"
+text = "#5c6a72"
+text_secondary = "#708089"
+text_faint = "#829181"
+accent = "#657a2f"
+accent_text = "#fdf6e3"
+danger = "#b4413f"
+ok = "#2f7a50"
+warn = "#8f6a10"
+
+[metrics]
+radius = 14
+dock_roundness = 0.7
+dock_alpha = 0.88
+popup_alpha = 0.96
+panel_alpha = 0.97
+shadow = 1.0
+outline = 0.08
+dock_padding = 12
+
+[font]
+preset = "noto"
+scale = 1.0
+
+[wallpaper]
+image = "wallpapers/forest.png"
+mode = "fill"
+color = "#2d353b"
+
+[decoration]
+style = "adwaita"
+height = 34
+radius = 12
+title_align = "center"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 12
+border_px = 2
+smart_gaps = true
+mfact = 0.55
+layouts = ["tile", "monocle"]
+focused_border = "#a7c080"
+normal_border = "#3d484d"
+urgent_border = "#e67e80"
+
+[bar]
+enabled = true
+style = "floating"
+height = 28
+
+[dock]
+enabled = true
+style = "mac"
+size = 52
+align = "center"
+roundness = 0.7
+magnification = 1.4
+
+[icons]
+theme = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+bottom_left = "overview"
+
+[[widgets]]
+use = "builtin:workspace-dots"
+place = "desktop"
+anchor = "top"
+x = 0
+y = 56

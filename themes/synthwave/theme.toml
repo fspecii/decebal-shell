@@ -1,0 +1,124 @@
+format = 1
+id = "synthwave"
+name = "Synthwave"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Neon magenta and cyan on deep purple night: hot-pink accents, cyan borders on focused windows, a vertical pill bar on the left, dark glassy rounded surfaces and a generated retro sun-and-grid wallpaper with stars. The engine has no real glow, so the neon comes from saturated borders and bright accents; a light 'daybreak' variant keeps the same hues."
+min_shell_version = "0.1.0"
+screenshots = ["screenshots/main.jpg"]
+tags = ["synthwave", "neon", "cyberpunk", "purple", "dark", "light", "retro"]
+
+[colors.dark]
+background = "#120226"
+sidebar = "#0d0221"
+surface = "#1c0a3a"
+bar = "#0d0221"
+bar_text = "#f5d0ff"
+popup = "#241048"
+dock = "#1a0838"
+overlay = "#241048"
+titlebar = "#2b1258"
+titlebar_inactive = "#1c0a3a"
+border = "#6a2a9e"
+text = "#f5e9ff"
+text_secondary = "#c9a8e8"
+text_faint = "#8a6aad"
+accent = "#ff2bd6"
+accent_text = "#14021f"
+danger = "#ff3860"
+ok = "#2bffb0"
+warn = "#ffe53b"
+
+[colors.light]
+background = "#f6eaff"
+sidebar = "#ecd8fb"
+surface = "#ffffff"
+bar = "#ecd8fb"
+bar_text = "#2a0a4a"
+popup = "#fbf3ff"
+dock = "#ecd8fb"
+overlay = "#fbf3ff"
+titlebar = "#e4cbf7"
+titlebar_inactive = "#ecd8fb"
+border = "#c79be8"
+text = "#2a0a4a"
+text_secondary = "#5b2f8a"
+text_faint = "#8a62b5"
+accent = "#b0108f"
+accent_text = "#ffffff"
+danger = "#c01040"
+ok = "#007a58"
+warn = "#8a6a00"
+
+[metrics]
+radius = 12
+dock_roundness = 0.5
+dock_alpha = 0.82
+popup_alpha = 0.94
+panel_alpha = 0.96
+shadow = 1.5
+outline = 0.22
+dock_padding = 12
+
+[font]
+ui = ["Rubik", "Inter", "Noto Sans"]
+title = ["Rubik", "Inter"]
+mono = ["JetBrains Mono", "DejaVu Sans Mono"]
+display = ["Rubik", "Inter"]
+scale = 1.0
+
+[wallpaper]
+image = "wallpapers/sun-grid.png"
+mode = "fill"
+color = "#120226"
+
+[decoration]
+style = "dracula"
+height = 30
+radius = 10
+title_align = "center"
+
+[rdwm]
+gap_inner = 12
+gap_outer = 14
+border_px = 3
+smart_gaps = true
+mfact = 0.55
+layouts = ["tile", "monocle"]
+focused_border = "#00f0ff"
+normal_border = "#3a1466"
+urgent_border = "#ff2bd6"
+
+[bar]
+enabled = true
+style = "vertical"
+position = "left"
+
+[dock]
+enabled = "auto"
+style = "mac"
+size = 50
+roundness = 0.6
+
+[icons]
+theme = "Yaru-purple-dark"
+fallback = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+bottom_left = "overview"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 56
+
+[[widgets]]
+use = "builtin:cpu-ram-ring"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 214

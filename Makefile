@@ -1,5 +1,6 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
+SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
 BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
@@ -20,6 +21,8 @@ install: all
 	for t in caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic; do for f in themes/$$t/theme.toml themes/$$t/wallpapers/*; do install -Dm644 $$f $(DESTDIR)$(PREFIX)/share/decebal/$$f; done; done
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
+	# showcase themes with wallpapers (the built-in ones are compiled in): /usr/share/decebal/themes/<id>/
+	for t in $(SHOWCASE_THEMES); do for f in $$(cd themes/$$t && find . -type f); do install -Dm644 themes/$$t/$$f $(DESTDIR)$(PREFIX)/share/decebal/themes/$$t/$${f#./}; done; done
 
 uninstall:
 	for b in $(BINS); do rm -f $(DESTDIR)$(PREFIX)/bin/$$b $(DESTDIR)$(PREFIX)/bin/mac$${b#dec}; done
@@ -30,6 +33,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
 	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/decebal/themes $(DESTDIR)$(PREFIX)/share/doc/decebal
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/decebal
+	for t in $(SHOWCASE_THEMES); do rm -rf $(DESTDIR)$(PREFIX)/share/decebal/themes/$$t; done
 
 # Extra login session "Hyprland (decebal)": the Rust shell without Quickshell (Omarchy + SDDM + hyprlock/hypridle/mako).
 install-session:
