@@ -817,7 +817,11 @@ impl DecBar {
             }
             Target::Settings => {
                 self.close();
-                if sys::have("omarchy-menu") {
+                // Decebal's own System Settings first; Omarchy's menu only when decsettings is not installed.
+                let own = crate::launch::sibling_or_path("decsettings");
+                if std::path::Path::new(&own).is_absolute() || sys::have("decsettings") {
+                    sys::spawn(&[own.as_str()]);
+                } else if sys::have("omarchy-menu") {
                     sys::spawn(&["sh", "-c", "sleep 0.15; omarchy-menu toggle setup"]);
                 }
             }
