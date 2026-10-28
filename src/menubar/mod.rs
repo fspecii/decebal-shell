@@ -617,6 +617,11 @@ impl DecBar {
     // --------------------------------------------------------- data workers
 
     fn spawn_snapshot(&self, full: bool) {
+        // Unit tests set the snapshot by hand; a worker probing the real machine (pactl, nmcli, ...) would overwrite it,
+        // and which tools exist differs per machine (CI has none).
+        if cfg!(test) {
+            return;
+        }
         if self.shared.snap_busy.swap(true, Ordering::SeqCst) {
             return;
         }
