@@ -1,0 +1,52 @@
+format = 1
+id = "high-contrast"
+name = "High Contrast"
+version = "1.0.0"
+author = "macshell"
+license = "MIT"
+description = "Maximum legibility: pure black or white, strong outlines, bold accent."
+min_shell_version = "0.1.0"
+tags = ["accessibility"]
+
+[metrics]
+radius = 4
+dock_roundness = 0.2
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+shadow = 0.0
+outline = 0.9
+
+[colors.dark]
+background = "#000000"
+sidebar = "#000000"
+surface = "#141414"
+bar = "#000000"
+popup = "#000000"
+dock = "#000000"
+overlay = "#000000"
+titlebar = "#1a1a1a"
+titlebar_inactive = "#000000"
+text = "#ffffff"
+accent = "#ffd400"
+accent_text = "#000000"
+danger = "#ff6b6b"
+ok = "#4dff88"
+warn = "#ffb000"
+
+[colors.light]
+background = "#ffffff"
+sidebar = "#ffffff"
+surface = "#eeeeee"
+bar = "#ffffff"
+popup = "#ffffff"
+dock = "#ffffff"
+overlay = "#ffffff"
+titlebar = "#e6e6e6"
+titlebar_inactive = "#ffffff"
+text = "#000000"
+accent = "#0000d0"
+accent_text = "#ffffff"
+danger = "#b00000"
+ok = "#006000"
+warn = "#704000"

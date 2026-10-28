@@ -23,7 +23,7 @@ Or open **System Settings -> Theme** (`macsettings theme`).
 |---|---|
 | Selection and overrides | `"theme"` key of `macshell.json` in the macshell config folder (`$MACSHELL_CONFIG`, default `~/.config/omarchy`), the file macbar already reads for `workspaces`. Other keys are kept. |
 | User themes | `~/.config/macshell/themes/*.toml` (`$MACSHELL_THEMES`, else `$XDG_CONFIG_HOME/macshell/themes`). The file name is the theme id; a user file with a built-in id replaces it. |
-| Built-in themes | compiled in (`src/theme/builtin/*.toml`): `macos`, `graphite`, `nord`, `dracula`, `solarized`, `windows11`, `caelestia`, `high-contrast` (all but Dracula have a light and a dark variant) |
+| Built-in themes | compiled in (`themes/<id>/theme.toml`, theme packages of format 1): `macos`, `graphite`, `nord`, `dracula`, `solarized`, `windows11`, `caelestia`, `high-contrast` (all but Dracula have a light and a dark variant) |
 
 `macshell.json`:
 ```json

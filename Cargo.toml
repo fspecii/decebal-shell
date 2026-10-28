@@ -31,6 +31,7 @@ resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 fontdue = "0.9"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
@@ -127,3 +128,8 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.image-webp]
 opt-level = 3
+
+[[bin]]
+name = "macwidgets"
+path = "src/bin/macwidgets.rs"
+required-features = ["x11"]

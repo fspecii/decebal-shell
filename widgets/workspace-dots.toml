@@ -1,0 +1,21 @@
+format = 1
+id = "workspace-dots"
+name = "Workspace dots"
+description = "One dot per workspace; the current one is lit, busy ones are brighter. Scroll over the pill to change workspace."
+size = [150, 26]
+
+[root]
+type = "row"
+padding = [0, 14]
+align = "center"
+justify = "center"
+background = "text@0.09"
+radius = 13
+on_scroll_up = "workspace prev"
+on_scroll_down = "workspace next"
+
+[[root.children]]
+type = "workspaces"
+size = 9
+gap = 8
+color = "text"

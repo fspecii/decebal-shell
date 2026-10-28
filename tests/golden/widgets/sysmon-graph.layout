@@ -1,0 +1,14 @@
+col [0.0 0.0 270.0 150.0] bg r=10 click
+  row [14.0 14.0 79.2 15.0]
+    text [14.0 14.0 19.8 15.0] text="CPU" size=12 bold
+    spacer [33.8 21.5 0.0 0.0]
+    text [33.8 14.0 59.4 15.0] text="37%  54°C" size=12
+  graph [14.0 37.0 120.0 44.0] points=60 max=1.00
+  row [14.0 89.0 121.0 14.0]
+    text [14.0 89.0 72.6 14.0] text="RAM 18.4 GiB" size=11
+    spacer [86.6 96.0 0.0 0.0]
+    text [86.6 89.0 48.4 14.0] text="disk 71%" size=11
+  row [14.0 111.0 139.1 14.0]
+    text [14.0 111.0 78.7 14.0] text="down 412 kB/s" size=11
+    spacer [92.7 118.0 0.0 0.0]
+    text [92.7 111.0 60.5 14.0] text="up 88 kB/s" size=11

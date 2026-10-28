@@ -8,14 +8,14 @@ pub const DYNAMIC_THEME: &str = "caelestia";
 
 /// (id, theme file). The first entry is the default.
 pub const BUILTIN: &[(&str, &str)] = &[
-    ("macos", include_str!("builtin/macos.toml")),
-    ("graphite", include_str!("builtin/graphite.toml")),
-    ("nord", include_str!("builtin/nord.toml")),
-    ("dracula", include_str!("builtin/dracula.toml")),
-    ("solarized", include_str!("builtin/solarized.toml")),
-    ("windows11", include_str!("builtin/windows11.toml")),
-    ("caelestia", include_str!("builtin/caelestia.toml")),
-    ("high-contrast", include_str!("builtin/high-contrast.toml")),
+    ("macos", include_str!("../../themes/macos/theme.toml")),
+    ("graphite", include_str!("../../themes/graphite/theme.toml")),
+    ("nord", include_str!("../../themes/nord/theme.toml")),
+    ("dracula", include_str!("../../themes/dracula/theme.toml")),
+    ("solarized", include_str!("../../themes/solarized/theme.toml")),
+    ("windows11", include_str!("../../themes/windows11/theme.toml")),
+    ("caelestia", include_str!("../../themes/caelestia/theme.toml")),
+    ("high-contrast", include_str!("../../themes/high-contrast/theme.toml")),
 ];
 
 pub fn source(id: &str) -> Option<&'static str> {

@@ -39,5 +39,6 @@ pub mod theme;
 pub mod units;
 pub mod util;
 pub mod wallhaven;
+pub mod widgets;
 pub mod window_app;
 pub mod wm;
