@@ -61,35 +61,42 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
     let mut y = y;
     for c in cards {
         let ch = u(CARD_H);
-        fill_rounded(pm, x0, y, cw, ch, u(12.0), pal::card());
-        if c.current {
+        // Cards far outside the window are only laid out (their buttons stay reachable by Tab), not painted: a long list
+        // re-shaped and re-rasterised every card on every wheel notch.
+        let on = y + ch >= 0.0 && y <= pm.height() as f32;
+        if on {
+            fill_rounded(pm, x0, y, cw, ch, u(12.0), pal::card());
+        }
+        if c.current && on {
             stroke_rounded(pm, x0 + 1.0, y + 1.0, cw - 2.0, ch - 2.0, u(12.0), pal::accent(), u(2.0));
         }
-        // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
-        let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), u(SHOT_W), ch - u(20.0));
-        match c.screenshot.as_ref().and_then(shot) {
-            Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
-            None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
-        }
-        let tx = px + pw + u(14.0);
-        let tw = x0 + cw - tx - u(12.0);
-        let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
-        let nw = p.text(pm, &name, tx, y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
-        if c.current {
-            p.text(pm, "In use", tx + nw + u(10.0), y + u(24.0), u(11.0), Weight::Medium, pal::accent());
-        }
-        let meta = p.fit(&c.meta, tw, u(11.0), Weight::Regular);
-        p.text(pm, &meta, tx, y + u(42.0), u(11.0), Weight::Regular, pal::faint());
-        let desc = match &c.error {
-            Some(e) => format!("Cannot be used: {e}"),
-            None if c.hash_mismatch => "Warning: the files do not match the package's content hash".to_string(),
-            None => c.description.clone(),
-        };
-        let d = p.fit(&desc, tw, u(12.0), Weight::Regular);
-        p.text(pm, &d, tx, y + u(60.0), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
-        if !c.tags.is_empty() {
-            let t = p.fit(&c.tags, tw, u(10.5), Weight::Regular);
-            p.text(pm, &t, tx, y + u(76.0), u(10.5), Weight::Regular, pal::faint());
+        if on {
+            // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
+            let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), u(SHOT_W), ch - u(20.0));
+            match c.screenshot.as_ref().and_then(shot) {
+                Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
+                None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
+            }
+            let tx = px + pw + u(14.0);
+            let tw = x0 + cw - tx - u(12.0);
+            let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
+            let nw = p.text(pm, &name, tx, y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
+            if c.current {
+                p.text(pm, "In use", tx + nw + u(10.0), y + u(24.0), u(11.0), Weight::Medium, pal::accent());
+            }
+            let meta = p.fit(&c.meta, tw, u(11.0), Weight::Regular);
+            p.text(pm, &meta, tx, y + u(42.0), u(11.0), Weight::Regular, pal::faint());
+            let desc = match &c.error {
+                Some(e) => format!("Cannot be used: {e}"),
+                None if c.hash_mismatch => "Warning: the files do not match the package's content hash".to_string(),
+                None => c.description.clone(),
+            };
+            let d = p.fit(&desc, tw, u(12.0), Weight::Regular);
+            p.text(pm, &d, tx, y + u(60.0), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
+            if !c.tags.is_empty() {
+                let t = p.fit(&c.tags, tw, u(10.5), Weight::Regular);
+                p.text(pm, &t, tx, y + u(76.0), u(10.5), Weight::Regular, pal::faint());
+            }
         }
 
         // buttons, right to left from the card's right edge
@@ -122,17 +129,19 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             } else {
                 crate::theme::th().ink(0.08)
             };
-            fill_rounded(pm, bx, by, w, bh, bh / 2.0, bg);
-            let fg = if primary {
-                crate::theme::th().accent_text_c()
-            } else if *danger {
-                pal::red()
-            } else {
-                pal::text()
-            };
-            p.text_center(pm, label, bx + w / 2.0, by + bh / 2.0, u(11.5), Weight::Medium, fg);
-            if it.focus.as_deref() == Some(id.as_str()) && it.ring {
-                stroke_rounded(pm, bx - u(2.0), by - u(2.0), w + u(4.0), bh + u(4.0), bh / 2.0 + u(2.0), crate::theme::th().accent.color(0.85), u(2.0));
+            if on {
+                fill_rounded(pm, bx, by, w, bh, bh / 2.0, bg);
+                let fg = if primary {
+                    crate::theme::th().accent_text_c()
+                } else if *danger {
+                    pal::red()
+                } else {
+                    pal::text()
+                };
+                p.text_center(pm, label, bx + w / 2.0, by + bh / 2.0, u(11.5), Weight::Medium, fg);
+                if it.focus.as_deref() == Some(id.as_str()) && it.ring {
+                    stroke_rounded(pm, bx - u(2.0), by - u(2.0), w + u(4.0), bh + u(4.0), bh / 2.0 + u(2.0), crate::theme::th().accent.color(0.85), u(2.0));
+                }
             }
             fr.layouts.push((rect, id.clone()));
             fr.placed.push(Placed {

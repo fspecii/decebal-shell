@@ -331,6 +331,9 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
             o.insert(k.clone(), v.clone());
         }
     }
+    if let Some(Value::Object(cc)) = extra.get("control_center") {
+        obj_mut(&mut shell, "control_center").extend(cc.clone());
+    }
     if let Some(Value::Object(ic)) = extra.get("icons") {
         obj_mut(&mut shell, "icons").extend(ic.clone());
     }
@@ -417,6 +420,14 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         rdwm::apply_to(&mut cfg, &theme)?;
         let schema = Schema::load(&paths.rdwmctl);
         let mut attempt = extra.clone();
+        if sel.palette.is_some() {
+            // a palette colours the borders too: the theme's hard-coded border colours would fight it
+            if let Some(Value::Object(r)) = attempt.get_mut("rdwm") {
+                for k in ["focused_border", "normal_border", "urgent_border"] {
+                    r.shift_remove(k);
+                }
+            }
+        }
         let mut text;
         loop {
             let mut c = cfg.clone();
@@ -523,7 +534,18 @@ fn prune(dir: &Path, keep: usize) {
 
 /// Plan and execute.
 pub fn apply(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result<Applied, String> {
-    execute(src, paths, plan(src, paths, name, base)?)
+    crate::log_info!("theme apply `{name}`");
+    let plan = plan(src, paths, name, base).inspect_err(|e| crate::log_warn!("theme `{name}` not applied: {e}"))?;
+    for n in &plan.notes {
+        crate::log_info!("theme `{}` note: {n}", plan.id);
+    }
+    crate::log_debug!("theme `{}` ({}): {} file(s) to write, rdwm reload {}", plan.id, if plan.dark { "dark" } else { "light" }, plan.writes.len(), plan.rdwm_changed);
+    let r = execute(src, paths, plan);
+    match &r {
+        Ok(a) => crate::log_info!("theme `{}` applied: files {:?}, rdwm reloaded {}, undo `{}`", a.theme_id, a.files, a.reloaded, a.undo_id),
+        Err(e) => crate::log_error!("theme apply failed: {e}"),
+    }
+    r
 }
 
 /// The undo records, oldest first.
@@ -536,6 +558,7 @@ pub fn undo_ids(paths: &Paths) -> Vec<String> {
 
 /// Restores the files of the latest apply (or of `only`, when it is still the latest) and removes the record.
 pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
+    crate::log_info!("theme undo");
     let ids = undo_ids(paths);
     let Some(last) = ids.last() else { return Err("nothing to undo".into()) };
     if only.is_some_and(|o| o != last) {
@@ -651,6 +674,25 @@ y = -30
     }
 
     #[test]
+    fn apply_copies_the_control_center_section_over_the_users_keys() {
+        let (d, src, paths) = sandbox("cc");
+        std::fs::write(paths.shell_json(), r#"{"control_center": {"enabled": false, "position": "top-left"}}"#).unwrap();
+        let text = SUNSET.replace("[icons]", "[control_center]\nenabled = true\nstyle = \"fluent\"\ntiles = [\"sound\"]\n\n[icons]");
+        assert_ne!(text, SUNSET, "the fixture has an [icons] section to put it before");
+        let widget = "format = 1\n[root]\ntype = \"text\"\ntext = \"{clock:%H:%M}\"\n";
+        let entries = vec![
+            Entry { path: "theme.toml".into(), data: text.into_bytes() },
+            Entry { path: "wallpapers/sunset.png".into(), data: png(32, 18, [200, 80, 40]) },
+            Entry { path: "widgets/clock-card.toml".into(), data: widget.as_bytes().to_vec() },
+        ];
+        install_entries(&entries, &src.themes_dir, false, &Limits::default()).unwrap();
+        apply(&src, &paths, "sunset", &Selection::default()).unwrap();
+        let cc = io::json_load(&paths.shell_json())["control_center"].clone();
+        assert_eq!((cc["enabled"].clone(), cc["style"].clone(), cc["tiles"].clone(), cc["position"].clone()), (json!(true), json!("fluent"), json!(["sound"]), json!("top-left")));
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
     fn apply_sets_every_file_the_theme_owns() {
         let (d, src, paths) = sandbox("all");
         std::fs::write(&paths.rdwm_config, "# mine\n[general]\ntags = [\"a\"]\n").unwrap();
@@ -683,6 +725,7 @@ y = -30
         assert_eq!((shell["bar"]["x"].clone(), shell["bar"]["left"][0].clone()), (json!(1), json!("workspaces")), "bar keys merge");
         assert_eq!((shell["hot_corners"]["top_left"].clone(), shell["hot_corners"]["top_right"].clone(), shell["hot_corners"]["dwell_ms"].clone()), (json!("dashboard"), json!("lock"), json!(300)));
         assert_eq!(shell["icons"]["theme"], "Papirus");
+        assert!(shell.get("control_center").is_none(), "a theme without the section leaves the shell default (present everywhere)");
         let items = shell["widgets"]["items"].as_array().unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!((items[0]["source"].as_str(), items[0]["from_theme"].as_bool()), (Some("sunset"), Some(true)));

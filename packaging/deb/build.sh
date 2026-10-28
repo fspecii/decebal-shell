@@ -19,7 +19,7 @@ Maintainer: Decebal contributors <noreply@example.invalid>
 Installed-Size: $size
 Section: x11
 Priority: optional
-Depends: libc6, libxkbcommon0
+Depends: libc6, libxkbcommon0, libpam0g
 Recommends: rdwm
 Conflicts: macshell
 Replaces: macshell

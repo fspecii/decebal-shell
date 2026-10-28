@@ -894,16 +894,19 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
                     let r = (x0 + cx * (tw + gap), y + cyy * (th + u(36.0)), tw, th);
                     let hover = it.hover.as_deref() == Some(t.id.as_str());
-                    draw_theme_preview(pm, r, s, t);
-                    if t.selected {
+                    let on = r.1 + r.3 + u(36.0) >= 0.0 && r.1 <= pm.height() as f32; // off-screen tiles are laid out, not painted
+                    if on {
+                        draw_theme_preview(pm, r, s, t);
+                    }
+                    if on && t.selected {
                         stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(11.0), pal::accent(), u(2.5));
-                    } else if hover {
+                    } else if on && hover {
                         stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(11.0), crate::theme::th().ink(0.3), u(2.0));
                     }
                     if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
                         stroke_rounded(pm, r.0 - u(5.0), r.1 - u(5.0), r.2 + u(10.0), r.3 + u(10.0), u(12.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
-                    let name = p.fit(&t.name, tw, u(12.0), Weight::Regular);
+                    let name = if on { p.fit(&t.name, tw, u(12.0), Weight::Regular) } else { String::new() };
                     p.text_center(
                         pm,
                         &name,

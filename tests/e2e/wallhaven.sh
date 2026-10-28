@@ -75,7 +75,7 @@ echo "== open the Wallhaven tab"
 e2e_start_app wallpaper
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 check "window found" test -n "$WID"
-wait_for "wallpaper pane shown" '.pane=="wallpaper"' 5
+wait_for "Appearance > Wallpaper shown" '.pane=="appearance" and .tab=="wallpaper"' 5
 check "tab switch is there" test "$(q '[.ctls[]|select(.id=="wh:tab")]|length')" = 1
 check "no network traffic before the tab is opened" test "$(nreq 'true')" = 0
 shot wh-0-backgrounds

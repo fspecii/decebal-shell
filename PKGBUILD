@@ -6,7 +6,7 @@ pkgdesc='Decebal: customisable, rice-friendly desktop environment for rdwm (dock
 arch=('x86_64' 'aarch64')
 url='https://github.com/fspecii/decebal'
 license=('MIT')
-depends=('fontconfig' 'libxcb')
+depends=('fontconfig' 'libxcb' 'pam')
 makedepends=('cargo')
 provides=('macshell')
 conflicts=('macshell')
@@ -37,7 +37,8 @@ prepare() {
 build() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
-  cargo build --frozen --release --all-features
+  # not --all-features: the test-only `test-auth` feature compiles a password bypass into declock
+  cargo build --frozen --release --features wayland,x11
 }
 
 check() {
@@ -47,11 +48,11 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for bin in decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   # DEPRECATED compatibility names (macbar -> decbar, ...), kept for one release so existing keybinds keep working
-  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
     install -Dm755 contrib/compat/mac-compat "$pkgdir/usr/bin/mac${b#dec}"
   done
   install -Dm644 contrib/decebal-dock.service "$pkgdir/usr/lib/systemd/user/decebal-dock.service"
@@ -67,6 +68,9 @@ package() {
   install -Dm644 contrib/decebal-bar.desktop "$pkgdir/etc/xdg/autostart/decebal-bar.desktop"
   install -Dm644 contrib/decebal-notify.desktop "$pkgdir/etc/xdg/autostart/decebal-notify.desktop"
   install -Dm644 contrib/dbus/org.freedesktop.Notifications.service "$pkgdir/usr/share/decebal/dbus/org.freedesktop.Notifications.service"
+  for f in $(cd themes && find . -type f); do
+    install -Dm644 "themes/$f" "$pkgdir/usr/share/decebal/themes/${f#./}"
+  done
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 contrib/dechaven.desktop "$pkgdir/usr/share/applications/dechaven.desktop"
   install -Dm644 contrib/decsettings.desktop "$pkgdir/usr/share/applications/decsettings.desktop"

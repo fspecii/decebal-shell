@@ -1,0 +1,103 @@
+format = 1
+id = "kanagawa"
+name = "Kanagawa"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Kanagawa Wave (Lotus in light mode): ink-wash blues and fuji-white on sumi ink, a pill bar down the right edge, serif window titles, a Windows-style left-aligned taskbar and minimal thin titlebars."
+min_shell_version = "0.1.0"
+tags = ["kanagawa", "ink", "right-bar", "serif", "taskbar", "dark", "light"]
+
+[metrics]
+radius = 12
+dock_roundness = 0.3
+dock_alpha = 0.92
+popup_alpha = 0.97
+panel_alpha = 0.98
+shadow = 0.8
+outline = 0.12
+
+[font]
+preset = "noto"
+title = ["Noto Serif", "DejaVu Serif", "Liberation Serif"]
+display = ["Noto Serif", "DejaVu Serif"]
+mono = ["JetBrains Mono", "Noto Sans Mono"]
+
+[wallpaper]
+image = "wallpapers/wave.jpg"
+mode = "fill"
+color = "#16161d"
+
+[decoration]
+style = "minimal"
+height = 28
+radius = 8
+title_align = "left"
+
+[rdwm]
+gap_inner = 6
+gap_outer = 8
+border_px = 2
+focused_border = "#7e9cd8"
+normal_border = "#363646"
+urgent_border = "#e46876"
+
+[bar]
+enabled = true
+style = "vertical"
+position = "right"
+
+[dock]
+enabled = true
+style = "windows"
+align = "left"
+position = "bottom"
+
+[icons]
+fallback = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+dwell_ms = 250
+
+[colors.dark]
+background = "#1f1f28"
+sidebar = "#16161d"
+surface = "#2a2a37"
+bar = "#16161d"
+bar_text = "#dcd7ba"
+popup = "#2a2a37"
+dock = "#2a2a37"
+overlay = "#2a2a37"
+titlebar = "#2a2a37"
+titlebar_inactive = "#16161d"
+border = "#54546d"
+text = "#dcd7ba"
+text_secondary = "#c8c093"
+text_faint = "#727169"
+accent = "#7e9cd8"
+accent_text = "#16161d"
+danger = "#e46876"
+ok = "#98bb6c"
+warn = "#e6c384"
+
+[colors.light]
+background = "#f2ecbc"
+sidebar = "#e5ddb0"
+surface = "#e7dba0"
+bar = "#e5ddb0"
+bar_text = "#43436c"
+popup = "#f6f0c8"
+dock = "#e7dba0"
+overlay = "#f6f0c8"
+titlebar = "#f6f0c8"
+titlebar_inactive = "#e5ddb0"
+border = "#c9cbd1"
+text = "#43436c"
+text_secondary = "#545464"
+text_faint = "#716e61"
+accent = "#4d699b"
+accent_text = "#f2ecbc"
+danger = "#c84053"
+ok = "#6f894e"
+warn = "#77713f"

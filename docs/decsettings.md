@@ -5,7 +5,8 @@ that edits `~/.config/rdwm/config.toml` in place, applies changes live and follo
 Window class `DecSettings` (rdwm draws the titlebar). Launch again to toggle it closed (like the other decebal windows).
 
 ```
-decsettings [PANE]          # general appearance desktop wallpaper tiling windows rules keyboard autostart displays
+decsettings [PANE]          # general appearance tiling windows rules keyboard autostart displays
+                            # old names still work: theme icons wallpaper desktop (-> Appearance tabs); appearance/fonts|window|dock|colours|apps
                             # + system panes: sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility config (see "System panes" below; `config` = text editor + presets, docs/presets.md)
 decsettings --config PATH   # edit another rdwm config
 ```
@@ -45,21 +46,23 @@ with the field list serde reports for an unknown key, and compare defaults with 
 table at start (`rdwmctl schema --offline`, bundled snapshot `src/settings/rdwm-schema.json` as fallback) and a test checks
 that every key the panes use exists in it (and the snapshot against an installed rdwmctl).
 
-## Theme pane
-The last pane (`decsettings theme`) is the gallery of the shared decebal theme: miniature desktops for every theme, light/dark/auto,
+## Appearance pane
+One pane (`decsettings appearance`, source `src/settings/appearance.rs`) holds everything about how the desktop looks, in four tabs:
+Theme (Style, theme cards, light/dark/auto, Match wallpaper colours) · Customise (sections Colours, Fonts, Window style, Dock & Bar, Icons,
+Control Center once it has settings; each with a one-line explanation and a reset) · Wallpaper (My backgrounds, Wallhaven) · All apps (one
+switch, per-app choices under Advanced). The rationale and before/after screenshots are in `docs/settings-design.md`.
+It arranges the builders of themepane, fontpane, iconspane, systempane and wallhaven; the shared decebal theme: miniature desktops, light/dark/auto,
 accent swatches, translucency, corner radius and text size. A choice edits rdwm's colour keys through the same
 comment-preserving store (validated, one reload) and writes `decebal.json`; every running decebal program follows within
 half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
 
-## Icons pane
-`decsettings icons` (`src/settings/iconspane.rs`): the installed icon themes (Auto first; symbolic-only and cursor-only ones
+## Icons
+Appearance > Customise > Icons (`decsettings icons`) (`src/settings/iconspane.rs`): the installed icon themes (Auto first; symbolic-only and cursor-only ones
 greyed out), a 4 x 4 preview of common icons for the highlighted theme, Use this theme, icon size, symbolic tint, fallback
 theme and reset. It edits the `icons` object of `decebal.json` (`docs/icons.md`).
 
 ## Panes
-General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (titlebars, borders, colours,
-traffic lights, rdwm's own bar) · Desktop & Dock (dock sliders, menu-bar workspaces, pinned apps add/remove/reorder) ·
-Wallpaper (two tabs: My backgrounds and Wallhaven, see wallpapers.md; live preview, mode, colour, path, lazily decoded thumbnails of `~/.config/omarchy/backgrounds/**`) ·
+General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (see above: window style = title bars, borders, colours, window buttons; Dock & Bar = dock sliders, menu-bar workspaces, hot corners, pinned apps; Wallpaper tab = My backgrounds and Wallhaven, see wallpapers.md, live preview, mode, colour, path, lazily decoded thumbnails of `~/.config/omarchy/backgrounds/**`) · Config & Presets (the old Configuration pane) ·
 Tiling & Layouts (all layouts as pictograms, default/cycle order, mfact/nmaster/gaps, per-tag layout, per-layout options) ·
 Windows & Snapping (focus, `[snap]`; `snap.activation` appears as soon as rdwm's schema has it) · Rules (add/edit/reorder/delete,
 "from a running window") · Keyboard (all binds incl. chords and modes, search, conflicts, key recorder, add/remove) ·
@@ -146,9 +149,9 @@ Missing file = defaults above; comments and unknown keys are kept when decsettin
 `weekday-day`, `none`). decbar reads them once a minute (`menubar::clock::format_with`); the defaults give exactly the old `Mon 26 Oct  03:08`.
 
 ## Sidebar and search
-Panes are grouped by `registry::SECTIONS` (Network & Connectivity, Display & Appearance, Sound, Notifications, Keyboard & Input, Windows, Apps, System).
-The sidebar scrolls. Search (Ctrl+F) matches pane titles/keywords first, then individual settings: the static index `registry::SETTINGS` for the system
-panes and the live row labels of the older panes ("volume" -> Sound > Volume, "gap" -> Tiling > Gap between windows). Results show as `Pane > Setting` rows; Enter/click jumps to the pane.
+Panes are grouped by `registry::SECTIONS` (Network & Connectivity, Appearance, Displays, Sound, Notifications, Keyboard & Input, Windows, Apps, System).
+The sidebar scrolls. Search (Ctrl+F) matches pane titles/keywords first, then individual settings: the static index `registry::SETTINGS` for the system panes, `appearance::INDEX` for every setting of the Appearance tabs (a unit test fails when a row is not indexed; a hit opens its tab and section)
+and the live row labels of the older panes ("volume" -> Sound > Volume, "gap" -> Tiling > Gap between windows). Results show as `Pane > Setting` rows; Enter/click jumps to the pane.
 
 ## Tests
 `cargo test --lib` has parser tests for pactl/wpctl/nmcli/bluetoothctl/xrandr/xinput/xset/timedatectl/powerprofilesctl/lspci/passwd fixtures, command-line tests with a recording

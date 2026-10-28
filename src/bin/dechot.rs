@@ -65,6 +65,7 @@ fn main() {
             match hot::set_in(&hot::config_path(), corner, &rest.join(" ")) {
                 Ok(stored) => println!("{} = {stored}", corner.replace('_', "-")),
                 Err(e) => {
+                    decebal::log_error!("fatal: {e}");
                     eprintln!("dechot: {e}");
                     std::process::exit(2);
                 }

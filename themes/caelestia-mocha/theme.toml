@@ -1,0 +1,100 @@
+format = 1
+id = "caelestia-mocha"
+name = "Caelestia Mocha"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Catppuccin Mocha (Latte in light mode) in the Caelestia shape: a vertical pill bar on the left edge, big 20 px radii, tonal mauve surfaces and no dock. Materia circle buttons on the titlebars."
+min_shell_version = "0.1.0"
+tags = ["catppuccin", "mocha", "pill", "vertical-bar", "dark", "light"]
+
+[metrics]
+radius = 20
+dock_roundness = 1.0
+dock_alpha = 0.9
+popup_alpha = 0.97
+panel_alpha = 0.97
+shadow = 1.0
+outline = 0.07
+
+[font]
+preset = "rubik"
+title = ["Rubik", "Inter"]
+mono = ["JetBrains Mono", "Noto Sans Mono"]
+
+[wallpaper]
+image = "wallpapers/mocha.jpg"
+mode = "fill"
+color = "#181825"
+
+[decoration]
+style = "materia"
+height = 34
+radius = 16
+
+[rdwm]
+gap_inner = 10
+gap_outer = 12
+border_px = 2
+focused_border = "#cba6f7"
+normal_border = "#313244"
+urgent_border = "#f38ba8"
+
+[bar]
+enabled = true
+style = "vertical"
+position = "left"
+
+[dock]
+enabled = "auto"
+style = "mac"
+roundness = 1.0
+
+[icons]
+fallback = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+dwell_ms = 200
+
+[colors.dark]
+background = "#1e1e2e"
+sidebar = "#181825"
+surface = "#313244"
+bar = "#181825"
+bar_text = "#cdd6f4"
+popup = "#313244"
+dock = "#313244"
+overlay = "#313244"
+titlebar = "#313244"
+titlebar_inactive = "#181825"
+border = "#45475a"
+text = "#cdd6f4"
+text_secondary = "#a6adc8"
+text_faint = "#7f849c"
+accent = "#cba6f7"
+accent_text = "#1e1e2e"
+danger = "#f38ba8"
+ok = "#a6e3a1"
+warn = "#fab387"
+
+[colors.light]
+background = "#eff1f5"
+sidebar = "#e6e9ef"
+surface = "#ccd0da"
+bar = "#e6e9ef"
+bar_text = "#4c4f69"
+popup = "#dce0e8"
+dock = "#ccd0da"
+overlay = "#dce0e8"
+titlebar = "#dce0e8"
+titlebar_inactive = "#e6e9ef"
+border = "#bcc0cc"
+text = "#4c4f69"
+text_secondary = "#5c5f77"
+text_faint = "#8c8fa1"
+accent = "#8839ef"
+accent_text = "#eff1f5"
+danger = "#d20f39"
+ok = "#40a02b"
+warn = "#df8e1d"

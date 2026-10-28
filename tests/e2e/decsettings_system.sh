@@ -261,7 +261,7 @@ shot displays-bottom
 
 echo "== resources"
 APP=$(pgrep -n -x decsettings)
-for p in general appearance desktop wallpaper tiling windows rules keyboard autostart displays sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility; do goto $p; done
+for p in general appearance tiling windows rules keyboard autostart displays sound network bluetooth notifications inputdev power defaults datetime users privacy storage accessibility; do goto $p; done
 sleep 3
 RSS=$(awk '/VmRSS/{print int($2/1024)}' /proc/$APP/status)
 THREADS=$(ls /proc/$APP/task | wc -l)

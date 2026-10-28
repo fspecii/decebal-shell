@@ -10,7 +10,10 @@ use decebal::theme::BAR_HEIGHT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-const USAGE: &str = "decbar [--dry-run] [--app ID] [--role main|bottom] [--position POS] [--png FILE [--width N] [--height N] [--open KEY|control]]\n\
+const USAGE: &str = "decbar --control-center [toggle|open|close] [--corner auto|top-right|top-left|bottom-right|bottom-left]\n\
+Opens the Control Center on its own (any theme, with or without a bar; a second `toggle` closes it): under the menu bar, above the\n\
+Windows taskbar, beside the pill bar or in a screen corner, as the theme's `control_center` settings say. Bind it to a key or a hot corner.\n\
+decbar [--dry-run] [--app ID] [--role main|bottom] [--position POS] [--png FILE [--width N] [--height N] [--open KEY|control]]\n\
 Runs the menu bar. Under the Caelestia theme (bar_style = \"vertical\") it is the pill bar instead, on the edge decebal.json says:\n\
 \"bar\": {\"position\": \"left\" | \"right\" | \"top\" | \"bottom\" | \"split\"} (default left; decthemectl layout sets it). Changes are followed live.\n\
 split is two bars: this process draws the top one (OS icon, workspaces, window title) and starts `decbar --role bottom` for the\n\
@@ -32,9 +35,26 @@ fn main() {
     let mut app_id: Option<String> = None;
     let mut role = Process::Main;
     let mut position: Option<BarPosition> = None;
+    let mut panel: Option<String> = None;
+    let mut corner: Option<decebal::controlcenter::settings::Corner> = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
+            "--control-center" | "--cc" => {
+                panel = Some(match args.get(i + 1).map(String::as_str) {
+                    Some(v @ ("toggle" | "open" | "close")) => {
+                        i += 1;
+                        v.to_string()
+                    }
+                    _ => "toggle".to_string(),
+                });
+            }
+            "--corner" => {
+                i += 1;
+                corner = Some(
+                    args.get(i).and_then(|v| decebal::controlcenter::settings::Corner::parse(v)).unwrap_or_else(|| usage_error("--corner is auto, top-right, top-left, bottom-right or bottom-left")),
+                );
+            }
             "--png" => {
                 i += 1;
                 png = args.get(i).cloned();
@@ -73,10 +93,15 @@ fn main() {
         i += 1;
     }
 
+    if let Some(verb) = panel {
+        control_center(&verb, corner);
+        return;
+    }
     let show_workspaces = decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm());
     if let Some(path) = png {
         let mut bar = DecBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces).with_height(height).with_process(role).with_position(position);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
+            decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);
         }
@@ -121,6 +146,7 @@ fn main() {
         let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" };
         let spec = App::surface_spec(&bar).unwrap_or(fallback);
         if let Err(e) = backend::run(bar, spec) {
+            decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);
         }
@@ -128,6 +154,42 @@ fn main() {
             break;
         }
         decebal::mem::trim();
+    }
+}
+
+/// `decbar --control-center`: the panel as a program of its own. Its lock makes a second `toggle` close the first.
+fn control_center(verb: &str, corner: Option<decebal::controlcenter::settings::Corner>) {
+    use decebal::controlcenter::settings::{place, Host};
+    use decebal::menubar::overlay::Overlay;
+    const LOCK: &str = "decbar-cc";
+    if verb == "close" {
+        decebal::single::signal(LOCK, libc::SIGTERM);
+        return;
+    }
+    let _lock = if verb == "open" {
+        match decebal::single::hold(LOCK) {
+            Some(l) => l,
+            None => return,
+        }
+    } else {
+        match decebal::single::acquire(LOCK) {
+            Some(l) => l,
+            None => return,
+        }
+    };
+    decebal::theme::live::reload();
+    let cc = decebal::theme::th().control_center;
+    if !cc.enabled {
+        eprintln!("decbar: the Control Center is turned off (control_center.enabled in decebal.json)");
+        return;
+    }
+    let host = Host::detect(&decebal::config::shell_settings(), &decebal::config::dock_settings(), decebal::theme::th().pill_bar(), backend::ui_scale());
+    let placement = place(&host, corner.unwrap_or(cc.position));
+    let overlay = Overlay::new(placement, host.is_taskbar());
+    let spec = Overlay::spec(&placement);
+    if let Err(e) = backend::run(overlay, spec) {
+        eprintln!("decbar: {e}");
+        std::process::exit(1);
     }
 }
 

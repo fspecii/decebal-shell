@@ -165,11 +165,15 @@ pub const FIELDS: &[Field] = &[
     Field { path: "dock.align", ty: Ty::Choice(&["center", "left"]), desc: "Windows taskbar icon alignment", status: Wired },
     Field { path: "dock.roundness", ty: Ty::Num(0.0, 1.0), desc: "0 square .. 1 pill", status: Wired },
     Field { path: "dock.magnification", ty: Ty::Num(1.0, 2.5), desc: "hover magnification of the macOS dock", status: Wired },
+    Field { path: "control_center.enabled", ty: Ty::Bool, desc: "the Control Center (quick settings): its button in the menu bar, pill bar and taskbar, `decutil control-center` and the hot-corner action (default true: every theme has it)", status: Wired },
+    Field { path: "control_center.position", ty: Ty::Choice(&crate::controlcenter::settings::POSITION_NAMES), desc: "corner the panel opens in when summoned by a key or hot corner; `auto` = beside the bar's own button (under the menu bar, above the taskbar, next to the pill bar)", status: Wired },
+    Field { path: "control_center.style", ty: Ty::Choice(&crate::controlcenter::settings::STYLE_NAMES), desc: "`card` (big rounded tiles, macOS / Caelestia), `fluent` (the theme's radius as it is, Windows 11 flyout) or `auto` (fluent under the Windows taskbar)", status: Wired },
+    Field { path: "control_center.tiles", ty: Ty::List(Elem::Choice(&crate::controlcenter::settings::TILE_NAMES), 7), desc: "tile groups to show, in panel order (default: all); a group without hardware on the machine is hidden anyway", status: Wired },
     Field { path: "icons.theme", ty: Ty::Text(80), desc: "icon theme name (e.g. Papirus, WhiteSur-dark), or `auto` to follow the desktop", status: Wired },
     Field { path: "icons.size_scale", ty: Ty::Num(0.6, 1.25), desc: "size of the artwork inside its square", status: Wired },
     Field { path: "icons.monochrome_tint", ty: Ty::Bool, desc: "repaint symbolic icons in the theme's text colour", status: Wired },
     Field { path: "icons.fallback", ty: Ty::Text(80), desc: "icon theme tried after the chosen one (`none` for no extra theme)", status: Wired },
-    Field { path: "hot_corners.top_left", ty: Ty::Action, desc: "hot-corner action (none, dashboard, session, spotlight, launchpad, overview, lock, tile-all, notifications)", status: Wired },
+    Field { path: "hot_corners.top_left", ty: Ty::Action, desc: "hot-corner action (none, dashboard, session, spotlight, launchpad, overview, lock, tile-all, notifications, control-center)", status: Wired },
     Field { path: "hot_corners.top_right", ty: Ty::Action, desc: "see top_left", status: Wired },
     Field { path: "hot_corners.bottom_left", ty: Ty::Action, desc: "see top_left", status: Wired },
     Field { path: "hot_corners.bottom_right", ty: Ty::Action, desc: "see top_left", status: Wired },
@@ -250,7 +254,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

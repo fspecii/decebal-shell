@@ -1,0 +1,112 @@
+format = 1
+id = "brutalist"
+name = "Brutalist"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Hard edges and no apologies: zero radius, thick black borders, pure black and signal yellow at maximum contrast, monospace type everywhere, square titlebars with glyph buttons, a flat black bar (yellow ink) and an unrounded dock. The light variant is yellow paper with black ink."
+min_shell_version = "0.1.0"
+tags = ["dark", "light", "brutalist", "yellow", "black", "square", "high-contrast"]
+screenshots = ["screenshots/main.png"]
+
+[metrics]
+radius = 0
+dock_roundness = 0.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.0
+outline = 1.0
+dock_padding = 8
+
+[font]
+preset = "monospace-ui"
+ui = ["JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono"]
+title = ["JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono"]
+mono = ["JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono"]
+display = ["JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono"]
+
+[colors.dark]
+background = "#000000"
+sidebar = "#000000"
+surface = "#0f0f0f"
+bar = "#000000"
+bar_text = "#ffe600"
+popup = "#000000"
+dock = "#000000"
+overlay = "#000000"
+titlebar = "#1a1a1a"
+titlebar_inactive = "#000000"
+border = "#ffe600"
+text = "#ffffff"
+text_secondary = "#f0f0f0"
+text_faint = "#b0b0b0"
+accent = "#ffe600"
+accent_text = "#000000"
+danger = "#ff3030"
+ok = "#00ff66"
+warn = "#ffa500"
+
+[colors.light]
+background = "#ffe600"
+sidebar = "#fff27a"
+surface = "#fff7a8"
+bar = "#ffd800"
+bar_text = "#000000"
+popup = "#fffbd0"
+dock = "#ffd800"
+overlay = "#fffbd0"
+titlebar = "#ffd800"
+titlebar_inactive = "#d9c500"
+border = "#000000"
+text = "#000000"
+text_secondary = "#1a1a1a"
+text_faint = "#4d4600"
+accent = "#000000"
+accent_text = "#ffe600"
+danger = "#c40000"
+ok = "#006b2d"
+warn = "#7a4a00"
+
+[wallpaper]
+image = "wallpapers/slab.png"
+mode = "fill"
+color = "#ffe600"
+
+[decoration]
+style = "classic"
+height = 30
+radius = 0
+title_align = "left"
+
+[rdwm]
+gap_inner = 0
+gap_outer = 0
+border_px = 4
+smart_gaps = true
+focused_border = "#ffe600"
+normal_border = "#000000"
+urgent_border = "#ff3030"
+
+[bar]
+enabled = true
+style = "flat"
+height = 28
+
+[dock]
+enabled = true
+style = "windows"
+size = 48
+align = "left"
+roundness = 0.0
+
+[hot_corners]
+top_right = "dashboard"
+
+[[widgets]]
+use = "slab-clock"
+place = "desktop"
+anchor = "top-right"
+x = -40
+y = 64

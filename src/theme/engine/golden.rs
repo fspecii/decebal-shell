@@ -17,6 +17,11 @@ fn legacy_def(id: &str) -> Def {
     }
 }
 
+/// The original eight themes, frozen in `tests/fixtures/legacy-builtin`.
+const LEGACY: [&str; 8] = ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"];
+/// Themes added after the engine: they have no legacy fixture, so they are checked as packages instead (see `new_themes_are_valid_packages`).
+const NEW: [&str; 10] = ["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic", "nothing-dot", "nothing-light", "brutalist", "terminal-minimal", "terminal-amber"];
+
 fn selections() -> Vec<Selection> {
     vec![
         Selection::default(),
@@ -28,8 +33,8 @@ fn selections() -> Vec<Selection> {
 
 #[test]
 fn every_builtin_resolves_to_the_same_theme_as_before() {
-    assert_eq!(BUILTIN.len(), 8);
-    for (id, text) in BUILTIN {
+    assert_eq!(BUILTIN.len(), LEGACY.len() + NEW.len());
+    for (id, text) in BUILTIN.iter().filter(|(id, _)| LEGACY.contains(id)) {
         assert!(crate::theme::engine::manifest::is_v1(text), "{id} is a format-1 package");
         // the new one goes through the production loader (chain included), the old one through the frozen files
         let empty = std::env::temp_dir().join("decebal-golden-empty");
@@ -103,4 +108,34 @@ fn the_example_package_is_valid_and_packs_reproducibly() {
     let back = crate::theme::engine::archive::read_targz(&a, &Limits::default()).unwrap();
     assert!(package::check(&back, &Limits::default()).ok());
     assert!(back.iter().any(|e| e.path == "widgets/sunset-clock.toml"));
+}
+
+/// Every theme added after the engine is a complete package in `themes/<id>/` (manifest, wallpaper, widgets, screenshot) that
+/// validates like a market upload, matches the compiled-in manifest, has distinct dark/light tokens where it claims both, and applies.
+#[test]
+fn new_themes_are_valid_packages_and_apply() {
+    use crate::theme::engine::apply::{self, tests::sandbox};
+    use crate::theme::engine::{archive::Limits, package};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("themes");
+    for id in NEW {
+        let dir = root.join(id);
+        let entries = package::read_dir(&dir, &Limits::default()).unwrap_or_else(|e| panic!("{id}: {e}"));
+        let r = package::check(&entries, &Limits::default());
+        assert!(r.ok(), "{id}: {:?}", r.errors());
+        assert_eq!(r.id.as_deref(), Some(id));
+        assert_eq!(std::fs::read_to_string(dir.join("theme.toml")).unwrap(), builtin::source(id).unwrap(), "{id}: compiled-in manifest differs");
+        assert!(entries.iter().any(|e| e.path.starts_with("wallpapers/")), "{id}: no wallpaper");
+        assert!(entries.iter().any(|e| e.path.starts_with("screenshots/")), "{id}: no screenshot");
+        let def = builtin::def(id).unwrap();
+        assert!(def.has_dark() || def.has_light(), "{id}");
+        // installed as a user package, so the wallpaper and widgets resolve
+        let (d, src, paths) = sandbox(&format!("new-{id}"));
+        package::install_entries(&entries, &src.themes_dir, true, &Limits::default()).unwrap_or_else(|e| panic!("{id}: install: {e}"));
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let out = apply::apply(&src, &paths, id, &Selection::default()).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert!(!out.notes.iter().any(|n| n.contains("missing") || n.contains("cannot bundle")), "{id}: {:?}", out.notes);
+        let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
+        assert!(cfg.contains(&format!("{id}/wallpapers/")), "{id}: wallpaper not applied: {cfg}");
+        let _ = std::fs::remove_dir_all(d);
+    }
 }

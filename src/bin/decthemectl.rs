@@ -11,7 +11,11 @@ const HELP: &str = "decthemectl list [--json]
 decthemectl get [--json]
 decthemectl apply NAME [--mode light|dark|auto] [--accent #rrggbb|none] [--opacity 0.4-1] [--radius 0-24]
                        [--font NAME|none] [--font-scale 0.8-1.4] [--reset] [--no-rdwm]
-decthemectl set KEY VALUE        KEY: mode accent opacity radius font font-scale sync-rdwm  (VALUE none = unset)
+decthemectl set KEY VALUE        KEY: mode palette accent opacity radius font font-scale sync-rdwm  (VALUE none = unset)
+decthemectl palette [list|status|NAME|none]
+                                 colour palettes, separate from themes: a palette recolours whichever theme is active and stays when
+                                 you switch themes (catppuccin, rose-pine, gruvbox, tokyo-night, everforest, kanagawa, nord, dracula,
+                                 solarized, monochrome, and your own in ~/.config/decebal/palettes/*.toml); `none` = the theme's colours
 decthemectl style [macos|windows|caelestia[-left|-right|-top|-bottom|-split]]
                                  the shell style preset: theme + dock style + menu bar together
                                  (windows: Windows 11 theme + taskbar dock; caelestia: Caelestia theme + its pill bar, no dock;
@@ -78,6 +82,18 @@ fn set_key(sel: &mut Selection, key: &str, value: &str) {
     match key {
         "mode" => sel.mode = Mode::parse(value).unwrap_or_else(|| die("mode must be light, dark or auto")),
         "accent" => sel.accent = if unset { None } else { Some(Rgb::parse(value).unwrap_or_else(|| die("accent must look like #0a84ff"))) },
+        "palette" => {
+            sel.palette = if unset {
+                None
+            } else {
+                Some(
+                    decebal::theme::palette::ids()
+                        .into_iter()
+                        .find(|i| decebal::theme::builtin::norm(i) == decebal::theme::builtin::norm(value))
+                        .unwrap_or_else(|| die(&format!("no palette `{value}` (decthemectl palette list)"))),
+                )
+            }
+        }
         "opacity" => sel.opacity = (!unset).then(|| num(value, "opacity")),
         "radius" => sel.radius = (!unset).then(|| num(value, "radius")),
         "font" => sel.font = (!unset).then(|| value.to_string()),
@@ -489,6 +505,28 @@ fn main() {
             set_key(&mut sel, k, v);
             apply(&src, &sel);
         }
+        Some("palette") => match args.get(1).map(String::as_str) {
+            None | Some("status") => {
+                let sel = src.selection();
+                println!("{}", sel.palette.as_deref().unwrap_or("none (the theme's own colours)"));
+            }
+            Some("list") => {
+                let cur = src.selection().palette;
+                for p in decebal::theme::palette::list() {
+                    let variants = match (p.has_dark, p.has_light) {
+                        (true, true) => "dark+light",
+                        (true, false) => "dark",
+                        _ => "light",
+                    };
+                    println!("{}{:<16} {:<10} {}  {}", if cur.as_deref() == Some(p.id.as_str()) { "* " } else { "  " }, p.id, variants, if p.builtin { "built-in" } else { "yours   " }, p.description);
+                }
+            }
+            Some(name) => {
+                let mut sel = src.selection();
+                set_key(&mut sel, "palette", name);
+                apply(&src, &sel);
+            }
+        },
         Some("style") => {
             let paths = Paths::discover();
             let Some(name) = args.get(1).filter(|a| !a.starts_with("--")) else {
@@ -613,7 +651,8 @@ fn main() {
                 die(&e);
             }
         }
-        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}", system::cli::HELP),
+        Some("log") => std::process::exit(decebal::dlog::cli(&args[1..])),
+        Some("-h") | Some("--help") | Some("help") | None => println!("{HELP}\n\n{}\n\n{}", system::cli::HELP, decebal::dlog::HELP),
         Some(other) => die(&format!("unknown command `{other}`\n{HELP}\n\n{}", system::cli::HELP)),
     }
 }

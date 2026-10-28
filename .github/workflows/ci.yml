@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libpam0g-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -27,7 +27,7 @@ jobs:
     needs: check
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev pkg-config
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libpam0g-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --locked

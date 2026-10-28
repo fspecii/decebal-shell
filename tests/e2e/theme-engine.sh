@@ -31,7 +31,7 @@ wait_for() { local t=$1; shift; local end=$(($(date +%s%N) / 1000000 + t * 1000)
 
 export HOME=$TMP/home XDG_CONFIG_HOME=$TMP/cfg XDG_RUNTIME_DIR=$TMP/run XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_STATE_HOME=$TMP/state
 export DECEBAL_CONFIG=$TMP/cfg/omarchy DECEBAL_BACKEND=x11 DISPLAY=$N RDWMCTL=$RDWM_DIR/rdwmctl DECSETTINGS_CONFIG=$TMP/cfg/rdwm/config.toml
-export DECEBAL_COLOR_SCHEME=dark DECEBAL_SYSTEM_THEMES=$TMP/nosystem
+export DECEBAL_COLOR_SCHEME=dark DECEBAL_SYSTEM_THEMES=$TMP/nosystem DECEBAL_LOG=debug DECEBAL_LOG_DIR=$TMP/logs
 unset WAYLAND_DISPLAY RDWM_SOCK
 mkdir -p "$HOME" "$XDG_CONFIG_HOME/rdwm" "$DECEBAL_CONFIG" "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$TMP/work"
 chmod 700 "$XDG_RUNTIME_DIR"
@@ -213,8 +213,54 @@ click_btn l:tcard:delete:my-nord
 [ -d "$THEMES/my-nord" ] && fail "second click did not delete" || pass "second click deletes"
 shot 22-pane-after-delete
 
+echo "== the bundled asset themes (themes/<id>: wallpaper, widgets, screenshot)"
+# They are installed system-wide by `make install`; here the repository's themes/ folder plays /usr/share/decebal/themes.
+export DECEBAL_SYSTEM_THEMES=$HERE/themes
+OLDWP=$WP; kill "$WP" 2>/dev/null; wait "$WP" 2>/dev/null; decwidgets >"$TMP/decwidgets2.log" 2>&1 & WP=$!; PIDS+=($WP)   # the daemon reads the variable at start
+declare -A WSTYLE=([nothing-dot]=classic [nothing-light]=classic [brutalist]=classic [terminal-minimal]=minimal [terminal-amber]=minimal)
+for id in nothing-dot nothing-light brutalist terminal-minimal terminal-amber; do
+  out=$(decthemectl theme validate "$HERE/themes/$id" 2>&1); has "$id validates as a package" "$out" "^ok:"
+  decthemectl theme list | grep -q "^$id\b.*system\|$id.*system" && pass "$id is listed from the system folder" || fail "$id list" "$(decthemectl theme list | grep "$id")"
+  out=$(decthemectl theme apply "$id" 2>&1); has "$id applies" "$out" "applied $id"
+  eq "$id: selection" "$(sel_name)" "$id"
+  case "$out" in *"is missing from the package"*|*"cannot bundle"*) fail "$id: wallpaper not found" ;; *) pass "$id: wallpaper found" ;; esac
+  case "$(rdcfg .config.wallpaper.image)" in */$id/wallpapers/*.png) pass "$id: wallpaper path points into the package" ;; *) fail "$id: wallpaper path" "$(rdcfg .config.wallpaper.image)" ;; esac
+  eq "$id: titlebar style" "$(rdcfg .config.decoration.style)" "${WSTYLE[$id]}"
+  eq "$id: widgets placed" "$(jq '[.widgets.items[]|select(.from_theme==true)]|length' "$DECEBAL_CONFIG/decebal.json")" "$([ "$id" = nothing-dot ] || [ "$id" = nothing-light ] && echo 3 || echo 1)"
+  want=1; [ "$id" = nothing-dot ] || [ "$id" = nothing-light ] && want=3
+  end=$((SECONDS + 15)); while [ $SECONDS -lt $end ] && [ "$(widget_windows)" != "$want" ]; do sleep 0.5; done
+  eq "$id: its widget windows appear" "$(widget_windows)" "$want"
+  [ "$(widget_windows)" = "$want" ] || tail -3 "$TMP/decwidgets2.log"
+  shot "theme-$id"
+done
+decthemectl theme apply nord >/dev/null 2>&1; unset DECEBAL_SYSTEM_THEMES; export DECEBAL_SYSTEM_THEMES=$TMP/nosystem
+
+echo "== palettes are separate from themes"
+decthemectl palette list | grep -q "catppuccin.*dark+light.*built-in" && pass "palette list" || fail "palette list"
+for th in nord brutalist terminal-minimal; do
+  decthemectl apply "$th" --mode dark >/dev/null 2>&1; decthemectl palette catppuccin >/dev/null 2>&1
+  eq "$th under catppuccin: background" "$(decthemectl get --json | jq -r .colors.background)" "#1e1e2e"
+  eq "$th under catppuccin: rdwm focused border is the palette accent" "$(rdcfg .config.colors.focused)" "#cba6f7"
+done
+decthemectl apply nord --mode dark >/dev/null 2>&1
+eq "the palette survives a theme switch" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
+decthemectl palette nope >/dev/null 2>&1 && fail "an unknown palette was accepted" || pass "an unknown palette is refused"
+decthemectl palette none >/dev/null 2>&1
+eq "palette none gives the theme's own colours back" "$(decthemectl get --json | jq -r .colors.background)" "#2e3440"
+
+echo "== debug logs (DECEBAL_LOG=debug, one file per program)"
+out=$(decthemectl log status 2>&1); has "log status names the folder" "$out" "$TMP/logs"
+for prog in decthemectl decsettings decbar decdock decwidgets; do
+  [ -s "$TMP/logs/$prog.log" ] && pass "$prog wrote its log" || fail "$prog has no log" "$(ls "$TMP/logs" 2>&1 | tr '\n' ' ')"
+done
+grep -q "theme apply .nothing-dot" "$TMP/logs/decthemectl.log" && pass "theme applies are logged" || fail "no apply record"
+grep -q "INFO  .* decsettings .*start: pane" "$TMP/logs/decsettings.log" && pass "decsettings logs its start" || fail "decsettings log content" "$(tail -3 "$TMP/logs/decsettings.log")"
+out=$(decthemectl log tail 5 2>&1); [ "$(printf '%s\n' "$out" | wc -l)" = 5 ] && pass "log tail merges the programs" || fail "log tail" "$out"
+decthemectl log level info >/dev/null && jq -e '.debug.level=="info"' "$DECEBAL_CONFIG/decebal.json" >/dev/null && pass "log level is persisted" || fail "log level"
+decthemectl log clear >/dev/null; [ -z "$(ls "$TMP/logs" 2>/dev/null)" ] && pass "log clear" || fail "log clear left files"
+
 echo "== no crashes"
-for p in "${PIDS[@]}"; do kill -0 "$p" 2>/dev/null || { [ "$p" = "$PV" ] || fail "process $p died"; }; done
+for p in "${PIDS[@]}"; do kill -0 "$p" 2>/dev/null || { [ "$p" = "$PV" ] || [ "$p" = "${OLDWP:-}" ] || fail "process $p died"; }; done
 grep -il "panicked" "$TMP"/*.log 2>/dev/null | head -3 | while read -r f; do fail "panic in $f"; done
 echo; echo "passed $PASS, failed $FAIL (screenshots in $SHOTS)"
 [ "$FAIL" = 0 ]

@@ -1,0 +1,106 @@
+format = 1
+id = "material-you-dynamic"
+name = "Material You Dynamic"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Material You that follows your wallpaper: Match wallpaper is switched on with a vibrant tonal scheme and full surface recolouring, so the whole shell takes its colours from the picture (a generated aurora gradient is bundled). A pill bar along the bottom edge, a floating dock above it, Breeze titlebars."
+min_shell_version = "0.1.0"
+tags = ["material-you", "dynamic", "wallpaper", "pill", "bottom-bar", "dark", "light"]
+
+[metrics]
+radius = 24
+dock_roundness = 1.0
+dock_alpha = 0.85
+popup_alpha = 0.96
+panel_alpha = 0.97
+shadow = 1.1
+outline = 0.06
+
+[font]
+preset = "rubik"
+title = ["Google Sans Flex", "Rubik", "Inter"]
+
+[wallpaper]
+image = "wallpapers/aurora.jpg"
+mode = "fill"
+color = "#141218"
+match_colors = true
+scheme = "vibrant"
+surfaces = "full"
+strength = 0.8
+follow_mode = true
+
+[decoration]
+style = "breeze"
+height = 34
+radius = 14
+
+[rdwm]
+gap_inner = 10
+gap_outer = 12
+border_px = 2
+focused_border = "#d0bcff"
+normal_border = "#49454f"
+urgent_border = "#f2b8b5"
+
+[bar]
+enabled = true
+style = "vertical"
+position = "bottom"
+
+[dock]
+enabled = true
+style = "mac"
+size = 52
+roundness = 1.0
+magnification = 1.5
+
+[icons]
+fallback = "Adwaita"
+
+[hot_corners]
+top_right = "dashboard"
+dwell_ms = 200
+
+[colors.dark]
+background = "#141218"
+sidebar = "#1d1b20"
+surface = "#211f26"
+bar = "#1d1b20"
+bar_text = "#e6e0e9"
+popup = "#2b2930"
+dock = "#211f26"
+overlay = "#2b2930"
+titlebar = "#2b2930"
+titlebar_inactive = "#1d1b20"
+border = "#49454f"
+text = "#e6e0e9"
+text_secondary = "#cac4d0"
+text_faint = "#938f99"
+accent = "#d0bcff"
+accent_text = "#381e72"
+danger = "#f2b8b5"
+ok = "#a8d5a2"
+warn = "#ffb77c"
+
+[colors.light]
+background = "#fef7ff"
+sidebar = "#f7f2fa"
+surface = "#f3edf7"
+bar = "#f7f2fa"
+bar_text = "#1d1b20"
+popup = "#ece6f0"
+dock = "#f3edf7"
+overlay = "#ece6f0"
+titlebar = "#ece6f0"
+titlebar_inactive = "#f7f2fa"
+border = "#cac4d0"
+text = "#1d1b20"
+text_secondary = "#49454f"
+text_faint = "#79747e"
+accent = "#6750a4"
+accent_text = "#ffffff"
+danger = "#b3261e"
+ok = "#386a20"
+warn = "#7d5700"

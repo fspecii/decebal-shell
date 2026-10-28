@@ -22,14 +22,14 @@ fn file_name(p: &str) -> String {
 /// Wallpaper pane hint: the colours follow what is chosen there. `None` while the feature is off.
 pub fn wallpaper_pane_note(m: &Model) -> Option<Item> {
     let d = Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }.selection().dynamic.filter(|d| d.enabled && d.source == Origin::Wallpaper)?;
-    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Change it in Theme.", d.scheme.title()), warn: false })
+    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Change it in Appearance > Theme.", d.scheme.title()), warn: false })
 }
 
 /// The section's items. `now` is the theme as resolved with the layer applied.
 pub fn items(sel: &Selection, now: &Theme) -> Vec<Item> {
     let d = sel.dynamic.clone().unwrap_or_default();
     let mut out = vec![Item::Header("Match wallpaper".into())];
-    let switch = Row::new("Match wallpaper")
+    let switch = Row::new("Match wallpaper colours")
         .detail(if d.enabled {
             match &d.source {
                 Origin::Wallpaper => format!("Following the wallpaper{}", d.image.as_deref().map(|i| format!(" ({})", file_name(i))).unwrap_or_default()),

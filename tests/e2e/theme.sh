@@ -149,28 +149,41 @@ sleep 1
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 [ -n "$WID" ] && pass "settings window up" || fail "no settings window"
 q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
-eq "theme pane is shown" "$(q .pane)" theme
+eq "the old name opens Appearance > Theme" "$(q '.pane + "/" + .tab')" appearance/theme
 shot 20-settings-dark
 . "$HERE/tests/e2e/settings_ui.sh"
-click_ctl l:theme:dracula; settle
+open_tab theme
+click_ctl l:tcard:apply:dracula; settle
 eq "clicking Dracula applies it" "$(theme_name)" dracula
 eqpx "bar follows the UI choice" 900 3 "#1e1f29"
 eq "rdwm titlebar follows the UI choice" "$(rdcfg .config.decoration.focused_bg)" "#343746"
+open_tab customise; open_section colours
 click_ctl l:accent:#30d158; settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green
-click_ctl l:theme:windows11; sleep 0.5
+# a palette is colours only: it recolours the theme and stays when the theme changes
+click_ctl l:palette:catppuccin; settle
+eq "palette stored" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
+eqpx "bar shows the palette's colour" 900 3 "#181825"
+open_tab theme
+click_ctl l:tcard:apply:windows11; sleep 0.5
+eq "the palette survives the theme switch" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
+open_section colours
+click_ctl l:palette:none; settle
+open_tab theme
 click_ctl th:mode; settle
 eq "selection json mode light" "$(jq -r .theme.mode "$DECEBAL_CONFIG/decebal.json")" light
-eqpx "windows light bar in the running bar" 900 3 "#e9eef6"
+eq "windows11 in its light variant" "$(decthemectl get --json | jq -r "\"\(.theme) \(.dark)\"")" "windows11 false"
 shot 22-settings-windows-light
-click_ctl th:reset; settle
+open_section colours
+click_ctl ap:reset:colours; settle
 eq "reset clears the accent override" "$(jq -r '.theme.accent // "none"' "$DECEBAL_CONFIG/decebal.json")" none
 
 shot 24-settings-scrolled
 echo "== external change while settings is open"
 decthemectl apply solarized --mode dark >/dev/null; sleep 1.6
-eq "settings window saw solarized (selected tile)" "$(q '[.layouts[]|select(.id=="l:theme:solarized")]|length')" 1
+open_tab theme
+eq "the external apply is the stored theme and the window is still alive" "$(theme_name)" solarized
 shot 23-settings-after-external
 
 echo "== no crashes, idle CPU"

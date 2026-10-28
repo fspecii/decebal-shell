@@ -57,6 +57,7 @@ fn main() {
     let shared = Rc::new(RefCell::new(Shared::default()));
     let app = Expose::new(state, all, shared.clone()).with_closer(decebal::backend::x11_window::close_window).started_at(started);
     if let Err(e) = decebal::backend::x11_window::run(app) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decexpose: {e}");
         std::process::exit(1);
     }

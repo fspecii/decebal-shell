@@ -90,8 +90,10 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     })();
     if let Err(e) = res {
         let _ = std::fs::remove_file(&tmp);
+        crate::log_error!("write {} failed: {e}", target.display());
         return Err(format!("{}: {e}", target.display()));
     }
+    crate::log_debug!("wrote {} ({} bytes)", target.display(), text.len());
     Ok(())
 }
 
@@ -155,11 +157,16 @@ impl Store {
             return Ok(false);
         }
         if stamp(&self.path) != self.stamp {
+            crate::log_warn!("{} changed on disk since it was read; not overwriting", self.path.display());
             // someone edited the file since we last read it: do not clobber, pick up their version
             return Err("config.toml changed on disk; reloaded it, please repeat the change".into());
         }
-        validate(&self.rdwmctl, &self.path, &text)?;
+        if let Err(e) = validate(&self.rdwmctl, &self.path, &text) {
+            crate::log_warn!("rdwm config rejected, nothing written: {e}");
+            return Err(e);
+        }
         write_atomic(&self.path, &text)?;
+        crate::log_info!("rdwm config saved: {}", self.path.display());
         self.cfg = new.clone();
         self.text = text;
         self.stamp = stamp(&self.path);
@@ -220,6 +227,7 @@ pub fn json_set(path: &Path, key: &str, v: Option<Value>) -> Result<(), String> 
     }
     let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
     text.push('\n');
+    crate::log_debug!("json set {} key `{key}`", path.display());
     write_atomic(path, &text)
 }
 
@@ -227,7 +235,11 @@ pub fn json_set(path: &Path, key: &str, v: Option<Value>) -> Result<(), String> 
 
 /// One request/reply round trip on rdwm's socket. Short timeouts: the UI must never hang on it.
 pub fn ipc_call(sock: &Path, req: &Value) -> Result<Value, String> {
-    let mut s = UnixStream::connect(sock).map_err(|e| e.to_string())?;
+    let mut s = UnixStream::connect(sock).map_err(|e| {
+        crate::log_trace!("rdwm socket {}: {e}", sock.display());
+        e.to_string()
+    })?;
+    crate::log_trace!("rdwm ipc: {req}");
     let _ = s.set_read_timeout(Some(Duration::from_millis(1500)));
     let _ = s.set_write_timeout(Some(Duration::from_millis(1500)));
     writeln!(s, "{req}").map_err(|e| e.to_string())?;
@@ -235,6 +247,7 @@ pub fn ipc_call(sock: &Path, req: &Value) -> Result<Value, String> {
     BufReader::new(s).read_line(&mut line).map_err(|e| e.to_string())?;
     let v: Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
     if v["ok"] == Value::Bool(false) {
+        crate::log_warn!("rdwm ipc {req} failed: {}", v["error"].as_str().unwrap_or("error"));
         return Err(v["error"].as_str().unwrap_or("error").to_string());
     }
     Ok(v)
@@ -316,6 +329,7 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
 
 pub fn spawn_detached(cmd: &str, args: &[&str]) -> bool {
     use std::process::Stdio;
+    crate::log_debug!("spawn {cmd} {args:?}");
     Command::new(cmd)
         .args(args)
         .stdin(Stdio::null())
@@ -327,6 +341,7 @@ pub fn spawn_detached(cmd: &str, args: &[&str]) -> bool {
                 let _ = c.wait();
             });
         })
+        .inspect_err(|e| crate::log_warn!("spawn failed: {e}"))
         .is_ok()
 }
 

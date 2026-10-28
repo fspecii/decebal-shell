@@ -19,7 +19,7 @@ decthemectl layout left|right|top|bottom|split   # where the Caelestia bar sits
 decthemectl dynamic on                # "Match wallpaper": recolour the current theme from the wallpaper (off by default, see below)
 decthemectl system on|off|status       # also theme GTK/Nautilus, Qt, terminals, the browser, X11 (see "Apply to all apps")
 ```
-Or open **System Settings -> Theme** (`decsettings theme`).
+Or open **System Settings -> Appearance** (`decsettings appearance`; `decsettings theme` still works).
 
 > **Theme packages.** Themes are now packages of format 1 (`theme.toml` plus wallpapers, widgets and screenshots, or one `.dtheme` file) that
 > also carry fonts, the titlebar style, bar, dock, icons, hot corners and desktop widgets, with install / pack / apply / undo / preview commands:
@@ -42,6 +42,7 @@ Or open **System Settings -> Theme** (`decsettings theme`).
 `mode`: `dark` (default), `light`, or `auto` (`$DECEBAL_COLOR_SCHEME`, else `~/.config/omarchy/desktop-styles/appearance`,
 Omarchy's `light.mode` marker, GTK's `gtk-application-prefer-dark-theme`; dark when none says otherwise). A theme with only one
 variant ignores the mode. A name such as `macOS Light` or `windows-11-dark` also selects the mode.
+`palette` is an override too: a colour palette laid over any theme (see [themes.md](themes.md#palettes-colours-separate-from-themes), `decthemectl palette`).
 Overrides: `accent` (accent text colour is re-derived for contrast), `opacity` 0.4-1 (multiplies the translucency of menus,
 dock and launchers; the menu bar stays solid), `radius` 0-24, `font` (a family, or the font object described under [Fonts](#fonts)), `fontScale` 0.8-1.4.
 `syncRdwm: false` leaves rdwm's `config.toml` alone.
@@ -174,6 +175,20 @@ Newly installed fonts are noticed when the theme's fonts change or the program r
 
 Accent, translucency, radius, font and text size overrides are kept, and so is Match wallpaper (it works with every style). `decthemectl style`
 without a name prints the current preset (`custom` when the theme and dock do not match one). Nothing else in the two JSON files is touched.
+
+## The Control Center in every style
+The quick-settings panel is part of the shell: the macOS menu bar has its icon, the Windows taskbar a quick-settings button in the tray (it opens
+the same panel, in the `fluent` look: the theme's radius as it is, squared toggles), the Caelestia bar its Control tile on every edge, and
+`decutil control-center toggle` (or `decbar --control-center`) opens it in any theme and with no bar at all: bind a key to it (rdwm:
+`action = "spawn"`, `args = ["decutil", "control-center", "toggle"]`) or choose **Control Center** for a hot corner. `decebal.json`:
+
+```json
+"control_center": { "enabled": true, "position": "auto", "style": "auto", "tiles": ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"] }
+```
+`position` (`auto`, `top-right`, `top-left`, `bottom-right`, `bottom-left`) is where a key or hot corner opens it (`auto`: beside the bar's own
+button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent` or `auto`; `tiles` lists the groups to show (an empty or
+unknown list means all). A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
+close|open|toggle [--corner C]`.
 
 ## The Caelestia theme
 Ported from [caelestia-shell](https://github.com/caelestia-dots/shell): the dark palette is its shipped default scheme

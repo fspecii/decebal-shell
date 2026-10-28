@@ -1,0 +1,43 @@
+format = 1
+id = "dot-clock"
+name = "Dot clock"
+description = "A Glyph-style clock: a ring of seconds around the time, a red dot and the date in capitals."
+size = [200, 200]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "surface"
+radius = 0
+border = "text@0.9"
+border_width = 1
+on_click = "open dashboard"
+
+[[root.children]]
+type = "ring"
+value = "clock.second"
+max = 60
+size = 176
+thickness = 6
+color = "accent"
+track = "text@0.14"
+
+[[root.children]]
+type = "col"
+justify = "center"
+align = "center"
+gap = 2
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 38
+weight = "bold"
+text_align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%a %d %b|upper}"
+size = 11
+color = "text_secondary"
+text_align = "center"

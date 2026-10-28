@@ -9,6 +9,7 @@ pub mod gate;
 pub mod lock;
 pub use embed::GAP as STATUS_GAP;
 pub mod menus;
+pub mod overlay;
 pub mod popup;
 pub mod rdwm;
 mod status;
@@ -564,7 +565,9 @@ impl DecBar {
         }
         items.push((Tray::Dash, BTN_W));
         items.push((Tray::Spotlight, BTN_W));
-        items.push((Tray::Control, BTN_W));
+        if crate::theme::th().control_center.enabled {
+            items.push((Tray::Control, BTN_W));
+        }
         let clock_w = self.fonts.as_ref().map(|f| f.measure(&self.clock_text, TEXT_PX, Weight::Regular)).unwrap_or(100.0) + 17.0;
         items.push((Tray::Clock, clock_w));
         items
@@ -588,6 +591,9 @@ impl DecBar {
     }
 
     fn panel_origin(&self) -> (f32, f32) {
+        if self.embedded {
+            return self.embed.origin;
+        }
         if self.pill_bar() {
             return self.v_panel_origin();
         }
@@ -695,7 +701,7 @@ impl DecBar {
 
     fn open_control(&mut self) {
         let snap = self.snapshot();
-        let (items, h) = controlcenter::layout(&snap);
+        let (items, h) = controlcenter::layout_with(&snap, &crate::theme::th().control_center.tiles);
         self.cc_items = items;
         self.cc_height = h;
         self.open = Open::Control;
@@ -703,9 +709,14 @@ impl DecBar {
         self.spawn_snapshot(true);
     }
 
+    /// How the panel is painted: the theme's `control_center.style`, `auto` meaning the flyout look under the Windows taskbar.
+    fn cc_style(&self) -> crate::controlcenter::settings::Style {
+        crate::theme::th().control_center.style.resolve(self.embed.taskbar)
+    }
+
     fn relayout_control(&mut self) {
         let snap = self.snapshot();
-        let (items, h) = controlcenter::layout(&snap);
+        let (items, h) = controlcenter::layout_with(&snap, &crate::theme::th().control_center.tiles);
         self.cc_items = items;
         self.cc_height = h;
     }
@@ -1108,8 +1119,9 @@ impl App for DecBar {
             Open::Menu(i) => self.draw_dropdown(pm, i),
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
+                let style = self.cc_style();
                 if let Some(f) = self.fonts.as_mut() {
-                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover };
+                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
                     controlcenter::draw(pm, &view, f, &mut self.symbols);
                 }
             }
@@ -1534,6 +1546,9 @@ impl DecBar {
             }
         }
         redraw |= crate::theme::take_changed();
+        if redraw && self.open == Open::Control && !crate::theme::th().control_center.enabled {
+            self.close();
+        }
         if redraw && self.open == Open::Control && self.cc_drag.is_none() {
             self.relayout_control();
         }

@@ -43,6 +43,13 @@ pub struct Selection {
     /// Which shortcut is being recorded: "k:<n>" or "new".
     pub recording: Option<String>,
     pub rec_mods: Vec<&'static str>,
+    /// Appearance pane: the open tab, the open Customise section and whether the All apps tab shows its advanced options.
+    pub tab: super::appearance::Tab,
+    pub section: super::appearance::Section,
+    pub adv: bool,
+    /// A button asked to open another pane (index into `PANES`) / to scroll back to the top; the window acts on both.
+    pub goto: Option<usize>,
+    pub reset_scroll: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -118,6 +125,11 @@ impl Model {
         m
     }
 
+    /// The Wallpaper tab of the Appearance pane is on screen.
+    pub fn wallpaper_open(&self) -> bool {
+        super::panes::PANES.get(self.sel.pane).is_some_and(|p| p.id == "appearance") && self.sel.tab == super::appearance::Tab::Wallpaper
+    }
+
     pub fn watched_files(&self) -> Vec<std::path::PathBuf> {
         vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json()]
     }
@@ -125,7 +137,13 @@ impl Model {
     // ------------------------------------------------------------ notices
 
     pub fn say(&mut self, text: impl Into<String>, error: bool) {
-        self.notice = Some(Notice { text: text.into(), error, at: Instant::now() });
+        let text = text.into();
+        if error {
+            crate::log_warn!("notice (error): {text}");
+        } else {
+            crate::log_info!("notice: {text}");
+        }
+        self.notice = Some(Notice { text, error, at: Instant::now() });
         self.dirty = true;
         let wake = self.wake.clone();
         std::thread::spawn(move || {
@@ -174,7 +192,10 @@ impl Model {
 
     pub fn on_event(&mut self, ev: Ev) {
         match ev {
-            Ev::FilesChanged => self.on_files_changed(),
+            Ev::FilesChanged => {
+                crate::log_debug!("watched config file changed on disk");
+                self.on_files_changed()
+            }
             Ev::Runtime(rt) => {
                 let before = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
                 self.rt = *rt;

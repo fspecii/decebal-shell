@@ -53,6 +53,7 @@ fn main() {
     match png {
         Some(path) => {
             if let Err(e) = pm.save_png(&path) {
+                decebal::log_error!("fatal: {e}");
                 eprintln!("decdock: {e}");
                 std::process::exit(1);
             }
@@ -72,6 +73,7 @@ fn main() {
                 dock.hover_x = hover;
                 let app = DockApp::new(dock).with_scale(scale).track_windows().watch_config().with_gate(closed.clone());
                 if let Err(e) = backend::run(app, spec) {
+                    decebal::log_error!("fatal: {e}");
                     eprintln!("decdock: {e}");
                     std::process::exit(1);
                 }
