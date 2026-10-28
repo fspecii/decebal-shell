@@ -4,14 +4,14 @@
 //! |---|---|---|---|---|
 //! | `macos` | macOS | `style: mac`, theme-driven roundness | `true` | `true` |
 //! | `windows` | Windows 11 | `style: windows`, `windowsAlign: center` (the Windows 11 taskbar) | `true` | `"auto"` (hidden while the taskbar is up) |
-//! | `caelestia` | Caelestia | `style: mac`, theme-driven roundness (pill) | `"auto"`: hidden, Caelestia has no dock | `true`, drawn as a vertical bar on the left edge (`bar_style = "vertical"`) |
+//! | `caelestia` | Caelestia | `style: mac`, theme-driven roundness (pill) | `"auto"`: hidden, Caelestia has no dock | `true`, drawn as the pill bar (`bar_style = "vertical"`) on the edge `bar.position` says (left, right, top, bottom or split; kept, `caelestia-top` sets it) |
 //!
 //! The pure parts ([`selection_for`], [`dock_edits`], [`bar_value`], [`dock_value`], [`detect`]) are shared by `macthemectl style`
-//! and the Theme pane; [`apply`] is the CLI's transaction.
+//! and the Theme pane; [`apply`] is the CLI's transaction. [`parse_with_layout`] reads `caelestia-top` and the like, [`position_value`] writes `bar.position`.
 
 use super::live::Source;
 use super::model::Selection;
-use crate::config::DockStyle;
+use crate::config::{BarPosition, DockStyle};
 use crate::settings::io::{self, Paths};
 use serde_json::{json, Value};
 
@@ -55,6 +55,30 @@ impl Style {
             Style::Caelestia => "caelestia",
         }
     }
+}
+
+/// A style word that may carry a Caelestia layout: `caelestia`, `caelestia-top`, `caelestia_split`, `caelestia bottom`.
+/// Only Caelestia has layouts, so `macos-top` is not a style.
+pub fn parse_with_layout(s: &str) -> Option<(Style, Option<BarPosition>)> {
+    if let Some(st) = Style::parse(s) {
+        return Some((st, None));
+    }
+    let norm = s.trim().to_ascii_lowercase();
+    let (head, tail) = norm.rsplit_once(['-', '_', ' '])?;
+    let (st, pos) = (Style::parse(head)?, BarPosition::parse(tail)?);
+    (st == Style::Caelestia).then_some((st, Some(pos)))
+}
+
+/// `macshell.json` `bar` object with `position` set; other keys of `bar` (`enabled`) are kept.
+pub fn position_value(pos: BarPosition, current: Option<&Value>) -> Value {
+    let mut bar = current.and_then(Value::as_object).cloned().unwrap_or_default();
+    bar.insert("position".into(), json!(pos.as_str()));
+    Value::Object(bar)
+}
+
+/// The position written in a `macshell.json` document (left when absent).
+pub fn position_of(shell: &Value) -> BarPosition {
+    shell.get("bar").and_then(|b| b.get("position")).and_then(Value::as_str).and_then(BarPosition::parse).unwrap_or_default()
 }
 
 /// The selection after choosing `style`: its theme, every override kept, the wallpaper colours kept only for Caelestia.
@@ -115,18 +139,32 @@ pub fn current(src: &Source, paths: &Paths) -> Option<Style> {
 }
 
 /// The CLI transaction: theme (and rdwm's colours) first, which validates everything, then the dock and bar files.
-/// Running programs follow within half a second; nothing is restarted.
+/// Running programs follow within half a second; nothing is restarted. The bar's position is kept.
 pub fn apply(src: &Source, paths: &Paths, style: Style, sel: &Selection) -> Result<super::rdwm::Report, String> {
+    apply_with(src, paths, style, sel, None)
+}
+
+/// [`apply`] that also sets `bar.position` (`macthemectl style caelestia-top`) when `position` is given.
+pub fn apply_with(src: &Source, paths: &Paths, style: Style, sel: &Selection, position: Option<BarPosition>) -> Result<super::rdwm::Report, String> {
     let new = selection_for(style, sel);
     let report = super::rdwm::apply(src, paths, &new)?;
     for (key, val) in dock_edits(style) {
         io::json_set(&paths.dock_settings(), key, val)?;
     }
-    let bar = bar_value(style, io::json_load(&paths.shell_json()).get("bar"));
+    let mut bar = bar_value(style, io::json_load(&paths.shell_json()).get("bar"));
+    if let Some(p) = position {
+        bar = position_value(p, Some(&bar));
+    }
     io::json_set(&paths.shell_json(), "bar", Some(bar))?;
     let dock = dock_value(style, io::json_load(&paths.shell_json()).get("dock"));
     io::json_set(&paths.shell_json(), "dock", Some(dock))?;
     Ok(report)
+}
+
+/// `macthemectl layout`: only `bar.position`; the running bars re-lay out within about a second.
+pub fn apply_layout(paths: &Paths, position: BarPosition) -> Result<(), String> {
+    let bar = position_value(position, io::json_load(&paths.shell_json()).get("bar"));
+    io::json_set(&paths.shell_json(), "bar", Some(bar))
 }
 
 #[cfg(test)]
@@ -234,6 +272,50 @@ mod tests {
         assert_eq!(detect("caelestia", DockStyle::Windows), None);
         assert_eq!(dock_style(&json!({"style": "taskbar"})), DockStyle::Windows);
         assert_eq!(dock_style(&json!({})), DockStyle::Mac);
+    }
+
+    #[test]
+    fn style_words_may_name_a_caelestia_layout() {
+        assert_eq!(parse_with_layout("caelestia"), Some((Style::Caelestia, None)));
+        assert_eq!(parse_with_layout("macos"), Some((Style::Macos, None)));
+        for p in BarPosition::ALL {
+            assert_eq!(parse_with_layout(&format!("caelestia-{}", p.as_str())), Some((Style::Caelestia, Some(p))));
+        }
+        assert_eq!(parse_with_layout("Caelestia_Split"), Some((Style::Caelestia, Some(BarPosition::Split))));
+        assert_eq!(parse_with_layout("caelestia top"), Some((Style::Caelestia, Some(BarPosition::Top))));
+        assert_eq!(parse_with_layout("caelestia-diagonal"), None);
+        assert_eq!(parse_with_layout("macos-top"), None, "only Caelestia has layouts");
+        assert_eq!(parse_with_layout("windows-left"), None);
+        assert_eq!(parse_with_layout("top"), None);
+    }
+
+    #[test]
+    fn the_position_is_kept_by_the_style_and_set_by_layout_words() {
+        let (_d, src, paths) = sandbox("pos");
+        std::fs::write(paths.shell_json(), r#"{"bar": {"enabled": "auto", "x": 1, "position": "bottom"}, "dock": {"enabled": true}}"#).unwrap();
+        let sel = Selection { sync_rdwm: false, ..Selection::default() };
+        apply(&src, &paths, Style::Caelestia, &sel).unwrap();
+        let shell = io::json_load(&paths.shell_json());
+        assert_eq!(position_of(&shell), BarPosition::Bottom, "`style caelestia` keeps the position");
+        assert_eq!((shell["bar"]["enabled"].as_bool(), shell["bar"]["x"].as_i64()), (Some(true), Some(1)));
+        // a style word with a layout sets it, in the same transaction
+        apply_with(&src, &paths, Style::Caelestia, &Selection { sync_rdwm: false, ..src.selection() }, Some(BarPosition::Split)).unwrap();
+        assert_eq!(position_of(&io::json_load(&paths.shell_json())), BarPosition::Split);
+        // macOS leaves the setting alone (it is inactive without the Caelestia theme) so coming back restores the layout
+        apply(&src, &paths, Style::Macos, &Selection { sync_rdwm: false, ..src.selection() }).unwrap();
+        assert_eq!(position_of(&io::json_load(&paths.shell_json())), BarPosition::Split);
+        // `layout` writes only bar.position
+        apply_layout(&paths, BarPosition::Right).unwrap();
+        let shell = io::json_load(&paths.shell_json());
+        assert_eq!((position_of(&shell), shell["bar"]["enabled"].as_bool(), shell["bar"]["x"].as_i64()), (BarPosition::Right, Some(true), Some(1)));
+        assert_eq!(shell["dock"]["enabled"], true);
+        assert_eq!(src.selection().name, "macos", "the theme is not touched");
+        // from nothing at all
+        let _ = std::fs::remove_file(paths.shell_json());
+        apply_layout(&paths, BarPosition::Top).unwrap();
+        assert_eq!(io::json_load(&paths.shell_json()), json!({"bar": {"position": "top"}}));
+        assert_eq!(position_of(&json!({})), BarPosition::Left);
+        assert_eq!(position_of(&json!({"bar": {"position": "nope"}})), BarPosition::Left);
     }
 
     #[test]
