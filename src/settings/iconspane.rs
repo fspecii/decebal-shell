@@ -113,7 +113,10 @@ pub fn items(m: &Model) -> Vec<Item> {
     let mut rows = vec![ThemeRow {
         id: AUTO.into(),
         title: "Auto".into(),
-        detail: format!("Follow the desktop: {}", st.desktop.as_deref().map(|d| if auto_theme.is_some() { d.to_string() } else { format!("{d} (not installed)") }).unwrap_or_else(|| "nothing configured, hicolor".into())),
+        detail: format!(
+            "Follow the desktop: {}",
+            st.desktop.as_deref().map(|d| if auto_theme.is_some() { d.to_string() } else { format!("{d} (not installed)") }).unwrap_or_else(|| "nothing configured, hicolor".into())
+        ),
         current: cur == AUTO,
         highlighted: hl == AUTO,
         selectable: true,
@@ -123,7 +126,11 @@ pub fn items(m: &Model) -> Vec<Item> {
             id: t.id.clone(),
             title: t.name.clone(),
             detail: if t.kind.selectable() {
-                if t.comment.is_empty() { t.id.clone() } else { format!("{} - {}", t.id, t.comment) }
+                if t.comment.is_empty() {
+                    t.id.clone()
+                } else {
+                    format!("{} - {}", t.id, t.comment)
+                }
             } else {
                 format!("{} - {}: cannot be used for application icons", t.id, t.kind.label())
             },
@@ -135,7 +142,8 @@ pub fn items(m: &Model) -> Vec<Item> {
     out.push(Item::IconThemes(rows));
 
     out.push(Item::Header("Appearance".into()));
-    let fb_opts: Vec<(String, String)> = std::iter::once(("None".to_string(), "none".to_string())).chain(themes.iter().filter(|t| t.kind.selectable()).map(|t| (t.name.clone(), t.id.clone()))).collect();
+    let fb_opts: Vec<(String, String)> =
+        std::iter::once(("None".to_string(), "none".to_string())).chain(themes.iter().filter(|t| t.kind.selectable()).map(|t| (t.name.clone(), t.id.clone()))).collect();
     let fb_sel = fb_opts.iter().position(|(_, v)| v.eq_ignore_ascii_case(&cfg.fallback));
     out.push(Item::Card(vec![
         Row::new("Icon size")

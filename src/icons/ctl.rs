@@ -63,7 +63,8 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
         }
         Some("fallback") => {
             let name = args.get(1).ok_or("fallback needs a theme name or none")?;
-            cfg.fallback = if name.eq_ignore_ascii_case("none") { "none".into() } else { resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))? };
+            cfg.fallback =
+                if name.eq_ignore_ascii_case("none") { "none".into() } else { resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))? };
             cfg.write(file)?;
             Ok(format!("fallback theme: {}", cfg.fallback))
         }

@@ -351,6 +351,15 @@ Markup in bodies is stripped (macnotify does not advertise `body-markup`).
 
 Test without touching your session: `make e2e-notify` (private `dbus-daemon` and Xvfb).
 
+## Icon themes
+
+Application, folder and MIME icons follow the freedesktop icon theme of your choice: System Settings -> Icons
+(`macsettings icons`, a list of the installed themes with a preview grid), or `macthemectl icons list|set NAME|status|reset`.
+`Auto` (the default) follows `gsettings` / GTK's `settings.ini`. The settings live in `macshell.json` under `icons`
+(`theme`, `size_scale`, `monochrome_tint`, `fallback`); programs follow within half a second. Lookup rules, caches and
+the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
+End-to-end test: `tests/e2e/icons.sh`.
+
 ## Develop
 
 ```sh

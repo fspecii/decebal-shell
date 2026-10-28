@@ -88,3 +88,18 @@ fn the_caelestia_style_is_documented_and_has_its_e2e() {
     // the theme that uses the layout
     assert!(read("src/theme/builtin/caelestia.toml").contains("bar_style = \"vertical\""));
 }
+
+#[test]
+fn icon_themes_are_documented_and_have_their_e2e() {
+    let readme = read("README.md");
+    assert!(readme.contains("## Icon themes") && readme.contains("docs/icons.md") && readme.contains("tests/e2e/icons.sh"));
+    for f in ["docs/icons.md", "contrib/icon-themes.md", "tests/e2e/icons.sh"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
+    }
+    let doc = read("docs/icons.md");
+    for key in ["theme", "size_scale", "monochrome_tint", "fallback"] {
+        assert!(doc.contains(&format!("`{key}`")), "docs/icons.md does not describe `{key}`");
+    }
+    assert!(read("contrib/icon-themes.md").contains("papirus-icon-theme"));
+    assert!(read("src/bin/macthemectl.rs").contains("macthemectl icons"));
+}

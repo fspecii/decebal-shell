@@ -237,7 +237,7 @@ pub enum ThemeKind {
     SymbolicOnly,
     /// A cursor theme (`cursors/`, no icon directories).
     CursorOnly,
-    /// `Hidden=true`, or no directories and nothing to inherit usefully.
+    /// No icon directories (and no cursors): an alias like `default`.
     Empty,
 }
 
@@ -269,9 +269,6 @@ pub struct ThemeInfo {
 }
 
 pub fn classify(base: &Path, ix: &Index) -> ThemeKind {
-    if ix.hidden {
-        return ThemeKind::Empty;
-    }
     if ix.dirs.is_empty() {
         return if base.join("cursors").is_dir() { ThemeKind::CursorOnly } else { ThemeKind::Empty };
     }
@@ -441,10 +438,7 @@ mod tests {
     #[test]
     fn at_2x_directories_count_their_physical_pixels() {
         let t = Tree::new("scale");
-        t.theme(
-            "S",
-            "[Icon Theme]\nName=S\nDirectories=48x48/apps,48x48@2x/apps\n[48x48/apps]\nSize=48\nType=Fixed\n[48x48@2x/apps]\nSize=48\nScale=2\nType=Fixed\n",
-        );
+        t.theme("S", "[Icon Theme]\nName=S\nDirectories=48x48/apps,48x48@2x/apps\n[48x48/apps]\nSize=48\nType=Fixed\n[48x48@2x/apps]\nSize=48\nScale=2\nType=Fixed\n");
         t.icon("S", "48x48/apps/foo.png").icon("S", "48x48@2x/apps/foo.png");
         let mut r = resolver(&t, &["S"], None);
         assert_eq!(t.rel(&r.exact("foo", 48).unwrap()), "S/48x48/apps/foo.png");
@@ -532,7 +526,7 @@ mod tests {
         assert_eq!((by("Colourful").name.as_str(), by("Colourful").comment.as_str()), ("Colourful Icons", "Pretty"));
         assert_eq!(by("Mono").kind, ThemeKind::SymbolicOnly);
         assert_eq!(by("Pointer").kind, ThemeKind::CursorOnly);
-        assert_eq!(by("Hidden").kind, ThemeKind::Empty);
+        assert_eq!(by("Hidden").kind, ThemeKind::Icons, "Hidden=true only keeps a theme out of GTK pickers (Adwaita is hidden); its icons are fine");
         assert_eq!(by("alias").kind, ThemeKind::Empty);
         assert!(l.iter().all(|x| x.id != "NoIndex"), "a folder without index.theme is not a theme");
         assert!(l[0].kind.selectable() && !l.last().unwrap().kind.selectable(), "selectable themes first");

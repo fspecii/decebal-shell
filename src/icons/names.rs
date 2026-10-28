@@ -33,7 +33,8 @@ fn alias(id: &str) -> &'static [&'static str] {
 
 /// Prefixes of the Icon Naming Specification where dropping the last `-part` gives the more general icon
 /// (`network-wired-disconnected` -> `network-wired`, `folder-pictures` -> `folder`).
-const DASH_STRIP: &[&str] = &["network-", "audio-", "battery-", "weather-", "user-", "folder-", "input-", "media-", "display-", "preferences-", "security-", "dialog-", "emblem-", "notification-", "mail-", "go-", "view-"];
+const DASH_STRIP: &[&str] =
+    &["network-", "audio-", "battery-", "weather-", "user-", "folder-", "input-", "media-", "display-", "preferences-", "security-", "dialog-", "emblem-", "notification-", "mail-", "go-", "view-"];
 
 /// MIME-like icon names: the generic icon of their media type.
 fn mime_generic(name: &str) -> Option<String> {

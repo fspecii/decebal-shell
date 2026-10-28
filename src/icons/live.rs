@@ -196,7 +196,14 @@ pub struct Status {
 }
 
 pub fn status() -> Status {
-    with(|s| Status { config: s.cfg.clone(), desktop: s.desktop.clone(), active: s.choice.active.clone(), problem: s.choice.problem.clone(), chain: s.chain().to_vec(), cached_paths: s.resolver().cached_paths() })
+    with(|s| Status {
+        config: s.cfg.clone(),
+        desktop: s.desktop.clone(),
+        active: s.choice.active.clone(),
+        problem: s.choice.problem.clone(),
+        chain: s.chain().to_vec(),
+        cached_paths: s.resolver().cached_paths(),
+    })
 }
 
 /// The chain a theme id would give with the current fallback (for previews of a theme that is not active).
