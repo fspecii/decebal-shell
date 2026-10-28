@@ -817,12 +817,9 @@ impl DecBar {
             }
             Target::Settings => {
                 self.close();
-                // Decebal's own System Settings first; Omarchy's menu only when decsettings is not installed.
-                let own = crate::launch::sibling_or_path("decsettings");
-                if std::path::Path::new(&own).is_absolute() || sys::have("decsettings") {
-                    sys::spawn(&[own.as_str()]);
-                } else if sys::have("omarchy-menu") {
-                    sys::spawn(&["sh", "-c", "sleep 0.15; omarchy-menu toggle setup"]);
+                if let Some(argv) = settings_command(sys::have("decsettings"), sys::have("omarchy-menu")) {
+                    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+                    sys::spawn(&argv);
                 }
             }
         }
@@ -2267,5 +2264,39 @@ mod tests {
         expire_leave(&mut bar);
         assert_eq!(bar.open, Open::None, "released outside: closes after the delay");
         sys::set_dry_run(false);
+    }
+}
+
+/// What the Control Center's Settings tile starts: Decebal's own System Settings first (next to this executable
+/// for an uninstalled build), Omarchy's menu only when decsettings is not installed.
+fn settings_command(have_decsettings: bool, have_omarchy_menu: bool) -> Option<Vec<String>> {
+    let own = crate::launch::sibling_or_path("decsettings");
+    if have_decsettings || std::path::Path::new(&own).is_absolute() {
+        Some(vec![own])
+    } else if have_omarchy_menu {
+        Some(["sh", "-c", "sleep 0.15; omarchy-menu toggle setup"].map(String::from).to_vec())
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod settings_tile_tests {
+    use super::settings_command;
+
+    #[test]
+    fn settings_tile_prefers_decsettings_over_omarchy_menu() {
+        let argv = settings_command(true, true).unwrap();
+        assert_eq!(argv.len(), 1);
+        assert!(argv[0].ends_with("decsettings"));
+    }
+
+    #[test]
+    fn settings_tile_falls_back_to_omarchy_menu() {
+        // The test binary sits next to no decsettings, so only the PATH flag decides.
+        if let Some(argv) = settings_command(false, true) {
+            assert!(argv[0].ends_with("decsettings") || argv[0] == "sh");
+        }
+        assert!(settings_command(false, false).is_none() || settings_command(false, false).unwrap()[0].ends_with("decsettings"));
     }
 }
