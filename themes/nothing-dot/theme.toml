@@ -1,0 +1,124 @@
+format = 1
+id = "nothing-dot"
+name = "Nothing Dot"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Dot-matrix monochrome in the spirit of Nothing OS: pure black or off-white, a single red accent, square flat windows and a dot-grid wallpaper, with a Glyph-style ring clock and battery on the desktop. Dot fonts (Doto, DotGothic16) are used for titles and big numbers when installed, JetBrains Mono for everything else."
+min_shell_version = "0.1.0"
+tags = ["dark", "light", "monochrome", "dot-matrix", "flat", "red-accent"]
+screenshots = ["screenshots/main.png"]
+
+[metrics]
+radius = 2
+dock_roundness = 0.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.0
+outline = 0.35
+dock_padding = 10
+
+[font]
+ui = ["JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono"]
+title = ["Doto", "DotGothic16", "JetBrains Mono", "DejaVu Sans Mono"]
+mono = ["JetBrains Mono", "DejaVu Sans Mono"]
+display = ["Doto", "DotGothic16", "JetBrains Mono", "DejaVu Sans Mono"]
+scale = 1.0
+
+[colors.dark]
+background = "#000000"
+sidebar = "#0a0a0a"
+surface = "#111111"
+bar = "#000000"
+bar_text = "#ffffff"
+popup = "#0d0d0d"
+dock = "#0a0a0a"
+overlay = "#0d0d0d"
+titlebar = "#111111"
+titlebar_inactive = "#000000"
+border = "#2e2e2e"
+text = "#ffffff"
+text_secondary = "#b8b8b8"
+text_faint = "#7a7a7a"
+accent = "#d71921"
+accent_text = "#ffffff"
+danger = "#ff3b30"
+ok = "#e6e6e6"
+warn = "#b0b0b0"
+
+[colors.light]
+background = "#f1f1ee"
+sidebar = "#e8e8e4"
+surface = "#fafaf8"
+bar = "#f1f1ee"
+bar_text = "#0a0a0a"
+popup = "#fafaf8"
+dock = "#e8e8e4"
+overlay = "#fafaf8"
+titlebar = "#e8e8e4"
+titlebar_inactive = "#f1f1ee"
+border = "#c4c4be"
+text = "#0a0a0a"
+text_secondary = "#44443f"
+text_faint = "#75756f"
+accent = "#d71921"
+accent_text = "#ffffff"
+danger = "#b3120f"
+ok = "#2a2a2a"
+warn = "#6e6e68"
+
+[wallpaper]
+image = "wallpapers/dots-dark.png"
+mode = "fill"
+color = "#000000"
+
+[decoration]
+style = "classic"
+height = 26
+radius = 0
+title_align = "left"
+
+[rdwm]
+gap_inner = 8
+gap_outer = 8
+border_px = 1
+focused_border = "#d71921"
+normal_border = "#2e2e2e"
+urgent_border = "#ff3b30"
+
+[bar]
+enabled = true
+style = "flat"
+height = 26
+
+[dock]
+enabled = true
+style = "mac"
+size = 44
+roundness = 0.0
+
+[hot_corners]
+top_right = "dashboard"
+
+[[widgets]]
+use = "dot-clock"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 64
+
+[[widgets]]
+use = "dot-battery"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 284
+
+[[widgets]]
+use = "builtin:workspace-dots"
+place = "desktop"
+anchor = "bottom"
+x = 0
+y = -100

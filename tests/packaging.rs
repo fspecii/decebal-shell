@@ -142,6 +142,13 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
     for f in ["docs/theme-engine.md", "tests/e2e/theme-engine.sh", "widgets/clock-card.toml", "themes/nord/theme.toml"] {
         assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
     }
+    // the asset themes are documented with a screenshot each and installed by make and the PKGBUILD
+    let gallery = read("docs/themes.md");
+    for id in ["nothing-dot", "nothing-light", "brutalist", "terminal-minimal", "terminal-amber"] {
+        assert!(gallery.contains(&format!("decthemectl theme apply {id}")) && gallery.contains(&format!("themes/{id}.png")), "docs/themes.md: {id}");
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png")).exists(), "{id} screenshot");
+        assert!(read("Makefile").contains(id) && read("PKGBUILD").contains(id), "{id} not installed by Makefile/PKGBUILD");
+    }
     // every built-in theme is a bundled package
     for id in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"] {
         assert!(read(&format!("themes/{id}/theme.toml")).starts_with("format = 1"), "{id}");

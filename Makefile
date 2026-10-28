@@ -2,6 +2,8 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
+# Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
+ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
 all:
@@ -16,6 +18,7 @@ install: all
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	install -Dm644 contrib/decsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
+	for t in $(ASSET_THEMES); do for f in $$(cd themes && find $$t -type f); do install -Dm644 themes/$$f $(DESTDIR)$(PREFIX)/share/decebal/themes/$$f; done; done
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
 
@@ -26,7 +29,7 @@ uninstall:
 	for d in $(AUTOSTART); do rm -f $(DESTDIR)/etc/xdg/autostart/$$d; done
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
-	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/doc/decebal
+	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/themes $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/doc/decebal
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/decebal
 
 # Extra login session "Hyprland (decebal)": the Rust shell without Quickshell (Omarchy + SDDM + hyprlock/hypridle/mako).

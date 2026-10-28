@@ -213,8 +213,30 @@ click_btn l:tcard:delete:my-nord
 [ -d "$THEMES/my-nord" ] && fail "second click did not delete" || pass "second click deletes"
 shot 22-pane-after-delete
 
+echo "== the bundled asset themes (themes/<id>: wallpaper, widgets, screenshot)"
+# They are installed system-wide by `make install`; here the repository's themes/ folder plays /usr/share/decebal/themes.
+export DECEBAL_SYSTEM_THEMES=$HERE/themes
+OLDWP=$WP; kill "$WP" 2>/dev/null; wait "$WP" 2>/dev/null; decwidgets >"$TMP/decwidgets2.log" 2>&1 & WP=$!; PIDS+=($WP)   # the daemon reads the variable at start
+declare -A WSTYLE=([nothing-dot]=classic [nothing-light]=classic [brutalist]=classic [terminal-minimal]=minimal [terminal-amber]=minimal)
+for id in nothing-dot nothing-light brutalist terminal-minimal terminal-amber; do
+  out=$(decthemectl theme validate "$HERE/themes/$id" 2>&1); has "$id validates as a package" "$out" "^ok:"
+  decthemectl theme list | grep -q "^$id\b.*system\|$id.*system" && pass "$id is listed from the system folder" || fail "$id list" "$(decthemectl theme list | grep "$id")"
+  out=$(decthemectl theme apply "$id" 2>&1); has "$id applies" "$out" "applied $id"
+  eq "$id: selection" "$(sel_name)" "$id"
+  case "$out" in *"is missing from the package"*|*"cannot bundle"*) fail "$id: wallpaper not found" ;; *) pass "$id: wallpaper found" ;; esac
+  case "$(rdcfg .config.wallpaper.image)" in */$id/wallpapers/*.png) pass "$id: wallpaper path points into the package" ;; *) fail "$id: wallpaper path" "$(rdcfg .config.wallpaper.image)" ;; esac
+  eq "$id: titlebar style" "$(rdcfg .config.decoration.style)" "${WSTYLE[$id]}"
+  eq "$id: widgets placed" "$(jq '[.widgets.items[]|select(.from_theme==true)]|length' "$DECEBAL_CONFIG/decebal.json")" "$([ "$id" = nothing-dot ] || [ "$id" = nothing-light ] && echo 3 || echo 1)"
+  want=1; [ "$id" = nothing-dot ] || [ "$id" = nothing-light ] && want=3
+  end=$((SECONDS + 15)); while [ $SECONDS -lt $end ] && [ "$(widget_windows)" != "$want" ]; do sleep 0.5; done
+  eq "$id: its widget windows appear" "$(widget_windows)" "$want"
+  [ "$(widget_windows)" = "$want" ] || tail -3 "$TMP/decwidgets2.log"
+  shot "theme-$id"
+done
+decthemectl theme apply nord >/dev/null 2>&1; unset DECEBAL_SYSTEM_THEMES; export DECEBAL_SYSTEM_THEMES=$TMP/nosystem
+
 echo "== no crashes"
-for p in "${PIDS[@]}"; do kill -0 "$p" 2>/dev/null || { [ "$p" = "$PV" ] || fail "process $p died"; }; done
+for p in "${PIDS[@]}"; do kill -0 "$p" 2>/dev/null || { [ "$p" = "$PV" ] || [ "$p" = "${OLDWP:-}" ] || fail "process $p died"; }; done
 grep -il "panicked" "$TMP"/*.log 2>/dev/null | head -3 | while read -r f; do fail "panic in $f"; done
 echo; echo "passed $PASS, failed $FAIL (screenshots in $SHOTS)"
 [ "$FAIL" = 0 ]
