@@ -510,3 +510,7 @@ State lives in `$XDG_RUNTIME_DIR/decutil/`; toasts go through the notification d
 
 The Control Center has a row of four tiles for these (Record, Inhibit Idle, Game Mode, DND) with live state read from the state files, and a Notifications tile that opens the decnotify history panel.
 `tests/e2e/session.sh` (`make e2e-session`) drives decsession and decutil on a private Xvfb with shimmed `systemctl`, `loginctl`, `ffmpeg`, `xset`, `picom` and friends.
+
+## Debian / Ubuntu
+
+`packaging/deb/build.sh [outdir]` builds `decebal_<version>_<arch>.deb` from a release build (replaces the old `macshell` package). Verified on Ubuntu 24.04: installs with `dpkg -i` and `decthemectl` runs.
