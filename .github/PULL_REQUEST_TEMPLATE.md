@@ -2,6 +2,6 @@
 
 ## Checked
 
-- [ ] `scripts/ci.sh` passes (or the relevant part: `cargo test`, `make check`)
-- [ ] New config keys/actions are in `docs/CONFIG.md`, `man/rdwm.5` and the completions (`crates/rdwm/tests/docs.rs` enforces it)
+- [ ] `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test --all-features` pass
+- [ ] New user-visible options are documented in `docs/` and covered by a test (unit or `tests/e2e`).
 - [ ] User-visible changes are in `CHANGELOG.md`

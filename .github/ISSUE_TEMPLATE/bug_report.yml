@@ -11,12 +11,12 @@ body:
     id: repro
     attributes:
       label: Steps to reproduce
-      description: A minimal config helps most. `rdwmctl config` prints the one in use.
+      description: A minimal config helps most. `decthemectl profile save NAME` saves the one in use.
     validations: {required: true}
   - type: input
     id: version
     attributes:
-      label: rdwm version (`rdwm --version`)
+      label: Decebal version (package version or git commit) and rdwm version (`rdwm --version`)
     validations: {required: true}
   - type: dropdown
     id: backend
@@ -33,5 +33,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: "`journalctl --user -u rdwm -b` or the terminal output. Remove anything private."
+      description: "`journalctl --user -u decebal-bar -b` or the terminal output. Remove anything private."
       render: text

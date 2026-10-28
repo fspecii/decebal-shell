@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest something rdwm should do
+description: Suggest something Decebal should do
 labels: [enhancement]
 body:
   - type: textarea
@@ -10,8 +10,8 @@ body:
   - type: textarea
     id: idea
     attributes:
-      label: What would you like rdwm to do?
-      description: rdwm stays small; say whether a plugin or config option could cover it instead.
+      label: What would you like Decebal to do?
+      description: Decebal stays small; say whether a theme, widget or config option could cover it instead.
   - type: textarea
     id: alternatives
     attributes:
