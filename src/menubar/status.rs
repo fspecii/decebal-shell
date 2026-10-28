@@ -112,7 +112,7 @@ impl MacBar {
     }
 
     pub(super) fn open_popup(&mut self, kind: Tray) {
-        if self.vertical() {
+        if self.pill_bar() {
             return self.v_open_popup(kind);
         }
         self.close();
@@ -147,7 +147,7 @@ impl MacBar {
         match self.build_popup(kind) {
             Some((rows, w, compact)) => {
                 self.popup = Some(Popup::layout(rows, old.0, old.1, w, compact));
-                if self.vertical() {
+                if self.pill_bar() {
                     self.v_clamp_popup();
                 }
                 let n = self.popup.as_ref().map(|p| p.rows.len()).unwrap_or(0);

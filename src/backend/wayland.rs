@@ -87,6 +87,7 @@ fn layer_anchor(spec: &SurfaceSpec) -> (Anchor, (i32, i32, i32, i32)) {
         SpecAnchor::Bottom => (Anchor::BOTTOM, (0, 0, spec.margin, 0), Anchor::LEFT | Anchor::RIGHT),
         SpecAnchor::Top => (Anchor::TOP, (spec.margin, 0, 0, 0), Anchor::LEFT | Anchor::RIGHT),
         SpecAnchor::Left => (Anchor::LEFT, (0, 0, 0, spec.margin), Anchor::TOP | Anchor::BOTTOM),
+        SpecAnchor::Right => (Anchor::RIGHT, (0, spec.margin, 0, 0), Anchor::TOP | Anchor::BOTTOM),
     };
     (if spec.stretch { edge | along } else { edge }, margins)
 }
@@ -288,7 +289,7 @@ impl<A: App + 'static> State<A> {
             if self.configured {
                 // Attach a buffer of the new size in the same commit so the compositor never stretches the old
                 // one over the resized surface (visible as a glitchy open/close). A 0 means "the output's size".
-                if want.0 != 0 && self.spec.anchor == SpecAnchor::Left {
+                if want.0 != 0 && self.spec.anchor.is_side() {
                     self.width = want.0;
                 }
                 if want.1 != 0 {

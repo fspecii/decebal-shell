@@ -48,6 +48,8 @@ thread_local! {
     static TEST_FLOATING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Likewise the vertical layout.
     static TEST_VERTICAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// ...and where the pill bar sits while [`TEST_VERTICAL`] is on.
+    static TEST_POSITION: std::cell::Cell<crate::config::BarPosition> = const { std::cell::Cell::new(crate::config::BarPosition::Left) };
 }
 
 fn floating() -> bool {
@@ -269,7 +271,19 @@ pub struct MacBar {
     /// A status engine inside another host (the Windows taskbar): never draws the vertical layout.
     embedded: bool,
     // The vertical layout (see [`vbar`]).
-    was_vertical: bool,
+    /// Where the pill bar was last seen ([`MacBar::place`]); a change closes what is open and re-lays out.
+    was_place: Option<vbar::Place>,
+    /// Which macbar process this is: the main one, or the bottom half of a split layout.
+    process: vbar::Process,
+    /// `macbar --position`: draws the pill bar there whatever `bar.position` says (screenshots).
+    position_override: Option<crate::config::BarPosition>,
+    /// The live main bar starts the bottom process itself while the layout is split.
+    companion: bool,
+    bottom_child: Option<std::process::Child>,
+    bottom_retry: Instant,
+    bottom_spawns: u32,
+    /// The program that is the bottom bar (tests); the sibling `macbar` when `None`.
+    bottom_exe: Option<String>,
     v_hover: Option<Tray>,
     v_hover_ws: Option<usize>,
     v_hover_open: Option<(Tray, Instant)>,
@@ -332,7 +346,14 @@ impl MacBar {
             embed: embed::Place::default(),
             gate: None,
             embedded: false,
-            was_vertical: false,
+            was_place: None,
+            process: vbar::Process::Main,
+            position_override: None,
+            companion: false,
+            bottom_child: None,
+            bottom_retry: Instant::now(),
+            bottom_spawns: 0,
+            bottom_exe: None,
             v_hover: None,
             v_hover_ws: None,
             v_hover_open: None,
@@ -343,12 +364,40 @@ impl MacBar {
             locks: lock::Locks::default(),
             lock_watcher: false,
         };
-        bar.was_vertical = bar.vertical();
-        if bar.was_vertical {
+        bar.was_place = bar.place();
+        if bar.was_place.is_some() {
             bar.logo_symbol = vbar::logo_symbol();
         }
         bar.refresh_app_name();
         bar
+    }
+
+    /// Which half of a split layout this process draws (`macbar --role bottom`); the default is the main bar.
+    pub fn with_process(mut self, process: vbar::Process) -> Self {
+        self.process = process;
+        self.was_place = self.place();
+        if process == vbar::Process::Bottom {
+            // two bars must not write the same test file
+            if let Some((path, _)) = self.debug_tray.as_mut() {
+                let mut name = path.clone().into_os_string();
+                name.push(".bottom");
+                *path = name.into();
+            }
+        }
+        self
+    }
+
+    /// Draws the pill bar at `position` whatever `bar.position` says (`macbar --position`, for screenshots).
+    pub fn with_position(mut self, position: Option<crate::config::BarPosition>) -> Self {
+        self.position_override = position;
+        self.was_place = self.place();
+        self
+    }
+
+    /// The main bar starts the bottom bar's process while the layout is split and keeps it running (the live bar only).
+    pub fn with_companion(mut self) -> Self {
+        self.companion = true;
+        self
     }
 
     /// Lets the bar close itself (the backend returns) while `bar.enabled` in `macshell.json` says it is off;
@@ -390,8 +439,8 @@ impl MacBar {
         if let Ok(mut s) = self.shared.snap.lock() {
             *s = Snapshot::collect();
         }
-        if self.vertical() {
-            return self.v_render_png(path, open);
+        if self.pill_bar() {
+            return self.v_render_png(path, width, open);
         }
         self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
@@ -538,7 +587,7 @@ impl MacBar {
     }
 
     fn panel_origin(&self) -> (f32, f32) {
-        if self.vertical() {
+        if self.pill_bar() {
             return self.v_panel_origin();
         }
         let right = self.tray().iter().find(|(k, _)| *k == Tray::Control).map(|(_, s)| s.x + s.w).unwrap_or(self.width as f32);
@@ -1000,8 +1049,9 @@ fn collect_light(prev: &Snapshot) -> Snapshot {
 
 impl App for MacBar {
     fn size(&self) -> (u32, u32) {
-        if self.vertical() {
-            return (vbar::SURFACE_W, 0);
+        if let Some(p) = self.place() {
+            // a side bar is as tall as the monitor (0), a top / bottom bar as wide as it; the rest is room for popouts
+            return if p.edge.is_side() { (vbar::SURFACE_W, 0) } else { (0, vbar::SURFACE_H) };
         }
         (0, surface_height(self.open_bottom()))
     }
@@ -1010,8 +1060,8 @@ impl App for MacBar {
         if self.embedded {
             return None;
         }
-        Some(if self.vertical() {
-            MacBar::v_spec()
+        Some(if let Some(p) = self.place() {
+            MacBar::v_spec(p)
         } else {
             crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "macshell-bar" }
         })
@@ -1024,7 +1074,7 @@ impl App for MacBar {
 
     fn draw(&mut self, pm: &mut Pixmap) {
         crate::gfx::clear(pm);
-        if self.vertical() {
+        if self.pill_bar() {
             self.v_draw(pm);
             if let Some(f) = &self.fonts {
                 f.trim();
@@ -1072,7 +1122,7 @@ impl App for MacBar {
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
-        if self.vertical() {
+        if self.pill_bar() {
             return self.v_motion(x, y);
         }
         let mut redraw = false;
@@ -1155,7 +1205,7 @@ impl App for MacBar {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
-        if self.vertical() {
+        if self.pill_bar() {
             return self.v_button(x, y, button);
         }
         self.leave_at = None;
@@ -1280,10 +1330,10 @@ impl App for MacBar {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
-        if self.vertical() && self.v_scroll(x, y, dy) {
+        if self.pill_bar() && self.v_scroll(x, y, dy) {
             return true;
         }
-        if !self.vertical() && y < BAR_HEIGHT && self.tray_scroll(x, dy) {
+        if !self.pill_bar() && y < BAR_HEIGHT && self.tray_scroll(x, dy) {
             return true;
         }
         if self.open != Open::Control {
@@ -1319,7 +1369,7 @@ impl App for MacBar {
     }
 
     fn input_rects(&self) -> Vec<InputRect> {
-        if self.vertical() {
+        if self.pill_bar() {
             return self.v_input_rects();
         }
         let w = self.width.max(1) as i32;
@@ -1406,7 +1456,8 @@ impl App for MacBar {
     }
 
     fn quit_requested(&self) -> bool {
-        self.gate.as_ref().is_some_and(|g| g.closed())
+        // the bottom half of a split layout has nothing to draw once the layout is no longer split
+        (self.process == vbar::Process::Bottom && self.place().is_none()) || self.gate.as_ref().is_some_and(|g| g.closed())
     }
 
     fn tick(&mut self) -> Tick {
@@ -1414,6 +1465,9 @@ impl App for MacBar {
         if let Some(g) = self.gate.as_mut() {
             g.poll();
             t.next = Some(t.next.map_or(gate::POLL, |n| n.min(gate::POLL)));
+        }
+        if self.ensure_bottom() {
+            t.next = Some(t.next.map_or(vbar::COMPANION_POLL, |n| n.min(vbar::COMPANION_POLL)));
         }
         t
     }
@@ -1423,10 +1477,12 @@ impl MacBar {
     fn tick_inner(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
         let mut close_in = None;
-        let vertical = self.vertical();
-        if vertical != self.was_vertical {
-            // The theme switched layouts: what was open belongs to the old one. The backend moves and resizes the surface.
-            self.was_vertical = vertical;
+        let place = self.place();
+        let vertical = place.is_some();
+        if place != self.was_place {
+            // The theme or the bar position switched layouts: what was open belongs to the old one. The backend moves,
+            // resizes and re-struts the surface.
+            self.was_place = place;
             self.close();
             self.v_hover = None;
             self.v_hover_ws = None;

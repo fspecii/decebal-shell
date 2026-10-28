@@ -1,52 +1,89 @@
-//! The vertical bar: `bar_style = "vertical"` (the Caelestia theme), a bar down the left screen edge.
+//! The Caelestia pill bar: `bar_style = "vertical"` (the Caelestia theme), a bar along a screen edge.
 //!
-//! Top to bottom: OS icon (opens the launcher), workspace pills (rdwm tags), the focused window (icon and
-//! rotated title), a tray group (layout, stay-awake, agents, quick settings), status icons (lock keys, sound,
-//! Wi-Fi / Ethernet, Bluetooth, battery), the clock stacked as `HH` over `MM` (opens the dashboard) and the power
-//! button (opens the session menu). Hovering a status icon (or the window) opens the same popup the horizontal
-//! bar opens on a click, to the right of the bar; the data comes from the same snapshot and worker threads.
+//! One layout, four edges. In reading order the bar holds the OS icon (opens the launcher), the workspace pills
+//! (rdwm tags), the focused window (icon and title), a tray group (layout, stay-awake, agents, quick settings),
+//! status icons (lock keys, sound, Wi-Fi / Ethernet, Bluetooth, battery), the clock (opens the dashboard) and the
+//! power button (opens the session menu). Hovering a status icon (or the window) opens the same popup the classic
+//! menu bar opens on a click, on the side of the bar that faces the screen; the data comes from the same snapshot and
+//! worker threads.
 //!
-//! The surface is [`SURFACE_W`] wide and as tall as the monitor, but only [`BAR_W`] of it is reserved (the strut)
-//! and takes input while nothing is open, exactly like the horizontal bar whose surface is taller than its strip.
+//! `bar.position` in `macshell.json` picks the edge ([`BarPosition`]):
 //!
-//! [`layout`] is pure: it turns the screen height and what exists on this machine into rectangles, which drawing,
-//! hit-testing and the tests share.
+//! | position | surface | strut | popouts open |
+//! |---|---|---|---|
+//! | `left` | [`SURFACE_W`] wide, as tall as the monitor | left | to the right |
+//! | `right` | the same, on the right edge | right | to the left |
+//! | `top` | as wide as the monitor, [`SURFACE_H`] tall | top | downwards |
+//! | `bottom` | the same, on the bottom edge | bottom | upwards |
+//! | `split` | a `top` bar with the head (OS icon, workspaces, window) and a second `macbar --role bottom` process with a `bottom` bar holding the tail (tray, status, clock, power) | top and bottom | down / up |
+//!
+//! The surface is bigger than the strip: only [`THICK`] of it is reserved (the strut) and takes input while nothing is
+//! open, exactly like the classic bar whose surface is taller than its strip.
+//!
+//! The layout is written once, for a bar running down an edge (x across the bar, y along it): [`layout`] computes the
+//! rectangles in that frame and [`Geo`] rotates / mirrors them onto the surface of the chosen edge. Drawing,
+//! hit-testing, popout placement and the tests all share the result, so a horizontal bar is the same bar turned.
 
 use super::popup::Popup;
 use super::*;
+use crate::backend::Anchor;
+use crate::config::BarPosition;
 use crate::menubar::rdwm::TagState;
 use tiny_skia::{FilterQuality, PixmapPaint, Transform};
 
-/// Width reserved at the screen edge (the strut) and the width of the bar strip.
-pub const BAR_W: f32 = 52.0;
-/// Room right of the strip for popups and the quick-settings panel (widest: the Control Center, 340 px).
+/// Thickness of the bar strip, and of the strut it reserves.
+pub const THICK: f32 = crate::theme::PILL_BAR_THICKNESS;
+/// Room beside a side bar for popups and the quick-settings panel (widest: the Control Center, 340 px).
 pub const POPOUT_W: f32 = 392.0;
-pub const SURFACE_W: u32 = (BAR_W + POPOUT_W) as u32;
+pub const SURFACE_W: u32 = (THICK + POPOUT_W) as u32;
+/// Room under (over) a top (bottom) bar for the same; the tallest thing is the Control Center. A small monitor cuts it.
+pub const POPOUT_H: f32 = 720.0;
+pub const SURFACE_H: u32 = (THICK + POPOUT_H) as u32;
 const PILL_X: f32 = 6.0;
-pub const PILL_W: f32 = BAR_W - 2.0 * PILL_X;
-/// Space above the first and below the last pill, and between pills.
+pub const PILL_W: f32 = THICK - 2.0 * PILL_X;
+/// Space before the first and after the last pill, and between pills.
 const EDGE: f32 = 8.0;
 const GAP: f32 = 8.0;
 pub const LOGO_H: f32 = PILL_W;
 pub const POWER_H: f32 = PILL_W;
-pub const CLOCK_H: f32 = 58.0;
-/// One workspace cell and the padding above / below the cells inside their pill.
-pub const WS_CELL: f32 = 26.0;
+/// Padding before / after the workspace cells inside their pill.
 const WS_PAD: f32 = 6.0;
 /// One icon cell in the tray and status pills (the battery also carries its percentage).
 pub const ICON_CELL: f32 = 30.0;
-pub const BATT_CELL: f32 = 44.0;
 const CELL_PAD: f32 = 6.0;
-/// The window pill is left out when less than this is free for it.
-const WIN_MIN: f32 = 72.0;
-/// Longest title run drawn along the window pill.
-const WIN_TEXT_MAX: f32 = 200.0;
 const WIN_ICON: f32 = 22.0;
 /// Gap between the strip and the popup opened from it.
 const POP_GAP: f32 = 6.0;
 const POP_MARGIN: f32 = 8.0;
 /// Pointer rest time on a status icon before its popup opens (moving between icons switches at once).
 pub const HOVER_DELAY: Duration = Duration::from_millis(140);
+/// How often the main bar of a split layout checks that its bottom half is running.
+pub const COMPANION_POLL: Duration = Duration::from_secs(2);
+/// Wait before starting the bottom process again after it ended.
+const COMPANION_RETRY: Duration = Duration::from_secs(8);
+
+/// Sizes that differ between a bar down an edge and one along it, so that the same content fits both.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dim {
+    /// One workspace cell along the bar.
+    pub ws_cell: f32,
+    pub batt_cell: f32,
+    pub clock_len: f32,
+    /// Longest title run drawn in the window pill.
+    pub win_text_max: f32,
+    /// The window pill is left out when less than this is free for it.
+    pub win_min: f32,
+}
+
+impl Dim {
+    pub fn of(horizontal: bool) -> Dim {
+        if horizontal {
+            Dim { ws_cell: 30.0, batt_cell: 54.0, clock_len: 64.0, win_text_max: 340.0, win_min: 96.0 }
+        } else {
+            Dim { ws_cell: 26.0, batt_cell: 44.0, clock_len: 58.0, win_text_max: 200.0, win_min: 72.0 }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct VRect {
@@ -66,12 +103,15 @@ impl VRect {
     pub fn cy(&self) -> f32 {
         self.y + self.h / 2.0
     }
+    pub fn right(&self) -> f32 {
+        self.x + self.w
+    }
     pub fn bottom(&self) -> f32 {
         self.y + self.h
     }
 }
 
-/// The rounded containers, top to bottom.
+/// The rounded containers, in reading order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pill {
     Logo,
@@ -83,11 +123,171 @@ pub enum Pill {
     Power,
 }
 
+/// Which pills a bar surface shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Part {
+    /// Everything: a single bar.
+    All,
+    /// The OS icon, workspaces and window title: the top bar of a split layout.
+    Head,
+    /// Tray, status icons, clock and power: the bottom bar of a split layout.
+    Tail,
+}
+
+/// Which macbar process this is. A split layout is two processes, each with its own surface and its own single-instance
+/// lock: the main one draws the top bar, `macbar --role bottom` the bottom bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Process {
+    #[default]
+    Main,
+    Bottom,
+}
+
+impl Process {
+    pub fn parse(s: &str) -> Option<Process> {
+        match s {
+            "main" | "top" => Some(Process::Main),
+            "bottom" => Some(Process::Bottom),
+            _ => None,
+        }
+    }
+    /// Name of the single-instance lock.
+    pub fn lock_name(self) -> &'static str {
+        match self {
+            Process::Main => "macbar",
+            Process::Bottom => "macbar-bottom",
+        }
+    }
+}
+
+/// Where one bar surface sits and what it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Place {
+    pub edge: Anchor,
+    pub part: Part,
+}
+
+impl Place {
+    /// The surface `process` draws for `position`; `None` when it has nothing to draw (the bottom process of an unsplit layout).
+    pub fn of(position: BarPosition, process: Process) -> Option<Place> {
+        let (edge, part) = match (position, process) {
+            (BarPosition::Left, Process::Main) => (Anchor::Left, Part::All),
+            (BarPosition::Right, Process::Main) => (Anchor::Right, Part::All),
+            (BarPosition::Top, Process::Main) => (Anchor::Top, Part::All),
+            (BarPosition::Bottom, Process::Main) => (Anchor::Bottom, Part::All),
+            (BarPosition::Split, Process::Main) => (Anchor::Top, Part::Head),
+            (BarPosition::Split, Process::Bottom) => (Anchor::Bottom, Part::Tail),
+            (_, Process::Bottom) => return None,
+        };
+        Some(Place { edge, part })
+    }
+    /// Window name of the surface (what `xdotool search --name` finds).
+    pub fn namespace(self) -> &'static str {
+        if self.part == Part::Tail {
+            "macshell-bar-bottom"
+        } else {
+            "macshell-bar"
+        }
+    }
+}
+
+/// Where `process` draws, given what the theme says (`Some(position)` while it has the pill bar) and an explicit
+/// `--position`, which wins over the setting but never over a theme without the pill bar.
+pub fn place_for(theme_says: Option<BarPosition>, over: Option<BarPosition>, process: Process) -> Option<Place> {
+    Place::of(theme_says.map(|p| over.unwrap_or(p))?, process)
+}
+
+/// [`place_for`] for the theme and settings on disk right now (what a process checks before it starts).
+pub fn place_now(process: Process, over: Option<BarPosition>) -> Option<Place> {
+    crate::theme::live::reload();
+    place_for(crate::theme::th().pill_bar(), over, process)
+}
+
+/// The surface and its edge: turns the one layout into rectangles on any of the four edges.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Geo {
+    pub edge: Anchor,
+    /// Surface size.
+    pub w: f32,
+    pub h: f32,
+}
+
+impl Geo {
+    pub fn new(edge: Anchor, w: f32, h: f32) -> Geo {
+        Geo { edge, w, h }
+    }
+    /// The bar runs along the top or bottom edge.
+    pub fn horizontal(&self) -> bool {
+        !self.edge.is_side()
+    }
+    /// Length of the bar along its edge.
+    pub fn len(&self) -> f32 {
+        if self.horizontal() {
+            self.w
+        } else {
+            self.h
+        }
+    }
+    /// The coordinate along the bar (x of a horizontal bar, y of a vertical one).
+    pub fn along(&self, x: f32, y: f32) -> f32 {
+        if self.horizontal() {
+            x
+        } else {
+            y
+        }
+    }
+    /// Surface coordinate where the strip starts across the bar.
+    fn base(&self) -> f32 {
+        match self.edge {
+            Anchor::Left | Anchor::Top => 0.0,
+            Anchor::Right => self.w - THICK,
+            Anchor::Bottom => self.h - THICK,
+        }
+    }
+    /// The bar strip on the surface: the part that is reserved and takes input.
+    pub fn strip(&self) -> VRect {
+        if self.horizontal() {
+            VRect { x: 0.0, y: self.base(), w: self.w, h: THICK }
+        } else {
+            VRect { x: self.base(), y: 0.0, w: THICK, h: self.h }
+        }
+    }
+    /// A rectangle of the layout frame (x across the bar from its outer edge, y along it) on the surface.
+    fn map(&self, r: VRect) -> VRect {
+        if self.horizontal() {
+            VRect { x: r.y, y: self.base() + r.x, w: r.h, h: r.w }
+        } else {
+            VRect { x: self.base() + r.x, y: r.y, w: r.w, h: r.h }
+        }
+    }
+    /// Top-left of a box `pw` x `ph` that pops out of `item`: on the screen side of the strip, centred on the item along
+    /// the bar, kept on the surface.
+    pub fn popout_origin(&self, item: VRect, pw: f32, ph: f32) -> (f32, f32) {
+        match self.edge {
+            Anchor::Left => (THICK + POP_GAP, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
+            Anchor::Right => (self.w - THICK - POP_GAP - pw, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
+            Anchor::Top => (clamp_in(item.cx() - pw / 2.0, pw, self.w), THICK + POP_GAP),
+            Anchor::Bottom => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.h - THICK - POP_GAP - ph),
+        }
+    }
+    /// Input region for a popout box: the box and the way back to the strip, so the pointer never leaves the surface on its way.
+    pub fn reach(&self, x: f32, y: f32, w: f32, h: f32) -> InputRect {
+        let s = self.strip();
+        let (x0, y0, x1, y1) = match self.edge {
+            Anchor::Left => (s.right(), y, x + w, y + h),
+            Anchor::Right => (x, y, s.x, y + h),
+            Anchor::Top => (x, s.bottom(), x + w, y + h),
+            Anchor::Bottom => (x, y, x + w, s.y),
+        };
+        InputRect { x: x0.floor() as i32, y: y0.floor() as i32, w: (x1 - x0.floor()).ceil() as i32, h: (y1 - y0.floor()).ceil() as i32 }
+    }
+}
+
 /// What the bar shows on this machine right now.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Content {
     pub workspaces: usize,
-    /// Height the window pill would like; 0 = no focused window.
+    /// Length the window pill would like; 0 = no focused window.
     pub window: f32,
     pub tray: Vec<Tray>,
     pub status: Vec<Tray>,
@@ -112,91 +312,110 @@ impl Layout {
     }
 }
 
-fn cell_h(kind: Tray) -> f32 {
+fn cell_len(kind: Tray, d: &Dim) -> f32 {
     if kind == Tray::Battery {
-        BATT_CELL
+        d.batt_cell
     } else {
         ICON_CELL
     }
 }
 
-pub fn group_h(kinds: &[Tray]) -> f32 {
-    kinds.iter().map(|k| cell_h(*k)).sum::<f32>() + 2.0 * CELL_PAD
+/// Length along the bar of a tray / status group.
+pub fn group_len(kinds: &[Tray], horizontal: bool) -> f32 {
+    let d = Dim::of(horizontal);
+    kinds.iter().map(|k| cell_len(*k, &d)).sum::<f32>() + 2.0 * CELL_PAD
 }
 
-pub fn workspaces_h(count: usize) -> f32 {
-    count as f32 * WS_CELL + 2.0 * WS_PAD
+/// Length along the bar of the workspace pill.
+pub fn workspaces_len(count: usize, horizontal: bool) -> f32 {
+    count as f32 * Dim::of(horizontal).ws_cell + 2.0 * WS_PAD
 }
 
-/// Lays the bar out on a screen `height` tall. The logo and workspaces hang from the top, the tray, status icons,
-/// clock and power button stand on the bottom, and the focused window takes the room between (centred in it),
-/// or is left out when there is less than [`WIN_MIN`].
-pub fn layout(height: f32, c: &Content) -> Layout {
-    let mut out = Layout::default();
+/// Lays the bar out on `geo`, showing the pills of `part`. The head (logo, workspaces) hangs from the start of the bar
+/// (top / left), the tail (tray, status icons, clock, power) stands on its end (bottom / right), and the focused window
+/// takes the room between, centred in it (a head-only bar puts it right after the workspaces); it is left out when
+/// there is less than [`Dim::win_min`].
+pub fn layout(geo: &Geo, part: Part, c: &Content) -> Layout {
+    let horiz = geo.horizontal();
+    let d = Dim::of(horiz);
+    let len = geo.len();
+    // the layout frame: x across the bar, y along it
+    let pill = |u: f32, l: f32| VRect { x: PILL_X, y: u, w: PILL_W, h: l };
+    let mut pills: Vec<(Pill, VRect)> = Vec::new();
+    let mut items: Vec<(Tray, VRect)> = Vec::new();
+    let (head, tail) = (part != Part::Tail, part != Part::Head);
+
     let mut top = EDGE;
-    let logo = VRect { x: PILL_X, y: top, w: PILL_W, h: LOGO_H };
-    out.pills.push((Pill::Logo, logo));
-    out.items.push((Tray::Logo, logo));
-    top += LOGO_H + GAP;
-    if c.workspaces > 0 {
-        let r = VRect { x: PILL_X, y: top, w: PILL_W, h: workspaces_h(c.workspaces) };
-        out.pills.push((Pill::Workspaces, r));
-        out.items.push((Tray::Workspaces, r));
-        top += r.h + GAP;
+    if head {
+        let logo = pill(top, LOGO_H);
+        pills.push((Pill::Logo, logo));
+        items.push((Tray::Logo, logo));
+        top += LOGO_H + GAP;
+        if c.workspaces > 0 {
+            let r = pill(top, workspaces_len(c.workspaces, horiz));
+            pills.push((Pill::Workspaces, r));
+            items.push((Tray::Workspaces, r));
+            top += r.h + GAP;
+        }
     }
 
-    // The bottom stack, built from the screen edge up and then put in reading order.
-    let mut bot = height - EDGE;
-    let mut bottom: Vec<(Pill, VRect)> = Vec::new();
-    let mut bottom_items: Vec<(Tray, VRect)> = Vec::new();
-    let mut stand = |pill: Pill, h: f32, bot: &mut f32| -> VRect {
-        let r = VRect { x: PILL_X, y: *bot - h, w: PILL_W, h };
-        bottom.push((pill, r));
-        *bot = r.y - GAP;
-        r
-    };
-    let power = stand(Pill::Power, POWER_H, &mut bot);
-    bottom_items.push((Tray::Power, power));
-    let clock = stand(Pill::Clock, CLOCK_H, &mut bot);
-    bottom_items.push((Tray::Clock, clock));
-    for (pill, kinds) in [(Pill::Status, &c.status), (Pill::Tray, &c.tray)] {
-        if kinds.is_empty() {
-            continue;
+    // The tail, built from the end of the bar back and then put in reading order.
+    let mut bot = len - EDGE;
+    let mut tail_pills: Vec<(Pill, VRect)> = Vec::new();
+    let mut tail_items: Vec<(Tray, VRect)> = Vec::new();
+    if tail {
+        let mut stand = |kind: Pill, l: f32, bot: &mut f32| -> VRect {
+            let r = pill(*bot - l, l);
+            tail_pills.push((kind, r));
+            *bot = r.y - GAP;
+            r
+        };
+        let power = stand(Pill::Power, POWER_H, &mut bot);
+        tail_items.push((Tray::Power, power));
+        let clock = stand(Pill::Clock, d.clock_len, &mut bot);
+        tail_items.push((Tray::Clock, clock));
+        for (kind, trays) in [(Pill::Status, &c.status), (Pill::Tray, &c.tray)] {
+            if trays.is_empty() {
+                continue;
+            }
+            let r = stand(kind, group_len(trays, horiz), &mut bot);
+            let mut u = r.y + CELL_PAD;
+            for k in trays {
+                let cell = pill(u, cell_len(*k, &d));
+                tail_items.push((*k, cell));
+                u += cell.h;
+            }
         }
-        let r = stand(pill, group_h(kinds), &mut bot);
-        let mut y = r.y + CELL_PAD;
-        for k in kinds {
-            let cell = VRect { x: PILL_X, y, w: PILL_W, h: cell_h(*k) };
-            bottom_items.push((*k, cell));
-            y += cell.h;
-        }
+        tail_pills.reverse();
+        // with a tail, `bot` is the free space's far boundary (it already includes the gap before the first tail pill)
     }
-    bottom.reverse();
-    // `bot` is now the free space's lower boundary (it already includes the gap above the topmost bottom pill).
     let avail = bot - top;
-    if c.window > 0.0 && avail >= WIN_MIN {
-        let h = c.window.min(avail);
-        let r = VRect { x: PILL_X, y: top + (avail - h) / 2.0, w: PILL_W, h };
-        out.pills.push((Pill::Window, r));
-        out.items.push((Tray::Window, r));
+    if head && c.window > 0.0 && avail >= d.win_min {
+        let l = c.window.min(avail);
+        let u = if tail { top + (avail - l) / 2.0 } else { top };
+        let r = pill(u, l);
+        pills.push((Pill::Window, r));
+        items.push((Tray::Window, r));
     }
-    out.pills.extend(bottom);
-    bottom_items.sort_by(|a, b| a.1.y.total_cmp(&b.1.y));
-    out.items.extend(bottom_items);
-    out
+    pills.extend(tail_pills);
+    tail_items.sort_by(|a, b| a.1.y.total_cmp(&b.1.y));
+    items.extend(tail_items);
+
+    Layout { pills: pills.into_iter().map(|(p, r)| (p, geo.map(r))).collect(), items: items.into_iter().map(|(k, r)| (k, geo.map(r))).collect() }
 }
 
-/// Which workspace cell (0-based) lies under `y` inside the workspace pill `pill`.
-pub fn workspace_hit(pill: VRect, count: usize, y: f32) -> Option<usize> {
-    let rel = y - (pill.y + WS_PAD);
-    if rel < 0.0 || y >= pill.bottom() - WS_PAD {
+/// Which workspace cell (0-based) lies under (`x`, `y`) inside the workspace pill `pill` of a bar.
+pub fn workspace_hit(pill: VRect, horizontal: bool, count: usize, x: f32, y: f32) -> Option<usize> {
+    let (start, len, at) = if horizontal { (pill.x, pill.w, x) } else { (pill.y, pill.h, y) };
+    let rel = at - (start + WS_PAD);
+    if rel < 0.0 || at >= start + len - WS_PAD {
         return None;
     }
-    let i = (rel / WS_CELL) as usize;
+    let i = (rel / Dim::of(horizontal).ws_cell) as usize;
     (i < count).then_some(i)
 }
 
-/// What a left click on `kind` does in the vertical bar.
+/// What a left click on `kind` does in the pill bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Click {
     /// The OS icon: the launcher (macspot).
@@ -299,21 +518,42 @@ pub fn logo_symbol() -> String {
     }
 }
 
+/// Arguments that start the bottom half of a split layout (after the program name).
+pub fn bottom_args() -> [&'static str; 2] {
+    ["--role", "bottom"]
+}
+
 impl MacBar {
-    /// True when this bar draws the vertical layout (the theme asks for it; never for an embedded status engine).
-    pub(super) fn vertical(&self) -> bool {
+    /// Where this process draws the pill bar, or `None` when it draws the classic menu bar (the theme asks for it; never
+    /// for an embedded status engine). `bar.position` comes with the live theme, so a change reaches here like a style switch.
+    pub(super) fn place(&self) -> Option<Place> {
         if self.embedded {
-            return false;
+            return None;
         }
         #[cfg(test)]
-        return TEST_VERTICAL.with(|f| f.get());
+        let theme_says = TEST_VERTICAL.with(|f| f.get()).then(|| TEST_POSITION.with(|p| p.get()));
         #[cfg(not(test))]
-        crate::theme::th().bar_vertical()
+        let theme_says = crate::theme::th().pill_bar();
+        place_for(theme_says, self.position_override, self.process)
     }
 
-    /// Starts the Caps / Num Lock watcher once, when the vertical bar is (about to be) on screen and a waker exists.
+    /// True when this bar draws the pill layout.
+    pub(super) fn pill_bar(&self) -> bool {
+        self.place().is_some()
+    }
+
+    /// The surface on its edge (the left edge before there is a place).
+    pub(super) fn v_geo(&self) -> Geo {
+        Geo::new(self.place().map_or(Anchor::Left, |p| p.edge), self.width as f32, self.height as f32)
+    }
+
+    fn v_part(&self) -> Part {
+        self.place().map_or(Part::All, |p| p.part)
+    }
+
+    /// Starts the Caps / Num Lock watcher once, when the pill bar is (about to be) on screen and a waker exists.
     pub(super) fn ensure_lock_watcher(&mut self) {
-        if self.lock_watcher || self.embedded || !self.vertical() {
+        if self.lock_watcher || self.embedded || !self.pill_bar() {
             return;
         }
         let Some(waker) = self.waker.clone() else { return };
@@ -323,6 +563,28 @@ impl MacBar {
             changed.changed.store(true, Ordering::SeqCst);
             waker.wake();
         });
+    }
+
+    /// While the layout is split this (main) bar owns the bottom bar's process: starts `macbar --role bottom` when it is not
+    /// running, and notices when it ended. The bottom process holds its own lock, so a second one just exits, and it leaves by
+    /// itself when the layout stops being split. Returns true while the companion is wanted (the caller keeps polling).
+    pub(super) fn ensure_bottom(&mut self) -> bool {
+        let wanted = self.companion && self.process == Process::Main && self.place().is_some_and(|p| p.part == Part::Head);
+        if let Some(child) = self.bottom_child.as_mut() {
+            if !matches!(child.try_wait(), Ok(None)) {
+                self.bottom_child = None;
+                self.bottom_retry = Instant::now() + COMPANION_RETRY;
+            }
+        }
+        if !wanted || self.bottom_child.is_some() || Instant::now() < self.bottom_retry {
+            return wanted;
+        }
+        self.bottom_retry = Instant::now() + COMPANION_RETRY;
+        self.bottom_spawns += 1;
+        let exe = self.bottom_exe.clone().unwrap_or_else(|| crate::launch::sibling_or_path("macbar"));
+        let child = std::process::Command::new(exe).args(bottom_args()).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).spawn();
+        self.bottom_child = child.ok();
+        wanted
     }
 
     /// The workspace pills: rdwm's tags of the selected monitor when it reports them, else the EWMH desktops.
@@ -365,12 +627,13 @@ impl MacBar {
         if snap.battery.is_some() {
             status.push(Tray::Battery);
         }
-        let window = if self.v_win.is_some() { (2.0 * 8.0 + WIN_ICON + 8.0 + self.v_win_len.min(WIN_TEXT_MAX)).ceil() } else { 0.0 };
+        let text_max = Dim::of(self.v_geo().horizontal()).win_text_max;
+        let window = if self.v_win.is_some() { (2.0 * 8.0 + WIN_ICON + 8.0 + self.v_win_len.min(text_max)).ceil() } else { 0.0 };
         Content { workspaces: self.v_workspaces().len(), window, tray, status }
     }
 
     pub(super) fn v_layout(&self) -> Layout {
-        layout(self.height as f32, &self.v_content())
+        layout(&self.v_geo(), self.v_part(), &self.v_content())
     }
 
     /// Re-reads the focused window (app id and title) and measures the title; true when something changed.
@@ -403,28 +666,29 @@ impl MacBar {
 
     // ------------------------------------------------------------ geometry for the backend / input
 
-    pub(super) fn v_spec() -> crate::backend::SurfaceSpec {
-        crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Left, margin: 0, reserve: BAR_W as i32, stretch: true, namespace: "macshell-bar" }
+    pub(super) fn v_spec(place: Place) -> crate::backend::SurfaceSpec {
+        crate::backend::SurfaceSpec { anchor: place.edge, margin: 0, reserve: THICK as i32, stretch: true, namespace: place.namespace() }
     }
 
-    /// Top-left of the open Control Center panel: right of the strip, centred on its tile, kept on screen.
+    /// Top-left of the open Control Center panel: on the screen side of the strip, centred on its tile, kept on screen.
     pub(super) fn v_panel_origin(&self) -> (f32, f32) {
-        let cy = self.v_layout().item(Tray::Control).map_or(self.height as f32 / 2.0, |r| r.cy());
-        (BAR_W + POP_GAP, clamp_y(cy - self.cc_height / 2.0, self.cc_height, self.height as f32))
+        let geo = self.v_geo();
+        let tile = self.v_layout().item(Tray::Control).unwrap_or(VRect { x: geo.w / 2.0, y: geo.h / 2.0, w: 0.0, h: 0.0 });
+        geo.popout_origin(tile, controlcenter::PANEL_W, self.cc_height)
     }
 
     pub(super) fn v_input_rects(&self) -> Vec<InputRect> {
-        let h = self.height.max(1) as i32;
-        let mut rects = vec![InputRect { x: 0, y: 0, w: BAR_W as i32, h }];
+        let geo = self.v_geo();
+        let s = geo.strip();
+        let mut rects = vec![InputRect { x: s.x as i32, y: s.y as i32, w: s.w.ceil() as i32, h: s.h.ceil() as i32 }];
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
-                // starts at the strip so the pointer never leaves the surface on its way over
-                rects.push(InputRect { x: BAR_W as i32, y: oy.floor() as i32, w: (ox + controlcenter::PANEL_W - BAR_W).ceil() as i32, h: self.cc_height.ceil() as i32 });
+                rects.push(geo.reach(ox, oy, controlcenter::PANEL_W, self.cc_height));
             }
             Open::Popup(_) => {
                 if let Some(p) = &self.popup {
-                    rects.push(InputRect { x: BAR_W as i32, y: p.y.floor() as i32, w: (p.x + p.w - BAR_W).ceil() as i32, h: p.h.ceil() as i32 });
+                    rects.push(geo.reach(p.x, p.y, p.w, p.h));
                 }
             }
             Open::Menu(_) | Open::None => {}
@@ -432,13 +696,13 @@ impl MacBar {
         rects
     }
 
-    /// Opens the popup of `kind` to the right of its icon (or window pill), vertically centred on it.
+    /// Opens the popup of `kind` beside its icon (or window pill) on the screen side of the strip.
     pub(super) fn v_open_popup(&mut self, kind: Tray) {
         self.close();
         let Some(item) = self.v_layout().item(kind) else { return };
         let Some((rows, w, compact)) = self.build_popup(kind) else { return };
-        let mut p = Popup::layout(rows, BAR_W + POP_GAP, 0.0, w, compact);
-        p.y = clamp_y(item.cy() - p.h / 2.0, p.h, self.height as f32);
+        let mut p = Popup::layout(rows, 0.0, 0.0, w, compact);
+        (p.x, p.y) = self.v_geo().popout_origin(item, p.w, p.h);
         self.popup = Some(p);
         self.open = Open::Popup(kind);
         self.last_full_refresh = Instant::now();
@@ -450,21 +714,29 @@ impl MacBar {
         }
     }
 
-    /// After a rebuild the popup may have grown: keep it on screen.
+    /// After a rebuild the popup may have grown: put it back beside its icon, on screen (a bottom bar's popup grows upwards).
     pub(super) fn v_clamp_popup(&mut self) {
-        let h = self.height as f32;
-        if let Some(p) = self.popup.as_mut() {
-            p.y = clamp_y(p.y, p.h, h);
+        let Open::Popup(kind) = self.open else { return };
+        let item = self.v_layout().item(kind);
+        let geo = self.v_geo();
+        if let (Some(p), Some(item)) = (self.popup.as_mut(), item) {
+            (p.x, p.y) = geo.popout_origin(item, p.w, p.h);
         }
     }
 
-    /// `--png` for the vertical layout: the whole surface (strip and popout room) at the height given by [`MacBar::with_height`].
-    /// `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`, `battery`, `window`, `layout`).
-    pub(super) fn v_render_png(&mut self, path: &str, open: Option<&str>) -> Result<(), String> {
-        if self.height == 0 {
-            self.height = 900;
+    /// `--png` for the pill bar: the whole surface (strip and popout room) at the height given by [`MacBar::with_height`] for a
+    /// side bar, at `width` for a top / bottom one. `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`,
+    /// `battery`, `window`, `layout`).
+    pub(super) fn v_render_png(&mut self, path: &str, width: u32, open: Option<&str>) -> Result<(), String> {
+        if self.v_geo().horizontal() {
+            self.width = width.max(1);
+            self.height = SURFACE_H;
+        } else {
+            self.width = SURFACE_W;
+            if self.height == 0 {
+                self.height = 900;
+            }
         }
-        self.width = SURFACE_W;
         self.v_refresh_window();
         match open {
             Some("control") => {
@@ -484,7 +756,7 @@ impl MacBar {
             }
             None => {}
         }
-        let mut pm = Pixmap::new(SURFACE_W, self.height.max(1)).ok_or("cannot allocate pixmap")?;
+        let mut pm = Pixmap::new(self.width, self.height.max(1)).ok_or("cannot allocate pixmap")?;
         self.draw(&mut pm);
         pm.save_png(path).map_err(|e| e.to_string())
     }
@@ -492,12 +764,13 @@ impl MacBar {
     // ------------------------------------------------------------------------------- input
 
     pub(super) fn v_target(&self, x: f32, y: f32) -> Option<(Tray, Option<usize>)> {
-        if x < 0.0 || x >= BAR_W {
+        let geo = self.v_geo();
+        if !geo.strip().contains(x, y) {
             return None;
         }
         let lay = self.v_layout();
         let (kind, r) = lay.hit(x, y)?;
-        let ws = (kind == Tray::Workspaces).then(|| workspace_hit(r, self.v_workspaces().len(), y)).flatten();
+        let ws = (kind == Tray::Workspaces).then(|| workspace_hit(r, geo.horizontal(), self.v_workspaces().len(), x, y)).flatten();
         Some((kind, ws))
     }
 
@@ -585,7 +858,7 @@ impl MacBar {
         if button != Button::Left {
             return false;
         }
-        if x < BAR_W {
+        if self.v_geo().strip().contains(x, y) {
             let Some((kind, ws)) = target else { return self.close() };
             self.v_hover_open = None;
             match click_for(kind, ws) {
@@ -611,7 +884,7 @@ impl MacBar {
                 }
                 Click::Dashboard => {
                     self.close();
-                    launch_ui(vec![crate::launch::sibling_or_path("macdash"), "--top".into(), "10".into()]);
+                    launch_ui(clock_dash_argv(self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All })));
                 }
                 Click::Session => {
                     self.close();
@@ -646,10 +919,11 @@ impl MacBar {
         }
     }
 
-    /// Wheel on the strip, as in caelestia: over the workspaces it steps through them, elsewhere the upper half of the
-    /// screen changes the volume and the lower half the brightness.
+    /// Wheel on the strip, as in caelestia: over the workspaces it steps through them, elsewhere the first half of the bar
+    /// (upper / left) changes the volume and the second half the brightness.
     pub(super) fn v_scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
-        if x >= BAR_W {
+        let geo = self.v_geo();
+        if !geo.strip().contains(x, y) {
             return false;
         }
         let target = self.v_target(x, y).map(|t| t.0);
@@ -658,7 +932,7 @@ impl MacBar {
             return false;
         }
         let up = if dy > 0.0 { -1.0 } else { 1.0 };
-        if target == Some(Tray::Audio) || y < self.height as f32 / 2.0 {
+        if target == Some(Tray::Audio) || geo.along(x, y) < geo.len() / 2.0 {
             let Some(v) = self.snapshot().volume else { return false };
             let cur = if v.muted { 0.0 } else { v.level };
             self.set_volume_now((cur + up * 0.05).clamp(0.0, 1.0));
@@ -674,7 +948,7 @@ impl MacBar {
         true
     }
 
-    /// Timers of the vertical bar: the hover delay before a popup opens. Returns (redraw, time until the next one).
+    /// Timers of the pill bar: the hover delay before a popup opens. Returns (redraw, time until the next one).
     pub(super) fn v_tick(&mut self) -> (bool, Option<Duration>) {
         let Some((kind, since)) = self.v_hover_open else { return (false, None) };
         if since.elapsed() < HOVER_DELAY {
@@ -696,6 +970,17 @@ impl MacBar {
         let w = f.measure(s, px, weight);
         let top = cy + 0.36 * px * crate::theme::live::font_scale() - f.ascent(px, weight);
         f.draw(pm, s, cx - w / 2.0, top, px, weight, color(rgb.0, rgb.1, rgb.2, alpha));
+    }
+
+    /// `s` starting at `x`, vertically centred on `cy`.
+    #[allow(clippy::too_many_arguments)]
+    fn v_text_from(&mut self, pm: &mut Pixmap, s: &str, x: f32, cy: f32, px: f32, weight: Weight, rgb: (u8, u8, u8)) {
+        let w = self.fonts.as_ref().map_or(0.0, |f| f.measure(s, px, weight));
+        self.v_text(pm, s, x + w / 2.0, cy, px, weight, rgb, 1.0);
+    }
+
+    fn v_text_width(&self, s: &str, px: f32, weight: Weight) -> f32 {
+        self.fonts.as_ref().map_or(0.0, |f| f.measure(s, px, weight))
     }
 
     fn v_symbol(&mut self, pm: &mut Pixmap, name: &str, size: f32, cx: f32, cy: f32, rgb: (u8, u8, u8)) {
@@ -722,15 +1007,18 @@ impl MacBar {
         let th = crate::theme::th();
         self.width = pm.width();
         self.height = pm.height();
-        let h = pm.height() as f32;
-        crate::gfx::fill_rect(pm, 0.0, 0.0, BAR_W, h, th.background.color(th.bar_alpha));
+        let geo = self.v_geo();
+        let horiz = geo.horizontal();
+        let strip = geo.strip();
+        crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.background.color(th.bar_alpha));
         let lay = self.v_layout();
         let snap = self.snapshot();
         let text = th.text.t();
         let radius = PILL_W / 2.0;
         for (_, r) in &lay.pills {
-            fill_rounded(pm, r.x, r.y, r.w, r.h, radius.min(r.h / 2.0), th.bar.color(1.0));
-            stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, radius.min(r.h / 2.0) - 0.5, th.outline_c(), 1.0);
+            let rad = radius.min(r.w.min(r.h) / 2.0);
+            fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(1.0));
+            stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, rad - 0.5, th.outline_c(), 1.0);
         }
 
         for (kind, r) in &lay.items {
@@ -740,7 +1028,9 @@ impl MacBar {
                 let a = if open { 0.18 } else { 0.10 };
                 let single = matches!(kind, Tray::Logo | Tray::Window | Tray::Clock | Tray::Power);
                 if single {
-                    fill_rounded(pm, r.x, r.y, r.w, r.h, radius.min(r.h / 2.0), th.ink(a));
+                    fill_rounded(pm, r.x, r.y, r.w, r.h, radius.min(r.w.min(r.h) / 2.0), th.ink(a));
+                } else if horiz {
+                    fill_rounded(pm, r.x + 1.0, r.y + 2.0, r.w - 2.0, r.h - 4.0, 12.0, th.ink(a));
                 } else {
                     fill_rounded(pm, r.x + 2.0, r.y + 1.0, r.w - 4.0, r.h - 2.0, 12.0, th.ink(a));
                 }
@@ -751,8 +1041,8 @@ impl MacBar {
                     let name = self.logo_symbol.clone();
                     self.v_symbol(pm, &name, 22.0, cx, cy, th.accent.t());
                 }
-                Tray::Workspaces => self.v_draw_workspaces(pm, *r),
-                Tray::Window => self.v_draw_window(pm, *r),
+                Tray::Workspaces => self.v_draw_workspaces(pm, *r, horiz),
+                Tray::Window => self.v_draw_window(pm, *r, horiz),
                 Tray::Layout => {
                     if let Some(l) = self.layout_state() {
                         popup::draw_layout_icon(pm, l.canonical(), cx - 11.0, cy - 7.0, 22.0, 14.0, (text.0, text.1, text.2, 0.95));
@@ -795,13 +1085,22 @@ impl MacBar {
                 }
                 Tray::Battery => {
                     if let Some(b) = &snap.battery {
-                        self.v_draw_battery(pm, *r, b);
+                        self.v_draw_battery(pm, *r, b, horiz);
                     }
                 }
                 Tray::Clock => {
                     let (hh, mm) = self.v_clock();
-                    self.v_text(pm, &hh, cx, cy - 11.0, 15.0, Weight::Bold, th.accent.t(), 1.0);
-                    self.v_text(pm, &mm, cx, cy + 11.0, 15.0, Weight::Medium, text, 1.0);
+                    if horiz {
+                        // HH:MM on one line, the hour in the accent colour as the stacked clock has it
+                        let (wh, wc, wm) = (self.v_text_width(&hh, 15.0, Weight::Bold), self.v_text_width(":", 15.0, Weight::Bold), self.v_text_width(&mm, 15.0, Weight::Medium));
+                        let x0 = cx - (wh + wc + wm) / 2.0;
+                        self.v_text(pm, &hh, x0 + wh / 2.0, cy, 15.0, Weight::Bold, th.accent.t(), 1.0);
+                        self.v_text(pm, ":", x0 + wh + wc / 2.0, cy, 15.0, Weight::Bold, th.accent.t(), 1.0);
+                        self.v_text(pm, &mm, x0 + wh + wc + wm / 2.0, cy, 15.0, Weight::Medium, text, 1.0);
+                    } else {
+                        self.v_text(pm, &hh, cx, cy - 11.0, 15.0, Weight::Bold, th.accent.t(), 1.0);
+                        self.v_text(pm, &mm, cx, cy + 11.0, 15.0, Weight::Medium, text, 1.0);
+                    }
                 }
                 Tray::Power => self.v_symbol(pm, "power", 18.0, cx, cy, th.danger.t()),
                 Tray::Weather | Tray::Dash | Tray::Spotlight => {}
@@ -832,18 +1131,19 @@ impl MacBar {
         }
     }
 
-    /// (`HH`, `MM`) for the stacked clock.
+    /// (`HH`, `MM`) for the clock.
     fn v_clock(&self) -> (String, String) {
         let (h, m) = self.last_minute.unwrap_or((0, 0));
         clock_parts(h, m, crate::config::shell_settings().clock_hour12)
     }
 
-    fn v_draw_workspaces(&mut self, pm: &mut Pixmap, pill: VRect) {
+    fn v_draw_workspaces(&mut self, pm: &mut Pixmap, pill: VRect, horiz: bool) {
         let th = crate::theme::th();
         let wss = self.v_workspaces();
+        let cell = Dim::of(horiz).ws_cell;
         for (i, ws) in wss.iter().enumerate() {
-            let cy = pill.y + WS_PAD + WS_CELL * (i as f32 + 0.5);
-            let cx = pill.cx();
+            let along = WS_PAD + cell * (i as f32 + 0.5);
+            let (cx, cy) = if horiz { (pill.x + along, pill.cy()) } else { (pill.cx(), pill.y + along) };
             let label = if ws.name.chars().count() <= 2 && !ws.name.is_empty() { ws.name.clone() } else { (i + 1).to_string() };
             let hovered = self.v_hover_ws == Some(i);
             let (bg, fg): (Option<tiny_skia::Color>, (u8, u8, u8)) = if ws.active {
@@ -856,7 +1156,9 @@ impl MacBar {
                 (hovered.then(|| th.ink(0.10)), th.text_faint.t())
             };
             if let Some(c) = bg {
-                fill_rounded(pm, cx - 15.0, cy - 11.0, 30.0, 22.0, 11.0, c);
+                // a 30 x 22 chip, its long side across the bar (a vertical bar) or along it (a horizontal one)
+                let (cw, ch) = if horiz { (28.0, 22.0) } else { (30.0, 22.0) };
+                fill_rounded(pm, cx - cw / 2.0, cy - ch / 2.0, cw, ch, 11.0, c);
             }
             if ws.active || ws.urgent || ws.occupied || hovered {
                 self.v_text(pm, &label, cx, cy, 12.0, if ws.active { Weight::Bold } else { Weight::Medium }, fg, 1.0);
@@ -866,10 +1168,22 @@ impl MacBar {
         }
     }
 
-    fn v_draw_window(&mut self, pm: &mut Pixmap, r: VRect) {
+    fn v_draw_window(&mut self, pm: &mut Pixmap, r: VRect, horiz: bool) {
         let Some((id, _)) = self.v_win.clone() else { return };
         let th = crate::theme::th();
         let icon = self.v_icons.get(&id, (WIN_ICON * 2.0) as u32).clone();
+        if horiz {
+            // icon, then the title read along the bar
+            crate::gfx::blit_scaled(pm, &icon, r.x + 8.0, r.cy() - WIN_ICON / 2.0, WIN_ICON, WIN_ICON, 1.0);
+            let left = r.x + 8.0 + WIN_ICON + 8.0;
+            let room = (r.right() - 8.0 - left).max(0.0);
+            let shown = match &self.fonts {
+                Some(f) => controlcenter::fit(&self.v_window_text(), room, TEXT_PX, Weight::Medium, f),
+                None => return,
+            };
+            self.v_text_from(pm, &shown, left, r.cy(), TEXT_PX, Weight::Medium, th.text.t());
+            return;
+        }
         crate::gfx::blit_scaled(pm, &icon, r.cx() - WIN_ICON / 2.0, r.y + 8.0, WIN_ICON, WIN_ICON, 1.0);
         let top = r.y + 8.0 + WIN_ICON + 8.0;
         let room = (r.bottom() - 8.0 - top).max(0.0);
@@ -880,13 +1194,9 @@ impl MacBar {
         self.v_rotated_text(pm, &shown, r.cx(), top, TEXT_PX, Weight::Medium, th.text.t());
     }
 
-    fn v_draw_battery(&mut self, pm: &mut Pixmap, r: VRect, b: &sys::Battery) {
+    fn v_draw_battery(&mut self, pm: &mut Pixmap, r: VRect, b: &sys::Battery, horiz: bool) {
         let th = crate::theme::th();
-        let (cx, top) = (r.cx(), r.y + 4.0);
-        let (bw, bh) = (12.0, 20.0);
         let body = th.text.color(0.75);
-        stroke_rounded(pm, cx - bw / 2.0 + 0.5, top + 2.5, bw - 1.0, bh - 1.0, 3.0, body, 1.0);
-        crate::gfx::fill_rect(pm, cx - 2.5, top, 5.0, 2.0, body);
         let fill = if b.charging {
             th.ok.t()
         } else if b.percent <= 15 {
@@ -894,15 +1204,45 @@ impl MacBar {
         } else {
             th.text.t()
         };
-        let fh = ((bh - 5.0) * b.percent.min(100) as f32 / 100.0).max(1.0);
+        let pct = b.percent.min(100) as f32 / 100.0;
+        let label = format!("{}", b.percent);
+        if horiz {
+            // the battery lying down, its percentage to the right
+            let (bw, bh) = (20.0, 11.0);
+            let tw = self.v_text_width(&label, 10.0, Weight::Medium);
+            let x0 = (r.cx() - (bw + 2.0 + 4.0 + tw) / 2.0).round();
+            let cy = r.cy();
+            stroke_rounded(pm, x0 + 0.5, cy - bh / 2.0 + 0.5, bw - 1.0, bh - 1.0, 3.0, body, 1.0);
+            crate::gfx::fill_rect(pm, x0 + bw, cy - 2.5, 2.0, 5.0, body);
+            let fw = ((bw - 5.0) * pct).max(1.0);
+            fill_rounded(pm, x0 + 2.0, cy - bh / 2.0 + 2.0, fw, bh - 4.0, 1.5, color(fill.0, fill.1, fill.2, 0.95));
+            self.v_text(pm, &label, x0 + bw + 2.0 + 4.0 + tw / 2.0, cy, 10.0, Weight::Medium, th.text.t(), 0.9);
+            return;
+        }
+        let (cx, top) = (r.cx(), r.y + 4.0);
+        let (bw, bh) = (12.0, 20.0);
+        stroke_rounded(pm, cx - bw / 2.0 + 0.5, top + 2.5, bw - 1.0, bh - 1.0, 3.0, body, 1.0);
+        crate::gfx::fill_rect(pm, cx - 2.5, top, 5.0, 2.0, body);
+        let fh = ((bh - 5.0) * pct).max(1.0);
         fill_rounded(pm, cx - bw / 2.0 + 2.0, top + 2.5 + bh - 1.0 - 2.0 - fh, bw - 4.0, fh, 1.5, color(fill.0, fill.1, fill.2, 0.95));
-        self.v_text(pm, &format!("{}", b.percent), cx, top + bh + 9.0, 10.0, Weight::Medium, th.text.t(), 0.9);
+        self.v_text(pm, &label, cx, top + bh + 9.0, 10.0, Weight::Medium, th.text.t(), 0.9);
     }
 }
 
-/// Top y that keeps a box `h` tall inside a screen `screen` tall, `POP_MARGIN` from the edges (the margin wins on a short screen).
-pub fn clamp_y(y: f32, h: f32, screen: f32) -> f32 {
-    y.min(screen - h - POP_MARGIN).max(POP_MARGIN)
+/// Top y (or x) that keeps a box `size` long inside a screen `screen` long, `POP_MARGIN` from the edges (the margin wins on a short screen).
+pub fn clamp_in(pos: f32, size: f32, screen: f32) -> f32 {
+    pos.min(screen - size - POP_MARGIN).max(POP_MARGIN)
+}
+
+/// True when a bar runs along the top edge: the top bar, or the top half of a split layout (seen from its bottom half).
+fn top_bar_exists(place: Place) -> bool {
+    place.edge == Anchor::Top || (place.edge == Anchor::Bottom && place.part == Part::Tail)
+}
+
+/// `macdash` for the clock: hung below a bar along the top edge, else near the top edge of the screen.
+fn clock_dash_argv(place: Place) -> Vec<String> {
+    let top = 10 + if top_bar_exists(place) { THICK as i32 } else { 0 };
+    vec![crate::launch::sibling_or_path("macdash"), "--top".into(), top.to_string()]
 }
 
 /// Starts a UI program (dashboard, session menu). In dry-run mode (tests) the command is only recorded.
@@ -923,121 +1263,367 @@ mod tests {
         Content { workspaces: 9, window: 140.0, tray: vec![Tray::Layout, Tray::Control], status: vec![Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery] }
     }
 
-    #[test]
-    fn the_surface_leaves_room_for_the_widest_panel() {
-        const { assert!(POPOUT_W >= POP_GAP + controlcenter::PANEL_W + 8.0) };
-        assert_eq!(SURFACE_W as f32, BAR_W + POPOUT_W);
-        assert_eq!(PILL_W, 40.0);
+    /// The surface the backend gives a bar on `edge` of a 1600 x 900 monitor.
+    fn geo_on(edge: Anchor) -> Geo {
+        if edge.is_side() {
+            Geo::new(edge, SURFACE_W as f32, 900.0)
+        } else {
+            Geo::new(edge, 1600.0, SURFACE_H as f32)
+        }
+    }
+
+    const EDGES: [Anchor; 4] = [Anchor::Left, Anchor::Right, Anchor::Top, Anchor::Bottom];
+
+    /// (along, across) of a surface rectangle: the frame the layout is written in, whichever the edge.
+    fn along(g: &Geo, r: &VRect) -> (f32, f32) {
+        if g.horizontal() {
+            (r.x, r.right())
+        } else {
+            (r.y, r.bottom())
+        }
     }
 
     #[test]
-    fn every_pill_sits_inside_the_strip_and_the_screen_and_none_overlap() {
-        for height in [800.0, 900.0, 1440.0] {
-            let lay = layout(height, &full());
-            assert_eq!(lay.pills.len(), 7, "{height}");
-            let mut last_bottom = 0.0;
+    fn the_surface_leaves_room_for_the_widest_panel() {
+        const { assert!(POPOUT_W >= POP_GAP + controlcenter::PANEL_W + 8.0) };
+        assert_eq!(SURFACE_W as f32, THICK + POPOUT_W);
+        assert_eq!(SURFACE_H as f32, THICK + POPOUT_H);
+        assert_eq!(PILL_W, 40.0);
+        assert_eq!(THICK, 52.0);
+    }
+
+    #[test]
+    fn places_follow_the_position_and_the_process() {
+        use BarPosition as P;
+        let at = |p, pr| Place::of(p, pr).map(|p| (p.edge, p.part));
+        assert_eq!(at(P::Left, Process::Main), Some((Anchor::Left, Part::All)));
+        assert_eq!(at(P::Right, Process::Main), Some((Anchor::Right, Part::All)));
+        assert_eq!(at(P::Top, Process::Main), Some((Anchor::Top, Part::All)));
+        assert_eq!(at(P::Bottom, Process::Main), Some((Anchor::Bottom, Part::All)));
+        assert_eq!(at(P::Split, Process::Main), Some((Anchor::Top, Part::Head)), "the main bar is the top half");
+        assert_eq!(at(P::Split, Process::Bottom), Some((Anchor::Bottom, Part::Tail)));
+        for p in [P::Left, P::Right, P::Top, P::Bottom] {
+            assert_eq!(at(p, Process::Bottom), None, "{p:?}: the bottom process has nothing to draw unless split");
+        }
+        assert_eq!(Place::of(P::Split, Process::Main).unwrap().namespace(), "macshell-bar");
+        assert_eq!(Place::of(P::Split, Process::Bottom).unwrap().namespace(), "macshell-bar-bottom");
+        assert_eq!((Process::parse("bottom"), Process::parse("main"), Process::parse("x")), (Some(Process::Bottom), Some(Process::Main), None));
+        assert_ne!(Process::Main.lock_name(), Process::Bottom.lock_name(), "one lock per role");
+    }
+
+    #[test]
+    fn the_strip_hugs_its_edge_and_is_the_only_reserved_part() {
+        let s = |e| geo_on(e).strip();
+        assert_eq!(s(Anchor::Left), VRect { x: 0.0, y: 0.0, w: THICK, h: 900.0 });
+        assert_eq!(s(Anchor::Right), VRect { x: SURFACE_W as f32 - THICK, y: 0.0, w: THICK, h: 900.0 });
+        assert_eq!(s(Anchor::Top), VRect { x: 0.0, y: 0.0, w: 1600.0, h: THICK });
+        assert_eq!(s(Anchor::Bottom), VRect { x: 0.0, y: SURFACE_H as f32 - THICK, w: 1600.0, h: THICK });
+        assert_eq!(geo_on(Anchor::Left).len(), 900.0);
+        assert_eq!(geo_on(Anchor::Top).len(), 1600.0);
+    }
+
+    #[test]
+    fn every_pill_sits_inside_the_strip_and_the_screen_and_none_overlap_for_every_edge() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let strip = g.strip();
+            let lay = layout(&g, Part::All, &full());
+            assert_eq!(lay.pills.len(), 7, "{edge:?}");
+            let mut last_end = 0.0;
             for (_, r) in &lay.pills {
-                assert!(r.x >= PILL_X && r.x + r.w <= BAR_W - PILL_X + 0.001, "inside the strip: {r:?}");
-                assert!(r.y >= EDGE - 0.001 && r.bottom() <= height - EDGE + 0.001, "{height}: {r:?}");
-                assert!(r.y >= last_bottom + GAP - 0.001, "{height}: pills are separated by the gap: {r:?} after {last_bottom}");
-                last_bottom = r.bottom();
+                // across: inside the strip, PILL_X from its sides
+                let (c0, c1) = if g.horizontal() { (r.y, r.bottom()) } else { (r.x, r.right()) };
+                let (s0, s1) = if g.horizontal() { (strip.y, strip.bottom()) } else { (strip.x, strip.right()) };
+                assert!(c0 >= s0 + PILL_X - 0.001 && c1 <= s1 - PILL_X + 0.001, "{edge:?}: inside the strip: {r:?}");
+                // along: inside the bar, separated by the gap, in reading order
+                let (a0, a1) = along(&g, r);
+                assert!(a0 >= EDGE - 0.001 && a1 <= g.len() - EDGE + 0.001, "{edge:?}: {r:?}");
+                assert!(a0 >= last_end + GAP - 0.001 || last_end == 0.0, "{edge:?}: pills are separated by the gap: {r:?} after {last_end}");
+                last_end = a1;
             }
         }
     }
 
     #[test]
-    fn the_order_is_logo_workspaces_window_tray_status_clock_power() {
-        let lay = layout(900.0, &full());
-        let order: Vec<Pill> = lay.pills.iter().map(|p| p.0).collect();
-        assert_eq!(order, [Pill::Logo, Pill::Workspaces, Pill::Window, Pill::Tray, Pill::Status, Pill::Clock, Pill::Power]);
-        let kinds: Vec<Tray> = lay.items.iter().map(|i| i.0).collect();
-        assert_eq!(kinds, [Tray::Logo, Tray::Workspaces, Tray::Window, Tray::Layout, Tray::Control, Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery, Tray::Clock, Tray::Power]);
-        let ys: Vec<f32> = lay.items.iter().map(|i| i.1.y).collect();
-        assert!(ys.windows(2).all(|w| w[0] < w[1]), "items run down the screen: {ys:?}");
+    fn the_order_is_logo_workspaces_window_tray_status_clock_power_on_every_edge() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let lay = layout(&g, Part::All, &full());
+            let order: Vec<Pill> = lay.pills.iter().map(|p| p.0).collect();
+            assert_eq!(order, [Pill::Logo, Pill::Workspaces, Pill::Window, Pill::Tray, Pill::Status, Pill::Clock, Pill::Power], "{edge:?}");
+            let kinds: Vec<Tray> = lay.items.iter().map(|i| i.0).collect();
+            assert_eq!(
+                kinds,
+                [Tray::Logo, Tray::Workspaces, Tray::Window, Tray::Layout, Tray::Control, Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery, Tray::Clock, Tray::Power],
+                "{edge:?}"
+            );
+            let starts: Vec<f32> = lay.items.iter().map(|i| along(&g, &i.1).0).collect();
+            assert!(starts.windows(2).all(|w| w[0] < w[1]), "{edge:?}: items run down (or across) the screen: {starts:?}");
+        }
     }
 
     #[test]
-    fn the_top_group_hangs_from_the_top_and_the_bottom_group_stands_on_the_bottom() {
-        let lay = layout(900.0, &full());
-        assert_eq!(lay.pill(Pill::Logo).unwrap().y, EDGE);
-        assert_eq!(lay.pill(Pill::Workspaces).unwrap().y, EDGE + LOGO_H + GAP);
-        assert_eq!(lay.pill(Pill::Power).unwrap().bottom(), 900.0 - EDGE);
-        assert_eq!(lay.pill(Pill::Clock).unwrap().bottom(), lay.pill(Pill::Power).unwrap().y - GAP);
-        let ws = lay.pill(Pill::Workspaces).unwrap();
-        assert_eq!(ws.h, 9.0 * WS_CELL + 2.0 * WS_PAD);
-        // a taller screen moves the bottom group down with it, the top group stays
-        let tall = layout(1200.0, &full());
-        assert_eq!(tall.pill(Pill::Logo), lay.pill(Pill::Logo));
-        assert_eq!(tall.pill(Pill::Power).unwrap().y - lay.pill(Pill::Power).unwrap().y, 300.0);
+    fn a_horizontal_bar_is_the_vertical_one_turned() {
+        let v = layout(&geo_on(Anchor::Left), Part::All, &full());
+        let h = layout(&Geo::new(Anchor::Top, 900.0, SURFACE_H as f32), Part::All, &full());
+        // same screen length, so the same layout: x of the one is y of the other (only the cell sizes differ, hence a few pills do)
+        for kind in [Pill::Logo, Pill::Power, Pill::Window] {
+            let (a, b) = (v.pill(kind).unwrap(), h.pill(kind).unwrap());
+            if kind != Pill::Window {
+                assert_eq!((a.y, a.h, a.x, a.w), (b.x, b.w, b.y, b.h), "{kind:?}");
+            }
+        }
+        let clock = h.pill(Pill::Clock).unwrap();
+        assert_eq!((clock.w, clock.h), (Dim::of(true).clock_len, PILL_W), "the clock is a wide pill on a horizontal bar");
+        assert_eq!(v.pill(Pill::Clock).unwrap().h, Dim::of(false).clock_len);
+        assert_ne!(Dim::of(true).ws_cell, 0.0);
+    }
+
+    #[test]
+    fn the_head_hangs_from_the_start_and_the_tail_stands_on_the_end_for_every_edge() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let lay = layout(&g, Part::All, &full());
+            let at = |p| along(&g, &lay.pill(p).unwrap());
+            assert_eq!(at(Pill::Logo).0, EDGE, "{edge:?}");
+            assert_eq!(at(Pill::Workspaces).0, EDGE + LOGO_H + GAP, "{edge:?}");
+            assert_eq!(at(Pill::Power).1, g.len() - EDGE, "{edge:?}");
+            assert_eq!(at(Pill::Clock).1, at(Pill::Power).0 - GAP, "{edge:?}");
+            assert_eq!(lay.pill(Pill::Workspaces).map(|r| if g.horizontal() { r.w } else { r.h }), Some(workspaces_len(9, g.horizontal())), "{edge:?}");
+        }
+        // a longer screen moves the tail with it, the head stays
+        let (short, long) = (Geo::new(Anchor::Top, 1600.0, SURFACE_H as f32), Geo::new(Anchor::Top, 2000.0, SURFACE_H as f32));
+        let (a, b) = (layout(&short, Part::All, &full()), layout(&long, Part::All, &full()));
+        assert_eq!(a.pill(Pill::Logo), b.pill(Pill::Logo));
+        assert_eq!(b.pill(Pill::Power).unwrap().x - a.pill(Pill::Power).unwrap().x, 400.0);
+    }
+
+    #[test]
+    fn mirrored_edges_swap_sides_not_order() {
+        let (l, r) = (layout(&geo_on(Anchor::Left), Part::All, &full()), layout(&geo_on(Anchor::Right), Part::All, &full()));
+        let shift = SURFACE_W as f32 - THICK;
+        for ((_, a), (_, b)) in l.items.iter().zip(&r.items) {
+            assert_eq!((b.x - a.x, b.y, b.w, b.h), (shift, a.y, a.w, a.h));
+        }
+        let (t, b) = (layout(&geo_on(Anchor::Top), Part::All, &full()), layout(&geo_on(Anchor::Bottom), Part::All, &full()));
+        let shift = SURFACE_H as f32 - THICK;
+        for ((_, a), (_, c)) in t.items.iter().zip(&b.items) {
+            assert_eq!((c.y - a.y, c.x, c.w, c.h), (shift, a.x, a.w, a.h));
+        }
     }
 
     #[test]
     fn the_window_pill_is_centred_in_the_free_space_and_capped_by_it() {
-        let lay = layout(900.0, &full());
-        let (ws, win, tray) = (lay.pill(Pill::Workspaces).unwrap(), lay.pill(Pill::Window).unwrap(), lay.pill(Pill::Tray).unwrap());
-        let above = win.y - ws.bottom();
-        let below = tray.y - win.bottom();
-        assert!((above - below).abs() < 0.01 && above >= GAP - 0.01, "centred: {above} vs {below}");
-        assert_eq!(win.h, 140.0);
-        // asks for more than there is: takes what is free, between the gaps
-        let big = layout(900.0, &Content { window: 2000.0, ..full() });
-        let (ws, win, tray) = (big.pill(Pill::Workspaces).unwrap(), big.pill(Pill::Window).unwrap(), big.pill(Pill::Tray).unwrap());
-        assert_eq!((win.y, win.bottom()), (ws.bottom() + GAP, tray.y - GAP));
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let lay = layout(&g, Part::All, &full());
+            let (ws, win, tray) = (along(&g, &lay.pill(Pill::Workspaces).unwrap()), along(&g, &lay.pill(Pill::Window).unwrap()), along(&g, &lay.pill(Pill::Tray).unwrap()));
+            let (above, below) = (win.0 - ws.1, tray.0 - win.1);
+            assert!((above - below).abs() < 0.01 && above >= GAP - 0.01, "{edge:?} centred: {above} vs {below}");
+            assert_eq!(win.1 - win.0, 140.0, "{edge:?}");
+            // asks for more than there is: takes what is free, between the gaps
+            let big = layout(&g, Part::All, &Content { window: 5000.0, ..full() });
+            let (ws, win, tray) = (along(&g, &big.pill(Pill::Workspaces).unwrap()), along(&g, &big.pill(Pill::Window).unwrap()), along(&g, &big.pill(Pill::Tray).unwrap()));
+            assert_eq!((win.0, win.1), (ws.1 + GAP, tray.0 - GAP), "{edge:?}");
+        }
     }
 
     #[test]
     fn the_window_pill_goes_when_there_is_no_room_or_no_window() {
-        assert!(layout(900.0, &Content { window: 0.0, ..full() }).pill(Pill::Window).is_none());
-        // a short screen: the stacks fill it, nothing is left for the window
-        let c = full();
-        let fixed = EDGE + LOGO_H + GAP + workspaces_h(9) + GAP + group_h(&c.tray) + GAP + group_h(&c.status) + GAP + CLOCK_H + GAP + POWER_H + EDGE;
-        assert!(layout(fixed + WIN_MIN - 1.0, &c).pill(Pill::Window).is_none());
-        assert!(layout(fixed + WIN_MIN + 2.0 * GAP, &c).pill(Pill::Window).is_some());
-        // no workspaces (not rdwm): the pill is simply absent
-        assert!(layout(900.0, &Content { workspaces: 0, ..full() }).pill(Pill::Workspaces).is_none());
+        for edge in [Anchor::Left, Anchor::Top] {
+            let horiz = !edge.is_side();
+            let g = |len: f32| if horiz { Geo::new(edge, len, SURFACE_H as f32) } else { Geo::new(edge, SURFACE_W as f32, len) };
+            assert!(layout(&g(900.0), Part::All, &Content { window: 0.0, ..full() }).pill(Pill::Window).is_none());
+            // a short bar: the stacks fill it, nothing is left for the window
+            let c = full();
+            let d = Dim::of(horiz);
+            let fixed = EDGE + LOGO_H + GAP + workspaces_len(9, horiz) + GAP + group_len(&c.tray, horiz) + GAP + group_len(&c.status, horiz) + GAP + d.clock_len + GAP + POWER_H + EDGE;
+            assert!(layout(&g(fixed + d.win_min - 1.0), Part::All, &c).pill(Pill::Window).is_none(), "{edge:?}");
+            assert!(layout(&g(fixed + d.win_min + 2.0 * GAP), Part::All, &c).pill(Pill::Window).is_some(), "{edge:?}");
+            // no workspaces (not rdwm): the pill is simply absent
+            assert!(layout(&g(900.0), Part::All, &Content { workspaces: 0, ..full() }).pill(Pill::Workspaces).is_none());
+        }
     }
 
     #[test]
-    fn icons_fill_their_pill_exactly_and_the_battery_is_taller() {
-        let lay = layout(900.0, &full());
-        let status = lay.pill(Pill::Status).unwrap();
-        assert_eq!(status.h, 3.0 * ICON_CELL + BATT_CELL + 2.0 * CELL_PAD);
-        let cells: Vec<VRect> = lay.items.iter().filter(|i| matches!(i.0, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery)).map(|i| i.1).collect();
-        assert_eq!(cells[0].y, status.y + CELL_PAD);
-        for pair in cells.windows(2) {
-            assert_eq!(pair[0].bottom(), pair[1].y);
+    fn a_split_layout_divides_the_pills_between_the_two_bars() {
+        let top = Geo::new(Anchor::Top, 1600.0, SURFACE_H as f32);
+        let bottom = Geo::new(Anchor::Bottom, 1600.0, SURFACE_H as f32);
+        let head = layout(&top, Part::Head, &full());
+        let tail = layout(&bottom, Part::Tail, &full());
+        let kinds = |l: &Layout| l.pills.iter().map(|p| p.0).collect::<Vec<_>>();
+        assert_eq!(kinds(&head), [Pill::Logo, Pill::Workspaces, Pill::Window], "the top bar: OS icon, workspaces, window title");
+        assert_eq!(kinds(&tail), [Pill::Tray, Pill::Status, Pill::Clock, Pill::Power], "the bottom bar: tray, status, clock, power");
+        // a head-only bar puts the window title right after the workspaces; the tail stands on the right end
+        let (ws, win) = (head.pill(Pill::Workspaces).unwrap(), head.pill(Pill::Window).unwrap());
+        assert_eq!(win.x, ws.right() + GAP);
+        assert_eq!(win.w, 140.0);
+        assert_eq!(tail.pill(Pill::Power).unwrap().right(), 1600.0 - EDGE);
+        // the tail keeps its place on the strip of the bottom edge
+        let strip = bottom.strip();
+        for (_, r) in &tail.pills {
+            assert!(r.y >= strip.y + PILL_X - 0.001 && r.bottom() <= strip.bottom() - PILL_X + 0.001);
         }
-        assert_eq!(cells[3].h, BATT_CELL);
-        assert_eq!(cells[3].bottom(), status.bottom() - CELL_PAD);
+        // together they are the single bar's items (and a lone bar has no gaps at the join)
+        let all = layout(&top, Part::All, &full());
+        let mut joined: Vec<Tray> = head.items.iter().chain(&tail.items).map(|i| i.0).collect();
+        joined.sort_by_key(|k| format!("{k:?}"));
+        let mut every: Vec<Tray> = all.items.iter().map(|i| i.0).collect();
+        every.sort_by_key(|k| format!("{k:?}"));
+        assert_eq!(joined, every);
+        // without a focused window or workspaces the top bar is just the OS icon
+        assert_eq!(kinds(&layout(&top, Part::Head, &Content { window: 0.0, workspaces: 0, ..full() })), [Pill::Logo]);
     }
 
     #[test]
-    fn hit_testing_finds_each_item_and_nothing_in_the_gaps() {
-        let lay = layout(900.0, &full());
-        for (k, r) in &lay.items {
-            assert_eq!(lay.hit(r.cx(), r.cy()).map(|h| h.0), Some(*k));
-            assert_eq!(lay.hit(r.x + 1.0, r.y + 1.0).map(|h| h.0), Some(*k), "{k:?} top-left corner");
+    fn icons_fill_their_pill_exactly_and_the_battery_is_longer() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let lay = layout(&g, Part::All, &full());
+            let status = along(&g, &lay.pill(Pill::Status).unwrap());
+            let d = Dim::of(g.horizontal());
+            assert_eq!(status.1 - status.0, 3.0 * ICON_CELL + d.batt_cell + 2.0 * CELL_PAD, "{edge:?}");
+            let cells: Vec<(f32, f32)> = lay.items.iter().filter(|i| matches!(i.0, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery)).map(|i| along(&g, &i.1)).collect();
+            assert_eq!(cells[0].0, status.0 + CELL_PAD, "{edge:?}");
+            for pair in cells.windows(2) {
+                assert_eq!(pair[0].1, pair[1].0, "{edge:?}");
+            }
+            assert_eq!(cells[3].1 - cells[3].0, d.batt_cell);
+            assert_eq!(cells[3].1, status.1 - CELL_PAD);
         }
-        let logo = lay.pill(Pill::Logo).unwrap();
-        assert_eq!(lay.hit(logo.cx(), logo.bottom() + GAP / 2.0), None, "the gap between pills");
-        assert_eq!(lay.hit(2.0, logo.cy()), None, "the strip margin left of the pills");
-        assert_eq!(lay.hit(BAR_W + 5.0, logo.cy()), None, "right of the strip");
+    }
+
+    #[test]
+    fn hit_testing_finds_each_item_and_nothing_in_the_gaps_for_every_edge() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let lay = layout(&g, Part::All, &full());
+            let strip = g.strip();
+            for (k, r) in &lay.items {
+                assert_eq!(lay.hit(r.cx(), r.cy()).map(|h| h.0), Some(*k), "{edge:?}");
+                assert_eq!(lay.hit(r.x + 1.0, r.y + 1.0).map(|h| h.0), Some(*k), "{edge:?} {k:?} top-left corner");
+                assert!(strip.contains(r.cx(), r.cy()), "{edge:?}: {k:?} lies on the strip");
+            }
+            let logo = lay.pill(Pill::Logo).unwrap();
+            let in_gap = if g.horizontal() { (logo.right() + GAP / 2.0, logo.cy()) } else { (logo.cx(), logo.bottom() + GAP / 2.0) };
+            assert_eq!(lay.hit(in_gap.0, in_gap.1), None, "{edge:?}: the gap between pills");
+            let margin = if g.horizontal() { (logo.cx(), strip.y + 2.0) } else { (strip.x + 2.0, logo.cy()) };
+            assert_eq!(lay.hit(margin.0, margin.1), None, "{edge:?}: the strip margin beside the pills");
+            let beyond = match edge {
+                Anchor::Left => (THICK + 5.0, logo.cy()),
+                Anchor::Right => (strip.x - 5.0, logo.cy()),
+                Anchor::Top => (logo.cx(), THICK + 5.0),
+                Anchor::Bottom => (logo.cx(), strip.y - 5.0),
+            };
+            assert_eq!(lay.hit(beyond.0, beyond.1), None, "{edge:?}: on the popout side of the strip");
+        }
     }
 
     #[test]
     fn workspace_pills_hit_test_by_cell() {
-        let pill = VRect { x: PILL_X, y: 100.0, w: PILL_W, h: workspaces_h(9) };
-        assert_eq!(workspace_hit(pill, 9, 100.0), None, "the pill's top padding");
-        assert_eq!(workspace_hit(pill, 9, 100.0 + WS_PAD), Some(0));
-        assert_eq!(workspace_hit(pill, 9, 100.0 + WS_PAD + WS_CELL - 0.1), Some(0));
-        assert_eq!(workspace_hit(pill, 9, 100.0 + WS_PAD + WS_CELL), Some(1));
-        for i in 0..9 {
-            assert_eq!(workspace_hit(pill, 9, 100.0 + WS_PAD + WS_CELL * (i as f32 + 0.5)), Some(i));
+        for horiz in [false, true] {
+            let cell = Dim::of(horiz).ws_cell;
+            let len = workspaces_len(9, horiz);
+            let pill = if horiz { VRect { x: 100.0, y: PILL_X, w: len, h: PILL_W } } else { VRect { x: PILL_X, y: 100.0, w: PILL_W, h: len } };
+            let (start, mid) = (100.0, if horiz { pill.cy() } else { pill.cx() });
+            let at = |t: f32| if horiz { workspace_hit(pill, true, 9, t, mid) } else { workspace_hit(pill, false, 9, mid, t) };
+            assert_eq!(at(start), None, "{horiz}: the pill's start padding");
+            assert_eq!(at(start + WS_PAD), Some(0));
+            assert_eq!(at(start + WS_PAD + cell - 0.1), Some(0));
+            assert_eq!(at(start + WS_PAD + cell), Some(1));
+            for i in 0..9 {
+                assert_eq!(at(start + WS_PAD + cell * (i as f32 + 0.5)), Some(i));
+            }
+            assert_eq!(at(start + len - WS_PAD / 2.0), None, "the end padding");
+            assert_eq!(at(start + len + 1.0), None);
+            // fewer cells than the pill is long for (the list shrank): nothing past the last one
+            let few = |t: f32| if horiz { workspace_hit(pill, true, 4, t, mid) } else { workspace_hit(pill, false, 4, mid, t) };
+            assert_eq!(few(start + WS_PAD + cell * 5.5), None);
         }
-        assert_eq!(workspace_hit(pill, 9, pill.bottom() - WS_PAD / 2.0), None, "the bottom padding");
-        assert_eq!(workspace_hit(pill, 9, pill.bottom() + 1.0), None);
-        // fewer cells than the pill is tall for (the list shrank): nothing past the last one
-        assert_eq!(workspace_hit(pill, 4, 100.0 + WS_PAD + WS_CELL * 5.5), None);
+    }
+
+    #[test]
+    fn popouts_open_on_the_screen_side_of_the_strip_and_stay_on_the_surface() {
+        let item_on = |g: &Geo| layout(g, Part::All, &full()).item(Tray::Audio).unwrap();
+        let (pw, ph) = (220.0, 180.0);
+        // left: to the right of the strip, level with the icon
+        let g = geo_on(Anchor::Left);
+        let it = item_on(&g);
+        let (x, y) = g.popout_origin(it, pw, ph);
+        assert_eq!(x, THICK + POP_GAP);
+        assert!((y + ph / 2.0 - it.cy()).abs() < 0.01);
+        // right: leftwards, its right edge a gap from the strip
+        let g = geo_on(Anchor::Right);
+        let it = item_on(&g);
+        let (x, y) = g.popout_origin(it, pw, ph);
+        assert_eq!(x + pw, g.strip().x - POP_GAP, "opens leftwards");
+        assert!((y + ph / 2.0 - it.cy()).abs() < 0.01);
+        // top: downwards, centred on the icon
+        let g = geo_on(Anchor::Top);
+        let it = item_on(&g);
+        let (x, y) = g.popout_origin(it, pw, ph);
+        assert_eq!(y, THICK + POP_GAP, "opens downwards");
+        assert!((x + pw / 2.0 - it.cx()).abs() < 0.01);
+        // bottom: upwards, its bottom edge a gap above the strip
+        let g = geo_on(Anchor::Bottom);
+        let it = item_on(&g);
+        let (x, y) = g.popout_origin(it, pw, ph);
+        assert_eq!(y + ph, g.strip().y - POP_GAP, "opens upwards");
+        assert!((x + pw / 2.0 - it.cx()).abs() < 0.01);
+        // an icon at the very end of the bar: the box is pulled back inside the surface, with the margin
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let power = layout(&g, Part::All, &full()).item(Tray::Power).unwrap();
+            let (x, y) = g.popout_origin(power, pw, ph);
+            assert!(x >= POP_MARGIN - 0.001 && x + pw <= g.w - POP_MARGIN + 0.001 && y >= POP_MARGIN - 0.001 && y + ph <= g.h - POP_MARGIN + 0.001, "{edge:?}: ({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn the_input_region_of_a_popout_reaches_back_to_the_strip() {
+        for edge in EDGES {
+            let g = geo_on(edge);
+            let (pw, ph) = (300.0, 200.0);
+            let it = layout(&g, Part::All, &full()).item(Tray::Network).unwrap();
+            let (x, y) = g.popout_origin(it, pw, ph);
+            let r = g.reach(x, y, pw, ph);
+            let (rx0, ry0, rx1, ry1) = (r.x as f32, r.y as f32, (r.x + r.w) as f32, (r.y + r.h) as f32);
+            // covers the box, and touches the strip on its facing side
+            assert!(rx0 <= x && ry0 <= y && rx1 >= x + pw && ry1 >= y + ph, "{edge:?}: {r:?}");
+            let s = g.strip();
+            match edge {
+                Anchor::Left => assert_eq!(rx0, s.right()),
+                Anchor::Right => assert_eq!(rx1, s.x),
+                Anchor::Top => assert_eq!(ry0, s.bottom()),
+                Anchor::Bottom => assert_eq!(ry1, s.y),
+            }
+        }
+    }
+
+    #[cfg(feature = "x11")]
+    #[test]
+    fn the_surfaces_and_struts_of_every_position() {
+        use crate::backend::x11::{place, strut_partial, Rect};
+        let mon = Rect { x: 0, y: 0, w: 1600, h: 900 };
+        let strut = |p: BarPosition, process| {
+            let pl = Place::of(p, process).unwrap();
+            let spec = MacBar::v_spec(pl);
+            let size = if pl.edge.is_side() { (SURFACE_W, 0) } else { (0, SURFACE_H) };
+            let win = place(&spec, size, mon);
+            (win, strut_partial(&spec, win, mon, (1600, 900)).unwrap())
+        };
+        let (win, s) = strut(BarPosition::Left, Process::Main);
+        assert_eq!((win, s), ((0, 0, SURFACE_W, 900), [52, 0, 0, 0, 0, 899, 0, 0, 0, 0, 0, 0]));
+        let (win, s) = strut(BarPosition::Right, Process::Main);
+        assert_eq!((win, s), ((1600 - SURFACE_W as i32, 0, SURFACE_W, 900), [0, 52, 0, 0, 0, 0, 0, 899, 0, 0, 0, 0]));
+        let (win, s) = strut(BarPosition::Top, Process::Main);
+        assert_eq!((win, s), ((0, 0, 1600, SURFACE_H), [0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]));
+        let (win, s) = strut(BarPosition::Bottom, Process::Main);
+        assert_eq!((win, s), ((0, 900 - SURFACE_H as i32, 1600, SURFACE_H), [0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]));
+        // split: two surfaces, two struts, one per half
+        assert_eq!(strut(BarPosition::Split, Process::Main).1, [0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]);
+        assert_eq!(strut(BarPosition::Split, Process::Bottom).1, [0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]);
+        assert_eq!(MacBar::v_spec(Place::of(BarPosition::Split, Process::Bottom).unwrap()).namespace, "macshell-bar-bottom");
     }
 
     #[test]
@@ -1075,59 +1661,98 @@ mod tests {
 
     #[test]
     fn popups_stay_on_screen() {
-        assert_eq!(clamp_y(-50.0, 100.0, 900.0), POP_MARGIN);
-        assert_eq!(clamp_y(300.0, 100.0, 900.0), 300.0);
-        assert_eq!(clamp_y(880.0, 100.0, 900.0), 900.0 - 100.0 - POP_MARGIN);
-        assert_eq!(clamp_y(10.0, 2000.0, 900.0), POP_MARGIN, "taller than the screen: the top edge wins");
+        assert_eq!(clamp_in(-50.0, 100.0, 900.0), POP_MARGIN);
+        assert_eq!(clamp_in(300.0, 100.0, 900.0), 300.0);
+        assert_eq!(clamp_in(880.0, 100.0, 900.0), 900.0 - 100.0 - POP_MARGIN);
+        assert_eq!(clamp_in(10.0, 2000.0, 900.0), POP_MARGIN, "taller than the screen: the top edge wins");
     }
 
     // ------------------------------------------------------------------ the bar itself
 
-    fn bar() -> MacBar {
+    /// A pill bar at `position`, sized as the backend would size its surface.
+    fn bar_at(position: BarPosition, process: Process) -> MacBar {
         TEST_VERTICAL.with(|f| f.set(true));
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
-        bar.width = SURFACE_W;
-        bar.height = 900;
+        TEST_POSITION.with(|p| p.set(position));
+        let mut bar = MacBar::new(Box::new(active::NoActiveWindow)).with_process(process);
+        let edge = bar.place().map_or(Anchor::Left, |p| p.edge);
+        (bar.width, bar.height) = if edge.is_side() { (SURFACE_W, 900) } else { (1600, SURFACE_H) };
         bar.show_workspaces = true;
         bar.workspaces = (0..9).map(|i| Workspace { name: (i + 1).to_string(), active: i == 1, occupied: i == 2, urgent: i == 4 }).collect();
         bar
     }
 
+    fn bar() -> MacBar {
+        bar_at(BarPosition::Left, Process::Main)
+    }
+
     #[test]
-    fn the_surface_asks_for_the_left_edge_and_a_strut_of_the_bar_width() {
+    fn the_surface_asks_for_its_edge_and_a_strut_of_the_bar_thickness() {
         let b = bar();
         let spec = b.surface_spec().unwrap();
-        assert_eq!((spec.anchor, spec.reserve, spec.stretch, spec.margin), (crate::backend::Anchor::Left, BAR_W as i32, true, 0));
+        assert_eq!((spec.anchor, spec.reserve, spec.stretch, spec.margin), (Anchor::Left, THICK as i32, true, 0));
         assert_eq!(b.size(), (SURFACE_W, 0), "as wide as the strip plus the popouts, full height");
+        for (pos, edge) in [(BarPosition::Right, Anchor::Right), (BarPosition::Top, Anchor::Top), (BarPosition::Bottom, Anchor::Bottom), (BarPosition::Split, Anchor::Top)] {
+            let b = bar_at(pos, Process::Main);
+            let spec = b.surface_spec().unwrap();
+            assert_eq!((spec.anchor, spec.reserve, spec.stretch), (edge, THICK as i32, true), "{pos:?}");
+            assert_eq!(b.size(), if edge.is_side() { (SURFACE_W, 0) } else { (0, SURFACE_H) }, "{pos:?}");
+        }
+        let split_bottom = bar_at(BarPosition::Split, Process::Bottom);
+        let spec = split_bottom.surface_spec().unwrap();
+        assert_eq!((spec.anchor, spec.namespace), (Anchor::Bottom, "macshell-bar-bottom"));
         TEST_VERTICAL.with(|f| f.set(false));
         let h = MacBar::new(Box::new(active::NoActiveWindow));
-        assert_eq!(h.surface_spec().unwrap().anchor, crate::backend::Anchor::Top, "the horizontal bar is unchanged");
+        assert_eq!(h.surface_spec().unwrap().anchor, Anchor::Top, "the classic bar is unchanged");
         assert_eq!(h.size(), (0, SURFACE_MIN_HEIGHT));
     }
 
     #[test]
-    fn only_the_strip_takes_input_until_something_opens() {
-        let b = bar();
-        assert_eq!(b.input_rects(), vec![InputRect { x: 0, y: 0, w: BAR_W as i32, h: 900 }]);
-        assert!(!b.wants_keyboard() && !b.wants_pointer_grab());
+    fn the_bottom_process_has_nothing_to_draw_unless_the_layout_is_split() {
+        let mut b = bar_at(BarPosition::Split, Process::Bottom);
+        assert!(!b.quit_requested(), "split: it runs");
+        TEST_POSITION.with(|p| p.set(BarPosition::Left));
+        assert!(b.place().is_none() && b.quit_requested(), "no longer split: it leaves");
+        TEST_POSITION.with(|p| p.set(BarPosition::Split));
+        assert!(!b.quit_requested());
+        TEST_VERTICAL.with(|f| f.set(false));
+        assert!(b.quit_requested(), "another theme: it leaves too");
+        // the main bar never quits because of the layout
+        let m = bar_at(BarPosition::Left, Process::Main);
+        TEST_VERTICAL.with(|f| f.set(false));
+        assert!(!m.quit_requested());
+        let _ = &mut b;
     }
 
     #[test]
-    fn clicking_a_workspace_pill_asks_rdwm_to_view_that_tag() {
-        let mut b = bar();
+    fn only_the_strip_takes_input_until_something_opens() {
+        for pos in BarPosition::ALL {
+            let b = bar_at(pos, Process::Main);
+            let s = b.v_geo().strip();
+            assert_eq!(b.input_rects(), vec![InputRect { x: s.x as i32, y: s.y as i32, w: s.w as i32, h: s.h as i32 }], "{pos:?}");
+            assert!(!b.wants_keyboard() && !b.wants_pointer_grab());
+        }
+    }
+
+    #[test]
+    fn clicking_a_workspace_pill_asks_rdwm_to_view_that_tag_on_every_edge() {
         let _g = crate::menubar::tests::LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
-        sys::set_dry_run(true);
-        let _ = sys::take_log();
-        let ws = b.v_layout().pill(Pill::Workspaces).unwrap();
-        let (x, y) = (ws.cx(), ws.y + WS_PAD + WS_CELL * 3.5);
-        assert_eq!(b.v_target(x, y), Some((Tray::Workspaces, Some(3))));
-        // without rdwm tags it falls back to the EWMH tracker (a no-op here); with them it sends `view 4`
-        b.v_switch_workspace(3);
-        *b.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into(), tags: vec![TagState::default(); 9] });
-        b.v_switch_workspace(3);
-        let log = sys::take_log();
-        sys::set_dry_run(false);
-        assert!(log.iter().any(|l| l.contains("rdwmctl action view 4")), "{log:?}");
+        for pos in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom, BarPosition::Split] {
+            let mut b = bar_at(pos, Process::Main);
+            sys::set_dry_run(true);
+            let _ = sys::take_log();
+            let geo = b.v_geo();
+            let ws = b.v_layout().pill(Pill::Workspaces).unwrap();
+            let cell = Dim::of(geo.horizontal()).ws_cell;
+            let (x, y) = if geo.horizontal() { (ws.x + WS_PAD + cell * 3.5, ws.cy()) } else { (ws.cx(), ws.y + WS_PAD + cell * 3.5) };
+            assert_eq!(b.v_target(x, y), Some((Tray::Workspaces, Some(3))), "{pos:?}");
+            // without rdwm tags it falls back to the EWMH tracker (a no-op here); with them it sends `view 4`
+            b.v_switch_workspace(3);
+            *b.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into(), tags: vec![TagState::default(); 9] });
+            b.v_switch_workspace(3);
+            let log = sys::take_log();
+            sys::set_dry_run(false);
+            assert!(log.iter().any(|l| l.contains("rdwmctl action view 4")), "{pos:?}: {log:?}");
+        }
     }
 
     #[test]
@@ -1156,36 +1781,46 @@ mod tests {
 
     #[test]
     fn hovering_a_status_icon_opens_its_popup_after_the_delay_and_sliding_switches() {
-        let mut b = bar();
-        b.update_snapshot(|s| {
-            s.volume = Some(sys::Volume { level: 0.4, muted: false });
-            s.net = Some(sys::Net { wifi_enabled: true, wifi_name: "home".into(), wired_name: String::new() });
-        });
-        let lay = b.v_layout();
-        let audio = lay.item(Tray::Audio).unwrap();
-        let net = lay.item(Tray::Network).unwrap();
-        assert!(b.pointer_motion(audio.cx(), audio.cy()));
-        assert_eq!(b.open, Open::None, "not at once");
-        assert!(b.tick_in().is_some(), "the delay is scheduled");
-        b.v_hover_open = Some((Tray::Audio, Instant::now() - HOVER_DELAY));
-        let t = b.tick();
-        assert!(t.redraw);
-        assert_eq!(b.open, Open::Popup(Tray::Audio));
-        let p = b.popup.as_ref().unwrap();
-        assert!(p.x >= BAR_W && p.x + p.w <= SURFACE_W as f32 && p.y >= POP_MARGIN && p.y + p.h <= 900.0, "inside the surface, right of the strip");
-        assert!(b.wants_pointer_grab());
-        // the popup's input region reaches back to the strip, so the pointer can get there
-        let rects = b.input_rects();
-        assert_eq!(rects.len(), 2);
-        assert_eq!(rects[1].x, BAR_W as i32);
-        assert!(rects[1].x + rects[1].w >= (p.x + p.w) as i32);
-        // sliding to the next icon switches at once
-        b.pointer_motion(net.cx(), net.cy());
-        assert_eq!(b.open, Open::Popup(Tray::Network));
-        // onto the logo (no popup): it closes
-        let logo = lay.item(Tray::Logo).unwrap();
-        b.pointer_motion(logo.cx(), logo.cy());
-        assert_eq!(b.open, Open::None);
+        for pos in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            let mut b = bar_at(pos, Process::Main);
+            let geo = b.v_geo();
+            b.update_snapshot(|s| {
+                s.volume = Some(sys::Volume { level: 0.4, muted: false });
+                s.net = Some(sys::Net { wifi_enabled: true, wifi_name: "home".into(), wired_name: String::new() });
+            });
+            let lay = b.v_layout();
+            let audio = lay.item(Tray::Audio).unwrap();
+            let net = lay.item(Tray::Network).unwrap();
+            assert!(b.pointer_motion(audio.cx(), audio.cy()), "{pos:?}");
+            assert_eq!(b.open, Open::None, "{pos:?}: not at once");
+            assert!(b.tick_in().is_some(), "the delay is scheduled");
+            b.v_hover_open = Some((Tray::Audio, Instant::now() - HOVER_DELAY));
+            let t = b.tick();
+            assert!(t.redraw);
+            assert_eq!(b.open, Open::Popup(Tray::Audio), "{pos:?}");
+            let p = b.popup.as_ref().unwrap().clone();
+            let (sw, sh) = (geo.w, geo.h);
+            assert!(p.x >= POP_MARGIN && p.x + p.w <= sw && p.y >= POP_MARGIN && p.y + p.h <= sh, "{pos:?}: inside the surface");
+            let s = geo.strip();
+            match pos {
+                BarPosition::Left => assert!(p.x >= s.right()),
+                BarPosition::Right => assert!(p.x + p.w <= s.x),
+                BarPosition::Top => assert!(p.y >= s.bottom()),
+                _ => assert!(p.y + p.h <= s.y),
+            }
+            assert!(b.wants_pointer_grab());
+            // the popup's input region reaches back to the strip, so the pointer can get there
+            let rects = b.input_rects();
+            assert_eq!(rects.len(), 2, "{pos:?}");
+            assert!(rects[1].x as f32 <= p.x && rects[1].y as f32 <= p.y && (rects[1].x + rects[1].w) as f32 >= p.x + p.w && (rects[1].y + rects[1].h) as f32 >= p.y + p.h);
+            // sliding to the next icon switches at once
+            b.pointer_motion(net.cx(), net.cy());
+            assert_eq!(b.open, Open::Popup(Tray::Network), "{pos:?}");
+            // onto the logo (no popup): it closes
+            let logo = lay.item(Tray::Logo).unwrap();
+            b.pointer_motion(logo.cx(), logo.cy());
+            assert_eq!(b.open, Open::None, "{pos:?}");
+        }
     }
 
     #[test]
@@ -1206,68 +1841,165 @@ mod tests {
 
     #[test]
     fn the_logo_clock_and_power_launch_their_programs() {
-        let mut b = bar();
         let _g = crate::menubar::tests::LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
-        sys::set_dry_run(true);
-        let _ = sys::take_log();
-        let lay = b.v_layout();
-        for k in [Tray::Logo, Tray::Clock, Tray::Power] {
-            let r = lay.item(k).unwrap();
-            assert!(b.pointer_button(r.cx(), r.cy(), Button::Left), "{k:?}");
+        for pos in [BarPosition::Left, BarPosition::Top, BarPosition::Bottom] {
+            let mut b = bar_at(pos, Process::Main);
+            sys::set_dry_run(true);
+            let _ = sys::take_log();
+            let lay = b.v_layout();
+            for k in [Tray::Logo, Tray::Clock, Tray::Power] {
+                let r = lay.item(k).unwrap();
+                assert!(b.pointer_button(r.cx(), r.cy(), Button::Left), "{pos:?} {k:?}");
+            }
+            let log = sys::take_log();
+            sys::set_dry_run(false);
+            let has = |needle: &str| log.iter().any(|l| l.contains(needle));
+            assert!(has("macspot") || has("rofi") || has("wofi") || has("fuzzel") || log.is_empty() || !sys::have("macspot"), "launcher: {log:?}");
+            let top = if pos == BarPosition::Top { 62 } else { 10 };
+            assert!(has(&format!("macdash --top {top}")), "{pos:?}: below a top bar, near the edge otherwise: {log:?}");
+            assert!(has("macsession"), "{log:?}");
         }
-        let log = sys::take_log();
-        sys::set_dry_run(false);
-        let has = |needle: &str| log.iter().any(|l| l.contains(needle));
-        assert!(has("macspot") || has("rofi") || has("wofi") || has("fuzzel") || log.is_empty() || !sys::have("macspot"), "launcher: {log:?}");
-        assert!(has("macdash --top 10"), "{log:?}");
-        assert!(has("macsession"), "{log:?}");
     }
 
     #[test]
     fn the_control_center_opens_beside_its_tile_and_stays_on_screen() {
-        let mut b = bar();
-        let tile = b.v_layout().item(Tray::Control).unwrap();
-        assert!(b.pointer_button(tile.cx(), tile.cy(), Button::Left));
-        assert_eq!(b.open, Open::Control);
-        let (ox, oy) = b.v_panel_origin();
-        assert_eq!(ox, BAR_W + POP_GAP);
-        assert!(oy >= POP_MARGIN && oy + b.cc_height <= 900.0 - POP_MARGIN + 0.01, "{oy} + {}", b.cc_height);
-        assert!(b.input_rects().iter().any(|r| r.x == BAR_W as i32 && r.w as f32 >= controlcenter::PANEL_W));
-        assert!(b.pointer_button(tile.cx(), tile.cy(), Button::Left));
-        assert_eq!(b.open, Open::None, "the tile toggles");
+        for pos in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            let mut b = bar_at(pos, Process::Main);
+            let geo = b.v_geo();
+            let tile = b.v_layout().item(Tray::Control).unwrap();
+            assert!(b.pointer_button(tile.cx(), tile.cy(), Button::Left), "{pos:?}");
+            assert_eq!(b.open, Open::Control);
+            let (ox, oy) = b.v_panel_origin();
+            assert!(ox >= POP_MARGIN - 0.01 && ox + controlcenter::PANEL_W <= geo.w - POP_MARGIN + 0.01, "{pos:?}: x {ox}");
+            assert!(oy >= POP_MARGIN - 0.01 && oy + b.cc_height <= geo.h - POP_MARGIN + 0.01, "{pos:?}: y {oy} + {}", b.cc_height);
+            let s = geo.strip();
+            match pos {
+                BarPosition::Left => assert_eq!(ox, THICK + POP_GAP),
+                BarPosition::Right => assert_eq!(ox + controlcenter::PANEL_W, s.x - POP_GAP, "leftwards"),
+                BarPosition::Top => assert_eq!(oy, THICK + POP_GAP, "downwards"),
+                _ => assert_eq!(oy + b.cc_height, s.y - POP_GAP, "upwards"),
+            }
+            assert!(b.input_rects().len() == 2, "{pos:?}");
+            assert!(b.pointer_button(tile.cx(), tile.cy(), Button::Left));
+            assert_eq!(b.open, Open::None, "{pos:?}: the tile toggles");
+        }
     }
 
     #[test]
-    fn switching_the_theme_layout_closes_whatever_is_open_and_resizes() {
+    fn the_tallest_panel_fits_the_popout_room_of_a_top_or_bottom_bar() {
+        let mut b = bar_at(BarPosition::Top, Process::Main);
+        b.open_control();
+        assert!(b.cc_height <= POPOUT_H - POP_GAP - POP_MARGIN, "the Control Center is {} tall, the room {}", b.cc_height, POPOUT_H);
+    }
+
+    #[test]
+    fn switching_the_layout_closes_whatever_is_open_and_resizes() {
         let mut b = bar();
-        b.was_vertical = true;
         b.update_snapshot(|s| s.volume = Some(sys::Volume { level: 0.4, muted: false }));
         let audio = b.v_layout().item(Tray::Audio).unwrap();
         b.pointer_button(audio.cx(), audio.cy(), Button::Left);
         assert_ne!(b.open, Open::None);
-        TEST_VERTICAL.with(|f| f.set(false));
+        // left -> top: the same bar, another edge
+        TEST_POSITION.with(|p| p.set(BarPosition::Top));
         let t = b.tick();
         assert!(t.redraw);
         assert_eq!(b.open, Open::None);
+        assert_eq!(b.size(), (0, SURFACE_H));
+        assert_eq!(b.surface_spec().unwrap().anchor, Anchor::Top);
+        assert_eq!(b.was_place.map(|p| p.edge), Some(Anchor::Top));
+        // ...to split: only the head stays in this process
+        TEST_POSITION.with(|p| p.set(BarPosition::Split));
+        b.tick();
+        assert_eq!(b.was_place.map(|p| p.part), Some(Part::Head));
+        // ...and back to the classic bar with another theme
+        TEST_VERTICAL.with(|f| f.set(false));
+        b.tick();
         assert_eq!(b.size(), (0, SURFACE_MIN_HEIGHT));
-        assert!(!b.was_vertical);
+        assert!(b.was_place.is_none());
     }
 
     #[test]
-    fn a_vertical_frame_paints_the_strip_pills_and_leaves_the_popout_area_clear() {
-        let mut b = bar();
-        let mut pm = crate::gfx::pixmap(SURFACE_W, 900).unwrap();
-        b.draw(&mut pm);
-        let th = crate::theme::th();
-        let lay = b.v_layout();
-        let logo = lay.pill(Pill::Logo).unwrap();
-        let a = |x: u32, y: u32| pm.pixel(x, y).unwrap().alpha();
-        assert_eq!(a(0, 0), 255, "the strip is painted from the corner");
-        assert_eq!(a(BAR_W as u32 - 1, 899), 255);
-        assert_eq!(a(BAR_W as u32 + 5, 100), 0, "right of the strip stays transparent");
-        assert_eq!(a(BAR_W as u32 + 5, 899), 0);
-        let strip = pm.pixel(2, 450).unwrap();
-        let pill = pm.pixel(logo.cx() as u32, (logo.y + 3.0) as u32).unwrap();
-        assert_ne!((strip.red(), strip.green(), strip.blue()), (pill.red(), pill.green(), pill.blue()), "pills are drawn over the strip ({:?})", th.id);
+    fn a_pill_frame_paints_the_strip_pills_and_leaves_the_popout_area_clear_on_every_edge() {
+        for pos in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            let mut b = bar_at(pos, Process::Main);
+            let geo = b.v_geo();
+            let mut pm = crate::gfx::pixmap(geo.w as u32, geo.h as u32).unwrap();
+            b.draw(&mut pm);
+            let lay = b.v_layout();
+            let logo = lay.pill(Pill::Logo).unwrap();
+            let a = |x: f32, y: f32| pm.pixel(x as u32, y as u32).unwrap().alpha();
+            let s = geo.strip();
+            assert_eq!(a(s.x, s.y), 255, "{pos:?}: the strip is painted from its corner");
+            assert_eq!(a(s.right() - 1.0, s.bottom() - 1.0), 255, "{pos:?}");
+            // beside the strip, on the popout side, stays transparent
+            let clear = match pos {
+                BarPosition::Left => (THICK + 5.0, 100.0),
+                BarPosition::Right => (s.x - 5.0, 100.0),
+                BarPosition::Top => (100.0, THICK + 5.0),
+                _ => (100.0, s.y - 5.0),
+            };
+            assert_eq!(a(clear.0, clear.1), 0, "{pos:?}: the popout room stays transparent");
+            let th = crate::theme::th();
+            let off = if geo.horizontal() { (logo.cx(), s.y + 2.0) } else { (s.x + 2.0, logo.cy()) };
+            let (strip, pill) = (pm.pixel(off.0 as u32, off.1 as u32).unwrap(), pm.pixel(logo.cx() as u32, (logo.y + 3.0) as u32).unwrap());
+            assert_ne!((strip.red(), strip.green(), strip.blue()), (pill.red(), pill.green(), pill.blue()), "{pos:?}: pills are drawn over the strip ({:?})", th.id);
+        }
+    }
+
+    #[test]
+    fn the_wheel_changes_the_volume_in_the_first_half_and_the_brightness_in_the_second() {
+        let _g = crate::menubar::tests::LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        for pos in [BarPosition::Left, BarPosition::Top] {
+            let mut b = bar_at(pos, Process::Main);
+            let geo = b.v_geo();
+            b.update_snapshot(|s| {
+                s.volume = Some(sys::Volume { level: 0.4, muted: false });
+                s.brightness = Some(50);
+            });
+            sys::set_dry_run(true);
+            let _ = sys::take_log();
+            // on the logo (first half) and the power button (second half)
+            let lay = b.v_layout();
+            let logo = lay.item(Tray::Logo).unwrap();
+            let power = lay.item(Tray::Power).unwrap();
+            assert!(b.v_scroll(logo.cx(), logo.cy(), -1.0), "{pos:?}: volume");
+            assert_eq!(b.snapshot().volume.map(|v| (v.level * 100.0).round() as i32), Some(45), "{pos:?}");
+            assert!(b.v_scroll(power.cx(), power.cy(), -1.0), "{pos:?}: brightness");
+            assert_eq!(b.snapshot().brightness, Some(55), "{pos:?}");
+            sys::set_dry_run(false);
+            let _ = sys::take_log();
+            // off the strip: nothing
+            assert!(!b.v_scroll(geo.w - 3.0, geo.h - 3.0, 1.0));
+        }
+    }
+
+    #[test]
+    fn the_main_bar_starts_the_bottom_process_only_while_split_and_only_when_live() {
+        let mut b = bar_at(BarPosition::Split, Process::Main);
+        assert!(!b.ensure_bottom(), "a bar that is not the live one never spawns");
+        assert_eq!(b.bottom_spawns, 0);
+        b.companion = true;
+        b.bottom_exe = Some("/bin/true".into());
+        assert!(b.ensure_bottom(), "split: the companion is wanted");
+        assert_eq!(b.bottom_spawns, 1, "started");
+        // it ended at once (true): not restarted before the retry delay, then restarted
+        std::thread::sleep(Duration::from_millis(200));
+        b.ensure_bottom();
+        assert_eq!(b.bottom_spawns, 1);
+        assert!(b.bottom_child.is_none());
+        b.bottom_retry = Instant::now() - Duration::from_secs(1);
+        b.ensure_bottom();
+        assert_eq!(b.bottom_spawns, 2);
+        // not split any more: nothing is started, the companion leaves by itself
+        TEST_POSITION.with(|p| p.set(BarPosition::Top));
+        std::thread::sleep(Duration::from_millis(200));
+        b.bottom_retry = Instant::now() - Duration::from_secs(1);
+        assert!(!b.ensure_bottom());
+        assert_eq!(b.bottom_spawns, 2);
+        // the bottom bar never owns a companion
+        let mut bottom = bar_at(BarPosition::Split, Process::Bottom);
+        bottom.companion = true;
+        assert!(!bottom.ensure_bottom());
+        assert_eq!(bottom_args(), ["--role", "bottom"]);
     }
 }

@@ -55,16 +55,20 @@ pub(crate) struct Rect {
 
 /// Window geometry for a requested app size on the monitor `mon`.
 pub(crate) fn place(spec: &SurfaceSpec, (w, h): (u32, u32), mon: Rect) -> (i32, i32, u32, u32) {
-    if spec.anchor == Anchor::Left {
-        // A vertical panel: flush with the monitor's left edge, as tall as the monitor when it asks for 0.
+    if spec.anchor.is_side() {
+        // A vertical panel: flush with the monitor's left (or right) edge, as tall as the monitor when it asks for 0.
         let height = if h == 0 { mon.h.max(1) as u32 } else { h };
-        return (mon.x + spec.margin, mon.y, w.max(1), height);
+        let w = w.max(1);
+        let x = if spec.anchor == Anchor::Right { mon.x + mon.w - w as i32 - spec.margin } else { mon.x + spec.margin };
+        return (x, mon.y, w, height);
     }
     let width = if w == 0 { mon.w.max(1) as u32 } else { w };
+    // never taller than the monitor: a pill bar's surface also holds the popouts, which may ask for more than a small screen has
+    let h = if spec.stretch { h.min(mon.h.max(1) as u32) } else { h };
     let x = mon.x + ((mon.w - width as i32) / 2).max(0);
     let y = match spec.anchor {
         Anchor::Bottom => mon.y + mon.h - h as i32 - spec.margin,
-        Anchor::Top | Anchor::Left => mon.y + spec.margin,
+        _ => mon.y + spec.margin,
     };
     (x, y, width, h.max(1))
 }
@@ -96,6 +100,12 @@ pub(crate) fn strut_partial(spec: &SurfaceSpec, win: (i32, i32, u32, u32), mon: 
             s[0] = (mon.x + size).max(0) as u32;
             s[4] = win.1.max(0) as u32;
             s[5] = (win.1 + win.3 as i32 - 1).max(0) as u32;
+        }
+        Anchor::Right => {
+            // right, then right_start_y / right_end_y (slots 6 and 7); measured from the screen's right edge
+            s[1] = (screen.0 - (mon.x + mon.w) + size).max(0) as u32;
+            s[6] = win.1.max(0) as u32;
+            s[7] = (win.1 + win.3 as i32 - 1).max(0) as u32;
         }
     }
     Some(s)
@@ -527,6 +537,40 @@ mod tests {
         let win2 = place(&s, (432, 0), m2);
         let st = strut_partial(&s, win2, m2, (3200, 720)).unwrap();
         assert_eq!((st[0], st[4], st[5]), (1920 + 52, 0, 719));
+    }
+
+    #[test]
+    fn a_right_panel_hugs_the_right_edge_and_its_strut_is_measured_from_it() {
+        let s = SurfaceSpec { anchor: Anchor::Right, margin: 0, reserve: 52, stretch: true, namespace: "t" };
+        let m = mon(0, 0, 1600, 900);
+        let win = place(&s, (444, 0), m);
+        assert_eq!(win, (1600 - 444, 0, 444, 900));
+        assert_eq!(strut_partial(&s, win, m, (1600, 900)), Some([0, 52, 0, 0, 0, 0, 0, 899, 0, 0, 0, 0]));
+        // the first of two side-by-side monitors: the strut counts the whole second one too
+        let left = mon(0, 0, 1600, 900);
+        let w1 = place(&s, (444, 0), left);
+        assert_eq!(strut_partial(&s, w1, left, (3200, 900)).unwrap()[1], 1600 + 52);
+        // the second one ends at the screen edge
+        let right = mon(1600, 0, 1600, 900);
+        let w2 = place(&s, (444, 0), right);
+        assert_eq!(w2.0, 3200 - 444);
+        assert_eq!(strut_partial(&s, w2, right, (3200, 900)).unwrap()[1], 52);
+    }
+
+    #[test]
+    fn top_and_bottom_pill_bars_span_the_monitor_and_reserve_their_thickness() {
+        let top = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: 52, stretch: true, namespace: "t" };
+        let bottom = SurfaceSpec { anchor: Anchor::Bottom, ..top };
+        let m = mon(0, 0, 1600, 900);
+        // the surface holds the popouts, so it is taller than the strut
+        assert_eq!(place(&top, (0, 772), m), (0, 0, 1600, 772));
+        assert_eq!(place(&bottom, (0, 772), m), (0, 900 - 772, 1600, 772));
+        let wt = place(&top, (0, 772), m);
+        assert_eq!(strut_partial(&top, wt, m, (1600, 900)), Some([0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]));
+        let wb = place(&bottom, (0, 772), m);
+        assert_eq!(strut_partial(&bottom, wb, m, (1600, 900)), Some([0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]));
+        // a monitor shorter than the surface: the surface is cut to it
+        assert_eq!(place(&bottom, (0, 772), mon(0, 0, 1024, 600)), (0, 0, 1024, 600));
     }
 
     #[test]
