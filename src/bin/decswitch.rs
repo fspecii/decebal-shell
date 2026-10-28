@@ -60,6 +60,7 @@ fn main() {
     let outcome = Rc::new(RefCell::new(Outcome::Pending));
     let app = Switcher::new(entries, back, hold, outcome.clone()).with_closer(decebal::backend::x11_window::close_window);
     if let Err(e) = decebal::backend::x11_window::run(app) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decswitch: {e}");
         std::process::exit(1);
     }

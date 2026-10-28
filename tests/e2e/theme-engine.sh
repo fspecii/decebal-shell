@@ -31,7 +31,7 @@ wait_for() { local t=$1; shift; local end=$(($(date +%s%N) / 1000000 + t * 1000)
 
 export HOME=$TMP/home XDG_CONFIG_HOME=$TMP/cfg XDG_RUNTIME_DIR=$TMP/run XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_STATE_HOME=$TMP/state
 export DECEBAL_CONFIG=$TMP/cfg/omarchy DECEBAL_BACKEND=x11 DISPLAY=$N RDWMCTL=$RDWM_DIR/rdwmctl DECSETTINGS_CONFIG=$TMP/cfg/rdwm/config.toml
-export DECEBAL_COLOR_SCHEME=dark DECEBAL_SYSTEM_THEMES=$TMP/nosystem
+export DECEBAL_COLOR_SCHEME=dark DECEBAL_SYSTEM_THEMES=$TMP/nosystem DECEBAL_LOG=debug DECEBAL_LOG_DIR=$TMP/logs
 unset WAYLAND_DISPLAY RDWM_SOCK
 mkdir -p "$HOME" "$XDG_CONFIG_HOME/rdwm" "$DECEBAL_CONFIG" "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$TMP/work"
 chmod 700 "$XDG_RUNTIME_DIR"
@@ -234,6 +234,17 @@ for id in nothing-dot nothing-light brutalist terminal-minimal terminal-amber; d
   shot "theme-$id"
 done
 decthemectl theme apply nord >/dev/null 2>&1; unset DECEBAL_SYSTEM_THEMES; export DECEBAL_SYSTEM_THEMES=$TMP/nosystem
+
+echo "== debug logs (DECEBAL_LOG=debug, one file per program)"
+out=$(decthemectl log status 2>&1); has "log status names the folder" "$out" "$TMP/logs"
+for prog in decthemectl decsettings decbar decdock decwidgets; do
+  [ -s "$TMP/logs/$prog.log" ] && pass "$prog wrote its log" || fail "$prog has no log" "$(ls "$TMP/logs" 2>&1 | tr '\n' ' ')"
+done
+grep -q "theme apply .nothing-dot" "$TMP/logs/decthemectl.log" && pass "theme applies are logged" || fail "no apply record"
+grep -q "INFO  .* decsettings .*start: pane" "$TMP/logs/decsettings.log" && pass "decsettings logs its start" || fail "decsettings log content" "$(tail -3 "$TMP/logs/decsettings.log")"
+out=$(decthemectl log tail 5 2>&1); [ "$(printf '%s\n' "$out" | wc -l)" = 5 ] && pass "log tail merges the programs" || fail "log tail" "$out"
+decthemectl log level info >/dev/null && jq -e '.debug.level=="info"' "$DECEBAL_CONFIG/decebal.json" >/dev/null && pass "log level is persisted" || fail "log level"
+decthemectl log clear >/dev/null; [ -z "$(ls "$TMP/logs" 2>/dev/null)" ] && pass "log clear" || fail "log clear left files"
 
 echo "== no crashes"
 for p in "${PIDS[@]}"; do kill -0 "$p" 2>/dev/null || { [ "$p" = "$PV" ] || [ "$p" = "${OLDWP:-}" ] || fail "process $p died"; }; done

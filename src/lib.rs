@@ -15,6 +15,7 @@ pub mod config;
 pub mod controlcenter;
 pub mod dash;
 pub mod dbus;
+pub mod dlog;
 pub mod dock;
 pub mod dock_app;
 pub mod dock_menu;

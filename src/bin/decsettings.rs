@@ -55,7 +55,9 @@ fn main() {
     let Some(_guard) = decebal::single::acquire("decsettings") else {
         return;
     };
+    decebal::log_info!("start: pane {:?}, rdwm config {}", pane, paths.rdwm_config.display());
     if let Err(e) = run_window(SettingsApp::new(paths, pane.as_deref())) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decsettings: {e}");
         std::process::exit(1);
     }

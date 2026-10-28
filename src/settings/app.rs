@@ -219,6 +219,7 @@ impl SettingsApp {
 
     fn select_pane(&mut self, i: usize) {
         if self.m.sel.pane != i {
+            crate::log_info!("pane: {}", PANES.get(i).map(|p| p.id).unwrap_or("?"));
             self.m.sel.pane = i;
             self.sb_follow = true;
             self.scroll = 0.0;

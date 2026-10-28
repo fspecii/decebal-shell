@@ -77,6 +77,7 @@ fn main() {
     if let Some(path) = png {
         let mut bar = DecBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces).with_height(height).with_process(role).with_position(position);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
+            decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);
         }
@@ -121,6 +122,7 @@ fn main() {
         let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" };
         let spec = App::surface_spec(&bar).unwrap_or(fallback);
         if let Err(e) = backend::run(bar, spec) {
+            decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);
         }

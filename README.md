@@ -60,7 +60,7 @@ decthemectl theme install mine.dtheme
 decthemectl theme snapshot my-desktop        # create a theme from the current settings
 decwidgets add clock-card --anchor top-right --x -40 --y 60
 ```
-The Theme pane of `decsettings` has the same as a gallery. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md);
+The Theme pane of `decsettings` has the same as a gallery. Format, widget language and security rules: [docs/theme-engine.md](docs/theme-engine.md); Ready-made looks: [docs/themes.md](docs/themes.md). Something misbehaving? Every program keeps a debug log: [docs/debugging.md](docs/debugging.md) (`decthemectl log`).
 end-to-end test: `tests/e2e/theme-engine.sh`.
 
 ## Install

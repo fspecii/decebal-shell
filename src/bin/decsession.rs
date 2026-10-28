@@ -35,6 +35,7 @@ fn main() {
     let outcome = Rc::new(RefCell::new(Outcome::Pending));
     let app = Session::new(session::choices(session::hibernate_available()), outcome.clone()).started_at(started);
     if let Err(e) = decebal::window_app::run_window(app) {
+        decebal::log_error!("fatal: {e}");
         eprintln!("decsession: {e}");
         std::process::exit(1);
     }
