@@ -154,7 +154,13 @@ pub struct Config {
     pub cursor_theme: Option<String>,
     /// Also send the reload signals Omarchy uses for kitty (SIGUSR1), ghostty/btop (SIGUSR2) and helix (SIGUSR1).
     pub signals: bool,
+    /// Per-target options that differ from their default (see [`OPTIONS`]), `"options"` in the JSON.
+    pub options: BTreeMap<String, bool>,
 }
+
+/// The per-target on/off options: `(key, default, title, detail)`. Only a value that differs from the default is stored.
+pub const OPTIONS: &[(&str, bool, &str, &str)] =
+    &[("gtk.font", true, "Theme font in GTK apps", "Write the theme's interface font (when it names an installed one) to GTK's settings.ini and gsettings; off leaves your GTK font alone")];
 
 impl Config {
     pub fn from_json(v: &Value) -> Config {
@@ -168,7 +174,25 @@ impl Config {
         c.icon_theme = s("iconTheme");
         c.cursor_theme = s("cursorTheme");
         c.signals = o.get("signals").and_then(Value::as_bool).unwrap_or(false);
+        if let Some(t) = o.get("options").and_then(Value::as_object) {
+            c.options = t.iter().filter(|(k, _)| OPTIONS.iter().any(|o| o.0 == k.as_str())).filter_map(|(k, v)| v.as_bool().map(|b| (k.clone(), b))).collect();
+        }
         c
+    }
+
+    /// The value of a per-target option: the user's, else its default.
+    pub fn option(&self, key: &str) -> bool {
+        self.options.get(key).copied().unwrap_or_else(|| OPTIONS.iter().find(|o| o.0 == key).is_none_or(|o| o.1))
+    }
+
+    /// Sets an option; a value equal to the default is not stored.
+    pub fn set_option(&mut self, key: &str, on: bool) {
+        let default = OPTIONS.iter().find(|o| o.0 == key).is_none_or(|o| o.1);
+        if on == default {
+            self.options.remove(key);
+        } else {
+            self.options.insert(key.to_string(), on);
+        }
     }
 
     pub fn to_json(&self) -> Value {
@@ -185,6 +209,9 @@ impl Config {
         }
         if self.signals {
             o.insert("signals".into(), json!(true));
+        }
+        if !self.options.is_empty() {
+            o.insert("options".into(), json!(self.options));
         }
         Value::Object(o)
     }
@@ -773,7 +800,11 @@ mod tests {
         assert!(!Config::default().enabled);
         let mut c = Config { enabled: true, icon_theme: Some("Papirus".into()), signals: true, ..Config::default() };
         c.targets.insert("gtk".into(), false);
+        assert!(c.option("gtk.font"), "the theme font is carried to GTK unless the user says no");
+        c.set_option("gtk.font", false);
+        assert!(!c.option("gtk.font"));
         assert_eq!(Config::from_json(&c.to_json()), c);
+        assert_eq!(Config::from_json(&json!({"options": {"nonsense": false, "gtk.font": false}})).options.len(), 1, "unknown options are dropped");
         let d = tmp("cfg");
         let f = d.join("decebal.json");
         std::fs::write(&f, "{\"bar\":{\"enabled\":true}}\n").unwrap();

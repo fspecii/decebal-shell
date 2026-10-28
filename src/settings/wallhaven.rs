@@ -1276,7 +1276,7 @@ mod tests {
 
     #[test]
     fn favouriting_through_the_pane_writes_the_state_file() {
-        let root = tmp("ctl");
+        let root = tmp("fav-ctl"); // not "ctl": two tests sharing a directory delete each other's files
         let (mut m, _) = super::super::model::tests_support::model_with("");
         m.wh = Wh::with_dirs(Dirs::under(&root));
         m.wh.tab = Tab::Wallhaven;
@@ -1306,7 +1306,7 @@ mod tests {
 
     #[test]
     fn tabs_switch() {
-        let root = tmp("ctl");
+        let root = tmp("tabs");
         let (mut m, _) = super::super::model::tests_support::model_with("");
         m.wh = Wh::with_dirs(Dirs::under(&root));
         apply(&mut m, &["wh", "tab"], CtlVal::Str("wallhaven".into()));

@@ -151,26 +151,20 @@ WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
 eq "theme pane is shown" "$(q .pane)" theme
 shot 20-settings-dark
-tile() { jq -r "[.layouts[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DECSETTINGS_DEBUG_LAYOUT"; }
-click() { xdotool mousemove --window "$WID" $1 $2; sleep 0.1; xdotool click --window "$WID" 1; sleep 0.5; }
-click $(tile l:theme:dracula); settle
+. "$HERE/tests/e2e/settings_ui.sh"
+click_ctl l:theme:dracula; settle
 eq "clicking Dracula applies it" "$(theme_name)" dracula
 eqpx "bar follows the UI choice" 900 3 "#1e1f29"
 eq "rdwm titlebar follows the UI choice" "$(rdcfg .config.decoration.focused_bg)" "#343746"
-# the Shell style card at the top pushed the swatches down: scroll them into view first
-for i in 1 2 3 4; do xdotool mousemove --window "$WID" 500 500; xdotool click --window "$WID" 5; done; sleep 0.6
-click $(tile l:accent:#30d158); settle
+click_ctl l:accent:#30d158; settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green
-click $(tile l:theme:windows11); sleep 0.5
-mode_c=$(jq -r '[.ctls[]|select(.id=="th:mode")][0]|"\(.parts[0][0]+.parts[0][2]/2|floor) \(.parts[0][1]+.parts[0][3]/2|floor)"' "$DECSETTINGS_DEBUG_LAYOUT")
-click $mode_c; settle
+click_ctl l:theme:windows11; sleep 0.5
+click_ctl th:mode; settle
 eq "selection json mode light" "$(jq -r .theme.mode "$DECEBAL_CONFIG/decebal.json")" light
 eqpx "windows light bar in the running bar" 900 3 "#e9eef6"
 shot 22-settings-windows-light
-for i in 1 2 3 4 5 6; do xdotool mousemove --window "$WID" 500 500; xdotool click --window "$WID" 5; done; sleep 0.6
-reset_c=$(jq -r '[.ctls[]|select(.id=="th:reset")][0].rect|"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)"' "$DECSETTINGS_DEBUG_LAYOUT")
-click $reset_c; settle
+click_ctl th:reset; settle
 eq "reset clears the accent override" "$(jq -r '.theme.accent // "none"' "$DECEBAL_CONFIG/decebal.json")" none
 
 shot 24-settings-scrolled

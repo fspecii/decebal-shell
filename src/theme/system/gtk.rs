@@ -6,6 +6,7 @@
 
 use super::files::{Comment, Edit};
 use super::{Config, Env, Palette, Plan, Target};
+use crate::theme::fontdb::{self, norm, FontDb};
 use crate::theme::model::Rgb;
 use std::fmt::Write;
 
@@ -151,11 +152,26 @@ pub fn layout(p: &Palette) -> &'static str {
     }
 }
 
-pub fn settings(p: &Palette, cfg: &Config) -> Vec<(String, String, String)> {
+/// The `gtk-font-name` value ("Inter 11"), or `None` to leave the user's GTK font alone: the option `gtk.font` is off, the theme names no
+/// font, it names a generic alias (`sans-serif`, `system-ui`: nothing explicit to carry over) or the family is not installed.
+pub fn font_name(p: &Palette, cfg: &Config, db: &FontDb) -> Option<String> {
+    if !cfg.option("gtk.font") {
+        return None;
+    }
+    let wanted = p.font.as_deref()?;
+    if matches!(norm(wanted).as_str(), "sansserif" | "sans" | "systemui" | "system" | "default" | "monospace" | "mono" | "uimonospace") {
+        return None;
+    }
+    let family = db.resolve(wanted)?;
+    Some(format!("{family} {}", fmt_pt(p.font_pt)))
+}
+
+/// `settings.ini`: `font` is [`font_name`].
+pub fn settings(p: &Palette, cfg: &Config, font: Option<&str>) -> Vec<(String, String, String)> {
     let s = |k: &str, v: String| ("Settings".to_string(), k.to_string(), v);
     let mut v = vec![s("gtk-application-prefer-dark-theme", if p.dark { "1" } else { "0" }.into()), s("gtk-decoration-layout", layout(p).into())];
-    if let Some(f) = &p.font {
-        v.push(s("gtk-font-name", format!("{f} {}", fmt_pt(p.font_pt))));
+    if let Some(f) = font {
+        v.push(s("gtk-font-name", f.to_string()));
     }
     if let Some(i) = &cfg.icon_theme {
         v.push(s("gtk-icon-theme-name", i.clone()));
@@ -190,14 +206,15 @@ impl Target for Gtk {
 
     fn plan(&self, p: &Palette, cfg: &Config, env: &Env) -> Plan {
         let mut plan = Plan::default();
+        let font = if cfg.option("gtk.font") && p.font.is_some() { font_name(p, cfg, &fontdb::get()) } else { None };
         for (dir, gtk4) in [("gtk-3.0", false), ("gtk-4.0", true)] {
             plan.edits.push(Edit::Block { path: env.config_home.join(dir).join("gtk.css"), comment: Comment::Css, text: css(p, gtk4) });
-            plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings(p, cfg) });
+            plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings(p, cfg, font.as_deref()) });
         }
         let g = |k: &str, v: String| ("org.gnome.desktop.interface".to_string(), k.to_string(), v);
         plan.gsettings.push(g("color-scheme", if p.dark { "'prefer-dark'" } else { "'prefer-light'" }.into()));
-        if let Some(f) = &p.font {
-            plan.gsettings.push(g("font-name", format!("'{f} {}'", fmt_pt(p.font_pt))));
+        if let Some(f) = &font {
+            plan.gsettings.push(g("font-name", format!("'{f}'")));
         }
         if let Some(i) = &cfg.icon_theme {
             plan.gsettings.push(g("icon-theme", format!("'{i}'")));
@@ -248,17 +265,15 @@ mod tests {
     fn settings_and_layout_follow_the_titlebar_style() {
         let mut p = palette(true);
         assert_eq!(layout(&p), "close,minimize,maximize:");
-        let s = settings(&p, &Config::default());
+        let s = settings(&p, &Config::default(), None);
         assert!(s.contains(&("Settings".into(), "gtk-application-prefer-dark-theme".into(), "1".into())));
-        assert!(!s.iter().any(|(_, k, _)| k == "gtk-icon-theme-name"), "unset optional keys are not written");
-        // the font only comes from the theme (its preset, since themes name fonts now), never from this config
-        assert_eq!(s.iter().any(|(_, k, _)| k == "gtk-font-name"), p.font.is_some());
+        assert!(!s.iter().any(|(_, k, _)| k == "gtk-icon-theme-name" || k == "gtk-font-name"), "unset optional keys are not written");
         p.classic_buttons = true;
         p.dark = false;
         p.font = Some("Segoe UI".into());
         p.font_pt = 10.5;
         let cfg = Config { icon_theme: Some("Papirus".into()), cursor_theme: Some("Bibata".into()), ..Config::default() };
-        let s = settings(&p, &cfg);
+        let s = settings(&p, &cfg, Some("Segoe UI 10.5"));
         for want in [
             ("gtk-application-prefer-dark-theme", "0"),
             ("gtk-decoration-layout", "appmenu:minimize,maximize,close"),
@@ -268,6 +283,31 @@ mod tests {
         ] {
             assert!(s.iter().any(|(_, k, v)| k == want.0 && v == want.1), "{want:?} in {s:?}");
         }
+    }
+
+    #[test]
+    fn the_gtk_font_needs_an_installed_named_family_and_the_option() {
+        let db = crate::theme::fontdb::fake::db();
+        let mut p = palette(true);
+        p.font_pt = 11.0;
+        let mut cfg = Config::default();
+        p.font = Some("inter".into());
+        assert_eq!(font_name(&p, &cfg, &db).as_deref(), Some("Inter 11"), "on by default, the installed spelling");
+        p.font = Some("Segoe UI".into());
+        assert_eq!(font_name(&p, &cfg, &db), None, "not installed");
+        for generic in ["sans-serif", "system-ui", "monospace"] {
+            p.font = Some(generic.into());
+            assert_eq!(font_name(&p, &cfg, &db), None, "{generic} names nothing explicit");
+        }
+        p.font = None;
+        assert_eq!(font_name(&p, &cfg, &db), None);
+        p.font = Some("Inter".into());
+        cfg.set_option("gtk.font", false);
+        assert_eq!(font_name(&p, &cfg, &db), None, "the user turned it off");
+        assert!(cfg.options.contains_key("gtk.font"));
+        cfg.set_option("gtk.font", true);
+        assert!(cfg.options.is_empty(), "the default is not stored");
+        assert_eq!(font_name(&p, &cfg, &db).as_deref(), Some("Inter 11"));
     }
 
     #[test]

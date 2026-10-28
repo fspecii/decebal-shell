@@ -155,10 +155,13 @@ Old files keep working: `"font": "Inter"` (a string) and `"fontScale"` are the s
 (`decthemectl set font Inter`), and `[font] family` / `font_family` in a theme file is the same.
 
 Layers, lowest first: preset (the user's, else the theme's, else `inter`) < theme `font_ui`/... < theme `family` < user `font` string < user role chains.
-Installed fonts are read once per process with one `fc-list` (plus two `fc-match` for the generic names), never per frame;
-faces are memory-mapped and opened on the first glyph that is not cached. Latin fonts are drawn with fontdue as before; fonts with more than 6000 glyphs
+Installed fonts are read with one `fc-list` (plus two `fc-match` for the generic names) when a program starts or the theme's fonts change, never per frame;
+a program keeps only the faces of the families its chains resolved to, not the table of every installed face.
+Faces are memory-mapped and opened on the first glyph that is not cached; a parsed fontdue face (about 13 MB for Inter) is built and freed on a
+short-lived worker thread (`src/mem.rs`: a second malloc arena) so that none of it stays resident afterwards: an idle `decnotify` is about 5 MB
+with banners on screen, as it was before fonts. Latin fonts are drawn with fontdue as before; fonts with more than 6000 glyphs
 (Noto CJK would take 320 MB) and variable fonts (their weight axis is applied) are rasterised glyph by glyph with ttf-parser and tiny-skia.
-Newly installed fonts are noticed by a restart of the program (the Theme pane rescans every 30 s).
+Newly installed fonts are noticed when the theme's fonts change or the program restarts (the Theme pane rescans every 30 s).
 
 ## Shell styles: macOS, Windows, Caelestia
 `decthemectl style NAME` (or **Shell style** at the top of the Theme pane) sets the theme, the dock style and the menu bar together:
@@ -302,6 +305,7 @@ decthemectl system off                 # put every file and setting back, then s
 decthemectl system status [--json]     # which targets run, which are skipped and why
 decthemectl system target gtk off      # per-target checkbox: omarchy browser editors hooks gtk qt kvantum x11 (default = auto)
 decthemectl system set icon-theme Papirus     # optional: also set an icon / cursor theme (cursor-theme); `none` unsets
+decthemectl system set gtk-font off    # keep your own GTK font (the theme's font is carried to GTK by default, see the `gtk` row)
 decthemectl apply-system [--dry-run] [--only gtk,qt]   # run it by hand; --dry-run lists the files it would write
 ```
 
@@ -314,7 +318,7 @@ light). Each target renders from it (`src/theme/system/*.rs`):
 | `browser` | on only if sudo needs no password for `omarchy-theme-set-browser-policy` (Omarchy's own rule) | `omarchy-theme-set-browser`: the Chromium/Chrome/Edge/Brave `BrowserThemeColor` policy from `chromium.theme`. This writes root-owned policy files, so decebal never triggers a password prompt: without the rule the box stays off. |
 | `editors` | off | `omarchy-theme-set-vscode` and `-obsidian` (VS Code / Cursor settings, Obsidian vaults). Off restores the previous Omarchy theme through the same helpers. |
 | `hooks` | off | your `~/.config/omarchy/hooks/theme-set.d` scripts |
-| `gtk` | on | a marked block in `~/.config/gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` (libadwaita named colours: `window_bg_color`, `accent_bg_color`, `headerbar_*`, `sidebar_*`, `card_*`, `popover_*`, ... plus the `theme_*` names and widget rules for GTK 3, whose Adwaita theme ignores the names), `settings.ini` (`gtk-application-prefer-dark-theme`, `gtk-decoration-layout`: window buttons on the left for the macOS titlebar style, on the right for classic; `gtk-font-name` when the theme names a font) and gsettings `color-scheme` (dark/light), `font-name`, `button-layout`. Icon and cursor theme only if you set them. |
+| `gtk` | on | a marked block in `~/.config/gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` (libadwaita named colours: `window_bg_color`, `accent_bg_color`, `headerbar_*`, `sidebar_*`, `card_*`, `popover_*`, ... plus the `theme_*` names and widget rules for GTK 3, whose Adwaita theme ignores the names), `settings.ini` (`gtk-application-prefer-dark-theme`, `gtk-decoration-layout`: window buttons on the left for the macOS titlebar style, on the right for classic; `gtk-font-name`) and gsettings `color-scheme` (dark/light), `font-name`, `button-layout`. The font keys are written only when the theme's interface font is an explicit, installed family (a generic `sans-serif` or a font that is not installed leaves yours alone) and the option **Theme font in GTK apps** (`decthemectl system set gtk-font on|off`, `system.options."gtk.font"` in `decebal.json`, on by default; switch it off in Settings > Theme > Apply to all apps) is on. Icon and cursor theme only if you set them. |
 | `qt` | on when qt5ct/qt6ct is installed | `qt5ct/colors/decebal.conf` and `qt6ct/colors/decebal.conf` and `color_scheme_path` + `custom_palette=true` in `qt5ct.conf` / `qt6ct.conf` (an existing `style` is kept; `Fusion` otherwise). Qt reads it with `QT_QPA_PLATFORMTHEME=qt6ct` (qt5ct for Qt 5) in the session environment; `decthemectl system status` warns when it is not set. |
 | `kvantum` | off | a colours-only Kvantum theme `~/.config/Kvantum/decebal` selected in `kvantum.kvconfig` (replaces your Kvantum theme while on). |
 | `x11` | on when xrdb is installed | `~/.config/decebal/system/Xresources` (`*.foreground`, `*.background`, `*.color0..15`, `Xcursor.theme` if set), included from a block in `~/.Xresources` and merged with `xrdb -merge` when `$DISPLAY` is set. st, xterm and urxvt pick it up when they start (st needs the Xresources patch). |

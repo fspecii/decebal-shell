@@ -34,6 +34,8 @@ pub fn items(m: &Model) -> Vec<Item> {
         .collect();
     out.push(Item::Header("Apply to".into()));
     out.push(Item::Card(rows));
+    let opts: Vec<Row> = system::OPTIONS.iter().map(|(key, _, title, detail)| Row::new(*title).detail(*detail).ctl(Ctl::new(format!("sy:o:{key}"), Kind::Toggle(cfg.option(key))))).collect();
+    out.push(Item::Card(opts));
     out.push(Item::Card(vec![
         Row::new("Icon theme")
             .detail("Optional: set this icon theme in GTK and Qt apps (empty = leave it alone)")
@@ -83,6 +85,15 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 return;
             }
             cfg.targets.insert((*id).to_string(), b);
+            if save(m, &cfg) {
+                system::request(&m.paths.shell_json());
+            }
+        }
+        (["sy", "o", key], CtlVal::Bool(b)) => {
+            if !system::OPTIONS.iter().any(|o| o.0 == *key) {
+                return;
+            }
+            cfg.set_option(key, b);
             if save(m, &cfg) {
                 system::request(&m.paths.shell_json());
             }
@@ -142,6 +153,19 @@ mod tests {
         assert!(!Config::load(&m.paths.shell_json()).targets.contains_key("nonsense"));
         m.apply("sy:on", CtlVal::Bool(false));
         assert!(!Config::load(&m.paths.shell_json()).enabled);
+    }
+
+    #[test]
+    fn the_gtk_font_option_is_on_until_turned_off() {
+        let (mut m, _) = model_with("");
+        assert_eq!(toggle(&items(&m), "sy:o:gtk.font").map(|t| t.0), Some(true), "on by default");
+        m.apply("sy:o:gtk.font", CtlVal::Bool(false));
+        assert!(!Config::load(&m.paths.shell_json()).option("gtk.font"));
+        assert_eq!(toggle(&items(&m), "sy:o:gtk.font").map(|t| t.0), Some(false));
+        m.apply("sy:o:nonsense", CtlVal::Bool(false));
+        assert!(!Config::load(&m.paths.shell_json()).options.contains_key("nonsense"));
+        m.apply("sy:o:gtk.font", CtlVal::Bool(true));
+        assert!(Config::load(&m.paths.shell_json()).options.is_empty());
     }
 
     #[test]

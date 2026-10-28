@@ -15,7 +15,6 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 use tiny_skia::{Color, Pixmap};
 
 pub use crate::theme::fonts::Role;
@@ -50,13 +49,17 @@ type GlyphKey = (char, u32, Weight, Role);
 /// What the current theme asked for, checked against the installed fonts.
 struct Setup {
     plan: FontPlan,
-    db: Arc<FontDb>,
+    /// Only the faces of the resolved families: the table of every installed face is let go after resolving.
+    db: FontDb,
     resolved: Resolved,
 }
 
 impl Setup {
-    fn new(plan: FontPlan, db: Arc<FontDb>) -> Setup {
-        let resolved = plan.resolve(&db);
+    fn new(plan: FontPlan) -> Setup {
+        let all = fontdb::get();
+        let resolved = plan.resolve(&all);
+        let used: Vec<String> = resolved.roles.iter().flatten().cloned().collect();
+        let db = all.subset(&used);
         Setup { plan, db, resolved }
     }
 }
@@ -91,8 +94,7 @@ fn is_invisible(ch: char) -> bool {
 impl Fonts {
     /// `None` only if no usable font file can be found at all.
     pub fn load() -> Option<Self> {
-        let db = fontdb::get();
-        let setup = Setup::new(crate::theme::current().fonts.clone(), db);
+        let setup = Setup::new(crate::theme::current().fonts.clone());
         setup.resolved.primary(Role::Ui)?;
         Some(Self {
             setup: RefCell::new(setup),
@@ -105,7 +107,7 @@ impl Fonts {
         })
     }
 
-    /// Rebuilds the chains and drops cached glyphs when the theme's fonts (or the installed fonts) changed since the last call.
+    /// Rebuilds the chains and drops cached glyphs when the theme's fonts changed since the last call.
     fn sync_theme(&self) {
         let g = crate::theme::generation();
         if self.theme_gen.get() == g {
@@ -113,14 +115,11 @@ impl Fonts {
         }
         self.theme_gen.set(g);
         let plan = crate::theme::current().fonts.clone();
-        let db = fontdb::get();
-        {
-            let cur = self.setup.borrow();
-            if cur.plan == plan && cur.db.gen == db.gen {
-                return; // only colours / sizes changed: glyph keys already include the scaled size
-            }
+        if self.setup.borrow().plan == plan {
+            return; // only colours / sizes changed: glyph keys already include the scaled size
         }
-        *self.setup.borrow_mut() = Setup::new(plan, db);
+        // the installed fonts are listed again for the new plan (a font installed meanwhile is picked up)
+        *self.setup.borrow_mut() = Setup::new(plan);
         self.specs.borrow_mut().clear();
         self.glyphs.borrow_mut().clear();
         self.ascents.borrow_mut().clear();
@@ -170,7 +169,7 @@ impl Fonts {
             return Some(font);
         }
         let backing = self.backing(&spec.face.file)?;
-        let font = Rc::new(textface::load_fontdue(backing.bytes(), spec.face.index)?);
+        let font = Rc::new(textface::load_fontdue_isolated(backing.bytes(), spec.face.index)?);
         if parsed.len() >= MAX_PARSED {
             parsed.remove(0);
         }
@@ -189,7 +188,9 @@ impl Fonts {
     /// Drops the parsed faces and file mappings (tens of MB); cached glyphs stay. Call after a frame is drawn.
     pub fn trim(&self) {
         let had = !self.parsed.borrow().is_empty() || !self.backings.borrow().is_empty();
-        self.parsed.borrow_mut().clear();
+        // dropped on a worker thread so their blocks go back to the arena they were parsed in (see textface)
+        let faces: Vec<fontdue::Font> = self.parsed.borrow_mut().drain(..).filter_map(|(_, _, f)| Rc::try_unwrap(f).ok()).collect();
+        textface::drop_isolated(faces);
         self.backings.borrow_mut().clear();
         if had {
             release_heap();
@@ -370,6 +371,14 @@ mod tests {
         f.trim();
         assert!(!f.has_loaded_face());
         assert!(f.backings.borrow().is_empty(), "mappings are released too");
+    }
+
+    #[test]
+    fn only_the_faces_of_the_resolved_chains_are_kept() {
+        let Some(f) = Fonts::load() else { return };
+        let s = f.setup.borrow();
+        let used: usize = s.resolved.roles.iter().flatten().map(|f| crate::theme::fontdb::norm(f)).collect::<std::collections::HashSet<_>>().len();
+        assert!(s.db.family_count() <= used, "{} families kept for {used} in the chains", s.db.family_count());
     }
 
     #[test]

@@ -10,7 +10,8 @@ decthemectl system on|off        \"Apply to all apps\": on applies now and after
                                  off puts every changed file and setting back (originals are saved by the first apply)
 decthemectl system status [--json]
 decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11
-decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals  (VALUE none = unset)";
+decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font  (VALUE none = unset; signals and gtk-font take on|off:
+                                 gtk-font, on by default, writes the theme's font to GTK's settings.ini and gsettings when it names an installed one)";
 
 fn print_report(r: &Report, dry: bool) {
     if !r.applied.is_empty() {
@@ -114,7 +115,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(
-                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "targets": t})
+                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "gtk_font": cfg.option("gtk.font"), "targets": t})
                     )
                     .unwrap()
                 );
@@ -161,6 +162,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 "icon-theme" => cfg.icon_theme = (!unset).then(|| v.clone()),
                 "cursor-theme" => cfg.cursor_theme = (!unset).then(|| v.clone()),
                 "signals" => cfg.signals = matches!(v.as_str(), "true" | "on" | "1" | "yes"),
+                "gtk-font" => cfg.set_option("gtk.font", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
                 other => return Err(format!("unknown key `{other}`")),
             }
             cfg.save(&src.shell_json)?;

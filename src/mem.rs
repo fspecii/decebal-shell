@@ -1,5 +1,5 @@
-//! Small glibc allocator tweaks that keep resident memory low after bursts of image decoding on
-//! worker threads (each thread would otherwise keep its own arena). No-ops on other libcs.
+//! Small glibc allocator tweaks that keep resident memory low after bursts of image decoding and font parsing
+//! on worker threads. No-ops on other libcs.
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 mod sys {
@@ -13,15 +13,17 @@ mod sys {
     pub const M_MMAP_THRESHOLD: i32 = -3;
 }
 
-/// Share one malloc arena between all threads, and pin the mmap threshold so big blocks (a parsed
-/// font face, an image) always get their own mapping that is returned on free. glibc otherwise raises
-/// the threshold to the size of the largest block freed so far and later parks such blocks on the
-/// heap, where they fragment it and stay resident. Call once, early in `main`.
+/// Two malloc arenas: the main one and one shared by every worker thread (not one per thread). Work that makes
+/// a lot of short-lived small allocations (parsing a font face: 13 MB of glyph outlines; decoding an image) runs
+/// on a worker, so it cannot interleave with long-lived data of the main heap and pin its pages. Also pins the
+/// mmap threshold so big blocks always get their own mapping that is returned on free: glibc otherwise raises
+/// the threshold to the size of the largest block freed so far and later parks such blocks on the heap, where
+/// they fragment it and stay resident. Call once, early in `main`.
 pub fn limit_arenas() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     // SAFETY: `mallopt` only changes allocator tuning and is safe to call at any time.
     unsafe {
-        sys::mallopt(sys::M_ARENA_MAX, 1);
+        sys::mallopt(sys::M_ARENA_MAX, 2);
         sys::mallopt(sys::M_MMAP_THRESHOLD, 256 * 1024);
     }
 }

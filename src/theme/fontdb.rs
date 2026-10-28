@@ -3,12 +3,11 @@
 //! One `fc-list` call (plus `fc-match` for the generic `sans-serif` / `monospace` aliases, run in parallel
 //! with it) is parsed into a table of faces: family names, weight, slant, width, file and index. Everything
 //! else (is a family installed, which file is its bold face, which families does the picker offer) is answered
-//! from that table, so no process runs per lookup. The table is built once per process ([`get`]); a program
-//! that wants to notice newly installed fonts calls [`rescan`].
+//! from that table, so no process runs per lookup. The table is shared while somebody holds it ([`get`]);
+//! the settings window keeps one and scans again when it is old ([`rescan_if_older`]).
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Case, space and punctuation-insensitive family key: "JetBrains Mono" == "JetBrainsMono".
@@ -78,10 +77,7 @@ pub struct FontDb {
     mono: String,
     /// Language of the session (`ja`, `ko`, `zh-tw`...): decides which Noto CJK variant "Noto Sans CJK" means.
     lang: String,
-    pub gen: u64,
 }
-
-static GEN: AtomicU64 = AtomicU64::new(1);
 
 fn run(cmd: &str, args: &[&str]) -> String {
     std::process::Command::new(cmd).args(args).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
@@ -110,7 +106,7 @@ impl FontDb {
     /// Builds the table from `fc-list -f '%{file}\t%{family}\t%{weight}\t%{slant}\t%{width}\t%{index}\t%{variable}\t%{spacing}\n'`
     /// output (tests feed a fake list).
     pub fn from_listing(listing: &str, sans: &str, mono: &str, lang: &str) -> FontDb {
-        let mut db = FontDb { sans: sans.to_string(), mono: mono.to_string(), lang: lang.to_ascii_lowercase().replace('_', "-"), gen: GEN.fetch_add(1, Ordering::Relaxed), ..FontDb::default() };
+        let mut db = FontDb { sans: sans.to_string(), mono: mono.to_string(), lang: lang.to_ascii_lowercase().replace('_', "-"), ..FontDb::default() };
         for line in listing.lines() {
             let f: Vec<&str> = line.split('\t').collect();
             if f.len() < 7 || f[1].trim().is_empty() {
@@ -137,21 +133,39 @@ impl FontDb {
             }
             db.faces.push(face);
         }
+        db.index();
+        db
+    }
+
+    /// Builds the name lookup and the picker list from `faces`.
+    fn index(&mut self) {
         let mut seen = HashSet::new();
-        for (i, f) in db.faces.iter().enumerate() {
+        for (i, f) in self.faces.iter().enumerate() {
             for n in &f.names {
-                db.by_norm.entry(norm(n)).or_default().push(i);
+                self.by_norm.entry(norm(n)).or_default().push(i);
             }
             if seen.insert(norm(&f.names[0])) {
-                db.families.push(f.names[0].clone());
+                self.families.push(f.names[0].clone());
             }
         }
-        db.families.sort_by_key(|f| f.to_lowercase());
-        db
+        self.families.sort_by_key(|f| f.to_lowercase());
     }
 
     pub fn is_empty(&self) -> bool {
         self.faces.is_empty()
+    }
+
+    /// A table with only the faces of `families` (installed spellings, as [`Self::resolve`] returns them): all a
+    /// resolved font chain needs to open its faces, a small fraction of a machine's thousands of faces.
+    /// [`Self::resolve`] and [`Self::picker_families`] on it only know those families.
+    pub fn subset(&self, families: &[String]) -> FontDb {
+        let want: HashSet<String> = families.iter().map(|f| norm(f)).collect();
+        let faces: Vec<Face> = self.faces.iter().filter(|f| f.names.iter().any(|n| want.contains(&norm(n)))).cloned().collect();
+        let mut db = FontDb { sans: self.sans.clone(), mono: self.mono.clone(), lang: self.lang.clone(), ..FontDb::default() };
+        db.variable_files = faces.iter().filter(|f| f.variable).map(|f| f.file.clone()).collect();
+        db.faces = faces;
+        db.index();
+        db
     }
 
     /// Every family for the picker (script-specific Noto fonts left out), sorted.
@@ -264,28 +278,37 @@ fn hidden_in_picker(f: &str) -> bool {
 
 // ---------------------------------------------------------------- process-wide table
 
-static DB: Mutex<Option<(Arc<FontDb>, std::time::Instant)>> = Mutex::new(None);
+/// The table while somebody holds it (a program that wants the installed fonts for good uses [`rescan_if_older`]).
+static DB: Mutex<Option<std::sync::Weak<FontDb>>> = Mutex::new(None);
+/// What [`rescan_if_older`] keeps alive, with the time of its scan.
+static KEPT: Mutex<Option<(Arc<FontDb>, std::time::Instant)>> = Mutex::new(None);
 
-/// The installed fonts; scanned on first use.
+/// The installed fonts. The table is shared while anybody holds it and scanned again after the last holder let go,
+/// so a daemon that only needs a few resolved families keeps no table of every installed face (see
+/// [`FontDb::subset`]).
 pub fn get() -> Arc<FontDb> {
     let mut g = DB.lock().unwrap();
-    if let Some((db, _)) = g.as_ref() {
-        return db.clone();
+    if let Some(db) = g.as_ref().and_then(std::sync::Weak::upgrade) {
+        return db;
     }
     let db = Arc::new(FontDb::scan());
-    *g = Some((db.clone(), std::time::Instant::now()));
+    *g = Some(Arc::downgrade(&db));
     db
 }
 
-/// Scans again when the last scan is older than `max_age` (a settings window that stays open for hours).
+/// Scans again when the last scan of this function is older than `max_age` (a settings window that stays open for
+/// hours) and keeps the table for good.
 pub fn rescan_if_older(max_age: std::time::Duration) -> Arc<FontDb> {
-    let stale = DB.lock().unwrap().as_ref().is_none_or(|(_, t)| t.elapsed() > max_age);
-    if stale {
-        let db = Arc::new(FontDb::scan());
-        *DB.lock().unwrap() = Some((db.clone(), std::time::Instant::now()));
-        return db;
+    let mut kept = KEPT.lock().unwrap();
+    if let Some((db, t)) = kept.as_ref() {
+        if t.elapsed() <= max_age {
+            return db.clone();
+        }
     }
-    get()
+    let db = Arc::new(FontDb::scan());
+    *DB.lock().unwrap() = Some(Arc::downgrade(&db));
+    *kept = Some((db.clone(), std::time::Instant::now()));
+    db
 }
 
 #[cfg(test)]
@@ -383,6 +406,27 @@ mod tests {
         assert!(!list.contains(&"Noto Sans Adlam".to_string()));
         assert!(list.windows(2).all(|w| w[0].to_lowercase() <= w[1].to_lowercase()), "sorted: {list:?}");
         assert!(db.is_mono("JetBrains Mono") && !db.is_mono("Inter"));
+    }
+
+    #[test]
+    fn a_subset_keeps_only_what_a_chain_needs_and_opens_the_same_faces() {
+        let db = fake::db();
+        let used = vec!["Inter".to_string(), "Adwaita Sans".to_string(), "JetBrainsMono Nerd Font".to_string()];
+        let sub = db.subset(&used);
+        assert!(sub.faces.len() < db.faces.len() && sub.family_count() == 3, "{} of {} faces", sub.faces.len(), db.faces.len());
+        for (fam, w) in [("Inter", FC_REGULAR), ("Inter", FC_SEMIBOLD), ("Adwaita Sans", FC_BOLD), ("JetBrainsMono Nerd Font", FC_REGULAR)] {
+            assert_eq!(sub.face(fam, w), db.face(fam, w), "{fam} {w}");
+        }
+        assert!(sub.face("Adwaita Sans", FC_BOLD).unwrap().variable, "variable files are remembered");
+        assert!(sub.face("Liberation Sans", FC_REGULAR).is_none(), "not in the chain");
+        assert!(sub.is_mono("JetBrainsMono NF") && !sub.is_mono("Inter"));
+        assert_eq!(sub.resolve("sans-serif").as_deref(), Some("Liberation Sans"), "generic aliases keep the fontconfig defaults (unlisted family: name as is)");
+    }
+
+    #[test]
+    fn the_table_is_shared_while_it_is_held() {
+        let (a, b) = (get(), get());
+        assert!(Arc::ptr_eq(&a, &b), "one scan for everybody who holds it");
     }
 
     #[test]

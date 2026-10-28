@@ -127,23 +127,20 @@ sleep 1
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 [ -n "$WID" ] && pass "settings window up" || fail "no settings window"
 q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
-scroll_down() { for i in $(seq 1 $1); do xdotool mousemove --window "$WID" 500 500; xdotool click --window "$WID" 5; done; sleep 0.6; }
-ctl_center() { jq -r "[.ctls[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DECSETTINGS_DEBUG_LAYOUT"; }
-click() { xdotool mousemove --window "$WID" $1 $2; sleep 0.1; xdotool click --window "$WID" 1; sleep 0.5; }
-scroll_down 40
-shot settings-fonts-top
-if [ "$(ctl_center th:fontpreset)" != "null null" ] && [ -n "$(ctl_center th:fontpreset)" ]; then
+. "$HERE/tests/e2e/settings_ui.sh"
+reveal th:fontpreset >/dev/null; shot settings-fonts-top
+if [ -n "$(rect_of th:fontpreset)" ]; then
   pass "the preset picker is on the pane"
-  click $(ctl_center th:fontpreset); sleep 0.4
+  click_ctl th:fontpreset; sleep 0.4
   shot settings-fonts-popup
   xdotool type --delay 80 "ibm"; sleep 0.2; xdotool key Return; sleep 1.5
   eq "choosing IBM Plex in the picker stores it" "$(sel .theme.font.preset)" ibm-plex
-  scroll_down 40; shot settings-fonts-ibm
-  click $(ctl_center th:font:mono); sleep 0.4
+  reveal th:font:mono >/dev/null; shot settings-fonts-ibm
+  click_ctl th:font:mono; sleep 0.4
   xdotool type --delay 80 "Liberation Mono"; sleep 0.2; xdotool key Return; sleep 1.5
   eq "role picker stores the family" "$(sel '.theme.font.mono | if type=="array" then join("|") else . end')" "Liberation Mono"
-  scroll_down 40; shot settings-fonts-mono
-  click $(ctl_center th:fontreset); sleep 1.2
+  reveal th:fontreset >/dev/null; shot settings-fonts-mono
+  click_ctl th:fontreset; sleep 1.2
   eq "Reset fonts empties the choice" "$(sel '.theme.font // "none"')" none
 else
   fail "no th:fontpreset control in the layout dump"

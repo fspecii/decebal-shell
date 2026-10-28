@@ -62,13 +62,18 @@ eq "snapshot unchanged" "$(snapshot)" "$BEFORE"
 ctl apply-system --dry-run >/dev/null && [ ! -e $CFG/gtk-4.0/gtk.css ] && pass "--dry-run writes nothing" || fail "dry-run wrote"
 
 echo "== system on"
+# every theme names a font through its preset, so GTK would get the theme's font: this user keeps Cantarell
+ctl system set gtk-font off >/dev/null
+eq "status --json shows the option off" "$(ctl system status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["gtk_font"])')" "False"
 ctl system on >"$TMP/on.log" 2>&1 || { fail "system on" "$(cat "$TMP/on.log")"; }
 has "gtk-4.0 gtk.css has the managed block" $CFG/gtk-4.0/gtk.css "decebal system theme"
 has "user css kept" $CFG/gtk-3.0/gtk.css "my own css"
 has "libadwaita accent from the theme" $CFG/gtk-4.0/gtk.css "@define-color accent_bg_color #88c0d0;"
 has "gtk3 widget rules" $CFG/gtk-3.0/gtk.css "button.suggested-action"
 has "settings.ini dark" $CFG/gtk-4.0/settings.ini "gtk-application-prefer-dark-theme=1"
-has "settings.ini keeps the user's font" $CFG/gtk-3.0/settings.ini "gtk-font-name=Cantarell 11"
+has "settings.ini keeps the user's font (gtk-font off)" $CFG/gtk-3.0/settings.ini "gtk-font-name=Cantarell 11"
+hasnt "gtk-4.0 settings.ini gets no font either" $CFG/gtk-4.0/settings.ini "gtk-font-name"
+hasnt "gsettings font-name untouched" <(gsettings get org.gnome.desktop.interface font-name) "Inter"
 has "qt6ct scheme file" $CFG/qt6ct/colors/decebal.conf "^active_colors=#ff"
 has "qt6ct.conf selects it, keeps style" $CFG/qt6ct/qt6ct.conf "style=Breeze"
 has "qt6ct.conf custom palette" $CFG/qt6ct/qt6ct.conf "custom_palette=true"
@@ -102,7 +107,24 @@ eq "light: gsettings follows" "$(gsettings get org.gnome.desktop.interface color
 has "macOS style: window buttons on the left" $CFG/gtk-4.0/settings.ini "gtk-decoration-layout=close,minimize,maximize:"
 ctl apply windows11 --mode light --no-rdwm >/dev/null
 has "Windows 11: window buttons on the right" $CFG/gtk-4.0/settings.ini "appmenu:minimize,maximize,close"
-has "Windows 11 font reaches GTK" $CFG/gtk-4.0/settings.ini "gtk-font-name=Segoe UI"
+hasnt "gtk-font off: Windows 11's font stays out of GTK" $CFG/gtk-4.0/settings.ini "Segoe UI"
+has "gtk-font off: ...and the user's font stays in gtk-3.0" $CFG/gtk-3.0/settings.ini "gtk-font-name=Cantarell 11"
+ctl system set gtk-font on >/dev/null
+if fc-list : family | grep -qi '^Segoe UI'; then
+  has "Windows 11 font reaches GTK (gtk-font on, installed)" $CFG/gtk-4.0/settings.ini "gtk-font-name=Segoe UI"
+else
+  hasnt "an uninstalled theme font is not written to GTK" $CFG/gtk-4.0/settings.ini "Segoe UI"
+  has "...and the user's font stays" $CFG/gtk-3.0/settings.ini "gtk-font-name=Cantarell 11"
+fi
+if ctl font list | grep -E '^[* ] +noto ' | grep -qv 'not installed'; then
+  ctl font noto >/dev/null
+  has "an installed theme font reaches settings.ini" $CFG/gtk-3.0/settings.ini "gtk-font-name=Noto Sans 11"
+  has "...in gtk-4.0 too" $CFG/gtk-4.0/settings.ini "gtk-font-name=Noto Sans 11"
+  has "...and gsettings font-name" <(gsettings get org.gnome.desktop.interface font-name) "Noto Sans 11"
+  ctl font reset >/dev/null
+else
+  echo "  skip installed-font GTK check (the noto preset is not installed)"
+fi
 ctl apply nord --mode dark --no-rdwm >/dev/null
 ctl system target qt off >/dev/null
 [ ! -e $CFG/qt6ct/colors/decebal.conf ] && pass "unchecking Qt restores its files" || fail "qt file still there"

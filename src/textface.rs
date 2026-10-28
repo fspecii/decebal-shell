@@ -115,6 +115,23 @@ pub fn ascent(bytes: &[u8], index: u32, px: f32) -> Option<f32> {
     Some(f.ascender() as f32 * px / f.units_per_em() as f32)
 }
 
+/// Parses on a short-lived thread (see [`crate::mem::limit_arenas`]): fontdue turns every glyph of the face into
+/// small allocations (13 MB for Inter). On the main heap they interleave with long-lived data and leave about 5 MB
+/// resident after the face is dropped; in the worker arena nothing else lives next to them, so the whole region
+/// goes back to the OS when [`drop_isolated`] frees them.
+pub fn load_fontdue_isolated(bytes: &[u8], index: u32) -> Option<fontdue::Font> {
+    std::thread::scope(|sc| sc.spawn(|| load_fontdue(bytes, index)).join().ok().flatten())
+}
+
+/// Drops parsed faces on a short-lived thread: the thread's cache of freed blocks is flushed back into the
+/// arena that owns them when it exits, so no freed block stays pinned by the main thread.
+pub fn drop_isolated(faces: Vec<fontdue::Font>) {
+    if faces.is_empty() {
+        return;
+    }
+    let _ = std::thread::spawn(move || drop(faces)).join();
+}
+
 pub fn load_fontdue(bytes: &[u8], index: u32) -> Option<fontdue::Font> {
     fontdue::Font::from_bytes(bytes, fontdue::FontSettings { collection_index: index, ..fontdue::FontSettings::default() }).ok()
 }

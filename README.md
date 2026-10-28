@@ -422,7 +422,8 @@ MIT
 `decthemectl system on` (or System Settings -> Theme -> Apply to all apps) makes the decebal theme, style and wallpaper colours reach the rest of
 the desktop: GTK 3/4 and libadwaita apps such as Nautilus, Qt (qt5ct/qt6ct), the terminals and btop/helix/neovim through an Omarchy theme made from
 the palette (Omarchy's own template engine), the browser colour and X11 clients (xrdb). Every file is saved before it is changed and
-`decthemectl system off` restores it; `decthemectl system status` shows what runs and what was skipped. See [docs/theming.md](docs/theming.md#apply-to-all-apps).
+`decthemectl system off` restores it; `decthemectl system status` shows what runs and what was skipped. The theme's interface font reaches GTK only when it names an
+installed family, and `decthemectl system set gtk-font off` (or the switch in the pane) keeps your own GTK font. See [docs/theming.md](docs/theming.md#apply-to-all-apps).
 
 
 ## Caelestia style (pill bar)
