@@ -1,7 +1,7 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
-BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
+BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 # Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
 ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber

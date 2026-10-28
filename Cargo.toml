@@ -45,6 +45,9 @@ x11rb = { version = "0.13", optional = true, features = ["shape", "randr", "xfix
 default = ["wayland", "x11"]
 wayland = ["dep:smithay-client-toolkit", "dep:wayland-protocols"]
 x11 = ["dep:x11rb"]
+# TEST ONLY: compiles in a fake authenticator for declock (DECLOCK_FAKE_AUTH=1 + DECLOCK_TEST_PASSWORD). Never build
+# release packages with it (PKGBUILD and the Makefile do not); tests/e2e/lock.sh checks the shipped binary lacks it.
+test-auth = []
 
 [profile.release]
 opt-level = 3
@@ -82,6 +85,11 @@ required-features = ["x11"]
 [[bin]]
 name = "dechud"
 path = "src/bin/dechud.rs"
+required-features = ["x11"]
+
+[[bin]]
+name = "declock"
+path = "src/bin/declock.rs"
 required-features = ["x11"]
 
 [[bin]]

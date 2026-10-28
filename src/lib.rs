@@ -27,6 +27,7 @@ pub mod icons;
 pub mod keysym;
 pub mod launch;
 pub mod launcher;
+pub mod lock;
 pub mod mem;
 pub mod menubar;
 pub mod notify;
