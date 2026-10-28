@@ -133,8 +133,14 @@ pub struct Theme {
     /// `flat` (a full-width strip), `floating` (a horizontal pill with a margin around it) or `vertical`
     /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
+    /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
+    /// Where the Caelestia pill bar sits (`macshell.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
+    /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
+    pub bar_position: crate::config::BarPosition,
     pub font_family: String,
     pub font_scale: f32,
+    /// The fonts per role with their fallback chains (see [`super::fonts`]).
+    pub fonts: super::fonts::FontPlan,
 }
 
 impl Theme {
@@ -187,6 +193,34 @@ impl Theme {
     pub fn bar_vertical(&self) -> bool {
         self.bar_style == "vertical"
     }
+    /// Where the Caelestia pill bar sits, or `None` while the theme has the ordinary menu bar. (`bar_style = "vertical"` is
+    /// the theme's name for the pill bar; the edge comes from `bar.position`.)
+    pub fn pill_bar(&self) -> Option<crate::config::BarPosition> {
+        self.bar_vertical().then_some(self.bar_position)
+    }
+    /// Pixels the pill bar takes from each screen edge (all zero for the ordinary menu bar, whose strut the windows
+    /// already know): where other programs must keep clear of it.
+    pub fn bar_insets(&self) -> Insets {
+        use crate::config::BarPosition as P;
+        let t = crate::theme::PILL_BAR_THICKNESS as i32;
+        match self.pill_bar() {
+            None => Insets::default(),
+            Some(P::Left) => Insets { left: t, ..Insets::default() },
+            Some(P::Right) => Insets { right: t, ..Insets::default() },
+            Some(P::Top) => Insets { top: t, ..Insets::default() },
+            Some(P::Bottom) => Insets { bottom: t, ..Insets::default() },
+            Some(P::Split) => Insets { top: t, bottom: t, ..Insets::default() },
+        }
+    }
+}
+
+/// Space reserved at the edges of the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Insets {
+    pub left: i32,
+    pub right: i32,
+    pub top: i32,
+    pub bottom: i32,
 }
 
 // ---------------------------------------------------------------- raw definition (a theme file)
@@ -196,6 +230,8 @@ pub enum V {
     S(String),
     N(f64),
     B(bool),
+    /// A list of names (font chains).
+    L(Vec<String>),
 }
 
 pub type Tokens = BTreeMap<String, V>;
@@ -205,6 +241,8 @@ pub enum Kind {
     Color,
     Num(f64, f64),
     Str,
+    /// A string or an array of strings (font chains).
+    List,
     Choice(&'static [&'static str]),
 }
 
@@ -240,11 +278,24 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
     ("dock_padding", Kind::Num(4.0, 40.0), "dock panel padding in px (consumed by the dock layout)"),
     ("bar_height", Kind::Num(20.0, 40.0), "menu bar height in px (consumed by the bar layout)"),
-    ("bar_style", Kind::Choice(&["flat", "floating", "vertical"]), "menu bar shape: a full-width strip, a floating pill, or a vertical bar on the left screen edge (the dock hides with it)"),
+    (
+        "bar_style",
+        Kind::Choice(&["flat", "floating", "vertical"]),
+        "menu bar shape: a full-width strip, a floating pill, or the Caelestia pill bar on a screen edge (left by default, see `bar.position`; the dock hides with it)",
+    ),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
-    ("font_family", Kind::Str, "UI font name (fontconfig); unavailable fonts fall back to Inter / sans-serif"),
+    ("font_family", Kind::Str, "the font of text, titles and display numbers (fontconfig family); unavailable fonts fall back to the preset, Inter and sans-serif"),
     ("font_scale", Kind::Num(0.8, 1.4), "text size multiplier"),
+    (
+        "font_preset",
+        Kind::Choice(super::fonts::PRESET_IDS),
+        "font preset: the fonts and fallbacks of every role (system, inter, segoe, cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui)",
+    ),
+    ("font_ui", Kind::List, "default text: a family or a list (first installed wins, later ones draw characters it lacks)"),
+    ("font_title", Kind::List, "window and popup titles (default: the preset's)"),
+    ("font_mono", Kind::List, "terminal-like text, aligned numbers"),
+    ("font_display", Kind::List, "large numbers: clock and workspace digits"),
 ];
 
 fn kind_of(key: &str) -> Option<&'static Kind> {
@@ -285,6 +336,18 @@ fn read_value(table: &toml_edit::Table, key: &str, label: &str, out: &mut Tokens
             V::N(n)
         }
         Kind::Str => V::S(v.as_str().ok_or_else(|| format!("`{label}` must be a string"))?.to_string()),
+        Kind::List => {
+            let bad = || format!("`{label}` must be a font name or a list of font names");
+            let list: Vec<String> = match (v.as_str(), v.as_array()) {
+                (Some(s), _) => super::fonts::parse_chain(s),
+                (_, Some(a)) => a.iter().map(|x| x.as_str().map(super::fonts::parse_chain).ok_or_else(bad)).collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect(),
+                _ => return Err(bad()),
+            };
+            if list.is_empty() {
+                return Err(format!("`{label}` needs at least one font name"));
+            }
+            V::L(list)
+        }
         Kind::Choice(opts) => {
             let s = v.as_str().ok_or_else(|| format!("`{label}` must be a string"))?;
             if !opts.contains(&s) {
@@ -299,7 +362,10 @@ fn read_value(table: &toml_edit::Table, key: &str, label: &str, out: &mut Tokens
 
 /// Reads every key of `table` as a token, `prefix` mapping `[font] family` to `font_family`.
 fn read_table(table: &toml_edit::Table, prefix: &str, out: &mut Tokens) -> Result<(), String> {
-    for (k, _) in table.iter() {
+    for (k, item) in table.iter() {
+        if prefix.is_empty() && k == "font" && item.is_table() {
+            continue; // a font table inside [dark] / [light]: read by the caller
+        }
         let label = if prefix.is_empty() { k.to_string() } else { format!("{prefix}_{k}") };
         read_value(table, k, &label, out)?;
     }
@@ -369,17 +435,6 @@ impl Def {
         }
     }
 
-    /// This theme with its colours replaced by the Material palette of `d` (both variants; metrics stay).
-    pub fn with_dynamic(&self, d: &Dynamic) -> Def {
-        let mut out = self.clone();
-        for dark in [true, false] {
-            let colours = super::material::generate(d.seed, d.variant, dark).tokens();
-            let slot = if dark { &mut out.dark } else { &mut out.light };
-            slot.get_or_insert_with(Tokens::new).extend(colours);
-        }
-        out
-    }
-
     pub fn has_dark(&self) -> bool {
         self.dark.is_some() || (self.light.is_none() && self.dark_default)
     }
@@ -432,7 +487,16 @@ impl Def {
         let titlebar = col("titlebar").unwrap_or(surface);
         let opacity = o.opacity.unwrap_or(1.0).clamp(0.4, 1.0);
         let clampf = |v: f64, lo: f64, hi: f64| v.clamp(lo, hi) as f32;
-        let font_family = o.font.clone().or_else(|| text_of("font_family")).unwrap_or_default();
+        let list_of = |k: &str| match get(k) {
+            Some(V::L(l)) => Some(l.clone()),
+            _ => None,
+        };
+        let theme_fonts = super::fonts::ThemeFonts {
+            preset: text_of("font_preset"),
+            family: text_of("font_family").filter(|f| !f.is_empty()),
+            roles: [list_of("font_ui"), list_of("font_title"), list_of("font_mono"), list_of("font_display")],
+        };
+        let fonts = super::fonts::FontPlan::build(&theme_fonts, &o.fonts, o.font.as_deref().filter(|f| !f.is_empty()));
         let font_scale = o.font_scale.map(f64::from).unwrap_or_else(|| num("font_scale", 1.0));
         Theme {
             id: id.to_string(),
@@ -469,10 +533,12 @@ impl Def {
             dock_padding: clampf(num("dock_padding", 16.0), 4.0, 40.0),
             bar_height: clampf(num("bar_height", 26.0), 20.0, 40.0),
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
+            bar_position: crate::config::BarPosition::default(),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
-            font_family,
+            font_family: fonts.primary_ui().to_string(),
             font_scale: (font_scale as f32).clamp(0.8, 1.4),
+            fonts,
         }
     }
 }
@@ -505,39 +571,169 @@ impl Mode {
     }
 }
 
-/// "Colours from wallpaper": the Material palette of a seed colour replaces the Caelestia theme's colours.
-/// The seed is taken from the wallpaper once (by `macthemectl dynamic` or the Theme pane) and stored here,
-/// so every program derives the same palette from three words of JSON instead of decoding an image.
+/// How far "match wallpaper" reaches into the theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Surfaces {
+    /// Only the accent (and the text on it); every surface keeps the theme's own colour.
+    Accent,
+    /// The accent plus surfaces, borders and text tinted towards the wallpaper's hue: the theme keeps its own
+    /// light and dark tones (a white Windows 11 stays white) and gains a wallpaper-coloured cast.
+    #[default]
+    Tint,
+    /// The theme's colours blend into the wallpaper's whole Material palette (at full strength: replaced by it).
+    Full,
+}
+
+impl Surfaces {
+    pub const ALL: [Surfaces; 3] = [Surfaces::Accent, Surfaces::Tint, Surfaces::Full];
+    pub fn parse(s: &str) -> Option<Surfaces> {
+        match s.trim().to_ascii_lowercase().replace(['-', '_', ' '], "").as_str() {
+            "accent" | "accentonly" => Some(Surfaces::Accent),
+            "tint" | "tinted" => Some(Surfaces::Tint),
+            "full" | "all" | "palette" | "fullsurface" => Some(Surfaces::Full),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Surfaces::Accent => "accent",
+            Surfaces::Tint => "tint",
+            Surfaces::Full => "full",
+        }
+    }
+    pub fn title(self) -> &'static str {
+        match self {
+            Surfaces::Accent => "Accent only",
+            Surfaces::Tint => "Tinted surfaces",
+            Surfaces::Full => "Full palette",
+        }
+    }
+}
+
+/// Where the colours come from.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum Origin {
+    /// Whatever wallpaper rdwm shows (else the one in rdwm's config, else Omarchy's current background).
+    #[default]
+    Wallpaper,
+    /// A fixed image file.
+    File(String),
+    /// A fixed colour.
+    Color(Rgb),
+}
+
+impl Origin {
+    pub fn parse(s: &str) -> Option<Origin> {
+        let s = s.trim();
+        if s.is_empty() || s.eq_ignore_ascii_case("wallpaper") || s.eq_ignore_ascii_case("current") {
+            return Some(Origin::Wallpaper);
+        }
+        if s.starts_with('#') {
+            return Rgb::parse(s).map(Origin::Color);
+        }
+        Some(Origin::File(s.to_string()))
+    }
+    pub fn to_text(&self) -> String {
+        match self {
+            Origin::Wallpaper => "wallpaper".into(),
+            Origin::File(p) => p.clone(),
+            Origin::Color(c) => c.hex(),
+        }
+    }
+}
+
+/// "Match wallpaper": an optional layer on top of any theme. The colours of a wallpaper (or an image, or one colour)
+/// are turned into a Material-style palette that recolours the accent and, depending on [`Surfaces`], the surfaces.
+///
+/// What is stored is the *result of looking at the picture* (`colors`) next to the settings, so every program
+/// derives the same palette from a few words of JSON instead of decoding an image. Whoever changes the wallpaper
+/// (`macthemectl watch`, `refresh`, the Theme pane, machaven) refreshes `colors`; the settings can be changed
+/// without touching the image again. Off by default: with no `dynamic` key, or `enabled: false`, nothing changes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dynamic {
-    pub seed: Rgb,
-    pub variant: super::material::Variant,
-    /// The image the seed came from (shown in the UI; the seed is not re-read from it by the programs).
-    pub wallpaper: Option<String>,
-    /// Re-derive the seed when macshell changes the wallpaper (machaven, the settings Wallpaper pane).
-    pub follow: bool,
+    pub enabled: bool,
+    pub scheme: super::material::Variant,
+    pub source: Origin,
+    pub surfaces: Surfaces,
+    /// 0..1: how far surfaces move (towards the tint or the full palette). Accent-only ignores it.
+    pub strength: f32,
+    /// -1..1: Material's contrast level for the derived palette.
+    pub contrast: f32,
+    /// Light or dark follows the picture's brightness instead of the Mode setting.
+    pub follow_mode: bool,
+    /// What the picture looked like when it was last read.
+    pub colors: super::extract::Extracted,
+    /// The image `colors` came from.
+    pub image: Option<String>,
+}
+
+impl Default for Dynamic {
+    fn default() -> Self {
+        Dynamic {
+            enabled: false,
+            scheme: Default::default(),
+            source: Origin::Wallpaper,
+            surfaces: Surfaces::Tint,
+            strength: 0.5,
+            contrast: 0.0,
+            follow_mode: false,
+            colors: Default::default(),
+            image: None,
+        }
+    }
 }
 
 impl Dynamic {
-    pub fn from_json(v: &serde_json::Value) -> Option<Dynamic> {
+    /// `legacy_on` is what an old file (written before the feature could be switched off: it has no `enabled` key)
+    /// means for the theme it sits next to: it only ever recoloured Caelestia.
+    pub fn from_json(v: &serde_json::Value, legacy_on: bool) -> Option<Dynamic> {
         let o = v.as_object()?;
+        let colors = super::extract::Extracted::from_json_fields(o)?;
+        let legacy = !o.contains_key("enabled") && !o.contains_key("surfaces");
+        let mut source = o.get("source").and_then(|x| x.as_str()).and_then(Origin::parse).unwrap_or_default();
+        // old files: `follow: false` pinned the seed to the image it came from
+        if o.get("follow").and_then(|x| x.as_bool()) == Some(false) && source == Origin::Wallpaper {
+            source = o.get("wallpaper").and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(|w| Origin::File(w.into())).unwrap_or(Origin::Color(colors.seed));
+        }
         Some(Dynamic {
-            seed: o.get("seed").and_then(|x| x.as_str()).and_then(Rgb::parse)?,
-            variant: o.get("scheme").and_then(|x| x.as_str()).and_then(super::material::Variant::parse).unwrap_or_default(),
-            wallpaper: o.get("wallpaper").and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(String::from),
-            follow: o.get("follow").and_then(|x| x.as_bool()).unwrap_or(true),
+            enabled: o.get("enabled").and_then(|x| x.as_bool()).unwrap_or(legacy && legacy_on),
+            scheme: o.get("scheme").and_then(|x| x.as_str()).and_then(super::material::Variant::parse).unwrap_or_default(),
+            source,
+            surfaces: o.get("surfaces").and_then(|x| x.as_str()).and_then(Surfaces::parse).unwrap_or(if legacy { Surfaces::Full } else { Surfaces::Tint }),
+            strength: o.get("strength").and_then(|x| x.as_f64()).map_or(if legacy { 1.0 } else { 0.5 }, |x| x.clamp(0.0, 1.0) as f32),
+            contrast: o.get("contrast").and_then(|x| x.as_f64()).map_or(0.0, |x| x.clamp(-1.0, 1.0) as f32),
+            follow_mode: o.get("mode").and_then(|x| x.as_str()) == Some("wallpaper"),
+            image: o.get("image").or_else(|| o.get("wallpaper")).and_then(|x| x.as_str()).filter(|w| !w.is_empty()).map(String::from),
+            colors,
         })
     }
 
     pub fn to_json(&self) -> serde_json::Value {
         let mut o = serde_json::Map::new();
-        o.insert("seed".into(), self.seed.hex().into());
-        o.insert("scheme".into(), self.variant.as_str().into());
-        if let Some(w) = &self.wallpaper {
-            o.insert("wallpaper".into(), w.clone().into());
+        o.insert("enabled".into(), self.enabled.into());
+        o.insert("scheme".into(), self.scheme.as_str().into());
+        o.insert("source".into(), self.source.to_text().into());
+        o.insert("surfaces".into(), self.surfaces.as_str().into());
+        let r2 = |x: f32| (f64::from(x) * 100.0).round() / 100.0;
+        o.insert("strength".into(), r2(self.strength).into());
+        o.insert("contrast".into(), r2(self.contrast).into());
+        o.insert("mode".into(), (if self.follow_mode { "wallpaper" } else { "keep" }).into());
+        self.colors.to_json_fields(&mut o);
+        if let Some(w) = &self.image {
+            o.insert("image".into(), w.clone().into());
         }
-        o.insert("follow".into(), self.follow.into());
         serde_json::Value::Object(o)
+    }
+
+    /// The palette of the stored colours for one variant: what the Theme pane previews and what recolours the theme.
+    pub fn roles(&self, dark: bool) -> super::material::Roles {
+        // a hand-picked colour is never "grey"; a grey picture only matters for the monochrome scheme
+        super::material::generate_with(self.colors.seed, &self.colors.others, self.scheme, dark, f64::from(self.contrast))
+    }
+
+    /// True when the picture has colour to match, or the scheme needs none (monochrome).
+    pub fn has_colour(&self) -> bool {
+        !self.colors.grey || self.scheme == super::material::Variant::Monochrome
     }
 }
 
@@ -550,17 +746,31 @@ pub struct Selection {
     /// Multiplies the translucency-capable surfaces (0.4..1).
     pub opacity: Option<f32>,
     pub radius: Option<f32>,
+    /// The old single font family (`"font": "Inter"`): the font of text, titles and display numbers.
     pub font: Option<String>,
     pub font_scale: Option<f32>,
+    /// Font preset and per-role chains (the `font` object).
+    pub fonts: super::fonts::FontChoice,
     /// Also restyle rdwm's titlebars when applying (macthemectl / macsettings).
     pub sync_rdwm: bool,
-    /// Colours derived from the wallpaper; only the Caelestia theme uses them.
+    /// "Match wallpaper" (any theme); `None` or `enabled: false` = off, the default.
     pub dynamic: Option<Dynamic>,
 }
 
 impl Default for Selection {
     fn default() -> Self {
-        Selection { name: crate::theme::builtin::DEFAULT_ID.into(), mode: Mode::Dark, accent: None, opacity: None, radius: None, font: None, font_scale: None, sync_rdwm: true, dynamic: None }
+        Selection {
+            name: crate::theme::builtin::DEFAULT_ID.into(),
+            mode: Mode::Dark,
+            accent: None,
+            opacity: None,
+            radius: None,
+            font: None,
+            font_scale: None,
+            fonts: Default::default(),
+            sync_rdwm: true,
+            dynamic: None,
+        }
     }
 }
 
@@ -582,12 +792,23 @@ impl Selection {
         s.accent = o.get("accent").and_then(|x| x.as_str()).and_then(Rgb::parse);
         s.opacity = o.get("opacity").and_then(|x| x.as_f64()).map(|x| x.clamp(0.4, 1.0) as f32);
         s.radius = o.get("radius").and_then(|x| x.as_f64()).map(|x| x.clamp(0.0, 24.0) as f32);
-        s.font = o.get("font").and_then(|x| x.as_str()).filter(|f| !f.is_empty()).map(String::from);
-        s.font_scale = o.get("fontScale").and_then(|x| x.as_f64()).map(|x| x.clamp(0.8, 1.4) as f32);
+        // `"font": "Inter"` (old) or `"font": {"preset": "segoe", "ui": [...], "title": ..., "mono": ..., "display": ..., "scale": 1.1}`
+        let mut scale = o.get("fontScale").and_then(|x| x.as_f64());
+        match o.get("font") {
+            Some(serde_json::Value::String(f)) => s.font = Some(f.clone()).filter(|f| !f.is_empty()),
+            Some(serde_json::Value::Object(f)) => {
+                s.font = f.get("family").and_then(|x| x.as_str()).filter(|f| !f.is_empty()).map(String::from);
+                s.fonts = super::fonts::FontChoice::from_json(f);
+                scale = f.get("scale").and_then(|x| x.as_f64()).or(scale);
+            }
+            _ => {}
+        }
+        s.font_scale = scale.map(|x| x.clamp(0.8, 1.4) as f32);
         if let Some(b) = o.get("syncRdwm").and_then(|x| x.as_bool()) {
             s.sync_rdwm = b;
         }
-        s.dynamic = o.get("dynamic").and_then(Dynamic::from_json);
+        let on_caelestia = crate::theme::builtin::norm(&s.name) == crate::theme::builtin::DYNAMIC_THEME;
+        s.dynamic = o.get("dynamic").and_then(|d| Dynamic::from_json(d, on_caelestia));
         s
     }
 
@@ -606,11 +827,24 @@ impl Selection {
         if let Some(x) = self.radius {
             o.insert("radius".into(), r3(x).into());
         }
-        if let Some(f) = &self.font {
-            o.insert("font".into(), f.clone().into());
-        }
-        if let Some(x) = self.font_scale {
-            o.insert("fontScale".into(), r3(x).into());
+        if self.fonts.is_empty() {
+            // old form: stays readable by older builds
+            if let Some(f) = &self.font {
+                o.insert("font".into(), f.clone().into());
+            }
+            if let Some(x) = self.font_scale {
+                o.insert("fontScale".into(), r3(x).into());
+            }
+        } else {
+            let mut f = serde_json::Map::new();
+            self.fonts.write_json(&mut f);
+            if let Some(fam) = &self.font {
+                f.insert("family".into(), fam.clone().into());
+            }
+            if let Some(x) = self.font_scale {
+                f.insert("scale".into(), r3(x).into());
+            }
+            o.insert("font".into(), f.into());
         }
         if !self.sync_rdwm {
             o.insert("syncRdwm".into(), false.into());
@@ -722,6 +956,64 @@ mod tests {
     }
 
     #[test]
+    fn old_font_keys_still_work() {
+        // macshell.json from before font roles: `font` is a string, `fontScale` a top-level number
+        let sel = Selection::from_json(&serde_json::json!({"name": "nord", "font": "Rubik", "fontScale": 1.2}));
+        assert_eq!((sel.font.as_deref(), sel.font_scale, sel.fonts.is_empty()), (Some("Rubik"), Some(1.2), true));
+        let d = Def::parse(MINI).unwrap();
+        let t = d.resolve("m", true, &sel);
+        assert_eq!(t.font_family, "Rubik");
+        assert_eq!((t.fonts.chain(crate::theme::Role::Ui)[0].as_str(), t.fonts.chain(crate::theme::Role::Title)[0].as_str()), ("Rubik", "Rubik"), "the single font leads text and titles");
+        assert_ne!(t.fonts.chain(crate::theme::Role::Mono)[0], "Rubik");
+        assert_eq!(t.fonts.preset, "inter", "a theme with no font keys keeps the original Inter look");
+        // theme files: `[font] family` is the same single font
+        let old = Def::parse("name = \"o\"\n[font]\nfamily = \"Segoe UI\"\nscale = 1.1\n").unwrap().resolve("o", true, &Selection::default());
+        assert_eq!((old.font_family.as_str(), old.font_scale), ("Segoe UI", 1.1));
+        // the new object form
+        let sel = Selection::from_json(&serde_json::json!({"name": "nord", "font": {"preset": "rubik", "ui": ["Inter", "Noto Sans CJK"], "scale": 1.3}}));
+        assert_eq!((sel.fonts.preset.as_deref(), sel.font_scale), (Some("rubik"), Some(1.3)));
+        let t = d.resolve("m", true, &sel);
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Ui)[..3], ["Inter", "Noto Sans CJK", "Rubik"]);
+    }
+
+    #[test]
+    fn theme_files_accept_font_roles_and_presets() {
+        let d = Def::parse("name = \"f\"\n[font]\npreset = \"segoe\"\nui = [\"Foo\", \"Bar\"]\nmono = \"Baz, Qux\"\n").unwrap();
+        let t = d.resolve("f", true, &Selection::default());
+        assert_eq!(t.fonts.preset, "segoe");
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Ui)[..3], ["Foo", "Bar", "Segoe UI Variable"]);
+        assert_eq!(&t.fonts.chain(crate::theme::Role::Mono)[..2], ["Baz", "Qux"]);
+        assert!(Def::parse("name = \"x\"\n[font]\npreset = \"comic\"\n").unwrap_err().contains("one of"));
+        assert!(Def::parse("name = \"x\"\n[font]\nui = 5\n").unwrap_err().contains("font name"));
+        assert!(Def::parse("name = \"x\"\n[font]\nui = []\n").unwrap_err().contains("at least one"));
+        // variants can have their own fonts
+        let d = Def::parse("name = \"v\"\n[dark.font]\npreset = \"fira\"\n[light.font]\npreset = \"noto\"\n").unwrap();
+        assert_eq!(d.resolve("v", true, &Selection::default()).fonts.preset, "fira");
+        assert_eq!(d.resolve("v", false, &Selection::default()).fonts.preset, "noto");
+    }
+
+    #[test]
+    fn every_builtin_theme_has_a_sensible_font_preset() {
+        let want = [
+            ("macos", "inter"),
+            ("graphite", "inter"),
+            ("nord", "inter"),
+            ("dracula", "jetbrains"),
+            ("solarized", "ibm-plex"),
+            ("windows11", "segoe"),
+            ("caelestia", "rubik"),
+            ("high-contrast", "system"),
+        ];
+        for (id, preset) in want {
+            let t = crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default());
+            assert_eq!(t.fonts.preset, preset, "{id}");
+        }
+        // the user's choice beats the theme's
+        let sel = Selection { fonts: crate::theme::fonts::FontChoice { preset: Some("fira".into()), ..Default::default() }, ..Selection::default() };
+        assert_eq!(crate::theme::builtin::def("windows11").unwrap().resolve("windows11", true, &sel).fonts.preset, "fira");
+    }
+
+    #[test]
     fn selection_json_round_trip() {
         let sel = Selection {
             name: "nord".into(),
@@ -731,10 +1023,52 @@ mod tests {
             radius: Some(6.0),
             font: Some("Inter".into()),
             font_scale: Some(1.1),
+            fonts: Default::default(),
             sync_rdwm: false,
-            dynamic: Some(Dynamic { seed: Rgb(1, 2, 3), variant: crate::theme::material::Variant::Vibrant, wallpaper: Some("/w.png".into()), follow: false }),
+            dynamic: Some(Dynamic {
+                enabled: true,
+                scheme: crate::theme::material::Variant::Palette,
+                source: Origin::File("/w.png".into()),
+                surfaces: Surfaces::Full,
+                strength: 0.75,
+                contrast: -0.5,
+                follow_mode: true,
+                colors: crate::theme::extract::Extracted { seed: Rgb(1, 2, 3), others: vec![Rgb(4, 5, 6)], tone: 33.5, grey: false },
+                image: Some("/w.png".into()),
+            }),
         };
         assert_eq!(Selection::from_json(&sel.to_json()), sel);
+        // old form stays old: a plain string and a top-level fontScale
+        let j = sel.to_json();
+        assert_eq!((j["font"].as_str(), j["fontScale"].as_f64()), (Some("Inter"), Some(1.1)));
+        // new form: a font object with the scale inside
+        let mut with_fonts = sel.clone();
+        with_fonts.fonts.preset = Some("segoe".into());
+        with_fonts.fonts.roles[2] = Some(vec!["Fira Code".into()]);
+        let j = with_fonts.to_json();
+        assert_eq!(j["font"]["preset"], "segoe");
+        assert_eq!((j["font"]["family"].as_str(), j["font"]["mono"].as_str(), j["font"]["scale"].as_f64()), (Some("Inter"), Some("Fira Code"), Some(1.1)));
+        assert!(j.get("fontScale").is_none());
+        assert_eq!(Selection::from_json(&j), with_fonts);
+        // off and default: nothing is written until it is turned on
+        assert!(Selection::default().dynamic.is_none());
+        assert!(!Dynamic::default().enabled);
+        // files written before the feature could be switched off: on only for Caelestia, as a full palette
+        let old = serde_json::json!({"name": "caelestia", "dynamic": {"seed": "#2a9d8f", "scheme": "vibrant", "wallpaper": "/old.png", "follow": true}});
+        let d = Selection::from_json(&old).dynamic.unwrap();
+        assert!(d.enabled && d.surfaces == Surfaces::Full && d.strength == 1.0 && d.scheme == crate::theme::material::Variant::Vibrant);
+        assert_eq!((d.colors.seed, d.image.as_deref(), &d.source), (Rgb(0x2a, 0x9d, 0x8f), Some("/old.png"), &Origin::Wallpaper));
+        let old_nord = serde_json::json!({"name": "nord", "dynamic": {"seed": "#2a9d8f", "follow": false, "wallpaper": "/old.png"}});
+        let d = Selection::from_json(&old_nord).dynamic.unwrap();
+        assert!(!d.enabled, "an old file never recoloured nord");
+        assert_eq!(d.source, Origin::File("/old.png".into()), "follow: false pinned the image");
+        // sources
+        assert_eq!(Origin::parse("wallpaper"), Some(Origin::Wallpaper));
+        assert_eq!(Origin::parse("#112233"), Some(Origin::Color(Rgb(0x11, 0x22, 0x33))));
+        assert_eq!(Origin::parse("~/Pictures/a.png"), Some(Origin::File("~/Pictures/a.png".into())));
+        assert_eq!(Origin::parse("#nope"), None);
+        assert_eq!(Surfaces::parse("Accent-only"), Some(Surfaces::Accent));
+        assert_eq!(Surfaces::parse("nope"), None);
         assert_eq!(Selection::from_json(&serde_json::json!("dracula")).name, "dracula");
         assert_eq!(Selection::from_json(&serde_json::json!(5)), Selection::default());
         let junk = Selection::from_json(&serde_json::json!({"name": "", "mode": "purple", "accent": "nope", "opacity": 9}));

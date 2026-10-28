@@ -9,6 +9,9 @@ min_shell_version = "0.1.0"
 tags = ["mac", "monochrome"]
 extends = "macos"
 
+[font]
+preset = "inter"
+
 [colors.dark]
 accent = "#8e8e93"
 accent_text = "#000000"

@@ -1,0 +1,13 @@
+[Unit]
+Description=macshell: match wallpaper colours (follows wallpaper changes while "Match wallpaper" is on)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# idles on one stat of macshell.json per 4.5 s while the feature is off
+ExecStart=/usr/bin/macthemectl watch
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

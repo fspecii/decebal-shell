@@ -19,11 +19,11 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tiny_skia::Pixmap;
 use x11rb::connection::{Connection, RequestConnection};
-use x11rb::wrapper::ConnectionExt as _;
 use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
 
 struct Win {
     id: Window,

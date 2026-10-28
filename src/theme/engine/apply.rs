@@ -13,7 +13,7 @@ use crate::settings::io::{self, Paths};
 use crate::settings::schema::Schema;
 use crate::settings::tomlcfg::{Cfg, Val};
 use crate::theme::live::{system_dark, Source};
-use crate::theme::model::{Dynamic, Selection};
+use crate::theme::model::{Origin, Selection, Surfaces};
 use crate::theme::{dynamic, rdwm};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -129,7 +129,10 @@ fn rdwm_extras(cfg: &mut Cfg, extra: &Map<String, Value>, wallpaper: Option<&Pat
         match schema.get(sec, key) {
             None => notes.push(format!("{label}: this rdwm has no `[{sec}] {key}` yet, left out")),
             Some(m) => {
-                if let (Val::Str(s), false) = (&v, m.choices.is_empty()) {
+                // a bundled snapshot of the key table can be older than the installed rdwm: for the titlebar style only the
+                // real `rdwmctl check-config` decides (a rejected style is dropped below)
+                let stale_style = !schema.live && sec == "decoration" && key == "style";
+                if let (Val::Str(s), false, false) = (&v, m.choices.is_empty(), stale_style) {
                     if !m.choices.contains(s) {
                         notes.push(format!("{label}: this rdwm does not know `{s}` (it has {}), left out", m.choices.join(", ")));
                         return Ok(());
@@ -186,7 +189,10 @@ fn widget_source(src: &Source, id: &str, name: &str) -> Option<String> {
         if crate::widgets::config::package_dir(&src.themes_dir, &c).is_some_and(|d| d.join("widgets").join(format!("{name}.toml")).is_file()) {
             return Some(c);
         }
-        cur = crate::widgets::config::package_dir(&src.themes_dir, &c).and_then(|d| std::fs::read_to_string(d.join("theme.toml")).ok()).and_then(|t| crate::theme::model::Def::parse(&t).ok()).and_then(|d| d.inherit);
+        cur = crate::widgets::config::package_dir(&src.themes_dir, &c)
+            .and_then(|d| std::fs::read_to_string(d.join("theme.toml")).ok())
+            .and_then(|t| crate::theme::model::Def::parse(&t).ok())
+            .and_then(|d| d.inherit);
     }
     None
 }
@@ -212,13 +218,15 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
 
     // wallpaper: the first bundled image, resolved inside the package folder
     let wp = extra.get("wallpaper");
-    let images: Vec<String> = wp.map(|w| {
-        let mut v: Vec<String> = w.get("images").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-        if let Some(i) = w.get("image").and_then(Value::as_str) {
-            v.insert(0, i.to_string());
-        }
-        v
-    }).unwrap_or_default();
+    let images: Vec<String> = wp
+        .map(|w| {
+            let mut v: Vec<String> = w.get("images").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+            if let Some(i) = w.get("image").and_then(Value::as_str) {
+                v.insert(0, i.to_string());
+            }
+            v
+        })
+        .unwrap_or_default();
     let image_path = match (&pkg_dir, images.first()) {
         (Some(d), Some(i)) => {
             super::archive::safe_rel_path(i)?;
@@ -237,15 +245,41 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         _ => None,
     };
     let match_colors = wp.and_then(|w| w.get("match_colors")).and_then(Value::as_bool) == Some(true);
+    let mut shell_marks: Vec<(&str, Option<Value>)> = Vec::new();
     if match_colors {
-        let variant = wp.and_then(|w| w.get("scheme")).and_then(Value::as_str).and_then(crate::theme::material::Variant::parse).unwrap_or_default();
-        match image_path.as_deref().map(|p| dynamic::derive(p, variant, false)) {
-            Some(Ok(d)) => sel.dynamic = Some(Dynamic { follow: false, ..d }),
-            Some(Err(e)) => notes.push(format!("wallpaper.match_colors: {e}")),
-            None => notes.push("wallpaper.match_colors: the theme has no wallpaper to take colours from".into()),
+        let w = wp.cloned().unwrap_or(Value::Null);
+        let scheme = w.get("scheme").and_then(Value::as_str).and_then(crate::theme::material::Variant::parse);
+        let surfaces = w.get("surfaces").and_then(Value::as_str).and_then(Surfaces::parse);
+        let (strength, follow) = (w.get("strength").and_then(Value::as_f64), w.get("follow_mode").and_then(Value::as_bool));
+        let src_origin = image_path.as_ref().map(|p| Origin::File(p.display().to_string()));
+        match dynamic::update_with(&sel, paths, image_path.as_deref(), |d| {
+            d.enabled = true;
+            if let Some(s) = scheme {
+                d.scheme = s;
+            }
+            if let Some(s) = surfaces {
+                d.surfaces = s;
+            }
+            if let Some(s) = strength {
+                d.strength = s as f32;
+            }
+            if let Some(f) = follow {
+                d.follow_mode = f;
+            }
+            if let Some(o) = src_origin {
+                d.source = o;
+            }
+        }) {
+            Ok(s) => {
+                sel = s;
+                shell_marks.push(("theme_dynamic", Some(json!(id))));
+            }
+            Err(e) => notes.push(format!("wallpaper.match_colors: {e}")),
         }
-    } else if id != crate::theme::builtin::DYNAMIC_THEME {
-        sel.dynamic = None;
+    } else if io::json_load(&paths.shell_json()).get("theme_dynamic").is_some() {
+        // the previous theme switched "Match wallpaper" on; this one does not ask for it, so it goes off again
+        sel = dynamic::disable(&sel);
+        shell_marks.push(("theme_dynamic", None));
     }
 
     let (theme, problem) = src.build(&sel, system_dark());
@@ -264,6 +298,16 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
     // ---- macshell.json
     let mut shell = io::json_load(&paths.shell_json());
     shell.as_object_mut().expect("object").insert("theme".into(), sel.to_json());
+    for (k, v) in &shell_marks {
+        match v {
+            Some(v) => {
+                shell.as_object_mut().expect("object").insert((*k).into(), v.clone());
+            }
+            None => {
+                shell.as_object_mut().expect("object").shift_remove(*k);
+            }
+        }
+    }
     if let Some(Value::Object(bar)) = extra.get("bar") {
         let o = obj_mut(&mut shell, "bar");
         for k in ["enabled", "position", "left", "center", "right"] {
@@ -371,10 +415,33 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         let mut cfg = Cfg::parse(&old).map_err(|e| format!("{}: {e}", paths.rdwm_config.display()))?;
         rdwm::apply_to(&mut cfg, &theme)?;
         let schema = Schema::load(&paths.rdwmctl);
-        rdwm_extras(&mut cfg, &extra, image_path.as_deref(), &schema, &mut notes)?;
-        let text = cfg.text();
+        let mut attempt = extra.clone();
+        let mut text;
+        loop {
+            let mut c = cfg.clone();
+            rdwm_extras(&mut c, &attempt, image_path.as_deref(), &schema, &mut notes)?;
+            text = c.text();
+            if text == old {
+                break;
+            }
+            match check_rdwm(paths, &text) {
+                Ok(()) => break,
+                Err(e) => {
+                    // an rdwm older than the theme may not know its titlebar style: keep the rest, say so
+                    let style = attempt.get("decoration").and_then(|d| d.get("style")).and_then(Value::as_str).map(String::from);
+                    match style {
+                        Some(st) => {
+                            notes.push(format!("decoration.style `{st}`: rdwm rejected it ({e}), left out"));
+                            if let Some(Value::Object(d)) = attempt.get_mut("decoration") {
+                                d.shift_remove("style");
+                            }
+                        }
+                        None => return Err(e),
+                    }
+                }
+            }
+        }
         if text != old {
-            check_rdwm(paths, &text)?;
             rdwm_changed = true;
             writes.push(Write { path: paths.rdwm_config.clone(), old: Some(old).filter(|_| paths.rdwm_config.exists()), new: text });
         }
@@ -434,6 +501,7 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
         applied.reloaded = rdwm::reload(paths).unwrap_or(false);
     }
     crate::theme::live::reload();
+    crate::theme::system::request(&paths.shell_json()); // "Apply to all apps", when the user switched it on
     Ok(applied)
 }
 
@@ -459,7 +527,8 @@ pub fn apply(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Resul
 
 /// The undo records, oldest first.
 pub fn undo_ids(src: &Source) -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(undo_dir(src)).into_iter().flatten().flatten().filter(|e| e.path().join("meta.json").is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    let mut v: Vec<String> =
+        std::fs::read_dir(undo_dir(src)).into_iter().flatten().flatten().filter(|e| e.path().join("meta.json").is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
     v.sort();
     v
 }
@@ -488,6 +557,7 @@ pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, S
         let _ = rdwm::reload(paths);
     }
     crate::theme::live::reload();
+    crate::theme::system::request(&paths.shell_json());
     Ok(theme)
 }
 
@@ -592,7 +662,18 @@ y = -30
 
         let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
         assert!(cfg.starts_with("# mine\n"), "comments survive:\n{cfg}");
-        for needle in ["style = \"classic\"", "height = 36", "gap_inner = 9", "border_px = 3", "layouts = [\"tile\", \"monocle\"]", "mode = \"fit\"", "wallpapers/sunset.png", "font = \"Inter\"", "focused = \"#ff7849\"", "buttons = true"] {
+        for needle in [
+            "style = \"classic\"",
+            "height = 36",
+            "gap_inner = 9",
+            "border_px = 3",
+            "layouts = [\"tile\", \"monocle\"]",
+            "mode = \"fit\"",
+            "wallpapers/sunset.png",
+            "font = \"Inter\"",
+            "focused = \"#ff7849\"",
+            "buttons = true",
+        ] {
             assert!(cfg.contains(needle), "{needle} in\n{cfg}");
         }
         let shell = io::json_load(&paths.shell_json());
@@ -717,7 +798,11 @@ y = -30
         let (d, src, paths) = sandbox("match");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         let text = SUNSET.replace("[wallpaper]\n", "[wallpaper]\nmatch_colors = true\n");
-        let entries = vec![Entry { path: "theme.toml".into(), data: text.into_bytes() }, Entry { path: "wallpapers/sunset.png".into(), data: png(32, 18, [30, 150, 90]) }, Entry { path: "widgets/clock-card.toml".into(), data: b"format = 1\n[root]\ntype = \"spacer\"\n".to_vec() }];
+        let entries = vec![
+            Entry { path: "theme.toml".into(), data: text.into_bytes() },
+            Entry { path: "wallpapers/sunset.png".into(), data: png(32, 18, [30, 150, 90]) },
+            Entry { path: "widgets/clock-card.toml".into(), data: b"format = 1\n[root]\ntype = \"spacer\"\n".to_vec() },
+        ];
         install_entries(&entries, &src.themes_dir, false, &Limits::default()).unwrap();
         apply(&src, &paths, "sunset", &Selection::default()).unwrap();
         let sel = src.selection();

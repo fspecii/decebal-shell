@@ -4,7 +4,7 @@
 //! fixes a file in one pass. [`parse_def`] is the `Result` form the loader (and `Def::parse`) uses.
 
 use super::schema::{self, AssetKind, Elem, Field, Status, Ty};
-use crate::theme::model::{Def, Kind, Rgb, Tokens, V, TOKENS};
+use crate::theme::model::{Def, Kind, Rgb, Tokens, TOKENS, V};
 use serde_json::{json, Map, Value};
 use toml_edit::{ImDocument, Item, Table};
 
@@ -174,11 +174,26 @@ fn check(ty: &Ty, item: &Item) -> Result<Value, String> {
             }
             Ok(Value::Array(out))
         }
+        Ty::Chain => {
+            let names: Vec<String> = match (v.as_str(), v.as_array()) {
+                (Some(s), _) => vec![s.to_string()],
+                (_, Some(a)) => a.iter().map(|x| x.as_str().map(String::from).ok_or("entries must be font family names")).collect::<Result<_, _>>()?,
+                _ => return Err("must be a font family or a list of families".into()),
+            };
+            if names.is_empty() || names.len() > 8 || names.iter().any(|n| n.trim().is_empty() || n.chars().count() > 80 || n.chars().any(|c| c.is_control())) {
+                return Err("needs 1 to 8 family names of at most 80 characters".into());
+            }
+            Ok(json!(names))
+        }
         Ty::Action => {
             let s = v.as_str().ok_or("must be a string")?;
             let ok = schema::safe_hot_actions().contains(&s.to_ascii_lowercase().replace('_', "-").as_str());
             if !ok {
-                return Err(if s.to_ascii_lowercase().starts_with("custom") { "themes cannot run commands; pick one of the built-in actions".into() } else { format!("`{s}` is not an action; use one of {}", schema::safe_hot_actions().join(", ")) });
+                return Err(if s.to_ascii_lowercase().starts_with("custom") {
+                    "themes cannot run commands; pick one of the built-in actions".into()
+                } else {
+                    format!("`{s}` is not an action; use one of {}", schema::safe_hot_actions().join(", "))
+                });
             }
             Ok(json!(s.to_ascii_lowercase().replace('_', "-")))
         }
@@ -209,6 +224,7 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
         Kind::Color => check(&Ty::Color, item).map(|v| V::S(v.as_str().unwrap_or_default().to_string())),
         Kind::Num(lo, hi) => check(&Ty::Num(*lo, *hi), item).map(|v| V::N(v.as_f64().unwrap_or_default())),
         Kind::Str => check(&Ty::Text(80), item).map(|v| V::S(v.as_str().unwrap_or_default().to_string())),
+        Kind::List => check(&Ty::Chain, item).map(|v| V::L(v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default())),
         Kind::Choice(c) => check(&Ty::Choice(c), item).map(|v| V::S(v.as_str().unwrap_or_default().to_string())),
     }
 }
@@ -320,7 +336,9 @@ fn read_widgets(cx: &mut Ctx, item: &Item, extra: &mut Map<String, Value>) {
                         let mut m = Map::new();
                         for (ok, ov) in opts.iter() {
                             let val = ov.as_value();
-                            let j = val.and_then(|v| v.as_str().map(|s| json!(s)).or_else(|| v.as_integer().map(|n| json!(n))).or_else(|| v.as_float().map(|n| json!(n))).or_else(|| v.as_bool().map(|n| json!(n))));
+                            let j = val.and_then(|v| {
+                                v.as_str().map(|s| json!(s)).or_else(|| v.as_integer().map(|n| json!(n))).or_else(|| v.as_float().map(|n| json!(n))).or_else(|| v.as_bool().map(|n| json!(n)))
+                            });
                             match j {
                                 Some(j) if m.len() < 32 => {
                                     m.insert(ok.to_string(), j);
@@ -371,7 +389,17 @@ fn lift_tokens(extra: &Map<String, Value>, common: &mut Tokens) {
             c.insert(t.into(), V::S(n.into()));
         }
     };
-    text("font", "ui", "font_family", common);
+    text("font", "preset", "font_preset", common);
+    for (role, token) in [("ui", "font_ui"), ("title", "font_title"), ("mono", "font_mono"), ("display", "font_display")] {
+        if let Some(Value::Array(a)) = get("font", role) {
+            let mut chain: Vec<String> = a.iter().filter_map(|x| x.as_str().map(String::from)).collect();
+            // `fallback` follows every chain the file spells out
+            if let Some(Value::Array(f)) = get("font", "fallback") {
+                chain.extend(f.iter().filter_map(|x| x.as_str().map(String::from)));
+            }
+            common.insert(token.into(), V::L(chain));
+        }
+    }
     num("font", "scale", "font_scale", common);
     text("bar", "style", "bar_style", common);
     num("bar", "height", "bar_height", common);
@@ -436,23 +464,26 @@ pub fn analyze(text: &str) -> Analysis {
             "dark" | "light" if item.is_table() => cx.err(item, &format!("[{k}]"), "not part of format 1: variants live in `[colors.dark]` / `[colors.light]`"),
             _ => match schema::field(k) {
                 Some(f) => match check(&f.ty, item) {
-                    Ok(v) => {
-                        match k {
-                            "format" => have_format = true,
-                            "name" => name = v.as_str().unwrap_or_default().to_string(),
-                            "description" => description = v.as_str().unwrap_or_default().to_string(),
-                            "extends" => extends = v.as_str().map(String::from),
-                            "dark" => dark_default = v.as_bool().unwrap_or(true),
-                            _ => {
-                                meta.insert(k.to_string(), v);
-                            }
+                    Ok(v) => match k {
+                        "format" => have_format = true,
+                        "name" => name = v.as_str().unwrap_or_default().to_string(),
+                        "description" => description = v.as_str().unwrap_or_default().to_string(),
+                        "extends" => extends = v.as_str().map(String::from),
+                        "dark" => dark_default = v.as_bool().unwrap_or(true),
+                        _ => {
+                            meta.insert(k.to_string(), v);
                         }
-                    }
+                    },
                     Err(e) => cx.err(item, k, e),
                 },
                 None => {
                     let msg = LEGACY.iter().find(|l| l.0 == k).map(|l| format!("not part of format 1: {}", l.1)).unwrap_or_else(|| {
-                        let known = schema::FIELDS.iter().filter(|f| !f.path.contains('.')).map(|f| f.path.to_string()).chain(SECTIONS.iter().map(|s| s.to_string())).chain(["colors".to_string(), "widgets".to_string()]);
+                        let known = schema::FIELDS
+                            .iter()
+                            .filter(|f| !f.path.contains('.'))
+                            .map(|f| f.path.to_string())
+                            .chain(SECTIONS.iter().map(|s| s.to_string()))
+                            .chain(["colors".to_string(), "widgets".to_string()]);
                         format!("unknown key{}", suggest(k, known))
                     });
                     cx.err(item, k, msg)
@@ -469,7 +500,12 @@ pub fn analyze(text: &str) -> Analysis {
     if let Some(min) = meta.get("min_shell_version").and_then(Value::as_str).and_then(schema::parse_version) {
         let cur = schema::parse_version(env!("CARGO_PKG_VERSION")).unwrap_or((0, 0, 0));
         if min > cur {
-            cx.diags.push(Diag { level: Level::Warning, line: 0, key: "min_shell_version".into(), msg: format!("needs macshell {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")) });
+            cx.diags.push(Diag {
+                level: Level::Warning,
+                line: 0,
+                key: "min_shell_version".into(),
+                msg: format!("needs macshell {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
+            });
         }
     }
     if !cx.diags.iter().any(|d| d.level == Level::Error) {
@@ -693,7 +729,8 @@ format = "%H:%M"
 
     #[test]
     fn extends_merges_extras_but_not_identity() {
-        let base = analyze("format = 1\nid = \"base\"\nname = \"Base\"\nversion = \"1.0.0\"\nscreenshots = [\"a.png\"]\n[bar]\nstyle = \"floating\"\nleft = [\"a\", \"b\"]\n[dock]\nsize = 40\n").def.unwrap();
+        let base =
+            analyze("format = 1\nid = \"base\"\nname = \"Base\"\nversion = \"1.0.0\"\nscreenshots = [\"a.png\"]\n[bar]\nstyle = \"floating\"\nleft = [\"a\", \"b\"]\n[dock]\nsize = 40\n").def.unwrap();
         let child = analyze("format = 1\nid = \"child\"\nname = \"Child\"\nversion = \"2.0.0\"\nextends = \"base\"\n[bar]\nleft = [\"c\"]\n").def.unwrap();
         let m = child.over(&base);
         assert_eq!(m.extra["bar"]["left"], json!(["c"]), "lists are replaced");

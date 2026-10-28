@@ -11,7 +11,7 @@ use super::writer::{def_to_manifest, Header};
 use crate::settings::io::{self, Paths};
 use crate::settings::tomlcfg::Cfg;
 use crate::theme::live::{system_dark, Source};
-use crate::theme::model::{Kind, Tokens, V, TOKENS};
+use crate::theme::model::{Kind, Tokens, TOKENS, V};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 
@@ -78,7 +78,7 @@ pub fn from_current(src: &Source, paths: &Paths, id: &str, name: &str) -> Result
         return Err(format!("the current theme is broken ({p}); fix it first"));
     }
     let cur_id = src.find(&sel.name).map(|f| f.0).unwrap_or_else(|| cur.id.clone());
-    let mut def = src.def_for(&cur_id, &sel)?;
+    let mut def = src.load_def(&cur_id)?;
     def.inherit = None;
     def.name = name.to_string();
     def.description = String::new();
@@ -121,13 +121,20 @@ pub fn from_current(src: &Source, paths: &Paths, id: &str, name: &str) -> Result
     def.common.insert("bar_style".into(), V::S(cur.bar_style.clone()));
     def.common.insert("titlebar_style".into(), V::S(cur.titlebar_style.clone()));
     def.common.insert("titlebar_height".into(), V::N(cur.titlebar_height as f64));
-    if cur.font_family.is_empty() {
-        def.common.remove("font_family");
-    } else {
-        def.common.insert("font_family".into(), V::S(cur.font_family.clone()));
+    // fonts: the theme's own, with the user's preset / per-role / family choices on top
+    if let Some(p) = &sel.fonts.preset {
+        def.common.insert("font_preset".into(), V::S(p.clone()));
+    }
+    for r in crate::theme::fonts::Role::ALL {
+        if let Some(chain) = sel.fonts.role(r) {
+            def.common.insert(format!("font_{}", r.key()), V::L(chain.clone()));
+        }
+    }
+    if let Some(f) = &sel.font {
+        def.common.insert("font_family".into(), V::S(f.clone()));
     }
     // these tokens now live in the sections; drop stale section copies so the token values win
-    for (sec, key) in [("font", "ui"), ("font", "scale"), ("bar", "style"), ("bar", "height"), ("dock", "size"), ("dock", "roundness"), ("decoration", "style"), ("decoration", "height")] {
+    for (sec, key) in [("font", "scale"), ("bar", "style"), ("bar", "height"), ("dock", "size"), ("dock", "roundness"), ("decoration", "style"), ("decoration", "height")] {
         if let Some(Value::Object(o)) = def.extra.get_mut(sec) {
             o.shift_remove(key);
         }
@@ -278,7 +285,9 @@ pub fn from_current(src: &Source, paths: &Paths, id: &str, name: &str) -> Result
         let mut out = inst.clone();
         out.source = None;
         let label = inst.use_.clone();
-        if inst.use_.starts_with("builtin:") || (inst.source.is_none() && crate::widgets::samples::source(&inst.use_).is_some() && !crate::widgets::config::user_dir().join(format!("{}.toml", inst.use_)).exists()) {
+        if inst.use_.starts_with("builtin:")
+            || (inst.source.is_none() && crate::widgets::samples::source(&inst.use_).is_some() && !crate::widgets::config::user_dir().join(format!("{}.toml", inst.use_)).exists())
+        {
             instances.push(out.to_json());
             continue;
         }
@@ -343,7 +352,11 @@ mod tests {
         let wall = d.join("w.png");
         image::RgbImage::from_pixel(40, 24, image::Rgb([10, 80, 160])).save(&wall).unwrap();
         std::fs::write(&paths.rdwm_config, format!("[general]\ngap_inner = 11\n[decoration]\nradius = 4\n[wallpaper]\nimage = \"{}\"\nmode = \"center\"\n", wall.display())).unwrap();
-        std::fs::write(paths.shell_json(), r#"{"hot_corners": {"top_left": "lock", "top_right": "custom:rm -rf ~"}, "widgets": {"items": [{"use": "builtin:clock-card", "anchor": "top-right", "x": -20, "y": 40}]}}"#).unwrap();
+        std::fs::write(
+            paths.shell_json(),
+            r#"{"hot_corners": {"top_left": "lock", "top_right": "custom:rm -rf ~"}, "widgets": {"items": [{"use": "builtin:clock-card", "anchor": "top-right", "x": -20, "y": 40}]}}"#,
+        )
+        .unwrap();
         std::fs::write(paths.dock_settings(), r#"{"style": "windows", "windowsAlign": "left"}"#).unwrap();
         // the look: nord with my accent, radius and text size
         let sel = Selection { name: "nord".into(), accent: crate::theme::Rgb::parse("#ff9f0a"), radius: Some(5.0), font_scale: Some(1.1), ..Selection::default() };

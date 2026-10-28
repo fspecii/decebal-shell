@@ -38,7 +38,25 @@ pub enum ColorRef {
 }
 
 pub const TOKENS: &[&str] = &[
-    "background", "sidebar", "surface", "bar", "bar_text", "popup", "dock", "overlay", "titlebar", "titlebar_inactive", "border", "text", "text_secondary", "text_faint", "accent", "accent_text", "danger", "ok", "warn",
+    "background",
+    "sidebar",
+    "surface",
+    "bar",
+    "bar_text",
+    "popup",
+    "dock",
+    "overlay",
+    "titlebar",
+    "titlebar_inactive",
+    "border",
+    "text",
+    "text_secondary",
+    "text_faint",
+    "accent",
+    "accent_text",
+    "danger",
+    "ok",
+    "warn",
 ];
 
 impl ColorRef {
@@ -486,7 +504,12 @@ fn parse_node(cx: &mut Cx, t: &Table, p: &str, depth: usize) -> Option<Node> {
         }
         "workspaces" => {
             cx.paths.insert("workspace.count".into());
-            Kind::Workspaces { size: ts(cx, "size", 3.0, 60.0, 8.0), gap: ts(cx, "gap", 0.0, 60.0, 6.0), color: col(cx, "color", ColorRef::Token("text".into(), 0.3)), active: col(cx, "active_color", accent) }
+            Kind::Workspaces {
+                size: ts(cx, "size", 3.0, 60.0, 8.0),
+                gap: ts(cx, "gap", 0.0, 60.0, 6.0),
+                color: col(cx, "color", ColorRef::Token("text".into(), 0.3)),
+                active: col(cx, "active_color", accent),
+            }
         }
         _ => unreachable!(),
     };

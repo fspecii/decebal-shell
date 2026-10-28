@@ -13,7 +13,7 @@ titlebar_style = "classic"
 titlebar_height = 32
 
 [font]
-family = "Segoe UI"
+preset = "segoe"
 
 [dark]
 background = "#202020"

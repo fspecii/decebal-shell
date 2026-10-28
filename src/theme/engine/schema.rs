@@ -49,6 +49,8 @@ pub enum Ty {
     Asset(AssetKind),
     Assets(AssetKind, usize),
     List(Elem, usize),
+    /// A font family or a list of families (the first installed one draws, later ones fill in missing characters).
+    Chain,
     /// A safe hot-corner / widget action word (checked against the allowlist).
     Action,
 }
@@ -78,8 +80,29 @@ pub const BUTTON_NAMES: &[&str] = &["close", "minimize", "maximize"];
 pub const WALLPAPER_MODES: &[&str] = &["fill", "fit", "stretch", "center", "tile"];
 /// Layout names rdwm knows (the first `layouts` entry is the default); validated here so a typo is caught at install time.
 pub const LAYOUTS: &[&str] = &[
-    "tile", "monocle", "floating", "bottomstack", "bstackhoriz", "rtile", "grid", "gaplessgrid", "horizgrid", "nrowgrid", "deck", "centeredmaster", "centeredfloatingmaster", "dwindle", "spiral", "tatami",
-    "columns", "rows", "threecol", "bsp", "scroll", "tabbed", "stacked",
+    "tile",
+    "monocle",
+    "floating",
+    "bottomstack",
+    "bstackhoriz",
+    "rtile",
+    "grid",
+    "gaplessgrid",
+    "horizgrid",
+    "nrowgrid",
+    "deck",
+    "centeredmaster",
+    "centeredfloatingmaster",
+    "dwindle",
+    "spiral",
+    "tatami",
+    "columns",
+    "rows",
+    "threecol",
+    "bsp",
+    "scroll",
+    "tabbed",
+    "stacked",
 ];
 
 /// Everything except the colour/metric token tables (those come from `TOKENS`).
@@ -102,13 +125,13 @@ pub const FIELDS: &[Field] = &[
     Field { path: "integrity.signer", ty: Ty::Text(120), desc: "key id of the signer, reserved for the theme market", status: Pending("no verifier until the market defines its keys") },
     Field { path: "metrics.gap", ty: Ty::Num(0.0, 40.0), desc: "spacing unit between shell elements in px", status: Pending("no shell surface reads it yet") },
     Field { path: "metrics.blur", ty: Ty::Num(0.0, 1.0), desc: "background blur strength for translucent surfaces (needs a compositor)", status: Pending("blur is not implemented in the shell") },
-    Field { path: "font.ui", ty: Ty::Text(80), desc: "interface font family (fontconfig name)", status: Wired },
-    Field { path: "font.title", ty: Ty::Text(80), desc: "window titlebar font family", status: Pending("font roles land with src/theme/fonts.rs") },
-    Field { path: "font.mono", ty: Ty::Text(80), desc: "monospace font family", status: Pending("font roles land with src/theme/fonts.rs") },
-    Field { path: "font.display", ty: Ty::Text(80), desc: "large text (clock, headings) font family", status: Pending("font roles land with src/theme/fonts.rs") },
-    Field { path: "font.preset", ty: Ty::Ident, desc: "named font preset (e.g. system, inter, segoe, sf) the fonts module expands to roles", status: Pending("font roles land with src/theme/fonts.rs") },
+    Field { path: "font.ui", ty: Ty::Chain, desc: "default text: a family or a list of families", status: Wired },
+    Field { path: "font.title", ty: Ty::Chain, desc: "window and popup titles (default: the preset's)", status: Wired },
+    Field { path: "font.mono", ty: Ty::Chain, desc: "terminal-like text, numbers that line up", status: Wired },
+    Field { path: "font.display", ty: Ty::Chain, desc: "large numbers: clock and workspace digits", status: Wired },
+    Field { path: "font.preset", ty: Ty::Choice(crate::theme::fonts::PRESET_IDS), desc: "named font preset that supplies every role you do not set", status: Wired },
     Field { path: "font.scale", ty: Ty::Num(0.8, 1.4), desc: "text size multiplier", status: Wired },
-    Field { path: "font.fallback", ty: Ty::List(Elem::Text(80), 8), desc: "families tried when a role's font is missing", status: Pending("font roles land with src/theme/fonts.rs") },
+    Field { path: "font.fallback", ty: Ty::List(Elem::Text(80), 8), desc: "families appended after the chains given in this file (CJK, emoji, icon fonts)", status: Wired },
     Field { path: "font.files", ty: Ty::Assets(Font, 8), desc: "font files bundled in the package", status: Pending("bundled fonts are not registered with fontconfig yet") },
     Field { path: "wallpaper.image", ty: Ty::Asset(Image), desc: "a bundled wallpaper", status: Wired },
     Field { path: "wallpaper.images", ty: Ty::Assets(Image, 64), desc: "several bundled wallpapers (the first one is used unless slideshow is on)", status: Wired },
@@ -117,19 +140,22 @@ pub const FIELDS: &[Field] = &[
     Field { path: "wallpaper.slideshow", ty: Ty::Bool, desc: "rotate through `images`", status: Pending("no slideshow runner yet; stored in macshell.json wallpaper.slideshow") },
     Field { path: "wallpaper.interval", ty: Ty::Int(10, 86400), desc: "seconds between slideshow images", status: Pending("no slideshow runner yet") },
     Field { path: "wallpaper.shuffle", ty: Ty::Bool, desc: "random slideshow order", status: Pending("no slideshow runner yet") },
-    Field { path: "wallpaper.match_colors", ty: Ty::Bool, desc: "recolour the theme from the wallpaper (Material You), like `macthemectl dynamic`", status: Wired },
-    Field { path: "wallpaper.scheme", ty: Ty::Choice(&["tonalspot", "vibrant", "neutral", "content"]), desc: "palette variant used with match_colors", status: Wired },
-    Field { path: "decoration.style", ty: Ty::Ident, desc: "rdwm titlebar style by name (macos, classic, windows, adwaita, breeze, arc, minimal...); rdwm decides what it knows", status: Wired },
+    Field { path: "wallpaper.match_colors", ty: Ty::Bool, desc: "turn on `Match wallpaper`: recolour the theme from the wallpaper (any theme), like `macthemectl dynamic`", status: Wired },
+    Field { path: "wallpaper.scheme", ty: Ty::Choice(&["tonal-spot", "vibrant", "expressive", "monochrome", "neutral", "content", "palette"]), desc: "palette variant used with match_colors", status: Wired },
+    Field { path: "wallpaper.surfaces", ty: Ty::Choice(&["accent", "tint", "full"]), desc: "with match_colors: only the accent, tinted surfaces, or the whole palette", status: Wired },
+    Field { path: "wallpaper.strength", ty: Ty::Num(0.0, 1.0), desc: "with match_colors: how far surfaces move towards the wallpaper", status: Wired },
+    Field { path: "wallpaper.follow_mode", ty: Ty::Bool, desc: "with match_colors: light or dark follows the picture's brightness", status: Wired },
+    Field { path: "decoration.style", ty: Ty::Ident, desc: "rdwm titlebar style by name: macos, macos-light, classic, windows, windows-light, adwaita, adwaita-light, breeze, arc, materia, nord, gruvbox, dracula, minimal, borderonly (`rdwmctl styles`); the style also decides the side of the window buttons", status: Wired },
     Field { path: "decoration.height", ty: Ty::Int(16, 60), desc: "titlebar height in px", status: Wired },
     Field { path: "decoration.radius", ty: Ty::Int(0, 24), desc: "window corner radius in px (default: the theme's radius)", status: Wired },
     Field { path: "decoration.title_align", ty: Ty::Choice(&["center", "left"]), desc: "title text alignment", status: Wired },
-    Field { path: "decoration.buttons", ty: Ty::Choice(&["left", "right", "none"]), desc: "which side the window buttons are on; `none` hides them", status: Pending("button side needs the rdwm decoration styles branch; `none` is applied") },
-    Field { path: "decoration.button_order", ty: Ty::List(Elem::Choice(BUTTON_NAMES), 3), desc: "order of the buttons from the outer edge in", status: Pending("needs the rdwm decoration styles branch") },
+    Field { path: "decoration.buttons", ty: Ty::Choice(&["left", "right", "none"]), desc: "`none` hides the window buttons; left/right is a hint, the decoration style decides the side", status: Pending("rdwm has no separate button-side key: the style decides; `none` is applied") },
+    Field { path: "decoration.button_order", ty: Ty::List(Elem::Choice(BUTTON_NAMES), 3), desc: "order of the buttons from the outer edge in", status: Pending("rdwm has no button-order key: the style decides") },
     Field { path: "bar.enabled", ty: Ty::Tri, desc: "show the menu bar (`auto` = hidden while the taskbar-style dock is up)", status: Wired },
-    Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "which screen edge the bar is on; `split` draws separate islands", status: Pending("top and left are wired through bar.style; the rest needs the bar layouts branch") },
+    Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "which screen edge the Caelestia pill bar sits on (with bar.style = \"vertical\"); `split` is a top and a bottom bar", status: Wired },
     Field { path: "bar.style", ty: Ty::Choice(&["flat", "floating", "vertical"]), desc: "flat strip, floating pill or vertical bar down the left edge", status: Wired },
     Field { path: "bar.height", ty: Ty::Int(20, 40), desc: "bar height (width when vertical) in px", status: Wired },
-    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "items on the left of the bar, in order (names, or `widget:<id>`)", status: Pending("needs the bar layouts branch; stored in macshell.json bar.left") },
+    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "items on the left of the bar, in order (names, or `widget:<id>`)", status: Pending("macbar has no item lists yet; stored in macshell.json bar.left") },
     Field { path: "bar.center", ty: Ty::List(Elem::Ident, 24), desc: "items in the middle of the bar, in order", status: Pending("needs the bar layouts branch; stored in macshell.json bar.center") },
     Field { path: "bar.right", ty: Ty::List(Elem::Ident, 24), desc: "items on the right of the bar, in order", status: Pending("needs the bar layouts branch; stored in macshell.json bar.right") },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },
@@ -139,7 +165,10 @@ pub const FIELDS: &[Field] = &[
     Field { path: "dock.align", ty: Ty::Choice(&["center", "left"]), desc: "Windows taskbar icon alignment", status: Wired },
     Field { path: "dock.roundness", ty: Ty::Num(0.0, 1.0), desc: "0 square .. 1 pill", status: Wired },
     Field { path: "dock.magnification", ty: Ty::Num(1.0, 2.5), desc: "hover magnification of the macOS dock", status: Wired },
-    Field { path: "icons.theme", ty: Ty::Text(80), desc: "icon theme name (e.g. Papirus, Adwaita)", status: Pending("the shell has no icon theme setting yet; stored in macshell.json icons.theme") },
+    Field { path: "icons.theme", ty: Ty::Text(80), desc: "icon theme name (e.g. Papirus, WhiteSur-dark), or `auto` to follow the desktop", status: Wired },
+    Field { path: "icons.size_scale", ty: Ty::Num(0.6, 1.25), desc: "size of the artwork inside its square", status: Wired },
+    Field { path: "icons.monochrome_tint", ty: Ty::Bool, desc: "repaint symbolic icons in the theme's text colour", status: Wired },
+    Field { path: "icons.fallback", ty: Ty::Text(80), desc: "icon theme tried after the chosen one (`none` for no extra theme)", status: Wired },
     Field { path: "hot_corners.top_left", ty: Ty::Action, desc: "hot-corner action (none, dashboard, session, spotlight, launchpad, overview, lock, tile-all, notifications)", status: Wired },
     Field { path: "hot_corners.top_right", ty: Ty::Action, desc: "see top_left", status: Wired },
     Field { path: "hot_corners.bottom_left", ty: Ty::Action, desc: "see top_left", status: Wired },
@@ -195,6 +224,7 @@ fn ty_text(t: &Ty) -> String {
         Ty::List(Elem::Text(_), n) => format!("list of text (<= {n})"),
         Ty::List(Elem::Ident, n) => format!("list of names (<= {n})"),
         Ty::List(Elem::Choice(c), n) => format!("list of {} (<= {n})", c.join("|")),
+        Ty::Chain => "family, or list of families (<= 8)".into(),
         Ty::Action => "safe action".into(),
     }
 }
@@ -244,7 +274,10 @@ pub fn parse_version(s: &str) -> Option<(u32, u32, u32)> {
 }
 
 pub fn valid_ident(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 64 && s.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+    !s.is_empty()
+        && s.len() <= 64
+        && s.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
 }
 
 /// Hot-corner actions a theme may set. `custom:<command>` is deliberately absent: themes are data, not commands.

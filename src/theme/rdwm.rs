@@ -25,6 +25,22 @@ fn validate(paths: &Paths, text: &str) -> Result<(), String> {
 
 /// The keys a theme owns. Everything else in the file is left alone.
 pub fn edits(t: &Theme) -> Vec<Edit> {
+    edits_with(t, &super::fontdb::get())
+}
+
+/// [`edits`] against a given list of installed fonts. The titlebar font is the title role's first installed
+/// family (rdwm's `decoration.font`); the rest of the chain goes to `decoration.fallback_fonts`.
+pub fn edits_with(t: &Theme, db: &super::fontdb::FontDb) -> Vec<Edit> {
+    let title = t.fonts.resolve(db).title_for_rdwm(&t.fonts, db);
+    let mut fallbacks: Vec<String> = title.iter().skip(1).take(4).cloned().collect();
+    // window titles often carry CJK and emoji: ask rdwm for the same safety nets the shell uses
+    for extra in ["Noto Sans CJK", "emoji"] {
+        if let Some(f) = db.resolve(extra) {
+            if !fallbacks.contains(&f) && title.first() != Some(&f) {
+                fallbacks.push(f);
+            }
+        }
+    }
     let size = (13.0 * t.font_scale * 2.0).round() as f64 / 2.0;
     vec![
         ("colors", "focused", Some(hex(t.accent))),
@@ -40,7 +56,8 @@ pub fn edits(t: &Theme) -> Vec<Edit> {
         ("decoration", "unfocused_fg", Some(hex(t.text_secondary))),
         ("decoration", "unfocused_border", Some(hex(t.border))),
         ("decoration", "inactive_button_color", Some(hex(t.text_faint.over(t.titlebar_inactive, 0.6)))),
-        ("decoration", "font", if t.font_family.is_empty() { None } else { Some(Val::Str(t.font_family.clone())) }),
+        ("decoration", "font", title.first().map(|f| Val::Str(f.clone()))),
+        ("decoration", "fallback_fonts", (!fallbacks.is_empty()).then_some(Val::List(fallbacks))),
         ("decoration", "font_size", Some(Val::Float(size))),
         ("decoration.bar", "font_size", Some(Val::Float(size))),
         ("decoration.bar", "norm", Some(Val::List(vec![t.text_secondary.hex(), t.bar.hex(), t.border.hex()]))),
@@ -51,7 +68,11 @@ pub fn edits(t: &Theme) -> Vec<Edit> {
 
 /// Applies [`edits`] to a parsed config in memory.
 pub fn apply_to(cfg: &mut Cfg, t: &Theme) -> Result<(), String> {
-    for (sec, key, val) in edits(t) {
+    apply_with(cfg, t, &super::fontdb::get())
+}
+
+pub fn apply_with(cfg: &mut Cfg, t: &Theme, db: &super::fontdb::FontDb) -> Result<(), String> {
+    for (sec, key, val) in edits_with(t, db) {
         match val {
             Some(v) => cfg.set(sec, key, &v)?,
             None => {
@@ -113,6 +134,7 @@ pub fn apply(src: &super::live::Source, paths: &Paths, sel: &super::model::Selec
         rdwm = Some(write_config(paths, &theme)?);
     }
     src.write_selection(sel)?;
+    super::system::request(&src.shell_json); // "Apply to all apps", when the user switched it on
     let reloaded = if rdwm == Some(Wrote::Changed) { reload(paths).unwrap_or(false) } else { false };
     Ok(Report { theme_id: theme.id.clone(), dark: theme.dark, rdwm, reloaded })
 }
@@ -149,13 +171,19 @@ mod tests {
     }
 
     #[test]
-    fn theme_owned_font_is_removed_when_the_next_theme_has_none() {
+    fn titlebar_font_is_the_first_installed_title_font_and_goes_away_with_the_theme() {
+        use crate::theme::fontdb::FontDb;
+        let list = "/f/S.ttf\tSegoe UI\t80\t0\t100\t0\tFalse\t\n/f/N.ttf\tNoto Sans\t80\t0\t100\t0\tFalse\t\n/f/L.ttf\tLiberation Sans\t80\t0\t100\t0\tFalse\t\n";
+        let db = FontDb::from_listing(list, "Liberation Sans", "", "");
         let mut cfg = Cfg::default();
-        apply_to(&mut cfg, &theme("windows11", true)).unwrap();
+        apply_with(&mut cfg, &theme("windows11", true), &db).unwrap();
         assert_eq!(cfg.get("decoration", "font"), Some(Val::Str("Segoe UI".into())));
+        assert_eq!(cfg.get("decoration", "fallback_fonts"), Some(Val::List(vec!["Noto Sans".into()])));
         assert_eq!(cfg.get("decoration", "style"), Some(Val::Str("classic".into())));
-        apply_to(&mut cfg, &theme("macos", true)).unwrap();
+        // the macOS theme's Inter is not installed here: no named font, rdwm picks its own
+        apply_with(&mut cfg, &theme("macos", true), &db).unwrap();
         assert_eq!(cfg.get("decoration", "font"), None);
+        assert_eq!(cfg.get("decoration", "fallback_fonts"), None);
         assert_eq!(cfg.get("decoration", "style"), Some(Val::Str("macos".into())));
     }
 

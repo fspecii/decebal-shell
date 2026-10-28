@@ -9,7 +9,7 @@ use crate::app::Button;
 use crate::controlcenter::sys;
 use crate::gfx::{blit_scaled, fill_rounded, stroke_rounded};
 use crate::menubar::symbols::SymbolCache;
-use crate::text::{Fonts, Weight};
+use crate::text::{Fonts, Role, Weight};
 use crate::window_app::{Action, KeyEvent, Response, Waker, WindowApp};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -365,9 +365,9 @@ impl Hud {
             // The number itself, big, where the other cards have their icon.
             let digit = r.workspace().to_string();
             let size = 54.0 * self.scale;
-            let tw = self.measure(&digit, size);
+            let tw = self.fonts.as_ref().map_or(digit.chars().count() as f32 * size * 0.55, |f| f.measure_as(Role::Display, &digit, size, Weight::Medium));
             if let Some(f) = &mut self.fonts {
-                f.draw(pm, &digit, (w / 2.0 - tw / 2.0).round(), l.icon_y - size * 0.05, size, Weight::Medium, th.text_c());
+                f.draw_as(Role::Display, pm, &digit, (w / 2.0 - tw / 2.0).round(), l.icon_y - size * 0.05, size, Weight::Medium, th.text_c());
             }
         } else if let Some(icon) = self.symbols.get(r.icon(), th.text.t(), px) {
             blit_scaled(pm, icon, l.icon_x, l.icon_y, px as f32, px as f32, 1.0);

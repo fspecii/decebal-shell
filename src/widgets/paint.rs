@@ -282,7 +282,7 @@ color = "warn"
         // card background at the left edge, transparent outside the rounded corner
         assert_eq!(px(&pm, 0, 0)[3], 0, "rounded corner is transparent");
         let bg = px(&pm, 100, 5);
-        assert_eq!(&bg[..3], &[th.popup.0, th.popup.1, th.popup.2][..], "popup colour (alpha-premultiplied at 0.96 so approx)") ;
+        assert_eq!(&bg[..3], &[th.popup.0, th.popup.1, th.popup.2][..], "popup colour (alpha-premultiplied at 0.96 so approx)");
     }
 
     #[test]

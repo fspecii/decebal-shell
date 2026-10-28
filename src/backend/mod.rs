@@ -22,6 +22,15 @@ pub enum Anchor {
     /// The left screen edge: a vertical panel (caelestia's bar). `stretch` then means full output height
     /// and an app height of 0 asks for that.
     Left,
+    /// The right screen edge: the same vertical panel mirrored (Caelestia's bar with `bar.position = "right"`).
+    Right,
+}
+
+impl Anchor {
+    /// The surface hugs a side edge and runs along the screen height.
+    pub fn is_side(self) -> bool {
+        matches!(self, Anchor::Left | Anchor::Right)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

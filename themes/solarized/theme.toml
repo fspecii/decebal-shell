@@ -16,6 +16,9 @@ popup_alpha = 0.98
 panel_alpha = 0.98
 outline = 0.2
 
+[font]
+preset = "ibm-plex"
+
 [colors.dark]
 background = "#002b36"
 sidebar = "#00222b"

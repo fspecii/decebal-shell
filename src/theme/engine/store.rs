@@ -150,13 +150,16 @@ pub fn info_for(src: &Source, id: &str) -> Info {
 
 /// Every theme, built-ins first; broken user themes are listed with their error.
 pub fn list(src: &Source) -> Vec<Info> {
-    src.list().into_iter().map(|e| {
-        let mut i = info_for(src, &e.id);
-        if let Some(err) = e.error {
-            i.error = Some(err);
-        }
-        i
-    }).collect()
+    src.list()
+        .into_iter()
+        .map(|e| {
+            let mut i = info_for(src, &e.id);
+            if let Some(err) = e.error {
+                i.error = Some(err);
+            }
+            i
+        })
+        .collect()
 }
 
 /// Installs a package from a directory or `.dtheme`. Returns where it went and what the check said (warnings, hash).
@@ -210,7 +213,20 @@ pub fn scaffold(src: &Source, id: &str, name: Option<&str>, base: Option<&str>) 
     let mut d = def.clone();
     d.extra.shift_remove("widgets");
     d.name = name.clone();
-    let text = def_to_manifest(&d, &Header { id: id.into(), name, version: Some("0.1.0".into()), author: Some(std::env::var("USER").unwrap_or_default()).filter(|a| !a.is_empty()), license: Some("MIT".into()), description: Some("My theme.".into()), tags: vec![], extends: None, screenshots: vec![] });
+    let text = def_to_manifest(
+        &d,
+        &Header {
+            id: id.into(),
+            name,
+            version: Some("0.1.0".into()),
+            author: Some(std::env::var("USER").unwrap_or_default()).filter(|a| !a.is_empty()),
+            license: Some("MIT".into()),
+            description: Some("My theme.".into()),
+            tags: vec![],
+            extends: None,
+            screenshots: vec![],
+        },
+    );
     std::fs::create_dir_all(dest.join("widgets")).map_err(|e| format!("{}: {e}", dest.display()))?;
     std::fs::write(dest.join("theme.toml"), text).map_err(|e| e.to_string())?;
     Ok(dest)
@@ -239,12 +255,26 @@ pub fn duplicate(src: &Source, id: &str, new_id: &str, new_name: Option<&str>) -
     };
     let def = src.load_def(id)?;
     // the copy is standalone: flatten the extends chain into it, but keep the assets of this theme's own folder
-    let own = if let Some(d) = info.dir.as_ref().filter(|_| info.origin != Origin::Builtin) { Def::parse(&std::fs::read_to_string(d.join("theme.toml")).map_err(|e| e.to_string())?)? } else { def.clone() };
+    let own =
+        if let Some(d) = info.dir.as_ref().filter(|_| info.origin != Origin::Builtin) { Def::parse(&std::fs::read_to_string(d.join("theme.toml")).map_err(|e| e.to_string())?)? } else { def.clone() };
     let shots = meta(&own, "screenshots").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
     let mut flat = def.clone();
     flat.inherit = None;
     flat.name = name.clone();
-    let text = def_to_manifest(&flat, &Header { id: new_id.into(), name, version: Some("1.0.0".into()), author: Some(info.author.clone()).filter(|a| !a.is_empty()), license: Some(info.license.clone()).filter(|a| !a.is_empty()), description: Some(info.description.clone()), tags: info.tags.clone(), extends: None, screenshots: shots });
+    let text = def_to_manifest(
+        &flat,
+        &Header {
+            id: new_id.into(),
+            name,
+            version: Some("1.0.0".into()),
+            author: Some(info.author.clone()).filter(|a| !a.is_empty()),
+            license: Some(info.license.clone()).filter(|a| !a.is_empty()),
+            description: Some(info.description.clone()),
+            tags: info.tags.clone(),
+            extends: None,
+            screenshots: shots,
+        },
+    );
     entries.retain(|e| e.path != "theme.toml");
     entries.push(super::archive::Entry { path: "theme.toml".into(), data: text.into_bytes() });
     entries.sort_by(|a, b| a.path.cmp(&b.path));
@@ -273,7 +303,20 @@ pub fn export(src: &Source, id: &str, dest: &Path) -> Result<Report, String> {
         None => {
             // a built-in or flat theme: write a fresh manifest from its resolved definition
             let def = src.load_def(id)?;
-            let text = def_to_manifest(&def, &Header { id: id.into(), name: def.name.clone(), version: Some(if info.version.is_empty() { "1.0.0".into() } else { info.version.clone() }), author: Some(info.author.clone()).filter(|a| !a.is_empty()), license: Some(info.license.clone()).filter(|a| !a.is_empty()), description: Some(info.description.clone()), tags: info.tags.clone(), extends: None, screenshots: vec![] });
+            let text = def_to_manifest(
+                &def,
+                &Header {
+                    id: id.into(),
+                    name: def.name.clone(),
+                    version: Some(if info.version.is_empty() { "1.0.0".into() } else { info.version.clone() }),
+                    author: Some(info.author.clone()).filter(|a| !a.is_empty()),
+                    license: Some(info.license.clone()).filter(|a| !a.is_empty()),
+                    description: Some(info.description.clone()),
+                    tags: info.tags.clone(),
+                    extends: None,
+                    screenshots: vec![],
+                },
+            );
             vec![super::archive::Entry { path: "theme.toml".into(), data: text.into_bytes() }]
         }
     };

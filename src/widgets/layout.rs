@@ -155,7 +155,9 @@ fn leaf_of(n: &Node, cx: &Ctx, r: Rect) -> Leaf {
             let v = value_of(value, cx).unwrap_or(*min);
             Leaf::Bar { frac: (((v - min) / (max - min).max(1e-9)) as f32).clamp(0.0, 1.0), thickness: n.c.height.unwrap_or(6.0).min(r.h), color: color.clone(), track: track.clone() }
         }
-        Kind::Ring { value, max, size, thickness, color, track } => Leaf::Ring { frac: ((value_of(value, cx).unwrap_or(0.0) / max) as f32).clamp(0.0, 1.0), size: *size, thickness: *thickness, color: color.clone(), track: track.clone() },
+        Kind::Ring { value, max, size, thickness, color, track } => {
+            Leaf::Ring { frac: ((value_of(value, cx).unwrap_or(0.0) / max) as f32).clamp(0.0, 1.0), size: *size, thickness: *thickness, color: color.clone(), track: track.clone() }
+        }
         Kind::Graph { series, max, color, fill } => {
             let values = match cx.data.get(series) {
                 Some(Val::Series(v)) => v.clone(),
@@ -240,7 +242,18 @@ fn place(al: Align, space: f32, size: f32) -> f32 {
 fn flow(out: &mut Vec<Item>, kids: &[&Node], cx: &Ctx, inner: Rect, horizontal: bool, gap: f32, justify: Justify, cross: Align) {
     let main = |w: f32, h: f32| if horizontal { w } else { h };
     let sizes: Vec<(f32, f32)> = kids.iter().map(|k| natural(k, cx)).collect();
-    let grows: Vec<f32> = kids.iter().map(|k| if k.c.grow > 0.0 { k.c.grow } else if matches!(k.kind, Kind::Spacer) { 1.0 } else { 0.0 }).collect();
+    let grows: Vec<f32> = kids
+        .iter()
+        .map(|k| {
+            if k.c.grow > 0.0 {
+                k.c.grow
+            } else if matches!(k.kind, Kind::Spacer) {
+                1.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let used: f32 = sizes.iter().map(|s| main(s.0, s.1)).sum::<f32>() + gap * kids.len().saturating_sub(1) as f32;
     let free = (main(inner.w, inner.h) - used).max(0.0);
     let total_grow: f32 = grows.iter().sum();
@@ -314,7 +327,18 @@ pub fn dump(it: &Item) -> String {
             Leaf::Ring { frac, size, thickness, .. } => out.push_str(&format!(" frac={frac:.2} size={size} thick={thickness}")),
             Leaf::Graph { values, max, .. } => out.push_str(&format!(" points={} max={max:.2}", values.len())),
             Leaf::Image { path, .. } => out.push_str(&format!(" path={path:?}")),
-            Leaf::Dots { tags, .. } => out.push_str(&format!(" dots={}", tags.iter().map(|t| if t.active { 'A' } else if t.occupied { 'o' } else { '.' }).collect::<String>())),
+            Leaf::Dots { tags, .. } => out.push_str(&format!(
+                " dots={}",
+                tags.iter()
+                    .map(|t| if t.active {
+                        'A'
+                    } else if t.occupied {
+                        'o'
+                    } else {
+                        '.'
+                    })
+                    .collect::<String>()
+            )),
         }
         if it.background.is_some() {
             out.push_str(&format!(" bg r={}", it.radius));

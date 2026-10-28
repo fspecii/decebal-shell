@@ -18,7 +18,7 @@ shadow = 1.0
 outline = 0.07
 
 [font]
-ui = "Google Sans Flex"
+preset = "rubik"
 
 [decoration]
 height = 32

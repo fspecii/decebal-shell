@@ -83,7 +83,12 @@ fn list(src: &Source) {
     }
     let dir = config::user_dir();
     println!("your widgets ({}):", dir.display());
-    let mut names: Vec<_> = std::fs::read_dir(&dir).into_iter().flatten().flatten().filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()).filter(|_| e.path().extension().is_some_and(|x| x == "toml"))).collect();
+    let mut names: Vec<_> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()).filter(|_| e.path().extension().is_some_and(|x| x == "toml")))
+        .collect();
     names.sort();
     for n in names {
         println!("  {n}");

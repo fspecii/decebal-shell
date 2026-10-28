@@ -535,7 +535,9 @@ impl App for DockApp {
         if self.is_windows() {
             return self.win_spec();
         }
-        Some(SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 71, stretch: false, namespace: "macshell-dock" })
+        // a dock kept next to the Caelestia pill bar floats above it when that runs along the bottom (`bottom`, `split`)
+        let margin = 13 + crate::theme::th().bar_insets().bottom;
+        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: 71, stretch: false, namespace: "macshell-dock" })
     }
 
     fn quit_requested(&self) -> bool {
@@ -1172,7 +1174,7 @@ mod tests {
         let mut r = rig("style", &["launchpad", "a", "trash"], vec![]);
         r.app.scale = Some(1.0);
         let mac = r.app.surface_spec().unwrap();
-        assert_eq!((mac.anchor, mac.margin, mac.reserve, mac.stretch), (Anchor::Bottom, 13, 71, false));
+        assert_eq!((mac.anchor, mac.margin, mac.reserve, mac.stretch), (Anchor::Bottom, 13 + crate::theme::th().bar_insets().bottom, 71, false));
         assert!(!r.app.is_windows());
         r.set_settings(r#"{"style":"windows"}"#);
         assert!(r.app.is_windows());

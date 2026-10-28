@@ -170,8 +170,14 @@ impl Model {
         match ev {
             Ev::FilesChanged => self.on_files_changed(),
             Ev::Runtime(rt) => {
+                let before = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
                 self.rt = *rt;
                 self.dirty = true;
+                // the wallpaper was changed behind our back (rdwmctl, a script): "Match wallpaper" follows it
+                let now = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
+                if let (Some(img), true) = (now.as_deref(), now != before) {
+                    super::wallpapercolors::follow(self, img);
+                }
             }
             Ev::Reload(r) => {
                 match r {

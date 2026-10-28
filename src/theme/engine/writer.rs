@@ -1,6 +1,6 @@
 //! Writing a [`Def`] back out as a format-1 `theme.toml` (duplicate, export, "create theme from current settings").
 
-use crate::theme::model::{Def, Kind, Tokens, V, TOKENS};
+use crate::theme::model::{Def, Kind, Tokens, TOKENS, V};
 use serde_json::{Map, Value};
 use toml_edit::{value, Array, ArrayOfTables, DocumentMut, InlineTable, Item, Table};
 
@@ -83,6 +83,9 @@ fn tokens_table(toks: &Tokens, want_color: bool, skip: &[&str]) -> Table {
             Some(V::N(n)) => {
                 put(&mut t, k, &serde_json::json!(*n));
             }
+            Some(V::L(l)) => {
+                put(&mut t, k, &serde_json::json!(l));
+            }
             _ => {}
         }
     }
@@ -92,6 +95,11 @@ fn tokens_table(toks: &Tokens, want_color: bool, skip: &[&str]) -> Table {
 /// Tokens that live in another section of format 1, and where.
 const LIFTED: &[(&str, &str, &str)] = &[
     ("font_family", "font", "ui"),
+    ("font_preset", "font", "preset"),
+    ("font_ui", "font", "ui"),
+    ("font_title", "font", "title"),
+    ("font_mono", "font", "mono"),
+    ("font_display", "font", "display"),
     ("font_scale", "font", "scale"),
     ("bar_style", "bar", "style"),
     ("bar_height", "bar", "height"),
@@ -149,10 +157,20 @@ pub fn def_to_manifest(def: &Def, h: &Header) -> String {
     sections.shift_remove("meta");
     sections.shift_remove("integrity");
     let widgets = sections.shift_remove("widgets");
+    // the old single `family` is the font of text, titles and display numbers
+    if let Some(V::S(f)) = def.common.get("font_family").filter(|_| !["font_ui", "font_title", "font_display"].iter().any(|k| def.common.contains_key(*k))) {
+        let o = sections.entry("font".to_string()).or_insert_with(|| Value::Object(Map::new()));
+        if let Some(o) = o.as_object_mut() {
+            for role in ["ui", "title", "display"] {
+                o.entry(role.to_string()).or_insert_with(|| serde_json::json!([f]));
+            }
+        }
+    }
     for (tok, sec, key) in LIFTED {
         let v = match def.common.get(*tok) {
             Some(V::S(s)) if !s.is_empty() => Value::from(s.as_str()),
             Some(V::N(n)) => serde_json::json!(*n),
+            Some(V::L(l)) if !l.is_empty() => serde_json::json!(l),
             _ => continue,
         };
         let entry = sections.entry(sec.to_string()).or_insert_with(|| Value::Object(Map::new()));
@@ -238,7 +256,7 @@ mod tests {
     fn legacy_files_are_upgraded() {
         let legacy = Def::parse("name = \"Old\"\n[metrics]\nradius = 5\nbar_style = \"floating\"\ntitlebar_height = 30\n[font]\nfamily = \"Foo\"\n[dark]\nbackground = \"#101010\"\ntext = \"#eeeeee\"\naccent = \"#ff0000\"\n").unwrap();
         let text = def_to_manifest(&legacy, &Header { id: "old".into(), name: "Old".into(), ..Header::default() });
-        assert!(text.contains("format = 1") && text.contains("[colors.dark]") && text.contains("ui = \"Foo\"") && text.contains("style = \"floating\"") && text.contains("height = 30"), "{text}");
+        assert!(text.contains("format = 1") && text.contains("[colors.dark]") && text.contains("ui = [\"Foo\"]") && text.contains("style = \"floating\"") && text.contains("height = 30"), "{text}");
         let again = manifest::analyze(&text).def.unwrap();
         assert_eq!(legacy.resolve("o", true, &Selection::default()), again.resolve("o", true, &Selection::default()));
     }

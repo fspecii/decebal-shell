@@ -51,6 +51,12 @@ impl Source {
         doc.get("theme").map(Selection::from_json).unwrap_or_default()
     }
 
+    /// `bar.position` of the same file: where the Caelestia pill bar sits (left when absent or misspelt).
+    pub fn bar_position(&self) -> crate::config::BarPosition {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse).unwrap_or_default()
+    }
+
     /// Stores the selection under `"theme"` (atomic, every other key of the file is kept).
     pub fn write_selection(&self, sel: &Selection) -> Result<(), String> {
         crate::settings::io::json_set(&self.shell_json, "theme", Some(sel.to_json()))
@@ -165,15 +171,11 @@ impl Source {
         mode.and_then(|m| lookup(&base).map(|id| (id, Some(m))))
     }
 
-    /// [`Self::load_def`] plus "colours from wallpaper": the Caelestia theme gets its palette from the stored seed.
-    pub fn def_for(&self, id: &str, sel: &Selection) -> Result<Def, String> {
+    /// The theme `id` resolved for `sel`: variant picked (the wallpaper's brightness decides when "match wallpaper"
+    /// follows light/dark), overrides applied, then "match wallpaper" recolours it when it is on.
+    pub fn theme_for(&self, id: &str, sel: &Selection, system_dark: bool) -> Result<Theme, String> {
         let def = self.load_def(id)?;
-        // Caelestia, and any theme package that says `[wallpaper] match_colors = true`, take the stored wallpaper palette
-        let recolour = id == builtin::DYNAMIC_THEME || def.extra.get("wallpaper").and_then(|w| w.get("match_colors")).and_then(|m| m.as_bool()) == Some(true);
-        Ok(match (&sel.dynamic, recolour) {
-            (Some(d), true) => def.with_dynamic(d),
-            _ => def,
-        })
+        Ok(resolve_with(&def, id, sel, system_dark))
     }
 
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
@@ -183,15 +185,11 @@ impl Source {
         if let Some(m) = implied {
             sel.mode = m;
         }
-        match self.def_for(&id, &sel) {
-            Ok(def) => {
-                let dark = def.pick_dark(sel.mode, system_dark);
-                (def.resolve(&id, dark, &sel), None)
-            }
+        match self.theme_for(&id, &sel, system_dark) {
+            Ok(t) => (Theme { bar_position: self.bar_position(), ..t }, None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                let dark = def.pick_dark(sel.mode, system_dark);
-                (def.resolve(builtin::DEFAULT_ID, dark, &sel), Some(e))
+                (Theme { bar_position: self.bar_position(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) }, Some(e))
             }
         }
     }
@@ -209,6 +207,26 @@ impl Source {
             v.extend(system_scheme_files().iter().map(|p| Stamp::of(p)));
         }
         v
+    }
+}
+
+/// Variant choice, resolution and the optional "match wallpaper" layer, in one place.
+fn resolve_with(def: &Def, id: &str, sel: &Selection, system_dark: bool) -> Theme {
+    let dyn_on = sel.dynamic.as_ref().filter(|d| d.enabled);
+    let mode = match dyn_on {
+        Some(d) if d.follow_mode => {
+            if d.colors.tone >= super::dynamic::LIGHT_TONE {
+                Mode::Light
+            } else {
+                Mode::Dark
+            }
+        }
+        _ => sel.mode,
+    };
+    let theme = def.resolve(id, def.pick_dark(mode, system_dark), sel);
+    match dyn_on {
+        Some(d) => super::dynamic::apply_to(theme, d, sel.accent.is_some()),
+        None => theme,
     }
 }
 
@@ -333,8 +351,13 @@ pub fn font_scale() -> f32 {
 pub fn reload() -> bool {
     let mut live = LIVE.lock().unwrap();
     let l = live.get_or_insert_with(|| Live::new(Source::discover()));
+    // icon settings (macshell.json `icons`) ride on the same watcher: a change repaints like a theme change
+    let icons = crate::icons::live::poll_now();
     if l.poll() {
         publish(l.theme.clone());
+        true
+    } else if icons {
+        GEN.fetch_add(1, Ordering::Relaxed);
         true
     } else {
         false
@@ -440,6 +463,30 @@ mod tests {
         std::fs::write(src.themes_dir.join("a.toml"), "name = \"A\"\ninherit = \"b\"\n").unwrap();
         std::fs::write(src.themes_dir.join("b.toml"), "name = \"B\"\ninherit = \"a\"\n").unwrap();
         assert!(src.load_def("a").unwrap_err().contains("loop"));
+    }
+
+    #[test]
+    fn the_bar_position_reaches_the_theme_and_a_change_is_a_reload() {
+        use crate::config::BarPosition as P;
+        let (_d, src) = sandbox("position");
+        std::fs::write(&src.shell_json, r#"{"theme": "caelestia", "bar": {"enabled": true}}"#).unwrap();
+        let mut live = Live::new(src.clone());
+        assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (Some(P::Left), crate::theme::Insets { left: 52, ..Default::default() }), "left is the default");
+        for (word, want, insets) in [
+            ("right", P::Right, crate::theme::Insets { right: 52, ..Default::default() }),
+            ("top", P::Top, crate::theme::Insets { top: 52, ..Default::default() }),
+            ("bottom", P::Bottom, crate::theme::Insets { bottom: 52, ..Default::default() }),
+            ("split", P::Split, crate::theme::Insets { top: 52, bottom: 52, ..Default::default() }),
+        ] {
+            std::fs::write(&src.shell_json, format!(r#"{{"theme": "caelestia", "bar": {{"enabled": true, "position": "{word}"}}}}"#)).unwrap();
+            assert!(live.poll(), "{word}: the theme changed, so every program redraws");
+            assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (Some(want), insets), "{word}");
+            assert!(!live.poll());
+        }
+        // the ordinary menu bar has no pill bar and no insets, whatever the setting says
+        std::fs::write(&src.shell_json, r#"{"theme": "nord", "bar": {"position": "split"}}"#).unwrap();
+        assert!(live.poll());
+        assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (None, crate::theme::Insets::default()));
     }
 
     #[test]

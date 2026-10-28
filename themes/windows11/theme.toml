@@ -18,7 +18,7 @@ shadow = 0.8
 outline = 0.1
 
 [font]
-ui = "Segoe UI"
+preset = "segoe"
 
 [decoration]
 style = "classic"

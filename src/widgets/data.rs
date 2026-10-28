@@ -56,7 +56,16 @@ impl Time {
         let mut tm: libc::tm = unsafe { std::mem::zeroed() };
         // SAFETY: see above; localtime_r is thread-safe.
         unsafe { libc::localtime_r(&t, &mut tm) };
-        Time { year: tm.tm_year + 1900, mon: tm.tm_mon.max(0) as u32, mday: tm.tm_mday.max(1) as u32, hour: tm.tm_hour.max(0) as u32, min: tm.tm_min.max(0) as u32, sec: tm.tm_sec.max(0) as u32, wday: tm.tm_wday.max(0) as u32, yday: tm.tm_yday.max(0) as u32 }
+        Time {
+            year: tm.tm_year + 1900,
+            mon: tm.tm_mon.max(0) as u32,
+            mday: tm.tm_mday.max(1) as u32,
+            hour: tm.tm_hour.max(0) as u32,
+            min: tm.tm_min.max(0) as u32,
+            sec: tm.tm_sec.max(0) as u32,
+            wday: tm.tm_wday.max(0) as u32,
+            yday: tm.tm_yday.max(0) as u32,
+        }
     }
     pub fn now() -> Time {
         Time::from_unix(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
@@ -227,7 +236,8 @@ pub fn sample() -> Data {
     ] {
         d.set(k, Val::Num(v));
     }
-    for (k, v) in [("gpu.present", true), ("battery.present", true), ("battery.charging", false), ("volume.muted", false), ("media.present", true), ("media.playing", true), ("weather.present", true)] {
+    for (k, v) in [("gpu.present", true), ("battery.present", true), ("battery.charging", false), ("volume.muted", false), ("media.present", true), ("media.playing", true), ("weather.present", true)]
+    {
         d.set(k, Val::Bool(v));
     }
     for (k, v) in [

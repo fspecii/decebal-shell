@@ -17,8 +17,34 @@ use super::Trust;
 /// rdwm actions a widget may trigger. Anything that starts a program (`spawn`, `togglescratch`), ends the session (`quit`,
 /// `kill`), or grabs the pointer is left out.
 pub const SAFE_RDWM: &[&str] = &[
-    "view", "toggleview", "viewnext", "viewprev", "focusstack", "focusmon", "cyclelayout", "cyclelayout_back", "setlayout", "togglefloating", "togglefullscreen", "togglemaximize", "minimize", "unminimize", "zoom",
-    "togglegaps", "togglebar", "tileall", "snap_left", "snap_right", "snap_up", "snap_down", "snap_restore", "focus_left", "focus_right", "focus_up", "focus_down", "reload",
+    "view",
+    "toggleview",
+    "viewnext",
+    "viewprev",
+    "focusstack",
+    "focusmon",
+    "cyclelayout",
+    "cyclelayout_back",
+    "setlayout",
+    "togglefloating",
+    "togglefullscreen",
+    "togglemaximize",
+    "minimize",
+    "unminimize",
+    "zoom",
+    "togglegaps",
+    "togglebar",
+    "tileall",
+    "snap_left",
+    "snap_right",
+    "snap_up",
+    "snap_down",
+    "snap_restore",
+    "focus_left",
+    "focus_right",
+    "focus_up",
+    "focus_down",
+    "reload",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +103,10 @@ pub enum Media {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Open(Open),
-    Rdwm { action: String, arg: Option<String> },
+    Rdwm {
+        action: String,
+        arg: Option<String>,
+    },
     Workspace(Ws),
     DndToggle,
     Volume(Option<Step>),
@@ -176,7 +205,14 @@ pub fn run(a: &Action) {
         Action::Exec(cmd) => {
             let cmd = cmd.clone();
             std::thread::spawn(move || {
-                let _ = std::process::Command::new("sh").arg("-c").arg(&cmd).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().map(|mut c| c.wait());
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&cmd)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map(|mut c| c.wait());
             });
         }
         Action::DndToggle => sys::toggle_dnd(),
@@ -236,7 +272,25 @@ mod tests {
 
     #[test]
     fn theme_widgets_cannot_run_commands_or_dangerous_rdwm_actions() {
-        for bad in ["exec rm -rf ~", "exec", "rdwm spawn xterm", "rdwm quit", "rdwm kill", "rdwm togglescratch", "rdwm view 1;ls", "rdwm view $(id)", "rdwm view 1 2", "open /bin/sh", "sh -c id", "", "spawn foo", "workspace 0", "workspace 99", "volume 100", "dnd on"] {
+        for bad in [
+            "exec rm -rf ~",
+            "exec",
+            "rdwm spawn xterm",
+            "rdwm quit",
+            "rdwm kill",
+            "rdwm togglescratch",
+            "rdwm view 1;ls",
+            "rdwm view $(id)",
+            "rdwm view 1 2",
+            "open /bin/sh",
+            "sh -c id",
+            "",
+            "spawn foo",
+            "workspace 0",
+            "workspace 99",
+            "volume 100",
+            "dnd on",
+        ] {
             assert!(Action::parse(bad, Trust::Theme).is_err(), "{bad:?} must be rejected");
         }
         let e = Action::parse("exec echo hi", Trust::Theme).unwrap_err();

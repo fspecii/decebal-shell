@@ -64,13 +64,22 @@ fn report_text(r: &Report, what: &str) -> String {
     if r.ok() {
         let def = r.analysis.def.as_ref();
         let meta = |k: &str| def.and_then(|d| d.extra.get("meta")).and_then(|m| m.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        s.push_str(&format!("ok: {} {} ({}), {what}, {} files, {} KiB, {}\n", def.map(|d| d.name.as_str()).unwrap_or(""), meta("version"), r.id.as_deref().unwrap_or("?"), r.files, r.total_bytes.div_ceil(1024), r.content_hash));
+        s.push_str(&format!(
+            "ok: {} {} ({}), {what}, {} files, {} KiB, {}\n",
+            def.map(|d| d.name.as_str()).unwrap_or(""),
+            meta("version"),
+            r.id.as_deref().unwrap_or("?"),
+            r.files,
+            r.total_bytes.div_ceil(1024),
+            r.content_hash
+        ));
     }
     s
 }
 
 fn paths_note(a: &apply::Applied) -> String {
-    let mut s = format!("applied {} ({}); changed: {}", a.theme_id, if a.dark { "dark" } else { "light" }, if a.files.is_empty() { "nothing (already applied)".to_string() } else { a.files.join(", ") });
+    let mut s =
+        format!("applied {} ({}); changed: {}", a.theme_id, if a.dark { "dark" } else { "light" }, if a.files.is_empty() { "nothing (already applied)".to_string() } else { a.files.join(", ") });
     if a.reloaded {
         s.push_str("; rdwm reloaded");
     }
@@ -130,7 +139,24 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
             let (id, _) = src.find(id).ok_or_else(|| format!("no theme `{id}`"))?;
             let i = store::info_for(src, &id);
             let def = src.load_def(&id)?;
-            let mut s = format!("{} ({})\n  id {}  version {}  author {}  license {}\n  origin {}{}\n  {}\n", i.name, if i.has_dark && i.has_light { "dark+light" } else if i.has_dark { "dark" } else { "light" }, i.id, i.version, i.author, i.license, i.origin.as_str(), i.dir.as_ref().map(|d| format!(" ({})", d.display())).unwrap_or_default(), i.description);
+            let mut s = format!(
+                "{} ({})\n  id {}  version {}  author {}  license {}\n  origin {}{}\n  {}\n",
+                i.name,
+                if i.has_dark && i.has_light {
+                    "dark+light"
+                } else if i.has_dark {
+                    "dark"
+                } else {
+                    "light"
+                },
+                i.id,
+                i.version,
+                i.author,
+                i.license,
+                i.origin.as_str(),
+                i.dir.as_ref().map(|d| format!(" ({})", d.display())).unwrap_or_default(),
+                i.description
+            );
             if !i.tags.is_empty() {
                 s.push_str(&format!("  tags: {}\n", i.tags.join(", ")));
             }
@@ -165,7 +191,11 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
             let path = Path::new(p);
             if path.is_file() && path.extension().is_some_and(|e| e == "toml") {
                 let text = std::fs::read_to_string(path).map_err(|e| format!("{p}: {e}"))?;
-                let a = if manifest::is_v1(&text) { manifest::analyze(&text) } else { return crate::theme::model::Def::parse(&text).map(|d| format!("ok: {} (legacy theme file; `theme duplicate` upgrades it to format 1)\n", d.name)).map_err(|e| format!("{p}: {e}")) };
+                let a = if manifest::is_v1(&text) {
+                    manifest::analyze(&text)
+                } else {
+                    return crate::theme::model::Def::parse(&text).map(|d| format!("ok: {} (legacy theme file; `theme duplicate` upgrades it to format 1)\n", d.name)).map_err(|e| format!("{p}: {e}"));
+                };
                 let mut s = String::new();
                 for d in &a.diags {
                     s.push_str(&format!("{p}: {d}\n"));
@@ -357,7 +387,7 @@ mod tests {
         let s = run_ok(&["schema"], &src, &paths);
         assert!(s.contains("colors.dark.accent") && s.contains("decoration.style") && s.contains("[pending:"), "{s}");
         let j: serde_json::Value = serde_json::from_str(&run_ok(&["schema", "--json"], &src, &paths)).unwrap();
-        assert!(j.as_array().unwrap().iter().any(|r| r["key"] == "font.mono" && r["applied"] == false));
+        assert!(j.as_array().unwrap().iter().any(|r| r["key"] == "font.files" && r["applied"] == false));
         assert!(run_err(&["bogus"], &src, &paths).contains("unknown theme command"));
         let _ = std::fs::remove_dir_all(d);
     }

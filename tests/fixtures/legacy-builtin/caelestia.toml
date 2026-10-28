@@ -13,7 +13,7 @@ bar_style = "vertical"
 titlebar_height = 32
 
 [font]
-family = "Google Sans Flex"
+preset = "rubik"
 
 [dark]
 background = "#191114"

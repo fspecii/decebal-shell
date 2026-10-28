@@ -8,6 +8,9 @@ dock_alpha = 0.75
 popup_alpha = 0.97
 panel_alpha = 0.98
 
+[font]
+preset = "jetbrains"
+
 [dark]
 background = "#282a36"
 sidebar = "#21222c"

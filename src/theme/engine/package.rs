@@ -160,7 +160,9 @@ pub fn check_image(path: &str, data: &[u8]) -> Option<String> {
     let dims = image::ImageReader::with_format(std::io::Cursor::new(data), want).into_dimensions();
     match dims {
         Ok((w, h)) if w == 0 || h == 0 => Some(format!("`{path}`: empty image")),
-        Ok((w, h)) if w > MAX_IMAGE_SIDE || h > MAX_IMAGE_SIDE || u64::from(w) * u64::from(h) > MAX_IMAGE_PIXELS => Some(format!("`{path}`: {w}x{h} pixels is too large (limit {MAX_IMAGE_SIDE} px a side, {} MP)", MAX_IMAGE_PIXELS / 1_000_000)),
+        Ok((w, h)) if w > MAX_IMAGE_SIDE || h > MAX_IMAGE_SIDE || u64::from(w) * u64::from(h) > MAX_IMAGE_PIXELS => {
+            Some(format!("`{path}`: {w}x{h} pixels is too large (limit {MAX_IMAGE_SIDE} px a side, {} MP)", MAX_IMAGE_PIXELS / 1_000_000))
+        }
         Ok(_) => None,
         Err(e) => Some(format!("`{path}`: unreadable image ({e})")),
     }

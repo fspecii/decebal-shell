@@ -32,6 +32,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 fontdue = "0.9"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+ttf-parser = "0.21"
 libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
@@ -133,3 +134,8 @@ opt-level = 3
 name = "macwidgets"
 path = "src/bin/macwidgets.rs"
 required-features = ["x11"]
+# fontdue parses every glyph of a face when it is opened (a 13 MB Inter collection): unusably slow unoptimised.
+[profile.dev.package.fontdue]
+opt-level = 3
+[profile.dev.package.ttf-parser]
+opt-level = 3
