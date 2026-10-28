@@ -1,4 +1,4 @@
-//! `macdash`: a dashboard popup under the menu bar, ported from caelestia-shell's dashboard.
+//! `decdash`: a dashboard popup under the menu bar, ported from caelestia-shell's dashboard.
 //!
 //! Three tabs: **Overview** (user card, clock, month calendar, weather, resource rings, now playing), **Media**
 //! (MPRIS player: cover, progress, controls, volume, player picker) and **Performance** (CPU, memory, storage,
@@ -304,11 +304,11 @@ impl Dash {
 
 impl WindowApp for Dash {
     fn title(&self) -> String {
-        "macdash".into()
+        "decdash".into()
     }
 
     fn app_id(&self) -> &'static str {
-        "macdash"
+        "decdash"
     }
 
     fn overlay(&self) -> bool {
@@ -330,7 +330,7 @@ impl WindowApp for Dash {
     fn input_grabbed(&mut self, mods: Option<u16>) -> Response {
         // Without the keyboard Escape could never close it (the pointer grab still lets a click outside do so).
         if mods.is_none() {
-            eprintln!("macdash: could not grab the keyboard; click outside to close");
+            eprintln!("decdash: could not grab the keyboard; click outside to close");
         }
         Response::NONE
     }

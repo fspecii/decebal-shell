@@ -1,5 +1,5 @@
 //! A minimal D-Bus wire client: just enough to own a name on the session bus, answer method calls and
-//! emit signals (used by `macnotify`), without libdbus or an async runtime.
+//! emit signals (used by `decnotify`), without libdbus or an async runtime.
 //!
 //! Scope: little/big-endian parsing of every basic type plus arrays, structs, dict entries and variants;
 //! little-endian marshalling; EXTERNAL authentication over a unix socket. No fd passing.

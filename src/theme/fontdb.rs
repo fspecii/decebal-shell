@@ -16,7 +16,7 @@ pub fn norm(s: &str) -> String {
     s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
 
-/// fontconfig weight values for the four weights macshell draws with.
+/// fontconfig weight values for the four weights decebal draws with.
 pub const FC_REGULAR: i32 = 80;
 pub const FC_MEDIUM: i32 = 100;
 pub const FC_SEMIBOLD: i32 = 180;

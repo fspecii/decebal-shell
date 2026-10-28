@@ -1,28 +1,28 @@
 [package]
-name = "macshell"
+name = "decebal"
 version = "0.1.0"
 edition = "2021"
-description = "Lightweight macOS-style dock, menu bar and wallpaper browser for Wayland and X11"
+description = "Decebal: a customisable, rice-friendly desktop environment for rdwm (dock, bar, launcher, settings, themes) for Wayland and X11"
 license = "MIT"
 readme = "README.md"
 rust-version = "1.85"
 resolver = "3"
 
 [lib]
-name = "macshell"
+name = "decebal"
 path = "src/lib.rs"
 
 [[bin]]
-name = "macdock"
-path = "src/bin/macdock.rs"
+name = "decdock"
+path = "src/bin/decdock.rs"
 
 [[bin]]
-name = "macbar"
-path = "src/bin/macbar.rs"
+name = "decbar"
+path = "src/bin/decbar.rs"
 
 [[bin]]
-name = "machaven"
-path = "src/bin/machaven.rs"
+name = "dechaven"
+path = "src/bin/dechaven.rs"
 
 [dependencies]
 toml_edit = { version = "0.22", default-features = false, features = ["parse", "display"] }
@@ -30,7 +30,7 @@ tiny-skia = "0.11"
 resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-# gzip for the .macshell-preset bundles (already in the tree through png/resvg)
+# gzip for the .decebal-preset bundles (already in the tree through png/resvg)
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 fontdue = "0.9"
 ttf-parser = "0.21"
@@ -54,67 +54,67 @@ panic = "abort"
 strip = true
 
 [[bin]]
-name = "macsettings"
-path = "src/bin/macsettings.rs"
+name = "decsettings"
+path = "src/bin/decsettings.rs"
 
 [[bin]]
-name = "macnotify"
-path = "src/bin/macnotify.rs"
+name = "decnotify"
+path = "src/bin/decnotify.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "macwm"
-path = "src/bin/macwm.rs"
+name = "decwm"
+path = "src/bin/decwm.rs"
 
 [[bin]]
-name = "maclaunch"
-path = "src/bin/maclaunch.rs"
+name = "declaunch"
+path = "src/bin/declaunch.rs"
 
 [[bin]]
-name = "macspot"
-path = "src/bin/macspot.rs"
+name = "decspot"
+path = "src/bin/decspot.rs"
 
 [[bin]]
-name = "macswitch"
-path = "src/bin/macswitch.rs"
+name = "decswitch"
+path = "src/bin/decswitch.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "machud"
-path = "src/bin/machud.rs"
+name = "dechud"
+path = "src/bin/dechud.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "macclip"
-path = "src/bin/macclip.rs"
+name = "decclip"
+path = "src/bin/decclip.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "machot"
-path = "src/bin/machot.rs"
+name = "dechot"
+path = "src/bin/dechot.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "macsession"
-path = "src/bin/macsession.rs"
+name = "decsession"
+path = "src/bin/decsession.rs"
 
 [[bin]]
-name = "macutil"
-path = "src/bin/macutil.rs"
+name = "decutil"
+path = "src/bin/decutil.rs"
 
 [[bin]]
-name = "macdash"
-path = "src/bin/macdash.rs"
+name = "decdash"
+path = "src/bin/decdash.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "macexpose"
-path = "src/bin/macexpose.rs"
+name = "decexpose"
+path = "src/bin/decexpose.rs"
 required-features = ["x11"]
 
 [[bin]]
-name = "macthemectl"
-path = "src/bin/macthemectl.rs"
+name = "decthemectl"
+path = "src/bin/decthemectl.rs"
 # Wallpaper thumbnails decode 4K-8K images: unusably slow unoptimised (debug runs and tests).
 [profile.dev.package.image]
 opt-level = 3
@@ -132,8 +132,8 @@ opt-level = 3
 opt-level = 3
 
 [[bin]]
-name = "macwidgets"
-path = "src/bin/macwidgets.rs"
+name = "decwidgets"
+path = "src/bin/decwidgets.rs"
 required-features = ["x11"]
 # fontdue parses every glyph of a face when it is opened (a 13 MB Inter collection): unusably slow unoptimised.
 [profile.dev.package.fontdue]

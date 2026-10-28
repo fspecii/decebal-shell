@@ -1,9 +1,9 @@
-//! macsession: the session menu, a full-screen dimmer with a centred row of big rounded buttons
+//! decsession: the session menu, a full-screen dimmer with a centred row of big rounded buttons
 //! (Lock, Log out, Suspend, Hibernate, Restart, Shut down), ported from caelestia-shell's session drawer.
 //!
 //! The UI is an X11 popup that covers the primary monitor (override-redirect, keyboard and pointer grabbed, see
 //! [`crate::backend::x11_window`]). This module holds the logic (which buttons exist, the commands behind them,
-//! keys, the confirm flow, layout, drawing); the `macsession` binary runs the chosen command once the overlay
+//! keys, the confirm flow, layout, drawing); the `decsession` binary runs the chosen command once the overlay
 //! (and with it the input grabs) is gone, so a screen locker can take the keyboard.
 //!
 //! Destructive choices (log out, restart, shut down) ask twice: the first key press or click arms the button
@@ -114,9 +114,9 @@ pub fn state_offers_disk(text: &str) -> bool {
     text.split_whitespace().any(|w| w == "disk")
 }
 
-/// Path of the kernel's list of sleep states (`MACSESSION_POWER_STATE` overrides it for tests).
+/// Path of the kernel's list of sleep states (`DECSESSION_POWER_STATE` overrides it for tests).
 pub fn power_state_path() -> PathBuf {
-    std::env::var_os("MACSESSION_POWER_STATE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/sys/power/state"))
+    std::env::var_os("DECSESSION_POWER_STATE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/sys/power/state"))
 }
 
 pub fn hibernate_available() -> bool {
@@ -222,7 +222,7 @@ pub struct Session {
     /// Loaded after the first frame: finding and parsing a font costs more than the rest of the start-up together.
     fonts: Option<Fonts>,
     symbols: SymbolCache,
-    /// When the process started; with `MACSESSION_TIMING` set, the time to the first painted frame is printed.
+    /// When the process started; with `DECSESSION_TIMING` set, the time to the first painted frame is printed.
     started: Option<Instant>,
 }
 
@@ -346,11 +346,11 @@ impl Session {
 
 impl WindowApp for Session {
     fn title(&self) -> String {
-        "macsession".into()
+        "decsession".into()
     }
 
     fn app_id(&self) -> &'static str {
-        "macsession"
+        "decsession"
     }
 
     fn overlay(&self) -> bool {
@@ -374,8 +374,8 @@ impl WindowApp for Session {
     }
 
     fn input_grabbed(&mut self, mods: Option<u16>) -> Response {
-        if let (Some(t), Some(_)) = (self.started, std::env::var_os("MACSESSION_TIMING")) {
-            eprintln!("macsession: first frame painted {} ms after start", t.elapsed().as_millis());
+        if let (Some(t), Some(_)) = (self.started, std::env::var_os("DECSESSION_TIMING")) {
+            eprintln!("decsession: first frame painted {} ms after start", t.elapsed().as_millis());
         }
         // Without the keyboard the menu could only be left with the mouse: do not hang around.
         match mods {

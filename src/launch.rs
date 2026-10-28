@@ -73,9 +73,9 @@ pub fn resolve_desktop_id(app_id: &str) -> Option<String> {
     None
 }
 
-/// Command that opens a file, folder or URL: `$MACSHELL_OPEN` (tests, custom file managers) or `xdg-open`.
+/// Command that opens a file, folder or URL: `$DECEBAL_OPEN` (tests, custom file managers) or `xdg-open`.
 pub fn open_argv(target: &str) -> Vec<String> {
-    let mut argv = match std::env::var("MACSHELL_OPEN") {
+    let mut argv = match std::env::var("DECEBAL_OPEN") {
         Ok(c) if !c.trim().is_empty() => exec_argv(&c),
         _ => vec!["xdg-open".to_string()],
     };
@@ -83,9 +83,9 @@ pub fn open_argv(target: &str) -> Vec<String> {
     argv
 }
 
-/// Command that empties the trash: `$MACSHELL_TRASH_EMPTY` or `gio trash --empty`.
+/// Command that empties the trash: `$DECEBAL_TRASH_EMPTY` or `gio trash --empty`.
 pub fn empty_trash_argv() -> Vec<String> {
-    match std::env::var("MACSHELL_TRASH_EMPTY") {
+    match std::env::var("DECEBAL_TRASH_EMPTY") {
         Ok(c) if !c.trim().is_empty() => exec_argv(&c),
         _ => vec!["gio".to_string(), "trash".to_string(), "--empty".to_string()],
     }
@@ -203,9 +203,9 @@ pub fn expand_exec(exec: &str, f: Fields) -> Vec<String> {
 pub fn launch(id: &str) -> bool {
     let argv = match id {
         "trash" => open_argv("trash:///"),
-        "launchpad" => match std::env::var("MACSHELL_LAUNCHPAD") {
+        "launchpad" => match std::env::var("DECEBAL_LAUNCHPAD") {
             Ok(cmd) if !cmd.is_empty() => exec_argv(&cmd),
-            _ => vec![sibling_or_path("maclaunch")],
+            _ => vec![sibling_or_path("declaunch")],
         },
         _ => {
             let Some(file) = find_desktop_file(id) else { return false };
@@ -418,9 +418,10 @@ pub fn adjust(argv: &[String], session: Session, rules: &[Rule], get: &dyn Fn(&s
     };
     let prog = program_index(&argv).map(|i| (i, base_name(&argv[i]).to_lowercase()));
     // Our own internal variables stay with our own programs only.
-    if !prog.as_ref().is_some_and(|(_, p)| p.starts_with("mac")) {
+    if !prog.as_ref().is_some_and(|(_, p)| crate::compat::is_own_program(p)) {
         for (k, _) in std::env::vars_os().filter_map(|(k, v)| Some((k.into_string().ok()?, v))) {
-            if k.starts_with("MACSHELL_") {
+            // the old MACSHELL_* names are still in the environment when the session predates the rename
+            if k.starts_with("DECEBAL_") || k.starts_with("MACSHELL_") {
                 set(&mut env, &k, None);
             }
         }
@@ -504,7 +505,7 @@ struct RuleCfg {
     env: std::collections::BTreeMap<String, Option<String>>,
 }
 
-/// Rules from the `"launch"` object of `macshell.json`:
+/// Rules from the `"launch"` object of `decebal.json`:
 /// `{"launch": {"builtin": true, "rules": [{"match": ["myapp", "foo*"], "when": "x11", "args": ["--flag"], "env": {"K": "v", "DROP": null}}]}}`.
 /// `when` is `x11` (default), `wayland` or `always`. User rules come after, and so win over, the built-in ones.
 pub fn rules_from_json(text: &str) -> Vec<Rule> {
@@ -526,17 +527,17 @@ pub fn rules_from_json(text: &str) -> Vec<Rule> {
 }
 
 fn load_rules() -> Vec<Rule> {
-    rules_from_json(&std::fs::read_to_string(crate::config::config_dir().join("macshell.json")).unwrap_or_default())
+    rules_from_json(&std::fs::read_to_string(crate::config::config_dir().join("decebal.json")).unwrap_or_default())
 }
 
 // --------------------------------------------------------------- running
 
 fn state_dir() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
-    Some(base.join("macshell"))
+    Some(base.join("decebal"))
 }
 
-/// Appends a line to `~/.local/state/macshell/launch.log` (rotated at 256 KiB).
+/// Appends a line to `~/.local/state/decebal/launch.log` (rotated at 256 KiB).
 pub fn log(msg: &str) {
     use std::io::Write;
     let Some(dir) = state_dir() else { return };
@@ -551,11 +552,11 @@ pub fn log(msg: &str) {
     }
 }
 
-/// Tells the user something went wrong: `notify-send` (or `$MACSHELL_NOTIFY`), best effort.
+/// Tells the user something went wrong: `notify-send` (or `$DECEBAL_NOTIFY`), best effort.
 pub fn notify_error(label: &str, why: &str) {
-    let mut argv = match std::env::var("MACSHELL_NOTIFY") {
+    let mut argv = match std::env::var("DECEBAL_NOTIFY") {
         Ok(c) if !c.trim().is_empty() => exec_argv(&c),
-        _ => vec!["notify-send".to_string(), "-a".into(), "macshell".into(), "-i".into(), "dialog-error".into(), "-u".into(), "normal".into()],
+        _ => vec!["notify-send".to_string(), "-a".into(), "decebal".into(), "-i".into(), "dialog-error".into(), "-u".into(), "normal".into()],
     };
     argv.push(format!("Couldn't open {label}"));
     argv.push(why.to_string());
@@ -687,13 +688,13 @@ mod tests {
     #[test]
     fn open_and_trash_commands_can_be_overridden() {
         // Only this test touches these variables.
-        std::env::set_var("MACSHELL_OPEN", "my-open --flag");
+        std::env::set_var("DECEBAL_OPEN", "my-open --flag");
         assert_eq!(open_argv("/tmp"), vec!["my-open", "--flag", "/tmp"]);
-        std::env::remove_var("MACSHELL_OPEN");
+        std::env::remove_var("DECEBAL_OPEN");
         assert_eq!(open_argv("/tmp"), vec!["xdg-open", "/tmp"]);
-        std::env::set_var("MACSHELL_TRASH_EMPTY", "true");
+        std::env::set_var("DECEBAL_TRASH_EMPTY", "true");
         assert_eq!(empty_trash_argv(), vec!["true"]);
-        std::env::remove_var("MACSHELL_TRASH_EMPTY");
+        std::env::remove_var("DECEBAL_TRASH_EMPTY");
         assert_eq!(empty_trash_argv(), vec!["gio", "trash", "--empty"]);
     }
 
@@ -756,7 +757,7 @@ mod tests {
     fn wayland_session_changes_nothing() {
         let a = adjust(&sv(&["google-chrome-stable", "u"]), Session::Wayland, &builtin_rules(), &noenv);
         assert_eq!(a.argv, sv(&["google-chrome-stable", "u"]));
-        assert!(a.env.iter().all(|(k, _)| k.starts_with("MACSHELL_")));
+        assert!(a.env.iter().all(|(k, _)| k.starts_with("DECEBAL_") || k.starts_with("MACSHELL_")));
     }
 
     #[test]
@@ -799,13 +800,13 @@ mod tests {
     }
 
     #[test]
-    fn macshell_vars_are_not_passed_to_foreign_apps() {
-        std::env::set_var("MACSHELL_TEST_INTERNAL", "1");
+    fn decebal_vars_are_not_passed_to_foreign_apps() {
+        std::env::set_var("DECEBAL_TEST_INTERNAL", "1");
         let a = adjust(&sv(&["firefox"]), Session::Wayland, &[], &noenv);
-        assert!(a.env.contains(&("MACSHELL_TEST_INTERNAL".to_string(), None)));
-        let b = adjust(&sv(&["/usr/bin/maclaunch"]), Session::Wayland, &[], &noenv);
+        assert!(a.env.contains(&("DECEBAL_TEST_INTERNAL".to_string(), None)));
+        let b = adjust(&sv(&["/usr/bin/declaunch"]), Session::Wayland, &[], &noenv);
         assert!(b.env.is_empty());
-        std::env::remove_var("MACSHELL_TEST_INTERNAL");
+        std::env::remove_var("DECEBAL_TEST_INTERNAL");
     }
 
     #[test]
@@ -836,9 +837,9 @@ mod tests {
 
     #[test]
     fn spawn_runs_in_workdir_and_reports_early_failure() {
-        let dir = std::env::temp_dir().join(format!("macshell-launch-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decebal-launch-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("MACSHELL_NOTIFY", "true");
+        std::env::set_var("DECEBAL_NOTIFY", "true");
         std::env::set_var("XDG_STATE_HOME", dir.join("state"));
         let app = crate::apps::AppEntry { name: "Pwd".into(), exec: "sh -c \"pwd > out.txt\"".into(), path: dir.to_string_lossy().into(), ..Default::default() };
         assert!(spawn_app(&app));
@@ -851,8 +852,8 @@ mod tests {
         let got = std::fs::read_to_string(dir.join("out.txt")).unwrap();
         assert_eq!(std::fs::canonicalize(got.trim()).unwrap(), std::fs::canonicalize(&dir).unwrap());
         assert!(!spawn_argv(&sv(&["/definitely/not/a/program"])));
-        std::env::remove_var("MACSHELL_NOTIFY");
-        assert!(dir.join("state/macshell/launch.log").is_file());
+        std::env::remove_var("DECEBAL_NOTIFY");
+        assert!(dir.join("state/decebal/launch.log").is_file());
         std::env::remove_var("XDG_STATE_HOME");
         let _ = std::fs::remove_dir_all(&dir);
     }

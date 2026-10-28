@@ -33,7 +33,7 @@ pub const PANES: &[PaneDef] = &[
         title: "Desktop & Dock",
         glyph: Glyph::Dock,
         color: (10, 132, 255),
-        keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces macdock macbar",
+        keywords: "dock magnification size spacing transparency roundness pinned apps menu bar workspaces decdock decbar",
     },
     PaneDef {
         id: "wallpaper",
@@ -78,7 +78,7 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "sound", title: "Sound", glyph: Glyph::Sys(glyphs::SPEAKER), color: (255, 69, 58), keywords: "audio speakers microphone volume output input mute pipewire pulseaudio" },
     PaneDef { id: "network", title: "Network", glyph: Glyph::Sys(glyphs::WIFI), color: (10, 132, 255), keywords: "wifi wi-fi wireless ethernet vpn internet ip dns networkmanager nmcli" },
     PaneDef { id: "bluetooth", title: "Bluetooth", glyph: Glyph::Sys(glyphs::BLUETOOTH), color: (10, 132, 255), keywords: "pair devices headset mouse keyboard discoverable bluez" },
-    PaneDef { id: "notifications", title: "Notifications", glyph: Glyph::Sys(glyphs::BELL), color: (255, 59, 48), keywords: "do not disturb dnd banner mute alerts macnotify" },
+    PaneDef { id: "notifications", title: "Notifications", glyph: Glyph::Sys(glyphs::BELL), color: (255, 59, 48), keywords: "do not disturb dnd banner mute alerts decnotify" },
     PaneDef { id: "inputdev", title: "Keyboard & Input", glyph: Glyph::Sys(glyphs::MOUSE), color: (99, 99, 102), keywords: "layout repeat caps lock pointer mouse touchpad scrolling tap speed xkb" },
     PaneDef { id: "power", title: "Power & Battery", glyph: Glyph::Sys(glyphs::BATTERY), color: (48, 209, 88), keywords: "battery profile performance saver screen blank sleep dpms lid suspend" },
     PaneDef { id: "defaults", title: "Default Apps", glyph: Glyph::Sys(glyphs::APPS), color: (255, 159, 10), keywords: "browser mail terminal file manager media player editor pdf xdg" },
@@ -91,7 +91,7 @@ pub const PANES: &[PaneDef] = &[
         title: "Configuration",
         glyph: Glyph::Rules,
         color: (120, 120, 128),
-        keywords: "config edit text file json toml raw presets profiles export import share backup restore revert save as preset macshell.json dock-settings config.toml",
+        keywords: "config edit text file json toml raw presets profiles export import share backup restore revert save as preset decebal.json dock-settings config.toml",
     },
     PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
 ];
@@ -157,7 +157,7 @@ pub fn expand_tilde(p: &str) -> String {
     }
 }
 
-/// What a hot corner can do: label in the dropdown, action name in `macshell.json`.
+/// What a hot corner can do: label in the dropdown, action name in `decebal.json`.
 const HOT_ACTIONS: [(&str, &str); 9] = [
     ("None", "none"),
     ("Dashboard", "dashboard"),
@@ -176,7 +176,7 @@ fn hot_corner_note() -> String {
     if pid.is_some_and(|p| std::path::Path::new(&format!("/proc/{p}")).exists()) {
         "Changes apply at once. Nothing fires while a mouse button is held, so dragging a window to a corner is safe.".into()
     } else {
-        "machot is not running (X11 only): start it with `machot daemon` or enable its autostart entry. Overview needs macexpose.".into()
+        "dechot is not running (X11 only): start it with `dechot daemon` or enable its autostart entry. Overview needs decexpose.".into()
     }
 }
 
@@ -218,7 +218,7 @@ impl Model {
                 noun: "program",
                 fields: vec![f("command", "Command", Ft::Text), f("args", "Arguments (comma separated)", Ft::List)],
                 new: vec![("command", Val::Str("my-program".into()))],
-                footer: "Without arguments the command runs through the shell (so `macbar &` works); with arguments it is started directly. Runs once when rdwm starts.",
+                footer: "Without arguments the command runs through the shell (so `decbar &` works); with arguments it is started directly. Runs once when rdwm starts.",
             },
             "plugin" => TableSpec {
                 name: "plugin",
@@ -424,7 +424,7 @@ impl Model {
         let running = self.rt.running;
         let bak = self.store.path.with_file_name(format!("{}.{}", self.store.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), super::io::BACKUP_SUFFIX));
         let mut about = vec![
-            Row::new("macsettings").ctl(Ctl::new("lbl:v", Kind::Label(env!("CARGO_PKG_VERSION").into()))),
+            Row::new("decsettings").ctl(Ctl::new("lbl:v", Kind::Label(env!("CARGO_PKG_VERSION").into()))),
             Row::new("Window manager")
                 .detail(if running { "rdwm is running and follows every change instantly" } else { "rdwm is not running: changes are saved to the file and apply when it starts" })
                 .ctl(Ctl::new("lbl:rdwm", Kind::Label(if running { format!("rdwm {}", self.rt.version.clone().unwrap_or_default()) } else { "not running".into() }))),
@@ -439,7 +439,7 @@ impl Model {
             Row::new("Edit the file by hand").detail("Opens config.toml with your default editor; this window follows your edits").ctl(btn("a:open", "Open in editor", false)),
         ];
         if bak.exists() {
-            act.push(Row::new("Restore original").detail("Put back the file as it was before macsettings first changed it").ctl(btn("a:restore", "Restore", true)));
+            act.push(Row::new("Restore original").detail("Put back the file as it was before decsettings first changed it").ctl(btn("a:restore", "Restore", true)));
         }
         let mut beh: Vec<Row> = Vec::new();
         beh.extend(self.r_toggle("general", "default_binds", "Built-in key bindings", "Off: only the bindings in your file exist"));
@@ -491,7 +491,7 @@ impl Model {
         cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused titlebar", ""));
         cols.extend(self.r_color("decoration", "unfocused_fg", "Unfocused title text", ""));
         let mut bar = Vec::new();
-        bar.extend(self.r_toggle("bar", "show", "rdwm's own bar", "dwm-style bar drawn by the window manager. Leave off while macbar runs"));
+        bar.extend(self.r_toggle("bar", "show", "rdwm's own bar", "dwm-style bar drawn by the window manager. Leave off while decbar runs"));
         bar.extend(self.r_seg("bar", "top", "Position", "", None).map(|mut r| {
             if let Some(Ctl { kind: Kind::Seg(o, s), .. }) = r.ctls.first_mut() {
                 *o = opts(&[("Top", "true"), ("Bottom", "false")]);
@@ -531,7 +531,7 @@ impl Model {
         }
     }
 
-    /// Four dropdowns (one per corner) and the dwell time: stored in `macshell.json` under `hot_corners`, picked up by `machot`.
+    /// Four dropdowns (one per corner) and the dwell time: stored in `decebal.json` under `hot_corners`, picked up by `dechot`.
     pub(super) fn hot_corner_rows(&self) -> Vec<Row> {
         use crate::hot::{Action, Corner, HotConfig};
         let cfg = HotConfig::from_json(&self.shell);
@@ -566,7 +566,7 @@ impl Model {
             self.dock_row("magnification", "Magnification", "1.0 = off", 1.0, 2.5, 0.05, 1.4),
             self.dock_row("transparency", "Transparency", "", 0.0, 1.0, 0.05, 0.4),
             self.dock_row("roundness", "Roundness", "", 0.0, 1.0, 0.05, 0.45),
-            Row::new("Apply").detail("macdock reads these settings when it starts").ctl(Ctl::new("a:restart-dock", Kind::Button { label: "Restart Dock".into(), danger: false })),
+            Row::new("Apply").detail("decdock reads these settings when it starts").ctl(Ctl::new("a:restart-dock", Kind::Button { label: "Restart Dock".into(), danger: false })),
         ];
         let ws = match self.shell.get("workspaces") {
             Some(Value::Bool(true)) => 1,
@@ -579,7 +579,7 @@ impl Model {
             Row::new("Workspace dots")
                 .detail("Show rdwm's tags in the menu bar. Auto shows them only under rdwm")
                 .ctl(Ctl::new("j:shell:workspaces", Kind::Seg(opts(&[("Auto", "auto"), ("On", "on"), ("Off", "off")]), Some(ws)))),
-            Row::new("Apply").detail("macbar reads this when it starts").ctl(Ctl::new("a:restart-bar", Kind::Button { label: "Restart Menu Bar".into(), danger: false })),
+            Row::new("Apply").detail("decbar reads this when it starts").ctl(Ctl::new("a:restart-bar", Kind::Button { label: "Restart Menu Bar".into(), danger: false })),
         ];
         let pins = self.pinned_list();
         let mut rows: Vec<Row> = Vec::new();
@@ -1033,7 +1033,7 @@ fn parse_tid(id: &str) -> Option<(String, String, String)> {
     Some((it.next()?.to_string(), it.next()?.to_string(), it.next().unwrap_or("").to_string()))
 }
 
-/// A hot corner dropdown or the dwell slider: writes `macshell.json`; the running machot notices the file at once.
+/// A hot corner dropdown or the dwell slider: writes `decebal.json`; the running dechot notices the file at once.
 fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
     let value = match v {
         CtlVal::Str(s) => s,
@@ -1051,7 +1051,7 @@ fn apply_hot_corner(m: &mut Model, key: &str, v: CtlVal) {
 }
 
 /// Makes `path` the wallpaper: written to `config.toml` (rdwm applies it) and followed by "Colours from wallpaper".
-/// The one code path for picking a picture in the Wallpaper pane, the Wallhaven tab and `macthemectl wallpaper`.
+/// The one code path for picking a picture in the Wallpaper pane, the Wallhaven tab and `decthemectl wallpaper`.
 pub fn set_wallpaper(m: &mut Model, path: &str) {
     m.apply("r:wallpaper:image", CtlVal::Str(path.to_string()));
     super::themepane::follow_wallpaper(m, path);
@@ -1099,12 +1099,12 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
         },
         ["hc", key] => apply_hot_corner(m, key, v),
         ["a", "restart-dock"] => {
-            let ok = restart_process("macdock");
-            m.say(if ok { "Dock restarted" } else { "Could not start macdock" }, !ok);
+            let ok = restart_process("decdock");
+            m.say(if ok { "Dock restarted" } else { "Could not start decdock" }, !ok);
         }
         ["a", "restart-bar"] => {
-            let ok = restart_process("macbar");
-            m.say(if ok { "Menu bar restarted" } else { "Could not start macbar" }, !ok);
+            let ok = restart_process("decbar");
+            m.say(if ok { "Menu bar restarted" } else { "Could not start decbar" }, !ok);
         }
         ["w", "clear"] => {
             m.apply("r:wallpaper:image", CtlVal::Reset);
@@ -1377,7 +1377,7 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    const BIG: &str = "# c\n[general]\nlayouts = [\"bsp\", \"tile\"]\ntags = [\"a\", \"b\"]\n[[tag_layout]]\ntag = 2\nlayout = \"grid\"\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\n[[bind]]\nkeys = [\"super+x\", \"r\"]\naction = \"reload\"\n[[rule]]\nclass = \"mpv\"\nfloating = true\n[[autostart]]\ncommand = \"macbar &\"\n[[plugin]]\ncommand = \"p\"\n[[scratchpad]]\nname = \"t\"\ncommand = \"foot\"\n[[wallpaper.output]]\nmatch = \"*\"\n[[output]]\nname = \"DP-1\"\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"setmfact\"\n";
+    const BIG: &str = "# c\n[general]\nlayouts = [\"bsp\", \"tile\"]\ntags = [\"a\", \"b\"]\n[[tag_layout]]\ntag = 2\nlayout = \"grid\"\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\n[[bind]]\nkeys = [\"super+x\", \"r\"]\naction = \"reload\"\n[[rule]]\nclass = \"mpv\"\nfloating = true\n[[autostart]]\ncommand = \"decbar &\"\n[[plugin]]\ncommand = \"p\"\n[[scratchpad]]\nname = \"t\"\ncommand = \"foot\"\n[[wallpaper.output]]\nmatch = \"*\"\n[[output]]\nname = \"DP-1\"\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"setmfact\"\n";
 
     #[test]
     fn every_key_the_panes_use_exists_in_rdwms_key_table() {

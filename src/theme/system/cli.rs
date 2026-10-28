@@ -1,16 +1,16 @@
-//! `macthemectl apply-system` and `macthemectl system on|off|status|target|set`.
+//! `decthemectl apply-system` and `decthemectl system on|off|status|target|set`.
 
 use super::{apply_now, current_palette, off, run_debounced, status, targets, Config, Env, Opts, Report};
 use crate::theme::live::Source;
 use crate::theme::model::Selection;
 
-pub const HELP: &str = "macthemectl apply-system [--dry-run] [--only gtk,qt,...] [--json]
+pub const HELP: &str = "decthemectl apply-system [--dry-run] [--only gtk,qt,...] [--json]
                                  carry the current theme to the rest of the desktop (GTK/libadwaita, Qt, terminals via Omarchy, X11, browser colour)
-macthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
+decthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
                                  off puts every changed file and setting back (originals are saved by the first apply)
-macthemectl system status [--json]
-macthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11
-macthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals  (VALUE none = unset)";
+decthemectl system status [--json]
+decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11
+decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals  (VALUE none = unset)";
 
 fn print_report(r: &Report, dry: bool) {
     if !r.applied.is_empty() {

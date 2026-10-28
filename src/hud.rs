@@ -1,4 +1,4 @@
-//! `machud`: the macOS-style on-screen display shown when volume, mute, brightness or the microphone change.
+//! `dechud`: the macOS-style on-screen display shown when volume, mute, brightness or the microphone change.
 //!
 //! A small rounded card (icon, label, 16-segment bar) in an override-redirect X11 popup that takes no input at
 //! all (see [`WindowApp::popup_passive`]) and goes away after [`TIMEOUT`]. The binary reads the current value itself
@@ -21,10 +21,10 @@ use tiny_skia::{Color, Pixmap};
 pub const TIMEOUT: Duration = Duration::from_millis(1400);
 /// Signal a second launch sends to the running one (after writing the mailbox).
 pub const SIG_UPDATE: i32 = libc::SIGUSR1;
-/// Name of the single-instance lock (`$XDG_RUNTIME_DIR/machud.lock`).
-pub const LOCK_NAME: &str = "machud";
+/// Name of the single-instance lock (`$XDG_RUNTIME_DIR/dechud.lock`).
+pub const LOCK_NAME: &str = "dechud";
 /// Mailbox file name inside `$XDG_RUNTIME_DIR`.
-pub const MAILBOX: &str = "machud.msg";
+pub const MAILBOX: &str = "dechud.msg";
 /// Number of bar segments.
 pub const SEGMENTS: usize = 16;
 /// Number of workspace dots (rdwm's tags).
@@ -160,9 +160,9 @@ pub fn brightness_from_sysfs(root: &Path) -> Option<u32> {
     })
 }
 
-/// Screen brightness: `brightnessctl -m`, else sysfs (`MACHUD_BACKLIGHT_DIR` replaces `/sys/class/backlight`, for tests).
+/// Screen brightness: `brightnessctl -m`, else sysfs (`DECHUD_BACKLIGHT_DIR` replaces `/sys/class/backlight`, for tests).
 pub fn probe_brightness() -> Option<Reading> {
-    let root = std::env::var_os("MACHUD_BACKLIGHT_DIR").map_or_else(|| "/sys/class/backlight".into(), std::path::PathBuf::from);
+    let root = std::env::var_os("DECHUD_BACKLIGHT_DIR").map_or_else(|| "/sys/class/backlight".into(), std::path::PathBuf::from);
     let pct = sys::run(&["brightnessctl", "-m"], PROBE_TIMEOUT).and_then(|o| sys::parse_brightnessctl(&o)).or_else(|| brightness_from_sysfs(&root))?;
     Some(Reading { kind: Kind::Brightness, level: pct as f32 / 100.0, muted: false })
 }
@@ -408,11 +408,11 @@ impl Hud {
 
 impl WindowApp for Hud {
     fn title(&self) -> String {
-        "machud".into()
+        "dechud".into()
     }
 
     fn app_id(&self) -> &'static str {
-        "machud"
+        "dechud"
     }
 
     fn overlay(&self) -> bool {
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn brightness_from_a_sysfs_tree() {
-        let dir = std::env::temp_dir().join(format!("machud-sysfs-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dechud-sysfs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(brightness_from_sysfs(&dir), None, "no backlight at all");
         let bl = dir.join("intel_backlight");

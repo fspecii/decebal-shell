@@ -1,4 +1,4 @@
-//! MPRIS (`org.mpris.MediaPlayer2.*`) over macshell's own minimal D-Bus client ([`crate::dbus`]).
+//! MPRIS (`org.mpris.MediaPlayer2.*`) over decebal's own minimal D-Bus client ([`crate::dbus`]).
 //!
 //! * [`Model`] is a pure state machine: it is fed every message from the bus and answers with the requests to send
 //!   (the tests drive it with synthesised messages).
@@ -561,7 +561,7 @@ impl Mpris {
         let s = shared.clone();
         std::thread::spawn(move || {
             if let Err(e) = worker(&s, &rx, wake_rd, &*waker) {
-                eprintln!("macdash: mpris: {e}");
+                eprintln!("decdash: mpris: {e}");
             }
             if let Ok(mut g) = s.lock() {
                 g.connected = false;

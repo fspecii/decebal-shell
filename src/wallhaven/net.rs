@@ -40,7 +40,7 @@ pub struct Net {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(20)).user_agent("macshell-machaven/0.1").build()
+    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(20)).user_agent("decebal-dechaven/0.1").build()
 }
 
 impl Net {

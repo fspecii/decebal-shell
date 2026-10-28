@@ -1,8 +1,8 @@
-# OPTIONAL. Lets the session bus start macnotify when the first notification arrives before the
+# OPTIONAL. Lets the session bus start decnotify when the first notification arrives before the
 # session script has started it, instead of the packaged mako/dunst service (which only works on Wayland).
 # Copy to ~/.local/share/dbus-1/services/ (user services win over /usr/share/dbus-1/services/).
-# On a machine that also runs Hyprland + mako, leave it out: macnotify refuses to run under a Wayland
+# On a machine that also runs Hyprland + mako, leave it out: decnotify refuses to run under a Wayland
 # session, but the bus would then have no daemon to activate.
 [D-BUS Service]
 Name=org.freedesktop.Notifications
-Exec=/usr/bin/macnotify
+Exec=/usr/bin/decnotify

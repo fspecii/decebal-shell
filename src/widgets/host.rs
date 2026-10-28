@@ -1,4 +1,4 @@
-//! The `macwidgets` daemon: one small X11 window per desktop widget, kept at the bottom of the stack.
+//! The `decwidgets` daemon: one small X11 window per desktop widget, kept at the bottom of the stack.
 //!
 //! The windows are override-redirect (rdwm never sees or tiles them) and sit below every application window. With a compositor
 //! they get a 32-bit visual and real alpha; without one the visible shape is cut out of the window with the SHAPE extension, so rounded
@@ -108,7 +108,7 @@ pub fn run(paths: Paths) -> Result<(), String> {
                         commands.extend(res.def.commands.iter().cloned());
                         wins.push(new_window(&conn, &screen, argb_visual, inst, res, mon, &data, &fonts)?);
                     }
-                    Err(e) => eprintln!("macwidgets: {}: {e}", inst.use_),
+                    Err(e) => eprintln!("decwidgets: {}: {e}", inst.use_),
                 }
             }
             live = Some(Live::new(&used, &commands, waker.clone()));
@@ -221,9 +221,9 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
             conn.create_window(0, id, screen.root, x as i16, y as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux).map_err(err)?;
         }
     }
-    let name = format!("macwidgets: {}", res.def.name);
+    let name = format!("decwidgets: {}", res.def.name);
     conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_NAME, AtomEnum::STRING, name.as_bytes()).map_err(err)?;
-    conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_CLASS, AtomEnum::STRING, b"macwidgets\0macwidgets\0").map_err(err)?;
+    conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_CLASS, AtomEnum::STRING, b"decwidgets\0decwidgets\0").map_err(err)?;
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, id, &CreateGCAux::new()).map_err(err)?;
     conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;

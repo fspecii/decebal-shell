@@ -1,5 +1,5 @@
 //! Album art for the Media tab: `file://` covers are read from disk, `http(s)` ones are fetched once with `curl`
-//! into `~/.cache/macshell/dash-art/`. Decoding happens on a worker thread; the UI picks the result up in `tick`.
+//! into `~/.cache/decebal/dash-art/`. Decoding happens on a worker thread; the UI picks the result up in `tick`.
 
 use super::info::square_pixmap;
 use super::mpris::file_url_path;
@@ -67,7 +67,7 @@ fn cache_file(url: &str) -> Option<PathBuf> {
     for b in url.bytes() {
         h = (h ^ u64::from(b)).wrapping_mul(0x100000001b3);
     }
-    Some(base.join("macshell/dash-art").join(format!("{h:016x}")))
+    Some(base.join("decebal/dash-art").join(format!("{h:016x}")))
 }
 
 fn fetch(url: &str) -> Option<image::RgbaImage> {
@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn loads_a_local_cover_and_ignores_stale_loads() {
-        let dir = std::env::temp_dir().join(format!("macdash-art-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decdash-art-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("cover art.png");
         image::RgbaImage::from_pixel(30, 20, image::Rgba([10, 200, 30, 255])).save(&path).unwrap();

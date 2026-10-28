@@ -1,12 +1,12 @@
 //! File edits for the system theme pipeline: the three ways a target may change a file, atomic writes,
-//! and the state (manifest + backups) that lets `macthemectl system off` put everything back.
+//! and the state (manifest + backups) that lets `decthemectl system off` put everything back.
 //!
-//! * [`Edit::Whole`]: macshell owns the file (colour scheme files, the generated Omarchy theme, ...).
+//! * [`Edit::Whole`]: decebal owns the file (colour scheme files, the generated Omarchy theme, ...).
 //! * [`Edit::Block`]: a marked block inside a file that also holds the user's own content (`gtk.css`, `~/.Xresources`).
 //! * [`Edit::Ini`]: a few keys of an INI file (`settings.ini`, `qt6ct.conf`); every other line stays.
 //!
 //! The first time a file is touched its original bytes (or "did not exist") are saved under the state directory.
-//! `off` puts the original back when the file still holds exactly what macshell wrote; when the user edited it in the
+//! `off` puts the original back when the file still holds exactly what decebal wrote; when the user edited it in the
 //! meantime a block is cut out and anything else is left alone and reported.
 
 use serde_json::{json, Value};
@@ -24,7 +24,7 @@ pub enum Comment {
     Bang,
 }
 
-const MARK: &str = "macshell system theme";
+const MARK: &str = "decebal system theme";
 
 impl Comment {
     fn line(self, s: &str) -> String {
@@ -35,10 +35,17 @@ impl Comment {
         }
     }
     fn begin(self) -> String {
-        self.line(&format!(">>> {MARK} (managed by macthemectl; `macthemectl system off` removes it) >>>"))
+        self.line(&format!(">>> {MARK} (managed by decthemectl; `decthemectl system off` removes it) >>>"))
     }
     fn end(self) -> String {
         self.line(&format!("<<< {MARK} <<<"))
+    }
+    /// The markers the pre-rename version wrote ("macshell"); still recognised so an update replaces or removes those blocks.
+    fn legacy_begin(self) -> String {
+        self.line(">>> macshell system theme (managed by macthemectl; `macthemectl system off` removes it) >>>")
+    }
+    fn legacy_end(self) -> String {
+        self.line("<<< macshell system theme <<<")
     }
 }
 
@@ -101,9 +108,13 @@ pub fn with_block(cur: &str, c: Comment, body: &str) -> String {
 
 /// `text` without the managed block (and the blank line that separated it).
 pub fn strip_block(cur: &str, c: Comment) -> String {
-    let (b, e) = (c.begin(), c.end());
-    let Some(s) = cur.find(&b) else { return cur.to_string() };
-    let Some(rel) = cur[s..].find(&e) else { return cur.to_string() };
+    let once = strip_block_between(cur, &c.begin(), &c.end());
+    strip_block_between(&once, &c.legacy_begin(), &c.legacy_end())
+}
+
+fn strip_block_between(cur: &str, b: &str, e: &str) -> String {
+    let Some(s) = cur.find(b) else { return cur.to_string() };
+    let Some(rel) = cur[s..].find(e) else { return cur.to_string() };
     let mut end = s + rel + e.len();
     if cur[end..].starts_with('\n') {
         end += 1;
@@ -194,7 +205,7 @@ pub fn ini_get(text: &str, section: &str, key: &str) -> Option<String> {
 
 // ---------------------------------------------------------------- hashing and atomic writes
 
-/// FNV-1a: a stable fingerprint of what macshell wrote.
+/// FNV-1a: a stable fingerprint of what decebal wrote.
 pub fn fnv(b: &[u8]) -> u64 {
     b.iter().fold(0xcbf29ce484222325u64, |h, x| (h ^ *x as u64).wrapping_mul(0x100000001b3))
 }
@@ -205,7 +216,7 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let dir = target.parent().ok_or("path has no directory")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.macshell-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.decebal-{}.tmp", std::process::id()));
     let res = (|| -> std::io::Result<()> {
         use std::io::Write;
         let mut f = std::fs::File::create(&tmp)?;
@@ -224,7 +235,7 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
 
 // ---------------------------------------------------------------- state
 
-/// What macshell recorded about one file it changed.
+/// What decebal recorded about one file it changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     /// Name of the saved original under `backups/`, `None` when the file did not exist.
@@ -240,7 +251,7 @@ pub struct Entry {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct State {
     pub files: BTreeMap<String, Entry>,
-    /// Directories macshell created (removed again when empty).
+    /// Directories decebal created (removed again when empty).
     pub dirs: Vec<String>,
     /// Extra recorded values: gsettings and xrdb originals, the previous Omarchy theme, ...
     pub extra: serde_json::Map<String, Value>,
@@ -463,7 +474,7 @@ pub fn restore(state_dir: &Path, st: &mut State, owner: Option<&str>) -> Vec<(St
             Err(e) => report.push((format!("{k}: {e}"), Restored::Kept)),
         }
     }
-    // directories macshell created, deepest first, only if empty
+    // directories decebal created, deepest first, only if empty
     if owner.is_some() && !st.files.is_empty() {
         return report;
     }
@@ -488,13 +499,24 @@ mod tests {
     fn blocks_append_replace_and_strip_cleanly() {
         let user = "@define-color mine #fff;\n";
         let a = with_block(user, Comment::Css, "@define-color accent_bg_color #123456;\n");
-        assert!(a.starts_with(user) && a.contains("accent_bg_color #123456") && a.contains(">>> macshell system theme"));
+        assert!(a.starts_with(user) && a.contains("accent_bg_color #123456") && a.contains(">>> decebal system theme"));
         let b = with_block(&a, Comment::Css, "@define-color accent_bg_color #654321;\n");
-        assert_eq!(b.matches("macshell system theme (managed").count(), 1);
+        assert_eq!(b.matches("decebal system theme (managed").count(), 1);
         assert!(b.contains("#654321") && !b.contains("#123456"));
         assert_eq!(strip_block(&b, Comment::Css), user);
         assert_eq!(strip_block(&with_block("", Comment::Hash, "x\n"), Comment::Hash), "");
         assert_eq!(strip_block("no block here\n", Comment::Css), "no block here\n");
+    }
+
+    #[test]
+    fn blocks_written_before_the_rename_are_replaced_and_stripped() {
+        let user = "@define-color mine #fff;\n";
+        let old = format!(
+            "{user}\n/* >>> macshell system theme (managed by macthemectl; `macthemectl system off` removes it) >>> */\n@define-color accent_bg_color #123456;\n/* <<< macshell system theme <<< */\n"
+        );
+        assert_eq!(strip_block(&old, Comment::Css), user);
+        let new = with_block(&old, Comment::Css, "@define-color accent_bg_color #654321;\n");
+        assert!(new.contains("#654321") && !new.contains("#123456") && !new.contains("macshell") && new.starts_with(user), "{new}");
     }
 
     #[test]
@@ -538,7 +560,7 @@ mod tests {
         assert!(rep.iter().all(|(_, r)| *r == Restored::Exact), "{rep:?}");
         assert_eq!(std::fs::read_to_string(&a).unwrap(), "body { }\n");
         assert_eq!(std::fs::read_to_string(&b).unwrap(), "[Settings]\nk=old\n");
-        assert!(!c.exists() && !nested.exists() && !d.join("new").exists(), "files and directories macshell created are gone");
+        assert!(!c.exists() && !nested.exists() && !d.join("new").exists(), "files and directories decebal created are gone");
         assert!(st2.files.is_empty());
     }
 

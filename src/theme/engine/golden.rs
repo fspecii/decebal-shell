@@ -32,8 +32,8 @@ fn every_builtin_resolves_to_the_same_theme_as_before() {
     for (id, text) in BUILTIN {
         assert!(crate::theme::engine::manifest::is_v1(text), "{id} is a format-1 package");
         // the new one goes through the production loader (chain included), the old one through the frozen files
-        let empty = std::env::temp_dir().join("macshell-golden-empty");
-        let src = crate::theme::live::Source { shell_json: empty.join("macshell.json"), themes_dir: empty };
+        let empty = std::env::temp_dir().join("decebal-golden-empty");
+        let src = crate::theme::live::Source { shell_json: empty.join("decebal.json"), themes_dir: empty };
         let (new, old) = (src.load_def(id).unwrap(), legacy_def(id));
         assert_eq!((new.has_dark(), new.has_light()), (old.has_dark(), old.has_light()), "{id}: variants");
         assert_eq!(new.name, old.name, "{id}: name");
@@ -62,7 +62,7 @@ fn the_packages_carry_the_shell_style_the_code_used_to_hardcode() {
     assert!(get("nord", "dock", "style").is_none(), "themes that never touched the dock still do not");
 }
 
-/// Applying a built-in through the engine writes what `macthemectl style` writes for the three shell styles.
+/// Applying a built-in through the engine writes what `decthemectl style` writes for the three shell styles.
 #[test]
 fn applying_the_style_themes_matches_the_style_presets() {
     use crate::settings::io;

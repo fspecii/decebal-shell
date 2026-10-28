@@ -1,7 +1,7 @@
-//! `machot`: macOS-style Hot Corners for the X11 session.
+//! `dechot`: macOS-style Hot Corners for the X11 session.
 //!
 //! * this module (no windowing, fully testable): the corners, the actions and the commands they run, the
-//!   `hot_corners` section of `macshell.json`, the corner geometry of a monitor layout and the dwell/cooldown state machine.
+//!   `hot_corners` section of `decebal.json`, the corner geometry of a monitor layout and the dwell/cooldown state machine.
 //! * `daemon` (X11): one tiny InputOnly window per configured corner of every monitor, EnterNotify/LeaveNotify, a
 //!   `poll(2)` timeout for the dwell time (nothing runs while idle), config reloads through inotify.
 
@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "x11")]
 pub mod daemon;
 
-/// Name of the daemon's single-instance lock (`$XDG_RUNTIME_DIR/machot.lock`).
-pub const LOCK_NAME: &str = "machot";
-/// The key of `macshell.json` that holds the settings.
+/// Name of the daemon's single-instance lock (`$XDG_RUNTIME_DIR/dechot.lock`).
+pub const LOCK_NAME: &str = "dechot";
+/// The key of `decebal.json` that holds the settings.
 pub const SECTION: &str = "hot_corners";
 /// Pointer must stay in the corner this long (ms) before it fires, unless `dwell_ms` says otherwise.
 pub const DEFAULT_DWELL_MS: u64 = 150;
@@ -37,7 +37,7 @@ pub enum Corner {
 impl Corner {
     pub const ALL: [Corner; 4] = [Corner::TopLeft, Corner::TopRight, Corner::BottomLeft, Corner::BottomRight];
 
-    /// The key in `macshell.json`.
+    /// The key in `decebal.json`.
     pub fn key(self) -> &'static str {
         match self {
             Corner::TopLeft => "top_left",
@@ -119,7 +119,7 @@ impl Action {
         })
     }
 
-    /// The canonical spelling written to `macshell.json`.
+    /// The canonical spelling written to `decebal.json`.
     pub fn name(&self) -> String {
         match self {
             Action::None => "none".into(),
@@ -141,15 +141,15 @@ impl Action {
     pub fn command(&self) -> Option<Command> {
         let (line, needs): (&str, Option<&'static str>) = match self {
             Action::None | Action::ShowDesktop => return Option::None,
-            Action::Dashboard => ("macdash", Some("macdash")),
-            Action::Session => ("macsession", Some("macsession")),
-            Action::Spotlight => ("macspot", Some("macspot")),
-            Action::Launchpad => ("maclaunch", Some("maclaunch")),
-            // macexpose may not be installed (yet): without it the corner does nothing.
-            Action::Overview => ("macexpose", Some("macexpose")),
+            Action::Dashboard => ("decdash", Some("decdash")),
+            Action::Session => ("decsession", Some("decsession")),
+            Action::Spotlight => ("decspot", Some("decspot")),
+            Action::Launchpad => ("declaunch", Some("declaunch")),
+            // decexpose may not be installed (yet): without it the corner does nothing.
+            Action::Overview => ("decexpose", Some("decexpose")),
             Action::Lock => ("rdwm-lock", Some("rdwm-lock")),
             Action::TileAll => ("rdwmctl action tileall", Some("rdwmctl")),
-            Action::Notifications => ("macnotify history", Some("macnotify")),
+            Action::Notifications => ("decnotify history", Some("decnotify")),
             Action::Custom(c) => return Some(Command { line: c.clone(), needs: Option::None }),
         };
         Some(Command { line: line.into(), needs })
@@ -176,7 +176,7 @@ impl HotConfig {
         &self.actions[c.index()]
     }
 
-    /// Reads the `hot_corners` object of a parsed `macshell.json`. Anything that is not understood (an unknown action,
+    /// Reads the `hot_corners` object of a parsed `decebal.json`. Anything that is not understood (an unknown action,
     /// a wrong type) counts as `none` / the default, so one bad key never disables the others.
     pub fn from_json(root: &Value) -> HotConfig {
         let mut cfg = HotConfig::default();
@@ -196,7 +196,7 @@ impl HotConfig {
         serde_json::from_str(text).map(|v: Value| HotConfig::from_json(&v)).unwrap_or_default()
     }
 
-    /// Reads `macshell.json` in `dir`; a missing or broken file is the default (all corners off).
+    /// Reads `decebal.json` in `dir`; a missing or broken file is the default (all corners off).
     pub fn load_from(dir: &Path) -> HotConfig {
         std::fs::read_to_string(dir.join(CONFIG_FILE)).map(|t| HotConfig::parse_text(&t)).unwrap_or_default()
     }
@@ -221,7 +221,7 @@ impl HotConfig {
 }
 
 /// File name of the shell settings inside [`crate::config::config_dir`].
-pub const CONFIG_FILE: &str = "macshell.json";
+pub const CONFIG_FILE: &str = "decebal.json";
 
 pub fn config_path() -> PathBuf {
     crate::config::config_dir().join(CONFIG_FILE)
@@ -472,14 +472,14 @@ mod tests {
     #[test]
     fn actions_resolve_to_commands() {
         let line = |a: &str| Action::parse(a).and_then(|a| a.command()).map(|c| (c.line, c.needs));
-        assert_eq!(line("dashboard"), Some(("macdash".into(), Some("macdash"))));
-        assert_eq!(line("session"), Some(("macsession".into(), Some("macsession"))));
-        assert_eq!(line("spotlight"), Some(("macspot".into(), Some("macspot"))));
-        assert_eq!(line("launchpad"), Some(("maclaunch".into(), Some("maclaunch"))));
-        assert_eq!(line("overview"), Some(("macexpose".into(), Some("macexpose"))));
+        assert_eq!(line("dashboard"), Some(("decdash".into(), Some("decdash"))));
+        assert_eq!(line("session"), Some(("decsession".into(), Some("decsession"))));
+        assert_eq!(line("spotlight"), Some(("decspot".into(), Some("decspot"))));
+        assert_eq!(line("launchpad"), Some(("declaunch".into(), Some("declaunch"))));
+        assert_eq!(line("overview"), Some(("decexpose".into(), Some("decexpose"))));
         assert_eq!(line("lock"), Some(("rdwm-lock".into(), Some("rdwm-lock"))));
         assert_eq!(line("tile-all"), Some(("rdwmctl action tileall".into(), Some("rdwmctl"))));
-        assert_eq!(line("notifications"), Some(("macnotify history".into(), Some("macnotify"))));
+        assert_eq!(line("notifications"), Some(("decnotify history".into(), Some("decnotify"))));
         assert_eq!(line("custom:  touch /tmp/x && echo 'a b' "), Some(("touch /tmp/x && echo 'a b'".into(), None)));
         assert_eq!(line("none"), None);
         assert_eq!(line("show-desktop"), None, "accepted, but rdwm has nothing to run for it");
@@ -503,7 +503,7 @@ mod tests {
     }
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("machot-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("dechot-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn set_writes_one_key_and_keeps_the_rest() {
         let d = tmp("set");
-        let p = d.join("macshell.json");
+        let p = d.join("decebal.json");
         std::fs::write(&p, r#"{"workspaces": "auto", "hot_corners": {"top_left": "lock"}}"#).unwrap();
         assert_eq!(set_in(&p, "top-right", "Spotlight").unwrap(), "spotlight");
         assert_eq!(set_in(&p, "dwell_ms", "250").unwrap(), "250");
@@ -529,7 +529,7 @@ mod tests {
         assert!(set_in(&p, "dwell_ms", "fast").is_err());
         assert!(set_in(&p, "top_left", "custom:").is_err());
         // a missing file is created
-        let q = d.join("new/macshell.json");
+        let q = d.join("new/decebal.json");
         set_in(&q, "bottom_left", "custom:true").unwrap();
         assert_eq!(HotConfig::load_from(q.parent().unwrap()).actions[Corner::BottomLeft.index()], Action::Custom("true".into()));
         let _ = std::fs::remove_dir_all(&d);

@@ -1,6 +1,6 @@
 //! Privacy & Security (screen lock preferences) and Accessibility (cursor size, reduce motion, text size, contrast).
 //! Both only change the session settings (`session-settings.json/.sh`); the lock preference is exported as
-//! `MACSHELL_LOCK_CMD`, `MACSHELL_LOCK_SECS`, `MACSHELL_LOCK_ON_SUSPEND` for whatever runs the idle lock.
+//! `DECEBAL_LOCK_CMD`, `DECEBAL_LOCK_SECS`, `DECEBAL_LOCK_ON_SUSPEND` for whatever runs the idle lock.
 
 use super::run::Cmd;
 use super::{Action, Dom, Hub};
@@ -71,7 +71,7 @@ pub fn privacy_items(h: &Hub) -> Vec<Item> {
     rows.push(Row::new("Lock after").detail("Idle time before the screen locks").ctl(Ctl::new("s:prv:secs:", Kind::Popup(o, tsel))));
     rows.push(Row::new("Lock when suspending").ctl(Ctl::new("s:prv:suspend:", Kind::Toggle(s.lock_on_suspend))));
     v.push(Item::Card(rows));
-    v.push(Item::Note { text: "macsettings saves these preferences and exports them at login (MACSHELL_LOCK_CMD, MACSHELL_LOCK_SECS, MACSHELL_LOCK_ON_SUSPEND). The program that watches for idle time and suspend (hypridle, xss-lock, ...) is part of your session setup.".into(), warn: false });
+    v.push(Item::Note { text: "decsettings saves these preferences and exports them at login (DECEBAL_LOCK_CMD, DECEBAL_LOCK_SECS, DECEBAL_LOCK_ON_SUSPEND). The program that watches for idle time and suspend (hypridle, xss-lock, ...) is part of your session setup.".into(), warn: false });
     v.push(Item::Header("Good to know".into()));
     let session = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
         "Wayland"
@@ -149,14 +149,14 @@ pub fn access_items(h: &Hub) -> Vec<Item> {
         Item::Card(vec![Row::new("Cursor size").detail("Larger pointer; apps pick it up when they start").ctl(Ctl::new("s:acc:cursor:", Kind::Popup(o, sel)))]),
         Item::Header("Motion and text".into()),
         Item::Card(vec![
-            Row::new("Reduce motion").detail("Fewer animations in macshell apps (MACSHELL_REDUCE_MOTION)").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
+            Row::new("Reduce motion").detail("Fewer animations in decebal apps (DECEBAL_REDUCE_MOTION)").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
             Row::new("Text size")
-                .detail("Scales text in macshell apps (MACSHELL_FONT_SCALE)")
+                .detail("Scales text in decebal apps (DECEBAL_FONT_SCALE)")
                 .ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() })),
-            Row::new("High contrast").detail("Asks the theme for its high-contrast variant (MACSHELL_HIGH_CONTRAST)").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
+            Row::new("High contrast").detail("Asks the theme for its high-contrast variant (DECEBAL_HIGH_CONTRAST)").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
         ]),
         Item::Note {
-            text: "These are saved in ~/.config/macshell/session-settings.sh and take effect for programs started after your next login. The theme and appearance settings read the same switches."
+            text: "These are saved in ~/.config/decebal/session-settings.sh and take effect for programs started after your next login. The theme and appearance settings read the same switches."
                 .into(),
             warn: false,
         },
@@ -232,7 +232,7 @@ mod tests {
         access_apply(&mut h, "font", CtlVal::Num(500.0));
         std::thread::sleep(std::time::Duration::from_millis(300));
         let sh = std::fs::read_to_string(super::super::session::Session::sh_path(&d)).unwrap();
-        for want in ["MACSHELL_LOCK_SECS=300", "MACSHELL_LOCK_ON_SUSPEND=1", "XCURSOR_SIZE=48", "MACSHELL_REDUCE_MOTION=1", "MACSHELL_FONT_SCALE=1.25"] {
+        for want in ["DECEBAL_LOCK_SECS=300", "DECEBAL_LOCK_ON_SUSPEND=1", "XCURSOR_SIZE=48", "DECEBAL_REDUCE_MOTION=1", "DECEBAL_FONT_SCALE=1.25"] {
             assert!(sh.contains(want), "{want}\n{sh}");
         }
         assert!(fr.lines().iter().any(|l| l.contains("xrdb")));

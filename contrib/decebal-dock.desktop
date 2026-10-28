@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=decebal dock
+Exec=decdock
+X-GNOME-Autostart-enabled=true
+NotShowIn=rdwm;

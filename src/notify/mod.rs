@@ -1,4 +1,4 @@
-//! macnotify: a freedesktop notification daemon (org.freedesktop.Notifications) with macOS-style banners.
+//! decnotify: a freedesktop notification daemon (org.freedesktop.Notifications) with macOS-style banners.
 //!
 //! The bus side lives here (method dispatch, signals, the event loop); drawing and input are in [`ui`].
 //! The daemon exits quietly when another daemon (mako, dunst, ...) already owns the name, so it can be
@@ -15,8 +15,8 @@ use model::{parse_notify, HistoryItem};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
 pub const PATH: &str = "/org/freedesktop/Notifications";
-/// macshell's own interface on the same object (history panel, do-not-disturb), driven by `macnotify`.
-pub const EXT_IFACE: &str = "org.macshell.Notifications";
+/// decebal's own interface on the same object (history panel, do-not-disturb), driven by `decnotify`.
+pub const EXT_IFACE: &str = "org.decebal.Notifications";
 
 const INTROSPECT: &str = r#"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
@@ -34,7 +34,7 @@ const INTROSPECT: &str = r#"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Obj
     <signal name="NotificationClosed"><arg type="u"/><arg type="u"/></signal>
     <signal name="ActionInvoked"><arg type="u"/><arg type="s"/></signal>
   </interface>
-  <interface name="org.macshell.Notifications">
+  <interface name="org.decebal.Notifications">
     <method name="ToggleHistory"/><method name="ShowHistory"/><method name="ClearHistory"/>
     <method name="GetDnd"><arg direction="out" type="b"/></method><method name="SetDnd"><arg direction="in" type="b"/></method>
   </interface>
@@ -108,7 +108,7 @@ impl Daemon {
             (BUS_NAME, "GetCapabilities") => Message::reply_to(m, "as", dbus::body_strings(&["actions", "body", "icon-static"])),
             (BUS_NAME, "GetServerInformation") => {
                 let mut w = Writer::default();
-                for s in ["macnotify", "macshell", env!("CARGO_PKG_VERSION"), "1.2"] {
+                for s in ["decnotify", "decebal", env!("CARGO_PKG_VERSION"), "1.2"] {
                     w.string(s);
                 }
                 Message::reply_to(m, "ssss", w.buf)
@@ -252,14 +252,14 @@ pub fn ext_call(member: &str, sig: &str, body: Vec<u8>) -> Result<Message, Strin
     conn.call_blocking(Message::call(BUS_NAME, PATH, EXT_IFACE, member, sig, body)).map_err(|e| e.to_string())
 }
 
-/// `Some(dnd)` when a macnotify daemon is running, `None` for any other daemon or none at all.
+/// `Some(dnd)` when a decnotify daemon is running, `None` for any other daemon or none at all.
 pub fn running_dnd() -> Option<bool> {
     ext_call("GetDnd", "", Vec::new()).ok()?.args().ok()?.first().and_then(Value::as_bool)
 }
 
 /// Sends a notification through the bus like `notify-send` would.
 pub fn send_test(summary: &str, body: &str) -> Result<u32, String> {
-    send_with("macnotify", "dialog-information", summary, body, true)
+    send_with("decnotify", "dialog-information", summary, body, true)
 }
 
 /// Sends a notification from `app` (with a theme icon name) through the bus; the daemon's default timeout applies.
@@ -287,7 +287,7 @@ fn send_with(app: &str, icon: &str, summary: &str, body: &str, default_action: b
     r.args().map_err(|e| e.to_string())?.first().and_then(Value::as_u32).ok_or_else(|| "bad reply".into())
 }
 
-/// Sets do-not-disturb on the running macnotify daemon, or in its settings file when none runs.
+/// Sets do-not-disturb on the running decnotify daemon, or in its settings file when none runs.
 pub fn set_dnd(on: bool) -> Result<(), String> {
     if running_dnd().is_some() {
         let mut w = Writer::default();
@@ -389,7 +389,7 @@ mod tests {
         let (r, _) = d.dispatch(&m, &mut sh);
         let (wire, _) = Message::decode(&r.unwrap().encode(7)).unwrap().unwrap();
         assert_eq!(wire.sig, "ssss");
-        assert_eq!(wire.args().unwrap()[0].as_str(), Some("macnotify"));
+        assert_eq!(wire.args().unwrap()[0].as_str(), Some("decnotify"));
         m.member = "GetCapabilities".into();
         let (r, _) = d.dispatch(&m, &mut sh);
         let (wire, _) = Message::decode(&r.unwrap().encode(8)).unwrap().unwrap();

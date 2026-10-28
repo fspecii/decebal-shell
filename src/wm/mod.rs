@@ -55,7 +55,7 @@ pub trait Control: Send + Sync {
 pub fn is_rdwm() -> bool {
     let env = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().split(':').any(|d| d.eq_ignore_ascii_case("rdwm"));
     #[cfg(feature = "x11")]
-    if !env && std::env::var_os("DISPLAY").is_some() && std::env::var("MACSHELL_BACKEND").as_deref() != Ok("wayland") {
+    if !env && std::env::var_os("DISPLAY").is_some() && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("wayland") {
         return x11::wm_name().as_deref() == Some("rdwm");
     }
     env
@@ -189,7 +189,7 @@ impl Tracker {
     pub fn start<F: Fn() + Send + Sync + 'static>(on_change: F) -> Self {
         let tracker = Tracker::default();
         let notify: Notify = Arc::new(on_change);
-        let forced = std::env::var("MACSHELL_BACKEND").ok();
+        let forced = std::env::var("DECEBAL_BACKEND").ok();
         let mut started = false;
         #[cfg(feature = "wayland")]
         if !started && forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() {

@@ -366,7 +366,7 @@ pub fn connect_wifi(ssid: &str) {
         let ok = run(&["nmcli", "-w", "20", "connection", "up", "id", &ssid], Duration::from_secs(25)).is_some()
             || run(&["nmcli", "-w", "20", "dev", "wifi", "connect", &ssid], Duration::from_secs(25)).is_some();
         if !ok && have("notify-send") {
-            let _ = run(&["notify-send", "-a", "macbar", "Wi-Fi", &format!("Could not connect to {ssid}. Enter its password in the network editor first.")], Duration::from_secs(3));
+            let _ = run(&["notify-send", "-a", "decbar", "Wi-Fi", &format!("Could not connect to {ssid}. Enter its password in the network editor first.")], Duration::from_secs(3));
         }
     });
 }
@@ -432,8 +432,8 @@ pub fn probe_battery_in(root: &std::path::Path) -> Option<Battery> {
 }
 
 pub fn probe_battery() -> Option<Battery> {
-    // MACBAR_POWER_SUPPLY lets tests point at a fake tree.
-    match std::env::var_os("MACBAR_POWER_SUPPLY") {
+    // DECBAR_POWER_SUPPLY lets tests point at a fake tree.
+    match std::env::var_os("DECBAR_POWER_SUPPLY") {
         Some(p) => probe_battery_in(std::path::Path::new(&p)),
         None => probe_battery_in(std::path::Path::new("/sys/class/power_supply")),
     }
@@ -505,9 +505,9 @@ pub fn media_command(cmd: &str) {
 
 /// DND state from whichever notification daemon is running.
 pub fn probe_dnd() -> Option<bool> {
-    // macnotify answers only while it is the running daemon (non-zero exit otherwise).
-    if have("macnotify") {
-        if let Some(out) = run(&["macnotify", "dnd", "status"], PROBE_TIMEOUT) {
+    // decnotify answers only while it is the running daemon (non-zero exit otherwise).
+    if have("decnotify") {
+        if let Some(out) = run(&["decnotify", "dnd", "status"], PROBE_TIMEOUT) {
             return Some(out.trim() == "on");
         }
     }
@@ -521,8 +521,8 @@ pub fn probe_dnd() -> Option<bool> {
 }
 
 pub fn toggle_dnd() {
-    if have("macnotify") && run(&["macnotify", "dnd", "status"], PROBE_TIMEOUT).is_some() {
-        spawn(&["macnotify", "dnd", "toggle"]);
+    if have("decnotify") && run(&["decnotify", "dnd", "status"], PROBE_TIMEOUT).is_some() {
+        spawn(&["decnotify", "dnd", "toggle"]);
     } else if have("dunstctl") {
         spawn(&["dunstctl", "set-paused", "toggle"]);
     } else if have("makoctl") {
@@ -530,9 +530,9 @@ pub fn toggle_dnd() {
     }
 }
 
-// ------------------------------------------------------- macutil quick toggles
+// ------------------------------------------------------- decutil quick toggles
 
-/// State of the `macutil` toggles (screen recording, idle inhibit, game mode).
+/// State of the `decutil` toggles (screen recording, idle inhibit, game mode).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Utils {
     pub record: bool,
@@ -540,23 +540,23 @@ pub struct Utils {
     pub game: bool,
 }
 
-/// Where `macutil` is (next to the running binary, else on `PATH`); `None` when it is not installed.
-pub fn macutil() -> Option<String> {
-    let p = crate::launch::sibling_or_path("macutil");
+/// Where `decutil` is (next to the running binary, else on `PATH`); `None` when it is not installed.
+pub fn decutil() -> Option<String> {
+    let p = crate::launch::sibling_or_path("decutil");
     // Dry runs (tests) only record commands, so they do not need the real thing.
-    (is_dry_run() || (p.contains('/') && std::path::Path::new(&p).is_file()) || have("macutil")).then_some(p)
+    (is_dry_run() || (p.contains('/') && std::path::Path::new(&p).is_file()) || have("decutil")).then_some(p)
 }
 
-/// Reads macutil's state files directly (no process is started); `None` when macutil is not installed.
+/// Reads decutil's state files directly (no process is started); `None` when decutil is not installed.
 pub fn probe_utils() -> Option<Utils> {
-    macutil()?;
+    decutil()?;
     let ctx = crate::util::Ctx::from_env();
     Some(Utils { record: crate::util::record::status(&ctx, &crate::util::RealSys).is_some(), idle: crate::util::idle::status(&ctx), game: crate::util::game::status(&ctx) })
 }
 
-/// `macutil FEATURE toggle` in the background (`feature`: `record`, `idle-inhibit`, `gamemode`, `dnd`).
+/// `decutil FEATURE toggle` in the background (`feature`: `record`, `idle-inhibit`, `gamemode`, `dnd`).
 pub fn util_toggle(feature: &str) {
-    if let Some(m) = macutil() {
+    if let Some(m) = decutil() {
         spawn(&[&m, feature, "toggle"]);
     }
 }
@@ -607,7 +607,7 @@ pub fn toggle_appearance() {
     let mode = crate::theme::live::Source::discover().selection().mode;
     if mode != Mode::Auto {
         let next = if is_light() { "dark" } else { "light" };
-        let ctl = crate::launch::sibling_or_path("macthemectl");
+        let ctl = crate::launch::sibling_or_path("decthemectl");
         spawn(&[&ctl, "set", "mode", next]);
     }
     if have("desktop-style") {
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn battery_probe_skips_mains_and_peripherals_and_desktops() {
-        let root = std::env::temp_dir().join(format!("macbar-ps-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("decbar-ps-{}", std::process::id()));
         let mk = |name: &str, files: &[(&str, &str)]| {
             let d = root.join(name);
             std::fs::create_dir_all(&d).unwrap();

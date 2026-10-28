@@ -14,7 +14,7 @@ use std::time::Duration;
 
 /// The popup value that means "back to what the preset says".
 const DEFAULT: &str = "";
-/// The popup value of the line that only shows a chain set by hand (macthemectl / macshell.json); picking it changes nothing.
+/// The popup value of the line that only shows a chain set by hand (decthemectl / decebal.json); picking it changes nothing.
 const KEEP: &str = "\u{1}keep";
 
 type Opt = (String, String);
@@ -67,7 +67,7 @@ pub fn items_with(sel: &Selection, now: &Theme, db: &fontdb::FontDb) -> Vec<Item
 
     let hidden = db.family_count().saturating_sub(families.len());
     let note = format!(
-        "A character the first font lacks (CJK, emoji, icons) is drawn by the next font of the chain, then by Noto Sans CJK, an emoji font and a Nerd Font when installed. {} installed families are listed{}. Chains of several fonts: macthemectl font set ROLE A,B,C.",
+        "A character the first font lacks (CJK, emoji, icons) is drawn by the next font of the chain, then by Noto Sans CJK, an emoji font and a Nerd Font when installed. {} installed families are listed{}. Chains of several fonts: decthemectl font set ROLE A,B,C.",
         families.len(),
         if hidden > 0 { format!(" ({hidden} script-specific Noto families are used automatically and left out)") } else { String::new() }
     );

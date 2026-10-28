@@ -71,7 +71,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     ]));
     out.push(Item::Note {
         text: format!(
-            "Themes live in {} (a folder each: theme.toml plus wallpapers, widgets, screenshots). macthemectl theme help lists the commands; docs/theme-engine.md describes the format.",
+            "Themes live in {} (a folder each: theme.toml plus wallpapers, widgets, screenshots). decthemectl theme help lists the commands; docs/theme-engine.md describes the format.",
             src.themes_dir.display()
         ),
         warn: false,
@@ -127,7 +127,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                     Ok(a) => {
                         reload(m);
                         let extra = if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) };
-                        m.say(format!("Applied {}{extra}. `macthemectl theme undo` goes back.", a.theme_id), false);
+                        m.say(format!("Applied {}{extra}. `decthemectl theme undo` goes back.", a.theme_id), false);
                     }
                     Err(e) => m.say(format!("Not applied: {e}"), true),
                 },
@@ -204,7 +204,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             }
             let full = super::panes::expand_tilde(path);
             match store::install(&src, std::path::Path::new(&full), false) {
-                Ok((i, r)) => m.say(format!("Installed {}{}", i.id, if r.all_warnings().is_empty() { String::new() } else { " (with warnings, see macthemectl theme validate)".to_string() }), false),
+                Ok((i, r)) => m.say(format!("Installed {}{}", i.id, if r.all_warnings().is_empty() { String::new() } else { " (with warnings, see decthemectl theme validate)".to_string() }), false),
                 Err(e) => m.say(format!("Not installed: {}", e.lines().next().unwrap_or("")), true),
             }
             m.dirty = true;

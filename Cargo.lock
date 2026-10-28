@@ -155,6 +155,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
+name = "decebal"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "fontdue",
+ "image",
+ "libc",
+ "resvg",
+ "serde",
+ "serde_json",
+ "smithay-client-toolkit",
+ "tiny-skia",
+ "toml_edit",
+ "ttf-parser",
+ "ureq",
+ "wayland-protocols",
+ "x11rb",
+]
+
+[[package]]
 name = "displaydoc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -493,26 +513,6 @@ name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
-
-[[package]]
-name = "macshell"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "fontdue",
- "image",
- "libc",
- "resvg",
- "serde",
- "serde_json",
- "smithay-client-toolkit",
- "tiny-skia",
- "toml_edit",
- "ttf-parser",
- "ureq",
- "wayland-protocols",
- "x11rb",
-]
 
 [[package]]
 name = "memchr"

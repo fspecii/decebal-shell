@@ -15,6 +15,20 @@ fn lock_path(name: &str) -> PathBuf {
     runtime_file(&format!("{name}.lock"))
 }
 
+/// The pid of a still-running instance of the pre-rename program (`macbar` for `decbar`) that holds its old lock, if any.
+/// A session that was started before the update still runs the old programs; the new ones must not start a second copy.
+fn legacy_holder(name: &str) -> Option<i32> {
+    let path = lock_path(&crate::compat::legacy_lock_name(name)?);
+    let mut file = OpenOptions::new().read(true).open(path).ok()?;
+    // SAFETY: flock on a descriptor we own; it only takes or refuses an advisory lock (released when `file` drops).
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        return None;
+    }
+    let mut pid = String::new();
+    let _ = file.read_to_string(&mut pid);
+    Some(pid.trim().parse::<i32>().unwrap_or(0))
+}
+
 /// `Some(guard)` when this is the only instance (keep the guard alive for the whole run). When another
 /// instance already holds the lock it is asked to quit (SIGTERM) and `None` is returned: just exit.
 pub fn acquire(name: &str) -> Option<File> {
@@ -22,8 +36,11 @@ pub fn acquire(name: &str) -> Option<File> {
 }
 
 /// `Some(guard)` when no other instance holds the lock `name`; otherwise `None` and the running instance is left alone.
-/// For daemons a supervisor restarts (macbar and its bottom half): a second copy simply exits instead of replacing the first.
+/// For daemons a supervisor restarts (decbar and its bottom half): a second copy simply exits instead of replacing the first.
 pub fn hold(name: &str) -> Option<File> {
+    if legacy_holder(name).is_some() {
+        return None;
+    }
     let file = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(name)).ok()?;
     // SAFETY: flock on a descriptor we own; it only takes or refuses an advisory lock.
     if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
@@ -35,9 +52,16 @@ pub fn hold(name: &str) -> Option<File> {
     Some(file)
 }
 
-/// Like [`acquire`], but a running instance gets `sig` instead of SIGTERM (macswitch: SIGUSR1 = next, SIGUSR2 = previous).
+/// Like [`acquire`], but a running instance gets `sig` instead of SIGTERM (decswitch: SIGUSR1 = next, SIGUSR2 = previous).
 /// The caller should have blocked `sig` (see [`block_signals`]) before this, so a signal that arrives early is held, not fatal.
 pub fn acquire_signalling(name: &str, sig: i32) -> Option<File> {
+    if let Some(pid) = legacy_holder(name) {
+        if pid > 1 && pid as u32 != std::process::id() {
+            // SAFETY: plain kill(2) with the pid the old instance recorded.
+            unsafe { libc::kill(pid, sig) };
+        }
+        return None;
+    }
     let mut file = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(name)).ok()?;
     // SAFETY: flock on a descriptor we own; it only takes or refuses an advisory lock.
     let got = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
@@ -88,9 +112,26 @@ pub fn wait_signal(sigs: &[i32]) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn a_running_pre_rename_instance_blocks_the_new_program() {
+        // `decclip-<pid>` has no legacy twin; use a real program name with a pid-specific role so nothing else is affected.
+        let role = format!("decbar-legacytest{}", std::process::id());
+        let legacy = format!("macbar-legacytest{}", std::process::id());
+        assert_eq!(crate::compat::legacy_lock_name(&role).as_deref(), Some(legacy.as_str()));
+        assert!(super::hold(&role).map(drop).is_some(), "free while the old program is not running");
+        let old = super::hold(&legacy).expect("the old program takes its lock");
+        assert!(super::hold(&role).is_none(), "the new program does not start a second copy");
+        // a toggle app signals the old instance (here: ourselves, which is skipped) and exits
+        assert!(super::acquire_signalling(&role, libc::SIGUSR2).is_none());
+        drop(old);
+        assert!(super::hold(&role).is_some(), "free again once the old one is gone");
+        let _ = std::fs::remove_file(super::lock_path(&role));
+        let _ = std::fs::remove_file(super::lock_path(&legacy));
+    }
+
+    #[test]
     fn hold_is_one_lock_per_role_and_never_signals_the_holder() {
-        let base = format!("macshell-test-hold-{}", std::process::id());
-        let (main, bottom) = (format!("{base}-macbar"), format!("{base}-macbar-bottom"));
+        let base = format!("decebal-test-hold-{}", std::process::id());
+        let (main, bottom) = (format!("{base}-decbar"), format!("{base}-decbar-bottom"));
         let try_hold = |n: &str| {
             for _ in 0..50 {
                 if let Some(f) = super::hold(n) {
@@ -115,7 +156,7 @@ mod tests {
 
     #[test]
     fn second_acquire_is_refused_while_the_first_is_held() {
-        let name = format!("macshell-test-{}", std::process::id());
+        let name = format!("decebal-test-{}", std::process::id());
         // Another test may have a child between fork and exec that still shares the descriptor for a moment.
         let mut first = None;
         for _ in 0..50 {

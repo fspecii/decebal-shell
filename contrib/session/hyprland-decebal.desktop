@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Hyprland (decebal)
+Comment=Hyprland with the Rust macOS-style bar, dock and Launchpad instead of Quickshell
+Exec=/usr/local/bin/decebal-session
+Type=Application
+DesktopNames=Hyprland

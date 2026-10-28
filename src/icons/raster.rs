@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn svg_renders_crisply_on_whole_pixels() {
-        let p = std::env::temp_dir().join(format!("macshell-raster-{}.svg", std::process::id()));
+        let p = std::env::temp_dir().join(format!("decebal-raster-{}.svg", std::process::id()));
         std::fs::write(&p, r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" fill="#ff0000"/></svg>"##).unwrap();
         let pm = svg(&p, 47, 47).unwrap();
         assert!(pm.data().chunks_exact(4).all(|q| q == [255, 0, 0, 255]), "fills the canvas exactly");

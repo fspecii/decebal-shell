@@ -1,6 +1,6 @@
 //! Pane icons (coloured rounded squares with a white glyph) and layout pictograms.
 //!
-//! [`layout_rects`] is the single description of what each rdwm layout looks like; macbar's layout
+//! [`layout_rects`] is the single description of what each rdwm layout looks like; decbar's layout
 //! switcher can draw the same pictograms through [`layout_icon`].
 
 use super::ui::fill_px;

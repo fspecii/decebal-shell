@@ -1,4 +1,5 @@
-//! macshell: a small, fast macOS-style desktop shell (dock, menu bar, wallpaper browser).
+//! Decebal: a small, fast, customisable desktop environment for rdwm (dock, bar, launcher, settings, themes, widgets).
+//! It used to be called macshell; [`compat`] keeps the old names working.
 //!
 //! Drawing is done on the CPU into a premultiplied RGBA [`tiny_skia::Pixmap`], so the
 //! same pixels can be pushed to a Wayland `wl_shm` buffer or an X11 ARGB window.
@@ -9,6 +10,7 @@ pub mod backend;
 pub mod calc;
 pub mod clip;
 pub mod clipboard;
+pub mod compat;
 pub mod config;
 pub mod controlcenter;
 pub mod dash;

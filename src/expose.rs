@@ -1,12 +1,12 @@
-//! macexpose: a Mission Control / Exposé style window overview. A dimmed full-screen overlay with the windows of the
+//! decexpose: a Mission Control / Exposé style window overview. A dimmed full-screen overlay with the windows of the
 //! current workspace (rdwm tag view) as a grid of thumbnails, or with `--all` every window grouped by workspace
 //! under a strip of workspace chips.
 //!
 //! The window list comes from rdwm's IPC `get_state` (see [`crate::switcher`], whose entries and commit requests are
 //! reused). The thumbnails are captured once, before the overlay exists, with X11 (Composite `NameWindowPixmap` when
 //! available, else `GetImage` on the window); windows that are not mapped (other tags, minimised) get an icon card.
-//! The UI is an X11 popup like macsession's (override-redirect, full screen, keyboard and pointer grabbed). This
-//! module holds the logic (layout maths, filtering, keys, drawing); the `macexpose` binary talks to rdwm once the
+//! The UI is an X11 popup like decsession's (override-redirect, full screen, keyboard and pointer grabbed). This
+//! module holds the logic (layout maths, filtering, keys, drawing); the `decexpose` binary talks to rdwm once the
 //! popup, and with it the grabs, is gone.
 
 use crate::app::Button;
@@ -800,11 +800,11 @@ impl Expose {
 
 impl WindowApp for Expose {
     fn title(&self) -> String {
-        "macexpose".into()
+        "decexpose".into()
     }
 
     fn app_id(&self) -> &'static str {
-        "macexpose"
+        "decexpose"
     }
 
     fn overlay(&self) -> bool {
@@ -828,8 +828,8 @@ impl WindowApp for Expose {
     }
 
     fn input_grabbed(&mut self, mods: Option<u16>) -> Response {
-        if let (Some(t), Some(_)) = (self.started, std::env::var_os("MACEXPOSE_TIMING")) {
-            eprintln!("macexpose: first frame painted {} ms after start", t.elapsed().as_millis());
+        if let (Some(t), Some(_)) = (self.started, std::env::var_os("DECEXPOSE_TIMING")) {
+            eprintln!("decexpose: first frame painted {} ms after start", t.elapsed().as_millis());
         }
         // Without the keyboard the overview could only be left with the mouse: do not hang around.
         if mods.is_none() {
@@ -1467,7 +1467,7 @@ mod tests {
     #[test]
     fn state_is_parsed_in_list_order_with_view_and_occupancy() {
         let reply = r#"{"ok":true,"state":{"monitors":[{"id":0,"view":2,"occupied":5}],"selected_mon":0,"focused":3,"mru":[3,1,2],
-            "windows":[{"id":1,"class":"a","title":"A","tags":1,"mon":0},{"id":2,"class":"macbar","title":"","tags":1,"mon":0},
+            "windows":[{"id":1,"class":"a","title":"A","tags":1,"mon":0},{"id":2,"class":"decbar","title":"","tags":1,"mon":0},
             {"id":3,"class":"c","title":"C","tags":2,"mon":0,"minimized":true}]}}"#;
         let s = parse_state(reply);
         assert_eq!(s.items.iter().map(|i| i.e.id).collect::<Vec<_>>(), vec![1, 3], "creation order, panels dropped, not MRU");

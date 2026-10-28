@@ -1,9 +1,9 @@
 #!/bin/sh
-# Shim for the macshell session: there is no Quickshell to talk to. Locking still works (hyprlock);
+# Shim for the decebal session: there is no Quickshell to talk to. Locking still works (hyprlock);
 # every other shell command (menus, panels, OSDs) does nothing.
 case "$1" in
   lock)
-    pidof hyprlock >/dev/null || hyprlock -c /usr/local/share/macshell/hyprlock.conf
+    pidof hyprlock >/dev/null || hyprlock -c /usr/local/share/decebal/hyprlock.conf
     ;;
 esac
 exit 0

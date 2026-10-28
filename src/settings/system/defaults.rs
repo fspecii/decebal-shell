@@ -1,7 +1,7 @@
 //! Default applications: browser, mail, terminal, file manager, media player, image viewer, text editor, PDF viewer.
 //! Candidates come from the installed `.desktop` files that claim the MIME type; the current choice from
 //! `xdg-mime query default`; changes go through `xdg-settings` / `xdg-mime default`.
-//! The terminal is not a MIME handler: `rdwm-terminal` honours `RDWM_TERMINAL`, which macsettings exports from
+//! The terminal is not a MIME handler: `rdwm-terminal` honours `RDWM_TERMINAL`, which decsettings exports from
 //! `session-settings.sh` at login.
 
 use super::run::{Cmd, Runner};
@@ -162,7 +162,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
         let cur = h.session.terminal.clone().or_else(|| std::env::var("RDWM_TERMINAL").ok().filter(|s| !s.is_empty()));
         let sel = Some(cur.as_ref().and_then(|c| opts.iter().position(|(_, v)| v == c)).unwrap_or(0));
         v.push(Item::Card(vec![Row::new("Terminal").detail("Used by rdwm-terminal; saved as RDWM_TERMINAL for your next login").ctl(Ctl::new("s:def:term:", Kind::Popup(opts, sel)))]));
-        v.push(Item::Note { text: "Automatic picks the first installed terminal that works in this session. A fixed choice is exported as RDWM_TERMINAL by ~/.config/macshell/session-settings.sh, which the login session sources.".into(), warn: false });
+        v.push(Item::Note { text: "Automatic picks the first installed terminal that works in this session. A fixed choice is exported as RDWM_TERMINAL by ~/.config/decebal/session-settings.sh, which the login session sources.".into(), warn: false });
     }
     v
 }

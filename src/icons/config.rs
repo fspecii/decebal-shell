@@ -1,4 +1,4 @@
-//! The `icons` object of `macshell.json` and the automatic theme choice.
+//! The `icons` object of `decebal.json` and the automatic theme choice.
 //!
 //! ```json
 //! "icons": { "theme": "WhiteSur-dark", "size_scale": 1.0, "monochrome_tint": false, "fallback": "Adwaita" }
@@ -11,7 +11,7 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-/// The key in `macshell.json`.
+/// The key in `decebal.json`.
 pub const KEY: &str = "icons";
 pub const DEFAULT_FALLBACK: &str = "Adwaita";
 pub const SCALE_MIN: f32 = 0.6;
@@ -37,7 +37,7 @@ impl IconConfig {
         self.theme.is_empty() || self.theme.eq_ignore_ascii_case("auto")
     }
 
-    /// Reads the `icons` object of a parsed `macshell.json`; anything missing or of the wrong type is the default.
+    /// Reads the `icons` object of a parsed `decebal.json`; anything missing or of the wrong type is the default.
     pub fn from_json(root: &Value) -> IconConfig {
         let mut c = IconConfig::default();
         let Some(o) = root.get(KEY).and_then(Value::as_object) else { return c };
@@ -89,7 +89,7 @@ impl IconConfig {
 }
 
 pub fn shell_json() -> PathBuf {
-    crate::config::config_dir().join("macshell.json")
+    crate::config::config_dir().join("decebal.json")
 }
 
 // ---------------------------------------------------------------- the desktop's own choice
@@ -208,10 +208,10 @@ mod tests {
 
     #[test]
     fn file_round_trip_keeps_other_keys_and_reset_removes_the_object() {
-        let dir = std::env::temp_dir().join(format!("macshell-iconcfg-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decebal-iconcfg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let f = dir.join("macshell.json");
+        let f = dir.join("decebal.json");
         std::fs::write(&f, r#"{"workspaces": "off", "theme": {"name": "nord"}}"#).unwrap();
         let c = IconConfig { theme: "Papirus".into(), ..IconConfig::default() };
         c.write(&f).unwrap();

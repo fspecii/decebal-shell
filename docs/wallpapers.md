@@ -2,11 +2,11 @@
 
 System Settings > Wallpaper has two tabs, switched by **Pictures from**:
 
-* **My backgrounds**: the pictures in `~/.config/omarchy/backgrounds/**` (or `$MACSHELL_CONFIG/backgrounds`), scaling,
+* **My backgrounds**: the pictures in `~/.config/omarchy/backgrounds/**` (or `$DECEBAL_CONFIG/backgrounds`), scaling,
   background colour and a path field. Picking one writes `[wallpaper] image` in rdwm's `config.toml`; rdwm applies it
   and "Colours from wallpaper" / "Match wallpaper" follow it.
 * **Wallhaven**: browse and search [wallhaven.cc](https://wallhaven.cc) and set a wallpaper from it without leaving
-  the settings window. The standalone `machaven` browser still exists; this tab is the same idea inside System
+  the settings window. The standalone `dechaven` browser still exists; this tab is the same idea inside System
   Settings, with filters, an optional API key, favourites and a random button.
 
 ## Using the Wallhaven tab
@@ -27,10 +27,10 @@ System Settings > Wallpaper has two tabs, switched by **Pictures from**:
 ### From a script
 
 ```
-macthemectl wallpaper wallhaven random                 # a random one from your current filters
-macthemectl wallpaper wallhaven search mountain lake   # the best match
-macthemectl wallpaper wallhaven search forest --list   # only print id, size and page of the matches
-macthemectl wallpaper wallhaven random --screen 3440x1440 --no-set
+decthemectl wallpaper wallhaven random                 # a random one from your current filters
+decthemectl wallpaper wallhaven search mountain lake   # the best match
+decthemectl wallpaper wallhaven search forest --list   # only print id, size and page of the matches
+decthemectl wallpaper wallhaven random --screen 3440x1440 --no-set
 ```
 
 It reads the same filters and API key as the tab, downloads the same way and sets the wallpaper through the same
@@ -46,26 +46,26 @@ allowed is dropped), and a download of a not-allowed wallpaper is refused.
 ## API key
 
 A key is optional (wallhaven needs it only for NSFW and your own account's settings). Paste it in Filters > Account
-and press Enter. It is stored in `$XDG_CONFIG_HOME/macshell/wallhaven.key` (default `~/.config/macshell/`), mode
+and press Enter. It is stored in `$XDG_CONFIG_HOME/decebal/wallhaven.key` (default `~/.config/decebal/`), mode
 0600 in a 0700 folder, written atomically. It is never shown again (the field shows dots), never logged, never put in
 a URL (it travels as the `X-API-Key` header, only to the API host, never to image hosts and not across redirects) and
-never written to `macshell.json` or `wallhaven.json`, which are safe to share. **Remove** deletes the file. Only
+never written to `decebal.json` or `wallhaven.json`, which are safe to share. **Remove** deletes the file. Only
 letters and digits (8-64) are accepted.
 
 ## Files
 
 | File | Holds |
 |---|---|
-| `$XDG_CONFIG_HOME/macshell/wallhaven.json` | search text, sort, filters, the sketchy / NSFW switch |
-| `$XDG_CONFIG_HOME/macshell/wallhaven.key` | the API key (0600) |
-| `$XDG_STATE_HOME/macshell/wallhaven-favourites.json` | favourites (up to 500) |
-| `$XDG_CACHE_HOME/macshell/wallhaven/last-search.json` | the last first page, shown when offline |
-| `$XDG_CACHE_HOME/macshell/wallhaven/thumbs/` | small thumbnails, pruned to 400 files / 24 MB |
+| `$XDG_CONFIG_HOME/decebal/wallhaven.json` | search text, sort, filters, the sketchy / NSFW switch |
+| `$XDG_CONFIG_HOME/decebal/wallhaven.key` | the API key (0600) |
+| `$XDG_STATE_HOME/decebal/wallhaven-favourites.json` | favourites (up to 500) |
+| `$XDG_CACHE_HOME/decebal/wallhaven/last-search.json` | the last first page, shown when offline |
+| `$XDG_CACHE_HOME/decebal/wallhaven/thumbs/` | small thumbnails, pruned to 400 files / 24 MB |
 | `<backgrounds>/wallhaven-<id>.<ext>` | downloaded wallpapers |
 
 ## Being a good API citizen
 
-* Identifies itself: `User-Agent: macshell-macsettings/<version> (wallhaven wallpaper picker)`.
+* Identifies itself: `User-Agent: decebal-decsettings/<version> (wallhaven wallpaper picker)`.
 * Wallhaven allows 45 API requests a minute. All API calls go through one worker and a sliding window of 40 a minute;
   a call that would have to wait more than 4 s is refused instead. A `429` starts a cool-down (`Retry-After`, default
   60 s, at most 10 min) during which nothing is sent, and nothing is ever retried automatically: the pane says

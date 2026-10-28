@@ -1,4 +1,4 @@
-//! `macthemectl icons ...`: the command line of the icon settings (also what the tests drive).
+//! `decthemectl icons ...`: the command line of the icon settings (also what the tests drive).
 
 use super::config::IconConfig;
 use super::live::State;
@@ -6,16 +6,16 @@ use super::resolve::{self, Roots, ThemeInfo};
 use serde_json::json;
 use std::path::Path;
 
-pub const HELP: &str = "macthemectl icons list [--json]           installed icon themes (* = in use; symbolic-only / cursor-only ones cannot be chosen)
-macthemectl icons set NAME|auto          use a theme (directory or display name); auto follows GSettings / GTK
-macthemectl icons status [--json]        configured theme, what is in use, lookup chain, scale, tint
-macthemectl icons reset                  remove the `icons` settings (automatic, scale 1, no tint, fallback Adwaita)
-macthemectl icons scale 0.6-1.25         size of the artwork inside its square (1 = fill it)
-macthemectl icons tint on|off            repaint symbolic icons in the theme's text colour
-macthemectl icons fallback NAME|none     theme tried after the chosen one, its parents and hicolor
-Stored in macshell.json under \"icons\"; running programs follow within half a second.";
+pub const HELP: &str = "decthemectl icons list [--json]           installed icon themes (* = in use; symbolic-only / cursor-only ones cannot be chosen)
+decthemectl icons set NAME|auto          use a theme (directory or display name); auto follows GSettings / GTK
+decthemectl icons status [--json]        configured theme, what is in use, lookup chain, scale, tint
+decthemectl icons reset                  remove the `icons` settings (automatic, scale 1, no tint, fallback Adwaita)
+decthemectl icons scale 0.6-1.25         size of the artwork inside its square (1 = fill it)
+decthemectl icons tint on|off            repaint symbolic icons in the theme's text colour
+decthemectl icons fallback NAME|none     theme tried after the chosen one, its parents and hicolor
+Stored in decebal.json under \"icons\"; running programs follow within half a second.";
 
-/// Runs one subcommand against `file` (macshell.json) and `roots`; the text to print, or an error message.
+/// Runs one subcommand against `file` (decebal.json) and `roots`; the text to print, or an error message.
 pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String> {
     let json = args.iter().any(|a| a == "--json");
     let args: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
@@ -25,11 +25,11 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
         Some("list") => Ok(list(file, roots, &themes, json)),
         Some("status") => Ok(status(file, roots, json)),
         Some("set") => {
-            let name = args.get(1).ok_or("set needs a theme name (macthemectl icons list)")?;
+            let name = args.get(1).ok_or("set needs a theme name (decthemectl icons list)")?;
             if name.eq_ignore_ascii_case("auto") {
                 cfg.theme = "auto".into();
             } else {
-                let id = resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))?;
+                let id = resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (decthemectl icons list)"))?;
                 let t = themes.iter().find(|t| t.id == id).expect("listed");
                 if !t.kind.selectable() {
                     return Err(format!("`{}` cannot be used for application icons ({})", t.id, t.kind.label()));
@@ -64,7 +64,7 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
         Some("fallback") => {
             let name = args.get(1).ok_or("fallback needs a theme name or none")?;
             cfg.fallback =
-                if name.eq_ignore_ascii_case("none") { "none".into() } else { resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (macthemectl icons list)"))? };
+                if name.eq_ignore_ascii_case("none") { "none".into() } else { resolve::find_installed(&themes, name).ok_or_else(|| format!("no icon theme `{name}` (decthemectl icons list)"))? };
             cfg.write(file)?;
             Ok(format!("fallback theme: {}", cfg.fallback))
         }
@@ -134,7 +134,7 @@ mod tests {
         let t = Tree::new("ctl");
         t.theme("hicolor", PLAIN).theme("Adwaita", PLAIN).theme("Tela", &PLAIN.replace("Plain", "Tela blue"));
         t.theme("Mono", "[Icon Theme]\nName=Mono\nDirectories=symbolic/apps\n[symbolic/apps]\nSize=16\nType=Scalable\n");
-        let f = t.root.join("macshell.json");
+        let f = t.root.join("decebal.json");
         (t, f)
     }
 

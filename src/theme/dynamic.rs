@@ -4,14 +4,14 @@
 //!   wallpaper (rdwm state / Omarchy background / a file / a colour)
 //!        | extract::load        (decode + 96 px thumbnail + k-means, cached by path + mtime + size)
 //!        v
-//!   Dynamic.colors  --stored in macshell.json under "theme"."dynamic"--  (a few words: seed, accents, tone)
+//!   Dynamic.colors  --stored in decebal.json under "theme"."dynamic"--  (a few words: seed, accents, tone)
 //!        | apply_to             (pure maths, microseconds, in every program that draws)
 //!        v
 //!   the resolved Theme: accent always; surfaces tinted or replaced, by strength
 //! ```
 //!
-//! Only the program that *notices a wallpaper change* decodes an image: `macthemectl watch` (one tiny daemon), the
-//! Theme and Wallpaper panes of macsettings, machaven, and `macthemectl dynamic refresh`. Everyone else reads the
+//! Only the program that *notices a wallpaper change* decodes an image: `decthemectl watch` (one tiny daemon), the
+//! Theme and Wallpaper panes of decsettings, dechaven, and `decthemectl dynamic refresh`. Everyone else reads the
 //! stored colours and re-derives within the usual 500 ms theme poll.
 //!
 //! Inspired by Omarchy (every theme is a `colors.toml` of a handful of colours, turned into app configs by
@@ -192,7 +192,7 @@ pub fn refresh(src: &Source, paths: &Paths, path: Option<&Path>) -> Result<Refre
     Ok(Refresh::Updated)
 }
 
-/// Hook for the programs that change the wallpaper (machaven, the settings Wallpaper pane): follows it when
+/// Hook for the programs that change the wallpaper (dechaven, the settings Wallpaper pane): follows it when
 /// "match wallpaper" is on, ignores every failure.
 pub fn on_wallpaper_set(path: Option<&Path>) {
     let (src, paths) = (Source::discover(), Paths::discover());
@@ -202,7 +202,7 @@ pub fn on_wallpaper_set(path: Option<&Path>) {
     }
 }
 
-// ---------------------------------------------------------------- the watcher (`macthemectl watch`)
+// ---------------------------------------------------------------- the watcher (`decthemectl watch`)
 
 /// What [`watch_tick`] remembers between two looks.
 #[derive(Debug, Default)]
@@ -252,10 +252,10 @@ pub fn watch(src: &Source, paths: &Paths, interval: Duration, mut log: impl FnMu
     }
 }
 
-/// A single-instance lock for `macthemectl watch` (`$XDG_RUNTIME_DIR/macthemectl-watch.lock`). `None` when another
+/// A single-instance lock for `decthemectl watch` (`$XDG_RUNTIME_DIR/decthemectl-watch.lock`). `None` when another
 /// watcher holds it. Keep the returned file alive for as long as the watcher runs.
 pub fn watch_lock() -> Option<std::fs::File> {
-    lock_file(&crate::single::runtime_file("macthemectl-watch.lock"))
+    lock_file(&crate::single::runtime_file("decthemectl-watch.lock"))
 }
 
 fn lock_file(path: &Path) -> Option<std::fs::File> {
@@ -446,7 +446,7 @@ mod tests {
     use crate::theme::model::Mode;
 
     fn sandbox(name: &str) -> (PathBuf, Source, Paths) {
-        let d = std::env::temp_dir().join(format!("macshell-dyn-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-dyn-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };

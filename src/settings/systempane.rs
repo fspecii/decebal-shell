@@ -1,6 +1,6 @@
 //! "Apply to all apps" in System Settings > Theme: the master switch and one checkbox per target.
 //!
-//! The work is done by `macthemectl` (see [`crate::theme::system`]); the pane only writes the `"system"` key of `macshell.json` and asks for
+//! The work is done by `decthemectl` (see [`crate::theme::system`]); the pane only writes the `"system"` key of `decebal.json` and asks for
 //! an apply (debounced, in a separate process, so a slow `omarchy-theme-set` never blocks the window).
 
 use super::model::{CtlVal, Model};
@@ -17,7 +17,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         .detail(if cfg.enabled {
             format!("On: the theme also colours the apps below (last applied: {})", applied.as_deref().unwrap_or("not yet"))
         } else {
-            "Off: nothing outside macshell and rdwm is changed. Turn on to theme GTK / Nautilus, Qt, terminals, the browser and more".into()
+            "Off: nothing outside decebal and rdwm is changed. Turn on to theme GTK / Nautilus, Qt, terminals, the browser and more".into()
         })
         .ctl(Ctl::new("sy:on", Kind::Toggle(cfg.enabled)))]));
     let rows: Vec<Row> = st
@@ -44,7 +44,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         Row::new("Apply now").detail("Run it again right away").ctl(Ctl::new("sy:now", Kind::Button { label: "Apply".into(), danger: false })),
     ]));
     out.push(Item::Note {
-        text: "Every file is saved before its first change and `macthemectl system off` (or the switch above) puts it back. The same from a terminal: macthemectl system status | on | off, macthemectl apply-system --dry-run. Qt apps need QT_QPA_PLATFORMTHEME=qt6ct in the session environment.".into(),
+        text: "Every file is saved before its first change and `decthemectl system off` (or the switch above) puts it back. The same from a terminal: decthemectl system status | on | off, decthemectl apply-system --dry-run. Qt apps need QT_QPA_PLATFORMTHEME=qt6ct in the session environment.".into(),
         warn: false,
     });
     out
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn switch_and_target_boxes_are_written_to_macshell_json() {
+    fn switch_and_target_boxes_are_written_to_decebal_json() {
         let (mut m, _) = model_with("");
         assert_eq!(toggle(&items(&m), "sy:on"), Some((false, true)), "off by default");
         for id in ["omarchy", "browser", "editors", "hooks", "gtk", "qt", "kvantum", "x11"] {

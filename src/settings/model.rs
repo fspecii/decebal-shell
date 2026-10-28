@@ -507,7 +507,7 @@ pub mod tests_support {
     use std::sync::Mutex;
 
     pub fn model_with(text: &str) -> (Model, std::path::PathBuf) {
-        let d = std::env::temp_dir().join(format!("macsettings-model-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let d = std::env::temp_dir().join(format!("decsettings-model-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         let cfg = d.join("config.toml");
@@ -530,7 +530,7 @@ mod tests {
         m.apply("r:general:smart_gaps", CtlVal::Bool(true));
         let t = std::fs::read_to_string(&cfg).unwrap();
         assert_eq!(t, "# mine\n[general]\nborder_px = 2   # thin\nsmart_gaps = true\nfoo_future = 1\n");
-        assert!(std::fs::metadata(cfg.with_file_name("config.toml.bak-macsettings")).is_ok());
+        assert!(std::fs::metadata(cfg.with_file_name("config.toml.bak-decsettings")).is_ok());
         assert!(m.flag("general", "smart_gaps"));
     }
 
@@ -625,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn dock_style_row_writes_the_style_word_macdock_reads() {
+    fn dock_style_row_writes_the_style_word_decdock_reads() {
         let (mut m, _) = model_with("");
         m.apply("j:dock:style", CtlVal::Str("windows".into()));
         let v = io::json_load(&m.paths.dock_settings());
@@ -637,7 +637,7 @@ mod tests {
     }
 
     #[test]
-    fn hot_corner_rows_write_the_section_machot_reads() {
+    fn hot_corner_rows_write_the_section_dechot_reads() {
         use crate::hot::{Action, Corner, HotConfig};
         let (mut m, _) = model_with("");
         std::fs::write(m.paths.shell_json(), "{\"workspaces\":true}").unwrap();

@@ -1,0 +1,15 @@
+#!/bin/sh
+# DEPRECATED. This project was renamed from macshell to Decebal: macbar -> decbar, macdock -> decdock, ... and
+# macshell-session -> decebal-session. This wrapper is installed under each old name (macbar, macspot, ...) so existing
+# keybinds, autostart lines and session scripts keep working for one release. It only runs the new program.
+# Use the new name in your own configuration; see docs/RENAME.md. It will be removed in the next release.
+name=${0##*/}
+case $name in
+    macshell-session) new=decebal-session ;;
+    mac-compat) echo "mac-compat: not installed under an old program name" >&2; exit 127 ;;
+    mac?*) new=dec${name#mac} ;;
+    *) echo "mac-compat: not installed under an old program name ($name)" >&2; exit 127 ;;
+esac
+# Say it once per terminal run, never into a log or a pipe that a script reads.
+[ -t 2 ] && echo "$name is deprecated and was renamed $new (Decebal); update your keybinds and scripts, see docs/RENAME.md" >&2
+exec "$new" "$@"

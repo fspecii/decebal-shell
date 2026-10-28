@@ -1,4 +1,4 @@
-//! The `.macshell-preset` bundle: a gzip-compressed ustar archive holding `manifest.toml` and a few fixed file names.
+//! The `.decebal-preset` bundle: a gzip-compressed ustar archive holding `manifest.toml` and a few fixed file names.
 //!
 //! Reading is deliberately strict because bundles come from other people. Nothing is ever extracted to disk here:
 //! [`read_tar_gz`] returns the whitelisted entries in memory, or an error naming the first thing that is wrong. Rejected:
@@ -19,7 +19,7 @@ pub const MAX_WALLPAPERS: usize = 4;
 pub const MAX_CLIPBOARD: usize = 3 * 1024 * 1024;
 
 pub const MANIFEST: &str = "manifest.toml";
-pub const FIXED_FILES: [&str; 5] = [MANIFEST, "macshell.json", "dock-settings.json", "dock-pinned-macos.json", "rdwm.toml"];
+pub const FIXED_FILES: [&str; 5] = [MANIFEST, "decebal.json", "dock-settings.json", "dock-pinned-macos.json", "rdwm.toml"];
 pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +61,7 @@ pub fn check_name(name: &str) -> Result<NameKind, String> {
     if name == MANIFEST {
         return Ok(NameKind::Manifest);
     }
-    if FIXED_FILES.contains(&name) {
+    if FIXED_FILES.contains(&name) || name == LEGACY_SHELL_FILE {
         return Ok(NameKind::Text);
     }
     if theme_id(name).is_some() {
@@ -183,7 +183,7 @@ pub fn read_tar_gz(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, String> {
         return Err("the file is too large to be a preset".into());
     }
     if bytes.len() < 18 || bytes[0] != 0x1f || bytes[1] != 0x8b {
-        return Err("not a macshell preset (not a gzip file)".into());
+        return Err("not a decebal preset (not a gzip file)".into());
     }
     let mut tar = Vec::new();
     flate2::read::GzDecoder::new(bytes).take(MAX_TOTAL + 1024 * 1024).read_to_end(&mut tar).map_err(|e| format!("damaged archive: {e}"))?;
@@ -274,7 +274,11 @@ fn check_dir_name(name: &str) -> Result<(), String> {
 // ---------------------------------------------------------------- clipboard text form
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-pub const TEXT_HEADER: &str = "MACSHELL-PRESET-1:";
+pub const TEXT_HEADER: &str = "DECEBAL-PRESET-1:";
+/// What presets exported before the rename start with (still accepted).
+pub const LEGACY_TEXT_HEADER: &str = "MACSHELL-PRESET-1:";
+/// What the shell settings file inside older bundles and preset folders is called (read as `decebal.json`).
+pub const LEGACY_SHELL_FILE: &str = "macshell.json";
 
 pub fn base64(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
@@ -308,7 +312,7 @@ pub fn unbase64(s: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// A bundle as copyable text (`MACSHELL-PRESET-1:` + base64, wrapped).
+/// A bundle as copyable text (`DECEBAL-PRESET-1:` + base64, wrapped).
 pub fn to_text(bundle: &[u8]) -> String {
     let b = base64(bundle);
     let mut s = String::from(TEXT_HEADER);
@@ -323,7 +327,7 @@ pub fn to_text(bundle: &[u8]) -> String {
 /// The inverse of [`to_text`]; surrounding blanks are fine.
 pub fn from_text(text: &str) -> Result<Vec<u8>, String> {
     let t = text.trim();
-    let body = t.strip_prefix(TEXT_HEADER).ok_or("the text is not a macshell preset (it should start with MACSHELL-PRESET-1:)")?;
+    let body = t.strip_prefix(TEXT_HEADER).or_else(|| t.strip_prefix(LEGACY_TEXT_HEADER)).ok_or("the text is not a decebal preset (it should start with DECEBAL-PRESET-1:)")?;
     if body.len() > MAX_CLIPBOARD * 2 {
         return Err("the text is too large".into());
     }
@@ -337,7 +341,7 @@ mod tests {
     fn sample() -> BTreeMap<String, Vec<u8>> {
         let mut f = BTreeMap::new();
         f.insert(MANIFEST.into(), b"format = 1\nname = \"x\"\n".to_vec());
-        f.insert("macshell.json".into(), b"{\"theme\":\"nord\"}\n".to_vec());
+        f.insert("decebal.json".into(), b"{\"theme\":\"nord\"}\n".to_vec());
         f.insert("rdwm.toml".into(), b"[general]\nborder_px = 3\n".to_vec());
         f.insert("themes/mine.toml".into(), b"name = \"mine\"\n".to_vec());
         f.insert("wallpaper/pic.png".into(), vec![0x89, b'P', b'N', b'G', 1, 2, 3]);
@@ -383,7 +387,10 @@ mod tests {
         assert_eq!(from_text(&t).unwrap(), b);
         assert_eq!(from_text(&format!("  \n{t}\n\n")).unwrap(), b);
         assert!(from_text("hello").is_err());
-        assert!(from_text("MACSHELL-PRESET-1:!!!").is_err());
+        assert!(from_text("DECEBAL-PRESET-1:!!!").is_err());
+        // text exported before the rename still imports
+        let legacy = t.replacen(TEXT_HEADER, LEGACY_TEXT_HEADER, 1);
+        assert_eq!(from_text(&legacy).unwrap(), from_text(&t).unwrap());
         for n in 0..6 {
             let d: Vec<u8> = (0..n as u8).collect();
             assert_eq!(unbase64(&base64(&d)).unwrap(), d);
@@ -404,7 +411,7 @@ mod tests {
             "wallpaper/x.sh",
             "wallpaper/.hidden.png",
             "a/b.json",
-            "macshell.json/",
+            "decebal.json/",
             "themes/a/b.toml",
             "evil.sh",
             "themes\\x.toml",
@@ -427,7 +434,7 @@ mod tests {
         // symlink and hard link
         let e = read_tar_gz(&tar_with("rdwm.toml", b'2', b"", "/etc/shadow")).unwrap_err();
         assert!(e.contains("symbolic link"), "{e}");
-        let e = read_tar_gz(&tar_with("rdwm.toml", b'1', b"", "macshell.json")).unwrap_err();
+        let e = read_tar_gz(&tar_with("rdwm.toml", b'1', b"", "decebal.json")).unwrap_err();
         assert!(e.contains("hard link"), "{e}");
         // devices, fifos
         for flag in *b"346" {

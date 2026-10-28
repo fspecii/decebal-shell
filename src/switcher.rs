@@ -1,9 +1,9 @@
-//! macswitch: the Alt+Tab window switcher. A row of window cells (app icon each) on a centred card,
+//! decswitch: the Alt+Tab window switcher. A row of window cells (app icon each) on a centred card,
 //! the selected window's title below; Alt released (or Return, or a click) commits, Escape cancels.
 //!
 //! The window list comes from rdwm's IPC `get_state`. The UI is an X11 popup (override-redirect, keyboard
 //! and pointer grabbed), see [`crate::backend::x11_window`]. This module holds the logic (list building,
-//! ordering, selection, keys, layout, drawing); the `macswitch` binary does the IPC when the user commits.
+//! ordering, selection, keys, layout, drawing); the `decswitch` binary does the IPC when the user commits.
 
 use crate::app::Button;
 use crate::gfx::{blit_scaled, color, fill_rect, fill_rounded, stroke_rounded};
@@ -25,8 +25,8 @@ use tiny_skia::{Color, Pixmap};
 pub const SIG_NEXT: i32 = libc::SIGUSR1;
 pub const SIG_PREV: i32 = libc::SIGUSR2;
 
-/// Window classes of macshell's own panels; they never show up in the switcher.
-const PANELS: &[&str] = &["macbar", "macdock", "macspot", "maclaunch", "macswitch", "macnotify"];
+/// Window classes of decebal's own panels; they never show up in the switcher.
+const PANELS: &[&str] = &["decbar", "decdock", "decspot", "declaunch", "decswitch", "decnotify"];
 
 const CELL: f32 = 88.0;
 const GAP: f32 = 8.0;
@@ -62,14 +62,14 @@ impl Entry {
     }
 }
 
-/// True for macshell's own panels and popups.
+/// True for decebal's own panels and popups.
 pub fn is_panel(class: &str) -> bool {
     let c = class.to_lowercase();
     PANELS.contains(&c.as_str())
 }
 
 /// The window list from a `get_state` reply, in switching order: the focused window first, then rdwm's own
-/// `mru` array when it has one (most recent first), then `saved` (the order macswitch itself last left),
+/// `mru` array when it has one (most recent first), then `saved` (the order decswitch itself last left),
 /// then whatever remains in rdwm's list order. Windows of all tags are kept; panels are dropped.
 pub fn parse_state(reply: &str, saved: &[u32]) -> Vec<Entry> {
     let Ok(v) = serde_json::from_str::<Value>(reply) else { return Vec::new() };
@@ -114,14 +114,14 @@ pub fn parse_state(reply: &str, saved: &[u32]) -> Vec<Entry> {
     order.iter().filter_map(|id| all.iter().find(|e| e.id == *id).cloned()).collect()
 }
 
-/// The order macswitch leaves behind after committing `chosen` from `list`: `chosen` first, the rest as shown.
+/// The order decswitch leaves behind after committing `chosen` from `list`: `chosen` first, the rest as shown.
 pub fn mru_after(list: &[Entry], chosen: u32) -> Vec<u32> {
     std::iter::once(chosen).chain(list.iter().map(|e| e.id).filter(|id| *id != chosen)).collect()
 }
 
 fn mru_path() -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|d| d.is_dir()).unwrap_or_else(std::env::temp_dir);
-    dir.join("macswitch-mru")
+    dir.join("decswitch-mru")
 }
 
 pub fn load_mru() -> Vec<u32> {
@@ -555,11 +555,11 @@ pub fn tile_color(class: &str) -> (u8, u8, u8) {
 
 impl WindowApp for Switcher {
     fn title(&self) -> String {
-        "macswitch".into()
+        "decswitch".into()
     }
 
     fn app_id(&self) -> &'static str {
-        "macswitch"
+        "decswitch"
     }
 
     fn overlay(&self) -> bool {
@@ -605,7 +605,7 @@ impl WindowApp for Switcher {
     }
 
     fn set_waker(&mut self, waker: Waker) {
-        // A second `macswitch` launch signals us; a thread turns the signals into counts and wakes the loop.
+        // A second `decswitch` launch signals us; a thread turns the signals into counts and wakes the loop.
         let pending = self.pending.clone();
         std::thread::spawn(move || {
             crate::single::block_signals(&[SIG_NEXT, SIG_PREV]);
@@ -749,7 +749,7 @@ mod tests {
 
     #[test]
     fn panels_are_skipped_and_other_tags_dimmed() {
-        let w = [win(1, "foot", 1), win(2, "Macdock", 1), win(3, "macspot", 1), win(4, "Maclaunch", 1), win(5, "macbar", 1), win(6, "firefox", 4)].join(",");
+        let w = [win(1, "foot", 1), win(2, "Decdock", 1), win(3, "decspot", 1), win(4, "Declaunch", 1), win(5, "decbar", 1), win(6, "firefox", 4)].join(",");
         let list = parse_state(&st(&w, r#""focused":1,"#), &[]);
         assert_eq!(ids(&list), vec![1, 6]);
         assert!(list[0].on_view && !list[1].on_view, "tag 3 is not in the view of tag 1");

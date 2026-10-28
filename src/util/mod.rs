@@ -1,7 +1,7 @@
-//! macutil: small utilities behind the Control Center's quick toggles and the command line, ported from
+//! decutil: small utilities behind the Control Center's quick toggles and the command line, ported from
 //! caelestia-shell's utilities drawer (screen recorder, idle inhibitor, game mode, toasts).
 //!
-//! Every command works without a daemon of its own: state lives in small files in `$XDG_RUNTIME_DIR/macutil`
+//! Every command works without a daemon of its own: state lives in small files in `$XDG_RUNTIME_DIR/decutil`
 //! (gone at logout, like the settings they restore), the work is done with ordinary tools (`ffmpeg` / `wf-recorder`,
 //! `slop`, `xset`, `picom`, `powerprofilesctl`) and every command is idempotent (`on` twice changes nothing,
 //! `off` without `on` does nothing). All side effects go through [`Sys`], so the logic is unit-tested with a mock.
@@ -47,7 +47,7 @@ pub enum Feature {
 pub enum Cmd {
     Help,
     Version,
-    /// `macutil status`: every feature on one line.
+    /// `decutil status`: every feature on one line.
     All,
     Do {
         feature: Feature,
@@ -98,7 +98,7 @@ pub fn parse_args(args: &[String]) -> Result<Cmd, String> {
 /// Where things live and what the session looks like; tests build one around a temp dir.
 #[derive(Debug, Clone)]
 pub struct Ctx {
-    /// `$XDG_RUNTIME_DIR/macutil`.
+    /// `$XDG_RUNTIME_DIR/decutil`.
     pub state: PathBuf,
     /// Where recordings go (`~/Videos/Recordings`).
     pub videos: PathBuf,
@@ -117,13 +117,13 @@ pub struct Ctx {
 impl Ctx {
     pub fn from_env() -> Ctx {
         let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-        let videos = std::env::var_os("MACUTIL_RECORD_DIR").map(PathBuf::from).unwrap_or_else(|| home.join("Videos/Recordings"));
+        let videos = std::env::var_os("DECUTIL_RECORD_DIR").map(PathBuf::from).unwrap_or_else(|| home.join("Videos/Recordings"));
         Ctx {
-            state: crate::single::runtime_file("macutil"),
+            state: crate::single::runtime_file("decutil"),
             videos,
             display: std::env::var("DISPLAY").ok().filter(|d| !d.is_empty()),
             wayland: std::env::var_os("WAYLAND_DISPLAY").is_some_and(|d| !d.is_empty()),
-            quiet: std::env::var_os("MACUTIL_QUIET").is_some(),
+            quiet: std::env::var_os("DECUTIL_QUIET").is_some(),
             settle: Duration::from_millis(400),
             grace: Duration::from_secs(10),
             now: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
@@ -219,7 +219,7 @@ impl Sys for RealSys {
 
     fn signal(&self, pid: u32, sig: i32) {
         if pid > 1 {
-            // SAFETY: plain kill(2) on a pid macutil itself recorded.
+            // SAFETY: plain kill(2) on a pid decutil itself recorded.
             unsafe { libc::kill(pid as i32, sig) };
         }
     }
@@ -229,11 +229,11 @@ impl Sys for RealSys {
     }
 
     fn notify(&self, summary: &str, body: &str, icon: &str) {
-        if crate::notify::send("macutil", icon, summary, body).is_ok() {
+        if crate::notify::send("decutil", icon, summary, body).is_ok() {
             return;
         }
         if self.have("notify-send") {
-            let _ = self.run(&["notify-send", "-a", "macutil", "-i", icon, summary, body], Duration::from_secs(3));
+            let _ = self.run(&["notify-send", "-a", "decutil", "-i", icon, summary, body], Duration::from_secs(3));
         }
     }
 
@@ -241,7 +241,7 @@ impl Sys for RealSys {
         if let Some(on) = crate::notify::running_dnd() {
             return Some(on);
         }
-        // Another daemon runs (the tools answer only then); else macnotify's settings file decides what the next start does.
+        // Another daemon runs (the tools answer only then); else decnotify's settings file decides what the next start does.
         if self.have("dunstctl") {
             if let Some(o) = self.run(&["dunstctl", "is-paused"], Duration::from_secs(2)) {
                 return Some(o.trim() == "true");
@@ -464,7 +464,7 @@ pub mod mock {
     }
 
     pub fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macutil-test-{}-{name}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decutil-test-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

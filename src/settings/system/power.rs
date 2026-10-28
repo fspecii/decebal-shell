@@ -206,7 +206,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
         Row::new("When idle").ctl(Ctl::new("lbl:idle", Kind::Label(show(&st.idle_action)))),
     ]));
     v.push(Item::Note {
-        text: "These are set by systemd-logind (/etc/systemd/logind.conf and logind.conf.d). macsettings only reads them: changing them needs administrator rights.".into(),
+        text: "These are set by systemd-logind (/etc/systemd/logind.conf and logind.conf.d). decsettings only reads them: changing them needs administrator rights.".into(),
         warn: false,
     });
     v

@@ -1,7 +1,7 @@
 //! Idle inhibitor for X11: switches the X screensaver and DPMS off (so `xss-lock`, which waits for the screensaver
 //! timeout, never locks and the monitors never blank) and puts the previous values back on `off`.
 //!
-//! The values read from `xset q` are kept in `$XDG_RUNTIME_DIR/macutil/idle.json`; that file existing is the state.
+//! The values read from `xset q` are kept in `$XDG_RUNTIME_DIR/decutil/idle.json`; that file existing is the state.
 
 use super::{toast, Ctx, Sys};
 use serde_json::{json, Value};

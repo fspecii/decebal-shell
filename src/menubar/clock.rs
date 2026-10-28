@@ -23,7 +23,7 @@ pub fn format(tm: &Tm) -> String {
     format!("{} {} {}  {:02}:{:02}", DAYS[(tm.wday % 7) as usize], tm.mday, MONTHS[(tm.mon % 12) as usize], tm.hour, tm.min)
 }
 
-/// The bar clock with the user's choices (`macshell.json`: `clockHour12`, `clockDate`). The defaults give exactly [`format`].
+/// The bar clock with the user's choices (`decebal.json`: `clockHour12`, `clockDate`). The defaults give exactly [`format`].
 /// `date` is `weekday-day-month` (default), `day-month`, `weekday-day` or `none`.
 pub fn format_with(tm: &Tm, hour12: bool, date: &str) -> String {
     let time = if hour12 {

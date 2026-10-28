@@ -1,4 +1,4 @@
-//! `macthemectl wallpaper wallhaven ...`: the Wallhaven pane without the window.
+//! `decthemectl wallpaper wallhaven ...`: the Wallhaven pane without the window.
 //!
 //! It reads the same filters and API key as the pane, downloads through the same validated path into the
 //! Wallpaper pane's backgrounds folder and sets the wallpaper through the same code
@@ -14,8 +14,8 @@ use crate::settings::schema::Schema;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-pub const HELP: &str = "macthemectl wallpaper wallhaven random [--screen WxH] [--no-set]
-macthemectl wallpaper wallhaven search WORDS... [--screen WxH] [--list] [--no-set]
+pub const HELP: &str = "decthemectl wallpaper wallhaven random [--screen WxH] [--no-set]
+decthemectl wallpaper wallhaven search WORDS... [--screen WxH] [--list] [--no-set]
                                  Download a wallpaper from wallhaven.cc and set it (saved in rdwm's config like the
                                  Wallpaper pane does). `random` picks one at random; `search` takes the best match, or
                                  with --list only prints the matches (id, size, address). --no-set only downloads.

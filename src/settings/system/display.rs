@@ -447,7 +447,7 @@ fn flag_path(dir: &std::path::Path) -> std::path::PathBuf {
     static N: AtomicU32 = AtomicU32::new(0);
     let base = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).filter(|p| p.is_dir()).unwrap_or_else(|| dir.to_path_buf());
     let _ = std::fs::create_dir_all(&base);
-    base.join(format!("macsettings-keep-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)))
+    base.join(format!("decsettings-keep-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)))
 }
 
 impl Hub {
@@ -523,7 +523,7 @@ impl Hub {
 }
 
 pub fn confirm_secs() -> u64 {
-    std::env::var("MACSETTINGS_CONFIRM_SECS").ok().and_then(|v| v.parse().ok()).filter(|v| (1..=120).contains(v)).unwrap_or(CONFIRM_SECS)
+    std::env::var("DECSETTINGS_CONFIRM_SECS").ok().and_then(|v| v.parse().ok()).filter(|v| (1..=120).contains(v)).unwrap_or(CONFIRM_SECS)
 }
 
 pub fn display_revert(sh: &Arc<super::Shared>, p: confirm::Pending) {
@@ -630,7 +630,7 @@ pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
         None => Some(0),
         Some(s) => opts.iter().position(|(_, v)| v.parse::<f64>().is_ok_and(|p| (p / 100.0 - s).abs() < 0.005)),
     };
-    v.push(Item::Card(vec![Row::new("Interface scale").detail("Size of text and controls in rdwm (titlebars) and macshell apps (Xft.dpi)").ctl(Ctl::new("s:disp:scale:", Kind::Popup(opts, sel)))]));
+    v.push(Item::Card(vec![Row::new("Interface scale").detail("Size of text and controls in rdwm (titlebars) and decebal apps (Xft.dpi)").ctl(Ctl::new("s:disp:scale:", Kind::Popup(opts, sel)))]));
     // night shift
     if let Some(Some(tool)) = h.disp.data.as_ref().map(|s| s.night_tool.clone()) {
         let (on, k) = h.session.night.clone().map(|(_, k)| (true, k)).unwrap_or((false, 4000));
@@ -878,10 +878,10 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
     }
 
     /// Read-only run of the real xrandr against a private Xvfb. Opt in with
-    /// `MACSETTINGS_REAL_XRANDR=1 DISPLAY=:148 cargo test real_xrandr` (only displays :145-:149 are accepted).
+    /// `DECSETTINGS_REAL_XRANDR=1 DISPLAY=:148 cargo test real_xrandr` (only displays :145-:149 are accepted).
     #[test]
     fn real_xrandr_reads_a_private_display() {
-        if std::env::var("MACSETTINGS_REAL_XRANDR").is_err() {
+        if std::env::var("DECSETTINGS_REAL_XRANDR").is_err() {
             return;
         }
         let d = std::env::var("DISPLAY").unwrap_or_default();

@@ -584,7 +584,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
                     commands.push(CommandDef { name: cname.to_string(), run, interval });
                 }
             }
-            (Trust::User, _) => cx.err(c, "commands", "`[commands]` needs `widgets.allow_exec = true` in macshell.json"),
+            (Trust::User, _) => cx.err(c, "commands", "`[commands]` needs `widgets.allow_exec = true` in decebal.json"),
             (Trust::Theme, _) => cx.err(c, "commands", "widgets that come with a theme cannot run commands"),
             _ => cx.err(c, "commands", "must be a table"),
         }

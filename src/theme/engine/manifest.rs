@@ -504,7 +504,7 @@ pub fn analyze(text: &str) -> Analysis {
                 level: Level::Warning,
                 line: 0,
                 key: "min_shell_version".into(),
-                msg: format!("needs macshell {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
+                msg: format!("needs decebal {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
             });
         }
     }

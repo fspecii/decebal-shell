@@ -14,7 +14,7 @@ pub enum Origin {
     Local,
     /// Came in through an import.
     Imported,
-    /// Shipped with macshell (never on disk).
+    /// Shipped with decebal (never on disk).
     Builtin,
     /// Written by "Apply" as a restore point.
     Backup,
@@ -117,7 +117,7 @@ impl Manifest {
         };
         match doc.get("format").and_then(|f| f.as_integer()) {
             Some(FORMAT) => {}
-            Some(n) => return Err(format!("this preset uses format {n}; this macshell understands format {FORMAT}")),
+            Some(n) => return Err(format!("this preset uses format {n}; this decebal understands format {FORMAT}")),
             None => return Err("manifest.toml: `format` is missing".into()),
         }
         let name = get_str("name")?.ok_or("manifest.toml: `name` is missing")?.trim().to_string();

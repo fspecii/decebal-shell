@@ -1,8 +1,8 @@
 # Dock style: macOS dock or Windows taskbar
 
-`macdock` has two looks. `style = "mac"` (default) is the floating, magnifying dock. `style = "windows"` turns it into a
+`decdock` has two looks. `style = "mac"` (default) is the floating, magnifying dock. `style = "windows"` turns it into a
 Windows 10/11 style taskbar: monitor wide, docked at the bottom (or top) edge, flat surface, no magnification, no bounce.
-The change is live: edit the file, use the dock's right-click menu or the Desktop & Dock pane of `macsettings`; the surface
+The change is live: edit the file, use the dock's right-click menu or the Desktop & Dock pane of `decsettings`; the surface
 is resized and moved, its strut republished (so the window manager's work area follows) and the old look disappears
 without a restart.
 
@@ -17,39 +17,39 @@ snake_case spelling (`windows_align`) is accepted too. A value that is not one o
 | `style` | `"mac"`, `"windows"` | the look |
 | `windowsAlign` | `"center"`, `"left"` | `center`: Windows 11 (rounded, 48 px, buttons in the middle of the bar). `left`: Windows 10 / classic (square, 44 px, line under running apps, pale search box) |
 | `windowsLabels` | `"never"`, `"always"` | `never`: one icon button per app (windows combined). `always`: "never combine": one button with the window title per window |
-| `windowsSearch` | `"box"`, `"button"`, `"none"` | search entry next to Start; opens macspot (`MACSHELL_SPOTLIGHT` overrides the command) |
+| `windowsSearch` | `"box"`, `"button"`, `"none"` | search entry next to Start; opens decspot (`DECEBAL_SPOTLIGHT` overrides the command) |
 | `windowsPosition` | `"bottom"`, `"top"` | edge of the taskbar (left and right are not drawn yet and give the bottom) |
 | `windowsTheme` | `"auto"`, `"dark"`, `"light"` | `auto` follows the system light/dark setting |
 | `transparency` | 0..1 | existing key; the taskbar uses a quarter of it (0.4 gives a 90% opaque bar) |
 
-Heights scale with `Xft.dpi / 96` (or `MACSHELL_SCALE`): 48 px (center) / 44 px (left) at 96 dpi.
+Heights scale with `Xft.dpi / 96` (or `DECEBAL_SCALE`): 48 px (center) / 44 px (left) at 96 dpi.
 
-`macshell.json`: `{"bar": {"enabled": true | false | "auto"}}`, see "macbar hiding" below.
+`decebal.json`: `{"bar": {"enabled": true | false | "auto"}}`, see "decbar hiding" below.
 
-`macthemectl style windows|macos|caelestia` writes `style` (and `windowsAlign`) here together with the theme, `bar.enabled` and `dock.enabled`
+`decthemectl style windows|macos|caelestia` writes `style` (and `windowsAlign`) here together with the theme, `bar.enabled` and `dock.enabled`
 (`"auto"` under Caelestia: the dock hides while the theme has a vertical bar, see [caelestia.md](caelestia.md)); see
 [theming.md](theming.md#shell-styles-macos-windows-caelestia).
 
 ## What the taskbar does
 
-* **Start**: a four-pane logo drawn in code; opens Launchpad (`maclaunch`, `MACSHELL_LAUNCHPAD` overrides). **Search**: opens macspot.
+* **Start**: a four-pane logo drawn in code; opens Launchpad (`declaunch`, `DECEBAL_LAUNCHPAD` overrides). **Search**: opens decspot.
 * **Task buttons**: pinned apps (the same `dock-pinned-macos.json`, Launchpad and Trash are not shown) and the running apps that are not pinned. Running: a small pill under the icon, the focused app's pill is longer and accent coloured (classic look: a line under the whole button). Hover highlight.
   Click: not running -> start it; running -> focus (restoring it if minimised); the focused app's button -> minimise it (several windows of one app: cycle through them). Middle click: new instance. Right click: menu (windows of the app, app name = new window, *Pin to taskbar* / *Unpin from taskbar*, *Open file location*, *Minimize*, *Close window* / *Close all windows*). Drag a pinned button to reorder; saved on release.
 * **Too many windows**: buttons shrink to a minimum, then the row scrolls with the wheel (edges fade).
-* **Tray**: the status items of macbar (window layout under rdwm, Bluetooth, Wi-Fi/Ethernet, sound, battery) with the same popups (wheel over sound = volume, middle click = mute), then the clock (time over date) which opens the same calendar, then the show-desktop sliver (minimises every window of the workspace; the next click restores them).
+* **Tray**: the status items of decbar (window layout under rdwm, Bluetooth, Wi-Fi/Ethernet, sound, battery) with the same popups (wheel over sound = volume, middle click = mute), then the clock (time over date) which opens the same calendar, then the show-desktop sliver (minimises every window of the workspace; the next click restores them).
 * **Dock menu**: right click on an empty part of the taskbar (or of the macOS dock panel): *Dock Style: macOS / Windows* (the current one is greyed), alignment, window titles, settings. In the macOS style every icon menu also ends with *Dock Style: Windows*.
 
-The tray reuses macbar's code instead of copying it: `menubar::embed` (`MacBar::status_engine`, `status_*`) lets another surface host the data
+The tray reuses decbar's code instead of copying it: `menubar::embed` (`DecBar::status_engine`, `status_*`) lets another surface host the data
 workers, the popup builders and the calendar; the taskbar only draws the tray icons and places the popup next to them.
 
-## macbar hiding (`bar.enabled`)
+## decbar hiding (`bar.enabled`)
 
-`macshell.json`: `{"bar": {"enabled": false}}` hides the menu bar, `"auto"` hides it exactly while `style` is `"windows"`, `true` (default) always shows it.
-macbar polls the two files every 2 s. When the bar is switched off its surface is closed (the strut disappears, windows use the space) but
+`decebal.json`: `{"bar": {"enabled": false}}` hides the menu bar, `"auto"` hides it exactly while `style` is `"windows"`, `true` (default) always shows it.
+decbar polls the two files every 2 s. When the bar is switched off its surface is closed (the strut disappears, windows use the space) but
 **the process stays alive**, sleeping and re-checking, and maps its surface again when the setting changes. This matters for the session:
-`rdwm-macshell-session` supervises `macbar macdock` with `pgrep -x macbar || rdwmctl action spawn macbar` every 2 s, so a bar that exited would be
+`rdwm-decebal-session` supervises `decbar decdock` with `pgrep -x decbar || rdwmctl action spawn decbar` every 2 s, so a bar that exited would be
 respawned forever; a sleeping one is simply left alone. No change to the session script is needed. For a Windows-only session the user
-sets `{"bar": {"enabled": "auto"}}` once. (`macbar --png/--app` ignore the setting.)
+sets `{"bar": {"enabled": "auto"}}` once. (`decbar --png/--app` ignore the setting.)
 
 ## Adapting to the shared theme
 

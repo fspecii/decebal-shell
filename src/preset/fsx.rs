@@ -126,7 +126,7 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macshell-fsx-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-fsx-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -144,11 +144,11 @@ mod tests {
     #[test]
     fn save_makes_a_timestamped_backup_and_skips_unchanged() {
         let d = tmp("save");
-        let p = d.join("macshell.json");
+        let p = d.join("decebal.json");
         assert_eq!(save_with_backup(&p, "{\"a\": 1}\n").unwrap(), None, "a new file has nothing to back up");
         assert_eq!(save_with_backup(&p, "{\"a\": 1}\n").unwrap(), None);
         let b1 = save_with_backup(&p, "{\"a\": 2}\n").unwrap().expect("backup");
-        assert!(b1.file_name().unwrap().to_string_lossy().starts_with("macshell.json.bak."), "{b1:?}");
+        assert!(b1.file_name().unwrap().to_string_lossy().starts_with("decebal.json.bak."), "{b1:?}");
         assert_eq!(std::fs::read_to_string(&b1).unwrap(), "{\"a\": 1}\n");
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "{\"a\": 2}\n");
         // two saves within the same second never overwrite each other's backup

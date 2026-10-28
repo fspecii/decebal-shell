@@ -154,8 +154,8 @@ fn commands() -> &'static [(Item, &'static str)] {
             (cmd("Shut Down", "Press Enter again to confirm", "power", RED, argv(&["systemctl", "poweroff"]), true), "poweroff turn off"),
             (cmd("Log Out", "Press Enter again to confirm", "logout", ORANGE, argv(&["loginctl", "terminate-user", &user]), true), "sign out exit"),
             (cmd("Toggle Dark Mode", "Switch between light and dark", "dark-mode", GRAY, Act::DarkMode, false), "appearance theme light"),
-            (cmd("Wallpapers", "Browse Wallhaven", "picture", BLUE, Act::Exec(launch::sibling_or_path("machaven")), false), "wallhaven background wallpaper"),
-            (cmd("Launchpad", "All applications", "grid", BLUE, Act::Exec(launch::sibling_or_path("maclaunch")), false), "apps applications"),
+            (cmd("Wallpapers", "Browse Wallhaven", "picture", BLUE, Act::Exec(launch::sibling_or_path("dechaven")), false), "wallhaven background wallpaper"),
+            (cmd("Launchpad", "All applications", "grid", BLUE, Act::Exec(launch::sibling_or_path("declaunch")), false), "apps applications"),
         ];
         if let Some(a) = shot {
             v.push((cmd("Screenshot", "Capture the screen", "screenshot", GRAY, a, false), "capture screen"));
@@ -347,9 +347,9 @@ pub fn search_with(query: &str, apps: &[AppEntry], hist: &History, now: u64) -> 
     out
 }
 
-/// `MACSPOT_SEARCH_URL` (with `%s` for the query) or DuckDuckGo.
+/// `DECSPOT_SEARCH_URL` (with `%s` for the query) or DuckDuckGo.
 fn web_url(q: &str) -> String {
-    let tpl = std::env::var("MACSPOT_SEARCH_URL").ok().filter(|t| t.contains("%s")).unwrap_or_else(|| "https://duckduckgo.com/?q=%s".into());
+    let tpl = std::env::var("DECSPOT_SEARCH_URL").ok().filter(|t| t.contains("%s")).unwrap_or_else(|| "https://duckduckgo.com/?q=%s".into());
     tpl.replacen("%s", &url_encode(q), 1)
 }
 
@@ -806,7 +806,7 @@ impl WindowApp for Spotlight {
     }
 
     fn app_id(&self) -> &'static str {
-        "macspot"
+        "decspot"
     }
 
     fn overlay(&self) -> bool {

@@ -1,4 +1,4 @@
-//! `macthemectl theme ...`: the command line of the theme engine. [`run`] returns the text to print so tests can drive it.
+//! `decthemectl theme ...`: the command line of the theme engine. [`run`] returns the text to print so tests can drive it.
 
 use super::archive::Limits;
 use super::manifest;
@@ -8,28 +8,28 @@ use crate::settings::io::Paths;
 use crate::theme::live::Source;
 use std::path::{Path, PathBuf};
 
-pub const HELP: &str = "macthemectl theme list [--json]                 installed themes (built-in, user, system) with version and author
-macthemectl theme info ID                     everything about one theme
-macthemectl theme schema [--json]             every key a theme.toml can set, its type and range, and whether the shell applies it yet
-macthemectl theme validate PATH               check a theme folder, a .dtheme file or a single theme.toml (line numbers for every mistake)
-macthemectl theme new ID [--name N] [--from BASE]
-                                              start a theme in ~/.config/macshell/themes/ID/ (BASE: a theme to copy, default macos)
-macthemectl theme install PATH [--force] [--apply]
+pub const HELP: &str = "decthemectl theme list [--json]                 installed themes (built-in, user, system) with version and author
+decthemectl theme info ID                     everything about one theme
+decthemectl theme schema [--json]             every key a theme.toml can set, its type and range, and whether the shell applies it yet
+decthemectl theme validate PATH               check a theme folder, a .dtheme file or a single theme.toml (line numbers for every mistake)
+decthemectl theme new ID [--name N] [--from BASE]
+                                              start a theme in ~/.config/decebal/themes/ID/ (BASE: a theme to copy, default macos)
+decthemectl theme install PATH [--force] [--apply]
                                               install a folder or .dtheme (validated; packages are data only)
-macthemectl theme uninstall ID                remove an installed theme
-macthemectl theme pack DIR [-o FILE]          make a .dtheme (writes the content hash into the manifest)
-macthemectl theme unpack FILE [DIR]           extract a .dtheme into a new folder to edit it
-macthemectl theme hash DIR [--write]          print the content hash (and store it in theme.toml with --write)
-macthemectl theme apply ID [--preview SECS] [--no-rdwm]
+decthemectl theme uninstall ID                remove an installed theme
+decthemectl theme pack DIR [-o FILE]          make a .dtheme (writes the content hash into the manifest)
+decthemectl theme unpack FILE [DIR]           extract a .dtheme into a new folder to edit it
+decthemectl theme hash DIR [--write]          print the content hash (and store it in theme.toml with --write)
+decthemectl theme apply ID [--preview SECS] [--no-rdwm]
                                               set colours, fonts, titlebars, bar, dock, wallpaper, widgets... in one step; --preview
                                               puts everything back after SECS seconds (default 10)
-macthemectl theme undo                        restore the files as they were before the last apply
-macthemectl theme duplicate ID NEWID [--name N]
+decthemectl theme undo                        restore the files as they were before the last apply
+decthemectl theme duplicate ID NEWID [--name N]
                                               an editable copy of any theme
-macthemectl theme export ID [FILE]            write theme ID as a .dtheme (default ./ID.dtheme)
-macthemectl theme snapshot ID [--name N]      create a theme from the current settings (colours, titlebars, gaps, wallpaper, dock, widgets)
+decthemectl theme export ID [FILE]            write theme ID as a .dtheme (default ./ID.dtheme)
+decthemectl theme snapshot ID [--name N]      create a theme from the current settings (colours, titlebars, gaps, wallpaper, dock, widgets)
 
-Themes live in ~/.config/macshell/themes/ID/ (override with $MACSHELL_THEMES) and /usr/share/macshell/themes/. See docs/theme-engine.md.";
+Themes live in ~/.config/decebal/themes/ID/ (override with $DECEBAL_THEMES) and /usr/share/decebal/themes/. See docs/theme-engine.md.";
 
 fn flag(args: &[String], name: &str) -> bool {
     args.iter().any(|a| a == name)
@@ -88,7 +88,7 @@ fn paths_note(a: &apply::Applied) -> String {
         s.push_str(&format!("  note: {n}\n"));
     }
     if !a.undo_id.is_empty() {
-        s.push_str("  undo with: macthemectl theme undo\n");
+        s.push_str("  undo with: decthemectl theme undo\n");
     }
     s
 }
@@ -105,7 +105,7 @@ fn json_list(infos: &[store::Info], current: &str) -> String {
     serde_json::to_string_pretty(&v).unwrap_or_default() + "\n"
 }
 
-/// Runs `macthemectl theme <args>`.
+/// Runs `decthemectl theme <args>`.
 pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, String> {
     let rest = args.get(1..).unwrap_or(&[]);
     match args.first().map(String::as_str) {
@@ -214,7 +214,7 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
         Some("new") => {
             let id = *pos(rest, &["--name", "--from"]).first().ok_or("new needs a theme id")?;
             let dir = store::scaffold(src, id, opt(rest, "--name"), opt(rest, "--from"))?;
-            Ok(format!("created {}\nedit theme.toml, then: macthemectl theme validate {} && macthemectl theme apply {id}\n", dir.display(), dir.display()))
+            Ok(format!("created {}\nedit theme.toml, then: decthemectl theme validate {} && decthemectl theme apply {id}\n", dir.display(), dir.display()))
         }
         Some("install") => {
             let p = *pos(rest, &[]).first().ok_or("install needs a folder or .dtheme")?;

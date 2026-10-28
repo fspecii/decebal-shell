@@ -3,7 +3,7 @@
 //! carries `x-kde-passwordManagerHint`, as KeePassXC and Bitwarden do. Exits when another client takes the selection
 //! or on SIGTERM.
 
-use macshell::clipboard::{self, SelAtoms};
+use decebal::clipboard::{self, SelAtoms};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;

@@ -1,5 +1,5 @@
 //! Date & Time: time zone (timedatectl), NTP, and how the menu bar writes the clock (12/24 h, date style),
-//! stored in `macshell.json` (`clockHour12`, `clockDate`) which macbar reads.
+//! stored in `decebal.json` (`clockHour12`, `clockDate`) which decbar reads.
 
 use super::run::{Cmd, Out, Runner};
 use super::{Action, Dom, Hub};

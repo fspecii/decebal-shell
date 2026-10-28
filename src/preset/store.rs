@@ -21,13 +21,13 @@ pub struct Env {
     pub rdwmctl: PathBuf,
 }
 
-/// `$MACSHELL_PRESETS`, else `$XDG_CONFIG_HOME/macshell/presets`, else `~/.config/macshell/presets`.
+/// `$DECEBAL_PRESETS`, else `$XDG_CONFIG_HOME/decebal/presets`, else `~/.config/decebal/presets`.
 pub fn presets_dir() -> PathBuf {
-    std::env::var_os("MACSHELL_PRESETS")
+    std::env::var_os("DECEBAL_PRESETS")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("macshell/presets")))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/macshell/presets")))
+        .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("decebal/presets")))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/decebal/presets")))
         .unwrap_or_else(|| PathBuf::from("presets"))
 }
 
@@ -57,7 +57,7 @@ impl Env {
 
     fn kind_of(file: &str) -> Option<FileKind> {
         Some(match file {
-            "macshell.json" => FileKind::Shell,
+            "decebal.json" => FileKind::Shell,
             "dock-settings.json" => FileKind::Dock,
             "dock-pinned-macos.json" => FileKind::Pinned,
             "rdwm.toml" => FileKind::Rdwm,
@@ -113,6 +113,12 @@ impl Preset {
     }
 
     pub fn from_files(mut files: BTreeMap<String, Vec<u8>>) -> Result<Preset, String> {
+        // presets exported (or kept in the presets folder) before the rename call the shell settings `macshell.json`
+        if !files.contains_key("decebal.json") {
+            if let Some(old) = files.remove(bundle::LEGACY_SHELL_FILE) {
+                files.insert("decebal.json".into(), old);
+            }
+        }
         bundle::check_files(&files)?;
         let m = files.remove(MANIFEST).ok_or("manifest.toml is missing")?;
         let manifest = Manifest::parse(std::str::from_utf8(&m).map_err(|_| "manifest.toml is not UTF-8 text")?)?;
@@ -178,7 +184,7 @@ impl Preset {
     /// Everything this preset would make the desktop run.
     pub fn commands(&self) -> Vec<RunItem> {
         let mut out = Vec::new();
-        for file in ["macshell.json", "dock-settings.json", "dock-pinned-macos.json"] {
+        for file in ["decebal.json", "dock-settings.json", "dock-pinned-macos.json"] {
             if let Some(v) = self.text(file).and_then(|t| serde_json::from_str::<Value>(t).ok()) {
                 out.extend(parts::json_commands(file, &v));
             }
@@ -191,7 +197,7 @@ impl Preset {
 
     /// Removes every command (see `parts::strip_toml_commands`) and the autostart part.
     pub fn strip_commands(&mut self) -> Result<(), String> {
-        for file in ["macshell.json", "dock-settings.json", "dock-pinned-macos.json"] {
+        for file in ["decebal.json", "dock-settings.json", "dock-pinned-macos.json"] {
             if let Some(t) = self.text(file) {
                 let mut v: Value = serde_json::from_str(t).map_err(|e| format!("{file}: {e}"))?;
                 parts::strip_json_commands(&mut v);
@@ -294,10 +300,10 @@ pub fn capture(env: &Env, opts: &CaptureOpts) -> Result<(Preset, Vec<String>), S
     m.created = fsx::now_iso();
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
 
-    if opts.parts.any_in("macshell.json") {
-        let doc = read_json(&env.target("macshell.json"))?;
+    if opts.parts.any_in("decebal.json") {
+        let doc = read_json(&env.target("decebal.json"))?;
         let share = parts::extract_json(&doc, &opts.parts);
-        files.insert("macshell.json".into(), parts::pretty_json(&share).into_bytes());
+        files.insert("decebal.json".into(), parts::pretty_json(&share).into_bytes());
         if opts.parts.has(Part::Shell) {
             if let Some(id) = theme_name(&doc).map(|n| n.trim().to_ascii_lowercase()) {
                 let name = format!("themes/{id}.toml");
@@ -620,7 +626,7 @@ impl Plan {
 
 fn label_of(file: &str) -> String {
     match file {
-        "macshell.json" => "Shell settings (macshell.json)".into(),
+        "decebal.json" => "Shell settings (decebal.json)".into(),
         "dock-settings.json" => "Dock (dock-settings.json)".into(),
         "dock-pinned-macos.json" => "Pinned apps (dock-pinned-macos.json)".into(),
         "rdwm.toml" => "Window manager (config.toml)".into(),
@@ -645,12 +651,12 @@ pub fn plan(env: &Env, p: &Preset) -> Plan {
         pl.targets.push(Target { path, label: label_of(file), bytes, kind: Env::kind_of(file), status });
     };
 
-    // --- macshell.json
-    if m.parts.any_in("macshell.json") {
-        let path = env.target("macshell.json");
-        match (read_json(&path), p.text("macshell.json").and_then(|t| serde_json::from_str::<Value>(t).ok())) {
+    // --- decebal.json
+    if m.parts.any_in("decebal.json") {
+        let path = env.target("decebal.json");
+        match (read_json(&path), p.text("decebal.json").and_then(|t| serde_json::from_str::<Value>(t).ok())) {
             (Ok(cur), Some(pre)) => {
-                cur_commands.extend(parts::json_commands("macshell.json", &cur));
+                cur_commands.extend(parts::json_commands("decebal.json", &cur));
                 let new = parts::merge_json(&cur, &pre, &m.parts, m.merge);
                 let (a, b) = (parts::flatten_json(&cur), parts::flatten_json(&new));
                 let status = if path.exists() {
@@ -662,10 +668,10 @@ pub fn plan(env: &Env, p: &Preset) -> Plan {
                 } else {
                     Status::New
                 };
-                push(&mut pl, "macshell.json", path, status, parts::pretty_json(&new).into_bytes(), a, b);
+                push(&mut pl, "decebal.json", path, status, parts::pretty_json(&new).into_bytes(), a, b);
             }
             (Err(e), _) => pl.errors.push(e),
-            (_, None) => pl.errors.push("macshell.json in the preset is not valid".into()),
+            (_, None) => pl.errors.push("decebal.json in the preset is not valid".into()),
         }
     }
     // --- dock files
@@ -769,7 +775,7 @@ pub fn plan(env: &Env, p: &Preset) -> Plan {
             m.parts.has(Part::Autostart)
         } else if r.source.starts_with("rdwm") {
             m.parts.has(Part::Keys)
-        } else if r.source.starts_with("macshell.json") {
+        } else if r.source.starts_with("decebal.json") {
             m.parts.has(Part::Shell)
         } else if r.source.starts_with("dock-settings") {
             m.parts.has(Part::Dock)
@@ -894,7 +900,7 @@ mod tests {
     use serde_json::json;
 
     pub fn sandbox(name: &str) -> Env {
-        let d = std::env::temp_dir().join(format!("macshell-preset-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-preset-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         std::fs::create_dir_all(d.join("cfg/rdwm")).unwrap();
@@ -908,11 +914,11 @@ mod tests {
         }
     }
 
-    const RDWM: &str = "# mine\n[general]\nborder_px = 2\n\n[wallpaper]\nimage = \"/nonexistent/wall.png\"\nmode = \"fill\"\n\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\nargs = [\"foot\"]\n\n[[autostart]]\ncommand = \"macbar &\"\n\n[[output]]\nname = \"DP-1\"\n";
+    const RDWM: &str = "# mine\n[general]\nborder_px = 2\n\n[wallpaper]\nimage = \"/nonexistent/wall.png\"\nmode = \"fill\"\n\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\nargs = [\"foot\"]\n\n[[autostart]]\ncommand = \"decbar &\"\n\n[[output]]\nname = \"DP-1\"\n";
 
     fn fill(env: &Env) {
         std::fs::write(
-            env.shell_dir.join("macshell.json"),
+            env.shell_dir.join("decebal.json"),
             r#"{"theme": {"name": "nord", "mode": "dark", "font": "Inter"}, "bar": {"enabled": true}, "hot_corners": {"top_left": "dashboard", "bottom_right": "custom:notify-send hi"}}"#,
         )
         .unwrap();
@@ -932,7 +938,7 @@ mod tests {
         let (p, notes) = capture(&env, &opts("My Setup", &[Part::Shell, Part::Fonts, Part::HotCorners, Part::Dock, Part::Rdwm, Part::Keys])).unwrap();
         assert!(notes.is_empty());
         assert_eq!(p.id, "my-setup");
-        assert!(p.files.contains_key("macshell.json") && p.files.contains_key("dock-settings.json") && p.files.contains_key("rdwm.toml"));
+        assert!(p.files.contains_key("decebal.json") && p.files.contains_key("dock-settings.json") && p.files.contains_key("rdwm.toml"));
         assert!(!p.files.contains_key("dock-pinned-macos.json"));
         let rd = p.text("rdwm.toml").unwrap();
         assert!(rd.contains("border_px") && rd.contains("[[bind]]") && !rd.contains("autostart") && !rd.contains("DP-1") && !rd.contains("wallpaper"), "{rd}");
@@ -953,23 +959,49 @@ mod tests {
     }
 
     #[test]
+    fn presets_made_before_the_rename_still_load() {
+        let env = sandbox("legacy-preset");
+        fill(&env);
+        let (p, _) = capture(&env, &opts("Old", &[Part::Shell, Part::Dock])).unwrap();
+        // the same files as the old version wrote them: the shell settings are `macshell.json`
+        let mut old = p.bundle_files();
+        let shell = old.remove("decebal.json").expect("shell part");
+        old.insert("macshell.json".into(), shell.clone());
+        let bundle = bundle::write_tar_gz(&old).unwrap();
+        let back = Preset::from_bundle(&bundle).unwrap();
+        assert_eq!(back.files.get("decebal.json"), Some(&shell));
+        assert!(!back.files.contains_key("macshell.json"));
+        // and a preset folder copied from ~/.config/macshell/presets
+        let dir = env.shell_dir.join("presets/old");
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, data) in &old {
+            std::fs::write(dir.join(name), data).unwrap();
+        }
+        let loaded = load_dir(&dir).unwrap();
+        assert_eq!(loaded.files.get("decebal.json"), Some(&shell));
+        // text exported by the old version starts with MACSHELL-PRESET-1:
+        let text = bundle::to_text(&bundle).replacen(bundle::TEXT_HEADER, bundle::LEGACY_TEXT_HEADER, 1);
+        assert_eq!(Preset::from_bundle(&bundle::from_text(&text).unwrap()).unwrap().files, back.files);
+    }
+
+    #[test]
     fn apply_writes_files_makes_a_restore_point_and_can_be_undone() {
         let env = sandbox("apply");
         fill(&env);
         let (p, _) = capture(&env, &opts("Original", &[Part::Shell, Part::Dock, Part::Rdwm])).unwrap();
         save(&env, &p, false).unwrap();
         // change the live config, then apply the saved preset
-        std::fs::write(env.shell_dir.join("macshell.json"), r#"{"theme": {"name": "dracula"}, "workspaces": "off"}"#).unwrap();
+        std::fs::write(env.shell_dir.join("decebal.json"), r#"{"theme": {"name": "dracula"}, "workspaces": "off"}"#).unwrap();
         std::fs::write(env.shell_dir.join("dock-settings.json"), r#"{"appSpacing": 20, "magnification": 2}"#).unwrap();
         std::fs::write(&env.rdwm_config, "[general]\nborder_px = 9\n[[output]]\nname = \"HDMI-1\"\n").unwrap();
         let pl = plan(&env, &p);
         assert!(pl.errors.is_empty(), "{:?}", pl.errors);
         assert!(pl.changed());
-        assert!(pl.changes.iter().any(|c| c.label.contains("macshell.json") && c.lines.iter().any(|l| l.contains("theme.name"))), "{:?}", pl.changes);
+        assert!(pl.changes.iter().any(|c| c.label.contains("decebal.json") && c.lines.iter().any(|l| l.contains("theme.name"))), "{:?}", pl.changes);
         let r = apply(&env, &p, true).unwrap();
         assert_eq!(r.restore_point.as_deref(), Some("before-original"));
         assert!(r.rdwm_changed && r.written.len() == 3);
-        let shell: Value = serde_json::from_str(&std::fs::read_to_string(env.shell_dir.join("macshell.json")).unwrap()).unwrap();
+        let shell: Value = serde_json::from_str(&std::fs::read_to_string(env.shell_dir.join("decebal.json")).unwrap()).unwrap();
         assert_eq!(shell["theme"]["name"], "nord");
         assert!(shell.get("workspaces").is_none(), "replace mode removes what the preset does not have");
         let dock: Value = serde_json::from_str(&std::fs::read_to_string(env.shell_dir.join("dock-settings.json")).unwrap()).unwrap();
@@ -978,12 +1010,12 @@ mod tests {
         let rd = std::fs::read_to_string(&env.rdwm_config).unwrap();
         assert!(rd.contains("border_px = 2") && rd.contains("HDMI-1"), "outputs are never replaced: {rd}");
         // timestamped backups of the replaced files exist
-        assert!(!fsx::backups(&env.shell_dir.join("macshell.json")).is_empty());
+        assert!(!fsx::backups(&env.shell_dir.join("decebal.json")).is_empty());
         // the restore point puts the earlier state back
         let rp = find(&env, "before-original").expect("restore point");
         assert!(rp.is_backup());
         apply(&env, &rp, false).unwrap();
-        let shell: Value = serde_json::from_str(&std::fs::read_to_string(env.shell_dir.join("macshell.json")).unwrap()).unwrap();
+        let shell: Value = serde_json::from_str(&std::fs::read_to_string(env.shell_dir.join("decebal.json")).unwrap()).unwrap();
         assert_eq!(shell["theme"]["name"], "dracula");
         assert_eq!(shell["workspaces"], "off");
         assert!(std::fs::read_to_string(&env.rdwm_config).unwrap().contains("border_px = 9"));
@@ -1051,7 +1083,7 @@ mod tests {
         let (p, _) = capture(&env, &opts("Shared", &[Part::Shell, Part::HotCorners, Part::Rdwm, Part::Keys, Part::Autostart])).unwrap();
         let cmds = p.commands();
         let srcs: Vec<&str> = cmds.iter().map(|c| c.command.as_str()).collect();
-        assert!(srcs.contains(&"macbar &") && srcs.contains(&"foot") && srcs.contains(&"notify-send hi"), "{cmds:?}");
+        assert!(srcs.contains(&"decbar &") && srcs.contains(&"foot") && srcs.contains(&"notify-send hi"), "{cmds:?}");
         let bytes = p.to_bundle().unwrap();
         // a second machine
         let env2 = sandbox("import2");
@@ -1065,7 +1097,7 @@ mod tests {
         assert!(stripped.commands().is_empty(), "{:?}", stripped.commands());
         assert!(stripped.manifest.commands_stripped && !stripped.manifest.parts.has(Part::Autostart));
         assert_eq!(stripped.manifest.name, "Shared (2)");
-        assert!(!stripped.text("rdwm.toml").unwrap().contains("macbar"));
+        assert!(!stripped.text("rdwm.toml").unwrap().contains("decbar"));
         // reload from disk keeps the flag
         let again = find(&env2, &stripped.id).unwrap();
         assert!(again.manifest.commands_stripped);
@@ -1073,7 +1105,7 @@ mod tests {
         apply(&env2, &stripped, true).unwrap();
         let cfg = std::fs::read_to_string(&env2.rdwm_config).unwrap();
         assert!(parts::toml_commands(&cfg).is_empty(), "{cfg}");
-        let shell = std::fs::read_to_string(env2.shell_dir.join("macshell.json")).unwrap();
+        let shell = std::fs::read_to_string(env2.shell_dir.join("decebal.json")).unwrap();
         assert!(!shell.contains("notify-send"), "{shell}");
     }
 
@@ -1086,9 +1118,9 @@ mod tests {
         let dir = env.presets_dir.join("fine");
         assert!(load_dir(&dir).is_ok());
         // a symlink inside
-        std::os::unix::fs::symlink("/etc/passwd", dir.join("macshell.json")).unwrap();
+        std::os::unix::fs::symlink("/etc/passwd", dir.join("decebal.json")).unwrap();
         assert!(load_dir(&dir).unwrap_err().contains("symbolic link"));
-        std::fs::remove_file(dir.join("macshell.json")).unwrap();
+        std::fs::remove_file(dir.join("decebal.json")).unwrap();
         // an unknown file
         std::fs::write(dir.join("run.sh"), "echo").unwrap();
         assert!(load_dir(&dir).unwrap_err().contains("unknown"));
@@ -1143,7 +1175,7 @@ mod tests {
         std::fs::write(&env.rdwm_config, format!("[wallpaper]\nimage = \"{}\"\nmode = \"fit\"\n", img.display())).unwrap();
         std::fs::create_dir_all(&env.themes_dir).unwrap();
         std::fs::write(env.themes_dir.join("mine.toml"), "name = \"Mine\"\n").unwrap();
-        std::fs::write(env.shell_dir.join("macshell.json"), r#"{"theme": {"name": "mine"}}"#).unwrap();
+        std::fs::write(env.shell_dir.join("decebal.json"), r#"{"theme": {"name": "mine"}}"#).unwrap();
         let mut o = opts("Pic", &[Part::Shell, Part::Wallpaper]);
         o.embed_wallpaper = true;
         let (p, notes) = capture(&env, &o).unwrap();

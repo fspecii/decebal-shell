@@ -62,7 +62,7 @@ fn atoms<C: Connection>(c: &C) -> Result<Atoms, Error> {
         max_horz: intern(c, "_NET_WM_STATE_MAXIMIZED_HORZ")?,
         moveresize: intern(c, "_NET_WM_MOVERESIZE")?,
         wm_change_state: intern(c, "WM_CHANGE_STATE")?,
-        wake: intern(c, "_MACSHELL_WAKE")?,
+        wake: intern(c, "_DECEBAL_WAKE")?,
     })
 }
 
@@ -506,8 +506,8 @@ mod tests {
 
     #[test]
     fn wm_class_from_app_id() {
-        assert_eq!(wm_class("MacSettings"), "macsettings\0MacSettings\0");
-        assert_eq!(wm_class("machaven"), "machaven\0Machaven\0");
+        assert_eq!(wm_class("DecSettings"), "decsettings\0DecSettings\0");
+        assert_eq!(wm_class("dechaven"), "dechaven\0Dechaven\0");
     }
 
     #[test]

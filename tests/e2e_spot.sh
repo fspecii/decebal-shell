@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end test of macspot on a private Xvfb under rdwm (if installed): type a query, press Enter, and check
+# End-to-end test of decspot on a private Xvfb under rdwm (if installed): type a query, press Enter, and check
 # that a stub application (never a real one) was launched. Also checks the toggle and Escape.
 #
-#   tests/e2e_spot.sh [path/to/macspot] [DISPLAY-number]
+#   tests/e2e_spot.sh [path/to/decspot] [DISPLAY-number]
 #
 # Needs Xvfb and xdotool. Uses its own XDG_RUNTIME_DIR/HOME; never touches the real session.
 set -u
-BIN=$(readlink -f "${1:-target/release/macspot}")
+BIN=$(readlink -f "${1:-target/release/decspot}")
 NUM=${2:-94}
 export DISPLAY=:$NUM
 unset WAYLAND_DISPLAY
@@ -48,12 +48,12 @@ if [ -n "$RDWM" ]; then "$RDWM" --backend x11 >"$T/rdwm.log" 2>&1 & PIDS+=($!); 
 
 wait_for() { for _ in $(seq 60); do eval "$1" && return 0; sleep 0.1; done; return 1; }
 shot() { command -v import >/dev/null && import -window root "${SHOTS:-$T}/$1.png" 2>/dev/null; }
-count_win() { xdotool search --onlyvisible --class macspot 2>/dev/null | wc -l; }
+count_win() { xdotool search --onlyvisible --class decspot 2>/dev/null | wc -l; }
 
 # 1. open, type, Enter -> stub launched, window gone
 "$BIN" & SP=$!; PIDS+=($SP)
-wait_for '[ "$(count_win)" -ge 1 ]' || fail "no macspot window appeared"
-read -r X Y W H < <(xdotool search --onlyvisible --class macspot | head -1 | xargs -I{} xdotool getwindowgeometry --shell {} | awk -F= '/^X=/{x=$2}/^Y=/{y=$2}/^WIDTH=/{w=$2}/^HEIGHT=/{h=$2}END{print x,y,w,h}')
+wait_for '[ "$(count_win)" -ge 1 ]' || fail "no decspot window appeared"
+read -r X Y W H < <(xdotool search --onlyvisible --class decspot | head -1 | xargs -I{} xdotool getwindowgeometry --shell {} | awk -F= '/^X=/{x=$2}/^Y=/{y=$2}/^WIDTH=/{w=$2}/^HEIGHT=/{h=$2}END{print x,y,w,h}')
 CX=$((X + W / 2)); [ $((CX - 800)) -lt 3 ] && [ $((800 - CX)) -lt 3 ] || fail "not centred horizontally (x=$X w=$W)"
 sleep 0.3
 xdotool type --delay 30 "zzstub"
@@ -62,19 +62,19 @@ shot typed
 xdotool key Return
 wait_for '[ -s "$T/launched" ]' || fail "stub app was not launched"
 grep -q -- "--flag" "$T/launched" || fail "Exec arguments wrong: $(cat "$T/launched")"
-wait_for '! kill -0 $SP 2>/dev/null' || fail "macspot did not exit after Enter"
+wait_for '! kill -0 $SP 2>/dev/null' || fail "decspot did not exit after Enter"
 echo "ok: type + Enter launches the stub"
 
 # 2. history learned
-[ -s "$XDG_STATE_HOME/macshell/spotlight-history" ] || fail "no usage history written"
-grep -q "app:Zzstub Application" "$XDG_STATE_HOME/macshell/spotlight-history" || fail "history lacks the app"
+[ -s "$XDG_STATE_HOME/decebal/spotlight-history" ] || fail "no usage history written"
+grep -q "app:Zzstub Application" "$XDG_STATE_HOME/decebal/spotlight-history" || fail "history lacks the app"
 echo "ok: usage history"
 
 # 3. toggle: second invocation closes the first
 "$BIN" & SP=$!; PIDS+=($SP)
 wait_for '[ "$(count_win)" -ge 1 ]' || fail "no window (toggle test)"
 "$BIN"
-wait_for '! kill -0 $SP 2>/dev/null' || fail "second macspot did not close the first"
+wait_for '! kill -0 $SP 2>/dev/null' || fail "second decspot did not close the first"
 echo "ok: toggle"
 
 # 4. Escape closes

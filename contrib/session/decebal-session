@@ -1,0 +1,5 @@
+#!/bin/sh
+# Starts Hyprland as the "decebal" session: the Rust bar and dock instead of Quickshell.
+export DECEBAL_SESSION=1
+export PATH="/usr/local/lib/decebal/shim:$PATH"
+exec /usr/bin/start-hyprland "$@"

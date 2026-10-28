@@ -4,7 +4,7 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-/// Hidden `macspot` argument that runs [`serve_x11`] with the text on stdin.
+/// Hidden `decspot` argument that runs [`serve_x11`] with the text on stdin.
 pub const SERVE_ARG: &str = "--serve-clipboard";
 
 fn in_path(prog: &str) -> bool {
@@ -24,7 +24,7 @@ fn pipe_to(mut cmd: Command, text: &str) -> bool {
 
 /// Puts `text` on the clipboard; true when a helper was started.
 pub fn copy(text: &str) -> bool {
-    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var("MACSHELL_BACKEND").as_deref() != Ok("x11");
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("x11");
     if wayland && in_path("wl-copy") {
         return pipe_to(Command::new("wl-copy"), text);
     }
@@ -155,11 +155,11 @@ pub fn serve_x11(_: &str) -> Result<(), String> {
 
 #[cfg(all(test, feature = "x11"))]
 mod tests {
-    /// Needs a private X server: `MACSHELL_TEST_X11=1 DISPLAY=:94 cargo test clipboard` (skipped otherwise,
+    /// Needs a private X server: `DECEBAL_TEST_X11=1 DISPLAY=:94 cargo test clipboard` (skipped otherwise,
     /// so the suite never touches a real session).
     #[test]
     fn serves_text_to_a_requestor() {
-        if std::env::var("MACSHELL_TEST_X11").as_deref() != Ok("1") {
+        if std::env::var("DECEBAL_TEST_X11").as_deref() != Ok("1") {
             return;
         }
         use x11rb::connection::Connection;
@@ -171,7 +171,7 @@ mod tests {
         let (conn, n) = x11rb::connect(None).unwrap();
         let root = conn.setup().roots[n].root;
         let atom = |s: &str| conn.intern_atom(false, s.as_bytes()).unwrap().reply().unwrap().atom;
-        let (clip, utf8, prop) = (atom("CLIPBOARD"), atom("UTF8_STRING"), atom("MACSPOT_TEST"));
+        let (clip, utf8, prop) = (atom("CLIPBOARD"), atom("UTF8_STRING"), atom("DECSPOT_TEST"));
         let win = conn.generate_id().unwrap();
         conn.create_window(0, win, root, 0, 0, 1, 1, 0, WindowClass::INPUT_ONLY, 0, &CreateWindowAux::new()).unwrap();
         for _ in 0..50 {

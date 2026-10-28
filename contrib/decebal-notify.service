@@ -1,0 +1,14 @@
+[Unit]
+Description=decebal notification daemon (org.freedesktop.Notifications, X11)
+PartOf=graphical-session.target
+After=graphical-session.target
+# Wayland sessions have their own daemon (mako, dunst); decnotify also exits quietly when the name is taken.
+ConditionEnvironment=!WAYLAND_DISPLAY
+
+[Service]
+ExecStart=/usr/bin/decnotify
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

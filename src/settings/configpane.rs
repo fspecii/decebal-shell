@@ -1,7 +1,7 @@
 //! The "Configuration" pane: edit the raw configuration files as text, and keep named presets of the whole setup that
 //! can be exported, imported and shared (`docs/presets.md`).
 //!
-//! * Edit files: a text editor ([`super::editor`]) per file (macshell.json, dock-settings.json, pinned apps, the rdwm
+//! * Edit files: a text editor ([`super::editor`]) per file (decebal.json, dock-settings.json, pinned apps, the rdwm
 //!   config) plus a read-only overview of every effective setting. Saving validates first and shows problems with line
 //!   numbers; an invalid file is never written; every save keeps a timestamped backup and "Revert" restores it.
 //! * Presets: save the current setup, apply (always reversible), rename, duplicate, delete, export/import bundles.
@@ -197,7 +197,7 @@ impl State {
 
     fn path_of(&self, tab: Tab) -> Option<PathBuf> {
         Some(match tab {
-            Tab::Shell => self.env.shell_dir.join("macshell.json"),
+            Tab::Shell => self.env.shell_dir.join("decebal.json"),
             Tab::Dock => self.env.shell_dir.join("dock-settings.json"),
             Tab::Pinned => self.env.shell_dir.join("dock-pinned-macos.json"),
             Tab::Rdwm => self.env.rdwm_config.clone(),
@@ -267,7 +267,7 @@ pub fn overview(m: &Model) -> String {
         "hot_corners": {"top_left": "none", "top_right": "none", "bottom_left": "none", "bottom_right": "none", "dwell_ms": crate::hot::DEFAULT_DWELL_MS},
     });
     let defaults_dock = serde_json::json!({"appSpacing": 6, "magnification": 1.4, "transparency": 0.4, "style": "mac", "windowsAlign": "center", "windowsLabels": "never", "windowsSearch": "box", "windowsPosition": "bottom", "windowsTheme": "auto"});
-    for (title, defaults, actual) in [("Shell (macshell.json)", defaults_shell, &m.shell), ("Dock (dock-settings.json)", defaults_dock, &m.dock)] {
+    for (title, defaults, actual) in [("Shell (decebal.json)", defaults_shell, &m.shell), ("Dock (dock-settings.json)", defaults_dock, &m.dock)] {
         let _ = writeln!(out, "\n## {title}\n");
         let (d, a) = (parts::flatten_json(&defaults), parts::flatten_json(actual));
         let mut keys: Vec<&String> = d.keys().chain(a.keys()).collect();
@@ -436,7 +436,7 @@ fn edit_items(m: &Model, out: &mut Vec<Item>) {
         rows.push(Row::new("Tidy up").detail("Re-indent the JSON (one undo step)").ctl(btn("cfg:format", "Format")));
     }
     out.push(Item::Card(rows));
-    let live = if tab == Tab::Rdwm { "rdwm reloads right after a save." } else { "Running macbar and macdock follow within half a second." };
+    let live = if tab == Tab::Rdwm { "rdwm reloads right after a save." } else { "Running decbar and decdock follow within half a second." };
     out.push(Item::Note { text: format!("Click into the text to type; Esc leaves it. Ctrl+Z undo, Ctrl+Shift+Z redo, Ctrl+A select all, Ctrl+C / X / V clipboard, Tab indents. {live}"), warn: false });
 }
 
@@ -465,7 +465,7 @@ fn preset_items(m: &Model, out: &mut Vec<Item>) {
     };
     out.push(Item::Card(vec![
         Row::new("Save the current setup as a preset").detail("Pick what to include: theme, dock, window manager, shortcuts, hot corners, fonts, wallpaper").ctl(btn("cfg:new", "Save as preset...")),
-        Row::new("Import a preset").detail("From a .macshell-preset file or from text you copied; you see what it contains and what it would run first").ctl(btn("cfg:import", "Import...")),
+        Row::new("Import a preset").detail("From a .decebal-preset file or from text you copied; you see what it contains and what it would run first").ctl(btn("cfg:import", "Import...")),
     ]));
     if let Some((name, _)) = &st.last_applied {
         out.push(Item::Card(vec![Row::new(format!("Applied \"{name}\"")).detail("Not what you wanted? Put everything back as it was before.").ctl(btn("cfg:undo", "Undo"))]));
@@ -498,7 +498,7 @@ fn preset_items(m: &Model, out: &mut Vec<Item>) {
             acts.push(Row::new("Rename").ctl(btn("cfg:rename", "Rename")).ctl(text("cfg:rename-text", &st.rename_text, p.manifest.name.as_str())));
             acts.push(Row::new("Delete").detail("Removes the preset folder").ctl(danger("cfg:delete", "Delete")));
         }
-        acts.push(Row::new("Export to a file").detail("A single shareable .macshell-preset").ctl(btn("cfg:export-browse", "Browse...")).ctl(btn("cfg:export", "Export")).ctl(text(
+        acts.push(Row::new("Export to a file").detail("A single shareable .decebal-preset").ctl(btn("cfg:export-browse", "Browse...")).ctl(btn("cfg:export", "Export")).ctl(text(
             "cfg:export-path",
             &st.export_path,
             "folder or file name",
@@ -518,7 +518,7 @@ fn preset_items(m: &Model, out: &mut Vec<Item>) {
             });
         }
     }
-    out.push(Item::Note { text: format!("Presets are folders in {}. They can be shared as one file (Export). Command line: macthemectl profile --help.", st.env.presets_dir.display()), warn: false });
+    out.push(Item::Note { text: format!("Presets are folders in {}. They can be shared as one file (Export). Command line: decthemectl profile --help.", st.env.presets_dir.display()), warn: false });
 }
 
 fn has_icons(shell: &serde_json::Value) -> bool {
@@ -599,12 +599,12 @@ fn import_items(m: &Model, out: &mut Vec<Item>) {
     let st = &m.cfg;
     out.push(Item::Header("Import a preset".into()));
     out.push(Item::Card(vec![
-        Row::new("File").detail("A .macshell-preset file").ctl(btn("cfg:import-browse", "Browse...")).ctl(btn("cfg:import-read", "Read")).ctl(text(
+        Row::new("File").detail("A .decebal-preset file").ctl(btn("cfg:import-browse", "Browse...")).ctl(btn("cfg:import-read", "Read")).ctl(text(
             "cfg:import-path",
             &st.import_path,
-            "/path/to/file.macshell-preset",
+            "/path/to/file.decebal-preset",
         )),
-        Row::new("Clipboard").detail("Text that starts with MACSHELL-PRESET-1:").ctl(btn("cfg:import-paste", "Paste from clipboard")),
+        Row::new("Clipboard").detail("Text that starts with DECEBAL-PRESET-1:").ctl(btn("cfg:import-paste", "Paste from clipboard")),
     ]));
     if let Some(imp) = &st.import {
         let p = &imp.preset;
@@ -744,7 +744,7 @@ pub fn poll(m: &mut Model) -> bool {
 
 fn system_clipboard() -> Option<String> {
     use std::process::{Command, Stdio};
-    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var("MACSHELL_BACKEND").as_deref() != Ok("x11");
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("x11");
     let mut tries: Vec<(&str, Vec<&str>)> = Vec::new();
     if wayland {
         tries.push(("wl-paste", vec!["-n"]));
@@ -1076,7 +1076,7 @@ fn start_picker(m: &mut Model, purpose: Purpose) {
         c.arg("--file-selection").arg(format!("--filename={start}")).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null());
         match purpose {
             Purpose::Import => {
-                c.arg("--title=Import a preset").arg("--file-filter=Presets | *.macshell-preset").arg("--file-filter=All files | *");
+                c.arg("--title=Import a preset").arg("--file-filter=Presets | *.decebal-preset").arg("--file-filter=All files | *");
             }
             Purpose::Export => {
                 c.arg("--save").arg("--confirm-overwrite").arg("--title=Export the preset");
@@ -1095,7 +1095,7 @@ fn expand(p: &str) -> PathBuf {
 fn read_import_file(m: &mut Model) {
     let path = expand(&m.cfg.import_path);
     if m.cfg.import_path.trim().is_empty() {
-        return m.say("Type or browse to a .macshell-preset file", true);
+        return m.say("Type or browse to a .decebal-preset file", true);
     }
     match store::read_bundle_file(&path) {
         Ok(p) => begin_import(m, p, path.display().to_string()),
@@ -1389,7 +1389,7 @@ mod tests {
     use crate::settings::schema::Schema;
 
     pub fn model(name: &str) -> Model {
-        let d = std::env::temp_dir().join(format!("macshell-cfgpane-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-cfgpane-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
@@ -1561,7 +1561,7 @@ mod tests {
         let mut m = model("flow");
         std::fs::write(m.paths.shell_json(), "{\"theme\": {\"name\": \"nord\"}}").unwrap();
         std::fs::write(m.paths.dock_settings(), "{\"appSpacing\": 9}").unwrap();
-        std::fs::write(&m.paths.rdwm_config, "[general]\nborder_px = 3\n[[autostart]]\ncommand = \"macbar &\"\n").unwrap();
+        std::fs::write(&m.paths.rdwm_config, "[general]\nborder_px = 3\n[[autostart]]\ncommand = \"decbar &\"\n").unwrap();
         // save
         apply(&mut m, "cfg:view", CtlVal::Str("presets".into()));
         apply(&mut m, "cfg:new", CtlVal::Click);
@@ -1577,7 +1577,7 @@ mod tests {
         apply(&mut m, "cfg:apply:cosy", CtlVal::Click);
         assert_eq!(m.cfg.screen, Screen::Apply);
         let shown = items(&m);
-        assert!(shown.iter().any(|i| matches!(i, Item::Note { text, warn: true } if text.contains("macbar &"))), "the commands are listed");
+        assert!(shown.iter().any(|i| matches!(i, Item::Note { text, warn: true } if text.contains("decbar &"))), "the commands are listed");
         apply(&mut m, "cfg:apply-do", CtlVal::Click);
         assert_eq!(m.cfg.screen, Screen::Presets, "{:?}", m.notice);
         assert!(std::fs::read_to_string(m.paths.dock_settings()).unwrap().contains("9"));
@@ -1589,7 +1589,7 @@ mod tests {
         std::fs::create_dir_all(&out).unwrap();
         apply(&mut m, "cfg:export-path", CtlVal::Str(format!("{}/", out.display())));
         apply(&mut m, "cfg:export", CtlVal::Click);
-        let file = out.join("cosy.macshell-preset");
+        let file = out.join("cosy.decebal-preset");
         assert!(file.exists(), "{:?}", m.notice);
         apply(&mut m, "cfg:import", CtlVal::Click);
         apply(&mut m, "cfg:import-path", CtlVal::Str(file.display().to_string()));

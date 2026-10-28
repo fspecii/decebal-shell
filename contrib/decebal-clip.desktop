@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=decebal clipboard history
+Comment=Records the clipboard (X11) and keeps it alive after the source app exits; open the picker with `decclip`
+Exec=decclip daemon
+NotShowIn=rdwm;GNOME;KDE;
+X-GNOME-Autostart-enabled=true

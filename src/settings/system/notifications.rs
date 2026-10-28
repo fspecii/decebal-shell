@@ -1,6 +1,6 @@
 //! Notifications: do-not-disturb, banner duration, per-app mute list.
 //!
-//! Stored in `~/.config/macshell/notifications.toml` (read by the notification daemon, macnotify):
+//! Stored in `~/.config/decebal/notifications.toml` (read by the notification daemon, decnotify):
 //!
 //! ```toml
 //! dnd = false                 # do not disturb: no banners (notifications are still kept in the history)
@@ -52,7 +52,7 @@ impl NotifCfg {
         let mut doc = old.parse::<DocumentMut>().unwrap_or_default();
         if old.trim().is_empty() {
             doc.decor_mut().set_prefix(
-                "# Notification settings, written by macsettings and read by macnotify.\n# dnd: do not disturb. banner_seconds: 1..60 (0 = until clicked). muted_apps: app names, case-insensitive.\n",
+                "# Notification settings, written by decsettings and read by decnotify.\n# dnd: do not disturb. banner_seconds: 1..60 (0 = until clicked). muted_apps: app names, case-insensitive.\n",
             );
         }
         let mut arr = Array::new();
@@ -123,7 +123,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
             .ctl(Ctl::new("s:not:mute:", Kind::Button { label: "Mute".into(), danger: false })),
     );
     v.push(Item::Card(rows));
-    v.push(Item::Note { text: format!("Saved in {}. The notification daemon (macnotify) reads it.", h.sh.dir.join(FILE).display()), warn: false });
+    v.push(Item::Note { text: format!("Saved in {}. The notification daemon (decnotify) reads it.", h.sh.dir.join(FILE).display()), warn: false });
     v
 }
 

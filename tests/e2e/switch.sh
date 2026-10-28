@@ -1,9 +1,9 @@
 #!/bin/bash
-# macswitch (Alt+Tab) end to end against a private rdwm on a private Xvfb display.
+# decswitch (Alt+Tab) end to end against a private rdwm on a private Xvfb display.
 #   tests/e2e/switch.sh               (uses ../rdwm/target/{release,debug}/rdwm, or RDWM=/path/to/rdwm)
 # Everything is private: Xvfb :96 (override with E2E_DISPLAY), own XDG_RUNTIME_DIR (so rdwm's IPC socket and
-# macswitch's lock/MRU files are private), own HOME. Never touches the real session; only PIDs started
-# here are killed. rdwm itself starts macswitch from its Alt+Tab binding, like the real setup.
+# decswitch's lock/MRU files are private), own HOME. Never touches the real session; only PIDs started
+# here are killed. rdwm itself starts decswitch from its Alt+Tab binding, like the real setup.
 # Screenshots land in $SHOTS (default $TMP/shots; keep with KEEP_TMP=1 or SHOTS=dir).
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
@@ -17,7 +17,7 @@ for t in Xvfb xdotool import xprop jq convert; do command -v $t >/dev/null || { 
 (cd "$HERE" && cargo build -q --offline $([ "$PROFILE" = release ] && echo --release) --bins --examples) || { echo "build failed"; exit 2; }
 
 PASS=0; FAIL=0; PIDS=()
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/macswitch-e2e.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/decswitch-e2e.XXXXXX")
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() {
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
@@ -44,8 +44,8 @@ unset WAYLAND_DISPLAY RDWM_SOCK
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_CACHE_HOME=$TMP/cache
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$XDG_CACHE_HOME"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11
-mkdir -p "$MACSHELL_CONFIG"
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11
+mkdir -p "$DECEBAL_CONFIG"
 export PATH=$BIN:$(dirname "$RDWM"):$PATH
 FAKE=$BIN/examples/fakewin
 
@@ -57,13 +57,13 @@ layouts = ["tile", "floating"]
 mods = ["alt"]
 key = "Tab"
 action = "spawn"
-args = ["$BIN/macswitch"]
+args = ["$BIN/decswitch"]
 
 [[bind]]
 mods = ["alt", "shift"]
 key = "Tab"
 action = "spawn"
-args = ["$BIN/macswitch", "--back"]
+args = ["$BIN/decswitch", "--back"]
 TOML
 xdotool mousemove 2 2
 "$RDWM" --backend x11 --config "$TMP/rdwm.toml" >"$TMP/rdwm.log" 2>&1 &
@@ -77,8 +77,8 @@ focused() { state | jq -r '.state.focused // .focused // empty'; }
 view() { state | jq -r '.state.monitors[0].view'; }
 shot() { import -window root "$SHOTS/$1.png" 2>/dev/null; }
 win_of() { xdotool search --name "^$1\$" 2>/dev/null | head -1; }
-sw_win() { for w in $(xdotool search --class macswitch 2>/dev/null); do xdotool getwindowgeometry --shell "$w" >/dev/null 2>&1 && { echo "$w"; return 0; }; done; return 1; }
-sw_running() { pgrep -u "$(id -u)" -x macswitch >/dev/null && pgrep -x macswitch | while read -r p; do grep -qs "$XDG_RUNTIME_DIR" "/proc/$p/environ" && echo "$p"; done | grep -q .; }
+sw_win() { for w in $(xdotool search --class decswitch 2>/dev/null); do xdotool getwindowgeometry --shell "$w" >/dev/null 2>&1 && { echo "$w"; return 0; }; done; return 1; }
+sw_running() { pgrep -u "$(id -u)" -x decswitch >/dev/null && pgrep -x decswitch | while read -r p; do grep -qs "$XDG_RUNTIME_DIR" "/proc/$p/environ" && echo "$p"; done | grep -q .; }
 sw_gone() { ! sw_running; }
 geom() { xdotool getwindowgeometry --shell "$1" | tr '\n' ' '; }
 pixel() { convert "$1" -crop 1x1+"$2"+"$3" +repage -depth 8 -format '%[hex:u.p{0,0}]' info: 2>/dev/null; }
@@ -100,7 +100,7 @@ A=$(id_of "Alpha Window"); B=$(id_of "Beta Window"); G=$(id_of "Gamma Window")
 echo "windows: A=$A B=$B G=$G focused=$(focused)"
 eq "newest window is focused" "$(focused)" "$G"
 
-# Expected switching order, kept in step with what macswitch does: focused first, then the order macswitch
+# Expected switching order, kept in step with what decswitch does: focused first, then the order decswitch
 # last left (the chosen window moves to the front), then creation order.
 ORDER=("$G" "$B" "$A")   # rdwm reports real focus recency: newest first, then Beta (focused before Gamma), then Alpha
 choose() { # choose INDEX: the window at INDEX becomes the first
@@ -109,10 +109,10 @@ choose() { # choose INDEX: the window at INDEX becomes the first
     ORDER=("$c" "${o[@]}")
 }
 focus_is() { [ "$(focused)" = "$1" ]; }
-dbg() { echo "      order=(${ORDER[*]}) focused=$(focused) saved=$(tr '\n' ' ' < "$XDG_RUNTIME_DIR/macswitch-mru" 2>/dev/null)"; }
+dbg() { echo "      order=(${ORDER[*]}) focused=$(focused) saved=$(tr '\n' ' ' < "$XDG_RUNTIME_DIR/decswitch-mru" 2>/dev/null)"; }
 
-sync_order() { mapfile -t ORDER < <(state | jq -r '.state.mru[]'); }   # rdwm's real focus recency: what macswitch lists
-alt_tab() { # alt_tab [extra key presses...]: hold Alt, tap Tab (rdwm spawns macswitch), wait until it is up, then the extras
+sync_order() { mapfile -t ORDER < <(state | jq -r '.state.mru[]'); }   # rdwm's real focus recency: what decswitch lists
+alt_tab() { # alt_tab [extra key presses...]: hold Alt, tap Tab (rdwm spawns decswitch), wait until it is up, then the extras
     sync_order
     xdotool keydown alt
     xdotool key Tab
@@ -123,7 +123,7 @@ alt_tab() { # alt_tab [extra key presses...]: hold Alt, tap Tab (rdwm spawns mac
 release() { xdotool keyup alt; }
 
 # 1. one Alt+Tab goes to the previous window (second in the list), and the overlay is really there
-alt_tab || fail "Alt+Tab did not start macswitch"
+alt_tab || fail "Alt+Tab did not start decswitch"
 W=$(sw_win); read -r X Y WW HH < <(xdotool getwindowgeometry --shell "$W" | awk -F= '/^X=/{x=$2}/^Y=/{y=$2}/^WIDTH=/{w=$2}/^HEIGHT=/{h=$2}END{print x,y,w,h}')
 shot overlay
 echo "overlay: ${WW}x${HH}+$X+$Y"
@@ -142,7 +142,7 @@ P2=$(pixel "$SHOTS/overlay.png" $(($(cell_x 2) + 3)) $((Y + 20 + 44)))
 NCOL=$(convert "$SHOTS/overlay.png" -crop $((WW - 40))x30+$((X + 20))+$((Y + HH - 44)) +repage -format '%k' info: 2>/dev/null)
 [ "${NCOL:-0}" -gt 2 ] && pass "title text is drawn ($NCOL colours)" || fail "title text is drawn" "$NCOL colours"
 release
-ok_within "macswitch exits after Alt is released" 3 sw_gone
+ok_within "decswitch exits after Alt is released" 3 sw_gone
 choose 1
 ok_within "Alt+Tab focused the previous window" 3 focus_is "${ORDER[0]}"
 
@@ -154,7 +154,7 @@ ok_within "Alt+Tab Tab picks the third window" 3 focus_is "${ORDER[0]}"
 
 # 3. Alt+Shift+Tab starts on the last entry; Shift+Tab goes back one
 xdotool keydown alt keydown shift; xdotool key Tab; xdotool keyup shift
-wait_for 5 sw_win || fail "Alt+Shift+Tab did not start macswitch"
+wait_for 5 sw_win || fail "Alt+Shift+Tab did not start decswitch"
 sleep 0.25; release; ok_within "exit" 3 sw_gone; choose 2
 ok_within "Alt+Shift+Tab picks the last window" 3 focus_is "${ORDER[0]}"
 alt_tab; xdotool key shift+Tab; sleep 0.1; xdotool key shift+Tab; sleep 0.1; release; ok_within "exit" 3 sw_gone
@@ -177,12 +177,12 @@ ok_within "Right + Return commits that window" 3 focus_is "${ORDER[0]}"
 
 # 6. a second launch while it is up moves the selection (no key involved)
 alt_tab
-macswitch >/dev/null 2>&1       # next
+decswitch >/dev/null 2>&1       # next
 sleep 0.2
 release; ok_within "exit" 3 sw_gone; choose 2
 ok_within "second launch sends next" 3 focus_is "${ORDER[0]}"
 alt_tab
-macswitch --back >/dev/null 2>&1   # previous: from index 1 to 0, i.e. the window that is focused already
+decswitch --back >/dev/null 2>&1   # previous: from index 1 to 0, i.e. the window that is focused already
 sleep 0.2
 release; ok_within "exit" 3 sw_gone; choose 0
 ok_within "second launch --back sends previous" 3 focus_is "${ORDER[0]}"
@@ -205,7 +205,7 @@ D=$(id_of "Delta Window")
 ctl action view 1 >/dev/null; sleep 0.3
 eq "back on tag 1" "$(view)" "1"
 xdotool keydown alt; xdotool key Tab
-wait_for 5 sw_win || fail "Alt+Shift+Tab did not start macswitch (tags)"
+wait_for 5 sw_win || fail "Alt+Shift+Tab did not start decswitch (tags)"
 sleep 0.25
 shot tags
 # the last cell (the window on tag 2) is drawn dimmed: it differs from the plain ones, and the title says where it is
@@ -227,7 +227,7 @@ ok_within "q closed a window" 3 bash -c "[ \"\$($RDWMCTL state | jq '.state.wind
 # 10. start-up: with no Alt held the grab commits right after the first paint, so the whole run is start -> paint -> commit -> exit
 BEFORE=$(focused)
 T0=$(date +%s%N)
-"$BIN/macswitch" >/dev/null 2>&1
+"$BIN/decswitch" >/dev/null 2>&1
 MS=$((($(date +%s%N) - T0) / 1000000))
 [ "$MS" -lt 100 ] && pass "start, paint, commit and exit took ${MS} ms (< 100)" || fail "start-up time" "${MS} ms"
 [ "$(focused)" != "$BEFORE" ] && pass "a quick tap (no Alt held at the grab) switches at once" || fail "a quick tap switches at once"
@@ -239,7 +239,7 @@ if command -v picom >/dev/null; then
     sleep 1.5
     if kill -0 $PICOM 2>/dev/null; then
         BEFORE=$(focused)
-        alt_tab || fail "Alt+Tab did not start macswitch (picom)"
+        alt_tab || fail "Alt+Tab did not start decswitch (picom)"
         sleep 0.3
         shot overlay-picom
         W=$(sw_win); read -r X Y WW HH < <(xdotool getwindowgeometry --shell "$W" | awk -F= '/^X=/{x=$2}/^Y=/{y=$2}/^WIDTH=/{w=$2}/^HEIGHT=/{h=$2}END{print x,y,w,h}')

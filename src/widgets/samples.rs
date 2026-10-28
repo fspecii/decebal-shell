@@ -1,4 +1,4 @@
-//! Widgets shipped with macshell (`widgets/*.toml` in the source tree). A theme refers to them as `builtin:<id>`.
+//! Widgets shipped with decebal (`widgets/*.toml` in the source tree). A theme refers to them as `builtin:<id>`.
 
 use super::dsl::{self, WidgetDef};
 use super::Trust;

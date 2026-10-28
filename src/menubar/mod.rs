@@ -225,7 +225,7 @@ struct Shared {
     vol_set_at: Mutex<Option<Instant>>,
 }
 
-pub struct MacBar {
+pub struct DecBar {
     fonts: Option<Fonts>,
     symbols: SymbolCache,
     active: Box<dyn ActiveWindow>,
@@ -255,7 +255,7 @@ pub struct MacBar {
     popup_drag: Option<usize>,
     /// When the pointer left the surface with something open; it closes [`CLOSE_DELAY`] later unless the pointer returns.
     leave_at: Option<Instant>,
-    /// Test hook (`MACBAR_DEBUG_TRAY=file`): where the status items' centres are written after each draw.
+    /// Test hook (`DECBAR_DEBUG_TRAY=file`): where the status items' centres are written after each draw.
     debug_tray: Option<(std::path::PathBuf, String)>,
     last_full_refresh: Instant,
     // Window-manager workspaces (optional indicator)
@@ -266,23 +266,23 @@ pub struct MacBar {
     heap_rechecked: bool,
     /// Where an embedded host (the Windows taskbar) put the open popup; see [`embed`].
     embed: embed::Place,
-    /// Set by [`MacBar::with_gate`]: lets the bar close itself while `bar.enabled` is off.
+    /// Set by [`DecBar::with_gate`]: lets the bar close itself while `bar.enabled` is off.
     gate: Option<gate::Gate>,
     /// A status engine inside another host (the Windows taskbar): never draws the vertical layout.
     embedded: bool,
     // The vertical layout (see [`vbar`]).
-    /// Where the pill bar was last seen ([`MacBar::place`]); a change closes what is open and re-lays out.
+    /// Where the pill bar was last seen ([`DecBar::place`]); a change closes what is open and re-lays out.
     was_place: Option<vbar::Place>,
-    /// Which macbar process this is: the main one, or the bottom half of a split layout.
+    /// Which decbar process this is: the main one, or the bottom half of a split layout.
     process: vbar::Process,
-    /// `macbar --position`: draws the pill bar there whatever `bar.position` says (screenshots).
+    /// `decbar --position`: draws the pill bar there whatever `bar.position` says (screenshots).
     position_override: Option<crate::config::BarPosition>,
     /// The live main bar starts the bottom process itself while the layout is split.
     companion: bool,
     bottom_child: Option<std::process::Child>,
     bottom_retry: Instant,
     bottom_spawns: u32,
-    /// The program that is the bottom bar (tests); the sibling `macbar` when `None`.
+    /// The program that is the bottom bar (tests); the sibling `decbar` when `None`.
     bottom_exe: Option<String>,
     v_hover: Option<Tray>,
     v_hover_ws: Option<usize>,
@@ -296,7 +296,7 @@ pub struct MacBar {
     lock_watcher: bool,
 }
 
-impl MacBar {
+impl DecBar {
     pub fn new(active: Box<dyn ActiveWindow>) -> Self {
         let shared = Arc::new(Shared {
             snap: Mutex::new(Snapshot { light: sys::is_light(), awake: sys::stay_awake(), ..Snapshot::default() }),
@@ -310,7 +310,7 @@ impl MacBar {
             lists_busy: AtomicBool::new(false),
             vol_set_at: Mutex::new(None),
         });
-        let mut bar = MacBar {
+        let mut bar = DecBar {
             fonts: Fonts::load(),
             symbols: SymbolCache::default(),
             active,
@@ -337,7 +337,7 @@ impl MacBar {
             popup_hover: None,
             popup_drag: None,
             leave_at: None,
-            debug_tray: std::env::var_os("MACBAR_DEBUG_TRAY").map(|p| (std::path::PathBuf::from(p), String::new())),
+            debug_tray: std::env::var_os("DECBAR_DEBUG_TRAY").map(|p| (std::path::PathBuf::from(p), String::new())),
             last_full_refresh: Instant::now(),
             show_workspaces: false,
             workspaces: Vec::new(),
@@ -372,7 +372,7 @@ impl MacBar {
         bar
     }
 
-    /// Which half of a split layout this process draws (`macbar --role bottom`); the default is the main bar.
+    /// Which half of a split layout this process draws (`decbar --role bottom`); the default is the main bar.
     pub fn with_process(mut self, process: vbar::Process) -> Self {
         self.process = process;
         self.was_place = self.place();
@@ -387,7 +387,7 @@ impl MacBar {
         self
     }
 
-    /// Draws the pill bar at `position` whatever `bar.position` says (`macbar --position`, for screenshots).
+    /// Draws the pill bar at `position` whatever `bar.position` says (`decbar --position`, for screenshots).
     pub fn with_position(mut self, position: Option<crate::config::BarPosition>) -> Self {
         self.position_override = position;
         self.was_place = self.place();
@@ -400,7 +400,7 @@ impl MacBar {
         self
     }
 
-    /// Lets the bar close itself (the backend returns) while `bar.enabled` in `macshell.json` says it is off;
+    /// Lets the bar close itself (the backend returns) while `bar.enabled` in `decebal.json` says it is off;
     /// see [`gate`]. `closed` is set to true when that happens.
     pub fn with_gate(mut self, closed: Arc<AtomicBool>) -> Self {
         self.gate = Some(gate::Gate::new(closed));
@@ -715,7 +715,7 @@ impl MacBar {
         }
         self.close();
         if !self.runner.run(it.action) {
-            eprintln!("macbar: could not run action {}", it.action);
+            eprintln!("decbar: could not run action {}", it.action);
         }
         true
     }
@@ -783,7 +783,7 @@ impl MacBar {
             }
             Target::Record => {
                 self.close();
-                if let Some(m) = sys::macutil() {
+                if let Some(m) = sys::decutil() {
                     // Let the panel disappear before the first frame is grabbed.
                     sys::spawn(&["sh", "-c", &format!("sleep 0.25; '{m}' record toggle")]);
                 } else if sys::have("omarchy") {
@@ -812,8 +812,8 @@ impl MacBar {
             }
             Target::Notifications => {
                 self.close();
-                // The history panel of macnotify (a toggle), once the control center is gone.
-                sys::spawn(&["sh", "-c", "sleep 0.15; macnotify history"]);
+                // The history panel of decnotify (a toggle), once the control center is gone.
+                sys::spawn(&["sh", "-c", "sleep 0.15; decnotify history"]);
             }
             Target::Settings => {
                 self.close();
@@ -850,8 +850,8 @@ impl MacBar {
     }
 
     fn spotlight(&self) {
-        let macspot = crate::launch::sibling_or_path("macspot");
-        let cmds: [&[&str]; 4] = [&[&macspot], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
+        let decspot = crate::launch::sibling_or_path("decspot");
+        let cmds: [&[&str]; 4] = [&[&decspot], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
         for c in cmds {
             if sys::have(c[0]) {
                 sys::spawn(c);
@@ -860,9 +860,9 @@ impl MacBar {
         }
     }
 
-    /// Opens `macdash` centred under the bar item (it toggles itself closed when already open).
+    /// Opens `decdash` centred under the bar item (it toggles itself closed when already open).
     fn dashboard(&self, item: Span) {
-        crate::launch::spawn_argv(&dash_argv(&crate::launch::sibling_or_path("macdash"), item));
+        crate::launch::spawn_argv(&dash_argv(&crate::launch::sibling_or_path("decdash"), item));
     }
 
     // ---------------------------------------------------------------- draw
@@ -1047,7 +1047,7 @@ fn collect_light(prev: &Snapshot) -> Snapshot {
     s
 }
 
-impl App for MacBar {
+impl App for DecBar {
     fn size(&self) -> (u32, u32) {
         if let Some(p) = self.place() {
             // a side bar is as tall as the monitor (0), a top / bottom bar as wide as it; the rest is room for popouts
@@ -1061,9 +1061,9 @@ impl App for MacBar {
             return None;
         }
         Some(if let Some(p) = self.place() {
-            MacBar::v_spec(p)
+            DecBar::v_spec(p)
         } else {
-            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "macshell-bar" }
+            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" }
         })
     }
 
@@ -1473,7 +1473,7 @@ impl App for MacBar {
     }
 }
 
-impl MacBar {
+impl DecBar {
     fn tick_inner(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
         let mut close_in = None;
@@ -1611,7 +1611,7 @@ mod tests {
 
     #[test]
     fn app_name_follows_the_active_window() {
-        let mut bar = MacBar::new(Box::new(Fixed("definitely-not-installed.app")));
+        let mut bar = DecBar::new(Box::new(Fixed("definitely-not-installed.app")));
         assert!(bar.menus[1].bold);
         assert_eq!(bar.app_name, "App");
         assert!(!bar.refresh_app_name(), "unchanged name needs no rebuild");
@@ -1619,7 +1619,7 @@ mod tests {
 
     #[test]
     fn floating_bar_is_a_pill_with_content_inset_and_the_flat_bar_is_unchanged() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1000;
         let flat_spans = bar.spans();
         let flat_tray = bar.tray();
@@ -1646,13 +1646,13 @@ mod tests {
 
     #[test]
     fn default_active_window_is_finder() {
-        let bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let bar = DecBar::new(Box::new(active::NoActiveWindow));
         assert_eq!(bar.app_name, "Finder");
     }
 
     #[test]
     fn closed_bar_only_takes_input_on_the_strip() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let r = bar.input_rects();
         assert_eq!(r, vec![InputRect { x: 0, y: 0, w: 1920, h: 26 }]);
@@ -1661,7 +1661,7 @@ mod tests {
 
     #[test]
     fn clicking_a_title_opens_its_menu_and_escape_closes_it() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let span = bar.spans()[2];
         assert!(bar.pointer_button(span.x + 5.0, 10.0, Button::Left));
@@ -1676,7 +1676,7 @@ mod tests {
 
     #[test]
     fn hovering_another_title_switches_menus_only_while_open() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let spans = bar.spans();
         bar.pointer_motion(spans[3].x + 2.0, 10.0);
@@ -1688,7 +1688,7 @@ mod tests {
 
     #[test]
     fn clicking_the_open_title_again_closes_it() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let s = bar.spans()[4];
         bar.pointer_button(s.x + 2.0, 10.0, Button::Left);
@@ -1698,7 +1698,7 @@ mod tests {
 
     #[test]
     fn leaving_the_surface_closes_a_menu() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let s = bar.spans()[2];
         bar.pointer_button(s.x + 2.0, 10.0, Button::Left);
@@ -1710,7 +1710,7 @@ mod tests {
 
     #[test]
     fn dropdown_stays_on_screen() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 300;
         let d = bar.dropdown(6).unwrap();
         assert!(d.x + d.w <= 300.0 + 0.01 || d.x == 0.0);
@@ -1718,7 +1718,7 @@ mod tests {
 
     #[test]
     fn right_clicks_do_nothing() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         let s = bar.spans()[2];
         assert!(!bar.pointer_button(s.x + 2.0, 10.0, Button::Right));
@@ -1727,7 +1727,7 @@ mod tests {
 
     #[test]
     fn control_center_opens_from_its_button_and_tracks_input() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.last_minute = None;
         let ctl = bar.tray().into_iter().find(|(k, _)| *k == Tray::Control).unwrap().1;
@@ -1743,8 +1743,8 @@ mod tests {
 
     pub(super) static LOG_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn control_bar() -> MacBar {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+    fn control_bar() -> DecBar {
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.update_snapshot(|s| {
             *s = Snapshot {
@@ -1762,7 +1762,7 @@ mod tests {
         bar
     }
 
-    fn centre_of(bar: &MacBar, t: Target) -> (f32, f32, controlcenter::R) {
+    fn centre_of(bar: &DecBar, t: Target) -> (f32, f32, controlcenter::R) {
         let it = bar.cc_items.iter().find(|i| i.target == Some(t)).expect("target present");
         let (ox, oy) = bar.panel_origin();
         (ox + it.r.x + it.r.w / 2.0, oy + it.r.y + it.r.h / 2.0, it.r)
@@ -1796,7 +1796,7 @@ mod tests {
     }
 
     #[test]
-    fn utility_tiles_run_macutil_and_flip_their_state() {
+    fn utility_tiles_run_decutil_and_flip_their_state() {
         let _g = LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         sys::set_dry_run(true);
         let _ = sys::take_log();
@@ -1810,18 +1810,18 @@ mod tests {
         assert_eq!(bar.snapshot().dnd, Some(true));
         let log = sys::take_log();
         for want in ["idle-inhibit toggle", "gamemode toggle", "dnd toggle"] {
-            assert!(log.iter().any(|l| l.contains("macutil") && l.ends_with(want)), "{want} missing in {log:?}");
+            assert!(log.iter().any(|l| l.contains("decutil") && l.ends_with(want)), "{want} missing in {log:?}");
         }
-        // Record closes the panel (so it is not in the first frames) and starts macutil a moment later.
+        // Record closes the panel (so it is not in the first frames) and starts decutil a moment later.
         let (x, y, _) = centre_of(&bar, Target::Record);
         bar.pointer_button(x, y, Button::Left);
         assert_eq!(bar.open, Open::None);
-        assert!(sys::take_log().iter().any(|l| l.contains("macutil") && l.contains("record toggle")));
-        // The notification history tile opens macnotify's panel.
+        assert!(sys::take_log().iter().any(|l| l.contains("decutil") && l.contains("record toggle")));
+        // The notification history tile opens decnotify's panel.
         let mut bar = control_bar();
         let (x, y, _) = centre_of(&bar, Target::Notifications);
         bar.pointer_button(x, y, Button::Left);
-        assert!(sys::take_log().iter().any(|l| l.contains("macnotify history")));
+        assert!(sys::take_log().iter().any(|l| l.contains("decnotify history")));
         sys::set_dry_run(false);
     }
 
@@ -1889,7 +1889,7 @@ mod tests {
 
     #[test]
     fn destructive_menu_items_need_a_second_click_without_the_helper() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.runner = Runner::without_helper();
         let apple = bar.spans()[0];
@@ -1909,7 +1909,7 @@ mod tests {
 
     #[test]
     fn unavailable_items_are_inert() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.runner = Runner::without_helper();
         let file = bar.spans()[2];
@@ -1949,23 +1949,23 @@ mod tests {
 
     #[test]
     fn workspaces_are_hidden_unless_enabled() {
-        let bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(4))));
+        let bar = DecBar::new(Box::new(Spaces(Default::default(), spaces(4))));
         assert!(!bar.tray_items().iter().any(|(k, _)| *k == Tray::Workspaces));
-        let bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(4)))).with_workspaces(true);
+        let bar = DecBar::new(Box::new(Spaces(Default::default(), spaces(4)))).with_workspaces(true);
         let first = bar.tray_items()[0];
         assert_eq!(first, (Tray::Workspaces, workspaces_width(4)));
     }
 
     #[test]
     fn no_workspaces_means_no_indicator_even_when_enabled() {
-        let bar = MacBar::new(Box::new(Spaces(Default::default(), vec![]))).with_workspaces(true);
+        let bar = DecBar::new(Box::new(Spaces(Default::default(), vec![]))).with_workspaces(true);
         assert!(!bar.tray_items().iter().any(|(k, _)| *k == Tray::Workspaces));
     }
 
     #[test]
     fn clicking_a_workspace_dot_asks_the_wm_to_switch() {
         let log = Log::default();
-        let mut bar = MacBar::new(Box::new(Spaces(log.clone(), spaces(4)))).with_workspaces(true);
+        let mut bar = DecBar::new(Box::new(Spaces(log.clone(), spaces(4)))).with_workspaces(true);
         bar.width = 1920;
         let (_, span) = bar.tray().into_iter().find(|(k, _)| *k == Tray::Workspaces).unwrap();
         let x = span.x + WS_PAD / 2.0 + WS_SLOT * 3.5;
@@ -1975,7 +1975,7 @@ mod tests {
 
     #[test]
     fn workspace_changes_trigger_a_redraw() {
-        let mut bar = MacBar::new(Box::new(Spaces(Default::default(), spaces(3)))).with_workspaces(true);
+        let mut bar = DecBar::new(Box::new(Spaces(Default::default(), spaces(3)))).with_workspaces(true);
         assert!(!bar.refresh_workspaces(), "already up to date");
         bar.workspaces.clear();
         assert!(bar.refresh_workspaces());
@@ -1983,7 +1983,7 @@ mod tests {
 
     #[test]
     fn idle_drops_fonts_loaded_by_layout() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         let Some(f) = &bar.fonts else { return };
         f.measure("never drawn \u{2603} string", 12.0, Weight::Bold);
         assert!(f.has_loaded_face());
@@ -1993,8 +1993,8 @@ mod tests {
 
     // ---- status popups ----
 
-    fn status_bar() -> MacBar {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+    fn status_bar() -> DecBar {
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.clock_text = "Tue 27 Oct  12:00".into();
         bar.update_snapshot(|s| {
@@ -2010,27 +2010,27 @@ mod tests {
         bar
     }
 
-    fn click_tray(bar: &mut MacBar, kind: Tray) -> bool {
+    fn click_tray(bar: &mut DecBar, kind: Tray) -> bool {
         let s = bar.tray_span(kind).expect("item visible");
         bar.pointer_button(s.x + s.w / 2.0, 10.0, Button::Left)
     }
 
     #[test]
-    fn dashboard_item_sits_before_spotlight_and_opens_macdash_under_itself() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+    fn dashboard_item_sits_before_spotlight_and_opens_decdash_under_itself() {
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.update_snapshot(|s| *s = Snapshot::default());
         let kinds: Vec<Tray> = bar.tray().into_iter().map(|t| t.0).collect();
         let at = |k: Tray| kinds.iter().position(|x| *x == k).unwrap();
         assert_eq!(at(Tray::Dash) + 1, at(Tray::Spotlight), "the dashboard glyph is left of the search glyph");
         let span = bar.tray_span(Tray::Dash).unwrap();
-        assert_eq!(dash_argv("macdash", span), ["macdash".to_string(), "--x".to_string(), format!("{}", (span.x + span.w / 2.0).round() as i32)]);
-        assert_eq!(dash_argv("/opt/macdash", Span { x: 100.0, w: 27.0 })[2], "114", "the middle of the item, rounded");
+        assert_eq!(dash_argv("decdash", span), ["decdash".to_string(), "--x".to_string(), format!("{}", (span.x + span.w / 2.0).round() as i32)]);
+        assert_eq!(dash_argv("/opt/decdash", Span { x: 100.0, w: 27.0 })[2], "114", "the middle of the item, rounded");
     }
 
     #[test]
     fn items_without_their_tool_are_hidden() {
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow));
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.update_snapshot(|s| *s = Snapshot::default());
         let kinds: Vec<Tray> = bar.tray().into_iter().map(|t| t.0).collect();
@@ -2172,7 +2172,7 @@ mod tests {
     }
 
     /// Pretends the close delay has passed and runs the tick that closes.
-    fn expire_leave(bar: &mut MacBar) {
+    fn expire_leave(bar: &mut DecBar) {
         bar.leave_at = bar.leave_at.map(|_| Instant::now() - CLOSE_DELAY - Duration::from_millis(5));
         bar.tick();
     }

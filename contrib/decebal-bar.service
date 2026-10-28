@@ -1,0 +1,14 @@
+[Unit]
+Description=decebal menu bar
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/decbar
+# Apps started from the panel must survive a restart of it.
+KillMode=process
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

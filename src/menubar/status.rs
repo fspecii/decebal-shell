@@ -7,7 +7,7 @@ use super::*;
 
 const POPUP_REFRESH: Duration = Duration::from_secs(4);
 
-impl MacBar {
+impl DecBar {
     pub(super) fn tray_span(&self, kind: Tray) -> Option<Span> {
         self.tray().into_iter().find(|(k, _)| *k == kind).map(|(_, s)| s)
     }

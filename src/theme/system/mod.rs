@@ -1,10 +1,10 @@
-//! "Apply to all apps": the optional pipeline that carries the macshell theme to the rest of the desktop.
+//! "Apply to all apps": the optional pipeline that carries the decebal theme to the rest of the desktop.
 //!
 //! One palette ([`Palette`], taken from the resolved [`Theme`]) is rendered by small targets:
 //!
 //! | target | what it changes |
 //! |---|---|
-//! | `omarchy` | a complete Omarchy theme `~/.config/omarchy/themes/macshell` (`colors.toml`; Omarchy's own template engine makes alacritty/foot/kitty/ghostty/btop/helix/neovim/... from it), `omarchy-theme-set`, live reload of terminals and btop |
+//! | `omarchy` | a complete Omarchy theme `~/.config/omarchy/themes/decebal` (`colors.toml`; Omarchy's own template engine makes alacritty/foot/kitty/ghostty/btop/helix/neovim/... from it), `omarchy-theme-set`, live reload of terminals and btop |
 //! | `browser` | Chromium/Chrome/Edge/Brave theme colour through Omarchy's browser policy helper |
 //! | `editors` | VS Code / Cursor / Obsidian through Omarchy's own sync helpers |
 //! | `hooks` | the user's `~/.config/omarchy/hooks/theme-set.d` |
@@ -14,7 +14,7 @@
 //! | `x11` | an Xresources file included from `~/.Xresources` and merged with `xrdb` (st, xterm, urxvt) |
 //!
 //! Every file is changed atomically, the first version of each is saved, and `off` restores them ([`files`]).
-//! Nothing here runs unless the user switched it on (`macthemectl system on`, or the Theme pane).
+//! Nothing here runs unless the user switched it on (`decthemectl system on`, or the Theme pane).
 
 pub mod cli;
 pub mod files;
@@ -142,7 +142,7 @@ impl Palette {
 
 // ---------------------------------------------------------------- config
 
-/// `"system"` in macshell.json.
+/// `"system"` in decebal.json.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Config {
     /// The master switch ("Apply to all apps"). Off until the user turns it on.
@@ -264,7 +264,7 @@ pub struct Env {
     pub state_home: PathBuf,
     /// Manifest, backups and the lock.
     pub state_dir: PathBuf,
-    /// Files macshell generates for other programs to include.
+    /// Files decebal generates for other programs to include.
     pub gen_dir: PathBuf,
     pub omarchy_path: Option<PathBuf>,
     pub display: Option<String>,
@@ -285,8 +285,8 @@ impl Env {
         let omarchy_path =
             var("OMARCHY_PATH").filter(|p| p.is_dir()).or_else(|| ["/usr/share/omarchy".into(), home.join(".local/share/omarchy")].into_iter().find(|p: &PathBuf| p.join("default/themed").is_dir()));
         Env {
-            state_dir: var("MACSHELL_SYSTEM_STATE").unwrap_or_else(|| state_home.join("macshell/system")),
-            gen_dir: config_home.join("macshell/system"),
+            state_dir: var("DECEBAL_SYSTEM_STATE").unwrap_or_else(|| state_home.join("decebal/system")),
+            gen_dir: config_home.join("decebal/system"),
             omarchy_path,
             display: std::env::var("DISPLAY").ok().filter(|d| !d.is_empty()),
             session_bus: std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some_and(|v| !v.is_empty()),
@@ -547,10 +547,10 @@ pub fn off(env: &Env, cfg: &Config, p: &Palette) -> Result<Report, String> {
         match how {
             files::Restored::Exact => report.wrote.push(PathBuf::from(path)),
             files::Restored::BlockRemoved => {
-                report.notes.push(format!("{path}: edited since; only the macshell block was removed"));
+                report.notes.push(format!("{path}: edited since; only the decebal block was removed"));
                 report.wrote.push(PathBuf::from(path));
             }
-            files::Restored::Kept => report.warnings.push(format!("{path}: edited since macshell wrote it, left as it is")),
+            files::Restored::Kept => report.warnings.push(format!("{path}: edited since decebal wrote it, left as it is")),
         }
     }
     st.extra.clear();
@@ -590,7 +590,7 @@ pub fn status(env: &Env, cfg: &Config) -> Vec<TargetStatus> {
         .collect()
 }
 
-/// The theme macshell last applied to the system, if any.
+/// The theme decebal last applied to the system, if any.
 pub fn applied_theme(env: &Env) -> Option<String> {
     State::load(&env.state_dir).extra.get("theme").and_then(Value::as_str).map(String::from)
 }
@@ -607,7 +607,7 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
     }
 }
 
-/// `macthemectl apply-system`.
+/// `decthemectl apply-system`.
 pub fn apply_now(src: &Source, opts: &Opts) -> Result<Report, String> {
     let (p, _) = current_palette(src)?;
     let cfg = Config::load(&src.shell_json);
@@ -620,13 +620,13 @@ fn pending_file(env: &Env) -> PathBuf {
 
 /// Called after any theme / style / font / wallpaper-colour change: when "Apply to all apps" is on, asks for one apply
 /// shortly (several changes in a row make one run). Never blocks and never fails the caller.
-/// `MACSHELL_SYSTEM_SYNC=1` runs it inline instead (scripts and tests).
+/// `DECEBAL_SYSTEM_SYNC=1` runs it inline instead (scripts and tests).
 pub fn request(shell_json: &Path) {
     let cfg = Config::load(shell_json);
     if !cfg.enabled {
         return;
     }
-    if std::env::var_os("MACSHELL_SYSTEM_SYNC").is_some_and(|v| v == "1") {
+    if std::env::var_os("DECEBAL_SYSTEM_SYNC").is_some_and(|v| v == "1") {
         let src = Source { shell_json: shell_json.to_path_buf(), themes_dir: Source::discover().themes_dir };
         let _ = apply_now(&src, &Opts::default());
         return;
@@ -642,12 +642,12 @@ pub fn request(shell_json: &Path) {
     spawn_ctl(&["apply-system", "--debounced", &nonce]);
 }
 
-/// Starts `macthemectl ARGS` detached (it lives next to the running program, else on PATH). Does nothing in unit tests.
+/// Starts `decthemectl ARGS` detached (it lives next to the running program, else on PATH). Does nothing in unit tests.
 pub fn spawn_ctl(args: &[&str]) {
     if cfg!(test) {
         return;
     }
-    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("macthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("macthemectl"));
+    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("decthemectl"));
     let _ = std::process::Command::new(exe).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
 }
 
@@ -715,7 +715,7 @@ pub mod testutil {
     }
 
     pub fn tmp(name: &str) -> TmpDir {
-        let d = std::env::temp_dir().join(format!("macshell-system-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let d = std::env::temp_dir().join(format!("decebal-system-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         TmpDir(d)
@@ -730,7 +730,7 @@ pub mod testutil {
             config_home: home.join(".config"),
             state_home: home.join(".local/state"),
             state_dir: root.join("state"),
-            gen_dir: home.join(".config/macshell/system"),
+            gen_dir: home.join(".config/decebal/system"),
             omarchy_path: None,
             display: None,
             session_bus: false,
@@ -775,7 +775,7 @@ mod tests {
         c.targets.insert("gtk".into(), false);
         assert_eq!(Config::from_json(&c.to_json()), c);
         let d = tmp("cfg");
-        let f = d.join("macshell.json");
+        let f = d.join("decebal.json");
         std::fs::write(&f, "{\"bar\":{\"enabled\":true}}\n").unwrap();
         c.save(&f).unwrap();
         assert_eq!(Config::load(&f), c);
@@ -847,7 +847,7 @@ mod tests {
         let mut cfg = Config { enabled: true, ..Config::default() };
         let p = palette(true);
         apply(&env, &cfg, &p, &Opts::default()).unwrap();
-        let qt = env.config_home.join("qt6ct/colors/macshell.conf");
+        let qt = env.config_home.join("qt6ct/colors/decebal.conf");
         let gtk = env.config_home.join("gtk-4.0/gtk.css");
         assert!(qt.exists() && gtk.exists());
         cfg.targets.insert("qt".into(), false);

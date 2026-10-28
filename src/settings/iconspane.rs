@@ -2,7 +2,7 @@
 //! highlighted one, the icon size and symbolic tint settings, and the fallback theme.
 //!
 //! Click a theme to highlight it (the grid shows its icons), "Use this theme" applies it. Everything is stored in
-//! `macshell.json` under `icons` (see `docs/icons.md`); running programs follow within half a second.
+//! `decebal.json` under `icons` (see `docs/icons.md`); running programs follow within half a second.
 
 use super::model::{CtlVal, Model};
 use super::ui::{pal, Ctl, Frame, Interact, Item, Kind, Painter, Placed, Row};
@@ -154,7 +154,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         Row::new("Reset icon settings").detail("Automatic theme, full size, no tint").ctl(Ctl::new("ic:reset", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
     out.push(Item::Note {
-        text: "Icon themes are read from ~/.local/share/icons, ~/.icons and the system's icons folders (see docs/icons.md for Arch packages such as papirus-icon-theme). macthemectl icons list, set and status do the same from a terminal.".into(),
+        text: "Icon themes are read from ~/.local/share/icons, ~/.icons and the system's icons folders (see docs/icons.md for Arch packages such as papirus-icon-theme). decthemectl icons list, set and status do the same from a terminal.".into(),
         warn: false,
     });
     out
@@ -316,7 +316,7 @@ mod tests {
     use crate::settings::model::tests_support::model_with;
     use std::sync::Mutex as StdMutex;
 
-    // The pane keeps its highlight in a process-wide slot and writes the real macshell.json of the model's
+    // The pane keeps its highlight in a process-wide slot and writes the real decebal.json of the model's
     // sandbox: the tests of this module take turns.
     static LOCK: StdMutex<()> = StdMutex::new(());
 

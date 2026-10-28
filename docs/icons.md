@@ -1,16 +1,16 @@
 # Icon themes
 
-Every macshell program that draws application, folder or MIME icons (the dock, the launchers `maclaunch` and
-`macspot`, the window switcher `macswitch`, the overview `macexpose`, the taskbar style, notifications and the menu
+Every decebal program that draws application, folder or MIME icons (the dock, the launchers `declaunch` and
+`decspot`, the window switcher `decswitch`, the overview `decexpose`, the taskbar style, notifications and the menu
 bar's popups) looks them up through one module, `src/icons.rs` and `src/icons/*`, following the freedesktop
 [Icon Theme Specification](https://specifications.freedesktop.org/icon-theme-spec/latest/). The theme is a setting.
 
 ## Choosing a theme
 
-* System Settings -> Icons (`macsettings icons`): the installed themes (Auto first) with a preview grid of 16 common
+* System Settings -> Icons (`decsettings icons`): the installed themes (Auto first) with a preview grid of 16 common
   icons for the highlighted one, **Use this theme**, icon size, symbolic tint and fallback theme.
-* `macthemectl icons list | set NAME|auto | status | reset | scale N | tint on|off | fallback NAME|none`.
-* By hand, in `macshell.json` (the folder of `MACSHELL_CONFIG`, default `~/.config/omarchy`):
+* `decthemectl icons list | set NAME|auto | status | reset | scale N | tint on|off | fallback NAME|none`.
+* By hand, in `decebal.json` (the folder of `DECEBAL_CONFIG`, default `~/.config/omarchy`):
 
 ```json
 "icons": {
@@ -28,13 +28,13 @@ bar's popups) looks them up through one module, `src/icons.rs` and `src/icons/*`
 | `monochrome_tint` | `false` | Repaint symbolic icons (`*-symbolic.svg`, `symbolic/` folders) in the shell theme's text colour. |
 | `fallback` | `"Adwaita"` | Theme tried after the chosen theme, its `Inherits=` parents and `hicolor`. `"none"` for no extra theme. |
 
-All keys are optional; unknown or mistyped values are ignored (the default is used). `macthemectl icons reset`
+All keys are optional; unknown or mistyped values are ignored (the default is used). `decthemectl icons reset`
 (or the pane's Reset) removes the whole object. The object is a plain JSON value, so presets and bundles that copy
-keys of `macshell.json` generically carry it along with `theme`, `dock`, `bar`, ...: `icons` is the key to export.
+keys of `decebal.json` generically carry it along with `theme`, `dock`, `bar`, ...: `icons` is the key to export.
 
 **Auto** asks, in this order: `gsettings get org.gnome.desktop.interface icon-theme`, `gtk-3.0/settings.ini`
 `gtk-icon-theme-name`, `gtk-4.0/settings.ini`; if none names an installed theme only hicolor and the fallback are used.
-An explicit theme that is not installed (or has only symbolic / cursor files) is reported in `macthemectl icons status`
+An explicit theme that is not installed (or has only symbolic / cursor files) is reported in `decthemectl icons status`
 and the pane, and the desktop's choice is used meanwhile.
 
 ## Lookup
@@ -63,6 +63,6 @@ a few hundred KB for the largest themes and only for themes in the chain.
 ## Hot reload
 
 The theme watcher every program already runs (`theme::live::start_watcher`, 500 ms of `stat`s) also checks
-`macshell.json`, the GTK / dconf files and the icon folders; a change drops the caches, bumps `icons::generation()` and
+`decebal.json`, the GTK / dconf files and the icon folders; a change drops the caches, bumps `icons::generation()` and
 wakes the event loop. Programs without the watcher (notifications, the switcher popup) poll the same files at most every
 700 ms when they draw.

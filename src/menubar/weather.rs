@@ -108,7 +108,7 @@ fn now_secs() -> u64 {
 
 fn cache_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
-    Some(base.join("macshell/weather.json"))
+    Some(base.join("decebal/weather.json"))
 }
 
 pub fn is_fresh(w: &Weather, now: u64) -> bool {

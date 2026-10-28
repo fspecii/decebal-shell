@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_arguments, clippy::needless_range_loop)]
-//! macsettings: native settings app for rdwm and the macshell panels.
+//! decsettings: native settings app for rdwm and the decebal panels.
 pub mod app;
 pub mod binds;
 pub mod configpane;

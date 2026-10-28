@@ -1,4 +1,4 @@
-//! `macclip`: clipboard history for the X11 session.
+//! `decclip`: clipboard history for the X11 session.
 //!
 //! * [`history`]: the stored entries (newest first, deduplicated, capped), their file and the list helpers the picker uses.
 //! * [`policy`]: what is never stored (blank or huge text, password managers).

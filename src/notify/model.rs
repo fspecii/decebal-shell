@@ -12,7 +12,7 @@ const MAX_IMAGE_EDGE: i64 = 1024;
 
 // ------------------------------------------------------------------ settings
 
-/// `~/.config/macshell/notifications.toml`. Schema (shared with macsettings):
+/// `~/.config/decebal/notifications.toml`. Schema (shared with decsettings):
 /// `dnd = false`, `banner_seconds = 5`, `muted_apps = []`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -34,7 +34,7 @@ pub fn config_path() -> PathBuf {
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
         .unwrap_or_else(|| PathBuf::from("/tmp"));
-    base.join("macshell/notifications.toml")
+    base.join("decebal/notifications.toml")
 }
 
 pub fn state_dir() -> PathBuf {
@@ -43,7 +43,7 @@ pub fn state_dir() -> PathBuf {
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
         .unwrap_or_else(|| PathBuf::from("/tmp"));
-    base.join("macshell")
+    base.join("decebal")
 }
 
 impl Config {

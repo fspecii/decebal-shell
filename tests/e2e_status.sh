@@ -1,12 +1,12 @@
 #!/bin/bash
 # End-to-end check of the bar's status items on a private Xvfb with a real rdwm and fake system tools.
 # Usage: tests/e2e_status.sh [display-number]   (default 92; needs Xvfb, xdotool, rdwm, rdwmctl, import)
-# Env: MACBAR (binary), RDWM, RDWMCTL, SHOTS=dir to keep screenshots.
+# Env: DECBAR (binary), RDWM, RDWMCTL, SHOTS=dir to keep screenshots.
 # Never touches the live session: own X display, own XDG_RUNTIME_DIR, the tools on PATH are fakes.
 set -u
 D=${1:-92}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BAR=${MACBAR:-$ROOT/target/release/macbar}
+BAR=${DECBAR:-$ROOT/target/release/decbar}
 RDWM=${RDWM:-rdwm}; RDWMCTL=${RDWMCTL:-rdwmctl}
 T=$(mktemp -d); XR=$T/xr; mkdir -p $XR $T/ps/BAT0; chmod 700 $XR
 export FAKE_STATE=$T/fs; mkdir -p $FAKE_STATE
@@ -20,7 +20,7 @@ Xvfb :$D -screen 0 1600x900x24 >/dev/null 2>&1 & PIDS+=($!)
 sleep 1
 $RDWM --backend x11 >$T/rdwm.log 2>&1 & PIDS+=($!)
 sleep 1.5
-MACBAR_DEBUG_TRAY=$T/tray PATH=$ROOT/tests/fakebin:$PATH MACBAR_POWER_SUPPLY=$T/ps $BAR >$T/bar.log 2>&1 & PIDS+=($!)
+DECBAR_DEBUG_TRAY=$T/tray PATH=$ROOT/tests/fakebin:$PATH DECBAR_POWER_SUPPLY=$T/ps $BAR >$T/bar.log 2>&1 & PIDS+=($!)
 for i in $(seq 40); do [ -s $T/tray ] && grep -q Layout $T/tray && break; sleep 0.25; done
 sleep 2   # late data (weather, layout) shifts the right-aligned items; let them settle
 fail=0

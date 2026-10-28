@@ -94,7 +94,7 @@ pub struct DockApp {
     win: Option<Box<windows::WinState>>,
     /// DPI scale for the taskbar, read once.
     scale: Option<f32>,
-    /// Lets the dock close itself while `dock.enabled` (macshell.json) says it is off; see [`DockApp::with_gate`].
+    /// Lets the dock close itself while `dock.enabled` (decebal.json) says it is off; see [`DockApp::with_gate`].
     gate: std::cell::RefCell<Option<crate::menubar::gate::Gate>>,
 }
 
@@ -122,14 +122,14 @@ impl DockApp {
         }
     }
 
-    /// Lets the dock close itself (the backend returns) while `dock.enabled` in `macshell.json` says it is off, which under
+    /// Lets the dock close itself (the backend returns) while `dock.enabled` in `decebal.json` says it is off, which under
     /// `"auto"` is the case with a theme that has a vertical bar (Caelestia has no dock). `closed` is set when that happens.
     pub fn with_gate(self, closed: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
         *self.gate.borrow_mut() = Some(crate::menubar::gate::Gate::with_check(closed, Box::new(crate::menubar::gate::dock_visible_now)));
         self
     }
 
-    /// Forces the taskbar's DPI scale (tests; normally `MACSHELL_SCALE` or `Xft.dpi`).
+    /// Forces the taskbar's DPI scale (tests; normally `DECEBAL_SCALE` or `Xft.dpi`).
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.scale = Some(scale);
         if self.is_windows() {
@@ -217,7 +217,7 @@ impl DockApp {
         let Some(w) = &mut self.watch else { return };
         match config::write_pinned(&w.pinned_path, &self.pinned) {
             Ok(()) => w.pinned_stamp = Stamp::of(&w.pinned_path),
-            Err(e) => eprintln!("macdock: cannot save {}: {e}", w.pinned_path.display()),
+            Err(e) => eprintln!("decdock: cannot save {}: {e}", w.pinned_path.display()),
         }
     }
 
@@ -276,7 +276,7 @@ impl DockApp {
 
     fn launch_item(&mut self, id: &str) {
         if !self.effects.launch(id) {
-            eprintln!("macdock: could not launch {id}");
+            eprintln!("decdock: could not launch {id}");
             return;
         }
         if id != "launchpad" && id != "trash" && !self.is_windows() {
@@ -537,7 +537,7 @@ impl App for DockApp {
         }
         // a dock kept next to the Caelestia pill bar floats above it when that runs along the bottom (`bottom`, `split`)
         let margin = 13 + crate::theme::th().bar_insets().bottom;
-        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: 71, stretch: false, namespace: "macshell-dock" })
+        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: 71, stretch: false, namespace: "decebal-dock" })
     }
 
     fn quit_requested(&self) -> bool {
@@ -791,7 +791,7 @@ mod tests {
     }
 
     fn tmp_dir(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macshell-dockapp-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-dockapp-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

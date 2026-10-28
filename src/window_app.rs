@@ -86,7 +86,7 @@ pub trait WindowApp {
     fn title(&self) -> String;
     /// Application id / window class, for window rules.
     fn app_id(&self) -> &'static str {
-        "machaven"
+        "dechaven"
     }
     /// Ask for a full-screen overlay above all windows (a layer surface) instead of a normal window.
     /// Backends without layer-shell fall back to a normal window and never call [`WindowApp::set_overlay`].
@@ -177,9 +177,9 @@ pub trait WindowApp {
 }
 
 /// Runs `app` in a normal top-level window: Wayland (xdg-shell) when the compositor offers it,
-/// otherwise X11. Set `MACSHELL_BACKEND=x11` or `wayland` to force one.
+/// otherwise X11. Set `DECEBAL_BACKEND=x11` or `wayland` to force one.
 pub fn run_window<A: WindowApp + 'static>(app: A) -> Result<(), String> {
-    let forced = std::env::var("MACSHELL_BACKEND").ok();
+    let forced = std::env::var("DECEBAL_BACKEND").ok();
     #[cfg(feature = "wayland")]
     if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && crate::backend::wayland_window::supported() {
         return crate::backend::wayland_window::run(app).map_err(|e| e.to_string());

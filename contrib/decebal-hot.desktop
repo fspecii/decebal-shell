@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=decebal hot corners
+Comment=Runs an action when the pointer rests in a screen corner (X11); set the corners in System Settings or with `dechot set`
+Exec=dechot daemon
+NotShowIn=rdwm;GNOME;KDE;
+X-GNOME-Autostart-enabled=true

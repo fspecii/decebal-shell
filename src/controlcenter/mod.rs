@@ -28,7 +28,7 @@ pub struct Snapshot {
     pub awake: bool,
     pub light: bool,
     pub battery: Option<sys::Battery>,
-    /// `macutil` toggles; `None` when macutil is not installed (the row is hidden).
+    /// `decutil` toggles; `None` when decutil is not installed (the row is hidden).
     pub util: Option<sys::Utils>,
 }
 
@@ -328,7 +328,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         y += 64.0 + GAP;
     }
 
-    // macutil quick toggles: Recording, Idle inhibit, Game mode, Do not disturb.
+    // decutil quick toggles: Recording, Idle inhibit, Game mode, Do not disturb.
     let qw = (inner - 3.0 * GAP) / 4.0;
     if let Some(u) = &s.util {
         let toggles: [(&'static str, &str, bool, Option<Target>); 4] = [
@@ -346,7 +346,7 @@ pub fn layout(s: &Snapshot) -> (Vec<Item>, f32) {
         y += 66.0 + GAP;
     }
 
-    // Quick actions. With macutil the third tile opens the notification history (Record moved into the row above).
+    // Quick actions. With decutil the third tile opens the notification history (Record moved into the row above).
     let third: (&'static str, &str, Target) = if s.util.is_some() { ("bell", "Notifications", Target::Notifications) } else { ("record", "Record", Target::Record) };
     let actions: [(&'static str, &str, bool, Target); 4] = [
         ("cup", "Stay Awake", s.awake, Target::StayAwake),
@@ -487,10 +487,10 @@ mod tests {
 
     #[test]
     fn full_panel_height_matches_the_original_stack() {
-        // 12 pad + 128 + 10 + 64 + 10 + 64 + 10 + 64 + 10 + 66 (macutil toggles) + 10 + 66 + 12 pad
+        // 12 pad + 128 + 10 + 64 + 10 + 64 + 10 + 64 + 10 + 66 (decutil toggles) + 10 + 66 + 12 pad
         let (_, h) = layout(&full());
         assert_eq!(h, 12.0 + 128.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 66.0 + 10.0 + 66.0 + 12.0);
-        // Without macutil the panel is the original stack.
+        // Without decutil the panel is the original stack.
         let (_, h) = layout(&Snapshot { util: None, ..full() });
         assert_eq!(h, 12.0 + 128.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 64.0 + 10.0 + 66.0 + 12.0);
     }
@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn without_macutil_the_legacy_record_tile_stays() {
+    fn without_decutil_the_legacy_record_tile_stays() {
         let (items, _) = layout(&Snapshot { util: None, ..full() });
         assert!(items.iter().any(|i| i.target == Some(Target::Record)));
         assert!(!items.iter().any(|i| matches!(i.target, Some(Target::IdleInhibit | Target::GameMode | Target::Dnd | Target::Notifications))));

@@ -84,7 +84,7 @@ impl ActiveWindow for NoActiveWindow {
     }
 }
 
-/// A fixed app id, for tests and screenshots (`macbar --app foot`).
+/// A fixed app id, for tests and screenshots (`decbar --app foot`).
 pub struct StaticApp(pub String);
 
 impl ActiveWindow for StaticApp {

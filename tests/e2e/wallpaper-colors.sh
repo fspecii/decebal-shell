@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # "Match wallpaper" end to end on a private Xvfb + rdwm: wallpapers of different dominant hues are set through rdwm,
-# `macthemectl watch` follows them, the derived accent changes with the hue, the running macbar restyles itself, the
+# `decthemectl watch` follows them, the derived accent changes with the hue, the running decbar restyles itself, the
 # feature is off by default and fully reversible, and the Theme pane renders the section (PNG screenshots in $SHOTS).
 #   tests/e2e/wallpaper-colors.sh        (SHOTS=dir keeps the PNGs; PROFILE=debug|release; E2E_DISPLAY=:94 by default)
 # Everything is private: own HOME/XDG dirs, only PIDs started here are killed, never the live display or rdwm.sock.
@@ -17,7 +17,7 @@ N=${E2E_DISPLAY:-:94}
 case "$N" in :0|:1|:2|0|1|2) echo "refusing a live display"; exit 2;; esac
 
 PASS=0; FAIL=0; PIDS=()
-TMP=$(mktemp -d /tmp/macshell-wallcolors-e2e.XXXXXX)
+TMP=$(mktemp -d /tmp/decebal-wallcolors-e2e.XXXXXX)
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; sleep 0.3; for p in "${PIDS[@]}"; do kill -9 "$p" 2>/dev/null; done; wait 2>/dev/null
   if [ "$SHOTS" = "$TMP/shots" ]; then rm -rf "$TMP"; else find "$TMP" -mindepth 1 -maxdepth 1 ! -path "$SHOTS" -exec rm -rf {} +; rmdir "$TMP" 2>/dev/null; fi; }
@@ -29,16 +29,16 @@ ne() { if [ "$2" != "$3" ]; then pass "$1"; else fail "$1" "both '$2'"; fi; }
 wait_for() { local t=$1; shift; local end=$(($(date +%s%N) / 1000000 + t * 1000)); while [ $(($(date +%s%N) / 1000000)) -lt $end ]; do "$@" >/dev/null 2>&1 && return 0; sleep 0.05; done; return 1; }
 
 export HOME=$TMP/home XDG_CONFIG_HOME=$TMP/cfg XDG_RUNTIME_DIR=$TMP/run XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_CACHE_HOME=$TMP/cache XDG_STATE_HOME=$TMP/state
-export MACSHELL_CONFIG=$TMP/cfg/omarchy MACSHELL_BACKEND=x11 DISPLAY=$N RDWMCTL=$RDWM_DIR/rdwmctl MACSETTINGS_CONFIG=$TMP/cfg/rdwm/config.toml
-export MACSHELL_COLOR_SCHEME=dark MACSHELL_THEMES=$TMP/cfg/macshell/themes
+export DECEBAL_CONFIG=$TMP/cfg/omarchy DECEBAL_BACKEND=x11 DISPLAY=$N RDWMCTL=$RDWM_DIR/rdwmctl DECSETTINGS_CONFIG=$TMP/cfg/rdwm/config.toml
+export DECEBAL_COLOR_SCHEME=dark DECEBAL_THEMES=$TMP/cfg/decebal/themes
 unset WAYLAND_DISPLAY RDWM_SOCK
-mkdir -p "$HOME" "$XDG_CONFIG_HOME/rdwm" "$MACSHELL_CONFIG" "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+mkdir -p "$HOME" "$XDG_CONFIG_HOME/rdwm" "$DECEBAL_CONFIG" "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
 chmod 700 "$XDG_RUNTIME_DIR"
 export PATH="$RDWM_DIR:$BIN:$PATH"
-CFG=$MACSETTINGS_CONFIG
+CFG=$DECSETTINGS_CONFIG
 printf '# test config\n[general]\ngap_inner = 6\n\n[decoration]\nenabled = true\n\n[bar]\nshow = false\n\n[wallpaper]\nimage = "/nonexistent"\nmode = "fill"\n' > "$CFG"
-export MACSETTINGS_DEBUG_LAYOUT=$TMP/dump.json
-SEL() { jq -r "$1" "$MACSHELL_CONFIG/macshell.json" 2>/dev/null; }
+export DECSETTINGS_DEBUG_LAYOUT=$TMP/dump.json
+SEL() { jq -r "$1" "$DECEBAL_CONFIG/decebal.json" 2>/dev/null; }
 
 # wallpapers of different dominant hues (a gradient with a lighter patch, like a photo, not a flat fill)
 mkdir -p "$TMP/walls"
@@ -61,8 +61,8 @@ wait_for 5 bash -c "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q window" || { 
 # config, and a reload falls back to the file's wallpaper)
 wp() { sed -i "s|^image = .*|image = \"$TMP/walls/$1.png\"|" "$CFG"; rdwmctl wallpaper "$TMP/walls/$1.png" >/dev/null 2>&1; }
 wp blue
-printf '{"workspaces": false}\n' > "$MACSHELL_CONFIG/macshell.json"
-macbar >"$TMP/macbar.log" 2>&1 & PIDS+=($!)
+printf '{"workspaces": false}\n' > "$DECEBAL_CONFIG/decebal.json"
+decbar >"$TMP/decbar.log" 2>&1 & PIDS+=($!)
 sleep 2
 
 shot() { sleep 1.3; import -window root "$SHOTS/$1.png" 2>/dev/null; }
@@ -74,34 +74,34 @@ nepx() { local end=$((SECONDS + 8)) got; while [ $SECONDS -lt $end ]; do got=$(p
 hue() { echo "$1" | awk '{ r=strtonum("0x" substr($0,2,2))/255; g=strtonum("0x" substr($0,4,2))/255; b=strtonum("0x" substr($0,6,2))/255;
   mx=r; if(g>mx)mx=g; if(b>mx)mx=b; mn=r; if(g<mn)mn=g; if(b<mn)mn=b; d=mx-mn; if(d==0){print -1; exit}
   if(mx==r)h=(g-b)/d; else if(mx==g)h=2+(b-r)/d; else h=4+(r-g)/d; h*=60; if(h<0)h+=360; printf "%d\n", h }'; }
-accent() { macthemectl get --json | jq -r .colors.accent; }
+accent() { decthemectl get --json | jq -r .colors.accent; }
 # the accent must reach a hue in [lo,hi] within 8 s
 accent_hue() { local end=$((SECONDS + 8)) a h; while [ $SECONDS -lt $end ]; do a=$(accent); h=$(hue "$a"); [ "$h" -ge "$2" ] && [ "$h" -le "$3" ] && { pass "$1 (accent $a hue $h)"; return; }; sleep 0.3; done; fail "$1" "accent $a hue $h, want $2-$3"; }
 
 echo "== off by default"
-[[ $(macthemectl dynamic status) == *off* ]] && pass "status says off" || fail "status"
+[[ $(decthemectl dynamic status) == *off* ]] && pass "status says off" || fail "status"
 eq "no dynamic key written" "$(SEL '.theme.dynamic // "none"')" none
 eq "accent is the macOS blue" "$(accent)" "#0a84ff"
 eqpx "bar is the original #131313" 900 3 "#131313"
-[[ $(macthemectl dynamic refresh) == *off* ]] && pass "refresh is a no-op while off" || fail "refresh while off"
+[[ $(decthemectl dynamic refresh) == *off* ]] && pass "refresh is a no-op while off" || fail "refresh while off"
 shot 00-off-blue-wallpaper
 
 echo "== on: macOS theme follows the wallpaper"
 t0=$(date +%s%N)
-[[ $(macthemectl dynamic on --scheme tonal-spot --surfaces tint --strength 70) == *seed* ]] && pass "dynamic on" || fail "dynamic on"
+[[ $(decthemectl dynamic on --scheme tonal-spot --surfaces tint --strength 70) == *seed* ]] && pass "dynamic on" || fail "dynamic on"
 echo "      (first read of a 1600x1000 PNG + apply: $((($(date +%s%N) - t0) / 1000000)) ms)"
-eq "theme untouched" "$(macthemectl get --json | jq -r .theme)" macos
+eq "theme untouched" "$(decthemectl get --json | jq -r .theme)" macos
 accent_hue "blue wallpaper gives a blue accent" 205 275
-nepx "running macbar restyled itself (tinted bar)" 900 3 "#131313"
+nepx "running decbar restyled itself (tinted bar)" 900 3 "#131313"
 BLUE_BAR=$(px 900 3)
 shot 10-macos-blue
-t0=$(date +%s%N); macthemectl dynamic refresh >/dev/null; echo "      (refresh with a cached palette: $((($(date +%s%N) - t0) / 1000000)) ms)"
-[ -s "$XDG_CACHE_HOME/macshell/wallpaper-colors.json" ] && pass "palette cached in XDG_CACHE_HOME" || fail "no cache file"
+t0=$(date +%s%N); decthemectl dynamic refresh >/dev/null; echo "      (refresh with a cached palette: $((($(date +%s%N) - t0) / 1000000)) ms)"
+[ -s "$XDG_CACHE_HOME/decebal/wallpaper-colors.json" ] && pass "palette cached in XDG_CACHE_HOME" || fail "no cache file"
 
 echo "== the watcher follows wallpaper changes"
-macthemectl watch --interval 300 >"$TMP/watch.log" 2>&1 & WPID=$!; PIDS+=($WPID)
+decthemectl watch --interval 300 >"$TMP/watch.log" 2>&1 & WPID=$!; PIDS+=($WPID)
 sleep 1
-macthemectl watch >"$TMP/watch2.log" 2>&1
+decthemectl watch >"$TMP/watch2.log" 2>&1
 grep -q "already running" "$TMP/watch2.log" && pass "a second watcher refuses to start" || fail "second watcher" "$(cat "$TMP/watch2.log")"
 wp red;    accent_hue "red wallpaper: accent turns red/pink" 330 360
 nepx "bar tint moved with the wallpaper" 900 3 "$BLUE_BAR"; shot 11-macos-red
@@ -116,73 +116,73 @@ kill -0 $WPID 2>/dev/null && pass "watcher still running (idle)" || fail "watche
 
 echo "== any base theme"
 for th in nord windows11 caelestia dracula; do
-  macthemectl apply $th >/dev/null; wp red
+  decthemectl apply $th >/dev/null; wp red
   accent_hue "$th + red wallpaper" 330 360
   wp blue; accent_hue "$th + blue wallpaper" 205 275
 done
-macthemectl apply windows11 --mode light >/dev/null; wp green; accent_hue "windows11 light + green" 95 165; shot 20-windows-light-green
-macthemectl apply macos --mode dark >/dev/null; wp red
+decthemectl apply windows11 --mode light >/dev/null; wp green; accent_hue "windows11 light + green" 95 165; shot 20-windows-light-green
+decthemectl apply macos --mode dark >/dev/null; wp red
 
 echo "== schemes, accent-only, strength, contrast"
 for s in tonal-spot vibrant expressive monochrome neutral content palette; do
-  macthemectl dynamic scheme $s >/dev/null 2>&1 && pass "scheme $s accepted" || fail "scheme $s"
+  decthemectl dynamic scheme $s >/dev/null 2>&1 && pass "scheme $s accepted" || fail "scheme $s"
   sleep 0.4; echo "      $s -> $(accent)"
 done
-macthemectl dynamic scheme bogus >/dev/null 2>&1 && fail "bad scheme accepted" || pass "bad scheme refused"
-macthemectl dynamic scheme monochrome >/dev/null; sleep 0.8
+decthemectl dynamic scheme bogus >/dev/null 2>&1 && fail "bad scheme accepted" || pass "bad scheme refused"
+decthemectl dynamic scheme monochrome >/dev/null; sleep 0.8
 a=$(accent); r=${a:1:2}; g=${a:3:2}; b=${a:5:2}
 [ "$r" = "$g" ] && [ "$g" = "$b" ] && pass "monochrome accent is grey ($a)" || fail "monochrome" "$a"
-macthemectl dynamic scheme vibrant >/dev/null; macthemectl dynamic surfaces accent >/dev/null
+decthemectl dynamic scheme vibrant >/dev/null; decthemectl dynamic surfaces accent >/dev/null
 eqpx "accent-only: the bar keeps the theme's own colour" 900 3 "#131313"
 accent_hue "accent-only: accent still follows" 330 360
-macthemectl dynamic surfaces tint >/dev/null; macthemectl dynamic strength 100 >/dev/null; macthemectl dynamic contrast 60 >/dev/null
+decthemectl dynamic surfaces tint >/dev/null; decthemectl dynamic strength 100 >/dev/null; decthemectl dynamic contrast 60 >/dev/null
 nepx "tint at 100 %: the bar is tinted" 900 3 "#131313"
 shot 30-macos-red-vibrant-tint100
-macthemectl dynamic strength 150 >/dev/null 2>&1 && fail "strength 150 accepted" || pass "out-of-range strength refused"
-macthemectl dynamic contrast 0 >/dev/null; macthemectl dynamic strength 50 >/dev/null; macthemectl dynamic scheme tonal-spot >/dev/null
+decthemectl dynamic strength 150 >/dev/null 2>&1 && fail "strength 150 accepted" || pass "out-of-range strength refused"
+decthemectl dynamic contrast 0 >/dev/null; decthemectl dynamic strength 50 >/dev/null; decthemectl dynamic scheme tonal-spot >/dev/null
 
 echo "== grey, black and pale wallpapers fall back to the theme's own colours"
 for w in grey black; do
   wp $w; sleep 2
   eq "$w wallpaper: macOS blue stays" "$(accent)" "#0a84ff"
 done
-[[ $(macthemectl dynamic status) == *"no colour"* ]] && pass "status explains it" || fail "status for grey"
-macthemectl dynamic mode wallpaper >/dev/null
+[[ $(decthemectl dynamic status) == *"no colour"* ]] && pass "status explains it" || fail "status for grey"
+decthemectl dynamic mode wallpaper >/dev/null
 wp pale; sleep 2
-eq "pale wallpaper + follow mode: the light variant" "$(macthemectl get --json | jq -r .dark)" false
+eq "pale wallpaper + follow mode: the light variant" "$(decthemectl get --json | jq -r .dark)" false
 wp blue; sleep 2
-eq "blue wallpaper (dark picture): the dark variant" "$(macthemectl get --json | jq -r .dark)" true
-macthemectl dynamic mode keep >/dev/null
+eq "blue wallpaper (dark picture): the dark variant" "$(decthemectl get --json | jq -r .dark)" true
+decthemectl dynamic mode keep >/dev/null
 
 echo "== a fixed source ignores the wallpaper"
-macthemectl dynamic source "$TMP/walls/green.png" >/dev/null
+decthemectl dynamic source "$TMP/walls/green.png" >/dev/null
 accent_hue "source = green.png" 95 165
 wp red; sleep 2
 accent_hue "wallpaper changes do not matter" 95 165
-macthemectl dynamic source '#2040ff' >/dev/null
+decthemectl dynamic source '#2040ff' >/dev/null
 accent_hue "source = a colour" 205 275
-macthemectl dynamic source wallpaper >/dev/null
-macthemectl dynamic preview --json | jq -e '.accent and .seed' >/dev/null && pass "preview prints the palette" || fail "preview"
+decthemectl dynamic source wallpaper >/dev/null
+decthemectl dynamic preview --json | jq -e '.accent and .seed' >/dev/null && pass "preview prints the palette" || fail "preview"
 
 echo "== the older form still works (Caelestia, full palette)"
-out=$(macthemectl dynamic --wallpaper "$TMP/walls/green.png" --scheme vibrant --dark)
+out=$(decthemectl dynamic --wallpaper "$TMP/walls/green.png" --scheme vibrant --dark)
 [[ $out == *"seed #"* ]] && pass "legacy form prints the seed" || fail "legacy form" "$out"
-eq "legacy form selects Caelestia" "$(macthemectl get --json | jq -r .theme)" caelestia
+eq "legacy form selects Caelestia" "$(decthemectl get --json | jq -r .theme)" caelestia
 eq "...as a full palette" "$(SEL .theme.dynamic.surfaces)" full
-macthemectl apply macos >/dev/null
-macthemectl dynamic source wallpaper >/dev/null; macthemectl dynamic scheme tonal-spot >/dev/null; macthemectl dynamic surfaces tint >/dev/null; macthemectl dynamic strength 50 >/dev/null
+decthemectl apply macos >/dev/null
+decthemectl dynamic source wallpaper >/dev/null; decthemectl dynamic scheme tonal-spot >/dev/null; decthemectl dynamic surfaces tint >/dev/null; decthemectl dynamic strength 50 >/dev/null
 
 echo "== settings UI"
-macthemectl dynamic off >/dev/null; wp red; sleep 1
-macsettings --config "$CFG" theme >"$TMP/ms.log" 2>&1 & PIDS+=($!)
-wait_for 8 test -s "$MACSETTINGS_DEBUG_LAYOUT" || fail "settings dump never written"
+decthemectl dynamic off >/dev/null; wp red; sleep 1
+decsettings --config "$CFG" theme >"$TMP/ms.log" 2>&1 & PIDS+=($!)
+wait_for 8 test -s "$DECSETTINGS_DEBUG_LAYOUT" || fail "settings dump never written"
 sleep 1
-WID=$(xdotool search --sync --class MacSettings 2>/dev/null | head -1)
+WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 [ -n "$WID" ] && pass "settings window up" || fail "no settings window"
 xdotool windowsize "$WID" 900 880 windowmove "$WID" 100 10 2>/dev/null; sleep 1
-q() { jq -r "$1" "$MACSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
-ctl() { jq -r "[.ctls[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\""  "$MACSETTINGS_DEBUG_LAYOUT"; }
-seg() { jq -r "[.ctls[]|select(.id==\"$1\")][0].parts[$2]|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$MACSETTINGS_DEBUG_LAYOUT"; }
+q() { jq -r "$1" "$DECSETTINGS_DEBUG_LAYOUT" 2>/dev/null; }
+ctl() { jq -r "[.ctls[]|select(.id==\"$1\")][0].rect|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\""  "$DECSETTINGS_DEBUG_LAYOUT"; }
+seg() { jq -r "[.ctls[]|select(.id==\"$1\")][0].parts[$2]|\"\(.[0]+.[2]/2|floor) \(.[1]+.[3]/2|floor)\"" "$DECSETTINGS_DEBUG_LAYOUT"; }
 click() { xdotool mousemove --window "$WID" $1 $2; sleep 0.1; xdotool click --window "$WID" 1; sleep 0.7; }
 scroll_to() { # scroll until control $1 is on screen (y < 800), at most 30 wheel clicks
   local i y; for i in $(seq 1 30); do y=$(q "[.ctls[]|select(.id==\"$1\")][0].rect[1] // 99999"); y=${y%.*}; [ "$y" -lt 760 ] && [ "$y" -gt 40 ] && return 0; xdotool mousemove --window "$WID" 450 450; xdotool click --window "$WID" 5; sleep 0.1; done; return 1; }
@@ -205,7 +205,7 @@ accent_hue "settings open: a new wallpaper recolours the shell" 95 165
 shot 43-settings-after-wallpaper-change
 
 echo "== off again restores everything"
-macthemectl dynamic off >/dev/null
+decthemectl dynamic off >/dev/null
 eqpx "bar back to #131313" 900 3 "#131313"
 eq "accent back to the macOS blue" "$(accent)" "#0a84ff"
 eq "settings kept for next time" "$(SEL .theme.dynamic.scheme)" tonal-spot

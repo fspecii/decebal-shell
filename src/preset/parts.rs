@@ -10,13 +10,13 @@ use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 /// One selectable share of the configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Part {
-    /// `macshell.json`: theme selection, menu bar and dock switches, workspaces, clock (everything not listed below).
+    /// `decebal.json`: theme selection, menu bar and dock switches, workspaces, clock (everything not listed below).
     Shell,
-    /// `macshell.json` -> `theme.font`, `theme.fontScale`.
+    /// `decebal.json` -> `theme.font`, `theme.fontScale`.
     Fonts,
-    /// `macshell.json` -> `icons` / `iconTheme` (only when the file has them).
+    /// `decebal.json` -> `icons` / `iconTheme` (only when the file has them).
     Icons,
-    /// `macshell.json` -> `hot_corners`.
+    /// `decebal.json` -> `hot_corners`.
     HotCorners,
     /// `dock-settings.json`.
     Dock,
@@ -72,7 +72,7 @@ impl Part {
 
     pub fn detail(self) -> &'static str {
         match self {
-            Part::Shell => "Theme, mode, accent, menu bar and dock switches, workspaces, clock (macshell.json)",
+            Part::Shell => "Theme, mode, accent, menu bar and dock switches, workspaces, clock (decebal.json)",
             Part::Fonts => "Interface font and text size",
             Part::Icons => "Icon theme, when the shell has one",
             Part::HotCorners => "What the four screen corners do",
@@ -93,7 +93,7 @@ impl Part {
     /// The bundle file that carries this part.
     pub fn file(self) -> &'static str {
         match self {
-            Part::Shell | Part::Fonts | Part::Icons | Part::HotCorners => "macshell.json",
+            Part::Shell | Part::Fonts | Part::Icons | Part::HotCorners => "decebal.json",
             Part::Dock => "dock-settings.json",
             Part::Pinned => "dock-pinned-macos.json",
             Part::Rdwm | Part::Keys | Part::Autostart | Part::Wallpaper => "rdwm.toml",
@@ -139,7 +139,7 @@ impl PartSet {
     }
 }
 
-// ---------------------------------------------------------------- macshell.json
+// ---------------------------------------------------------------- decebal.json
 
 const ICON_KEYS: [&str; 5] = ["icons", "iconTheme", "icon_theme", "icon-theme", "iconPack"];
 const FONT_KEYS: [&str; 3] = ["font", "fontScale", "font_scale"];
@@ -191,7 +191,7 @@ pub fn extract_json(doc: &Value, parts: &PartSet) -> Value {
     out
 }
 
-/// Applies a preset's `macshell.json` share on top of `current`.
+/// Applies a preset's `decebal.json` share on top of `current`.
 /// Replace mode first removes everything `parts` own, so the result is exactly what the preset says for those parts.
 /// Merge mode only overlays: objects merge key by key, `null` removes a key, everything else is replaced.
 pub fn merge_json(current: &Value, preset: &Value, parts: &PartSet, merge: bool) -> Value {
@@ -650,7 +650,7 @@ pub fn toml_commands(text: &str) -> Vec<RunItem> {
     out
 }
 
-/// Commands hidden in `macshell.json` / `dock-settings.json`: `custom:` hot corners and any `command`-like key.
+/// Commands hidden in `decebal.json` / `dock-settings.json`: `custom:` hot corners and any `command`-like key.
 pub fn json_commands(file: &str, v: &Value) -> Vec<RunItem> {
     let mut out = Vec::new();
     if let Some(hc) = v.get("hot_corners").and_then(Value::as_object) {
@@ -769,7 +769,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    const RDWM: &str = "# my config\n[general]\nborder_px = 2\ngap_inner = 6\n\n[decoration]\nenabled = true\n\n[wallpaper]\nimage = \"/a/b.png\"\nmode = \"fill\"\n\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\nargs = [\"foot\", \"-e\", \"htop\"]\n\n[[bind]]\nkeys = [\"super+q\"]\naction = \"close\"\n\n[[autostart]]\ncommand = \"macbar &\"\n\n[[scratchpad]]\nname = \"term\"\ncommand = \"foot -a scratch\"\n\n[[output]]\nname = \"DP-1\"\n\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"spawn\"\nargs = [\"notify-send\", \"hi\"]\n";
+    const RDWM: &str = "# my config\n[general]\nborder_px = 2\ngap_inner = 6\n\n[decoration]\nenabled = true\n\n[wallpaper]\nimage = \"/a/b.png\"\nmode = \"fill\"\n\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\nargs = [\"foot\", \"-e\", \"htop\"]\n\n[[bind]]\nkeys = [\"super+q\"]\naction = \"close\"\n\n[[autostart]]\ncommand = \"decbar &\"\n\n[[scratchpad]]\nname = \"term\"\ncommand = \"foot -a scratch\"\n\n[[output]]\nname = \"DP-1\"\n\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"spawn\"\nargs = [\"notify-send\", \"hi\"]\n";
 
     fn ps(p: &[Part]) -> PartSet {
         PartSet::new(p.iter().copied())
@@ -837,9 +837,9 @@ mod tests {
         let w = extract_toml(RDWM, &ps(&[Part::Wallpaper])).unwrap();
         assert!(w.contains("image = \"/a/b.png\"") && !w.contains("[general]"));
         let k = extract_toml(RDWM, &ps(&[Part::Keys])).unwrap();
-        assert!(k.contains("super+q") && k.contains("[[mode.bind]]") && !k.contains("macbar"));
+        assert!(k.contains("super+q") && k.contains("[[mode.bind]]") && !k.contains("decbar"));
         let a = extract_toml(RDWM, &ps(&[Part::Autostart])).unwrap();
-        assert!(a.contains("macbar &") && a.contains("[[scratchpad]]"));
+        assert!(a.contains("decbar &") && a.contains("[[scratchpad]]"));
         assert!(extract_toml("[general\n", &ps(&[Part::Rdwm])).is_err());
     }
 
@@ -881,12 +881,12 @@ mod tests {
     fn commands_are_found_everywhere() {
         let c = toml_commands(RDWM);
         let cmds: Vec<&str> = c.iter().map(|r| r.command.as_str()).collect();
-        assert!(cmds.contains(&"macbar &") && cmds.contains(&"foot -a scratch") && cmds.contains(&"foot -e htop") && cmds.contains(&"notify-send hi"), "{c:?}");
+        assert!(cmds.contains(&"decbar &") && cmds.contains(&"foot -a scratch") && cmds.contains(&"foot -e htop") && cmds.contains(&"notify-send hi"), "{c:?}");
         assert_eq!(c.len(), 4);
         assert!(c.iter().any(|r| r.source.contains("scratchpad") && r.source.contains("term")));
         assert!(toml_commands("[general]\nborder_px = 1\n").is_empty());
         let hc = json!({"hot_corners": {"top_left": "dashboard", "bottom_right": "custom:rm -rf ~"}, "widgets": [{"command": "date"}]});
-        let j = json_commands("macshell.json", &hc);
+        let j = json_commands("decebal.json", &hc);
         assert_eq!(j.len(), 2, "{j:?}");
         assert!(j.iter().any(|r| r.command == "rm -rf ~"));
     }

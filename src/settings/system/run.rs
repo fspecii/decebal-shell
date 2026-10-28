@@ -89,9 +89,9 @@ pub fn which(prog: &str) -> Option<std::path::PathBuf> {
     std::env::split_paths(&path).map(|d| d.join(prog)).find(|p| p.is_file())
 }
 
-/// True in a Wayland session (X11 tools then only reach XWayland; the window itself runs on Wayland unless `MACSHELL_BACKEND=x11`). `MACSETTINGS_FORCE_X11_TOOLS=1` overrides.
+/// True in a Wayland session (X11 tools then only reach XWayland; the window itself runs on Wayland unless `DECEBAL_BACKEND=x11`). `DECSETTINGS_FORCE_X11_TOOLS=1` overrides.
 pub fn wayland_session() -> bool {
-    std::env::var_os("MACSETTINGS_FORCE_X11_TOOLS").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) && std::env::var("MACSHELL_BACKEND").map_or(true, |b| b != "x11")
+    std::env::var_os("DECSETTINGS_FORCE_X11_TOOLS").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) && std::env::var("DECEBAL_BACKEND").map_or(true, |b| b != "x11")
 }
 
 pub struct RealRunner {

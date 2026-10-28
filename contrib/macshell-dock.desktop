@@ -1,6 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=macshell dock
-Exec=macdock
-X-GNOME-Autostart-enabled=true
-NotShowIn=rdwm;

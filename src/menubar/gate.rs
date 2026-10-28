@@ -1,6 +1,6 @@
-//! `bar.enabled` in `macshell.json`: macbar can be switched off (a Windows-only layout) without the
+//! `bar.enabled` in `decebal.json`: decbar can be switched off (a Windows-only layout) without the
 //! session supervisor noticing. The process stays alive while hidden, because the supervisor
-//! (`rdwm-macshell-session`) restarts a missing macbar within two seconds; only its surface goes away.
+//! (`rdwm-decebal-session`) restarts a missing decbar within two seconds; only its surface goes away.
 //! [`wait_until_visible`] is what the hidden process does, [`Gate`] is what a shown bar uses to notice it
 //! must hide.
 
@@ -17,7 +17,7 @@ pub fn visible_now() -> bool {
     config::shell_settings().bar_visible(config::dock_settings().style)
 }
 
-/// True when macdock should be on screen: `dock.enabled` (macshell.json) with `"auto"` meaning "unless the theme has a
+/// True when decdock should be on screen: `dock.enabled` (decebal.json) with `"auto"` meaning "unless the theme has a
 /// vertical bar". Re-reads the theme files first, because a hidden dock has no watcher thread running.
 pub fn dock_visible_now() -> bool {
     crate::theme::live::reload();

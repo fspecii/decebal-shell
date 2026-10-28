@@ -1,9 +1,9 @@
-//! The bar's status engine for other hosts: the Windows-style taskbar of macdock embeds a [`MacBar`]
+//! The bar's status engine for other hosts: the Windows-style taskbar of decdock embeds a [`DecBar`]
 //! that never draws its own surface. It supplies the same data (layout, sound, Wi-Fi, Bluetooth, battery),
 //! the same popups and the calendar, so a fix to any of them reaches both. The host draws the tray icons
-//! itself, places the popup next to the item it opened from ([`MacBar::status_place`]) and forwards input.
+//! itself, places the popup next to the item it opened from ([`DecBar::status_place`]) and forwards input.
 //!
-//! Everything here is a thin, additive layer over the private parts of `MacBar` and `status.rs`.
+//! Everything here is a thin, additive layer over the private parts of `DecBar` and `status.rs`.
 
 use super::popup::{CalHit, Calendar, Popup};
 use super::*;
@@ -25,16 +25,16 @@ pub struct Place {
     screen_w: f32,
 }
 
-impl MacBar {
+impl DecBar {
     /// A bar that only serves as a status engine: no menus, no weather, no focused-window tracking.
-    pub fn status_engine() -> MacBar {
-        let mut bar = MacBar::new(Box::new(StaticApp(String::new())));
+    pub fn status_engine() -> DecBar {
+        let mut bar = DecBar::new(Box::new(StaticApp(String::new())));
         bar.embedded = true;
         bar.was_place = None;
         bar
     }
 
-    /// Starts the data sources; `waker` makes the host's loop call [`MacBar::status_tick`].
+    /// Starts the data sources; `waker` makes the host's loop call [`DecBar::status_tick`].
     pub fn status_start(&mut self, waker: Waker) {
         self.start_watchers(waker);
         self.spawn_snapshot(false);
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn calendar_hangs_from_the_clock_above_a_bottom_strip_and_below_a_top_one() {
-        let mut bar = MacBar::status_engine();
+        let mut bar = DecBar::status_engine();
         assert!(bar.status_kinds().is_empty() || !bar.status_kinds().contains(&Tray::Clock));
         assert!(bar.status_open_kind().is_none() && bar.status_rect().is_none());
         bar.status_place(752.0, true, 1280.0);
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn popups_are_kept_on_screen_and_closing_clears_them() {
-        let mut bar = MacBar::status_engine();
+        let mut bar = DecBar::status_engine();
         bar.status_place(752.0, true, 1280.0);
         assert!(bar.status_toggle(Tray::Clock, 100.0));
         assert_eq!(bar.status_rect().unwrap().x, 4, "clamped to the left edge");

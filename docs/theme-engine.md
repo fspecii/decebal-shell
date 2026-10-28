@@ -2,16 +2,16 @@
 
 A theme is a **package of data**: colours for dark and light, metrics, fonts, a wallpaper, a titlebar style, the bar and dock, icons, hot
 corners, a few safe rdwm keys and desktop widgets. Every built-in theme (macOS, Windows 11, Caelestia, Nord, Dracula, ...) is such a package
-(`themes/<id>/theme.toml`, compiled in), so there is **one engine**: your own themes, a theme from a friend and the ones shipped with macshell
+(`themes/<id>/theme.toml`, compiled in), so there is **one engine**: your own themes, a theme from a friend and the ones shipped with decebal
 use the same keys and the same code. Nothing in a package is ever executed. That is what makes a future theme market safe.
 
 ```
-macthemectl theme new mine --from caelestia      # start from a copy
-$EDITOR ~/.config/macshell/themes/mine/theme.toml
-macthemectl theme validate ~/.config/macshell/themes/mine
-macthemectl theme apply mine --preview 10        # 10 s, then everything is put back
-macthemectl theme apply mine ; macthemectl theme undo
-macthemectl theme pack ~/.config/macshell/themes/mine -o mine.dtheme
+decthemectl theme new mine --from caelestia      # start from a copy
+$EDITOR ~/.config/decebal/themes/mine/theme.toml
+decthemectl theme validate ~/.config/decebal/themes/mine
+decthemectl theme apply mine --preview 10        # 10 s, then everything is put back
+decthemectl theme apply mine ; decthemectl theme undo
+decthemectl theme pack ~/.config/decebal/themes/mine -o mine.dtheme
 ```
 
 * [Package format](#package-format-version-1) * [Manifest reference](#manifest-reference) * [Inheritance](#inheritance-extends)
@@ -31,16 +31,16 @@ sunset-grid/
   widgets/sunset-clock.toml  widget files (see Widgets)
   README.md  LICENSE.txt     .md / .txt in the root, never read by the shell
 ```
-Installed themes live in `~/.config/macshell/themes/<id>/` (`$MACSHELL_THEMES`), system-wide ones in `/usr/share/macshell/themes/<id>/`
-(`$MACSHELL_SYSTEM_THEMES`); the user's folder wins. A single legacy `~/.config/macshell/themes/<name>.toml` (no `format` key) keeps working
-exactly as before, and `macthemectl theme duplicate NAME NEW` upgrades it to a package.
+Installed themes live in `~/.config/decebal/themes/<id>/` (`$DECEBAL_THEMES`), system-wide ones in `/usr/share/decebal/themes/<id>/`
+(`$DECEBAL_SYSTEM_THEMES`); the user's folder wins. A single legacy `~/.config/decebal/themes/<name>.toml` (no `format` key) keeps working
+exactly as before, and `decthemectl theme duplicate NAME NEW` upgrades it to a package.
 
 `theme.toml` starts with `format = 1`. A reader that does not know the format refuses the file; format 2 will be a different number, not
 a different meaning of these keys.
 
 ## Manifest reference
 
-`macthemectl theme schema` prints every key with its type, range and whether the shell applies it yet (`--json` for tools); it is generated
+`decthemectl theme schema` prints every key with its type, range and whether the shell applies it yet (`--json` for tools); it is generated
 from the same table the validator uses (`src/theme/engine/schema.rs`), so it cannot drift from the code. Unknown keys are errors
 ("did you mean ...?"), and every error names the line and the key.
 
@@ -130,14 +130,14 @@ deeper than 8 are errors. A package may extend a built-in id (`extends = "nord"`
 
 ## Commands
 
-`macthemectl theme help` lists them. Output is plain text; `list` and `schema` take `--json`.
+`decthemectl theme help` lists them. Output is plain text; `list` and `schema` take `--json`.
 
 | command | does |
 |---|---|
 | `list`, `info ID` | installed themes (built-in / user / system) with version, author, variants, integrity |
 | `schema` | every manifest key |
 | `validate PATH` | a folder, a `.dtheme` or one `theme.toml`; all errors with line numbers, then warnings |
-| `new ID [--name N] [--from BASE]` | scaffold `~/.config/macshell/themes/ID/` from a theme |
+| `new ID [--name N] [--from BASE]` | scaffold `~/.config/decebal/themes/ID/` from a theme |
 | `install PATH [--force] [--apply]` | check, then copy atomically into the user folder (a built-in id needs `--force`) |
 | `uninstall ID` | remove a user theme (not built-ins, not the one in use) |
 | `pack DIR [-o FILE]`, `unpack FILE [DIR]`, `hash DIR [--write]` | make / open a `.dtheme`; the content hash |
@@ -145,7 +145,7 @@ deeper than 8 are errors. A package may extend a built-in id (`extends = "nord"`
 | `duplicate ID NEW`, `export ID [FILE]` | an editable copy (flattened, with its assets); a `.dtheme` of any theme |
 | `snapshot ID [--name N]` | create a theme from the current settings |
 
-The old commands are unchanged (`macthemectl apply NAME`, `style`, `set`, `dynamic`, `export`, ...); `theme apply` is the one that applies a
+The old commands are unchanged (`decthemectl apply NAME`, `style`, `set`, `dynamic`, `export`, ...); `theme apply` is the one that applies a
 whole package.
 
 ## What apply does, undo, preview
@@ -155,7 +155,7 @@ whole package.
 1. resolve the theme (nothing is written if it is broken or unknown);
 2. compute the new text of every file it owns: **rdwm `config.toml`** (colours, titlebar style/height/radius, `[rdwm]` keys, wallpaper
    image/mode/colour, validated with `rdwmctl check-config`; a titlebar style the installed rdwm rejects is dropped and reported, the
-   rest still applies), **`dock-settings.json`** (style, align, position, magnification, roundness), **`macshell.json`** (theme selection,
+   rest still applies), **`dock-settings.json`** (style, align, position, magnification, roundness), **`decebal.json`** (theme selection,
    `bar`, `dock`, `hot_corners`, `icons`, `widgets`, `theme_wallpaper`);
 3. save the old contents as an undo record (`<shell config>/theme-undo/<time>/`, the last ten are kept);
 4. write the files atomically one by one; if any write fails, everything already written is put back;
@@ -165,8 +165,8 @@ Keys the running rdwm does not know, or the shell cannot apply yet, are left out
 file byte for byte (a file the apply created is removed again) and steps back through earlier applies. `--preview N` applies, waits N seconds
 (or Ctrl-C) and undoes; the Theme pane's Preview does the same for 8 seconds. The widgets a theme placed carry `"from_theme": true`: the next
 apply replaces them, the user's own instances stay. A theme with `match_colors` records it in `theme_dynamic` so the next theme switches
-"Match wallpaper" off again. Programs follow within half a second like for every theme change; `macwidgets` rebuilds when its widget files
-or `macshell.json` change.
+"Match wallpaper" off again. Programs follow within half a second like for every theme change; `decwidgets` rebuilds when its widget files
+or `decebal.json` change.
 
 ## Safety model
 
@@ -192,7 +192,7 @@ A package is data. The loader enforces, for archives and folders alike (`package
 ## Widgets
 
 A widget is a small declarative file, `widgets/<name>.toml`: containers, text with format strings, icons, bars, rings, graphs, images,
-workspace dots, and click actions from a fixed list. It is drawn on the desktop by `macwidgets` (an X11 daemon, one small override-redirect
+workspace dots, and click actions from a fixed list. It is drawn on the desktop by `decwidgets` (an X11 daemon, one small override-redirect
 window per widget at the bottom of the stack, SHAPE-cut so rounded cards look right without a compositor and real alpha with one).
 The widget uses the theme's colours by name, so it follows theme, mode and wallpaper-colour changes.
 
@@ -242,7 +242,7 @@ weight = "bold"
 `int`, `.1` (decimals, 0-4), `bytes`, `rate`, `dur`, `mmss`, `upper`, `lower`, and for `clock` the strftime codes `%H %I %M %S %p %a %A %b %B %d %e
 %m %y %Y %j %%`. There is no arithmetic, no calls, no nesting.
 
-**Data sources** (`macwidgets data` prints them): `clock` `clock.hour/minute/second`; `cpu.usage/temp/load/cores/history`; `mem.usage/used/total`;
+**Data sources** (`decwidgets data` prints them): `clock` `clock.hour/minute/second`; `cpu.usage/temp/load/cores/history`; `mem.usage/used/total`;
 `swap.usage`; `disk.usage/used/total/free`; `net.rx/tx/rx_history/tx_history`; `gpu.present/usage/mem/temp/name`; `battery.present/level/charging/status`;
 `volume.level/muted`; `brightness.level`; `workspace.current/count/name`; `window.title/app`; `media.present/playing/title/artist/album/progress/position/length/art`
 (MPRIS); `weather.present/temp/icon/code` (the bar's cache); `user.name/display`; `host.name`; `uptime`; `opt.<key>` (instance options);
@@ -266,20 +266,20 @@ Every action runs a fixed program with fixed arguments, never through a shell (`
 | source | trust | `exec` and `[commands]` |
 |---|---|---|
 | inside a theme package, or a shipped sample | `Theme` | rejected when the file is validated (so `theme install` fails) |
-| the user's own folder (`~/.config/macshell/widgets/`, `$MACSHELL_WIDGETS`) | `User` | rejected with a message pointing at the switch |
-| the same, with `"widgets": {"allow_exec": true}` in `macshell.json` | `UserExec` | allowed |
+| the user's own folder (`~/.config/decebal/widgets/`, `$DECEBAL_WIDGETS`) | `User` | rejected with a message pointing at the switch |
+| the same, with `"widgets": {"allow_exec": true}` in `decebal.json` | `UserExec` | allowed |
 
 With the switch on, a user widget may use `on_click = "exec notify-send hi"` and `[commands.up] run = "uptime -p"  interval = 10` (at least 1
 second, 5 s timeout, first line of stdout, 4 KiB cap) read as `{cmd.up}`. Theme widgets never get this, even when the switch is on, and
 `theme snapshot` leaves exec-capable widgets out of the package.
 
-**Placing.** Themes place widgets with `[[widgets]]`; you can too: `macwidgets add clock-card --anchor top-right --x -40 --y 60`,
-`macwidgets list`, `macwidgets remove clock-card`, or edit `macshell.json` -> `widgets.items`. `macwidgets` (no arguments) runs the daemon;
-put it in rdwm's autostart. `macwidgets render NAME --png OUT [--live] [--bg #rrggbb|IMAGE]` draws a widget with fixed sample data for
+**Placing.** Themes place widgets with `[[widgets]]`; you can too: `decwidgets add clock-card --anchor top-right --x -40 --y 60`,
+`decwidgets list`, `decwidgets remove clock-card`, or edit `decebal.json` -> `widgets.items`. `decwidgets` (no arguments) runs the daemon;
+put it in rdwm's autostart. `decwidgets render NAME --png OUT [--live] [--bg #rrggbb|IMAGE]` draws a widget with fixed sample data for
 documentation. Shipped samples (`widgets/*.toml`): `clock-card`, `cpu-ram-ring`, `now-playing-mini`, `workspace-dots`, `sysmon-graph`,
 `battery-pill`; refer to them as `builtin:<id>`.
 
-`place = "bar"` is accepted and stored; hosting widgets inside macbar waits for the bar item lists (see the table below).
+`place = "bar"` is accepted and stored; hosting widgets inside decbar waits for the bar item lists (see the table below).
 
 ## The Theme pane
 
@@ -299,12 +299,12 @@ and listed as `note:` by `theme apply`):
 | `font.files` | registering bundled fonts with fontconfig (files are validated and shipped) |
 | `wallpaper.slideshow/interval/shuffle` | a runner that rotates `theme_wallpaper.images` |
 | `decoration.buttons` left/right, `decoration.button_order` | rdwm has no such keys: the style decides (`none` is applied) |
-| `bar.left/center/right`, `[[widgets]] place = "bar"`, `slot`, `order` | macbar reading item lists (stored in `macshell.json` `bar.*`) |
+| `bar.left/center/right`, `[[widgets]] place = "bar"`, `slot`, `order` | decbar reading item lists (stored in `decebal.json` `bar.*`) |
 | `dock.position` left/right | the dock only has bottom/top (Windows taskbar) |
 | `integrity.signature/signer` | the market's key policy |
 
 Wired to the real implementations: fonts (`font.*` -> theme font roles and presets), "Match wallpaper" (`wallpaper.match_colors/scheme/surfaces/strength/follow_mode`),
-rdwm titlebar styles (`decoration.style` -> `[decoration] style`), the Caelestia bar position (`bar.position` -> `macshell.json` `bar.position`), icons
+rdwm titlebar styles (`decoration.style` -> `[decoration] style`), the Caelestia bar position (`bar.position` -> `decebal.json` `bar.position`), icons
 (`icons.*` -> the `icons` object), and "Apply to all apps" (an apply asks for one run when the user switched it on; a theme cannot switch it on).
 
 ## Tests

@@ -1,4 +1,4 @@
-//! Which widgets run where: the `widgets` object of `macshell.json`, and finding each instance's definition.
+//! Which widgets run where: the `widgets` object of `decebal.json`, and finding each instance's definition.
 //!
 //! ```json
 //! "widgets": { "allow_exec": false,
@@ -6,7 +6,7 @@
 //!                           "monitor": "primary", "enabled": true, "options": {} } ] }
 //! ```
 //! `source` names the theme package a bare `use` lives in (set by `theme apply`); without it a bare name is looked up in the user's
-//! widget folder (`$MACSHELL_WIDGETS`, else `~/.config/macshell/widgets`) and then among the shipped samples. `builtin:<id>` is a sample.
+//! widget folder (`$DECEBAL_WIDGETS`, else `~/.config/decebal/widgets`) and then among the shipped samples. `builtin:<id>` is a sample.
 
 use super::dsl::{self, WidgetDef};
 use super::{samples, Trust};
@@ -91,7 +91,7 @@ pub struct WidgetsConfig {
 }
 
 impl WidgetsConfig {
-    /// From the parsed `macshell.json`. Bad items are skipped.
+    /// From the parsed `decebal.json`. Bad items are skipped.
     pub fn from_json(root: &Value) -> WidgetsConfig {
         let w = root.get("widgets");
         WidgetsConfig {
@@ -116,11 +116,11 @@ impl WidgetsConfig {
 }
 
 pub fn user_dir() -> PathBuf {
-    std::env::var_os("MACSHELL_WIDGETS")
+    std::env::var_os("DECEBAL_WIDGETS")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("macshell/widgets")))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/macshell/widgets")))
+        .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("decebal/widgets")))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/decebal/widgets")))
         .unwrap_or_else(|| PathBuf::from("widgets"))
 }
 
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn theme_package_widgets_are_parsed_as_theme_widgets() {
-        let d = std::env::temp_dir().join(format!("macshell-wcfg-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-wcfg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("t1/widgets")).unwrap();
         std::fs::write(d.join("t1/theme.toml"), "format = 1\nname = \"t\"\n").unwrap();

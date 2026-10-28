@@ -79,7 +79,7 @@ pub fn install_face(src: &Path, dest: &Path) -> Result<(), String> {
         .with_guessed_format()
         .map_err(|e| e.to_string())?
         .decode()
-        .map_err(|_| "That file is not a picture macsettings can read (PNG, JPEG or WebP)".to_string())?;
+        .map_err(|_| "That file is not a picture decsettings can read (PNG, JPEG or WebP)".to_string())?;
     let sq = img.resize_to_fill(256, 256, image::imageops::FilterType::Triangle);
     let tmp = dest.with_extension(format!("tmp{}", std::process::id()));
     {
@@ -222,7 +222,7 @@ pub fn human(b: u64) -> String {
     }
 }
 
-pub const TOOLS: &[&str] = &["rdwm", "rdwmctl", "macdock", "macbar", "machaven", "maclaunch", "macspot", "macsettings", "macwm"];
+pub const TOOLS: &[&str] = &["rdwm", "rdwmctl", "decdock", "decbar", "dechaven", "declaunch", "decspot", "decsettings", "decwm"];
 
 pub fn load_storage(r: &dyn Runner) -> Storage {
     let rd = |p: &str| std::fs::read_to_string(p).unwrap_or_default();
@@ -285,7 +285,7 @@ pub fn storage_items(h: &Hub, rdwm_version: Option<&str>) -> Vec<Item> {
             .collect(),
     ));
     v.push(Item::Header("Software".into()));
-    let mut rows = vec![Row::new("macshell").detail("This build").ctl(l("macshell", env!("CARGO_PKG_VERSION").to_string()))];
+    let mut rows = vec![Row::new("decebal").detail("This build").ctl(l("decebal", env!("CARGO_PKG_VERSION").to_string()))];
     rows.push(Row::new("rdwm").detail("Running window manager").ctl(l("rdwmv", rdwm_version.map(|v| v.to_string()).unwrap_or_else(|| "not running".into()))));
     for (t, p) in &s.tools {
         rows.push(Row::new(format!("  {t}")).ctl(l(&format!("tool:{t}"), p.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "not installed".into()))));

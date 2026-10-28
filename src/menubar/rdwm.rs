@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn watcher_reads_state_from_a_fake_socket() {
         use std::os::unix::net::UnixListener;
-        let dir = std::env::temp_dir().join(format!("macbar-rdwm-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decbar-rdwm-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let sock = dir.join("rdwm.sock");
         let l = UnixListener::bind(&sock).unwrap();

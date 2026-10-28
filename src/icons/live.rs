@@ -1,7 +1,7 @@
 //! The process-wide icon state: the configured theme turned into a lookup chain, kept up to date.
 //!
 //! * [`State`] (pure apart from reading files) owns the config, the chosen theme and the [`Resolver`] with its path cache;
-//!   [`State::poll`] re-reads what changed (macshell.json, GTK / dconf files, the icon directories).
+//!   [`State::poll`] re-reads what changed (decebal.json, GTK / dconf files, the icon directories).
 //! * Process-wide: [`lookup`], [`generation`] (bumped whenever icons must be redrawn), [`poll_now`] (called by the
 //!   theme watcher, which also wakes the event loop), [`status`].
 //!   Programs without that watcher still follow: [`generation`] polls itself at most every 700 ms.
@@ -107,7 +107,7 @@ impl State {
         }
         let cfg = IconConfig::read(&self.cfg_path);
         if cfg == self.cfg && desk == self.desktop_stamps && roots == self.root_stamps {
-            self.shell_stamp = shell; // some other key of macshell.json changed
+            self.shell_stamp = shell; // some other key of decebal.json changed
             return false;
         }
         // GSettings is only asked when the desktop files moved (or the config started following the desktop)
@@ -184,7 +184,7 @@ pub fn render_settings() -> (f32, bool) {
     (f32::from_bits(SCALE_BITS.load(Ordering::Relaxed)), TINT.load(Ordering::Relaxed))
 }
 
-/// Everything `macthemectl icons status` and the settings pane show.
+/// Everything `decthemectl icons status` and the settings pane show.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Status {
     pub config: IconConfig,
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn state_chain_uses_the_choice_hicolor_and_the_fallback() {
         let t = tree();
-        let f = t.root.join("macshell.json");
+        let f = t.root.join("decebal.json");
         std::fs::write(&f, r#"{"icons": {"theme": "Tela"}}"#).unwrap();
         let s = State::build(f.clone(), t.roots(), IconConfig::read(&f), None);
         assert_eq!(s.chain(), ["Tela", "hicolor", "Adwaita"]);
@@ -281,7 +281,7 @@ mod tests {
     fn polling_follows_config_edits_and_ignores_other_keys() {
         let t = tree();
         t.icon("Tela", "scalable/apps/only-tela.svg").icon("Papirus", "scalable/apps/only-papirus.svg");
-        let f = t.root.join("macshell.json");
+        let f = t.root.join("decebal.json");
         std::fs::write(&f, r#"{"icons": {"theme": "Tela"}}"#).unwrap();
         let mut s = State::build(f.clone(), t.roots(), IconConfig::read(&f), None);
         assert!(s.resolver().lookup("only-tela", 48, false).is_some() && s.resolver().lookup("only-papirus", 48, false).is_none());
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn newly_installed_themes_are_noticed_through_the_directory_stamp() {
         let t = tree();
-        let f = t.root.join("macshell.json");
+        let f = t.root.join("decebal.json");
         std::fs::write(&f, r#"{"icons": {"theme": "NewTheme"}}"#).unwrap();
         let mut s = State::build(f, t.roots(), cfg("NewTheme"), None);
         assert!(s.choice.problem.is_some());
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn the_desktop_choice_is_only_asked_when_its_files_moved() {
         let t = tree();
-        let f = t.root.join("macshell.json");
+        let f = t.root.join("decebal.json");
         let mut s = State::build(f.clone(), t.roots(), cfg("auto"), Some("Tela".into()));
         assert_eq!(s.choice.active.as_deref(), Some("Tela"));
         std::fs::write(&f, r#"{"icons": {"size_scale": 0.8}}"#).unwrap();

@@ -1,8 +1,8 @@
 #!/bin/bash
-# macdock's Windows-style taskbar against rdwm on a private Xvfb display: switch the style by editing
+# decdock's Windows-style taskbar against rdwm on a private Xvfb display: switch the style by editing
 # dock-settings.json (and from the dock's own menu), struts / workarea, Start, search, task buttons
 # (focus / minimise / restore / middle click / right-click menu / drag), tray popups, calendar, show desktop,
-# the left aligned and titled variants, and switching back to the macOS dock. Also macbar's bar.enabled.
+# the left aligned and titled variants, and switching back to the macOS dock. Also decbar's bar.enabled.
 #   tests/e2e/taskbar.sh                (uses ../rdwm/target/{release,debug}/rdwm, or RDWM=/path/to/rdwm)
 # Everything is private: Xvfb :140 (E2E_DISPLAY), own XDG dirs, fake apps (examples/fakewin), fake system tools
 # (tests/fakebin), logging stubs for the launcher / search; only PIDs started here are killed.
@@ -44,11 +44,11 @@ unset WAYLAND_DISPLAY RDWM_SOCK
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$XDG_DATA_HOME/applications" "$TMP/nodata"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11 MACSHELL_SCALE=${MACSHELL_SCALE:-1}
-mkdir -p "$MACSHELL_CONFIG"
-PINNED=$MACSHELL_CONFIG/dock-pinned-macos.json
-SETTINGS=$MACSHELL_CONFIG/dock-settings.json
-SHELLCFG=$MACSHELL_CONFIG/macshell.json
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11 DECEBAL_SCALE=${DECEBAL_SCALE:-1}
+mkdir -p "$DECEBAL_CONFIG"
+PINNED=$DECEBAL_CONFIG/dock-pinned-macos.json
+SETTINGS=$DECEBAL_CONFIG/dock-settings.json
+SHELLCFG=$DECEBAL_CONFIG/decebal.json
 FAKE=$BIN/examples/fakewin
 RDWMCTL=${RDWMCTL:-$(dirname "$RDWM")/rdwmctl}
 export FAKEWIN_LOG=$TMP/clicks.log
@@ -57,12 +57,12 @@ printf '#!/bin/sh\necho launchpad >> %s/start.log\n' "$TMP" > "$TMP/launchpad.sh
 printf '#!/bin/sh\necho search >> %s/start.log\n' "$TMP" > "$TMP/search.sh"
 printf '#!/bin/sh\necho open "$@" >> %s/open.log\n' "$TMP" > "$TMP/open.sh"
 chmod +x "$TMP"/*.sh
-export MACSHELL_LAUNCHPAD=$TMP/launchpad.sh MACSHELL_SPOTLIGHT=$TMP/search.sh MACSHELL_OPEN=$TMP/open.sh
+export DECEBAL_LAUNCHPAD=$TMP/launchpad.sh DECEBAL_SPOTLIGHT=$TMP/search.sh DECEBAL_OPEN=$TMP/open.sh
 # fake system tools for the tray
 export FAKE_STATE=$TMP/fs; mkdir -p "$FAKE_STATE" "$TMP/ps/BAT0"
 echo 0.50 > $FAKE_STATE/vol; echo 0 > $FAKE_STATE/mute; echo enabled > $FAKE_STATE/wifi; echo yes > $FAKE_STATE/btpower; echo 50 > $FAKE_STATE/bright; : > $FAKE_STATE/log
 echo Battery > $TMP/ps/BAT0/type; echo 64 > $TMP/ps/BAT0/capacity; echo Discharging > $TMP/ps/BAT0/status
-export MACBAR_POWER_SUPPLY=$TMP/ps PATH=$HERE/tests/fakebin:$PATH
+export DECBAR_POWER_SUPPLY=$TMP/ps PATH=$HERE/tests/fakebin:$PATH
 
 desktop() { printf '[Desktop Entry]\nType=Application\nName=%s\nExec=%s %s "%s" %s\nStartupWMClass=%s\n' "$1" "$FAKE" "$1" "$2" "$3" "$1" > "$XDG_DATA_HOME/applications/$1.desktop"; }
 desktop alpha "Alpha Window" cc3333
@@ -77,12 +77,12 @@ xdotool mousemove 2 2
 "$RDWM" --backend x11 >"$TMP/rdwm.log" 2>&1 &
 PIDS+=($!)
 wait_for 5 bash -c "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q window" || { echo "rdwm did not start"; cat "$TMP/rdwm.log"; exit 2; }
-export MACDOCK_DEBUG_LAYOUT=$TMP/layout.txt
-"$BIN/macdock" >"$TMP/macdock.log" 2>&1 &
+export DECDOCK_DEBUG_LAYOUT=$TMP/layout.txt
+"$BIN/decdock" >"$TMP/decdock.log" 2>&1 &
 DOCK_PID=$!; PIDS+=($DOCK_PID)
 
-dock_win() { for w in $(xdotool search --name '^macshell-dock$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
-wait_for 6 dock_win || { echo "dock did not map"; cat "$TMP/macdock.log"; exit 2; }
+dock_win() { for w in $(xdotool search --name '^decebal-dock$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
+wait_for 6 dock_win || { echo "dock did not map"; cat "$TMP/decdock.log"; exit 2; }
 DOCKW=$(dock_win)
 gx() { xdotool getwindowgeometry --shell "$DOCKW" | sed -n 's/^X=//p'; }
 gy() { xdotool getwindowgeometry --shell "$DOCKW" | sed -n 's/^Y=//p'; }
@@ -95,7 +95,7 @@ has_win() { xdotool search --class "^$1\$" >/dev/null 2>&1; }
 win_of() { xdotool search --class "^$1\$" 2>/dev/null | head -1; }
 hidden() { xprop -id "$1" _NET_WM_STATE 2>/dev/null | grep -q HIDDEN; }
 # Root coordinates of a zone from the dock's layout dump: pos KEY [NAME]  (lines: "key [name] x y ...")
-lay() { cat "$MACDOCK_DEBUG_LAYOUT" 2>/dev/null; }
+lay() { cat "$DECDOCK_DEBUG_LAYOUT" 2>/dev/null; }
 pos() { # pos start | pos task alpha | pos tray Audio | pos clock ...
     local line
     if [ $# -ge 2 ]; then line=$(lay | awk -v k="$1" -v n="$2" '$1==k && $2==n {print $3, $4}'); else line=$(lay | awk -v k="$1" '$1==k {print $2, $3}'); fi
@@ -304,20 +304,20 @@ click_at $lx $(( bottom - (12 + 24 + 11 + 24) + 6 + 24 + 11 + 12 ))
 ok_within "menu item switches to the Windows style" 4 bash -c "[ \"\$(xdotool getwindowgeometry --shell $DOCKW | sed -n 's/^WIDTH=//p')\" = 1280 ]"
 grep -q '"style": "windows"' "$SETTINGS" && pass "style saved to dock-settings.json" || fail "style not saved" "$(cat $SETTINGS)"
 
-echo "== macbar can be hidden (bar.enabled)"
-"$BIN/macbar" >"$TMP/macbar.log" 2>&1 &
+echo "== decbar can be hidden (bar.enabled)"
+"$BIN/decbar" >"$TMP/decbar.log" 2>&1 &
 BAR_PID=$!; PIDS+=($BAR_PID)
-bar_win() { xdotool search --name '^macshell-bar$' 2>/dev/null | head -1; }
-ok_within "macbar maps by default" 5 bar_win
+bar_win() { xdotool search --name '^decebal-bar$' 2>/dev/null | head -1; }
+ok_within "decbar maps by default" 5 bar_win
 printf '{"bar":{"enabled":false}}\n' > "$SHELLCFG"
-ok_within "macbar unmaps when bar.enabled is false" 8 bash -c "! xdotool search --name '^macshell-bar\$' >/dev/null 2>&1"
-kill -0 $BAR_PID 2>/dev/null && pass "macbar process stays alive (supervisor keeps happy)" || fail "macbar exited"
+ok_within "decbar unmaps when bar.enabled is false" 8 bash -c "! xdotool search --name '^decebal-bar\$' >/dev/null 2>&1"
+kill -0 $BAR_PID 2>/dev/null && pass "decbar process stays alive (supervisor keeps happy)" || fail "decbar exited"
 printf '{"bar":{"enabled":"auto"}}\n' > "$SHELLCFG"
 setcfg '{"style":"mac"}'
-ok_within "macbar returns for auto + macOS dock" 8 bar_win
+ok_within "decbar returns for auto + macOS dock" 8 bar_win
 setcfg '{"style":"windows"}'
-ok_within "auto + Windows dock hides macbar" 8 bash -c "! xdotool search --name '^macshell-bar\$' >/dev/null 2>&1"
-kill -0 $BAR_PID 2>/dev/null && pass "macbar still alive when hidden by auto" || fail "macbar exited"
+ok_within "auto + Windows dock hides decbar" 8 bash -c "! xdotool search --name '^decebal-bar\$' >/dev/null 2>&1"
+kill -0 $BAR_PID 2>/dev/null && pass "decbar still alive when hidden by auto" || fail "decbar exited"
 shot 24-windows-only
 
 echo

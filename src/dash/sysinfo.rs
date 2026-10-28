@@ -1,4 +1,4 @@
-//! Live system numbers for `macdash`'s Performance tab: CPU (total and per core), memory, swap, root
+//! Live system numbers for `decdash`'s Performance tab: CPU (total and per core), memory, swap, root
 //! disk, network rates, CPU temperature and an optional NVIDIA GPU.
 //!
 //! Everything is read from `/proc`, `/sys/class/hwmon` and `statvfs` (plus one `nvidia-smi` call when that tool
@@ -466,7 +466,7 @@ mod tests {
     }
 
     fn tmp(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macdash-{tag}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decdash-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

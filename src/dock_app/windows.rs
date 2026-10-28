@@ -1,12 +1,12 @@
 //! The Windows-style taskbar mode of [`DockApp`]: input handling, state and the glue between the pure
-//! model in [`crate::taskbar`], the tray popups of the embedded [`MacBar`] status engine and the
+//! model in [`crate::taskbar`], the tray popups of the embedded [`DecBar`] status engine and the
 //! backend. Everything that differs between the two dock styles lives here; `dock_app.rs` only
 //! dispatches to these methods when `dock.style` is `"windows"`.
 
 use super::*;
 use crate::config::{DockStyle, WinPosition, WinTheme};
 use crate::menubar::clock;
-use crate::menubar::{MacBar, Tray};
+use crate::menubar::{DecBar, Tray};
 use crate::taskbar::draw::{Colors, Frame, Painter};
 use crate::taskbar::{self, click_action, Hit, Inputs, Layout, Metrics, TaskButton, TaskClick};
 
@@ -17,7 +17,7 @@ const SCROLL_STEP: f32 = 48.0;
 
 pub(super) struct WinState {
     pub painter: Painter,
-    pub status: MacBar,
+    pub status: DecBar,
     pub status_started: bool,
     pub m: Metrics,
     pub colors: Colors,
@@ -34,7 +34,7 @@ pub(super) struct WinState {
     pub last_minute: Option<(u32, u32)>,
     /// Windows hidden by "show desktop", restored by the next click on the sliver.
     pub hidden: Vec<u64>,
-    /// Test hook (`MACDOCK_DEBUG_LAYOUT=file`): zone centres in surface coordinates after each draw.
+    /// Test hook (`DECDOCK_DEBUG_LAYOUT=file`): zone centres in surface coordinates after each draw.
     pub debug: Option<(PathBuf, String)>,
 }
 
@@ -46,7 +46,7 @@ impl WinState {
         let clock_w = painter.measure(&time, 12.0 * m.scale).max(painter.measure(&date, 12.0 * m.scale));
         WinState {
             painter,
-            status: MacBar::status_engine(),
+            status: DecBar::status_engine(),
             status_started: false,
             m,
             colors: Colors::dark(),
@@ -60,7 +60,7 @@ impl WinState {
             clock_w,
             last_minute: None,
             hidden: Vec::new(),
-            debug: std::env::var_os("MACDOCK_DEBUG_LAYOUT").map(|p| (PathBuf::from(p), String::new())),
+            debug: std::env::var_os("DECDOCK_DEBUG_LAYOUT").map(|p| (PathBuf::from(p), String::new())),
         }
     }
 }
@@ -72,18 +72,18 @@ pub fn clock_lines() -> (String, String) {
     (time, date)
 }
 
-/// What opens when the search entry is clicked: `MACSHELL_SPOTLIGHT` or macspot.
+/// What opens when the search entry is clicked: `DECEBAL_SPOTLIGHT` or decspot.
 pub fn search_argv() -> Vec<String> {
-    match std::env::var("MACSHELL_SPOTLIGHT") {
+    match std::env::var("DECEBAL_SPOTLIGHT") {
         Ok(cmd) if !cmd.is_empty() => launch::exec_argv(&cmd),
-        _ => vec![launch::sibling_or_path("macspot")],
+        _ => vec![launch::sibling_or_path("decspot")],
     }
 }
 
 /// Surface spec of the taskbar for these settings and metrics.
 pub fn taskbar_spec(s: &config::DockSettings, m: &Metrics) -> SurfaceSpec {
     let anchor = if s.windows_position == WinPosition::Top { Anchor::Top } else { Anchor::Bottom };
-    SurfaceSpec { anchor, margin: 0, reserve: m.bar_h.ceil() as i32, stretch: true, namespace: "macshell-dock" }
+    SurfaceSpec { anchor, margin: 0, reserve: m.bar_h.ceil() as i32, stretch: true, namespace: "decebal-dock" }
 }
 
 /// y of an open menu's bottom edge: above a bottom strip, or below a top one.
@@ -563,12 +563,12 @@ impl DockApp {
         match hit {
             Hit::Start => {
                 if !self.effects.launch("launchpad") {
-                    eprintln!("macdock: could not open the launcher");
+                    eprintln!("decdock: could not open the launcher");
                 }
             }
             Hit::Search => {
                 if !self.effects.spawn(&search_argv()) {
-                    eprintln!("macdock: could not start the search");
+                    eprintln!("decdock: could not start the search");
                 }
             }
             Hit::Task(i) => self.win_click_task(i),
@@ -677,7 +677,7 @@ impl DockApp {
     pub(super) fn set_dock_setting(&mut self, key: &str, value: serde_json::Value) {
         let path = self.watch.as_ref().map(|w| w.settings_path.clone()).unwrap_or_else(|| config::config_dir().join(config::SETTINGS_FILE));
         if let Err(e) = config::write_setting(&path, key, value) {
-            eprintln!("macdock: cannot save {}: {e}", path.display());
+            eprintln!("decdock: cannot save {}: {e}", path.display());
             return;
         }
         let new = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<config::DockSettings>(&t).ok()).unwrap_or_default();
@@ -716,7 +716,7 @@ impl DockApp {
             Action::SetAlign(a) => self.set_dock_setting("windowsAlign", serde_json::json!(a.as_str())),
             Action::SetLabels(l) => self.set_dock_setting("windowsLabels", serde_json::json!(if l == config::WinLabels::Always { "always" } else { "never" })),
             Action::OpenSettings => {
-                self.effects.spawn(&[launch::sibling_or_path("macsettings"), "desktop".into()]);
+                self.effects.spawn(&[launch::sibling_or_path("decsettings"), "desktop".into()]);
             }
             _ => return false,
         }

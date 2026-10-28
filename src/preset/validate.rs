@@ -6,7 +6,7 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileKind {
-    /// `macshell.json`
+    /// `decebal.json`
     Shell,
     /// `dock-settings.json`
     Dock,
@@ -207,7 +207,7 @@ mod tests {
     use super::*;
 
     fn rd(text: &str) -> Vec<Diag> {
-        validate(FileKind::Rdwm, text, Path::new("/nonexistent/rdwmctl"), Path::new("/tmp/macshell-validate-test/config.toml"))
+        validate(FileKind::Rdwm, text, Path::new("/nonexistent/rdwmctl"), Path::new("/tmp/decebal-validate-test/config.toml"))
     }
 
     #[test]
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn rdwmctl_complaints_are_mapped() {
         // a fake rdwmctl that rejects everything with a positioned message
-        let dir = std::env::temp_dir().join(format!("macshell-validate-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decebal-validate-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let ctl = dir.join("rdwmctl");
         std::fs::write(&ctl, "#!/bin/sh\necho 'rdwmctl: config error: unknown key `bogus` in [general] at line 2 column 1' >&2\nexit 1\n").unwrap();

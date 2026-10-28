@@ -134,7 +134,7 @@ pub struct Theme {
     /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
     /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
-    /// Where the Caelestia pill bar sits (`macshell.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
+    /// Where the Caelestia pill bar sits (`decebal.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
     /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
     pub bar_position: crate::config::BarPosition,
     pub font_family: String,
@@ -647,7 +647,7 @@ impl Origin {
 ///
 /// What is stored is the *result of looking at the picture* (`colors`) next to the settings, so every program
 /// derives the same palette from a few words of JSON instead of decoding an image. Whoever changes the wallpaper
-/// (`macthemectl watch`, `refresh`, the Theme pane, machaven) refreshes `colors`; the settings can be changed
+/// (`decthemectl watch`, `refresh`, the Theme pane, dechaven) refreshes `colors`; the settings can be changed
 /// without touching the image again. Off by default: with no `dynamic` key, or `enabled: false`, nothing changes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dynamic {
@@ -737,7 +737,7 @@ impl Dynamic {
     }
 }
 
-/// The user's choice: a theme, a mode, and optional per-key overrides. Stored under `"theme"` in `macshell.json`.
+/// The user's choice: a theme, a mode, and optional per-key overrides. Stored under `"theme"` in `decebal.json`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Selection {
     pub name: String,
@@ -751,7 +751,7 @@ pub struct Selection {
     pub font_scale: Option<f32>,
     /// Font preset and per-role chains (the `font` object).
     pub fonts: super::fonts::FontChoice,
-    /// Also restyle rdwm's titlebars when applying (macthemectl / macsettings).
+    /// Also restyle rdwm's titlebars when applying (decthemectl / decsettings).
     pub sync_rdwm: bool,
     /// "Match wallpaper" (any theme); `None` or `enabled: false` = off, the default.
     pub dynamic: Option<Dynamic>,
@@ -775,7 +775,7 @@ impl Default for Selection {
 }
 
 impl Selection {
-    /// From the `"theme"` value of macshell.json: a bare name or an object. Bad fields are ignored.
+    /// From the `"theme"` value of decebal.json: a bare name or an object. Bad fields are ignored.
     pub fn from_json(v: &serde_json::Value) -> Selection {
         let mut s = Selection::default();
         if let Some(name) = v.as_str() {
@@ -812,7 +812,7 @@ impl Selection {
         s
     }
 
-    /// Object form for macshell.json. Unset overrides are omitted.
+    /// Object form for decebal.json. Unset overrides are omitted.
     pub fn to_json(&self) -> serde_json::Value {
         let mut o = serde_json::Map::new();
         o.insert("name".into(), self.name.clone().into());
@@ -957,7 +957,7 @@ mod tests {
 
     #[test]
     fn old_font_keys_still_work() {
-        // macshell.json from before font roles: `font` is a string, `fontScale` a top-level number
+        // decebal.json from before font roles: `font` is a string, `fontScale` a top-level number
         let sel = Selection::from_json(&serde_json::json!({"name": "nord", "font": "Rubik", "fontScale": 1.2}));
         assert_eq!((sel.font.as_deref(), sel.font_scale, sel.fonts.is_empty()), (Some("Rubik"), Some(1.2), true));
         let d = Def::parse(MINI).unwrap();

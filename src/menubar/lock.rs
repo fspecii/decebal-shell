@@ -41,7 +41,7 @@ pub fn spawn_watcher(locks: Locks, wake: impl Fn() + Send + 'static) -> bool {
     use x11rb::connection::Connection;
     use x11rb::protocol::xkb::{self, ConnectionExt as _};
     use x11rb::protocol::Event;
-    if std::env::var_os("DISPLAY").is_none() || std::env::var("MACSHELL_BACKEND").as_deref() == Ok("wayland") {
+    if std::env::var_os("DISPLAY").is_none() || std::env::var("DECEBAL_BACKEND").as_deref() == Ok("wayland") {
         return false;
     }
     let Ok((conn, _)) = x11rb::connect(None) else { return false };

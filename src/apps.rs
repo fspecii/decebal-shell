@@ -106,7 +106,7 @@ fn read_entry(path: &Path) -> Option<AppEntry> {
 
 fn cache_file() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
-    Some(base.join("macshell/apps.tsv"))
+    Some(base.join("decebal/apps.tsv"))
 }
 
 fn esc(s: &str) -> String {

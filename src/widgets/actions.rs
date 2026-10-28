@@ -70,12 +70,12 @@ impl Open {
     /// The program (and its argument) that shows it.
     pub fn argv(self) -> &'static [&'static str] {
         match self {
-            Open::Dashboard => &["macdash"],
-            Open::Launcher => &["maclaunch"],
-            Open::Spotlight => &["macspot"],
-            Open::Session => &["macsession"],
-            Open::Notifications => &["macnotify", "history"],
-            Open::Overview => &["macexpose"],
+            Open::Dashboard => &["decdash"],
+            Open::Launcher => &["declaunch"],
+            Open::Spotlight => &["decspot"],
+            Open::Session => &["decsession"],
+            Open::Notifications => &["decnotify", "history"],
+            Open::Overview => &["decexpose"],
         }
     }
 }
@@ -172,7 +172,7 @@ impl Action {
             "exec" => match trust {
                 Trust::UserExec if !rest.is_empty() && rest.len() <= 400 && !rest.contains('\0') => Ok(Action::Exec(rest.into())),
                 Trust::UserExec => bad("exec needs a command line (at most 400 characters)"),
-                Trust::User => bad("`exec` needs `widgets.allow_exec = true` in macshell.json"),
+                Trust::User => bad("`exec` needs `widgets.allow_exec = true` in decebal.json"),
                 Trust::Theme => bad("widgets that come with a theme cannot run commands; use one of the allowed actions (open, rdwm, workspace, dnd, volume, brightness, media)"),
             },
             "" => bad("empty action"),
@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn actions_map_to_fixed_argument_vectors() {
-        assert_eq!(Action::parse("open notifications", Trust::Theme).unwrap().argv().unwrap(), ["macnotify", "history"]);
+        assert_eq!(Action::parse("open notifications", Trust::Theme).unwrap().argv().unwrap(), ["decnotify", "history"]);
         assert_eq!(Action::parse("workspace 3", Trust::Theme).unwrap().argv().unwrap(), ["rdwmctl", "action", "view", "3"]);
         assert_eq!(Action::parse("rdwm view 8", Trust::Theme).unwrap().argv().unwrap(), ["rdwmctl", "action", "view", "8"]);
         for a in SAFE_RDWM {

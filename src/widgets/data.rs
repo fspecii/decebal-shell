@@ -193,7 +193,7 @@ pub fn suggest(path: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Fixed values for the gallery, tests and `macwidgets render --sample`. Time: Friday 2026-10-23 14:07:42.
+/// Fixed values for the gallery, tests and `decwidgets render --sample`. Time: Friday 2026-10-23 14:07:42.
 pub fn sample() -> Data {
     let mut d = Data::empty();
     d.time = Time { year: 2026, mon: 9, mday: 23, hour: 14, min: 7, sec: 42, wday: 5, yday: 295 };
@@ -264,7 +264,7 @@ pub fn sample() -> Data {
 
 // ---------------------------------------------------------------- live sources
 
-/// A waker nobody listens to, for one-shot sampling (`macwidgets render --live`).
+/// A waker nobody listens to, for one-shot sampling (`decwidgets render --live`).
 pub fn null_waker() -> crate::app::Waker {
     let (a, b) = std::os::unix::net::UnixStream::pair().expect("socketpair");
     let _ = a.set_nonblocking(true);

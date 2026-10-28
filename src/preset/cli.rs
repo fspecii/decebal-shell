@@ -1,22 +1,22 @@
-//! `macthemectl profile ...`: the command-line side of the Configuration pane.
+//! `decthemectl profile ...`: the command-line side of the Configuration pane.
 
 use super::manifest::Origin;
 use super::parts::{Part, PartSet};
 use super::store::{self, CaptureOpts, Env, Preset, Status};
 use crate::settings::io::Paths;
 
-pub const HELP: &str = "macthemectl profile list [--json]
-macthemectl profile show NAME                 files, parts and the commands a preset would run
-macthemectl profile save NAME [--parts LIST|all] [--description TEXT] [--embed-wallpaper] [--overwrite]
-macthemectl profile apply NAME [--dry-run] [--allow-commands]
-macthemectl profile undo NAME                 put back what applying NAME replaced (the restore point before-NAME)
-macthemectl profile duplicate NAME [NEW]      editable copy (also of a built-in preset)
-macthemectl profile rename NAME NEW | delete NAME
-macthemectl profile export NAME FILE          a shareable FILE.macshell-preset
-macthemectl profile import FILE [--strip-commands | --allow-commands] [--apply]
-macthemectl profile parts                     the parts a preset can contain
+pub const HELP: &str = "decthemectl profile list [--json]
+decthemectl profile show NAME                 files, parts and the commands a preset would run
+decthemectl profile save NAME [--parts LIST|all] [--description TEXT] [--embed-wallpaper] [--overwrite]
+decthemectl profile apply NAME [--dry-run] [--allow-commands]
+decthemectl profile undo NAME                 put back what applying NAME replaced (the restore point before-NAME)
+decthemectl profile duplicate NAME [NEW]      editable copy (also of a built-in preset)
+decthemectl profile rename NAME NEW | delete NAME
+decthemectl profile export NAME FILE          a shareable FILE.decebal-preset
+decthemectl profile import FILE [--strip-commands | --allow-commands] [--apply]
+decthemectl profile parts                     the parts a preset can contain
 
-Presets live in ~/.config/macshell/presets/NAME/ (MACSHELL_PRESETS). Built-in presets are read-only.
+Presets live in ~/.config/decebal/presets/NAME/ (DECEBAL_PRESETS). Built-in presets are read-only.
 LIST is comma separated: shell,fonts,icons,hotcorners,dock,pinned,rdwm,keys,autostart,wallpaper
 (default: everything except pinned, autostart and icons). Applying always saves a restore point first and validates every
 file before writing. A preset that would run commands (autostart, plugins, scratchpads, spawn shortcuts, custom hot
@@ -28,7 +28,7 @@ fn parse_parts(s: &str) -> Result<PartSet, String> {
     }
     let mut v = Vec::new();
     for w in s.split(',').map(str::trim).filter(|w| !w.is_empty()) {
-        v.push(Part::parse(w).ok_or_else(|| format!("unknown part `{w}` (macthemectl profile parts)"))?);
+        v.push(Part::parse(w).ok_or_else(|| format!("unknown part `{w}` (decthemectl profile parts)"))?);
     }
     if v.is_empty() {
         return Err("--parts needs at least one part".into());
@@ -134,7 +134,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("apply") => {
-            let p = store::find(&env, &name(0, "apply")?).ok_or("no such preset (macthemectl profile list)")?;
+            let p = store::find(&env, &name(0, "apply")?).ok_or("no such preset (decthemectl profile list)")?;
             apply_preset(&env, &paths, &p, flag(args, "--dry-run"), flag(args, "--allow-commands"), true)
         }
         Some("undo") => {
@@ -235,7 +235,7 @@ fn apply_preset(env: &Env, paths: &Paths, p: &Preset, dry: bool, allow: bool, re
             Err(e) => eprintln!("note: rdwm did not reload: {e}"),
         }
     }
-    println!("applied `{}`{}", p.manifest.name, r.restore_point.map(|id| format!(" (undo: macthemectl profile undo {})", id.trim_start_matches("before-"))).unwrap_or_default());
+    println!("applied `{}`{}", p.manifest.name, r.restore_point.map(|id| format!(" (undo: decthemectl profile undo {})", id.trim_start_matches("before-"))).unwrap_or_default());
     Ok(())
 }
 

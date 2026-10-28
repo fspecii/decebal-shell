@@ -1,8 +1,8 @@
 #!/bin/bash
-# macdock context menu, live pinned list and drag-to-reorder against rdwm on a private Xvfb display.
+# decdock context menu, live pinned list and drag-to-reorder against rdwm on a private Xvfb display.
 #   tests/e2e/dock_menu.sh            (uses ../rdwm/target/{release,debug}/rdwm, or RDWM=/path/to/rdwm)
 # Everything is private: Xvfb :93 (override with E2E_DISPLAY), own XDG dirs, fake apps (examples/fakewin),
-# MACSHELL_OPEN / MACSHELL_TRASH_EMPTY point at logging stubs, only PIDs started here are killed.
+# DECEBAL_OPEN / DECEBAL_TRASH_EMPTY point at logging stubs, only PIDs started here are killed.
 # Screenshots land in $SHOTS (default $TMP/shots; keep them with KEEP_TMP=1 or SHOTS=dir).
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
@@ -15,7 +15,7 @@ for t in Xvfb xdotool import xprop; do command -v $t >/dev/null || { echo "$t ne
 (cd "$HERE" && cargo build -q --offline $([ "$PROFILE" = release ] && echo --release) --bins --examples) || { echo "build failed"; exit 2; }
 
 PASS=0; FAIL=0; PIDS=()
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/macdock-e2e.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/decdock-e2e.XXXXXX")
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() {
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
@@ -41,15 +41,15 @@ unset WAYLAND_DISPLAY RDWM_SOCK
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$XDG_DATA_HOME/applications" "$TMP/nodata"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11
-mkdir -p "$MACSHELL_CONFIG"
-PINNED=$MACSHELL_CONFIG/dock-pinned-macos.json
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11
+mkdir -p "$DECEBAL_CONFIG"
+PINNED=$DECEBAL_CONFIG/dock-pinned-macos.json
 FAKE=$BIN/examples/fakewin
 export FAKEWIN_LOG=$TMP/clicks.log
 printf '#!/bin/sh\necho "$@" >> %s/open.log\n' "$TMP" > "$TMP/open.sh"
 printf '#!/bin/sh\necho emptied >> %s/trash.log\n' "$TMP" > "$TMP/trash.sh"
 chmod +x "$TMP/open.sh" "$TMP/trash.sh"
-export MACSHELL_OPEN=$TMP/open.sh MACSHELL_TRASH_EMPTY=$TMP/trash.sh
+export DECEBAL_OPEN=$TMP/open.sh DECEBAL_TRASH_EMPTY=$TMP/trash.sh
 
 desktop() { # desktop ID TITLE COLOR
     printf '[Desktop Entry]\nType=Application\nName=%s\nExec=%s %s "%s" %s\nStartupWMClass=%s\n' "$1" "$FAKE" "$1" "$2" "$3" "$1" > "$XDG_DATA_HOME/applications/$1.desktop"
@@ -64,11 +64,11 @@ xdotool mousemove 2 2
 "$RDWM" --backend x11 >"$TMP/rdwm.log" 2>&1 &
 PIDS+=($!)
 wait_for 5 bash -c "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q window" || { echo "rdwm did not start"; cat "$TMP/rdwm.log"; exit 2; }
-"$BIN/macdock" >"$TMP/macdock.log" 2>&1 &
+"$BIN/decdock" >"$TMP/decdock.log" 2>&1 &
 DOCK_PID=$!; PIDS+=($DOCK_PID)
 
-dock_win() { for w in $(xdotool search --name '^macshell-dock$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
-wait_for 6 dock_win || { echo "dock did not map"; cat "$TMP/macdock.log"; exit 2; }
+dock_win() { for w in $(xdotool search --name '^decebal-dock$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
+wait_for 6 dock_win || { echo "dock did not map"; cat "$TMP/decdock.log"; exit 2; }
 DOCKW=$(dock_win)
 geom() { xdotool getwindowgeometry --shell "$DOCKW" | tr '\n' ' '; }
 gx() { xdotool getwindowgeometry --shell "$DOCKW" | sed -n 's/^X=//p'; }
@@ -170,7 +170,7 @@ sleep 0.5
 shot 08-after-remove
 [ "$(gw)" -le "$base_w" ] && pass "dock narrowed after removing an icon" || fail "dock width $(gw) vs $base_w"
 base_w=$(gw); base_h=$(gh); base_strut=$(strut)
-ls "$MACSHELL_CONFIG" | grep -q tmp && fail "temporary file left behind" || pass "no temporary files left"
+ls "$DECEBAL_CONFIG" | grep -q tmp && fail "temporary file left behind" || pass "no temporary files left"
 
 echo "== keep in dock for a running unpinned app"
 "$FAKE" gamma "Gamma Window" cccc33 & GAMMA_PID=$!; PIDS+=($GAMMA_PID)
@@ -235,8 +235,8 @@ eq "dock back to base height" "$(gh)" "$base_h"
 xdotool mousemove "$(cell_x 1)" $(( $(gy) + 5 )); sleep 0.1; xdotool click 1; sleep 0.3
 grep -q "Background button 1" "$FAKEWIN_LOG" && pass "click in the transparent headroom reaches the window below" || fail "click-through" "$(cat "$FAKEWIN_LOG" 2>/dev/null)"
 
-kill -0 "$DOCK_PID" 2>/dev/null && pass "macdock still running" || fail "macdock crashed" "$(tail -5 "$TMP/macdock.log")"
-grep -qi "panic" "$TMP/macdock.log" && fail "panic in macdock log" || true
+kill -0 "$DOCK_PID" 2>/dev/null && pass "decdock still running" || fail "decdock crashed" "$(tail -5 "$TMP/decdock.log")"
+grep -qi "panic" "$TMP/decdock.log" && fail "panic in decdock log" || true
 echo
 echo "$PASS passed, $FAIL failed (screenshots in $SHOTS)"
 [ "$FAIL" = 0 ]

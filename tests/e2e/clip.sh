@@ -1,5 +1,5 @@
 #!/bin/bash
-# macclip (clipboard history daemon + picker) end to end on a private Xvfb, no window manager.
+# decclip (clipboard history daemon + picker) end to end on a private Xvfb, no window manager.
 #   tests/e2e/clip.sh                 (E2E_DISPLAY=92 by default; SHOTS=dir keeps the screenshots)
 # Everything is private: own Xvfb display, own XDG_RUNTIME_DIR / XDG_STATE_HOME / HOME / config. xclip is the copy source,
 # examples/clipowner plays a password manager (a window with a given WM_CLASS that owns the clipboard), examples/fakewin
@@ -10,13 +10,13 @@ HERE=$(cd "$(dirname "$0")/../.." && pwd)
 TARGET=${CARGO_TARGET_DIR:-$HERE/target}
 BIN=$TARGET/${PROFILE:-release}
 for t in Xvfb xdotool xclip xprop import jq; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
-(cd "$HERE" && cargo build -q --offline $([ "${PROFILE:-release}" = release ] && echo --release) --bin macclip --example fakewin --example clipowner) || { echo "build failed"; exit 2; }
+(cd "$HERE" && cargo build -q --offline $([ "${PROFILE:-release}" = release ] && echo --release) --bin decclip --example fakewin --example clipowner) || { echo "build failed"; exit 2; }
 
 N=${E2E_DISPLAY:-92}
 [ "$N" = 1 ] && { echo "refusing the live display"; exit 2; }
 [ -e "/tmp/.X11-unix/X$N" ] && { echo "display :$N is in use; set E2E_DISPLAY"; exit 2; }
 PASS=0; FAIL=0; PIDS=()
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/macclip-e2e.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/decclip-e2e.XXXXXX")
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() {
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
@@ -40,10 +40,10 @@ unset WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_CACHE_HOME=$TMP/cache XDG_STATE_HOME=$TMP/state
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$TMP/nodata" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11 MACSHELL_COLOR_SCHEME=dark
-mkdir -p "$MACSHELL_CONFIG"
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11 DECEBAL_COLOR_SCHEME=dark
+mkdir -p "$DECEBAL_CONFIG"
 export PATH=$BIN:$TARGET/${PROFILE:-release}/examples:/usr/bin:/bin
-HFILE=$XDG_STATE_HOME/macshell/clipboard-history
+HFILE=$XDG_STATE_HOME/decebal/clipboard-history
 
 shot() { import -window root "$SHOTS/$1.png" 2>/dev/null; }
 texts() { jq -c '[.entries[].text]' "$HFILE" 2>/dev/null; }
@@ -53,15 +53,15 @@ copy() { printf '%s' "$1" | xclip -selection clipboard; }
 top_is() { [ "$(jq -r '.entries[0].text' "$HFILE" 2>/dev/null)" = "$1" ]; }
 picker_win() { xdotool search --name '^Clipboard$' 2>/dev/null | head -1 | grep .; }
 picker_gone() { ! picker_win; }
-daemon_up() { xprop -root _MACCLIP_DAEMON 2>/dev/null | grep -q 'window id'; }
-open_picker() { macclip >"$TMP/pick.out" 2>&1 & PICK_PID=$!; PIDS+=($PICK_PID); wait_for 3 picker_win || { fail "the picker did not open"; return 1; }; sleep 0.1; }
+daemon_up() { xprop -root _DECCLIP_DAEMON 2>/dev/null | grep -q 'window id'; }
+open_picker() { decclip >"$TMP/pick.out" 2>&1 & PICK_PID=$!; PIDS+=($PICK_PID); wait_for 3 picker_win || { fail "the picker did not open"; return 1; }; sleep 0.1; }
 picker_exited() { ! kill -0 "$PICK_PID" 2>/dev/null; }
 
 # --- 0. the daemon
-macclip daemon >"$TMP/daemon.out" 2>&1 &
+decclip daemon >"$TMP/daemon.out" 2>&1 &
 DPID=$!; PIDS+=($DPID)
-wait_for 5 daemon_up && pass "the daemon is up (root property _MACCLIP_DAEMON)" || { fail "daemon did not start"; cat "$TMP/daemon.out"; exit 1; }
-macclip daemon >"$TMP/daemon2.out" 2>&1; eq "a second daemon returns at once" "$?" 0
+wait_for 5 daemon_up && pass "the daemon is up (root property _DECCLIP_DAEMON)" || { fail "daemon did not start"; cat "$TMP/daemon.out"; exit 1; }
+decclip daemon >"$TMP/daemon2.out" 2>&1; eq "a second daemon returns at once" "$?" 0
 kill -0 $DPID 2>/dev/null && pass "...and the first one keeps running" || fail "first daemon died"
 
 # --- 1. recording
@@ -172,8 +172,8 @@ eq "...and changes nothing" "$(clip)" "beta two"
 
 # the hotkey again closes it (toggle)
 open_picker || exit 1
-macclip
-wait_for 3 picker_exited && pass "running macclip again closes the picker" || fail "toggle"
+decclip
+wait_for 3 picker_exited && pass "running decclip again closes the picker" || fail "toggle"
 
 # Alt+number
 before=$(texts)
@@ -209,14 +209,14 @@ eq "no daemon: the entry moved to the top in the file" "$(texts | jq -r '.[0]')"
 eq "no daemon: the history file stayed mode 600" "$(stat -c %a "$HFILE")" 600
 
 # --- 6. clear
-macclip daemon >"$TMP/daemon.out" 2>&1 &
+decclip daemon >"$TMP/daemon.out" 2>&1 &
 DPID=$!; PIDS+=($DPID)
 sleep 0.6
-macclip clear
+decclip clear
 eq "clear empties the file" "$(count)" 0
 [ -z "$(clip)" ] && pass "clear empties the clipboard, whoever holds it" || fail "clipboard after clear" "$(clip)"
 copy "after clear"; wait_for 3 top_is "after clear" && pass "recording continues after clear" || fail "recording after clear"
-macclip clear >/dev/null
+decclip clear >/dev/null
 eq "clear is idempotent" "$(count)" 0
 
 # --- 7. cost

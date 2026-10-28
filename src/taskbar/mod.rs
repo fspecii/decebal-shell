@@ -1,4 +1,4 @@
-//! The Windows-style taskbar of macdock: pure model and layout math (no windowing, no drawing; see
+//! The Windows-style taskbar of decdock: pure model and layout math (no windowing, no drawing; see
 //! [`draw`] for that). Coordinates are in the strip's own space, x from the left edge of the monitor and
 //! y from the strip's top; the host shifts them to wherever the strip sits in its surface.
 //!

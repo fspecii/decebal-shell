@@ -2,7 +2,7 @@
 //!
 //! libadwaita (Nautilus, Text Editor, ...) reads `window_bg_color`, `accent_bg_color`, `headerbar_*`, `sidebar_*` and friends from the
 //! user's `gtk-4.0/gtk.css`; plain GTK 3 and GTK 4 Adwaita use the older `theme_*` names, so both families are defined. The block is
-//! appended to whatever the user already has and cut out again by `macthemectl system off`.
+//! appended to whatever the user already has and cut out again by `decthemectl system off`.
 
 use super::files::{Comment, Edit};
 use super::{Config, Env, Palette, Plan, Target};

@@ -4,7 +4,7 @@
 //! one of three rasterisers, chosen when the face is first opened:
 //!
 //! * [`Kind::Fontdue`]: ordinary fonts. fontdue parses every glyph up front (about 12 MB for a Latin face) but
-//!   its output is what macshell always drew with, so Latin text looks exactly as before.
+//!   its output is what decebal always drew with, so Latin text looks exactly as before.
 //! * [`Kind::Outline`]: fonts fontdue would swallow whole (Noto CJK: 65 535 glyphs, 320 MB and 0.6 s) and variable
 //!   fonts (fontdue ignores their weight axis). ttf-parser reads one glyph's outline on demand, tiny-skia fills it.
 //! * [`Kind::Bitmap`]: colour emoji fonts (CBDT / sbix PNG strikes), box-filtered down to the text size.

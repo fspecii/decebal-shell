@@ -1,4 +1,4 @@
-//! Qt 5 / Qt 6: a qt5ct / qt6ct colour scheme (`colors/macshell.conf`) selected in `qt5ct.conf` / `qt6ct.conf`, and an optional Kvantum
+//! Qt 5 / Qt 6: a qt5ct / qt6ct colour scheme (`colors/decebal.conf`) selected in `qt5ct.conf` / `qt6ct.conf`, and an optional Kvantum
 //! colour theme. Qt apps read the scheme when `QT_QPA_PLATFORMTHEME=qt5ct` (Qt 5) or `qt6ct` (Qt 6) is set in the session environment.
 
 use super::files::{ini_get, Edit};
@@ -78,7 +78,7 @@ pub fn kvconfig(p: &Palette) -> String {
         ("link.visited.color", p.magenta),
         ("progress.indicator.text.color", p.accent_text),
     ];
-    let mut s = format!("[%General]\nauthor=macshell\ncomment={} ({}) colours from macshell\n\n[GeneralColors]\n", p.name, if p.dark { "dark" } else { "light" });
+    let mut s = format!("[%General]\nauthor=decebal\ncomment={} ({}) colours from decebal\n\n[GeneralColors]\n", p.name, if p.dark { "dark" } else { "light" });
     for (k, c) in rows {
         s.push_str(&format!("{k}={}\n", h(c)));
     }
@@ -113,7 +113,7 @@ impl Target for Qt {
         let mut plan = Plan::default();
         for dir in flavours(env) {
             let base = env.config_home.join(dir);
-            let scheme_path: PathBuf = base.join("colors/macshell.conf");
+            let scheme_path: PathBuf = base.join("colors/decebal.conf");
             plan.edits.push(Edit::Whole { path: scheme_path.clone(), text: scheme(p) });
             let conf = base.join(format!("{dir}.conf"));
             let existing = std::fs::read_to_string(&conf).unwrap_or_default();
@@ -154,8 +154,8 @@ impl Target for Kvantum {
         let base = env.config_home.join("Kvantum");
         Plan {
             edits: vec![
-                Edit::Whole { path: base.join("macshell/macshell.kvconfig"), text: kvconfig(p) },
-                Edit::Ini { path: base.join("kvantum.kvconfig"), sets: vec![("General".into(), "theme".into(), "macshell".into())] },
+                Edit::Whole { path: base.join("decebal/decebal.kvconfig"), text: kvconfig(p) },
+                Edit::Ini { path: base.join("kvantum.kvconfig"), sets: vec![("General".into(), "theme".into(), "decebal".into())] },
             ],
             gsettings: Vec::new(),
         }
@@ -203,10 +203,10 @@ mod tests {
         let (env, _) = env(&d, &["qt6ct"]);
         let plan = Qt.plan(&palette(true), &Config::default(), &env);
         let paths: Vec<String> = plan.edits.iter().map(|e| e.path().strip_prefix(&env.config_home).unwrap().to_string_lossy().into_owned()).collect();
-        assert_eq!(paths, ["qt6ct/colors/macshell.conf", "qt6ct/qt6ct.conf"]);
+        assert_eq!(paths, ["qt6ct/colors/decebal.conf", "qt6ct/qt6ct.conf"]);
         let Edit::Ini { sets, .. } = &plan.edits[1] else { panic!() };
         assert!(sets.iter().any(|(_, k, v)| k == "style" && v == "Fusion"));
-        assert!(sets.iter().any(|(_, k, v)| k == "color_scheme_path" && v.ends_with("qt6ct/colors/macshell.conf")));
+        assert!(sets.iter().any(|(_, k, v)| k == "color_scheme_path" && v.ends_with("qt6ct/colors/decebal.conf")));
         std::fs::create_dir_all(env.config_home.join("qt6ct")).unwrap();
         std::fs::write(env.config_home.join("qt6ct/qt6ct.conf"), "[Appearance]\nstyle=Breeze\n").unwrap();
         let plan = Qt.plan(&palette(true), &Config::default(), &env);

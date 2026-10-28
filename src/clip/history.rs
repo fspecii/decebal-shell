@@ -115,10 +115,10 @@ impl History {
     }
 }
 
-/// `$XDG_STATE_HOME/macshell/clipboard-history` (`~/.local/state/...` when unset).
+/// `$XDG_STATE_HOME/decebal/clipboard-history` (`~/.local/state/...` when unset).
 pub fn state_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
-    Some(base.join("macshell").join("clipboard-history"))
+    Some(base.join("decebal").join("clipboard-history"))
 }
 
 // ---------------------------------------------------------------- what the picker shows
@@ -220,8 +220,8 @@ mod tests {
     #[test]
     fn save_is_private_atomic_and_loads_back() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("macclip-test-{}-{}", std::process::id(), line!()));
-        let path = dir.join("macshell/clipboard-history");
+        let dir = std::env::temp_dir().join(format!("decclip-test-{}-{}", std::process::id(), line!()));
+        let path = dir.join("decebal/clipboard-history");
         let mut h = History::default();
         h.push("secret-ish", 1);
         h.save(&path).unwrap();

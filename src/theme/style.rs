@@ -1,12 +1,12 @@
 //! Shell style presets: one word that sets the theme, the dock style and the menu bar coherently.
 //!
-//! | style | theme | dock (`dock-settings.json`) | dock shown (`macshell.json` `dock.enabled`) | menu bar (`macshell.json` `bar.enabled`) |
+//! | style | theme | dock (`dock-settings.json`) | dock shown (`decebal.json` `dock.enabled`) | menu bar (`decebal.json` `bar.enabled`) |
 //! |---|---|---|---|---|
 //! | `macos` | macOS | `style: mac`, theme-driven roundness | `true` | `true` |
 //! | `windows` | Windows 11 | `style: windows`, `windowsAlign: center` (the Windows 11 taskbar) | `true` | `"auto"` (hidden while the taskbar is up) |
 //! | `caelestia` | Caelestia | `style: mac`, theme-driven roundness (pill) | `"auto"`: hidden, Caelestia has no dock | `true`, drawn as the pill bar (`bar_style = "vertical"`) on the edge `bar.position` says (left, right, top, bottom or split; kept, `caelestia-top` sets it) |
 //!
-//! The pure parts ([`selection_for`], [`dock_edits`], [`bar_value`], [`dock_value`], [`detect`]) are shared by `macthemectl style`
+//! The pure parts ([`selection_for`], [`dock_edits`], [`bar_value`], [`dock_value`], [`detect`]) are shared by `decthemectl style`
 //! and the Theme pane; [`apply`] is the CLI's transaction. [`parse_with_layout`] reads `caelestia-top` and the like, [`position_value`] writes `bar.position`.
 
 use super::live::Source;
@@ -69,14 +69,14 @@ pub fn parse_with_layout(s: &str) -> Option<(Style, Option<BarPosition>)> {
     (st == Style::Caelestia).then_some((st, Some(pos)))
 }
 
-/// `macshell.json` `bar` object with `position` set; other keys of `bar` (`enabled`) are kept.
+/// `decebal.json` `bar` object with `position` set; other keys of `bar` (`enabled`) are kept.
 pub fn position_value(pos: BarPosition, current: Option<&Value>) -> Value {
     let mut bar = current.and_then(Value::as_object).cloned().unwrap_or_default();
     bar.insert("position".into(), json!(pos.as_str()));
     Value::Object(bar)
 }
 
-/// The position written in a `macshell.json` document (left when absent).
+/// The position written in a `decebal.json` document (left when absent).
 pub fn position_of(shell: &Value) -> BarPosition {
     shell.get("bar").and_then(|b| b.get("position")).and_then(Value::as_str).and_then(BarPosition::parse).unwrap_or_default()
 }
@@ -97,14 +97,14 @@ pub fn dock_edits(style: Style) -> Vec<(&'static str, Option<Value>)> {
     }
 }
 
-/// `macshell.json` `bar` object with `enabled` set for `style`; other keys of `bar` are kept.
+/// `decebal.json` `bar` object with `enabled` set for `style`; other keys of `bar` are kept.
 pub fn bar_value(style: Style, current: Option<&Value>) -> Value {
     let mut bar = current.and_then(Value::as_object).cloned().unwrap_or_default();
     bar.insert("enabled".into(), if style == Style::Windows { json!("auto") } else { json!(true) });
     Value::Object(bar)
 }
 
-/// `macshell.json` `dock` object with `enabled` set for `style`; other keys of `dock` are kept. Caelestia has no dock, so it
+/// `decebal.json` `dock` object with `enabled` set for `style`; other keys of `dock` are kept. Caelestia has no dock, so it
 /// writes `"auto"` (the dock hides while the theme's bar is the vertical one and returns with any other theme); the other
 /// styles write `true`, so going back brings the dock back.
 pub fn dock_value(style: Style, current: Option<&Value>) -> Value {
@@ -123,12 +123,12 @@ pub fn detect(theme_id: &str, dock: DockStyle) -> Option<Style> {
     }
 }
 
-/// The dock style written in `dock-settings.json` (as macdock reads it).
+/// The dock style written in `dock-settings.json` (as decdock reads it).
 pub fn dock_style(doc: &Value) -> DockStyle {
     doc.get("style").and_then(|v| serde_json::from_value::<DockStyle>(v.clone()).ok()).unwrap_or_default()
 }
 
-/// What `macthemectl style` prints and the pane shows.
+/// What `decthemectl style` prints and the pane shows.
 pub fn current(src: &Source, paths: &Paths) -> Option<Style> {
     let sel = src.selection();
     let id = src.find(&sel.name).map(|f| f.0).unwrap_or_default();
@@ -141,7 +141,7 @@ pub fn apply(src: &Source, paths: &Paths, style: Style, sel: &Selection) -> Resu
     apply_with(src, paths, style, sel, None)
 }
 
-/// [`apply`] that also sets `bar.position` (`macthemectl style caelestia-top`) when `position` is given.
+/// [`apply`] that also sets `bar.position` (`decthemectl style caelestia-top`) when `position` is given.
 pub fn apply_with(src: &Source, paths: &Paths, style: Style, sel: &Selection, position: Option<BarPosition>) -> Result<super::rdwm::Report, String> {
     let new = selection_for(style, sel);
     let report = super::rdwm::apply(src, paths, &new)?;
@@ -158,7 +158,7 @@ pub fn apply_with(src: &Source, paths: &Paths, style: Style, sel: &Selection, po
     Ok(report)
 }
 
-/// `macthemectl layout`: only `bar.position`; the running bars re-lay out within about a second.
+/// `decthemectl layout`: only `bar.position`; the running bars re-lay out within about a second.
 pub fn apply_layout(paths: &Paths, position: BarPosition) -> Result<(), String> {
     let bar = position_value(position, io::json_load(&paths.shell_json()).get("bar"));
     io::json_set(&paths.shell_json(), "bar", Some(bar))
@@ -171,7 +171,7 @@ mod tests {
     use crate::theme::model::{Dynamic, Mode, Rgb};
 
     fn sandbox(name: &str) -> (std::path::PathBuf, Source, Paths) {
-        let d = std::env::temp_dir().join(format!("macshell-style-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-style-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };

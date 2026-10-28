@@ -150,7 +150,7 @@ pub const PRESETS: &[Preset] = &[
 /// The ids of [`PRESETS`], for the theme-file validator (`Kind::Choice` needs a constant slice; a test keeps both in sync).
 pub const PRESET_IDS: &[&str] = &["system", "inter", "segoe", "cantarell", "rubik", "jetbrains", "ibm-plex", "fira", "noto", "monospace-ui"];
 
-/// What a theme without any font setting uses: the look macshell always had (Inter, else the system sans).
+/// What a theme without any font setting uses: the look decebal always had (Inter, else the system sans).
 pub const DEFAULT_PRESET: &str = "inter";
 
 /// Looks a preset up by id or title, ignoring case and punctuation ("IBM Plex" == "ibm-plex").
@@ -180,7 +180,7 @@ fn chain_json(v: &serde_json::Value) -> Option<Vec<String>> {
     (!list.is_empty()).then_some(list)
 }
 
-/// The user's font choices (the `font` object of the `theme` key of macshell.json): a preset and per-role chains.
+/// The user's font choices (the `font` object of the `theme` key of decebal.json): a preset and per-role chains.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FontChoice {
     pub preset: Option<String>,
@@ -338,9 +338,9 @@ impl Resolved {
     }
 }
 
-// ---------------------------------------------------------------- the `macthemectl font` command
+// ---------------------------------------------------------------- the `decthemectl font` command
 
-/// What the user typed after `macthemectl font`.
+/// What the user typed after `decthemectl font`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     List,
@@ -352,13 +352,13 @@ pub enum Cmd {
     Reset,
 }
 
-pub const HELP: &str = "macthemectl font PRESET             inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system
-macthemectl font list               presets with the fonts each one found on this machine
-macthemectl font families           installed font families (what the pickers offer)
-macthemectl font status             the fonts in use, role by role
-macthemectl font set ROLE FAMILY[,FALLBACK...]   ROLE: ui title mono display (none = back to the preset)
-macthemectl font scale 0.8-1.4|none
-macthemectl font reset              back to the theme's own fonts";
+pub const HELP: &str = "decthemectl font PRESET             inter segoe cantarell rubik jetbrains ibm-plex fira noto monospace-ui system
+decthemectl font list               presets with the fonts each one found on this machine
+decthemectl font families           installed font families (what the pickers offer)
+decthemectl font status             the fonts in use, role by role
+decthemectl font set ROLE FAMILY[,FALLBACK...]   ROLE: ui title mono display (none = back to the preset)
+decthemectl font scale 0.8-1.4|none
+decthemectl font reset              back to the theme's own fonts";
 
 /// Parses the words after `font`. Pure, so it can be tested without touching any file.
 pub fn parse_cmd(args: &[String]) -> Result<Cmd, String> {

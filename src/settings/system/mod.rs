@@ -1,4 +1,4 @@
-//! System-side panes of macsettings (sound, network, bluetooth, displays, input, power, ...).
+//! System-side panes of decsettings (sound, network, bluetooth, displays, input, power, ...).
 //!
 //! Architecture
 //! * every pane is `parse (pure) -> State`, `load(&dyn Runner) -> State`, `items(&Hub) -> Vec<Item>`, `apply(&mut Hub, id, val)`;
@@ -211,7 +211,7 @@ pub struct Shared {
 impl Shared {
     pub fn spawn(self: &Arc<Self>, f: impl FnOnce(&dyn Runner) -> Done + Send + 'static) {
         let me = self.clone();
-        let _ = std::thread::Builder::new().name("macsettings-job".into()).stack_size(512 * 1024).spawn(move || {
+        let _ = std::thread::Builder::new().name("decsettings-job".into()).stack_size(512 * 1024).spawn(move || {
             let d = f(me.runner.as_ref());
             me.results.lock().unwrap().push_back(d);
             (me.wake)();
@@ -387,7 +387,7 @@ impl Hub {
             return;
         }
         let sh = self.sh.clone();
-        let h = std::thread::Builder::new().name("macsettings-poll".into()).stack_size(256 * 1024).spawn(move || poll_loop(sh));
+        let h = std::thread::Builder::new().name("decsettings-poll".into()).stack_size(256 * 1024).spawn(move || poll_loop(sh));
         if let Ok(h) = h {
             *g = Some(h.thread().clone());
         }

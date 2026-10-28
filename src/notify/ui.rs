@@ -1,4 +1,4 @@
-//! X11 front end of macnotify: banner windows stacked below the menu bar, and the history panel.
+//! X11 front end of decnotify: banner windows stacked below the menu bar, and the history panel.
 //!
 //! Every banner is its own override-redirect window (no window manager involvement, nothing for a tiling
 //! WM to tile), clipped with the Shape extension to its rounded outline so it never paints black corners
@@ -377,7 +377,7 @@ impl Ui {
         }
         let aux = CreateWindowAux::new().override_redirect(1).background_pixel(self.pal.bg_pixel()).event_mask(mask);
         self.conn.create_window(0, win, self.root, x as i16, y as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, 0, &aux).map_err(cerr)?;
-        let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"macnotify\0Macnotify\0");
+        let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"decnotify\0Decnotify\0");
         let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"Notification");
         let _ = self.conn.change_property8(PropMode::REPLACE, win, self.at.wm_name, self.at.utf8, b"Notification");
         let _ = self.conn.change_property32(PropMode::REPLACE, win, self.at.wtype, AtomEnum::ATOM, &[self.at.wtype_notification]);

@@ -1,10 +1,10 @@
-//! Files the Wallhaven pane keeps, all under XDG directories and none of them `macshell.json`
+//! Files the Wallhaven pane keeps, all under XDG directories and none of them `decebal.json`
 //! (which people export and share):
 //!
-//! * `$XDG_CONFIG_HOME/macshell/wallhaven.json` - filters and the "allow sketchy / NSFW" switch;
-//! * `$XDG_CONFIG_HOME/macshell/wallhaven.key` - the API key, mode 0600, never shown, never logged;
-//! * `$XDG_STATE_HOME/macshell/wallhaven-favourites.json` - the local favourites list;
-//! * `$XDG_CACHE_HOME/macshell/wallhaven/` - the last search (offline view) and small thumbnails (bounded).
+//! * `$XDG_CONFIG_HOME/decebal/wallhaven.json` - filters and the "allow sketchy / NSFW" switch;
+//! * `$XDG_CONFIG_HOME/decebal/wallhaven.key` - the API key, mode 0600, never shown, never logged;
+//! * `$XDG_STATE_HOME/decebal/wallhaven-favourites.json` - the local favourites list;
+//! * `$XDG_CACHE_HOME/decebal/wallhaven/` - the last search (offline view) and small thumbnails (bounded).
 
 use super::parse::{valid_id, Wall};
 use super::query::Prefs;
@@ -49,7 +49,7 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(fallback)))
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("macshell")
+        .join("decebal")
 }
 
 impl Dirs {
@@ -349,7 +349,7 @@ mod tests {
     fn discover_uses_xdg_and_falls_back_to_home() {
         // pure function of the environment; just check the shape without mutating it
         let d = Dirs::discover();
-        assert!(d.config.ends_with("macshell") && d.state.ends_with("macshell") && d.cache.ends_with("macshell/wallhaven"));
+        assert!(d.config.ends_with("decebal") && d.state.ends_with("decebal") && d.cache.ends_with("decebal/wallhaven"));
         assert_ne!(d.config, d.state);
     }
 }

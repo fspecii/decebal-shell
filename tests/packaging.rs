@@ -21,7 +21,7 @@ fn listed(text: &str, marker: &str) -> BTreeSet<String> {
 #[test]
 fn session_and_util_binaries_are_registered() {
     let bins = cargo_bins();
-    for b in ["macsession", "macutil"] {
+    for b in ["decsession", "decutil"] {
         assert!(bins.contains(b), "{b} missing from Cargo.toml");
     }
 }
@@ -50,26 +50,26 @@ fn readme_mentions_every_cargo_bin() {
 fn hot_corners_autostart_is_installed() {
     let make = read("Makefile");
     let pkg = read("PKGBUILD");
-    for f in ["macshell-hot.desktop", "macshell-hot.service"] {
+    for f in ["decebal-hot.desktop", "decebal-hot.service"] {
         assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contrib").join(f).exists(), "contrib/{f} missing");
         assert!(make.contains(f), "Makefile does not install {f}");
         assert!(pkg.contains(f), "PKGBUILD does not install {f}");
     }
-    assert!(read("contrib/macshell-hot.desktop").contains("Exec=machot daemon"));
-    assert!(cargo_bins().contains("machot"));
+    assert!(read("contrib/decebal-hot.desktop").contains("Exec=dechot daemon"));
+    assert!(cargo_bins().contains("dechot"));
 }
 
 #[test]
-fn macexpose_is_registered_everywhere() {
+fn decexpose_is_registered_everywhere() {
     let doc: toml_edit::DocumentMut = read("Cargo.toml").parse().expect("Cargo.toml parses");
-    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("macexpose")).expect("macexpose [[bin]]");
-    assert_eq!(bin["path"].as_str(), Some("src/bin/macexpose.rs"));
+    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("decexpose")).expect("decexpose [[bin]]");
+    assert_eq!(bin["path"].as_str(), Some("src/bin/decexpose.rs"));
     let features: Vec<&str> = bin["required-features"].as_array().expect("required-features").iter().filter_map(|f| f.as_str()).collect();
     assert_eq!(features, ["x11"], "it is an X11 popup");
-    assert!(listed(&read("Makefile"), "BINS =").contains("macexpose"));
-    assert!(listed(&read("PKGBUILD"), "for bin in").contains("macexpose"));
+    assert!(listed(&read("Makefile"), "BINS =").contains("decexpose"));
+    assert!(listed(&read("PKGBUILD"), "for bin in").contains("decexpose"));
     let readme = read("README.md");
-    assert!(readme.contains("## Window overview (`macexpose`)") && readme.contains("macexpose --all"), "README section");
+    assert!(readme.contains("## Window overview (`decexpose`)") && readme.contains("decexpose --all"), "README section");
     assert!(readme.contains("tests/e2e/expose.sh"));
     assert!(std::path::Path::new(&format!("{}/tests/e2e/expose.sh", env!("CARGO_MANIFEST_DIR"))).exists(), "e2e script");
 }
@@ -80,7 +80,7 @@ fn the_caelestia_style_is_documented_and_has_its_e2e() {
     assert!(readme.contains("## Caelestia style (pill bar)") && readme.contains("docs/caelestia.md"), "README section");
     assert!(readme.contains("tests/e2e/vbar.sh") && readme.contains("tests/e2e/layouts.sh"));
     let doc = read("docs/caelestia.md");
-    for needle in ["bar_style = \"vertical\"", "dock.enabled", "macspot", "macdash", "macsession", "macutil", "machud", "macnotify", "_NET_WM_STRUT_PARTIAL", "[[bind]]"] {
+    for needle in ["bar_style = \"vertical\"", "dock.enabled", "decspot", "decdash", "decsession", "decutil", "dechud", "decnotify", "_NET_WM_STRUT_PARTIAL", "[[bind]]"] {
         assert!(doc.contains(needle), "docs/caelestia.md does not mention {needle}");
     }
     assert!(read("Makefile").contains("e2e-vbar:") && read("Makefile").contains("e2e-layouts:"), "Makefile targets");
@@ -98,15 +98,15 @@ fn the_caelestia_layouts_are_documented_everywhere_they_are_user_visible() {
         assert!(readme.contains(&format!("`{p}`")), "README does not describe the {p} layout");
         assert!(doc.contains(&format!("`{p}`")), "docs/caelestia.md does not describe the {p} layout");
     }
-    for needle in ["bar.position", "macthemectl layout", "caelestia-top", "--role bottom", "macbar-bottom", "Layout"] {
+    for needle in ["bar.position", "decthemectl layout", "caelestia-top", "--role bottom", "decbar-bottom", "Layout"] {
         assert!(doc.contains(needle), "docs/caelestia.md does not mention {needle}");
     }
-    assert!(readme.contains("macthemectl layout") && readme.contains("\"position\""), "README: command and setting");
+    assert!(readme.contains("decthemectl layout") && readme.contains("\"position\""), "README: command and setting");
     // the --help texts name the commands, the setting values and the role
-    let ctl = read("src/bin/macthemectl.rs");
-    assert!(ctl.contains("macthemectl layout [left|right|top|bottom|split]") && ctl.contains("caelestia[-left|-right|-top|-bottom|-split]"), "macthemectl --help");
-    let bar = read("src/bin/macbar.rs");
-    assert!(bar.contains("--role main|bottom") && bar.contains("--position POS") && bar.contains("split"), "macbar --help");
+    let ctl = read("src/bin/decthemectl.rs");
+    assert!(ctl.contains("decthemectl layout [left|right|top|bottom|split]") && ctl.contains("caelestia[-left|-right|-top|-bottom|-split]"), "decthemectl --help");
+    let bar = read("src/bin/decbar.rs");
+    assert!(bar.contains("--role main|bottom") && bar.contains("--position POS") && bar.contains("split"), "decbar --help");
     // the end-to-end check and its Makefile target
     let e2e = read("tests/e2e/layouts.sh");
     for p in positions {
@@ -127,16 +127,16 @@ fn icon_themes_are_documented_and_have_their_e2e() {
         assert!(doc.contains(&format!("`{key}`")), "docs/icons.md does not describe `{key}`");
     }
     assert!(read("contrib/icon-themes.md").contains("papirus-icon-theme"));
-    assert!(read("src/bin/macthemectl.rs").contains("macthemectl icons"));
+    assert!(read("src/bin/decthemectl.rs").contains("decthemectl icons"));
 }
 
 #[test]
-fn macwidgets_and_the_theme_engine_are_registered_everywhere() {
+fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
     let doc: toml_edit::DocumentMut = read("Cargo.toml").parse().expect("Cargo.toml parses");
-    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("macwidgets")).expect("macwidgets [[bin]]");
-    assert_eq!(bin["path"].as_str(), Some("src/bin/macwidgets.rs"));
-    assert!(listed(&read("Makefile"), "BINS =").contains("macwidgets"));
-    assert!(listed(&read("PKGBUILD"), "for bin in").contains("macwidgets"));
+    let bin = doc["bin"].as_array_of_tables().unwrap().iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some("decwidgets")).expect("decwidgets [[bin]]");
+    assert_eq!(bin["path"].as_str(), Some("src/bin/decwidgets.rs"));
+    assert!(listed(&read("Makefile"), "BINS =").contains("decwidgets"));
+    assert!(listed(&read("PKGBUILD"), "for bin in").contains("decwidgets"));
     let readme = read("README.md");
     assert!(readme.contains("## Theme packages and widgets") && readme.contains("docs/theme-engine.md") && readme.contains("tests/e2e/theme-engine.sh"));
     for f in ["docs/theme-engine.md", "tests/e2e/theme-engine.sh", "widgets/clock-card.toml", "themes/nord/theme.toml"] {
@@ -146,4 +146,44 @@ fn macwidgets_and_the_theme_engine_are_registered_everywhere() {
     for id in ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"] {
         assert!(read(&format!("themes/{id}/theme.toml")).starts_with("format = 1"), "{id}");
     }
+}
+
+#[test]
+fn the_old_mac_names_are_installed_as_deprecated_wrappers() {
+    let bins = cargo_bins();
+    assert!(read("Makefile").contains("contrib/compat/mac-compat"), "Makefile does not install the compatibility wrappers");
+    assert_eq!(listed(&read("PKGBUILD"), "for b in"), bins, "PKGBUILD wrapper loop vs Cargo.toml [[bin]]");
+    assert!(read("PKGBUILD").contains("contrib/compat/mac-compat") && read("PKGBUILD").contains("replaces=('macshell')"));
+    let doc = read("docs/RENAME.md");
+    for b in &bins {
+        let old = format!("mac{}", b.strip_prefix("dec").expect("every binary is dec*"));
+        assert!(doc.contains(&old) && doc.contains(b.as_str()), "docs/RENAME.md does not list {old} -> {b}");
+    }
+}
+
+#[test]
+fn a_wrapper_runs_the_new_program_with_the_same_arguments() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("decebal-compat-wrapper-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let put = |name: &str, text: &str| {
+        let p = dir.join(name);
+        std::fs::write(&p, text).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    put("decspot", "#!/bin/sh\necho \"decspot ran: $*\"\n");
+    put("decebal-session", "#!/bin/sh\necho \"session ran: $*\"\n");
+    let wrapper = read("contrib/compat/mac-compat");
+    put("macspot", &wrapper);
+    put("macshell-session", &wrapper);
+    put("mac-compat", &wrapper);
+    let run = |name: &str, args: &[&str]| {
+        let out = std::process::Command::new(dir.join(name)).args(args).env("PATH", format!("{}:/usr/bin:/bin", dir.display())).output().unwrap();
+        (out.status.code(), String::from_utf8_lossy(&out.stdout).trim().to_string(), String::from_utf8_lossy(&out.stderr).trim().to_string())
+    };
+    assert_eq!(run("macspot", &["--search", "a b"]), (Some(0), "decspot ran: --search a b".into(), String::new()), "silent when stderr is not a terminal");
+    assert_eq!(run("macshell-session", &["x"]).1, "session ran: x");
+    assert_eq!(run("mac-compat", &[]).0, Some(127), "not installed under an old name");
+    let _ = std::fs::remove_dir_all(&dir);
 }

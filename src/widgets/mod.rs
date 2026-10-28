@@ -4,11 +4,11 @@
 //! `image`, `workspaces`) whose strings and numbers come from named data sources (`{cpu.usage:pct}`, `{clock:%H:%M}`). There is no
 //! scripting: expressions are `path`, `path:format`, `path|fallback`. Clicks run an *action* from a fixed allowlist
 //! ([`actions`]). A widget that comes from a theme package ([`Trust::Theme`]) can never run a command; a widget in the user's
-//! own folder can use `exec` and `[commands]` only when `widgets.allow_exec = true` in `macshell.json` ([`Trust::UserExec`]).
+//! own folder can use `exec` and `[commands]` only when `widgets.allow_exec = true` in `decebal.json` ([`Trust::UserExec`]).
 //!
 //! * [`dsl`]: the file format and its validator.  * [`fmt`]: format strings.  * [`data`]: values and live sources.
 //! * [`layout`]: measuring and arranging.  * [`paint`]: drawing.  * [`config`]: which widgets run where.  * [`samples`]: shipped examples.
-//! * `host` (X11): the `macwidgets` daemon's windows.
+//! * `host` (X11): the `decwidgets` daemon's windows.
 
 pub mod actions;
 pub mod config;

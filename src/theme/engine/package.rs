@@ -151,7 +151,7 @@ pub fn check_image(path: &str, data: &[u8]) -> Option<String> {
         "png" => image::ImageFormat::Png,
         "jpg" | "jpeg" => image::ImageFormat::Jpeg,
         "webp" => image::ImageFormat::WebP,
-        _ => return Some(format!("`{path}`: not an image type macshell accepts (png, jpg, webp)")),
+        _ => return Some(format!("`{path}`: not an image type decebal accepts (png, jpg, webp)")),
     };
     match image::guess_format(data) {
         Ok(f) if f == want => {}
@@ -288,7 +288,7 @@ pub fn check(entries: &[Entry], lim: &Limits) -> Report {
         for w in def.extra.get("widgets").and_then(Value::as_array).into_iter().flatten() {
             if let Some(u) = w.get("use").and_then(Value::as_str).filter(|u| !u.starts_with("builtin:")) {
                 if !paths.contains(format!("widgets/{u}.toml").as_str()) {
-                    warnings.push(format!("widget `{u}` is not in this package; it is looked up in the parent theme and ~/.config/macshell/widgets at apply time"));
+                    warnings.push(format!("widget `{u}` is not in this package; it is looked up in the parent theme and ~/.config/decebal/widgets at apply time"));
                 }
             }
         }
@@ -400,7 +400,7 @@ pub fn install_entries(entries: &[Entry], themes_dir: &Path, force: bool, lim: &
     let dest = themes_dir.join(&id);
     let exists = std::fs::symlink_metadata(&dest).is_ok();
     if exists && !force {
-        return Err(format!("`{id}` is already installed (use --force to replace it, or `macthemectl theme uninstall {id}`)"));
+        return Err(format!("`{id}` is already installed (use --force to replace it, or `decthemectl theme uninstall {id}`)"));
     }
     let tmp = themes_dir.join(format!(".install-{id}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -445,7 +445,7 @@ pub mod tests {
     }
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macshell-pkg-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-pkg-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

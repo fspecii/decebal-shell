@@ -1,6 +1,6 @@
 //! Mapping a theme onto rdwm's `config.toml`: titlebars, window borders and rdwm's own bar.
 //!
-//! rdwm knows nothing about macshell themes. It already has every colour key needed
+//! rdwm knows nothing about decebal themes. It already has every colour key needed
 //! (`[colors]`, `[decoration] *_bg/fg/border`, `[decoration.bar]`), so applying a theme is a
 //! comment-preserving edit of those keys followed by one reload.
 
@@ -90,7 +90,7 @@ pub enum Wrote {
     Unchanged,
 }
 
-/// Edits `paths.rdwm_config` (validated with `rdwmctl check-config`, atomic, one-time backup like macsettings).
+/// Edits `paths.rdwm_config` (validated with `rdwmctl check-config`, atomic, one-time backup like decsettings).
 /// A missing file is created. Nothing is written when validation fails.
 pub fn write_config(paths: &Paths, t: &Theme) -> Result<Wrote, String> {
     let old = std::fs::read_to_string(&paths.rdwm_config).unwrap_or_default();
@@ -117,7 +117,7 @@ pub fn reload(paths: &Paths) -> Result<bool, String> {
     io::ipc_call(&paths.socket, &serde_json::json!({"cmd": "reload"})).map(|_| true)
 }
 
-/// The whole "apply" transaction used by `macthemectl` and the settings pane:
+/// The whole "apply" transaction used by `decthemectl` and the settings pane:
 /// resolve -> validate rdwm's file -> write rdwm config -> write the selection -> reload rdwm once.
 /// Validation happens before anything is written, so a failure leaves both files untouched.
 pub fn apply(src: &super::live::Source, paths: &Paths, sel: &super::model::Selection) -> Result<Report, String> {
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn write_config_is_atomic_noop_when_unchanged_and_backs_up_once() {
-        let d = std::env::temp_dir().join(format!("macshell-theme-rdwm-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-theme-rdwm-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.clone(), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
@@ -207,25 +207,25 @@ mod tests {
         let t = theme("dracula", true);
         assert_eq!(write_config(&paths, &t).unwrap(), Wrote::Changed);
         assert_eq!(write_config(&paths, &t).unwrap(), Wrote::Unchanged);
-        let bak = std::fs::read_to_string(d.join("config.toml.bak-macsettings")).unwrap();
+        let bak = std::fs::read_to_string(d.join("config.toml.bak-decsettings")).unwrap();
         assert_eq!(bak, "# hi\n[general]\ntags = [\"x\"]\n");
         write_config(&paths, &theme("nord", true)).unwrap();
-        assert_eq!(std::fs::read_to_string(d.join("config.toml.bak-macsettings")).unwrap(), bak, "backup is made once");
+        assert_eq!(std::fs::read_to_string(d.join("config.toml.bak-decsettings")).unwrap(), bak, "backup is made once");
         assert!(std::fs::read_to_string(&paths.rdwm_config).unwrap().starts_with("# hi\n"));
         assert_eq!(std::fs::read_dir(&d).unwrap().count(), 2, "no temp files left");
     }
 
     #[test]
     fn apply_writes_nothing_when_the_config_is_broken() {
-        let d = std::env::temp_dir().join(format!("macshell-theme-bad-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-theme-bad-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.clone(), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
         std::fs::write(&paths.rdwm_config, "this is [not toml").unwrap();
-        let src = crate::theme::live::Source { shell_json: d.join("macshell.json"), themes_dir: d.join("themes") };
+        let src = crate::theme::live::Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         let sel = Selection { name: "nord".into(), ..Selection::default() };
         assert!(apply(&src, &paths, &sel).is_err());
-        assert!(!d.join("macshell.json").exists(), "selection untouched when rdwm's file cannot be edited");
+        assert!(!d.join("decebal.json").exists(), "selection untouched when rdwm's file cannot be edited");
         let ok = Selection { sync_rdwm: false, ..sel };
         let r = apply(&src, &paths, &ok).unwrap();
         assert_eq!((r.rdwm, r.reloaded), (None, false));

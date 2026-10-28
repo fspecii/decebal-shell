@@ -7,7 +7,7 @@
 //! menu bar opens on a click, on the side of the bar that faces the screen; the data comes from the same snapshot and
 //! worker threads.
 //!
-//! `bar.position` in `macshell.json` picks the edge ([`BarPosition`]):
+//! `bar.position` in `decebal.json` picks the edge ([`BarPosition`]):
 //!
 //! | position | surface | strut | popouts open |
 //! |---|---|---|---|
@@ -15,7 +15,7 @@
 //! | `right` | the same, on the right edge | right | to the left |
 //! | `top` | as wide as the monitor, [`SURFACE_H`] tall | top | downwards |
 //! | `bottom` | the same, on the bottom edge | bottom | upwards |
-//! | `split` | a `top` bar with the head (OS icon, workspaces, window) and a second `macbar --role bottom` process with a `bottom` bar holding the tail (tray, status, clock, power) | top and bottom | down / up |
+//! | `split` | a `top` bar with the head (OS icon, workspaces, window) and a second `decbar --role bottom` process with a `bottom` bar holding the tail (tray, status, clock, power) | top and bottom | down / up |
 //!
 //! The surface is bigger than the strip: only [`THICK`] of it is reserved (the strut) and takes input while nothing is
 //! open, exactly like the classic bar whose surface is taller than its strip.
@@ -134,8 +134,8 @@ pub enum Part {
     Tail,
 }
 
-/// Which macbar process this is. A split layout is two processes, each with its own surface and its own single-instance
-/// lock: the main one draws the top bar, `macbar --role bottom` the bottom bar.
+/// Which decbar process this is. A split layout is two processes, each with its own surface and its own single-instance
+/// lock: the main one draws the top bar, `decbar --role bottom` the bottom bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Process {
     #[default]
@@ -154,8 +154,8 @@ impl Process {
     /// Name of the single-instance lock.
     pub fn lock_name(self) -> &'static str {
         match self {
-            Process::Main => "macbar",
-            Process::Bottom => "macbar-bottom",
+            Process::Main => "decbar",
+            Process::Bottom => "decbar-bottom",
         }
     }
 }
@@ -184,9 +184,9 @@ impl Place {
     /// Window name of the surface (what `xdotool search --name` finds).
     pub fn namespace(self) -> &'static str {
         if self.part == Part::Tail {
-            "macshell-bar-bottom"
+            "decebal-bar-bottom"
         } else {
-            "macshell-bar"
+            "decebal-bar"
         }
     }
 }
@@ -418,7 +418,7 @@ pub fn workspace_hit(pill: VRect, horizontal: bool, count: usize, x: f32, y: f32
 /// What a left click on `kind` does in the pill bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Click {
-    /// The OS icon: the launcher (macspot).
+    /// The OS icon: the launcher (decspot).
     Launcher,
     /// A workspace pill: view it.
     Workspace(usize),
@@ -426,9 +426,9 @@ pub enum Click {
     Popout(Tray),
     /// The quick-settings tile: toggle the Control Center panel.
     Control,
-    /// The clock: the dashboard (macdash).
+    /// The clock: the dashboard (decdash).
     Dashboard,
-    /// The power button: the session menu (macsession).
+    /// The power button: the session menu (decsession).
     Session,
     Nothing,
 }
@@ -523,7 +523,7 @@ pub fn bottom_args() -> [&'static str; 2] {
     ["--role", "bottom"]
 }
 
-impl MacBar {
+impl DecBar {
     /// Where this process draws the pill bar, or `None` when it draws the classic menu bar (the theme asks for it; never
     /// for an embedded status engine). `bar.position` comes with the live theme, so a change reaches here like a style switch.
     pub(super) fn place(&self) -> Option<Place> {
@@ -565,7 +565,7 @@ impl MacBar {
         });
     }
 
-    /// While the layout is split this (main) bar owns the bottom bar's process: starts `macbar --role bottom` when it is not
+    /// While the layout is split this (main) bar owns the bottom bar's process: starts `decbar --role bottom` when it is not
     /// running, and notices when it ended. The bottom process holds its own lock, so a second one just exits, and it leaves by
     /// itself when the layout stops being split. Returns true while the companion is wanted (the caller keeps polling).
     pub(super) fn ensure_bottom(&mut self) -> bool {
@@ -581,7 +581,7 @@ impl MacBar {
         }
         self.bottom_retry = Instant::now() + COMPANION_RETRY;
         self.bottom_spawns += 1;
-        let exe = self.bottom_exe.clone().unwrap_or_else(|| crate::launch::sibling_or_path("macbar"));
+        let exe = self.bottom_exe.clone().unwrap_or_else(|| crate::launch::sibling_or_path("decbar"));
         let child = std::process::Command::new(exe).args(bottom_args()).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).spawn();
         self.bottom_child = child.ok();
         wanted
@@ -724,7 +724,7 @@ impl MacBar {
         }
     }
 
-    /// `--png` for the pill bar: the whole surface (strip and popout room) at the height given by [`MacBar::with_height`] for a
+    /// `--png` for the pill bar: the whole surface (strip and popout room) at the height given by [`DecBar::with_height`] for a
     /// side bar, at `width` for a top / bottom one. `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`,
     /// `battery`, `window`, `layout`).
     pub(super) fn v_render_png(&mut self, path: &str, width: u32, open: Option<&str>) -> Result<(), String> {
@@ -888,7 +888,7 @@ impl MacBar {
                 }
                 Click::Session => {
                     self.close();
-                    launch_ui(vec![crate::launch::sibling_or_path("macsession")]);
+                    launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
                 }
                 Click::Nothing => {
                     return self.close();
@@ -1239,10 +1239,10 @@ fn top_bar_exists(place: Place) -> bool {
     place.edge == Anchor::Top || (place.edge == Anchor::Bottom && place.part == Part::Tail)
 }
 
-/// `macdash` for the clock: hung below a bar along the top edge, else near the top edge of the screen.
+/// `decdash` for the clock: hung below a bar along the top edge, else near the top edge of the screen.
 fn clock_dash_argv(place: Place) -> Vec<String> {
     let top = 10 + if top_bar_exists(place) { THICK as i32 } else { 0 };
-    vec![crate::launch::sibling_or_path("macdash"), "--top".into(), top.to_string()]
+    vec![crate::launch::sibling_or_path("decdash"), "--top".into(), top.to_string()]
 }
 
 /// Starts a UI program (dashboard, session menu). In dry-run mode (tests) the command is only recorded.
@@ -1305,8 +1305,8 @@ mod tests {
         for p in [P::Left, P::Right, P::Top, P::Bottom] {
             assert_eq!(at(p, Process::Bottom), None, "{p:?}: the bottom process has nothing to draw unless split");
         }
-        assert_eq!(Place::of(P::Split, Process::Main).unwrap().namespace(), "macshell-bar");
-        assert_eq!(Place::of(P::Split, Process::Bottom).unwrap().namespace(), "macshell-bar-bottom");
+        assert_eq!(Place::of(P::Split, Process::Main).unwrap().namespace(), "decebal-bar");
+        assert_eq!(Place::of(P::Split, Process::Bottom).unwrap().namespace(), "decebal-bar-bottom");
         assert_eq!((Process::parse("bottom"), Process::parse("main"), Process::parse("x")), (Some(Process::Bottom), Some(Process::Main), None));
         assert_ne!(Process::Main.lock_name(), Process::Bottom.lock_name(), "one lock per role");
     }
@@ -1607,7 +1607,7 @@ mod tests {
         let mon = Rect { x: 0, y: 0, w: 1600, h: 900 };
         let strut = |p: BarPosition, process| {
             let pl = Place::of(p, process).unwrap();
-            let spec = MacBar::v_spec(pl);
+            let spec = DecBar::v_spec(pl);
             let size = if pl.edge.is_side() { (SURFACE_W, 0) } else { (0, SURFACE_H) };
             let win = place(&spec, size, mon);
             (win, strut_partial(&spec, win, mon, (1600, 900)).unwrap())
@@ -1623,7 +1623,7 @@ mod tests {
         // split: two surfaces, two struts, one per half
         assert_eq!(strut(BarPosition::Split, Process::Main).1, [0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]);
         assert_eq!(strut(BarPosition::Split, Process::Bottom).1, [0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]);
-        assert_eq!(MacBar::v_spec(Place::of(BarPosition::Split, Process::Bottom).unwrap()).namespace, "macshell-bar-bottom");
+        assert_eq!(DecBar::v_spec(Place::of(BarPosition::Split, Process::Bottom).unwrap()).namespace, "decebal-bar-bottom");
     }
 
     #[test]
@@ -1670,10 +1670,10 @@ mod tests {
     // ------------------------------------------------------------------ the bar itself
 
     /// A pill bar at `position`, sized as the backend would size its surface.
-    fn bar_at(position: BarPosition, process: Process) -> MacBar {
+    fn bar_at(position: BarPosition, process: Process) -> DecBar {
         TEST_VERTICAL.with(|f| f.set(true));
         TEST_POSITION.with(|p| p.set(position));
-        let mut bar = MacBar::new(Box::new(active::NoActiveWindow)).with_process(process);
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow)).with_process(process);
         let edge = bar.place().map_or(Anchor::Left, |p| p.edge);
         (bar.width, bar.height) = if edge.is_side() { (SURFACE_W, 900) } else { (1600, SURFACE_H) };
         bar.show_workspaces = true;
@@ -1681,7 +1681,7 @@ mod tests {
         bar
     }
 
-    fn bar() -> MacBar {
+    fn bar() -> DecBar {
         bar_at(BarPosition::Left, Process::Main)
     }
 
@@ -1699,9 +1699,9 @@ mod tests {
         }
         let split_bottom = bar_at(BarPosition::Split, Process::Bottom);
         let spec = split_bottom.surface_spec().unwrap();
-        assert_eq!((spec.anchor, spec.namespace), (Anchor::Bottom, "macshell-bar-bottom"));
+        assert_eq!((spec.anchor, spec.namespace), (Anchor::Bottom, "decebal-bar-bottom"));
         TEST_VERTICAL.with(|f| f.set(false));
-        let h = MacBar::new(Box::new(active::NoActiveWindow));
+        let h = DecBar::new(Box::new(active::NoActiveWindow));
         assert_eq!(h.surface_spec().unwrap().anchor, Anchor::Top, "the classic bar is unchanged");
         assert_eq!(h.size(), (0, SURFACE_MIN_HEIGHT));
     }
@@ -1854,10 +1854,10 @@ mod tests {
             let log = sys::take_log();
             sys::set_dry_run(false);
             let has = |needle: &str| log.iter().any(|l| l.contains(needle));
-            assert!(has("macspot") || has("rofi") || has("wofi") || has("fuzzel") || log.is_empty() || !sys::have("macspot"), "launcher: {log:?}");
+            assert!(has("decspot") || has("rofi") || has("wofi") || has("fuzzel") || log.is_empty() || !sys::have("decspot"), "launcher: {log:?}");
             let top = if pos == BarPosition::Top { 62 } else { 10 };
-            assert!(has(&format!("macdash --top {top}")), "{pos:?}: below a top bar, near the edge otherwise: {log:?}");
-            assert!(has("macsession"), "{log:?}");
+            assert!(has(&format!("decdash --top {top}")), "{pos:?}: below a top bar, near the edge otherwise: {log:?}");
+            assert!(has("decsession"), "{log:?}");
         }
     }
 

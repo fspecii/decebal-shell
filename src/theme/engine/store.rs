@@ -1,5 +1,5 @@
-//! The theme folders and what is in them: the user's (`~/.config/macshell/themes/<id>/`), the system's
-//! (`/usr/share/macshell/themes/<id>/`) and the built-ins compiled into the programs.
+//! The theme folders and what is in them: the user's (`~/.config/decebal/themes/<id>/`), the system's
+//! (`/usr/share/decebal/themes/<id>/`) and the built-ins compiled into the programs.
 //!
 //! A user folder entry is either a package directory (`<id>/theme.toml` plus assets) or, as before, a single `<id>.toml`.
 
@@ -12,9 +12,9 @@ use crate::theme::model::{Def, Selection};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-/// `$MACSHELL_SYSTEM_THEMES`, else `/usr/share/macshell/themes`.
+/// `$DECEBAL_SYSTEM_THEMES`, else `/usr/share/decebal/themes`.
 pub fn system_dir() -> PathBuf {
-    std::env::var_os("MACSHELL_SYSTEM_THEMES").filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/usr/share/macshell/themes"))
+    std::env::var_os("DECEBAL_SYSTEM_THEMES").filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/usr/share/decebal/themes"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,7 +188,7 @@ pub fn uninstall(src: &Source, id: &str) -> Result<PathBuf, String> {
         return Ok(flat);
     }
     if builtin::source(id).is_some() {
-        return Err(format!("`{id}` is built into macshell and cannot be uninstalled"));
+        return Err(format!("`{id}` is built into decebal and cannot be uninstalled"));
     }
     if system_dir().join(id).is_dir() {
         return Err(format!("`{id}` is installed system-wide ({}); remove it with your package manager", system_dir().join(id).display()));
@@ -337,17 +337,17 @@ mod tests {
     use crate::theme::engine::package::tests::{good, png};
 
     fn sandbox(name: &str) -> (PathBuf, Source) {
-        let d = std::env::temp_dir().join(format!("macshell-store-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-store-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        let src = Source { shell_json: d.join("macshell.json"), themes_dir: d.join("themes") };
+        let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
     }
 
     #[test]
     fn installed_packages_are_listed_resolved_and_removable() {
         let (d, src) = sandbox("list");
-        std::env::set_var("MACSHELL_SYSTEM_THEMES", d.join("nosystem"));
+        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
         let (inst, _) = install_dir(&src, &good());
         assert_eq!(inst.id, "demo");
         let all = list(&src);
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn scaffold_duplicate_and_export_round_trip() {
         let (d, src) = sandbox("dup");
-        std::env::set_var("MACSHELL_SYSTEM_THEMES", d.join("nosystem"));
+        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
         let dir = scaffold(&src, "mine", None, Some("nord")).unwrap();
         assert!(dir.join("theme.toml").is_file());
         assert!(scaffold(&src, "mine", None, None).is_err());
@@ -406,7 +406,7 @@ mod tests {
         let out = d.join("demo.dtheme");
         export(&src, "demo", &out).unwrap();
         let (_, other) = sandbox("dup2");
-        std::env::set_var("MACSHELL_SYSTEM_THEMES", d.join("nosystem"));
+        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
         let (got, _) = install(&other, &out, false).unwrap();
         assert_eq!(got.id, "demo");
         let hash_ok = info_for(&other, "demo").hash;

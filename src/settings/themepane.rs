@@ -2,8 +2,8 @@
 //! swatches, translucency / corner radius / text size, and "also style rdwm".
 //!
 //! Choosing anything runs one transaction (see [`crate::theme::rdwm`]): validate rdwm's colour edit,
-//! write it through the model's atomic store, then write the selection to `macshell.json`. Every
-//! running macshell program notices that file within half a second.
+//! write it through the model's atomic store, then write the selection to `decebal.json`. Every
+//! running decebal program notices that file within half a second.
 
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row, Swatch, ThemeTile};
@@ -125,12 +125,12 @@ pub fn items(m: &Model) -> Vec<Item> {
     out.push(Item::Card(vec![
         slider("th:opacity", "Translucency", "Opacity of menus, dock and launchers (the menu bar stays solid)", f64::from(sel.opacity.unwrap_or(1.0)) * 100.0, 40.0, 100.0, " %"),
         slider("th:radius", "Corner radius", "Menus, cards and window titlebars", f64::from(now.radius), 0.0, 24.0, " px"),
-        slider("th:fontscale", "Text size", "All macshell text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
+        slider("th:fontscale", "Text size", "All decebal text", f64::from(sel.font_scale.unwrap_or(1.0)) * 100.0, 80.0, 140.0, " %"),
         Row::new("Reset customisations").detail("Back to the theme's own accent, translucency, radius and text size").ctl(Ctl::new("th:reset", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
     out.extend(super::fontpane::items(&sel, &now));
     let mut note =
-        format!("Your own themes: put .toml files in {} (macthemectl export nord > mine.toml is a good start). macthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
+        format!("Your own themes: put .toml files in {} (decthemectl export nord > mine.toml is a good start). decthemectl list, apply and get do the same from a terminal.", src.themes_dir.display());
     if !broken.is_empty() {
         note.push_str(&format!("\nIgnored: {}", broken.join("; ")));
     }
@@ -376,7 +376,7 @@ mod tests {
         for (i, word) in ["left", "right", "top", "bottom", "split"].iter().enumerate() {
             m.apply("th:layout", CtlVal::Str((*word).into()));
             assert_eq!(m.shell["bar"]["position"], *word);
-            assert_eq!(crate::settings::io::json_load(&m.paths.shell_json())["bar"]["position"], *word, "written to macshell.json");
+            assert_eq!(crate::settings::io::json_load(&m.paths.shell_json())["bar"]["position"], *word, "written to decebal.json");
             assert_eq!(layout_row(&items(&m)).unwrap().1, Some(i));
             assert_eq!(m.shell["bar"]["enabled"], true, "the other bar keys stay");
             assert_eq!(selection(&m).name, "caelestia", "only the position changed");
@@ -393,8 +393,8 @@ mod tests {
     }
 
     #[test]
-    fn every_theme_macthemectl_lists_loads_in_the_pane_without_the_could_not_be_loaded_note() {
-        // A long-running macsettings that predates a theme (an old binary has no "caelestia" in its table) reports
+    fn every_theme_decthemectl_lists_loads_in_the_pane_without_the_could_not_be_loaded_note() {
+        // A long-running decsettings that predates a theme (an old binary has no "caelestia" in its table) reports
         // "no theme caelestia"; a current one must load everything the CLI lists, in both modes.
         let (mut m, _) = model_with("[general]\n");
         let entries = source(&m).list();

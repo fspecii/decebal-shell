@@ -236,7 +236,7 @@ impl WindowApp for Launcher {
     }
 
     fn app_id(&self) -> &'static str {
-        "maclaunch"
+        "declaunch"
     }
 
     fn overlay(&self) -> bool {

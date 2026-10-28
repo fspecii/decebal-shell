@@ -1,6 +1,6 @@
-//! Presets: named, shareable snapshots of the macshell + rdwm configuration.
+//! Presets: named, shareable snapshots of the decebal + rdwm configuration.
 //!
-//! A preset is a folder `~/.config/macshell/presets/<id>/` (or one `.macshell-preset` bundle file, a gzip-compressed
+//! A preset is a folder `~/.config/decebal/presets/<id>/` (or one `.decebal-preset` bundle file, a gzip-compressed
 //! tar) holding `manifest.toml` and up to four fixed files plus an optional custom theme and wallpaper. See
 //! `docs/presets.md`.
 //!
@@ -10,8 +10,8 @@
 //! * `validate`: file checks with line numbers (shared with the settings editor).
 //! * `fsx`: atomic saves with timestamped backups and revert.
 //! * `store`: capture, list, save, import, plan (preview) and apply.
-//! * `builtin`: the presets that ship with macshell.
-//! * `cli`: `macthemectl profile ...`.
+//! * `builtin`: the presets that ship with decebal.
+//! * `cli`: `decthemectl profile ...`.
 
 pub mod builtin;
 pub mod bundle;
@@ -27,4 +27,4 @@ pub use parts::{Part, PartSet};
 pub use store::{Env, Preset};
 
 /// File extension of a bundle.
-pub const EXT: &str = "macshell-preset";
+pub const EXT: &str = "decebal-preset";

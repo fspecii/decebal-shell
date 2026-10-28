@@ -2,7 +2,7 @@
 //!
 //! * [`index`], [`resolve`]: `index.theme` parsing and the Icon Theme Specification lookup (inherits, hicolor, sizes, scales).
 //! * [`names`]: aliases and fallbacks (dock ids, reverse-DNS classes, MIME icons, the generic application icon).
-//! * [`config`], [`live`]: the `icons` object of `macshell.json` (theme, size scale, tint, fallback), the automatic
+//! * [`config`], [`live`]: the `icons` object of `decebal.json` (theme, size scale, tint, fallback), the automatic
 //!   choice from GSettings / GTK and hot reload ([`generation`] changes when icons must be redrawn).
 //! * [`raster`], [`xpm`]: SVG / PNG / XPM to a crisp square pixmap. [`cache`]: the bounded LRU both caches use.
 //! * [`IconCache`]: what the dock, launchers, bar and switchers hold; it drops its pixmaps when the generation moves.
@@ -145,7 +145,7 @@ impl IconCache {
         self.lru.get(&key).expect("stored above")
     }
 
-    /// Pixmaps held and their bytes (tests, `macthemectl icons status`).
+    /// Pixmaps held and their bytes (tests, `decthemectl icons status`).
     pub fn usage(&self) -> (usize, usize) {
         (self.lru.len(), self.lru.weight())
     }
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn png_icons_are_loaded_and_fitted() {
         let src = launchpad(64).unwrap();
-        let p = std::env::temp_dir().join("macshell-test-icon.png");
+        let p = std::env::temp_dir().join("decebal-test-icon.png");
         src.save_png(&p).unwrap();
         let pm = load_png_scaled(&p, 32).unwrap();
         assert_eq!((pm.width(), pm.height()), (32, 32));
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn bad_svg_is_none() {
-        let p = std::env::temp_dir().join("macshell-bad.svg");
+        let p = std::env::temp_dir().join("decebal-bad.svg");
         std::fs::write(&p, b"not svg").unwrap();
         assert!(render_svg(&p, 32).is_none());
     }
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_render_without_the_theme() {
-        let p = std::env::temp_dir().join(format!("macshell-abs-{}.png", std::process::id()));
+        let p = std::env::temp_dir().join(format!("decebal-abs-{}.png", std::process::id()));
         launchpad(64).unwrap().save_png(&p).unwrap();
         let mut c = IconCache::default();
         let pm = c.get(p.to_str().unwrap(), 40);

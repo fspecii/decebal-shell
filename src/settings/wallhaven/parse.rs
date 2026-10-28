@@ -45,7 +45,7 @@ pub struct Page {
     pub seed: Option<String>,
 }
 
-/// Wallhaven ids are short lowercase alphanumerics (the same rule `machaven` uses).
+/// Wallhaven ids are short lowercase alphanumerics (the same rule `dechaven` uses).
 pub fn valid_id(id: &str) -> bool {
     crate::wallhaven::wallpaper::valid_id(id)
 }

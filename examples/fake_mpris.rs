@@ -4,9 +4,9 @@
 //! TITLE (default `Fake Song`) by Fake Artist. Every method call it receives is appended to the file named by
 //! `FAKE_MPRIS_LOG` (`PlayPause`, `Next`, `Previous`, `SetPosition <us>`, `Volume <v>`); PlayPause toggles the
 //! status and is announced with PropertiesChanged like a real player does. `FAKE_MPRIS_ART` names a cover image
-//! (a file path) published as `mpris:artUrl`. Built on macshell's own D-Bus client.
+//! (a file path) published as `mpris:artUrl`. Built on decebal's own D-Bus client.
 
-use macshell::dbus::{Conn, Message, Value, Writer, CALL};
+use decebal::dbus::{Conn, Message, Value, Writer, CALL};
 use std::io::Write;
 use std::time::Instant;
 

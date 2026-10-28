@@ -1,7 +1,7 @@
 #!/bin/sh
-# Shim, first on PATH only in the macshell session: Omarchy's autostart calls this to start Quickshell.
+# Shim, first on PATH only in the decebal session: Omarchy's autostart calls this to start Quickshell.
 # Start the Rust shell instead, plus a notification daemon and idle locking.
-systemctl --user start macshell-bar.service macshell-dock.service
+systemctl --user start decebal-bar.service decebal-dock.service
 pgrep -x mako >/dev/null || setsid mako >/dev/null 2>&1 &
-pgrep -x hypridle >/dev/null || setsid hypridle -c /usr/local/share/macshell/hypridle.conf >/dev/null 2>&1 &
+pgrep -x hypridle >/dev/null || setsid hypridle -c /usr/local/share/decebal/hypridle.conf >/dev/null 2>&1 &
 exit 0

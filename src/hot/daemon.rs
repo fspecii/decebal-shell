@@ -1,4 +1,4 @@
-//! The machot daemon: tiny InputOnly windows in the corners of every monitor and a dwell timer.
+//! The dechot daemon: tiny InputOnly windows in the corners of every monitor and a dwell timer.
 //!
 //! No polling: the process sleeps in `poll(2)` on the X socket and an inotify descriptor (the config file). The
 //! only timeouts are a running dwell (150 ms by default), the debounce of a restack and, when inotify is not
@@ -39,7 +39,7 @@ fn buttons_down(mask: KeyButMask) -> bool {
 pub fn spawn(cmd: &Command) -> bool {
     if let Some(prog) = cmd.needs {
         if !in_path(prog) {
-            eprintln!("machot: {prog} is not in PATH, nothing to run");
+            eprintln!("dechot: {prog} is not in PATH, nothing to run");
             return false;
         }
     }
@@ -54,7 +54,7 @@ pub fn spawn(cmd: &Command) -> bool {
             true
         }
         Err(e) => {
-            eprintln!("machot: cannot run {:?}: {e}", cmd.line);
+            eprintln!("dechot: cannot run {:?}: {e}", cmd.line);
             false
         }
     }
@@ -204,8 +204,8 @@ impl Daemon {
             let r = spot.rect;
             let aux = CreateWindowAux::new().override_redirect(1).event_mask(EventMask::ENTER_WINDOW | EventMask::LEAVE_WINDOW);
             self.conn.create_window(0, win, self.root, r.x as i16, r.y as i16, r.w as u16, r.h as u16, 0, WindowClass::INPUT_ONLY, 0, &aux).map_err(err)?;
-            let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"machot corner");
-            let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"machot\0Machot\0");
+            let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"dechot corner");
+            let _ = self.conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"dechot\0Dechot\0");
             self.conn.map_window(win).map_err(err)?;
             self.wins.push(Corners { spot: *spot, win });
         }
@@ -234,7 +234,7 @@ impl Daemon {
         self.cfg = cfg;
         self.machine.set_dwell(self.cfg.dwell_ms);
         if let Err(e) = self.relayout(false) {
-            eprintln!("machot: {e}");
+            eprintln!("dechot: {e}");
         }
     }
 
@@ -344,7 +344,7 @@ impl Daemon {
 /// Runs the daemon until the X connection ends. Only one runs per session: a second one returns at once.
 pub fn run() -> Result<(), String> {
     let Some(_lock) = crate::single::acquire_signalling(LOCK_NAME, 0) else {
-        eprintln!("machot: the daemon is already running");
+        eprintln!("dechot: the daemon is already running");
         return Ok(());
     };
     Daemon::new()?.run()

@@ -1,6 +1,6 @@
 //! The key table of the theme package format (`format = 1`).
 //!
-//! One table drives the validator ([`super::manifest`]), `macthemectl theme schema` and docs/theme-engine.md, so they cannot
+//! One table drives the validator ([`super::manifest`]), `decthemectl theme schema` and docs/theme-engine.md, so they cannot
 //! drift apart. Colour and metric token keys come from [`crate::theme::model::TOKENS`] (they are listed here by reference).
 
 use crate::theme::model::{Kind, TOKENS};
@@ -115,7 +115,7 @@ pub const FIELDS: &[Field] = &[
     Field { path: "license", ty: Ty::Text(60), desc: "SPDX identifier of the licence of the package's contents", status: Wired },
     Field { path: "description", ty: Ty::Text(400), desc: "one or two sentences for the gallery", status: Wired },
     Field { path: "homepage", ty: Ty::Text(200), desc: "web page or repository", status: Wired },
-    Field { path: "min_shell_version", ty: Ty::Version, desc: "oldest macshell this theme works with", status: Wired },
+    Field { path: "min_shell_version", ty: Ty::Version, desc: "oldest decebal this theme works with", status: Wired },
     Field { path: "screenshots", ty: Ty::Assets(Image, 8), desc: "preview images shown in the gallery and the market", status: Wired },
     Field { path: "tags", ty: Ty::List(Elem::Text(24), 12), desc: "search words (dark, minimal, material, retro...)", status: Wired },
     Field { path: "extends", ty: Ty::Ident, desc: "id of a theme to start from; only the keys given here are overridden", status: Wired },
@@ -137,10 +137,10 @@ pub const FIELDS: &[Field] = &[
     Field { path: "wallpaper.images", ty: Ty::Assets(Image, 64), desc: "several bundled wallpapers (the first one is used unless slideshow is on)", status: Wired },
     Field { path: "wallpaper.mode", ty: Ty::Choice(WALLPAPER_MODES), desc: "how the image fills the screen", status: Wired },
     Field { path: "wallpaper.color", ty: Ty::Color, desc: "background colour behind the image", status: Wired },
-    Field { path: "wallpaper.slideshow", ty: Ty::Bool, desc: "rotate through `images`", status: Pending("no slideshow runner yet; stored in macshell.json wallpaper.slideshow") },
+    Field { path: "wallpaper.slideshow", ty: Ty::Bool, desc: "rotate through `images`", status: Pending("no slideshow runner yet; stored in decebal.json wallpaper.slideshow") },
     Field { path: "wallpaper.interval", ty: Ty::Int(10, 86400), desc: "seconds between slideshow images", status: Pending("no slideshow runner yet") },
     Field { path: "wallpaper.shuffle", ty: Ty::Bool, desc: "random slideshow order", status: Pending("no slideshow runner yet") },
-    Field { path: "wallpaper.match_colors", ty: Ty::Bool, desc: "turn on `Match wallpaper`: recolour the theme from the wallpaper (any theme), like `macthemectl dynamic`", status: Wired },
+    Field { path: "wallpaper.match_colors", ty: Ty::Bool, desc: "turn on `Match wallpaper`: recolour the theme from the wallpaper (any theme), like `decthemectl dynamic`", status: Wired },
     Field { path: "wallpaper.scheme", ty: Ty::Choice(&["tonal-spot", "vibrant", "expressive", "monochrome", "neutral", "content", "palette"]), desc: "palette variant used with match_colors", status: Wired },
     Field { path: "wallpaper.surfaces", ty: Ty::Choice(&["accent", "tint", "full"]), desc: "with match_colors: only the accent, tinted surfaces, or the whole palette", status: Wired },
     Field { path: "wallpaper.strength", ty: Ty::Num(0.0, 1.0), desc: "with match_colors: how far surfaces move towards the wallpaper", status: Wired },
@@ -155,9 +155,9 @@ pub const FIELDS: &[Field] = &[
     Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "which screen edge the Caelestia pill bar sits on (with bar.style = \"vertical\"); `split` is a top and a bottom bar", status: Wired },
     Field { path: "bar.style", ty: Ty::Choice(&["flat", "floating", "vertical"]), desc: "flat strip, floating pill or vertical bar down the left edge", status: Wired },
     Field { path: "bar.height", ty: Ty::Int(20, 40), desc: "bar height (width when vertical) in px", status: Wired },
-    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "items on the left of the bar, in order (names, or `widget:<id>`)", status: Pending("macbar has no item lists yet; stored in macshell.json bar.left") },
-    Field { path: "bar.center", ty: Ty::List(Elem::Ident, 24), desc: "items in the middle of the bar, in order", status: Pending("needs the bar layouts branch; stored in macshell.json bar.center") },
-    Field { path: "bar.right", ty: Ty::List(Elem::Ident, 24), desc: "items on the right of the bar, in order", status: Pending("needs the bar layouts branch; stored in macshell.json bar.right") },
+    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "items on the left of the bar, in order (names, or `widget:<id>`)", status: Pending("decbar has no item lists yet; stored in decebal.json bar.left") },
+    Field { path: "bar.center", ty: Ty::List(Elem::Ident, 24), desc: "items in the middle of the bar, in order", status: Pending("needs the bar layouts branch; stored in decebal.json bar.center") },
+    Field { path: "bar.right", ty: Ty::List(Elem::Ident, 24), desc: "items on the right of the bar, in order", status: Pending("needs the bar layouts branch; stored in decebal.json bar.right") },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },
     Field { path: "dock.style", ty: Ty::Choice(&["mac", "windows"]), desc: "macOS floating dock or the Windows 11 taskbar", status: Wired },
     Field { path: "dock.position", ty: Ty::Choice(&["bottom", "top", "left", "right"]), desc: "screen edge of the dock", status: Pending("only bottom/top are wired (windows taskbar); left/right need the dock layouts work") },
@@ -188,14 +188,14 @@ pub const FIELDS: &[Field] = &[
 
 /// Keys of a `[[widgets]]` instance.
 pub const WIDGET_FIELDS: &[Field] = &[
-    Field { path: "use", ty: Ty::Text(80), desc: "widget to show: a file `widgets/<name>.toml` of this package (just the name) or `builtin:<name>` (samples shipped with macshell)", status: Wired },
-    Field { path: "place", ty: Ty::Choice(&["desktop", "bar"]), desc: "on the desktop (macwidgets) or inside the bar", status: Wired },
+    Field { path: "use", ty: Ty::Text(80), desc: "widget to show: a file `widgets/<name>.toml` of this package (just the name) or `builtin:<name>` (samples shipped with decebal)", status: Wired },
+    Field { path: "place", ty: Ty::Choice(&["desktop", "bar"]), desc: "on the desktop (decwidgets) or inside the bar", status: Wired },
     Field { path: "anchor", ty: Ty::Choice(ANCHORS), desc: "desktop: which screen corner/edge x and y are measured from", status: Wired },
     Field { path: "x", ty: Ty::Int(-4000, 4000), desc: "desktop: horizontal offset from the anchor in px", status: Wired },
     Field { path: "y", ty: Ty::Int(-4000, 4000), desc: "desktop: vertical offset from the anchor in px", status: Wired },
     Field { path: "monitor", ty: Ty::Text(60), desc: "desktop: output name or `primary`", status: Wired },
-    Field { path: "slot", ty: Ty::Choice(&["left", "center", "right"]), desc: "bar: which part of the bar", status: Pending("hosting widgets inside macbar needs the bar layouts branch") },
-    Field { path: "order", ty: Ty::Int(-100, 100), desc: "bar: position among the items of the slot (lower first)", status: Pending("hosting widgets inside macbar needs the bar layouts branch") },
+    Field { path: "slot", ty: Ty::Choice(&["left", "center", "right"]), desc: "bar: which part of the bar", status: Pending("hosting widgets inside decbar needs the bar layouts branch") },
+    Field { path: "order", ty: Ty::Int(-100, 100), desc: "bar: position among the items of the slot (lower first)", status: Pending("hosting widgets inside decbar needs the bar layouts branch") },
     Field { path: "enabled", ty: Ty::Bool, desc: "turn the instance off without deleting it", status: Wired },
     Field { path: "options", ty: Ty::Text(0), desc: "table of values handed to the widget as `opt.<key>`", status: Wired },
 ];

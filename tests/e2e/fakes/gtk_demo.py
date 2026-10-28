@@ -7,7 +7,7 @@ Shows a header bar, a sidebar, a list, buttons (suggested / destructive), an ent
 import sys
 
 ver = sys.argv[1] if len(sys.argv) > 1 else "4"
-title = sys.argv[2] if len(sys.argv) > 2 else "macshell GTK demo"
+title = sys.argv[2] if len(sys.argv) > 2 else "decebal GTK demo"
 import gi
 
 if ver == "4":
@@ -17,7 +17,7 @@ if ver == "4":
 
     class App(Adw.Application):
         def __init__(self):
-            super().__init__(application_id="org.macshell.GtkDemo")
+            super().__init__(application_id="org.decebal.GtkDemo")
 
         def do_activate(self):
             win = Adw.ApplicationWindow(application=self, title=title, default_width=820, default_height=520)

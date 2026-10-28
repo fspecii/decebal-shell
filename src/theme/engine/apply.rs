@@ -5,7 +5,7 @@
 //! back if any write fails. [`undo`] restores the latest record; [`preview`] is apply, wait, undo.
 //!
 //! Files: rdwm's `config.toml` (colours, titlebars, gaps, border colours, layouts, wallpaper), `dock-settings.json` (dock style and
-//! alignment) and `macshell.json` (theme selection, `bar`, `dock`, `hot_corners`, `widgets`, `icons`, `theme_wallpaper`).
+//! alignment) and `decebal.json` (theme selection, `bar`, `dock`, `hot_corners`, `widgets`, `icons`, `theme_wallpaper`).
 //! A key the running rdwm does not know yet is skipped and reported in [`Applied::notes`], not an error.
 
 use super::schema::Status;
@@ -49,7 +49,7 @@ pub struct Applied {
     pub undo_id: String,
 }
 
-/// Where undo records live: next to `macshell.json` (so a test or a private HOME never touches the real one).
+/// Where undo records live: next to `decebal.json` (so a test or a private HOME never touches the real one).
 pub fn undo_dir(paths: &Paths) -> PathBuf {
     paths.shell_dir.join("theme-undo")
 }
@@ -202,7 +202,7 @@ fn widget_source(src: &Source, id: &str, name: &str) -> Option<String> {
 
 /// Computes everything `apply` would write, touching nothing.
 pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result<Plan, String> {
-    let (id, implied) = src.find(name).ok_or_else(|| format!("no theme `{name}` (macthemectl theme list)"))?;
+    let (id, implied) = src.find(name).ok_or_else(|| format!("no theme `{name}` (decthemectl theme list)"))?;
     if let Some(e) = src.list().into_iter().find(|e| e.id == id).and_then(|e| e.error) {
         return Err(format!("theme `{id}` is broken: {e}"));
     }
@@ -296,7 +296,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         }
     }
 
-    // ---- macshell.json
+    // ---- decebal.json
     let mut shell = io::json_load(&paths.shell_json());
     shell.as_object_mut().expect("object").insert("theme".into(), sel.to_json());
     for (k, v) in &shell_marks {
@@ -370,7 +370,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
             }
         }
         shell.as_object_mut().expect("object").insert("theme_wallpaper".into(), Value::Object(s));
-        notes.push("wallpaper.slideshow: stored in macshell.json `theme_wallpaper`; nothing rotates the images yet".into());
+        notes.push("wallpaper.slideshow: stored in decebal.json `theme_wallpaper`; nothing rotates the images yet".into());
     } else {
         shell.as_object_mut().expect("object").shift_remove("theme_wallpaper");
     }
@@ -583,10 +583,10 @@ pub mod tests {
     use crate::theme::engine::package::{install_entries, tests::png};
 
     pub fn sandbox(name: &str) -> (PathBuf, Source, Paths) {
-        let d = std::env::temp_dir().join(format!("macshell-apply-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-apply-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
-        std::env::set_var("MACSHELL_SYSTEM_THEMES", d.join("nosystem"));
+        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: d.join("cfg/themes") };
         (d, src, paths)

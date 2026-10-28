@@ -1,5 +1,5 @@
 #!/bin/bash
-# macdash (dashboard popup) end to end on a PRIVATE Xvfb display, a private XDG_RUNTIME_DIR and a private D-Bus
+# decdash (dashboard popup) end to end on a PRIVATE Xvfb display, a private XDG_RUNTIME_DIR and a private D-Bus
 # session bus with fake MPRIS players (examples/fake_mpris.rs). No window manager.
 #   tests/e2e/dash.sh                  (E2E_DISPLAY=96 by default; SHOTS=dir keeps the screenshots)
 # Needs Xvfb, xdotool, import + convert (ImageMagick), dbus-daemon and tesseract (OCR of the card; the
@@ -12,12 +12,12 @@ TARGET=${CARGO_TARGET_DIR:-$HERE/target}
 PROFILE=${PROFILE:-release}
 BIN=$TARGET/$PROFILE
 for t in Xvfb xdotool import convert dbus-daemon tesseract; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
-(cd "$HERE" && cargo build -q --offline $([ "$PROFILE" = release ] && echo --release) --bin macdash --example fake_mpris --example fakewin) || { echo "build failed"; exit 2; }
+(cd "$HERE" && cargo build -q --offline $([ "$PROFILE" = release ] && echo --release) --bin decdash --example fake_mpris --example fakewin) || { echo "build failed"; exit 2; }
 
 N=${E2E_DISPLAY:-96}
 [ "$N" = 1 ] && { echo "refusing the live display"; exit 2; }
 PASS=0; FAIL=0; PIDS=()
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/macdash-e2e.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/decdash-e2e.XXXXXX")
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() {
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
@@ -41,10 +41,10 @@ wait_for 5 test -e /tmp/.X11-unix/X$N || { echo "Xvfb failed"; cat "$TMP/xvfb.lo
 export DISPLAY=:$N
 unset WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE DBUS_SESSION_BUS_ADDRESS
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_CACHE_HOME=$TMP/cache
-mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$TMP/nodata" "$XDG_CACHE_HOME/macshell" "$TMP/shim"
+mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$TMP/nodata" "$XDG_CACHE_HOME/decebal" "$TMP/shim"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11 MACSHELL_COLOR_SCHEME=dark
-mkdir -p "$MACSHELL_CONFIG"
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11 DECEBAL_COLOR_SCHEME=dark
+mkdir -p "$DECEBAL_CONFIG"
 
 # Private session bus on a socket inside the private runtime dir.
 dbus-daemon --session --address="unix:path=$XDG_RUNTIME_DIR/bus" --nofork >"$TMP/dbus.log" 2>&1 &
@@ -52,8 +52,8 @@ PIDS+=($!)
 wait_for 5 test -S "$XDG_RUNTIME_DIR/bus" || { echo "dbus-daemon failed"; cat "$TMP/dbus.log"; exit 2; }
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
-# A fresh weather reading, so macdash never goes to the network.
-echo "{\"temp_c\":12,\"code\":116,\"night\":false,\"fetched\":$(date +%s)}" > "$XDG_CACHE_HOME/macshell/weather.json"
+# A fresh weather reading, so decdash never goes to the network.
+echo "{\"temp_c\":12,\"code\":116,\"night\":false,\"fetched\":$(date +%s)}" > "$XDG_CACHE_HOME/decebal/weather.json"
 # A fake nvidia-smi (the GPU card shows up) and nothing else new on PATH.
 cat > "$TMP/shim/nvidia-smi" <<'SH'
 #!/bin/bash
@@ -67,9 +67,9 @@ export FAKE_MPRIS_ART=$TMP/cover.png
 
 convert() { command convert "$@" 2>/dev/null; }
 shot() { import -window root "$SHOTS/$1.png" 2>/dev/null; }
-dash_win() { for w in $(xdotool search --name '^macdash$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
+dash_win() { for w in $(xdotool search --name '^decdash$' 2>/dev/null); do echo "$w"; return 0; done; return 1; }
 dash_gone() { ! dash_win; }
-n_wins() { xdotool search --name '^macdash$' 2>/dev/null | wc -l; }
+n_wins() { xdotool search --name '^decdash$' 2>/dev/null | wc -l; }
 read_geom() { eval "$(xdotool getwindowgeometry --shell "$1" | grep -E '^(X|Y|WIDTH|HEIGHT)=')"; }
 hexpix() { convert "$1" -crop 1x1+"$2"+"$3" +repage -depth 8 txt:- 2>/dev/null | grep -o '#[0-9A-F]\{6\}' | head -1; }
 # ocr FILE X Y W H: the text in a region (light on dark is inverted first), whitespace squeezed.
@@ -84,9 +84,9 @@ ocr() {
 sx() { echo $((X + $1)); }
 sy() { echo $((Y + $1)); }
 click_at() { xdotool mousemove $(sx "$1") $(sy "$2"); sleep 0.08; xdotool click 1; sleep 0.25; }
-# start ARGS...: runs macdash in the background, waits for its window; sets DASH_PID, DASH_WIN and the geometry.
+# start ARGS...: runs decdash in the background, waits for its window; sets DASH_PID, DASH_WIN and the geometry.
 start() {
-    macdash "$@" >"$TMP/macdash.out" 2>&1 &
+    decdash "$@" >"$TMP/decdash.out" 2>&1 &
     DASH_PID=$!; PIDS+=($DASH_PID)
     wait_for 4 dash_win || { fail "window did not appear ($*)"; return 1; }
     DASH_WIN=$(dash_win); read_geom "$DASH_WIN"
@@ -220,15 +220,15 @@ dash_gone && pass "window is gone" || fail "window gone"
 
 # --- 8. single instance toggle
 start || exit 1
-macdash >/dev/null 2>&1
-gone && pass "running macdash again closes the open one" || fail "toggle closed"
+decdash >/dev/null 2>&1
+gone && pass "running decdash again closes the open one" || fail "toggle closed"
 dash_gone && pass "... and leaves no window" || fail "toggle left a window"
 start || exit 1
 eq "a fresh run opens exactly one window" "$(n_wins)" 1
-macdash media >/dev/null 2>&1; gone
+decdash media >/dev/null 2>&1; gone
 start media || exit 1
 shot media_arg
-has "macdash media opens on the Media tab" "$(ocr "$SHOTS/media_arg.png" $((X + 252)) $((Y + 58)) 248 30)" "Fake Song"
+has "decdash media opens on the Media tab" "$(ocr "$SHOTS/media_arg.png" $((X + 252)) $((Y + 58)) 248 30)" "Fake Song"
 eq "an out-of-range --x is kept on screen" "$([ "$X" -ge 8 ] && echo ok)" ok
 xdotool key Escape; gone
 
@@ -257,7 +257,7 @@ RSS=$(awk '/VmRSS/{print $2}' "/proc/$DASH_PID/status" 2>/dev/null)
 echo "      after ~3.5 s open: cpu ${CPU:-?} ticks, rss ${RSS:-?} kB"
 [ -n "$CPU" ] && [ "$CPU" -le 60 ] && pass "cheap while visible (cpu ticks $CPU <= 60)" || fail "cpu while visible" "${CPU:-gone}"
 xdotool key Escape; gone
-! pgrep -x macdash >/dev/null 2>&1 || true
+! pgrep -x decdash >/dev/null 2>&1 || true
 
 echo; echo "passed $PASS, failed $FAIL (screenshots in $SHOTS)"
 [ "$FAIL" = 0 ]

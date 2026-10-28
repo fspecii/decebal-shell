@@ -1,9 +1,9 @@
 #!/bin/bash
-# macexpose (window overview) end to end against a private rdwm on a private Xvfb display.
+# decexpose (window overview) end to end against a private rdwm on a private Xvfb display.
 #   tests/e2e/expose.sh               (uses ../rdwm/target/{release,debug}/rdwm, or RDWM=/path/to/rdwm)
 # Everything is private, scaffolding as in switch.sh: Xvfb :97 (override with E2E_DISPLAY), own XDG_RUNTIME_DIR (so rdwm's
-# IPC socket and macexpose's lock file are private), own HOME. Never touches the real session; only PIDs started here
-# are killed. Four coloured fakewin windows are tiled by rdwm; macexpose is started by hand (no key binding needed).
+# IPC socket and decexpose's lock file are private), own HOME. Never touches the real session; only PIDs started here
+# are killed. Four coloured fakewin windows are tiled by rdwm; decexpose is started by hand (no key binding needed).
 # Screenshots land in $SHOTS (default $TMP/shots; keep with KEEP_TMP=1 or SHOTS=dir).
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
@@ -17,7 +17,7 @@ for t in Xvfb xdotool import xprop jq convert; do command -v $t >/dev/null || { 
 (cd "$HERE" && cargo build -q --offline $([ "$PROFILE" = release ] && echo --release) --bins --examples) || { echo "build failed"; exit 2; }
 
 PASS=0; FAIL=0; PIDS=(); EXPID=
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/macexpose-e2e.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/decexpose-e2e.XXXXXX")
 SHOTS=${SHOTS:-$TMP/shots}; mkdir -p "$SHOTS"
 cleanup() {
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
@@ -44,8 +44,8 @@ unset WAYLAND_DISPLAY RDWM_SOCK
 export XDG_RUNTIME_DIR=$TMP/run XDG_CONFIG_HOME=$TMP/cfg HOME=$TMP/home XDG_DATA_HOME=$TMP/data XDG_DATA_DIRS=$TMP/nodata XDG_CACHE_HOME=$TMP/cache
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$HOME" "$XDG_DATA_HOME/applications" "$TMP/nodata" "$XDG_CACHE_HOME"
 chmod 700 "$XDG_RUNTIME_DIR"
-export MACSHELL_CONFIG=$TMP/macshell-cfg MACSHELL_BACKEND=x11
-mkdir -p "$MACSHELL_CONFIG"
+export DECEBAL_CONFIG=$TMP/decebal-cfg DECEBAL_BACKEND=x11
+mkdir -p "$DECEBAL_CONFIG"
 export PATH=$BIN:$(dirname "$RDWM"):$PATH
 FAKE=$BIN/examples/fakewin
 
@@ -89,13 +89,13 @@ fake() { # fake CLASS TITLE COLOR -> starts a test window, waits until rdwm mana
     sleep 0.2
 }
 
-ex_start() { # ex_start [args...]: run macexpose in the background, wait until its overlay and labels are up
-    "$BIN/macexpose" "$@" >"$TMP/macexpose.out" 2>&1 &
+ex_start() { # ex_start [args...]: run decexpose in the background, wait until its overlay and labels are up
+    "$BIN/decexpose" "$@" >"$TMP/decexpose.out" 2>&1 &
     EXPID=$!; PIDS+=($EXPID)
     wait_for 5 ex_win || return 1
     sleep 0.5
 }
-ex_win() { for w in $(xdotool search --class macexpose 2>/dev/null); do xdotool getwindowgeometry --shell "$w" >/dev/null 2>&1 && { echo "$w"; return 0; }; done; return 1; }
+ex_win() { for w in $(xdotool search --class decexpose 2>/dev/null); do xdotool getwindowgeometry --shell "$w" >/dev/null 2>&1 && { echo "$w"; return 0; }; done; return 1; }
 ex_running() { [ -n "$EXPID" ] && [ -d "/proc/$EXPID" ] && ! grep -q '^State:.*Z' "/proc/$EXPID/status"; }
 ex_gone() { ! ex_running; }
 focus_is() { [ "$(focused)" = "$1" ]; }
@@ -110,7 +110,7 @@ echo "windows: A=$A B=$B G=$G D=$D focused=$(focused)"
 eq "newest window is focused" "$(focused)" "$D"
 
 # 1. the overview covers the screen and every window's colour shows up in a thumbnail
-ex_start || fail "macexpose did not start"
+ex_start || fail "decexpose did not start"
 W=$(ex_win); read -r X Y WW HH < <(xdotool getwindowgeometry --shell "$W" | awk -F= '/^X=/{x=$2}/^Y=/{y=$2}/^WIDTH=/{w=$2}/^HEIGHT=/{h=$2}END{print x,y,w,h}')
 eq "overlay covers the screen" "${WW}x${HH}+$X+$Y" "${SW}x${SH}+0+0"
 shot overview
@@ -141,7 +141,7 @@ ctl action focuswindow "$B" >/dev/null; sleep 0.2
 xdotool mousemove 1000 700; sleep 0.2          # over the bottom-right (tiled) window
 ctl action focuswindow "$B" >/dev/null; sleep 0.2
 BEFORE=$(focused)
-ex_start || fail "macexpose did not start (escape)"
+ex_start || fail "decexpose did not start (escape)"
 xdotool key Escape
 ok_within "Escape closes the overview" 3 ex_gone
 sleep 0.4
@@ -149,7 +149,7 @@ eq "Escape leaves the focus where it was" "$(focused)" "$BEFORE"
 xdotool mousemove 2 2
 
 # 4. typing filters: only the matching window is left
-ex_start || fail "macexpose did not start (filter)"
+ex_start || fail "decexpose did not start (filter)"
 xdotool type --delay 40 gam
 sleep 0.4
 shot filter
@@ -169,7 +169,7 @@ ok_within "Gamma is focused" 3 focus_is "$G"
 # 5. w closes the selected window (the focused one is selected first); the overview stays up with the others
 ctl action focuswindow "$G" >/dev/null; sleep 0.2
 N0=$(nwin)
-ex_start || fail "macexpose did not start (close)"
+ex_start || fail "decexpose did not start (close)"
 xdotool key w
 ok_within "w closed the selected window" 3 bash -c "[ \"\$($RDWMCTL state | jq '.state.windows | length')\" -lt $N0 ]"
 sleep 0.3
@@ -187,7 +187,7 @@ fake epsilon "Epsilon Window" cc33cc
 E=$(win_of "Epsilon Window")
 ctl action view 1 >/dev/null; sleep 0.3
 eq "back on tag 1" "$(view)" "1"
-ex_start --all || fail "macexpose --all did not start"
+ex_start --all || fail "decexpose --all did not start"
 shot all
 chip_x() { echo $((402 + ($1 - 1) * 54 + 8)); }
 P1=$(pixel "$SHOTS/all.png" "$(chip_x 1)" 37); P2=$(pixel "$SHOTS/all.png" "$(chip_x 2)" 37); P5=$(pixel "$SHOTS/all.png" "$(chip_x 5)" 37)
@@ -203,7 +203,7 @@ ok_within "a chip click closes the overview" 3 ex_gone
 ok_within "the chip switched the view to tag 2" 3 bash -c "[ \"\$($RDWMCTL state | jq '.state.monitors[0].view')\" = 2 ]"
 ctl action view 1 >/dev/null; sleep 0.3
 # End selects the last cell (the window on tag 2); Return commits: view first, then focus
-ex_start --all || fail "macexpose --all did not start (commit)"
+ex_start --all || fail "decexpose --all did not start (commit)"
 xdotool key End; sleep 0.2
 xdotool key Return
 ok_within "Return closes the overview" 3 ex_gone
@@ -213,9 +213,9 @@ ctl action view 1 >/dev/null; sleep 0.3
 
 # 7. running it again closes it (toggle), and the focus stays
 BEFORE=$(focused)
-ex_start || fail "macexpose did not start (toggle)"
+ex_start || fail "decexpose did not start (toggle)"
 FIRST=$EXPID
-"$BIN/macexpose" >/dev/null 2>&1
+"$BIN/decexpose" >/dev/null 2>&1
 ok_within "a second launch closes the first" 3 ex_gone
 EXPID=$FIRST; sleep 0.3
 eq "toggling leaves the focus alone" "$(focused)" "$BEFORE"
@@ -223,7 +223,7 @@ eq "toggling leaves the focus alone" "$(focused)" "$BEFORE"
 # 8. start-up: ten windows -> first frame within ~120 ms
 for i in 1 2 3 4 5 6; do fake extra "Extra $i" 666666; done
 eq "ten windows" "$(nwin)" "10"
-MACEXPOSE_TIMING=1 "$BIN/macexpose" >"$TMP/timing.out" 2>&1 &
+DECEXPOSE_TIMING=1 "$BIN/decexpose" >"$TMP/timing.out" 2>&1 &
 EXPID=$!; PIDS+=($EXPID)
 wait_for 5 ex_win; sleep 0.5
 MS=$(grep -o 'painted [0-9]*' "$TMP/timing.out" | grep -o '[0-9]*')

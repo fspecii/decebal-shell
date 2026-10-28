@@ -148,7 +148,7 @@ impl Picker {
         self.history.remove(idx);
         if let Some(p) = &self.path {
             if let Err(e) = self.history.save(p) {
-                eprintln!("macclip: cannot write {}: {e}", p.display());
+                eprintln!("decclip: cannot write {}: {e}", p.display());
             }
         }
         (self.on_change)();
@@ -252,7 +252,7 @@ impl WindowApp for Picker {
     }
 
     fn app_id(&self) -> &'static str {
-        "macclip"
+        "decclip"
     }
 
     fn overlay(&self) -> bool {
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn delete_removes_the_entry_and_writes_the_file() {
-        let dir = std::env::temp_dir().join(format!("macclip-picker-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decclip-picker-test-{}", std::process::id()));
         let path = dir.join("clipboard-history");
         let mut h = History::default();
         for t in ["a", "b", "c"] {

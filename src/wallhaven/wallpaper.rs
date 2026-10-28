@@ -40,11 +40,11 @@ fn home() -> PathBuf {
     std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// Where downloads go: `$MACHAVEN_DOWNLOAD_DIR` if set, else `~/Pictures/Wallpapers/Wallhaven`.
+/// Where downloads go: `$DECHAVEN_DOWNLOAD_DIR` if set, else `~/Pictures/Wallpapers/Wallhaven`.
 /// Wallhaven id of the wallpaper currently in use, taken from the file name (`wallhaven-<id>.<ext>`) of the
-/// current-background symlink. `MACHAVEN_CURRENT_BG` overrides the path; unknown or non-wallhaven files give `None`.
+/// current-background symlink. `DECHAVEN_CURRENT_BG` overrides the path; unknown or non-wallhaven files give `None`.
 pub fn current_wallpaper_id() -> Option<String> {
-    let path = std::env::var_os("MACHAVEN_CURRENT_BG").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/omarchy/current/background")))?;
+    let path = std::env::var_os("DECHAVEN_CURRENT_BG").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/omarchy/current/background")))?;
     id_from_file_name(path.canonicalize().ok()?.file_name()?.to_str()?)
 }
 
@@ -54,7 +54,7 @@ fn id_from_file_name(name: &str) -> Option<String> {
 }
 
 pub fn download_dir() -> PathBuf {
-    match std::env::var_os("MACHAVEN_DOWNLOAD_DIR") {
+    match std::env::var_os("DECHAVEN_DOWNLOAD_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
         _ => home().join("Pictures/Wallpapers/Wallhaven"),
     }
@@ -92,7 +92,7 @@ pub fn setter_command(setter: Setter, path: &Path) -> (&'static str, Vec<String>
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(120)).user_agent("macshell-machaven/0.1").build()
+    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(120)).user_agent("decebal-dechaven/0.1").build()
 }
 
 /// Downloads `url` to the Wallhaven folder (once) and returns the file path.

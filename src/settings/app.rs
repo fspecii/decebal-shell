@@ -84,7 +84,7 @@ pub struct SettingsApp {
     legacy_rows: Option<Vec<(usize, String)>>,
     search_rect: Rect,
     first_draw: bool,
-    /// `MACSETTINGS_DEBUG_LAYOUT=file`: write the control map after every paint (end-to-end tests).
+    /// `DECSETTINGS_DEBUG_LAYOUT=file`: write the control map after every paint (end-to-end tests).
     dump: Option<std::path::PathBuf>,
     dump_meta: (Option<String>, Vec<String>),
 }
@@ -115,7 +115,7 @@ impl SettingsApp {
         if let Some(p) = start_pane {
             m.sel.pane = pane_index(p);
         }
-        let s = std::env::var("MACSETTINGS_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.5..=4.0).contains(v)).unwrap_or(1.0);
+        let s = std::env::var("DECSETTINGS_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.5..=4.0).contains(v)).unwrap_or(1.0);
         SettingsApp {
             m,
             fonts: Fonts::load(),
@@ -144,7 +144,7 @@ impl SettingsApp {
             legacy_rows: None,
             search_rect: (0.0, 0.0, 0.0, 0.0),
             first_draw: true,
-            dump: std::env::var_os("MACSETTINGS_DEBUG_LAYOUT").map(Into::into),
+            dump: std::env::var_os("DECSETTINGS_DEBUG_LAYOUT").map(Into::into),
             dump_meta: (None, Vec::new()),
         }
     }
@@ -251,7 +251,7 @@ impl SettingsApp {
         let (res_tx, res_rx) = channel::<(String, Option<Pixmap>)>();
         let waker = self.waker.clone();
         std::thread::Builder::new()
-            .name("macsettings-thumbs".into())
+            .name("decsettings-thumbs".into())
             .stack_size(1 << 20)
             .spawn(move || {
                 while let Ok(id) = req_rx.recv() {
@@ -1038,7 +1038,7 @@ impl WindowApp for SettingsApp {
     }
 
     fn app_id(&self) -> &'static str {
-        "MacSettings"
+        "DecSettings"
     }
 
     fn initial_size(&self) -> (u32, u32) {
@@ -1064,7 +1064,7 @@ impl WindowApp for SettingsApp {
     }
 
     fn set_scale(&mut self, scale: f32) {
-        if std::env::var_os("MACSETTINGS_SCALE").is_none() && (0.5..=4.0).contains(&scale) {
+        if std::env::var_os("DECSETTINGS_SCALE").is_none() && (0.5..=4.0).contains(&scale) {
             self.s = scale;
         }
     }
@@ -1372,7 +1372,7 @@ mod tests {
 
     #[test]
     fn thumbnails_decode_and_crop() {
-        let d = std::env::temp_dir().join(format!("macsettings-thumb-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decsettings-thumb-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         let p = d.join("a.png");
         let mut img = image::RgbaImage::new(400, 100);
@@ -1394,7 +1394,7 @@ mod key_tests {
     use super::*;
 
     fn app() -> SettingsApp {
-        let d = std::env::temp_dir().join(format!("macsettings-app-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let d = std::env::temp_dir().join(format!("decsettings-app-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent".into(), socket: d.join("none.sock") };

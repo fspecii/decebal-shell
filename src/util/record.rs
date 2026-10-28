@@ -1,6 +1,6 @@
 //! Screen recording: `ffmpeg -f x11grab` on X11, `wf-recorder` on Wayland, region by `slop` / `slurp`.
 //!
-//! The recorder runs detached; its pid and the output file are kept in `$XDG_RUNTIME_DIR/macutil/record.json`.
+//! The recorder runs detached; its pid and the output file are kept in `$XDG_RUNTIME_DIR/decutil/record.json`.
 //! Stopping sends SIGINT (both tools finish the file on it), waits for the process, and then notifies.
 
 use super::{tilde, toast, Ctx, Sys};

@@ -336,7 +336,7 @@ pub mod testkit {
         pub fn new(tag: &str) -> Tree {
             static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let root = std::env::temp_dir().join(format!("macshell-icons-{tag}-{}-{n}", std::process::id()));
+            let root = std::env::temp_dir().join(format!("decebal-icons-{tag}-{}-{n}", std::process::id()));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(root.join("icons")).unwrap();
             std::fs::create_dir_all(root.join("pixmaps")).unwrap();

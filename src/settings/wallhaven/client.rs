@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_BASE: &str = "https://wallhaven.cc/api/v1";
-pub const USER_AGENT: &str = concat!("macshell-macsettings/", env!("CARGO_PKG_VERSION"), " (wallhaven wallpaper picker)");
+pub const USER_AGENT: &str = concat!("decebal-decsettings/", env!("CARGO_PKG_VERSION"), " (wallhaven wallpaper picker)");
 
 /// Largest wallpaper accepted.
 pub const MAX_IMAGE_BYTES: u64 = 40 * 1024 * 1024;
@@ -473,7 +473,7 @@ pub mod tests {
         assert!(path.starts_with("/search?categories=111&purity=100&sorting=toplist&order=desc&topRange=1M&atleast=1600x900&page=2"), "{path}");
         assert!(!path.contains(key) && !path.contains("apikey"));
         assert_eq!(h.get("x-api-key").map(String::as_str), Some(key));
-        assert!(h.get("user-agent").unwrap().starts_with("macshell-macsettings/"), "{h:?}");
+        assert!(h.get("user-agent").unwrap().starts_with("decebal-decsettings/"), "{h:?}");
         assert!(!USER_AGENT.contains("ureq"));
     }
 

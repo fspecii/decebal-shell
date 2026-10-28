@@ -1,6 +1,6 @@
 //! Finding, selecting and live-reloading themes.
 //!
-//! * [`Source`]: where things live (`macshell.json`'s `"theme"` key, the user themes folder).
+//! * [`Source`]: where things live (`decebal.json`'s `"theme"` key, the user themes folder).
 //! * [`Live`]: the resolved theme plus the file stamps it came from; `poll` re-resolves on change.
 //! * Process-wide: [`current`] (lazy), [`start_watcher`] (one thread, 500 ms of `stat`s, wakes the UI),
 //!   [`generation`] (bumped on every change; `tick` compares it with the last one drawn).
@@ -16,9 +16,9 @@ use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Source {
-    /// `macshell.json` (the file macbar and macdock already read).
+    /// `decebal.json` (the file decbar and decdock already read).
     pub shell_json: PathBuf,
-    /// `~/.config/macshell/themes`.
+    /// `~/.config/decebal/themes`.
     pub themes_dir: PathBuf,
 }
 
@@ -37,13 +37,13 @@ pub struct Entry {
 
 impl Source {
     pub fn discover() -> Source {
-        let themes_dir = std::env::var_os("MACSHELL_THEMES")
+        let themes_dir = std::env::var_os("DECEBAL_THEMES")
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("macshell/themes")))
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/macshell/themes")))
+            .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("decebal/themes")))
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/decebal/themes")))
             .unwrap_or_else(|| PathBuf::from("themes"));
-        Source { shell_json: crate::config::config_dir().join("macshell.json"), themes_dir }
+        Source { shell_json: crate::config::config_dir().join("decebal.json"), themes_dir }
     }
 
     pub fn selection(&self) -> Selection {
@@ -236,9 +236,9 @@ fn system_scheme_files() -> Vec<PathBuf> {
     vec![cfg.join("gtk-3.0/settings.ini"), cfg.join("omarchy/current/theme/light.mode"), cfg.join("omarchy/desktop-styles/appearance")]
 }
 
-/// "auto" mode: `MACSHELL_COLOR_SCHEME`, `desktop-style appearance`, Omarchy's `light.mode` marker, GTK's dark preference; dark otherwise.
+/// "auto" mode: `DECEBAL_COLOR_SCHEME`, `desktop-style appearance`, Omarchy's `light.mode` marker, GTK's dark preference; dark otherwise.
 pub fn system_dark() -> bool {
-    if let Some(v) = std::env::var_os("MACSHELL_COLOR_SCHEME") {
+    if let Some(v) = std::env::var_os("DECEBAL_COLOR_SCHEME") {
         return !v.to_string_lossy().eq_ignore_ascii_case("light");
     }
     let files = system_scheme_files();
@@ -267,7 +267,7 @@ pub struct Live {
     stamps: Vec<Stamp>,
     sys_dark: bool,
     pub theme: Arc<Theme>,
-    /// Why the selected theme could not be used (shown by `macthemectl get` and the settings pane).
+    /// Why the selected theme could not be used (shown by `decthemectl get` and the settings pane).
     pub problem: Option<String>,
 }
 
@@ -351,7 +351,7 @@ pub fn font_scale() -> f32 {
 pub fn reload() -> bool {
     let mut live = LIVE.lock().unwrap();
     let l = live.get_or_insert_with(|| Live::new(Source::discover()));
-    // icon settings (macshell.json `icons`) ride on the same watcher: a change repaints like a theme change
+    // icon settings (decebal.json `icons`) ride on the same watcher: a change repaints like a theme change
     let icons = crate::icons::live::poll_now();
     if l.poll() {
         publish(l.theme.clone());
@@ -395,10 +395,10 @@ mod tests {
     use crate::theme::model::Rgb;
 
     fn sandbox(name: &str) -> (PathBuf, Source) {
-        let d = std::env::temp_dir().join(format!("macshell-theme-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-theme-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("themes")).unwrap();
-        let src = Source { shell_json: d.join("macshell.json"), themes_dir: d.join("themes") };
+        let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
     }
 
@@ -420,7 +420,7 @@ mod tests {
         let sel = Selection { name: "nord".into(), mode: Mode::Light, ..Selection::default() };
         src.write_selection(&sel).unwrap();
         assert_eq!(src.selection(), sel);
-        let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.join("macshell.json")).unwrap()).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.join("decebal.json")).unwrap()).unwrap();
         assert_eq!(doc["workspaces"], "off", "other keys are kept");
     }
 

@@ -1,12 +1,12 @@
-//! The macclip daemon: records the CLIPBOARD selection and keeps it alive after its source exits.
+//! The decclip daemon: records the CLIPBOARD selection and keeps it alive after its source exits.
 //!
 //! No polling: the server tells us (XFixes `SelectionNotify`) whenever the owner of CLIPBOARD changes. We then ask
 //! the new owner for `TARGETS` and the text, apply the privacy rules and store it. PRIMARY is never looked at.
 //! When the owner disappears and the clipboard is empty we take it over and serve the newest text.
 //!
-//! Other macclip processes talk to the daemon through its window: its id is the `_MACCLIP_DAEMON` property of the
-//! root window, commands are `_MACCLIP_CMD` client messages (see [`Cmd`]), a text to put on the clipboard travels in
-//! the `_MACCLIP_TEXT` property of the daemon's window.
+//! Other decclip processes talk to the daemon through its window: its id is the `_DECCLIP_DAEMON` property of the
+//! root window, commands are `_DECCLIP_CMD` client messages (see [`Cmd`]), a text to put on the clipboard travels in
+//! the `_DECCLIP_TEXT` property of the daemon's window.
 
 use super::history::{self, History, MAX_BYTES};
 use super::policy::{self, Verdict};
@@ -21,21 +21,21 @@ use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
-const ROOT_PROP: &str = "_MACCLIP_DAEMON";
-const CMD_MSG: &str = "_MACCLIP_CMD";
-const TEXT_PROP: &str = "_MACCLIP_TEXT";
-const DONE_PROP: &str = "_MACCLIP_DONE";
+const ROOT_PROP: &str = "_DECCLIP_DAEMON";
+const CMD_MSG: &str = "_DECCLIP_CMD";
+const TEXT_PROP: &str = "_DECCLIP_TEXT";
+const DONE_PROP: &str = "_DECCLIP_DONE";
 /// How long an owner gets to answer a conversion before it is given up on.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long a client waits for the daemon to act on a command.
 const ACK_TIMEOUT: Duration = Duration::from_millis(1500);
-/// Name of the daemon's single-instance lock (`$XDG_RUNTIME_DIR/macclip-daemon.lock`).
-pub const LOCK_NAME: &str = "macclip-daemon";
+/// Name of the daemon's single-instance lock (`$XDG_RUNTIME_DIR/decclip-daemon.lock`).
+pub const LOCK_NAME: &str = "decclip-daemon";
 
 /// A command for the daemon (`data32[0]` of the client message).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cmd {
-    /// Own the clipboard with the text in `_MACCLIP_TEXT` (and make it the newest entry).
+    /// Own the clipboard with the text in `_DECCLIP_TEXT` (and make it the newest entry).
     Set = 1,
     /// Forget everything and empty the clipboard.
     Clear = 2,
@@ -172,13 +172,13 @@ impl Daemon {
         let clipboard = intern(&conn, "CLIPBOARD")?;
         let win = conn.generate_id().map_err(err)?;
         conn.create_window(0, win, root, 0, 0, 1, 1, 0, WindowClass::INPUT_ONLY, 0, &CreateWindowAux::new().event_mask(EventMask::PROPERTY_CHANGE)).map_err(err)?;
-        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"macclip").map_err(err)?;
-        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"macclip\0Macclip\0").map_err(err)?;
+        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"decclip").map_err(err)?;
+        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"decclip\0Decclip\0").map_err(err)?;
         let mask = xfixes::SelectionEventMask::SET_SELECTION_OWNER | xfixes::SelectionEventMask::SELECTION_WINDOW_DESTROY | xfixes::SelectionEventMask::SELECTION_CLIENT_CLOSE;
         conn.xfixes_select_selection_input(win, clipboard, mask).map_err(err)?;
         let root_prop = intern(&conn, ROOT_PROP)?;
         conn.change_property32(PropMode::REPLACE, root, root_prop, AtomEnum::WINDOW, &[win]).map_err(err)?;
-        let props = [intern(&conn, "_MACCLIP_DATA0")?, intern(&conn, "_MACCLIP_DATA1")?, intern(&conn, "_MACCLIP_DATA2")?, intern(&conn, "_MACCLIP_DATA3")?];
+        let props = [intern(&conn, "_DECCLIP_DATA0")?, intern(&conn, "_DECCLIP_DATA1")?, intern(&conn, "_DECCLIP_DATA2")?, intern(&conn, "_DECCLIP_DATA3")?];
         let d = Daemon {
             cmd: intern(&conn, CMD_MSG)?,
             text_prop: intern(&conn, TEXT_PROP)?,
@@ -210,7 +210,7 @@ impl Daemon {
     fn save(&self) {
         if let Some(p) = &self.path {
             if let Err(e) = self.history.save(p) {
-                eprintln!("macclip: cannot write {}: {e}", p.display());
+                eprintln!("decclip: cannot write {}: {e}", p.display());
             }
         }
     }
@@ -463,7 +463,7 @@ impl Daemon {
 /// Runs the daemon until the X connection ends. Only one runs per session: a second one returns at once.
 pub fn run() -> Result<(), String> {
     let Some(_lock) = crate::single::acquire_signalling(LOCK_NAME, 0) else {
-        eprintln!("macclip: the daemon is already running");
+        eprintln!("decclip: the daemon is already running");
         return Ok(());
     };
     let mut d = Daemon::new()?;
@@ -529,7 +529,7 @@ impl Link {
     }
 }
 
-/// Puts `text` on the clipboard without a daemon: a detached helper process (`macclip --serve-clipboard`) owns it
+/// Puts `text` on the clipboard without a daemon: a detached helper process (`decclip --serve-clipboard`) owns it
 /// until someone else copies. True once the helper is the owner.
 pub fn serve_detached(text: &str) -> bool {
     use std::io::Write;

@@ -1,7 +1,7 @@
 //! Game mode: stops the compositor (picom) and switches to the performance power profile, then restores both.
 //! The Hyprland-only tweaks of the original (animations, blur, gaps) are the compositor's job here: no compositor, no effects.
 //!
-//! What was running before is kept in `$XDG_RUNTIME_DIR/macutil/game.json`; that file existing is the state.
+//! What was running before is kept in `$XDG_RUNTIME_DIR/decutil/game.json`; that file existing is the state.
 
 use super::{toast, Ctx, Sys};
 use serde_json::{json, Value};

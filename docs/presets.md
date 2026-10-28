@@ -1,43 +1,43 @@
 # Configuration pane and presets
 
-System Settings > System > **Configuration** (`macsettings config`) has two halves: a text editor for the raw
+System Settings > System > **Configuration** (`decsettings config`) has two halves: a text editor for the raw
 configuration files, and **presets**: named snapshots of the whole setup that you can apply, undo, export and share.
 Code: `src/settings/configpane.rs`, `src/settings/editor.rs` (the widget), `src/preset/` (everything that touches files).
-Command line: `macthemectl profile --help`.
+Command line: `decthemectl profile --help`.
 
 ## Edit files
 
-Tabs: **Shell** (`macshell.json`), **Dock** (`dock-settings.json`), **Pinned apps** (`dock-pinned-macos.json`),
-**Window manager** (rdwm's `config.toml`, the same file macsettings edits) and **All settings**, a read-only listing of every
+Tabs: **Shell** (`decebal.json`), **Dock** (`dock-settings.json`), **Pinned apps** (`dock-pinned-macos.json`),
+**Window manager** (rdwm's `config.toml`, the same file decsettings edits) and **All settings**, a read-only listing of every
 effective setting with the defaults filled in and marked `# default` (rdwm's key table from `rdwmctl schema`, plus the
-macshell defaults).
+decebal defaults).
 
 The editor is a small multi-line widget of its own (the toolkit only had single-line fields): line numbers, JSON/TOML colouring,
 cursor, mouse and keyboard selection (double click = word, triple click = line, drag), undo/redo that groups typing,
 Ctrl+C/X/V with the system clipboard (`wl-paste`/`xclip`, an internal buffer otherwise), Tab/Shift+Tab indent, auto-indent.
 Esc leaves the editor; Ctrl+S saves.
 
-* **Validation** runs on every key (syntax + the typed checks macbar/macdock use, hot-corner actions, theme mode) and again
+* **Validation** runs on every key (syntax + the typed checks decbar/decdock use, hot-corner actions, theme mode) and again
   on Save (for the rdwm file also `rdwmctl check-config`, the same code as `rdwm --check-config`). Problems show with line
   and column in the status strip, as a note under the editor, and as a red line in the text. **An invalid file is never written.**
 * **Saving** is atomic (temp file, fsync, rename; symlinked dotfiles are written through, the mode is kept) and keeps the old
   version as `NAME.bak.YYYYmmdd-HHMMSS` next to the file (the newest 20 are kept). **Revert** puts the newest backup back; the
   version being replaced becomes a backup too, so Revert twice goes forward again.
-* **Live**: the rdwm file is reloaded over IPC right after a save; macbar, macdock and the theme follow their JSON files
+* **Live**: the rdwm file is reloaded over IPC right after a save; decbar, decdock and the theme follow their JSON files
   within half a second, as for every other pane. A file changed on disk while you have unsaved edits shows a warning
   (Reload discards your edits; saving overwrites). Unmodified buffers follow the disk silently.
 
 ## Presets
 
-A preset is a folder `~/.config/macshell/presets/<id>/` (`$MACSHELL_PRESETS` overrides) with `manifest.toml` and the files
+A preset is a folder `~/.config/decebal/presets/<id>/` (`$DECEBAL_PRESETS` overrides) with `manifest.toml` and the files
 that carry its parts. **Save as preset** lets you choose the parts:
 
 | part | what | file in the preset |
 |---|---|---|
-| Shell and theme | `macshell.json` except the keys below: theme, mode, accent, `bar` (incl. `bar.position`), `dock`, `system`, workspaces, clock; a custom theme file from `~/.config/macshell/themes` travels along | `macshell.json`, `themes/<id>.toml` |
-| Fonts | `theme.font`, `theme.fontScale` | `macshell.json` |
-| Icons | `icons` (the icon theme settings; ticked by default when present) | `macshell.json` |
-| Hot corners | `hot_corners` | `macshell.json` |
+| Shell and theme | `decebal.json` except the keys below: theme, mode, accent, `bar` (incl. `bar.position`), `dock`, `system`, workspaces, clock; a custom theme file from `~/.config/decebal/themes` travels along | `decebal.json`, `themes/<id>.toml` |
+| Fonts | `theme.font`, `theme.fontScale` | `decebal.json` |
+| Icons | `icons` (the icon theme settings; ticked by default when present) | `decebal.json` |
+| Hot corners | `hot_corners` | `decebal.json` |
 | Dock | `dock-settings.json` | `dock-settings.json` |
 | Pinned apps | `dock-pinned-macos.json` (machine specific, off by default) | `dock-pinned-macos.json` |
 | Window manager | rdwm: everything except the tables below | `rdwm.toml` |
@@ -47,8 +47,8 @@ that carry its parts. **Save as preset** lets you choose the parts:
 
 rdwm's `[[output]]` (monitor layout) is machine specific and is never saved or replaced. Keys that look like credentials
 (`apiKey`, `token`, `password`, `secret`, ...) are removed from everything a preset captures, at any depth, so a Wallhaven key
-or similar never ends up in a file you share. The system-wide theming *state* (`~/.local/state/macshell/system`) is not part
-of a preset either; only the `system` settings key in `macshell.json` is.
+or similar never ends up in a file you share. The system-wide theming *state* (`~/.local/state/decebal/system`) is not part
+of a preset either; only the `system` settings key in `decebal.json` is.
 
 **Apply** always shows a preview first: every file with the settings that would change (`+` added, `~` changed, `-` removed,
 capped), notes (e.g. a wallpaper that does not exist here) and every command the preset would run. Then: everything is
@@ -61,19 +61,19 @@ built-in presets **merge**: they change only the keys they mention (`null` remov
 touch your workspaces, clock format, pinned apps, shortcuts or autostart.
 
 Built-in presets (read only, generated from the built-in themes and `theme::style`): **macOS default**, **Caelestia**,
-**Windows-like**, **Minimal tiling** (no dock or macshell bar, rdwm's own slim bar, thin borders, no titlebars, small gaps).
+**Windows-like**, **Minimal tiling** (no dock or decebal bar, rdwm's own slim bar, thin borders, no titlebars, small gaps).
 Duplicate one to edit it. Per preset: Details, Apply, Duplicate, Rename, Delete (not built-ins), Export, Copy to clipboard.
 
 ## Sharing: export and import
 
-**Export** writes one `NAME.macshell-preset`: a gzip-compressed tar with `manifest.toml` first, then the files above.
-**Copy** puts the same bundle on the clipboard as text (`MACSHELL-PRESET-1:` + base64; not for presets with a wallpaper).
+**Export** writes one `NAME.decebal-preset`: a gzip-compressed tar with `manifest.toml` first, then the files above.
+**Copy** puts the same bundle on the clipboard as text (`DECEBAL-PRESET-1:` + base64; not for presets with a wallpaper).
 **Import** reads a file (path field, or Browse with `zenity` when installed) or the clipboard text.
 
 Importing is deliberately strict, because bundles come from other people. Nothing is extracted to disk by the reader; the
 entries are checked in memory first:
 
-* only these names are accepted: `manifest.toml`, `macshell.json`, `dock-settings.json`, `dock-pinned-macos.json`,
+* only these names are accepted: `manifest.toml`, `decebal.json`, `dock-settings.json`, `dock-pinned-macos.json`,
   `rdwm.toml`, `themes/<id>.toml`, `wallpaper/<name>.{png,jpg,jpeg,webp}`; anything else (`run.sh`, a folder, ...) is refused;
 * absolute paths, `..`, empty/`.` components, backslashes, NULs and control characters are refused (path traversal);
 * symbolic links, hard links, devices and fifos are refused; pax headers are skipped, never obeyed; GNU long names refused;
@@ -94,13 +94,13 @@ a preset with commands shows the list again and the button reads "Apply, I trust
 ## Command line
 
 ```
-macthemectl profile list [--json]
-macthemectl profile show NAME
-macthemectl profile save NAME [--parts shell,dock,...|all] [--description TEXT] [--embed-wallpaper] [--overwrite]
-macthemectl profile apply NAME [--dry-run] [--allow-commands]
-macthemectl profile undo NAME
-macthemectl profile duplicate NAME [NEW] | rename NAME NEW | delete NAME
-macthemectl profile export NAME FILE | import FILE [--strip-commands | --allow-commands] [--apply]
+decthemectl profile list [--json]
+decthemectl profile show NAME
+decthemectl profile save NAME [--parts shell,dock,...|all] [--description TEXT] [--embed-wallpaper] [--overwrite]
+decthemectl profile apply NAME [--dry-run] [--allow-commands]
+decthemectl profile undo NAME
+decthemectl profile duplicate NAME [NEW] | rename NAME NEW | delete NAME
+decthemectl profile export NAME FILE | import FILE [--strip-commands | --allow-commands] [--apply]
 ```
 
 `import` and `apply` refuse (exit 1) a preset that would run commands unless you pass `--allow-commands` (keep) or, for
@@ -130,4 +130,4 @@ oversized, bomb, duplicates, bad checksum, pax), manifest validation, part split
 finding and stripping, atomic save + timestamped backup + revert, plan/apply/undo/rollback, the editor model (insert,
 delete, undo, selection, line numbers, tokens) and the validation error mapping. `tests/e2e/configpane.sh` (Xvfb `:91` + rdwm, private
 HOME and XDG dirs; `SHOTS=dir` keeps screenshots) types into the editor, saves, saves a preset, exports it, imports it in a
-second private HOME with its own macsettings and runs hostile bundles through `macthemectl profile import`.
+second private HOME with its own decsettings and runs hostile bundles through `decthemectl profile import`.

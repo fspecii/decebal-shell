@@ -186,7 +186,7 @@ impl Toggle {
     }
 }
 
-/// `macshell.json`: shell-wide switches.
+/// `decebal.json`: shell-wide switches.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ShellSettings {
@@ -194,7 +194,7 @@ pub struct ShellSettings {
     pub workspaces: Toggle,
     pub bar: BarSettings,
     pub dock: DockGateSettings,
-    /// Menu bar clock: 12-hour format (macsettings: Date & Time).
+    /// Menu bar clock: 12-hour format (decsettings: Date & Time).
     pub clock_hour12: bool,
     /// `weekday-day-month` (default), `day-month`, `weekday-day`, `none`.
     pub clock_date: String,
@@ -206,7 +206,7 @@ impl Default for ShellSettings {
     }
 }
 
-/// Where the Caelestia pill bar sits (`macshell.json` -> `"bar": { "position": "left" }`). Only the Caelestia theme
+/// Where the Caelestia pill bar sits (`decebal.json` -> `"bar": { "position": "left" }`). Only the Caelestia theme
 /// (`bar_style = "vertical"`) draws that bar; every other theme keeps the menu bar across the top and ignores it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BarPosition {
@@ -264,14 +264,14 @@ impl BarPosition {
 }
 
 impl<'de> Deserialize<'de> for BarPosition {
-    /// Lenient: a misspelt value (or a number) must not make the whole `macshell.json` unreadable, it means the default.
+    /// Lenient: a misspelt value (or a number) must not make the whole `decebal.json` unreadable, it means the default.
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let v = serde_json::Value::deserialize(d)?;
         Ok(v.as_str().and_then(BarPosition::parse).unwrap_or_default())
     }
 }
 
-/// `macshell.json` -> `"bar": { "enabled": true | false | "auto", "position": "left" | ... }`: whether macbar shows at all,
+/// `decebal.json` -> `"bar": { "enabled": true | false | "auto", "position": "left" | ... }`: whether decbar shows at all,
 /// and where the Caelestia pill bar sits. `enabled = "auto"` hides it while the dock is in the Windows style.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
@@ -286,7 +286,7 @@ impl Default for BarSettings {
     }
 }
 
-/// `macshell.json` -> `"dock": { "enabled": true | false | "auto" }`: whether macdock shows at all. `"auto"` hides it while the
+/// `decebal.json` -> `"dock": { "enabled": true | false | "auto" }`: whether decdock shows at all. `"auto"` hides it while the
 /// theme's bar is the vertical one (`bar_style = "vertical"`: Caelestia has no dock). Default `true`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
@@ -345,7 +345,7 @@ impl Pinned {
 }
 
 pub fn config_dir() -> PathBuf {
-    std::env::var_os("MACSHELL_CONFIG")
+    std::env::var_os("DECEBAL_CONFIG")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(|p| PathBuf::from(p).join("omarchy")))
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/omarchy")))
@@ -361,7 +361,7 @@ pub fn dock_settings() -> DockSettings {
 }
 
 pub fn shell_settings() -> ShellSettings {
-    load("macshell.json")
+    load("decebal.json")
 }
 
 pub fn pinned() -> Pinned {
@@ -504,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn bar_position_round_trips_through_macshell_json() {
+    fn bar_position_round_trips_through_decebal_json() {
         for p in BarPosition::ALL {
             let s: ShellSettings = serde_json::from_str(&format!(r#"{{"bar": {{"enabled": true, "position": "{}"}}, "dock": {{"enabled": "auto"}}}}"#, p.as_str())).unwrap();
             assert_eq!(s.bar.position, p);
@@ -524,7 +524,7 @@ mod tests {
     }
 
     fn tmp_dir(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macshell-cfg-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-cfg-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

@@ -68,7 +68,7 @@ pub struct History {
 
 fn state_file() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
-    Some(base.join("macshell/spotlight-history"))
+    Some(base.join("decebal/spotlight-history"))
 }
 
 pub fn now() -> u64 {

@@ -11,14 +11,14 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-pub const BACKUP_SUFFIX: &str = "bak-macsettings";
+pub const BACKUP_SUFFIX: &str = "bak-decsettings";
 
 // ---------------------------------------------------------------- paths
 
 #[derive(Debug, Clone)]
 pub struct Paths {
     pub rdwm_config: PathBuf,
-    /// `~/.config/omarchy` (or `$MACSHELL_CONFIG`): dock-settings.json etc.
+    /// `~/.config/omarchy` (or `$DECEBAL_CONFIG`): dock-settings.json etc.
     pub shell_dir: PathBuf,
     pub rdwmctl: PathBuf,
     /// rdwm's IPC socket (`RDWM_SOCK`, else `$XDG_RUNTIME_DIR/rdwm.sock`).
@@ -28,7 +28,7 @@ pub struct Paths {
 impl Paths {
     pub fn discover() -> Paths {
         let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-        let rdwm_config = std::env::var_os("MACSETTINGS_CONFIG").or_else(|| std::env::var_os("RDWM_CONFIG")).map(PathBuf::from).unwrap_or_else(|| {
+        let rdwm_config = std::env::var_os("DECSETTINGS_CONFIG").or_else(|| std::env::var_os("RDWM_CONFIG")).map(PathBuf::from).unwrap_or_else(|| {
             std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("rdwm/config.toml")).unwrap_or_else(|| home.join(".config/rdwm/config.toml"))
         });
         let socket = match std::env::var_os("RDWM_SOCK").filter(|s| !s.is_empty()) {
@@ -45,7 +45,7 @@ impl Paths {
         self.shell_dir.join("dock-pinned-macos.json")
     }
     pub fn shell_json(&self) -> PathBuf {
-        self.shell_dir.join("macshell.json")
+        self.shell_dir.join("decebal.json")
     }
     pub fn backgrounds(&self) -> PathBuf {
         self.shell_dir.join("backgrounds")
@@ -66,7 +66,7 @@ pub fn stamp(path: &Path) -> Stamp {
 
 /// Writes `text` next to `path` and renames it over the target (following a symlinked target so
 /// dotfile managers keep working). Keeps the permissions of an existing file, makes a one-time
-/// `<name>.bak-macsettings` of the original, and fsyncs before the rename.
+/// `<name>.bak-decsettings` of the original, and fsyncs before the rename.
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = target.parent().ok_or("config path has no directory")?;
@@ -78,7 +78,7 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
             std::fs::copy(&target, &bak).map_err(|e| format!("backup {}: {e}", bak.display()))?;
         }
     }
-    let tmp = dir.join(format!(".{name}.macsettings-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.decsettings-{}.tmp", std::process::id()));
     let res = (|| -> std::io::Result<()> {
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(text.as_bytes())?;
@@ -184,7 +184,7 @@ pub fn validate(rdwmctl: &Path, target: &Path, text: &str) -> Result<(), String>
     Cfg::parse(text).map_err(|e| format!("invalid TOML: {e}"))?;
     let dir = std::fs::canonicalize(target).ok().and_then(|p| p.parent().map(Path::to_path_buf)).or_else(|| target.parent().map(Path::to_path_buf)).unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&dir);
-    let tmp = dir.join(format!(".macsettings-check-{}.toml", std::process::id()));
+    let tmp = dir.join(format!(".decsettings-check-{}.toml", std::process::id()));
     std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
     let out = Command::new(rdwmctl).arg("check-config").arg(&tmp).output();
     let _ = std::fs::remove_file(&tmp);
@@ -200,7 +200,7 @@ pub fn validate(rdwmctl: &Path, target: &Path, text: &str) -> Result<(), String>
     }
 }
 
-// ---------------------------------------------------------------- JSON files (macshell)
+// ---------------------------------------------------------------- JSON files (decebal)
 
 pub fn json_load(path: &Path) -> Value {
     std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).filter(Value::is_object).unwrap_or_else(|| Value::Object(Default::default()))
@@ -284,7 +284,7 @@ pub fn poll_runtime(sock: &Path) -> Runtime {
 /// Costs two `stat` calls per tick while nothing happens.
 pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc<dyn Fn() + Send + Sync>) {
     std::thread::Builder::new()
-        .name("macsettings-watch".into())
+        .name("decsettings-watch".into())
         .stack_size(256 * 1024)
         .spawn(move || {
             let mut stamps: Vec<Stamp> = files.iter().map(|f| stamp(f)).collect();
@@ -335,7 +335,7 @@ mod tests {
     use super::*;
 
     fn tmpdir(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("macsettings-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decsettings-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -350,7 +350,7 @@ mod tests {
         write_atomic(&p, "a = 1\n").unwrap();
         write_atomic(&p, "a = 2\n").unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "a = 2\n");
-        assert_eq!(std::fs::read_to_string(d.join("config.toml.bak-macsettings")).unwrap(), "orig = 1\n", "backup is the first original only");
+        assert_eq!(std::fs::read_to_string(d.join("config.toml.bak-decsettings")).unwrap(), "orig = 1\n", "backup is the first original only");
         assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o640);
         let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         assert!(!left.iter().any(|n| n.ends_with(".tmp")), "{left:?}");

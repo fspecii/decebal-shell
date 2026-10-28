@@ -104,7 +104,7 @@ pub fn items(sel: &Selection, now: &Theme) -> Vec<Item> {
             note.push_str("Your own accent colour (below) wins over the wallpaper's. ");
         }
         if d.source == Origin::Wallpaper {
-            note.push_str("The colours follow when the wallpaper is changed here, in machaven or with `macthemectl dynamic refresh`; run `macthemectl watch` from the session to follow changes made by any tool.");
+            note.push_str("The colours follow when the wallpaper is changed here, in dechaven or with `decthemectl dynamic refresh`; run `decthemectl watch` from the session to follow changes made by any tool.");
         }
         if !note.is_empty() {
             out.push(Item::Note { text: note.trim().to_string(), warn: !d.has_colour() });
@@ -191,7 +191,7 @@ mod tests {
     }
 
     fn png(name: &str, rgb: [u8; 3]) -> std::path::PathBuf {
-        let p = std::env::temp_dir().join(format!("macshell-wc-{name}-{}.png", std::process::id()));
+        let p = std::env::temp_dir().join(format!("decebal-wc-{name}-{}.png", std::process::id()));
         image::RgbImage::from_pixel(32, 20, image::Rgb(rgb)).save(&p).unwrap();
         p
     }

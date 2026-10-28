@@ -12,7 +12,7 @@
 //! * [`Roles`]: the Material colour roles of one scheme (primary, surface containers, outline ...).
 //! * [`generate`]: seed + [`Variant`] + dark/light -> [`Roles`].
 //! * [`CAELESTIA_DARK`]: caelestia-shell's shipped default scheme (`services/Colours.qml`).
-//! * [`Roles::tokens`]: maps the roles onto macshell's theme colour tokens.
+//! * [`Roles::tokens`]: maps the roles onto decebal's theme colour tokens.
 //! * [`seed_from_image`]: dominant colour of a wallpaper (Material's "source colour").
 
 use super::model::{Rgb, Tokens, V};
@@ -156,7 +156,7 @@ impl Tonal {
     }
 }
 
-/// The colour schemes ("variants") macshell can generate: Material You's tonal-spot, vibrant, expressive,
+/// The colour schemes ("variants") decebal can generate: Material You's tonal-spot, vibrant, expressive,
 /// monochrome, neutral and fidelity ("content") schemes, plus a pywal-like `Palette` that keeps the wallpaper's
 /// own distinct colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -364,7 +364,7 @@ impl Roles {
         ]
     }
 
-    /// The roles as macshell theme colour tokens. This is the one place the mapping lives:
+    /// The roles as decebal theme colour tokens. This is the one place the mapping lives:
     /// background = surface, cards = surface container, floating things (menus, Spotlight, the
     /// bar pill and the dock share the container tone) one step up, text = on-surface, accent = primary.
     pub fn tokens(&self) -> Tokens {
@@ -780,7 +780,7 @@ mod tests {
 
     #[test]
     fn seed_from_an_image_file() {
-        let dir = std::env::temp_dir().join(format!("macshell-seed-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("decebal-seed-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("w.png");
         image::RgbImage::from_fn(200, 120, |x, _| if x < 150 { image::Rgb([220, 120, 20]) } else { image::Rgb([20, 20, 30]) }).save(&p).unwrap();

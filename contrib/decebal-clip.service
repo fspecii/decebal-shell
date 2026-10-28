@@ -1,0 +1,14 @@
+[Unit]
+Description=decebal clipboard history daemon (X11)
+PartOf=graphical-session.target
+After=graphical-session.target
+# X11 sessions only: decclip needs the XFixes selection events of a real X server.
+ConditionEnvironment=!WAYLAND_DISPLAY
+
+[Service]
+ExecStart=/usr/bin/decclip daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

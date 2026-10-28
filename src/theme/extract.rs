@@ -12,7 +12,7 @@
 //! * **grey** says the picture has no colour worth matching (a grey, black or white wallpaper): callers then keep
 //!   the theme's own colours instead of inventing an accent.
 //!
-//! Results are cached in `$XDG_CACHE_HOME/macshell/wallpaper-colors.json` keyed by path, modification time and size,
+//! Results are cached in `$XDG_CACHE_HOME/decebal/wallpaper-colors.json` keyed by path, modification time and size,
 //! so changing back to a known wallpaper (or any palette setting) never decodes an image again.
 
 use super::material::{self, hue_turn, oklch, tone_of, CHROMA_SCALE, DEFAULT_SEED};
@@ -205,7 +205,7 @@ pub fn default_cache() -> Option<PathBuf> {
     }
     let base =
         std::env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").filter(|s| !s.is_empty()).map(|h| PathBuf::from(h).join(".cache")))?;
-    Some(base.join("macshell/wallpaper-colors.json"))
+    Some(base.join("decebal/wallpaper-colors.json"))
 }
 
 /// Modification time (ns since the epoch) and size: when either changes the cached colours are stale.
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn the_cache_is_keyed_by_mtime_and_size() {
-        let d = std::env::temp_dir().join(format!("macshell-extract-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-extract-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let (img, cache) = (d.join("w.png"), d.join("cache/colors.json"));
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn the_cache_stays_small() {
-        let d = std::env::temp_dir().join(format!("macshell-extract-small-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-extract-small-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let cache = d.join("c.json");
@@ -399,7 +399,7 @@ mod tests {
                 2160,
                 |x, y| if (1000..1600).contains(&x) && (600..1100).contains(&y) { image::Rgb([240, 160, 30]) } else { image::Rgb([(x / 20) as u8 / 2, 40, (y / 12) as u8]) },
             );
-        let d = std::env::temp_dir().join(format!("macshell-extract-4k-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("decebal-extract-4k-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         let p = d.join("4k.png");
         img.save(&p).unwrap();

@@ -199,7 +199,7 @@ pub fn read_targz(bytes: &[u8], lim: &Limits) -> Result<Vec<Entry>, String> {
             b'1' => return Err(format!("archive entry rejected: `{name}` is a hard link")),
             b'2' => return Err(format!("archive entry rejected: `{name}` is a symlink (links are not allowed in themes)")),
             b'3' | b'4' | b'6' | b'7' => return Err(format!("archive entry rejected: `{name}` is a device, fifo or special file")),
-            b'x' | b'g' | b'L' | b'K' => return Err("archive uses tar extensions (pax / GNU long names); repack with `macthemectl theme pack`".into()),
+            b'x' | b'g' | b'L' | b'K' => return Err("archive uses tar extensions (pax / GNU long names); repack with `decthemectl theme pack`".into()),
             other => return Err(format!("archive entry rejected: `{name}` has unknown type {:?}", other as char)),
         }
     }

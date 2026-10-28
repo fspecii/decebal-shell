@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=decebal wallpaper colours
+Comment=Follows wallpaper changes for System Settings > Theme > Match wallpaper (idles when it is off)
+Exec=decthemectl watch
+NotShowIn=rdwm;GNOME;KDE;
+X-GNOME-Autostart-enabled=true
