@@ -124,7 +124,7 @@ pub const FIELDS: &[Field] = &[
     Field { path: "integrity.signature", ty: Ty::Text(600), desc: "detached signature of content_hash, reserved for the theme market", status: Pending("no verifier until the market defines its keys") },
     Field { path: "integrity.signer", ty: Ty::Text(120), desc: "key id of the signer, reserved for the theme market", status: Pending("no verifier until the market defines its keys") },
     Field { path: "metrics.gap", ty: Ty::Num(0.0, 40.0), desc: "spacing unit between shell elements in px", status: Pending("no shell surface reads it yet") },
-    Field { path: "metrics.blur", ty: Ty::Num(0.0, 1.0), desc: "background blur strength for translucent surfaces (needs a compositor)", status: Pending("blur is not implemented in the shell") },
+    Field { path: "metrics.blur", ty: Ty::Num(0.0, 1.0), desc: "background blur hint for translucent X11 surfaces (needs configured picom)", status: Wired },
     Field { path: "font.ui", ty: Ty::Chain, desc: "default text: a family or a list of families", status: Wired },
     Field { path: "font.title", ty: Ty::Chain, desc: "window and popup titles (default: the preset's)", status: Wired },
     Field { path: "font.mono", ty: Ty::Chain, desc: "terminal-like text, numbers that line up", status: Wired },
@@ -249,7 +249,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("{variant}.{k}"), ty_text(&Ty::Color), desc, Wired);
         }
     }
-    for (k, kind, desc) in TOKENS.iter().filter(|t| matches!(t.1, Kind::Num(..)) && !matches!(t.0, "font_scale" | "titlebar_height" | "bar_height" | "dock_icon_size")) {
+    for (k, kind, desc) in TOKENS.iter().filter(|t| matches!(t.1, Kind::Num(..)) && !matches!(t.0, "font_scale" | "titlebar_height" | "bar_height" | "dock_icon_size" | "blur")) {
         if let Kind::Num(a, b) = kind {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }

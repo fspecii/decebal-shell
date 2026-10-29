@@ -315,7 +315,7 @@ impl SettingsApp {
         fill_px(pm, 0.0, 0.0, sbw, h, pal::sidebar());
         fill_px(pm, sbw - 1.0, 0.0, 1.0, h, pal::sep());
         let rows = self.sidebar_rows();
-        let top = u(58.0);
+        let top = u(100.0);
         // layout pass: y of every row relative to the list top
         let heights: Vec<f32> = rows
             .iter()
@@ -348,6 +348,23 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         self.sidebar_hits.clear();
         self.sidebar_labels.clear();
+        // Navigation groups share one rounded surface, mirroring the reference's inset lists.
+        let mut gy = top - self.sb_scroll;
+        let mut group: Option<(f32, f32)> = None;
+        for (r, hh) in rows.iter().zip(&heights) {
+            if matches!(r, SbRow::Header(_)) {
+                if let Some((start, height)) = group.take() {
+                    fill_rounded(pm, u(8.0), start, sbw - u(16.0), height, u(16.0), pal::card());
+                }
+            } else {
+                let g = group.get_or_insert((gy, 0.0));
+                g.1 += hh;
+            }
+            gy += hh;
+        }
+        if let Some((start, height)) = group {
+            fill_rounded(pm, u(8.0), start, sbw - u(16.0), height, u(16.0), pal::card());
+        }
         let mut y = top - self.sb_scroll;
         for (r, hh) in rows.iter().zip(&heights) {
             let ry = y;
@@ -361,7 +378,7 @@ impl SettingsApp {
                 }
                 SbRow::Pane(i) => {
                     let def = &PANES[*i];
-                    let rect = (u(8.0), ry, sbw - u(16.0), hh - u(2.0));
+                    let rect = (u(12.0), ry + u(2.0), sbw - u(24.0), hh - u(4.0));
                     let selected = self.m.sel.pane == *i;
                     let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
                     if ry + hh > top && ry < h {
@@ -378,7 +395,7 @@ impl SettingsApp {
                     self.sidebar_labels.push(None);
                 }
                 SbRow::Hit(i, label) => {
-                    let rect = (u(8.0), ry, sbw - u(16.0), hh - u(2.0));
+                    let rect = (u(12.0), ry + u(2.0), sbw - u(24.0), hh - u(4.0));
                     if ry + hh > top && ry < h {
                         if self.it.hover.as_deref() == Some(&format!("pane:{i}")) {
                             fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
@@ -396,7 +413,8 @@ impl SettingsApp {
         }
         // search field on top of the scrolled list
         fill_px(pm, 0.0, 0.0, sbw - 1.0, top, pal::sidebar());
-        let sr = (u(12.0), u(14.0), sbw - u(24.0), u(30.0));
+        p.text(pm, "Settings", u(20.0), u(26.0), u(22.0), Weight::Bold, pal::text());
+        let sr = (u(12.0), u(50.0), sbw - u(24.0), u(32.0));
         self.search_rect = sr;
         let focused = self.zone == Zone::Search;
         fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(10.0), if focused { pal::window() } else { pal::field() });
@@ -527,7 +545,7 @@ impl SettingsApp {
         let (preview, warns) = self.dump_meta.clone();
         let doc = json!({
             "pane": PANES[self.m.sel.pane].id, "tab": self.m.sel.tab.id(), "section": self.m.sel.section.id(), "scroll": self.scroll, "ctls": ctls,
-            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 58.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
+            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 100.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
             "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
@@ -606,7 +624,7 @@ impl SettingsApp {
     // ------------------------------------------------------------ helpers for events
 
     fn sidebar_hit(&self, x: f32, y: f32) -> Option<usize> {
-        if y < 58.0 * self.s {
+        if y < 100.0 * self.s {
             return None;
         }
         self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).map(|(_, i)| *i)
@@ -1326,7 +1344,7 @@ impl WindowApp for SettingsApp {
             return Response::REDRAW;
         }
         if x < self.sb() {
-            let max = (self.sb_total - (self.size.1 as f32 - 58.0 * self.s)).max(0.0);
+            let max = (self.sb_total - (self.size.1 as f32 - 100.0 * self.s)).max(0.0);
             let old = self.sb_scroll;
             self.sb_scroll = (self.sb_scroll + dy * self.s * 0.6).clamp(0.0, max);
             return if (old - self.sb_scroll).abs() > 0.1 { Response::REDRAW } else { Response::NONE };

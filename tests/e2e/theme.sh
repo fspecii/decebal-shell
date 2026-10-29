@@ -161,13 +161,13 @@ open_tab customise; open_section colours
 click_ctl l:accent:#30d158; settle
 eq "accent swatch applied (rdwm focused border)" "$(rdcfg .config.colors.focused)" "#30d158"
 shot 21-settings-dracula-green
-# a palette is colours only: it recolours the theme and stays when the theme changes
+# A palette recolours the current design; applying a theme restores its own colours.
 click_ctl l:palette:catppuccin; settle
 eq "palette stored" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
 eqpx "bar shows the palette's colour" 900 3 "#181825"
 open_tab theme
 click_ctl l:tcard:apply:windows11; sleep 0.5
-eq "the palette survives the theme switch" "$(jq -r .theme.palette "$DECEBAL_CONFIG/decebal.json")" catppuccin
+eq "theme apply restores its own palette" "$(jq -r '.theme.palette // "none"' "$DECEBAL_CONFIG/decebal.json")" none
 open_section colours
 click_ctl l:palette:none; settle
 open_tab theme

@@ -213,6 +213,11 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
 
     let mut sel = base.clone();
     sel.name = id.clone();
+    // Applying a complete design restores its own colour scheme. Palettes remain
+    // independently selectable afterwards.
+    sel.palette = None;
+    sel.accent = None;
+    sel.dynamic = None;
     if let Some(m) = implied {
         sel.mode = m;
     }
@@ -628,7 +633,7 @@ pub mod tests {
     }
 
     #[test]
-    fn switching_desktop_designs_keeps_the_palette_and_updates_bar_dock_and_windows() {
+    fn applying_a_theme_restores_its_colours_and_updates_bar_dock_and_windows() {
         let (dir, src, paths) = sandbox("palette-design-switch");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         let mut base = crate::theme::palette::select(&Selection::default(), Some("nord"));
@@ -636,9 +641,9 @@ pub mod tests {
             apply(&src, &paths, id, &base).unwrap();
             base = src.selection();
             assert_eq!(base.name, id);
-            assert_eq!(base.palette.as_deref(), Some("nord"));
+            assert_eq!(base.palette, None);
             let theme = src.build(&base, true).0;
-            assert_eq!(theme.background.hex(), "#2e3440");
+            assert_eq!(theme.background, crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default()).background);
             assert_eq!(theme.titlebar_style, crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default()).titlebar_style);
             let shell = io::json_load(&paths.shell_json());
             let dock = io::json_load(&paths.dock_settings());
@@ -652,13 +657,12 @@ pub mod tests {
     }
 
     #[test]
-    fn a_themes_wallpaper_matching_cannot_override_an_explicit_palette() {
+    fn applying_a_dynamic_theme_replaces_the_previous_palette() {
         let (dir, src, paths) = sandbox("palette-dynamic-priority");
         let base = crate::theme::palette::select(&Selection::default(), Some("nord"));
         let p = plan(&src, &paths, "material-you-dynamic", &Selection { sync_rdwm: false, ..base }).unwrap();
-        assert_eq!(p.selection.palette.as_deref(), Some("nord"));
-        assert!(!p.selection.dynamic.as_ref().is_some_and(|d| d.enabled));
-        assert_eq!(src.build(&p.selection, true).0.background.hex(), "#2e3440");
+        assert_eq!(p.selection.palette, None);
+        assert!(p.selection.dynamic.as_ref().is_some_and(|d| d.enabled));
         let _ = std::fs::remove_dir_all(dir);
     }
 

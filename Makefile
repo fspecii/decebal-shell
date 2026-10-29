@@ -111,3 +111,6 @@ e2e-widgets-settings:
 
 e2e-theme-studio:
 	tests/e2e/theme-studio.sh
+
+e2e-glass:
+	tests/e2e/glass.sh

@@ -996,6 +996,10 @@ pub(super) fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile
     let u = |v: f32| v * s;
     let c = |i: usize, a: f32| color(t.colors[i].0, t.colors[i].1, t.colors[i].2, a);
     let (x, y, w, h) = r;
+    if matches!(t.id.as_str(), "nextkde" | "macos") {
+        draw_glass_design_preview(pm, r, t);
+        return;
+    }
     fill_rounded(pm, x, y, w, h, u(8.0), c(0, 1.0));
     // menu bar
     let bh = h * 0.13;
@@ -1028,6 +1032,60 @@ pub(super) fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile
         fill_rounded(pm, x + (w - dw) / 2.0 + dw * (0.12 + 0.2 * k as f32), y + h - dh - u(4.0) + dh * 0.2, dh * 0.6, dh * 0.6, dh * 0.16, if k == 3 { c(5, 1.0) } else { c(4, 0.5) });
     }
     stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, u(8.0), crate::theme::th().ink(0.18), 1.0);
+}
+
+/// Original illustrative preview of the reference's complete arrangement: clock/weather
+/// cards, an inset Settings window, and a translucent dock over a blue gradient.
+fn draw_glass_design_preview(pm: &mut Pixmap, r: Rect, t: &ThemeTile) {
+    use tiny_skia::{FillRule, GradientStop, LinearGradient, Paint, Point, SpreadMode, Transform};
+    let (x, y, w, h) = r;
+    let c = |i: usize, a: f32| color(t.colors[i].0, t.colors[i].1, t.colors[i].2, a);
+    let rr = |pm: &mut Pixmap, xx: f32, yy: f32, ww: f32, hh: f32, radius: f32, col: Color| {
+        fill_rounded(pm, x + xx * w, y + yy * h, ww * w, hh * h, radius * h, col);
+    };
+    if let (Some(path), Some(shader)) = (
+        crate::gfx::rounded_rect(x, y, w, h, 8.0),
+        LinearGradient::new(Point::from_xy(x, y), Point::from_xy(x + w, y + h), vec![GradientStop::new(0.0, c(0, 1.0)), GradientStop::new(1.0, c(5, 1.0))], SpreadMode::Pad, Transform::identity()),
+    ) {
+        pm.fill_path(&path, &Paint { shader, anti_alias: true, ..Paint::default() }, FillRule::Winding, Transform::identity(), None);
+    }
+    rr(pm, 0.0, 0.0, 1.0, 0.055, 0.015, c(1, 0.45));
+    // A pair of transparent widgets, with the wallpaper visible through their planes.
+    rr(pm, 0.035, 0.10, 0.19, 0.29, 0.035, c(4, 0.13));
+    rr(pm, 0.24, 0.10, 0.30, 0.29, 0.035, c(4, 0.13));
+    let (cx, cy, radius) = (x + w * 0.13, y + h * 0.245, h * 0.115);
+    stroke_rounded(pm, cx - radius, cy - radius, radius * 2.0, radius * 2.0, radius, c(4, 0.65), 0.8);
+    for n in 0..12 {
+        let a = n as f32 * std::f32::consts::TAU / 12.0;
+        fill_circle(pm, cx + a.sin() * radius * 0.82, cy + a.cos() * radius * 0.82, 0.7, c(4, 0.9));
+    }
+    super::app::stroke_line(pm, cx, cy, cx - radius * 0.55, cy - radius * 0.35, c(4, 1.0), 1.2);
+    super::app::stroke_line(pm, cx, cy, cx + radius * 0.44, cy - radius * 0.18, c(4, 1.0), 1.2);
+    fill_circle(pm, x + w * 0.30, y + h * 0.21, h * 0.045, color(255, 212, 117, 1.0));
+    for i in 0..4 {
+        rr(pm, 0.28 + i as f32 * 0.055, 0.32, 0.025, 0.012, 0.005, c(4, 0.65));
+    }
+    // The reference's split-plane settings window, with two appearance tiles.
+    rr(pm, 0.28, 0.34, 0.65, 0.48, 0.025, c(2, 0.96));
+    rr(pm, 0.28, 0.34, 0.17, 0.48, 0.025, c(3, 0.92));
+    for i in 0..5 {
+        rr(pm, 0.30, 0.39 + i as f32 * 0.069, 0.13, 0.049, 0.014, c(4, if i == 0 { 0.16 } else { 0.06 }));
+        fill_circle(pm, x + w * 0.315, y + h * (0.414 + i as f32 * 0.069), h * 0.011, c(5, 0.9));
+    }
+    for i in 0..2 {
+        let xx = 0.47 + i as f32 * 0.22;
+        rr(pm, xx, 0.43, 0.20, 0.28, 0.023, c(4, 0.10));
+        rr(pm, xx + 0.012, 0.45, 0.176, 0.16, 0.018, c(5, if i == 0 { 0.55 } else { 0.24 }));
+        rr(pm, xx + 0.02, 0.64, 0.105, 0.018, 0.007, c(4, 0.75));
+        rr(pm, xx + 0.02, 0.68, 0.15, 0.009, 0.004, c(4, 0.35));
+    }
+    // A broad, airy glass dock, with distinct app silhouettes and colours.
+    rr(pm, 0.20, 0.87, 0.60, 0.105, 0.045, c(4, 0.20));
+    let icons = [(45, 144, 245), (250, 172, 86), (82, 188, 132), (153, 112, 218), (246, 112, 120), (85, 187, 220), (115, 125, 145)];
+    for (i, col) in icons.iter().enumerate() {
+        rr(pm, 0.23 + i as f32 * 0.079, 0.89, 0.055, 0.065, 0.015, color(col.0, col.1, col.2, 1.0));
+    }
+    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, 8.0, c(4, 0.18), 1.0);
 }
 
 fn fill_rect_px(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {

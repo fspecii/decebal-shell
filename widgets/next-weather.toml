@@ -1,55 +1,62 @@
 format = 1
 id = "next-weather"
 name = "Next weather"
-description = "Current temperature from the shared weather source, with an honest unavailable state."
-size = [264, 152]
+description = "Wide glass current-weather card, using the shared weather source on every theme."
+size = [400, 192]
 refresh = 1000
 
 [root]
 type = "col"
-padding = 20
+padding = 16
 gap = 8
-background = "popup@0.94"
+background = "dock@0.14"
 radius = "theme"
-border = "border@0.6"
+border = "bar_text@0.32"
+border_width = 1
 on_click = "open dashboard"
 
 [[root.children]]
-type = "text"
-text = "WEATHER"
-size = 11
-weight = "bold"
-color = "text_secondary"
-[[root.children]]
 type = "row"
+width = 368
 align = "center"
-gap = 16
+[[root.children.children]]
+type = "col"
+gap = 0
+grow = 1
+[[root.children.children.children]]
+type = "text"
+text = "Current weather"
+size = 14
+color = "bar_text@0.85"
+[[root.children.children.children]]
+type = "text"
+text = "{weather.temp:int}°"
+size = 48
+color = "bar_text"
 show_if = "weather.present"
+[[root.children.children.children]]
+type = "text"
+text = "Waiting for data"
+size = 20
+color = "bar_text"
+show_if = "!weather.present"
 [[root.children.children]]
 type = "icon"
 name = "{weather.icon}"
-size = 40
-color = "accent"
-[[root.children.children]]
-type = "text"
-text = "{weather.temp:int}°C"
-size = 42
-weight = "bold"
-[[root.children]]
-type = "text"
-text = "Current conditions"
-size = 12
-color = "text_secondary"
+size = 48
+color = "bar_text@0.90"
 show_if = "weather.present"
 [[root.children]]
-type = "text"
-text = "Weather unavailable"
-size = 18
-weight = "bold"
-show_if = "!weather.present"
+type = "spacer"
+height = 18
 [[root.children]]
 type = "text"
-text = "Waiting for weather data"
+text = "{clock:%A, %e %B}"
 size = 12
-color = "text_secondary"
-show_if = "!weather.present"
+color = "bar_text@0.80"
+[[root.children]]
+type = "text"
+text = "Current temperature · Celsius"
+size = 11
+color = "bar_text@0.72"
+show_if = "weather.present"

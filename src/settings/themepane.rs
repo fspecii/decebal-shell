@@ -144,7 +144,7 @@ pub fn scheme_items(c: &Ctx) -> Vec<Item> {
         Item::Header("Colour palette".into()),
         Item::Note {
             text: format!(
-                "Using {source}. Palettes change colours on every theme without changing its design. Your palette stays selected when you switch themes. Choosing one replaces wallpaper colours and resets the custom accent."
+                "Using {source}. Palettes change colours on every theme without changing its design. Applying a theme restores its own colours; choose another palette here afterwards. Choosing one replaces wallpaper colours and resets the custom accent."
             ),
             warn: false,
         },
@@ -285,6 +285,9 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["l", "theme", id], CtlVal::Click) => {
             let mode = src.find(id).and_then(|f| f.1);
             sel.name = (*id).to_string();
+            sel.palette = None;
+            sel.accent = None;
+            sel.dynamic = None;
             if let Some(mode) = mode {
                 sel.mode = mode;
             }
@@ -381,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn a_palette_is_chosen_in_customise_colours_and_survives_switching_themes() {
+    fn palettes_can_override_a_design_and_applying_the_next_theme_restores_its_colours() {
         let (mut m, cfg) = model_with("[general]\n");
         let c = Ctx::new(&m);
         let Some(Item::Themes(tiles)) = scheme_items(&c).into_iter().find(|i| matches!(i, Item::Themes(_))) else { panic!("no palette gallery") };
@@ -393,12 +396,12 @@ mod tests {
         for id in ["nord", "windows11", "brutalist"] {
             m.apply(&format!("l:theme:{id}"), CtlVal::Click);
             let s = selection(&m);
-            assert_eq!((s.name.as_str(), s.palette.as_deref()), (id, Some("catppuccin")));
+            assert_eq!((s.name.as_str(), s.palette.as_deref()), (id, None));
             let (t, _) = source(&m).build(&s, true);
-            assert_eq!(t.background.hex(), "#1e1e2e", "{id}: the palette's background");
+            assert_eq!(t.background, crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default()).background);
         }
         let text = std::fs::read_to_string(&cfg).unwrap();
-        assert!(text.to_lowercase().contains("#cba6f7"), "rdwm's colours follow the palette: {text}");
+        assert!(!text.to_lowercase().contains("#cba6f7"), "the new theme replaces the old palette: {text}");
         m.apply("ap:reset:colours", CtlVal::Click);
         assert_eq!(selection(&m).palette, None);
         m.apply("l:palette:gruvbox", CtlVal::Click);

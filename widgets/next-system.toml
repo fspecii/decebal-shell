@@ -1,64 +1,66 @@
 format = 1
 id = "next-system"
 name = "Next system"
-description = "Live CPU activity and memory in a compact shared resource card."
-size = [264, 180]
+description = "Glass resource dial with live CPU and memory usage, shared across themes."
+size = [192, 192]
 refresh = 1000
 
 [root]
 type = "col"
-padding = 20
+padding = 16
 gap = 8
-background = "popup@0.94"
+background = "dock@0.14"
 radius = "theme"
-border = "border@0.6"
+border = "bar_text@0.32"
+border_width = 1
 on_click = "open dashboard"
 
 [[root.children]]
-type = "row"
-width = 224
+type = "stack"
+width = 160
+height = 108
+align = "center"
 [[root.children.children]]
+type = "ring"
+value = "cpu.usage"
+size = 104
+thickness = 5
+color = "bar_text@0.90"
+track = "bar_text@0.18"
+[[root.children.children]]
+type = "col"
+align = "center"
+justify = "center"
+gap = 2
+[[root.children.children.children]]
 type = "text"
-text = "SYSTEM"
-size = 11
-weight = "bold"
-color = "text_secondary"
-[[root.children.children]]
-type = "spacer"
-[[root.children.children]]
+text = "{cpu.usage:pct}"
+size = 25
+color = "bar_text"
+[[root.children.children.children]]
 type = "text"
-text = "{cpu.usage:pct} CPU"
-size = 12
-weight = "bold"
-[[root.children]]
-type = "graph"
-width = 224
-series = "cpu.history"
-height = 42
-color = "accent"
+text = "CPU"
+size = 10
+color = "bar_text@0.75"
 [[root.children]]
 type = "row"
-width = 224
+width = 160
 [[root.children.children]]
 type = "text"
 text = "Memory"
-size = 12
-color = "text_secondary"
+size = 11
+color = "bar_text@0.80"
 [[root.children.children]]
 type = "spacer"
 [[root.children.children]]
 type = "text"
 text = "{mem.usage:pct}"
-size = 12
-weight = "bold"
+size = 11
+color = "bar_text@0.90"
 [[root.children]]
 type = "bar"
-width = 224
+width = 160
+height = 4
 value = "mem.usage"
-height = 6
-color = "accent"
-[[root.children]]
-type = "text"
-text = "{mem.used:bytes} of {mem.total:bytes}"
-size = 11
-color = "text_secondary"
+color = "bar_text@0.75"
+track = "bar_text@0.15"

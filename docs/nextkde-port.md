@@ -1,50 +1,46 @@
-# NextKDE design adaptation
+# NextKDE reference adaptation
 
-Reference: [NextKde/NextKde](https://github.com/NextKde/NextKde), commit `3fa1d7006869bbd3404a05d362c6e6028e0fe3da`, inspected on 2026-10-29. The upstream repository's root `LICENSE` is GNU GPL version 3. Its desktop screenshot (`docs/images/desktop.png`), `apps/settings/pages/ThemeSettingsPage.qml`, `apps/settings/components/SettingsCard.qml`, `apps/settings/pages/WidgetAppearanceSection.qml`, `shell/desktop/modules/deskcenter/DeskWidgetCard.qml`, `shell/desktop/modules/weather/DockWeatherWidget.qml` and `shell/desktop/modules/dock/DockTemperatureWidget.qml` were design references.
+Reference: [NextKde/NextKde](https://github.com/NextKde/NextKde), commit `3fa1d7006869bbd3404a05d362c6e6028e0fe3da`, inspected on 2026-10-29. The upstream root `LICENSE` is GNU GPL version 3. Reference files inspected include `docs/images/desktop.png`, the Theme Settings page and Settings Card, `WidgetAppearanceSection.qml`, `AppearanceTokens.qml`, `DeskWidgetCard.qml`, `DeskClockFace.qml`, `DockWeatherWidget.qml`, `DockTemperatureWidget.qml` and the shared glass README.
 
-This is an original Decebal implementation inspired by that design, rather than a transplant of the Qt/Quickshell implementation. No upstream QML, JavaScript, fonts, icons, wallpapers or other assets are distributed here. The theme manifest, shared widget definitions and geometric wallpaper artwork are original MIT-licensed Decebal content. `themes/nextkde/LICENSE.md` contains the license; `ARTWORK.md` contains the complete original SVG source for both wallpaper renders. NextKDE remains the name of the independent upstream project; this theme does not imply endorsement.
+This is an original Decebal adaptation of the reference, not an exact port of its compositor implementation. No upstream QML, JavaScript, fonts, icons, wallpapers or other assets are distributed here. The manifest, shared widget definitions and gradient artwork are original MIT-licensed Decebal content. `themes/nextkde/LICENSE.md` contains the license; `ARTWORK.md` contains both wallpaper SVG sources. NextKDE is the independent upstream project's name; this theme does not imply endorsement.
 
-## Design mapping
+## Appearance
 
-The reference combines a thin translucent global top bar, centered floating dock, generous rounded glass cards and restrained blue selections. Decebal maps those ideas to its existing macOS decoration/dock engine, 26-pixel top bar, 18-pixel surface radius and translucent dock/popup metrics. These are supported controls, not unused shader settings. Refraction shaders, Quickshell animations, KDE integrations, dock carousels and spatial wallpaper effects are not implemented by this data theme.
+The actual reference screenshot combines a quiet slate-to-aqua gradient, a nearly invisible top bar, centered floating glass dock, white monochrome widget ink and pale hairline card contours. Version 1.1 follows those features with original 4K gradient wallpaper, an explicit low top-bar alpha, translucent dock, 22-pixel rounded surfaces and glass widget cards. It avoids opaque popup-colored widget plates and unrelated decorative wallpaper shapes.
 
-The original wallpaper uses broad, quiet overlapping glass ribbons so widgets remain legible. `glass-dark.png` is the default; `glass-light.png` is an additional manually selectable asset. The current theme engine selects the first wallpaper image, so switching appearance mode does not automatically switch wallpapers. Wallpaper matching is off by default to keep the user's palette independent. The theme's dark/light colors supply defaults; a separately selected global palette continues to recolor all tokenized surfaces.
+Upstream `AppearanceTokens.qml` declares zero painted bar/widget opacity for glass forms and white widget ink at 78% opacity. `DeskWidgetCard.qml` delegates its glass surface to KWin with a subtle scrim. Decebal adapts that appearance using supported alpha/scrim controls: the theme's bar alpha is 6%, dock alpha 18%; widget fill is a 14% dock-token scrim with a 32% foreground hairline. Popups/settings retain more opaque surfaces for reading controls. These are material defaults, not a claim of KWin shader equivalence.
 
-Settings design guidance for the separate app redesign: a muted sidebar, grouped navigation, blue selected capsules, white/tonal rounded content cards, clear section labels and broad gutters. Desktop structure and palette should remain separate choices.
+Actual liquid refraction, adaptive contrast scrims, continuous-corner geometry and independent per-card blur/refraction remain compositor capabilities beyond this package. The root backend handles alpha/compositor support. A package cannot recreate those effects by naming a theme or changing RGB colors.
 
-## Shared widget concepts
+`glass-dark.png` is the default wallpaper; `glass-light.png` is an additional manually selectable asset. The current theme engine does not automatically choose the wallpaper by mode. Wallpaper color matching is disabled by default so the user's separately selected palette remains independent. Widget surfaces and ink use theme tokens; changing palette recolors them everywhere. Glass legibility depends on the actual backdrop and needs desktop/compositor verification, not only uncomposited token contrast calculations.
 
-All three definitions live in the repository-level `widgets/` directory. They use theme tokens exclusively and never test the active theme ID. They contain no commands, executable hooks, asset paths or third-party services of their own. Each can be enabled independently in the global widget settings and runs on every theme. The theme deliberately has no widget placements, so selecting it cannot replace global widget choices.
+## Shared widgets
 
-- `next-clock`: digital time, weekday and full date from the shared local clock.
-- `next-weather`: current temperature and symbolic condition from Decebal's existing weather source. An explicit waiting state appears when data is unavailable. No forecasts, location or condition descriptions are fabricated; the source currently provides none of those strings.
-- `next-system`: CPU history and load plus memory usage from the existing shared system sampler. It does not start extra polling processes.
+These repository-level definitions contain no active-theme checks, command hooks or copied upstream code. Each can be enabled independently on every theme. The theme has no `[[widgets]]` placements and therefore cannot replace global widget choices.
 
-The reference's analog clock/weather/resource-card concepts are adapted to the supported widget DSL. Widget actions only open the existing dashboard. Clock/date formatting follows the shared formatter; weather is currently Celsius, matching the shared data source.
+- `next-clock`: 192×192 transparent glass square with a live monochrome analog dial, hour numerals and second hand. Uses the shared `analog-clock` DSL leaf and local `Data.time`, rather than static artwork.
+- `next-weather`: 400×192 wide glass card with real temperature and condition symbol, date and Celsius unit label. Missing weather data produces an explicit waiting state. Forecast, city and condition descriptions visible upstream are omitted because Decebal's shared weather source does not provide them.
+- `next-system`: 192×192 glass square with live CPU resource ring and memory bar. Uses the existing shared sampler without separate polling processes.
 
-Integration registers `nextkde` in `src/theme/builtin.rs` and the three `next-*` definitions in `src/widgets/samples.rs`. The install target recursively copies theme packages, including both wallpapers, artwork sources and license. No user configuration or running desktop has been changed by this work.
+All widget glass ink uses `bar_text`, including the NextKDE light variant, while fill uses `dock`; both follow independent global palettes. These foreground tokens make the shared definitions usable with other desktop structures. Clicking a card opens the existing dashboard.
+
+Integration registers `nextkde` in `src/theme/builtin.rs` and all three `next-*` definitions in `src/widgets/samples.rs`. Installation recursively copies theme packages, including original artwork, wallpapers and license. No running desktop, user preferences or live theme was modified by this bounded task.
 
 ## Validation
 
-Using `/home/ambsd/Projects/macshell-appearance/target/debug/` binaries:
+Run against the current integration build:
 
 ```sh
 decthemectl theme validate themes/nextkde
 for f in widgets/next-*.toml; do decwidgets validate "$f"; done
 ```
 
-All pass under the strict theme-data parser. Both 3840×2160 PNG wallpaper assets were generated with `rsvg-convert` from the SVG source embedded in `ARTWORK.md`; the dark wallpaper and upstream reference screenshot were visually inspected. All three widgets were rendered and inspected with fixed sample data under the default active palette and isolated NextKDE dark/light configuration:
+Version 1.0 passed package validation and eighteen isolated renders across NextKDE, Windows 11 and Caelestia in dark/light modes. Version 1.1 passed current-build theme validation (package SHA-256 `81864a30ccd8a613a349f4eece93113676b0da4132ea4dd7e3fedf1880bbc692`) after alpha-range and analog-clock additions. All eighteen revised file-based widget renders passed across NextKDE, Windows 11 and Caelestia in dark/light modes. NextKDE dark analog and light weather renders over the actual gradient were visually inspected; all-builtin contrast verification passes using the renderer's dedicated bar-text role. Dark dock base color remains dark enough for ordinary text tokens; light dock base remains pale.
 
-```sh
-DECEBAL_CONFIG=/tmp/nextkde-render-dark DECEBAL_THEMES="$PWD/themes" \
-  decwidgets render widgets/next-system.toml --png /tmp/next-system-dark.png
-```
+A 1920×1080 private Xvfb + actual rdwm desktop displayed the running analog/weather/system cards, top bar, floating dock and full Settings window at 940×680. The Picom XRender backend with scoped Gaussian blur produced the accepted fully composited root screenshot, not a manually combined image. Its log was clean. The equivalent GLX backend on Xvfb produced a black Settings client inside its otherwise-painted frame, even with blur disabled and `use-damage=false`; direct client captures remained fully painted. Disabling the compositor and using XRender both restored the visible client. This isolates an Xvfb/GLX composition incompatibility rather than a Settings repaint or theme failure. It does not establish that hardware GLX fails on the live desktop.
 
-The isolated config folder contains `decebal.json` with `{"theme":{"name":"nextkde","mode":"dark"}}` (or `light`). System card layout was corrected after the first render so the CPU/memory values align to the right. A contrast calculation on uncomposited theme tokens checked primary, secondary and faint text against popup plus accent text against accent: minimum 6.69:1 dark / 5.03:1 light. Actual compositing varies with wallpaper; the popup is 94% opaque. No complete desktop runtime or fresh weather-provider/network check was performed in this bounded package task; parent integration handles built-in registry coverage and the live desktop build.
+Private matrix scripts and evidence were retained under `/tmp/nextkde-matrix-*`; the accepted Gaussian screenshot is `/tmp/nextkde-matrix-floating-xrender-gaussian.zHn1m4/root.png`. The private Picom config used `backend="xrender"`, `use-damage=false`, Gaussian size 12/deviation 5 and the same `_DECEBAL_BLUR` scoped rule as the repository configuration. Only the screenshot test configuration changed; live Picom configuration was untouched. Parent integration owns final live compositor verification.
 
-### Integration review
+A private render configuration uses a temporary folder containing `decebal.json` with `{"theme":{"name":"nextkde","mode":"dark"}}`, plus `DECEBAL_CONFIG=<temporary-folder>` and `DECEBAL_THEMES=<checkout>/themes`. Render with `decwidgets render widgets/next-clock.toml --png <output> --bg themes/nextkde/wallpapers/glass-dark.png`. This does not apply a live theme.
 
-The integrated package in `decebal-theme-studio` passed `decthemectl theme validate themes/nextkde` with SHA-256 `af5e008f353b4a9ecd1648ab9ccb8415482b74565341752f2e6cfb9ff6463973`. Eighteen isolated file-definition renders passed: three widgets × NextKDE/Windows 11/Caelestia × dark/light. NextKDE dark system, Windows light clock and Caelestia dark weather renders were visually inspected; cards adapt their colors and radii without depending on the active desktop style. Outputs are private temporary QA artifacts, not installed theme content. The then-current `target/debug/decwidgets` predates registration, so these were file-based renderer checks; the parent integration build verifies compiled built-in registration and runs the full suite.
-
-
-Parent integration completed a fresh compiled registry build, the 30-check private desktop theme application run, and dark/light gallery captures (`docs/themes/nextkde*.png`). The package now also includes an actual desktop screenshot at `screenshots/main.png`; this changes the package content hash from the earlier bounded review. Settings was visually checked at normal and narrow sizes. The release and combined test results are recorded in the project handoff.
+The X11 glass path now tags translucent shell surfaces with `_DECEBAL_BLUR = 1` when `metrics.blur` is nonzero. `contrib/picom/decebal-glass.conf` enables background blur only for these tagged windows. Bounding shapes exclude the bar's unused transparent popup canvas, so it cannot blur desktop widgets behind that canvas. This implements transparent tint and frosted backgrounds; upstream KWin's refractive/distortion shader remains a separate effect and is not reproduced.

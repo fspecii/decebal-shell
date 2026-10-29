@@ -148,6 +148,37 @@ pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
             let y = r.y + (r.h - thickness) / 2.0;
             charts::bar(pm, crate::dash::layout::Rect::new(r.x, y, r.w, *thickness), *frac, col(p.theme, track, op), col(p.theme, color, op));
         }
+        Leaf::AnalogClock { hour, minute, second, size, color, track, second_color, numerals, seconds } => {
+            let d = size.min(r.w).min(r.h);
+            let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+            let radius = d * 0.48;
+            let ink = col(p.theme, color, op);
+            let tick = col(p.theme, track, op);
+            charts::ring(pm, cx, cy, radius, (d * 0.006).max(0.7), 1.0, tick, tick);
+            for n in 1..=12 {
+                let turn = n as f32 / 12.0;
+                let (x, y) = clock_point(cx, cy, radius * 0.90, turn);
+                if *numerals {
+                    let text = n.to_string();
+                    let px = d * 0.085;
+                    let width = p.fonts.measure(&text, px, Weight::Bold);
+                    let lh = FontMetrics(p.fonts).line_height(px);
+                    p.fonts.draw(pm, &text, x - width / 2.0, y - lh / 2.0, px, Weight::Bold, ink);
+                } else {
+                    let (ex, ey) = clock_point(cx, cy, radius * 0.80, turn);
+                    clock_line(pm, x, y, ex, ey, (d * 0.012).max(1.0), tick);
+                }
+            }
+            for (turn, length, width, c) in [(*hour, 0.48, 0.028, ink), (*minute, 0.73, 0.018, ink)] {
+                let (x, y) = clock_point(cx, cy, radius * length, turn);
+                clock_line(pm, cx, cy, x, y, (d * width).max(1.0), c);
+            }
+            if *seconds {
+                let (x, y) = clock_point(cx, cy, radius * 0.76, *second);
+                clock_line(pm, cx, cy, x, y, (d * 0.007).max(0.8), col(p.theme, second_color, op));
+            }
+            gfx::fill_circle(pm, cx, cy, (d * 0.023).max(1.0), ink);
+        }
         Leaf::Ring { frac, size, thickness, color, track } => {
             let d = size.min(r.w).min(r.h);
             charts::ring(pm, r.x + r.w / 2.0, r.y + r.h / 2.0, (d - thickness) / 2.0, *thickness, *frac, col(p.theme, track, op), col(p.theme, color, op));
@@ -180,6 +211,25 @@ pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
     }
     for c in &it.children {
         paint(pm, c, p, op);
+    }
+}
+
+/// Fractions of a clockwise turn, with zero at twelve o'clock.
+fn clock_point(cx: f32, cy: f32, radius: f32, turn: f32) -> (f32, f32) {
+    let a = turn * std::f32::consts::TAU;
+    (cx + a.sin() * radius, cy - a.cos() * radius)
+}
+
+fn clock_line(pm: &mut Pixmap, x: f32, y: f32, ex: f32, ey: f32, width: f32, color: Color) {
+    let mut path = tiny_skia::PathBuilder::new();
+    path.move_to(x, y);
+    path.line_to(ex, ey);
+    if let Some(path) = path.finish() {
+        let mut paint = Paint::default();
+        paint.set_color(color);
+        paint.anti_alias = true;
+        let stroke = tiny_skia::Stroke { width, line_cap: tiny_skia::LineCap::Round, ..Default::default() };
+        pm.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
     }
 }
 
@@ -225,9 +275,55 @@ fn shift(it: &mut Item, d: f32) {
 mod tests {
     use super::*;
     use crate::theme::model::{Def, Selection};
+    use crate::widgets::data;
     use crate::widgets::data::sample;
     use crate::widgets::layout::{layout, Ctx, Fixed};
     use crate::widgets::{dsl, Trust};
+
+    #[test]
+    fn analog_clock_parser_layout_and_fixed_time_hands() {
+        let src = "format=1\n[root]\ntype=\"analog-clock\"\nsize=160\nseconds=false\nnumerals=false\n";
+        let def = dsl::parse(src, Trust::Theme).unwrap();
+        assert!(def.paths.contains("clock"));
+        assert!(dsl::parse(&src.replace("size=160", "size=0"), Trust::Theme).is_err());
+        assert!(dsl::parse(&src.replace("seconds=false", "seconds=7"), Trust::Theme).is_err());
+        let mut data = data::sample();
+        data.time.hour = 3;
+        data.time.min = 0;
+        data.time.sec = 0;
+        let it = super::super::layout::layout(&def, &super::super::layout::Ctx { data: &data, metrics: &super::super::layout::Fixed, theme_radius: 18.0 }, None);
+        assert_eq!((it.rect.w, it.rect.h), (160.0, 160.0));
+        let Leaf::AnalogClock { hour, minute, second, .. } = it.leaf else { panic!("clock leaf") };
+        assert_eq!((hour, minute, second), (0.25, 0.0, 0.0));
+        let right = clock_point(80.0, 80.0, 40.0, hour);
+        let up = clock_point(80.0, 80.0, 40.0, minute);
+        assert!((right.0 - 120.0).abs() < 0.001 && (right.1 - 80.0).abs() < 0.001);
+        assert!((up.0 - 80.0).abs() < 0.001 && (up.1 - 40.0).abs() < 0.001);
+        data.time.hour = 12;
+        data.time.min = 30;
+        data.time.sec = 30;
+        let it = super::super::layout::layout(&def, &super::super::layout::Ctx { data: &data, metrics: &super::super::layout::Fixed, theme_radius: 18.0 }, None);
+        let Leaf::AnalogClock { hour, minute, second, .. } = it.leaf else { panic!("clock leaf") };
+        assert!((hour - 0.04236111).abs() < 0.00001);
+        assert!((minute - 0.5083333).abs() < 0.00001);
+        assert_eq!(second, 0.5);
+    }
+
+    #[test]
+    fn analog_clock_renders_hands_and_transparent_corners() {
+        let Some(mut fonts) = fonts() else { return };
+        let def = dsl::parse("format=1\n[root]\ntype=\"analog-clock\"\nsize=160\nseconds=false\nnumerals=false\ncolor=\"#ff0000\"\ntrack=\"#00ff00\"\n", Trust::Theme).unwrap();
+        let mut data = data::sample();
+        data.time.hour = 3;
+        data.time.min = 0;
+        data.time.sec = 0;
+        let pm = render(&def, &data, &theme(), &mut fonts, Path::new("."), 0).unwrap();
+        assert_eq!(pm.pixel(0, 0).unwrap().alpha(), 0);
+        assert!(px(&pm, 105, 80)[0] > 240, "hour hand points right");
+        assert!(px(&pm, 80, 40)[0] > 240, "minute hand points up");
+        assert_eq!(pm.pixel(60, 80).unwrap().alpha(), 0, "no opposite hour hand");
+        assert_eq!(pm.pixel(80, 115).unwrap().alpha(), 0, "no opposite minute hand");
+    }
 
     fn theme() -> Theme {
         crate::theme::builtin::def("nord").unwrap().resolve("nord", true, &Selection::default())

@@ -401,6 +401,7 @@ fn lift_tokens(extra: &Map<String, Value>, common: &mut Tokens) {
         }
     }
     num("font", "scale", "font_scale", common);
+    num("metrics", "blur", "blur", common);
     text("bar", "style", "bar_style", common);
     num("bar", "height", "bar_height", common);
     num("dock", "size", "dock_icon_size", common);

@@ -271,7 +271,7 @@ impl DockApp {
         let y0 = self.win_strip_top();
         let top = self.on_top();
         // the theme's dock translucency; the Transparency setting shifts it around its 0.4 default
-        let alpha = (crate::theme::th().dock_alpha - (self.dock.settings.transparency - 0.4) * 0.25).clamp(0.6, 1.0);
+        let alpha = (crate::theme::th().dock_alpha - (self.dock.settings.transparency - 0.4) * 0.25).clamp(0.0, 1.0);
         let Some(w) = self.win.as_mut() else { return };
         let snap = w.status.status_state();
         let layout_name = w.status.status_layout();

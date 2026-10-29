@@ -139,14 +139,14 @@ decoration, bar and dock; a palette also colours rdwm's borders (the theme's har
 
 ```
 decthemectl palette list            # built-in and yours, * = current
-decthemectl palette catppuccin      # recolour the current theme (and every theme you switch to)
+decthemectl palette catppuccin      # recolour the current theme
 decthemectl palette none            # back to each theme's own colours
 decthemectl apply brutalist --accent "#ff8800"     # a custom accent sits on top of the palette
 ```
 In System Settings, **Appearance > Themes** picks the desktop design (macOS, Windows, Caelestia and other distinct designs).
 **Appearance > Palettes** contains the colour gallery, light/dark mode, wallpaper colours and custom accent. Choosing a palette
-turns off wallpaper recolouring and clears the custom accent so the palette is shown as selected. Changing the desktop theme
-keeps that palette. Turn on Match wallpaper colours to use a generated palette instead. Translucency and corner radius remain
+turns off wallpaper recolouring and clears the custom accent so the palette is shown as selected. Applying a desktop theme
+restores its own colour palette. Turn on Match wallpaper colours to use a generated palette instead. Translucency and corner radius remain
 in **Customise > Colours**. Old colour-based theme packages remain loadable from the CLI, but do not duplicate the palette choices
 in the Themes gallery. User-created packages stay visible.
 
@@ -203,3 +203,5 @@ These original theme packages have dark and light colours, bundled original wall
 | ![Signal Deck](themes/signal-deck.png) **Signal Deck** | Split navigation, technical typography and orbital geometry. | `decthemectl theme apply signal-deck` |
 
 Research and provenance: [glass and paper](theme-research-glass-paper.md), [organic and retro](theme-research-organic-retro.md), [NextKDE](nextkde-port.md). Screenshots are captured on a private Xvfb desktop by `tests/e2e/theme-studio.sh`. The light artwork is bundled as an alternative wallpaper; changing colour mode alone keeps the selected wallpaper.
+
+Applying a theme selects the theme's own colours and clears the previous palette/custom accent. Afterwards, any palette can still be applied to that design. Widget selections and positions remain independent of this colour reset.

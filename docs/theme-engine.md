@@ -255,6 +255,7 @@ weight = "bold"
 | `text` | `text` (format string), `size`, `weight` (regular/bold), `color`, `text_align`, `max_chars` |
 | `icon` | `name` (a bar symbol such as `play`, `pause`, `speaker-2`, or a format string like `{weather.icon}`), `size`, `color` |
 | `bar` | `value` (number or data path), `min`, `max`, `color`, `track`, `height` |
+| `analog-clock` | `size` (24–600, default 180), `color` (hands/numerals), `track` (rim/ticks), `second_color`, `numerals` (default true), `seconds` (default true); live local time with smoothly positioned hour/minute hands |
 | `ring` | `value`, `max`, `size`, `thickness`, `color`, `track` |
 | `graph` | `series` (e.g. `cpu.history`), `max`, `color`, `fill` |
 | `image` | `file` (in the package) or `source` (a data path such as `media.art`), `radius_px`, `fit` (cover/contain) |

@@ -1,6 +1,7 @@
 format = 1
 id = "paper-signal"
 name = "Paper Signal"
+screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"

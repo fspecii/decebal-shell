@@ -17,7 +17,7 @@
 //! text = "{clock:%H:%M}"
 //! size = 44
 //! ```
-//! Node types: `row` `col` `stack` `spacer` `button` (containers); `text` `icon` `bar` `ring` `graph` `image` `workspaces` (leaves).
+//! Node types: `row` `col` `stack` `spacer` `button` (containers); `text` `icon` `bar` `ring` `analog-clock` `graph` `image` `workspaces` (leaves).
 //! Every error carries the line and the key path. See docs/theme-engine.md for the property tables.
 
 use super::actions::Action;
@@ -130,6 +130,7 @@ pub enum Kind {
     Text { text: Fmt, size: f32, bold: bool, color: ColorRef, align: Align, max_chars: usize },
     Icon { name: Fmt, size: f32, color: ColorRef },
     Bar { value: Value, min: f64, max: f64, color: ColorRef, track: ColorRef },
+    AnalogClock { size: f32, color: ColorRef, track: ColorRef, second_color: ColorRef, numerals: bool, seconds: bool },
     Ring { value: Value, max: f64, size: f32, thickness: f32, color: ColorRef, track: ColorRef },
     Graph { series: String, max: Option<f32>, color: ColorRef, fill: bool },
     Image { file: Option<String>, source: Option<String>, radius: f32, cover: bool },
@@ -327,6 +328,7 @@ fn kind_keys(ty: &str) -> &'static [&'static str] {
         "text" => &["text", "size", "weight", "color", "text_align", "max_chars"],
         "icon" => &["name", "size", "color"],
         "bar" => &["value", "min", "max", "color", "track"],
+        "analog-clock" => &["size", "color", "track", "second_color", "numerals", "seconds"],
         "ring" => &["value", "max", "size", "thickness", "color", "track"],
         "graph" => &["series", "max", "color", "fill"],
         "image" => &["file", "source", "radius_px", "fit"],
@@ -391,10 +393,10 @@ fn parse_node(cx: &mut Cx, t: &Table, p: &str, depth: usize) -> Option<Node> {
         return None;
     }
     let Some(ty) = t.get("type").and_then(Item::as_str) else {
-        cx.err(t, p, "missing `type` (row, col, stack, spacer, button, text, icon, bar, ring, graph, image, workspaces)");
+        cx.err(t, p, "missing `type` (row, col, stack, spacer, button, text, icon, bar, ring, analog-clock, graph, image, workspaces)");
         return None;
     };
-    if !matches!(ty, "row" | "col" | "stack" | "spacer" | "button" | "text" | "icon" | "bar" | "ring" | "graph" | "image" | "workspaces") {
+    if !matches!(ty, "row" | "col" | "stack" | "spacer" | "button" | "text" | "icon" | "bar" | "ring" | "analog-clock" | "graph" | "image" | "workspaces") {
         cx.err(t.get("type")?, &format!("{p}.type"), format!("unknown node type `{ty}`"));
         return None;
     }
@@ -450,6 +452,17 @@ fn parse_node(cx: &mut Cx, t: &Table, p: &str, depth: usize) -> Option<Node> {
                 }
             }
             Kind::Icon { name, size: ts(cx, "size", 6.0, 300.0, 18.0), color: col(cx, "color", text_c) }
+        }
+        "analog-clock" => {
+            cx.paths.insert("clock".into());
+            Kind::AnalogClock {
+                size: ts(cx, "size", 24.0, 600.0, 180.0),
+                color: col(cx, "color", text_c),
+                track: col(cx, "track", track_c),
+                second_color: col(cx, "second_color", accent),
+                numerals: flag(cx, t, p, "numerals").unwrap_or(true),
+                seconds: flag(cx, t, p, "seconds").unwrap_or(true),
+            }
         }
         "bar" | "ring" => {
             let Some(v) = value(cx, t, p, "value") else {

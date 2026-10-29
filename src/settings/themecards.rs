@@ -30,9 +30,6 @@ pub struct Card {
     pub hash_mismatch: bool,
 }
 
-pub const CARD_H: f32 = 112.0;
-const SHOT_W: f32 = 168.0;
-
 type ShotCache = HashMap<PathBuf, Option<Pixmap>>;
 static SHOTS: Mutex<Option<ShotCache>> = Mutex::new(None);
 
@@ -58,8 +55,15 @@ fn shot(path: &PathBuf) -> Option<Pixmap> {
 pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, cw: f32, it: &Interact, fr: &mut Frame) -> f32 {
     let s = p.s;
     let u = |v: f32| v * s;
-    let mut y = y;
-    for c in cards {
+    let origin_x = x0;
+    let origin_y = y;
+    let columns = if cw >= u(600.0) { 2 } else { 1 };
+    let cw = (cw - u(16.0) * (columns - 1) as f32) / columns as f32;
+    let preview_h = if cw >= u(300.0) { 160.0 } else { 120.0 };
+    let row_height = u(preview_h + 192.0);
+    for (index, c) in cards.iter().enumerate() {
+        let x0 = origin_x + (index % columns) as f32 * (cw + u(16.0));
+        let y = origin_y + (index / columns) as f32 * row_height;
         let mut buttons: Vec<(&str, String, bool)> = Vec::new();
         if c.error.is_none() {
             if !c.current {
@@ -72,18 +76,7 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         if c.deletable && !c.current {
             buttons.push(("delete", if c.confirm_delete { "Really delete?".into() } else { "Delete".into() }, true));
         }
-        let compact = cw < u(560.0);
-        let mut button_rows = 1;
-        let mut available = cw - u(24.0);
-        for (_, label, _) in &buttons {
-            let width = p.measure(label, u(11.5), Weight::Medium) + u(30.0);
-            if width > available && available < cw - u(24.0) {
-                button_rows += 1;
-                available = cw - u(24.0);
-            }
-            available -= width;
-        }
-        let ch = u(if compact { 216.0 + 32.0 * button_rows as f32 } else { CARD_H });
+        let ch = row_height - u(16.0);
         // Cards far outside the window are only laid out (their buttons stay reachable by Tab), not painted: a long list
         // re-shaped and re-rasterised every card on every wheel notch.
         let on = y + ch >= 0.0 && y <= pm.height() as f32;
@@ -95,13 +88,13 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         }
         if on {
             // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
-            let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), if compact { cw - u(20.0) } else { u(SHOT_W) }, if compact { u(100.0) } else { ch - u(20.0) });
+            let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), cw - u(20.0), u(preview_h));
             match c.screenshot.as_ref().and_then(shot) {
                 Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
                 None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
             }
-            let tx = if compact { x0 + u(12.0) } else { px + pw + u(14.0) };
-            let text_y = y + if compact { u(108.0) } else { 0.0 };
+            let tx = x0 + u(12.0);
+            let text_y = y + u(preview_h + 8.0);
             let tw = x0 + cw - tx - u(12.0);
             let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
             let nw = p.text(pm, &name, tx, text_y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
@@ -129,7 +122,7 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         let bh = u(24.0);
         for (act, label, danger) in buttons.iter() {
             let w = p.measure(label, u(11.5), Weight::Medium) + u(22.0);
-            if compact && bx - w < x0 + u(12.0) {
+            if bx - w < x0 + u(12.0) {
                 bx = x0 + cw - u(12.0);
                 by -= u(32.0);
             }
@@ -169,9 +162,8 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             });
             bx -= u(8.0);
         }
-        y += ch + u(10.0);
     }
-    y + u(8.0)
+    origin_y + cards.len().div_ceil(columns) as f32 * row_height + u(8.0)
 }
 
 #[cfg(test)]
@@ -197,6 +189,13 @@ mod tests {
                 confirm_delete: true,
                 hash_mismatch: false,
             };
+            let mut wide = Frame::default();
+            let mut second = card.clone();
+            second.id = "second".into();
+            draw(&mut pm, &mut painter, &[card.clone(), second], 0.0, 0.0, 640.0 * scale, &Interact::default(), &mut wide);
+            assert_eq!(wide.placed.len(), 10);
+            assert_eq!(wide.placed[0].row_rect.1, wide.placed[5].row_rect.1);
+            assert!(wide.placed[0].row_rect.0 + wide.placed[0].row_rect.2 < wide.placed[5].row_rect.0);
             let mut frame = Frame::default();
             draw(&mut pm, &mut painter, &[card], 180.0 * scale, 10.0 * scale, 284.0 * scale, &Interact::default(), &mut frame);
             assert_eq!(frame.placed.len(), 5);

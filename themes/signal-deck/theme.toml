@@ -1,6 +1,7 @@
 format = 1
 id = "signal-deck"
 name = "Signal Deck"
+screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"

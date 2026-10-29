@@ -39,6 +39,7 @@ struct Win {
     backdrop: Option<Pixmap>,
     depth: u8,
     colormap: Option<Colormap>,
+    glass: bool,
 }
 
 pub struct Paths {
@@ -264,20 +265,30 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, id, &CreateGCAux::new()).map_err(err)?;
     conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
+    let glass = crate::theme::th().blur > 0.0;
+    bx::set_glass_hint(conn, id, glass).map_err(err)?;
     conn.map_window(id).map_err(err)?;
     conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
     let base = res.base.clone();
-    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth, colormap })
+    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth, colormap, glass })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn draw(conn: &RustConnection, w: &mut Win, base: &Data, th: &crate::theme::Theme, fonts: &mut Fonts, symbols: &mut SymbolCache, max_bytes: usize, compositor: bool) -> Result<(), String> {
+    let glass = th.blur > 0.0;
+    if glass != w.glass {
+        bx::set_glass_hint(conn, w.id, glass).map_err(err)?;
+        w.glass = glass;
+    }
     let data = data_with_options(base, &w.inst);
     let item = layout::layout(&w.res.def, &Ctx { data: &data, metrics: &FontMetrics(fonts), theme_radius: th.radius }, Some((w.w as f32, w.h as f32)));
     let mut pm = Pixmap::new(w.w, w.h).ok_or("pixmap")?;
     paint::paint(&mut pm, &item, &mut Painter { fonts, symbols, images: &mut w.images, theme: th }, 1.0);
     fonts.trim();
     let depth = if w.argb { 32 } else { w.depth };
+    if glass && w.argb {
+        conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, w.id, 0, 0, &bx::glass_rects(&pm)).map_err(err)?;
+    }
     if !w.argb {
         // no alpha channel: blend the card over what the desktop showed there, and cut the window to the card's shape
         let rects = bx::visible_rects(&pm);

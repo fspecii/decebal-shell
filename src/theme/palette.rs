@@ -3,7 +3,7 @@
 //! A **theme** is the shape of the desktop (decoration style, radius, bar, dock, fonts, wallpaper, widgets); a **palette** is only
 //! colours: a dark and a light set of the shell's colour tokens. The selection (`"theme": {"palette": "catppuccin"}` in decebal.json,
 //! `decthemectl palette set catppuccin`, the Colours pane) lays a palette over whichever theme is active, so every palette works on every
-//! theme and switching theme keeps the palette. Without a palette the theme's own colours are used.
+//! theme. Applying a complete theme restores its own colours; a palette can be selected afterwards. Without a palette the theme's own colours are used.
 //!
 //! Palette files are small TOML files (`palettes/<id>.toml` in the source tree, compiled in; yours go in `~/.config/decebal/palettes/`,
 //! `$DECEBAL_PALETTES`), in the same legacy layout as a theme's colours:

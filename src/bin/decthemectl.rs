@@ -480,6 +480,9 @@ fn main() {
                 die(&format!("theme `{}` is broken: {}", e.id, e.error.unwrap_or_default()));
             }
             sel.name = id;
+            sel.palette = None;
+            sel.accent = None;
+            sel.dynamic = None;
             if let Some(m) = implied {
                 sel.mode = m;
             }

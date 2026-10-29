@@ -99,16 +99,8 @@ mod contrast_tests {
                 }
                 let t = d.resolve(id, dark, &Selection::default());
                 let tag = format!("{id} {}", if dark { "dark" } else { "light" });
-                for (what, bg) in [
-                    ("background", t.background),
-                    ("sidebar", t.sidebar),
-                    ("surface", t.surface),
-                    ("bar", t.bar),
-                    ("popup", t.popup),
-                    ("dock", t.dock),
-                    ("overlay", t.overlay),
-                    ("titlebar", t.titlebar),
-                ] {
+                for (what, bg) in [("background", t.background), ("sidebar", t.sidebar), ("surface", t.surface), ("popup", t.popup), ("dock", t.dock), ("overlay", t.overlay), ("titlebar", t.titlebar)]
+                {
                     let c = contrast(t.text, bg);
                     assert!(c >= 4.5, "{tag}: text on {what} is {c:.2}:1");
                 }

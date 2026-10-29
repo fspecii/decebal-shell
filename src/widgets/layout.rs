@@ -49,6 +49,7 @@ pub enum Leaf {
     Text { s: String, size: f32, bold: bool, color: ColorRef, align: Align },
     Icon { name: String, size: f32, color: ColorRef },
     Bar { frac: f32, thickness: f32, color: ColorRef, track: ColorRef },
+    AnalogClock { hour: f32, minute: f32, second: f32, size: f32, color: ColorRef, track: ColorRef, second_color: ColorRef, numerals: bool, seconds: bool },
     Ring { frac: f32, size: f32, thickness: f32, color: ColorRef, track: ColorRef },
     Graph { values: Vec<f32>, max: f32, color: ColorRef, fill: bool },
     Image { path: Option<String>, radius: f32, cover: bool },
@@ -81,6 +82,7 @@ fn kind_name(k: &Kind) -> &'static str {
         Kind::Text { .. } => "text",
         Kind::Icon { .. } => "icon",
         Kind::Bar { .. } => "bar",
+        Kind::AnalogClock { .. } => "analog-clock",
         Kind::Ring { .. } => "ring",
         Kind::Graph { .. } => "graph",
         Kind::Image { .. } => "image",
@@ -127,7 +129,7 @@ fn content_size(n: &Node, cx: &Ctx) -> (f32, f32) {
             (cx.metrics.text_width(&s, size, bold), cx.metrics.line_height(size))
         }
         Kind::Icon { size, .. } => (*size, *size),
-        Kind::Ring { size, .. } => (*size, *size),
+        Kind::Ring { size, .. } | Kind::AnalogClock { size, .. } => (*size, *size),
         Kind::Bar { .. } => (80.0, 6.0),
         Kind::Graph { .. } => (120.0, 36.0),
         Kind::Image { .. } => (48.0, 48.0),
@@ -154,6 +156,13 @@ fn leaf_of(n: &Node, cx: &Ctx, r: Rect) -> Leaf {
         Kind::Bar { value, min, max, color, track } => {
             let v = value_of(value, cx).unwrap_or(*min);
             Leaf::Bar { frac: (((v - min) / (max - min).max(1e-9)) as f32).clamp(0.0, 1.0), thickness: n.c.height.unwrap_or(6.0).min(r.h), color: color.clone(), track: track.clone() }
+        }
+        Kind::AnalogClock { size, color, track, second_color, numerals, seconds } => {
+            let t = cx.data.time;
+            let second = t.sec as f32 / 60.0;
+            let minute = (t.min as f32 + second) / 60.0;
+            let hour = (t.hour as f32 % 12.0 + minute) / 12.0;
+            Leaf::AnalogClock { hour, minute, second, size: *size, color: color.clone(), track: track.clone(), second_color: second_color.clone(), numerals: *numerals, seconds: *seconds }
         }
         Kind::Ring { value, max, size, thickness, color, track } => {
             Leaf::Ring { frac: ((value_of(value, cx).unwrap_or(0.0) / max) as f32).clamp(0.0, 1.0), size: *size, thickness: *thickness, color: color.clone(), track: track.clone() }
@@ -324,6 +333,7 @@ pub fn dump(it: &Item) -> String {
             Leaf::Text { s, size, bold, .. } => out.push_str(&format!(" text={s:?} size={size}{}", if *bold { " bold" } else { "" })),
             Leaf::Icon { name, size, .. } => out.push_str(&format!(" icon={name:?} size={size}")),
             Leaf::Bar { frac, thickness, .. } => out.push_str(&format!(" frac={frac:.2} thick={thickness}")),
+            Leaf::AnalogClock { hour, minute, second, .. } => out.push_str(&format!(" hands={hour:.4},{minute:.4},{second:.4}")),
             Leaf::Ring { frac, size, thickness, .. } => out.push_str(&format!(" frac={frac:.2} size={size} thick={thickness}")),
             Leaf::Graph { values, max, .. } => out.push_str(&format!(" points={} max={max:.2}", values.len())),
             Leaf::Image { path, .. } => out.push_str(&format!(" path={path:?}")),

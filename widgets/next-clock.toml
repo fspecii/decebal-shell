@@ -1,32 +1,24 @@
 format = 1
 id = "next-clock"
 name = "Next clock"
-description = "A generous clock and date card, inspired by NextKDE desktop widgets. Works with every theme."
-size = [264, 152]
+description = "A live monochrome analog dial on a transparent glass card, shared by every theme."
+size = [192, 192]
 refresh = 1000
 
 [root]
 type = "col"
-padding = 20
-gap = 8
-background = "popup@0.94"
+padding = 16
+background = "dock@0.14"
 radius = "theme"
-border = "border@0.6"
+border = "bar_text@0.32"
+border_width = 1
 on_click = "open dashboard"
 
 [[root.children]]
-type = "text"
-text = "{clock:%A}"
-size = 13
-weight = "bold"
-color = "accent"
-[[root.children]]
-type = "text"
-text = "{clock:%H:%M}"
-size = 48
-weight = "bold"
-[[root.children]]
-type = "text"
-text = "{clock:%e %B %Y}"
-size = 14
-color = "text_secondary"
+type = "analog-clock"
+size = 160
+color = "bar_text@0.90"
+track = "bar_text@0.38"
+second_color = "bar_text@0.80"
+numerals = true
+seconds = true

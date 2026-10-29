@@ -156,10 +156,26 @@ pub(crate) fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
     conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
 }
 
+/// Marks only shell surfaces that request glass, for scoped compositor blur rules.
+pub(crate) fn set_glass_hint(conn: &RustConnection, win: Window, enabled: bool) -> Result<(), Error> {
+    let atom = conn.intern_atom(false, b"_DECEBAL_BLUR").map_err(err)?.reply().map_err(err)?.atom;
+    conn.change_property32(PropMode::REPLACE, win, atom, AtomEnum::CARDINAL, &[u32::from(enabled)]).map_err(err)?;
+    Ok(())
+}
+
 /// Clicks go only to `rects` (all of the window when empty).
 /// Rectangles covering the pixels of `pm` that are not (nearly) transparent, merged vertically.
 /// Capped: a pathological image degrades to its bounding box.
 pub(crate) fn visible_rects(pm: &Pixmap) -> Vec<Rectangle> {
+    material_rects(pm, 16)
+}
+
+/// Visible material, including low-alpha glass; excludes unused popup canvases from blur.
+pub(crate) fn glass_rects(pm: &Pixmap) -> Vec<Rectangle> {
+    material_rects(pm, 0)
+}
+
+fn material_rects(pm: &Pixmap, cutoff: u8) -> Vec<Rectangle> {
     let (w, h) = (pm.width() as usize, pm.height() as usize);
     let data = pm.data();
     let mut out: Vec<Rectangle> = Vec::new();
@@ -171,9 +187,9 @@ pub(crate) fn visible_rects(pm: &Pixmap) -> Vec<Rectangle> {
             let row = &data[y * w * 4..(y + 1) * w * 4];
             let mut x = 0;
             while x < w {
-                if row[x * 4 + 3] > 16 {
+                if row[x * 4 + 3] > cutoff {
                     let x0 = x;
-                    while x < w && row[x * 4 + 3] > 16 {
+                    while x < w && row[x * 4 + 3] > cutoff {
                         x += 1;
                     }
                     runs.push((x0 as i16, (x - x0) as u16));
@@ -264,6 +280,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     set_panel_hints(&conn, win, &atoms, strut)?;
     let mut rects = app.input_rects();
     let clip = !has_compositor(&conn, screen_num);
+    let mut glass_hint = None;
     set_input_shape(&conn, win, &rects, (w, h))?;
 
     let gc = conn.generate_id().map_err(err)?;
@@ -334,9 +351,20 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         if dirty {
             dirty = false;
             app.draw(&mut pm);
-            if clip {
-                // No compositor: transparent pixels would show as black, so only the drawn area is shown.
-                let vis = visible_rects(&pm);
+            let glass = crate::theme::th().blur > 0.0;
+            if glass_hint != Some(glass) {
+                set_glass_hint(&conn, win, glass)?;
+                glass_hint = Some(glass);
+            }
+            if clip || glass || !last_visible.is_empty() {
+                // Glass must not blur the unused transparent popup canvas over other windows.
+                let vis = if glass {
+                    glass_rects(&pm)
+                } else if clip {
+                    visible_rects(&pm)
+                } else {
+                    vec![Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]
+                };
                 if vis.len() != last_visible.len() || vis.iter().zip(&last_visible).any(|(a, b)| (a.x, a.y, a.width, a.height) != (b.x, b.y, b.width, b.height)) {
                     conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &vis).map_err(err)?;
                     last_visible = vis;
@@ -443,6 +471,15 @@ fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, max_by
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn glass_shape_keeps_faint_bar_material_but_excludes_unused_popup_canvas() {
+        let mut pm = tiny_skia::Pixmap::new(100, 420).unwrap();
+        crate::gfx::fill_rect(&mut pm, 0.0, 0.0, 100.0, 26.0, crate::theme::Rgb(40, 70, 100).color(0.06));
+        let regions = super::glass_rects(&pm);
+        assert!(regions.iter().any(|r| r.y == 0 && r.width == 100 && r.height == 26));
+        assert!(regions.iter().all(|r| i32::from(r.y) + i32::from(r.height) <= 26), "unused 420px canvas would blur widgets beneath the bar");
+    }
+
     use super::*;
 
     fn spec(anchor: Anchor, margin: i32, stretch: bool) -> SurfaceSpec {
