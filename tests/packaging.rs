@@ -219,6 +219,6 @@ fn shared_widgets_have_x11_login_and_service_entries() {
         assert!(read("PKGBUILD").contains(name));
     }
     assert!(read("contrib/decebal-widgets.desktop").contains("Exec=decwidgets autostart"));
-    let unit=read("contrib/decebal-widgets.service");
+    let unit = read("contrib/decebal-widgets.service");
     assert!(unit.contains("ExecStart=/usr/bin/decwidgets daemon") && unit.contains("Restart=on-failure"));
 }
