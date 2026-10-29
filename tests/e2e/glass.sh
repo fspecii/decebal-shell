@@ -141,8 +141,15 @@ print(f'  underlying window glass sample: {tuple(p)}')
 assert p[1]>p[0]+60 and p[1]>p[2]+60, 'glass ignored the actual window behind it'
 PYWINDOW
 PASS=$((PASS+1));echo '  ok   native glass captures the normal window behind it'
+xdotool windowsize "$BWIN" 350 90
+python3 "$HERE/tests/e2e/glass-motion.py" "$BARWIN" "$BWIN"
+PASS=$((PASS+1)); echo '  ok   native glass follows moving windows without the old 250ms stepping'
 kill "$BACKDROP";wait "$BACKDROP" 2>/dev/null||true
 decthemectl apply nord --reset --no-rdwm >/dev/null
+# Themes without widgets now correctly hide the collection. Re-enable this test
+# fixture explicitly so the following checks exercise a non-glass widget.
+jq '.widgets={enabled:true,items:[{use:"builtin:next-clock",anchor:"top-left",x:40,y:120}]}' "$DECEBAL_CONFIG/decebal.json" > "$T/shell.json"
+mv "$T/shell.json" "$DECEBAL_CONFIG/decebal.json"
 check 'opaque theme clears bar blur hint' hint "$BARWIN" 0
 # Theme changes rebuild widget windows, so find its current id for each assertion.
 widget_clear() { local id; id=$(xdotool search --class '^decwidgets$' | head -1); hint "$id" 0; }

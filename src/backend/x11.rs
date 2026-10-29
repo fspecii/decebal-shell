@@ -264,7 +264,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     conn.randr_select_input(screen.root, randr::NotifyMask::SCREEN_CHANGE).map_err(err)?;
 
     let (wake, waker) = WakePipe::new().map_err(err)?;
-    app.set_waker(waker);
+    app.set_waker(waker.clone());
 
     let (x, y, w, h) = place(&spec, app.size(), mon);
     let colormap = conn.generate_id().map_err(err)?;
@@ -289,7 +289,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let clip = !has_compositor(&conn, screen_num);
     let mut glass_hint = None;
     let mut native_hint = None;
-    let mut material_renderer = super::glass::Renderer::default();
+    let mut material_renderer = super::glass::Renderer::new(waker);
     let mut material_deadline = Instant::now();
     set_input_shape(&conn, win, &rects, (w, h))?;
 
@@ -313,7 +313,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     loop {
         let native_material = crate::glass::Material::from_theme(&crate::theme::th());
         let native_poll = native_material.enabled() && !app.glass_regions().is_empty();
-        let material_due = native_poll && Instant::now() >= material_deadline;
+        let material_due = native_poll && (material_renderer.ready() || Instant::now() >= material_deadline);
         if material_due {
             material_deadline = Instant::now() + std::time::Duration::from_millis(250);
         }

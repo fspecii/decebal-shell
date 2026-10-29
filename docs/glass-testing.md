@@ -11,7 +11,8 @@ Checks cover:
 - The bar's bounding shape excludes unused popup canvas over the desktop clock, keeping Picom from blurring widgets beneath that transparent canvas.
 - Root screenshot pixels inside both surfaces change when the wallpaper changes between two solid colours. The pixels differ from the bare wallpaper as well, proving that an actual tinted surface is composited over the background.
 - A generated checkerboard changes through the native card bezel compared with straight alpha compositing, proving a captured/transformed backdrop rather than a marker alone.
-- Switching to Nord clears native and blur hints on both shared surfaces while Picom remains alive.
+- Moving an ordinary window below the bar changes the actual native client pixels throughout the motion, rather than only on the old 250 ms refresh timer. Repainting that window while stationary also refreshes glass via XDamage.
+- Switching to Nord clears native and blur hints on both shared surfaces while Picom remains alive. The test explicitly re-enables its widget fixture because a theme without widgets normally hides the collection.
 
 This proves captured native glass, per-pixel composition and the Picom fallback boundary. It does not claim parity with NextKDE's KWin liquid-glass refraction effects. The test uses screenshots of its own generated desktop only.
 
@@ -20,3 +21,5 @@ Picom enables default background blur when a blur method is configured. The firs
 The default test compositor is XRender because this machine's private Xvfb/GLX path sometimes leaves the composited root stale while the actual bar client pixels update correctly. The test records both client and root pixels; it retains strict root freshness assertions. `PICOM_BACKEND=glx` reproduces that environment-specific artifact. The native material renderer is independent of Picom's blur/shader backend. Production GLX behavior is a separate live-session check.
 
 The suite also stops and restarts its private compositor, verifying the widget watcher recreates desktop surfaces as 24-bit fallback windows and then restores 32-bit ARGB windows. This covers compositor/login startup ordering.
+
+Backdrop capture and CPU blur run on a dedicated X11 connection, outside the GUI input loop. Root geometry events and XDamage on overlapping lower windows trigger sampling, capped at one sample per 16 ms. Idle scenes do not continually read back pixels. There is one pending request and one replaceable result slot; slow rendering cannot accumulate stale frames. Result wakes repaint the native surface immediately. Geometry requests are pipelined, and captures remain clipped to material bounds. Disabling glass or closing the surface disconnects the worker and releases its Damage subscriptions.
