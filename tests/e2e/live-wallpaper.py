@@ -135,6 +135,11 @@ with tempfile.TemporaryDirectory(prefix='decebal-live-test-') as tmp:
         click_control('lw:provider', 0)
         wait(lambda:any(c['id']=='lw:search' and c['value']=='Search DesktopHut' for c in layout()['ctls']))
         check(True,'DesktopHut is available as the curated live wallpaper source')
+        if os.environ.get('DESKTOPHUT_NETWORK_SMOKE') == '1':
+            click_control('lw:search')
+            wait(lambda:any(c['id'].startswith('lw:use:') for c in layout()['ctls']), timeout=120)
+            check(True,'DesktopHut search populates actual Settings download cards')
+            check(bool(list((d/'cache/decebal/live-wallpapers').glob('desktophut-*'))),'DesktopHut result thumbnails are cached')
         shellpath=d/'config/omarchy/decebal.json'
         click_control('th:dynamic')
         wait(lambda:json.loads(shellpath.read_text())['theme']['dynamic']['enabled'] is True)
