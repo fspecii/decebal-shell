@@ -40,6 +40,9 @@ struct Win {
     depth: u8,
     colormap: Option<Colormap>,
     glass: bool,
+    native: bool,
+    position: (i32, i32),
+    renderer: crate::backend::glass::Renderer,
 }
 
 pub struct Paths {
@@ -82,14 +85,12 @@ pub fn ensure_running() -> Result<(), String> {
     if std::env::var_os("DISPLAY").is_none() {
         return Err("No desktop display is available for widgets".into());
     }
-    if crate::single::signal("decwidgets", 0) {
-        return Ok(());
-    }
-    if !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decwidgets"), "daemon".into()]) {
+    let running = crate::single::signal("decwidgets", 0);
+    if !running && !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decwidgets"), "daemon".into()]) {
         return Err("Could not start desktop widgets".into());
     }
-    for _ in 0..20 {
-        if crate::single::signal("decwidgets", 0) {
+    for _ in 0..100 {
+        if is_running() {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -97,20 +98,33 @@ pub fn ensure_running() -> Result<(), String> {
     Err("Desktop widgets did not start; see the decwidgets log".into())
 }
 
+/// True only once the host on this X display has completed its first render.
+pub fn is_running() -> bool {
+    let Ok((conn, screen)) = x11rb::connect(None) else { return false };
+    let name = format!("_DECEBAL_WIDGET_HOST_S{screen}");
+    let Some(atom) = conn.intern_atom(true, name.as_bytes()).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0) else { return false };
+    conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
+}
+
 pub fn run(paths: Paths) -> Result<(), String> {
     let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let root = screen.root;
+    conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::SUBSTRUCTURE_NOTIFY | EventMask::PROPERTY_CHANGE)).map_err(err)?;
     let (pipe, waker) = WakePipe::new().map_err(err)?;
     {
         let w = waker.clone();
         crate::theme::live::start_watcher(move || w.wake());
     }
+    let ready_atom = conn.intern_atom(false, format!("_DECEBAL_WIDGET_HOST_S{screen_num}").as_bytes()).map_err(err)?.reply().map_err(err)?.atom;
+    let ready_window = conn.generate_id().map_err(err)?;
+    conn.create_window(0, ready_window, root, 0, 0, 1, 1, 0, WindowClass::INPUT_ONLY, 0, &CreateWindowAux::new()).map_err(err)?;
+    let mut announced = false;
     let mut fonts = Fonts::load().ok_or("no usable font found")?;
     let mut symbols = SymbolCache::default();
     let max_bytes = conn.maximum_request_bytes().saturating_sub(64);
-    let compositor = bx::has_compositor(&conn, screen_num);
-    let argb_visual = if compositor { bx::argb_visual(&screen) } else { None };
+    let mut compositor = bx::has_compositor(&conn, screen_num);
+    let mut argb_visual = if compositor { bx::argb_visual(&screen) } else { None };
 
     let mut wins: Vec<Win> = Vec::new();
     let mut live: Option<Live> = None;
@@ -149,6 +163,7 @@ pub fn run(paths: Paths) -> Result<(), String> {
                 crate::mem::trim();
             }
             stamp.1 = theme_stamp(&paths);
+            stack_widgets(&conn, root, &wins)?;
             conn.flush().map_err(err)?;
             next_refresh = Instant::now();
         }
@@ -160,12 +175,20 @@ pub fn run(paths: Paths) -> Result<(), String> {
             }
             let th = crate::theme::th();
             for w in wins.iter_mut() {
-                draw(&conn, w, &data, &th, &mut fonts, &mut symbols, max_bytes, compositor)?;
+                draw(&conn, &screen, w, &data, &th, &mut fonts, &mut symbols, max_bytes, compositor)?;
+            }
+            if !announced {
+                conn.set_selection_owner(ready_window, ready_atom, x11rb::CURRENT_TIME).map_err(err)?;
+                announced = true;
             }
             let ms = wins.iter().map(|w| w.res.def.refresh_ms).min().unwrap_or(1000);
+            let ms = if crate::glass::Material::from_theme(&th).enabled() { ms.min(250) } else { ms };
             next_refresh = Instant::now() + Duration::from_millis(u64::from(ms));
         }
 
+        // Small cards may fit entirely in x11rb's output buffer. Always submit
+        // drawing, shape and readiness requests before sleeping for input.
+        conn.flush().map_err(err)?;
         let timeout = next_refresh.saturating_duration_since(Instant::now()).min(Duration::from_millis(500));
         let ready = poll_readable(&[conn.stream().as_raw_fd(), pipe.fd()], Some(timeout)).map_err(err)?;
         if ready[1] {
@@ -197,8 +220,30 @@ pub fn run(paths: Paths) -> Result<(), String> {
                         _ => {}
                     }
                 }
+                Event::PropertyNotify(p) if p.window == root => {
+                    let wallpaper = conn.intern_atom(true, b"_XROOTPMAP_ID").map_err(err)?.reply().map_err(err)?.atom;
+                    if p.atom == wallpaper {
+                        rebuild = true;
+                    }
+                    stack_widgets(&conn, root, &wins)?;
+                }
+                Event::ConfigureNotify(c) => {
+                    if let Some(w) = wins.iter_mut().find(|w| w.id == c.window) {
+                        w.position = (i32::from(c.x), i32::from(c.y));
+                    }
+                    stack_widgets(&conn, root, &wins)?;
+                }
+                Event::MapNotify(_) | Event::DestroyNotify(_) => stack_widgets(&conn, root, &wins)?,
                 _ => {}
             }
+        }
+        // Login services may start the compositor after this watcher, and a
+        // compositor can restart. Recreate surfaces with the appropriate visual.
+        let active_compositor = bx::has_compositor(&conn, screen_num);
+        if active_compositor != compositor {
+            compositor = active_compositor;
+            argb_visual = if compositor { bx::argb_visual(&screen) } else { None };
+            rebuild = true;
         }
         // the config or the selected theme changed on disk
         let now = (crate::config::Stamp::of(&paths.shell_json), theme_stamp(&paths));
@@ -264,34 +309,123 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_CLASS, AtomEnum::STRING, b"decwidgets\0decwidgets\0").map_err(err)?;
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, id, &CreateGCAux::new()).map_err(err)?;
-    conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
     let glass = crate::theme::th().blur > 0.0;
     bx::set_glass_hint(conn, id, glass).map_err(err)?;
+    bx::set_native_glass_hint(conn, id, false).map_err(err)?;
     conn.map_window(id).map_err(err)?;
-    conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
     let base = res.base.clone();
-    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth, colormap, glass })
+    Ok(Win {
+        id,
+        gc,
+        inst: inst.clone(),
+        res,
+        w,
+        h,
+        item: Some(item),
+        images: ImageCache::new(&base),
+        argb: argb_visual.is_some(),
+        backdrop,
+        depth: screen.root_depth,
+        colormap,
+        glass,
+        native: false,
+        position: (x, y),
+        renderer: Default::default(),
+    })
+}
+
+/// Desktop cards belong above wallpaper windows, below managed applications. Absolute
+/// lowering can hide them behind an external DESKTOP wallpaper window.
+fn stack_widgets(conn: &RustConnection, root: Window, wins: &[Win]) -> Result<(), String> {
+    if wins.is_empty() {
+        return Ok(());
+    }
+    let kind = conn.intern_atom(false, b"_NET_WM_WINDOW_TYPE").map_err(err)?.reply().map_err(err)?.atom;
+    let desktop = conn.intern_atom(false, b"_NET_WM_WINDOW_TYPE_DESKTOP").map_err(err)?.reply().map_err(err)?.atom;
+    let clients = conn.intern_atom(false, b"_NET_CLIENT_LIST").map_err(err)?.reply().map_err(err)?.atom;
+    let managed: Vec<u32> = conn.get_property(false, root, clients, AtomEnum::WINDOW, 0, 65536).map_err(err)?.reply().map_err(err)?.value32().map(|v| v.collect()).unwrap_or_default();
+    let tree = conn.query_tree(root).map_err(err)?.reply().map_err(err)?.children;
+    let desktops: Vec<_> = tree
+        .iter()
+        .copied()
+        .filter(|id| !wins.iter().any(|w| w.id == *id))
+        .filter(|id| {
+            if !conn.get_window_attributes(*id).ok().and_then(|c| c.reply().ok()).is_some_and(|a| a.map_state == MapState::VIEWABLE) {
+                return false;
+            }
+            conn.get_property(false, *id, kind, AtomEnum::ATOM, 0, 16).ok().and_then(|r| r.reply().ok()).and_then(|p| p.value32().map(|mut v| v.any(|a| a == desktop))).unwrap_or(false)
+        })
+        .collect();
+    let wallpaper = desktops.last().copied();
+    let first_app = tree
+        .iter()
+        .copied()
+        .find(|id| managed.contains(id) && !desktops.contains(id) && conn.get_window_attributes(*id).ok().and_then(|c| c.reply().ok()).is_some_and(|a| a.map_state == MapState::VIEWABLE));
+    let rank = |id| tree.iter().position(|w| *w == id);
+    if let Some(bg) = wallpaper.filter(|bg| first_app.is_none_or(|app| rank(*bg) < rank(app))) {
+        let base = rank(bg).unwrap();
+        let ordered = wins.iter().enumerate().all(|(i, w)| rank(w.id) == Some(base + i + 1));
+        if !ordered {
+            let mut sibling = bg;
+            for w in wins {
+                conn.configure_window(w.id, &ConfigureWindowAux::new().sibling(sibling).stack_mode(StackMode::ABOVE)).map_err(err)?;
+                sibling = w.id;
+            }
+        }
+    } else if let Some(app) = first_app {
+        for w in wins {
+            if rank(w.id) > rank(app) {
+                conn.configure_window(w.id, &ConfigureWindowAux::new().sibling(app).stack_mode(StackMode::BELOW)).map_err(err)?;
+            }
+        }
+    } else if !wins.iter().enumerate().all(|(i, w)| rank(w.id) == Some(i)) {
+        // A bare root pixmap is not a window. Keep cards below shell panels and
+        // application popups even before the first managed app is launched.
+        for w in wins.iter().rev() {
+            conn.configure_window(w.id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
-fn draw(conn: &RustConnection, w: &mut Win, base: &Data, th: &crate::theme::Theme, fonts: &mut Fonts, symbols: &mut SymbolCache, max_bytes: usize, compositor: bool) -> Result<(), String> {
-    let glass = th.blur > 0.0;
-    if glass != w.glass {
-        bx::set_glass_hint(conn, w.id, glass).map_err(err)?;
-        w.glass = glass;
-    }
+fn draw(
+    conn: &RustConnection,
+    screen: &Screen,
+    w: &mut Win,
+    base: &Data,
+    th: &crate::theme::Theme,
+    fonts: &mut Fonts,
+    symbols: &mut SymbolCache,
+    max_bytes: usize,
+    compositor: bool,
+) -> Result<(), String> {
     let data = data_with_options(base, &w.inst);
     let item = layout::layout(&w.res.def, &Ctx { data: &data, metrics: &FontMetrics(fonts), theme_radius: th.radius }, Some((w.w as f32, w.h as f32)));
     let mut pm = Pixmap::new(w.w, w.h).ok_or("pixmap")?;
     paint::paint(&mut pm, &item, &mut Painter { fonts, symbols, images: &mut w.images, theme: th }, 1.0);
-    fonts.trim();
+    // Keep parsed metrics while cards are active; trim when the collection is empty.
     let depth = if w.argb { 32 } else { w.depth };
-    if glass && w.argb {
-        conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, w.id, 0, 0, &bx::glass_rects(&pm)).map_err(err)?;
+    let material = crate::glass::Material::from_theme(th);
+    // Preserve foreground coverage before native glass makes its interior opaque.
+    let shape = if material.enabled() || (th.blur > 0.0 && w.argb) { Some(bx::glass_rects(&pm)) } else { None };
+    let r = item.rect;
+    let native = w.renderer.paint(conn, screen, w.id, w.position, &mut pm, &[crate::glass::Region { x: r.x, y: r.y, w: r.w, h: r.h, radius: item.radius }], material);
+    let glass = th.blur > 0.0 && !native;
+    if glass != w.glass {
+        bx::set_glass_hint(conn, w.id, glass).map_err(err)?;
+        w.glass = glass;
+    }
+    if native != w.native {
+        bx::set_native_glass_hint(conn, w.id, native).map_err(err)?;
+        w.native = native;
+    }
+    if let Some(rects) = &shape {
+        conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, w.id, 0, 0, rects).map_err(err)?;
     }
     if !w.argb {
         // no alpha channel: blend the card over what the desktop showed there, and cut the window to the card's shape
-        let rects = bx::visible_rects(&pm);
+        let rects = shape.clone().unwrap_or_else(|| bx::visible_rects(&pm));
         conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, w.id, 0, 0, &rects).map_err(err)?;
         let mut out = w.backdrop.clone().unwrap_or_else(|| {
             let mut p = Pixmap::new(w.w, w.h).expect("size checked above");
@@ -310,7 +444,11 @@ fn draw(conn: &RustConnection, w: &mut Win, base: &Data, th: &crate::theme::Them
 /// The pixels of the root window under (x, y, w, h), or `None` when the area is off screen or the format is unexpected.
 fn snapshot(conn: &RustConnection, root: Window, x: i32, y: i32, w: u32, h: u32) -> Option<Pixmap> {
     let (x, y) = (i16::try_from(x).ok()?, i16::try_from(y).ok()?);
-    let img = conn.get_image(ImageFormat::Z_PIXMAP, root, x, y, w as u16, h as u16, !0).ok()?.reply().ok()?;
+    // Read the wallpaper pixmap rather than root's composited children (which
+    // could include an application or another widget at this location).
+    let atom = conn.intern_atom(true, b"_XROOTPMAP_ID").ok()?.reply().ok()?.atom;
+    let wallpaper = if atom == 0 { None } else { conn.get_property(false, root, atom, AtomEnum::PIXMAP, 0, 1).ok().and_then(|c| c.reply().ok()).and_then(|p| p.value32().and_then(|mut v| v.next())) };
+    let img = conn.get_image(ImageFormat::Z_PIXMAP, wallpaper.unwrap_or(root), x, y, w as u16, h as u16, !0).ok()?.reply().ok()?;
     if img.data.len() != (w * h * 4) as usize {
         return None;
     }

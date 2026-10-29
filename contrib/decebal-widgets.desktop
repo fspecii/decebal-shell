@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=decebal desktop widgets
+Exec=decwidgets autostart
+TryExec=decwidgets

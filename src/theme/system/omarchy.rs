@@ -271,7 +271,7 @@ impl Target for Omarchy {
     fn default_on(&self, env: &Env) -> bool {
         match self.kind {
             Kind::Core => self.available(env).is_ok(),
-            Kind::Browser => self.available(env).is_ok() && browser_passwordless(env),
+            Kind::Browser => false,
             Kind::Editors | Kind::Hooks => false,
         }
     }
@@ -467,18 +467,19 @@ mod tests {
         let mut cfg = Config { enabled: true, ..Config::default() };
         apply(&env, &cfg, &palette(false), &Opts::default()).unwrap();
         let calls = fake.calls.borrow().clone();
-        assert!(calls.iter().any(|c| c.starts_with("omarchy-theme-set-browser")), "passwordless sudo: the browser follows");
+        assert!(!calls.iter().any(|c| c.starts_with("omarchy-theme-set-browser")), "browser remains opt-in even with passwordless sudo");
         assert!(
             !calls.iter().any(|c| c.starts_with("omarchy-theme-set-vscode") || c.starts_with("omarchy-hook") || c.contains("restart-terminal")),
             "editors, hooks and signals are off by default: {calls:?}"
         );
+        cfg.targets.insert("browser".into(), true);
         cfg.targets.insert("editors".into(), true);
         cfg.targets.insert("hooks".into(), true);
         cfg.signals = true;
         fake.calls.borrow_mut().clear();
         apply(&env, &cfg, &palette(true), &Opts::default()).unwrap();
         let calls = fake.calls.borrow().clone();
-        for want in ["omarchy-theme-set-vscode", "omarchy-theme-set-obsidian", "omarchy-hook theme-set decebal", "omarchy-restart-terminal", "omarchy-restart-helix"] {
+        for want in ["omarchy-theme-set-browser", "omarchy-theme-set-vscode", "omarchy-theme-set-obsidian", "omarchy-hook theme-set decebal", "omarchy-restart-terminal", "omarchy-restart-helix"] {
             assert!(calls.iter().any(|c| c.starts_with(want)), "{want} in {calls:?}");
         }
     }

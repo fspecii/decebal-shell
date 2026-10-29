@@ -1,9 +1,9 @@
 # Orbit Glass
 
-Floating navigation, rounded Arc windows and original luminous orbital geometry.
+Orbit is a desktop command deck: a glass navigation rail on the right, a compact centered launcher below, minimal window chrome with controls on the right, and a measured 16/20-pixel inner/outer window rhythm. Adwaita Sans with monospace window titles provides a precise typographic voice; installed Inter/Adwaita Mono fallbacks keep it usable across machines. The rail and dock serve separate roles: workspace/status navigation and application launchers.
 
-Select any named color palette independently. This package controls desktop structure and provides complete light/dark token defaults; it does not force wallpaper color matching. Shared builtin widgets remain available on every theme, with global enable/disable choices preserved by the shell. Manifest widget entries are initial placement suggestions.
+The original eclipse-field artwork leaves the right work area quiet. Palette selection remains independent of desktop layout. No widget is tied to Orbit; global widget choices and positions remain intact when switching themes. The manifest deliberately supplies no widget placements.
 
-The first wallpaper is the default; the second is a manually selectable companion. Automatic wallpaper switching with light/dark mode is not currently implemented. Fonts fall back to Inter/Noto Sans or DejaVu Sans Mono if the preferred families are unavailable.
+The theme selects matching dark/light artwork on a full apply. Later mode changes follow the packaged variants while preserving a custom wallpaper selected by the user. `ARTWORK.md` contains complete original SVG source for both 4K PNG assets; `LICENSE.txt` applies to the package. Screenshots show actual running applications on a private desktop, not UI painted into the wallpaper.
 
-`ARTWORK.md` contains original SVG source and rendering instructions for the included 3840×2160 PNG artwork. No screenshot is simulated in the artwork. Desktop screenshots will be captured after integration. See `docs/theme-research-glass-paper.md` in the source repository for inspirations and validation.
+Glass requires a compositor and the shell's shared material implementation. Alpha and background blur alone are not described as liquid refraction. See `docs/theme-research-glass-paper.md` for the reference research, design rationale, precise validation and current material limitations.

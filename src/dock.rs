@@ -60,6 +60,8 @@ pub struct Dock {
     /// Smoothed per-item scales; empty until the first animation step.
     eased: Vec<f32>,
     icons: IconCache,
+    #[cfg(test)]
+    dimensions_override: Option<(f32, f32)>,
 }
 
 /// How far (in px) magnification reaches from the pointer.
@@ -76,27 +78,57 @@ const BOUNCE_MAX: Duration = Duration::from_secs(8);
 
 impl Dock {
     pub fn new(items: Vec<DockItem>, settings: DockSettings) -> Self {
-        Self { items, settings, hover_x: None, drag: None, bounce: Vec::new(), eased: Vec::new(), icons: IconCache::default() }
+        Self {
+            items,
+            settings,
+            hover_x: None,
+            drag: None,
+            bounce: Vec::new(),
+            eased: Vec::new(),
+            icons: IconCache::default(),
+            #[cfg(test)]
+            dimensions_override: None,
+        }
     }
 
-    fn base_cell_w() -> f32 {
-        CELL_W
+    fn dimensions(&self) -> (f32, f32) {
+        #[cfg(test)]
+        if let Some(dimensions) = self.dimensions_override {
+            return dimensions;
+        }
+        let theme = crate::theme::th();
+        (theme.dock_icon_size, theme.dock_padding)
+    }
+
+    fn icon_scale(&self) -> f32 {
+        self.dimensions().0 / ICON_SIZE
+    }
+    fn base_cell_w(&self) -> f32 {
+        CELL_W * self.icon_scale()
+    }
+    fn padding(&self) -> f32 {
+        self.dimensions().1
+    }
+    /// Visible panel height, excluding magnification and bounce headroom.
+    pub fn panel_height(&self) -> f32 {
+        PANEL_HEIGHT * self.icon_scale()
     }
 
     /// Panel width with no magnification.
     pub fn rest_width(&self) -> f32 {
         let n = self.items.len() as f32;
         if n == 0.0 {
-            return 2.0 * PANEL_PAD_X;
+            return 2.0 * self.padding();
         }
-        n * Self::base_cell_w() + (n - 1.0) * self.settings.app_spacing + 2.0 * PANEL_PAD_X
+        n * self.base_cell_w() + (n - 1.0) * self.settings.app_spacing + 2.0 * self.padding()
     }
 
     /// Canvas (window) size that always fits the fully magnified dock.
     pub fn canvas_size(&self) -> (u32, u32) {
-        let extra = self.items.len() as f32 * Self::base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
+        let extra = self.items.len() as f32 * self.base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
         let w = (self.rest_width() + extra + 2.0 * SIDE_MARGIN).max(MIN_CANVAS_W);
-        let h = PANEL_HEIGHT + HEADROOM;
+        let headroom = (HEADROOM * self.icon_scale()).max(self.dimensions().0 * (self.settings.magnification - 1.0).max(0.0) + BOUNCE_H * self.icon_scale() + 4.0);
+        let h = self.panel_height() + headroom;
         (w.ceil() as u32, h.ceil() as u32)
     }
 
@@ -115,7 +147,7 @@ impl Dock {
 
     fn bounce_offset(&self, id: &str) -> f32 {
         match self.bounce.iter().find(|(b, _)| b == id) {
-            Some((_, t)) => BOUNCE_H * (t.elapsed().as_secs_f32() * std::f32::consts::PI / BOUNCE_PERIOD).sin().abs(),
+            Some((_, t)) => BOUNCE_H * self.icon_scale() * (t.elapsed().as_secs_f32() * std::f32::consts::PI / BOUNCE_PERIOD).sin().abs(),
             None => 0.0,
         }
     }
@@ -130,13 +162,13 @@ impl Dock {
 
     /// Scales the pointer asks for right now (1.0 everywhere without hover).
     fn target_scales(&self, rest_x: f32, n: usize) -> Vec<f32> {
-        let base = Self::base_cell_w();
+        let base = self.base_cell_w();
         let sp = self.settings.app_spacing;
         let mag = (self.settings.magnification - 1.0).max(0.0);
         (0..n)
             .map(|i| match self.hover_x {
                 Some(hx) => {
-                    let centre = rest_x + PANEL_PAD_X - CONTENT_NUDGE + i as f32 * (base + sp) + base / 2.0;
+                    let centre = rest_x + self.padding() - CONTENT_NUDGE * self.icon_scale() + i as f32 * (base + sp) + base / 2.0;
                     1.0 + mag * Self::falloff((hx - centre).abs())
                 }
                 None => 1.0,
@@ -177,7 +209,7 @@ impl Dock {
     /// Computes cell positions for a canvas of width `canvas_w`.
     pub fn layout(&self, canvas_w: f32) -> Layout {
         let sp = self.settings.app_spacing;
-        let base = Self::base_cell_w();
+        let base = self.base_cell_w();
         let n = self.items.len();
         let rest_w = self.rest_width();
         let rest_x = (canvas_w - rest_w) / 2.0;
@@ -185,9 +217,9 @@ impl Dock {
         let scales = self.current_scales(rest_x, n);
 
         let total: f32 = scales.iter().map(|s| base * s).sum::<f32>() + sp * n.saturating_sub(1) as f32;
-        let panel_w = total + 2.0 * PANEL_PAD_X;
+        let panel_w = total + 2.0 * self.padding();
         let panel_x = (canvas_w - panel_w) / 2.0;
-        let mut x = panel_x + PANEL_PAD_X - CONTENT_NUDGE;
+        let mut x = panel_x + self.padding() - CONTENT_NUDGE * self.icon_scale();
         let cells = scales
             .iter()
             .map(|&scale| {
@@ -202,11 +234,23 @@ impl Dock {
     /// Index of the item under canvas point (`x`, `y`), if any.
     pub fn hit_test(&self, canvas_w: f32, canvas_h: f32, x: f32, y: f32) -> Option<usize> {
         let l = self.layout(canvas_w);
-        let top = canvas_h - PANEL_HEIGHT - 8.0;
+        let top = canvas_h - self.panel_height() - 8.0;
         if y < top || y > canvas_h {
             return None;
         }
         l.cells.iter().position(|c| x >= c.x && x <= c.x + c.w)
+    }
+
+    /// Actual rounded material plate, excluding animation headroom and side margins.
+    pub fn glass_region(&self, canvas_w: f32, canvas_h: f32) -> crate::glass::Region {
+        let layout = self.layout(canvas_w);
+        crate::glass::Region {
+            x: layout.panel_x,
+            y: canvas_h - self.panel_height(),
+            w: layout.panel_w,
+            h: self.panel_height(),
+            radius: layout_radius(layout.panel_w, self.panel_height(), self.settings.roundness),
+        }
     }
 
     /// Draws the whole dock into `pm`, which should be `canvas_size()` pixels.
@@ -215,16 +259,17 @@ impl Dock {
         let cw = pm.width() as f32;
         let ch = pm.height() as f32;
         let layout = self.layout(cw);
-        let panel_y = ch - PANEL_HEIGHT;
+        let panel_y = ch - self.panel_height();
 
-        let radius = layout_radius(layout.panel_w, PANEL_HEIGHT, self.settings.roundness);
+        let radius = layout_radius(layout.panel_w, self.panel_height(), self.settings.roundness);
         // Theme colours: panel colour, opacity (`dock_alpha` 0.6 = the original look at default settings) and outline.
         let th = crate::theme::th();
         let alpha = ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0);
-        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, PANEL_HEIGHT, radius, th.dock.color(alpha));
-        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, PANEL_HEIGHT - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
+        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, self.panel_height(), radius, th.dock.color(alpha));
+        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, self.panel_height() - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
 
-        let icon_bottom = panel_y + PANEL_PAD_TOP + ICON_SIZE;
+        let icon_bottom = panel_y + PANEL_PAD_TOP * self.icon_scale() + self.dimensions().0;
+        let icon_size = self.dimensions().0;
         let dragged = self.drag.map(|d| d.index);
         for (i, (item, cell)) in self.items.iter().zip(&layout.cells).enumerate() {
             if dragged == Some(i) {
@@ -234,7 +279,7 @@ impl Dock {
                 }
                 continue;
             }
-            let size = ICON_SIZE * cell.scale;
+            let size = icon_size * cell.scale;
             let px = (size.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
             let lift = self.bounce_offset(&item.id);
             let icon = self.icons.get(&item.id, px);
@@ -246,7 +291,7 @@ impl Dock {
         }
         if let Some(d) = self.drag {
             if let Some(item) = self.items.get(d.index) {
-                let size = ICON_SIZE * 1.1;
+                let size = icon_size * 1.1;
                 let icon = self.icons.get(&item.id, (size.ceil() as u32) * 2);
                 blit_scaled(pm, icon, d.x - size / 2.0, icon_bottom - size - 8.0, size, size, 0.9);
             }
@@ -266,6 +311,41 @@ mod tests {
     fn dock(n: usize) -> Dock {
         let items = (0..n).map(|i| DockItem::pinned(&format!("app{i}"), i == 0)).collect();
         Dock::new(items, DockSettings::default())
+    }
+
+    #[test]
+    fn forty_two_pixel_theme_changes_plate_cells_hit_testing_and_render_canvas() {
+        let mut dock = dock(5);
+        dock.dimensions_override = Some((42.0, 8.0));
+        let (w, h) = dock.canvas_size();
+        let layout = dock.layout(w as f32);
+        let plate = dock.glass_region(w as f32, h as f32);
+        assert!((layout.cells[0].w - 60.0 * 42.0 / 47.0).abs() < 0.01);
+        assert!((plate.h - 71.0 * 42.0 / 47.0).abs() < 0.01);
+        assert!((plate.w - (5.0 * 60.0 * 42.0 / 47.0 + 4.0 * 6.0 + 16.0)).abs() < 0.01);
+        assert!(plate.h < PANEL_HEIGHT && dock.rest_width() < 356.0);
+        let cell = layout.cells[2];
+        assert_eq!(dock.hit_test(w as f32, h as f32, cell.x + cell.w / 2.0, h as f32 - 20.0), Some(2));
+        assert_eq!(dock.hit_test(w as f32, h as f32, cell.x + cell.w / 2.0, 0.0), None);
+        let mut pm = Pixmap::new(w, h).unwrap();
+        dock.draw(&mut pm);
+        let p = ((h as usize - 2) * w as usize + (plate.x + plate.w / 2.0) as usize) * 4;
+        assert!(pm.data()[p + 3] > 0);
+    }
+
+    #[test]
+    fn material_plate_excludes_animation_canvas_and_tracks_magnification() {
+        let mut dock = Dock::new(vec![DockItem::pinned("one", false), DockItem::pinned("two", false)], DockSettings::default());
+        let (w, h) = dock.canvas_size();
+        for hover in [None, Some(w as f32 / 2.0)] {
+            dock.hover_x = hover;
+            let region = dock.glass_region(w as f32, h as f32);
+            let layout = dock.layout(w as f32);
+            assert!(region.y > 0.0 && region.x > 0.0);
+            assert_eq!((region.x, region.w), (layout.panel_x, layout.panel_w));
+            assert_eq!(region.y + region.h, h as f32);
+            assert_eq!(region.h, PANEL_HEIGHT);
+        }
     }
 
     #[test]

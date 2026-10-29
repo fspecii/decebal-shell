@@ -8,7 +8,9 @@ use std::path::PathBuf;
 const HELP: &str = "decwidgets - declarative desktop widgets
 
 Usage:
+  decwidgets autostart             start the shared watcher on X11; quietly skip Wayland/headless sessions
   decwidgets [daemon]              run the widgets listed in decebal.json (\"widgets\" -> \"items\") on the desktop
+  decwidgets status [--json]        host readiness, saved desktop widgets and definition errors
   decwidgets list                  shipped samples, your widgets, and what is placed
   decwidgets data                  the data sources a widget can read ({cpu.usage:pct}, {clock:%H:%M}...)
   decwidgets validate FILE [--user] [--allow-exec]
@@ -33,6 +35,15 @@ fn main() {
     let src = Source::discover();
     match args.first().map(String::as_str) {
         None | Some("daemon") => daemon(&src),
+        Some("autostart") => {
+            let session = std::env::var("XDG_SESSION_TYPE").ok();
+            let backend = std::env::var("DECEBAL_BACKEND").ok();
+            let display = std::env::var("DISPLAY").is_ok_and(|s| !s.is_empty());
+            let wayland = std::env::var("WAYLAND_DISPLAY").is_ok_and(|s| !s.is_empty());
+            if autostart_allowed(session.as_deref(), backend.as_deref(), display, wayland) {
+                daemon(&src);
+            }
+        }
         Some("-h" | "--help" | "help") => println!("{HELP}"),
         Some("-V" | "--version") => println!("decwidgets {}", env!("CARGO_PKG_VERSION")),
         Some("data") => {
@@ -43,6 +54,7 @@ fn main() {
             println!("{:<18} {:<9} first line of a [commands.<name>] run (your own widgets with allow_exec only)", "cmd.<name>", "text");
         }
         Some("list") => list(&src),
+        Some("status") => status(&src, args.iter().any(|a| a == "--json")),
         Some("validate") => {
             let Some(file) = args.get(1) else { die("validate needs a file") };
             let trust = if args.iter().any(|a| a == "--user") {
@@ -67,11 +79,45 @@ fn main() {
     }
 }
 
+fn autostart_allowed(session: Option<&str>, backend: Option<&str>, display: bool, wayland: bool) -> bool {
+    display && session != Some("wayland") && backend != Some("wayland") && (!wayland || session == Some("x11"))
+}
+
 fn daemon(src: &Source) {
     decebal::mem::limit_arenas();
     let Some(_guard) = decebal::single::hold("decwidgets") else { return };
     if let Err(e) = decebal::widgets::host::run(decebal::widgets::host::Paths { shell_json: src.shell_json.clone(), themes_dir: src.themes_dir.clone() }) {
         die(&e);
+    }
+}
+
+fn status(src: &Source, json: bool) {
+    let cfg = WidgetsConfig::load(&src.shell_json);
+    let instances: Vec<_> = cfg
+        .items
+        .iter()
+        .filter(|i| i.place == Place::Desktop)
+        .map(|i| {
+            let problem = config::resolve(i, &src.themes_dir, cfg.allow_exec).err();
+            serde_json::json!({"use":i.use_,"enabled":i.enabled,"source":i.source,"error":problem})
+        })
+        .collect();
+    #[cfg(feature = "x11")]
+    let running = decebal::widgets::host::is_running();
+    #[cfg(not(feature = "x11"))]
+    let running = false;
+    if json {
+        println!("{}", serde_json::json!({"running":running,"enabled":cfg.enabled,"config":src.shell_json,"items":instances}));
+    } else {
+        println!("Desktop host: {}", if running { "ready" } else { "not running on this display" });
+        println!("Visibility: {}", if cfg.enabled { "shown" } else { "hidden" });
+        println!("Configuration: {}", src.shell_json.display());
+        if instances.is_empty() {
+            println!("No desktop cards configured. Open System Settings → Widgets and choose Add.");
+        }
+        for i in instances {
+            println!("  {} {}{}", if i["enabled"] == true { "on " } else { "off" }, i["use"].as_str().unwrap_or("?"), i["error"].as_str().map(|e| format!(" — {e}")).unwrap_or_default());
+        }
     }
 }
 
@@ -174,7 +220,14 @@ fn render(src: &Source, args: &[String]) {
 
 fn edit(src: &Source, args: &[String], add: bool) {
     let Some(name) = args.first().filter(|a| !a.starts_with("--")) else { die("needs a widget name") };
-    let root = decebal::settings::io::json_load(&src.shell_json);
+    let root: serde_json::Value = match std::fs::read_to_string(&src.shell_json) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| die(&format!("{}: {e}; configuration was not changed", src.shell_json.display()))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+        Err(e) => die(&format!("{}: {e}", src.shell_json.display())),
+    };
+    if !root.is_object() || root.get("widgets").is_some_and(|w| !w.is_object() || w.get("items").is_some_and(|i| !i.is_array())) {
+        die("widgets configuration must be an object with an items array; configuration was not changed");
+    }
     let mut cfg = WidgetsConfig::from_json(&root);
     let mut items = root.pointer("/widgets/items").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
     if add {
@@ -243,6 +296,17 @@ fn upsert(items: &mut Vec<serde_json::Value>, inst: &Instance, overrides: serde_
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn autostart_skips_wayland_xwayland_and_headless_sessions() {
+        assert!(autostart_allowed(Some("x11"), None, true, false));
+        assert!(autostart_allowed(None, Some("x11"), true, false));
+        assert!(!autostart_allowed(Some("wayland"), None, true, true));
+        assert!(!autostart_allowed(Some("wayland"), Some("x11"), true, true));
+        assert!(!autostart_allowed(None, None, true, true));
+        assert!(!autostart_allowed(None, None, false, false));
+        assert!(!autostart_allowed(Some("x11"), Some("wayland"), true, false));
+    }
 
     #[test]
     fn add_preserves_matching_raw_options_and_only_overrides_explicit_position() {

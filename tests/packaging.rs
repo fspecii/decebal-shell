@@ -210,3 +210,15 @@ fn the_theme_gallery_lists_every_shipped_package_with_its_screenshot() {
         assert!(len < 400 * 1024, "{id}.png is {len} bytes");
     }
 }
+
+#[test]
+fn shared_widgets_have_x11_login_and_service_entries() {
+    for name in ["decebal-widgets.desktop", "decebal-widgets.service"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contrib").join(name).exists());
+        assert!(read("Makefile").contains(name));
+        assert!(read("PKGBUILD").contains(name));
+    }
+    assert!(read("contrib/decebal-widgets.desktop").contains("Exec=decwidgets autostart"));
+    let unit=read("contrib/decebal-widgets.service");
+    assert!(unit.contains("ExecStart=/usr/bin/decwidgets daemon") && unit.contains("Restart=on-failure"));
+}

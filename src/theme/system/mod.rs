@@ -1,4 +1,4 @@
-//! "Apply to all apps": the optional pipeline that carries the decebal theme to the rest of the desktop.
+//! "Apply to all apps": the automatic, reversible pipeline that carries the decebal theme to the rest of the desktop.
 //!
 //! One palette ([`Palette`], taken from the resolved [`Theme`]) is rendered by small targets:
 //!
@@ -8,7 +8,7 @@
 //! | `browser` | Chromium/Chrome/Edge/Brave theme colour through Omarchy's browser policy helper |
 //! | `editors` | VS Code / Cursor / Obsidian through Omarchy's own sync helpers |
 //! | `hooks` | the user's `~/.config/omarchy/hooks/theme-set.d` |
-//! | `gtk` | `gtk-3.0` / `gtk-4.0` `gtk.css` (libadwaita named colours), `settings.ini`, gsettings (dark/light, font, button layout) |
+//! | `gtk` | `gtk-3.0` / `gtk-4.0` `gtk.css` (libadwaita CSS variables and named colours), `settings.ini`, gsettings (dark/light, font, button layout) |
 //! | `qt` | qt5ct / qt6ct colour scheme and config |
 //! | `kvantum` | a Kvantum colour theme |
 //! | `x11` | an Xresources file included from `~/.Xresources` and merged with `xrdb` (st, xterm, urxvt) |
@@ -21,6 +21,7 @@ pub mod files;
 pub mod gtk;
 pub mod omarchy;
 pub mod qt;
+pub mod terminals;
 pub mod x11;
 
 use super::live::{system_dark, Source};
@@ -118,7 +119,7 @@ impl Palette {
             font: (!t.font_family.is_empty()).then(|| t.font_family.clone()),
             font_pt: (11.0 * t.font_scale * 2.0).round() / 2.0,
             radius: t.radius,
-            classic_buttons: t.titlebar_style == "classic",
+            classic_buttons: t.window_buttons_right,
         }
     }
 
@@ -143,9 +144,9 @@ impl Palette {
 // ---------------------------------------------------------------- config
 
 /// `"system"` in decebal.json.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
-    /// The master switch ("Apply to all apps"). Off until the user turns it on.
+    /// The master switch. Theme propagation is automatic unless explicitly disabled.
     pub enabled: bool,
     /// Per-target overrides of the defaults.
     pub targets: BTreeMap<String, bool>,
@@ -162,11 +163,17 @@ pub struct Config {
 pub const OPTIONS: &[(&str, bool, &str, &str)] =
     &[("gtk.font", true, "Theme font in GTK apps", "Write the theme's interface font (when it names an installed one) to GTK's settings.ini and gsettings; off leaves your GTK font alone")];
 
+impl Default for Config {
+    fn default() -> Self {
+        Self { enabled: true, targets: BTreeMap::new(), icon_theme: None, cursor_theme: None, signals: false, options: BTreeMap::new() }
+    }
+}
+
 impl Config {
     pub fn from_json(v: &Value) -> Config {
         let mut c = Config::default();
         let Some(o) = v.as_object() else { return c };
-        c.enabled = o.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+        c.enabled = o.get("enabled").and_then(Value::as_bool).unwrap_or(true);
         if let Some(t) = o.get("targets").and_then(Value::as_object) {
             c.targets = t.iter().filter_map(|(k, v)| v.as_bool().map(|b| (k.clone(), b))).collect();
         }
@@ -394,6 +401,7 @@ pub fn targets() -> Vec<Box<dyn Target>> {
         Box::new(qt::Qt),
         Box::new(qt::Kvantum),
         Box::new(x11::X11),
+        Box::new(terminals::Terminals),
     ]
 }
 
@@ -558,6 +566,8 @@ pub fn apply(env: &Env, cfg: &Config, p: &Palette, opts: &Opts) -> Result<Report
     } else if plans.iter().any(|(t, _)| t.id() == "qt") {
         report.warnings.push("QT_QPA_PLATFORMTHEME is not set; export QT_QPA_PLATFORMTHEME=qt6ct (qt5ct for Qt 5) in your session environment for Qt apps to read the scheme".into());
     }
+    let completion = json!({"error": null, "warnings": report.warnings, "applied": report.applied, "theme": p.id});
+    files::write_atomic(&env.state_dir.join("last-result.json"), &completion.to_string())?;
     Ok(report)
 }
 
@@ -581,6 +591,8 @@ pub fn off(env: &Env, cfg: &Config, p: &Palette) -> Result<Report, String> {
         }
     }
     st.extra.clear();
+    let _ = std::fs::remove_file(env.state_dir.join("last-result.json"));
+    let _ = std::fs::remove_file(pending_file(env));
     if st.is_empty() && st.dirs.is_empty() {
         let _ = std::fs::remove_file(env.state_dir.join("manifest.json"));
         let _ = std::fs::remove_dir(env.state_dir.join("backups"));
@@ -636,19 +648,55 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
 
 /// `decthemectl apply-system`.
 pub fn apply_now(src: &Source, opts: &Opts) -> Result<Report, String> {
-    let (p, _) = current_palette(src)?;
     let cfg = Config::load(&src.shell_json);
-    apply(&Env::discover(), &cfg, &p, opts)
+    let env = Env::discover();
+    let result = current_palette(src).and_then(|(p, _)| apply(&env, &cfg, &p, opts));
+    if !opts.dry_run {
+        if let Err(error) = &result {
+            record_failure(&env, error);
+        }
+    }
+    result
+}
+
+#[derive(Debug, Default)]
+pub struct Completion {
+    pub pending: bool,
+    pub error: Option<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Honest asynchronous status for Settings: queued work is not a completed apply.
+pub fn completion(env: &Env) -> Completion {
+    let value: Value = std::fs::read_to_string(env.state_dir.join("last-result.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    Completion {
+        pending: pending_file(env).exists(),
+        error: if pending_file(env).exists() { None } else { value["error"].as_str().map(String::from) },
+        warnings: if pending_file(env).exists() { Vec::new() } else { value["warnings"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() },
+    }
+}
+
+fn record_failure(env: &Env, error: &str) {
+    let _ = files::write_atomic(&env.state_dir.join("last-result.json"), &json!({"error": error, "warnings": []}).to_string());
 }
 
 fn pending_file(env: &Env) -> PathBuf {
     env.state_dir.join("pending")
 }
 
+fn automatic_enabled(value: Option<&str>) -> bool {
+    value != Some("0")
+}
+
 /// Called after any theme / style / font / wallpaper-colour change: when "Apply to all apps" is on, asks for one apply
 /// shortly (several changes in a row make one run). Never blocks and never fails the caller.
 /// `DECEBAL_SYSTEM_SYNC=1` runs it inline instead (scripts and tests).
+/// `DECEBAL_SYSTEM_AUTOMATIC=0` suppresses automatic requests before any I/O; explicit apply-system still works.
 pub fn request(shell_json: &Path) {
+    // Unit tests must never discover/apply the developer’s desktop, even if the caller exports SYNC=1.
+    if cfg!(test) || !automatic_enabled(std::env::var("DECEBAL_SYSTEM_AUTOMATIC").ok().as_deref()) {
+        return;
+    }
     let cfg = Config::load(shell_json);
     if !cfg.enabled {
         return;
@@ -656,9 +704,6 @@ pub fn request(shell_json: &Path) {
     if std::env::var_os("DECEBAL_SYSTEM_SYNC").is_some_and(|v| v == "1") {
         let src = Source { shell_json: shell_json.to_path_buf(), themes_dir: Source::discover().themes_dir };
         let _ = apply_now(&src, &Opts::default());
-        return;
-    }
-    if cfg!(test) {
         return;
     }
     let env = Env::discover();
@@ -675,7 +720,15 @@ pub fn spawn_ctl(args: &[&str]) {
         return;
     }
     let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("decthemectl"));
-    let _ = std::process::Command::new(exe).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+    if let Err(error) = std::process::Command::new(exe).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
+        if args.first() == Some(&"apply-system") {
+            let env = Env::discover();
+            record_failure(&env, &format!("Could not start app theme integration: {error}"));
+            if args.get(2).is_some_and(|nonce| std::fs::read_to_string(pending_file(&env)).ok().as_deref() == Some(*nonce)) {
+                let _ = std::fs::remove_file(pending_file(&env));
+            }
+        }
+    }
 }
 
 /// The child started by [`request`]: waits a moment and applies only if no newer request arrived.
@@ -685,9 +738,11 @@ pub fn run_debounced(src: &Source, nonce: &str) -> Result<Option<Report>, String
     if std::fs::read_to_string(pending_file(&env)).ok().as_deref() != Some(nonce) {
         return Ok(None);
     }
-    let r = apply_now(src, &Opts::default())?;
-    let _ = std::fs::remove_file(pending_file(&env));
-    Ok(Some(r))
+    let result = apply_now(src, &Opts::default());
+    if std::fs::read_to_string(pending_file(&env)).ok().as_deref() == Some(nonce) {
+        let _ = std::fs::remove_file(pending_file(&env));
+    }
+    result.map(Some)
 }
 
 // ---------------------------------------------------------------- test support
@@ -796,8 +851,43 @@ mod tests {
     }
 
     #[test]
-    fn config_round_trips_and_defaults_to_off() {
-        assert!(!Config::default().enabled);
+    fn automatic_override_is_explicit_and_does_not_change_the_default() {
+        assert!(automatic_enabled(None));
+        assert!(automatic_enabled(Some("1")));
+        assert!(!automatic_enabled(Some("0")));
+        assert!(Config::default().enabled);
+    }
+
+    #[test]
+    fn unit_test_request_never_discovers_or_writes_desktop_environment() {
+        let d = tmp("request-noop");
+        request(&d.join("decebal.json"));
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn completion_distinguishes_pending_failure_and_success() {
+        let d = tmp("completion");
+        let (env, _) = env(&d, &[]);
+        std::fs::create_dir_all(&env.state_dir).unwrap();
+        std::fs::write(pending_file(&env), "nonce").unwrap();
+        record_failure(&env, "write failed");
+        let result = completion(&env);
+        assert!(result.pending);
+        assert!(result.error.is_none(), "a retry hides stale errors while pending");
+        std::fs::remove_file(pending_file(&env)).unwrap();
+        assert_eq!(completion(&env).error.as_deref(), Some("write failed"));
+        files::write_atomic(&env.state_dir.join("last-result.json"), "{\"warnings\":[\"reopen GTK apps\"]}").unwrap();
+        assert!(!completion(&env).pending);
+        assert!(completion(&env).error.is_none());
+        assert_eq!(completion(&env).warnings, ["reopen GTK apps"]);
+    }
+
+    #[test]
+    fn config_round_trips_and_defaults_to_automatic_unless_explicitly_disabled() {
+        assert!(Config::default().enabled);
+        assert!(Config::from_json(&json!({})).enabled);
+        assert!(!Config::from_json(&json!({"enabled": false})).enabled);
         let mut c = Config { enabled: true, icon_theme: Some("Papirus".into()), signals: true, ..Config::default() };
         c.targets.insert("gtk".into(), false);
         assert!(c.option("gtk.font"), "the theme font is carried to GTK unless the user says no");

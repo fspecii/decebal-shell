@@ -1177,6 +1177,42 @@ impl App for DecBar {
         self.heap_rechecked = false;
     }
 
+    fn glass_regions(&self) -> Vec<crate::glass::Region> {
+        let mut regions = Vec::new();
+        let th = crate::theme::th();
+        if !self.embedded {
+            if self.pill_bar() {
+                let radius = self.v_geo().pill_width() / 2.0;
+                regions.extend(self.v_layout().pills.into_iter().map(|(_, r)| crate::glass::Region { x: r.x, y: r.y, w: r.w, h: r.h, radius: radius.min(r.w.min(r.h) / 2.0) }));
+            } else if floating() {
+                let height = BAR_HEIGHT - 2.0 * PILL_MARGIN_Y;
+                regions.push(crate::glass::Region { x: PILL_MARGIN_X, y: PILL_MARGIN_Y, w: self.width as f32 - 2.0 * PILL_MARGIN_X, h: height, radius: height / 2.0 });
+            } else {
+                regions.push(crate::glass::Region { x: 0.0, y: 0.0, w: self.width as f32, h: BAR_HEIGHT, radius: 0.0 });
+            }
+        }
+        match self.open {
+            Open::Menu(index) => {
+                if let Some(d) = self.dropdown(index) {
+                    regions.push(crate::glass::Region { x: d.x, y: d.y, w: d.w, h: d.h, radius: th.radius });
+                }
+            }
+            Open::Control => {
+                let (x, y) = self.panel_origin();
+                regions.push(crate::glass::Region { x, y, w: controlcenter::PANEL_W, h: self.cc_height, radius: controlcenter::look(self.cc_style()).0 });
+            }
+            Open::Popup(_) => {
+                if let Some(p) = &self.popup {
+                    regions.push(crate::glass::Region { x: p.x, y: p.y, w: p.w, h: p.h, radius: th.radius });
+                } else if let Some(c) = &self.calendar {
+                    regions.push(crate::glass::Region { x: c.x, y: c.y, w: Calendar::W, h: Calendar::H, radius: th.r(1.2) });
+                }
+            }
+            Open::None => {}
+        }
+        regions
+    }
+
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
         if self.pill_bar() {
             return self.v_motion(x, y);
@@ -1620,6 +1656,21 @@ mod tests {
 
     fn menus() -> Vec<Menu> {
         menus::build("Foot", false)
+    }
+
+    #[test]
+    fn glass_metadata_excludes_popup_canvas_and_pointer_bridge() {
+        let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
+        bar.resized(1280, 420);
+        let regions = bar.glass_regions();
+        assert_eq!(regions.len(), 1);
+        assert!(regions.iter().all(|r| r.y + r.h <= BAR_HEIGHT));
+        bar.open_popup(Tray::Clock);
+        let regions = bar.glass_regions();
+        assert_eq!(regions.len(), 2);
+        let calendar = bar.calendar.as_ref().unwrap();
+        assert_eq!((regions[1].x, regions[1].y, regions[1].w, regions[1].h), (calendar.x, calendar.y, Calendar::W, Calendar::H));
+        assert!(regions[1].y > regions[0].y + regions[0].h);
     }
 
     #[test]

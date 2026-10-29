@@ -8,7 +8,6 @@ use crate::dock::{Dock, DockItem, Drag};
 use crate::dock_menu::{self, Action, Ctx, DockMenu, Outcome, TEXT_PX};
 use crate::launch;
 use crate::text::{Fonts, Weight};
-use crate::theme::PANEL_HEIGHT;
 use crate::wm::{app_matches, display_name, Tracker};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -47,8 +46,8 @@ const MENU_GAP: f32 = 8.0;
 const MENU_TOP: f32 = 6.0;
 
 /// y of the menu's bottom edge on a surface `h` pixels tall (just above the dock strip).
-fn menu_bottom(h: u32) -> f32 {
-    h as f32 - PANEL_HEIGHT - MENU_GAP
+fn menu_bottom(h: u32, panel_height: f32) -> f32 {
+    h as f32 - panel_height - MENU_GAP
 }
 
 /// Config files watched for external edits (the settings app writes them).
@@ -445,7 +444,7 @@ impl App for DockApp {
         let (w, h) = self.dock.canvas_size();
         match &self.menu {
             Some(m) => {
-                let need = (m.menu.size().1 + PANEL_HEIGHT + MENU_GAP + MENU_TOP).ceil() as u32;
+                let need = (m.menu.size().1 + self.dock.panel_height() + MENU_GAP + MENU_TOP).ceil() as u32;
                 (w, h.max(need))
             }
             None => (w, h),
@@ -461,7 +460,7 @@ impl App for DockApp {
             return self.win_draw(pm);
         }
         self.dock.draw(pm);
-        let bottom = menu_bottom(pm.height());
+        let bottom = menu_bottom(pm.height(), self.dock.panel_height());
         if let Some(m) = &mut self.menu {
             let d = m.menu.placed(pm.width() as f32, bottom);
             if let Some(f) = &mut m.fonts {
@@ -469,6 +468,30 @@ impl App for DockApp {
                 f.trim();
             }
         }
+    }
+
+    fn glass_regions(&self) -> Vec<crate::glass::Region> {
+        let mut regions = Vec::new();
+        if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
+            regions.push(crate::glass::Region { x: 0.0, y: self.win_strip_top(), w: self.surface.0 as f32, h: w.m.bar_h, radius: 0.0 });
+            regions.extend(w.status.glass_regions());
+        } else {
+            regions.push(self.dock.glass_region(self.surface.0 as f32, self.surface.1 as f32));
+        }
+        if let Some(menu) = &self.menu {
+            let bottom = if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
+                if self.dock.settings.windows_position == crate::config::WinPosition::Top {
+                    w.m.bar_h + MENU_GAP + menu.menu.size().1
+                } else {
+                    self.surface.1 as f32 - w.m.bar_h - MENU_GAP
+                }
+            } else {
+                menu_bottom(self.surface.1, self.dock.panel_height())
+            };
+            let placed = menu.menu.placed(self.surface.0 as f32, bottom);
+            regions.push(crate::glass::Region { x: placed.x, y: placed.y, w: placed.w, h: placed.h, radius: crate::theme::th().radius });
+        }
+        regions
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool {
@@ -488,7 +511,7 @@ impl App for DockApp {
             return true;
         }
         if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1));
+            let d = m.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1, self.dock.panel_height()));
             if d.contains(x, y) {
                 return m.menu.pointer_moved(&d, x, y);
             }
@@ -537,7 +560,7 @@ impl App for DockApp {
         }
         // a dock kept next to the Caelestia pill bar floats above it when that runs along the bottom (`bottom`, `split`)
         let margin = 13 + crate::theme::th().bar_insets().bottom;
-        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: 71, stretch: false, namespace: "decebal-dock" })
+        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: self.dock.panel_height().ceil() as i32, stretch: false, namespace: "decebal-dock" })
     }
 
     fn quit_requested(&self) -> bool {
@@ -586,7 +609,7 @@ impl App for DockApp {
         }
         let (w, h) = self.surface;
         if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h));
+            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
             if button == Button::Left && m.menu.press(&d, x, y) {
                 return false;
             }
@@ -615,7 +638,7 @@ impl App for DockApp {
             (Button::Right, None) => {
                 // The dock's own menu: right click on the panel between or around the icons.
                 let l = self.dock.layout(w as f32);
-                if x >= l.panel_x && x <= l.panel_x + l.panel_w && y >= h as f32 - PANEL_HEIGHT {
+                if x >= l.panel_x && x <= l.panel_x + l.panel_w && y >= h as f32 - self.dock.panel_height() {
                     self.open_dock_menu(x);
                     return true;
                 }
@@ -642,7 +665,7 @@ impl App for DockApp {
         if self.menu.is_some() {
             let out = match &mut self.menu {
                 Some(m) => {
-                    let d = m.menu.placed(w as f32, menu_bottom(h));
+                    let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
                     m.menu.release(&d, x, y)
                 }
                 None => Outcome::None,
@@ -709,10 +732,10 @@ impl App for DockApp {
             return self.win_input_rects();
         }
         let (w, h) = self.surface;
-        let strip = (PANEL_HEIGHT + 8.0) as i32;
+        let strip = (self.dock.panel_height() + 8.0).ceil() as i32;
         let mut rects = vec![InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip }];
         if let Some(m) = &self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h));
+            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
             rects.push(InputRect { x: d.x.floor() as i32, y: d.y.floor() as i32, w: d.w.ceil() as i32 + 1, h: d.h.ceil() as i32 });
         }
         rects
@@ -842,7 +865,7 @@ mod tests {
 
         fn row_point(&self, label: &str) -> (f32, f32) {
             let m = &self.app.menu.as_ref().unwrap().menu;
-            let d = m.placed(self.app.surface.0 as f32, menu_bottom(self.app.surface.1));
+            let d = m.placed(self.app.surface.0 as f32, menu_bottom(self.app.surface.1, self.app.dock.panel_height()));
             let i = m.entries.iter().position(|e| e.label == label).unwrap_or_else(|| panic!("no {label}"));
             (d.x + 30.0, d.rows[i].y + 5.0)
         }
@@ -1042,8 +1065,7 @@ mod tests {
         let mut r = rig("own", &["launchpad", "foot", "trash"], vec![]);
         r.open_menu(1);
         r.choose("Remove from Dock");
-        let t = r.app.tick();
-        assert!(!t.redraw, "nothing changed since our own save");
+        assert!(!r.app.poll_config(), "our own save must not be reloaded as an external edit");
     }
 
     #[test]

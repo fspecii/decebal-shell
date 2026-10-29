@@ -11,13 +11,15 @@ makedepends=('cargo')
 provides=('macshell')
 conflicts=('macshell')
 replaces=('macshell')
-optdepends=('picom: translucency and blur on X11'
+optdepends=('mpv: live wallpapers on X11'
+            'mpvpaper: live wallpapers on Wayland'
+            'picom: translucency and blur on X11'
             'networkmanager: Wi-Fi tile (nmcli)'
             'bluez-utils: Bluetooth tile (bluetoothctl)'
             'wireplumber: volume (wpctl)'
             'brightnessctl: brightness slider'
             'playerctl: Now Playing'
-            'ffmpeg: screen recording on X11 (decutil record)'
+            'ffmpeg: live wallpaper still frames and screen recording on X11'
             'slop: region selection for decutil record --region'
             'wf-recorder: screen recording on Wayland'
             'power-profiles-daemon: performance profile for decutil gamemode'
@@ -61,6 +63,8 @@ package() {
   install -Dm644 contrib/decebal-dock.desktop "$pkgdir/etc/xdg/autostart/decebal-dock.desktop"
   install -Dm644 contrib/decebal-clip.service "$pkgdir/usr/lib/systemd/user/decebal-clip.service"
   install -Dm644 contrib/decebal-clip.desktop "$pkgdir/etc/xdg/autostart/decebal-clip.desktop"
+  install -Dm644 contrib/decebal-widgets.service "$pkgdir/usr/lib/systemd/user/decebal-widgets.service"
+  install -Dm644 contrib/decebal-widgets.desktop "$pkgdir/etc/xdg/autostart/decebal-widgets.desktop"
   install -Dm644 contrib/decebal-hot.service "$pkgdir/usr/lib/systemd/user/decebal-hot.service"
   install -Dm644 contrib/decebal-hot.desktop "$pkgdir/etc/xdg/autostart/decebal-hot.desktop"
   install -Dm644 contrib/decebal-wallpaper-colors.service "$pkgdir/usr/lib/systemd/user/decebal-wallpaper-colors.service"

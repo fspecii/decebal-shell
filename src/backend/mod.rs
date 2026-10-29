@@ -1,5 +1,7 @@
 //! Display backends. Each one runs an [`App`](crate::app::App) until the surface closes.
 
+#[cfg(feature = "x11")]
+pub(crate) mod glass;
 #[cfg(feature = "wayland")]
 pub mod wayland;
 #[cfg(feature = "wayland")]

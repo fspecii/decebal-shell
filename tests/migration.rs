@@ -14,7 +14,7 @@ fn sandbox(name: &str) -> PathBuf {
 /// `decthemectl` with only a private HOME (no XDG overrides) and `extra` environment on top.
 fn ctl(d: &Path, args: &[&str], extra: &[(&str, &Path)]) -> (bool, String, String) {
     let mut c = Command::new(env!("CARGO_BIN_EXE_decthemectl"));
-    c.args(args).env_clear().env("PATH", "/usr/bin:/bin").env("HOME", d.join("home")).env("RDWMCTL", "/nonexistent/rdwmctl");
+    c.args(args).env_clear().env("DECEBAL_SYSTEM_AUTOMATIC", "0").env("PATH", "/usr/bin:/bin").env("HOME", d.join("home")).env("RDWMCTL", "/nonexistent/rdwmctl");
     for (k, v) in extra {
         c.env(k, v);
     }

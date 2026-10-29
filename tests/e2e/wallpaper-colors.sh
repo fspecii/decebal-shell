@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # "Match wallpaper" end to end on a private Xvfb + rdwm: wallpapers of different dominant hues are set through rdwm,
 # `decthemectl watch` follows them, the derived accent changes with the hue, the running decbar restyles itself, the
 # feature is off by default and fully reversible, and the Theme pane renders the section (PNG screenshots in $SHOTS).

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Shell styles end to end: the real decbar and decdock under the macOS, Windows and Caelestia styles on a private
 # Xvfb + rdwm. `decthemectl style X` switches the running programs; pixels of the bar and the dock are checked per style,
 # the Caelestia bar (a vertical strip with pills, the dock hidden; tests/e2e/vbar.sh covers it in depth), wallpaper colours (`decthemectl dynamic`), and that the macOS style is

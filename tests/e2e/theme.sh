@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Theming end to end: private Xvfb + rdwm + decbar + decdock + decsettings, switch themes with decthemectl and
 # through the settings UI, check that every program and rdwm follow, and save screenshots.
 #   tests/e2e/theme.sh                 (SHOTS=dir keeps the PNGs; E2E_DISPLAY=:135 by default)

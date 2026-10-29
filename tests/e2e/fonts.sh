@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Font presets end to end on a PRIVATE Xvfb: apply several presets with decthemectl, check that the stored selection,
 # rdwm's titlebar font and the running programs follow, and screenshot the bar, the dashboard and the Theme pane
 # (Fonts section) so the glyph baseline, clipping and the CJK / emoji / icon fallbacks can be looked at.

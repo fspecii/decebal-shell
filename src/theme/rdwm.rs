@@ -117,26 +117,14 @@ pub fn reload(paths: &Paths) -> Result<bool, String> {
     io::ipc_call(&paths.socket, &serde_json::json!({"cmd": "reload"})).map(|_| true)
 }
 
-/// The whole "apply" transaction used by `decthemectl` and the settings pane:
-/// resolve -> validate rdwm's file -> write rdwm config -> write the selection -> reload rdwm once.
-/// Validation happens before anything is written, so a failure leaves both files untouched.
+/// Selection transaction used by `decthemectl`: apply complete package structure
+/// while retaining explicit palette/accent/customisation. The shared engine validates
+/// every planned write first and rolls back the package transaction on failure.
 pub fn apply(src: &super::live::Source, paths: &Paths, sel: &super::model::Selection) -> Result<Report, String> {
-    let (theme, problem) = src.build(sel, super::live::system_dark());
-    if let Some(p) = problem {
-        return Err(p);
-    }
-    let mut rdwm = None;
-    if sel.sync_rdwm {
-        let old = std::fs::read_to_string(&paths.rdwm_config).unwrap_or_default();
-        let mut cfg = Cfg::parse(&old).map_err(|e| format!("{}: {e}", paths.rdwm_config.display()))?;
-        apply_to(&mut cfg, &theme)?;
-        validate(paths, &cfg.text())?;
-        rdwm = Some(write_config(paths, &theme)?);
-    }
-    src.write_selection(sel)?;
-    super::system::request(&src.shell_json); // "Apply to all apps", when the user switched it on
-    let reloaded = if rdwm == Some(Wrote::Changed) { reload(paths).unwrap_or(false) } else { false };
-    Ok(Report { theme_id: theme.id.clone(), dark: theme.dark, rdwm, reloaded })
+    let plan = super::engine::apply::plan_selection(src, paths, sel)?;
+    let changed = plan.rdwm_changed;
+    let result = super::engine::apply::execute(src, paths, plan)?;
+    Ok(Report { theme_id: result.theme_id, dark: result.dark, rdwm: sel.sync_rdwm.then_some(if changed { Wrote::Changed } else { Wrote::Unchanged }), reloaded: result.reloaded })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -155,6 +143,20 @@ mod tests {
     fn theme(name: &str, dark: bool) -> Theme {
         let d = crate::theme::builtin::def(name).unwrap();
         d.resolve(name, dark, &Selection::default())
+    }
+
+    #[test]
+    fn cli_selection_adapter_preserves_explicit_accent_and_package_decoration() {
+        let (dir, src, paths) = crate::theme::engine::apply::tests::sandbox("cli-explicit-accent");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        crate::theme::engine::apply::tests::install_sunset(&src);
+        let sel = Selection { name: "sunset".into(), accent: super::super::model::Rgb::parse("#aabbcc"), ..Selection::default() };
+        apply(&src, &paths, &sel).unwrap();
+        assert_eq!(src.selection().accent, sel.accent);
+        let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("decoration", "style"), Some(Val::Str("classic".into())));
+        assert_eq!(cfg.get("decoration", "height"), Some(Val::Int(36)));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

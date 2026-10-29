@@ -1,16 +1,15 @@
 //! The "Theme" pane: gallery of themes with live miniature previews, light/dark/auto, accent
 //! swatches, translucency / corner radius / text size, and "also style rdwm".
 //!
-//! Choosing anything runs one transaction (see [`crate::theme::rdwm`]): validate rdwm's colour edit,
-//! write it through the model's atomic store, then write the selection to `decebal.json`. Every
-//! running decebal program notices that file within half a second.
+//! Selection changes run the shared package transaction: validate, atomically apply
+//! package structure plus selected colours, then reload the model's file snapshots.
+//! Running shell programs follow the saved selection through the theme watcher.
 
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row, Swatch, ThemeTile};
 use crate::config::BarPosition;
 use crate::theme::live::{system_dark, Source};
 use crate::theme::model::{Mode, Rgb, Selection};
-use crate::theme::rdwm;
 use crate::theme::style::{self, Style};
 
 /// macOS accent colours, in the order System Settings shows them.
@@ -235,30 +234,21 @@ pub fn items(m: &Model) -> Vec<Item> {
 /// Runs the transaction for a changed selection; true when it was written.
 pub(super) fn commit(m: &mut Model, sel: Selection) -> bool {
     let src = source(m);
-    let (theme, problem) = src.build(&sel, system_dark());
-    if let Some(p) = problem {
-        m.say(format!("Not applied: {p}"), true);
-        return false;
-    }
-    if sel.sync_rdwm {
-        m.notice = None;
-        m.edit(|c| rdwm::apply_to(c, &theme));
-        if m.notice.as_ref().is_some_and(|n| n.error) {
-            return false; // rdwm's file would be invalid: nothing was written, the selection stays as it was
-        }
-    }
-    match src.write_selection(&sel) {
-        Ok(()) => {
-            crate::theme::live::reload();
-            crate::theme::system::request(&m.paths.shell_json()); // "Apply to all apps", when on
+    let mut paths = m.paths.clone();
+    // Tests and explicit configuration may choose a stricter checker than discovery.
+    paths.rdwmctl = m.store.rdwmctl.clone();
+    match crate::theme::engine::apply::apply_selection(&src, &paths, &sel) {
+        Ok(applied) => {
+            m.store = super::io::Store::load(&paths.rdwm_config, &paths.rdwmctl);
+            m.file_error = None;
+            m.shell = super::io::json_load(&paths.shell_json());
+            m.dock = super::io::json_load(&paths.dock_settings());
             m.dirty = true;
-            if m.notice.is_none() {
-                m.say(format!("Theme: {}", theme.name), false);
-            }
+            m.say(format!("Theme: {}{}", applied.theme_id, if applied.notes.is_empty() { String::new() } else { format!(" ({})", applied.notes.join("; ")) }), false);
             true
         }
         Err(e) => {
-            m.say(format!("Not saved: {e}"), true);
+            m.say(format!("Not applied: {e}"), true);
             false
         }
     }
@@ -367,6 +357,29 @@ mod tests {
 
     fn selection(m: &Model) -> Selection {
         source(m).selection()
+    }
+
+    #[test]
+    fn mode_and_palette_controls_preserve_active_package_geometry_and_widgets() {
+        let (mut m, cfg) = model_with("[general]\n");
+        let widgets = serde_json::json!({"enabled": false, "future": 1, "items": [{"use": "builtin:clock-card", "x": 77, "future": 2}]});
+        super::super::io::json_set(&m.paths.shell_json(), "widgets", Some(widgets.clone())).unwrap();
+        let design = source(&m).load_def("orbit-glass").unwrap();
+        let expected_style = design.extra["decoration"]["style"].as_str().unwrap();
+        let expected_height = design.extra["decoration"]["height"].as_i64().unwrap();
+        m.apply("l:theme:orbit-glass", CtlVal::Click);
+        m.apply("th:mode", CtlVal::Str("light".into()));
+        m.apply("l:palette:nord", CtlVal::Click);
+        let doc = super::super::tomlcfg::Cfg::parse(&std::fs::read_to_string(cfg).unwrap()).unwrap();
+        assert_eq!(doc.get("decoration", "style"), Some(super::super::tomlcfg::Val::Str(expected_style.into())));
+        assert_eq!(doc.get("decoration", "height"), Some(super::super::tomlcfg::Val::Int(expected_height)));
+        if let Some(position) = design.extra.get("bar").and_then(|b| b.get("position")) {
+            assert_eq!(&m.shell["bar"]["position"], position);
+        }
+        assert_eq!(m.dock["style"], "mac");
+        assert_eq!(m.shell["widgets"], widgets);
+        assert_eq!(selection(&m).palette.as_deref(), Some("nord"));
+        assert_eq!(selection(&m).mode, Mode::Light);
     }
 
     #[test]

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The Stay Awake coffee cup of the bar end to end: the real decbar on a private Xvfb with a private rdwm, a fake `omarchy` that
 # flips the stay-awake indicator the way `omarchy toggle idle` does, and the fake system tools of tests/fakebin.
 #   tests/e2e/awake.sh                 (E2E_DISPLAY=:172 by default; SHOTS=dir keeps the screenshots; PROFILE=debug uses debug binaries)

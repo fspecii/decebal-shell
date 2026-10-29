@@ -22,6 +22,7 @@ pub mod dock_menu;
 pub mod expose;
 pub mod fuzzy;
 pub mod gfx;
+pub mod glass;
 pub mod hot;
 pub mod hud;
 pub mod icons;

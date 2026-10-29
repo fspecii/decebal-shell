@@ -131,7 +131,8 @@ impl Model {
     }
 
     pub fn watched_files(&self) -> Vec<std::path::PathBuf> {
-        vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json()]
+        let env = crate::theme::system::Env::discover();
+        vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json(), env.state_dir.join("pending"), env.state_dir.join("last-result.json")]
     }
 
     // ------------------------------------------------------------ notices

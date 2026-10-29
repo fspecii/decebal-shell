@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Screenshots of the bundled asset themes (docs/themes/<id>.png and themes/<id>/screenshots/main.png): private Xvfb + rdwm +
 # decbar + decdock + decwidgets + a small decsettings (Theme pane), each theme applied from the repository's themes/ folder.
 #   MODE=light OUT=/tmp/x tests/e2e/theme-shots.sh brutalist     (a light-variant shot; the bundled wallpaper stays the same)

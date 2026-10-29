@@ -454,6 +454,7 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Wallpaper, Section::Colours, "Background colour", "wallpaper letterbox solid colour"),
     (Tab::Wallpaper, Section::Colours, "Image file", "wallpaper path png jpeg webp"),
     (Tab::Wallpaper, Section::Colours, "Wallhaven", "online download search random favourites wallpapers"),
+    (Tab::Wallpaper, Section::Colours, "Live wallpapers", "video animated mp4 webm commons motion fullscreen pause frame rate"),
     // All apps
     (Tab::Apps, Section::Colours, "Apply theme to all apps", "system wide theming gtk qt terminal chrome browser nautilus kvantum switch"),
     (Tab::Apps, Section::Colours, "Apply now", "run again re-apply theme apps"),

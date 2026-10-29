@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The bar's weather widget end to end, with fake data only: a canned wttr.in / Open-Meteo answer from tests/fakebin/curl (no network),
 # a private HOME / XDG cache and a private Xvfb. Checks that the weather popup renders (macOS bar, caelestia pill bars (side and top))
 # and that the fetch path fills it. Screenshots in $SHOTS.
