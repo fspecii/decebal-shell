@@ -41,19 +41,63 @@ pub struct KeyEvent {
     pub alt: bool,
 }
 
-/// Where a popup hangs under a bar, see [`WindowApp::popup_anchor`].
+/// The screen edge the bar a popup hangs from sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Edge {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl Edge {
+    pub fn parse(s: &str) -> Option<Edge> {
+        match s {
+            "top" => Some(Edge::Top),
+            "bottom" => Some(Edge::Bottom),
+            "left" => Some(Edge::Left),
+            "right" => Some(Edge::Right),
+            _ => None,
+        }
+    }
+}
+
+/// Where a popup hangs from a bar, see [`WindowApp::popup_anchor`]. `top` is the gap between the popup and the
+/// screen edge the bar is on (named for the usual bar along the top). `center_x` is where along the bar the popup
+/// centres: an x offset for a bar along the top or bottom, a y offset for one at a side.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupAnchor {
     pub top: i32,
     pub center_x: Option<i32>,
+    pub edge: Edge,
 }
 
 impl PopupAnchor {
     /// Left edge of a window `w` wide on a monitor `mon_w` wide: centred on `center_x` (the monitor's middle when unset), 8 px from the edges at most.
     pub fn left(&self, mon_w: i32, w: i32) -> i32 {
+        match self.edge {
+            Edge::Left => return self.top.min((mon_w - w).max(0)),
+            Edge::Right => return (mon_w - w - self.top).max(0),
+            Edge::Top | Edge::Bottom => {}
+        }
         let cx = self.center_x.unwrap_or(mon_w / 2);
         let max = (mon_w - w - 8).max(0);
         (cx - w / 2).clamp(8.min(max), max)
+    }
+
+    /// Top edge of a window `h` high on a monitor `mon_h` high: the gap from the top, or from the bottom edge, or
+    /// centred on the bar item (`center_x`) beside a bar at a side; 8 px from the edges at most.
+    pub fn y(&self, mon_h: i32, h: i32) -> i32 {
+        match self.edge {
+            Edge::Top => self.top,
+            Edge::Bottom => (mon_h - h - self.top).max(0),
+            Edge::Left | Edge::Right => {
+                let cy = self.center_x.unwrap_or(mon_h / 2);
+                let max = (mon_h - h - 8).max(0);
+                (cy - h / 2).clamp(8.min(max), max)
+            }
+        }
     }
 }
 
@@ -198,12 +242,12 @@ mod tests {
 
     #[test]
     fn anchor_centres_and_stays_on_screen() {
-        let a = PopupAnchor { top: 30, center_x: Some(800) };
+        let a = PopupAnchor { top: 30, center_x: Some(800), edge: Edge::Top };
         assert_eq!(a.left(1600, 400), 600);
-        assert_eq!(PopupAnchor { top: 30, center_x: Some(10) }.left(1600, 400), 8, "kept 8 px from the left edge");
-        assert_eq!(PopupAnchor { top: 30, center_x: Some(1590) }.left(1600, 400), 1192, "kept 8 px from the right edge");
-        assert_eq!(PopupAnchor { top: 30, center_x: None }.left(1000, 400), 300, "centred on the monitor when unset");
+        assert_eq!(PopupAnchor { top: 30, center_x: Some(10), edge: Edge::Top }.left(1600, 400), 8, "kept 8 px from the left edge");
+        assert_eq!(PopupAnchor { top: 30, center_x: Some(1590), edge: Edge::Top }.left(1600, 400), 1192, "kept 8 px from the right edge");
+        assert_eq!(PopupAnchor { top: 30, center_x: None, edge: Edge::Top }.left(1000, 400), 300, "centred on the monitor when unset");
         // A window wider than the monitor must not panic.
-        assert_eq!(PopupAnchor { top: 0, center_x: Some(50) }.left(300, 400), 0);
+        assert_eq!(PopupAnchor { top: 0, center_x: Some(50), edge: Edge::Top }.left(300, 400), 0);
     }
 }

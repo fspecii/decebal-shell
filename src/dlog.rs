@@ -5,10 +5,12 @@
 //! the level, so a quiet program leaves no file.
 //!
 //! * Level: `$DECEBAL_LOG` = `off|error|warn|info|debug|trace` (`1`/`true`/`on` mean `debug`), else `decebal.json`
-//!   `"debug": {"level": "debug"}` (or `"debug": true`), else `warn`. Set the persistent one with `decthemectl log level debug`;
+//!   `"debug": {"level": "debug"}` (or `"debug": true`), else `info`. Set the persistent one with `decthemectl log level debug`;
 //!   it applies to programs started afterwards.
 //! * `$DECEBAL_LOG_STDERR=1` also prints every record to stderr.
-//! * A panic is always recorded (message, place, backtrace) unless the level is `off`.
+//! * A panic is always recorded (message, place, backtrace) unless the level is `off`. So is a hard crash (SIGSEGV, SIGABRT,
+//!   SIGBUS, SIGFPE, SIGILL: the signal and the time), and every long-running program writes one `start` and one `exit` line
+//!   at `info`, so a log that ends without an `exit` line means the program was killed or crashed.
 //! * Read it with `decthemectl log [path|tail [N] [PROGRAM]|clear|level LEVEL]`.
 //!
 //! Use the macros: `log_error!`, `log_warn!`, `log_info!`, `log_debug!`, `log_trace!` (format arguments are only evaluated when the
@@ -53,7 +55,7 @@ impl Level {
     }
 }
 
-static LEVEL: AtomicU8 = AtomicU8::new(Level::Warn as u8);
+static LEVEL: AtomicU8 = AtomicU8::new(Level::Info as u8);
 static PROGRAM: OnceLock<String> = OnceLock::new();
 static SINK: Mutex<Sink> = Mutex::new(Sink { file: None, bytes: 0, failed: false });
 const ROTATE_AT: u64 = 2 * 1024 * 1024;
@@ -111,7 +113,7 @@ pub fn path_for(program: &str) -> PathBuf {
     dir().join(format!("{program}.log"))
 }
 
-/// The level the settings ask for: env, then `decebal.json`, then `warn`.
+/// The level the settings ask for: env, then `decebal.json`, then `info`.
 pub fn configured_level() -> Level {
     if let Some(l) = std::env::var("DECEBAL_LOG").ok().and_then(|s| Level::parse(&s)) {
         return l;
@@ -123,11 +125,11 @@ pub fn configured_level() -> Level {
             if *b {
                 Level::Debug
             } else {
-                Level::Warn
+                Level::Info
             }
         }
-        Some(d) => d.get("level").and_then(|l| l.as_str()).and_then(Level::parse).unwrap_or(Level::Warn),
-        None => Level::Warn,
+        Some(d) => d.get("level").and_then(|l| l.as_str()).and_then(Level::parse).unwrap_or(Level::Info),
+        None => Level::Info,
     }
 }
 
@@ -135,11 +137,21 @@ pub fn configured_level() -> Level {
 /// `debug`, and installs a panic hook that logs the panic before the previous hook runs.
 pub fn init() {
     set_level(configured_level());
-    if enabled(Level::Debug) {
+    // The one-shot command line tools would log two lines per call; only the programs that stay up say when they start and stop.
+    let life = if matches!(program(), "decthemectl" | "decutil") { Level::Debug } else { Level::Info };
+    if enabled(life) {
         let args: Vec<String> = std::env::args().skip(1).collect();
         let env: Vec<String> =
             ["DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "DECEBAL_BACKEND", "DECEBAL_CONFIG"].iter().filter_map(|k| std::env::var(k).ok().map(|v| format!("{k}={v}"))).collect();
-        write_record(Level::Debug, "start", format_args!("{} {} args={args:?} {}", program(), env!("CARGO_PKG_VERSION"), env.join(" ")));
+        write_record(life, "start", format_args!("{} {} args={args:?} {}", program(), env!("CARGO_PKG_VERSION"), env.join(" ")));
+        STARTED.get_or_init(|| (std::time::Instant::now(), life));
+        // SAFETY: atexit with a plain extern "C" function.
+        unsafe {
+            libc::atexit(at_exit);
+        }
+    }
+    if level() != Level::Off {
+        install_crash_handler();
     }
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -151,6 +163,85 @@ pub fn init() {
         }
         prev(info);
     }));
+}
+
+static STARTED: OnceLock<(std::time::Instant, Level)> = OnceLock::new();
+
+extern "C" fn at_exit() {
+    if let Some((t, life)) = STARTED.get() {
+        write_record(*life, "exit", format_args!("{} exited normally after {}s", program(), t.elapsed().as_secs()));
+    }
+}
+
+/// The crash line's file, opened by path inside the signal handler (nothing there may allocate or take a lock).
+static CRASH_PATH: OnceLock<std::ffi::CString> = OnceLock::new();
+
+const FATAL: [(libc::c_int, &[u8]); 5] = [(libc::SIGSEGV, b"SIGSEGV"), (libc::SIGABRT, b"SIGABRT"), (libc::SIGBUS, b"SIGBUS"), (libc::SIGFPE, b"SIGFPE"), (libc::SIGILL, b"SIGILL")];
+
+extern "C" fn on_fatal(sig: libc::c_int) {
+    // Only async-signal-safe calls: open, write, signal, raise, time.
+    let mut line = [0u8; 160];
+    let mut n = 0;
+    let mut put = |bytes: &[u8]| {
+        for &b in bytes {
+            if n < line.len() {
+                line[n] = b;
+                n += 1;
+            }
+        }
+    };
+    put(b"unix ");
+    let mut t = unsafe { libc::time(std::ptr::null_mut()) } as u64;
+    let mut digits = [0u8; 20];
+    let mut d = 0;
+    loop {
+        digits[d] = b'0' + (t % 10) as u8;
+        d += 1;
+        t /= 10;
+        if t == 0 {
+            break;
+        }
+    }
+    while d > 0 {
+        d -= 1;
+        put(&digits[d..d + 1]);
+    }
+    put(b" FATAL crash: killed by ");
+    put(FATAL.iter().find(|(s, _)| *s == sig).map_or(&b"a fatal signal"[..], |(_, name)| name));
+    put(b" (the program crashed; run it with DECEBAL_LOG=debug DECEBAL_LOG_STDERR=1 from a terminal for more)\n");
+    if let Some(path) = CRASH_PATH.get() {
+        // SAFETY: open/write/close on a valid C string and a stack buffer.
+        unsafe {
+            let fd = libc::open(path.as_ptr(), libc::O_WRONLY | libc::O_APPEND | libc::O_CREAT, 0o644);
+            if fd >= 0 {
+                libc::write(fd, line.as_ptr().cast(), n);
+                libc::close(fd);
+            }
+        }
+    }
+    // SAFETY: restoring the default action and re-raising ends the process the way it would have ended anyway.
+    unsafe {
+        libc::signal(sig, libc::SIG_DFL);
+        libc::raise(sig);
+    }
+}
+
+/// Makes a crash leave a line in the program's log (the panic hook never runs for a signal). The directory is created now
+/// because the handler cannot.
+fn install_crash_handler() {
+    let _ = std::fs::create_dir_all(dir());
+    let Ok(path) = std::ffi::CString::new(path_for(program()).into_os_string().into_encoded_bytes()) else { return };
+    let _ = CRASH_PATH.set(path);
+    for (sig, _) in FATAL {
+        // SAFETY: a zeroed sigaction with our handler; SA_ONSTACK so a stack overflow can still be reported.
+        unsafe {
+            let mut sa: libc::sigaction = std::mem::zeroed();
+            sa.sa_sigaction = on_fatal as extern "C" fn(libc::c_int) as usize;
+            sa.sa_flags = libc::SA_ONSTACK;
+            libc::sigemptyset(&mut sa.sa_mask);
+            libc::sigaction(sig, &sa, std::ptr::null_mut());
+        }
+    }
 }
 
 /// Formats `YYYY-MM-DD HH:MM:SS.mmm` in local time.
@@ -266,7 +357,7 @@ Per run: DECEBAL_LOG=debug decsettings   (DECEBAL_LOG_STDERR=1 also prints; DECE
 pub fn cli(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         None | Some("status") => {
-            println!("level   {} (from {})", configured_level().as_str(), if std::env::var_os("DECEBAL_LOG").is_some() { "$DECEBAL_LOG" } else { "decebal.json, default warn" });
+            println!("level   {} (from {})", configured_level().as_str(), if std::env::var_os("DECEBAL_LOG").is_some() { "$DECEBAL_LOG" } else { "decebal.json, default info" });
             println!("folder  {}", dir().display());
             for p in programs() {
                 let size = std::fs::metadata(path_for(&p)).map(|m| m.len()).unwrap_or(0);
@@ -326,6 +417,27 @@ pub fn cli(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_crash_leaves_a_line_in_the_log() {
+        // A child process that aborts right after init: its log must end with the FATAL line.
+        let dir = std::env::temp_dir().join(format!("decebal-crash-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let me = std::env::current_exe().unwrap();
+        let status = std::process::Command::new(me).args(["--exact", "dlog::tests::crash_child", "--nocapture", "--ignored"]).env("DECEBAL_LOG_DIR", &dir).env("DECEBAL_LOG", "info").status().unwrap();
+        assert!(!status.success());
+        let text: String = std::fs::read_dir(&dir).unwrap().filter_map(|e| std::fs::read_to_string(e.unwrap().path()).ok()).collect();
+        assert!(text.contains("FATAL crash: killed by SIGABRT"), "log was: {text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "run by a_crash_leaves_a_line_in_the_log in a child process"]
+    fn crash_child() {
+        set_level(Level::Info);
+        install_crash_handler();
+        unsafe { libc::abort() };
+    }
 
     #[test]
     fn levels_parse_and_order() {

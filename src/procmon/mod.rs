@@ -196,8 +196,29 @@ impl Monitor {
         let fresh = self.shared.lock().ok().filter(|s| s.0 != self.seen).map(|s| (s.0, s.1.clone()));
         if let Some((gen, snap)) = fresh {
             self.seen = gen;
+            // The pointer is on the list (or a question is open): the rows must not shuffle under it, so a refresh
+            // keeps their order and only updates the numbers. Re-sorting waits until the pointer leaves.
+            let hold = self.confirm.is_some() || matches!(self.hover, Some(Hit::Row(..) | Hit::End(_) | Hit::Force(_)));
+            let pin = hold.then(|| model::pin_order(&self.snap.procs, &self.snap.groups, &self.rows));
+            let hovered = self.hover.and_then(|h| match h {
+                Hit::Row(i, _) | Hit::End(i) | Hit::Force(i) => self.rows.get(i).and_then(|r| model::row_pid(&self.snap.procs, &self.snap.groups, r)),
+                _ => None,
+            });
             self.snap = snap;
-            self.rebuild();
+            self.rows = model::flatten_pinned(&self.snap.procs, &self.snap.groups, &self.view, &self.expanded, pin.as_ref());
+            let max = self.max_scroll();
+            self.scroll = self.scroll.clamp(0.0, max);
+            self.dump_rows();
+            // The hovered row may have moved or gone: follow it by pid.
+            if let (Some(pid), Some(h)) = (hovered, self.hover) {
+                let now = self.rows.iter().position(|r| model::row_pid(&self.snap.procs, &self.snap.groups, r) == Some(pid));
+                self.hover = match (h, now) {
+                    (Hit::Row(_, chev), Some(i)) => Some(Hit::Row(i, chev)),
+                    (Hit::End(_), Some(i)) => Some(Hit::End(i)),
+                    (Hit::Force(_), Some(i)) => Some(Hit::Force(i)),
+                    _ => None,
+                };
+            }
             changed = true;
         }
         if self.status.as_ref().is_some_and(|(_, at, _)| at.elapsed() > Duration::from_secs(6)) {
@@ -885,7 +906,7 @@ mod tests {
 
     #[test]
     fn draws_both_tabs_the_dialog_and_the_popup_without_panicking() {
-        for mode in [Mode::Window, Mode::Popup(PopupAnchor { top: 30, center_x: Some(400) })] {
+        for mode in [Mode::Window, Mode::Popup(PopupAnchor { top: 30, center_x: Some(400), edge: crate::window_app::Edge::Top })] {
             let roots = Roots { proc: "/nonexistent".into(), sys: "/nonexistent".into(), power: "/nonexistent".into(), nvidia: false };
             let mut m = Monitor::with_roots(mode, Tab::Processes, roots, act::Ctx { my_uid: 1000, self_pid: 4000 });
             load(&mut m, sample());
@@ -929,12 +950,12 @@ mod tests {
     #[test]
     fn the_popup_is_anchored_and_never_bigger_than_the_screen() {
         let mut m = Monitor::with_roots(
-            Mode::Popup(PopupAnchor { top: 34, center_x: Some(500) }),
+            Mode::Popup(PopupAnchor { top: 34, center_x: Some(500), edge: crate::window_app::Edge::Top }),
             Tab::Processes,
             Roots { proc: "/nonexistent".into(), sys: "/nonexistent".into(), power: "/nonexistent".into(), nvidia: false },
             act::Ctx { my_uid: 1, self_pid: 2 },
         );
-        assert_eq!(m.popup_anchor(), Some(PopupAnchor { top: 34, center_x: Some(500) }));
+        assert_eq!(m.popup_anchor(), Some(PopupAnchor { top: 34, center_x: Some(500), edge: crate::window_app::Edge::Top }));
         assert!(m.overlay());
         assert_eq!(m.content_size(), Some(POPUP_SIZE));
         m.set_screen(700, 500);

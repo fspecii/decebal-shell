@@ -347,6 +347,8 @@ impl Pinned {
 pub fn config_dir() -> PathBuf {
     std::env::var_os("DECEBAL_CONFIG")
         .map(PathBuf::from)
+        // Unit tests never read the developer's own config (their theme, fonts, bar position): an empty folder, unless a test sets DECEBAL_CONFIG.
+        .or_else(|| cfg!(test).then(|| std::env::temp_dir().join(format!("decebal-test-config-{}", std::process::id()))))
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(|p| PathBuf::from(p).join("omarchy")))
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/omarchy")))
         .unwrap_or_else(|| PathBuf::from("."))

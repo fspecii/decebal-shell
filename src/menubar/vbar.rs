@@ -908,8 +908,8 @@ impl DecBar {
                 }
                 Click::Monitor => {
                     self.close();
-                    let top = 10 + if top_bar_exists(self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All })) { THICK as i32 } else { 0 };
-                    self.process_monitor(vec!["--top".to_string(), top.to_string()]);
+                    let place = self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All });
+                    self.process_monitor(monitor_placement(place, x, y));
                 }
                 Click::Nothing => {
                     return self.close();
@@ -1261,6 +1261,19 @@ fn top_bar_exists(place: Place) -> bool {
     place.edge == Anchor::Top || (place.edge == Anchor::Bottom && place.part == Part::Tail)
 }
 
+/// `decmon --popup` arguments that hang the process manager from the bar's own edge, next to the item clicked at
+/// (`x`, `y`) on the strip: under a bar along the top, over one along the bottom, beside one at a side.
+fn monitor_placement(place: Place, x: f32, y: f32) -> Vec<String> {
+    let (edge, along) = match place.edge {
+        Anchor::Top => ("top", x),
+        Anchor::Bottom => ("bottom", x),
+        Anchor::Left => ("left", y),
+        Anchor::Right => ("right", y),
+    };
+    let gap = THICK as i32 + 10;
+    vec!["--edge".into(), edge.into(), "--top".into(), gap.to_string(), "--x".into(), (along.round() as i32).to_string()]
+}
+
 /// `decdash` for the clock: hung below a bar along the top edge, else near the top edge of the screen.
 fn clock_dash_argv(place: Place) -> Vec<String> {
     let top = 10 + if top_bar_exists(place) { THICK as i32 } else { 0 };
@@ -1312,6 +1325,16 @@ mod tests {
         assert_eq!(SURFACE_H as f32, THICK + POPOUT_H);
         assert_eq!(PILL_W, 40.0);
         assert_eq!(THICK, 52.0);
+    }
+
+    #[test]
+    fn the_process_manager_hangs_from_the_bars_own_edge() {
+        let args = |edge, x, y| monitor_placement(Place { edge, part: Part::All }, x, y).join(" ");
+        let gap = THICK as i32 + 10;
+        assert_eq!(args(Anchor::Bottom, 900.0, 1400.0), format!("--edge bottom --top {gap} --x 900"));
+        assert_eq!(args(Anchor::Top, 900.0, 20.0), format!("--edge top --top {gap} --x 900"));
+        assert_eq!(args(Anchor::Left, 20.0, 300.0), format!("--edge left --top {gap} --x 300"), "beside a side bar the position is along y");
+        assert_eq!(args(Anchor::Right, 20.0, 300.0), format!("--edge right --top {gap} --x 300"));
     }
 
     #[test]

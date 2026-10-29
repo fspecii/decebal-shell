@@ -20,7 +20,7 @@ use crate::app::Button;
 use crate::menubar::symbols::SymbolCache;
 use crate::menubar::weather::{self, Weather};
 use crate::text::Fonts;
-use crate::window_app::{Action, KeyEvent, PopupAnchor, Response, Waker, WindowApp};
+use crate::window_app::{Action, Edge, KeyEvent, PopupAnchor, Response, Waker, WindowApp};
 use layout::{Hit, KeyAction, Tab};
 use mpris::{Cmd, Mpris, Player, Status};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -92,7 +92,7 @@ impl Dash {
         Dash {
             tab,
             alpha: false,
-            anchor: PopupAnchor { top: top.unwrap_or_else(default_top), center_x },
+            anchor: PopupAnchor { top: top.unwrap_or_else(default_top), center_x, edge: Edge::Top },
             fonts: Fonts::load(),
             symbols: SymbolCache::default(),
             waker: None,

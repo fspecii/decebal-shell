@@ -14,7 +14,7 @@ DECEBAL_LOG=trace decsettings    # one run only; DECEBAL_LOG_STDERR=1 also print
 
 * Files: `~/.local/state/decebal/logs/<program>.log` (`$XDG_STATE_HOME`, or `$DECEBAL_LOG_DIR`), rotated to `.log.1` at 2 MiB. Nothing is
   created until a record passes the level, so a quiet program leaves no file.
-* Levels: `off error warn info debug trace`; the default is `warn`. `info` adds user-visible events (theme applies and undo, settings panes,
+* Levels: `off error warn info debug trace`; the default is `info` (start, exit and crash lines, panics, warnings); `info` also records user-visible events (theme applies and undo, settings panes,
   the notices decsettings shows, saved rdwm config); `debug` adds every file write, spawned command and watcher event, and a start record with
   arguments and display variables; `trace` adds each request to rdwm's socket.
 * A panic is always recorded with its place and a backtrace (unless the level is `off`), as is a fatal error that ends a program.

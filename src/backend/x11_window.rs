@@ -118,7 +118,7 @@ impl Keymap {
 /// Top edge of a popup of height `h` on the monitor `mon`: above the bottom by the app's margin, centred, or a fifth down.
 fn popup_top<A: WindowApp>(app: &A, mon: &super::x11::Rect, h: u32) -> i32 {
     if let Some(a) = app.popup_anchor() {
-        mon.y + a.top
+        mon.y + a.y(mon.h, h as i32)
     } else if let Some(f) = app.popup_bottom_margin() {
         (mon.y + mon.h - h as i32 - (mon.h as f32 * f).round() as i32).max(mon.y)
     } else if app.popup_centered() {

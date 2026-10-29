@@ -226,6 +226,26 @@ fn matches(q: &str, p: &Proc) -> bool {
 /// The visible rows: Apps then Background, each sorted, with groups in `expanded` (by main pid) unfolded.
 /// A search unfolds the groups it matches inside and lists only the matching processes.
 pub fn flatten(procs: &[Proc], groups: &[Group], view: &View, expanded: &HashSet<u32>) -> Vec<VRow> {
+    flatten_pinned(procs, groups, view, expanded, None)
+}
+
+/// The pid that names a row (a group by its main process), what [`pin_order`] and [`flatten_pinned`] keep rows by.
+pub fn row_pid(procs: &[Proc], groups: &[Group], row: &VRow) -> Option<u32> {
+    match *row {
+        VRow::Section(..) => None,
+        VRow::Group(g) => Some(procs[groups[g].members[0]].pid),
+        VRow::Child(g, m) => Some(procs[groups[g].members[m]].pid),
+    }
+}
+
+/// Where each row of `rows` stands, by pid: hand it to [`flatten_pinned`] to keep that order across a refresh.
+pub fn pin_order(procs: &[Proc], groups: &[Group], rows: &[VRow]) -> std::collections::HashMap<u32, usize> {
+    rows.iter().enumerate().filter_map(|(i, r)| row_pid(procs, groups, r).map(|pid| (pid, i))).collect()
+}
+
+/// [`flatten`], but rows that were listed before (`pin`) keep their relative order instead of being re-sorted, and
+/// new ones go last: the list stops moving under the pointer while its numbers keep updating.
+pub fn flatten_pinned(procs: &[Proc], groups: &[Group], view: &View, expanded: &HashSet<u32>, pin: Option<&std::collections::HashMap<u32, usize>>) -> Vec<VRow> {
     let q = view.query.trim().to_lowercase();
     let searching = !q.is_empty();
     let visible = |i: usize| (view.kernel || !procs[i].kthread) && (!view.mine_only || procs[i].uid == view.my_uid);
@@ -253,6 +273,10 @@ pub fn flatten(procs: &[Proc], groups: &[Group], view: &View, expanded: &HashSet
             (g.name.as_str(), procs[g.members[0]].pid as usize, f64::from(g.cpu), g.rss, g.io)
         };
         list.sort_by(|a, b| order_by(view, procs, key(a.0), key(b.0)));
+        if let Some(pin) = pin {
+            let at = |gi: usize| pin.get(&procs[groups[gi].members[0]].pid).copied().unwrap_or(usize::MAX);
+            list.sort_by_key(|(gi, _)| at(*gi)); // stable: new rows keep their sorted order among themselves
+        }
         if list.is_empty() {
             continue;
         }
@@ -269,6 +293,9 @@ pub fn flatten(procs: &[Proc], groups: &[Group], view: &View, expanded: &HashSet
                     };
                     order_by(view, procs, k(a), k(b))
                 });
+                if let Some(pin) = pin {
+                    members.sort_by_key(|&mi| pin.get(&procs[g.members[mi]].pid).copied().unwrap_or(usize::MAX));
+                }
                 rows.extend(members.into_iter().map(|mi| VRow::Child(gi, mi)));
             }
         }
@@ -425,5 +452,29 @@ mod tests {
         assert!(rows_pids(&procs, &groups, &flatten(&procs, &groups, &view, &HashSet::new())).contains(&"G301".to_string()));
         view.mine_only = true;
         assert!(!rows_pids(&procs, &groups, &flatten(&procs, &groups, &view, &HashSet::new())).contains(&"G300".to_string()), "root's process is not mine");
+    }
+
+    #[test]
+    fn a_pinned_list_keeps_its_order_while_the_numbers_change() {
+        let mut procs = sample();
+        let view = View::default();
+        let none = HashSet::new();
+        let groups = build_groups(&procs, &index());
+        let before = flatten(&procs, &groups, &view, &none);
+        let pin = pin_order(&procs, &groups, &before);
+        // kitty is suddenly the busiest app and worker has gone quiet: unpinned that re-sorts.
+        procs[1].cpu = 90.0;
+        procs[7].cpu = 0.0;
+        let groups = build_groups(&procs, &index());
+        let sorted = rows_pids(&procs, &groups, &flatten(&procs, &groups, &view, &none));
+        assert_eq!(sorted[1], "G100", "the unpinned list re-sorts");
+        let pinned = rows_pids(&procs, &groups, &flatten_pinned(&procs, &groups, &view, &none, Some(&pin)));
+        assert_eq!(pinned, rows_pids(&procs, &groups, &before), "the pinned list stays put");
+        // A process that appears later goes last in its section; one that exits just leaves.
+        procs.push(p(400, 1, "newcomer", 99.0, 10));
+        procs.retain(|x| x.pid != 301);
+        let groups = build_groups(&procs, &index());
+        let pinned = rows_pids(&procs, &groups, &flatten_pinned(&procs, &groups, &view, &none, Some(&pin)));
+        assert_eq!(pinned, ["Apps:2", "G200", "G100", "Background:3", "G300", "G1", "G400"]);
     }
 }

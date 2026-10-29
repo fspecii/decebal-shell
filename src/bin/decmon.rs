@@ -7,13 +7,14 @@ use decebal::window_app::PopupAnchor;
 
 const HELP: &str = "decmon - Activity Monitor: processes and system performance
 
-Usage: decmon [TAB] [--popup [--x PX] [--top PX]] [--help | --version]
+Usage: decmon [TAB] [--popup [--edge EDGE] [--x PX] [--top PX]] [--help | --version]
 
 TAB is processes (default) or performance (also 1, 2).
 Without --popup it is a normal resizable window (also what the \"Activity Monitor\" entry of the launcher starts).
 --popup  open as a card under the menu bar (an X11 popup that grabs the keyboard; this is what decbar's agents icon runs)
 --x PX   centre the popup on this x offset from the monitor's left edge
---top PX distance of the popup from the monitor's top edge (default: just under the bar)
+--top PX distance of the popup from the screen edge the bar is on (default: just under the bar)
+--edge E the edge of the bar the popup hangs from: top (default), bottom, left or right; --x is then the position along the bar
 
 Running decmon again while its window is open closes it, so one hotkey bound to `decmon` toggles it.
 
@@ -29,13 +30,20 @@ fn main() {
     decebal::compat::init();
     decebal::mem::limit_arenas();
     let mut tab = Tab::Processes;
-    let (mut popup, mut x, mut top) = (false, None, None);
+    let (mut popup, mut x, mut top, mut edge) = (false, None, None, decebal::window_app::Edge::Top);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "-h" | "--help" => return println!("{HELP}"),
             "-V" | "--version" => return println!("decmon {}", env!("CARGO_PKG_VERSION")),
             "--popup" => popup = true,
+            "--edge" => {
+                let Some(e) = args.next().and_then(|v| decebal::window_app::Edge::parse(&v)) else {
+                    eprintln!("decmon: --edge takes top, bottom, left or right");
+                    std::process::exit(2);
+                };
+                edge = e;
+            }
             "--x" | "--top" => {
                 let Some(v) = args.next().and_then(|v| v.parse::<i32>().ok()) else {
                     eprintln!("decmon: {a} takes a number of pixels");
@@ -63,14 +71,14 @@ fn main() {
     // The popup is an X11 override-redirect window; without X11 (or a DISPLAY) it opens as a normal window instead.
     #[cfg(feature = "x11")]
     let result = if popup && std::env::var_os("DISPLAY").is_some() {
-        let anchor = PopupAnchor { top: top.unwrap_or_else(decebal::procmon::default_top), center_x: x };
+        let anchor = PopupAnchor { top: top.unwrap_or_else(decebal::procmon::default_top), center_x: x, edge };
         decebal::backend::x11_window::run(Monitor::new(Mode::Popup(anchor), tab)).map_err(|e| e.to_string())
     } else {
         run_window(Monitor::new(Mode::Window, tab))
     };
     #[cfg(not(feature = "x11"))]
     let result = {
-        let _ = (x, top, popup);
+        let _ = (x, top, popup, edge);
         run_window(Monitor::new(Mode::Window, tab))
     };
     if let Err(e) = result {
