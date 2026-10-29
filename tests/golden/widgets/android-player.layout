@@ -1,0 +1,13 @@
+col [0.0 0.0 320.0 254.0] bg r=30
+  text [22.0 22.0 276.0 13.0] text="NOW PLAYING" size=10 bold
+  text [22.0 47.0 276.0 28.0] text="Midnight City" size=22 bold
+  text [22.0 87.0 276.0 17.0] text="M83" size=13
+  bar [22.0 116.0 276.0 6.0] frac=0.38 thick=6
+  text [22.0 134.0 276.0 14.0] text="1:25 / 3:44" size=11
+  row [22.0 160.0 276.0 44.0]
+    button [22.0 164.0 107.2 36.0] bg r=12 click
+      text [49.2 174.5 52.8 15.0] text="Previous" size=12
+    button [141.2 160.0 64.0 44.0] bg r=22 click
+      icon [164.2 173.0 18.0 18.0] icon="pause" size=18
+    button [217.2 164.0 80.8 36.0] bg r=12 click
+      text [244.4 174.5 26.4 15.0] text="Next" size=12

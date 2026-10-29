@@ -1,0 +1,113 @@
+format = 1
+id = "berry-hub"
+name = "Berry hub"
+description = "A BlackBerry-inspired compact home hub with focused app and search, apps and history shortcuts."
+size = [320, 244]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 16
+gap = 12
+align = "stretch"
+background = "popup"
+radius = 6
+border = "border"
+
+[[root.children]]
+type = "row"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 28
+color = "text"
+weight = "bold"
+
+[[root.children.children]]
+type = "spacer"
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%a %d %b}"
+size = 12
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "HUB / CURRENT ACTIVITY"
+size = 10
+color = "accent"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "{window.app|No active application}"
+size = 16
+color = "text"
+weight = "bold"
+max_chars = 26
+
+[[root.children]]
+type = "text"
+text = "{window.title|No focused window}"
+size = 12
+color = "text_secondary"
+max_chars = 34
+
+[[root.children]]
+type = "row"
+gap = 8
+align = "stretch"
+
+[[root.children.children]]
+type = "button"
+height = 36
+padding = 8
+background = "accent"
+radius = 3
+on_click = "open spotlight"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "Search"
+size = 12
+color = "accent_text"
+
+[[root.children.children]]
+type = "button"
+height = 36
+padding = 8
+background = "accent"
+radius = 3
+on_click = "open launcher"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "Apps"
+size = 12
+color = "accent_text"
+
+[[root.children.children]]
+type = "button"
+height = 36
+padding = 8
+background = "accent"
+radius = 3
+on_click = "open notifications"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "History"
+size = 12
+color = "accent_text"
+
+[[root.children]]
+type = "text"
+text = "WORKSPACE {workspace.name|--}"
+size = 10
+color = "text_secondary"

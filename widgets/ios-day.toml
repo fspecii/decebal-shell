@@ -1,0 +1,61 @@
+format = 1
+id = "ios-day"
+name = "iOS day"
+description = "A rounded day-and-weather tile with a large date and a weather-unavailable state."
+size = [224, 248]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 22
+gap = 10
+align = "stretch"
+background = "popup"
+radius = 30
+border = "border@0.4"
+
+[[root.children]]
+type = "text"
+text = "{clock:%A}"
+size = 15
+color = "accent"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "{clock:%d}"
+size = 64
+color = "text"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "{clock:%B %Y}"
+size = 13
+color = "text_secondary"
+
+[[root.children]]
+type = "row"
+gap = 12
+align = "center"
+show_if = "weather.present"
+
+[[root.children.children]]
+type = "icon"
+name = "{weather.icon}"
+size = 28
+color = "accent"
+
+[[root.children.children]]
+type = "text"
+text = "{weather.temp:int}°C"
+size = 22
+color = "text"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "Weather unavailable"
+size = 12
+color = "text_secondary"
+show_if = "!weather.present"

@@ -1,0 +1,128 @@
+format = 1
+id = "android-player"
+name = "Android player"
+description = "A Material-inspired media tile with track progress and playback controls."
+size = [320, 254]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 22
+gap = 12
+align = "stretch"
+background = "popup"
+radius = 30
+border = "border@0.4"
+
+[[root.children]]
+type = "text"
+text = "NOW PLAYING"
+size = 10
+color = "accent"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "{media.title|Untitled track}"
+size = 22
+color = "text"
+weight = "bold"
+max_chars = 22
+show_if = "media.present"
+
+[[root.children]]
+type = "text"
+text = "Nothing playing"
+size = 22
+color = "text"
+weight = "bold"
+show_if = "!media.present"
+
+[[root.children]]
+type = "text"
+text = "{media.artist|Unknown artist}"
+size = 13
+color = "text_secondary"
+max_chars = 32
+show_if = "media.present"
+
+[[root.children]]
+type = "text"
+text = "Start a media player to connect"
+size = 12
+color = "text_secondary"
+show_if = "!media.present"
+
+[[root.children]]
+type = "bar"
+value = "media.progress"
+height = 6
+color = "accent"
+track = "border"
+show_if = "media.present"
+
+[[root.children]]
+type = "text"
+text = "{media.position:mmss|--:--} / {media.length:mmss|--:--}"
+size = 11
+color = "text_secondary"
+show_if = "media.present"
+
+[[root.children]]
+type = "row"
+gap = 12
+align = "center"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "button"
+height = 36
+padding = 8
+background = "accent"
+radius = 12
+on_click = "media prev"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "Previous"
+size = 12
+color = "accent_text"
+
+[[root.children.children]]
+type = "button"
+width = 64
+height = 44
+padding = 12
+radius = 22
+background = "accent"
+on_click = "media play-pause"
+
+[[root.children.children.children]]
+type = "icon"
+name = "pause"
+size = 18
+color = "accent_text"
+show_if = "media.playing"
+
+[[root.children.children.children]]
+type = "icon"
+name = "play"
+size = 18
+color = "accent_text"
+show_if = "!media.playing"
+
+[[root.children.children]]
+type = "button"
+height = 36
+padding = 8
+background = "accent"
+radius = 12
+on_click = "media next"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "Next"
+size = 12
+color = "accent_text"

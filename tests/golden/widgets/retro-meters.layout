@@ -1,0 +1,15 @@
+col [0.0 0.0 320.0 218.0] bg r=8 click
+  row [16.0 16.0 288.0 15.0]
+    text [16.0 16.0 99.0 15.0] text="SYSTEM / STEREO" size=12 bold
+    spacer [115.0 23.5 161.5 0.0]
+    text [276.5 17.0 27.5 13.0] text="1 SEC" size=10
+  row [16.0 43.0 288.0 137.0]
+    col [16.0 43.0 138.0 137.0]
+      text [60.2 43.0 49.5 13.0] text="PROCESSOR" size=10
+      ring [41.0 64.0 88.0 88.0] frac=0.37 size=88 thick=10
+      text [71.8 160.0 26.4 20.0] text="37%" size=16 bold
+    col [166.0 43.0 138.0 137.0]
+      text [218.5 43.0 33.0 13.0] text="MEMORY" size=10
+      ring [191.0 64.0 88.0 88.0] frac=0.62 size=88 thick=10
+      text [221.8 160.0 26.4 20.0] text="62%" size=16 bold
+  text [16.0 192.0 288.0 13.0] text="LOAD 1.42   /   16 CORES" size=10

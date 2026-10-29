@@ -1,0 +1,101 @@
+format = 1
+id = "retro-meters"
+name = "Retro meters"
+description = "A compact hi-fi inspired CPU and memory instrument panel."
+size = [320, 218]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 16
+gap = 12
+align = "stretch"
+background = "popup"
+border = "border"
+radius = 8
+on_click = "open dashboard"
+
+[[root.children]]
+type = "row"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "SYSTEM / STEREO"
+size = 12
+color = "text"
+weight = "bold"
+
+[[root.children.children]]
+type = "spacer"
+
+[[root.children.children]]
+type = "text"
+text = "1 SEC"
+size = 10
+color = "ok"
+
+[[root.children]]
+type = "row"
+align = "stretch"
+gap = 12
+
+[[root.children.children]]
+type = "col"
+gap = 8
+align = "center"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "PROCESSOR"
+size = 10
+color = "text_secondary"
+
+[[root.children.children.children]]
+type = "ring"
+value = "cpu.usage"
+size = 88
+thickness = 10
+color = "accent"
+track = "border"
+
+[[root.children.children.children]]
+type = "text"
+text = "{cpu.usage:pct|Unavailable}"
+size = 16
+color = "accent"
+weight = "bold"
+
+[[root.children.children]]
+type = "col"
+gap = 8
+align = "center"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "MEMORY"
+size = 10
+color = "text_secondary"
+
+[[root.children.children.children]]
+type = "ring"
+value = "mem.usage"
+size = 88
+thickness = 10
+color = "warn"
+track = "border"
+
+[[root.children.children.children]]
+type = "text"
+text = "{mem.usage:pct|Unavailable}"
+size = 16
+color = "warn"
+weight = "bold"
+
+[[root.children]]
+type = "text"
+text = "LOAD {cpu.load:.2|--}   /   {cpu.cores:int|--} CORES"
+size = 10
+color = "text_secondary"

@@ -1,0 +1,16 @@
+col [0.0 0.0 320.0 244.0] bg r=6
+  row [16.0 16.0 288.0 35.0]
+    text [16.0 16.0 77.0 35.0] text="14:07" size=28 bold
+    spacer [93.0 33.5 145.0 0.0]
+    text [238.0 26.0 66.0 15.0] text="Fri 23 Oct" size=12
+  text [16.0 63.0 288.0 13.0] text="HUB / CURRENT ACTIVITY" size=10 bold
+  text [16.0 88.0 288.0 20.0] text="Terminal" size=16 bold
+  text [16.0 120.0 288.0 15.0] text="Decebal - theme engine" size=12
+  row [16.0 147.0 288.0 36.0]
+    button [16.0 147.0 92.9 36.0] bg r=3 click
+      text [42.6 157.5 39.6 15.0] text="Search" size=12
+    button [116.9 147.0 79.7 36.0] bg r=3 click
+      text [143.5 157.5 26.4 15.0] text="Apps" size=12
+    button [204.5 147.0 99.5 36.0] bg r=3 click
+      text [231.2 157.5 46.2 15.0] text="History" size=12
+  text [16.0 195.0 288.0 13.0] text="WORKSPACE 2" size=10

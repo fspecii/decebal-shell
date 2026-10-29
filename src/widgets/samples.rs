@@ -4,6 +4,11 @@ use super::dsl::{self, WidgetDef};
 use super::Trust;
 
 pub const SAMPLES: &[(&str, &str)] = &[
+    ("terminal-session", include_str!("../../widgets/terminal-session.toml")),
+    ("retro-meters", include_str!("../../widgets/retro-meters.toml")),
+    ("ios-day", include_str!("../../widgets/ios-day.toml")),
+    ("berry-hub", include_str!("../../widgets/berry-hub.toml")),
+    ("android-player", include_str!("../../widgets/android-player.toml")),
     ("network-traffic", include_str!("../../widgets/network-traffic.toml")),
     ("storage-card", include_str!("../../widgets/storage-card.toml")),
     ("next-clock", include_str!("../../widgets/next-clock.toml")),
@@ -61,7 +66,7 @@ mod tests {
 
     /// Set WIDGET_EVIDENCE_DIR to retain the actual renderer output for visual review.
     #[test]
-    fn resource_cards_render_in_dark_and_light_designs() {
+    fn shared_cards_render_in_dark_and_light_designs() {
         use crate::theme::model::Selection;
         use crate::widgets::{layout::Item, paint};
         use std::path::Path;
@@ -78,9 +83,11 @@ mod tests {
         for design in ["nord", "macos"] {
             for dark in [true, false] {
                 let th = crate::theme::builtin::def(design).unwrap().resolve(design, dark, &Selection::default());
-                for id in ["network-traffic", "storage-card"] {
+                for id in ["network-traffic", "storage-card", "terminal-session", "retro-meters", "ios-day", "berry-hub", "android-player"] {
                     let def = get(id).unwrap();
-                    for (state, data) in [("sample", sample()), ("unavailable", crate::widgets::data::Data::empty())] {
+                    let mut unavailable = crate::widgets::data::Data::empty();
+                    unavailable.time = sample().time;
+                    for (state, data) in [("sample", sample()), ("unavailable", unavailable)] {
                         let it = layout(&def, &Ctx { data: &data, metrics: &paint::FontMetrics(&fonts), theme_radius: th.radius }, None);
                         contained(&it, it.rect.w, it.rect.h);
                         let pm = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
@@ -95,6 +102,48 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn mobile_cards_show_real_states_and_hit_their_allowlisted_controls() {
+        use crate::widgets::actions::{Action, Media, Open};
+        use crate::widgets::data::Val;
+        use crate::widgets::layout::{hit, Item};
+
+        fn actions(it: &Item, root: &Item, out: &mut Vec<Action>) {
+            if let Some(action) = &it.on_click {
+                let target = hit(root, it.rect.x + it.rect.w / 2.0, it.rect.y + it.rect.h / 2.0).unwrap();
+                assert_eq!(target.on_click.as_ref(), Some(action));
+                out.push(action.clone());
+            }
+            for child in &it.children {
+                actions(child, root, out);
+            }
+        }
+        let draw = |id: &str, data: &crate::widgets::data::Data| layout(&get(id).unwrap(), &Ctx { data, metrics: &Fixed, theme_radius: 10.0 }, None);
+        let mut data = sample();
+        let hub = draw("berry-hub", &data);
+        let mut got = Vec::new();
+        actions(&hub, &hub, &mut got);
+        assert_eq!(got, vec![Action::Open(Open::Spotlight), Action::Open(Open::Launcher), Action::Open(Open::Notifications)]);
+        let player = draw("android-player", &data);
+        got.clear();
+        actions(&player, &player, &mut got);
+        assert_eq!(got, vec![Action::Media(Media::Prev), Action::Media(Media::PlayPause), Action::Media(Media::Next)]);
+        assert!(dump(&player).contains("icon=\"pause\""));
+        data.set("media.playing", Val::Bool(false));
+        assert!(dump(&draw("android-player", &data)).contains("icon=\"play\""));
+        data.set("media.title", Val::Text("Very long track title ".repeat(20)));
+        assert!(dump(&draw("android-player", &data)).contains('…'));
+        let empty = crate::widgets::data::Data::empty();
+        let player = draw("android-player", &empty);
+        got.clear();
+        actions(&player, &player, &mut got);
+        assert!(got.is_empty());
+        assert!(dump(&player).contains("Nothing playing"));
+        assert!(dump(&draw("ios-day", &empty)).contains("Weather unavailable"));
+        assert!(!dump(&draw("ios-day", &empty)).contains("°C"));
+        assert!(dump(&draw("berry-hub", &empty)).contains("No focused window"));
     }
 
     /// Layout goldens: `UPDATE_GOLDEN=1 cargo test --lib widgets::samples` rewrites tests/golden/widgets/*.layout.

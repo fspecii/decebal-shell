@@ -73,9 +73,29 @@ Reproduce layout goldens and actual dark/light renders with installed fonts:
 
 ```sh
 cargo test --lib widgets::samples
-WIDGET_EVIDENCE_DIR="$PWD/docs/widget-evidence" cargo test --lib widgets::samples::tests::resource_cards_render_in_dark_and_light_designs
+WIDGET_EVIDENCE_DIR="$PWD/docs/widget-evidence" cargo test --lib widgets::samples::tests::shared_cards_render_in_dark_and_light_designs
 ```
 
 The committed PNGs in `docs/widget-evidence/` are actual tiny-skia widget output,
 using fixed sample data and missing-data states in Nord and macOS dark/light
 variants. No live desktop, configuration or theme application is needed.
+
+### Rice and mobile-inspired collection
+
+These shared widgets are available in Settings → Widgets on every theme. Their
+shapes and layout borrow from familiar desktop rice and mobile design styles;
+all colours still come from the current semantic palette.
+
+| Widget ID | Design and live data | Interaction |
+| --- | --- | --- |
+| `terminal-session` | Square prompt frame, user/host, uptime, CPU and RAM meters | Open dashboard |
+| `retro-meters` | Hi-fi inspired twin resource dials, load and core count | Open dashboard |
+| `ios-day` | Rounded date tile with current cached weather | Display only |
+| `berry-hub` | Compact clock, focused app/title, workspace and angular shortcuts | Search, apps, notification history |
+| `android-player` | Rounded media tile, track/artist, progress and transport controls | Previous, play/pause, next |
+
+The hub does not invent message counts or connect to phone accounts. Weather uses
+the existing cached source; playback uses the existing MPRIS source. Missing
+weather and absent players show explicit empty states; playback controls disappear
+when no player is present. Long app/track text is truncated. These additions do
+not select or replace a theme's widget layout.

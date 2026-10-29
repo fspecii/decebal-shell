@@ -1,0 +1,8 @@
+col [0.0 0.0 320.0 214.0] bg r=2 click
+  text [16.0 16.0 288.0 15.0] text="+-- SESSION ----------------+" size=12 bold
+  text [16.0 41.0 288.0 20.0] text="ada@analytical ~" size=16 bold
+  text [16.0 71.0 288.0 15.0] text="$ uptime  1d 2h" size=12
+  text [16.0 96.0 288.0 15.0] text="CPU  37%    RAM  62%" size=12
+  bar [16.0 121.0 288.0 6.0] frac=0.37 thick=6
+  bar [16.0 137.0 288.0 6.0] frac=0.62 thick=6
+  text [16.0 153.0 288.0 23.0] text="$ _" size=18
