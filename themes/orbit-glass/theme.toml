@@ -5,7 +5,7 @@ screenshots = ["screenshots/main.png"]
 version = "2.0.0"
 author = "decebal"
 license = "MIT"
-description = "An orbital command deck: right glass navigation rail, compact launcher, precise window chrome and an original eclipse field."
+description = "An orbital command deck: right glass navigation rail, precise window chrome and an original eclipse field, with no bottom dock."
 min_shell_version = "0.1.0"
 tags = ["glass", "orbital", "right-rail", "command-deck"]
 
@@ -102,7 +102,7 @@ position = "right"
 height = 28
 
 [dock]
-enabled = true
+enabled = false
 style = "mac"
 size = 42
 roundness = 0.52
