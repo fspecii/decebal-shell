@@ -1514,6 +1514,32 @@ mod key_tests {
         SettingsApp::new(paths, None)
     }
 
+    #[test]
+    fn scrolled_theme_apply_shows_widget_choice_and_replaces_layout() {
+        let initial = app();
+        let mut a = SettingsApp::new(initial.m.paths.clone(), Some("appearance"));
+        super::super::io::json_set(&a.m.paths.shell_json(), "widgets", Some(serde_json::json!({"enabled":true,"items":[{"use":"builtin:clock-card","x":345}]}))).unwrap();
+        a.resize(1200, 900);
+        let mut pixels = Pixmap::new(1200, 900).unwrap();
+        a.draw(&mut pixels);
+        let id = "l:tcard:apply:glyph-rice";
+        let p = a.frame.find(id).expect("theme apply control").rect;
+        a.scroll = (p.1 - 300.0).max(0.0);
+        a.draw(&mut pixels);
+        let p = a.frame.find(id).unwrap().rect;
+        assert!(p.1 >= 0.0 && p.1 + p.3 < 900.0);
+        a.pointer_button(p.0 + p.2 / 2.0, p.1 + p.3 / 2.0, Button::Left, true);
+        a.draw(&mut pixels);
+        assert!(a.m.widget_choice.is_some(), "apply must request widget-layout choice");
+        let p = a.frame.find("wc:replace").expect("visible widget choice").rect;
+        assert!(p.1 >= 0.0 && p.1 + p.3 < 900.0, "choice must be on screen: {p:?}");
+        a.pointer_button(p.0 + p.2 / 2.0, p.1 + p.3 / 2.0, Button::Left, true);
+        a.draw(&mut pixels);
+        assert!(a.m.widget_choice.is_none());
+        let shell = super::super::io::json_load(&a.m.paths.shell_json());
+        assert_eq!(shell["theme"]["name"], "glyph-rice");
+    }
+
     fn ev(key: Key, ch: Option<char>) -> KeyEvent {
         KeyEvent { key, text: ch.map(String::from).unwrap_or_default(), ch, ctrl: false, shift: false, alt: false }
     }
