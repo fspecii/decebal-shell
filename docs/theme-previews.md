@@ -50,6 +50,8 @@ python tools/build-decoration-preview.py /path/to/rdwm
 export DECEBAL_DECO_RENDERER="$PWD/target/decoration-preview-helper/target/debug/decebal-deco-preview"
 ```
 
+A helper installed beside `decthemectl` is discovered automatically; `DECEBAL_DECO_RENDERER` can override it.
+
 No rdwm source or live binary is changed. The helper uses rdwm-deco directly; it
 is not a second decoration renderer. Without this optional helper, previews state
 that native decoration rendering is unavailable and draw no substitute buttons.

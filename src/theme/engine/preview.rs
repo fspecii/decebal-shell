@@ -52,7 +52,10 @@ fn renderer() -> PathBuf {
     std::env::var_os("DECEBAL_THEME_PREVIEW_BIN").map(PathBuf::from).unwrap_or_else(|| std::env::current_exe().unwrap_or_default().with_file_name("decthemectl"))
 }
 fn deco_renderer() -> Option<PathBuf> {
-    std::env::var_os("DECEBAL_DECO_RENDERER").map(PathBuf::from).filter(|p| p.is_file())
+    std::env::var_os("DECEBAL_DECO_RENDERER")
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+        .or_else(|| std::env::current_exe().ok().map(|p| p.with_file_name("decebal-deco-preview")).filter(|p| p.is_file()))
 }
 
 /// Raw manifests, inherited assets, builtin references, effective palette and native renderer identity.
