@@ -26,8 +26,19 @@ pub const DOCK_BORDER_ALPHA: f32 = 0.05;
 
 /// Menu bar height and background (`#131313`).
 pub const BAR_HEIGHT: f32 = 26.0;
-/// Thickness of the Caelestia pill bar (the strut it reserves) whichever edge it sits on.
+/// Width of a Caelestia side bar, including the strip it reserves.
 pub const PILL_BAR_THICKNESS: f32 = 52.0;
+/// Horizontal bars need less height than a side bar needs width.
+pub const HORIZONTAL_PILL_BAR_THICKNESS: f32 = 40.0;
+
+pub fn pill_bar_thickness(position: crate::config::BarPosition) -> f32 {
+    use crate::config::BarPosition;
+    match position {
+        BarPosition::Left | BarPosition::Right => PILL_BAR_THICKNESS,
+        BarPosition::Top | BarPosition::Bottom | BarPosition::Split => HORIZONTAL_PILL_BAR_THICKNESS,
+    }
+}
+
 pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
 
 // Shared, switchable theme (colours, metrics, fonts): see docs/theming.md. Kept in `theme/` so this

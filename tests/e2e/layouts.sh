@@ -60,9 +60,10 @@ FAKE=$BIN/examples/fakewin
 printf '{"version":1,"pinned":["launchpad","trash"],"order":["launchpad","trash"]}\n' > "$DECEBAL_CONFIG/dock-pinned-macos.json"
 
 SW=1600; SH=900
-THICK=52                       # the strut of every pill bar
+THICK=52                       # side bars retain their original width
+HORIZONTAL_THICK=40             # top/bottom bars are slimmer
 SURF_W=444                     # a side bar's surface: the strip plus room for popouts
-SURF_H=772                     # a top / bottom bar's surface
+SURF_H=760                     # a top / bottom bar's surface
 Xvfb $N -screen 0 ${SW}x${SH}x24 +extension RANDR +extension SHAPE -nolisten tcp -ac >"$TMP/xvfb.log" 2>&1 &
 PIDS+=($!)
 wait_for 5 test -e /tmp/.X11-unix/X${N#:} || { echo "Xvfb failed"; cat "$TMP/xvfb.log"; exit 2; }
@@ -223,16 +224,16 @@ check_layout right  "$RIGHT_X 0 $SURF_W $SH"            "0 $THICK 0 0 0 0 0 $((S
 workspace_click right "$TRAY" "$RIGHT_X" 0
 hover_popout right "$TRAY" "$RIGHT_X" 0
 
-check_layout top    "0 0 $SW $SURF_H"                   "0 0 $THICK 0 0 0 0 0 0 $((SW - 1)) 0 0"
+check_layout top    "0 0 $SW $SURF_H"                   "0 0 $HORIZONTAL_THICK 0 0 0 0 0 0 $((SW - 1)) 0 0"
 workspace_click top "$TRAY" 0 0
 hover_popout top "$TRAY" 0 0
 
-check_layout bottom "0 $BOTTOM_Y $SW $SURF_H"           "0 0 0 $THICK 0 0 0 0 0 0 0 $((SW - 1))"
+check_layout bottom "0 $BOTTOM_Y $SW $SURF_H"           "0 0 0 $HORIZONTAL_THICK 0 0 0 0 0 0 0 $((SW - 1))"
 workspace_click bottom "$TRAY" 0 "$BOTTOM_Y"
 hover_popout bottom "$TRAY" 0 "$BOTTOM_Y"
 
-check_layout split  "0 0 $SW $SURF_H"                   "0 0 $THICK 0 0 0 0 0 0 $((SW - 1)) 0 0" \
-                    "0 $BOTTOM_Y $SW $SURF_H"           "0 0 0 $THICK 0 0 0 0 0 0 0 $((SW - 1))"
+check_layout split  "0 0 $SW $SURF_H"                   "0 0 $HORIZONTAL_THICK 0 0 0 0 0 0 $((SW - 1)) 0 0" \
+                    "0 $BOTTOM_Y $SW $SURF_H"           "0 0 0 $HORIZONTAL_THICK 0 0 0 0 0 0 0 $((SW - 1))"
 # the top bar owns the OS icon, workspaces and window; the bottom bar the status icons, clock and power
 HEAD_ITEMS=$(awk '{print $1}' "$TRAY" | tr '\n' ' ')
 BOTTOM_ITEMS=$(awk '{print $1}' "$TRAY.bottom" 2>/dev/null | tr '\n' ' ')
@@ -248,7 +249,7 @@ echo "== the dock stays hidden unless decebal.json says so; above a bottom bar w
 jq '.dock.enabled = true' "$DECEBAL_CONFIG/decebal.json" > "$TMP/m.json" && mv "$TMP/m.json" "$DECEBAL_CONFIG/decebal.json"
 until_ok "dock.enabled = true shows the dock under the split layout" 10 dock_visible
 DG=$(geom_of decebal-dock); read -r dx dy dw dh <<< "$DG"
-[ -n "$dy" ] && [ $((dy + dh)) -le $((SH - THICK)) ] && pass "the dock floats above the bottom bar (bottom edge ${dy}+${dh} <= $((SH - THICK)))" || fail "the dock overlaps the bottom bar" "$DG"
+[ -n "$dy" ] && [ $((dy + dh)) -le $((SH - HORIZONTAL_THICK)) ] && pass "the dock floats above the bottom bar (bottom edge ${dy}+${dh} <= $((SH - HORIZONTAL_THICK)))" || fail "the dock overlaps the bottom bar" "$DG"
 shot "layout-split-with-dock"
 jq '.dock.enabled = "auto"' "$DECEBAL_CONFIG/decebal.json" > "$TMP/m.json" && mv "$TMP/m.json" "$DECEBAL_CONFIG/decebal.json"
 until_ok "dock.enabled = auto hides it again" 10 dock_gone

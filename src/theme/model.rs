@@ -205,7 +205,7 @@ impl Theme {
     /// already know): where other programs must keep clear of it.
     pub fn bar_insets(&self) -> Insets {
         use crate::config::BarPosition as P;
-        let t = crate::theme::PILL_BAR_THICKNESS as i32;
+        let t = self.pill_bar().map_or(0, |p| crate::theme::pill_bar_thickness(p) as i32);
         match self.pill_bar() {
             None => Insets::default(),
             Some(P::Left) => Insets { left: t, ..Insets::default() },

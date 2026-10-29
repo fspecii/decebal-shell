@@ -242,7 +242,7 @@ impl Host {
         }
         if shell.bar_visible(dock.style) {
             return match pill {
-                Some(position) => Host::Pill { position, thickness: crate::theme::PILL_BAR_THICKNESS },
+                Some(position) => Host::Pill { position, thickness: crate::theme::pill_bar_thickness(position) },
                 None => Host::MenuBar { thickness: crate::theme::BAR_HEIGHT },
             };
         }
@@ -331,6 +331,26 @@ pub fn place(host: &Host, want: Corner) -> Placement {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn horizontal_hosts_clear_the_slimmer_strip_and_side_hosts_keep_their_width() {
+        let shell = crate::config::ShellSettings::default();
+        let dock = crate::config::DockSettings::default();
+        for position in BarPosition::ALL {
+            let thickness = match position {
+                BarPosition::Left | BarPosition::Right => 52.0,
+                _ => 40.0,
+            };
+            let host = Host::detect(&shell, &dock, Some(position), 1.0);
+            assert_eq!(host, Host::Pill { position, thickness });
+            let p = place(&host, Corner::Auto);
+            let inset = match position {
+                BarPosition::Left | BarPosition::Right => p.inset_x,
+                _ => p.inset_y,
+            };
+            assert_eq!(inset, thickness + GAP);
+        }
+    }
 
     #[test]
     fn defaults_make_the_panel_present_with_every_tile() {

@@ -489,9 +489,9 @@ mod tests {
         assert_eq!((live.theme.pill_bar(), live.theme.bar_insets()), (Some(P::Left), crate::theme::Insets { left: 52, ..Default::default() }), "left is the default");
         for (word, want, insets) in [
             ("right", P::Right, crate::theme::Insets { right: 52, ..Default::default() }),
-            ("top", P::Top, crate::theme::Insets { top: 52, ..Default::default() }),
-            ("bottom", P::Bottom, crate::theme::Insets { bottom: 52, ..Default::default() }),
-            ("split", P::Split, crate::theme::Insets { top: 52, bottom: 52, ..Default::default() }),
+            ("top", P::Top, crate::theme::Insets { top: 40, ..Default::default() }),
+            ("bottom", P::Bottom, crate::theme::Insets { bottom: 40, ..Default::default() }),
+            ("split", P::Split, crate::theme::Insets { top: 40, bottom: 40, ..Default::default() }),
         ] {
             std::fs::write(&src.shell_json, format!(r#"{{"theme": "caelestia", "bar": {{"enabled": true, "position": "{word}"}}}}"#)).unwrap();
             assert!(live.poll(), "{word}: the theme changed, so every program redraws");

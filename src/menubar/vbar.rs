@@ -17,7 +17,7 @@
 //! | `bottom` | the same, on the bottom edge | bottom | upwards |
 //! | `split` | a `top` bar with the head (OS icon, workspaces, window) and a second `decbar --role bottom` process with a `bottom` bar holding the tail (tray, status, clock, power) | top and bottom | down / up |
 //!
-//! The surface is bigger than the strip: only [`THICK`] of it is reserved (the strut) and takes input while nothing is
+//! The surface is bigger than the strip: 52 px at the sides and 40 px at the top/bottom are reserved (the strut) and take input while nothing is
 //! open, exactly like the classic bar whose surface is taller than its strip.
 //!
 //! The layout is written once, for a bar running down an edge (x across the bar, y along it): [`layout`] computes the
@@ -33,19 +33,18 @@ use tiny_skia::{FilterQuality, PixmapPaint, Transform};
 
 /// Thickness of the bar strip, and of the strut it reserves.
 pub const THICK: f32 = crate::theme::PILL_BAR_THICKNESS;
+pub const HORIZONTAL_THICK: f32 = crate::theme::HORIZONTAL_PILL_BAR_THICKNESS;
 /// Room beside a side bar for popups and the quick-settings panel (widest: the Control Center, 340 px).
 pub const POPOUT_W: f32 = 392.0;
 pub const SURFACE_W: u32 = (THICK + POPOUT_W) as u32;
 /// Room under (over) a top (bottom) bar for the same; the tallest thing is the Control Center. A small monitor cuts it.
 pub const POPOUT_H: f32 = 720.0;
-pub const SURFACE_H: u32 = (THICK + POPOUT_H) as u32;
+pub const SURFACE_H: u32 = (HORIZONTAL_THICK + POPOUT_H) as u32;
 const PILL_X: f32 = 6.0;
 pub const PILL_W: f32 = THICK - 2.0 * PILL_X;
 /// Space before the first and after the last pill, and between pills.
 const EDGE: f32 = 8.0;
 const GAP: f32 = 8.0;
-pub const LOGO_H: f32 = PILL_W;
-pub const POWER_H: f32 = PILL_W;
 /// Padding before / after the workspace cells inside their pill.
 const WS_PAD: f32 = 6.0;
 /// One icon cell in the tray and status pills (the battery also carries its percentage).
@@ -181,6 +180,13 @@ impl Place {
         };
         Some(Place { edge, part })
     }
+    pub fn thickness(self) -> f32 {
+        if self.edge.is_side() {
+            THICK
+        } else {
+            HORIZONTAL_THICK
+        }
+    }
     /// Window name of the surface (what `xdotool search --name` finds).
     pub fn namespace(self) -> &'static str {
         if self.part == Part::Tail {
@@ -220,6 +226,23 @@ impl Geo {
     pub fn horizontal(&self) -> bool {
         !self.edge.is_side()
     }
+    pub fn thickness(&self) -> f32 {
+        if self.horizontal() {
+            HORIZONTAL_THICK
+        } else {
+            THICK
+        }
+    }
+    fn pill_inset(&self) -> f32 {
+        if self.horizontal() {
+            4.0
+        } else {
+            PILL_X
+        }
+    }
+    fn pill_width(&self) -> f32 {
+        self.thickness() - 2.0 * self.pill_inset()
+    }
     /// Length of the bar along its edge.
     pub fn len(&self) -> f32 {
         if self.horizontal() {
@@ -241,13 +264,13 @@ impl Geo {
         match self.edge {
             Anchor::Left | Anchor::Top => 0.0,
             Anchor::Right => self.w - THICK,
-            Anchor::Bottom => self.h - THICK,
+            Anchor::Bottom => self.h - self.thickness(),
         }
     }
     /// The bar strip on the surface: the part that is reserved and takes input.
     pub fn strip(&self) -> VRect {
         if self.horizontal() {
-            VRect { x: 0.0, y: self.base(), w: self.w, h: THICK }
+            VRect { x: 0.0, y: self.base(), w: self.w, h: self.thickness() }
         } else {
             VRect { x: self.base(), y: 0.0, w: THICK, h: self.h }
         }
@@ -266,8 +289,8 @@ impl Geo {
         match self.edge {
             Anchor::Left => (THICK + POP_GAP, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
             Anchor::Right => (self.w - THICK - POP_GAP - pw, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
-            Anchor::Top => (clamp_in(item.cx() - pw / 2.0, pw, self.w), THICK + POP_GAP),
-            Anchor::Bottom => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.h - THICK - POP_GAP - ph),
+            Anchor::Top => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.thickness() + POP_GAP),
+            Anchor::Bottom => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.h - self.thickness() - POP_GAP - ph),
         }
     }
     /// Input region for a popout box: the box and the way back to the strip, so the pointer never leaves the surface on its way.
@@ -340,17 +363,18 @@ pub fn layout(geo: &Geo, part: Part, c: &Content) -> Layout {
     let d = Dim::of(horiz);
     let len = geo.len();
     // the layout frame: x across the bar, y along it
-    let pill = |u: f32, l: f32| VRect { x: PILL_X, y: u, w: PILL_W, h: l };
+    let pill_width = geo.pill_width();
+    let pill = |u: f32, l: f32| VRect { x: geo.pill_inset(), y: u, w: pill_width, h: l };
     let mut pills: Vec<(Pill, VRect)> = Vec::new();
     let mut items: Vec<(Tray, VRect)> = Vec::new();
     let (head, tail) = (part != Part::Tail, part != Part::Head);
 
     let mut top = EDGE;
     if head {
-        let logo = pill(top, LOGO_H);
+        let logo = pill(top, pill_width);
         pills.push((Pill::Logo, logo));
         items.push((Tray::Logo, logo));
-        top += LOGO_H + GAP;
+        top += pill_width + GAP;
         if c.workspaces > 0 {
             let r = pill(top, workspaces_len(c.workspaces, horiz));
             pills.push((Pill::Workspaces, r));
@@ -370,7 +394,7 @@ pub fn layout(geo: &Geo, part: Part, c: &Content) -> Layout {
             *bot = r.y - GAP;
             r
         };
-        let power = stand(Pill::Power, POWER_H, &mut bot);
+        let power = stand(Pill::Power, pill_width, &mut bot);
         tail_items.push((Tray::Power, power));
         let clock = stand(Pill::Clock, d.clock_len, &mut bot);
         tail_items.push((Tray::Clock, clock));
@@ -675,7 +699,7 @@ impl DecBar {
     // ------------------------------------------------------------ geometry for the backend / input
 
     pub(super) fn v_spec(place: Place) -> crate::backend::SurfaceSpec {
-        crate::backend::SurfaceSpec { anchor: place.edge, margin: 0, reserve: THICK as i32, stretch: true, namespace: place.namespace() }
+        crate::backend::SurfaceSpec { anchor: place.edge, margin: 0, reserve: place.thickness() as i32, stretch: true, namespace: place.namespace() }
     }
 
     /// Top-left of the open Control Center panel: on the screen side of the strip, centred on its tile, kept on screen.
@@ -1035,7 +1059,7 @@ impl DecBar {
         let lay = self.v_layout();
         let snap = self.snapshot();
         let text = th.text.t();
-        let radius = PILL_W / 2.0;
+        let radius = geo.pill_width() / 2.0;
         for (_, r) in &lay.pills {
             let rad = radius.min(r.w.min(r.h) / 2.0);
             fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(1.0));
@@ -1270,13 +1294,13 @@ fn monitor_placement(place: Place, x: f32, y: f32) -> Vec<String> {
         Anchor::Left => ("left", y),
         Anchor::Right => ("right", y),
     };
-    let gap = THICK as i32 + 10;
+    let gap = place.thickness() as i32 + 10;
     vec!["--edge".into(), edge.into(), "--top".into(), gap.to_string(), "--x".into(), (along.round() as i32).to_string()]
 }
 
 /// `decdash` for the clock: hung below a bar along the top edge, else near the top edge of the screen.
 fn clock_dash_argv(place: Place) -> Vec<String> {
-    let top = 10 + if top_bar_exists(place) { THICK as i32 } else { 0 };
+    let top = 10 + if top_bar_exists(place) { HORIZONTAL_THICK as i32 } else { 0 };
     vec![crate::launch::sibling_or_path("decdash"), "--top".into(), top.to_string()]
 }
 
@@ -1322,7 +1346,7 @@ mod tests {
     fn the_surface_leaves_room_for_the_widest_panel() {
         const { assert!(POPOUT_W >= POP_GAP + controlcenter::PANEL_W + 8.0) };
         assert_eq!(SURFACE_W as f32, THICK + POPOUT_W);
-        assert_eq!(SURFACE_H as f32, THICK + POPOUT_H);
+        assert_eq!(SURFACE_H as f32, HORIZONTAL_THICK + POPOUT_H);
         assert_eq!(PILL_W, 40.0);
         assert_eq!(THICK, 52.0);
     }
@@ -1330,9 +1354,10 @@ mod tests {
     #[test]
     fn the_process_manager_hangs_from_the_bars_own_edge() {
         let args = |edge, x, y| monitor_placement(Place { edge, part: Part::All }, x, y).join(" ");
-        let gap = THICK as i32 + 10;
+        let gap = HORIZONTAL_THICK as i32 + 10;
         assert_eq!(args(Anchor::Bottom, 900.0, 1400.0), format!("--edge bottom --top {gap} --x 900"));
         assert_eq!(args(Anchor::Top, 900.0, 20.0), format!("--edge top --top {gap} --x 900"));
+        let gap = THICK as i32 + 10;
         assert_eq!(args(Anchor::Left, 20.0, 300.0), format!("--edge left --top {gap} --x 300"), "beside a side bar the position is along y");
         assert_eq!(args(Anchor::Right, 20.0, 300.0), format!("--edge right --top {gap} --x 300"));
     }
@@ -1361,8 +1386,8 @@ mod tests {
         let s = |e| geo_on(e).strip();
         assert_eq!(s(Anchor::Left), VRect { x: 0.0, y: 0.0, w: THICK, h: 900.0 });
         assert_eq!(s(Anchor::Right), VRect { x: SURFACE_W as f32 - THICK, y: 0.0, w: THICK, h: 900.0 });
-        assert_eq!(s(Anchor::Top), VRect { x: 0.0, y: 0.0, w: 1600.0, h: THICK });
-        assert_eq!(s(Anchor::Bottom), VRect { x: 0.0, y: SURFACE_H as f32 - THICK, w: 1600.0, h: THICK });
+        assert_eq!(s(Anchor::Top), VRect { x: 0.0, y: 0.0, w: 1600.0, h: HORIZONTAL_THICK });
+        assert_eq!(s(Anchor::Bottom), VRect { x: 0.0, y: SURFACE_H as f32 - HORIZONTAL_THICK, w: 1600.0, h: HORIZONTAL_THICK });
         assert_eq!(geo_on(Anchor::Left).len(), 900.0);
         assert_eq!(geo_on(Anchor::Top).len(), 1600.0);
     }
@@ -1379,7 +1404,7 @@ mod tests {
                 // across: inside the strip, PILL_X from its sides
                 let (c0, c1) = if g.horizontal() { (r.y, r.bottom()) } else { (r.x, r.right()) };
                 let (s0, s1) = if g.horizontal() { (strip.y, strip.bottom()) } else { (strip.x, strip.right()) };
-                assert!(c0 >= s0 + PILL_X - 0.001 && c1 <= s1 - PILL_X + 0.001, "{edge:?}: inside the strip: {r:?}");
+                assert!(c0 >= s0 + g.pill_inset() - 0.001 && c1 <= s1 - g.pill_inset() + 0.001, "{edge:?}: inside the strip: {r:?}");
                 // along: inside the bar, separated by the gap, in reading order
                 let (a0, a1) = along(&g, r);
                 assert!(a0 >= EDGE - 0.001 && a1 <= g.len() - EDGE + 0.001, "{edge:?}: {r:?}");
@@ -1408,20 +1433,23 @@ mod tests {
     }
 
     #[test]
-    fn a_horizontal_bar_is_the_vertical_one_turned() {
+    fn horizontal_pills_are_slimmer_but_keep_their_content_and_hit_targets() {
         let v = layout(&geo_on(Anchor::Left), Part::All, &full());
-        let h = layout(&Geo::new(Anchor::Top, 900.0, SURFACE_H as f32), Part::All, &full());
-        // same screen length, so the same layout: x of the one is y of the other (only the cell sizes differ, hence a few pills do)
-        for kind in [Pill::Logo, Pill::Power, Pill::Window] {
-            let (a, b) = (v.pill(kind).unwrap(), h.pill(kind).unwrap());
-            if kind != Pill::Window {
-                assert_eq!((a.y, a.h, a.x, a.w), (b.x, b.w, b.y, b.h), "{kind:?}");
+        for edge in [Anchor::Top, Anchor::Bottom] {
+            let g = geo_on(edge);
+            let h = layout(&g, Part::All, &full());
+            assert_eq!(g.strip().h, 40.0);
+            for (kind, r) in &h.pills {
+                assert_eq!(r.h, 32.0, "{edge:?} {kind:?}");
+                assert!(r.y >= g.strip().y && r.bottom() <= g.strip().bottom());
             }
+            for (kind, r) in &h.items {
+                assert_eq!(h.hit(r.cx(), r.cy()).map(|h| h.0), Some(*kind));
+            }
+            assert_eq!(h.pill(Pill::Clock).unwrap().w, Dim::of(true).clock_len);
         }
-        let clock = h.pill(Pill::Clock).unwrap();
-        assert_eq!((clock.w, clock.h), (Dim::of(true).clock_len, PILL_W), "the clock is a wide pill on a horizontal bar");
-        assert_eq!(v.pill(Pill::Clock).unwrap().h, Dim::of(false).clock_len);
-        assert_ne!(Dim::of(true).ws_cell, 0.0);
+        assert_eq!(geo_on(Anchor::Left).strip().w, 52.0);
+        assert_eq!(v.pill(Pill::Logo).unwrap().w, 40.0);
     }
 
     #[test]
@@ -1431,7 +1459,7 @@ mod tests {
             let lay = layout(&g, Part::All, &full());
             let at = |p| along(&g, &lay.pill(p).unwrap());
             assert_eq!(at(Pill::Logo).0, EDGE, "{edge:?}");
-            assert_eq!(at(Pill::Workspaces).0, EDGE + LOGO_H + GAP, "{edge:?}");
+            assert_eq!(at(Pill::Workspaces).0, EDGE + g.pill_width() + GAP, "{edge:?}");
             assert_eq!(at(Pill::Power).1, g.len() - EDGE, "{edge:?}");
             assert_eq!(at(Pill::Clock).1, at(Pill::Power).0 - GAP, "{edge:?}");
             assert_eq!(lay.pill(Pill::Workspaces).map(|r| if g.horizontal() { r.w } else { r.h }), Some(workspaces_len(9, g.horizontal())), "{edge:?}");
@@ -1451,7 +1479,7 @@ mod tests {
             assert_eq!((b.x - a.x, b.y, b.w, b.h), (shift, a.y, a.w, a.h));
         }
         let (t, b) = (layout(&geo_on(Anchor::Top), Part::All, &full()), layout(&geo_on(Anchor::Bottom), Part::All, &full()));
-        let shift = SURFACE_H as f32 - THICK;
+        let shift = SURFACE_H as f32 - HORIZONTAL_THICK;
         for ((_, a), (_, c)) in t.items.iter().zip(&b.items) {
             assert_eq!((c.y - a.y, c.x, c.w, c.h), (shift, a.x, a.w, a.h));
         }
@@ -1482,7 +1510,19 @@ mod tests {
             // a short bar: the stacks fill it, nothing is left for the window
             let c = full();
             let d = Dim::of(horiz);
-            let fixed = EDGE + LOGO_H + GAP + workspaces_len(9, horiz) + GAP + group_len(&c.tray, horiz) + GAP + group_len(&c.status, horiz) + GAP + d.clock_len + GAP + POWER_H + EDGE;
+            let fixed = EDGE
+                + g(1000.0).pill_width()
+                + GAP
+                + workspaces_len(9, horiz)
+                + GAP
+                + group_len(&c.tray, horiz)
+                + GAP
+                + group_len(&c.status, horiz)
+                + GAP
+                + d.clock_len
+                + GAP
+                + g(1000.0).pill_width()
+                + EDGE;
             assert!(layout(&g(fixed + d.win_min - 1.0), Part::All, &c).pill(Pill::Window).is_none(), "{edge:?}");
             assert!(layout(&g(fixed + d.win_min + 2.0 * GAP), Part::All, &c).pill(Pill::Window).is_some(), "{edge:?}");
             // no workspaces (not rdwm): the pill is simply absent
@@ -1507,7 +1547,7 @@ mod tests {
         // the tail keeps its place on the strip of the bottom edge
         let strip = bottom.strip();
         for (_, r) in &tail.pills {
-            assert!(r.y >= strip.y + PILL_X - 0.001 && r.bottom() <= strip.bottom() - PILL_X + 0.001);
+            assert!(r.y >= strip.y + bottom.pill_inset() - 0.001 && r.bottom() <= strip.bottom() - bottom.pill_inset() + 0.001);
         }
         // together they are the single bar's items (and a lone bar has no gaps at the join)
         let all = layout(&top, Part::All, &full());
@@ -1607,7 +1647,7 @@ mod tests {
         let g = geo_on(Anchor::Top);
         let it = item_on(&g);
         let (x, y) = g.popout_origin(it, pw, ph);
-        assert_eq!(y, THICK + POP_GAP, "opens downwards");
+        assert_eq!(y, HORIZONTAL_THICK + POP_GAP, "opens downwards");
         assert!((x + pw / 2.0 - it.cx()).abs() < 0.01);
         // bottom: upwards, its bottom edge a gap above the strip
         let g = geo_on(Anchor::Bottom);
@@ -1662,12 +1702,12 @@ mod tests {
         let (win, s) = strut(BarPosition::Right, Process::Main);
         assert_eq!((win, s), ((1600 - SURFACE_W as i32, 0, SURFACE_W, 900), [0, 52, 0, 0, 0, 0, 0, 899, 0, 0, 0, 0]));
         let (win, s) = strut(BarPosition::Top, Process::Main);
-        assert_eq!((win, s), ((0, 0, 1600, SURFACE_H), [0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]));
+        assert_eq!((win, s), ((0, 0, 1600, SURFACE_H), [0, 0, 40, 0, 0, 0, 0, 0, 0, 1599, 0, 0]));
         let (win, s) = strut(BarPosition::Bottom, Process::Main);
-        assert_eq!((win, s), ((0, 900 - SURFACE_H as i32, 1600, SURFACE_H), [0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]));
+        assert_eq!((win, s), ((0, 900 - SURFACE_H as i32, 1600, SURFACE_H), [0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 1599]));
         // split: two surfaces, two struts, one per half
-        assert_eq!(strut(BarPosition::Split, Process::Main).1, [0, 0, 52, 0, 0, 0, 0, 0, 0, 1599, 0, 0]);
-        assert_eq!(strut(BarPosition::Split, Process::Bottom).1, [0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 1599]);
+        assert_eq!(strut(BarPosition::Split, Process::Main).1, [0, 0, 40, 0, 0, 0, 0, 0, 0, 1599, 0, 0]);
+        assert_eq!(strut(BarPosition::Split, Process::Bottom).1, [0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 1599]);
         assert_eq!(DecBar::v_spec(Place::of(BarPosition::Split, Process::Bottom).unwrap()).namespace, "decebal-bar-bottom");
     }
 
@@ -1740,7 +1780,7 @@ mod tests {
         for (pos, edge) in [(BarPosition::Right, Anchor::Right), (BarPosition::Top, Anchor::Top), (BarPosition::Bottom, Anchor::Bottom), (BarPosition::Split, Anchor::Top)] {
             let b = bar_at(pos, Process::Main);
             let spec = b.surface_spec().unwrap();
-            assert_eq!((spec.anchor, spec.reserve, spec.stretch), (edge, THICK as i32, true), "{pos:?}");
+            assert_eq!((spec.anchor, spec.reserve, spec.stretch), (edge, if edge.is_side() { THICK } else { HORIZONTAL_THICK } as i32, true), "{pos:?}");
             assert_eq!(b.size(), if edge.is_side() { (SURFACE_W, 0) } else { (0, SURFACE_H) }, "{pos:?}");
         }
         let split_bottom = bar_at(BarPosition::Split, Process::Bottom);
@@ -1944,7 +1984,7 @@ mod tests {
             sys::set_dry_run(false);
             let has = |needle: &str| log.iter().any(|l| l.contains(needle));
             assert!(has("decspot") || has("rofi") || has("wofi") || has("fuzzel") || log.is_empty() || !sys::have("decspot"), "launcher: {log:?}");
-            let top = if pos == BarPosition::Top { 62 } else { 10 };
+            let top = if pos == BarPosition::Top { 50 } else { 10 };
             assert!(has(&format!("decdash --top {top}")), "{pos:?}: below a top bar, near the edge otherwise: {log:?}");
             assert!(has("decsession"), "{log:?}");
         }
@@ -1965,7 +2005,7 @@ mod tests {
             match pos {
                 BarPosition::Left => assert_eq!(ox, THICK + POP_GAP),
                 BarPosition::Right => assert_eq!(ox + controlcenter::PANEL_W, s.x - POP_GAP, "leftwards"),
-                BarPosition::Top => assert_eq!(oy, THICK + POP_GAP, "downwards"),
+                BarPosition::Top => assert_eq!(oy, HORIZONTAL_THICK + POP_GAP, "downwards"),
                 _ => assert_eq!(oy + b.cc_height, s.y - POP_GAP, "upwards"),
             }
             assert!(b.input_rects().len() == 2, "{pos:?}");

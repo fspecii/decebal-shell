@@ -28,14 +28,16 @@ is closed; no restart.
 |---|---|---|---|
 | `left` (default) | a vertical bar down the left edge | `left = 52` over the monitor's rows | to the right of the bar |
 | `right` | the same on the right edge | `right = 52` | to the left of the bar |
-| `top` | a horizontal bar along the top edge: the vertical bar's content turned 90 degrees (OS icon, workspaces, window title in the middle, tray, status icons, clock as `HH:MM`, power) | `top = 52` over the monitor's columns | downwards |
-| `bottom` | the same along the bottom edge | `bottom = 52` | upwards |
-| `split` | two bars, as in Caelestia-like and Windows-like desktops: **top** = OS icon, workspaces, active window title; **bottom** = tray, status icons, clock, power (standing on the right end) | two struts: `top = 52` and `bottom = 52` | down from the top bar, up from the bottom bar |
+| `top` | a horizontal bar along the top edge: the vertical bar's content turned 90 degrees (OS icon, workspaces, window title in the middle, tray, status icons, clock as `HH:MM`, power) | `top = 40` over the monitor's columns | downwards |
+| `bottom` | the same along the bottom edge | `bottom = 40` | upwards |
+| `split` | two bars, as in Caelestia-like and Windows-like desktops: **top** = OS icon, workspaces, active window title; **bottom** = tray, status icons, clock, power (standing on the right end) | two struts: `top = 40` and `bottom = 40` | down from the top bar, up from the bottom bar |
 
 An unknown value (or a key of the wrong type) means `left`, and never spoils the rest of `decebal.json`. The setting only matters
 while the theme is Caelestia (`bar_style = "vertical"`: that is the theme's name for the pill bar, whatever edge it is on); with any
 other theme `decbar` is the classic menu bar and `bar.position` is remembered but ignored. `decthemectl style macos` keeps it, so
 `decthemectl style caelestia` brings the same layout back.
+
+Horizontal bars use 32 px pills inside a 40 px strip; side bars retain 40 px pills inside a 52 px strip.
 
 One layout, rotated: `src/menubar/vbar.rs` computes the pills once for a bar running down an edge and maps them onto the surface of
 whichever edge is chosen (`Geo`), so hit-testing, popout placement and drawing are shared by all five. Only the things that cannot be
@@ -58,7 +60,7 @@ a second copy of either role exits at once without disturbing the first):
 ### The dock
 
 Caelestia has no dock, so it stays hidden at every position (`"dock": {"enabled": "auto"}`, see below). If you set `"enabled": true` the
-dock comes back, floating above the bottom bar when the layout is `bottom` or `split` (its margin grows by the bar's 52 px), and clear
+dock comes back, floating above the bottom bar when the layout is `bottom` or `split` (its margin grows by the bar's 40 px), and clear
 of the left and right bars because it is centred on the monitor. The dashboard hangs below a top bar (`top`, `split`), notification banners
 keep clear of a top or right bar.
 
@@ -67,7 +69,7 @@ keep clear of a top or right bar.
 | piece | Caelestia style |
 |---|---|
 | theme | `caelestia` (the shell's shipped scheme, or `decthemectl dynamic on` for Match wallpaper colours) |
-| bar | `bar_style = "vertical"`: `decbar` moves to the edge `bar.position` names (`Anchor::Left`, `Right`, `Top` or `Bottom`), 52 px thick, and reserves that strip with `_NET_WM_STRUT_PARTIAL` (e.g. `left = 52`, `left_start_y`/`left_end_y` = the monitor's rows), so rdwm tiles windows beside it |
+| bar | `bar_style = "vertical"`: `decbar` moves to the edge `bar.position` names (`Anchor::Left`, `Right`, `Top` or `Bottom`), 52 px wide on the sides and 40 px high at the top/bottom, and reserves that strip with `_NET_WM_STRUT_PARTIAL` (e.g. `left = 52`, `left_start_y`/`left_end_y` = the monitor's rows), so rdwm tiles windows beside it |
 | dock | `decebal.json` `dock.enabled = "auto"`: hidden while the theme's bar is the pill bar (see below) |
 | dashboard, launcher, session, OSD, notifications | unchanged programs, restyled by the theme; positioned for a bar that is not at the top |
 
