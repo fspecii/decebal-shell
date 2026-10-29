@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Source {
     /// `decebal.json` (the file decbar and decdock already read).
     pub shell_json: PathBuf,

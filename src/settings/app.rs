@@ -1521,9 +1521,17 @@ mod key_tests {
         super::super::io::json_set(&a.m.paths.shell_json(), "widgets", Some(serde_json::json!({"enabled":true,"items":[{"use":"builtin:clock-card","x":345}]}))).unwrap();
         a.resize(1200, 900);
         let mut pixels = Pixmap::new(1200, 900).unwrap();
-        a.draw(&mut pixels);
         let id = "l:tcard:apply:glyph-rice";
-        let p = a.frame.find(id).expect("theme apply control").rect;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            a.reuse_items = false;
+            a.draw(&mut pixels);
+            if a.frame.find(id).is_some() || std::time::Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let p = a.frame.find(id).expect("theme apply control after asynchronous discovery").rect;
         a.scroll = (p.1 - 300.0).max(0.0);
         a.draw(&mut pixels);
         let p = a.frame.find(id).unwrap().rect;

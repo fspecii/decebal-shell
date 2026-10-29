@@ -31,7 +31,7 @@ fn card_of(src: &Source, i: &store::Info, current: bool, confirm: &Option<String
     let (preview, preview_status) = if i.error.is_some() {
         (None, "Theme cannot be rendered".into())
     } else {
-        match crate::theme::engine::preview::request(src, &selection) {
+        match crate::theme::engine::preview::cached(src, &selection) {
             Ok(Some(path)) => (Some(path), "Native preview · sample data".into()),
             Ok(None) => (None, "Generating native preview…".into()),
             Err(_) => (None, "Native preview unavailable".into()),
@@ -58,6 +58,7 @@ fn card_of(src: &Source, i: &store::Info, current: bool, confirm: &Option<String
         tags: i.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join("  "),
         swatches: i.swatches,
         screenshot: preview,
+        preview_request: i.error.is_none().then(|| (src.clone(), selection)),
         preview_status,
         current,
         deletable: i.origin == store::Origin::User,

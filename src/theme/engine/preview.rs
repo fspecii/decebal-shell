@@ -31,6 +31,13 @@ const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 static CHANGED: AtomicBool = AtomicBool::new(false);
 static PENDING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+type Results = HashMap<String, (Instant, Result<Option<PathBuf>, String>)>;
+static RESULTS: OnceLock<Mutex<Results>> = OnceLock::new();
+
+pub fn cached(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, String> {
+    let id = format!("{:?}:{}", src.themes_dir, selection.to_json());
+    RESULTS.get().and_then(|r| r.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()).map(|(_, result)| result).unwrap_or(Ok(None))
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Job {
@@ -293,8 +300,6 @@ fn prune(dir: &Path) {
 /// Automatic lazy generation on gallery discovery/import/change. One bounded worker, no per-card process storm.
 pub fn request(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, String> {
     // Only memory lookup and bounded enqueue on the GUI thread. No stat/read/font lookup.
-    type Results = HashMap<String, (Instant, Result<Option<PathBuf>, String>)>;
-    static RESULTS: OnceLock<Mutex<Results>> = OnceLock::new();
     static QUEUE: OnceLock<mpsc::SyncSender<(String, Source, Selection)>> = OnceLock::new();
     let id = format!("{:?}:{}", src.themes_dir, selection.to_json());
     let results = RESULTS.get_or_init(|| Mutex::new(HashMap::new()));

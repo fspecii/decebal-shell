@@ -121,3 +121,5 @@ not a full-theme benchmark). 100 memoized 4 MiB asset digest lookups took 261–
 checks all four distinct edge colors and the 2:1 aspect ratio in square/wide/tall
 slots, with PNG evidence in `target/preview-fit-evidence/`. The gallery now uses a
 uniform contain pixmap transform directly, without a cover crop or rounded edge mask.
+
+The gallery queues rendering only for visible cards. Off-screen cards retain metadata and cached results without entering the render queue, so they cannot delay the previews currently in view.

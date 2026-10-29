@@ -22,6 +22,7 @@ pub struct Card {
     pub tags: String,
     pub swatches: [(u8, u8, u8); 7],
     pub screenshot: Option<PathBuf>,
+    pub preview_request: Option<(crate::theme::live::Source, crate::theme::Selection)>,
     pub preview_status: String,
     pub current: bool,
     pub deletable: bool,
@@ -108,7 +109,10 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         if on {
             // Content-addressed native preview. Never substitute an invented desktop mockup.
             let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), cw - u(20.0), u(preview_h));
-            match c.screenshot.as_ref().and_then(shot) {
+            // Only visible cards enter the render queue; off-screen packages cannot
+            // delay the previews the user is looking at.
+            let generated = c.preview_request.as_ref().and_then(|(src, sel)| crate::theme::engine::preview::request(src, sel).ok().flatten());
+            match generated.as_ref().or(c.screenshot.as_ref()).and_then(shot) {
                 Some(img) => {
                     draw_contain(pm, &img, px, py, pw, ph);
                 }
@@ -246,6 +250,7 @@ mod tests {
                 tags: "#example".into(),
                 swatches: [(128, 128, 128); 7],
                 screenshot: None,
+                preview_request: None,
                 preview_status: "Generating native preview…".into(),
                 current: false,
                 deletable: true,
