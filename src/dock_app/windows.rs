@@ -275,6 +275,7 @@ impl DockApp {
         let Some(w) = self.win.as_mut() else { return };
         let snap = w.status.status_state();
         let layout_name = w.status.status_layout();
+        let weather = w.status.status_weather_symbol();
         let open = w.status.status_open_kind().map(|k| if k == Tray::Clock { Hit::Clock } else { Hit::Tray(k) });
         let hover = w.hover;
         let pressed = w.pressed.map(|p| p.0);
@@ -288,6 +289,7 @@ impl DockApp {
             pressed,
             open,
             tray: &snap,
+            weather,
             layout_name: layout_name.as_deref(),
             time: &w.time,
             date: &w.date,

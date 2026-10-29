@@ -32,7 +32,7 @@ pub struct Place {
 }
 
 impl DecBar {
-    /// A bar that only serves as a status engine: no menus, no weather, no focused-window tracking.
+    /// A bar that only serves as a status engine: no menus, no focused-window tracking.
     pub fn status_engine() -> DecBar {
         let mut bar = DecBar::new(Box::new(StaticApp(String::new())));
         bar.embedded = true;
@@ -45,6 +45,15 @@ impl DecBar {
     pub fn status_start(&mut self, waker: Waker) {
         self.start_watchers(waker);
         self.spawn_snapshot(false);
+        if self.weather_stale() {
+            self.spawn_weather();
+        }
+    }
+
+    /// The weather symbol for the tray (`weather-rain`, ...) once a reading exists.
+    pub fn status_weather_symbol(&self) -> Option<&'static str> {
+        let w = self.shared.weather.lock().ok()?.clone()?;
+        Some(weather::symbol_for(w.code, w.night))
     }
 
     /// The status items that exist on this machine, in tray order (left to right).
@@ -53,6 +62,9 @@ impl DecBar {
         let mut out = Vec::new();
         if self.layout_state().is_some() {
             out.push(Tray::Layout);
+        }
+        if self.shared.weather.lock().is_ok_and(|w| w.is_some()) {
+            out.push(Tray::Weather);
         }
         if snap.bluetooth.is_some() {
             out.push(Tray::Bluetooth);
@@ -121,6 +133,7 @@ impl DecBar {
                 Tray::Audio => self.spawn_snapshot(true),
                 Tray::Network | Tray::Bluetooth => self.spawn_lists(kind),
                 Tray::Battery => self.spawn_snapshot(false),
+                Tray::Weather if self.weather_stale() => self.spawn_weather(),
                 _ => {}
             }
         }
@@ -358,6 +371,9 @@ impl DecBar {
             if self.last_minute != Some(minute) {
                 self.last_minute = Some(minute);
                 self.spawn_snapshot(false);
+                if self.weather_stale() {
+                    self.spawn_weather();
+                }
                 redraw = true;
             }
         }

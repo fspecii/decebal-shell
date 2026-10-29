@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bar's weather widget is clickable in every theme: macOS, Windows 11 taskbar and Caelestia pill bars open a weather popup (conditions, feels-like, humidity, wind, location, today's high/low, 2-day forecast, Refresh row, offline / no-data states). It reads the same wttr.in answer as before, nothing new is fetched. The pill bars and the taskbar gained the weather icon, which they never showed.
 - Activity Monitor (`decmon`): a process manager and performance monitor, opened by the bar's agents icon (popup) or as a window; End task / Force quit with guards (docs/procmon.md).
 - The bar's coffee-cup icon is clickable: it turns Stay Awake off (hover shows how long it was on, right click offers 30 min / 1 h / 2 h timers).
 - declock: a themed X11 screen locker (blurred backdrop, clock, avatar, password field with dots, wrong-password shake and back-off) authenticating through PAM; see docs/lockscreen.md.
