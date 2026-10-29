@@ -453,7 +453,7 @@ pub fn click_for(kind: Tray, workspace: Option<usize>) -> Click {
 
 /// Items that open a popup when hovered or clicked.
 pub fn popout(kind: Tray) -> bool {
-    matches!(kind, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery | Tray::Window | Tray::Layout)
+    matches!(kind, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery | Tray::Window | Tray::Layout | Tray::Weather)
 }
 
 /// The rdwm request that views workspace `index` (0-based; rdwm tags are numbered from 1).
@@ -623,6 +623,9 @@ impl DecBar {
         if self.locks.caps() || self.locks.num() {
             status.push(Tray::Lock);
         }
+        if self.shared.weather.lock().is_ok_and(|w| w.is_some()) {
+            status.push(Tray::Weather);
+        }
         if snap.volume.is_some() {
             status.push(Tray::Audio);
         }
@@ -718,6 +721,7 @@ impl DecBar {
             Tray::Audio => self.spawn_snapshot(true),
             Tray::Network | Tray::Bluetooth => self.spawn_lists(kind),
             Tray::Battery => self.spawn_snapshot(false),
+            Tray::Weather if self.weather_stale() => self.spawn_weather(),
             _ => {}
         }
     }
@@ -734,7 +738,7 @@ impl DecBar {
 
     /// `--png` for the pill bar: the whole surface (strip and popout room) at the height given by [`DecBar::with_height`] for a
     /// side bar, at `width` for a top / bottom one. `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`,
-    /// `battery`, `window`, `layout`).
+    /// `battery`, `window`, `layout`, `weather`).
     pub(super) fn v_render_png(&mut self, path: &str, width: u32, open: Option<&str>) -> Result<(), String> {
         if self.v_geo().horizontal() {
             self.width = width.max(1);
@@ -758,6 +762,7 @@ impl DecBar {
                     "battery" => Tray::Battery,
                     "window" => Tray::Window,
                     "layout" => Tray::Layout,
+                    "weather" => Tray::Weather,
                     other => return Err(format!("unknown popup {other}")),
                 };
                 self.v_open_popup(kind);
@@ -1124,7 +1129,13 @@ impl DecBar {
                     }
                 }
                 Tray::Power => self.v_symbol(pm, "power", 18.0, cx, cy, th.danger.t()),
-                Tray::Weather | Tray::Dash | Tray::Spotlight => {}
+                Tray::Weather => {
+                    let wx = self.shared.weather.lock().ok().and_then(|w| w.clone());
+                    if let Some(w) = wx {
+                        self.v_symbol(pm, &format!("wx:{:x}", weather::nerd_codepoint(w.code, w.night)), 17.0, cx, cy, text);
+                    }
+                }
+                Tray::Dash | Tray::Spotlight => {}
             }
         }
 
@@ -1656,7 +1667,7 @@ mod tests {
         assert_eq!(click_for(Tray::Control, None), Click::Control);
         assert_eq!(click_for(Tray::Workspaces, Some(4)), Click::Workspace(4));
         assert_eq!(click_for(Tray::Workspaces, None), Click::Nothing);
-        for k in [Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery, Tray::Window, Tray::Layout] {
+        for k in [Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery, Tray::Window, Tray::Layout, Tray::Weather] {
             assert_eq!(click_for(k, None), Click::Popout(k));
         }
         assert_eq!(click_for(Tray::Awake, None), Click::StayAwakeOff);
@@ -1744,6 +1755,30 @@ mod tests {
         TEST_VERTICAL.with(|f| f.set(false));
         assert!(!m.quit_requested());
         let _ = &mut b;
+    }
+
+    #[test]
+    fn the_weather_icon_appears_with_a_reading_and_a_click_opens_its_popout_on_every_edge() {
+        for pos in BarPosition::ALL {
+            let mut b = bar_at(pos, Process::Main);
+            b.update_snapshot(|s| s.volume = Some(sys::Volume { level: 0.5, muted: false }));
+            if b.v_layout().item(Tray::Audio).is_none() {
+                continue; // the top half of a split bar carries no status icons
+            }
+            assert!(b.v_layout().item(Tray::Weather).is_none(), "{pos:?}: nothing to show before the first reading");
+            *b.shared.weather.lock().unwrap() = Some(crate::menubar::sample_weather());
+            let r = b.v_layout().item(Tray::Weather).expect("weather icon");
+            assert!(b.v_button(r.cx(), r.cy(), Button::Left), "{pos:?}");
+            assert_eq!(b.open, Open::Popup(Tray::Weather), "{pos:?}");
+            let p = b.popup.clone().expect("popup");
+            assert!(p.rows.iter().any(|row| row.act == popup::Act::WeatherRefresh));
+            // the popup sits on the screen side of the strip, inside the surface
+            assert!(p.x >= 0.0 && p.y >= 0.0 && p.x + p.w <= b.width as f32 + 0.5 && p.y + p.h <= b.height as f32 + 0.5, "{pos:?}");
+            // and the icon paints without panicking
+            let mut pm = Pixmap::new(b.width, b.height).unwrap();
+            b.draw(&mut pm);
+        }
+        TEST_VERTICAL.with(|f| f.set(false));
     }
 
     #[test]
