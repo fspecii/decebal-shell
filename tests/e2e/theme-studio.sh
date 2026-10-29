@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# The bundled pill-bar theme packages (caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic) end to end, on a private
-# Xvfb with a private rdwm, HOME and runtime dir: each is applied (dark, then light), the files it owns are checked (rdwm titlebar style and
-# wallpaper, bar position, dock style, Match wallpaper for the dynamic one), undo restores everything, and a screenshot of every theme
-# with decbar, decdock, two windows and decsettings is saved in $SHOTS (docs/themes/<id>.png when SHOTS=docs/themes).
-#   tests/e2e/theme-studio.sh        (SHOTS=dir keeps the PNGs; E2E_DISPLAY=:87 by default; PROFILE=release for a release build)
-# Only PIDs started here are killed; the live session is never touched (DISPLAY :0 and :1 are refused).
+# Five original design packages on a private Xvfb/HOME: validate, apply, verify
+# selection and wallpaper assets, then capture dark/light Settings and a shared
+# desktop clock. Set SHOTS to retain screenshots; NO_BUILD=1 uses existing binaries.
+# Live displays and occupied displays are refused.
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 PROFILE=${PROFILE:-debug}
@@ -17,6 +15,7 @@ elif [ "$PROFILE" = release ]; then (cd "$HERE" && cargo build -j2 -q --offline 
 else (cd "$HERE" && cargo build -j2 -q --offline --bins --examples) || { echo "build failed"; exit 2; }; fi
 N=${E2E_DISPLAY:-:87}
 case "$N" in :0|:1) echo "refusing the live display"; exit 2;; esac
+[ ! -e "/tmp/.X11-unix/X${N#:}" ] || { echo "display already occupied"; exit 2; }
 
 IDS="orbit-glass paper-signal moss-atlas signal-deck nextkde"
 PASS=0; FAIL=0; PIDS=()
@@ -53,9 +52,6 @@ wait_for 5 bash -c "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q window" || { 
 decbar >"$TMP/decbar.log" 2>&1 & PIDS+=($!)
 decdock >"$TMP/decdock.log" 2>&1 & PIDS+=($!)
 sleep 2
-fakewin Terminal "Terminal" 1d2030 >/dev/null 2>&1 & PIDS+=($!)
-sleep 0.4
-fakewin Files "Files" 2b3550 >/dev/null 2>&1 & PIDS+=($!)
 decsettings --config "$CFG" theme >"$TMP/decsettings.log" 2>&1 & PIDS+=($!)
 sleep 2
 settings_window=$(xdotool search --class decsettings 2>/dev/null | head -1)
