@@ -124,6 +124,24 @@ fn dash_argv(program: &str, item: Span) -> Vec<String> {
     vec![program.to_string(), "--x".to_string(), format!("{}", (item.x + item.w / 2.0).round() as i32)]
 }
 
+/// Made-up reading for `--png` screenshots when there is no cached one (shows every row of the popup).
+pub(crate) fn sample_weather() -> Weather {
+    let day = |date: &str, high_c, low_c, code| weather::Day { date: date.into(), high_c, low_c, code };
+    Weather {
+        temp_c: 9,
+        code: 122,
+        feels_c: Some(6),
+        humidity: Some(80),
+        wind_kmh: Some(14),
+        wind_dir: "NW".into(),
+        desc: "Overcast".into(),
+        location: "Berlin, Germany".into(),
+        days: vec![day("2026-10-29", 11, 4, 119), day("2026-10-30", 8, 2, 296), day("2026-10-31", 6, -1, 338)],
+        fetched: weather::now(),
+        ..Weather::default()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tray {
     Workspaces,
@@ -219,6 +237,8 @@ struct Shared {
     changed: AtomicBool,
     snap_busy: AtomicBool,
     weather_busy: AtomicBool,
+    /// The last fetch failed (offline): the popup says its reading is old.
+    weather_failed: AtomicBool,
     layout: rdwm::Shared,
     wifi: Mutex<Vec<sys::WifiNet>>,
     bt: Mutex<Vec<sys::BtDevice>>,
@@ -302,10 +322,12 @@ impl DecBar {
     pub fn new(active: Box<dyn ActiveWindow>) -> Self {
         let shared = Arc::new(Shared {
             snap: Mutex::new(Snapshot { light: sys::is_light(), awake: sys::stay_awake(), ..Snapshot::default() }),
-            weather: Mutex::new(weather::fresh_cached()),
+            // unit tests never read the real cache
+            weather: Mutex::new(if cfg!(test) { None } else { weather::fresh_cached() }),
             changed: AtomicBool::new(false),
             snap_busy: AtomicBool::new(false),
             weather_busy: AtomicBool::new(false),
+            weather_failed: AtomicBool::new(false),
             layout: Arc::new(Mutex::new(None)),
             wifi: Mutex::new(Vec::new()),
             bt: Mutex::new(Vec::new()),
@@ -441,12 +463,13 @@ impl DecBar {
         if let Ok(mut s) = self.shared.snap.lock() {
             *s = Snapshot::collect();
         }
+        self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(sample_weather);
         if self.pill_bar() {
             return self.v_render_png(path, width, open);
         }
-        self.shared.weather.lock().map_err(|e| e.to_string())?.get_or_insert_with(|| Weather { temp_c: 9, code: 122, night: false, fetched: 0 });
         match open {
             Some("calendar") => self.open_popup(Tray::Clock),
+            Some("weather") => self.open_popup(Tray::Weather),
             Some("control") => {
                 self.relayout_control();
                 self.open = Open::Control;
@@ -648,7 +671,11 @@ impl DecBar {
         });
     }
 
-    fn spawn_weather(&self) {
+    pub(super) fn spawn_weather(&self) {
+        // Unit tests never reach the network (or the on-disk cache).
+        if cfg!(test) {
+            return;
+        }
         if self.shared.weather_busy.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -657,12 +684,14 @@ impl DecBar {
         std::thread::spawn(move || {
             let fetched = weather::fetch();
             crate::mem::trim();
+            shared.weather_failed.store(fetched.is_none(), Ordering::SeqCst);
             if let Some(w) = fetched {
                 if let Ok(mut slot) = shared.weather.lock() {
                     *slot = Some(w);
                 }
-                shared.changed.store(true, Ordering::SeqCst);
             }
+            // also on failure: an open popup says "couldn't refresh"
+            shared.changed.store(true, Ordering::SeqCst);
             shared.weather_busy.store(false, Ordering::SeqCst);
             if let Some(w) = waker {
                 w.wake();
@@ -670,7 +699,7 @@ impl DecBar {
         });
     }
 
-    fn weather_stale(&self) -> bool {
+    pub(super) fn weather_stale(&self) -> bool {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         self.shared.weather.lock().ok().and_then(|w| w.clone()).map(|w| !weather::is_fresh(&w, now)).unwrap_or(true)
     }
@@ -1308,11 +1337,7 @@ impl App for DecBar {
                         self.process_monitor(vec!["--x".to_string(), format!("{}", (s.x + s.w / 2.0).round() as i32)]);
                         return true;
                     }
-                    Tray::Weather => {
-                        self.spawn_weather();
-                        return false;
-                    }
-                    Tray::Layout | Tray::Battery | Tray::Bluetooth | Tray::Audio | Tray::Network | Tray::Clock => {
+                    Tray::Layout | Tray::Weather | Tray::Battery | Tray::Bluetooth | Tray::Audio | Tray::Network | Tray::Clock => {
                         if self.open == Open::Popup(kind) {
                             self.close();
                         } else {
@@ -2109,6 +2134,84 @@ mod tests {
         assert!(!awake::is_on() && !bar.snapshot().awake && bar.open == Open::None);
         *awake::TEST_DIR.lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn wx_bar() -> DecBar {
+        let bar = status_bar();
+        *bar.shared.weather.lock().unwrap() = Some(sample_weather());
+        bar
+    }
+
+    #[test]
+    fn clicking_the_weather_item_opens_a_popup_and_clicking_again_closes_it() {
+        let mut bar = wx_bar();
+        let s = bar.tray_span(Tray::Weather).expect("shown once there is a reading");
+        // the whole drawn item is the hit area: left and right edges as well as the middle
+        for x in [s.x + 1.0, s.x + s.w / 2.0, s.x + s.w - 1.0] {
+            assert!(bar.pointer_button(x, 10.0, Button::Left), "x={x}");
+            assert_eq!(bar.open, Open::Popup(Tray::Weather));
+            assert!(bar.popup.is_some());
+            assert!(click_tray(&mut bar, Tray::Weather));
+            assert_eq!(bar.open, Open::None);
+        }
+    }
+
+    #[test]
+    fn weather_popup_shows_conditions_location_range_and_forecast() {
+        let bar = wx_bar();
+        let (rows, w, _) = bar.build_popup(Tray::Weather).unwrap();
+        let text: Vec<String> = rows.iter().map(|r| format!("{}|{}", r.label, r.detail)).collect();
+        let all = text.join("\n");
+        assert!(rows[0].label == "Berlin, Germany" && rows[0].detail == "Overcast", "{all}");
+        assert!(all.contains("9°C, feels like 6°"), "{all}");
+        assert!(all.contains("Humidity 80%") && all.contains("Wind 14 km/h NW"), "{all}");
+        assert!(all.contains("Today: high 11°, low 4°"), "{all}");
+        assert!(all.contains("Fri|8° / 2°") && all.contains("Sat|6° / -1°"), "{all}");
+        let last = rows.last().unwrap();
+        assert!(last.label == "Refresh" && last.act == popup::Act::WeatherRefresh && last.detail.starts_with("Updated"), "{all}");
+        assert!(w > 200.0);
+    }
+
+    #[test]
+    fn weather_popup_without_details_or_data_stays_sensible() {
+        let bar = status_bar();
+        // no reading at all: an empty state that still offers Refresh
+        let (rows, _, _) = bar.build_popup(Tray::Weather).unwrap();
+        assert!(rows.iter().any(|r| r.label.starts_with("No weather data")));
+        assert!(rows.iter().any(|r| r.act == popup::Act::WeatherRefresh));
+        bar.shared.weather_failed.store(true, Ordering::SeqCst);
+        let (rows, _, _) = bar.build_popup(Tray::Weather).unwrap();
+        assert!(rows.iter().any(|r| r.label.contains("offline")));
+        // an old cache entry (temperature and condition only) shows just those, and says it is old when offline
+        *bar.shared.weather.lock().unwrap() = Some(Weather { temp_c: 3, code: 296, fetched: weather::now() - 7200, ..Weather::default() });
+        let (rows, _, _) = bar.build_popup(Tray::Weather).unwrap();
+        assert_eq!(rows[0].label, "Weather");
+        assert_eq!(rows[0].detail, "Rain");
+        assert!(rows.iter().any(|r| r.label == "3°C"));
+        assert!(!rows.iter().any(|r| r.label.starts_with("Humidity") || r.label == "Forecast"));
+        let refresh = rows.last().unwrap();
+        assert!(refresh.detail.starts_with("Offline") && refresh.detail.contains("2 h ago"), "{refresh:?}");
+    }
+
+    #[test]
+    fn the_refresh_row_keeps_the_popup_open_and_never_touches_the_network_in_tests() {
+        let mut bar = wx_bar();
+        click_tray(&mut bar, Tray::Weather);
+        let p = bar.popup.clone().unwrap();
+        let i = p.rows.iter().position(|r| r.act == popup::Act::WeatherRefresh).unwrap();
+        let (ry, rh) = p.row_span(i);
+        assert!(bar.pointer_button(p.x + 30.0, p.y + ry + rh / 2.0, Button::Left));
+        assert_eq!(bar.open, Open::Popup(Tray::Weather));
+        assert!(!bar.shared.weather_busy.load(Ordering::SeqCst), "spawn_weather is a no-op under test");
+    }
+
+    #[test]
+    fn weather_item_is_hit_where_it_is_drawn() {
+        let bar = wx_bar();
+        let s = bar.tray_span(Tray::Weather).unwrap();
+        let temp_w = bar.fonts.as_ref().map(|f| f.measure("9°", TEXT_PX, Weight::Regular)).unwrap_or(14.0);
+        // icon (9 px pad + ICON_PX) and the temperature text both lie inside the span
+        assert!(s.w >= 9.0 + ICON_PX + 6.0 + temp_w - 0.5, "span {} too narrow for the drawn icon and text", s.w);
     }
 
     #[test]

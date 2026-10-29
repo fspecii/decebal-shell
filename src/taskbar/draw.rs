@@ -108,6 +108,8 @@ pub struct Frame<'a> {
     /// The item whose popup is open (kept highlighted).
     pub open: Option<Hit>,
     pub tray: &'a Snapshot,
+    /// Symbol of the weather item (None: no reading yet).
+    pub weather: Option<&'static str>,
     pub layout_name: Option<&'a str>,
     pub time: &'a str,
     pub date: &'a str,
@@ -375,6 +377,7 @@ impl Painter {
                 }
             }
             Tray::Battery => draw_battery(pm, f, cx, cy),
+            Tray::Weather => self.symbol(pm, f.weather.unwrap_or("weather-cloud"), c.ink, 16.0 * m.scale, cx, cy),
             k => {
                 let name = tray_symbol(k, f.tray);
                 self.symbol(pm, name, c.ink, 16.0 * m.scale, cx, cy);
@@ -472,6 +475,7 @@ mod tests {
             pressed: None,
             open: None,
             tray: &snap,
+            weather: Some("weather-partly"),
             layout_name: None,
             time: "14:05",
             date: "27/10/2026",

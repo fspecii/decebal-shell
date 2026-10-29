@@ -39,6 +39,60 @@ impl DecBar {
         }
     }
 
+    /// The weather popup: conditions, location, today's range and the short forecast, then Refresh. Without a reading
+    /// (offline, first start) it says so and still offers Refresh.
+    pub(super) fn weather_rows(&self) -> Option<Vec<Row>> {
+        let wx = self.shared.weather.lock().ok().and_then(|w| w.clone());
+        let busy = self.shared.weather_busy.load(Ordering::SeqCst);
+        let failed = self.shared.weather_failed.load(Ordering::SeqCst);
+        let now = weather::now();
+        let refresh = |detail: &str| Row::item("Refresh", Act::WeatherRefresh).icon(Icon::Symbol("refresh")).detail(detail);
+        let Some(w) = wx else {
+            let note = if busy {
+                "Fetching the weather…"
+            } else if failed {
+                "No weather data (offline?)"
+            } else {
+                "No weather data yet"
+            };
+            return Some(vec![Row::header("Weather"), Row::text(note), Row::sep(), refresh(if busy { "…" } else { "" })]);
+        };
+        let words = if w.desc.is_empty() { weather::condition_words(w.code, w.night).to_string() } else { w.desc.clone() };
+        let mut rows = vec![Row::header(if w.location.is_empty() { "Weather" } else { &w.location }).detail(&words)];
+        let sym = weather::symbol_for(w.code, w.night);
+        let now_line = match w.feels_c {
+            Some(f) if f != w.temp_c => format!("{}°C, feels like {}°", w.temp_c, f),
+            _ => format!("{}°C", w.temp_c),
+        };
+        rows.push(Row::item(&now_line, Act::None).icon(Icon::Symbol(sym)));
+        if let Some(h) = w.humidity {
+            rows.push(Row::text(&format!("Humidity {h}%")));
+        }
+        if let Some(k) = w.wind_kmh {
+            rows.push(Row::text(format!("Wind {k} km/h {}", w.wind_dir).trim_end()));
+        }
+        if let Some(today) = w.days.first() {
+            rows.push(Row::text(&format!("Today: high {}°, low {}°", today.high_c, today.low_c)));
+        }
+        if w.days.len() > 1 {
+            rows.push(Row::sep());
+            rows.push(Row::header("Forecast"));
+            for d in w.days.iter().skip(1) {
+                let day = weather::weekday_short(&d.date).unwrap_or(&d.date);
+                rows.push(Row::item(day, Act::None).icon(Icon::Symbol(weather::symbol_for(d.code, false))).detail(&format!("{}° / {}°", d.high_c, d.low_c)));
+            }
+        }
+        rows.push(Row::sep());
+        if busy {
+            rows.push(refresh("Refreshing…"));
+        } else if failed {
+            rows.push(refresh(&format!("Offline, from {}", weather::age_words(w.fetched, now))));
+        } else {
+            rows.push(refresh(&format!("Updated {}", weather::age_words(w.fetched, now))));
+        }
+        Some(rows)
+    }
+
     /// Rows, width and compactness of the popup for `kind`.
     pub(super) fn build_popup(&self, kind: Tray) -> Option<(Vec<Row>, f32, bool)> {
         let snap = self.snapshot();
@@ -116,6 +170,7 @@ impl DecBar {
                 }
                 Some((rows, 280.0, false))
             }
+            Tray::Weather => Some((self.weather_rows()?, 300.0, false)),
             Tray::Window => {
                 let (id, title) = self.v_win.clone()?;
                 let mut rows = vec![Row::header(&active::display_name(&id))];
@@ -177,6 +232,7 @@ impl DecBar {
             Tray::Audio => self.spawn_snapshot(true),
             Tray::Network | Tray::Bluetooth => self.spawn_lists(kind),
             Tray::Battery => self.spawn_snapshot(false),
+            Tray::Weather if self.weather_stale() => self.spawn_weather(),
             _ => {}
         }
     }
@@ -351,6 +407,10 @@ impl DecBar {
             Act::AwakeOff => {
                 self.close();
                 self.awake_off();
+            }
+            Act::WeatherRefresh => {
+                self.spawn_weather();
+                self.rebuild_popup();
             }
             Act::AwakeFor(secs) => {
                 awake::start(secs);

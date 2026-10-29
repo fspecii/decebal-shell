@@ -1,0 +1,17 @@
+#!/bin/bash
+# Fake curl: canned weather answers, no network ever. Any other URL fails like an unreachable host (exit 6).
+[ -n "${FAKE_STATE:-}" ] && echo "curl $*" >> "$FAKE_STATE/log"
+for a in "$@"; do url=$a; done
+case "$url" in
+https://wttr.in/*)
+    cat <<'JSON'
+{"current_condition":[{"FeelsLikeC":"6","temp_C":"9","weatherCode":"122","humidity":"80","windspeedKmph":"14","winddir16Point":"NW","weatherDesc":[{"value":"Overcast"}]}],
+ "nearest_area":[{"latitude":"52.5","longitude":"13.4","areaName":[{"value":"Fakeville"}],"country":[{"value":"Testland"}]}],
+ "weather":[{"date":"2026-10-29","maxtempC":"11","mintempC":"4","hourly":[{"weatherCode":"119"},{},{},{},{"weatherCode":"119"}]},
+            {"date":"2026-10-30","maxtempC":"8","mintempC":"2","hourly":[{},{},{},{},{"weatherCode":"296"}]},
+            {"date":"2026-10-31","maxtempC":"6","mintempC":"-1","hourly":[{},{},{},{},{"weatherCode":"338"}]}]}
+JSON
+    ;;
+https://api.open-meteo.com/*) echo '{"current":{"temperature_2m":9.2,"weather_code":3,"is_day":1}}' ;;
+*) exit 6 ;;
+esac

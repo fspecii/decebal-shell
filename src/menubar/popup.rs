@@ -33,6 +33,8 @@ pub enum Act {
     WifiToggle,
     WifiConnect(String),
     NetworkEditor,
+    /// Fetch the weather again now (the weather popup's Refresh row).
+    WeatherRefresh,
     BtToggle,
     BtDevice {
         mac: String,
