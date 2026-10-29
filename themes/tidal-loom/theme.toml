@@ -1,0 +1,122 @@
+format = 1
+id = "tidal-loom"
+name = "Tidal Loom"
+screenshots = ["screenshots/main.png"]
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A cool textile desktop: flowing woven bands, a left navigation rail, compact taskbar and an upper-right widget pair."
+min_shell_version = "0.1.0"
+tags = ["original", "dark", "light", "textile"]
+
+[colors.dark]
+background = "#121e2c"
+sidebar = "#0e1926"
+surface = "#1d2c40"
+bar = "#0e1926"
+bar_text = "#e3eef7"
+popup = "#1d2c40"
+dock = "#0e1926"
+overlay = "#1d2c40"
+titlebar = "#0e1926"
+titlebar_inactive = "#121e2c"
+border = "#94abc5"
+text = "#e3eef7"
+text_secondary = "#b5c6da"
+text_faint = "#94abc5"
+accent = "#9ad6df"
+accent_text = "#102932"
+danger = "#ffacae"
+ok = "#a6d6bd"
+warn = "#dfc591"
+
+[colors.light]
+background = "#e7eff0"
+sidebar = "#d6e3e7"
+surface = "#f5fafb"
+bar = "#d6e3e7"
+bar_text = "#20374b"
+popup = "#f5fafb"
+dock = "#d6e3e7"
+overlay = "#f5fafb"
+titlebar = "#d6e3e7"
+titlebar_inactive = "#e7eff0"
+border = "#5b7386"
+text = "#20374b"
+text_secondary = "#496478"
+text_faint = "#5b7386"
+accent = "#28677b"
+accent_text = "#f5fafb"
+danger = "#a13948"
+ok = "#30664f"
+warn = "#79560d"
+
+[metrics]
+radius = 16
+dock_roundness = 0.25
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.45
+outline = 0.18
+dock_padding = 6
+
+[font]
+ui = ["IBM Plex Sans", "Inter", "Noto Sans"]
+title = ["IBM Plex Sans", "Inter", "Noto Sans"]
+mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
+display = ["IBM Plex Sans", "Inter", "Noto Sans"]
+scale = 1.0
+
+[wallpaper]
+images = ["wallpapers/dark.png", "wallpapers/light.png"]
+mode = "fill"
+
+[decoration]
+style = "breeze"
+height = 32
+radius = 16
+title_align = "left"
+
+[rdwm]
+gap_inner = 8
+gap_outer = 10
+border_px = 1
+smart_gaps = false
+mfact = 0.55
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "vertical"
+position = "left"
+
+[dock]
+enabled = true
+style = "windows"
+size = 40
+roundness = 0.25
+magnification = 1.0
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -64
+y = 80
+
+[[widgets]]
+use = "builtin:sysmon-graph"
+place = "desktop"
+anchor = "top-right"
+x = -64
+y = 240

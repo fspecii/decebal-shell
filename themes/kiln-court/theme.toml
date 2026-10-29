@@ -1,0 +1,122 @@
+format = 1
+id = "kiln-court"
+name = "Kiln Court"
+screenshots = ["screenshots/main.png"]
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A warm architectural court: nested clay vaults, a bottom pill panel, quiet rounded windows and a left-hand widget column."
+min_shell_version = "0.1.0"
+tags = ["original", "dark", "light", "architecture"]
+
+[colors.dark]
+background = "#241e1c"
+sidebar = "#201a18"
+surface = "#302724"
+bar = "#201a18"
+bar_text = "#f5e6d8"
+popup = "#302724"
+dock = "#201a18"
+overlay = "#302724"
+titlebar = "#201a18"
+titlebar_inactive = "#241e1c"
+border = "#b39b8a"
+text = "#f5e6d8"
+text_secondary = "#cdb9aa"
+text_faint = "#b39b8a"
+accent = "#edaf84"
+accent_text = "#281c17"
+danger = "#f4a398"
+ok = "#b6c79d"
+warn = "#edc385"
+
+[colors.light]
+background = "#ede1d1"
+sidebar = "#e2d3c0"
+surface = "#fcf3e7"
+bar = "#e2d3c0"
+bar_text = "#3a2922"
+popup = "#fcf3e7"
+dock = "#e2d3c0"
+overlay = "#fcf3e7"
+titlebar = "#e2d3c0"
+titlebar_inactive = "#ede1d1"
+border = "#7d6050"
+text = "#3a2922"
+text_secondary = "#6a5144"
+text_faint = "#7d6050"
+accent = "#99472e"
+accent_text = "#fff6e9"
+danger = "#a12f2a"
+ok = "#466232"
+warn = "#78520e"
+
+[metrics]
+radius = 10
+dock_roundness = 0.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.45
+outline = 0.18
+dock_padding = 6
+
+[font]
+ui = ["IBM Plex Sans", "Inter", "Noto Sans"]
+title = ["IBM Plex Sans", "Inter", "Noto Sans"]
+mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
+display = ["IBM Plex Sans", "Inter", "Noto Sans"]
+scale = 1.0
+
+[wallpaper]
+images = ["wallpapers/dark.png", "wallpapers/light.png"]
+mode = "fill"
+
+[decoration]
+style = "adwaita"
+height = 32
+radius = 10
+title_align = "left"
+
+[rdwm]
+gap_inner = 12
+gap_outer = 12
+border_px = 1
+smart_gaps = false
+mfact = 0.55
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "vertical"
+position = "bottom"
+
+[dock]
+enabled = false
+style = "mac"
+size = 40
+roundness = 0.0
+magnification = 1.0
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-left"
+x = 64
+y = 96
+
+[[widgets]]
+use = "builtin:cpu-ram-ring"
+place = "desktop"
+anchor = "top-left"
+x = 64
+y = 252

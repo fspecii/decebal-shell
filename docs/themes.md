@@ -205,3 +205,16 @@ These original theme packages have dark and light colours, bundled original wall
 Research and provenance: [glass and paper](theme-research-glass-paper.md), [organic and retro](theme-research-organic-retro.md), [NextKDE](nextkde-port.md). Screenshots are captured on a private Xvfb desktop by `tests/e2e/theme-studio.sh`. The light artwork is bundled as an alternative wallpaper; changing colour mode alone keeps the selected wallpaper.
 
 Applying a theme selects the theme's own colours and clears the previous palette/custom accent. Afterwards, any palette can still be applied to that design. Widget selections and positions remain independent of this colour reset.
+
+## Kiln Court and Tidal Loom
+
+Two original dark/light rice packages with 4K wallpapers and optional shared
+widget layouts. **Kiln Court** uses clay vaults, a bottom pill panel, no dock and
+an upper-left clock/resource pair. **Tidal Loom** uses woven bands, a left rail,
+compact taskbar and an upper-right clock/system pair. Apply with
+`decthemectl theme apply kiln-court` or `decthemectl theme apply tidal-loom`.
+
+See [design, attribution, native render evidence and follow-ups](rice-batch.md).
+The gallery images are labelled headless compositions with real native widget
+pixels and sample data. Light artwork is bundled for manual selection; changing
+color mode preserves the selected wallpaper.
