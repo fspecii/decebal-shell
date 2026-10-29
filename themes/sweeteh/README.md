@@ -55,13 +55,12 @@ The package engine cannot safely generate/register icon themes from SVGs yet.
 Upstream only requests cursor size 24 and names no cursor family; keep the user's
 cursor. There is no theme-package cursor selector, so none is invented.
 
-Optional font setup, outside this task: register the bundled
-`fonts/GoogleSansFlex.ttf` in the user's font directory using their normal font
-manager, retain OFL.txt, then reopen shell/apps. Nothing is installed by theme
-application. `font.files` is deliberately omitted: the engine accepts bundled
-files but does not register them. Native evidence uses the installed fallback
-font unless Google Sans Flex is already available. Material Symbols are not
-bundled; widgets reuse native symbolic glyphs with matching semantic colors.
+The bundled `fonts/GoogleSansFlex.ttf` is retained with its OFL license for
+upstream attribution. Its variable outlines are currently unsupported by the
+native text renderer; do not register it for this shell. Decebal falls back to
+an installed readable font when an outline cannot be drawn. Theme application
+does not install fonts. Material Symbols are not bundled; widgets reuse native
+symbolic glyphs with matching semantic colors.
 
 ## Terminal and application styling
 
