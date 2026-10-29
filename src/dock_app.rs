@@ -128,6 +128,23 @@ impl DockApp {
         self
     }
 
+    /// Native static gallery frame. Sample pins only; no trackers, watchers or event loop.
+    pub fn preview_frame(width: u32) -> Result<Pixmap, String> {
+        let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], config::dock_settings());
+        let mut app = Self::new(dock).with_scale(1.0);
+        let (w, h) = if let Some(win) = app.win.as_mut() {
+            win.time = "14:07".into();
+            win.date = "23/10/2026".into();
+            (width, win.m.bar_h.ceil() as u32)
+        } else {
+            app.dock.canvas_size()
+        };
+        app.resized(w, h);
+        let mut pm = Pixmap::new(w, h).ok_or("dock preview canvas")?;
+        app.draw(&mut pm);
+        Ok(pm)
+    }
+
     /// Forces the taskbar's DPI scale (tests; normally `DECEBAL_SCALE` or `Xft.dpi`).
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.scale = Some(scale);

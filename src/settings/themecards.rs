@@ -3,7 +3,7 @@
 //!
 //! The data comes from [`crate::theme::engine::store`]; the clicks are handled in `themepane` (`l:tcard:<action>:<id>`).
 
-use super::ui::{pal, Frame, Interact, Kind as CtlKind, Painter, Placed, ThemeTile};
+use super::ui::{pal, Frame, Interact, Kind as CtlKind, Painter, Placed};
 use crate::gfx::{fill_rounded, stroke_rounded};
 use crate::settings::ui::Ctl;
 use crate::text::Weight;
@@ -22,6 +22,7 @@ pub struct Card {
     pub tags: String,
     pub swatches: [(u8, u8, u8); 7],
     pub screenshot: Option<PathBuf>,
+    pub preview_status: String,
     pub current: bool,
     pub deletable: bool,
     pub error: Option<String>,
@@ -37,6 +38,9 @@ static SHOTS: Mutex<Option<ShotCache>> = Mutex::new(None);
 fn shot(path: &PathBuf) -> Option<Pixmap> {
     let mut g = SHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let cache = g.get_or_insert_with(HashMap::new);
+    if cache.len() >= 64 && !cache.contains_key(path) {
+        cache.clear();
+    }
     cache
         .entry(path.clone())
         .or_insert_with(|| {
@@ -87,11 +91,18 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             stroke_rounded(pm, x0 + 1.0, y + 1.0, cw - 2.0, ch - 2.0, u(12.0), pal::accent(), u(2.0));
         }
         if on {
-            // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
+            // Content-addressed native preview. Never substitute an invented desktop mockup.
             let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), cw - u(20.0), u(preview_h));
             match c.screenshot.as_ref().and_then(shot) {
-                Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
-                None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
+                Some(img) => {
+                    let scale = (pw / img.width() as f32).min(ph / img.height() as f32);
+                    let (iw, ih) = (img.width() as f32 * scale, img.height() as f32 * scale);
+                    super::ui::draw_cover(pm, &img, px + (pw - iw) / 2.0, py + (ph - ih) / 2.0, iw, ih, u(8.0));
+                }
+                None => {
+                    fill_rounded(pm, px, py, pw, ph, u(8.0), pal::card());
+                    p.text_center(pm, &c.preview_status, px + pw / 2.0, py + ph / 2.0, u(12.0), Weight::Regular, pal::sub());
+                }
             }
             let tx = x0 + u(12.0);
             let text_y = y + u(preview_h + 8.0);
@@ -183,6 +194,7 @@ mod tests {
                 tags: "#example".into(),
                 swatches: [(128, 128, 128); 7],
                 screenshot: None,
+                preview_status: "Generating native preview…".into(),
                 current: false,
                 deletable: true,
                 error: None,

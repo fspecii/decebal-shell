@@ -138,3 +138,18 @@ retain both modes. Missing native render support must be labelled, not mocked.
 Checkpoint all ports before bringing parent `e33a0f1` preview-gallery source into
 this branch; retain its entire livewall/Settings change and do not edit the
 parent checkout. Decoration catalogue/picker follows sequentially.
+
+## Automatic-preview delivery checkpoint
+
+Sweeteh commit: `c0551988daacfc74598277fd837f80e1db44261d`.
+Parent source through `e33a0f1` is preserved locally as `a92416c`, `9e9dd00`,
+`15c9844`; no parent checkout changes. Automatic previews use production plans
+and native widget/bar/dock painters in an isolated headless worker, optional
+read-only rdwm-deco helper for caption samples, and content-addressed invalidation.
+No per-theme layout branches or generic desktop mockups remain in the gallery;
+palette tiles are swatches only. See `theme-previews.md` for architecture,
+cache bounds, tests, source isolation and honest fidelity limits. All current
+ports and the original two-theme batch have generated dark/light native evidence.
+Kiln/Tidal now use actual `wallpaper.dark/light` metadata, correcting the earlier
+assumption that mode-aware art was unavailable. Single-output, fixed sample data;
+compositor motion/glass and missing native helpers are explicitly labelled.

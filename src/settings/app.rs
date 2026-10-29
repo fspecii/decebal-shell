@@ -1461,6 +1461,7 @@ impl WindowApp for SettingsApp {
         redraw |= self.m.sys_poll();
         redraw |= super::wallhaven::pump(&mut self.m);
         redraw |= crate::livewall::pane::pump(&mut self.m);
+        redraw |= crate::theme::engine::preview::take_changed();
         redraw |= super::configpane::poll(&mut self.m);
         redraw |= self.m.expire_notice();
         if crate::theme::take_changed() {

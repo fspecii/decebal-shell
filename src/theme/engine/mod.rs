@@ -17,6 +17,7 @@ pub mod cli;
 mod golden;
 pub mod manifest;
 pub mod package;
+pub mod preview;
 pub mod schema;
 pub mod sha256;
 #[cfg(test)]

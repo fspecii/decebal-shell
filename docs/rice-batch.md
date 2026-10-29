@@ -17,10 +17,10 @@ already copy the whole themes tree, so no packaging special cases are needed.
 No font installation is required; both use existing font fallback chains.
 
 Apply after integration with `decthemectl theme apply kiln-court` or
-`decthemectl theme apply tidal-loom`. Applying a theme uses its dark wallpaper;
-light mode changes colors while preserving the chosen wallpaper. Select the
-bundled `wallpapers/light.png` manually for a fully light composition. This is an
-existing engine limitation, not automatic mode-aware wallpaper selection.
+`decthemectl theme apply tidal-loom`. Both now use the engine's existing
+`wallpaper.dark/light` metadata: engine-owned artwork follows mode changes,
+while a custom wallpaper remains selected. Automatic native previews use those
+actual metadata paths; no theme ID selects an image in renderer code.
 
 Widgets are optional through Settings → Widgets. Theme layouts follow the
 existing ownership policy: untouched layouts switch with themes; replacing a

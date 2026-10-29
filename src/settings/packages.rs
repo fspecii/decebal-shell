@@ -17,7 +17,26 @@ fn source(m: &Model) -> Source {
     Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }
 }
 
-fn card_of(i: &store::Info, current: bool, confirm: &Option<String>) -> Card {
+fn card_of(src: &Source, i: &store::Info, current: bool, confirm: &Option<String>) -> Card {
+    let mut selection = src.selection();
+    selection.name = i.id.clone();
+    if !current {
+        selection.palette = None;
+        selection.accent = None;
+        selection.dynamic = None;
+    }
+    if selection.mode == crate::theme::Mode::Auto {
+        selection.mode = if crate::theme::live::system_dark() { crate::theme::Mode::Dark } else { crate::theme::Mode::Light };
+    }
+    let (preview, preview_status) = if i.error.is_some() {
+        (None, "Theme cannot be rendered".into())
+    } else {
+        match crate::theme::engine::preview::request(src, &selection) {
+            Ok(Some(path)) => (Some(path), "Native preview · sample data".into()),
+            Ok(None) => (None, "Generating native preview…".into()),
+            Err(_) => (None, "Native preview unavailable".into()),
+        }
+    };
     let mut meta: Vec<String> = Vec::new();
     for s in [i.version.as_str(), i.author.as_str(), i.license.as_str()] {
         if !s.is_empty() {
@@ -38,7 +57,8 @@ fn card_of(i: &store::Info, current: bool, confirm: &Option<String>) -> Card {
         description: i.description.clone(),
         tags: i.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join("  "),
         swatches: i.swatches,
-        screenshot: i.screenshots.first().cloned(),
+        screenshot: preview,
+        preview_status,
         current,
         deletable: i.origin == store::Origin::User,
         error: i.error.clone(),
@@ -53,8 +73,8 @@ pub fn items(m: &Model) -> Vec<Item> {
     let cur = src.find(&src.selection().name).map(|f| f.0).unwrap_or_default();
     let confirm = CONFIRM.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let infos: Vec<_> = store::list(&src).into_iter().filter(|i| i.origin == store::Origin::User || !crate::theme::palette::legacy_theme(&i.id)).collect();
-    let mut cards: Vec<Card> = infos.iter().filter(|i| i.origin != store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)).collect();
-    cards.extend(infos.iter().filter(|i| i.origin == store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)));
+    let mut cards: Vec<Card> = infos.iter().filter(|i| i.origin != store::Origin::Builtin).map(|i| card_of(&src, i, i.id == cur, &confirm)).collect();
+    cards.extend(infos.iter().filter(|i| i.origin == store::Origin::Builtin).map(|i| card_of(&src, i, i.id == cur, &confirm)));
     let current_note = (!cards.iter().any(|c| c.current))
         .then(|| Item::Note { text: format!("Current theme: {}. Choose a desktop design below and its colours in Palettes.", src.build(&src.selection(), true).0.name), warn: false });
     let mut out = vec![

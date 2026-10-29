@@ -398,6 +398,14 @@ fn cmd_watch(src: &Source, args: &[String]) {
 }
 
 fn main() {
+    let early: Vec<String> = std::env::args().skip(1).collect();
+    if early.first().map(String::as_str) == Some("--theme-preview-worker") {
+        let Some(path) = early.get(1) else { die("preview worker needs a job file") };
+        if let Err(e) = decebal::theme::engine::preview::worker(std::path::Path::new(path)) {
+            die(&e);
+        }
+        return;
+    }
     decebal::compat::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let src = Source::discover();

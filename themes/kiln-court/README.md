@@ -5,9 +5,8 @@ licensed under the repository MIT license. No downloaded imagery, logos, third-p
 theme files or bundled fonts. Fonts are named only and fall back to Inter/Noto Sans.
 
 Apply with `decthemectl theme apply kiln-court`. The package supplies dark and light
-semantic colors. Both artworks are bundled; the first (dark) wallpaper is selected
-on apply. Mode changes preserve the chosen wallpaper. Select `wallpapers/light.png`
-manually for the matching light artwork. Independent palettes recolor shell and
+semantic colors. Both artworks are bundled with `wallpaper.dark/light`; mode changes follow
+engine-owned artwork while preserving a custom wallpaper. Independent palettes recolor shell and
 widgets, not wallpaper pixels.
 
 The two desktop widgets are optional layout seeds using existing safe builtin

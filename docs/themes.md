@@ -231,3 +231,7 @@ color mode preserves the selected wallpaper.
 Both include actual native dark/light sample/empty widget evidence in
 `docs/theme-ports/`. These are labelled headless compositions, not full desktop
 captures. Theme ownership/backlog: [Theme Specialist](theme-specialist.md).
+
+The gallery now [generates native previews automatically](theme-previews.md)
+from package metadata and assets. Manual screenshots are optional evidence;
+new themes and edits regenerate through the same isolated cache path.

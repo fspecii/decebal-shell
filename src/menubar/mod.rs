@@ -486,6 +486,24 @@ impl DecBar {
         pm.save_png(path).map_err(|e| e.to_string())
     }
 
+    /// Native headless gallery frame. No tick, probes, watchers, popups or companion process.
+    pub fn preview_frame(width: u32, height: u32, bottom: bool) -> Result<Pixmap, String> {
+        let mut bar = Self::new(Box::new(active::NoActiveWindow));
+        bar.width = width;
+        bar.height = height;
+        bar.process = if bottom { vbar::Process::Bottom } else { vbar::Process::Main };
+        bar.clock_text = "Fri 23 Oct  14:07".into();
+        bar.last_minute = Some((14, 7));
+        bar.app_name = "Sample application".into();
+        bar.show_workspaces = true;
+        bar.workspaces = crate::widgets::data::sample().tags.into_iter().map(|t| Workspace { name: t.name, active: t.active, occupied: t.occupied, urgent: t.urgent }).collect();
+        *bar.shared.snap.lock().map_err(|e| e.to_string())? = Snapshot::default();
+        *bar.shared.weather.lock().map_err(|e| e.to_string())? = None;
+        let mut pm = Pixmap::new(width, height).ok_or("preview canvas")?;
+        bar.draw(&mut pm);
+        Ok(pm)
+    }
+
     /// Starts the push sources (layout changes from rdwm, volume changes) that wake the loop through `waker`.
     fn start_watchers(&mut self, waker: Waker) {
         self.waker = Some(waker.clone());

@@ -9,6 +9,8 @@ use crate::theme::live::Source;
 use std::path::{Path, PathBuf};
 
 pub const HELP: &str = "decthemectl theme list [--json]                 installed themes (built-in, user, system) with version and author
+decthemectl theme render ID --mode dark|light --png FILE [--palette ID]
+                                              isolated native preview; never applies to the desktop
 decthemectl theme info ID                     everything about one theme
 decthemectl theme schema [--json]             every key a theme.toml can set, its type and range, and whether the shell applies it yet
 decthemectl theme validate PATH               check a theme folder, a .dtheme file or a single theme.toml (line numbers for every mistake)
@@ -133,6 +135,27 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
                 s.push_str(&format!("{} {:<16} {:<18} {:<7} {:<11} {:<9} {}{seal}{err}\n", if i.id == cur { "*" } else { " " }, i.id, i.name, i.version, var, i.origin.as_str(), i.author));
             }
             Ok(s)
+        }
+        Some("render") => {
+            let id = rest.first().filter(|s| !s.starts_with("--")).ok_or("render needs a theme id")?;
+            let mut sel = crate::theme::Selection { name: id.clone(), mode: crate::theme::Mode::Dark, ..Default::default() };
+            let mut out = None;
+            let mut args = rest[1..].iter();
+            while let Some(key) = args.next() {
+                let val = args.next().ok_or("render option needs a value")?;
+                match key.as_str() {
+                    "--mode" => {
+                        sel.mode = crate::theme::Mode::parse(val).filter(|m| *m != crate::theme::Mode::Auto).ok_or("render mode is dark or light")?;
+                    }
+                    "--palette" => sel.palette = Some(val.clone()),
+                    "--png" => out = Some(std::path::PathBuf::from(val)),
+                    _ => return Err(format!("unknown render option {key}")),
+                }
+            }
+            let out = out.ok_or("render needs --png FILE")?;
+            let path = super::preview::generate(src, &sel)?;
+            std::fs::copy(&path, &out).map_err(|e| e.to_string())?;
+            Ok(format!("native preview: {} (cache {})\n", out.display(), path.display()))
         }
         Some("info") => {
             let id = pos(rest, &[]).first().copied().ok_or("info needs a theme id")?;

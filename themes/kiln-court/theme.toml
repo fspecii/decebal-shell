@@ -70,7 +70,8 @@ display = ["IBM Plex Sans", "Inter", "Noto Sans"]
 scale = 1.0
 
 [wallpaper]
-images = ["wallpapers/dark.png", "wallpapers/light.png"]
+dark = "wallpapers/dark.png"
+light = "wallpapers/light.png"
 mode = "fill"
 
 [decoration]
