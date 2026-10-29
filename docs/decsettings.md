@@ -47,8 +47,8 @@ table at start (`rdwmctl schema --offline`, bundled snapshot `src/settings/rdwm-
 that every key the panes use exists in it (and the snapshot against an installed rdwmctl).
 
 ## Appearance pane
-One pane (`decsettings appearance`, source `src/settings/appearance.rs`) holds everything about how the desktop looks, in four tabs:
-Theme (Style, theme cards, light/dark/auto, Match wallpaper colours) · Customise (sections Colours, Fonts, Window style, Dock & Bar, Icons,
+One pane (`decsettings appearance`, source `src/settings/appearance.rs`) holds everything about how the desktop looks, in five tabs:
+Themes (desktop designs and layout) · Palettes (colour sets, light/dark/auto, Match wallpaper colours, accent) · Customise (sections Colours, Fonts, Window style, Dock & Bar, Icons,
 Control Center once it has settings; each with a one-line explanation and a reset) · Wallpaper (My backgrounds, Wallhaven) · All apps (one
 switch, per-app choices under Advanced). The rationale and before/after screenshots are in `docs/settings-design.md`.
 It arranges the builders of themepane, fontpane, iconspane, systempane and wallhaven; the shared decebal theme: miniature desktops, light/dark/auto,

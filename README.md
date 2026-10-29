@@ -44,6 +44,13 @@ For comparison the Quickshell/QML shell this replaces used about 550 MB. All thr
 into a shared buffer, redraw only when something changes, and sit at 0 % CPU when idle. Binaries are
 2-4 MB.
 
+## Appearance: themes and palettes
+
+System Settings > Appearance separates **Themes** (desktop design: macOS, Windows, Caelestia and other layouts)
+from **Palettes** (Nord, Dracula, Catppuccin and other colour sets). Every palette works with every theme and remains
+selected when you change the design. Choosing a palette replaces wallpaper-derived colours and clears the custom accent;
+turn on Match wallpaper colours in Palettes to use generated colours instead. Fonts, icons and other details live in Customise.
+
 ## Theme packages and widgets
 
 Themes are data packages (`format = 1`): a folder, or a single `.dtheme` file, with a `theme.toml` (colours for dark and light, metrics, fonts,

@@ -1,4 +1,4 @@
-//! The "Match wallpaper" section of the Theme pane (and the hooks that make it follow wallpaper changes).
+//! The "Match wallpaper" section of the Palettes pane (and the hooks that make it follow wallpaper changes).
 //!
 //! An optional layer over *any* theme (see [`crate::theme::dynamic`]): a switch, the scheme, what it recolours (accent
 //! only, tinted surfaces, the full palette), strength and contrast, whether light/dark follows the picture, the source
@@ -22,7 +22,7 @@ fn file_name(p: &str) -> String {
 /// Wallpaper pane hint: the colours follow what is chosen there. `None` while the feature is off.
 pub fn wallpaper_pane_note(m: &Model) -> Option<Item> {
     let d = Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }.selection().dynamic.filter(|d| d.enabled && d.source == Origin::Wallpaper)?;
-    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Change it in Appearance > Theme.", d.scheme.title()), warn: false })
+    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Change it in Appearance > Palettes.", d.scheme.title()), warn: false })
 }
 
 /// The section's items. `now` is the theme as resolved with the layer applied.

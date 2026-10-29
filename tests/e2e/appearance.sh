@@ -18,8 +18,8 @@ shot() { [ -n "${SHOTS:-}" ] && { mkdir -p "$SHOTS"; e2e_shot "$SHOTS/$1.png"; }
 echo "== old pane names open something sensible"
 # name  expected(pane/tab/section; the section only matters in Customise)
 for spec in "theme:appearance/theme" "appearance:appearance/theme" "icons:appearance/customise/icons" "desktop:appearance/customise/dock" \
-            "wallpaper:appearance/wallpaper" "appearance/fonts:appearance/customise/fonts" "appearance/window:appearance/customise/window" \
-            "appearance/colours:appearance/customise/colours" "system-theme:appearance/apps" "config:config" "general:general" "tiling:tiling"; do
+            "palettes:appearance/palettes" "wallpaper:appearance/wallpaper" "appearance/fonts:appearance/customise/fonts" "appearance/window:appearance/customise/window" \
+            "appearance/colours:appearance/palettes" "system-theme:appearance/apps" "config:config" "general:general" "tiling:tiling"; do
   name=${spec%%:*}; want=${spec##*:}
   rm -f "$DUMP"
   decsettings --config "$E2E_CFG" "$name" >"$E2E_T/ds.log" 2>&1 & pid=$!
@@ -27,7 +27,7 @@ for spec in "theme:appearance/theme" "appearance:appearance/theme" "icons:appear
   sleep 0.5
   got=$(view)
   case $want in
-    appearance/theme|appearance/wallpaper|appearance/apps) got=${got%/*}; [ "$(q .pane)/$(q .tab)" = "$want" ] && got=$want ;;
+    appearance/theme|appearance/palettes|appearance/wallpaper|appearance/apps) got=${got%/*}; [ "$(q .pane)/$(q .tab)" = "$want" ] && got=$want ;;
     config|general|tiling) got=$(q .pane) ;;
   esac
   [ "$got" = "$want" ] && ok "decsettings $name -> $want" || bad "decsettings $name -> $got (want $want)"
@@ -42,12 +42,12 @@ for _ in $(seq 1 60); do [ -s "$DUMP" ] && break; sleep 0.1; done; sleep 0.5
 WID=$(xdotool search --sync --class DecSettings 2>/dev/null | head -1)
 xdotool mousemove --window "$WID" 400 300
 # query | label shown in the results | tab/section it opens
-for spec in "accent colour|Accent colour|customise/colours" "translucency|Translucency|customise/colours" "text size|Text size|customise/fonts" \
+for spec in "accent colour|Accent colour|palettes" "translucency|Translucency|customise/colours" "text size|Text size|customise/fonts" \
             "monospace|Monospace font|customise/fonts" "green button|Green button|customise/window" "window border|Window border|customise/window" \
             "magnification|Magnification|customise/dock" "pinned|Pinned apps|customise/dock" "hot corner|Hot corners|customise/dock" \
             "icon theme|Icon theme|customise/icons" "tint|Tint symbolic icons|customise/icons" "wallhaven|Wallhaven|wallpaper" \
-            "scaling|Scaling|wallpaper" "match wallpaper|Match wallpaper colours|theme" "light dark|Mode|theme" \
-            "desktop style|Desktop style|theme" "gtk|GTK apps|apps" "apply to all|Apply theme to all apps|apps" "chrome|Browser colour|apps"; do
+            "scaling|Scaling|wallpaper" "match wallpaper|Match wallpaper colours|palettes" "light dark|Mode|palettes" \
+            "desktop design|Themes|theme" "gtk|GTK apps|apps" "apply to all|Apply theme to all apps|apps" "chrome|Browser colour|apps"; do
   query=${spec%%|*}; rest=${spec#*|}; label=${rest%%|*}; where=${rest##*|}
   xdotool key ctrl+f; sleep 0.2
   xdotool key --repeat 30 BackSpace; sleep 0.1; xdotool type --delay 20 "$query"; sleep 0.7
@@ -60,7 +60,7 @@ for spec in "accent colour|Accent colour|customise/colours" "translucency|Transl
   first=$(q '.hit_labels|map(select(. != null))|first // ""')
   if [ "$first" = "$label" ]; then
     xdotool key Return; sleep 0.6
-    case $where in theme|wallpaper|apps) [ "$(q .tab)" = "$where" ] && ok "  Enter opens tab $where" || bad "  Enter opened $(q .tab) (want $where)";;
+    case $where in theme|palettes|wallpaper|apps) [ "$(q .tab)" = "$where" ] && ok "  Enter opens tab $where" || bad "  Enter opened $(q .tab) (want $where)";;
       *) [ "$(q .tab)/$(q .section)" = "$where" ] && ok "  Enter opens $where" || bad "  Enter opened $(q .tab)/$(q .section) (want $where)";; esac
   fi
 done

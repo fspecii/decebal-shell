@@ -247,7 +247,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
     };
     let match_colors = wp.and_then(|w| w.get("match_colors")).and_then(Value::as_bool) == Some(true);
     let mut shell_marks: Vec<(&str, Option<Value>)> = Vec::new();
-    if match_colors {
+    if match_colors && sel.palette.is_none() {
         let w = wp.cloned().unwrap_or(Value::Null);
         let scheme = w.get("scheme").and_then(Value::as_str).and_then(crate::theme::material::Variant::parse);
         let surfaces = w.get("surfaces").and_then(Value::as_str).and_then(Surfaces::parse);
@@ -613,6 +613,41 @@ pub mod tests {
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: d.join("cfg/themes") };
         (d, src, paths)
+    }
+
+    #[test]
+    fn switching_desktop_designs_keeps_the_palette_and_updates_bar_dock_and_windows() {
+        let (dir, src, paths) = sandbox("palette-design-switch");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let mut base = crate::theme::palette::select(&Selection::default(), Some("nord"));
+        for id in ["windows11", "caelestia", "macos"] {
+            apply(&src, &paths, id, &base).unwrap();
+            base = src.selection();
+            assert_eq!(base.name, id);
+            assert_eq!(base.palette.as_deref(), Some("nord"));
+            let theme = src.build(&base, true).0;
+            assert_eq!(theme.background.hex(), "#2e3440");
+            assert_eq!(theme.titlebar_style, crate::theme::builtin::def(id).unwrap().resolve(id, true, &Selection::default()).titlebar_style);
+            let shell = io::json_load(&paths.shell_json());
+            let dock = io::json_load(&paths.dock_settings());
+            assert_eq!(dock["style"], if id == "windows11" { "windows" } else { "mac" });
+            let shell: crate::config::ShellSettings = serde_json::from_value(shell).unwrap();
+            let dock_style = crate::theme::style::dock_style(&dock);
+            assert_eq!(shell.bar_visible(dock_style), id != "windows11");
+            assert_eq!(shell.dock_visible(theme.bar_vertical()), id != "caelestia");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_themes_wallpaper_matching_cannot_override_an_explicit_palette() {
+        let (dir, src, paths) = sandbox("palette-dynamic-priority");
+        let base = crate::theme::palette::select(&Selection::default(), Some("nord"));
+        let p = plan(&src, &paths, "material-you-dynamic", &Selection { sync_rdwm: false, ..base }).unwrap();
+        assert_eq!(p.selection.palette.as_deref(), Some("nord"));
+        assert!(!p.selection.dynamic.as_ref().is_some_and(|d| d.enabled));
+        assert_eq!(src.build(&p.selection, true).0.background.hex(), "#2e3440");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     pub const SUNSET: &str = r##"format = 1

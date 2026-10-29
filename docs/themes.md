@@ -143,8 +143,12 @@ decthemectl palette catppuccin      # recolour the current theme (and every them
 decthemectl palette none            # back to each theme's own colours
 decthemectl apply brutalist --accent "#ff8800"     # a custom accent sits on top of the palette
 ```
-In System Settings, **Appearance > Theme** picks the theme and the mode, and **Appearance > Customise > Colours** has the palette gallery
-(first tile: the theme's own colours), the accent, translucency and corner radius; "Reset to theme default" there clears the palette too.
+In System Settings, **Appearance > Themes** picks the desktop design (macOS, Windows, Caelestia and other distinct designs).
+**Appearance > Palettes** contains the colour gallery, light/dark mode, wallpaper colours and custom accent. Choosing a palette
+turns off wallpaper recolouring and clears the custom accent so the palette is shown as selected. Changing the desktop theme
+keeps that palette. Turn on Match wallpaper colours to use a generated palette instead. Translucency and corner radius remain
+in **Customise > Colours**. Old colour-based theme packages remain loadable from the CLI, but do not duplicate the palette choices
+in the Themes gallery. User-created packages stay visible.
 
 Your own palette is a small file in `~/.config/decebal/palettes/<id>.toml` (`$DECEBAL_PALETTES`), the same colour tokens a theme has:
 
@@ -169,3 +173,19 @@ surface; the built-in palettes are tested that way against every theme in both m
 
 `cargo test` also applies every palette to every theme in both modes and checks contrast. `cargo test` checks that every shipped theme parses, validates as a package (wallpaper, widgets, screenshot present, compiled-in manifest equal
 to the file) and applies; `tests/e2e/theme-engine.sh` applies each one on a private Xvfb and rdwm and takes the screenshots.
+
+
+Use an isolated shell configuration for the unit suite; some drawing tests assume the default theme:
+
+```sh
+appearance_test_config=$(mktemp -d)
+DECEBAL_CONFIG="$appearance_test_config" DECEBAL_THEMES="$appearance_test_config/themes" DECEBAL_PALETTES="$appearance_test_config/palettes" cargo test --lib
+```
+
+The appearance regression checks exercise actual palette clicks, design switching, rdwm colours and search/navigation on a private desktop:
+
+```sh
+cargo build --bin decsettings --bin decthemectl --bin decbar
+MS_BIN_DIR="$PWD/target/debug" dbus-run-session -- tests/e2e/palettes.sh :98
+MS_BIN_DIR="$PWD/target/debug" dbus-run-session -- tests/e2e/appearance.sh :97
+```

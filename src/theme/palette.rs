@@ -25,6 +25,9 @@ use std::path::PathBuf;
 
 /// (id, file text), compiled in.
 pub const BUILTIN: &[(&str, &str)] = &[
+    ("terminal-amber", include_str!("../../palettes/terminal-amber.toml")),
+    ("graphite", include_str!("../../palettes/graphite.toml")),
+    ("high-contrast", include_str!("../../palettes/high-contrast.toml")),
     ("catppuccin", include_str!("../../palettes/catppuccin.toml")),
     ("rose-pine", include_str!("../../palettes/rose-pine.toml")),
     ("gruvbox", include_str!("../../palettes/gruvbox.toml")),
@@ -67,6 +70,21 @@ pub struct Info {
     pub builtin: bool,
     pub has_dark: bool,
     pub has_light: bool,
+}
+
+/// Select a colour source explicitly. A named palette or theme colours replaces wallpaper
+/// recolouring and a custom accent; the desktop design and all non-colour overrides stay intact.
+pub fn select(base: &super::model::Selection, id: Option<&str>) -> super::model::Selection {
+    let mut sel = super::dynamic::disable(base);
+    sel.palette = id.map(str::to_string);
+    sel.accent = None;
+    sel
+}
+
+/// Old colour-first theme packages remain loadable for compatibility, but belong in Palettes.
+/// User packages are never hidden by this classification.
+pub fn legacy_theme(id: &str) -> bool {
+    BUILTIN.iter().any(|(p, _)| *p == id) || matches!(id, "graphite" | "high-contrast" | "caelestia-mocha" | "material-you-dynamic" | "nothing-light" | "terminal-amber")
 }
 
 /// `$DECEBAL_PALETTES`, else `$XDG_CONFIG_HOME/decebal/palettes`, else `~/.config/decebal/palettes`.
@@ -188,7 +206,8 @@ mod tests {
         for (pid, _) in BUILTIN {
             let pal = load(pid).unwrap();
             for (tid, _) in THEMES {
-                let def = builtin::def(tid).unwrap().with_palette(&pal);
+                let original = builtin::def(tid).unwrap();
+                let def = original.with_palette(&pal);
                 for dark in [true, false] {
                     let sel = Selection { palette: Some((*pid).into()), ..Selection::default() };
                     let t = def.resolve(tid, dark, &sel);
@@ -204,9 +223,25 @@ mod tests {
                     // colours come from the palette, the shape from the theme
                     let variant = if dark { pal.dark.as_ref() } else { pal.light.as_ref() }.unwrap();
                     assert_eq!(Some(&crate::theme::model::V::S(t.background.hex())), variant.get("background"), "{tag}");
-                    assert_eq!(t.radius, def.resolve(tid, dark, &Selection::default()).radius, "{tag}: radius is the theme's");
+                    let base = original.resolve(tid, dark, &Selection::default());
+                    assert_eq!((t.radius, t.dock_roundness, t.bar_height), (base.radius, base.dock_roundness, base.bar_height), "{tag}: theme geometry");
+                    assert_eq!((&t.bar_style, &t.titlebar_style, &t.fonts), (&base.bar_style, &base.titlebar_style, &base.fonts), "{tag}: theme design");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn selecting_a_palette_replaces_other_colour_sources_without_changing_design() {
+        use crate::theme::model::{Dynamic, Rgb};
+        let base = Selection { name: "windows11".into(), accent: Some(Rgb(1, 2, 3)), radius: Some(17.0), dynamic: Some(Dynamic { enabled: true, ..Dynamic::default() }), ..Selection::default() };
+        for id in [Some("nord"), None] {
+            let sel = select(&base, id);
+            assert_eq!(sel.name, base.name);
+            assert_eq!(sel.radius, base.radius);
+            assert_eq!(sel.palette.as_deref(), id);
+            assert!(sel.accent.is_none());
+            assert!(!sel.dynamic.as_ref().is_some_and(|d| d.enabled));
         }
     }
 

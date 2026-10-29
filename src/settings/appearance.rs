@@ -1,8 +1,9 @@
 //! The "Appearance" pane: the one home of how the desktop looks.
 //!
-//! Four tabs, in the order a person needs them:
+//! Five tabs, in the order a person needs them:
 //!
-//! * **Theme**: pick a theme (cards with a live preview), light / dark / auto, "Match wallpaper colours".
+//! * **Themes**: pick the desktop design.
+//! * **Palettes**: colours for every theme, light / dark / auto and wallpaper colours.
 //! * **Customise**: one section at a time (Colours, Fonts, Window style, Dock & Bar, Icons and, once it exists, Control Center),
 //!   each with a one-line explanation and a "Reset to theme default".
 //! * **Wallpaper**: the pictures (My backgrounds and Wallhaven).
@@ -22,17 +23,19 @@ use super::ui::{Ctl, Item, Kind, Row};
 pub enum Tab {
     #[default]
     Theme,
+    Palettes,
     Customise,
     Wallpaper,
     Apps,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Theme, Tab::Customise, Tab::Wallpaper, Tab::Apps];
+    pub const ALL: [Tab; 5] = [Tab::Theme, Tab::Palettes, Tab::Customise, Tab::Wallpaper, Tab::Apps];
 
     pub fn id(self) -> &'static str {
         match self {
             Tab::Theme => "theme",
+            Tab::Palettes => "palettes",
             Tab::Customise => "customise",
             Tab::Wallpaper => "wallpaper",
             Tab::Apps => "apps",
@@ -41,7 +44,8 @@ impl Tab {
 
     pub fn title(self) -> &'static str {
         match self {
-            Tab::Theme => "Theme",
+            Tab::Theme => "Themes",
+            Tab::Palettes => "Palettes",
             Tab::Customise => "Customise",
             Tab::Wallpaper => "Wallpaper",
             Tab::Apps => "All apps",
@@ -92,7 +96,7 @@ impl Section {
 
     pub fn blurb(self) -> &'static str {
         match self {
-            Section::Colours => "The accent colour, the colour scheme, and how see-through and round menus and the dock are.",
+            Section::Colours => "How see-through and round menus and the dock are. Choose colours in Palettes.",
             Section::Fonts => "Which fonts the desktop uses and how big its text is.",
             Section::WindowStyle => "How windows look: title bars, the close / minimise / zoom buttons and borders.",
             Section::DockBar => "The dock, the menu bar, hot corners and which apps are pinned.",
@@ -124,7 +128,7 @@ pub fn resolve(name: &str) -> Option<View> {
     match n {
         "appearance" | "theme" | "themes" => v(Tab::Theme, Section::Colours),
         "customise" | "customize" | "customization" => v(Tab::Customise, Section::Colours),
-        "colours" | "colors" | "colour" | "color" | "accent" => v(Tab::Customise, Section::Colours),
+        "palettes" | "palette" | "colours" | "colors" | "colour" | "color" | "accent" => v(Tab::Palettes, Section::Colours),
         "fonts" | "font" => v(Tab::Customise, Section::Fonts),
         "window" | "windows-style" | "windowstyle" | "titlebars" | "decoration" => v(Tab::Customise, Section::WindowStyle),
         "dock" | "desktop" | "bar" | "menubar" => v(Tab::Customise, Section::DockBar),
@@ -186,6 +190,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     let mut out = vec![tab_bar(m), Item::Space(6.0)];
     match m.sel.tab {
         Tab::Theme => out.extend(theme_tab(m)),
+        Tab::Palettes => out.extend(palettes_tab(m)),
         Tab::Customise => out.extend(customise_tab(m)),
         Tab::Wallpaper => out.extend(wallpaper_tab(m)),
         Tab::Apps => out.extend(super::systempane::items(m)),
@@ -195,16 +200,22 @@ pub fn items(m: &Model) -> Vec<Item> {
 
 fn theme_tab(m: &Model) -> Vec<Item> {
     let c = Ctx::new(m);
-    let mut out = super::themepane::style_items(m, &c);
+    let mut out = super::themepane::layout_items(&c);
     out.extend(super::packages::items(m));
-    out.extend(super::themepane::mode_items(&c));
-    out.extend(super::wallpapercolors::items(&c.sel, &c.now));
     out.push(Item::Header("More".into()));
     out.push(Item::Card(vec![
-        Row::new("Accent, fonts, window style, dock").detail("Change single things on top of the theme").ctl(go_button("ap:go:customise", "Customise")),
+        Row::new("Fonts, window style, dock").detail("Change single things on top of the theme").ctl(go_button("ap:go:customise", "Customise")),
         Row::new("Presets, import and export, edit as text").detail("For advanced users").ctl(go_button("ap:go:config", "Config & Presets")),
     ]));
-    out.extend(super::themepane::library_note(&c));
+    out
+}
+
+fn palettes_tab(m: &Model) -> Vec<Item> {
+    let c = Ctx::new(m);
+    let mut out = super::themepane::scheme_items(&c);
+    out.extend(super::themepane::mode_items(&c));
+    out.extend(super::wallpapercolors::items(&c.sel, &c.now));
+    out.extend(super::themepane::accent_items(&c));
     out
 }
 
@@ -217,8 +228,7 @@ fn customise_tab(m: &Model) -> Vec<Item> {
     let c = Ctx::new(m);
     match m.sel.section {
         Section::Colours => {
-            out.extend(super::themepane::accent_items(&c));
-            out.extend(super::themepane::scheme_items(&c));
+            out.push(Item::Card(vec![Row::new("Colour palette").detail("Choose colours for every theme in Palettes").ctl(go_button("ap:go:palettes", "Open Palettes"))]));
             out.extend(super::themepane::surface_items(&c));
             out.push(reset_card("ap:reset:colours", "Back to the theme's own palette, accent, translucency and corner radius"));
         }
@@ -244,7 +254,9 @@ fn customise_tab(m: &Model) -> Vec<Item> {
 fn wallpaper_tab(m: &Model) -> Vec<Item> {
     let mut out = m.pane_wallpaper();
     out.push(Item::Header("Colours".into()));
-    out.push(Item::Card(vec![Row::new("Match wallpaper colours").detail("Recolour the theme from the picture you choose. Set it on the Theme tab").ctl(go_button("ap:go:theme", "Open Theme"))]));
+    out.push(Item::Card(vec![Row::new("Match wallpaper colours")
+        .detail("Recolour the theme from the picture you choose. Set it on the Palettes tab")
+        .ctl(go_button("ap:go:palettes", "Open Palettes"))]));
     out
 }
 
@@ -351,18 +363,18 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
 /// tabs draw is covered, so a new setting cannot silently be unfindable.
 pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     // Theme
-    (Tab::Theme, Section::Colours, "Desktop style", "style macos windows caelestia shell layout bar dock look"),
-    (Tab::Theme, Section::Colours, "Themes", "theme packages cards apply preview export duplicate delete install create nord dracula solarized graphite windows 11 high contrast catalog"),
-    (Tab::Theme, Section::Colours, "Mode", "light dark auto system night day appearance"),
-    (Tab::Theme, Section::Colours, "Match wallpaper colours", "dynamic material you colours from wallpaper recolour scheme strength contrast"),
+    (Tab::Theme, Section::Colours, "Layout", "style macos windows caelestia shell layout bar dock look"),
+    (Tab::Theme, Section::Colours, "Themes", "theme desktop design packages cards apply preview export duplicate delete install create macos windows 11 caelestia catalog"),
+    (Tab::Palettes, Section::Colours, "Mode", "light dark auto system night day appearance"),
+    (Tab::Palettes, Section::Colours, "Match wallpaper colours", "dynamic material you colours from wallpaper recolour scheme strength contrast"),
     (Tab::Theme, Section::Colours, "Get more themes", "market community download"),
     (Tab::Theme, Section::Colours, "Create theme from current settings", "save snapshot new theme package"),
     (Tab::Theme, Section::Colours, "Install a theme file", "import dtheme package folder"),
     // Customise > Colours
-    (Tab::Customise, Section::Colours, "Accent colour", "blue purple pink red orange yellow green graphite highlight swatches hex"),
-    (Tab::Customise, Section::Colours, "Custom accent", "hex colour #rrggbb own accent"),
+    (Tab::Palettes, Section::Colours, "Accent colour", "blue purple pink red orange yellow green graphite highlight swatches hex"),
+    (Tab::Palettes, Section::Colours, "Custom accent", "hex colour #rrggbb own accent"),
     (
-        Tab::Customise,
+        Tab::Palettes,
         Section::Colours,
         "Colour palette",
         "colour scheme colors palette catppuccin rose pine gruvbox tokyo night everforest kanagawa nord dracula solarized monochrome recolour theme tiles",
@@ -466,6 +478,25 @@ pub fn view_of_label(label: &str) -> Option<View> {
 mod tests {
     use super::*;
     use crate::settings::model::tests_support::model_with;
+
+    #[test]
+    fn themes_and_palettes_have_separate_controls_and_search_destinations() {
+        let (mut m, _) = model_with("[general]\n");
+        m.sel.tab = Tab::Theme;
+        let themes = items(&m);
+        assert!(themes.iter().any(|i| matches!(i, Item::ThemeCards(_))));
+        assert!(!themes.iter().any(|i| matches!(i, Item::Themes(_))));
+        assert!(!themes.iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "th:style")))));
+        m.sel.tab = Tab::Palettes;
+        let palettes = items(&m);
+        assert!(palettes.iter().any(|i| matches!(i, Item::Themes(_))));
+        assert!(!palettes.iter().any(|i| matches!(i, Item::ThemeCards(_))));
+        assert_eq!(resolve("appearance/palettes").unwrap().tab, Tab::Palettes);
+        assert_eq!(resolve("colours").unwrap().tab, Tab::Palettes);
+        for label in ["Colour palette", "Accent colour", "Mode", "Match wallpaper colours"] {
+            assert_eq!(INDEX.iter().find(|(_, _, l, _)| *l == label).unwrap().0, Tab::Palettes);
+        }
+    }
 
     #[test]
     fn old_pane_names_resolve_to_their_new_home() {

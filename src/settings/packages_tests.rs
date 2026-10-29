@@ -9,9 +9,9 @@ fn the_section_lists_a_card_per_theme_and_the_stub_rows() {
     let (m, _) = model_with("[general]\n");
     let its = items(&m);
     let Some(Item::ThemeCards(cards)) = its.iter().find(|i| matches!(i, Item::ThemeCards(_))) else { panic!("no cards") };
-    assert!(cards.len() >= crate::theme::builtin::BUILTIN.len());
+    assert!(cards.len() >= crate::theme::builtin::BUILTIN.iter().filter(|(id, _)| !crate::theme::palette::legacy_theme(id)).count());
     assert_eq!(cards.iter().filter(|c| c.current).count(), 1);
-    let nord = cards.iter().find(|c| c.id == "nord").unwrap();
+    let nord = cards.iter().find(|c| c.id == "macos").unwrap();
     assert!(nord.meta.contains("1.0.0") && nord.meta.contains("built-in") && !nord.deletable, "{}", nord.meta);
     let ctls: Vec<(String, bool)> =
         its.iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flat_map(|r| r.iter().flat_map(|r| r.ctls.iter().map(|c| (c.id.clone(), c.enabled)))).collect();

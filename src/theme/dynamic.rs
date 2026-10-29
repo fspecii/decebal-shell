@@ -157,7 +157,8 @@ pub fn update_with(sel: &Selection, paths: &Paths, wall: Option<&Path>, f: impl 
         let (x, image) = read(&input_of(&d, paths, wall)?)?;
         d = with_colors(&d, x, image);
     }
-    Ok(Selection { dynamic: Some(d), ..sel.clone() })
+    let palette = if d.enabled { None } else { sel.palette.clone() };
+    Ok(Selection { dynamic: Some(d), palette, ..sel.clone() })
 }
 
 /// `sel` with the picture read again (`wall` stands in for "the wallpaper"); `sel` itself when match wallpaper is off.

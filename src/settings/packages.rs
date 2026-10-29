@@ -52,14 +52,23 @@ pub fn items(m: &Model) -> Vec<Item> {
     let src = source(m);
     let cur = src.find(&src.selection().name).map(|f| f.0).unwrap_or_default();
     let confirm = CONFIRM.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let infos = store::list(&src);
+    let infos: Vec<_> = store::list(&src).into_iter().filter(|i| i.origin == store::Origin::User || !crate::theme::palette::legacy_theme(&i.id)).collect();
     let mut cards: Vec<Card> = infos.iter().filter(|i| i.origin != store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)).collect();
     cards.extend(infos.iter().filter(|i| i.origin == store::Origin::Builtin).map(|i| card_of(i, i.id == cur, &confirm)));
+    let current_note = (!cards.iter().any(|c| c.current))
+        .then(|| Item::Note { text: format!("Current theme: {}. Choose a desktop design below and its colours in Palettes.", src.build(&src.selection(), true).0.name), warn: false });
     let mut out = vec![
         Item::Header("Themes".into()),
-        Item::Note { text: "A theme sets colours, fonts, window style, dock and wallpaper together. Pick one to change the whole look; fine-tune it under Customise.".into(), warn: false },
+        Item::Note {
+            text: "Themes define the desktop design: bar, dock, window decorations, fonts and wallpaper. Your selected palette stays in use. Change colours in Palettes; adjust details in Customise."
+                .into(),
+            warn: false,
+        },
         Item::ThemeCards(cards),
     ];
+    if let Some(note) = current_note {
+        out.insert(1, note);
+    }
     out.push(Item::Card(vec![
         Row::new("Create theme from current settings…")
             .detail("Saves your colours, fonts, titlebars, gaps, wallpaper, dock and widgets as a new package. Type a name and press Enter.")
@@ -215,5 +224,22 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             true
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod appearance_tests {
+    use super::*;
+
+    #[test]
+    fn the_gallery_shows_desktop_designs_and_not_legacy_colour_variants() {
+        let (m, _) = crate::settings::model::tests_support::model_with("[general]\n");
+        let cards = items(&m).into_iter().find_map(|i| if let Item::ThemeCards(c) = i { Some(c) } else { None }).unwrap();
+        for id in ["macos", "windows11", "caelestia", "nothing-dot", "brutalist"] {
+            assert!(cards.iter().any(|c| c.id == id), "missing design {id}");
+        }
+        for id in ["nord", "dracula", "tokyo-night", "graphite", "high-contrast", "caelestia-mocha", "nothing-light", "terminal-amber"] {
+            assert!(!cards.iter().any(|c| c.id == id), "colour variant {id} in Themes");
+        }
     }
 }

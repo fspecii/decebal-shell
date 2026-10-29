@@ -11,8 +11,8 @@ in place (comments and unknown keys are kept), applies changes live, and follows
 
 PANE is one of: general appearance tiling windows rules keyboard autostart displays config (and the system panes: sound network
 bluetooth notifications inputdev power defaults datetime users privacy storage accessibility). `appearance` is the home of how the
-desktop looks (tabs: Theme, Customise, Wallpaper, All apps). These older names open their tab: theme, icons, wallpaper, desktop;
-also appearance/fonts, appearance/window, appearance/dock, appearance/colours, appearance/apps. config = Config & Presets (edit the
+desktop looks (tabs: Themes, Palettes, Customise, Wallpaper, All apps). These older names open their tab: theme, icons, wallpaper, desktop;
+also appearance/fonts, appearance/window, appearance/dock, appearance/palettes, appearance/colours, appearance/apps. config = Config & Presets (edit the
 files as text, save/apply/export/import presets, see docs/presets.md).
 
 Options:

@@ -92,7 +92,8 @@ fn set_key(sel: &mut Selection, key: &str, value: &str) {
                         .find(|i| decebal::theme::builtin::norm(i) == decebal::theme::builtin::norm(value))
                         .unwrap_or_else(|| die(&format!("no palette `{value}` (decthemectl palette list)"))),
                 )
-            }
+            };
+            *sel = decebal::theme::palette::select(sel, sel.palette.as_deref());
         }
         "opacity" => sel.opacity = (!unset).then(|| num(value, "opacity")),
         "radius" => sel.radius = (!unset).then(|| num(value, "radius")),

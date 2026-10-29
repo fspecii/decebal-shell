@@ -78,6 +78,18 @@ pub fn style_items(m: &Model, c: &Ctx) -> Vec<Item> {
     out
 }
 
+/// Layout belongs to the selected design, including custom themes using a pill bar.
+pub fn layout_items(c: &Ctx) -> Vec<Item> {
+    if !c.now.bar_vertical() {
+        return Vec::new();
+    }
+    let pos = c.now.bar_position;
+    let opts = BarPosition::ALL.iter().map(|p| (p.title().to_string(), p.as_str().to_string())).collect();
+    vec![Item::Card(vec![Row::new("Layout")
+        .detail("Place this theme's pill bar on an edge, or split it across top and bottom")
+        .ctl(Ctl::new("th:layout", Kind::Seg(opts, BarPosition::ALL.iter().position(|p| *p == pos))))])]
+}
+
 /// Theme tab: light / dark / auto.
 pub fn mode_items(c: &Ctx) -> Vec<Item> {
     let mode_opts = vec![("Light".to_string(), "light".to_string()), ("Dark".to_string(), "dark".to_string()), ("Auto".to_string(), "auto".to_string())];
@@ -92,7 +104,7 @@ pub fn mode_items(c: &Ctx) -> Vec<Item> {
             .detail(if c.sel.mode == Mode::Auto {
                 format!("Following the system: {} right now", if c.sys { "dark" } else { "light" })
             } else {
-                "Themes with both variants switch; single-variant themes keep their look".into()
+                "Themes and palettes with both variants switch; single-variant choices keep their look".into()
             })
             .ctl(Ctl::new("th:mode", Kind::Seg(mode_opts, mode_sel)))]),
     ]
@@ -104,10 +116,10 @@ pub fn scheme_items(c: &Ctx) -> Vec<Item> {
     let mut tiles = vec![ThemeTile {
         id: "l:palette:none".into(),
         name: "Theme colours".into(),
-        selected: c.sel.palette.is_none(),
+        selected: c.sel.palette.is_none() && !c.sel.dynamic.as_ref().is_some_and(|d| d.enabled),
         error: false,
         colors: {
-            let t = c.src.build(&Selection { palette: None, accent: None, ..c.sel.clone() }, c.sys).0;
+            let t = c.src.build(&Selection { palette: None, accent: None, dynamic: None, ..c.sel.clone() }, c.sys).0;
             [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()]
         },
     }];
@@ -118,17 +130,21 @@ pub fn scheme_items(c: &Ctx) -> Vec<Item> {
         tiles.push(ThemeTile {
             id: format!("l:palette:{}", p.id),
             name: p.name.clone(),
-            selected: c.sel.palette.as_deref() == Some(p.id.as_str()),
+            selected: c.sel.palette.as_deref() == Some(p.id.as_str()) && !c.sel.dynamic.as_ref().is_some_and(|d| d.enabled),
             error: false,
             colors: [t.background.t(), t.bar.t(), t.surface.t(), t.titlebar.t(), t.text.t(), t.accent.t(), t.dock.t()],
         });
     }
+    let source = if c.sel.dynamic.as_ref().is_some_and(|d| d.enabled) {
+        "wallpaper colours".to_string()
+    } else {
+        c.sel.palette.as_deref().and_then(crate::theme::palette::load).map(|p| p.name).unwrap_or_else(|| "theme colours".into())
+    };
     vec![
         Item::Header("Colour palette".into()),
         Item::Note {
             text: format!(
-                "A palette recolours every theme and stays when you switch themes; the theme keeps its shape (windows, dock, fonts, wallpaper). Your own: .toml files in {} (see docs/themes.md); decthemectl palette list|NAME|none does the same.",
-                crate::theme::palette::user_dir().display()
+                "Using {source}. Palettes change colours on every theme without changing its design. Your palette stays selected when you switch themes. Choosing one replaces wallpaper colours and resets the custom accent."
             ),
             warn: false,
         },
@@ -273,8 +289,9 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 sel.mode = mode;
             }
         }
-        (["l", "palette", "none"], CtlVal::Click) => sel.palette = None,
-        (["l", "palette", id], CtlVal::Click) => sel.palette = Some((*id).to_string()),
+        (["l", "palette", id], CtlVal::Click) => {
+            sel = crate::theme::palette::select(&sel, if *id == "none" { None } else { Some(id) });
+        }
         (["l", "accent", "none"], CtlVal::Click) => sel.accent = None,
         (["l", "accent", hex], CtlVal::Click) => sel.accent = Rgb::parse(hex),
         (["th", "mode"], CtlVal::Str(s)) => sel.mode = Mode::parse(&s).unwrap_or(sel.mode),
@@ -297,7 +314,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             let Some(pos) = BarPosition::parse(&s) else { return };
             let bar = style::position_value(pos, m.shell.get("bar"));
             m.edit_json("shell", "bar", Some(bar));
-            m.say(format!("Caelestia layout: {}", pos.title()), false);
+            m.say(format!("Bar layout: {}", pos.title()), false);
             return;
         }
         // the "Match wallpaper" section (th:dynamic, th:dyn-*) lives in wallpapercolors.rs
