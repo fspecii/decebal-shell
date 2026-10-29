@@ -2,7 +2,7 @@
 
 Open **System Settings → Widgets** in the Appearance sidebar group, or run `decsettings widgets`.
 
-Widgets are a desktop preference shared by every theme. Switching themes changes their colours and typography without replacing the user's enabled widgets, saved options or placement.
+Widgets follow the selected theme. A theme with active widgets supplies its layout; a theme with no active widgets hides the collection while retaining the saved instances. If you have customised the saved layout, applying a theme with widgets asks **Keep my layout**, **Use theme widgets**, or **Cancel** before changing anything. Palette and light/dark changes within the same theme preserve the layout.
 
 - **Show widgets** hides the whole desktop collection while retaining every enabled state and position.
 - **Your widgets** shows saved instances, including disabled and unavailable entries. Each can be enabled, disabled or removed. Desktop widgets have a screen anchor and horizontal/vertical pixel offsets; positive offsets move right/down and negative offsets move left/up.
@@ -16,23 +16,25 @@ Model regression checks:
 
 ```sh
 cargo test --lib settings::widgetspane
+cargo test --lib settings::widgetchoice
 ```
 
 The isolated desktop lifecycle regression starts its own Xvfb and rdwm with temporary HOME, configuration, data and runtime directories:
 
 ```sh
 tests/e2e/widgets-settings.sh
+tests/e2e/theme-widget-choice.sh
 ```
 
 It builds the three tested debug binaries by default (`PROFILE=release` selects release; `NO_BUILD=1` uses existing binaries). `RDWM_BIN_DIR` selects the rdwm build and `E2E_DISPLAY` selects an unused private display (default `:219`). Occupied displays and live displays `:0`/`:1` are refused.
 
-The regression exercises actual Settings controls and checks X11 windows: master hiding destroys windows while the host remains alive, showing recreates them, individual toggles retain saved instances, and the catalog re-enables an existing disabled widget without duplication or losing options/placement. It also launches the daemon twice and applies two installed themes, comparing the complete canonical `widgets` JSON value across switches. All processes and files belong to the temporary test desktop and are cleaned up on exit.
+The regression exercises actual Settings controls and checks X11 windows: master hiding destroys windows while the host remains alive, showing recreates them, individual toggles retain saved instances, and the catalog re-enables an existing disabled widget without duplication or losing options/placement. It also launches the daemon twice. Theme replacement and cancellation are covered by `cargo test --lib settings::widgetchoice` and `cargo test --lib theme::engine::apply`. All processes and files belong to the temporary test desktop and are cleaned up on exit.
 
 ## Adding a widget
 
 New shared widgets belong in `widgets/` and are registered in `src/widgets/samples.rs`. Use semantic colour tokens (`surface`, `text`, `accent`, etc.) and the shared data sources; avoid active-theme checks and fixed palette colours. They then appear automatically in the Widgets collection for every desktop design. Theme packages may also supply definitions, which remain available through the shared collection while that package is installed.
 
-Add the widget's layout golden, validate it under theme trust, and inspect dark/light renders under multiple designs. Keep unavailable data explicit. Theme manifests may suggest first-run defaults but must never replace an existing user's widget collection. Widget positions are retained across theme switches; the host keeps cards clear of pill bars when the bar changes edge.
+Add the widget's layout golden, validate it under theme trust, and inspect dark/light renders under multiple designs. Keep unavailable data explicit. Theme manifests supply their widget defaults. Untouched theme layouts switch automatically; custom layouts require a replacement choice. `decthemectl theme apply ID` requires `--keep-widgets` or `--replace-widgets` when a custom layout exists. Themes without active widgets hide saved cards; the host keeps cards clear of pill bars when the bar changes edge.
 
 Adding or re-enabling a card through **Add/Enable** also turns on the desktop collection, so an apparently successful Add cannot leave it hidden by the master switch. The normal master switch still preserves every individual enabled state and placement.
 

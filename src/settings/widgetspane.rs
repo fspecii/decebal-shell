@@ -78,7 +78,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     let catalog = entries(&widgets);
     let mut out = vec![
         Item::Header("Desktop widgets".into()),
-        Item::Note { text: "Small, useful cards for your desktop. Your widgets and their positions stay with you when you change themes; colours follow the selected palette.".into(), warn: false },
+        Item::Note { text: "Small, useful cards for your desktop. Themes choose their own widgets. If you customise this layout, applying a theme with widgets asks before replacing it. Themes without widgets hide the collection without deleting your saved layout.".into(), warn: false },
         Item::Card(vec![Row::new("Show widgets").detail("Hide every desktop widget without losing your choices or positions").ctl(Ctl::new("wg:enabled", Kind::Toggle(enabled)))]),
         Item::Header("Your widgets".into()),
     ];
@@ -210,6 +210,9 @@ pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
         return;
     }
     widgets.as_object_mut().unwrap().entry("enabled").or_insert(json!(true));
+    if widgets["enabled"] == json!(true) {
+        widgets.as_object_mut().unwrap().remove("theme_widgets_absent");
+    }
     m.edit_json("shell", "widgets", Some(widgets.clone()));
     if m.notice.as_ref().is_some_and(|n| n.error) || m.shell.get("widgets") != Some(&widgets) {
         return;

@@ -488,12 +488,15 @@ fn main() {
             if let Some(m) = implied {
                 sel.mode = m;
             }
+            let mut widget_choice = decebal::theme::engine::apply::WidgetChoice::Ask;
             let mut i = 2;
             while i < args.len() {
                 let a = args[i].as_str();
                 match a {
                     "--reset" => sel = Selection { name: sel.name.clone(), mode: sel.mode, sync_rdwm: sel.sync_rdwm, ..Selection::default() },
                     "--no-rdwm" => sel.sync_rdwm = false,
+                    "--keep-widgets" => widget_choice = decebal::theme::engine::apply::WidgetChoice::Keep,
+                    "--replace-widgets" => widget_choice = decebal::theme::engine::apply::WidgetChoice::Replace,
                     "--mode" | "--accent" | "--opacity" | "--radius" | "--font" | "--font-scale" => {
                         i += 1;
                         let v = args.get(i).unwrap_or_else(|| die(&format!("{a} needs a value")));
@@ -503,7 +506,13 @@ fn main() {
                 }
                 i += 1;
             }
-            apply(&src, &sel);
+            if widget_choice == decebal::theme::engine::apply::WidgetChoice::Ask {
+                apply(&src, &sel);
+            } else {
+                let plan = decebal::theme::engine::apply::plan_selection_with_widgets(&src, &Paths::discover(), &sel, widget_choice).unwrap_or_else(|e| die(&e));
+                let result = decebal::theme::engine::apply::execute(&src, &Paths::discover(), plan).unwrap_or_else(|e| die(&e));
+                println!("applied {}", result.theme_id);
+            }
         }
         Some("set") => {
             let (Some(k), Some(v)) = (args.get(1), args.get(2)) else { die("set needs KEY VALUE") };

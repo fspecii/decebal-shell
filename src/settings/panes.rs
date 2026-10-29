@@ -363,7 +363,7 @@ impl Model {
     }
 
     fn banners(&self) -> Vec<Item> {
-        let mut v = Vec::new();
+        let mut v = super::widgetchoice::items(self);
         if let Some(e) = &self.file_error {
             v.push(Item::Note { text: format!("config.toml is not valid right now (edited elsewhere?): {e}. Showing the last good version; changes here are paused until it parses."), warn: true });
         }
@@ -1057,6 +1057,9 @@ pub fn set_wallpaper(m: &mut Model, path: &str) {
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if id.starts_with("wc:") {
+        return super::widgetchoice::apply(m, id, v);
+    }
     if id.starts_with("lw:") {
         return crate::livewall::pane::apply(m, id, v);
     }

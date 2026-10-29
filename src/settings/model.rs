@@ -81,6 +81,7 @@ pub struct Model {
     pub wh: super::wallhaven::Wh,
     pub lw: crate::livewall::pane::State,
     pub wallpaper_palette_name: String,
+    pub widget_choice: Option<super::widgetchoice::Pending>,
     /// Keys the builders asked for / found missing in the schema (consistency test).
     pub used: RefCell<Vec<(String, String)>>,
     pub missing: RefCell<Vec<(String, String)>>,
@@ -121,6 +122,7 @@ impl Model {
             wh: super::wallhaven::Wh::default(),
             lw: crate::livewall::pane::State::default(),
             wallpaper_palette_name: "Wallpaper colours".into(),
+            widget_choice: None,
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,

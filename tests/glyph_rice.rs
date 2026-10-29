@@ -32,14 +32,16 @@ fn glyph_restores_colours_preserves_widgets_and_selects_variant_art() {
     fs::write(paths.shell_json(), json!({"theme":{"name":"nord","palette":"nord"},"widgets":widgets,"unrelated":123}).to_string()).unwrap();
     for (mode, bg, fg, artwork) in [(Mode::Dark, "#000000", "#f2f2f2", "dark.png"), (Mode::Light, "#e9e9e9", "#0b0b0b", "light.png")] {
         let base = Selection { mode, palette: Some("nord".into()), ..Selection::default() };
-        let p = apply::plan(&src, &paths, "glyph-rice", &base).unwrap();
+        let p = apply::plan_with_widgets(&src, &paths, "glyph-rice", &base, apply::WidgetChoice::Keep).unwrap();
         assert!(p.selection.palette.is_none());
         let theme = src.build(&p.selection, true).0;
         assert_eq!(theme.background, decebal::theme::Rgb::parse(bg).unwrap());
         assert_eq!(theme.text, decebal::theme::Rgb::parse(fg).unwrap());
         assert!(theme.bar_vertical());
         let shell: Value = serde_json::from_str(&p.writes.iter().find(|w| w.path == paths.shell_json()).unwrap().new).unwrap();
-        assert_eq!(shell["widgets"], widgets);
+        assert_eq!(shell["widgets"]["items"], widgets["items"]);
+        assert_eq!(shell["widgets"]["enabled"], widgets["enabled"]);
+        assert_eq!(shell["widgets"]["future"], 42);
         assert_eq!(shell["unrelated"], 123);
         assert_eq!(shell["dock"]["enabled"], false);
         assert_eq!(shell["bar"]["position"], "left");

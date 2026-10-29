@@ -58,12 +58,15 @@ check 'catalog exposes saved disabled widget action' jq -e 'any(.ctls[];.id=="wg
 click wg:add:builtin.clock-card
 check 'catalog re-enables saved instance without duplicate' json_is '.widgets.items|length==1 and .[0].enabled==true and .[0].x==21'
 check 'catalog enabled widget appears' count 1
-BEFORE=$(jq -cS .widgets "$CFG")
-for theme in gruvbox-dark everforest; do
- decthemectl theme install "$HERE/themes/$theme" >"$E2E_T/install-$theme.log" 2>&1
- decthemectl theme apply "$theme" >"$E2E_T/apply-$theme.log" 2>&1
- check "$theme preserves exact widgets JSON value" test "$BEFORE" = "$(jq -cS .widgets "$CFG")"
+BEFORE=$(jq -cS ' .widgets | {enabled,items,allow_exec,future}' "$CFG")
+for theme in nothing-light everforest; do
+ decthemectl theme install "$HERE/themes/$theme" --force >"$E2E_T/install-$theme.log" 2>&1
+ decthemectl theme apply "$theme" --keep-widgets >"$E2E_T/apply-$theme.log" 2>&1
+ check "$theme keeps the custom layout after explicit choice" test "$BEFORE" = "$(jq -cS '.widgets | {enabled,items,allow_exec,future}' "$CFG")"
  check "$theme retains desktop widget" count 1
 done
-check 'host survives complete settings/theme lifecycle' kill -0 "$HOST"
+decthemectl theme apply nord >"$E2E_T/apply-widgetless.log" 2>&1
+check 'widgetless theme hides saved widgets' json_is '.widgets.enabled==false and (.widgets.items|length)==1'
+check 'widgetless theme removes desktop cards' count 0
+check 'host survives complete settings/theme lifecycle'  kill -0 "$HOST"
 echo "passed $PASS, failed 0"

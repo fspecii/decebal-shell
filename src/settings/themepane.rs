@@ -233,6 +233,9 @@ pub fn items(m: &Model) -> Vec<Item> {
 
 /// Runs the transaction for a changed selection; true when it was written.
 pub(super) fn commit(m: &mut Model, sel: Selection) -> bool {
+    if super::widgetchoice::request(m, &sel, false) {
+        return false;
+    }
     let src = source(m);
     let mut paths = m.paths.clone();
     // Tests and explicit configuration may choose a stricter checker than discovery.
@@ -257,6 +260,17 @@ pub(super) fn commit(m: &mut Model, sel: Selection) -> bool {
 /// A new wallpaper was chosen in the Wallpaper pane: the colours follow it when "Match wallpaper" is on.
 pub fn follow_wallpaper(m: &mut Model, path: &str) {
     super::wallpapercolors::follow(m, path);
+}
+
+pub(super) fn apply_style(m: &mut Model, st: Style) {
+    for (key, val) in style::dock_edits(st) {
+        m.edit_json("dock", key, val);
+    }
+    let bar = style::bar_value(st, m.shell.get("bar"));
+    m.edit_json("shell", "bar", Some(bar));
+    let dock = style::dock_value(st, m.shell.get("dock"));
+    m.edit_json("shell", "dock", Some(dock));
+    m.say(format!("Shell style: {}", st.title()), false);
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
@@ -292,14 +306,9 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["th", "style"], CtlVal::Str(s)) => {
             let Some(st) = Style::parse(&s) else { return };
             if commit(m, style::selection_for(st, &sel)) {
-                for (key, val) in style::dock_edits(st) {
-                    m.edit_json("dock", key, val);
-                }
-                let bar = style::bar_value(st, m.shell.get("bar"));
-                m.edit_json("shell", "bar", Some(bar));
-                let dock = style::dock_value(st, m.shell.get("dock"));
-                m.edit_json("shell", "dock", Some(dock));
-                m.say(format!("Shell style: {}", st.title()), false);
+                apply_style(m, st);
+            } else if let Some(p) = &mut m.widget_choice {
+                p.style = Some(st);
             }
             return;
         }
@@ -368,6 +377,7 @@ mod tests {
         let expected_style = design.extra["decoration"]["style"].as_str().unwrap();
         let expected_height = design.extra["decoration"]["height"].as_i64().unwrap();
         m.apply("l:theme:orbit-glass", CtlVal::Click);
+        let widgets = m.shell["widgets"].clone();
         m.apply("th:mode", CtlVal::Str("light".into()));
         m.apply("l:palette:nord", CtlVal::Click);
         let doc = super::super::tomlcfg::Cfg::parse(&std::fs::read_to_string(cfg).unwrap()).unwrap();

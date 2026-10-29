@@ -296,6 +296,8 @@ With the switch on, a user widget may use `on_click = "exec notify-send hi"` and
 second, 5 s timeout, first line of stdout, 4 KiB cap) read as `{cmd.up}`. Theme widgets never get this, even when the switch is on, and
 `theme snapshot` leaves exec-capable widgets out of the package.
 
+**Theme selection.** Applying a theme installs its widget layout when the current layout is untouched. A custom layout requires an explicit Keep/Replace choice in Settings (or `--keep-widgets` / `--replace-widgets` on `theme apply`). Cancel changes nothing. Themes with no enabled widget instances hide the saved collection without deleting it. Palette and mode changes within the same theme preserve widget placement.
+
 **Placing.** Themes place widgets with `[[widgets]]`; you can too: `decwidgets add clock-card --anchor top-right --x -40 --y 60`,
 `decwidgets list`, `decwidgets remove clock-card`, or edit `decebal.json` -> `widgets.items`. `decwidgets` (no arguments) runs the daemon;
 put it in rdwm's autostart. `decwidgets render NAME --png OUT [--live] [--bg #rrggbb|IMAGE]` draws a widget with fixed sample data for

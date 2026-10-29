@@ -20,7 +20,7 @@ decthemectl theme uninstall ID                remove an installed theme
 decthemectl theme pack DIR [-o FILE]          make a .dtheme (writes the content hash into the manifest)
 decthemectl theme unpack FILE [DIR]           extract a .dtheme into a new folder to edit it
 decthemectl theme hash DIR [--write]          print the content hash (and store it in theme.toml with --write)
-decthemectl theme apply ID [--preview SECS] [--no-rdwm]
+decthemectl theme apply ID [--preview SECS] [--no-rdwm] [--keep-widgets|--replace-widgets]
                                               set colours, fonts, titlebars, bar, dock, wallpaper, widgets... in one step; --preview
                                               puts everything back after SECS seconds (default 10)
 decthemectl theme undo                        restore the files as they were before the last apply
@@ -269,7 +269,8 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
             if flag(rest, "--preview") || opt(rest, "--preview").is_some() {
                 let secs: u64 = opt(rest, "--preview").and_then(|v| v.parse().ok()).unwrap_or(10).clamp(1, 600);
                 let cancel = std::sync::atomic::AtomicBool::new(false);
-                let a = apply::apply(src, paths, id, &sel)?;
+                let p = apply::plan_with_widgets(src, paths, id, &sel, apply::WidgetChoice::Keep)?;
+                let a = apply::execute(src, paths, p)?;
                 eprintln!("{}previewing for {secs} s (Ctrl-C keeps the preview off and restores now)...", paths_note(&a));
                 if !a.undo_id.is_empty() {
                     install_interrupt();
@@ -281,7 +282,18 @@ pub fn run(args: &[String], src: &Source, paths: &Paths) -> Result<String, Strin
                 }
                 return Ok("preview over, everything restored\n".into());
             }
-            Ok(paths_note(&apply::apply(src, paths, id, &sel)?))
+            if flag(rest, "--keep-widgets") && flag(rest, "--replace-widgets") {
+                return Err("Choose only one widget option".into());
+            }
+            let choice = if flag(rest, "--replace-widgets") {
+                apply::WidgetChoice::Replace
+            } else if flag(rest, "--keep-widgets") {
+                apply::WidgetChoice::Keep
+            } else {
+                apply::WidgetChoice::Ask
+            };
+            let plan = apply::plan_with_widgets(src, paths, id, &sel, choice)?;
+            Ok(paths_note(&apply::execute(src, paths, plan)?))
         }
         Some("undo") => Ok(format!("restored the files from before `{}`\n", apply::undo(src, paths, None)?)),
         Some("duplicate") => {

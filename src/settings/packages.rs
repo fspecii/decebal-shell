@@ -136,14 +136,21 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 set_confirm(None);
             }
             match *act {
-                "apply" => match eapply::apply(&src, &m.paths, id, &src.selection()) {
-                    Ok(a) => {
-                        reload(m);
-                        let extra = if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) };
-                        m.say(format!("Applied {}{extra}. `decthemectl theme undo` goes back.", a.theme_id), false);
+                "apply" => {
+                    let mut sel = src.selection();
+                    sel.name = id.to_string();
+                    if super::widgetchoice::request(m, &sel, true) {
+                        return true;
                     }
-                    Err(e) => m.say(format!("Not applied: {e}"), true),
-                },
+                    match eapply::apply(&src, &m.paths, id, &src.selection()) {
+                        Ok(a) => {
+                            reload(m);
+                            let extra = if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) };
+                            m.say(format!("Applied {}{extra}. `decthemectl theme undo` goes back.", a.theme_id), false);
+                        }
+                        Err(e) => m.say(format!("Not applied: {e}"), true),
+                    }
+                }
                 "preview" => {
                     let (s2, p2, id2, wake) = (src.clone(), m.paths.clone(), id.to_string(), m.wake.clone());
                     m.say(format!("Previewing {id} for {PREVIEW_SECS} seconds…"), false);

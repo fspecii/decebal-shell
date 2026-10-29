@@ -200,17 +200,48 @@ fn widget_source(src: &Source, id: &str, name: &str) -> Option<String> {
 
 // ---------------------------------------------------------------- plan
 
+/// How to handle a custom desktop layout when a theme supplies widgets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetChoice {
+    Ask,
+    Keep,
+    Replace,
+}
+
+fn widget_layout(w: &Value) -> Value {
+    json!({"enabled":w.get("enabled").and_then(Value::as_bool).unwrap_or(true),"items":w.get("items").cloned().unwrap_or_else(||json!([]))})
+}
+
+pub fn custom_widgets(w: &Value) -> bool {
+    w.get("items").and_then(Value::as_array).is_some_and(|items| !items.is_empty()) && w.get("theme_baseline") != Some(&widget_layout(w))
+}
+
+pub fn widgets_need_confirmation(src: &Source, paths: &Paths, name: &str) -> Result<bool, String> {
+    let (id, _) = src.find(name).ok_or("Unknown theme")?;
+    let def = src.load_def(&id)?;
+    Ok(def.extra.get("widgets").and_then(Value::as_array).is_some_and(|items| items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false)))
+        && custom_widgets(&io::json_load(&paths.shell_json())["widgets"]))
+}
+
+pub fn plan_with_widgets(src: &Source, paths: &Paths, name: &str, base: &Selection, choice: WidgetChoice) -> Result<Plan, String> {
+    plan_inner(src, paths, name, base, true, choice)
+}
+
+pub fn plan_selection_with_widgets(src: &Source, paths: &Paths, sel: &Selection, choice: WidgetChoice) -> Result<Plan, String> {
+    plan_inner(src, paths, &sel.name, sel, false, choice)
+}
+
 /// Computes everything `apply` would write, touching nothing.
 pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result<Plan, String> {
-    plan_inner(src, paths, name, base, true)
+    plan_inner(src, paths, name, base, true, WidgetChoice::Ask)
 }
 
 /// Changes mode/palette/customisation without discarding the selection's colours or package structure.
 pub fn plan_selection(src: &Source, paths: &Paths, selection: &Selection) -> Result<Plan, String> {
-    plan_inner(src, paths, &selection.name, selection, false)
+    plan_inner(src, paths, &selection.name, selection, false, WidgetChoice::Ask)
 }
 
-fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_colors: bool) -> Result<Plan, String> {
+fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_colors: bool, widget_choice: WidgetChoice) -> Result<Plan, String> {
     let (id, implied) = src.find(name).ok_or_else(|| format!("no theme `{name}` (decthemectl theme list)"))?;
     if let Some(e) = src.list().into_iter().find(|e| e.id == id).and_then(|e| e.error) {
         return Err(format!("theme `{id}` is broken: {e}"));
@@ -375,9 +406,9 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     if let Some(Value::Object(ic)) = extra.get("icons") {
         obj_mut(&mut shell, "icons").extend(ic.clone());
     }
-    if shell.get("widgets").is_none() {
-        // Widgets belong to the desktop, not the selected theme. A first theme can offer defaults;
-        // after that the entire object (disabled items, positions, unknown fields) is preserved.
+    if reset_colors || !same_theme || shell.get("widgets").is_none() {
+        let previous_widgets = shell.get("widgets").cloned().unwrap_or_else(|| json!({}));
+        let custom = custom_widgets(&previous_widgets);
         let w = obj_mut(&mut shell, "widgets");
         let mut items: Vec<Value> = Vec::new();
         for inst in extra.get("widgets").and_then(Value::as_array).into_iter().flatten() {
@@ -402,7 +433,33 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             }
             items.push(inst);
         }
-        w.insert("items".into(), Value::Array(items));
+        if !items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false)) {
+            if custom {
+                let enabled = previous_widgets.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+                w.entry("custom_enabled_before_theme").or_insert(json!(enabled));
+                w.shift_remove("theme_baseline");
+            }
+            w.insert("enabled".into(), json!(false));
+            w.insert("theme_widgets_absent".into(), json!(true));
+            if !custom {
+                w.insert("theme_baseline".into(), widget_layout(&Value::Object(w.clone())));
+            }
+        } else if custom && widget_choice == WidgetChoice::Ask {
+            return Err("This theme supplies widgets and you have a custom layout. Choose --keep-widgets or --replace-widgets, or apply it in Settings to review the choice.".into());
+        } else if custom && widget_choice == WidgetChoice::Keep {
+            if let Some(enabled) = w.shift_remove("custom_enabled_before_theme") {
+                w.insert("enabled".into(), enabled);
+            }
+            w.shift_remove("theme_baseline");
+            w.shift_remove("theme_widgets_absent");
+        } else {
+            w.insert("items".into(), Value::Array(items));
+            w.insert("enabled".into(), json!(true));
+            w.shift_remove("custom_enabled_before_theme");
+            w.shift_remove("theme_widgets_absent");
+            w.insert("theme_baseline".into(), widget_layout(&Value::Object(w.clone())));
+        }
+        w.insert("theme_source".into(), json!(id));
     }
     if wp.is_some_and(|w| w.get("slideshow").and_then(Value::as_bool) == Some(true)) {
         let dir = pkg_dir.as_deref().unwrap_or(Path::new(""));
@@ -652,7 +709,8 @@ pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, 
 
 /// Applies a theme now and puts everything back after `secs` (or on `cancel`). Blocks; run it on a thread.
 pub fn preview(src: &Source, paths: &Paths, name: &str, secs: u64, cancel: &std::sync::atomic::AtomicBool) -> Result<Applied, String> {
-    let a = apply(src, paths, name, &src.selection())?;
+    let plan = plan_with_widgets(src, paths, name, &src.selection(), WidgetChoice::Keep)?;
+    let a = execute(src, paths, plan)?;
     if a.undo_id.is_empty() {
         return Ok(a);
     }
@@ -977,36 +1035,53 @@ y = -30
     }
 
     #[test]
-    fn every_theme_preserves_global_widget_choices_and_unknown_fields() {
-        let (d, src, paths) = sandbox("widgets-global");
+    fn custom_widgets_require_a_choice_and_survive_widgetless_themes() {
+        let (d, src, paths) = sandbox("widgets-choice");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
-        let widgets = json!({"enabled": false, "allow_exec": false, "future": {"test": 1}, "items": [
-            {"use": "builtin:clock-card", "enabled": false, "x": -100, "anchor": "top-right", "from_theme": true, "future": 2},
-            {"use": "builtin:sysmon-graph", "x": 30, "y": 200}
-        ]});
-        io::json_set(&paths.shell_json(), "widgets", Some(widgets.clone())).unwrap();
         install_sunset(&src);
-        for id in std::iter::once("sunset").chain(crate::theme::builtin::BUILTIN.iter().map(|(id, _)| *id)) {
-            apply(&src, &paths, id, &Selection::default()).unwrap();
-            assert_eq!(io::json_load(&paths.shell_json())["widgets"], widgets, "{id} overwrote widget preferences");
-        }
+        let widgets = json!({"enabled": true, "allow_exec": false, "future": 42,
+            "items": [{"use": "builtin:clock-card", "x": 123}]});
+        io::json_set(&paths.shell_json(), "widgets", Some(widgets.clone())).unwrap();
+        let before = std::fs::read(paths.shell_json()).unwrap();
+        assert!(widgets_need_confirmation(&src, &paths, "sunset").unwrap());
+        assert!(plan(&src, &paths, "sunset", &Selection::default()).is_err());
+        assert_eq!(std::fs::read(paths.shell_json()).unwrap(), before);
+        apply(&src, &paths, "nord", &Selection::default()).unwrap();
+        let hidden = io::json_load(&paths.shell_json())["widgets"].clone();
+        assert_eq!(hidden["enabled"], false);
+        assert_eq!(hidden["items"], widgets["items"]);
+        assert!(widgets_need_confirmation(&src, &paths, "sunset").unwrap());
+        let p = plan_with_widgets(&src, &paths, "sunset", &src.selection(), WidgetChoice::Keep).unwrap();
+        execute(&src, &paths, p).unwrap();
+        let kept = io::json_load(&paths.shell_json())["widgets"].clone();
+        assert_eq!(kept["enabled"], true);
+        assert_eq!(kept["items"], widgets["items"]);
+        assert_eq!(kept["future"], 42);
+        let p = plan_with_widgets(&src, &paths, "sunset", &src.selection(), WidgetChoice::Replace).unwrap();
+        execute(&src, &paths, p).unwrap();
+        let replaced = io::json_load(&paths.shell_json())["widgets"].clone();
+        assert_eq!(replaced["items"].as_array().unwrap().len(), 2);
+        assert_eq!(replaced["allow_exec"], false);
+        assert!(!custom_widgets(&replaced));
         let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]
-    fn first_theme_seeds_widgets_once_and_an_empty_library_stays_empty() {
-        let (d, src, paths) = sandbox("widgets-first-run");
+    fn theme_widgets_follow_the_theme_and_empty_layouts_accept_defaults() {
+        let (d, src, paths) = sandbox("widgets-theme");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         install_sunset(&src);
         apply(&src, &paths, "sunset", &Selection::default()).unwrap();
         let seeded = io::json_load(&paths.shell_json())["widgets"].clone();
         assert_eq!(seeded["items"].as_array().unwrap().len(), 2);
         apply(&src, &paths, "nord", &src.selection()).unwrap();
-        assert_eq!(io::json_load(&paths.shell_json())["widgets"], seeded);
-        let empty = json!({"enabled": true, "items": []});
-        io::json_set(&paths.shell_json(), "widgets", Some(empty.clone())).unwrap();
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"]["enabled"], false);
+        assert!(!widgets_need_confirmation(&src, &paths, "sunset").unwrap());
         apply(&src, &paths, "sunset", &src.selection()).unwrap();
-        assert_eq!(io::json_load(&paths.shell_json())["widgets"], empty);
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"], seeded);
+        io::json_set(&paths.shell_json(), "widgets", Some(json!({"enabled": true, "items": []}))).unwrap();
+        apply(&src, &paths, "sunset", &src.selection()).unwrap();
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"]["items"].as_array().unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(d);
     }
 
