@@ -55,6 +55,21 @@ fn shot(path: &PathBuf) -> Option<Pixmap> {
         .clone()
 }
 
+/// Uniform contain transform: preserve every image edge, with letterboxing as needed.
+fn draw_contain(pm: &mut Pixmap, img: &Pixmap, x: f32, y: f32, w: f32, h: f32) {
+    let scale = (w / img.width() as f32).min(h / img.height() as f32);
+    let tx = x + (w - img.width() as f32 * scale) / 2.0;
+    let ty = y + (h - img.height() as f32 * scale) / 2.0;
+    pm.draw_pixmap(
+        0,
+        0,
+        img.as_ref(),
+        &tiny_skia::PixmapPaint { quality: tiny_skia::FilterQuality::Bilinear, ..Default::default() },
+        tiny_skia::Transform::from_scale(scale, scale).post_translate(tx, ty),
+        None,
+    );
+}
+
 /// Draws the cards one under the other; returns the y below them.
 pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, cw: f32, it: &Interact, fr: &mut Frame) -> f32 {
     let s = p.s;
@@ -95,9 +110,7 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), cw - u(20.0), u(preview_h));
             match c.screenshot.as_ref().and_then(shot) {
                 Some(img) => {
-                    let scale = (pw / img.width() as f32).min(ph / img.height() as f32);
-                    let (iw, ih) = (img.width() as f32 * scale, img.height() as f32 * scale);
-                    super::ui::draw_cover(pm, &img, px + (pw - iw) / 2.0, py + (ph - ih) / 2.0, iw, ih, u(8.0));
+                    draw_contain(pm, &img, px, py, pw, ph);
                 }
                 None => {
                     fill_rounded(pm, px, py, pw, ph, u(8.0), pal::card());
@@ -180,6 +193,45 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edge_marked_preview_is_contained_without_stretch_at_multiple_aspects() {
+        let mut img = Pixmap::new(200, 100).unwrap();
+        img.fill(tiny_skia::Color::WHITE);
+        for y in 0..100usize {
+            for x in 0..200usize {
+                let color = if x < 8 {
+                    [255, 0, 0, 255]
+                } else if x >= 192 {
+                    [0, 255, 0, 255]
+                } else if y < 8 {
+                    [0, 0, 255, 255]
+                } else if y >= 92 {
+                    [255, 255, 0, 255]
+                } else {
+                    [255, 255, 255, 255]
+                };
+                img.data_mut()[(y * 200 + x) * 4..(y * 200 + x + 1) * 4].copy_from_slice(&color);
+            }
+        }
+        for (w, h) in [(300, 300), (400, 100), (100, 200)] {
+            let mut pm = Pixmap::new(w + 20, h + 20).unwrap();
+            draw_contain(&mut pm, &img, 10.0, 10.0, w as f32, h as f32);
+            let evidence = std::path::Path::new("target/preview-fit-evidence");
+            std::fs::create_dir_all(evidence).unwrap();
+            pm.save_png(evidence.join(format!("edges-{w}x{h}.png"))).unwrap();
+            let colored: Vec<_> = pm.pixels().iter().enumerate().filter(|(_, p)| p.alpha() > 0).collect();
+            let minx = colored.iter().map(|(i, _)| *i % pm.width() as usize).min().unwrap();
+            let maxx = colored.iter().map(|(i, _)| *i % pm.width() as usize).max().unwrap();
+            let miny = colored.iter().map(|(i, _)| *i / pm.width() as usize).min().unwrap();
+            let maxy = colored.iter().map(|(i, _)| *i / pm.width() as usize).max().unwrap();
+            assert!(((maxx - minx + 1) as f32 / (maxy - miny + 1) as f32 - 2.0).abs() < 0.05);
+            for rgb in [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]] {
+                assert!(pm.pixels().iter().any(|p| [p.red(), p.green(), p.blue()] == rgb), "missing edge {rgb:?}");
+            }
+            assert!(minx >= 10 && miny >= 10 && maxx < 10 + w as usize && maxy < 10 + h as usize);
+        }
+    }
 
     #[test]
     fn compact_theme_actions_wrap_inside_the_card_at_multiple_scales() {

@@ -73,9 +73,14 @@ fn render(dir: &std::path::Path, src: &Source, mode: &str) -> String {
 fn automatic_native_cache_tracks_palette_layout_widget_wallpaper_and_mode() {
     let (dir, src) = fixture();
     let before = fs::read(&src.shell_json).unwrap();
+    let start = std::time::Instant::now();
     let first = render(&dir, &src, "dark");
+    eprintln!("cold native preview: {:?}; evidence {}", start.elapsed(), dir.display());
     let original = fs::read(dir.join("result-dark.png")).unwrap();
+    let warm = std::time::Instant::now();
     assert_eq!(render(&dir, &src, "dark"), first, "unchanged inputs reuse the same cache entry");
+    eprintln!("persistent cached native preview: {:?}", warm.elapsed());
+    assert!(dir.join("cache/decebal/theme-previews/fontconfig").is_dir(), "font cache outlives individual jobs");
     assert_eq!(fs::read(dir.join("result-dark.png")).unwrap(), original);
     let manifest = dir.join("themes/probe/theme.toml");
     let s = fs::read_to_string(&manifest).unwrap();

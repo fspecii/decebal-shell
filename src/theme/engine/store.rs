@@ -35,7 +35,7 @@ impl Origin {
 }
 
 /// One theme as the gallery and `theme list` show it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Info {
     pub id: String,
     pub name: String,
@@ -160,6 +160,87 @@ pub fn list(src: &Source) -> Vec<Info> {
             i
         })
         .collect()
+}
+
+// Metadata-only inventory for the integrity snapshot: include directory identity,
+// ctime and all entries (including docs/screenshots covered by package integrity).
+fn gallery_stamp(roots: &[PathBuf]) -> Result<String, String> {
+    fn walk(path: &Path, depth: usize, count: &mut usize, out: &mut String) -> Result<(), String> {
+        if depth > 8 || *count > 8192 {
+            return Err("gallery inventory limit".into());
+        }
+        *count += 1;
+        out.push_str(&path.to_string_lossy());
+        let m = match std::fs::symlink_metadata(path) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                out.push_str("missing");
+                return Ok(());
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            out.push_str(&format!("{:?}", (m.dev(), m.ino(), m.len(), m.mtime(), m.mtime_nsec(), m.ctime(), m.ctime_nsec())));
+        }
+        #[cfg(not(unix))]
+        out.push_str(&format!("{:?}", (m.len(), m.modified(), m.created())));
+        if m.is_dir() {
+            let mut paths = std::fs::read_dir(path).map_err(|e| e.to_string())?.map(|e| e.map(|e| e.path())).collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+            paths.sort();
+            for child in paths {
+                walk(&child, depth + 1, count, out)?;
+            }
+        }
+        Ok(())
+    }
+    let mut out = String::new();
+    for root in roots {
+        walk(root, 0, &mut 0, &mut out)?;
+    }
+    Ok(out)
+}
+
+/// Nonblocking gallery snapshot. Integrity verification and metadata I/O stay off the UI thread.
+/// A bounded single worker refreshes at most once per second while the gallery is requested.
+pub fn gallery_list(src: &Source) -> Vec<Info> {
+    use std::sync::{mpsc, Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+    type Snapshot = (PathBuf, Instant, Vec<Info>);
+    static SNAPSHOT: Mutex<Option<Snapshot>> = Mutex::new(None);
+    static PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static QUEUE: OnceLock<mpsc::SyncSender<Source>> = OnceLock::new();
+    let tx = QUEUE.get_or_init(|| {
+        let (tx, rx) = mpsc::sync_channel::<Source>(1);
+        std::thread::spawn(move || {
+            let mut previous: Option<(PathBuf, String, Vec<Info>)> = None;
+            for src in rx {
+                let stamp = gallery_stamp(&[src.themes_dir.clone(), system_dir()]);
+                let infos = match (&previous, &stamp) {
+                    (Some((path, old, infos)), Ok(stamp)) if path == &src.themes_dir && old == stamp => infos.clone(),
+                    _ => list(&src),
+                };
+                if let Ok(stamp) = stamp {
+                    previous = Some((src.themes_dir.clone(), stamp, infos.clone()));
+                }
+                let mut g = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
+                let changed = g.as_ref().is_none_or(|(path, _, old)| path != &src.themes_dir || old != &infos);
+                *g = Some((src.themes_dir, Instant::now(), infos));
+                PENDING.store(false, std::sync::atomic::Ordering::Release);
+                if changed {
+                    super::preview::notify_changed();
+                }
+            }
+        });
+        tx
+    });
+    let g = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
+    let current = g.as_ref().filter(|(path, _, _)| path == &src.themes_dir);
+    if current.is_none_or(|(_, at, _)| at.elapsed() >= Duration::from_secs(1)) && !PENDING.swap(true, std::sync::atomic::Ordering::AcqRel) && tx.try_send(src.clone()).is_err() {
+        PENDING.store(false, std::sync::atomic::Ordering::Release);
+    }
+    current.map(|(_, _, infos)| infos.clone()).unwrap_or_default()
 }
 
 /// Installs a package from a directory or `.dtheme`. Returns where it went and what the check said (warnings, hash).
@@ -334,6 +415,23 @@ pub fn export(src: &Source, id: &str, dest: &Path) -> Result<Report, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gallery_metadata_stamp_tracks_same_size_asset_and_inventory_changes() {
+        let root = std::env::temp_dir().join(format!("gallery-stamp-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let roots = [root.clone()];
+        std::fs::write(root.join("a"), "abc").unwrap();
+        let a = gallery_stamp(&roots).unwrap();
+        assert_eq!(a, gallery_stamp(&roots).unwrap());
+        std::fs::write(root.join("a"), "def").unwrap();
+        let b = gallery_stamp(&roots).unwrap();
+        assert_ne!(a, b);
+        std::fs::write(root.join("b"), "def").unwrap();
+        assert_ne!(b, gallery_stamp(&roots).unwrap());
+        std::fs::remove_file(root.join("a")).unwrap();
+        assert_ne!(b, gallery_stamp(&roots).unwrap());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     use crate::theme::engine::package::tests::{good, png};
 
     fn sandbox(name: &str) -> (PathBuf, Source) {

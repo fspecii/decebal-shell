@@ -72,7 +72,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     let src = source(m);
     let cur = src.find(&src.selection().name).map(|f| f.0).unwrap_or_default();
     let confirm = CONFIRM.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let infos: Vec<_> = store::list(&src).into_iter().filter(|i| i.origin == store::Origin::User || !crate::theme::palette::legacy_theme(&i.id)).collect();
+    let infos: Vec<_> = store::gallery_list(&src).into_iter().filter(|i| i.origin == store::Origin::User || !crate::theme::palette::legacy_theme(&i.id)).collect();
     let mut cards: Vec<Card> = infos.iter().filter(|i| i.origin != store::Origin::Builtin).map(|i| card_of(&src, i, i.id == cur, &confirm)).collect();
     cards.extend(infos.iter().filter(|i| i.origin == store::Origin::Builtin).map(|i| card_of(&src, i, i.id == cur, &confirm)));
     let current_note = (!cards.iter().any(|c| c.current))
@@ -261,7 +261,15 @@ mod appearance_tests {
     #[test]
     fn the_gallery_shows_desktop_designs_and_not_legacy_colour_variants() {
         let (m, _) = crate::settings::model::tests_support::model_with("[general]\n");
-        let cards = items(&m).into_iter().find_map(|i| if let Item::ThemeCards(c) = i { Some(c) } else { None }).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let cards = loop {
+            let cards = items(&m).into_iter().find_map(|i| if let Item::ThemeCards(c) = i { Some(c) } else { None }).unwrap();
+            if !cards.is_empty() {
+                break cards;
+            }
+            assert!(std::time::Instant::now() < deadline, "gallery discovery timed out");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
         for id in ["macos", "windows11", "caelestia", "nothing-dot", "brutalist"] {
             assert!(cards.iter().any(|c| c.id == id), "missing design {id}");
         }

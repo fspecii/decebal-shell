@@ -1,5 +1,5 @@
 //! Content-addressed, isolated native theme previews. No theme application or live provider is run.
-use super::{apply, archive::Limits, package, sha256, writer};
+use super::{apply, sha256, writer};
 use crate::settings::io::Paths;
 use crate::theme::{
     builtin,
@@ -13,7 +13,7 @@ use crate::widgets::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -25,7 +25,7 @@ use std::{
 };
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-pub const VERSION: &str = "native-theme-preview-1";
+pub const VERSION: &str = "native-theme-preview-2";
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -58,6 +58,71 @@ fn deco_renderer() -> Option<PathBuf> {
         .or_else(|| std::env::current_exe().ok().map(|p| p.with_file_name("decebal-deco-preview")).filter(|p| p.is_file()))
 }
 
+// Metadata is only consulted on the background worker. ctime catches same-size writes
+// even when a producer restores mtime; content remains the authoritative cache key.
+type DigestCache = HashMap<PathBuf, (String, [u8; 32])>;
+static DIGESTS: Mutex<Option<DigestCache>> = Mutex::new(None);
+fn asset_digest(path: &Path) -> Result<[u8; 32], String> {
+    let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !m.is_file() {
+        return Err("preview asset is not a regular file".into());
+    }
+    #[cfg(unix)]
+    let stamp = {
+        use std::os::unix::fs::MetadataExt;
+        format!("{}:{}:{}:{}:{}:{}:{}", m.dev(), m.ino(), m.len(), m.mtime(), m.mtime_nsec(), m.ctime(), m.ctime_nsec())
+    };
+    #[cfg(not(unix))]
+    let stamp = format!("{}:{:?}:{:?}", m.len(), m.modified(), m.created());
+    let mut g = DIGESTS.lock().unwrap_or_else(|e| e.into_inner());
+    let cache = g.get_or_insert_with(HashMap::new);
+    if let Some((old, digest)) = cache.get(path) {
+        if old == &stamp {
+            return Ok(*digest);
+        }
+    }
+    if m.len() > 32 << 20 {
+        return Err("preview asset too large".into());
+    }
+    let mut h = sha256::Sha256::default();
+    h.update(&fs::read(path).map_err(|e| e.to_string())?);
+    let digest = h.finish();
+    if cache.len() >= 4096 {
+        cache.clear();
+    }
+    cache.insert(path.to_owned(), (stamp, digest));
+    Ok(digest)
+}
+fn hash_assets(root: &Path, dir: &Path, depth: usize, count: &mut usize, total: &mut u64, hash: &mut sha256::Sha256) -> Result<(), String> {
+    if depth > 6 {
+        return Err("preview assets nested too deeply".into());
+    }
+    let mut paths = fs::read_dir(dir).map_err(|e| e.to_string())?.map(|e| e.map(|e| e.path())).collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    paths.sort();
+    for path in paths {
+        *count += 1;
+        if *count > 512 {
+            return Err("too many preview assets".into());
+        }
+        let rel = path.strip_prefix(root).map_err(|e| e.to_string())?.to_string_lossy();
+        if rel.starts_with("screenshots/") || rel == "screenshots" || rel.ends_with(".md") || rel.ends_with(".txt") {
+            continue;
+        }
+        let m = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+        if m.is_dir() {
+            hash_assets(root, &path, depth + 1, count, total, hash)?;
+        } else {
+            *total = total.saturating_add(m.len());
+            if *total > 128 << 20 {
+                return Err("preview package too large".into());
+            }
+            hash.update(rel.as_bytes());
+            hash.update(&asset_digest(&path)?);
+        }
+    }
+    Ok(())
+}
+
 /// Raw manifests, inherited assets, builtin references, effective palette and native renderer identity.
 /// Screenshots/docs are deliberately excluded: generated evidence must not invalidate itself.
 pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String> {
@@ -71,17 +136,7 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
             return Err("preview inheritance loop".into());
         }
         if let Some(dir) = config::package_dir(&src.themes_dir, &id) {
-            let entries = package::read_dir(&dir, &Limits::default())?;
-            for entry in entries.iter().filter(|e| {
-                e.path == "theme.toml"
-                    || e.path.starts_with("widgets/")
-                    || e.path.starts_with("wallpapers/")
-                    || e.path.starts_with("fonts/")
-                    || !(e.path.starts_with("screenshots/") || e.path.ends_with(".md") || e.path.ends_with(".txt"))
-            }) {
-                hash.update(entry.path.as_bytes());
-                hash.update(&entry.data);
-            }
+            hash_assets(&dir, &dir, 0, &mut 0, &mut 0, &mut hash)?;
         } else if let Ok(text) = fs::read(src.themes_dir.join(format!("{id}.toml"))) {
             hash.update(&text);
         } else if let Some(text) = builtin::source(&id) {
@@ -152,7 +207,8 @@ fn run(j: &Job) -> Result<(), String> {
         let file = j.work.join("job.json");
         fs::write(&file, serde_json::to_vec(j).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         let xml = |p: &Path| p.to_string_lossy().replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-        let config = format!("<?xml version=\"1.0\"?><!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\"><fontconfig><include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>{}<cachedir>{}</cachedir></fontconfig>", j.font_dirs.iter().map(|p|format!("<dir>{}</dir>",xml(p))).collect::<String>(),xml(&j.work.join("font-cache")));
+        fs::create_dir_all(cache_dir().join("fontconfig")).map_err(|e| e.to_string())?;
+        let config = format!("<?xml version=\"1.0\"?><!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\"><fontconfig><include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>{}<cachedir>{}</cachedir></fontconfig>", j.font_dirs.iter().map(|p|format!("<dir>{}</dir>",xml(p))).collect::<String>(),xml(&cache_dir().join("fontconfig")));
         fs::write(j.work.join("fonts.conf"), config).map_err(|e| e.to_string())?;
         let mut cmd = Command::new(renderer());
         cmd.env("FONTCONFIG_FILE", j.work.join("fonts.conf"));
@@ -204,7 +260,13 @@ pub fn generate(src: &Source, selection: &Selection) -> Result<PathBuf, String> 
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let output = dir.join(format!("{key}.png"));
     if !output.is_file() {
-        run(&job(src, selection, output.clone()))?;
+        if output.with_extension("error").is_file() {
+            return Err("Native preview unavailable".into());
+        }
+        if let Err(e) = run(&job(src, selection, output.clone())) {
+            let _ = fs::write(output.with_extension("error"), &e);
+            return Err(e);
+        }
     }
     prune(&dir);
     Ok(output)
@@ -230,39 +292,45 @@ fn prune(dir: &Path) {
 
 /// Automatic lazy generation on gallery discovery/import/change. One bounded worker, no per-card process storm.
 pub fn request(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, String> {
-    let key = fingerprint(src, selection)?;
-    let dir = cache_dir();
-    let output = dir.join(format!("{key}.png"));
-    if output.is_file() {
-        return Ok(Some(output));
-    }
-    if dir.join(format!("{key}.error")).is_file() {
-        return Err("Native preview unavailable".into());
-    }
-    static QUEUE: OnceLock<mpsc::SyncSender<Job>> = OnceLock::new();
+    // Only memory lookup and bounded enqueue on the GUI thread. No stat/read/font lookup.
+    type Results = HashMap<String, (Instant, Result<Option<PathBuf>, String>)>;
+    static RESULTS: OnceLock<Mutex<Results>> = OnceLock::new();
+    static QUEUE: OnceLock<mpsc::SyncSender<(String, Source, Selection)>> = OnceLock::new();
+    let id = format!("{:?}:{}", src.themes_dir, selection.to_json());
+    let results = RESULTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let cached = results.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned();
     let queue = QUEUE.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel::<Job>(32);
+        let (tx, rx) = mpsc::sync_channel::<(String, Source, Selection)>(32);
         std::thread::spawn(move || {
-            for j in rx {
-                let key = j.output.file_stem().unwrap_or_default().to_string_lossy().to_string();
-                let _ = fs::create_dir_all(j.output.parent().unwrap());
-                if let Err(e) = run(&j) {
-                    let _ = fs::write(j.output.with_extension("error"), e);
+            for (id, src, selection) in rx {
+                let result = generate(&src, &selection).map(Some);
+                let mut g = RESULTS.get().unwrap().lock().unwrap_or_else(|e| e.into_inner());
+                let changed = g.get(&id).is_none_or(|(_, old)| old != &result);
+                if g.len() >= 256 {
+                    g.clear();
                 }
+                g.insert(id.clone(), (Instant::now(), result));
+                drop(g);
                 if let Some(p) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-                    p.remove(&key);
+                    p.remove(&id);
                 }
-                prune(j.output.parent().unwrap());
-                CHANGED.store(true, Ordering::Release);
+                if changed {
+                    CHANGED.store(true, Ordering::Release);
+                }
             }
         });
         tx
     });
-    let mut guard = PENDING.lock().unwrap_or_else(|e| e.into_inner());
-    if guard.get_or_insert_with(HashSet::new).insert(key.clone()) && queue.try_send(job(src, selection, output)).is_err() {
-        guard.as_mut().unwrap().remove(&key);
+    if cached.as_ref().is_none_or(|(at, _)| at.elapsed() >= Duration::from_secs(1)) {
+        let mut guard = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.get_or_insert_with(HashSet::new).insert(id.clone()) && queue.try_send((id.clone(), src.clone(), selection.clone())).is_err() {
+            guard.as_mut().unwrap().remove(&id);
+        }
     }
-    Ok(None)
+    cached.map(|(_, result)| result).unwrap_or(Ok(None))
+}
+pub(crate) fn notify_changed() {
+    CHANGED.store(true, Ordering::Release);
 }
 pub fn take_changed() -> bool {
     CHANGED.swap(false, Ordering::AcqRel)
@@ -423,4 +491,37 @@ pub fn worker(file: &Path) -> Result<(), String> {
     fs::write(j.output.with_extension("json"), json!({"renderer":VERSION,"selection":selection.to_json(),"widgets":count,"notes":notes,"desktop":[WIDTH,HEIGHT]}).to_string())
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod performance_tests {
+    use super::*;
+    #[test]
+    fn asset_digest_reuses_unchanged_content_and_tracks_same_size_rewrites() {
+        let dir = std::env::temp_dir().join(format!("preview-digest-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("wallpaper");
+        fs::write(&path, vec![1u8; 4 << 20]).unwrap();
+        let first = asset_digest(&path).unwrap();
+        let before = Instant::now();
+        for _ in 0..100 {
+            assert_eq!(asset_digest(&path).unwrap(), first);
+        }
+        eprintln!("100 warm 4MiB asset digest lookups: {:?}", before.elapsed());
+        let old_mtime = fs::metadata(&path).unwrap().modified().unwrap();
+        fs::write(&path, vec![2u8; 4 << 20]).unwrap();
+        fs::File::options().write(true).open(&path).unwrap().set_times(fs::FileTimes::new().set_modified(old_mtime)).unwrap();
+        assert_ne!(asset_digest(&path).unwrap(), first);
+        fs::remove_file(&path).unwrap();
+        assert!(asset_digest(&path).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn gui_request_never_waits_for_asset_digest_lock() {
+        let _guard = DIGESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let src = Source { shell_json: "/nonexistent/preview.json".into(), themes_dir: "/nonexistent/themes".into() };
+        let start = Instant::now();
+        let _ = request(&src, &Selection::default());
+        assert!(start.elapsed() < Duration::from_millis(100));
+    }
 }

@@ -82,3 +82,13 @@ that ignored picker test separately passed in dark and light. Read-only rdwm
 core/deco suite: 526 passed, zero failed, two ignored. Native catalogue: 60
 mode/scale/state sheets with real hit-area assertions. All-target/all-feature
 Clippy with warnings denied, formatting and diff checks are required before handoff.
+
+## Preview performance/fitting follow-up — 2026-10-30
+
+Parent `8c62a7e` inspected read-only: helper autodiscovery retained, merged DotText /
+Ascii understood and left untouched. GUI preview resolution and gallery integrity
+work now use bounded workers, process-local metadata/digest memoization, shared
+private fontconfig cache and direct uniform contain drawing. No Settings sizing or
+widget renderer edits. See `theme-previews.md` for measurements and edge-marker QA.
+Rejected: per-job cold font caches, synchronous per-card asset hashing, cover/rounded
+crop for evidence. Viewport priority remains deferred; FIFO queue is bounded to32.

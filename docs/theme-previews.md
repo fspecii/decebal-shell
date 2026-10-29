@@ -10,7 +10,7 @@ semantic color swatches, not a hard-coded desktop illustration.
 same path. No theme IDs choose preview layouts. Effective definitions and
 inheritance drive the production apply **plan**, which writes only private plan
 files and never calls apply/reload. A separate `decthemectl` worker runs with private
-HOME/XDG/config/runtime/fontconfig cache, no display or session bus and automatic
+HOME/XDG/config/runtime directories and a shared private preview fontconfig cache, no display or session bus and automatic
 system theming disabled. It never starts the widget host, WM or desktop event loop.
 Theme actions/commands are never executed. Original installed user font directories
 can be read through private fontconfig; they are not changed or registered.
@@ -71,7 +71,24 @@ palette contents, layout, artwork or widget code therefore choose a new artifact
 Renderer changes must bump `preview::VERSION`; rebuilt helper identity also
 invalidates caches automatically.
 
-One bounded background worker handles gallery requests. Rendering times out after
+GUI card assembly only reads in-memory preview results and submits to a bounded queue;
+it never fingerprints packages, reads assets, or discovers fonts. A separate bounded
+inventory worker handles gallery metadata and integrity verification. Unchanged
+metadata inventories reuse those results. Preview asset SHA256 digests are memoized
+by path/device/inode/size/mtime/ctime (nanosecond precision on Linux); same-size writes,
+atomic replacement and removals invalidate them. Content digests remain authoritative
+for artifact names. Memoization is process-local; persistent PNG reuse still works
+across launches. Revalidation is throttled to once per second per requested selection;
+the last completed preview can remain visible until replacement finishes.
+
+One bounded background render worker handles gallery requests. The fontconfig cache
+lives at `theme-previews/fontconfig` across jobs rather than in disposable job homes;
+system font caches remain readable, and original user font directories remain read-only.
+The existing parent helper autodiscovery beside the running executable is preserved.
+Queue order remains gallery order (32 pending maximum); viewport priority is deferred
+because visibility belongs to card painting while package requests precede layout.
+Offscreen themes may still queue; this patch does not claim faster native painting.
+ Rendering times out after
 45 seconds, publishes PNGs atomically, wakes the gallery and retains a failure
 reason under the same key instead of retrying forever. The gallery fits the whole
 image, including its sample-data footer, rather than cropping it. The persistent
@@ -96,3 +113,11 @@ component evidence. The earlier individual sample/empty cards remain useful QA.
 Parent preview-gallery commits through `e33a0f1` were preserved via three local
 cherry-picks before this change. This work does not replace its livewall gallery,
 video preview implementation or unrelated Settings changes.
+
+Performance/fitting regression (2026-10-30): the fixture measured 1.48–1.54 s cold and
+47–49 ms persistent cached render on this machine (small 20px wallpaper, one widget;
+not a full-theme benchmark). 100 memoized 4 MiB asset digest lookups took 261–292 µs.
+`settings::themecards::tests::edge_marked_preview_is_contained_without_stretch_at_multiple_aspects`
+checks all four distinct edge colors and the 2:1 aspect ratio in square/wide/tall
+slots, with PNG evidence in `target/preview-fit-evidence/`. The gallery now uses a
+uniform contain pixmap transform directly, without a cover crop or rounded edge mask.
