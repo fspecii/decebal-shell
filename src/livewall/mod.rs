@@ -1,5 +1,6 @@
-//! Video wallpapers: local media, Commons discovery and an optional lightweight player host.
+//! Video wallpapers: local media, DesktopHut/Commons discovery and an optional lightweight player host.
 pub mod catalog;
+pub mod desktophut;
 pub mod host;
 pub mod pane;
 
@@ -146,6 +147,11 @@ pub fn cli(args: &[String]) -> Result<String, String> {
             Ok("Live wallpaper stopped; still frame kept".into())
         }
         Some("status") => Ok(json!({"config":Config::load(),"runtime": io::json_load(&host::status_path())}).to_string()),
+        Some("desktophut") => match args.get(1).map(String::as_str) {
+            Some("search") => serde_json::to_string_pretty(&desktophut::search(&args[2..].join(" "), 0)?).map_err(|e| e.to_string()),
+            Some("download") => Ok(desktophut::download_page(args.get(2).ok_or("DesktopHut download needs a source page URL")?)?.display().to_string()),
+            _ => Err("decwall desktophut search WORDS | download PAGE_URL".into()),
+        },
         Some("search") => Ok(serde_json::to_string_pretty(&catalog::search(&args[1..].join(" "), 0)?).map_err(|e| e.to_string())?),
         Some("download") => {
             let id = args.get(1).ok_or("download needs the numeric Commons page id from search")?.parse::<u64>().map_err(|_| "Invalid Commons page id")?;
@@ -153,7 +159,7 @@ pub fn cli(args: &[String]) -> Result<String, String> {
             let path = catalog::download(&media)?;
             Ok(path.display().to_string())
         }
-        _ => Err("decwall daemon | set VIDEO | off | status | search WORDS | download COMMONS_ID".into()),
+        _ => Err("decwall daemon | set VIDEO | off | status | search WORDS | download COMMONS_ID | desktophut search WORDS | desktophut download PAGE_URL".into()),
     }
 }
 

@@ -1,6 +1,6 @@
 # Live wallpapers
 
-Open **System Settings → Wallpaper → Live wallpapers**. Paste a local MP4, WebM, MKV, MOV or OGV path and choose **Use this video**, or search Wikimedia Commons and choose **Download and use**. The existing My backgrounds and Wallhaven tabs still select still images.
+Open **System Settings → Wallpaper → Live wallpapers**. Paste a local MP4, WebM, MKV, MOV or OGV path and choose **Use this video**, or search DesktopHut or Wikimedia Commons and choose **Download and use**. The existing My backgrounds and Wallhaven tabs still select still images.
 
 The player is optional: install `ffmpeg` to extract the fallback image, `mpv` for an X11 session, or `mpvpaper` for a Wayland session. No video plays until selected. `decwall daemon` restores an enabled selection at login; the supplied XDG autostart entry is limited to rdwm. A disabled selection exits immediately instead of leaving a background daemon. The systemd user unit is an alternative; do not enable it as well as the autostart entry.
 
@@ -16,6 +16,10 @@ X11 uses input-transparent, override-redirect DESKTOP windows, below widgets, pa
 
 ## Online source
 
+[DesktopHut](https://www.desktophut.com/) is the default curated live-wallpaper source. Search by keyword, or leave the search empty to browse recent uploads, then **Download and use**. Decebal reads the public gallery and each wallpaper’s structured VideoObject metadata to fetch the original MP4 rather than its short preview. No account or API key is required. Source terms remain with the wallpaper; these files are not assumed to have an open licence. Use the source button to check details. The site’s HTML can change; failures leave the existing wallpaper unchanged.
+
+DesktopHut pages are capped at 48 cards, with at most 12 cached previews per page and deduplication across pages. Only HTTPS source pages, images and original MP4 files on `www.desktophut.com` are accepted; redirects are rejected. Responses and video downloads are bounded (512 MB for videos). The existing still-frame/fullscreen pause and muted playback behavior applies to both providers.
+
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Commons:Video) provides videos without an API key. Search uses the official [MediaWiki videoinfo API](https://www.mediawiki.org/wiki/Extension:TimedMediaHandler/API). It is a general media library, not a curated rice/wallpaper catalogue; refine searches such as `cloud timelapse`, `waterfall` or `abstract animation`, and check the source page. This picker does not promise Wallhaven-style content filtering.
 
 The picker shows thumbnails, dimensions, download size, author and licence, with a source-page button. Search pages contain at most 12 items and searches are separated by at least two seconds. Downloads occur only on explicit selection, from Wikimedia media hosts, with bounded responses, timeouts and a 512 MB video limit. Search results above 7680×4320 are excluded. Creator/licence/source metadata is saved in a `.credit.json` sidecar for offline attribution. Cached thumbnails are separate from the video library. Videos are downloaded before playback, not streamed in the background.
@@ -26,6 +30,8 @@ The picker shows thumbnails, dimensions, download size, author and licence, with
 decwall set /path/to/loop.webm
 decwall status                         # config plus player states and errors
 decwall off                            # keep the still image
+decwall desktophut search cyberpunk
+decwall desktophut download https://www.desktophut.com/PAGE-SLUG
 decwall search clouds timelapse
 decwall download 81916645              # Commons page id returned by search
 # Set the returned local path with decwall set.

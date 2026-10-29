@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 #[derive(Default)]
 pub struct State {
     pub path: String,
+    pub commons: bool,
     pub query: String,
     pub results: Vec<Media>,
     pub next: Option<u64>,
@@ -60,13 +61,22 @@ pub fn items(m: &Model) -> Vec<Item> {
         text: "Requires ffmpeg and mpv on X11; Wayland uses mpvpaper. Playback pauses on covered outputs. Selecting a picture or a theme wallpaper stops the video.".into(),
         warn: false,
     });
-    out.push(Item::Header("Wikimedia Commons videos".into()));
+    out.push(Item::Header(if lw.commons { "Wikimedia Commons videos" } else { "DesktopHut live wallpapers" }.into()));
     out.push(Item::Card(vec![
+        Row::new("Source").ctl(Ctl::new("lw:provider", Kind::Seg(vec![("DesktopHut".into(), "desktophut".into()), ("Commons".into(), "commons".into())], Some(usize::from(lw.commons))))),
         Row::new("Search").detail("Try clouds, waterfall, ocean or abstract animation").ctl(Ctl::new("lw:query", Kind::Text { val: lw.query.clone(), hint: "landscape nature".into() })),
-        Row::new("Find videos").detail("Openly licensed videos; no API key required").ctl(button("lw:search", "Search Commons", !lw.busy)),
+        Row::new("Find videos")
+            .detail(if lw.commons { "Openly licensed videos; no API key required" } else { "Curated animated wallpapers; leave search empty to browse recent uploads" })
+            .ctl(button("lw:search", if lw.commons { "Search Commons" } else { "Search DesktopHut" }, !lw.busy)),
     ]));
     out.push(Item::Note {
-        text: "Commons is a general media library, not a curated wallpaper gallery. Check each source page for content and attribution. Downloads keep the source and credits beside the video.".into(),
+        text: if lw.commons {
+            "Commons is a general media library. Check each source page for content and attribution."
+        } else {
+            "DesktopHut downloads use the original MP4. Check source terms; wallpapers are not assumed to be openly licensed."
+        }
+        .to_string()
+            + " Downloads keep source details beside the video.",
         warn: false,
     });
     for media in &lw.results {
@@ -74,7 +84,11 @@ pub fn items(m: &Model) -> Vec<Item> {
             out.push(Item::Preview { id: p.to_string_lossy().into_owned(), caption: media.title.clone() });
         }
         out.push(Item::Card(vec![
-            Row::new(&media.title).detail(format!("{} × {} · {:.1} MB · {}", media.width, media.height, media.bytes as f64 / 1048576., media.license)),
+            Row::new(&media.title).detail(if media.bytes == 0 {
+                "MP4 · resolution and size on source page · ".to_string() + &media.license
+            } else {
+                format!("{} × {} · {:.1} MB · {}", media.width, media.height, media.bytes as f64 / 1048576., media.license)
+            }),
             Row::new("Creator").detail(&media.artist).ctl(button(&format!("lw:source:{}", media.id), "Source and licence", true)),
             Row::new("Live wallpaper").ctl(button(&format!("lw:use:{}", media.id), "Download and use", !lw.busy)),
         ]));
@@ -100,6 +114,12 @@ fn work(m: &mut Model, f: impl FnOnce() -> Result<Done, String> + Send + 'static
 }
 pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
     match (id, v) {
+        ("lw:provider", CtlVal::Str(s)) if !m.lw.busy && matches!(s.as_str(), "commons" | "desktophut") => {
+            m.lw.commons = s == "commons";
+            m.lw.results.clear();
+            m.lw.next = None;
+            m.lw.last_search = None;
+        }
         ("lw:path", CtlVal::Str(s)) => m.lw.path = s,
         ("lw:query", CtlVal::Str(s)) => m.lw.query = s,
         ("lw:set", CtlVal::Click) => {
@@ -135,9 +155,10 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             let append = id == "lw:more";
             let offset = if append { m.lw.next.unwrap_or(0) } else { 0 };
             let query = m.lw.query.clone();
+            let commons = m.lw.commons;
             if !m.lw.busy {
                 m.lw.last_search = Some(Instant::now());
-                work(m, move || catalog::search(&query, offset).map(|p| Done::Search(p, append)));
+                work(m, move || (if commons { catalog::search(&query, offset) } else { super::desktophut::search(&query, offset) }).map(|p| Done::Search(p, append)));
             }
         }
         (id, CtlVal::Click) if id.starts_with("lw:use:") => {
@@ -145,7 +166,7 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             if let Some(media) = m.lw.results.iter().find(|a| Some(a.id) == id).cloned() {
                 let paths = m.paths.clone();
                 work(m, move || {
-                    let p = catalog::download(&media)?;
+                    let p = if media.page.starts_with("https://www.desktophut.com/") { super::desktophut::download(&media)? } else { catalog::download(&media)? };
                     super::activate(super::prepare(&p)?, &paths)?;
                     Ok(Done::Applied)
                 });
@@ -175,7 +196,11 @@ pub fn pump(m: &mut Model) -> bool {
             if !append {
                 m.lw.results.clear();
             }
-            m.lw.results.extend(p.media);
+            for media in p.media {
+                if !m.lw.results.iter().any(|m| m.page == media.page) {
+                    m.lw.results.push(media);
+                }
+            }
             m.lw.next = p.next;
             if m.lw.results.is_empty() {
                 m.say("No supported videos found. Try another search.", false);
@@ -192,4 +217,23 @@ pub fn pump(m: &mut Model) -> bool {
     }
     m.dirty = true;
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::model::tests_support::model_with;
+    #[test]
+    fn provider_switch_clears_pagination_and_keeps_playback_settings() {
+        let (mut m, _) = model_with("[general]\n");
+        assert!(!m.lw.commons);
+        m.lw.next = Some(3);
+        apply(&mut m, "lw:provider", CtlVal::Str("commons".into()));
+        assert!(m.lw.commons);
+        assert!(m.lw.next.is_none());
+        assert!(m.lw.results.is_empty());
+        m.lw.busy = true;
+        apply(&mut m, "lw:provider", CtlVal::Str("desktophut".into()));
+        assert!(m.lw.commons, "a running provider request cannot be switched underneath its result");
+    }
 }
