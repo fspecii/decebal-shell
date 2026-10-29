@@ -1,0 +1,45 @@
+format = 1
+id = "glyph-weather"
+name = "Glyph weather"
+size = [220, 220]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 26
+gap = 12
+align = "center"
+background = "popup"
+radius = 110
+
+[[root.children]]
+type = "icon"
+name = "{weather.icon|wx:113}"
+size = 64
+show_if = "weather.present"
+
+[[root.children]]
+type = "dot-text"
+text = "{weather.temp:int}\u00b0"
+show_if = "weather.present"
+size = 48
+
+[[root.children]]
+type = "text"
+text = "WEATHER"
+size = 11
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "Unavailable"
+size = 12
+color = "text_secondary"
+show_if = "!weather.present"
+
+[[root.children]]
+type = "dot-text"
+text = "—"
+size = 28
+color = "text_secondary"
+show_if = "!weather.present"

@@ -218,3 +218,16 @@ See [design, attribution, native render evidence and follow-ups](rice-batch.md).
 The gallery images are labelled headless compositions with real native widget
 pixels and sample data. Light artwork is bundled for manual selection; changing
 color mode preserves the selected wallpaper.
+
+## Screenshot ports
+
+- **Mountain Neon Dot**: generated alpine art, teal/rose/cyan, transparent stacked
+  dot clock, three widget islands, explicitly unconfigured homelab templates.
+  [Mapping, provenance and limits](../themes/mountain-neon-dot/README.md).
+- **Glyph Rice 1.1**: giant font-independent dot clock, six monochrome dashboard
+  widgets, native left rail and enabled window buttons.
+  [Mapping, attribution and limits](../themes/glyph-rice/README.md).
+
+Both include actual native dark/light sample/empty widget evidence in
+`docs/theme-ports/`. These are labelled headless compositions, not full desktop
+captures. Theme ownership/backlog: [Theme Specialist](theme-specialist.md).

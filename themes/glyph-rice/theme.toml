@@ -1,11 +1,11 @@
 format = 1
 id = "glyph-rice"
 name = "Glyph Rice"
-version = "1.0.0"
+version = "1.1.0"
 author = "Nebelung-cloud; Decebal port contributors"
 license = "GPL-3.0-only"
 homepage = "https://github.com/Nebelung-cloud/glyph-rice"
-description = "Glyph's black, white dots and one red: left pill rail, rounded monochrome cards and a halftone orb."
+description = "Glyph's black dot texture, giant dot clock, left rail and six-card monochrome dashboard with honest weather, media and system data."
 tags = ["dark", "light", "monochrome", "dot-matrix", "glyph"]
 screenshots = ["screenshots/main.png"]
 
@@ -75,10 +75,10 @@ mode = "fill"
 match_colors = false
 
 [decoration]
-style = "borderonly"
+style = "minimal"
 height = 24
 radius = 20
-buttons = "none"
+buttons = "right"
 
 [rdwm]
 gap_inner = 10
@@ -117,19 +117,40 @@ bottom_right = "dashboard"
 use = "glyph-home"
 place = "desktop"
 anchor = "top-left"
-x = 150
-y = 130
+x = 190
+y = 175
 
 [[widgets]]
-use = "glyph-system"
+use = "glyph-weather"
 place = "desktop"
 anchor = "top-right"
-x = -60
-y = 170
+x = -560
+y = 150
+
+[[widgets]]
+use = "glyph-calendar"
+place = "desktop"
+anchor = "top-right"
+x = -320
+y = 150
+
+[[widgets]]
+use = "glyph-day"
+place = "desktop"
+anchor = "top-right"
+x = -80
+y = 150
 
 [[widgets]]
 use = "glyph-player"
 place = "desktop"
 anchor = "top-right"
-x = -60
+x = -320
 y = 390
+
+[[widgets]]
+use = "glyph-system"
+place = "desktop"
+anchor = "top-right"
+x = -80
+y = 630

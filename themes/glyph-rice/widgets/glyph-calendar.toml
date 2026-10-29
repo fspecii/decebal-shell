@@ -1,0 +1,29 @@
+format = 1
+id = "glyph-calendar"
+name = "Glyph calendar"
+size = [220, 220]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 26
+gap = 20
+background = "popup"
+radius = 42
+
+[[root.children]]
+type = "text"
+text = "{clock:%B}"
+size = 12
+color = "text_secondary"
+
+[[root.children]]
+type = "dot-text"
+text = "{clock:%d}"
+size = 80
+
+[[root.children]]
+type = "text"
+text = "{clock:%a \u00b7 %Y}"
+size = 12
+color = "text_secondary"

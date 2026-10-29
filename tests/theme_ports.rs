@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const PORTS: &[&str] = &["mountain-neon-dot"];
+const PORTS: &[&str] = &["mountain-neon-dot", "glyph-rice"];
 
 fn root(id: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("themes").join(id)
@@ -115,6 +115,14 @@ fn native_port_widgets_fit_and_keep_absent_sources_honest() {
                     if empty && def.id == "summit-system" {
                         assert!(content.iter().any(|s| s.contains("Unavailable")));
                     }
+                    if empty && def.id == "glyph-weather" {
+                        assert!(content.iter().any(|s| s == "Unavailable"));
+                    }
+                    if empty && def.id == "glyph-player" {
+                        assert!(content.iter().any(|s| s == "No active player"));
+                        assert!(!layout::dump(&tree).contains("PlayPause"), "absent player must not offer transport controls");
+                    }
+
                     let pm = paint::render(&def, &d, &th, &mut fonts, file.parent().unwrap(), 0).unwrap();
                     assert!(pm.data().chunks_exact(4).any(|p| p[3] > 0));
                     if let Some(out) = std::env::var_os("DECEBAL_THEME_EVIDENCE") {
@@ -126,6 +134,27 @@ fn native_port_widgets_fit_and_keep_absent_sources_honest() {
                     }
                 }
             }
+        }
+    }
+}
+
+#[test]
+fn glyph_transport_tracks_mpris_state_without_fabricating_a_player() {
+    let def = dsl::parse(&fs::read_to_string(root("glyph-rice").join("widgets/glyph-player.toml")).unwrap(), Trust::Theme).unwrap();
+    for (present, playing, icon, controls) in [(true, true, "pause", true), (true, false, "play", true), (false, false, "", false)] {
+        let mut d = data::sample();
+        d.set("media.present", data::Val::Bool(present));
+        d.set("media.playing", data::Val::Bool(playing));
+        let tree = layout::layout(&def, &layout::Ctx { data: &d, metrics: &layout::Fixed, theme_radius: 20.0 }, None);
+        fn has_control(it: &Item) -> bool {
+            it.on_click == Some(decebal::widgets::actions::Action::Media(decebal::widgets::actions::Media::PlayPause)) || it.children.iter().any(has_control)
+        }
+        fn has_icon(it: &Item, icon: &str) -> bool {
+            matches!(&it.leaf, Leaf::Icon {name, ..} if name == icon) || it.children.iter().any(|i| has_icon(i, icon))
+        }
+        assert_eq!(has_control(&tree), controls);
+        if controls {
+            assert!(has_icon(&tree, icon));
         }
     }
 }

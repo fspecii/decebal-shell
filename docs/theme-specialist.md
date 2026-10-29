@@ -17,7 +17,7 @@ custom-widget Keep / Replace / Cancel policy. Do not touch `src/livewall` or
   right, no dock. Reusing six widget definitions and both imagegen wallpapers
   from `feat-mountain-neon-dot` (worker stopped by user). No upstream identity is
   known; do not guess one.
-- Priority 2, next: improve existing Glyph Rice from reference ending
+- Priority 2, completed in the Glyph refinement commit: improve existing Glyph Rice from reference ending
   `e808c311-08d1-4b1c-bcab-88b002ce1d9e.png`: giant dot time and greeting left,
   weather/calendar/day cards above MPRIS and system cards right, black dot texture,
   slim left rail. Reuse the stopped `feat-monochrome-dot-dashboard` worker's
@@ -79,3 +79,35 @@ Light QA required a backing behind system text and moving homelab off the peak.
 The stopped dot prototype also lacked a layout-dump match arm; completed it.
 A prototype pixel-gap assertion sampled the antialiased edge, not an empty gap;
 corrected the assertion while retaining the 0.43-cell round-dot radius.
+
+## Glyph refinement checkpoint
+
+Mountain commit: `3d93bf3728ef912b21d9cb5cfd25aaa384f0ce92` (includes shared dot
+text support). Glyph reuses that primitive and the stopped worker's six cards.
+Evidence: `docs/theme-ports/glyph-rice/`, dark/light and sample/empty. Old
+three-card renderer now delegates to the canonical six-card render path.
+
+Rejected: disabled caption buttons, ordinary-font clock, blank album-art holes,
+static play icons, unavailable temperature rendered as a real degree reading,
+and empty CPU graphs that look like a measured zero. Keep the original GPL
+palette/art/license; avoid adding guessed screenshot provenance. Renderer limits:
+continuous day ring/CPU line graph, no cover-decode failure predicate, fixed
+40 px native rail, 1920 × 1200 seed requiring smaller-screen layout edits.
+
+## Decoration track — queued after current ports
+
+Audit `/home/ambsd/Projects/rdwm/crates/rdwm-deco/src/config.rs`, styles and
+hit-testing read-only. Existing IDs found: macos, macos-light, classic, windows,
+windows-light, adwaita, adwaita-light, breeze, arc, materia, nord, gruvbox, dracula,
+minimal, borderonly. Do not duplicate them. Decebal's snapshot/picker still lists
+only macos/classic; first deliver a clear picker for supported structural styles,
+with functioning caption controls and representative native previews if feasible.
+Keep borderonly out of the normal button-style picker. Priorities after audit:
+GNOME/Adwaita, KDE/Breeze, Arc, then missing Elementary/Pantheon; Material already
+has `materia`. Catppuccin/Nordic/Orchis must be assessed for structure versus
+palette-only variants. Missing renderer work needs parent coordination of a
+proper tool-managed rdwm checkout; never edit the live rdwm source checkout.
+
+Preserve parent preview-gallery `e33a0f1`; no edits to `src/livewall`,
+`src/settings/app.rs` or parent-owned Settings UI renderer files. Keep catalogue,
+hit areas/actions, focused/unfocused, dark/light and scale QA for each delivery.

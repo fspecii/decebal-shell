@@ -1,0 +1,36 @@
+format = 1
+id = "glyph-day"
+name = "Glyph day"
+size = [220, 220]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "popup"
+radius = 110
+
+[[root.children]]
+type = "ring"
+value = "clock.hour"
+max = 24
+size = 202
+thickness = 3
+color = "text"
+track = "border"
+
+[[root.children]]
+type = "col"
+align = "center"
+justify = "center"
+gap = 15
+
+[[root.children.children]]
+type = "dot-text"
+text = "{clock:%H}"
+size = 54
+
+[[root.children.children]]
+type = "text"
+text = "DAY \u00b7 / 24H"
+size = 10
+color = "text_secondary"

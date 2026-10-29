@@ -27,6 +27,7 @@ fn glyph_restores_colours_preserves_widgets_and_selects_variant_art() {
     let dir = std::env::temp_dir().join(format!("glyph-contract-{}", std::process::id()));
     fs::create_dir_all(dir.join("shell")).unwrap();
     let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/glyph-rdwmctl".into(), socket: dir.join("no.sock") };
+    fs::write(&paths.rdwm_config, "[decoration]\nbuttons = false\n").unwrap();
     let src = Source { shell_json: paths.shell_json(), themes_dir: root().parent().unwrap().to_path_buf() };
     let widgets = json!({"enabled":false,"future":42,"items":[{"use":"builtin:clock-card","enabled":false,"x":123,"options":{"private":"retain"}}]});
     fs::write(paths.shell_json(), json!({"theme":{"name":"nord","palette":"nord"},"widgets":widgets,"unrelated":123}).to_string()).unwrap();
@@ -45,7 +46,9 @@ fn glyph_restores_colours_preserves_widgets_and_selects_variant_art() {
         assert_eq!(shell["unrelated"], 123);
         assert_eq!(shell["dock"]["enabled"], false);
         assert_eq!(shell["bar"]["position"], "left");
-        assert!(p.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new.contains(artwork));
+        let config = &p.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new;
+        assert!(config.contains(artwork));
+        assert!(config.contains("buttons = true"), "must recover from the old port's disabled buttons");
     }
     fs::remove_dir_all(dir).unwrap();
 }

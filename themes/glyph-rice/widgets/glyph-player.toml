@@ -1,39 +1,102 @@
 format = 1
 id = "glyph-player"
 name = "Glyph player"
-size = [460, 170]
+size = [460, 220]
 refresh = 1000
+
 [root]
-type = "col"
+type = "row"
 padding = 24
-gap = 10
+gap = 20
+align = "center"
 background = "popup"
-radius = 32
-border = "border@0.4"
+radius = 42
+
 [[root.children]]
+type = "stack"
+width = 150
+height = 150
+background = "surface"
+radius = 75
+border = "text_faint@0.3"
+
+[[root.children.children]]
+type = "image"
+source = "media.art"
+radius_px = 75
+fit = "cover"
+show_if = "media.art"
+
+[[root.children.children]]
+type = "col"
+align = "center"
+justify = "center"
+show_if = "!media.art"
+
+[[root.children.children.children]]
+type = "dot-text"
+text = "NO ART"
+size = 12
+color = "text_faint"
+
+[[root.children]]
+type = "col"
+gap = 12
+
+[[root.children.children]]
 type = "text"
 text = "NOW PLAYING"
-size = 12
+show_if = "media.playing"
+size = 11
 color = "text_secondary"
-[[root.children]]
+
+[[root.children.children]]
+type = "text"
+text = "MEDIA"
+show_if = "!media.playing"
+size = 11
+color = "text_secondary"
+
+[[root.children.children]]
 type = "text"
 text = "{media.title|No active player}"
-size = 24
-max_chars = 28
-[[root.children]]
+size = 22
+max_chars = 19
+
+[[root.children.children]]
 type = "text"
 text = "{media.artist|Media unavailable}"
-size = 13
+size = 12
 color = "text_secondary"
-[[root.children]]
+max_chars = 28
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+width = 230
+height = 2
+color = "text"
+show_if = "media.present"
+
+[[root.children.children]]
 type = "button"
 background = "accent"
-radius = 20
-height = 36
-width = 48
+radius = 26
+height = 52
+width = 52
 on_click = "media play-pause"
-[[root.children.children]]
+show_if = "media.present"
+
+[[root.children.children.children]]
+type = "icon"
+name = "pause"
+size = 20
+color = "accent_text"
+show_if = "media.playing"
+
+[[root.children.children.children]]
 type = "icon"
 name = "play"
-size = 18
+size = 20
 color = "accent_text"
+show_if = "!media.playing"
