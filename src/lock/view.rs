@@ -132,6 +132,11 @@ impl Painter {
 
     /// Draws the panel over the backdrop already in `pm`.
     pub fn draw(&mut self, pm: &mut Pixmap, v: &View) {
+        self.draw_static(pm, v);
+        self.draw_input(pm, v);
+    }
+
+    pub fn draw_static(&mut self, pm: &mut Pixmap, v: &View) {
         let th = crate::theme::th();
         let s = self.scale;
         let cx = pm.width() as f32 / 2.0;
@@ -165,7 +170,15 @@ impl Painter {
         let fw = 340.0 * s;
         let name = ellipsize(&self.name, |t| self.measure(Role::Ui, t, 22.0 * s, Weight::Medium), fw);
         self.text_center(pm, Role::Ui, &name, cx, 352.0 * s, 22.0 * s, Weight::Medium, fg(0.92));
+    }
 
+    /// Only the input/status region changes while typing; keep clock/avatar/name cached.
+    pub fn draw_input(&mut self, pm: &mut Pixmap, v: &View) {
+        let th = crate::theme::th();
+        let s = self.scale;
+        let cx = pm.width() as f32 / 2.0;
+        let fg = |a: f32| color(FG.0, FG.1, FG.2, a);
+        let fw = 340.0 * s;
         // password field
         let (fh, fy) = (54.0 * s, 398.0 * s);
         let fx = cx - fw / 2.0 + v.shake_dx * s;
@@ -197,9 +210,8 @@ impl Painter {
             };
             self.text_center(pm, Role::Ui, &text, cx, fy + fh + 16.0 * s, 16.0 * s, Weight::Medium, c);
         }
-        if let Some(f) = &self.fonts {
-            f.trim(); // fontdue faces are big: drop them between frames, the glyph cache keeps the pixels
-        }
+        // Retain font faces while locked: measuring the clock/name needs their metrics
+        // on every keypress, even when glyph pixels are cached. Drop with this painter.
     }
 }
 

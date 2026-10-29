@@ -7,7 +7,6 @@ use super::bg;
 use super::state::{Input, LockState, Outcome};
 use super::view::{panel_size, scale_for, Painter, View};
 use super::{face_path, BgMode, Config};
-use crate::gfx::blit_scaled;
 use crate::keysym::keysym_char;
 use crate::menubar::clock;
 use std::os::fd::AsRawFd;
@@ -176,12 +175,53 @@ fn blank_cursor(c: &RustConnection, root: Window) -> Option<Cursor> {
     Some(cur)
 }
 
+/// Separable fixed-point bilinear expansion of the small, already blurred backdrop.
+/// Avoids a general affine rasterizer over millions of pixels at lock startup.
+fn expand_backdrop(src: &Pixmap, w: u32, h: u32) -> Pixmap {
+    let axis = |out: u32, input: u32| -> Vec<(usize, usize, u32)> {
+        (0..out)
+            .map(|i| {
+                let pos = ((i as f64 + 0.5) * f64::from(input) / f64::from(out) - 0.5).clamp(0.0, f64::from(input - 1));
+                let a = pos.floor() as usize;
+                (a, (a + 1).min(input as usize - 1), ((pos - a as f64) * 256.0).round() as u32)
+            })
+            .collect()
+    };
+    let xs = axis(w, src.width());
+    let ys = axis(h, src.height());
+    let mut horizontal = vec![[0u32; 4]; w as usize * src.height() as usize];
+    for (sy, row) in horizontal.chunks_exact_mut(w as usize).enumerate() {
+        for (out, &(a, b, weight)) in row.iter_mut().zip(&xs) {
+            let a = &src.data()[(sy * src.width() as usize + a) * 4..][..4];
+            let b = &src.data()[(sy * src.width() as usize + b) * 4..][..4];
+            for c in 0..4 {
+                out[c] = u32::from(a[c]) * (256 - weight) + u32::from(b[c]) * weight;
+            }
+        }
+    }
+    let mut dst = Pixmap::new(w, h).expect("backdrop pixmap");
+    for (row, &(a, b, weight)) in dst.data_mut().chunks_exact_mut(w as usize * 4).zip(&ys) {
+        let ar = &horizontal[a * w as usize..][..w as usize];
+        let br = &horizontal[b * w as usize..][..w as usize];
+        for ((out, a), b) in row.chunks_exact_mut(4).zip(ar).zip(br) {
+            for c in 0..4 {
+                out[c] = ((a[c] * (256 - weight) + b[c] * weight + 32768) >> 16) as u8;
+            }
+        }
+    }
+    dst
+}
+
 struct Ui {
     w: u16,
     h: u16,
     depth: u8,
     small: Pixmap,
     panel: Pixmap,
+    backdrop: Pixmap,
+    panel_backdrop: Pixmap,
+    static_panel: Pixmap,
+    damage_y: u32,
     px: i32,
     py: i32,
     painter: Painter,
@@ -196,14 +236,23 @@ impl Ui {
         let px = mon.x + (mon.w as i32 - pw as i32) / 2;
         let py = mon.y + (mon.h as i32 - ph as i32) / 2 - (mon.h as f32 * 0.03) as i32;
         let painter = Painter::new(scale, &cfg.user.display, face_path(&cfg.user.home).as_deref());
-        Ui { w, h, depth, small, panel: Pixmap::new(pw, ph).expect("panel pixmap"), px, py, painter, last: None }
+        let backdrop = expand_backdrop(&small, u32::from(w), u32::from(h));
+        let mut panel_backdrop = Pixmap::new(pw, ph).expect("panel backdrop");
+        panel_backdrop.draw_pixmap(-px, -py, backdrop.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+        Ui { w, h, depth, small, backdrop, damage_y: 0, static_panel: panel_backdrop.clone(), panel_backdrop, panel: Pixmap::new(pw, ph).expect("panel pixmap"), px, py, painter, last: None }
     }
 
     /// Draws the backdrop and the panel for `view` into the panel pixmap.
     fn render(&mut self, view: &View) {
-        self.panel.fill(tiny_skia::Color::TRANSPARENT);
-        blit_scaled(&mut self.panel, &self.small, -(self.px as f32), -(self.py as f32), f32::from(self.w), f32::from(self.h), 1.0);
-        self.painter.draw(&mut self.panel, view);
+        let clock_lines = |v: &View| v.time.as_ref().map(|t| super::view::lines(t, v.hour12));
+        let redraw_static = self.last.as_ref().is_none_or(|last| clock_lines(last) != clock_lines(view));
+        self.damage_y = if redraw_static { 0 } else { (390.0 * self.painter.scale()).floor() as u32 };
+        if redraw_static {
+            self.static_panel.data_mut().copy_from_slice(self.panel_backdrop.data());
+            self.painter.draw_static(&mut self.static_panel, view);
+        }
+        self.panel.data_mut().copy_from_slice(self.static_panel.data());
+        self.painter.draw_input(&mut self.panel, view);
         self.last = Some(view.clone());
     }
 
@@ -220,10 +269,23 @@ impl Ui {
         let mut y = y0;
         while y < y1 {
             let rows = rows_per.min(y1 - y);
-            let mut pm = Pixmap::new((x1 - x0) as u32, rows as u32).ok_or_else(|| Error("pixmap".into()))?;
-            blit_scaled(&mut pm, &self.small, -(x0 as f32), -(y as f32), f32::from(self.w), f32::from(self.h), 1.0);
-            pm.draw_pixmap(self.px - x0, self.py - y, self.panel.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-            let mut bgrx = pm.take();
+            let width = (x1 - x0) as usize;
+            let mut bgrx = vec![0u8; width * rows as usize * 4];
+            for row in 0..rows {
+                let sy = y + row;
+                let dst = &mut bgrx[row as usize * width * 4..(row as usize + 1) * width * 4];
+                let offset = (sy as usize * usize::from(self.w) + x0 as usize) * 4;
+                dst.copy_from_slice(&self.backdrop.data()[offset..offset + width * 4]);
+                let py = sy - self.py;
+                let left = x0.max(self.px);
+                let right = x1.min(self.px + self.panel.width() as i32);
+                if py >= 0 && py < self.panel.height() as i32 && right > left {
+                    let from = (py as usize * self.panel.width() as usize + (left - self.px) as usize) * 4;
+                    let to = (left - x0) as usize * 4;
+                    let bytes = (right - left) as usize * 4;
+                    dst[to..to + bytes].copy_from_slice(&self.panel.data()[from..from + bytes]);
+                }
+            }
             for p in bgrx.chunks_exact_mut(4) {
                 p.swap(0, 2);
                 p[3] = 0xff;
@@ -239,7 +301,7 @@ impl Ui {
     }
 
     fn paint_panel(&self, c: &RustConnection, win: Window, gc: Gcontext) -> Result<(), Error> {
-        self.paint(c, win, gc, self.px, self.py, self.panel.width(), self.panel.height())
+        self.paint(c, win, gc, self.px, self.py + self.damage_y as i32, self.panel.width(), self.panel.height().saturating_sub(self.damage_y))
     }
 }
 
@@ -447,6 +509,87 @@ fn spawn_check(auth: Arc<dyn Authenticator>, secret: super::secret::Secret, tx: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expanded_backdrop_is_smooth_opaque_and_clamps_edges() {
+        let mut small = Pixmap::new(2, 1).unwrap();
+        small.data_mut().copy_from_slice(&[0, 0, 0, 255, 200, 100, 50, 255]);
+        let full = expand_backdrop(&small, 8, 4);
+        assert_eq!(&full.data()[..4], &[0, 0, 0, 255]);
+        assert_eq!(&full.data()[28..32], &[200, 100, 50, 255]);
+        assert!(full.pixel(3, 2).unwrap().red() > 0 && full.pixel(3, 2).unwrap().red() < 200);
+        assert!(full.pixels().iter().all(|p| p.alpha() == 255));
+        assert_eq!(&full.data()[..32], &full.data()[32..64]);
+    }
+
+    /// Rendering/upload only: no locker, grabs, password, or authenticator.
+    #[test]
+    #[ignore = "run through tests/e2e/lock-perf.sh on private Xvfb"]
+    fn private_x11_render_performance() {
+        assert_eq!(std::env::var("DECLOCK_PERF_PRIVATE").as_deref(), Ok("1"));
+        let display = std::env::var("DISPLAY").unwrap();
+        assert!(!matches!(display.as_str(), ":0" | ":1"));
+        let (c, n) = x11rb::connect(None).unwrap();
+        let screen = &c.setup().roots[n];
+        let (w, h) = (screen.width_in_pixels, screen.height_in_pixels);
+        assert_eq!((w, h), (3440, 1440));
+        let cfg = Config {
+            bg: BgMode::Screenshot,
+            blur: 3,
+            dim: 0.45,
+            hour12: false,
+            user: super::super::UserInfo { login: "test".into(), display: "Performance Test".into(), home: "/nonexistent".into() },
+        };
+        let start = Instant::now();
+        let small = make_backdrop(&c, &cfg, screen.root, w, h, screen.root_depth);
+        let captured = start.elapsed();
+        let mut ui = Ui::layout(&c, &cfg, screen.root, (w, h), small, screen.root_depth);
+        let laid_out = start.elapsed();
+        let win = c.generate_id().unwrap();
+        let gc = c.generate_id().unwrap();
+        c.create_window(screen.root_depth, win, screen.root, 0, 0, w, h, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new().background_pixel(0)).unwrap();
+        c.create_gc(gc, win, &CreateGCAux::new()).unwrap();
+        c.map_window(win).unwrap();
+        let state = LockState::new();
+        let mut view = View::from_state(&state, clock::now(), false, Instant::now());
+        ui.render(&view);
+        let rendered = start.elapsed();
+        ui.paint_all(&c, win, gc).unwrap();
+        c.get_input_focus().unwrap().reply().unwrap();
+        let startup = start.elapsed();
+        println!(
+            "LOCK_STAGES capture_ms={:.2} layout_ms={:.2} render_ms={:.2} upload_ms={:.2}",
+            captured.as_secs_f64() * 1000.0,
+            (laid_out - captured).as_secs_f64() * 1000.0,
+            (rendered - laid_out).as_secs_f64() * 1000.0,
+            (startup - rendered).as_secs_f64() * 1000.0
+        );
+        let mut timings = Vec::new();
+        for dots in 1..=20 {
+            let start = Instant::now();
+            view.dots = dots;
+            ui.render(&view);
+            ui.paint_panel(&c, win, gc).unwrap();
+            c.get_input_focus().unwrap().reply().unwrap();
+            timings.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        timings.sort_by(f64::total_cmp);
+        println!("LOCK_PERF startup_ms={:.2} key_median_ms={:.2} key_p95_ms={:.2}", startup.as_secs_f64() * 1000.0, timings[10], timings[19]);
+        // Cached/static split must produce the same complete image as a full redraw.
+        let mut reference = ui.panel_backdrop.clone();
+        let mut painter = Painter::new(ui.painter.scale(), "Performance Test", None);
+        painter.draw(&mut reference, &view);
+        assert_eq!(reference.data(), ui.panel.data());
+        let image = c.get_image(ImageFormat::Z_PIXMAP, win, ui.px as i16, ui.py as i16, ui.panel.width() as u16, ui.panel.height() as u16, !0).unwrap().reply().unwrap();
+        assert_eq!(image.data.len(), ui.panel.data().len());
+        for (actual, expected) in image.data.chunks_exact(4).zip(ui.panel.data().chunks_exact(4)) {
+            assert_eq!(&actual[..3], &[expected[2], expected[1], expected[0]], "partial upload left stale pixels");
+        }
+        let max_ms = std::env::var("DECLOCK_PERF_MAX_KEY_MS").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(250.0);
+        assert!(timings[10] < max_ms, "typing render/upload median exceeds {max_ms}ms");
+        c.destroy_window(win).unwrap();
+        c.flush().unwrap();
+    }
 
     #[test]
     fn keys_decode() {
