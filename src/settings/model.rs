@@ -80,6 +80,7 @@ pub struct Model {
     /// Wallpaper > Wallhaven tab (starts its workers only when opened).
     pub wh: super::wallhaven::Wh,
     pub lw: crate::livewall::pane::State,
+    pub wallpaper_palette_name: String,
     /// Keys the builders asked for / found missing in the schema (consistency test).
     pub used: RefCell<Vec<(String, String)>>,
     pub missing: RefCell<Vec<(String, String)>>,
@@ -119,6 +120,7 @@ impl Model {
             walls: None,
             wh: super::wallhaven::Wh::default(),
             lw: crate::livewall::pane::State::default(),
+            wallpaper_palette_name: "Wallpaper colours".into(),
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,

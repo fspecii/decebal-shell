@@ -102,3 +102,10 @@ so the tab stays around 30 MB resident in total. Workers start only when the tab
 ## Live wallpapers
 
 The **Live wallpapers** tab adds muted local videos and a Wikimedia Commons video search with source/licence information. Playback pauses on each output covered by a visible fullscreen app, retaining a frozen frame. An extracted image remains the normal rdwm wallpaper as a fallback. See [Live wallpapers](live-wallpapers.md) for dependencies, power behaviour, CLI commands and validation.
+
+
+## Match the theme to the wallpaper
+
+The Wallpaper section has a **Match wallpaper** box. Enable **Match wallpaper colours** to follow the selected picture automatically, with scheme, strength and contrast controls and a preview. The current theme keeps its layout and widgets.
+
+To keep an independent palette, enter a **Custom palette name** and choose **Create and apply**. Decebal extracts the wallpaper colours, saves dark and light variants in your palette folder, and applies them to the current theme. Saved palettes appear in Appearance → Palettes and can be reused with any theme. Existing palettes are preserved; repeated names receive a numbered suffix. Grey wallpapers produce a monochrome palette. For video wallpapers the extracted still image is used.

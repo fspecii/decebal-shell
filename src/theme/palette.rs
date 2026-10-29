@@ -97,6 +97,45 @@ pub fn user_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("palettes"))
 }
 
+/// Save semantic dark/light colour roles extracted from a wallpaper, without overwriting existing palettes.
+pub fn save_wallpaper(name: &str, dynamic: &super::model::Dynamic, dir: &std::path::Path) -> Result<String, String> {
+    use super::model::V;
+    let name = name.trim();
+    if name.is_empty() || name.len() > 120 || name.chars().any(char::is_control) {
+        return Err("Choose a palette name of 1–120 characters".into());
+    }
+    let slug = name.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect::<String>();
+    let slug = slug.trim_matches('-').chars().take(40).collect::<String>();
+    let base = format!("wallpaper-{}", if slug.is_empty() { "colours" } else { &slug });
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut id = base.clone();
+    let mut suffix = 2;
+    while dir.join(format!("{id}.toml")).exists() {
+        id = format!("{base}-{suffix}");
+        suffix += 1;
+    }
+    let mut dynamic = dynamic.clone();
+    if dynamic.colors.grey {
+        dynamic.scheme = super::material::Variant::Monochrome;
+    }
+    let mut doc = toml_edit::DocumentMut::new();
+    doc["name"] = toml_edit::value(name);
+    doc["description"] = toml_edit::value("Custom palette generated from wallpaper colours; independent of the selected theme");
+    for (variant, dark) in [("dark", true), ("light", false)] {
+        doc[variant] = toml_edit::Item::Table(toml_edit::Table::new());
+        let tokens = dynamic.roles(dark).tokens();
+        for key in COLOR_KEYS {
+            if let Some(V::S(value)) = tokens.get(*key) {
+                doc[variant][*key] = toml_edit::value(value.clone());
+            }
+        }
+    }
+    let text = doc.to_string();
+    parse(&text)?;
+    crate::settings::io::write_atomic(&dir.join(format!("{id}.toml")), &text)?;
+    Ok(id)
+}
+
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.')) && !id.starts_with('.')
 }
@@ -253,5 +292,28 @@ mod tests {
         let sel = Selection::default();
         assert_eq!(d.resolve("macos", true, &sel).background.hex(), "#101010");
         assert_eq!(d.resolve("macos", false, &sel).background, base.resolve("macos", false, &sel).background);
+    }
+}
+
+#[cfg(test)]
+mod wallpaper_palette_tests {
+    use super::*;
+    #[test]
+    fn saved_wallpaper_palettes_have_both_variants_and_never_overwrite() {
+        let dir = std::env::temp_dir().join(format!("decebal-generated-palette-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let dynamic = super::super::model::Dynamic { colors: super::super::extract::Extracted::from_color(super::super::model::Rgb(32, 140, 100)), ..Default::default() };
+        let id = save_wallpaper("My forest", &dynamic, &dir).unwrap();
+        let text = std::fs::read_to_string(dir.join(format!("{id}.toml"))).unwrap();
+        let def = parse(&text).unwrap();
+        for colors in [def.dark.unwrap(), def.light.unwrap()] {
+            for key in COLOR_KEYS {
+                assert!(colors.contains_key(*key));
+            }
+        }
+        assert_ne!(id, save_wallpaper("My forest", &dynamic, &dir).unwrap());
+        assert!(save_wallpaper("", &dynamic, &dir).is_err());
+        assert_eq!(text, std::fs::read_to_string(dir.join(format!("{id}.toml"))).unwrap());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

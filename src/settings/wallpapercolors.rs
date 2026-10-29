@@ -22,7 +22,7 @@ fn file_name(p: &str) -> String {
 /// Wallpaper pane hint: the colours follow what is chosen there. `None` while the feature is off.
 pub fn wallpaper_pane_note(m: &Model) -> Option<Item> {
     let d = Source { shell_json: m.paths.shell_json(), themes_dir: Source::discover().themes_dir }.selection().dynamic.filter(|d| d.enabled && d.source == Origin::Wallpaper)?;
-    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Change it in Appearance > Palettes.", d.scheme.title()), warn: false })
+    Some(Item::Note { text: format!("Match wallpaper is on ({}): the shell's colours follow the wallpaper you choose here. Adjust the matching controls here.", d.scheme.title()), warn: false })
 }
 
 /// The section's items. `now` is the theme as resolved with the layer applied.
@@ -113,12 +113,40 @@ pub fn items(sel: &Selection, now: &Theme) -> Vec<Item> {
     out
 }
 
+/// Controls for keeping the wallpaper-derived colours as a reusable, independent palette.
+pub fn save_items(m: &Model) -> Item {
+    let mut save = Ctl::new("th:dyn-palette-save", Kind::Button { label: "Create and apply".into(), danger: false });
+    save.enabled = m.current_wallpaper().is_some();
+    Item::Card(vec![
+        Row::new("Custom palette name")
+            .detail("Save dark and light colours from this wallpaper; keep the current theme design")
+            .ctl(Ctl::new("th:dyn-palette-name", Kind::Text { val: m.wallpaper_palette_name.clone(), hint: "Wallpaper colours".into() })),
+        Row::new("Create wallpaper palette").detail("The saved palette is also available in Appearance → Palettes").ctl(save),
+    ])
+}
+
 /// A change to the section's controls. Returns the new selection (`Ok(None)`: not one of ours).
 pub fn apply(m: &mut Model, sel: &Selection, id: &str, v: CtlVal) -> Result<Option<Selection>, String> {
     let wall = m.current_wallpaper().map(std::path::PathBuf::from);
     let paths = m.paths.clone();
     let set = |f: &dyn Fn(&mut Dynamic)| dynamic::update_with(sel, &paths, wall.as_deref(), |d| f(d)).map(Some);
     match (id, v) {
+        ("dyn-palette-name", CtlVal::Str(name)) => {
+            m.wallpaper_palette_name = name;
+            m.dirty = true;
+            Ok(None)
+        }
+        ("dyn-palette-save", CtlVal::Click) => {
+            let derived = dynamic::update_with(sel, &paths, wall.as_deref(), |d| {
+                d.enabled = true;
+                d.source = Origin::Wallpaper;
+            })?;
+            let d = derived.dynamic.as_ref().ok_or("No wallpaper colours available")?;
+            let id = crate::theme::palette::save_wallpaper(&m.wallpaper_palette_name, d, &crate::theme::palette::user_dir())?;
+            let mut next = crate::theme::palette::select(sel, Some(&id));
+            next.accent = None;
+            Ok(Some(next))
+        }
         ("dynamic", CtlVal::Bool(true)) => dynamic::enable(sel, &paths, wall.as_deref()).map(Some),
         ("dynamic", CtlVal::Bool(false)) => Ok(Some(dynamic::disable(sel))),
         ("dyn-scheme", CtlVal::Str(s)) => match Variant::parse(&s) {

@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='decebal-live-test-') as tmp:
         (d / folder).mkdir(parents=True, exist_ok=True)
     (d / 'run').chmod(0o700)
     env = dict(os.environ, HOME=str(d/'home'), XDG_CONFIG_HOME=str(d/'config'), XDG_DATA_HOME=str(d/'data'), XDG_CACHE_HOME=str(d/'cache'), XDG_RUNTIME_DIR=str(d/'run'), DECEBAL_BACKEND='x11', XDG_SESSION_TYPE='x11', DECEBAL_SYSTEM_AUTOMATIC='0', RDWMCTL=str(RDWM/'rdwmctl'), DECSETTINGS_CONFIG=str(d/'config/rdwm/config.toml'))
-    for k in ['WAYLAND_DISPLAY', 'RDWM_SOCK', 'RDWM_CONFIG', 'DECEBAL_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
+    for k in ['WAYLAND_DISPLAY', 'RDWM_SOCK', 'RDWM_CONFIG', 'DECEBAL_CONFIG', 'DBUS_SESSION_BUS_ADDRESS', 'DECEBAL_PALETTES']:
         env.pop(k, None)
     cfg = d / 'config/rdwm/config.toml'
     cfg.write_text('[general]\ntags = ["1", "2"]\n[decoration]\nenabled = true\n[wallpaper]\ncolor = "#123456"\n')
@@ -119,6 +119,28 @@ with tempfile.TemporaryDirectory(prefix='decebal-live-test-') as tmp:
         wait(lambda:any(c['id']=='lw:path' for c in layout()['ctls']))
         check(True,'Settings opens the Live wallpapers tab')
         check(any(c['id']=='lw:pause' for c in layout()['ctls']),'Settings exposes fullscreen power control')
+        check(any(c['id']=='th:dynamic' for c in layout()['ctls']),'Wallpaper has a direct colour-matching box')
+        def click_control(cid):
+            for _ in range(35):
+                candidate=next((c for c in layout()['ctls'] if c['id']==cid),None)
+                if candidate:
+                    r=candidate['rect']
+                    if 80 < r[1] < 550:
+                        run('xdotool','mousemove','--window',wid,int(r[0]+r[2]/2),int(r[1]+r[3]/2));run('xdotool','click','1');return
+                run('xdotool','mousemove','--window',wid,490,520);run('xdotool','click','5');time.sleep(.1)
+            raise AssertionError('control not reachable: '+cid)
+        shellpath=d/'config/omarchy/decebal.json'
+        click_control('th:dynamic')
+        wait(lambda:json.loads(shellpath.read_text())['theme']['dynamic']['enabled'] is True)
+        base_theme=json.loads(shellpath.read_text())['theme']['name']
+        check(True,'matching wallpaper colours can be enabled directly from Wallpaper')
+        click_control('th:dyn-palette-save')
+        wait(lambda:list((d/'config/decebal/palettes').glob('wallpaper-*.toml')))
+        import tomllib
+        palette=tomllib.loads(next((d/'config/decebal/palettes').glob('wallpaper-*.toml')).read_text())
+        check('dark' in palette and 'light' in palette,'Create and apply saves both palette variants')
+        wait(lambda:json.loads(shellpath.read_text())['theme'].get('palette','').startswith('wallpaper-'))
+        check(json.loads(shellpath.read_text())['theme']['name']==base_theme,'generated wallpaper palette is applied without changing the theme design')
         shot=pathlib.Path(os.environ.get('LIVE_WALLPAPER_SHOT','/tmp/decebal-live-wallpapers-settings.png'))
         run('import','-window',wid,shot)
         print('Settings screenshot:',shot)

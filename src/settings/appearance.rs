@@ -255,11 +255,13 @@ fn customise_tab(m: &Model) -> Vec<Item> {
 }
 
 pub(super) fn wallpaper_tab(m: &Model) -> Vec<Item> {
+    let c = Ctx::new(m);
     let mut out = m.pane_wallpaper();
-    out.push(Item::Header("Colours".into()));
-    out.push(Item::Card(vec![Row::new("Match wallpaper colours")
-        .detail("Recolour the theme from the picture you choose. Set it on the Palettes tab")
-        .ctl(go_button("ap:go:palettes", "Open Palettes"))]));
+    // The source switch stays first; colour matching belongs to this pane for every source.
+    let colors = super::wallpapercolors::items(&c.sel, &c.now);
+    let mut colors = colors;
+    colors.push(super::wallpapercolors::save_items(m));
+    out.splice(1.min(out.len())..1.min(out.len()), colors);
     out
 }
 
@@ -466,6 +468,8 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Wallpaper, Section::Colours, "Background colour", "wallpaper letterbox solid colour"),
     (Tab::Wallpaper, Section::Colours, "Image file", "wallpaper path png jpeg webp"),
     (Tab::Wallpaper, Section::Colours, "Wallhaven", "online download search random favourites wallpapers"),
+    (Tab::Wallpaper, Section::Colours, "Custom palette name", "wallpaper extract generate save named palette colours"),
+    (Tab::Wallpaper, Section::Colours, "Create wallpaper palette", "wallpaper palette create apply saved dark light"),
     (Tab::Wallpaper, Section::Colours, "Live wallpapers", "video animated mp4 webm commons motion fullscreen pause frame rate"),
     // All apps
     (Tab::Apps, Section::Colours, "Apply theme to all apps", "system wide theming gtk qt terminal chrome browser nautilus kvantum switch"),
