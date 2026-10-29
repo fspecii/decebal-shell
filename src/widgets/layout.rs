@@ -152,7 +152,17 @@ fn natural(n: &Node, cx: &Ctx) -> (f32, f32) {
 fn leaf_of(n: &Node, cx: &Ctx, r: Rect) -> Leaf {
     match &n.kind {
         Kind::Text { color, align, .. } => {
-            let (s, size, bold) = text_of(n, cx).unwrap_or_default();
+            let (mut s, size, bold) = text_of(n, cx).unwrap_or_default();
+            // Character limits alone cannot keep wide glyphs inside an allocated text slot.
+            if cx.metrics.text_width(&s, size, bold) > r.w {
+                while !s.is_empty() {
+                    s.pop();
+                    if cx.metrics.text_width(&format!("{s}…"), size, bold) <= r.w {
+                        s.push('…');
+                        break;
+                    }
+                }
+            }
             Leaf::Text { s, size, bold, color: color.clone(), align: *align }
         }
         Kind::DotText { text, size, color } => Leaf::DotText { s: text.eval(cx.data), size: *size, color: color.clone() },

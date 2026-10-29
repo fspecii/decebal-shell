@@ -22,8 +22,8 @@ full-width graphs/bars, rounded corners, and semantic colours in both modes.
 Font rasterization can vary between machines; layout goldens are the portable
 regression baseline.
 
-Validation on this checkout: 37 widget tests passed; the full default-feature
-library suite passed 1,433 tests with four ignored and the current-user PAM-start
+Validation on this checkout: 40 widget tests passed; the full default-feature
+library suite passed 1,436 tests with four ignored and the current-user PAM-start
 probe explicitly skipped. All-target/all-feature Clippy with warnings denied,
 formatting, and whitespace checks passed. Theme ownership and Keep/Replace/Cancel
 code, production PAM, live wallpaper code and live configuration were unchanged.
@@ -39,3 +39,16 @@ silhouettes. The shared render test above now covers all seven new cards.
 The interaction regression tests the hub's actual hit targets and allowlisted
 actions, player controls and playing/paused/absent states, long-title truncation,
 and missing weather. Rendering uses the actual painter, not browser mockups.
+
+## Fetch, terminal wave and compact-player correction
+
+`fetch-summary`, `terminal-wave` and `now-playing-mini` are included in the shared
+sample/unavailable dark/light rendering test. The compact-player regression also
+saves `long` and `cover-long` variants, checks actual font widths, and verifies
+that the Next button's center is inside the root hit region and invokes the
+allowlisted Next action. The waveform progress regression checks empty, half and
+full meters and the absent-player state. Cover art in this test is a generated
+solid placeholder; no private media files are included.
+
+The live bug capture remains in ignored `target/widget-debug/now-playing-live.png`
+on this checkout, outside committed evidence because it includes the desktop.

@@ -1,0 +1,379 @@
+format = 1
+id = "terminal-wave"
+name = "Terminal wave"
+description = "Terminal media controls with a waveform-shaped track progress meter; no audio capture or spectrum analysis."
+size = [360, 272]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 18
+gap = 12
+align = "stretch"
+background = "popup"
+radius = 2
+border = "accent@0.6"
+
+[[root.children]]
+type = "text"
+text = "$ music --wave"
+size = 12
+color = "ok"
+
+[[root.children]]
+type = "text"
+text = "{media.title|Untitled track}"
+size = 18
+color = "text"
+weight = "bold"
+max_chars = 32
+show_if = "media.present"
+
+[[root.children]]
+type = "text"
+text = "{media.artist|Unknown artist}"
+size = 12
+color = "text_secondary"
+max_chars = 40
+show_if = "media.present"
+
+[[root.children]]
+type = "text"
+text = "No player connected"
+size = 18
+color = "text"
+show_if = "!media.present"
+
+[[root.children]]
+type = "row"
+gap = 4
+height = 56
+align = "center"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.0
+max = 0.041666666666666664
+width = 0
+grow = 1
+height = 8
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.041666666666666664
+max = 0.08333333333333333
+width = 0
+grow = 1
+height = 14
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.08333333333333333
+max = 0.125
+width = 0
+grow = 1
+height = 24
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.125
+max = 0.16666666666666666
+width = 0
+grow = 1
+height = 38
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.16666666666666666
+max = 0.20833333333333334
+width = 0
+grow = 1
+height = 22
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.20833333333333334
+max = 0.25
+width = 0
+grow = 1
+height = 12
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.25
+max = 0.2916666666666667
+width = 0
+grow = 1
+height = 30
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.2916666666666667
+max = 0.3333333333333333
+width = 0
+grow = 1
+height = 46
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.3333333333333333
+max = 0.375
+width = 0
+grow = 1
+height = 34
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.375
+max = 0.4166666666666667
+width = 0
+grow = 1
+height = 18
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.4166666666666667
+max = 0.4583333333333333
+width = 0
+grow = 1
+height = 10
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.4583333333333333
+max = 0.5
+width = 0
+grow = 1
+height = 26
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.5
+max = 0.5416666666666666
+width = 0
+grow = 1
+height = 42
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.5416666666666666
+max = 0.5833333333333334
+width = 0
+grow = 1
+height = 52
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.5833333333333334
+max = 0.625
+width = 0
+grow = 1
+height = 32
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.625
+max = 0.6666666666666666
+width = 0
+grow = 1
+height = 16
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.6666666666666666
+max = 0.7083333333333334
+width = 0
+grow = 1
+height = 28
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.7083333333333334
+max = 0.75
+width = 0
+grow = 1
+height = 44
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.75
+max = 0.7916666666666666
+width = 0
+grow = 1
+height = 24
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.7916666666666666
+max = 0.8333333333333334
+width = 0
+grow = 1
+height = 12
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.8333333333333334
+max = 0.875
+width = 0
+grow = 1
+height = 36
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.875
+max = 0.9166666666666666
+width = 0
+grow = 1
+height = 48
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.9166666666666666
+max = 0.9583333333333334
+width = 0
+grow = 1
+height = 26
+color = "accent"
+track = "border"
+
+[[root.children.children]]
+type = "bar"
+value = "media.progress"
+min = 0.9583333333333334
+max = 1.0
+width = 0
+grow = 1
+height = 10
+color = "accent"
+track = "border"
+
+[[root.children]]
+type = "text"
+text = "{media.position:mmss|--:--} / {media.length:mmss|--:--}  [track progress]"
+size = 11
+color = "text_secondary"
+show_if = "media.present"
+
+[[root.children]]
+type = "row"
+gap = 8
+align = "center"
+show_if = "media.present"
+
+[[root.children.children]]
+type = "button"
+on_click = "media prev"
+height = 34
+padding = 8
+border = "border"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "|<"
+size = 14
+color = "accent"
+
+[[root.children.children]]
+type = "button"
+on_click = "media play-pause"
+height = 34
+padding = 8
+border = "accent"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "PAUSE"
+size = 12
+color = "accent"
+show_if = "media.playing"
+
+[[root.children.children.children]]
+type = "text"
+text = "PLAY"
+size = 12
+color = "accent"
+show_if = "!media.playing"
+
+[[root.children.children]]
+type = "button"
+on_click = "media next"
+height = 34
+padding = 8
+border = "border"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = ">|"
+size = 14
+color = "accent"

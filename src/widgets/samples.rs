@@ -4,6 +4,8 @@ use super::dsl::{self, WidgetDef};
 use super::Trust;
 
 pub const SAMPLES: &[(&str, &str)] = &[
+    ("fetch-summary", include_str!("../../widgets/fetch-summary.toml")),
+    ("terminal-wave", include_str!("../../widgets/terminal-wave.toml")),
     ("terminal-session", include_str!("../../widgets/terminal-session.toml")),
     ("retro-meters", include_str!("../../widgets/retro-meters.toml")),
     ("ios-day", include_str!("../../widgets/ios-day.toml")),
@@ -83,7 +85,7 @@ mod tests {
         for design in ["nord", "macos"] {
             for dark in [true, false] {
                 let th = crate::theme::builtin::def(design).unwrap().resolve(design, dark, &Selection::default());
-                for id in ["network-traffic", "storage-card", "terminal-session", "retro-meters", "ios-day", "berry-hub", "android-player"] {
+                for id in ["now-playing-mini", "fetch-summary", "terminal-wave", "network-traffic", "storage-card", "terminal-session", "retro-meters", "ios-day", "berry-hub", "android-player"] {
                     let def = get(id).unwrap();
                     let mut unavailable = crate::widgets::data::Data::empty();
                     unavailable.time = sample().time;
@@ -144,6 +146,78 @@ mod tests {
         assert!(dump(&draw("ios-day", &empty)).contains("Weather unavailable"));
         assert!(!dump(&draw("ios-day", &empty)).contains("°C"));
         assert!(dump(&draw("berry-hub", &empty)).contains("No focused window"));
+    }
+
+    #[test]
+    fn compact_player_keeps_next_inside_with_cover_art_and_wide_titles() {
+        use crate::theme::model::Selection;
+        use crate::widgets::actions::{Action, Media};
+        use crate::widgets::data::Val;
+        use crate::widgets::layout::{hit, Item, Leaf, Metrics};
+        use crate::widgets::paint::{self, FontMetrics};
+        use std::path::Path;
+
+        fn check(it: &Item, metrics: &dyn Metrics) {
+            assert!(it.rect.x >= 12.0 && it.rect.x + it.rect.w <= 298.01, "{:?}", it.rect);
+            if let Leaf::Text { s, size, bold, .. } = &it.leaf {
+                assert!(metrics.text_width(s, *size, *bold) <= it.rect.w + 0.01, "{s}");
+            }
+            for child in &it.children {
+                check(child, metrics);
+            }
+        }
+        let mut fonts = crate::text::Fonts::load().expect("render verification requires fonts");
+        let def = get("now-playing-mini").unwrap();
+        let cover_path = std::env::temp_dir().join(format!("decebal-cover-{}.png", std::process::id()));
+        let mut cover = tiny_skia::Pixmap::new(52, 52).unwrap();
+        cover.fill(tiny_skia::Color::from_rgba8(70, 130, 160, 255));
+        cover.save_png(&cover_path).unwrap();
+        for with_cover in [false, true] {
+            let mut data = sample();
+            data.set("media.title", Val::Text("Ｗ界 Wide title ".repeat(20)));
+            data.set("media.artist", Val::Text("Very long artist ".repeat(20)));
+            if with_cover {
+                data.set("media.art", Val::Text(cover_path.display().to_string()));
+            }
+            let it = layout(&def, &Ctx { data: &data, metrics: &FontMetrics(&fonts), theme_radius: 10.0 }, None);
+            for child in &it.children {
+                check(child, &FontMetrics(&fonts));
+            }
+            let next = it.children.iter().find(|i| i.on_click == Some(Action::Media(Media::Next))).unwrap();
+            assert_eq!(hit(&it, next.rect.x + next.rect.w / 2.0, next.rect.y + next.rect.h / 2.0).unwrap().on_click, Some(Action::Media(Media::Next)));
+            assert!(dump(&it).contains('…'));
+            if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {
+                for design in ["nord", "macos"] {
+                    for dark in [true, false] {
+                        let th = crate::theme::builtin::def(design).unwrap().resolve(design, dark, &Selection::default());
+                        let pm = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
+                        let mode = if dark { "dark" } else { "light" };
+                        let state = if with_cover { "cover-long" } else { "long" };
+                        pm.save_png(Path::new(&dir).join(format!("now-playing-mini-{design}-{mode}-{state}.png"))).unwrap();
+                    }
+                }
+            }
+        }
+        std::fs::remove_file(cover_path).unwrap();
+    }
+
+    #[test]
+    fn terminal_wave_tracks_progress_and_hides_controls_without_a_player() {
+        use crate::widgets::data::Val;
+        use crate::widgets::layout::Leaf;
+        let def = get("terminal-wave").unwrap();
+        for progress in [0.0, 0.5, 1.0] {
+            let mut data = sample();
+            data.set("media.progress", Val::Num(progress));
+            let it = layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: 10.0 }, None);
+            let bars: Vec<_> = it.children.iter().flat_map(|c| &c.children).filter_map(|c| if let Leaf::Bar { frac, .. } = c.leaf { Some(frac) } else { None }).collect();
+            assert_eq!(bars.len(), 24);
+            assert_eq!(bars.iter().filter(|f| **f == 1.0).count(), (progress * 24.0) as usize);
+        }
+        let data = crate::widgets::data::Data::empty();
+        let it = layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: 10.0 }, None);
+        assert!(dump(&it).contains("No player connected"));
+        assert!(!dump(&it).contains(" click"));
     }
 
     /// Layout goldens: `UPDATE_GOLDEN=1 cargo test --lib widgets::samples` rewrites tests/golden/widgets/*.layout.

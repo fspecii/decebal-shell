@@ -99,3 +99,16 @@ the existing cached source; playback uses the existing MPRIS source. Missing
 weather and absent players show explicit empty states; playback controls disappear
 when no player is present. Long app/track text is truncated. These additions do
 not select or replace a theme's widget layout.
+
+### Fetch summary and terminal wave
+
+- `fetch-summary`: Neofetch-inspired ASCII badge, user/host, uptime, CPU cores/load,
+  memory, root-storage use and semantic palette swatches. Click to open Dashboard.
+- `terminal-wave`: terminal-style music controls and a waveform-shaped **track
+  progress** meter. Segments fill from left to right using MPRIS track position.
+  This is not an audio spectrum and does not capture desktop audio. Controls hide
+  when no player is present.
+
+The compact `now-playing-mini` reserves space for all three transport controls,
+even with cover art and wide track titles. Text is fitted to its allocated pixel
+width with an ellipsis, so the Next button stays inside the card's hit region.

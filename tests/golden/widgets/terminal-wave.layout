@@ -1,0 +1,37 @@
+col [0.0 0.0 360.0 272.0] bg r=2
+  text [18.0 18.0 324.0 15.0] text="$ music --wave" size=12
+  text [18.0 45.0 324.0 23.0] text="Midnight City" size=18 bold
+  text [18.0 80.0 324.0 15.0] text="M83" size=12
+  row [18.0 107.0 324.0 56.0]
+    bar [18.0 131.0 9.7 8.0] frac=1.00 thick=8
+    bar [31.7 128.0 9.7 14.0] frac=1.00 thick=14
+    bar [45.3 123.0 9.7 24.0] frac=1.00 thick=24
+    bar [59.0 116.0 9.7 38.0] frac=1.00 thick=38
+    bar [72.7 124.0 9.7 22.0] frac=1.00 thick=22
+    bar [86.3 129.0 9.7 12.0] frac=1.00 thick=12
+    bar [100.0 120.0 9.7 30.0] frac=1.00 thick=30
+    bar [113.7 112.0 9.7 46.0] frac=1.00 thick=46
+    bar [127.3 118.0 9.7 34.0] frac=1.00 thick=34
+    bar [141.0 126.0 9.7 18.0] frac=0.12 thick=18
+    bar [154.7 130.0 9.7 10.0] frac=0.00 thick=10
+    bar [168.3 122.0 9.7 26.0] frac=0.00 thick=26
+    bar [182.0 114.0 9.7 42.0] frac=0.00 thick=42
+    bar [195.7 109.0 9.7 52.0] frac=0.00 thick=52
+    bar [209.3 119.0 9.7 32.0] frac=0.00 thick=32
+    bar [223.0 127.0 9.7 16.0] frac=0.00 thick=16
+    bar [236.7 121.0 9.7 28.0] frac=0.00 thick=28
+    bar [250.3 113.0 9.7 44.0] frac=0.00 thick=44
+    bar [264.0 123.0 9.7 24.0] frac=0.00 thick=24
+    bar [277.7 129.0 9.7 12.0] frac=0.00 thick=12
+    bar [291.3 117.0 9.7 36.0] frac=0.00 thick=36
+    bar [305.0 111.0 9.7 48.0] frac=0.00 thick=48
+    bar [318.7 122.0 9.7 26.0] frac=0.00 thick=26
+    bar [332.3 130.0 9.7 10.0] frac=0.00 thick=10
+  text [18.0 175.0 324.0 14.0] text="1:25 / 3:44  [track progress]" size=11
+  row [18.0 201.0 324.0 34.0]
+    button [18.0 201.0 96.8 34.0] click
+      text [58.7 209.0 15.4 18.0] text="|<" size=14
+    button [122.8 201.0 114.4 34.0] click
+      text [163.5 210.5 33.0 15.0] text="PAUSE" size=12
+    button [245.2 201.0 96.8 34.0] click
+      text [285.9 209.0 15.4 18.0] text=">|" size=14

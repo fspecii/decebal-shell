@@ -149,7 +149,12 @@ pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
         }
         Leaf::Bar { frac, thickness, color, track } => {
             let y = r.y + (r.h - thickness) / 2.0;
-            charts::bar(pm, crate::dash::layout::Rect::new(r.x, y, r.w, *thickness), *frac, col(p.theme, track, op), col(p.theme, color, op));
+            // Narrow waveform bars must not expand their fill to the bar's height.
+            gfx::fill_rounded(pm, r.x, y, r.w, *thickness, r.w.min(*thickness) / 2.0, col(p.theme, track, op));
+            let width = r.w * frac.clamp(0.0, 1.0);
+            if width >= 1.0 {
+                gfx::fill_rounded(pm, r.x, y, width, *thickness, width.min(*thickness) / 2.0, col(p.theme, color, op));
+            }
         }
         Leaf::AnalogClock { hour, minute, second, size, color, track, second_color, numerals, seconds } => {
             let d = size.min(r.w).min(r.h);
@@ -326,6 +331,20 @@ mod tests {
         assert!(px(&pm, 80, 40)[0] > 240, "minute hand points up");
         assert_eq!(pm.pixel(60, 80).unwrap().alpha(), 0, "no opposite hour hand");
         assert_eq!(pm.pixel(80, 115).unwrap().alpha(), 0, "no opposite minute hand");
+    }
+
+    #[test]
+    fn narrow_bars_never_paint_outside_their_allocated_width() {
+        let mut fonts = fonts().expect("render verification requires fonts");
+        let def = dsl::parse("format=1\nsize=[80,80]\n[root]\ntype=\"row\"\npadding=10\n[[root.children]]\ntype=\"bar\"\nwidth=8\nheight=40\nvalue=1\n", Trust::Theme).unwrap();
+        let pm = render(&def, &sample(), &theme(), &mut fonts, Path::new("."), 0).unwrap();
+        assert!(pm.pixel(14, 30).unwrap().alpha() > 0);
+        assert_eq!(pm.pixel(30, 30).unwrap().alpha(), 0);
+        for y in 0..80 {
+            for x in 19..80 {
+                assert_eq!(pm.pixel(x, y).unwrap().alpha(), 0, "overflow at {x},{y}");
+            }
+        }
     }
 
     fn theme() -> Theme {
