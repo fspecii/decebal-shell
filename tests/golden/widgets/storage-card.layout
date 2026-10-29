@@ -1,0 +1,6 @@
+col [0.0 0.0 300.0 184.0] bg r=10 click
+  text [16.0 16.0 268.0 20.0] text="Root storage /" size=16 bold
+  text [16.0 46.0 268.0 30.0] text="Free: 270 GiB" size=24 bold
+  bar [16.0 86.0 268.0 8.0] frac=0.71 thick=8
+  text [16.0 104.0 268.0 15.0] text="661 GiB / 931 GiB" size=12
+  text [16.0 129.0 268.0 15.0] text="71% used" size=12

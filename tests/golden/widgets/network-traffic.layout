@@ -1,0 +1,7 @@
+col [0.0 0.0 300.0 224.0] bg r=10 click
+  text [16.0 16.0 268.0 20.0] text="Network traffic" size=16 bold
+  text [16.0 44.0 268.0 14.0] text="60 seconds · independent scales" size=11
+  text [16.0 66.0 268.0 17.0] text="Receive   412 kB/s" size=13
+  graph [16.0 91.0 268.0 36.0] points=60 max=402498.31
+  text [16.0 135.0 268.0 17.0] text="Send   88 kB/s" size=13
+  graph [16.0 160.0 268.0 36.0] points=60 max=115000.00

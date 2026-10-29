@@ -1,0 +1,49 @@
+format = 1
+id = "storage-card"
+name = "Root storage"
+description = "Root filesystem capacity, used space and available space."
+size = [300, 184]
+refresh = 1000
+
+[root]
+type = "col"
+align = "stretch"
+padding = 16
+gap = 10
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "Root storage /"
+size = 16
+weight = "bold"
+color = "text"
+
+[[root.children]]
+type = "text"
+text = "Free: {disk.free:bytes|Unavailable}"
+size = 24
+weight = "bold"
+color = "accent"
+
+[[root.children]]
+type = "bar"
+value = "disk.usage"
+height = 8
+color = "accent"
+track = "border"
+
+[[root.children]]
+type = "text"
+text = "{disk.used:bytes|Unavailable} / {disk.total:bytes|Unavailable}"
+size = 12
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "{disk.usage:pct|Unavailable} used"
+size = 12
+color = "text_secondary"

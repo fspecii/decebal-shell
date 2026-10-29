@@ -53,3 +53,29 @@ It starts with an empty, hidden collection and uses the actual Settings Add butt
 Login integration uses `decwidgets autostart`: it quietly exits in Wayland/Xwayland and headless contexts, and runs the persistent watcher on X11 even when the collection is empty or hidden. A compositor arriving later or restarting causes the host to recreate surfaces with the appropriate visual. `decwidgets daemon` remains the explicit foreground daemon command.
 
 The host advertises readiness only after its first rendered frame. Adding a widget also reveals a hidden collection. X11 startup uses `decwidgets autostart` (a safe no-op outside X11) or the packaged `decebal-widgets.service`; rdwm's session supervisor starts and monitors the shared daemon. No data workers are started while the collection is empty or hidden. The visibility regression `tests/e2e/widgets-visible.sh` checks actual pixels, clicks and stacking with a real window manager rather than relying on window counts alone.
+
+### Network and storage cards
+
+The shared catalog also includes **Network traffic** (`builtin:network-traffic`) and
+**Root storage** (`builtin:storage-card`). Both open the existing dashboard when
+clicked, use semantic palette colours, and reuse the shared one-second system
+sampler without commands or extra services. They do not change theme defaults.
+
+Network traffic shows aggregate receive/send rates from the existing sampler
+(which excludes loopback and common container bridges/veth pairs), and two independently scaled
+60-sample histories (normally 60 seconds while the host is active). It is a
+throughput monitor, not a connectivity test. Root storage shows the filesystem
+mounted at `/`, with free/used/total capacity and a usage bar; it does not enumerate
+other mounts. Missing values say **Unavailable**; legitimate zero values remain
+visible. Missing graphs are empty and a missing storage value leaves an empty bar.
+
+Reproduce layout goldens and actual dark/light renders with installed fonts:
+
+```sh
+cargo test --lib widgets::samples
+WIDGET_EVIDENCE_DIR="$PWD/docs/widget-evidence" cargo test --lib widgets::samples::tests::resource_cards_render_in_dark_and_light_designs
+```
+
+The committed PNGs in `docs/widget-evidence/` are actual tiny-skia widget output,
+using fixed sample data and missing-data states in Nord and macOS dark/light
+variants. No live desktop, configuration or theme application is needed.

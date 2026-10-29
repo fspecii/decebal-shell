@@ -1,0 +1,53 @@
+format = 1
+id = "network-traffic"
+name = "Network traffic"
+description = "Aggregate receive/send rates and 60-second histories across network interfaces."
+size = [300, 224]
+refresh = 1000
+
+[root]
+type = "col"
+align = "stretch"
+padding = 16
+gap = 8
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "Network traffic"
+size = 16
+weight = "bold"
+color = "text"
+
+[[root.children]]
+type = "text"
+text = "60 seconds · independent scales"
+size = 11
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "Receive   {net.rx:rate|Unavailable}"
+size = 13
+color = "accent"
+
+[[root.children]]
+type = "graph"
+series = "net.rx_history"
+height = 36
+color = "accent"
+
+[[root.children]]
+type = "text"
+text = "Send   {net.tx:rate|Unavailable}"
+size = 13
+color = "ok"
+
+[[root.children]]
+type = "graph"
+series = "net.tx_history"
+height = 36
+color = "ok"
