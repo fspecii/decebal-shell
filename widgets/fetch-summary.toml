@@ -1,158 +1,66 @@
 format = 1
 id = "fetch-summary"
-name = "Fetch summary"
-description = "Neofetch-inspired ASCII badge and live host, uptime, CPU, RAM and root storage summary."
-size = [380, 244]
+name = "Fastfetch summary"
+description = "Real Fastfetch JSON system data, refreshed every minute; requires Fastfetch."
+size = [380, 256]
 refresh = 1000
 
 [root]
 type = "col"
 padding = 18
-gap = 14
+gap = 8
 align = "stretch"
 background = "popup"
-radius = 2
-border = "accent@0.6"
+radius = "theme"
+border = "border@0.6"
 on_click = "open dashboard"
 
 [[root.children]]
 type = "text"
-text = "$ decebal --fetch"
+text = "FASTFETCH"
 size = 12
-color = "ok"
+color = "accent"
+weight = "bold"
 
 [[root.children]]
-type = "row"
-gap = 12
-align = "center"
-
-[[root.children.children]]
-type = "col"
-gap = 2
-width = 94
-
-[[root.children.children.children]]
 type = "text"
-text = "    /\\"
-size = 13
-color = "accent"
+text = "{fetch.os|System information unavailable}"
+size = 22
+color = "text"
 weight = "bold"
 
-[[root.children.children.children]]
+[[root.children]]
 type = "text"
-text = "   /  \\"
-size = 13
-color = "accent"
-weight = "bold"
-
-[[root.children.children.children]]
-type = "text"
-text = "  / /\\ \\"
-size = 13
-color = "accent"
-weight = "bold"
-
-[[root.children.children.children]]
-type = "text"
-text = " / ____ \\"
-size = 13
-color = "accent"
-weight = "bold"
-
-[[root.children.children.children]]
-type = "text"
-text = "/_/    \\_\\"
-size = 13
-color = "accent"
-weight = "bold"
-
-[[root.children.children]]
-type = "col"
-gap = 8
-width = 0
-grow = 1
-align = "stretch"
-
-[[root.children.children.children]]
-type = "text"
-text = "{user.name|user}@{host.name|host}"
-size = 15
-color = "accent"
-weight = "bold"
-max_chars = 24
-
-[[root.children.children.children]]
-type = "text"
-text = "------------------------"
-size = 11
+text = "Kernel  {fetch.kernel|Unavailable}"
+size = 12
 color = "text_secondary"
 
-[[root.children.children.children]]
+[[root.children]]
 type = "text"
-text = "Desktop  Decebal"
-size = 12
-color = "text"
-
-[[root.children.children.children]]
-type = "text"
-text = "Up  {uptime:dur|Unavailable}"
-size = 12
-color = "text"
-
-[[root.children.children.children]]
-type = "text"
-text = "CPU  {cpu.cores:int|--} cores / {cpu.usage:pct|--}"
-size = 12
-color = "text"
-
-[[root.children.children.children]]
-type = "text"
-text = "RAM  {mem.used:bytes|--} / {mem.total:bytes|--}"
-size = 12
-color = "text"
-
-[[root.children.children.children]]
-type = "text"
-text = "Disk  {disk.usage:pct|Unavailable}"
+text = "CPU  {fetch.cpu|Unavailable}"
 size = 12
 color = "text"
 
 [[root.children]]
-type = "row"
-gap = 6
+type = "text"
+text = "RAM  {fetch.mem_used:bytes|--} / {fetch.mem_total:bytes|--}"
+size = 12
+color = "text"
 
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "accent"
+[[root.children]]
+type = "text"
+text = "Uptime  {fetch.uptime:dur|Unavailable}"
+size = 12
+color = "text"
 
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "ok"
+[[root.children]]
+type = "text"
+text = "WM  {fetch.wm|Unavailable}"
+size = 12
+color = "text"
 
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "warn"
-
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "text"
-
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "text_secondary"
-
-[[root.children.children]]
-type = "stack"
-width = 26
-height = 12
-background = "border"
+[[root.children]]
+type = "text"
+text = "{fetch.status|Fastfetch unavailable}"
+size = 10
+color = "text_secondary"

@@ -403,15 +403,19 @@ fn draw(
     let data = data_with_options(base, &w.inst);
     let item = layout::layout(&w.res.def, &Ctx { data: &data, metrics: &FontMetrics(fonts), theme_radius: th.radius }, Some((w.w as f32, w.h as f32)));
     let mut pm = Pixmap::new(w.w, w.h).ok_or("pixmap")?;
-    paint::paint(&mut pm, &item, &mut Painter { fonts, symbols, images: &mut w.images, theme: th }, 1.0);
+    paint::paint(&mut pm, &item, &mut Painter { fonts, symbols, images: &mut w.images, theme: th, background_opacity: paint::background_opacity(&data) }, 1.0);
     // Keep parsed metrics while cards are active; trim when the collection is empty.
     let depth = if w.argb { 32 } else { w.depth };
-    let material = crate::glass::Material::from_theme(th);
+    let mut material = crate::glass::Material::from_theme(th);
+    let background_visible = paint::background_opacity(&data) > 0.0;
+    if !background_visible {
+        material.refraction = 0.0;
+    }
     // Preserve foreground coverage before native glass makes its interior opaque.
     let shape = if material.enabled() || (th.blur > 0.0 && w.argb) { Some(bx::glass_rects(&pm)) } else { None };
     let r = item.rect;
     let native = w.renderer.paint(conn, screen, w.id, w.position, &mut pm, &[crate::glass::Region { x: r.x, y: r.y, w: r.w, h: r.h, radius: item.radius }], material);
-    let glass = th.blur > 0.0 && !native;
+    let glass = th.blur > 0.0 && !native && background_visible;
     if glass != w.glass {
         bx::set_glass_hint(conn, w.id, glass).map_err(err)?;
         w.glass = glass;

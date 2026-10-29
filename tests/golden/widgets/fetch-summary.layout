@@ -1,24 +1,9 @@
-col [0.0 0.0 380.0 244.0] bg r=2 click
-  text [18.0 18.0 344.0 15.0] text="$ decebal --fetch" size=12
-  row [18.0 47.0 344.0 156.0]
-    col [18.0 78.5 94.0 93.0]
-      text [18.0 78.5 42.9 17.0] text="    /\\" size=13 bold
-      text [18.0 97.5 50.0 17.0] text="   /  \\" size=13 bold
-      text [18.0 116.5 57.2 17.0] text="  / /\\ \\" size=13 bold
-      text [18.0 135.5 64.3 17.0] text=" / ____ \\" size=13 bold
-      text [18.0 154.5 71.5 17.0] text="/_/    \\_\\" size=13 bold
-    col [124.0 47.0 238.0 156.0]
-      text [124.0 47.0 238.0 19.0] text="ada@analytical" size=15 bold
-      text [124.0 74.0 238.0 14.0] text="------------------------" size=11
-      text [124.0 96.0 238.0 15.0] text="Desktop  Decebal" size=12
-      text [124.0 119.0 238.0 15.0] text="Up  1d 2h" size=12
-      text [124.0 142.0 238.0 15.0] text="CPU  16 cores / 37%" size=12
-      text [124.0 165.0 238.0 15.0] text="RAM  18.4 GiB / 29.8 GiB" size=12
-      text [124.0 188.0 238.0 15.0] text="Disk  71%" size=12
-  row [18.0 217.0 344.0 12.0]
-    stack [18.0 217.0 26.0 12.0] bg r=0
-    stack [50.0 217.0 26.0 12.0] bg r=0
-    stack [82.0 217.0 26.0 12.0] bg r=0
-    stack [114.0 217.0 26.0 12.0] bg r=0
-    stack [146.0 217.0 26.0 12.0] bg r=0
-    stack [178.0 217.0 26.0 12.0] bg r=0
+col [0.0 0.0 380.0 256.0] bg r=10 click
+  text [18.0 18.0 344.0 15.0] text="FASTFETCH" size=12 bold
+  text [18.0 41.0 344.0 28.0] text="Example Linux" size=22 bold
+  text [18.0 77.0 344.0 15.0] text="Kernel  6.12.0-example" size=12
+  text [18.0 100.0 344.0 15.0] text="CPU  Example 16-core CPU" size=12
+  text [18.0 123.0 344.0 15.0] text="RAM  18.4 GiB / 29.8 GiB" size=12
+  text [18.0 146.0 344.0 15.0] text="Uptime  1d 2h" size=12
+  text [18.0 169.0 344.0 15.0] text="WM  rdwm" size=12
+  text [18.0 192.0 344.0 13.0] text="Fastfetch sample data" size=10

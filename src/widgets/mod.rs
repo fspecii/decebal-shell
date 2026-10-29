@@ -15,6 +15,7 @@ pub mod catalog;
 pub mod config;
 pub mod data;
 pub mod dsl;
+pub mod fetch;
 pub mod fmt;
 pub mod layout;
 pub mod paint;

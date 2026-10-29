@@ -21,6 +21,7 @@ Section: x11
 Priority: optional
 Depends: libc6, libxkbcommon0, libpam0g
 Recommends: rdwm
+Suggests: fastfetch
 Conflicts: macshell
 Replaces: macshell
 Provides: macshell

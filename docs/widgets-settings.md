@@ -102,8 +102,8 @@ not select or replace a theme's widget layout.
 
 ### Fetch summary and terminal wave
 
-- `fetch-summary`: Neofetch-inspired ASCII badge, user/host, uptime, CPU cores/load,
-  memory, root-storage use and semantic palette swatches. Click to open Dashboard.
+- `fetch-summary`: real Fastfetch JSON data for OS, kernel, CPU model, memory,
+  uptime and window manager. Requires `fastfetch`; click to open Dashboard.
 - `terminal-wave`: terminal-style music controls and a waveform-shaped **track
   progress** meter. Segments fill from left to right using MPRIS track position.
   This is not an audio spectrum and does not capture desktop audio. Controls hide
@@ -112,3 +112,44 @@ not select or replace a theme's widget layout.
 The compact `now-playing-mini` reserves space for all three transport controls,
 even with cover art and wide track titles. Text is fitted to its allocated pixel
 width with an ellipsis, so the Next button stays inside the card's hit region.
+
+
+### Palette and material integration
+
+Every built-in uses semantic theme colours. Choosing a separate colour scheme
+recolours cards and their controls without changing their layout. Material
+backgrounds now inherit theme surface opacity: popup/surface backgrounds use
+`popup_alpha`, dock backgrounds use `dock_alpha`, bar backgrounds use `bar_alpha`,
+and overlay backgrounds use `panel_alpha`. Explicit token alpha multiplies that
+value. Theme opacity changes therefore affect existing cards too.
+
+An optional saved instance option applies additional background transparency:
+
+```json
+{"use":"builtin:fetch-summary", "options":{"background_opacity":0.6}}
+```
+
+`background_opacity` ranges from 0 (no background fill) to 1 (theme material,
+the default). It multiplies material fill opacity; text, icons, meter data and
+button backgrounds retain their foreground contrast. Outlines are retained.
+Zero disables native backdrop glass and external blur on that widget. These are
+per-instance options, preserved by Settings; there is no new opacity slider.
+On X11 without a compositor the host blends translucent cards over rdwm's
+wallpaper pixmap; with a compositor it uses ARGB and the existing glass path.
+Native Wayland widget hosting remains unsupported.
+
+Fastfetch runs as a built-in data provider only when a visible card requests
+`fetch.*`. Its command is fixed to JSON output and OS/Kernel/CPU/Memory/Uptime/WM,
+with `--config none`; theme files cannot supply Fastfetch arguments or load user
+Fastfetch custom commands. A worker refreshes at most once a minute, with a
+five-second timeout and a 64 KiB output limit. Missing Fastfetch, malformed output
+and module errors produce explicit unavailable states. Failed refreshes clear
+previous values. No package installation or external configuration is performed.
+
+Validate the installed backend explicitly (the normal suite skips this optional
+dependency probe):
+
+```sh
+cargo test --lib widgets::fetch::tests::installed_fastfetch_returns_real_system_data -- --ignored
+WIDGET_EVIDENCE_DIR="$PWD/docs/widget-evidence" cargo test --lib widgets::samples
+```

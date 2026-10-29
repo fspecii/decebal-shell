@@ -119,6 +119,15 @@ macro_rules! src {
 }
 
 pub const SOURCES: &[Source] = src! {
+    "fetch.present" "bool" "Fastfetch returned supported data";
+    "fetch.status" "text" "Fastfetch backend status";
+    "fetch.os" "text" "Fastfetch OS name";
+    "fetch.kernel" "text" "Fastfetch kernel release";
+    "fetch.cpu" "text" "Fastfetch CPU model";
+    "fetch.wm" "text" "Fastfetch window manager";
+    "fetch.mem_used" "bytes" "Fastfetch memory used";
+    "fetch.mem_total" "bytes" "Fastfetch memory total";
+    "fetch.uptime" "time" "Fastfetch uptime in seconds";
     "clock" "time" "now; format with {clock:%H:%M} (%H %I %M %S %p %a %A %b %B %d %e %m %y %Y %j %%)";
     "clock.hour" "number" "0-23";
     "clock.minute" "number" "0-59";
@@ -255,6 +264,15 @@ pub fn sample() -> Data {
     ] {
         d.set(k, Val::Text(v.into()));
     }
+    d.set("fetch.present", Val::Bool(true));
+    d.set("fetch.status", Val::Text("Fastfetch sample data".into()));
+    d.set("fetch.os", Val::Text("Example Linux".into()));
+    d.set("fetch.kernel", Val::Text("6.12.0-example".into()));
+    d.set("fetch.cpu", Val::Text("Example 16-core CPU".into()));
+    d.set("fetch.wm", Val::Text("rdwm".into()));
+    d.set("fetch.mem_used", Val::Num(19.8e9));
+    d.set("fetch.mem_total", Val::Num(32.0e9));
+    d.set("fetch.uptime", Val::Num(93784.0));
     d.set("cpu.history", Val::Series(hist));
     d.set("net.rx_history", Val::Series(rx));
     d.set("net.tx_history", Val::Series(tx));
@@ -290,6 +308,7 @@ pub struct Live {
     cmds: Arc<Mutex<HashMap<String, String>>>,
     user: crate::dash::info::User,
     wm: Option<Box<dyn crate::menubar::active::ActiveWindow>>,
+    fetch: Option<super::fetch::Fetch>,
 }
 
 impl Live {
@@ -317,6 +336,7 @@ impl Live {
             wm = Some(Box::new(w));
         }
         Live {
+            fetch: has("fetch").then(|| super::fetch::Fetch::new(waker.clone())),
             sampler: ["cpu", "mem", "swap", "disk", "net", "uptime"].iter().any(|g| has(g)).then(|| crate::dash::sysinfo::Sampler::new(crate::dash::sysinfo::Paths::default())),
             gpu: Arc::new(Mutex::new(None)),
             gpu_at: None,
@@ -335,6 +355,9 @@ impl Live {
         use std::time::{Duration, Instant};
         let now = Instant::now();
         d.time = Time::now();
+        if let Some(fetch) = self.fetch.as_mut() {
+            fetch.update(d);
+        }
         let has = |g: &str| self.groups.contains(g);
         d.set("clock.hour", Val::Num(f64::from(d.time.hour)));
         d.set("clock.minute", Val::Num(f64::from(d.time.min)));

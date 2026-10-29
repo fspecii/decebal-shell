@@ -73,6 +73,8 @@ pub struct Painter<'a> {
     pub symbols: &'a mut SymbolCache,
     pub images: &'a mut ImageCache,
     pub theme: &'a Theme,
+    /// Per-instance material opacity; foreground text and controls remain readable.
+    pub background_opacity: f32,
 }
 
 pub fn token(th: &Theme, name: &str) -> Rgb {
@@ -111,12 +113,33 @@ fn col(th: &Theme, c: &ColorRef, op: f32) -> Color {
     rgb.color(a * op)
 }
 
+/// Theme surface alphas apply to material backgrounds, never to foreground text.
+fn background_color(p: &Painter, color: &ColorRef, opacity: f32) -> Color {
+    let material_alpha = match color {
+        ColorRef::Token(token, _) => match token.as_str() {
+            "dock" => p.theme.dock_alpha,
+            "bar" => p.theme.bar_alpha,
+            "overlay" => p.theme.panel_alpha,
+            "popup" | "background" | "surface" | "sidebar" | "titlebar" | "titlebar_inactive" => p.theme.popup_alpha,
+            _ => p.theme.popup_alpha,
+        },
+        ColorRef::Fixed(..) => 1.0,
+    };
+    col(p.theme, color, opacity * material_alpha * p.background_opacity)
+}
+
+/// Saved instance option, also supported by off-screen rendering fixtures.
+pub fn background_opacity(data: &super::data::Data) -> f32 {
+    data.num("opt.background_opacity").filter(|v| v.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0) as f32
+}
+
 /// Paints `it` (and its children) into `pm`; (0, 0) of the item tree is the pixmap's top-left.
 pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
     let op = parent_opacity * it.opacity;
     let r = it.rect;
     if let Some(bg) = &it.background {
-        gfx::fill_rounded(pm, r.x, r.y, r.w, r.h, it.radius, col(p.theme, bg, op));
+        let color = if it.kind == "button" { col(p.theme, bg, op) } else { background_color(p, bg, op) };
+        gfx::fill_rounded(pm, r.x, r.y, r.w, r.h, it.radius, color);
     }
     if let Some(b) = &it.border {
         let w = it.border_width;
@@ -266,7 +289,7 @@ pub fn render(def: &super::dsl::WidgetDef, data: &super::data::Data, th: &Theme,
     let mut imgs = ImageCache::new(base);
     let mut shifted = it;
     shift(&mut shifted, margin as f32);
-    paint(&mut pm, &shifted, &mut Painter { fonts, symbols: &mut sym, images: &mut imgs, theme: th }, 1.0);
+    paint(&mut pm, &shifted, &mut Painter { fonts, symbols: &mut sym, images: &mut imgs, theme: th, background_opacity: background_opacity(data) }, 1.0);
     fonts.trim();
     Some(pm)
 }
@@ -347,6 +370,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn theme_surface_opacity_and_instance_opacity_preserve_foreground_and_controls() {
+        let def = dsl::parse("format=1\nsize=[120,60]\n[root]\ntype=\"row\"\nbackground=\"popup@0.8\"\n[[root.children]]\ntype=\"button\"\nwidth=20\nheight=20\nbackground=\"accent\"\n", Trust::Theme)
+            .unwrap();
+        let mut fonts = fonts().expect("render verification requires fonts");
+        let mut th = theme();
+        th.popup_alpha = 0.5;
+        let mut data = sample();
+        data.set("opt.background_opacity", data::Val::Num(0.5));
+        let pm = render(&def, &data, &th, &mut fonts, Path::new("."), 0).unwrap();
+        assert!(pm.pixel(100, 50).unwrap().alpha().abs_diff(51) <= 1, "theme .5 × token .8 × instance .5");
+        assert_eq!(pm.pixel(10, 10).unwrap().alpha(), 255, "button stays opaque");
+        data.set("opt.background_opacity", data::Val::Num(0.0));
+        let pm = render(&def, &data, &th, &mut fonts, Path::new("."), 0).unwrap();
+        assert_eq!(pm.pixel(100, 50).unwrap().alpha(), 0);
+        assert_eq!(pm.pixel(10, 10).unwrap().alpha(), 255);
+        for (token, expected) in [("popup", 0.5), ("surface", 0.5), ("dock", 0.3), ("bar", 0.4), ("overlay", 0.6)] {
+            th.dock_alpha = 0.3;
+            th.bar_alpha = 0.4;
+            th.panel_alpha = 0.6;
+            let (mut symbols, mut images) = (SymbolCache::default(), ImageCache::default());
+            let p = Painter { fonts: &mut fonts, symbols: &mut symbols, images: &mut images, theme: &th, background_opacity: 1.0 };
+            assert!((background_color(&p, &ColorRef::Token(token.into(), 1.0), 1.0).alpha() - expected).abs() < 0.003);
+        }
+    }
+
     fn theme() -> Theme {
         crate::theme::builtin::def("nord").unwrap().resolve("nord", true, &Selection::default())
     }
@@ -400,7 +449,7 @@ color = "warn"
             None => return pm,
         };
         let (mut sym, mut imgs) = (SymbolCache::default(), ImageCache::default());
-        paint(&mut pm, &it, &mut Painter { fonts: &mut fonts, symbols: &mut sym, images: &mut imgs, theme: &th }, 1.0);
+        paint(&mut pm, &it, &mut Painter { fonts: &mut fonts, symbols: &mut sym, images: &mut imgs, theme: &th, background_opacity: 1.0 }, 1.0);
         pm
     }
 
@@ -445,5 +494,5 @@ color = "warn"
         let _ = Def::default();
     }
 
-    const GOLDEN_SHAPES: &str = "c60eb4ff6b70d864f1399c5002368ffc8622866ecc3b33f0aa7f2ac6ae265a0f";
+    const GOLDEN_SHAPES: &str = "eb9033d15cb6fda3476678bd60a24109de9f61a3e46d568975b8bc13913427ae";
 }

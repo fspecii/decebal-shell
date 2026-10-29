@@ -85,7 +85,7 @@ mod tests {
         for design in ["nord", "macos"] {
             for dark in [true, false] {
                 let th = crate::theme::builtin::def(design).unwrap().resolve(design, dark, &Selection::default());
-                for id in ["now-playing-mini", "fetch-summary", "terminal-wave", "network-traffic", "storage-card", "terminal-session", "retro-meters", "ios-day", "berry-hub", "android-player"] {
+                for (id, _) in SAMPLES {
                     let def = get(id).unwrap();
                     let mut unavailable = crate::widgets::data::Data::empty();
                     unavailable.time = sample().time;
@@ -218,6 +218,72 @@ mod tests {
         let it = layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: 10.0 }, None);
         assert!(dump(&it).contains("No player connected"));
         assert!(!dump(&it).contains(" click"));
+    }
+
+    #[test]
+    fn every_builtin_follows_palette_and_supports_material_transparency() {
+        use crate::theme::model::{Def, Selection};
+        use crate::widgets::{data::Val, paint};
+        use std::path::Path;
+        fn semantic(it: &crate::widgets::layout::Item) {
+            use crate::widgets::{dsl::ColorRef, layout::Leaf};
+            let check = |color: &ColorRef| assert!(matches!(color, ColorRef::Token(..)), "built-ins must use semantic colours: {color:?}");
+            if let Some(bg) = &it.background {
+                check(bg);
+            }
+            if let Some(border) = &it.border {
+                check(border);
+            }
+            match &it.leaf {
+                Leaf::Text { color, .. } | Leaf::Icon { color, .. } | Leaf::Graph { color, .. } => check(color),
+                Leaf::Bar { color, track, .. } | Leaf::Ring { color, track, .. } => {
+                    check(color);
+                    check(track);
+                }
+                Leaf::AnalogClock { color, track, second_color, .. } => {
+                    check(color);
+                    check(track);
+                    check(second_color);
+                }
+                Leaf::Dots { color, active, .. } => {
+                    check(color);
+                    check(active);
+                }
+                _ => {}
+            }
+            for child in &it.children {
+                semantic(child);
+            }
+        }
+        let mut fonts = crate::text::Fonts::load().expect("render verification requires fonts");
+        for dark in [true, false] {
+            let base = crate::theme::builtin::def("nord").unwrap();
+            let palette = Def::parse(include_str!("../../palettes/catppuccin.toml")).unwrap();
+            let selection = Selection { opacity: Some(0.7), ..Selection::default() };
+            let th = base.with_palette(&palette).resolve("nord", dark, &selection);
+            let original = base.resolve("nord", dark, &selection);
+            assert_ne!(th.accent, original.accent);
+            assert_eq!(th.radius, original.radius, "a palette must preserve theme geometry");
+            for (id, _) in SAMPLES {
+                let def = get(id).unwrap();
+                let mut data = sample();
+                semantic(&layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: th.radius }, None));
+                let baseline = paint::render(&def, &data, &original, &mut fonts, Path::new("."), 16).unwrap();
+                let opaque = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
+                assert_ne!(baseline.data(), opaque.data(), "{id}: palette had no effect");
+                data.set("opt.background_opacity", Val::Num(0.0));
+                let clear = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
+                let alpha = |pm: &tiny_skia::Pixmap| pm.data().chunks_exact(4).map(|p| u64::from(p[3])).sum::<u64>();
+                assert!(alpha(&clear) < alpha(&opaque), "{id}: material opacity had no effect");
+                data.set("opt.background_opacity", Val::Num(0.6));
+                let transparent = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
+                assert!(alpha(&transparent) > alpha(&clear) && alpha(&transparent) < alpha(&opaque), "{id}");
+                if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {
+                    let mode = if dark { "dark" } else { "light" };
+                    transparent.save_png(Path::new(&dir).join(format!("{id}-catppuccin-{mode}-transparent.png"))).unwrap();
+                }
+            }
+        }
     }
 
     /// Layout goldens: `UPDATE_GOLDEN=1 cargo test --lib widgets::samples` rewrites tests/golden/widgets/*.layout.
