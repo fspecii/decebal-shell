@@ -229,6 +229,9 @@ impl Fonts {
         for i in owner.into_iter().chain(0..n) {
             if let Some(spec) = self.spec(role, i, weight) {
                 if let Some(g) = self.rasterize(&spec, ch, px) {
+                    if !ch.is_whitespace() && !is_invisible(ch) && g.advance > 0.0 && !g.bitmap.iter().any(|b| *b != 0) {
+                        continue;
+                    }
                     return Some(g);
                 }
             }
@@ -379,6 +382,22 @@ mod tests {
         let s = f.setup.borrow();
         let used: usize = s.resolved.roles.iter().flatten().map(|f| crate::theme::fontdb::norm(f)).collect::<std::collections::HashSet<_>>().len();
         assert!(s.db.family_count() <= used, "{} families kept for {used} in the chains", s.db.family_count());
+    }
+
+    #[test]
+    fn unsupported_selected_font_falls_back_to_visible_text() {
+        let Some(f) = Fonts::load() else { return };
+        let Some(fallback) = f.spec(Role::Ui, 0, Weight::Regular) else { return };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("themes/sweeteh/fonts/GoogleSansFlex.ttf");
+        f.setup.borrow_mut().resolved.roles[Role::Ui.idx()] = vec!["unsupported".into(), "fallback".into()];
+        f.specs
+            .borrow_mut()
+            .insert((Role::Ui, 0, Weight::Regular), Some(Rc::new(Spec { face: crate::theme::fontdb::FaceRef { file: path, index: 0, variable: true, weight: 80 }, kind: Kind::Outline })));
+        f.specs.borrow_mut().insert((Role::Ui, 1, Weight::Regular), Some(fallback));
+        for ch in ['A', 'g', '0'] {
+            let g = f.build_glyph(Role::Ui, ch, 20.0, Weight::Regular).expect("fallback glyph");
+            assert!(g.bitmap.iter().any(|p| *p != 0), "text must remain visible");
+        }
     }
 
     #[test]

@@ -180,7 +180,11 @@ pub fn raster_outline(bytes: &[u8], face: &FaceRef, ch: char, px: f32) -> Option
     let advance = f.glyph_hor_advance(gid).unwrap_or(0) as f32 * s;
     let mut b = Outline { pb: tiny_skia::PathBuilder::new(), s };
     let empty = |advance| Glyph { xmin: 0, ymin: 0, width: 0, height: 0, advance, bitmap: Vec::new(), color: false };
-    let Some(bb) = f.outline_glyph(gid, &mut b) else { return Some(empty(advance)) };
+    let Some(bb) = f.outline_glyph(gid, &mut b) else {
+        // A cmap entry is not proof that this parser supports its outline.
+        // Return failure for printable glyphs so the next font can draw them.
+        return if ch.is_whitespace() || advance == 0.0 { Some(empty(advance)) } else { None };
+    };
     let Some(path) = b.pb.finish() else { return Some(empty(advance)) };
     let x0 = (bb.x_min as f32 * s).floor();
     let top = (-(bb.y_max as f32) * s).floor();
@@ -291,6 +295,18 @@ mod tests {
         assert_eq!(out[3], 128, "half of the pixels were opaque");
         assert_eq!(out[0], 128);
         assert_eq!(box_scale(&src, 4, 2, 4, 2), src);
+    }
+
+    #[test]
+    fn unsupported_variable_outlines_request_fallback_instead_of_blank_letters() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("themes/sweeteh/fonts/GoogleSansFlex.ttf");
+        let bytes = std::fs::read(&path).unwrap();
+        let face = FaceRef { file: path, index: 0, variable: true, weight: 80 };
+        for ch in ['A', 'g', '0'] {
+            if let Some(g) = raster_outline(&bytes, &face, ch, 20.0) {
+                assert!(g.bitmap.iter().any(|a| *a != 0), "visible letters must render or request a fallback");
+            }
+        }
     }
 
     #[test]

@@ -35,7 +35,12 @@ impl Paths {
             Some(p) => PathBuf::from(p),
             None => std::env::var_os("XDG_RUNTIME_DIR").filter(|s| !s.is_empty()).map(|d| PathBuf::from(d).join("rdwm.sock")).unwrap_or_else(|| PathBuf::from("/nonexistent/rdwm.sock")),
         };
-        Paths { rdwm_config, shell_dir: crate::config::config_dir(), rdwmctl: std::env::var_os("RDWMCTL").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("rdwmctl")), socket }
+        Paths {
+            rdwm_config,
+            shell_dir: crate::config::config_dir(),
+            rdwmctl: std::env::var_os("RDWMCTL").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(crate::launch::sibling_or_path("rdwmctl"))),
+            socket,
+        }
     }
 
     pub fn dock_settings(&self) -> PathBuf {
