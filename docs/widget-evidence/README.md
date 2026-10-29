@@ -22,15 +22,16 @@ rendered built-in colour is asserted to be a semantic token.
 ## Real Fastfetch backend
 
 `fetch-summary-fastfetch-live-dark.png` and `...-light.png` contain actual values
-collected from installed Fastfetch 2.70.0 using the compiled adapter. They use
+collected from installed Fastfetch 2.70.0 using the compiled adapter, including Fastfetch’s real distro ASCII logo. They use
 Nord geometry, Catppuccin colours and the transparency settings above.
 `fetch-summary-fastfetch-cli-live.png` exercises the registered live source through
 `decwidgets render --live` on the private test configuration. It uses that probe's
 colours and background. These files contain real OS/kernel/CPU/RAM/uptime/WM data.
 The other fetch-summary PNGs intentionally use clearly labelled sample data.
 
-The adapter uses fixed JSON modules and `--config none`, runs off the drawing
-thread, and caps execution at five seconds and stdout at 64 KiB. Tests cover
+The adapter uses fixed JSON modules and a second builtin-logo-only invocation,
+both with `--config none`. It runs off the drawing thread, with a shared
+five-second budget and stdout capped at 64 KiB per invocation. Tests cover
 malformed/partial JSON, absent modules, control characters, missing binaries,
 timeouts, output overflow, clearing stale data, and refresh throttling.
 
@@ -56,8 +57,8 @@ RDWM_BIN_DIR=/path/to/rdwm/target/debug tests/e2e/widget-materials.sh
 PROFILE=debug RDWM_BIN_DIR=/path/to/rdwm/target/debug tests/e2e/widgets-visible.sh
 ```
 
-Validation: 45 widget tests passed, with the optional Fastfetch test passed
-separately. Full library: 1,441 passed, five ignored, current-user PAM-start probe
+Validation: 48 widget tests passed, with the optional Fastfetch test passed
+separately. Full library: 1,444 passed, five ignored, current-user PAM-start probe
 skipped. Clippy all targets/features with warnings denied and formatting passed.
 Private Xvfb: all five material pixel checks and all 35 visibility/click checks
 passed. The material checks cover opacity, an independent palette, light mode and
@@ -67,3 +68,19 @@ The earlier live bug capture remains in ignored
 `target/widget-debug/now-playing-live.png`; desktop content is not committed.
 No live configuration, binaries or processes were changed. Theme widget ownership,
 Keep/Replace/Cancel, production PAM and live-wallpaper code were preserved.
+
+
+## Actual ASCII logo
+
+The fetch card displays Fastfetch's full built-in distro ASCII, not a handwritten
+approximation. `tests/fixtures/widgets/fastfetch-omarchy-logo.txt` was captured
+from installed Fastfetch 2.70.0 with:
+
+```sh
+fastfetch --config none --structure Break --logo Omarchy --logo-type builtin --logo-padding-right 0 --pipe true
+```
+
+That fixture is used only for deterministic sample renders. Live collection lets
+Fastfetch detect the actual distro. Logo tests preserve the original grid, reject
+terminal escapes and oversized output, fit without truncation, and check seamless
+full-block pixels. The actual monospace role and semantic accent are used.

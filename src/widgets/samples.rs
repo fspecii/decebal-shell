@@ -235,7 +235,7 @@ mod tests {
                 check(border);
             }
             match &it.leaf {
-                Leaf::Text { color, .. } | Leaf::Icon { color, .. } | Leaf::Graph { color, .. } => check(color),
+                Leaf::Text { color, .. } | Leaf::Ascii { color, .. } | Leaf::Icon { color, .. } | Leaf::Graph { color, .. } => check(color),
                 Leaf::Bar { color, track, .. } | Leaf::Ring { color, track, .. } => {
                     check(color);
                     check(track);

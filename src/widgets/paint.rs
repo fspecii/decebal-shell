@@ -18,6 +18,9 @@ impl Metrics for FontMetrics<'_> {
     fn text_width(&self, s: &str, px: f32, bold: bool) -> f32 {
         self.0.measure(s, px, if bold { Weight::Bold } else { Weight::Regular })
     }
+    fn mono_cell_width(&self, px: f32) -> f32 {
+        self.0.measure_as(crate::text::Role::Mono, "M", px, Weight::Regular)
+    }
     fn line_height(&self, px: f32) -> f32 {
         (px * crate::theme::live::font_scale() * 1.25).ceil()
     }
@@ -163,6 +166,23 @@ pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
         }
         Leaf::DotText { s, size, color } => {
             super::dots::paint(pm, s, *size, r.x, r.y + (r.h - size) / 2.0, col(p.theme, color, op));
+        }
+        Leaf::Ascii { lines, size, cell, color } => {
+            let line_height = size * 1.25;
+            let width = lines.iter().map(|line| line.chars().count()).max().unwrap_or(0) as f32 * cell;
+            let x = r.x + (r.w - width).max(0.0) / 2.0;
+            let y = r.y + (r.h - lines.len() as f32 * line_height).max(0.0) / 2.0;
+            for (row, line) in lines.iter().enumerate() {
+                for (column, ch) in line.chars().enumerate() {
+                    let (x, y) = (x + column as f32 * cell, y + row as f32 * line_height);
+                    if ch == '█' {
+                        // Terminal full blocks fill their entire cell, with no font-dependent seams.
+                        gfx::fill_rounded(pm, x.round(), y.round(), (x + cell).round() - x.round(), (y + line_height).round() - y.round(), 0.0, col(p.theme, color, op));
+                    } else if ch != ' ' && *size > 0.0 {
+                        p.fonts.draw_as(crate::text::Role::Mono, pm, &ch.to_string(), x, y, *size, Weight::Regular, col(p.theme, color, op));
+                    }
+                }
+            }
         }
         Leaf::Icon { name, size, color } => {
             let (rgb, a) = rgb_of(p.theme, color);
@@ -394,6 +414,21 @@ mod tests {
             let p = Painter { fonts: &mut fonts, symbols: &mut symbols, images: &mut images, theme: &th, background_opacity: 1.0 };
             assert!((background_color(&p, &ColorRef::Token(token.into(), 1.0), 1.0).alpha() - expected).abs() < 0.003);
         }
+    }
+
+    #[test]
+    fn ascii_full_blocks_form_a_seamless_fixed_cell_grid() {
+        let mut fonts = fonts().expect("render verification requires fonts");
+        let def = dsl::parse("format=1\nsize=[40,30]\n[root]\ntype=\"ascii\"\ntext=\"{fetch.logo}\"\nsize=12\n", Trust::Theme).unwrap();
+        let mut data = sample();
+        data.set("fetch.logo", data::Val::Text("██\n██".into()));
+        let pm = render(&def, &data, &theme(), &mut fonts, Path::new("."), 0).unwrap();
+        for y in 0..30 {
+            for x in 15..25 {
+                assert_eq!(pm.pixel(x, y).unwrap().alpha(), 255, "seam at {x},{y}");
+            }
+        }
+        assert_eq!(pm.pixel(0, 15).unwrap().alpha(), 0, "logo is centered in its slot");
     }
 
     fn theme() -> Theme {

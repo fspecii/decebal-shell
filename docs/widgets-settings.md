@@ -102,8 +102,9 @@ not select or replace a theme's widget layout.
 
 ### Fetch summary and terminal wave
 
-- `fetch-summary`: real Fastfetch JSON data for OS, kernel, CPU model, memory,
-  uptime and window manager. Requires `fastfetch`; click to open Dashboard.
+- `fetch-summary`: the real distro ASCII logo from Fastfetch beside its JSON
+  OS, kernel, CPU model, memory, uptime and WM data. Requires `fastfetch`; click
+  to open Dashboard. The logo follows the active semantic accent colour.
 - `terminal-wave`: terminal-style music controls and a waveform-shaped **track
   progress** meter. Segments fill from left to right using MPRIS track position.
   This is not an audio spectrum and does not capture desktop audio. Controls hide
@@ -141,8 +142,10 @@ Native Wayland widget hosting remains unsupported.
 Fastfetch runs as a built-in data provider only when a visible card requests
 `fetch.*`. Its command is fixed to JSON output and OS/Kernel/CPU/Memory/Uptime/WM,
 with `--config none`; theme files cannot supply Fastfetch arguments or load user
-Fastfetch custom commands. A worker refreshes at most once a minute, with a
-five-second timeout and a 64 KiB output limit. Missing Fastfetch, malformed output
+Fastfetch custom commands. A second fixed invocation uses `--structure Break`,
+`--logo-type builtin` and `--pipe true` to return just the real distro logo.
+The pair shares a five-second budget; each output is capped at 64 KiB. The worker
+refreshes at most once a minute. Missing Fastfetch, malformed output
 and module errors produce explicit unavailable states. Failed refreshes clear
 previous values. No package installation or external configuration is performed.
 
@@ -153,3 +156,22 @@ dependency probe):
 cargo test --lib widgets::fetch::tests::installed_fastfetch_returns_real_system_data -- --ignored
 WIDGET_EVIDENCE_DIR="$PWD/docs/widget-evidence" cargo test --lib widgets::samples
 ```
+
+
+The `ascii` DSL leaf displays multiline data in a fixed monospace grid:
+
+```toml
+[root]
+type = "ascii"
+text = "{fetch.logo}"
+size = 12
+color = "accent"
+```
+
+ASCII art keeps its leading spaces, line breaks and block characters and scales
+down as a whole to fit its slot. It never wraps or adds ellipses to a logo.
+Rendering is bounded to 40 rows × 80 columns. Fastfetch logos containing terminal
+escape sequences or control characters are rejected. Full-block characters fill
+pixel-snapped cells without font-dependent seams; other characters use the
+configured monospace role. If logo extraction fails, system data remains visible
+with an explicit logo-unavailable status; no fabricated fallback logo is used.

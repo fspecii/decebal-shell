@@ -253,6 +253,7 @@ weight = "bold"
 | `button` | like `row`, centred; for clickable icons |
 | `spacer` | grows to push siblings apart |
 | `text` | `text` (format string), `size`, `weight` (regular/bold), `color`, `text_align`, `max_chars` |
+| `ascii` | `text` (format string, e.g. `{fetch.logo}`), `size` (6–40), `color`; multiline fixed monospace grid, up to 40 rows × 80 columns, scales down to fit without wrapping or ellipses |
 | `icon` | `name` (a bar symbol such as `play`, `pause`, `speaker-2`, or a format string like `{weather.icon}`), `size`, `color` |
 | `bar` | `value` (number or data path), `min`, `max`, `color`, `track`, `height` |
 | `analog-clock` | `size` (24–600, default 180), `color` (hands/numerals), `track` (rim/ticks), `second_color`, `numerals` (default true), `seconds` (default true); live local time with smoothly positioned hour/minute hands |

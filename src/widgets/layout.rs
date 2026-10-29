@@ -22,6 +22,9 @@ impl Rect {
 
 pub trait Metrics {
     fn text_width(&self, s: &str, px: f32, bold: bool) -> f32;
+    fn mono_cell_width(&self, px: f32) -> f32 {
+        px * 0.6
+    }
     fn line_height(&self, px: f32) -> f32 {
         (px * 1.25).ceil()
     }
@@ -48,6 +51,7 @@ pub enum Leaf {
     None,
     Text { s: String, size: f32, bold: bool, color: ColorRef, align: Align },
     DotText { s: String, size: f32, color: ColorRef },
+    Ascii { lines: Vec<String>, size: f32, cell: f32, color: ColorRef },
     Icon { name: String, size: f32, color: ColorRef },
     Bar { frac: f32, thickness: f32, color: ColorRef, track: ColorRef },
     AnalogClock { hour: f32, minute: f32, second: f32, size: f32, color: ColorRef, track: ColorRef, second_color: ColorRef, numerals: bool, seconds: bool },
@@ -82,6 +86,7 @@ fn kind_name(k: &Kind) -> &'static str {
         Kind::Button { .. } => "button",
         Kind::Text { .. } => "text",
         Kind::DotText { .. } => "dot-text",
+        Kind::Ascii { .. } => "ascii",
         Kind::Icon { .. } => "icon",
         Kind::Bar { .. } => "bar",
         Kind::AnalogClock { .. } => "analog-clock",
@@ -118,6 +123,10 @@ fn text_of(n: &Node, cx: &Ctx) -> Option<(String, f32, bool)> {
     }
 }
 
+fn ascii_lines(text: &str) -> Vec<String> {
+    text.lines().take(40).map(|line| line.chars().filter(|c| !c.is_control()).take(80).collect()).collect()
+}
+
 fn content_size(n: &Node, cx: &Ctx) -> (f32, f32) {
     let kids: Vec<&Node> = n.children.iter().filter(|c| visible(c, cx)).collect();
     let sizes: Vec<(f32, f32)> = kids.iter().map(|c| natural(c, cx)).collect();
@@ -131,6 +140,10 @@ fn content_size(n: &Node, cx: &Ctx) -> (f32, f32) {
             (cx.metrics.text_width(&s, size, bold), cx.metrics.line_height(size))
         }
         Kind::DotText { text, size, .. } => (super::dots::width(&text.eval(cx.data), *size), *size),
+        Kind::Ascii { text, size, .. } => {
+            let lines = ascii_lines(&text.eval(cx.data));
+            (lines.iter().map(|line| line.chars().count()).max().unwrap_or(0) as f32 * cx.metrics.mono_cell_width(*size), lines.len() as f32 * size * 1.25)
+        }
         Kind::Icon { size, .. } => (*size, *size),
         Kind::Ring { size, .. } | Kind::AnalogClock { size, .. } => (*size, *size),
         Kind::Bar { .. } => (80.0, 6.0),
@@ -166,6 +179,14 @@ fn leaf_of(n: &Node, cx: &Ctx, r: Rect) -> Leaf {
             Leaf::Text { s, size, bold, color: color.clone(), align: *align }
         }
         Kind::DotText { text, size, color } => Leaf::DotText { s: text.eval(cx.data), size: *size, color: color.clone() },
+        Kind::Ascii { text, size, color } => {
+            let lines = ascii_lines(&text.eval(cx.data));
+            let cell = cx.metrics.mono_cell_width(*size);
+            let width = lines.iter().map(|line| line.chars().count()).max().unwrap_or(0) as f32 * cell;
+            let height = lines.len() as f32 * size * 1.25;
+            let scale = (r.w / width.max(1.0)).min(r.h / height.max(1.0)).clamp(0.0, 1.0);
+            Leaf::Ascii { lines, size: size * scale, cell: cell * scale, color: color.clone() }
+        }
         Kind::Icon { name, size, color } => Leaf::Icon { name: name.eval(cx.data), size: *size, color: color.clone() },
         Kind::Bar { value, min, max, color, track } => {
             let v = value_of(value, cx).unwrap_or(*min);
@@ -346,6 +367,9 @@ pub fn dump(it: &Item) -> String {
             Leaf::None => {}
             Leaf::DotText { s, size, .. } => out.push_str(&format!(" dot-text={s:?} size={size}")),
             Leaf::Text { s, size, bold, .. } => out.push_str(&format!(" text={s:?} size={size}{}", if *bold { " bold" } else { "" })),
+            Leaf::Ascii { lines, size, cell, .. } => {
+                out.push_str(&format!(" rows={} columns={} size={size:.2} cell={cell:.2}", lines.len(), lines.iter().map(|line| line.chars().count()).max().unwrap_or(0)))
+            }
             Leaf::Icon { name, size, .. } => out.push_str(&format!(" icon={name:?} size={size}")),
             Leaf::Bar { frac, thickness, .. } => out.push_str(&format!(" frac={frac:.2} thick={thickness}")),
             Leaf::AnalogClock { hour, minute, second, .. } => out.push_str(&format!(" hands={hour:.4},{minute:.4},{second:.4}")),
@@ -391,6 +415,25 @@ mod tests {
         let def = dsl::parse(src, Trust::Theme).unwrap();
         let d = sample();
         layout(&def, &Ctx { data: &d, metrics: &Fixed, theme_radius: 10.0 }, None)
+    }
+
+    #[test]
+    fn ascii_preserves_spaces_uses_fixed_cells_and_fits_without_truncating_the_logo() {
+        let src = "format=1\nsize=[24,20]\n[root]\ntype=\"ascii\"\ntext=\"{fetch.logo}\"\nsize=12\n";
+        let def = dsl::parse(src, Trust::Theme).unwrap();
+        assert!(def.paths.contains("fetch.logo"));
+        assert!(dsl::parse(&src.replace("size=12", "size=0"), Trust::Theme).is_err());
+        let mut data = sample();
+        data.set("fetch.logo", Val::Text(" /\\\n/  \\".into()));
+        let item = layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: 0.0 }, None);
+        let Leaf::Ascii { lines, size, cell, .. } = item.leaf else { panic!("ASCII leaf") };
+        assert_eq!(lines, vec![" /\\", "/  \\"], "preserve the original grid");
+        assert!(cell * 4.0 <= 24.01 && size * 1.25 * 2.0 <= 20.01);
+        data.set("fetch.logo", Val::Text(("X".repeat(200) + "\n").repeat(80)));
+        let item = layout(&def, &Ctx { data: &data, metrics: &Fixed, theme_radius: 0.0 }, None);
+        let Leaf::Ascii { lines, .. } = item.leaf else { panic!("ASCII leaf") };
+        assert_eq!(lines.len(), 40);
+        assert!(lines.iter().all(|line| line.len() == 80));
     }
 
     #[test]

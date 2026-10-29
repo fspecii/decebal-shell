@@ -119,6 +119,7 @@ macro_rules! src {
 }
 
 pub const SOURCES: &[Source] = src! {
+    "fetch.logo" "text" "actual Fastfetch built-in distro ASCII logo";
     "fetch.present" "bool" "Fastfetch returned supported data";
     "fetch.status" "text" "Fastfetch backend status";
     "fetch.os" "text" "Fastfetch OS name";
@@ -264,9 +265,10 @@ pub fn sample() -> Data {
     ] {
         d.set(k, Val::Text(v.into()));
     }
+    d.set("fetch.logo", Val::Text(include_str!("../../tests/fixtures/widgets/fastfetch-omarchy-logo.txt").trim_end_matches('\n').into()));
     d.set("fetch.present", Val::Bool(true));
     d.set("fetch.status", Val::Text("Fastfetch sample data".into()));
-    d.set("fetch.os", Val::Text("Example Linux".into()));
+    d.set("fetch.os", Val::Text("Omarchy (sample)".into()));
     d.set("fetch.kernel", Val::Text("6.12.0-example".into()));
     d.set("fetch.cpu", Val::Text("Example 16-core CPU".into()));
     d.set("fetch.wm", Val::Text("rdwm".into()));

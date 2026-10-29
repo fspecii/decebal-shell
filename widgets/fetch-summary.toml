@@ -2,13 +2,13 @@ format = 1
 id = "fetch-summary"
 name = "Fastfetch summary"
 description = "Real Fastfetch JSON system data, refreshed every minute; requires Fastfetch."
-size = [380, 256]
+size = [680, 300]
 refresh = 1000
 
 [root]
 type = "col"
 padding = 18
-gap = 8
+gap = 12
 align = "stretch"
 background = "popup"
 radius = "theme"
@@ -23,43 +23,64 @@ color = "accent"
 weight = "bold"
 
 [[root.children]]
+type = "row"
+gap = 20
+align = "center"
+
+[[root.children.children]]
+type = "ascii"
+text = "{fetch.logo}"
+size = 12
+color = "accent"
+width = 260
+height = 228
+show_if = "fetch.logo"
+
+[[root.children.children]]
+type = "col"
+width = 0
+grow = 1
+align = "stretch"
+gap = 10
+
+[[root.children.children.children]]
 type = "text"
 text = "{fetch.os|System information unavailable}"
 size = 22
 color = "text"
 weight = "bold"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "Kernel  {fetch.kernel|Unavailable}"
 size = 12
 color = "text_secondary"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "CPU  {fetch.cpu|Unavailable}"
 size = 12
 color = "text"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "RAM  {fetch.mem_used:bytes|--} / {fetch.mem_total:bytes|--}"
 size = 12
 color = "text"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "Uptime  {fetch.uptime:dur|Unavailable}"
 size = 12
 color = "text"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "WM  {fetch.wm|Unavailable}"
 size = 12
 color = "text"
 
-[[root.children]]
+[[root.children.children.children]]
 type = "text"
 text = "{fetch.status|Fastfetch unavailable}"
 size = 10

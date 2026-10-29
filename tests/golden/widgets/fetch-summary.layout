@@ -1,9 +1,12 @@
-col [0.0 0.0 380.0 256.0] bg r=10 click
-  text [18.0 18.0 344.0 15.0] text="FASTFETCH" size=12 bold
-  text [18.0 41.0 344.0 28.0] text="Example Linux" size=22 bold
-  text [18.0 77.0 344.0 15.0] text="Kernel  6.12.0-example" size=12
-  text [18.0 100.0 344.0 15.0] text="CPU  Example 16-core CPU" size=12
-  text [18.0 123.0 344.0 15.0] text="RAM  18.4 GiB / 29.8 GiB" size=12
-  text [18.0 146.0 344.0 15.0] text="Uptime  1d 2h" size=12
-  text [18.0 169.0 344.0 15.0] text="WM  rdwm" size=12
-  text [18.0 192.0 344.0 13.0] text="Fastfetch sample data" size=10
+col [0.0 0.0 680.0 300.0] bg r=10 click
+  text [18.0 18.0 644.0 15.0] text="FASTFETCH" size=12 bold
+  row [18.0 45.0 644.0 228.0]
+    ascii [18.0 45.0 260.0 228.0] rows=15 columns=34 size=12.00 cell=7.20
+    col [298.0 71.0 364.0 176.0]
+      text [298.0 71.0 364.0 28.0] text="Omarchy (sample)" size=22 bold
+      text [298.0 109.0 364.0 15.0] text="Kernel  6.12.0-example" size=12
+      text [298.0 134.0 364.0 15.0] text="CPU  Example 16-core CPU" size=12
+      text [298.0 159.0 364.0 15.0] text="RAM  18.4 GiB / 29.8 GiB" size=12
+      text [298.0 184.0 364.0 15.0] text="Uptime  1d 2h" size=12
+      text [298.0 209.0 364.0 15.0] text="WM  rdwm" size=12
+      text [298.0 234.0 364.0 13.0] text="Fastfetch sample data" size=10

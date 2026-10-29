@@ -56,7 +56,20 @@ impl Fetch {
 pub fn collect() -> Result<Values, String> {
     let mut cmd = Command::new("fastfetch");
     cmd.args(ARGS);
-    parse(&run(cmd, Duration::from_secs(5))?)
+    let start = Instant::now();
+    let mut values = parse(&run(cmd, Duration::from_secs(5))?)?;
+    let mut logo = Command::new("fastfetch");
+    logo.args(["--config", "none", "--structure", "Break", "--logo-type", "builtin", "--logo-padding-right", "0", "--pipe", "true"]);
+    let remaining = Duration::from_secs(5).saturating_sub(start.elapsed());
+    match run(logo, remaining).and_then(|bytes| parse_logo(&bytes)) {
+        Ok(logo) => {
+            values.insert("fetch.logo".into(), Val::Text(logo));
+        }
+        Err(_) => {
+            values.insert("fetch.status".into(), Val::Text("Fastfetch · logo unavailable".into()));
+        }
+    }
+    Ok(values)
 }
 
 fn run(mut cmd: Command, timeout: Duration) -> Result<Vec<u8>, String> {
@@ -112,6 +125,18 @@ fn run(mut cmd: Command, timeout: Duration) -> Result<Vec<u8>, String> {
     let _ = child.kill();
     let _ = child.wait();
     result
+}
+
+/// Preserve the actual logo grid. Terminal escapes and oversized art are rejected.
+fn parse_logo(bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() > LIMIT {
+        return Err("Fastfetch logo too large".into());
+    }
+    let logo = std::str::from_utf8(bytes).map_err(|_| "Invalid Fastfetch logo".to_string())?.trim_end_matches(['\r', '\n']);
+    if logo.is_empty() || logo.chars().any(|c| c.is_control() && c != '\n') || logo.lines().count() > 40 || logo.lines().any(|line| line.chars().count() > 80) {
+        return Err("Invalid Fastfetch logo grid".into());
+    }
+    Ok(logo.into())
 }
 
 fn parse(bytes: &[u8]) -> Result<Values, String> {
@@ -191,6 +216,18 @@ mod tests {
     }
 
     #[test]
+    fn distro_logo_is_preserved_and_terminal_escape_sequences_are_rejected() {
+        let fixture = include_bytes!("../../tests/fixtures/widgets/fastfetch-omarchy-logo.txt");
+        let logo = parse_logo(fixture).unwrap();
+        assert_eq!(logo, std::str::from_utf8(fixture).unwrap().trim_end_matches('\n'));
+        assert_eq!(logo.lines().count(), 15);
+        assert!(logo.contains("██              ██"));
+        for invalid in ["", "\u{1b}[31mred", "tab\tlogo", &"X".repeat(81), &"X\n".repeat(41)] {
+            assert!(parse_logo(invalid.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
     fn subprocess_failure_timeout_and_output_are_bounded() {
         assert!(run(Command::new("/nonexistent/decebal-fastfetch"), Duration::from_millis(20)).is_err());
         let mut slow = Command::new("sh");
@@ -206,6 +243,7 @@ mod tests {
     #[ignore = "requires an installed Fastfetch; run explicitly for integration evidence"]
     fn installed_fastfetch_returns_real_system_data() {
         let values = collect().unwrap();
+        assert!(matches!(values.get("fetch.logo"), Some(Val::Text(s)) if s.lines().count() > 1));
         assert!(matches!(values.get("fetch.os"), Some(Val::Text(s)) if !s.is_empty()));
         assert!(matches!(values.get("fetch.cpu"), Some(Val::Text(s)) if !s.is_empty()));
         assert!(matches!(values.get("fetch.mem_total"), Some(Val::Num(n)) if *n > 0.0));

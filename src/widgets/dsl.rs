@@ -17,7 +17,7 @@
 //! text = "{clock:%H:%M}"
 //! size = 44
 //! ```
-//! Node types: `row` `col` `stack` `spacer` `button` (containers); `text` `dot-text` `icon` `bar` `ring` `analog-clock` `graph` `image` `workspaces` (leaves).
+//! Node types: `row` `col` `stack` `spacer` `button` (containers); `text` `dot-text` `ascii` `icon` `bar` `ring` `analog-clock` `graph` `image` `workspaces` (leaves).
 //! Every error carries the line and the key path. See docs/theme-engine.md for the property tables.
 
 use super::actions::Action;
@@ -129,6 +129,7 @@ pub enum Kind {
     Button { gap: f32 },
     Text { text: Fmt, size: f32, bold: bool, color: ColorRef, align: Align, max_chars: usize },
     DotText { text: Fmt, size: f32, color: ColorRef },
+    Ascii { text: Fmt, size: f32, color: ColorRef },
     Icon { name: Fmt, size: f32, color: ColorRef },
     Bar { value: Value, min: f64, max: f64, color: ColorRef, track: ColorRef },
     AnalogClock { size: f32, color: ColorRef, track: ColorRef, second_color: ColorRef, numerals: bool, seconds: bool },
@@ -328,6 +329,7 @@ fn kind_keys(ty: &str) -> &'static [&'static str] {
         "spacer" => &[],
         "text" => &["text", "size", "weight", "color", "text_align", "max_chars"],
         "dot-text" => &["text", "size", "color"],
+        "ascii" => &["text", "size", "color"],
         "icon" => &["name", "size", "color"],
         "bar" => &["value", "min", "max", "color", "track"],
         "analog-clock" => &["size", "color", "track", "second_color", "numerals", "seconds"],
@@ -395,10 +397,10 @@ fn parse_node(cx: &mut Cx, t: &Table, p: &str, depth: usize) -> Option<Node> {
         return None;
     }
     let Some(ty) = t.get("type").and_then(Item::as_str) else {
-        cx.err(t, p, "missing `type` (row, col, stack, spacer, button, text, dot-text, icon, bar, ring, analog-clock, graph, image, workspaces)");
+        cx.err(t, p, "missing `type` (row, col, stack, spacer, button, text, dot-text, ascii, icon, bar, ring, analog-clock, graph, image, workspaces)");
         return None;
     };
-    if !matches!(ty, "row" | "col" | "stack" | "spacer" | "button" | "text" | "dot-text" | "icon" | "bar" | "ring" | "analog-clock" | "graph" | "image" | "workspaces") {
+    if !matches!(ty, "row" | "col" | "stack" | "spacer" | "button" | "text" | "dot-text" | "ascii" | "icon" | "bar" | "ring" | "analog-clock" | "graph" | "image" | "workspaces") {
         cx.err(t.get("type")?, &format!("{p}.type"), format!("unknown node type `{ty}`"));
         return None;
     }
@@ -450,6 +452,13 @@ fn parse_node(cx: &mut Cx, t: &Table, p: &str, depth: usize) -> Option<Node> {
                 cx.err(t, &format!("{p}.text"), "a dot-text node needs `text`");
             }
             Kind::DotText { text, size: ts(cx, "size", 7.0, 300.0, 70.0), color: col(cx, "color", text_c) }
+        }
+        "ascii" => {
+            let text = fmt(cx, t, p, "text").unwrap_or_default();
+            if t.get("text").is_none() {
+                cx.err(t, &format!("{p}.text"), "an ascii node needs `text`");
+            }
+            Kind::Ascii { text, size: ts(cx, "size", 6.0, 40.0, 12.0), color: col(cx, "color", accent) }
         }
         "icon" => {
             let name = fmt(cx, t, p, "name").unwrap_or_default();
