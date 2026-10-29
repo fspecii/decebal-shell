@@ -159,12 +159,13 @@ static INIT: Once = Once::new();
 pub fn init() {
     INIT.call_once(|| {
         apply_env_fallbacks();
-        crate::dlog::init();
         if let Some(d) = Dirs::from_env() {
             for c in migrate(&d) {
                 eprintln!("decebal: copied {} to {} (the old one is left untouched)", c.from.display(), c.to.display());
             }
         }
+        // After the copy: the log folder lives inside the state folder, and a folder that exists is never overwritten by it.
+        crate::dlog::init();
     });
 }
 
