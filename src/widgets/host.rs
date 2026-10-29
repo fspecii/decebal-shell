@@ -38,6 +38,7 @@ struct Win {
     /// Without a compositor: what the root window showed under the card when it was created, so translucent parts blend with it.
     backdrop: Option<Pixmap>,
     depth: u8,
+    colormap: Option<Colormap>,
 }
 
 pub struct Paths {
@@ -69,6 +70,32 @@ fn data_with_options(base: &Data, inst: &Instance) -> Data {
     d
 }
 
+/// Start the single shared host when a user enables desktop widgets.
+pub fn ensure_running() -> Result<(), String> {
+    if cfg!(test) {
+        return Ok(());
+    }
+    if std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland") || std::env::var("DECEBAL_BACKEND").as_deref() == Ok("wayland") {
+        return Err("Desktop widgets currently need an X11 session".into());
+    }
+    if std::env::var_os("DISPLAY").is_none() {
+        return Err("No desktop display is available for widgets".into());
+    }
+    if crate::single::signal("decwidgets", 0) {
+        return Ok(());
+    }
+    if !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decwidgets"), "daemon".into()]) {
+        return Err("Could not start desktop widgets".into());
+    }
+    for _ in 0..20 {
+        if crate::single::signal("decwidgets", 0) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    Err("Desktop widgets did not start; see the decwidgets log".into())
+}
+
 pub fn run(paths: Paths) -> Result<(), String> {
     let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
@@ -95,13 +122,17 @@ pub fn run(paths: Paths) -> Result<(), String> {
         if rebuild {
             rebuild = false;
             for w in wins.drain(..) {
+                let _ = conn.free_gc(w.gc);
                 let _ = conn.destroy_window(w.id);
+                if let Some(c) = w.colormap {
+                    let _ = conn.free_colormap(c);
+                }
             }
             let cfg = WidgetsConfig::load(&paths.shell_json);
             let mon = bx::panel_monitor(&conn, root, (i32::from(screen.width_in_pixels), i32::from(screen.height_in_pixels)));
             let mut used: BTreeSet<String> = BTreeSet::new();
             let mut commands = Vec::new();
-            for inst in cfg.items.iter().filter(|i| i.enabled && i.place == Place::Desktop) {
+            for inst in cfg.items.iter().filter(|i| cfg.enabled && i.enabled && i.place == Place::Desktop) {
                 match config::resolve(inst, &paths.themes_dir, cfg.allow_exec) {
                     Ok(res) => {
                         used.extend(res.def.paths.iter().cloned());
@@ -111,7 +142,11 @@ pub fn run(paths: Paths) -> Result<(), String> {
                     Err(e) => eprintln!("decwidgets: {}: {e}", inst.use_),
                 }
             }
-            live = Some(Live::new(&used, &commands, waker.clone()));
+            live = if wins.is_empty() { None } else { Some(Live::new(&used, &commands, waker.clone())) };
+            if wins.is_empty() {
+                fonts.trim();
+                crate::mem::trim();
+            }
             stamp.1 = theme_stamp(&paths);
             conn.flush().map_err(err)?;
             next_refresh = Instant::now();
@@ -204,17 +239,19 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     let d = data_with_options(data, inst);
     let item = lay(&res.def, &d, fonts);
     let (w, h) = (item.rect.w.ceil().max(8.0) as u32, item.rect.h.ceil().max(8.0) as u32);
-    let (x, y) = config::place_at(&inst.anchor, inst.x, inst.y, (mon.x, mon.y, mon.w, mon.h), w as i32, h as i32);
+    let (x, y) = config::place_clear(&inst.anchor, inst.x, inst.y, (mon.x, mon.y, mon.w, mon.h), w as i32, h as i32, crate::theme::th().bar_insets());
     // taken before the window exists, so the snapshot is the desktop and not our own black rectangle
     let backdrop = if argb_visual.is_some() { None } else { snapshot(conn, screen.root, x, y, w, h) };
     let id = conn.generate_id().map_err(err)?;
     let mask = EventMask::EXPOSURE | EventMask::BUTTON_PRESS | EventMask::STRUCTURE_NOTIFY;
     let mut aux = CreateWindowAux::new().override_redirect(1).event_mask(mask).background_pixel(screen.black_pixel);
+    let mut colormap = None;
     match argb_visual {
         Some(visual) => {
-            let colormap = conn.generate_id().map_err(err)?;
-            conn.create_colormap(ColormapAlloc::NONE, colormap, screen.root, visual).map_err(err)?;
-            aux = aux.background_pixel(0).border_pixel(0).colormap(colormap);
+            let cmap = conn.generate_id().map_err(err)?;
+            colormap = Some(cmap);
+            conn.create_colormap(ColormapAlloc::NONE, cmap, screen.root, visual).map_err(err)?;
+            aux = aux.background_pixel(0).border_pixel(0).colormap(cmap);
             conn.create_window(32, id, screen.root, x as i16, y as i16, w as u16, h as u16, 0, WindowClass::INPUT_OUTPUT, visual, &aux).map_err(err)?;
         }
         None => {
@@ -230,7 +267,7 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     conn.map_window(id).map_err(err)?;
     conn.configure_window(id, &ConfigureWindowAux::new().stack_mode(StackMode::BELOW)).map_err(err)?;
     let base = res.base.clone();
-    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth })
+    Ok(Win { id, gc, inst: inst.clone(), res, w, h, item: Some(item), images: ImageCache::new(&base), argb: argb_visual.is_some(), backdrop, depth: screen.root_depth, colormap })
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,0 +1,132 @@
+format = 1
+id = "moss-atlas"
+name = "Moss Atlas"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "An organic workspace with a right-hand instrument rail, generous rounded surfaces and original layered terrain. Design stays constant when the palette changes."
+min_shell_version = "0.1.0"
+tags = ["original", "dark", "light", "palette-independent", "organic"]
+
+[colors.dark]
+background = "#19251f"
+sidebar = "#142019"
+surface = "#233129"
+bar = "#142019"
+bar_text = "#e5e9dc"
+popup = "#293930"
+dock = "#19251f"
+overlay = "#293930"
+titlebar = "#293930"
+titlebar_inactive = "#233129"
+border = "#536657"
+text = "#e5e9dc"
+text_secondary = "#bac8b8"
+text_faint = "#97ac98"
+accent = "#b6cf89"
+accent_text = "#19251f"
+danger = "#eeaaa0"
+ok = "#b6cf89"
+warn = "#e0c393"
+
+[colors.light]
+background = "#f2f1e7"
+sidebar = "#e6eadc"
+surface = "#f9f8ee"
+bar = "#e6eadc"
+bar_text = "#253c2c"
+popup = "#f9f8ee"
+dock = "#e6eadc"
+overlay = "#f9f8ee"
+titlebar = "#e6eadc"
+titlebar_inactive = "#f2f1e7"
+border = "#9cae96"
+text = "#253c2c"
+text_secondary = "#52674f"
+text_faint = "#667d60"
+accent = "#4f6c35"
+accent_text = "#f9f8ee"
+danger = "#a34039"
+ok = "#3f713f"
+warn = "#805c20"
+
+[metrics]
+radius = 18
+dock_roundness = 0.5
+dock_alpha = 0.96
+popup_alpha = 0.98
+panel_alpha = 0.98
+bar_alpha = 0.98
+shadow = 0.5
+outline = 0.12
+dock_padding = 10
+
+[font]
+preset = "noto"
+scale = 1.0
+ui = ["Noto Sans", "Cantarell", "sans-serif"]
+title = ["Noto Sans", "sans-serif"]
+mono = ["IBM Plex Mono", "monospace"]
+display = ["Noto Sans", "sans-serif"]
+
+[wallpaper]
+image = "wallpapers/moss-atlas-dark.png"
+mode = "fill"
+color = "#19251f"
+
+[decoration]
+style = "adwaita"
+height = 34
+radius = 12
+title_align = "center"
+
+[rdwm]
+gap_inner = 14
+gap_outer = 14
+border_px = 2
+smart_gaps = true
+mfact = 0.55
+nmaster = 1
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "vertical"
+position = "right"
+
+[dock]
+enabled = false
+style = "mac"
+size = 44
+roundness = 0.5
+magnification = 1.2
+
+[control_center]
+enabled = true
+position = "auto"
+style = "card"
+
+[hot_corners]
+top_left = "overview"
+bottom_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-left"
+x = 64
+y = 88
+
+[[widgets]]
+use = "builtin:cpu-ram-ring"
+place = "desktop"
+anchor = "top-left"
+x = 64
+y = 244
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "bottom-left"
+x = 64
+y = -64

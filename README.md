@@ -539,3 +539,11 @@ The Control Center has a row of four tiles for these (Record, Inhibit Idle, Game
 ## Debian / Ubuntu
 
 `packaging/deb/build.sh [outdir]` builds `decebal_<version>_<arch>.deb` from a release build (replaces the old `macshell` package). Verified on Ubuntu 24.04: installs with `dpkg -i` and `decthemectl` runs.
+
+## Shared widgets and new desktop designs
+
+System Settings → Widgets controls desktop widgets independently of the selected theme. Enable or hide the collection, toggle individual cards, and adjust their placement. Theme switches preserve these choices. See [Widgets settings](docs/widgets-settings.md).
+
+The theme gallery includes NextKDE, Orbit Glass, Paper Signal, Moss Atlas and Signal Deck. Themes choose the desktop design; **Palettes** changes colours across every design and widget. NextKDE includes shared clock, weather and system cards. See [NextKDE adaptation](docs/nextkde-port.md), [Settings design](docs/settings-nextkde-design.md), and [theme gallery](docs/themes.md).
+
+Desktop widget hosting currently supports X11. Isolated regression checks: `tests/e2e/widgets-settings.sh` and `tests/e2e/theme-studio.sh`.

@@ -9,6 +9,11 @@ pub const DYNAMIC_THEME: &str = "caelestia";
 /// (id, theme file). The first entry is the default.
 pub const BUILTIN: &[(&str, &str)] = &[
     ("macos", include_str!("../../themes/macos/theme.toml")),
+    ("nextkde", include_str!("../../themes/nextkde/theme.toml")),
+    ("orbit-glass", include_str!("../../themes/orbit-glass/theme.toml")),
+    ("paper-signal", include_str!("../../themes/paper-signal/theme.toml")),
+    ("moss-atlas", include_str!("../../themes/moss-atlas/theme.toml")),
+    ("signal-deck", include_str!("../../themes/signal-deck/theme.toml")),
     ("graphite", include_str!("../../themes/graphite/theme.toml")),
     ("nord", include_str!("../../themes/nord/theme.toml")),
     ("dracula", include_str!("../../themes/dracula/theme.toml")),

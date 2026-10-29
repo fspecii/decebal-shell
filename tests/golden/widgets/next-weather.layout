@@ -1,0 +1,6 @@
+col [0.0 0.0 264.0 152.0] bg r=10 click
+  text [20.0 20.0 42.4 14.0] text="WEATHER" size=11 bold
+  row [20.0 42.0 148.4 53.0]
+    icon [20.0 48.5 40.0 40.0] icon="weather-partly" size=40
+    text [76.0 42.0 92.4 53.0] text="18°C" size=42 bold
+  text [20.0 103.0 118.8 15.0] text="Current conditions" size=12

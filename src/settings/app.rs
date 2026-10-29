@@ -174,7 +174,7 @@ impl SettingsApp {
     }
 
     fn sb(&self) -> f32 {
-        SIDEBAR_W * self.s
+        (self.size.0 as f32 * 0.34).clamp(156.0 * self.s, SIDEBAR_W * self.s)
     }
 
     /// Search hits for the current query (recomputed only when the query changes).
@@ -355,7 +355,8 @@ impl SettingsApp {
             match r {
                 SbRow::Header(t) => {
                     if ry + hh > top && ry < h {
-                        p.text(pm, &t.to_uppercase(), u(20.0), ry + hh - u(10.0), u(10.5), Weight::Medium, pal::faint());
+                        let label = p.fit(&t.to_uppercase(), sbw - u(32.0), u(10.5), Weight::SemiBold);
+                        p.text(pm, &label, u(20.0), ry + hh - u(10.0), u(10.5), Weight::SemiBold, pal::sub());
                     }
                 }
                 SbRow::Pane(i) => {
@@ -365,20 +366,13 @@ impl SettingsApp {
                     let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
                     if ry + hh > top && ry < h {
                         if selected {
-                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), if self.zone == Zone::Sidebar { pal::accent() } else { crate::theme::th().ink(0.14) });
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().accent.color(if self.zone == Zone::Sidebar { 0.20 } else { 0.12 }));
                         } else if hover {
                             fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
                         }
                         pane_icon(pm, def.glyph, def.color, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
-                        p.text(
-                            pm,
-                            def.title,
-                            rect.0 + u(42.0),
-                            rect.1 + rect.3 / 2.0,
-                            u(13.0),
-                            if selected { Weight::Medium } else { Weight::Regular },
-                            if selected && self.zone == Zone::Sidebar { pal::accent_text() } else { pal::text() },
-                        );
+                        let label = p.fit(def.title, rect.2 - u(50.0), u(13.0), Weight::Regular);
+                        p.text(pm, &label, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
                     }
                     self.sidebar_hits.push((rect, *i));
                     self.sidebar_labels.push(None);
@@ -405,7 +399,7 @@ impl SettingsApp {
         let sr = (u(12.0), u(14.0), sbw - u(24.0), u(30.0));
         self.search_rect = sr;
         let focused = self.zone == Zone::Search;
-        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), if focused { pal::window() } else { pal::field() });
+        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(10.0), if focused { pal::window() } else { pal::field() });
         if focused {
             stroke_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), pal::accent(), u(1.5));
         }

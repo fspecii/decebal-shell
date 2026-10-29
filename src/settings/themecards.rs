@@ -60,49 +60,6 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
     let u = |v: f32| v * s;
     let mut y = y;
     for c in cards {
-        let ch = u(CARD_H);
-        // Cards far outside the window are only laid out (their buttons stay reachable by Tab), not painted: a long list
-        // re-shaped and re-rasterised every card on every wheel notch.
-        let on = y + ch >= 0.0 && y <= pm.height() as f32;
-        if on {
-            fill_rounded(pm, x0, y, cw, ch, u(12.0), pal::card());
-        }
-        if c.current && on {
-            stroke_rounded(pm, x0 + 1.0, y + 1.0, cw - 2.0, ch - 2.0, u(12.0), pal::accent(), u(2.0));
-        }
-        if on {
-            // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
-            let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), u(SHOT_W), ch - u(20.0));
-            match c.screenshot.as_ref().and_then(shot) {
-                Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
-                None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
-            }
-            let tx = px + pw + u(14.0);
-            let tw = x0 + cw - tx - u(12.0);
-            let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
-            let nw = p.text(pm, &name, tx, y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
-            if c.current {
-                p.text(pm, "In use", tx + nw + u(10.0), y + u(24.0), u(11.0), Weight::Medium, pal::accent());
-            }
-            let meta = p.fit(&c.meta, tw, u(11.0), Weight::Regular);
-            p.text(pm, &meta, tx, y + u(42.0), u(11.0), Weight::Regular, pal::faint());
-            let desc = match &c.error {
-                Some(e) => format!("Cannot be used: {e}"),
-                None if c.hash_mismatch => "Warning: the files do not match the package's content hash".to_string(),
-                None => c.description.clone(),
-            };
-            let d = p.fit(&desc, tw, u(12.0), Weight::Regular);
-            p.text(pm, &d, tx, y + u(60.0), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
-            if !c.tags.is_empty() {
-                let t = p.fit(&c.tags, tw, u(10.5), Weight::Regular);
-                p.text(pm, &t, tx, y + u(76.0), u(10.5), Weight::Regular, pal::faint());
-            }
-        }
-
-        // buttons, right to left from the card's right edge
-        let mut bx = x0 + cw - u(12.0);
-        let by = y + ch - u(32.0);
-        let bh = u(24.0);
         let mut buttons: Vec<(&str, String, bool)> = Vec::new();
         if c.error.is_none() {
             if !c.current {
@@ -115,8 +72,67 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         if c.deletable && !c.current {
             buttons.push(("delete", if c.confirm_delete { "Really delete?".into() } else { "Delete".into() }, true));
         }
+        let compact = cw < u(560.0);
+        let mut button_rows = 1;
+        let mut available = cw - u(24.0);
+        for (_, label, _) in &buttons {
+            let width = p.measure(label, u(11.5), Weight::Medium) + u(30.0);
+            if width > available && available < cw - u(24.0) {
+                button_rows += 1;
+                available = cw - u(24.0);
+            }
+            available -= width;
+        }
+        let ch = u(if compact { 216.0 + 32.0 * button_rows as f32 } else { CARD_H });
+        // Cards far outside the window are only laid out (their buttons stay reachable by Tab), not painted: a long list
+        // re-shaped and re-rasterised every card on every wheel notch.
+        let on = y + ch >= 0.0 && y <= pm.height() as f32;
+        if on {
+            fill_rounded(pm, x0, y, cw, ch, u(12.0), pal::card());
+        }
+        if c.current && on {
+            stroke_rounded(pm, x0 + 1.0, y + 1.0, cw - 2.0, ch - 2.0, u(12.0), pal::accent(), u(2.0));
+        }
+        if on {
+            // preview: the package's screenshot, else a miniature desktop painted in the theme's colours
+            let (px, py, pw, ph) = (x0 + u(10.0), y + u(10.0), if compact { cw - u(20.0) } else { u(SHOT_W) }, if compact { u(100.0) } else { ch - u(20.0) });
+            match c.screenshot.as_ref().and_then(shot) {
+                Some(img) => super::ui::draw_cover(pm, &img, px, py, pw, ph, u(8.0)),
+                None => super::ui::draw_theme_preview(pm, (px, py, pw, ph), s, &ThemeTile { id: c.id.clone(), name: c.name.clone(), selected: false, error: c.error.is_some(), colors: c.swatches }),
+            }
+            let tx = if compact { x0 + u(12.0) } else { px + pw + u(14.0) };
+            let text_y = y + if compact { u(108.0) } else { 0.0 };
+            let tw = x0 + cw - tx - u(12.0);
+            let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
+            let nw = p.text(pm, &name, tx, text_y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
+            if c.current {
+                p.text(pm, "In use", tx + nw + u(10.0), text_y + u(24.0), u(11.0), Weight::Medium, pal::accent());
+            }
+            let meta = p.fit(&c.meta, tw, u(11.0), Weight::Regular);
+            p.text(pm, &meta, tx, text_y + u(42.0), u(11.0), Weight::Regular, pal::faint());
+            let desc = match &c.error {
+                Some(e) => format!("Cannot be used: {e}"),
+                None if c.hash_mismatch => "Warning: the files do not match the package's content hash".to_string(),
+                None => c.description.clone(),
+            };
+            let d = p.fit(&desc, tw, u(12.0), Weight::Regular);
+            p.text(pm, &d, tx, text_y + u(60.0), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
+            if !c.tags.is_empty() {
+                let t = p.fit(&c.tags, tw, u(10.5), Weight::Regular);
+                p.text(pm, &t, tx, text_y + u(76.0), u(10.5), Weight::Regular, pal::faint());
+            }
+        }
+
+        // buttons, right to left from the card's right edge
+        let mut bx = x0 + cw - u(12.0);
+        let mut by = y + ch - u(32.0);
+        let bh = u(24.0);
         for (act, label, danger) in buttons.iter() {
             let w = p.measure(label, u(11.5), Weight::Medium) + u(22.0);
+            if compact && bx - w < x0 + u(12.0) {
+                bx = x0 + cw - u(12.0);
+                by -= u(32.0);
+            }
             bx -= w;
             let id = format!("l:tcard:{act}:{}", c.id);
             let rect = (bx, by, w, bh);
@@ -156,4 +172,44 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
         y += ch + u(10.0);
     }
     y + u(8.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compact_theme_actions_wrap_inside_the_card_at_multiple_scales() {
+        for scale in [1.0, 1.5, 2.0] {
+            let mut pm = Pixmap::new((480.0 * scale) as u32, (800.0 * scale) as u32).unwrap();
+            let mut painter = Painter { fonts: None, s: scale };
+            let card = Card {
+                id: "example".into(),
+                name: "Example theme".into(),
+                meta: "1.0 · Example · MIT".into(),
+                description: "A complete desktop design".into(),
+                tags: "#example".into(),
+                swatches: [(128, 128, 128); 7],
+                screenshot: None,
+                current: false,
+                deletable: true,
+                error: None,
+                confirm_delete: true,
+                hash_mismatch: false,
+            };
+            let mut frame = Frame::default();
+            draw(&mut pm, &mut painter, &[card], 180.0 * scale, 10.0 * scale, 284.0 * scale, &Interact::default(), &mut frame);
+            assert_eq!(frame.placed.len(), 5);
+            for (i, button) in frame.placed.iter().enumerate() {
+                let r = button.rect;
+                assert!(r.0 >= 192.0 * scale && r.0 + r.2 <= 452.0 * scale);
+                assert!(r.1 >= 210.0 * scale, "button overlaps theme text");
+                assert!(frame.at(r.0 + r.2 / 2.0, r.1 + r.3 / 2.0).is_some());
+                for other in &frame.placed[..i] {
+                    let q = other.rect;
+                    assert!(r.0 + r.2 <= q.0 || q.0 + q.2 <= r.0 || r.1 + r.3 <= q.1 || q.1 + q.3 <= r.1);
+                }
+            }
+        }
+    }
 }

@@ -4,6 +4,9 @@ use super::dsl::{self, WidgetDef};
 use super::Trust;
 
 pub const SAMPLES: &[(&str, &str)] = &[
+    ("next-clock", include_str!("../../widgets/next-clock.toml")),
+    ("next-weather", include_str!("../../widgets/next-weather.toml")),
+    ("next-system", include_str!("../../widgets/next-system.toml")),
     ("clock-card", include_str!("../../widgets/clock-card.toml")),
     ("cpu-ram-ring", include_str!("../../widgets/cpu-ram-ring.toml")),
     ("now-playing-mini", include_str!("../../widgets/now-playing-mini.toml")),

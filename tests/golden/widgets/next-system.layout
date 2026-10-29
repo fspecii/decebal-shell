@@ -1,0 +1,12 @@
+col [0.0 0.0 264.0 180.0] bg r=10 click
+  row [20.0 20.0 224.0 15.0]
+    text [20.0 20.0 36.3 14.0] text="SYSTEM" size=11 bold
+    spacer [56.3 20.0 141.5 0.0]
+    text [197.8 20.0 46.2 15.0] text="37% CPU" size=12 bold
+  graph [20.0 43.0 224.0 42.0] points=60 max=1.00
+  row [20.0 93.0 224.0 15.0]
+    text [20.0 93.0 39.6 15.0] text="Memory" size=12
+    spacer [59.6 93.0 164.6 0.0]
+    text [224.2 93.0 19.8 15.0] text="62%" size=12 bold
+  bar [20.0 116.0 224.0 6.0] frac=0.62 thick=6
+  text [20.0 130.0 121.0 14.0] text="18.4 GiB of 29.8 GiB" size=11

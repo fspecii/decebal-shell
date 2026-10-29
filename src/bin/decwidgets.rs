@@ -69,13 +69,17 @@ fn main() {
 
 fn daemon(src: &Source) {
     decebal::mem::limit_arenas();
-    let Some(_guard) = decebal::single::acquire("decwidgets") else { return };
+    let Some(_guard) = decebal::single::hold("decwidgets") else { return };
     if let Err(e) = decebal::widgets::host::run(decebal::widgets::host::Paths { shell_json: src.shell_json.clone(), themes_dir: src.themes_dir.clone() }) {
         die(&e);
     }
 }
 
 fn list(src: &Source) {
+    println!("Available on every theme:");
+    for e in decebal::widgets::catalog::list(&src.themes_dir, false) {
+        println!("  {}  {}{}", e.id, e.name, e.error.map(|s| format!(" (unavailable: {s})")).unwrap_or_default());
+    }
     println!("shipped samples:");
     for (id, text) in samples::SAMPLES {
         let w = dsl::parse(text, Trust::Theme).ok();
@@ -170,16 +174,28 @@ fn render(src: &Source, args: &[String]) {
 
 fn edit(src: &Source, args: &[String], add: bool) {
     let Some(name) = args.first().filter(|a| !a.starts_with("--")) else { die("needs a widget name") };
-    let mut cfg = WidgetsConfig::load(&src.shell_json);
+    let root = decebal::settings::io::json_load(&src.shell_json);
+    let mut cfg = WidgetsConfig::from_json(&root);
+    let mut items = root.pointer("/widgets/items").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
     if add {
         let mut inst = Instance::desktop(name, "top-left", 40, 60);
+        let mut overrides = serde_json::Map::new();
         let mut i = 1;
         while i < args.len() {
             let v = args.get(i + 1).cloned().unwrap_or_else(|| die("missing value"));
             match args[i].as_str() {
-                "--anchor" => inst.anchor = v,
-                "--x" => inst.x = v.parse().unwrap_or_else(|_| die("--x takes pixels")),
-                "--y" => inst.y = v.parse().unwrap_or_else(|_| die("--y takes pixels")),
+                "--anchor" => {
+                    inst.anchor = v;
+                    overrides.insert("anchor".into(), serde_json::json!(inst.anchor));
+                }
+                "--x" => {
+                    inst.x = v.parse().unwrap_or_else(|_| die("--x takes pixels"));
+                    overrides.insert("x".into(), serde_json::json!(inst.x));
+                }
+                "--y" => {
+                    inst.y = v.parse().unwrap_or_else(|_| die("--y takes pixels"));
+                    overrides.insert("y".into(), serde_json::json!(inst.y));
+                }
                 other => die(&format!("unknown option {other}")),
             }
             i += 2;
@@ -188,15 +204,57 @@ fn edit(src: &Source, args: &[String], add: bool) {
             die(&e);
         }
         inst.place = Place::Desktop;
-        cfg.items.retain(|x| !(x.use_ == inst.use_ && x.source == inst.source));
-        cfg.items.push(inst);
+        upsert(&mut items, &inst, overrides);
     } else {
-        let before = cfg.items.len();
-        cfg.items.retain(|x| x.use_ != *name);
-        if cfg.items.len() == before {
+        let before = items.len();
+        items.retain(|v| v.get("use").and_then(serde_json::Value::as_str) != Some(name.as_str()));
+        if items.len() == before {
             die(&format!("`{name}` is not placed"));
         }
     }
-    decebal::settings::io::json_set(&src.shell_json, "widgets", Some(cfg.to_json())).unwrap_or_else(|e| die(&e));
+    let mut widgets = root.get("widgets").and_then(serde_json::Value::as_object).cloned().unwrap_or_default();
+    if add {
+        cfg.enabled = true;
+    }
+    widgets.insert("items".into(), serde_json::Value::Array(items));
+    widgets.insert("enabled".into(), serde_json::json!(cfg.enabled));
+    decebal::settings::io::json_set(&src.shell_json, "widgets", Some(serde_json::Value::Object(widgets))).unwrap_or_else(|e| die(&e));
+    cfg = WidgetsConfig::load(&src.shell_json);
+    if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == Place::Desktop) {
+        if let Err(e) = decebal::widgets::host::ensure_running() {
+            die(&e);
+        }
+    }
     println!("{} {name}; decwidgets follows within half a second", if add { "placed" } else { "removed" });
+}
+
+fn upsert(items: &mut Vec<serde_json::Value>, inst: &Instance, overrides: serde_json::Map<String, serde_json::Value>) {
+    if let Some(raw) = items.iter_mut().find(|v| Instance::from_json(v).is_some_and(|x| x.use_ == inst.use_ && x.source == inst.source)) {
+        let object = raw.as_object_mut().unwrap();
+        object.extend(overrides);
+        object.insert("enabled".into(), serde_json::json!(true));
+        object.insert("place".into(), serde_json::json!("desktop"));
+    } else {
+        items.push(inst.to_json());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn add_preserves_matching_raw_options_and_only_overrides_explicit_position() {
+        let original = json!({"use":"clock-card","enabled":false,"x":17,"y":90,"anchor":"bottom-right","monitor":"DP-2","options":{"format":"24h"},"future":3,"from_theme":true});
+        let mut items = vec![original.clone(), json!({"unknown":true})];
+        let inst = Instance::desktop("clock-card", "top-left", 80, 60);
+        let overrides = serde_json::Map::from_iter([("x".into(), json!(80))]);
+        upsert(&mut items, &inst, overrides);
+        let mut expected = original;
+        expected["enabled"] = json!(true);
+        expected["place"] = json!("desktop");
+        expected["x"] = json!(80);
+        assert_eq!(items, vec![expected, json!({"unknown":true})]);
+    }
 }

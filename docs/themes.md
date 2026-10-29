@@ -189,3 +189,17 @@ cargo build --bin decsettings --bin decthemectl --bin decbar
 MS_BIN_DIR="$PWD/target/debug" dbus-run-session -- tests/e2e/palettes.sh :98
 MS_BIN_DIR="$PWD/target/debug" dbus-run-session -- tests/e2e/appearance.sh :97
 ```
+
+## New desktop designs
+
+These original theme packages have dark and light colours, bundled original wallpapers, and support the shared Widgets library. A selected palette applies across all five.
+
+| Theme | Desktop design | Apply |
+|---|---|---|
+| ![NextKDE](themes/nextkde.png) **NextKDE** | Soft glass, slim global top bar and floating dock; inspired by [NextKDE](https://github.com/NextKde/NextKde). | `decthemectl theme apply nextkde` |
+| ![Orbit Glass](themes/orbit-glass.png) **Orbit Glass** | Floating navigation, rounded windows and orbital artwork. | `decthemectl theme apply orbit-glass` |
+| ![Paper Signal](themes/paper-signal.png) **Paper Signal** | Slim panel, square windows and an editorial paper composition. | `decthemectl theme apply paper-signal` |
+| ![Moss Atlas](themes/moss-atlas.png) **Moss Atlas** | Right instrument rail, generous curves and organic terrain. | `decthemectl theme apply moss-atlas` |
+| ![Signal Deck](themes/signal-deck.png) **Signal Deck** | Split navigation, technical typography and orbital geometry. | `decthemectl theme apply signal-deck` |
+
+Research and provenance: [glass and paper](theme-research-glass-paper.md), [organic and retro](theme-research-organic-retro.md), [NextKDE](nextkde-port.md). Screenshots are captured on a private Xvfb desktop by `tests/e2e/theme-studio.sh`. The light artwork is bundled as an alternative wallpaper; changing colour mode alone keeps the selected wallpaper.

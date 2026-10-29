@@ -1,0 +1,132 @@
+format = 1
+id = "signal-deck"
+name = "Signal Deck"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A restrained orbital control room: split instrument bars, precise square geometry, technical typography and original survey artwork. Every surface follows the selected palette."
+min_shell_version = "0.1.0"
+tags = ["original", "dark", "light", "palette-independent", "technical"]
+
+[colors.dark]
+background = "#111e29"
+sidebar = "#0d1821"
+surface = "#192c38"
+bar = "#0d1821"
+bar_text = "#e2ebeb"
+popup = "#203643"
+dock = "#111e29"
+overlay = "#203643"
+titlebar = "#203643"
+titlebar_inactive = "#192c38"
+border = "#4b6470"
+text = "#e2ebeb"
+text_secondary = "#b4c6cb"
+text_faint = "#8ca5af"
+accent = "#e6b978"
+accent_text = "#14232c"
+danger = "#f0a6a1"
+ok = "#8cc7ac"
+warn = "#e6b978"
+
+[colors.light]
+background = "#e9eef0"
+sidebar = "#dbe4e8"
+surface = "#f6f8f7"
+bar = "#dbe4e8"
+bar_text = "#203942"
+popup = "#f6f8f7"
+dock = "#dbe4e8"
+overlay = "#f6f8f7"
+titlebar = "#dbe4e8"
+titlebar_inactive = "#e9eef0"
+border = "#8ca3ad"
+text = "#203942"
+text_secondary = "#4c6670"
+text_faint = "#5f7982"
+accent = "#865820"
+accent_text = "#f6f8f7"
+danger = "#a63d39"
+ok = "#316d52"
+warn = "#865820"
+
+[metrics]
+radius = 4
+dock_roundness = 0.5
+dock_alpha = 0.96
+popup_alpha = 0.98
+panel_alpha = 0.98
+bar_alpha = 0.98
+shadow = 0.5
+outline = 0.12
+dock_padding = 10
+
+[font]
+preset = "ibm-plex"
+scale = 1.0
+ui = ["IBM Plex Sans", "Noto Sans", "sans-serif"]
+title = ["IBM Plex Mono", "monospace"]
+mono = ["IBM Plex Mono", "monospace"]
+display = ["IBM Plex Mono", "monospace"]
+
+[wallpaper]
+image = "wallpapers/signal-deck-dark.png"
+mode = "fill"
+color = "#111e29"
+
+[decoration]
+style = "breeze"
+height = 28
+radius = 4
+title_align = "left"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 10
+border_px = 1
+smart_gaps = true
+mfact = 0.55
+nmaster = 1
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "vertical"
+position = "split"
+
+[dock]
+enabled = false
+style = "mac"
+size = 44
+roundness = 0.5
+magnification = 1.2
+
+[control_center]
+enabled = true
+position = "auto"
+style = "card"
+
+[hot_corners]
+top_left = "overview"
+bottom_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -56
+y = 80
+
+[[widgets]]
+use = "builtin:sysmon-graph"
+place = "desktop"
+anchor = "top-right"
+x = -56
+y = 236
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "bottom-right"
+x = -56
+y = -64

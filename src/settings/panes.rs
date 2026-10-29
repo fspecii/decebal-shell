@@ -30,6 +30,13 @@ pub const PANES: &[PaneDef] = &[
         keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
     },
     PaneDef {
+        id: "widgets",
+        title: "Widgets",
+        glyph: Glyph::Tiles,
+        color: (94, 92, 230),
+        keywords: "desktop widgets cards clock weather media music cpu ram graphs battery enable disable show hide position anchor collection",
+    },
+    PaneDef {
         id: "tiling",
         title: "Tiling & Layouts",
         glyph: Glyph::Tiles,
@@ -372,6 +379,7 @@ impl Model {
             "config" => super::configpane::items(self),
             "general" => self.pane_general(),
             "appearance" => super::appearance::items(self),
+            "widgets" => super::widgetspane::items(self),
             "tiling" => self.pane_tiling(),
             "windows" => self.pane_windows(),
             "rules" => self.pane_rules(),
@@ -1048,6 +1056,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if matches!(parts.as_slice(), ["th", ..] | ["l", "theme" | "accent" | "palette", _] | ["l", "tcard", ..]) {
         return super::themepane::apply(m, &parts, v);
+    }
+    if matches!(parts.as_slice(), ["wg", ..]) {
+        return super::widgetspane::apply(m, &parts, v);
     }
     if matches!(parts.as_slice(), ["cc", ..]) {
         return super::ccpane::apply(m, &parts, v);

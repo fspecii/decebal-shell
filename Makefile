@@ -6,7 +6,7 @@ NO_COMPAT = declock decmon
 BINS = decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
 UNITS = decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 # Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
-ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber
+ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber orbit-glass paper-signal moss-atlas signal-deck nextkde
 AUTOSTART = decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
 all:

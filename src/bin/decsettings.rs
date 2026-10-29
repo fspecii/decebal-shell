@@ -9,11 +9,11 @@ const HELP: &str = "decsettings [OPTIONS] [PANE]
 Settings for the rdwm window manager and the decebal dock and menu bar. Edits ~/.config/rdwm/config.toml
 in place (comments and unknown keys are kept), applies changes live, and follows edits made by hand.
 
-PANE is one of: general appearance tiling windows rules keyboard autostart displays config (and the system panes: sound network
+PANE is one of: general appearance widgets tiling windows rules keyboard autostart displays config (and the system panes: sound network
 bluetooth notifications inputdev power defaults datetime users privacy storage accessibility). `appearance` is the home of how the
 desktop looks (tabs: Themes, Palettes, Customise, Wallpaper, All apps). These older names open their tab: theme, icons, wallpaper, desktop;
 also appearance/fonts, appearance/window, appearance/dock, appearance/palettes, appearance/colours, appearance/apps. config = Config & Presets (edit the
-files as text, save/apply/export/import presets, see docs/presets.md).
+files as text, save/apply/export/import presets, see docs/presets.md). `widgets` manages desktop cards across all themes.
 
 Options:
   --config PATH   rdwm config file to edit (default: $DECSETTINGS_CONFIG, $XDG_CONFIG_HOME/rdwm/config.toml)

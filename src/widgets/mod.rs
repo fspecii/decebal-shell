@@ -11,6 +11,7 @@
 //! * `host` (X11): the `decwidgets` daemon's windows.
 
 pub mod actions;
+pub mod catalog;
 pub mod config;
 pub mod data;
 pub mod dsl;

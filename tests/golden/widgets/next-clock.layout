@@ -1,0 +1,4 @@
+col [0.0 0.0 264.0 152.0] bg r=10 click
+  text [20.0 20.0 42.9 17.0] text="Friday" size=13 bold
+  text [20.0 45.0 132.0 60.0] text="14:07" size=48 bold
+  text [20.0 113.0 115.5 18.0] text="23 October 2026" size=14

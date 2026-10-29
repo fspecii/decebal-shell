@@ -121,6 +121,16 @@ fn main() {
         None
     };
 
+    #[cfg(feature = "x11")]
+    if gated && role == Process::Main {
+        let cfg = decebal::widgets::config::WidgetsConfig::load(&decebal::theme::live::Source::discover().shell_json);
+        if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == decebal::widgets::config::Place::Desktop) {
+            if let Err(e) = decebal::widgets::host::ensure_running() {
+                decebal::log_warn!("widgets: {e}");
+            }
+        }
+    }
+
     // `bar.enabled` (decebal.json) can switch the bar off, e.g. for the Windows-only layout. A hidden bar
     // keeps its process (the session supervisor would restart a missing one) but has no surface; it comes back
     // by itself when the setting changes. `--png` and `--app` runs ignore the setting. The bottom half of a split

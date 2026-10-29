@@ -398,9 +398,9 @@ impl Frame {
 
 // ---------------------------------------------------------------- metrics
 
-pub const ROW_H: f32 = 44.0;
-pub const ROW_H_DETAIL: f32 = 56.0;
-pub const CARD_R: f32 = 10.0;
+pub const ROW_H: f32 = 48.0;
+pub const ROW_H_DETAIL: f32 = 60.0;
+pub const CARD_R: f32 = 12.0;
 pub const CARD_PAD: f32 = 14.0;
 pub const TH_W: f32 = 132.0;
 pub const TH_H: f32 = 84.0;
@@ -455,10 +455,10 @@ pub fn format_num(v: f64, step: f64) -> String {
 
 /// Draws one control inside `r` (its slot, vertically centred) and returns its [`Placed`] entry.
 #[allow(clippy::too_many_arguments)]
-fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: &Interact, row_rect: Rect) -> Placed {
+fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: &Interact, row_rect: Rect, max_width: f32) -> Placed {
     let s = p.s;
     let u = |v: f32| v * s;
-    let w = ctl_width(p, c);
+    let w = ctl_width(p, c).min(max_width).max(u(24.0));
     let x = right - w;
     let hover = it.hover.as_deref() == Some(c.id.as_str());
     let focus = it.focus.as_deref() == Some(c.id.as_str());
@@ -475,7 +475,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Toggle(on) => {
             let (tw, th) = (u(40.0), u(24.0));
             rect = (right - tw, cy - th / 2.0, tw, th);
-            fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::green() } else { crate::theme::th().ink(0.18) }));
+            fill_rounded(pm, rect.0, rect.1, tw, th, th / 2.0, a(if *on { pal::accent() } else { crate::theme::th().ink(0.18) }));
             let kx = if *on { rect.0 + tw - th / 2.0 } else { rect.0 + th / 2.0 };
             fill_circle(pm, kx, cy + u(0.6), th / 2.0 - u(2.0), color(0, 0, 0, 0.25 * dim));
             fill_circle(pm, kx, cy, th / 2.0 - u(2.0), a(color(255, 255, 255, 1.0)));
@@ -513,12 +513,14 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
             fill_rounded(pm, x, rect.1, w, h_field, u(7.0), a(pal::field()));
             let mut sx = x + u(2.0);
             for (i, (l, _)) in opts.iter().enumerate() {
-                let sw = p.measure(l, u(12.0), Weight::Regular) + u(22.0);
+                let sw = (p.measure(l, u(12.0), Weight::Regular) + u(22.0)).min((w - u(4.0)) / opts.len().max(1) as f32);
                 let r = (sx, rect.1 + u(2.0), sw, h_field - u(4.0));
                 if *sel == Some(i) {
-                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(crate::theme::th().ink(0.22)));
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(pal::window()));
                 }
-                p.text_center(pm, l, r.0 + r.2 / 2.0, cy, u(12.0), if *sel == Some(i) { Weight::Medium } else { Weight::Regular }, a(pal::text()));
+                let text_size = u(if ctl_width(p, c) > max_width { 11.0 } else { 12.0 });
+                let label = p.fit(l, (sw - u(4.0)).max(0.0), text_size, Weight::Regular);
+                p.text_center(pm, &label, r.0 + r.2 / 2.0, cy, text_size, if *sel == Some(i) { Weight::Medium } else { Weight::Regular }, a(pal::text()));
                 parts.push(r);
                 sx += sw;
             }
@@ -549,7 +551,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Text { val, hint } => {
             let editing = it.edit.as_ref().filter(|(id, _, _)| id == &c.id);
             let bg = if editing.is_some() {
-                color(0, 0, 0, 0.35)
+                pal::window()
             } else if hover {
                 pal::field_hover()
             } else {
@@ -668,12 +670,12 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     let s = p.s;
     let u = |v: f32| v * s;
     let mut fr = Frame::default();
-    let side = u(28.0);
+    let side = u(if width < u(400.0) { 16.0 } else { 32.0 });
     let cw = (width - 2.0 * side).min(u(700.0));
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
-    let mut y = u(20.0) - scroll;
-    p.text_as(Role::Title, pm, title, x0, y + u(18.0), u(26.0), Weight::Bold, pal::text());
-    y += u(52.0);
+    let mut y = u(28.0) - scroll;
+    p.text_as(Role::Title, pm, title, x0, y + u(18.0), u(25.0), Weight::SemiBold, pal::text());
+    y += u(62.0);
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
@@ -694,7 +696,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
             Item::ThemeCards(cards) => y = super::themecards::draw(pm, p, cards, x0, y, cw, it, &mut fr),
             Item::Header(t) => {
                 y += u(6.0);
-                p.text(pm, &t.to_uppercase(), x0 + u(14.0), y + u(8.0), u(11.0), Weight::SemiBold, pal::faint());
+                p.text(pm, t, x0 + u(14.0), y + u(8.0), u(12.0), Weight::SemiBold, pal::sub());
                 y += u(22.0);
             }
             Item::Note { text, warn } => {
@@ -715,12 +717,15 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 }
             }
             Item::Card(rows) => {
-                let h: f32 = rows.iter().map(|r| u(row_h(r))).sum();
+                let stacked = cw < u(380.0);
+                let height = |r: &Row| u(row_h(r) + if stacked && !r.label.is_empty() { 32.0 * r.ctls.len() as f32 } else { 0.0 });
+                let h: f32 = rows.iter().map(height).sum();
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
                 let mut ry = y;
                 for (i, r) in rows.iter().enumerate() {
-                    let rh = u(row_h(r));
-                    let cy = ry + rh / 2.0;
+                    let rh = height(r);
+                    let stacked = stacked && !r.label.is_empty();
+                    let cy = if stacked && !r.ctls.is_empty() { ry + rh - u(22.0) } else { ry + rh / 2.0 };
                     let row_rect = (x0, ry, cw, rh);
                     if r.selected {
                         fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, crate::theme::th().accent.color(0.22));
@@ -736,10 +741,15 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     // controls, right to left
                     let mut right = x0 + cw - u(CARD_PAD);
                     let mut first_id = None;
+                    let mut control_cy = cy;
                     for c in r.ctls.iter().rev() {
-                        let mut placed = draw_ctl(pm, p, c, right, cy, it, row_rect);
+                        let mut placed = draw_ctl(pm, p, c, right, control_cy, it, row_rect, (right - x0 - u(CARD_PAD)).max(u(24.0)));
                         placed.label = r.label.clone();
-                        right = placed.rect.0 - u(10.0);
+                        if stacked {
+                            control_cy -= u(32.0);
+                        } else {
+                            right = placed.rect.0 - u(10.0);
+                        }
                         if c.focusable() {
                             first_id = Some(c.id.clone());
                         }
@@ -752,13 +762,14 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     if let Some(id) = first_id {
                         fr.rows.push((row_rect, id));
                     }
-                    let avail = (right - lx).max(u(40.0));
-                    let ly = if r.detail.is_empty() { cy } else { cy - u(8.0) };
+                    let avail = (if stacked { x0 + cw - u(CARD_PAD) - lx } else { right - lx }).max(u(40.0));
+                    let label_cy = if stacked && !r.ctls.is_empty() { ry + u(20.0) } else { cy };
+                    let ly = if r.detail.is_empty() { label_cy } else { label_cy - u(4.0) };
                     let label = p.fit(&r.label, avail, u(13.0), Weight::Regular);
                     p.text(pm, &label, lx, ly, u(13.0), Weight::Regular, pal::text());
                     if !r.detail.is_empty() {
                         let d = p.fit(&r.detail, avail, u(11.0), Weight::Regular);
-                        p.text(pm, &d, lx, cy + u(10.0), u(11.0), Weight::Regular, pal::sub());
+                        p.text(pm, &d, lx, label_cy + u(12.0), u(11.0), Weight::Regular, pal::sub());
                     }
                     ry += rh;
                 }
@@ -1104,6 +1115,30 @@ mod tests {
         f.placed.push(mk("c", Kind::Toggle(true), false));
         f.placed.push(mk("d", Kind::Toggle(true), true));
         assert_eq!(f.focus_order(), ["a", "d"]);
+    }
+
+    #[test]
+    fn compact_rows_keep_controls_inside_cards_at_multiple_scales() {
+        for scale in [1.0, 1.5, 2.0] {
+            let mut pm = Pixmap::new((480.0 * scale) as u32, (600.0 * scale) as u32).unwrap();
+            let mut p = Painter { fonts: None, s: scale };
+            let items = vec![Item::Card(vec![
+                Row::new("Interface scale").detail("Adjust interface size").ctl(Ctl::new("s", Kind::Slider { v: 1.0, min: 0.5, max: 2.0, step: 0.1, unit: "×".into() })),
+                Row::new("Display name").ctl(Ctl::new("n", Kind::Text { val: "Display".into(), hint: String::new() })),
+                Row::new("Mode").ctl(Ctl::new("m", Kind::Seg(vec![("First".into(), "a".into()), ("Second".into(), "b".into())], Some(0)))),
+                Row::new("Actions").ctl(Ctl::new("a", Kind::Button { label: "Reset".into(), danger: false })).ctl(Ctl::new("b", Kind::Button { label: "Apply".into(), danger: false })),
+            ])];
+            let sidebar = 164.0 * scale;
+            let fr = draw_items(&mut pm, &mut p, "Settings", &items, 0.0, sidebar, 316.0 * scale, &Interact::default(), &|_| None);
+            assert_eq!(fr.focus_order(), ["s", "n", "m", "a", "b"]);
+            for control in &fr.placed {
+                assert!(control.rect.0 >= sidebar, "{} escaped the content area", control.ctl.id);
+                assert!(control.rect.0 + control.rect.2 <= 480.0 * scale);
+                assert!(control.rect.1 >= control.row_rect.1);
+                assert!(control.rect.1 + control.rect.3 <= control.row_rect.1 + control.row_rect.3);
+                assert!(fr.at(control.rect.0 + control.rect.2 / 2.0, control.rect.1 + control.rect.3 / 2.0).is_some());
+            }
+        }
     }
 
     #[test]

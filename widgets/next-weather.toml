@@ -1,0 +1,55 @@
+format = 1
+id = "next-weather"
+name = "Next weather"
+description = "Current temperature from the shared weather source, with an honest unavailable state."
+size = [264, 152]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 20
+gap = 8
+background = "popup@0.94"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "WEATHER"
+size = 11
+weight = "bold"
+color = "text_secondary"
+[[root.children]]
+type = "row"
+align = "center"
+gap = 16
+show_if = "weather.present"
+[[root.children.children]]
+type = "icon"
+name = "{weather.icon}"
+size = 40
+color = "accent"
+[[root.children.children]]
+type = "text"
+text = "{weather.temp:int}°C"
+size = 42
+weight = "bold"
+[[root.children]]
+type = "text"
+text = "Current conditions"
+size = 12
+color = "text_secondary"
+show_if = "weather.present"
+[[root.children]]
+type = "text"
+text = "Weather unavailable"
+size = 18
+weight = "bold"
+show_if = "!weather.present"
+[[root.children]]
+type = "text"
+text = "Waiting for weather data"
+size = 12
+color = "text_secondary"
+show_if = "!weather.present"

@@ -1,0 +1,82 @@
+format = 1
+id = "nextkde"
+name = "NextKDE"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "NextKDE-inspired soft glass, a global top bar and a floating dock."
+min_shell_version = "0.1.0"
+tags = ["glass", "floating-dock", "nextkde"]
+
+[metrics]
+radius = 18
+dock_roundness = 0.72
+dock_alpha = 0.68
+popup_alpha = 0.94
+panel_alpha = 0.94
+shadow = 1.0
+outline = 0.12
+
+[font]
+preset = "inter"
+
+[dock]
+enabled = true
+style = "mac"
+
+[bar]
+enabled = true
+style = "flat"
+height = 26
+
+[wallpaper]
+image = "wallpapers/glass-dark.png"
+mode = "fill"
+match_colors = false
+
+[decoration]
+style = "macos"
+height = 32
+radius = 12
+
+[colors.dark]
+background = "#182334"
+sidebar = "#142030"
+surface = "#253447"
+bar = "#101c2c"
+popup = "#233246"
+dock = "#182334"
+overlay = "#27394f"
+titlebar = "#29394c"
+titlebar_inactive = "#1e2c3e"
+border = "#526780"
+text_secondary = "#c2d1e4"
+text_faint = "#a8bcd4"
+bar_text = "#f2f7ff"
+text = "#f2f7ff"
+accent = "#80baff"
+accent_text = "#10233c"
+danger = "#ff8279"
+ok = "#30d158"
+warn = "#ff9f0a"
+
+[colors.light]
+background = "#eef3f9"
+sidebar = "#e4ebf4"
+surface = "#ffffff"
+bar = "#e8eff8"
+popup = "#f7faff"
+dock = "#e1eaf5"
+overlay = "#f7faff"
+titlebar = "#e3ecf6"
+titlebar_inactive = "#edf2f8"
+border = "#bdccdf"
+text_secondary = "#455c76"
+text_faint = "#576e88"
+bar_text = "#17263a"
+text = "#17263a"
+accent = "#0966c2"
+accent_text = "#ffffff"
+danger = "#d70015"
+ok = "#1d8f3c"
+warn = "#b25000"

@@ -1,0 +1,128 @@
+format = 1
+id = "orbit-glass"
+name = "Orbit Glass"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A restrained orbital desktop: floating navigation, sculpted rounded windows and original luminous geometric artwork. Desktop structure remains independent of the selected color palette."
+min_shell_version = "0.1.0"
+tags = ["glass", "orbital", "floating", "geometric"]
+
+[colors.dark]
+background = "#101726"
+sidebar = "#141e30"
+surface = "#1b2940"
+bar = "#131e30"
+bar_text = "#eef7ff"
+popup = "#1b2940"
+dock = "#162237"
+overlay = "#1b2940"
+titlebar = "#1c2a40"
+titlebar_inactive = "#162134"
+border = "#52637c"
+text = "#eef7ff"
+text_secondary = "#c2d2e5"
+text_faint = "#9db0c8"
+accent = "#9adced"
+accent_text = "#102331"
+danger = "#ff9eac"
+ok = "#9bdec2"
+warn = "#f3d394"
+
+[colors.light]
+background = "#edf2f8"
+sidebar = "#e1e9f3"
+surface = "#f8fbff"
+bar = "#e8eff8"
+bar_text = "#182a40"
+popup = "#f8fbff"
+dock = "#e5edf7"
+overlay = "#f8fbff"
+titlebar = "#e1eaf5"
+titlebar_inactive = "#eaf0f8"
+border = "#8496af"
+text = "#182a40"
+text_secondary = "#455b75"
+text_faint = "#5c708a"
+accent = "#275d90"
+accent_text = "#ffffff"
+danger = "#a42747"
+ok = "#246147"
+warn = "#805b14"
+
+[metrics]
+radius = 18
+dock_roundness = 0.82
+dock_alpha = 0.88
+popup_alpha = 0.98
+panel_alpha = 0.98
+bar_alpha = 0.96
+shadow = 1.0
+outline = 0.16
+dock_padding = 10
+
+[font]
+ui = ["Inter", "Noto Sans"]
+title = ["Inter", "Noto Sans"]
+mono = ["JetBrains Mono", "DejaVu Sans Mono"]
+display = ["Rubik", "Inter", "Noto Sans"]
+scale = 1.0
+
+[wallpaper]
+images = ["wallpapers/dark.png", "wallpapers/light.png"]
+mode = "fill"
+
+[decoration]
+style = "arc"
+height = 32
+radius = 16
+title_align = "center"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 10
+border_px = 1
+smart_gaps = false
+mfact = 0.55
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "floating"
+height = 28
+
+[dock]
+enabled = true
+style = "mac"
+size = 46
+roundness = 0.82
+magnification = 1.15
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 88
+
+[[widgets]]
+use = "builtin:cpu-ram-ring"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 246
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 386

@@ -1,0 +1,32 @@
+format = 1
+id = "next-clock"
+name = "Next clock"
+description = "A generous clock and date card, inspired by NextKDE desktop widgets. Works with every theme."
+size = [264, 152]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 20
+gap = 8
+background = "popup@0.94"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "{clock:%A}"
+size = 13
+weight = "bold"
+color = "accent"
+[[root.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 48
+weight = "bold"
+[[root.children]]
+type = "text"
+text = "{clock:%e %B %Y}"
+size = 14
+color = "text_secondary"

@@ -1,0 +1,64 @@
+format = 1
+id = "next-system"
+name = "Next system"
+description = "Live CPU activity and memory in a compact shared resource card."
+size = [264, 180]
+refresh = 1000
+
+[root]
+type = "col"
+padding = 20
+gap = 8
+background = "popup@0.94"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "row"
+width = 224
+[[root.children.children]]
+type = "text"
+text = "SYSTEM"
+size = 11
+weight = "bold"
+color = "text_secondary"
+[[root.children.children]]
+type = "spacer"
+[[root.children.children]]
+type = "text"
+text = "{cpu.usage:pct} CPU"
+size = 12
+weight = "bold"
+[[root.children]]
+type = "graph"
+width = 224
+series = "cpu.history"
+height = 42
+color = "accent"
+[[root.children]]
+type = "row"
+width = 224
+[[root.children.children]]
+type = "text"
+text = "Memory"
+size = 12
+color = "text_secondary"
+[[root.children.children]]
+type = "spacer"
+[[root.children.children]]
+type = "text"
+text = "{mem.usage:pct}"
+size = 12
+weight = "bold"
+[[root.children]]
+type = "bar"
+width = 224
+value = "mem.usage"
+height = 6
+color = "accent"
+[[root.children]]
+type = "text"
+text = "{mem.used:bytes} of {mem.total:bytes}"
+size = 11
+color = "text_secondary"

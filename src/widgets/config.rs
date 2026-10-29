@@ -84,10 +84,17 @@ impl Instance {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WidgetsConfig {
+    pub enabled: bool,
     pub allow_exec: bool,
     pub items: Vec<Instance>,
+}
+
+impl Default for WidgetsConfig {
+    fn default() -> Self {
+        Self { enabled: true, allow_exec: false, items: Vec::new() }
+    }
 }
 
 impl WidgetsConfig {
@@ -95,6 +102,7 @@ impl WidgetsConfig {
     pub fn from_json(root: &Value) -> WidgetsConfig {
         let w = root.get("widgets");
         WidgetsConfig {
+            enabled: w.and_then(|w| w.get("enabled")).and_then(Value::as_bool).unwrap_or(true),
             allow_exec: w.and_then(|w| w.get("allow_exec")).and_then(Value::as_bool).unwrap_or(false),
             items: w.and_then(|w| w.get("items")).and_then(Value::as_array).map(|a| a.iter().filter_map(Instance::from_json).take(32).collect()).unwrap_or_default(),
         }
@@ -107,6 +115,9 @@ impl WidgetsConfig {
     /// The `widgets` object, keeping the `allow_exec` switch the user set.
     pub fn to_json(&self) -> Value {
         let mut o = Map::new();
+        if !self.enabled {
+            o.insert("enabled".into(), json!(false));
+        }
         if self.allow_exec {
             o.insert("allow_exec".into(), json!(true));
         }
@@ -134,7 +145,7 @@ pub struct Resolved {
 }
 
 /// Reads a small regular file, never through a symlink.
-fn read_regular(path: &Path) -> Result<String, String> {
+pub(crate) fn read_regular(path: &Path) -> Result<String, String> {
     let m = std::fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if !m.is_file() || m.len() > 64 << 10 {
         return Err(format!("{}: not a regular file of at most 64 KiB", path.display()));
@@ -194,9 +205,28 @@ pub fn place_at(anchor: &str, x: i32, y: i32, mon: (i32, i32, i32, i32), w: i32,
     (px, py)
 }
 
+/// Keep the saved anchor offsets while ensuring a changed pill-bar layout cannot cover a card.
+pub fn place_clear(anchor: &str, x: i32, y: i32, mon: (i32, i32, i32, i32), w: i32, h: i32, edges: crate::theme::Insets) -> (i32, i32) {
+    let (px, py) = place_at(anchor, x, y, mon, w, h);
+    let left = mon.0 + edges.left;
+    let top = mon.1 + edges.top;
+    let right = (mon.0 + mon.2 - edges.right - w).max(left);
+    let bottom = (mon.1 + mon.3 - edges.bottom - h).max(top);
+    (px.clamp(left, right), py.clamp(top, bottom))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cards_stay_clear_when_the_bar_changes_edges() {
+        use crate::theme::Insets;
+        let mon = (0, 0, 1600, 900);
+        assert_eq!(place_clear("top-right", -35, 80, mon, 264, 150, Insets { right: 52, ..Default::default() }), (1284, 80));
+        assert_eq!(place_clear("top-left", 20, 0, mon, 264, 150, Insets { left: 52, top: 40, ..Default::default() }), (52, 40));
+        assert_eq!(place_clear("bottom-right", -35, -10, mon, 264, 150, Insets { bottom: 40, ..Default::default() }), (1301, 710));
+    }
 
     #[test]
     fn instances_round_trip_and_bad_ones_are_skipped() {

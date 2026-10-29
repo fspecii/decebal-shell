@@ -337,11 +337,11 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
     if let Some(Value::Object(ic)) = extra.get("icons") {
         obj_mut(&mut shell, "icons").extend(ic.clone());
     }
-    {
-        // widgets: this theme's instances replace the previous theme's; the user's own stay
+    if shell.get("widgets").is_none() {
+        // Widgets belong to the desktop, not the selected theme. A first theme can offer defaults;
+        // after that the entire object (disabled items, positions, unknown fields) is preserved.
         let w = obj_mut(&mut shell, "widgets");
-        let mut items: Vec<Value> = w.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
-        items.retain(|i| i.get("from_theme").and_then(Value::as_bool) != Some(true));
+        let mut items: Vec<Value> = Vec::new();
         for inst in extra.get("widgets").and_then(Value::as_array).into_iter().flatten() {
             let mut inst = inst.clone();
             let Some(o) = inst.as_object_mut() else { continue };
@@ -359,6 +359,9 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
                 }
             }
             o.insert("from_theme".into(), json!(true));
+            if o.get("place").and_then(Value::as_str) == Some("bar") {
+                notes.push(format!("widget `{use_}`: bar placement is not available yet; use desktop placement in Widgets"));
+            }
             items.push(inst);
         }
         w.insert("items".into(), Value::Array(items));
@@ -514,6 +517,15 @@ pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Stri
     }
     crate::theme::live::reload();
     crate::theme::system::request(&paths.shell_json()); // "Apply to all apps", when the user switched it on
+    #[cfg(feature = "x11")]
+    {
+        let cfg = crate::widgets::config::WidgetsConfig::load(&paths.shell_json());
+        if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == crate::widgets::config::Place::Desktop) {
+            if let Err(e) = crate::widgets::host::ensure_running() {
+                crate::log_warn!("widgets: {e}");
+            }
+        }
+    }
     Ok(applied)
 }
 
@@ -858,17 +870,36 @@ y = -30
     }
 
     #[test]
-    fn re_applying_replaces_the_previous_themes_widgets_but_keeps_the_users() {
-        let (d, src, paths) = sandbox("widgets");
+    fn every_theme_preserves_global_widget_choices_and_unknown_fields() {
+        let (d, src, paths) = sandbox("widgets-global");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
-        std::fs::write(paths.shell_json(), r#"{"widgets": {"items": [{"use": "mine", "x": 5}]}}"#).unwrap();
+        let widgets = json!({"enabled": false, "allow_exec": false, "future": {"test": 1}, "items": [
+            {"use": "builtin:clock-card", "enabled": false, "x": -100, "anchor": "top-right", "from_theme": true, "future": 2},
+            {"use": "builtin:sysmon-graph", "x": 30, "y": 200}
+        ]});
+        io::json_set(&paths.shell_json(), "widgets", Some(widgets.clone())).unwrap();
+        install_sunset(&src);
+        for id in std::iter::once("sunset").chain(crate::theme::builtin::BUILTIN.iter().map(|(id, _)| *id)) {
+            apply(&src, &paths, id, &Selection::default()).unwrap();
+            assert_eq!(io::json_load(&paths.shell_json())["widgets"], widgets, "{id} overwrote widget preferences");
+        }
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn first_theme_seeds_widgets_once_and_an_empty_library_stays_empty() {
+        let (d, src, paths) = sandbox("widgets-first-run");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         install_sunset(&src);
         apply(&src, &paths, "sunset", &Selection::default()).unwrap();
-        assert_eq!(io::json_load(&paths.shell_json())["widgets"]["items"].as_array().unwrap().len(), 3);
-        apply(&src, &paths, "nord", &Selection::default()).unwrap();
-        let items = io::json_load(&paths.shell_json())["widgets"]["items"].clone();
-        assert_eq!(items.as_array().unwrap().len(), 1);
-        assert_eq!(items[0]["use"], "mine");
+        let seeded = io::json_load(&paths.shell_json())["widgets"].clone();
+        assert_eq!(seeded["items"].as_array().unwrap().len(), 2);
+        apply(&src, &paths, "nord", &src.selection()).unwrap();
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"], seeded);
+        let empty = json!({"enabled": true, "items": []});
+        io::json_set(&paths.shell_json(), "widgets", Some(empty.clone())).unwrap();
+        apply(&src, &paths, "sunset", &src.selection()).unwrap();
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"], empty);
         let _ = std::fs::remove_dir_all(d);
     }
 

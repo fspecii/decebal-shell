@@ -13,7 +13,7 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Appearance", panes: &["appearance", "config"] },
+    Section { title: "Appearance", panes: &["appearance", "widgets", "config"] },
     Section { title: "Displays", panes: &["displays"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
@@ -25,6 +25,12 @@ pub const SECTIONS: &[Section] = &[
 
 /// (pane id, setting, extra words)
 pub const SETTINGS: &[(&str, &str, &str)] = &[
+    ("widgets", "Show widgets", "desktop cards global visible enable disable hide themes"),
+    ("widgets", "Your widgets", "enabled saved instances remove clock weather cpu ram music battery"),
+    ("widgets", "Available widgets", "collection add install theme user shared universal"),
+    ("widgets", "Position", "desktop widget anchor corner edge centre center placement"),
+    ("widgets", "Horizontal offset", "widget left right x pixels"),
+    ("widgets", "Vertical offset", "widget top bottom y pixels"),
     ("sound", "Output device", "speakers headphones default sink"),
     ("sound", "Input device", "microphone mic default source"),
     ("sound", "Volume", "loudness level slider"),

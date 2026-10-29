@@ -1,0 +1,128 @@
+format = 1
+id = "paper-signal"
+name = "Paper Signal"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "An editorial desktop with a slim flat panel, precise rectangular windows, quiet typography and original paper geometry. Desktop structure remains independent of the selected color palette."
+min_shell_version = "0.1.0"
+tags = ["editorial", "paper", "flat", "minimal"]
+
+[colors.dark]
+background = "#242824"
+sidebar = "#2b302a"
+surface = "#30362f"
+bar = "#232823"
+bar_text = "#f0eddf"
+popup = "#30362f"
+dock = "#2b302a"
+overlay = "#30362f"
+titlebar = "#2b302a"
+titlebar_inactive = "#262c26"
+border = "#777f70"
+text = "#f0eddf"
+text_secondary = "#c8cebd"
+text_faint = "#aab29e"
+accent = "#e7ac87"
+accent_text = "#292b25"
+danger = "#ffada3"
+ok = "#b4d0a2"
+warn = "#e5cf93"
+
+[colors.light]
+background = "#f3eee2"
+sidebar = "#e9e4d7"
+surface = "#faf7ef"
+bar = "#e9e4d7"
+bar_text = "#30392f"
+popup = "#faf7ef"
+dock = "#e9e4d7"
+overlay = "#faf7ef"
+titlebar = "#e8e3d6"
+titlebar_inactive = "#f0ecdf"
+border = "#989d8d"
+text = "#30392f"
+text_secondary = "#58624f"
+text_faint = "#68725f"
+accent = "#9d422b"
+accent_text = "#fff9ee"
+danger = "#a3292b"
+ok = "#3f663b"
+warn = "#795a0e"
+
+[metrics]
+radius = 2
+dock_roundness = 0.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.15
+outline = 0.18
+dock_padding = 6
+
+[font]
+ui = ["IBM Plex Sans", "Inter", "Noto Sans"]
+title = ["IBM Plex Sans", "Inter", "Noto Sans"]
+mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
+display = ["IBM Plex Sans", "Inter", "Noto Sans"]
+scale = 1.0
+
+[wallpaper]
+images = ["wallpapers/light.png", "wallpapers/dark.png"]
+mode = "fill"
+
+[decoration]
+style = "minimal"
+height = 26
+radius = 2
+title_align = "left"
+
+[rdwm]
+gap_inner = 12
+gap_outer = 12
+border_px = 1
+smart_gaps = false
+mfact = 0.55
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "flat"
+height = 22
+
+[dock]
+enabled = false
+style = "mac"
+size = 40
+roundness = 0.0
+magnification = 1.0
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 72
+
+[[widgets]]
+use = "builtin:sysmon-graph"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 230
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "top-right"
+x = -52
+y = 390
