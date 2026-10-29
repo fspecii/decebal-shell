@@ -1,0 +1,33 @@
+format = 1
+id = "summit-status"
+name = "Summit status"
+size = [265, 44]
+refresh = 1000
+[root]
+type = "col"
+gap = 2
+on_click = "open dashboard"
+background = "bar"
+radius = 10
+padding = [8, 5, 8, 0]
+border = "border@0.5"
+[[root.children]]
+type = "text"
+text = "VOL {volume.level:pct|—} · BAT {battery.level:pct|—}"
+size = 13
+color = "ok"
+
+[[root.children]]
+type = "row"
+gap = 0
+height = 2
+[[root.children.children]]
+type = "spacer"
+width = 124.5
+height = 2
+background = "accent"
+[[root.children.children]]
+type = "spacer"
+width = 124.5
+height = 2
+background = "ok"

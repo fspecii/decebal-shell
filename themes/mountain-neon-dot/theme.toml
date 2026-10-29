@@ -1,0 +1,156 @@
+format = 1
+id = "mountain-neon-dot"
+name = "Mountain Neon Dot"
+screenshots = ["screenshots/main.png"]
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "Original alpine charcoal, neon rose and cyan; transparent desktop instruments and three compact top islands."
+min_shell_version = "0.1.0"
+tags = ["original", "dark", "light", "palette-independent", "technical"]
+
+[colors.dark]
+background = "#142527"
+sidebar = "#10141f"
+surface = "#192c38"
+bar = "#10141f"
+bar_text = "#e2ebeb"
+popup = "#203643"
+dock = "#142527"
+overlay = "#203643"
+titlebar = "#203643"
+titlebar_inactive = "#192c38"
+border = "#4b6470"
+text = "#e2ebeb"
+text_secondary = "#b4c6cb"
+text_faint = "#8ca5af"
+accent = "#ff299c"
+accent_text = "#14232c"
+danger = "#f0a6a1"
+ok = "#48e7eb"
+warn = "#ff299c"
+
+[colors.light]
+background = "#e9eef0"
+sidebar = "#dbe4e8"
+surface = "#f6f8f7"
+bar = "#dbe4e8"
+bar_text = "#203942"
+popup = "#f6f8f7"
+dock = "#dbe4e8"
+overlay = "#f6f8f7"
+titlebar = "#dbe4e8"
+titlebar_inactive = "#e9eef0"
+border = "#8ca3ad"
+text = "#203942"
+text_secondary = "#4c6670"
+text_faint = "#5f7982"
+accent = "#aa125e"
+accent_text = "#f6f8f7"
+danger = "#a63d39"
+ok = "#006e78"
+warn = "#aa125e"
+
+[metrics]
+radius = 10
+dock_roundness = 0.5
+dock_alpha = 0.96
+popup_alpha = 0.98
+panel_alpha = 0.98
+bar_alpha = 0.98
+shadow = 0.5
+outline = 0.12
+dock_padding = 10
+
+[font]
+preset = "jetbrains"
+scale = 1.0
+ui = ["JetBrains Mono", "DejaVu Sans Mono", "Noto Sans"]
+title = ["JetBrains Mono", "monospace"]
+mono = ["JetBrains Mono", "monospace"]
+display = ["JetBrains Mono", "monospace"]
+
+[wallpaper]
+dark = "wallpapers/dark.png"
+light = "wallpapers/light.png"
+mode = "fill"
+color = "#142527"
+
+[decoration]
+style = "breeze"
+height = 28
+radius = 10
+title_align = "left"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 10
+border_px = 1
+smart_gaps = true
+mfact = 0.55
+nmaster = 1
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = false
+style = "floating"
+position = "split"
+
+[dock]
+enabled = false
+style = "mac"
+size = 44
+roundness = 0.5
+magnification = 1.2
+
+[control_center]
+enabled = true
+position = "auto"
+style = "card"
+
+[hot_corners]
+top_left = "overview"
+bottom_right = "control-center"
+
+
+[[widgets]]
+use = "summit-clock"
+place = "desktop"
+anchor = "top-left"
+x = 212
+y = 280
+
+[[widgets]]
+use = "summit-lab"
+place = "desktop"
+anchor = "top-right"
+x = -110
+y = 88
+
+[[widgets]]
+use = "summit-system"
+place = "desktop"
+anchor = "bottom-right"
+x = -85
+y = -230
+
+[[widgets]]
+use = "summit-menu"
+place = "desktop"
+anchor = "top-left"
+x = 12
+y = 8
+
+[[widgets]]
+use = "summit-time"
+place = "desktop"
+anchor = "top"
+x = 0
+y = 8
+
+[[widgets]]
+use = "summit-status"
+place = "desktop"
+anchor = "top-right"
+x = -12
+y = 8

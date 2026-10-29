@@ -1,0 +1,28 @@
+format = 1
+id = "summit-clock"
+name = "Summit clock"
+size = [380, 330]
+refresh = 1000
+[root]
+type = "col"
+gap = 18
+[[root.children]]
+type = "dot-text"
+text = "{clock:%H}"
+size = 98
+color = "text"
+[[root.children]]
+type = "dot-text"
+text = "{clock:%M}"
+size = 98
+color = "text"
+[[root.children]]
+type = "dot-text"
+text = "{clock:%A · %d %b}"
+size = 16
+color = "text"
+[[root.children]]
+type = "text"
+text = "● · · · · · · · · · · ·"
+size = 14
+color = "accent"

@@ -1,0 +1,48 @@
+format = 1
+id = "summit-lab"
+name = "Summit lab"
+size = [410, 260]
+refresh = 1000
+[root]
+type = "col"
+gap = 8
+[[root.children]]
+type = "dot-text"
+text = "HOMELAB"
+size = 18
+color = "text"
+[[root.children]]
+type = "text"
+text = "MONITORING NOT CONFIGURED"
+size = 12
+color = "text"
+[[root.children]]
+type = "text"
+text = "SERVER        — NOT CONFIGURED"
+size = 14
+color = "text"
+[[root.children]]
+type = "text"
+text = "FLAME         — NOT CONFIGURED"
+size = 14
+color = "text"
+[[root.children]]
+type = "text"
+text = "PORTAINER     — NOT CONFIGURED"
+size = 14
+color = "text"
+[[root.children]]
+type = "text"
+text = "NEXTCLOUD     — NOT CONFIGURED"
+size = 14
+color = "text"
+[[root.children]]
+type = "text"
+text = "N8N           — NOT CONFIGURED"
+size = 14
+color = "text"
+[[root.children]]
+type = "text"
+text = "PAPERLESS     — NOT CONFIGURED"
+size = 14
+color = "text"

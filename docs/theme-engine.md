@@ -343,3 +343,15 @@ rdwm titlebar styles (`decoration.style` -> `[decoration] style`), the Caelestia
 * `tests/e2e/theme-engine.sh`: private Xvfb + rdwm; installs the community sample (`examples/themes/sunset-grid`), applies it, checks rdwm's config, the
   dock, the wallpaper and the widget windows, clicks a widget, edits a widget live, previews and undoes, checks the refusals, and drives
   the Theme pane's cards; screenshots in `$SHOTS`.
+
+### Font-independent dot text
+
+`type = "dot-text"` accepts `text` (the same safe format string as ordinary text),
+`size` (7–300 px, the full seven-row height) and `color` (semantic token by
+ default). It draws an original round-dot alphabet without a font dependency.
+ASCII letters are uppercase, digits and basic date/metric punctuation are
+supported; unsupported glyphs use a question mark. Measurement and painting both
+limit the string to 400 characters. It is intended for short clocks, dates and
+metrics, not full multilingual prose. Ordinary `text` remains preferable for
+names and unavailable explanations. Existing safe actions and visibility rules
+apply; this primitive adds no data sources or execution capability.

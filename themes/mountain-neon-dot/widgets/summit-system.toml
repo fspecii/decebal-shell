@@ -1,0 +1,48 @@
+format = 1
+id = "summit-system"
+name = "Summit system"
+size = [400, 245]
+refresh = 1000
+[root]
+type = "col"
+gap = 8
+padding = 16
+background = "popup@0.94"
+radius = "theme"
+border = "border@0.4"
+[[root.children]]
+type = "text"
+text = "{user.name|User}@{host.name|Unavailable}"
+max_chars = 30
+size = 16
+color = "ok"
+[[root.children]]
+type = "text"
+text = "──────────────────────"
+size = 15
+color = "ok"
+[[root.children]]
+type = "text"
+text = "UP  {uptime:dur|Unavailable}"
+size = 15
+color = "text"
+[[root.children]]
+type = "text"
+text = "CPU {cpu.usage:pct|Unavailable}"
+size = 15
+color = "ok"
+[[root.children]]
+type = "text"
+text = "MEM {mem.used:bytes|Unavailable}"
+size = 15
+color = "ok"
+[[root.children]]
+type = "text"
+text = "DISK {disk.usage:pct|Unavailable}"
+size = 15
+color = "text"
+[[root.children]]
+type = "text"
+text = "↓ {net.rx:rate|Unavailable}  ↑ {net.tx:rate|Unavailable}"
+size = 13
+color = "ok"

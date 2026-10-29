@@ -47,6 +47,7 @@ pub struct Ctx<'a> {
 pub enum Leaf {
     None,
     Text { s: String, size: f32, bold: bool, color: ColorRef, align: Align },
+    DotText { s: String, size: f32, color: ColorRef },
     Icon { name: String, size: f32, color: ColorRef },
     Bar { frac: f32, thickness: f32, color: ColorRef, track: ColorRef },
     AnalogClock { hour: f32, minute: f32, second: f32, size: f32, color: ColorRef, track: ColorRef, second_color: ColorRef, numerals: bool, seconds: bool },
@@ -80,6 +81,7 @@ fn kind_name(k: &Kind) -> &'static str {
         Kind::Spacer => "spacer",
         Kind::Button { .. } => "button",
         Kind::Text { .. } => "text",
+        Kind::DotText { .. } => "dot-text",
         Kind::Icon { .. } => "icon",
         Kind::Bar { .. } => "bar",
         Kind::AnalogClock { .. } => "analog-clock",
@@ -128,6 +130,7 @@ fn content_size(n: &Node, cx: &Ctx) -> (f32, f32) {
             let (s, size, bold) = text_of(n, cx).unwrap_or_default();
             (cx.metrics.text_width(&s, size, bold), cx.metrics.line_height(size))
         }
+        Kind::DotText { text, size, .. } => (super::dots::width(&text.eval(cx.data), *size), *size),
         Kind::Icon { size, .. } => (*size, *size),
         Kind::Ring { size, .. } | Kind::AnalogClock { size, .. } => (*size, *size),
         Kind::Bar { .. } => (80.0, 6.0),
@@ -152,6 +155,7 @@ fn leaf_of(n: &Node, cx: &Ctx, r: Rect) -> Leaf {
             let (s, size, bold) = text_of(n, cx).unwrap_or_default();
             Leaf::Text { s, size, bold, color: color.clone(), align: *align }
         }
+        Kind::DotText { text, size, color } => Leaf::DotText { s: text.eval(cx.data), size: *size, color: color.clone() },
         Kind::Icon { name, size, color } => Leaf::Icon { name: name.eval(cx.data), size: *size, color: color.clone() },
         Kind::Bar { value, min, max, color, track } => {
             let v = value_of(value, cx).unwrap_or(*min);
@@ -330,6 +334,7 @@ pub fn dump(it: &Item) -> String {
         out.push_str(&format!("{}{} [{:.1} {:.1} {:.1} {:.1}]", "  ".repeat(depth), it.kind, r.x, r.y, r.w, r.h));
         match &it.leaf {
             Leaf::None => {}
+            Leaf::DotText { s, size, .. } => out.push_str(&format!(" dot-text={s:?} size={size}")),
             Leaf::Text { s, size, bold, .. } => out.push_str(&format!(" text={s:?} size={size}{}", if *bold { " bold" } else { "" })),
             Leaf::Icon { name, size, .. } => out.push_str(&format!(" icon={name:?} size={size}")),
             Leaf::Bar { frac, thickness, .. } => out.push_str(&format!(" frac={frac:.2} thick={thickness}")),

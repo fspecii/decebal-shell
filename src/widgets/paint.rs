@@ -138,6 +138,9 @@ pub fn paint(pm: &mut Pixmap, it: &Item, p: &mut Painter, parent_opacity: f32) {
             };
             p.fonts.draw(pm, s, x, r.y + (r.h - lh) / 2.0, *size, weight, col(p.theme, color, op));
         }
+        Leaf::DotText { s, size, color } => {
+            super::dots::paint(pm, s, *size, r.x, r.y + (r.h - size) / 2.0, col(p.theme, color, op));
+        }
         Leaf::Icon { name, size, color } => {
             let (rgb, a) = rgb_of(p.theme, color);
             if let Some(img) = p.symbols.get(name, rgb.t(), size.round().max(1.0) as u32) {

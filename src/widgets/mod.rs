@@ -33,3 +33,5 @@ pub enum Trust {
     /// The user's own widget folder with `widgets.allow_exec = true`: `exec` actions and `[commands.*]` are allowed.
     UserExec,
 }
+
+mod dots;
