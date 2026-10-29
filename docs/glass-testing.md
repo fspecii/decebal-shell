@@ -13,3 +13,5 @@ Checks cover:
 - Switching to Nord clears the blur hint on both shared surfaces while Picom remains alive.
 
 This proves per-pixel transparency and scoped blur integration with Picom GLX. It does not claim parity with NextKDE's KWin liquid-glass refraction effects. The test uses screenshots of its own generated desktop only.
+
+Picom enables default background blur when a blur method is configured. The first, unconditional `blur-background = false` rule is required; the following `_DECEBAL_BLUR = 1` rule selectively enables it. Without this default-off rule, even a zero-hint bar's unused transparent popup canvas blurs ordinary windows beneath it. The checkerboard regression proves that fine desktop detail stays sharp after switching to a non-glass theme.

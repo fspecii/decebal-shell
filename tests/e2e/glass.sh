@@ -23,7 +23,7 @@ PASS=0
 check() { local label=$1; shift; for _ in $(seq 1 100); do if "$@" >/dev/null 2>&1; then echo "  ok   $label"; PASS=$((PASS+1)); return; fi; sleep .1; done; echo "FAIL $label (logs $T)"; cat "$T/picom.log"; exit 1; }
 Xvfb "$N" -screen 0 1280x800x24 +extension GLX +extension RENDER -nolisten tcp -ac >"$T/xvfb.log" 2>&1 & PIDS+=($!)
 check 'private Xvfb starts' test -e "/tmp/.X11-unix/X${N#:}"
-picom --backend glx --config "$HERE/contrib/picom/decebal-glass.conf" --no-vsync >"$T/picom.log" 2>&1 & PICOM=$!; PIDS+=($PICOM)
+picom --backend glx --config "${PICOM_CONFIG:-$HERE/contrib/picom/decebal-glass.conf}" --no-vsync >"$T/picom.log" 2>&1 & PICOM=$!; PIDS+=($PICOM)
 sleep 1; check 'picom GLX remains alive' kill -0 "$PICOM"
 decthemectl theme install "$HERE/themes/nextkde" --force >"$T/install.log" 2>&1
 decthemectl apply nord --no-rdwm >/dev/null
@@ -95,5 +95,18 @@ check 'opaque theme clears bar blur hint' hint "$BARWIN" 0
 # Theme changes rebuild widget windows, so find its current id for each assertion.
 widget_clear() { local id; id=$(xdotool search --class '^decwidgets$' | head -1); hint "$id" 0; }
 check 'opaque theme clears shared widget blur hint' widget_clear
+# A blur method enables Picom's default blur unless an explicit all-window rule
+# disables it. Test untagged/zero-hint transparent popup canvas over sharp detail.
+magick -size 1280x800 pattern:checkerboard -threshold 50% "$T/checker.png"
+feh --no-fehbg --bg-fill "$T/checker.png"; sleep 1
+import -window root "$T/nord-checker.png"
+python3 - "$T/nord-checker.png" <<'PYSHARP'
+import subprocess,sys
+raw=subprocess.check_output(['magick',sys.argv[1],'-crop','80x80+600+140','+repage','-depth','8','gray:-'])
+mean=sum(raw)/len(raw);std=(sum((x-mean)**2 for x in raw)/len(raw))**.5
+print(f'  non-glass background contrast: {std:.1f}')
+assert std>80, f'ordinary desktop content was blurred through unused bar canvas: {std}'
+PYSHARP
+PASS=$((PASS+1)); echo '  ok   non-glass canvas leaves ordinary desktop detail sharp'
 check 'picom survives material change' kill -0 "$PICOM"
 echo "passed $PASS, failed 0"
