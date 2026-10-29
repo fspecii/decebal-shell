@@ -1,0 +1,34 @@
+format = 1
+id = "sweet-workspaces"
+name = "Sweeteh Workspaces"
+size = [320, 44]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "accent"
+radius = 26
+padding = [0, 0, 0, 4]
+
+[[root.children]]
+type = "row"
+background = "popup"
+radius = 26
+border = "text@0.20"
+padding = 10
+gap = 20
+on_click = "open overview"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "WORKSPACES"
+size = 12
+color = "text_secondary"
+
+[[root.children.children]]
+type = "workspaces"
+size = 10
+gap = 12
+color = "text_secondary"
+active_color = "accent"

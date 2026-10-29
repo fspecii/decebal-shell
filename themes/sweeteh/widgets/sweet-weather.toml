@@ -1,0 +1,50 @@
+format = 1
+id = "sweet-weather"
+name = "Sweeteh Weather"
+size = [220, 224]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "accent"
+radius = 26
+padding = [0, 0, 0, 4]
+
+[[root.children]]
+type = "col"
+background = "popup"
+radius = 26
+border = "text@0.20"
+padding = 16
+gap = 8
+
+[[root.children.children]]
+type = "icon"
+name = "{weather.icon}"
+size = 40
+color = "accent"
+show_if = "weather.present"
+
+[[root.children.children]]
+type = "text"
+text = "WEATHER"
+size = 12
+color = "text_secondary"
+
+[[root.children.children]]
+type = "text"
+text = "{weather.temp:int}°"
+size = 52
+show_if = "weather.present"
+
+[[root.children.children]]
+type = "text"
+text = "No data"
+size = 20
+show_if = "!weather.present"
+
+[[root.children.children]]
+type = "text"
+text = "Shared local weather"
+size = 12
+color = "text_secondary"

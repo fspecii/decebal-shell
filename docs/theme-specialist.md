@@ -24,7 +24,7 @@ custom-widget Keep / Replace / Cancel policy. Do not touch `src/livewall` or
   six-card layout and numeric dot-renderer prototype. Existing package GPL
   attribution remains applicable; screenshot alone does not establish identity.
 
-- Priority 3, queued: [Aarav2709/Sweeteh](https://github.com/Aarav2709/Sweeteh).
+- Priority 3, completed in the Sweeteh port commit: [Aarav2709/Sweeteh](https://github.com/Aarav2709/Sweeteh).
   Inspect pinned upstream README/code/assets/license first, then port cohesive
   colors/fonts/layout/widgets and legal wallpaper/icon choices. Track application
   and terminal coverage and engine gaps. Never run its installer.
@@ -111,3 +111,30 @@ proper tool-managed rdwm checkout; never edit the live rdwm source checkout.
 Preserve parent preview-gallery `e33a0f1`; no edits to `src/livewall`,
 `src/settings/app.rs` or parent-owned Settings UI renderer files. Keep catalogue,
 hit areas/actions, focused/unfocused, dark/light and scale QA for each delivery.
+
+## Sweeteh checkpoint / automatic-preview requirement
+
+Glyph commit: `21e01845901c5d15bc0125787141890ee0e30d9c`.
+Sweeteh upstream pinned `b7c0bdaa6aca54c7b45e341341b4b34408bb9c5a`.
+Real defaults/code/demo inspected; port uses fallback Material blue roles, 4 px
+native ledges and eight optional shared-data widgets. GPL code, OFL Google Sans
+and two unchanged Unsplash photos have separate provenance/hashes in package
+ATTRIBUTION.md. No demo-frame flower image or uncredited video imported.
+Native evidence: `docs/theme-ports/sweeteh/`; 32 widget state/mode PNGs and four
+compositions. Font registration, custom folder recoloring, cursor selection,
+true week grid, island/tray reservation, extra terminal slots and animation are
+explicit engine gaps, not claimed integrations. No upstream installer executed.
+
+Next required architecture: automatically generated package/gallery previews,
+not hand-drawn desktop miniatures or mandatory manual screenshots. Resolve actual
+manifest (inheritance included), effective mode/palette, artwork, widget files and
+anchors; compose real native pixels for widgets/bar/dock/decoration where
+available. Fixed labelled sample data is allowed, per-theme invented layouts are
+not. Use a content-addressed cache including manifest/assets/builtin widget
+sources, palette and renderer version; request regeneration on discovery after
+creation/import/change. Run generation in a private headless process, never by
+applying anything to the live session. Test each invalidation dimension and
+retain both modes. Missing native render support must be labelled, not mocked.
+Checkpoint all ports before bringing parent `e33a0f1` preview-gallery source into
+this branch; retain its entire livewall/Settings change and do not edit the
+parent checkout. Decoration catalogue/picker follows sequentially.

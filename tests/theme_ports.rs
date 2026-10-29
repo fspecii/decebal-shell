@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const PORTS: &[&str] = &["mountain-neon-dot", "glyph-rice"];
+const PORTS: &[&str] = &["mountain-neon-dot", "glyph-rice", "sweeteh"];
 
 fn root(id: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("themes").join(id)
@@ -74,11 +74,22 @@ fn port_packages_pack_and_keep_custom_layout_choices() {
                 if choice == apply::WidgetChoice::Keep {
                     assert_eq!(shell["widgets"]["items"], custom["items"]);
                 } else {
-                    assert_eq!(shell["widgets"]["items"].as_array().unwrap().len(), 6);
+                    assert_eq!(shell["widgets"]["items"].as_array().unwrap().len(), if *id == "sweeteh" { 8 } else { 6 });
                 }
                 assert_eq!(shell["dock"]["enabled"], false);
                 let config = &p.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new;
-                assert!(config.contains(if mode == Mode::Dark { "dark.png" } else { "light.png" }));
+                let artwork = if *id == "sweeteh" {
+                    if mode == Mode::Dark {
+                        "julia-ly-pD0yNIuaLho-unsplash.jpg"
+                    } else {
+                        "jack-b-JUvlf3OT6kc-unsplash.jpg"
+                    }
+                } else if mode == Mode::Dark {
+                    "dark.png"
+                } else {
+                    "light.png"
+                };
+                assert!(config.contains(artwork));
                 assert!(!config.contains("buttons = \"none\""));
             }
         }

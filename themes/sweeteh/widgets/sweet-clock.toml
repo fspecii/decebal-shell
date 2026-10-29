@@ -1,0 +1,27 @@
+format = 1
+id = "sweet-clock"
+name = "Sweeteh Clock"
+size = [220, 224]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "accent"
+radius = 26
+padding = [0, 0, 0, 4]
+
+[[root.children]]
+type = "stack"
+background = "popup"
+radius = 26
+border = "text@0.20"
+padding = 16
+
+[[root.children.children]]
+type = "analog-clock"
+size = 188
+color = "text"
+track = "text_secondary"
+second_color = "accent"
+numerals = false
+seconds = false

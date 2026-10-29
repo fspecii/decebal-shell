@@ -9,14 +9,14 @@ import tomllib
 from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-for ident in sys.argv[1:] or ['mountain-neon-dot', 'glyph-rice']:
+for ident in sys.argv[1:] or ['mountain-neon-dot', 'glyph-rice', 'sweeteh']:
     package = ROOT / 'themes' / ident
     manifest = tomllib.loads((package / 'theme.toml').read_text())
     width, height = (1920, 1200) if ident == 'glyph-rice' else (1920, 1080)
     out = ROOT / 'docs/theme-ports' / ident
     for mode in ('dark', 'light'):
         for state in ('sample', 'empty'):
-            canvas = ImageOps.fit(Image.open(package / 'wallpapers' / f'{mode}.png').convert('RGBA'),
+            canvas = ImageOps.fit(Image.open(package / manifest['wallpaper'][mode]).convert('RGBA'),
                                   (width, height), method=Image.Resampling.LANCZOS)
             boxes = []
             for spec in manifest['widgets']:

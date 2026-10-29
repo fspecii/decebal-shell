@@ -1,0 +1,26 @@
+format = 1
+id = "sweet-status"
+name = "Sweeteh Status"
+size = [280, 44]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "accent"
+radius = 26
+padding = [0, 0, 0, 4]
+
+[[root.children]]
+type = "row"
+background = "popup"
+radius = 26
+border = "text@0.20"
+padding = 10
+gap = 8
+on_click = "open dashboard"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "VOL {volume.level:pct|—} · BAT {battery.level:pct|—}"
+size = 13

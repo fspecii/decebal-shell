@@ -1,0 +1,32 @@
+format = 1
+id = "sweet-island"
+name = "Sweeteh Island"
+size = [300, 44]
+refresh = 1000
+
+[root]
+type = "stack"
+background = "accent"
+radius = 26
+padding = [0, 0, 0, 4]
+
+[[root.children]]
+type = "row"
+background = "popup"
+radius = 26
+border = "text@0.20"
+padding = 10
+gap = 18
+on_click = "open launcher"
+align = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 16
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%a, %d %b}"
+size = 12
+color = "text_secondary"

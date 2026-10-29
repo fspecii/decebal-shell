@@ -1,0 +1,168 @@
+format = 1
+id = "sweeteh"
+name = "Sweeteh"
+version = "1.0.0"
+author = "Aarav2709; Decebal port contributors"
+license = "GPL-3.0-only; OFL-1.1 font; Unsplash photographs"
+homepage = "https://github.com/Aarav2709/Sweeteh"
+description = "Sweeteh's raised Material tiles and island desktop, with the upstream blue fallback palette, real-data widgets and attributed rain/night-sky artwork."
+tags = ["dark", "light", "material", "islands", "raised", "port"]
+screenshots = ["screenshots/main.png", "screenshots/light.png"]
+
+[colors.dark]
+background = "#121318"
+sidebar = "#1a1b21"
+surface = "#1e1f25"
+bar = "#121318"
+bar_text = "#e3e2e9"
+popup = "#1e1f25"
+dock = "#121318"
+overlay = "#292a2f"
+titlebar = "#1e1f25"
+titlebar_inactive = "#121318"
+border = "#45464f"
+text = "#e3e2e9"
+text_secondary = "#c6c6d0"
+text_faint = "#c6c6d0"
+accent = "#b4c5ff"
+accent_text = "#1b2d61"
+danger = "#ffb4ab"
+ok = "#c1c5dd"
+warn = "#e2bbdb"
+
+[colors.light]
+background = "#faf8ff"
+sidebar = "#f4f3fa"
+surface = "#eeedf4"
+bar = "#faf8ff"
+bar_text = "#1a1b21"
+popup = "#eeedf4"
+dock = "#faf8ff"
+overlay = "#e9e7ef"
+titlebar = "#eeedf4"
+titlebar_inactive = "#faf8ff"
+border = "#c6c6d0"
+text = "#1a1b21"
+text_secondary = "#45464f"
+text_faint = "#45464f"
+accent = "#4b5c92"
+accent_text = "#ffffff"
+danger = "#ba1a1a"
+ok = "#595e72"
+warn = "#745470"
+
+[metrics]
+radius = 24
+dock_roundness = 1.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.25
+outline = 0.15
+
+[font]
+ui = ["Google Sans Flex", "Inter", "Noto Sans"]
+title = ["Google Sans Flex", "Inter", "Noto Sans"]
+mono = ["JetBrains Mono", "DejaVu Sans Mono"]
+display = ["Google Sans Flex", "Inter", "Noto Sans"]
+scale = 1.0
+
+[wallpaper]
+dark = "wallpapers/julia-ly-pD0yNIuaLho-unsplash.jpg"
+light = "wallpapers/jack-b-JUvlf3OT6kc-unsplash.jpg"
+mode = "fill"
+match_colors = false
+
+[decoration]
+style = "adwaita"
+height = 32
+radius = 10
+buttons = "right"
+title_align = "center"
+
+[rdwm]
+gap_inner = 5
+gap_outer = 20
+border_px = 2
+smart_gaps = false
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = false
+style = "floating"
+
+[dock]
+enabled = false
+style = "mac"
+size = 44
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[icons]
+theme = "Adwaita"
+fallback = "hicolor"
+monochrome_tint = true
+
+[hot_corners]
+top_left = "overview"
+top_right = "control-center"
+
+[[widgets]]
+use = "sweet-clock"
+place = "desktop"
+anchor = "top-right"
+x = -260
+y = 96
+
+[[widgets]]
+use = "sweet-weather"
+place = "desktop"
+anchor = "top-right"
+x = -24
+y = 96
+
+[[widgets]]
+use = "sweet-calendar"
+place = "desktop"
+anchor = "top-right"
+x = -24
+y = 340
+
+[[widgets]]
+use = "sweet-media"
+place = "desktop"
+anchor = "top-right"
+x = -24
+y = 584
+
+[[widgets]]
+use = "sweet-system"
+place = "desktop"
+anchor = "top-right"
+x = -24
+y = 828
+
+[[widgets]]
+use = "sweet-workspaces"
+place = "desktop"
+anchor = "top-left"
+x = 12
+y = 8
+
+[[widgets]]
+use = "sweet-island"
+place = "desktop"
+anchor = "top"
+x = 0
+y = 8
+
+[[widgets]]
+use = "sweet-status"
+place = "desktop"
+anchor = "top-right"
+x = -12
+y = 8
