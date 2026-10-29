@@ -1116,7 +1116,10 @@ y = -30
         let cancel = std::sync::atomic::AtomicBool::new(false);
         let handle = std::thread::scope(|s| {
             let h = s.spawn(|| preview(&src, &paths, "nord", 1, &cancel));
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while src.selection().name != "nord" && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
             assert_eq!(src.selection().name, "nord", "applied during the preview");
             h.join().unwrap()
         });
