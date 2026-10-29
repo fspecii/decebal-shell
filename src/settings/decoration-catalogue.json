@@ -1,0 +1,242 @@
+[
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 8,
+      "button_margin": 10,
+      "button_size": 12,
+      "height": 28,
+      "radius": 10,
+      "title_align": "center"
+    },
+    "description": "macOS: rounded, traffic lights on the left (dark)",
+    "id": "macos",
+    "look": "Lights",
+    "shape": "Circle",
+    "side": "Left"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 8,
+      "button_margin": 10,
+      "button_size": 12,
+      "height": 28,
+      "radius": 10,
+      "title_align": "center"
+    },
+    "description": "macOS light: pale greys, traffic lights on the left",
+    "id": "macos-light",
+    "look": "Lights",
+    "shape": "Circle",
+    "side": "Left"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 28,
+      "height": 28,
+      "radius": 0,
+      "title_align": "center"
+    },
+    "description": "dwm strip: square, glyph cells on the right",
+    "id": "classic",
+    "look": "Ghost",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 46,
+      "height": 32,
+      "radius": 8,
+      "title_align": "left"
+    },
+    "description": "Windows 11: flat, 46px caption cells on the right, red close hover (dark)",
+    "id": "windows",
+    "look": "Ghost",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 46,
+      "height": 32,
+      "radius": 8,
+      "title_align": "left"
+    },
+    "description": "Windows 11 light",
+    "id": "windows-light",
+    "look": "Ghost",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 24,
+      "height": 36,
+      "radius": 12,
+      "title_align": "center"
+    },
+    "description": "GNOME/libadwaita: rounded, circular flat buttons on the right (dark)",
+    "id": "adwaita",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 24,
+      "height": 36,
+      "radius": 12,
+      "title_align": "center"
+    },
+    "description": "GNOME/libadwaita light",
+    "id": "adwaita-light",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 4,
+      "button_margin": 6,
+      "button_size": 20,
+      "height": 30,
+      "radius": 5,
+      "title_align": "center"
+    },
+    "description": "KDE Breeze: flat, chevron glyphs on the right, blue and red hovers",
+    "id": "breeze",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 6,
+      "button_margin": 10,
+      "button_size": 16,
+      "height": 30,
+      "radius": 6,
+      "title_align": "center"
+    },
+    "description": "Arc: flat headerbar, small round buttons that light up blue/red",
+    "id": "arc",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 4,
+      "button_margin": 6,
+      "button_size": 26,
+      "height": 34,
+      "radius": 3,
+      "title_align": "center"
+    },
+    "description": "Material (Materia): flat, large ghost circles on the right",
+    "id": "materia",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 8,
+      "button_margin": 12,
+      "button_size": 12,
+      "height": 30,
+      "radius": 8,
+      "title_align": "left"
+    },
+    "description": "Nord: rounded, aurora-coloured dots on the right",
+    "id": "nord",
+    "look": "Lights",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 14,
+      "height": 28,
+      "radius": 4,
+      "title_align": "left"
+    },
+    "description": "Gruvbox: warm dark, small rounded squares on the right",
+    "id": "gruvbox",
+    "look": "Lights",
+    "shape": "Square",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 8,
+      "button_margin": 11,
+      "button_size": 12,
+      "height": 28,
+      "radius": 8,
+      "title_align": "center"
+    },
+    "description": "Dracula: purple-grey bar, pastel traffic lights on the left",
+    "id": "dracula",
+    "look": "Lights",
+    "shape": "Circle",
+    "side": "Left"
+  },
+  {
+    "defaults": {
+      "border_px": 0,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 8,
+      "height": 20,
+      "radius": 0,
+      "title_align": "left"
+    },
+    "description": "Minimal: thin strip, tiny dots on the right, left-aligned title",
+    "id": "minimal",
+    "look": "Lights",
+    "shape": "Circle",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 0,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 8,
+      "height": 8,
+      "radius": 0,
+      "title_align": "center"
+    },
+    "description": "Border only: a thin coloured strip, no title, no buttons",
+    "id": "borderonly",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
+  }
+]

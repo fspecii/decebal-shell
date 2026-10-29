@@ -5,6 +5,7 @@ pub mod appearance;
 pub mod binds;
 pub mod ccpane;
 pub mod configpane;
+pub mod decorations;
 pub mod editor;
 pub mod fontpane;
 pub mod icons;

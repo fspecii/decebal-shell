@@ -1,1007 +1,1490 @@
 {
-"actions":[
-"spawn",
-"close",
-"kill",
-"quit",
-"reload",
-"focusstack",
-"focusmon",
-"tagmon",
-"incnmaster",
-"setmfact",
-"zoom",
-"togglebar",
-"togglegaps",
-"togglesticky",
-"togglescratch",
-"view",
-"toggleview",
-"tag",
-"toggletag",
-"setlayout",
-"cyclelayout",
-"togglefloating",
-"togglefullscreen",
-"togglemaximize",
-"minimize",
-"unminimize",
-"snap_left",
-"snap_right",
-"snap_up",
-"snap_down",
-"snap_topleft",
-"snap_topright",
-"snap_bottomleft",
-"snap_bottomright",
-"snap_restore",
-"movemouse",
-"resizemouse",
-"focuswindow",
-"cyclelayout_back",
-"focus_left",
-"focus_right",
-"focus_up",
-"focus_down",
-"swap_left",
-"swap_right",
-"swap_up",
-"swap_down",
-"scroll_left",
-"scroll_right",
-"column_width",
-"column_preset",
-"consume_left",
-"consume_right",
-"expel_left",
-"expel_right",
-"bsp_rotate",
-"bsp_flip",
-"bsp_balance",
-"bsp_presel",
-"mode",
-"none"
-],
-"keys":[
-{
-"choices":[],
-"default":1,
-"desc":"Window border width",
-"key":"border_px",
-"max":256.0,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":32,
-"desc":"Edge-snap / auto-float distance while dragging",
-"key":"snap",
-"max":null,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":0,
-"desc":"Gap between windows",
-"key":"gap_inner",
-"max":1024.0,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":0,
-"desc":"Gap around the work area",
-"key":"gap_outer",
-"max":1024.0,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":0.55,
-"desc":"Initial master area fraction",
-"key":"mfact",
-"max":0.95,
-"min":0.05,
-"section":"general",
-"type":"float"
-},
-{
-"choices":[],
-"default":1,
-"desc":"Initial number of master windows",
-"key":"nmaster",
-"max":4096.0,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Focus the window under the pointer",
-"key":"focus_follows_mouse",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Keep focus on a fullscreen window",
-"key":"lock_fullscreen",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Remember layout, nmaster and mfact per tag",
-"key":"pertag",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Activation requests focus the window",
-"key":"activate_focuses",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Honour size hints for tiled windows",
-"key":"resize_hints",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":[
-"1",
-"2",
-"3",
-"4",
-"5",
-"6",
-"7",
-"8",
-"9"
-],
-"desc":"Tag names",
-"key":"tags",
-"max":31.0,
-"min":1.0,
-"section":"general",
-"type":"list"
-},
-{
-"choices":[],
-"default":[
-"tile",
-"floating",
-"monocle"
-],
-"desc":"Layouts cyclelayout walks; the first is the default",
-"key":"layouts",
-"max":null,
-"min":1.0,
-"section":"general",
-"type":"list"
-},
-{
-"choices":[],
-"default":false,
-"desc":"No gaps around a lone window",
-"key":"smart_gaps",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":false,
-"desc":"No border on a lone tiled window",
-"key":"smart_borders",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[
-"left",
-"right",
-"top",
-"bottom"
-],
-"default":null,
-"desc":"Restyle tile: master side",
-"key":"master_side",
-"max":null,
-"min":null,
-"section":"general",
-"type":"enum"
-},
-{
-"choices":[
-"vertical",
-"horizontal",
-"deck",
-"tabbed"
-],
-"default":null,
-"desc":"Restyle tile: stack arrangement",
-"key":"stack_style",
-"max":null,
-"min":null,
-"section":"general",
-"type":"enum"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Merge your binds over the built-in defaults",
-"key":"default_binds",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Create the IPC socket",
-"key":"ipc",
-"max":null,
-"min":null,
-"section":"general",
-"type":"bool"
-},
-{
-"choices":[],
-"default":null,
-"desc":"IPC socket path override",
-"key":"socket",
-"max":null,
-"min":null,
-"section":"general",
-"type":"string"
-},
-{
-"choices":[],
-"default":200,
-"desc":"Layout plugin reply deadline",
-"key":"layout_timeout_ms",
-"max":10000.0,
-"min":0.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":1000,
-"desc":"Wait for the next key of a key sequence",
-"key":"chord_timeout_ms",
-"max":60000.0,
-"min":1.0,
-"section":"general",
-"type":"int"
-},
-{
-"choices":[],
-"default":"#005577",
-"desc":"Focused window border",
-"key":"focused",
-"max":null,
-"min":null,
-"section":"colors",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#444444",
-"desc":"Unfocused window border",
-"key":"normal",
-"max":null,
-"min":null,
-"section":"colors",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#ff0000",
-"desc":"Urgent window border",
-"key":"urgent",
-"max":null,
-"min":null,
-"section":"colors",
-"type":"color"
-},
-{
-"choices":[],
-"default":false,
-"desc":"dwm's built-in bar",
-"key":"show",
-"max":null,
-"min":null,
-"section":"bar",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Bar at the top (else bottom)",
-"key":"top",
-"max":null,
-"min":null,
-"section":"bar",
-"type":"bool"
-},
-{
-"choices":[],
-"default":20,
-"desc":"Bar height; also the minimum window size",
-"key":"height",
-"max":1024.0,
-"min":0.0,
-"section":"bar",
-"type":"int"
-},
-{
-"choices":[],
-"default":false,
-"desc":"Server-side titlebars",
-"key":"enabled",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"bool"
-},
-{
-"choices":[
-"macos",
-"classic"
-],
-"default":"macos",
-"desc":"Titlebar style",
-"key":"style",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"enum"
-},
-{
-"choices":[],
-"default":28,
-"desc":"Titlebar height",
-"key":"height",
-"max":200.0,
-"min":8.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":1,
-"desc":"Border around the titlebar",
-"key":"border_px",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":10,
-"desc":"Top corner radius (macos style)",
-"key":"radius",
-"max":200.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[
-"center",
-"left"
-],
-"default":"center",
-"desc":"Title alignment",
-"key":"title_align",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"enum"
-},
-{
-"choices":[],
-"default":"",
-"desc":"Font file or name; empty = automatic",
-"key":"font",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"string"
-},
-{
-"choices":[],
-"default":[],
-"desc":"Fallback fonts",
-"key":"fallback_fonts",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"list"
-},
-{
-"choices":[],
-"default":[],
-"desc":"Extra font directories",
-"key":"font_dirs",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"list"
-},
-{
-"choices":[],
-"default":13.0,
-"desc":"Title font size",
-"key":"font_size",
-"max":96.0,
-"min":6.0,
-"section":"decoration",
-"type":"float"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Close / minimise / zoom buttons",
-"key":"buttons",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"bool"
-},
-{
-"choices":[],
-"default":12,
-"desc":"Traffic-light diameter",
-"key":"button_size",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":8,
-"desc":"Gap between buttons",
-"key":"button_gap",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":10,
-"desc":"Left margin of the buttons",
-"key":"button_margin",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":5,
-"desc":"Resize zone thickness",
-"key":"resize_edge",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":12,
-"desc":"Resize corner length",
-"key":"resize_corner",
-"max":512.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Focused titlebar background",
-"key":"focused_bg",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Focused titlebar text",
-"key":"focused_fg",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Focused titlebar border",
-"key":"focused_border",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Unfocused titlebar background",
-"key":"unfocused_bg",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Unfocused titlebar text",
-"key":"unfocused_fg",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Unfocused titlebar border",
-"key":"unfocused_border",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#ff5f57",
-"desc":"Close button colour",
-"key":"close_color",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#febc2e",
-"desc":"Minimise button colour",
-"key":"minimize_color",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#28c840",
-"desc":"Zoom button colour",
-"key":"zoom_color",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":"#4d4d52",
-"desc":"Buttons of unfocused windows",
-"key":"inactive_button_color",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"color"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Look of dwm's built-in bar",
-"key":"bar",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"table"
-},
-{
-"choices":[
-"fullscreen",
-"maximize",
-"monocle",
-"float",
-"none"
-],
-"default":"fullscreen",
-"desc":"What the green button does",
-"key":"zoom_button",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"enum"
-},
-{
-"choices":[
-"fullscreen",
-"maximize",
-"monocle",
-"float",
-"none"
-],
-"default":"maximize",
-"desc":"Double click on the title",
-"key":"double_click",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"enum"
-},
-{
-"choices":[],
-"default":400,
-"desc":"Double-click interval (0 = off)",
-"key":"double_click_ms",
-"max":60000.0,
-"min":0.0,
-"section":"decoration",
-"type":"int"
-},
-{
-"choices":[],
-"default":false,
-"desc":"Middle click on the title closes",
-"key":"middle_click_close",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Titlebars in the monocle layout",
-"key":"in_monocle",
-"max":null,
-"min":null,
-"section":"decoration",
-"type":"bool"
-},
-{
-"choices":[],
-"default":null,
-"desc":"UI scale factor; unset = automatic",
-"key":"scale",
-"max":8.0,
-"min":0.5,
-"section":"decoration",
-"type":"float"
-},
-{
-"choices":[],
-"default":false,
-"desc":"Window and zone snapping (default: on with decorations)",
-"key":"enabled",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Snap to other windows' edges",
-"key":"windows",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[],
-"default":16,
-"desc":"Window snap distance",
-"key":"distance",
-"max":256.0,
-"min":0.0,
-"section":"snap",
-"type":"int"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Leave gap_inner next to snapped windows",
-"key":"gaps",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Screen-edge snap zones",
-"key":"zones",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[],
-"default":6,
-"desc":"Pointer band that triggers a zone",
-"key":"edge",
-"max":64.0,
-"min":1.0,
-"section":"snap",
-"type":"int"
-},
-{
-"choices":[],
-"default":64,
-"desc":"Corner zone length",
-"key":"corner",
-"max":1024.0,
-"min":8.0,
-"section":"snap",
-"type":"int"
-},
-{
-"choices":[
-"maximize",
-"none"
-],
-"default":"maximize",
-"desc":"Top edge zone",
-"key":"top",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"enum"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Translucent zone preview",
-"key":"preview",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[],
-"default":"#3584e460",
-"desc":"Preview colour (#rrggbbaa)",
-"key":"preview_color",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"color"
-},
-{
-"choices":[],
-"default":3,
-"desc":"Preview outline width",
-"key":"preview_border",
-"max":32.0,
-"min":0.0,
-"section":"snap",
-"type":"int"
-},
-{
-"choices":[],
-"default":true,
-"desc":"Dragging a snapped window restores its size",
-"key":"restore",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"bool"
-},
-{
-"choices":[
-"swap",
-"insert",
-"float",
-"off"
-],
-"default":"swap",
-"desc":"Drop a tiled window onto the tiles",
-"key":"retile_on_drop",
-"max":null,
-"min":null,
-"section":"snap",
-"type":"enum"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Wallpaper file",
-"key":"image",
-"max":null,
-"min":null,
-"section":"wallpaper",
-"type":"string"
-},
-{
-"choices":[
-"fill",
-"fit",
-"stretch",
-"center",
-"tile"
-],
-"default":"fill",
-"desc":"How the image is scaled",
-"key":"mode",
-"max":null,
-"min":null,
-"section":"wallpaper",
-"type":"enum"
-},
-{
-"choices":[],
-"default":"#1f1f24",
-"desc":"Background colour",
-"key":"color",
-"max":null,
-"min":null,
-"section":"wallpaper",
-"type":"color"
-},
-{
-"choices":[],
-"default":256,
-"desc":"Largest source image",
-"key":"max_decode_mb",
-"max":4096.0,
-"min":1.0,
-"section":"wallpaper",
-"type":"int"
-},
-{
-"choices":[],
-"default":null,
-"desc":"Per-output wallpapers ([[wallpaper.output]])",
-"key":"output",
-"max":null,
-"min":null,
-"section":"wallpaper",
-"type":"table"
-}
-],
-"layouts":[
-{
-"name":"tile",
-"symbol":"[]="
-},
-{
-"name":"monocle",
-"symbol":"[M]"
-},
-{
-"name":"floating",
-"symbol":"><>"
-},
-{
-"name":"bottomstack",
-"symbol":"TTT"
-},
-{
-"name":"bstackhoriz",
-"symbol":"==="
-},
-{
-"name":"rtile",
-"symbol":"=[]"
-},
-{
-"name":"grid",
-"symbol":"HHH"
-},
-{
-"name":"gaplessgrid",
-"symbol":":::"
-},
-{
-"name":"horizgrid",
-"symbol":"---"
-},
-{
-"name":"nrowgrid",
-"symbol":"###"
-},
-{
-"name":"deck",
-"symbol":"[D]"
-},
-{
-"name":"centeredmaster",
-"symbol":"|M|"
-},
-{
-"name":"centeredfloatingmaster",
-"symbol":">M>"
-},
-{
-"name":"dwindle",
-"symbol":"[\\]"
-},
-{
-"name":"spiral",
-"symbol":"[@]"
-},
-{
-"name":"tatami",
-"symbol":"|+|"
-},
-{
-"name":"columns",
-"symbol":"|||"
-},
-{
-"name":"rows",
-"symbol":"=-="
-},
-{
-"name":"threecol",
-"symbol":"[||]"
-},
-{
-"name":"bsp",
-"symbol":"[+]"
-},
-{
-"name":"scroll",
-"symbol":"[<>]"
-},
-{
-"name":"tabbed",
-"symbol":"[T]"
-},
-{
-"name":"stacked",
-"symbol":"[S]"
-}
-]
+  "actions": [
+    "spawn",
+    "close",
+    "kill",
+    "quit",
+    "reload",
+    "focusstack",
+    "focusmon",
+    "tagmon",
+    "incnmaster",
+    "setmfact",
+    "zoom",
+    "togglebar",
+    "togglegaps",
+    "togglesticky",
+    "togglescratch",
+    "view",
+    "toggleview",
+    "tag",
+    "toggletag",
+    "setlayout",
+    "cyclelayout",
+    "togglefloating",
+    "tileall",
+    "togglefullscreen",
+    "fullscreen_center",
+    "togglemaximize",
+    "minimize",
+    "unminimize",
+    "snap_left",
+    "snap_right",
+    "snap_up",
+    "snap_down",
+    "snap_topleft",
+    "snap_topright",
+    "snap_bottomleft",
+    "snap_bottomright",
+    "snap_restore",
+    "movemouse",
+    "resizemouse",
+    "focuswindow",
+    "cyclelayout_back",
+    "viewnext",
+    "viewprev",
+    "alttab",
+    "alttab_back",
+    "focus_left",
+    "focus_right",
+    "focus_up",
+    "focus_down",
+    "swap_left",
+    "swap_right",
+    "swap_up",
+    "swap_down",
+    "scroll_left",
+    "scroll_right",
+    "column_width",
+    "column_preset",
+    "consume_left",
+    "consume_right",
+    "expel_left",
+    "expel_right",
+    "consume_or_expel_left",
+    "consume_or_expel_right",
+    "move_column_left",
+    "move_column_right",
+    "column_maximize",
+    "column_center",
+    "bsp_rotate",
+    "bsp_flip",
+    "bsp_balance",
+    "bsp_presel",
+    "mode",
+    "none"
+  ],
+  "decoration_styles": [
+    {
+      "border": 1,
+      "button_gap": 8,
+      "button_margin": 10,
+      "button_size": 12,
+      "buttons": true,
+      "desc": "macOS: rounded, traffic lights on the left (dark)",
+      "focused": [
+        "#2d2d30",
+        "#e8e8e8",
+        "#4a4a4f"
+      ],
+      "glyphs": "traffic",
+      "height": 28,
+      "look": "lights",
+      "name": "macos",
+      "radius": 10,
+      "shape": "circle",
+      "side": "left",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#232325",
+        "#8c8c91",
+        "#333336"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 8,
+      "button_margin": 10,
+      "button_size": 12,
+      "buttons": true,
+      "desc": "macOS light: pale greys, traffic lights on the left",
+      "focused": [
+        "#e9e9ec",
+        "#2b2b2e",
+        "#c3c3c8"
+      ],
+      "glyphs": "traffic",
+      "height": 28,
+      "look": "lights",
+      "name": "macos-light",
+      "radius": 10,
+      "shape": "circle",
+      "side": "left",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#f3f3f5",
+        "#9a9a9f",
+        "#d8d8dc"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 28,
+      "buttons": true,
+      "desc": "dwm strip: square, glyph cells on the right",
+      "focused": [
+        "#005577",
+        "#eeeeee",
+        "#005577"
+      ],
+      "glyphs": "classic",
+      "height": 28,
+      "look": "ghost",
+      "name": "classic",
+      "radius": 0,
+      "shape": "cell",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#222222",
+        "#bbbbbb",
+        "#444444"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 46,
+      "buttons": true,
+      "desc": "Windows 11: flat, 46px caption cells on the right, red close hover (dark)",
+      "focused": [
+        "#202020",
+        "#ffffff",
+        "#383838"
+      ],
+      "glyphs": "thin",
+      "height": 32,
+      "look": "ghost",
+      "name": "windows",
+      "radius": 8,
+      "shape": "cell",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#2b2b2b",
+        "#8c8c8c",
+        "#383838"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 46,
+      "buttons": true,
+      "desc": "Windows 11 light",
+      "focused": [
+        "#f3f3f3",
+        "#1a1a1a",
+        "#d4d4d4"
+      ],
+      "glyphs": "thin",
+      "height": 32,
+      "look": "ghost",
+      "name": "windows-light",
+      "radius": 8,
+      "shape": "cell",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#fafafa",
+        "#8a8a8a",
+        "#dcdcdc"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 24,
+      "buttons": true,
+      "desc": "GNOME/libadwaita: rounded, circular flat buttons on the right (dark)",
+      "focused": [
+        "#303030",
+        "#ffffff",
+        "#1d1d1d"
+      ],
+      "glyphs": "classic",
+      "height": 36,
+      "look": "ghost",
+      "name": "adwaita",
+      "radius": 12,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#2a2a2a",
+        "#9a9a9a",
+        "#232323"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 24,
+      "buttons": true,
+      "desc": "GNOME/libadwaita light",
+      "focused": [
+        "#ebebeb",
+        "#2e3436",
+        "#cfcfcf"
+      ],
+      "glyphs": "classic",
+      "height": 36,
+      "look": "ghost",
+      "name": "adwaita-light",
+      "radius": 12,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#fafafa",
+        "#9a9a9a",
+        "#dcdcdc"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 4,
+      "button_margin": 6,
+      "button_size": 20,
+      "buttons": true,
+      "desc": "KDE Breeze: flat, chevron glyphs on the right, blue and red hovers",
+      "focused": [
+        "#475057",
+        "#eff0f1",
+        "#2a2e32"
+      ],
+      "glyphs": "chevron",
+      "height": 30,
+      "look": "ghost",
+      "name": "breeze",
+      "radius": 5,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#31363b",
+        "#7f8c8d",
+        "#2a2e32"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 6,
+      "button_margin": 10,
+      "button_size": 16,
+      "buttons": true,
+      "desc": "Arc: flat headerbar, small round buttons that light up blue/red",
+      "focused": [
+        "#2f343f",
+        "#d3dae3",
+        "#262932"
+      ],
+      "glyphs": "thin",
+      "height": 30,
+      "look": "ghost",
+      "name": "arc",
+      "radius": 6,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#353945",
+        "#7c818c",
+        "#2b2e39"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 4,
+      "button_margin": 6,
+      "button_size": 26,
+      "buttons": true,
+      "desc": "Material (Materia): flat, large ghost circles on the right",
+      "focused": [
+        "#212121",
+        "#ffffff",
+        "#171717"
+      ],
+      "glyphs": "thin",
+      "height": 34,
+      "look": "ghost",
+      "name": "materia",
+      "radius": 3,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#2b2b2b",
+        "#8a8a8a",
+        "#222222"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 8,
+      "button_margin": 12,
+      "button_size": 12,
+      "buttons": true,
+      "desc": "Nord: rounded, aurora-coloured dots on the right",
+      "focused": [
+        "#3b4252",
+        "#d8dee9",
+        "#2e3440"
+      ],
+      "glyphs": "traffic",
+      "height": 30,
+      "look": "lights",
+      "name": "nord",
+      "radius": 8,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#2e3440",
+        "#6b7689",
+        "#3b4252"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 14,
+      "buttons": true,
+      "desc": "Gruvbox: warm dark, small rounded squares on the right",
+      "focused": [
+        "#3c3836",
+        "#ebdbb2",
+        "#1d2021"
+      ],
+      "glyphs": "traffic",
+      "height": 28,
+      "look": "lights",
+      "name": "gruvbox",
+      "radius": 4,
+      "shape": "square",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#282828",
+        "#928374",
+        "#1d2021"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 8,
+      "button_margin": 11,
+      "button_size": 12,
+      "buttons": true,
+      "desc": "Dracula: purple-grey bar, pastel traffic lights on the left",
+      "focused": [
+        "#343746",
+        "#f8f8f2",
+        "#21222c"
+      ],
+      "glyphs": "traffic",
+      "height": 28,
+      "look": "lights",
+      "name": "dracula",
+      "radius": 8,
+      "shape": "circle",
+      "side": "left",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#282a36",
+        "#6272a4",
+        "#21222c"
+      ]
+    },
+    {
+      "border": 0,
+      "button_gap": 6,
+      "button_margin": 8,
+      "button_size": 8,
+      "buttons": true,
+      "desc": "Minimal: thin strip, tiny dots on the right, left-aligned title",
+      "focused": [
+        "#1e1e1e",
+        "#c8c8c8",
+        "#1e1e1e"
+      ],
+      "glyphs": "none",
+      "height": 20,
+      "look": "lights",
+      "name": "minimal",
+      "radius": 0,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#181818",
+        "#777777",
+        "#181818"
+      ]
+    },
+    {
+      "border": 0,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 8,
+      "buttons": false,
+      "desc": "Border only: a thin coloured strip, no title, no buttons",
+      "focused": [
+        "#005577",
+        "#eeeeee",
+        "#005577"
+      ],
+      "glyphs": "thin",
+      "height": 8,
+      "look": "ghost",
+      "name": "borderonly",
+      "radius": 0,
+      "shape": "circle",
+      "side": "right",
+      "title": false,
+      "title_align": "center",
+      "unfocused": [
+        "#333333",
+        "#bbbbbb",
+        "#333333"
+      ]
+    }
+  ],
+  "keys": [
+    {
+      "choices": [],
+      "default": 1,
+      "desc": "Window border width",
+      "key": "border_px",
+      "max": 256.0,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 32,
+      "desc": "Edge-snap / auto-float distance while dragging",
+      "key": "snap",
+      "max": null,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 0,
+      "desc": "Gap between windows",
+      "key": "gap_inner",
+      "max": 1024.0,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 0,
+      "desc": "Gap around the work area",
+      "key": "gap_outer",
+      "max": 1024.0,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 0.55,
+      "desc": "Initial master area fraction",
+      "key": "mfact",
+      "max": 0.95,
+      "min": 0.05,
+      "section": "general",
+      "type": "float"
+    },
+    {
+      "choices": [],
+      "default": 1,
+      "desc": "Initial number of master windows",
+      "key": "nmaster",
+      "max": 4096.0,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Focus the window under the pointer",
+      "key": "focus_follows_mouse",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Keep focus on a fullscreen window",
+      "key": "lock_fullscreen",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "In a tiling layout windows never stack: snap zones are off while dragging when other visible windows are present (drops retile instead)",
+      "key": "no_overlap",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Viewing the tag you are on goes back to the previous one",
+      "key": "view_back_and_forth",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Remember layout, nmaster and mfact per tag",
+      "key": "pertag",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Activation requests focus the window",
+      "key": "activate_focuses",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Honour size hints for tiled windows",
+      "key": "resize_hints",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [
+        "master",
+        "aside",
+        "below",
+        "bottom"
+      ],
+      "default": "master",
+      "desc": "Where a new window joins the tiling order (master = dwm)",
+      "key": "attach",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "desc": "Tag names",
+      "key": "tags",
+      "max": 31.0,
+      "min": 1.0,
+      "section": "general",
+      "type": "list"
+    },
+    {
+      "choices": [],
+      "default": [
+        "tile",
+        "floating",
+        "monocle"
+      ],
+      "desc": "Layouts cyclelayout walks; the first is the default",
+      "key": "layouts",
+      "max": null,
+      "min": 1.0,
+      "section": "general",
+      "type": "list"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "No gaps around a lone window",
+      "key": "smart_gaps",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "No border on a lone tiled window",
+      "key": "smart_borders",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "default": null,
+      "desc": "Restyle tile: master side",
+      "key": "master_side",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "enum"
+    },
+    {
+      "choices": [
+        "vertical",
+        "horizontal",
+        "deck",
+        "tabbed"
+      ],
+      "default": null,
+      "desc": "Restyle tile: stack arrangement",
+      "key": "stack_style",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Merge your binds over the built-in defaults",
+      "key": "default_binds",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Create the IPC socket",
+      "key": "ipc",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "IPC socket path override",
+      "key": "socket",
+      "max": null,
+      "min": null,
+      "section": "general",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": 200,
+      "desc": "Layout plugin reply deadline",
+      "key": "layout_timeout_ms",
+      "max": 10000.0,
+      "min": 0.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 1000,
+      "desc": "Wait for the next key of a key sequence",
+      "key": "chord_timeout_ms",
+      "max": 60000.0,
+      "min": 1.0,
+      "section": "general",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": "#005577",
+      "desc": "Focused window border",
+      "key": "focused",
+      "max": null,
+      "min": null,
+      "section": "colors",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#444444",
+      "desc": "Unfocused window border",
+      "key": "normal",
+      "max": null,
+      "min": null,
+      "section": "colors",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#ff0000",
+      "desc": "Urgent window border",
+      "key": "urgent",
+      "max": null,
+      "min": null,
+      "section": "colors",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "dwm's built-in bar",
+      "key": "show",
+      "max": null,
+      "min": null,
+      "section": "bar",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Bar at the top (else bottom)",
+      "key": "top",
+      "max": null,
+      "min": null,
+      "section": "bar",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 20,
+      "desc": "Bar height; also the minimum window size",
+      "key": "height",
+      "max": 1024.0,
+      "min": 0.0,
+      "section": "bar",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Server-side titlebars",
+      "key": "enabled",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "bool"
+    },
+    {
+      "choices": [
+        "macos",
+        "macos-light",
+        "classic",
+        "windows",
+        "windows-light",
+        "adwaita",
+        "adwaita-light",
+        "breeze",
+        "arc",
+        "materia",
+        "nord",
+        "gruvbox",
+        "dracula",
+        "minimal",
+        "borderonly"
+      ],
+      "default": "macos",
+      "desc": "Titlebar style (see decoration_styles)",
+      "key": "style",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": 28,
+      "desc": "Titlebar height (unset = the style's)",
+      "key": "height",
+      "max": 200.0,
+      "min": 8.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 1,
+      "desc": "Border around the titlebar",
+      "key": "border_px",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 10,
+      "desc": "Top corner radius (unset = the style's)",
+      "key": "radius",
+      "max": 200.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [
+        "center",
+        "left"
+      ],
+      "default": "center",
+      "desc": "Title alignment",
+      "key": "title_align",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": "",
+      "desc": "Font file or name; empty = automatic",
+      "key": "font",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": [],
+      "desc": "Fallback fonts",
+      "key": "fallback_fonts",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "list"
+    },
+    {
+      "choices": [],
+      "default": [],
+      "desc": "Extra font directories",
+      "key": "font_dirs",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "list"
+    },
+    {
+      "choices": [],
+      "default": 13.0,
+      "desc": "Title font size",
+      "key": "font_size",
+      "max": 96.0,
+      "min": 6.0,
+      "section": "decoration",
+      "type": "float"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Close / minimise / zoom buttons",
+      "key": "buttons",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 12,
+      "desc": "Button diameter or cell width (unset = the style's)",
+      "key": "button_size",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 8,
+      "desc": "Gap between buttons",
+      "key": "button_gap",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 10,
+      "desc": "Distance of the buttons from their frame edge",
+      "key": "button_margin",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 5,
+      "desc": "Resize zone thickness",
+      "key": "resize_edge",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 12,
+      "desc": "Resize corner length",
+      "key": "resize_corner",
+      "max": 512.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Focused titlebar background",
+      "key": "focused_bg",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Focused titlebar text",
+      "key": "focused_fg",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Focused titlebar border",
+      "key": "focused_border",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Unfocused titlebar background",
+      "key": "unfocused_bg",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Unfocused titlebar text",
+      "key": "unfocused_fg",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Unfocused titlebar border",
+      "key": "unfocused_border",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#ff5f57",
+      "desc": "Close button colour or hover fill",
+      "key": "close_color",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#febc2e",
+      "desc": "Minimise button colour or hover fill",
+      "key": "minimize_color",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#28c840",
+      "desc": "Zoom button colour or hover fill",
+      "key": "zoom_color",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": "#4d4d52",
+      "desc": "Dot colour of unfocused windows",
+      "key": "inactive_button_color",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Look of dwm's built-in bar",
+      "key": "bar",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "table"
+    },
+    {
+      "choices": [
+        "fullscreen",
+        "maximize",
+        "monocle",
+        "float",
+        "none"
+      ],
+      "default": "fullscreen",
+      "desc": "What the green button does",
+      "key": "zoom_button",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "enum"
+    },
+    {
+      "choices": [
+        "fullscreen",
+        "maximize",
+        "monocle",
+        "float",
+        "none"
+      ],
+      "default": "maximize",
+      "desc": "Double click on the title",
+      "key": "double_click",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": 400,
+      "desc": "Double-click interval (0 = off)",
+      "key": "double_click_ms",
+      "max": 60000.0,
+      "min": 0.0,
+      "section": "decoration",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Middle click on the title closes",
+      "key": "middle_click_close",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Titlebars in the monocle layout",
+      "key": "in_monocle",
+      "max": null,
+      "min": null,
+      "section": "decoration",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "UI scale factor; unset = automatic",
+      "key": "scale",
+      "max": 8.0,
+      "min": 0.5,
+      "section": "decoration",
+      "type": "float"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Window and zone snapping (default: on with decorations)",
+      "key": "enabled",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Snap to other windows' edges",
+      "key": "windows",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 16,
+      "desc": "Window snap distance",
+      "key": "distance",
+      "max": 256.0,
+      "min": 0.0,
+      "section": "snap",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Leave gap_inner next to snapped windows",
+      "key": "gaps",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Screen-edge snap zones",
+      "key": "zones",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 6,
+      "desc": "Pointer band that triggers a zone",
+      "key": "edge",
+      "max": 64.0,
+      "min": 1.0,
+      "section": "snap",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 64,
+      "desc": "Corner zone length",
+      "key": "corner",
+      "max": 1024.0,
+      "min": 8.0,
+      "section": "snap",
+      "type": "int"
+    },
+    {
+      "choices": [
+        "maximize",
+        "none"
+      ],
+      "default": "maximize",
+      "desc": "Top edge zone",
+      "key": "top",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Translucent zone preview",
+      "key": "preview",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": "#3584e460",
+      "desc": "Preview colour (#rrggbbaa)",
+      "key": "preview_color",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": 3,
+      "desc": "Preview outline width",
+      "key": "preview_border",
+      "max": 32.0,
+      "min": 0.0,
+      "section": "snap",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Dragging a snapped window restores its size",
+      "key": "restore",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "bool"
+    },
+    {
+      "choices": [
+        "always",
+        "shift",
+        "ctrl",
+        "alt",
+        "super"
+      ],
+      "default": "always",
+      "desc": "Snap zones always, or only while holding a modifier (combine with +, e.g. ctrl+shift)",
+      "key": "activation",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "enum"
+    },
+    {
+      "choices": [
+        "swap",
+        "insert",
+        "float",
+        "off"
+      ],
+      "default": "swap",
+      "desc": "Drop a tiled window onto the tiles",
+      "key": "retile_on_drop",
+      "max": null,
+      "min": null,
+      "section": "snap",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Wallpaper file",
+      "key": "image",
+      "max": null,
+      "min": null,
+      "section": "wallpaper",
+      "type": "string"
+    },
+    {
+      "choices": [
+        "fill",
+        "fit",
+        "stretch",
+        "center",
+        "tile"
+      ],
+      "default": "fill",
+      "desc": "How the image is scaled",
+      "key": "mode",
+      "max": null,
+      "min": null,
+      "section": "wallpaper",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": "#1f1f24",
+      "desc": "Background colour",
+      "key": "color",
+      "max": null,
+      "min": null,
+      "section": "wallpaper",
+      "type": "color"
+    },
+    {
+      "choices": [],
+      "default": 256,
+      "desc": "Largest source image",
+      "key": "max_decode_mb",
+      "max": 4096.0,
+      "min": 1.0,
+      "section": "wallpaper",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "Per-output wallpapers ([[wallpaper.output]])",
+      "key": "output",
+      "max": null,
+      "min": null,
+      "section": "wallpaper",
+      "type": "table"
+    }
+  ],
+  "layouts": [
+    {
+      "name": "tile",
+      "symbol": "[]="
+    },
+    {
+      "name": "monocle",
+      "symbol": "[M]"
+    },
+    {
+      "name": "floating",
+      "symbol": "><>"
+    },
+    {
+      "name": "bottomstack",
+      "symbol": "TTT"
+    },
+    {
+      "name": "bstackhoriz",
+      "symbol": "==="
+    },
+    {
+      "name": "rtile",
+      "symbol": "=[]"
+    },
+    {
+      "name": "grid",
+      "symbol": "HHH"
+    },
+    {
+      "name": "gaplessgrid",
+      "symbol": ":::"
+    },
+    {
+      "name": "horizgrid",
+      "symbol": "---"
+    },
+    {
+      "name": "nrowgrid",
+      "symbol": "###"
+    },
+    {
+      "name": "deck",
+      "symbol": "[D]"
+    },
+    {
+      "name": "centeredmaster",
+      "symbol": "|M|"
+    },
+    {
+      "name": "centeredfloatingmaster",
+      "symbol": ">M>"
+    },
+    {
+      "name": "dwindle",
+      "symbol": "[\\]"
+    },
+    {
+      "name": "spiral",
+      "symbol": "[@]"
+    },
+    {
+      "name": "tatami",
+      "symbol": "|+|"
+    },
+    {
+      "name": "columns",
+      "symbol": "|||"
+    },
+    {
+      "name": "rows",
+      "symbol": "=-="
+    },
+    {
+      "name": "threecol",
+      "symbol": "[||]"
+    },
+    {
+      "name": "bsp",
+      "symbol": "[+]"
+    },
+    {
+      "name": "scroll",
+      "symbol": "[<>]"
+    },
+    {
+      "name": "tabbed",
+      "symbol": "[T]"
+    },
+    {
+      "name": "stacked",
+      "symbol": "[S]"
+    }
+  ]
 }

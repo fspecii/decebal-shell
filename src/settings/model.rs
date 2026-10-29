@@ -309,6 +309,12 @@ impl Model {
         if let Some(v) = self.store.cfg.get(section, key) {
             return Some(v);
         }
+        if section == "decoration" && key != "style" {
+            let style = self.string("decoration", "style").unwrap_or_else(|| "macos".into());
+            if let Some(value) = super::decorations::default_value(&style, key) {
+                return Some(value);
+            }
+        }
         let d = &self.schema.get(section, key)?.default;
         match d {
             Value::Bool(b) => Some(Val::Bool(*b)),
@@ -444,6 +450,12 @@ impl Model {
                 return;
             }
         };
+        if sec == "decoration" && key == "style" {
+            if let Val::Str(style) = &val {
+                self.edit(|c| super::decorations::choose(c, style));
+                return;
+            }
+        }
         self.edit(|c| c.set(&sec, &key, &val));
     }
 

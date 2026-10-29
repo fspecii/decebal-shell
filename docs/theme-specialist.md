@@ -1,155 +1,84 @@
-# Decebal Theme Specialist
+# Decebal Theme Specialist — 2026-10-30
 
-This thread owns all theme creation and ports. No theme subagents. Work only in
-this checkout; other workers' checkouts are read-only source material. General
-widget/features work stays in its own threads. No installs, live configuration,
-restarts, rdwm edits, pushes or merges. Preserve PAM and window buttons, and the
-custom-widget Keep / Replace / Cancel policy. Do not touch `src/livewall` or
-`src/settings/app.rs` while the parent is rebuilding them.
+This is the sole thread for theme creation/ports, references, palettes/layouts,
+widgets, assets, attribution, previews and visual QA. No theme agents. General
+widget/features work stays separate. Work only in this checkout; stopped workers'
+checkouts and `/home/ambsd/Projects/rdwm` are read-only. No live config, installs,
+restarts, rdwm edits, pushes or merges. Preserve PAM, caption controls and widget
+Keep / Replace / Cancel. Parent owns integration/deployment.
 
-## Backlog and checkpoints
+## Completed checkpoints
 
-- Completed: `3ce4b7b24566b372ed0bfda2510e184f40119de3`, original Kiln Court /
-  Tidal Loom dark/light batch. Keep it intact. See `rice-batch.md` for evidence.
-- Priority 1, completed in this theme commit: Mountain Neon Dot, from user reference ending
-  `5cb42945-93ba-4f85-b386-ba20dd4a15b9.png`: teal snow mountain, magenta/cyan
-  separated top islands, transparent stacked dot clock/date at left, homelab at
-  right, no dock. Reusing six widget definitions and both imagegen wallpapers
-  from `feat-mountain-neon-dot` (worker stopped by user). No upstream identity is
-  known; do not guess one.
-- Priority 2, completed in the Glyph refinement commit: improve existing Glyph Rice from reference ending
-  `e808c311-08d1-4b1c-bcab-88b002ce1d9e.png`: giant dot time and greeting left,
-  weather/calendar/day cards above MPRIS and system cards right, black dot texture,
-  slim left rail. Reuse the stopped `feat-monochrome-dot-dashboard` worker's
-  six-card layout and numeric dot-renderer prototype. Existing package GPL
-  attribution remains applicable; screenshot alone does not establish identity.
+| Work | Exact commit | Evidence / decisions |
+| --- | --- | --- |
+| Kiln Court + Tidal Loom | `3ce4b7b24566b372ed0bfda2510e184f40119de3` | Original clay architecture / woven bands; `rice-batch.md`. Ancestor preserved. Paired mode artwork corrected in automatic-preview follow-up. |
+| Mountain Neon Dot | `3d93bf3728ef912b21d9cb5cfd25aaa384f0ce92` | Six safe widgets, generated art recovered byte-for-byte, honest unconfigured homelab; package README + `theme-ports/mountain-neon-dot/`. |
+| Glyph Rice 1.1 | `21e01845901c5d15bc0125787141890ee0e30d9c` | Giant dot time, six real-data cards, original GPL palette/art, functional native rail/captions; package README + `theme-ports/glyph-rice/`. |
+| Sweeteh | `c0551988daacfc74598277fd837f80e1db44261d` | Upstream `b7c0bdaa6aca54c7b45e341341b4b34408bb9c5a`; eight raised widgets, real fallback Material roles, GPL/OFL/Unsplash attribution; package README + ATTRIBUTION.md. |
+| Automatic previews | `c80ab4a8b9badacdb4ec0ca6ab99abf2587a6593` | Actual metadata, wallpaper, widget/bar/dock painters, optional native captions, isolated worker/cache; `theme-previews.md`, `theme-ports/automatic/`. |
+| Existing decoration designs | This decoration-picker commit | 14 supported designs exposed, native defaults/controls; `decorations.md`, `decorations/` and generated `src/settings/decoration-catalogue.json`. |
 
-- Priority 3, completed in the Sweeteh port commit: [Aarav2709/Sweeteh](https://github.com/Aarav2709/Sweeteh).
-  Inspect pinned upstream README/code/assets/license first, then port cohesive
-  colors/fonts/layout/widgets and legal wallpaper/icon choices. Track application
-  and terminal coverage and engine gaps. Never run its installer.
+Parent source through `e33a0f1` is retained via local cherry-picks `a92416c`,
+`9e9dd00`, `15c9844`. Livewall source matches that parent checkpoint. Further
+Settings changes build on it; never overwrite the parent's gallery/video work.
 
-Both stopped source checkouts are under
-`/home/ambsd/.t3/worktrees/decebal-theme-studio/`; never edit or commit there.
-Actual reference images were inspected at the supplied attachment paths.
+## Reference continuity
 
-## Design and renderer knowledge
+Actual user screenshots were inspected, not inferred from text:
 
-- Ordinary widget text uses the UI font, so putting Doto in `font.display` does
-  not make a dot clock. Reject a font-only approximation. Reuse and finish the
-  worker's small safe `dot-text` primitive: original seven-row alphabet, round
-  dots, deterministic width, no external font or asset dependency.
-- Native `decwidgets render` uses **sample** data unless `--live` is supplied.
-  Label compositions clearly. Never bake a sample render into artwork or imply
-  that sample metrics are actual device/service status. Test empty data too.
-- Homelab has no shared endpoint-health provider. Keep service rows explicitly
-  unconfigured; reject hard-coded uptime, success dots and latency values.
-- Theme `wallpaper.dark/light` already exists and follows mode when the engine
-  owns the selected artwork. Prefer it to `images` for paired artwork in ports.
-- Shared vertical bar geometry is fixed (40 px pill, 52 px strip). A manifest
-  cannot set an arbitrary narrower rail or configure three separated top
-  islands. Mountain uses safe interactive widget islands with bar/dock off;
-  these do not supply a full tray. Glyph keeps the native functional rail.
-- Layouts are pixel seeds, not responsive grids. Measure bounds at the intended
-  resolution and document smaller/scaled-screen limits. Containers do not
-  automatically ellipsize long text: set max_chars and reserve width.
-- Preserve window controls explicitly; a border-only decoration with
-  `buttons = "none"` is rejected even when a reference hides chrome.
+- Mountain: attachment suffix `5cb42945-93ba-4f85-b386-ba20dd4a15b9.png`.
+  Teal snow mountain, rose/cyan top islands, stacked transparent dot time/date,
+  homelab right, no dock. No upstream identity supplied; do not guess one.
+- Glyph: suffix `e808c311-08d1-4b1c-bcab-88b002ce1d9e.png`.
+  Giant dot time/greeting left; weather/calendar/day, MPRIS/system right;
+  black dot texture and slim rail. Existing upstream GPL attribution retained.
+- Both partial workers stopped by user: `feat-mountain-neon-dot` and
+  `feat-monochrome-dot-dashboard` under the sibling T3 worktrees. Their files
+  were reused read-only. No edits/commits in those checkouts.
+- Sweeteh: actual pinned README/code/license/assets and video frames inspected.
+  Do not copy the demo's flower image from frames or the video without provenance.
+  Checked-in photos, source URLs/hashes and font licensing are recorded separately.
 
-## QA contract
+## Renderer knowledge / rejected approaches
 
-For each port: validate/pack with the real package engine; render all native
-widgets in dark/light, plus absent-data states; inspect compositions and
-individual cards; check contrast, anchors and non-overlap; test palette/mode and
-custom-layout choice preservation. Retain attribution, source asset hashes,
-reproduction commands, rejected approaches and practical fidelity limits. Commit
-one theme at a time, and update this note with exact commits and evidence.
+- Ordinary widget text uses UI fonts; Doto in `font.display` alone never made a
+  dot clock. Shared original `dot-text` now draws bounded seven-row round dots.
+  Letters uppercase; unsupported glyphs use `?`. Avoid it for user names/prose.
+- No homelab provider exists: retain NOT CONFIGURED, never fake uptime/latency.
+  No media: hide transport. No art: honest placeholder. Missing weather/history:
+  explicit unavailable. Do not bake live/sample telemetry into wallpaper.
+- Actual host geometry and `wallpaper.dark/light` exist. Prefer paired metadata;
+  preserve custom wallpapers on mode edits. Do not special-case theme IDs.
+- Native rail: 40 px pill / 52 px strip. Widget islands lack tray/struts and may
+  be covered by apps. Source pixel seeds need editing on smaller/scaled screens.
+- Native previews are generated lazily after discovery/create/import/edit, using
+  fixed labelled data and content keys for manifests/assets/widgets/palette,
+  renderer version/helper identity and installed font identities. Tests mutate
+  each input. Palette tiles are swatches; no generic desktop drawings remain.
+- Headless compositor glass/motion, week-grid offsets, custom folder recoloring,
+  automatic bundled-font registration and media-art decode-failure predicates
+  remain gaps. Do not claim them. See detailed package/preview docs.
+- Rejected: border-only/disabled caption buttons as visual styling, fake generic
+  widgets/windows in gallery previews, static play glyphs and ordinary-font clocks.
+  Native QA moved mountain text off bright rock; AA edge pixels are not empty gaps.
 
-## Mountain checkpoint and rejected approaches
+## Next incremental decoration work
 
-Mountain native evidence: `docs/theme-ports/mountain-neon-dot/`, six widgets in
-both modes and sample/empty states, four compositions. Port contracts 2/2, golden
-package/apply 5/5, dot-renderer pixels/width 1/1, CLI validation clean. Reproduction
-and original imagegen SHA256s are in the package README. The three-island layout
-is explicitly an approximation without tray/struts; do not claim full bar parity.
+Existing Adwaita, Breeze, Arc and Materia renderers are exposed; do not duplicate.
+`borderonly` is diagnostic only, outside the normal button picker. Nord/Gruvbox/
+Dracula and light variants are existing style treatments, not new full themes.
 
-Rejected: ordinary-font clock, live host metrics baked into gallery art,
-hard-coded homelab health and ASCII distro identity copied from the screenshot.
-Light QA required a backing behind system text and moving homelab off the peak.
-The stopped dot prototype also lacked a layout-dump match arm; completed it.
-A prototype pixel-gap assertion sampled the antialiased edge, not an empty gap;
-corrected the assertion while retaining the 0.43-cell round-dot radius.
+1. Elementary/Pantheon is genuinely absent. **Parent must coordinate a proper
+   tool-managed rdwm checkout** before renderer edits. Concrete scope/reference,
+   registration, three functional controls, native hit/action/scale tests and
+   attribution are in `decorations.md`. No shell worktree or edits to live rdwm.
+2. Audit Orchis structure against Adwaita/Materia before adding a renderer.
+3. Audit Catppuccin/Nordic variants; use palettes when only colors differ.
 
-## Glyph refinement checkpoint
-
-Mountain commit: `3d93bf3728ef912b21d9cb5cfd25aaa384f0ce92` (includes shared dot
-text support). Glyph reuses that primitive and the stopped worker's six cards.
-Evidence: `docs/theme-ports/glyph-rice/`, dark/light and sample/empty. Old
-three-card renderer now delegates to the canonical six-card render path.
-
-Rejected: disabled caption buttons, ordinary-font clock, blank album-art holes,
-static play icons, unavailable temperature rendered as a real degree reading,
-and empty CPU graphs that look like a measured zero. Keep the original GPL
-palette/art/license; avoid adding guessed screenshot provenance. Renderer limits:
-continuous day ring/CPU line graph, no cover-decode failure predicate, fixed
-40 px native rail, 1920 × 1200 seed requiring smaller-screen layout edits.
-
-## Decoration track — queued after current ports
-
-Audit `/home/ambsd/Projects/rdwm/crates/rdwm-deco/src/config.rs`, styles and
-hit-testing read-only. Existing IDs found: macos, macos-light, classic, windows,
-windows-light, adwaita, adwaita-light, breeze, arc, materia, nord, gruvbox, dracula,
-minimal, borderonly. Do not duplicate them. Decebal's snapshot/picker still lists
-only macos/classic; first deliver a clear picker for supported structural styles,
-with functioning caption controls and representative native previews if feasible.
-Keep borderonly out of the normal button-style picker. Priorities after audit:
-GNOME/Adwaita, KDE/Breeze, Arc, then missing Elementary/Pantheon; Material already
-has `materia`. Catppuccin/Nordic/Orchis must be assessed for structure versus
-palette-only variants. Missing renderer work needs parent coordination of a
-proper tool-managed rdwm checkout; never edit the live rdwm source checkout.
-
-Preserve parent preview-gallery `e33a0f1`; no edits to `src/livewall`,
-`src/settings/app.rs` or parent-owned Settings UI renderer files. Keep catalogue,
-hit areas/actions, focused/unfocused, dark/light and scale QA for each delivery.
-
-## Sweeteh checkpoint / automatic-preview requirement
-
-Glyph commit: `21e01845901c5d15bc0125787141890ee0e30d9c`.
-Sweeteh upstream pinned `b7c0bdaa6aca54c7b45e341341b4b34408bb9c5a`.
-Real defaults/code/demo inspected; port uses fallback Material blue roles, 4 px
-native ledges and eight optional shared-data widgets. GPL code, OFL Google Sans
-and two unchanged Unsplash photos have separate provenance/hashes in package
-ATTRIBUTION.md. No demo-frame flower image or uncredited video imported.
-Native evidence: `docs/theme-ports/sweeteh/`; 32 widget state/mode PNGs and four
-compositions. Font registration, custom folder recoloring, cursor selection,
-true week grid, island/tray reservation, extra terminal slots and animation are
-explicit engine gaps, not claimed integrations. No upstream installer executed.
-
-Next required architecture: automatically generated package/gallery previews,
-not hand-drawn desktop miniatures or mandatory manual screenshots. Resolve actual
-manifest (inheritance included), effective mode/palette, artwork, widget files and
-anchors; compose real native pixels for widgets/bar/dock/decoration where
-available. Fixed labelled sample data is allowed, per-theme invented layouts are
-not. Use a content-addressed cache including manifest/assets/builtin widget
-sources, palette and renderer version; request regeneration on discovery after
-creation/import/change. Run generation in a private headless process, never by
-applying anything to the live session. Test each invalidation dimension and
-retain both modes. Missing native render support must be labelled, not mocked.
-Checkpoint all ports before bringing parent `e33a0f1` preview-gallery source into
-this branch; retain its entire livewall/Settings change and do not edit the
-parent checkout. Decoration catalogue/picker follows sequentially.
-
-## Automatic-preview delivery checkpoint
-
-Sweeteh commit: `c0551988daacfc74598277fd837f80e1db44261d`.
-Parent source through `e33a0f1` is preserved locally as `a92416c`, `9e9dd00`,
-`15c9844`; no parent checkout changes. Automatic previews use production plans
-and native widget/bar/dock painters in an isolated headless worker, optional
-read-only rdwm-deco helper for caption samples, and content-addressed invalidation.
-No per-theme layout branches or generic desktop mockups remain in the gallery;
-palette tiles are swatches only. See `theme-previews.md` for architecture,
-cache bounds, tests, source isolation and honest fidelity limits. All current
-ports and the original two-theme batch have generated dark/light native evidence.
-Kiln/Tidal now use actual `wallpaper.dark/light` metadata, correcting the earlier
-assumption that mode-aware art was unavailable. Single-output, fixed sample data;
-compositor motion/glass and missing native helpers are explicitly labelled.
+One missing structural style per tested commit. Keep all completed ports intact.
+Validation checkpoint: full Decebal suite 1,467 passed, zero failed, five ignored
+(including the explicit native picker evidence test), PAM-start probe filtered;
+that ignored picker test separately passed in dark and light. Read-only rdwm
+core/deco suite: 526 passed, zero failed, two ignored. Native catalogue: 60
+mode/scale/state sheets with real hit-area assertions. All-target/all-feature
+Clippy with warnings denied, formatting and diff checks are required before handoff.

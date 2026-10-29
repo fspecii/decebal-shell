@@ -26,6 +26,7 @@ path = {json.dumps(str(root / 'tools/decoration-preview.rs'))}
 rdwm-deco = {{ path = {json.dumps(str(rdwm / 'crates/rdwm-deco'))} }}
 toml = "0.8"
 png = "0.17"
+serde_json = "1"
 ''')
 subprocess.run(['cargo', 'build', '--offline', '--manifest-path', str(work / 'Cargo.toml'), '--target-dir', str(work / 'target')], check=True)
 print(work / 'target/debug/decebal-deco-preview')

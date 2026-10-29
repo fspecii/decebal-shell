@@ -1,0 +1,11 @@
+{
+  "rdwm_head": "eb286077bb0b24f2aea227166112d548c21ff148",
+  "files": {
+    "crates/rdwm-deco/src/config.rs": "c73dfcd6419ad28ae9f90b57fce14ebd317a54ce2d8ba9f08c8d751d97bb9da3",
+    "crates/rdwm-deco/src/styles.rs": "fc036eb98f4956d8db59e9a57834ae0f4b7c1f1f022df9ac5fb6f14f73ce0a8d",
+    "crates/rdwm-deco/src/titlebar.rs": "2b32bc1846fefa464e105a85487c27dce943b96f11aeacc28ab495dc739c8fdd",
+    "crates/rdwm-deco/src/lib.rs": "7dd0ace43c4e584b9ebedf748ada63cea7731ed8d89d5ac54d6fbea683214941",
+    "crates/rdwm-core/src/tests/deco.rs": "26b4f3bf44e427a8bb61ba426061da4c20354d8891999cd544da62ced031a538"
+  },
+  "source_access": "read-only; build artifacts in this Decebal checkout target/"
+}

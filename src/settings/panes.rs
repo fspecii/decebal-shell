@@ -437,16 +437,24 @@ impl Model {
     pub(super) fn window_style_items(&self) -> Vec<Item> {
         let mut deco = Vec::new();
         deco.extend(self.r_toggle("decoration", "enabled", "Window title bars", "Show a title bar with close, minimise and zoom buttons on every window"));
-        deco.extend(self.r_seg("decoration", "style", "Window style", "macOS: rounded, buttons on the left. Classic: a flat strip", Some(&[("macOS", "macos"), ("Classic", "classic")])));
+        let designs = super::decorations::choices(&self.schema);
+        deco.extend(self.r_popup(
+            "decoration",
+            "style",
+            "Button and titlebar design",
+            "GNOME, KDE, Arc, Material and other native rdwm designs. Changes geometry, not the desktop palette. Choosing a design restores its native geometry and enables all window buttons.",
+            Some(&designs),
+            None,
+        ));
         deco.extend(self.r_slider("decoration", "height", "Title bar height", "", 1.0, " px", Some(64.0)));
-        deco.extend(self.r_slider("decoration", "radius", "Window corner radius", "macOS style only", 1.0, " px", Some(30.0)));
+        deco.extend(self.r_slider("decoration", "radius", "Window corner radius", "Override the selected design’s native radius", 1.0, " px", Some(30.0)));
         deco.extend(self.r_seg("decoration", "title_align", "Title alignment", "", Some(&[("Center", "center"), ("Left", "left")])));
         deco.extend(self.r_stepper("decoration", "font_size", "Title text size", "", 0.5, " px", None));
         deco.extend(self.r_toggle("decoration", "buttons", "Window buttons", "Close, minimise and zoom"));
         deco.extend(self.r_popup(
             "decoration",
             "zoom_button",
-            "Green button",
+            "Maximise / zoom button",
             "",
             Some(&[("Fullscreen", "fullscreen"), ("Maximize", "maximize"), ("Monocle", "monocle"), ("Float", "float"), ("Nothing", "none")]),
             None,
@@ -1529,6 +1537,7 @@ mod tests {
     fn schema_activation_key_is_shown_only_when_rdwm_has_it() {
         let (mut m, _) = model_with("");
         let has = |m: &Model| m.items(pane_of("windows")).iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "r:snap:activation"))));
+        m.schema.keys.retain(|k| !(k.section == "snap" && k.key == "activation"));
         assert!(!has(&m));
         m.schema.keys.push(super::super::schema::KeyMeta {
             section: "snap".into(),

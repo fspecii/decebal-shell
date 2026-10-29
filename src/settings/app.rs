@@ -1519,6 +1519,27 @@ mod key_tests {
     }
 
     #[test]
+    #[ignore = "run headlessly with private config and DECEBAL_DECORATION_EVIDENCE"]
+    fn native_decoration_picker_evidence() {
+        assert_eq!(std::env::var("DECEBAL_SYSTEM_AUTOMATIC").as_deref(), Ok("0"));
+        let initial = app();
+        let mut a = SettingsApp::new(initial.m.paths.clone(), Some("appearance/window"));
+        a.m.apply("r:decoration:style", super::super::model::CtlVal::Str("adwaita".into()));
+        a.resize(1200, 900);
+        let mut pixels = Pixmap::new(1200, 900).unwrap();
+        a.draw(&mut pixels);
+        let control = a.frame.placed.iter().find(|p| p.ctl.id == "r:decoration:style").expect("design picker present").clone();
+        a.open_popup(&control);
+        assert_eq!(a.popup.as_ref().unwrap().opts.len(), 14);
+        a.draw(&mut pixels);
+        if let Some(dir) = std::env::var_os("DECEBAL_DECORATION_EVIDENCE") {
+            let dir = std::path::PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            pixels.save_png(dir.join(if crate::theme::th().dark { "picker-dark.png" } else { "picker-light.png" })).unwrap();
+        }
+    }
+
+    #[test]
     fn typing_in_search_filters_panes() {
         let mut a = app();
         let mut f = ev(Key::Char, Some('f'));

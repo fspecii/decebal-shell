@@ -39,6 +39,14 @@ fn render(cfg: &DecorationConfig, path: &Path, scale: f32, hovers: bool) {
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("metadata") => {
+            let rows:Vec<_>=Style::ALL.into_iter().map(|style| {
+                let cfg=DecorationConfig{style,..Default::default()};let m=cfg.metrics();let s=style.spec();
+                serde_json::json!({"id":style.name(),"description":s.desc,"side":format!("{:?}",s.side),"shape":format!("{:?}",s.shape),"look":format!("{:?}",s.look),
+                    "defaults":{"height":m.height,"radius":m.radius,"border_px":m.border,"title_align":if m.align==Align::Center{"center"}else{"left"},"button_size":m.size,"button_gap":m.gap,"button_margin":m.margin}})
+            }).collect();
+            println!("{}", serde_json::to_string_pretty(&rows).unwrap());
+        }
         Some("theme") => {
             let root: toml::Value = fs::read_to_string(&args[1]).unwrap().parse().unwrap();
             let cfg: DecorationConfig = root.get("decoration").cloned().unwrap_or(toml::Value::Table(Default::default())).try_into().unwrap();
