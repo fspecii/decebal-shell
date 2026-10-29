@@ -133,6 +133,8 @@ pub const FIELDS: &[Field] = &[
     Field { path: "font.scale", ty: Ty::Num(0.8, 1.4), desc: "text size multiplier", status: Wired },
     Field { path: "font.fallback", ty: Ty::List(Elem::Text(80), 8), desc: "families appended after the chains given in this file (CJK, emoji, icon fonts)", status: Wired },
     Field { path: "font.files", ty: Ty::Assets(Font, 8), desc: "font files bundled in the package", status: Pending("bundled fonts are not registered with fontconfig yet") },
+    Field { path: "wallpaper.dark", ty: Ty::Asset(Image), desc: "bundled wallpaper for dark mode", status: Wired },
+    Field { path: "wallpaper.light", ty: Ty::Asset(Image), desc: "bundled wallpaper for light mode", status: Wired },
     Field { path: "wallpaper.image", ty: Ty::Asset(Image), desc: "a bundled wallpaper", status: Wired },
     Field { path: "wallpaper.images", ty: Ty::Assets(Image, 64), desc: "several bundled wallpapers (the first one is used unless slideshow is on)", status: Wired },
     Field { path: "wallpaper.mode", ty: Ty::Choice(WALLPAPER_MODES), desc: "how the image fills the screen", status: Wired },

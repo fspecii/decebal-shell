@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Private test desktop for decsettings: Xvfb + rdwm (x11 backend) with its own HOME, config and runtime dir.
 # Never touches the real session: DISPLAY is a private Xvfb, WAYLAND_DISPLAY is unset, every path is a temp copy.
 # usage: source env.sh; e2e_up [display]; ...; e2e_down

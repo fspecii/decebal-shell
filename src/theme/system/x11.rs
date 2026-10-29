@@ -53,7 +53,7 @@ impl Target for X11 {
         "X11 terminals"
     }
     fn detail(&self) -> &'static str {
-        "Xresources for st, xterm and urxvt (merged with xrdb)"
+        "Xresources for compatible terminals (xterm, urxvt, patched st); unpatched st uses Terminal colours"
     }
     fn available(&self, env: &Env) -> Result<(), String> {
         if env.has("xrdb") || env.home.join(".Xresources").exists() {

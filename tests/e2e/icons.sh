@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Icon themes end to end on a private Xvfb + rdwm: the real decdock and decsettings, themes switched with
 # `decthemectl icons` and through the Icons pane. Icon themes are symlinked from ICON_SRC (default: the installed ones)
 # into a private XDG_DATA_HOME; nothing is installed anywhere.

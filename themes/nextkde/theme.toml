@@ -10,6 +10,11 @@ min_shell_version = "0.1.0"
 tags = ["glass", "floating-dock", "nextkde"]
 
 [metrics]
+glass_refraction = 10
+glass_edge = 12
+glass_highlight = 0.35
+glass_grain = 0.003
+glass_blur = 4
 radius = 22
 dock_roundness = 0.85
 dock_alpha = 0.18
@@ -33,6 +38,8 @@ style = "flat"
 height = 26
 
 [wallpaper]
+dark = "wallpapers/glass-dark.png"
+light = "wallpapers/glass-light.png"
 image = "wallpapers/glass-dark.png"
 mode = "fill"
 match_colors = false

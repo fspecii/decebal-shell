@@ -53,6 +53,8 @@ decthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale
                                  fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
                                  cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (decthemectl font list)
 decthemectl icons list|set NAME|status|reset|scale N|tint on|off|fallback NAME   icon theme settings (decthemectl icons help)
+decthemectl wallpaper live set VIDEO | off | status | search WORDS | download ID
+                                 Muted video wallpapers, paused behind fullscreen apps (see docs/live-wallpapers.md)
 decthemectl wallpaper wallhaven random|search WORDS   a wallpaper from wallhaven.cc (see docs/wallpapers.md)
 decthemectl sync                re-apply the current theme to rdwm's config
 decthemectl profile ...          presets of the whole setup: list save apply undo export import (decthemectl profile --help)
@@ -613,7 +615,7 @@ fn main() {
                 }
             }
         }
-        Some("wallpaper") => match decebal::settings::wallhaven::cli::run(&args[1..]) {
+        Some("wallpaper") => match if args.get(1).map(String::as_str) == Some("live") { decebal::livewall::cli(&args[2..]) } else { decebal::settings::wallhaven::cli::run(&args[1..]) } {
             Ok(line) => println!("{line}"),
             Err(e) => die(&e),
         },

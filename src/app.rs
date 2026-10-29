@@ -67,6 +67,10 @@ pub trait App {
     fn resized(&mut self, _w: u32, _h: u32) {}
     /// Paint the whole surface. `pm` is the real surface size.
     fn draw(&mut self, pm: &mut Pixmap);
+    /// Visible material bounds, separate from foreground content and unused canvas.
+    fn glass_regions(&self) -> Vec<crate::glass::Region> {
+        Vec::new()
+    }
     /// Pointer moved; return true when a redraw is needed.
     fn pointer_motion(&mut self, x: f32, y: f32) -> bool;
     fn pointer_leave(&mut self) -> bool;

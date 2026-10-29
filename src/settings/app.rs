@@ -124,8 +124,10 @@ impl SettingsApp {
             // the old names of the panes that became Appearance tabs (theme, icons, wallpaper, desktop) open that tab
             match super::appearance::resolve(p) {
                 Some(v) => {
-                    m.sel.pane = pane_index("appearance");
-                    super::appearance::show(&mut m, v);
+                    m.sel.pane = pane_index(if v.tab == super::appearance::Tab::Wallpaper { "wallpaper" } else { "appearance" });
+                    if v.tab != super::appearance::Tab::Wallpaper {
+                        super::appearance::show(&mut m, v);
+                    }
                     m.sel.reset_scroll = false;
                 }
                 None => m.sel.pane = pane_index(p),
@@ -1444,6 +1446,7 @@ impl WindowApp for SettingsApp {
         }
         redraw |= self.m.sys_poll();
         redraw |= super::wallhaven::pump(&mut self.m);
+        redraw |= crate::livewall::pane::pump(&mut self.m);
         redraw |= super::configpane::poll(&mut self.m);
         redraw |= self.m.expire_notice();
         if crate::theme::take_changed() {

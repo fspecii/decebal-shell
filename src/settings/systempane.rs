@@ -12,15 +12,31 @@ pub fn items(m: &Model) -> Vec<Item> {
     let env = Env::discover();
     let st = system::status(&env, &cfg);
     let applied = system::applied_theme(&env);
-    let mut out =
-        vec![Item::Header("Apply to all apps".into()), Item::Note { text: "One switch to make GTK, Qt, terminal and browser apps use the same colours and fonts as the desktop.".into(), warn: false }];
+    let completion = system::completion(&env);
+    let mut out = vec![
+        Item::Header("Apply to all apps".into()),
+        Item::Note { text: "Themes automatically carry their colours and fonts to supported apps. Switch this off to restore your apps’ own settings.".into(), warn: false },
+    ];
     out.push(Item::Card(vec![Row::new("Apply theme to all apps")
         .detail(if cfg.enabled {
-            format!("On: the theme also colours the apps below (last applied: {})", applied.as_deref().unwrap_or("not yet"))
+            if completion.pending {
+                "Applying app colours…".into()
+            } else if completion.error.is_some() {
+                "App theme integration needs attention; see the error below".into()
+            } else {
+                format!("On: theme changes also update supported apps (last completed: {})", applied.as_deref().unwrap_or("not yet"))
+            }
         } else {
-            "Off: nothing outside decebal and rdwm is changed. Turn on to theme GTK / Nautilus, Qt, terminals, the browser and more".into()
+            "Off: app theme integration is disabled. Turn on for Files, GTK, Qt, terminals and supported app integrations".into()
         })
         .ctl(Ctl::new("sy:on", Kind::Toggle(cfg.enabled)))]));
+    out.push(Item::Note { text: "Files and other GTK apps read custom palettes when they launch; open windows follow light/dark mode where supported. st updates live; other terminals use their supported reload or next launch. Apps are never closed or restarted.".into(), warn: false });
+    if let Some(error) = completion.error {
+        out.push(Item::Note { text: format!("App theme apply failed: {error}"), warn: true });
+    }
+    for warning in completion.warnings {
+        out.push(Item::Note { text: warning, warn: true });
+    }
     let adv = m.sel.adv;
     out.push(Item::Header("Advanced".into()));
     out.push(Item::Card(vec![Row::new("Choose what is themed")
@@ -79,13 +95,17 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     let mut cfg = Config::load(&m.paths.shell_json());
     match (parts, v) {
         (["sy", "on"], CtlVal::Bool(on)) => {
-            // `system on` applies and saves the switch; `system off` restores and clears it
-            system::spawn_ctl(&["system", if on { "on" } else { "off" }]);
+            // Save first, then queue one observable apply; opt-out restores the original app settings.
             if cfg.enabled != on {
                 cfg.enabled = on;
                 if !save(m, &cfg) {
                     return;
                 }
+            }
+            if on {
+                system::request(&m.paths.shell_json());
+            } else {
+                system::spawn_ctl(&["system", "off"]);
             }
             m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
         }
@@ -147,8 +167,8 @@ mod tests {
     fn switch_and_target_boxes_are_written_to_decebal_json() {
         let (mut m, _) = model_with("");
         m.sel.adv = true;
-        assert_eq!(toggle(&items(&m), "sy:on"), Some((false, true)), "off by default");
-        for id in ["omarchy", "browser", "editors", "hooks", "gtk", "qt", "kvantum", "x11"] {
+        assert_eq!(toggle(&items(&m), "sy:on"), Some((true, true)), "automatic by default");
+        for id in ["omarchy", "browser", "editors", "hooks", "gtk", "qt", "kvantum", "x11", "terminals"] {
             assert!(toggle(&items(&m), &format!("sy:t:{id}")).is_some(), "{id} has a checkbox");
         }
         m.apply("sy:on", CtlVal::Bool(true));

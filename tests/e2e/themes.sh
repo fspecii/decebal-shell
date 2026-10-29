@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The bundled pill-bar theme packages (caelestia-mocha rose-pine tokyo-night kanagawa material-you-dynamic) end to end, on a private
 # Xvfb with a private rdwm, HOME and runtime dir: each is applied (dark, then light), the files it owns are checked (rdwm titlebar style and
 # wallpaper, bar position, dock style, Match wallpaper for the dynamic one), undo restores everything, and a screenshot of every theme

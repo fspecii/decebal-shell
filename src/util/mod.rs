@@ -126,6 +126,8 @@ pub fn parse_args(args: &[String]) -> Result<Cmd, String> {
 pub struct Ctx {
     /// `$XDG_RUNTIME_DIR/decutil`.
     pub state: PathBuf,
+    /// Shared Stay Awake indicator (private in tests).
+    pub awake_indicator: PathBuf,
     /// Where recordings go (`~/Videos/Recordings`).
     pub videos: PathBuf,
     pub display: Option<String>,
@@ -146,6 +148,7 @@ impl Ctx {
         let videos = std::env::var_os("DECUTIL_RECORD_DIR").map(PathBuf::from).unwrap_or_else(|| home.join("Videos/Recordings"));
         Ctx {
             state: crate::single::runtime_file("decutil"),
+            awake_indicator: std::env::var_os("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".local/state")).join("omarchy/indicators/stay-awake"),
             videos,
             display: std::env::var("DISPLAY").ok().filter(|d| !d.is_empty()),
             wayland: std::env::var_os("WAYLAND_DISPLAY").is_some_and(|d| !d.is_empty()),
@@ -479,6 +482,7 @@ pub mod mock {
     pub fn ctx(dir: &Path) -> Ctx {
         Ctx {
             state: dir.join("state"),
+            awake_indicator: dir.join("indicators/stay-awake"),
             videos: dir.join("videos"),
             display: Some(":9".into()),
             wayland: false,

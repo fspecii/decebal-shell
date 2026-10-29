@@ -27,8 +27,9 @@ pub const PANES: &[PaneDef] = &[
         glyph: Glyph::Brush,
         color: (88, 86, 214),
         // the words of every tab (Theme, Customise, Wallpaper, All apps); the individual settings are indexed in `appearance::INDEX`
-        keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
+        keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven live animated video commons match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
     },
+    PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "background pictures wallhaven live animated video commons wallpaper scaling" },
     PaneDef {
         id: "widgets",
         title: "Widgets",
@@ -350,6 +351,13 @@ impl Model {
         match PANES.get(pane).map(|p| p.id) {
             Some("config") => super::configpane::prepare(self),
             Some("appearance") => super::appearance::prepare(self),
+            Some("wallpaper") => {
+                if self.wh.tab == super::wallhaven::Tab::Wallhaven {
+                    super::wallhaven::prepare(self);
+                } else if self.walls.is_none() {
+                    self.walls = Some(list_images(&self.paths.backgrounds(), 3, 400));
+                }
+            }
             _ => {}
         }
     }
@@ -379,6 +387,7 @@ impl Model {
             "config" => super::configpane::items(self),
             "general" => self.pane_general(),
             "appearance" => super::appearance::items(self),
+            "wallpaper" => super::appearance::wallpaper_tab(self),
             "widgets" => super::widgetspane::items(self),
             "tiling" => self.pane_tiling(),
             "windows" => self.pane_windows(),
@@ -599,6 +608,9 @@ impl Model {
     }
 
     pub(super) fn pane_wallpaper(&self) -> Vec<Item> {
+        if self.wh.tab == super::wallhaven::Tab::Live {
+            return crate::livewall::pane::items(self);
+        }
         if self.wh.tab == super::wallhaven::Tab::Wallhaven {
             return super::wallhaven::items(self);
         }
@@ -1045,6 +1057,9 @@ pub fn set_wallpaper(m: &mut Model, path: &str) {
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     let parts: Vec<&str> = id.split(':').collect();
+    if id.starts_with("lw:") {
+        return crate::livewall::pane::apply(m, id, v);
+    }
     if matches!(parts.as_slice(), ["wh", ..] | ["w", "wh", _]) {
         return super::wallhaven::apply(m, &parts, v);
     }
@@ -1433,7 +1448,7 @@ mod tests {
     #[test]
     fn search_finds_panes_by_title_and_keyword() {
         let find = |q: &str| PANES.iter().filter(|p| pane_matches(p, q)).map(|p| p.id).collect::<Vec<_>>();
-        assert_eq!(find("wallp"), ["appearance", "displays"]);
+        assert_eq!(find("wallp"), ["appearance", "wallpaper", "displays"]);
         assert_eq!(find("gap"), ["tiling"]);
         assert!(find("snap").contains(&"windows"));
         assert_eq!(find("").len(), PANES.len());

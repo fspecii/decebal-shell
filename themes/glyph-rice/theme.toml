@@ -1,0 +1,135 @@
+format = 1
+id = "glyph-rice"
+name = "Glyph Rice"
+version = "1.0.0"
+author = "Nebelung-cloud; Decebal port contributors"
+license = "GPL-3.0-only"
+homepage = "https://github.com/Nebelung-cloud/glyph-rice"
+description = "Glyph's black, white dots and one red: left pill rail, rounded monochrome cards and a halftone orb."
+tags = ["dark", "light", "monochrome", "dot-matrix", "glyph"]
+screenshots = ["screenshots/main.png"]
+
+[metrics]
+radius = 20
+dock_roundness = 1.0
+dock_alpha = 1.0
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0
+shadow = 0.0
+outline = 0.08
+
+[font]
+ui = ["Space Grotesk", "Inter", "Noto Sans"]
+title = ["Space Grotesk", "Inter", "Noto Sans"]
+mono = ["Space Mono", "JetBrains Mono", "DejaVu Sans Mono"]
+display = ["Doto", "Space Mono", "DejaVu Sans Mono"]
+scale = 1.0
+
+[colors.dark]
+background = "#000000"
+sidebar = "#0e0e0e"
+surface = "#1a1a1a"
+bar = "#0e0e0e"
+bar_text = "#f2f2f2"
+popup = "#0e0e0e"
+dock = "#0e0e0e"
+overlay = "#0e0e0e"
+titlebar = "#0e0e0e"
+titlebar_inactive = "#000000"
+border = "#2a2a2a"
+text = "#f2f2f2"
+text_secondary = "#8c8c8c"
+text_faint = "#8c8c8c"
+accent = "#d71921"
+accent_text = "#ffffff"
+danger = "#d71921"
+ok = "#f2f2f2"
+warn = "#8c8c8c"
+
+[colors.light]
+background = "#e9e9e9"
+sidebar = "#ffffff"
+surface = "#f1f1f1"
+bar = "#ffffff"
+bar_text = "#0b0b0b"
+popup = "#ffffff"
+dock = "#ffffff"
+overlay = "#ffffff"
+titlebar = "#ffffff"
+titlebar_inactive = "#e9e9e9"
+border = "#d9d9d9"
+text = "#0b0b0b"
+text_secondary = "#6e6e6e"
+text_faint = "#6e6e6e"
+accent = "#d71921"
+accent_text = "#ffffff"
+danger = "#d71921"
+ok = "#0b0b0b"
+warn = "#6e6e6e"
+
+[wallpaper]
+dark = "wallpapers/dark.png"
+light = "wallpapers/light.png"
+mode = "fill"
+match_colors = false
+
+[decoration]
+style = "borderonly"
+height = 24
+radius = 20
+buttons = "none"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 14
+border_px = 1
+smart_gaps = false
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "vertical"
+position = "left"
+
+[dock]
+enabled = false
+style = "mac"
+size = 44
+roundness = 1.0
+magnification = 1.0
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[icons]
+theme = "Papirus"
+fallback = "Adwaita"
+monochrome_tint = true
+
+[hot_corners]
+top_right = "control-center"
+bottom_right = "dashboard"
+
+[[widgets]]
+use = "glyph-home"
+place = "desktop"
+anchor = "top-left"
+x = 150
+y = 130
+
+[[widgets]]
+use = "glyph-system"
+place = "desktop"
+anchor = "top-right"
+x = -60
+y = 170
+
+[[widgets]]
+use = "glyph-player"
+place = "desktop"
+anchor = "top-right"
+x = -60
+y = 390

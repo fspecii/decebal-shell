@@ -79,6 +79,7 @@ pub struct Model {
     pub walls: Option<Vec<std::path::PathBuf>>,
     /// Wallpaper > Wallhaven tab (starts its workers only when opened).
     pub wh: super::wallhaven::Wh,
+    pub lw: crate::livewall::pane::State,
     /// Keys the builders asked for / found missing in the schema (consistency test).
     pub used: RefCell<Vec<(String, String)>>,
     pub missing: RefCell<Vec<(String, String)>>,
@@ -117,6 +118,7 @@ impl Model {
             apps: None,
             walls: None,
             wh: super::wallhaven::Wh::default(),
+            lw: crate::livewall::pane::State::default(),
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,
@@ -127,11 +129,12 @@ impl Model {
 
     /// The Wallpaper tab of the Appearance pane is on screen.
     pub fn wallpaper_open(&self) -> bool {
-        super::panes::PANES.get(self.sel.pane).is_some_and(|p| p.id == "appearance") && self.sel.tab == super::appearance::Tab::Wallpaper
+        super::panes::PANES.get(self.sel.pane).is_some_and(|p| p.id == "wallpaper")
     }
 
     pub fn watched_files(&self) -> Vec<std::path::PathBuf> {
-        vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json()]
+        let env = crate::theme::system::Env::discover();
+        vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json(), env.state_dir.join("pending"), env.state_dir.join("last-result.json")]
     }
 
     // ------------------------------------------------------------ notices

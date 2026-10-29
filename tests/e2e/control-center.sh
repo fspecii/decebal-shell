@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The Control Center in every shell style: macOS, Windows 11 (taskbar), Caelestia left / top / split, and with no bar at all.
 #   tests/e2e/control-center.sh        (E2E_DISPLAY=:143; SHOTS=dir keeps the screenshots, default docs/screenshots; PROFILE=debug)
 # For each style it applies the style with `decthemectl style`, opens the panel with `decutil control-center toggle` (the

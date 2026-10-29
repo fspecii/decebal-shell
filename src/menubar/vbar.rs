@@ -240,7 +240,7 @@ impl Geo {
             PILL_X
         }
     }
-    fn pill_width(&self) -> f32 {
+    pub(super) fn pill_width(&self) -> f32 {
         self.thickness() - 2.0 * self.pill_inset()
     }
     /// Length of the bar along its edge.
@@ -1060,14 +1060,17 @@ impl DecBar {
         let geo = self.v_geo();
         let horiz = geo.horizontal();
         let strip = geo.strip();
-        crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.background.color(th.bar_alpha));
+        let native_glass = th.glass_refraction > 0.0;
+        if !native_glass {
+            crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.background.color(th.bar_alpha));
+        }
         let lay = self.v_layout();
         let snap = self.snapshot();
         let text = th.text.t();
         let radius = geo.pill_width() / 2.0;
         for (_, r) in &lay.pills {
             let rad = radius.min(r.w.min(r.h) / 2.0);
-            fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(1.0));
+            fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(if native_glass { th.bar_alpha } else { 1.0 }));
             stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, rad - 0.5, th.outline_c(), 1.0);
         }
 
@@ -1780,6 +1783,23 @@ mod tests {
 
     fn bar() -> DecBar {
         bar_at(BarPosition::Left, Process::Main)
+    }
+
+    #[test]
+    fn glass_regions_follow_individual_pills_on_every_edge() {
+        for position in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            let bar = bar_at(position, Process::Main);
+            let layout = bar.v_layout();
+            let regions = bar.glass_regions();
+            assert_eq!(regions.len(), layout.pills.len());
+            for (region, (_, pill)) in regions.iter().zip(&layout.pills) {
+                assert_eq!((region.x, region.y, region.w, region.h), (pill.x, pill.y, pill.w, pill.h));
+                assert!(region.radius > 0.0 && region.radius <= region.w.min(region.h) / 2.0);
+            }
+            // No material in the canvas's generous popup space, even though it receives pointer input.
+            let strip = bar.v_geo().strip();
+            assert!(regions.iter().all(|r| r.x >= strip.x && r.y >= strip.y && r.x + r.w <= strip.right() + 0.01 && r.y + r.h <= strip.bottom() + 0.01));
+        }
     }
 
     #[test]

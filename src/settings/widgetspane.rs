@@ -162,6 +162,7 @@ fn change(widgets: &mut Value, parts: &[&str], value: CtlVal) -> Result<(), Stri
                 }
                 array.push(entry.instance.to_json());
             }
+            widgets["enabled"] = json!(true);
         }
         (["wg", "item", index, action], value) => {
             let i = index.parse::<usize>().map_err(|_| "This widget is no longer available")?;
@@ -272,11 +273,23 @@ mod tests {
     }
 
     #[test]
+    fn adding_to_hidden_empty_desktop_reveals_collection() {
+        let (mut m, _) = model_with("[general]\n");
+        save(&m, json!({"enabled":false,"items":[],"future":"preserved"}));
+        m.apply("wg:add:builtin.next-clock", CtlVal::Click);
+        let doc = load(&m);
+        assert_eq!(doc["widgets"]["enabled"], true);
+        assert_eq!(doc["widgets"]["items"].as_array().unwrap().len(), 1);
+        assert_eq!(doc["widgets"]["future"], "preserved");
+    }
+
+    #[test]
     fn disabled_builtin_alias_is_enabled_without_adding_a_duplicate() {
         let (mut m, _) = model_with("[general]\n");
-        save(&m, json!({"items":[{"use":"clock-card", "enabled":false, "x":91, "options":{"a":1}}]}));
+        save(&m, json!({"enabled":false,"items":[{"use":"clock-card", "enabled":false, "x":91, "options":{"a":1}}]}));
         m.apply("wg:add:builtin.clock-card", CtlVal::Click);
         let doc = load(&m);
+        assert_eq!(doc["widgets"]["enabled"], true);
         assert_eq!(doc["widgets"]["items"].as_array().unwrap().len(), 1);
         assert_eq!(doc["widgets"]["items"][0]["enabled"], true);
         assert_eq!(doc["widgets"]["items"][0]["x"], 91);

@@ -33,3 +33,21 @@ The regression exercises actual Settings controls and checks X11 windows: master
 New shared widgets belong in `widgets/` and are registered in `src/widgets/samples.rs`. Use semantic colour tokens (`surface`, `text`, `accent`, etc.) and the shared data sources; avoid active-theme checks and fixed palette colours. They then appear automatically in the Widgets collection for every desktop design. Theme packages may also supply definitions, which remain available through the shared collection while that package is installed.
 
 Add the widget's layout golden, validate it under theme trust, and inspect dark/light renders under multiple designs. Keep unavailable data explicit. Theme manifests may suggest first-run defaults but must never replace an existing user's widget collection. Widget positions are retained across theme switches; the host keeps cards clear of pill bars when the bar changes edge.
+
+Adding or re-enabling a card through **Add/Enable** also turns on the desktop collection, so an apparently successful Add cannot leave it hidden by the master switch. The normal master switch still preserves every individual enabled state and placement.
+
+`decwidgets status --json` reports whether the host on the current X display completed its first render, the selected config path, master visibility and definition errors for saved desktop cards. Host startup waits for this ready signal rather than only checking that a process acquired a lock.
+
+Desktop cards sit above mapped `DESKTOP` wallpaper windows and below managed applications. With rdwm's root-pixmap wallpaper, they remain below applications and shell panels. Non-composited translucent cards sample the wallpaper pixmap rather than capturing app contents, and refresh when that pixmap changes.
+
+The stronger visibility regression checks real root pixels and real click behavior on private Xvfb with rdwm and generated wallpapers:
+
+```sh
+CARGO_TARGET_DIR=/home/ambsd/Projects/macshell-appearance/target tests/e2e/widgets-visible.sh
+```
+
+It starts with an empty, hidden collection and uses the actual Settings Add button to start the host. It proves visible pixels above wallpaper, click delivery, coverage by fullscreen apps, palette/theme/restart persistence, duplicate prevention, support for a late desktop window, and refreshed translucent wallpaper sampling. This complements the saved-state lifecycle checks; mapped-window counts alone do not prove a working desktop widget.
+
+Login integration uses `decwidgets autostart`: it quietly exits in Wayland/Xwayland and headless contexts, and runs the persistent watcher on X11 even when the collection is empty or hidden. A compositor arriving later or restarting causes the host to recreate surfaces with the appropriate visual. `decwidgets daemon` remains the explicit foreground daemon command.
+
+The host advertises readiness only after its first rendered frame. Adding a widget also reveals a hidden collection. X11 startup uses `decwidgets autostart` (a safe no-op outside X11) or the packaged `decebal-widgets.service`; rdwm's session supervisor starts and monitors the shared daemon. No data workers are started while the collection is empty or hidden. The visibility regression `tests/e2e/widgets-visible.sh` checks actual pixels, clicks and stacking with a real window manager rather than relying on window counts alone.

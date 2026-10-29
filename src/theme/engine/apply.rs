@@ -202,6 +202,15 @@ fn widget_source(src: &Source, id: &str, name: &str) -> Option<String> {
 
 /// Computes everything `apply` would write, touching nothing.
 pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result<Plan, String> {
+    plan_inner(src, paths, name, base, true)
+}
+
+/// Changes mode/palette/customisation without discarding the selection's colours or package structure.
+pub fn plan_selection(src: &Source, paths: &Paths, selection: &Selection) -> Result<Plan, String> {
+    plan_inner(src, paths, &selection.name, selection, false)
+}
+
+fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_colors: bool) -> Result<Plan, String> {
     let (id, implied) = src.find(name).ok_or_else(|| format!("no theme `{name}` (decthemectl theme list)"))?;
     if let Some(e) = src.list().into_iter().find(|e| e.id == id).and_then(|e| e.error) {
         return Err(format!("theme `{id}` is broken: {e}"));
@@ -215,14 +224,20 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
     sel.name = id.clone();
     // Applying a complete design restores its own colour scheme. Palettes remain
     // independently selectable afterwards.
-    sel.palette = None;
-    sel.accent = None;
-    sel.dynamic = None;
+    if reset_colors {
+        sel.palette = None;
+        sel.accent = None;
+        sel.dynamic = None;
+    }
     if let Some(m) = implied {
         sel.mode = m;
     }
 
-    // wallpaper: the first bundled image, resolved inside the package folder
+    let previous = src.selection();
+    let same_theme = src.find(&previous.name).is_some_and(|(old, _)| old == id);
+    let mode_changed = def.pick_dark(previous.mode, system_dark()) != def.pick_dark(sel.mode, system_dark());
+    // A complete design chooses its mode variant. Selection-only edits preserve a
+    // custom wallpaper; a mode change only replaces artwork owned by this package.
     let wp = extra.get("wallpaper");
     let images: Vec<String> = wp
         .map(|w| {
@@ -230,10 +245,28 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
             if let Some(i) = w.get("image").and_then(Value::as_str) {
                 v.insert(0, i.to_string());
             }
+            let variant = if def.pick_dark(sel.mode, system_dark()) { "dark" } else { "light" };
+            if let Some(i) = w.get(variant).and_then(Value::as_str) {
+                v.insert(0, i.to_string());
+            }
             v
         })
         .unwrap_or_default();
-    let image_path = match (&pkg_dir, images.first()) {
+    let current_wallpaper = std::fs::read_to_string(&paths.rdwm_config).ok().and_then(|t| Cfg::parse(&t).ok()).and_then(|c| match c.get("wallpaper", "image") {
+        Some(Val::Str(s)) => Some(PathBuf::from(s)),
+        _ => None,
+    });
+    let package_owned = pkg_dir.as_ref().is_some_and(|dir| {
+        let mut owned = images.clone();
+        for key in ["dark", "light"] {
+            if let Some(i) = wp.and_then(|w| w.get(key)).and_then(Value::as_str) {
+                owned.push(i.into());
+            }
+        }
+        owned.iter().any(|i| current_wallpaper.as_ref().is_some_and(|p| p == &dir.join(i)))
+    });
+    let choose_wallpaper = reset_colors || !same_theme || (mode_changed && package_owned);
+    let image_path = match (&pkg_dir, images.first().filter(|_| choose_wallpaper)) {
         (Some(d), Some(i)) => {
             super::archive::safe_rel_path(i)?;
             let p = d.join(i);
@@ -252,7 +285,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
     };
     let match_colors = wp.and_then(|w| w.get("match_colors")).and_then(Value::as_bool) == Some(true);
     let mut shell_marks: Vec<(&str, Option<Value>)> = Vec::new();
-    if match_colors && sel.palette.is_none() {
+    if reset_colors && match_colors && sel.palette.is_none() {
         let w = wp.cloned().unwrap_or(Value::Null);
         let scheme = w.get("scheme").and_then(Value::as_str).and_then(crate::theme::material::Variant::parse);
         let surfaces = w.get("surfaces").and_then(Value::as_str).and_then(Surfaces::parse);
@@ -282,7 +315,7 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
             }
             Err(e) => notes.push(format!("wallpaper.match_colors: {e}")),
         }
-    } else if io::json_load(&paths.shell_json()).get("theme_dynamic").is_some() {
+    } else if reset_colors && io::json_load(&paths.shell_json()).get("theme_dynamic").is_some() {
         // the previous theme switched "Match wallpaper" on; this one does not ask for it, so it goes off again
         sel = dynamic::disable(&sel);
         shell_marks.push(("theme_dynamic", None));
@@ -428,7 +461,15 @@ pub fn plan(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Result
         rdwm::apply_to(&mut cfg, &theme)?;
         let schema = Schema::load(&paths.rdwmctl);
         let mut attempt = extra.clone();
-        if sel.palette.is_some() {
+        if !choose_wallpaper {
+            attempt.shift_remove("wallpaper");
+        }
+        if let Some(radius) = sel.radius {
+            if let Some(Value::Object(d)) = attempt.get_mut("decoration") {
+                d.insert("radius".into(), json!(radius));
+            }
+        }
+        if sel.palette.is_some() || sel.accent.is_some() {
             // a palette colours the borders too: the theme's hard-coded border colours would fight it
             if let Some(Value::Object(r)) = attempt.get_mut("rdwm") {
                 for k in ["focused_border", "normal_border", "urgent_border"] {
@@ -490,6 +531,7 @@ fn stamp_id() -> String {
 pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
     let mut applied = Applied { theme_id: plan.id.clone(), dark: plan.dark, files: Vec::new(), notes: plan.notes.clone(), reloaded: false, undo_id: String::new() };
     if plan.writes.is_empty() {
+        crate::theme::system::request(&paths.shell_json());
         return Ok(applied);
     }
     let uid = stamp_id();
@@ -563,6 +605,12 @@ pub fn apply(src: &Source, paths: &Paths, name: &str, base: &Selection) -> Resul
         Err(e) => crate::log_error!("theme apply failed: {e}"),
     }
     r
+}
+
+/// Apply a selection as the same atomic package transaction, preserving explicit colours.
+pub fn apply_selection(src: &Source, paths: &Paths, selection: &Selection) -> Result<Applied, String> {
+    let plan = plan_selection(src, paths, selection)?;
+    execute(src, paths, plan)
 }
 
 /// The undo records, oldest first.
@@ -722,6 +770,61 @@ y = -30
             Entry { path: "widgets/clock-card.toml".into(), data: widget.as_bytes().to_vec() },
         ];
         install_entries(&entries, &src.themes_dir, false, &Limits::default()).unwrap();
+    }
+
+    #[test]
+    fn selection_edits_keep_package_structure_palette_and_custom_wallpaper() {
+        let (dir, src, paths) = sandbox("selection-structure");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        install_sunset(&src);
+        apply(&src, &paths, "sunset", &Selection::default()).unwrap();
+        let widgets = io::json_load(&paths.shell_json())["widgets"].clone();
+        let mut cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        cfg.set("wallpaper", "image", &Val::Str("/my/wall.png".into())).unwrap();
+        cfg.set("wallpaper", "mode", &Val::Str("center".into())).unwrap();
+        std::fs::write(&paths.rdwm_config, cfg.text()).unwrap();
+        let mut sel = crate::theme::palette::select(&src.selection(), Some("nord"));
+        sel.accent = crate::theme::model::Rgb::parse("#aabbcc");
+        sel.radius = Some(7.0);
+        apply_selection(&src, &paths, &sel).unwrap();
+        assert_eq!(src.selection().palette.as_deref(), Some("nord"));
+        assert_eq!(src.selection().accent, sel.accent);
+        let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("decoration", "style"), Some(Val::Str("classic".into())));
+        assert_eq!(cfg.get("decoration", "height"), Some(Val::Int(36)));
+        assert_eq!(cfg.get("decoration", "radius"), Some(Val::Int(7)));
+        assert_eq!(cfg.get("wallpaper", "image"), Some(Val::Str("/my/wall.png".into())));
+        assert_eq!(cfg.get("wallpaper", "mode"), Some(Val::Str("center".into())));
+        assert_eq!(io::json_load(&paths.dock_settings())["style"], "windows");
+        assert_eq!(io::json_load(&paths.shell_json())["widgets"], widgets);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn mode_variant_follows_only_package_owned_wallpaper() {
+        let (dir, src, paths) = sandbox("selection-mode-wallpaper");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        install_sunset(&src);
+        let package = src.themes_dir.join("sunset");
+        let text = SUNSET
+            .replace("[metrics]", "[colors.light]\nbackground = \"#f0eeee\"\ntext = \"#111111\"\n[metrics]")
+            .replace("[wallpaper]", "[wallpaper]\ndark = \"wallpapers/sunset.png\"\nlight = \"wallpapers/day.png\"");
+        std::fs::write(package.join("theme.toml"), text).unwrap();
+        std::fs::write(package.join("wallpapers/day.png"), png(32, 18, [230, 230, 220])).unwrap();
+        apply(&src, &paths, "sunset", &Selection { mode: crate::theme::model::Mode::Dark, ..Selection::default() }).unwrap();
+        let mut sel = src.selection();
+        sel.mode = crate::theme::model::Mode::Light;
+        apply_selection(&src, &paths, &sel).unwrap();
+        let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("wallpaper", "image"), Some(Val::Str(package.join("wallpapers/day.png").display().to_string())));
+        let mut cfg = cfg;
+        cfg.set("wallpaper", "image", &Val::Str("/my/custom.png".into())).unwrap();
+        std::fs::write(&paths.rdwm_config, cfg.text()).unwrap();
+        sel.mode = crate::theme::model::Mode::Dark;
+        apply_selection(&src, &paths, &sel).unwrap();
+        let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("wallpaper", "image"), Some(Val::Str("/my/custom.png".into())));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

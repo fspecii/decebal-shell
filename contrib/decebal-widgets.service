@@ -1,0 +1,13 @@
+[Unit]
+Description=decebal shared desktop widgets
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=!WAYLAND_DISPLAY
+
+[Service]
+ExecStart=/usr/bin/decwidgets daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

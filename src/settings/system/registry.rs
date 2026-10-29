@@ -13,7 +13,7 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Appearance", panes: &["appearance", "widgets", "config"] },
+    Section { title: "Appearance", panes: &["appearance", "wallpaper", "widgets", "config"] },
     Section { title: "Displays", panes: &["displays"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
@@ -161,7 +161,8 @@ pub fn search(q: &str, extra: &[(usize, String)]) -> Vec<Hit> {
         }
     }
     if let Some(pane) = pane_index("appearance") {
-        for (_, _, label, words) in crate::settings::appearance::INDEX {
+        for (tab, _, label, words) in crate::settings::appearance::INDEX {
+            let pane = if *tab == crate::settings::appearance::Tab::Wallpaper { pane_index("wallpaper").unwrap_or(pane) } else { pane };
             if all_match(&format!("{label} {words}"), &ts) && !PANES[pane].title.eq_ignore_ascii_case(label) {
                 add(&mut hits, pane, label);
             }

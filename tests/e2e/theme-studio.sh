@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Five original design packages on a private Xvfb/HOME: validate, apply, verify
 # selection and wallpaper assets, then capture dark/light Settings and a shared
 # desktop clock. Set SHOTS to retain screenshots; NO_BUILD=1 uses existing binaries.

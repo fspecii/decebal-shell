@@ -609,7 +609,44 @@ pub fn stay_awake() -> bool {
     state_dir().map(|d| d.join("omarchy/indicators/stay-awake").exists()).unwrap_or(false)
 }
 
+pub fn x11_idle() -> bool {
+    std::env::var("DECEBAL_BACKEND").as_deref() == Ok("x11") || (std::env::var_os("WAYLAND_DISPLAY").is_none() && std::env::var_os("DISPLAY").is_some())
+}
+
+/// Restore a persisted Stay Awake choice when an X11 session starts.
+pub fn reconcile_stay_awake() {
+    if !x11_idle() || is_dry_run() {
+        return;
+    }
+    let ctx = crate::util::Ctx::from_env();
+    let wanted = stay_awake();
+    let active = crate::util::idle::status(&ctx);
+    if wanted != active {
+        if let Some(m) = decutil() {
+            spawn(&[&m, "idle-inhibit", if wanted { "on" } else { "off" }]);
+        }
+    } else if wanted {
+        if let Err(e) = crate::util::idle::enforce(&ctx, &crate::util::RealSys) {
+            crate::log_warn!("Stay Awake: {e}");
+        }
+    }
+}
+
+pub fn set_stay_awake(on: bool) {
+    if x11_idle() {
+        if let Some(m) = decutil() {
+            spawn(&[&m, "idle-inhibit", if on { "on" } else { "off" }]);
+        }
+    } else if have("omarchy") {
+        spawn(&["omarchy", "toggle", "idle", if on { "stay-awake" } else { "allow-idle" }]);
+    }
+}
+
 pub fn toggle_stay_awake() {
+    if x11_idle() {
+        set_stay_awake(!stay_awake());
+        return;
+    }
     if have("omarchy") {
         spawn(&["omarchy", "toggle", "idle"]);
     }

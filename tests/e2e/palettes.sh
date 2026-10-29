@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Themes/palettes separation on a private Xvfb, rdwm, HOME and session bus.
 # Build decsettings, decthemectl, decbar first. MS_BIN_DIR may point at target/debug.
 set -eu

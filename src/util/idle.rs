@@ -30,14 +30,14 @@ fn number_after(line: &str, key: &str) -> Option<u32> {
 pub fn parse_xset_q(out: &str) -> Option<Xset> {
     let line = |prefix: &str| out.lines().map(str::trim).find(|l| l.starts_with(prefix));
     let timeout_line = line("timeout:")?;
-    let dpms_line = line("Standby:")?;
+    let dpms_line = line("Standby:").unwrap_or("");
     Some(Xset {
         timeout: number_after(timeout_line, "timeout:")?,
         cycle: number_after(timeout_line, "cycle:")?,
         dpms: out.contains("DPMS is Enabled"),
-        standby: number_after(dpms_line, "Standby:")?,
-        suspend: number_after(dpms_line, "Suspend:")?,
-        off: number_after(dpms_line, "Off:")?,
+        standby: number_after(dpms_line, "Standby:").unwrap_or(0),
+        suspend: number_after(dpms_line, "Suspend:").unwrap_or(0),
+        off: number_after(dpms_line, "Off:").unwrap_or(0),
     })
 }
 
@@ -73,8 +73,26 @@ fn xset(sys: &dyn Sys, args: &[&str]) -> Result<(), String> {
     sys.run(&argv, T).map(|_| ()).ok_or_else(|| format!("`{}` failed", argv.join(" ")))
 }
 
+/// Reassert inhibition after another settings tool has changed X11 idle timers.
+/// Keep the original restore snapshot intact.
+pub fn enforce(ctx: &Ctx, sys: &dyn Sys) -> Result<(), String> {
+    if !status(ctx) {
+        return Ok(());
+    }
+    let now = sys.run(&["xset", "q"], T).and_then(|o| parse_xset_q(&o)).ok_or("could not verify X11 idle inhibition")?;
+    if now.timeout > 0 || now.dpms {
+        xset(sys, &["s", "off"])?;
+        xset(sys, &["-dpms"])?;
+    }
+    Ok(())
+}
+
 pub fn on(ctx: &Ctx, sys: &dyn Sys) -> Result<String, String> {
     if status(ctx) {
+        if let Some(dir) = ctx.awake_indicator.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&ctx.awake_indicator, "").map_err(|e| e.to_string())?;
         return Ok("idle inhibit already on".into());
     }
     if ctx.display.is_none() {
@@ -91,6 +109,10 @@ pub fn on(ctx: &Ctx, sys: &dyn Sys) -> Result<String, String> {
         let _ = restore(sys, &before);
         return Err(e);
     }
+    if let Some(dir) = ctx.awake_indicator.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&ctx.awake_indicator, "").map_err(|e| e.to_string())?;
     toast(ctx, sys, "Idle inhibitor enabled", "The screen will not lock or blank", "preferences-desktop-screensaver");
     Ok("idle inhibit on".into())
 }
@@ -104,11 +126,15 @@ fn restore(sys: &dyn Sys, x: &Xset) -> Result<(), String> {
 }
 
 pub fn off(ctx: &Ctx, sys: &dyn Sys) -> Result<String, String> {
-    let Some(x) = ctx.read_state(STATE).map(|_| load(ctx)) else { return Ok("idle inhibit already off".into()) };
+    let Some(x) = ctx.read_state(STATE).map(|_| load(ctx)) else {
+        let _ = std::fs::remove_file(&ctx.awake_indicator);
+        return Ok("idle inhibit already off".into());
+    };
     if let Some(x) = x {
         restore(sys, &x)?;
     }
     ctx.clear_state(STATE);
+    let _ = std::fs::remove_file(&ctx.awake_indicator);
     toast(ctx, sys, "Idle inhibitor disabled", "Screen lock and blanking restored", "preferences-desktop-screensaver");
     Ok("idle inhibit off".into())
 }
@@ -155,11 +181,13 @@ mod tests {
         assert_eq!(execute(&cmd(Switch::Status), &c, &m).unwrap(), "off");
         assert_eq!(execute(&cmd(Switch::On), &c, &m).unwrap(), "idle inhibit on");
         assert_eq!(execute(&cmd(Switch::Status), &c, &m).unwrap(), "on");
+        assert!(c.awake_indicator.exists());
         assert_eq!(m.log(), ["xset q", "xset s off", "xset -dpms"]);
         // on again: nothing runs
         assert_eq!(execute(&cmd(Switch::On), &c, &m).unwrap(), "idle inhibit already on");
         assert_eq!(m.log().len(), 3);
         assert_eq!(execute(&cmd(Switch::Off), &c, &m).unwrap(), "idle inhibit off");
+        assert!(!c.awake_indicator.exists());
         assert_eq!(&m.log()[3..], ["xset s 600 600", "xset dpms 0 0 900", "xset +dpms"]);
         assert_eq!(execute(&cmd(Switch::Status), &c, &m).unwrap(), "off");
         // off again: nothing runs
@@ -194,5 +222,25 @@ mod tests {
         let mut c2 = ctx(&dir);
         c2.display = None;
         assert!(execute(&cmd(Switch::On), &c2, &Mock::new(&["xset"])).unwrap_err().contains("DISPLAY"));
+    }
+}
+
+#[cfg(test)]
+mod reconcile_tests {
+    use super::*;
+    use crate::util::mock::*;
+    #[test]
+    fn reassertion_keeps_the_original_restore_settings() {
+        let dir = tmp("idle-enforce");
+        let c = ctx(&dir);
+        let m = Mock::new(&["xset"]);
+        m.out("xset q", "Screen Saver:\n timeout: 600 cycle: 10\n Standby: 0 Suspend: 0 Off: 1200\n DPMS is Enabled\n");
+        m.out("xset s off", "");
+        m.out("xset -dpms", "");
+        on(&c, &m).unwrap();
+        let saved = c.read_state(STATE);
+        enforce(&c, &m).unwrap();
+        assert_eq!(c.read_state(STATE), saved);
+        assert_eq!(&m.log()[3..], ["xset q", "xset s off", "xset -dpms"]);
     }
 }

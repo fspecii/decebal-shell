@@ -30,7 +30,7 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Theme, Tab::Palettes, Tab::Customise, Tab::Wallpaper, Tab::Apps];
+    pub const ALL: [Tab; 4] = [Tab::Theme, Tab::Palettes, Tab::Customise, Tab::Apps];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -53,6 +53,9 @@ impl Tab {
     }
 
     pub fn parse(s: &str) -> Option<Tab> {
+        if s == "wallpaper" {
+            return Some(Tab::Wallpaper);
+        }
         Tab::ALL.into_iter().find(|t| t.id() == s)
     }
 }
@@ -251,7 +254,7 @@ fn customise_tab(m: &Model) -> Vec<Item> {
     out
 }
 
-fn wallpaper_tab(m: &Model) -> Vec<Item> {
+pub(super) fn wallpaper_tab(m: &Model) -> Vec<Item> {
     let mut out = m.pane_wallpaper();
     out.push(Item::Header("Colours".into()));
     out.push(Item::Card(vec![Row::new("Match wallpaper colours")
@@ -300,17 +303,26 @@ pub fn show(m: &mut Model, view: View) {
 
 /// Selects the Appearance pane (by index in `PANES`) on `view`.
 pub fn open(m: &mut Model, view: View) {
-    if let Some(i) = super::system::registry::pane_index("appearance") {
+    if let Some(i) = super::system::registry::pane_index(if view.tab == Tab::Wallpaper { "wallpaper" } else { "appearance" }) {
         m.sel.goto = Some(i);
     }
-    show(m, view);
+    if view.tab != Tab::Wallpaper {
+        show(m, view);
+    } else {
+        m.sel.reset_scroll = true;
+        m.dirty = true;
+    }
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     match (parts, v) {
         (["ap", "tab"], CtlVal::Str(s)) => {
             if let Some(t) = Tab::parse(&s) {
-                show(m, View { tab: t, section: m.sel.section });
+                if t == Tab::Wallpaper {
+                    open(m, View { tab: t, section: m.sel.section });
+                } else {
+                    show(m, View { tab: t, section: m.sel.section });
+                }
             }
         }
         (["ap", "sec"], CtlVal::Str(s)) => {
@@ -331,7 +343,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         (["ap", "go", name], CtlVal::Click) => {
             if let Some(view) = resolve(name) {
-                show(m, view);
+                open(m, view);
             }
         }
         (["ap", "reset", "colours"], CtlVal::Click) => super::themepane::apply(m, &["th", "reset-colours"], CtlVal::Click),
@@ -454,6 +466,7 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Wallpaper, Section::Colours, "Background colour", "wallpaper letterbox solid colour"),
     (Tab::Wallpaper, Section::Colours, "Image file", "wallpaper path png jpeg webp"),
     (Tab::Wallpaper, Section::Colours, "Wallhaven", "online download search random favourites wallpapers"),
+    (Tab::Wallpaper, Section::Colours, "Live wallpapers", "video animated mp4 webm commons motion fullscreen pause frame rate"),
     // All apps
     (Tab::Apps, Section::Colours, "Apply theme to all apps", "system wide theming gtk qt terminal chrome browser nautilus kvantum switch"),
     (Tab::Apps, Section::Colours, "Apply now", "run again re-apply theme apps"),
@@ -537,11 +550,11 @@ mod tests {
         m.apply("ap:sec", CtlVal::Str("fonts".into()));
         assert_eq!((m.sel.tab, m.sel.section), (Tab::Customise, Section::Fonts));
         m.apply("ap:go:wallpaper", CtlVal::Click);
-        assert_eq!(m.sel.tab, Tab::Wallpaper);
+        assert_eq!(m.sel.goto, super::super::system::registry::pane_index("wallpaper"));
         m.apply("ap:go:config", CtlVal::Click);
         assert!(m.sel.goto.is_some());
         m.apply("ap:tab", CtlVal::Str("nonsense".into()));
-        assert_eq!(m.sel.tab, Tab::Wallpaper);
+        assert_eq!(m.sel.tab, Tab::Customise);
     }
 
     #[test]
@@ -605,5 +618,23 @@ mod tests {
         // the theme paints rdwm's colours and sizes again, so what the user had typed in is gone
         assert!(!t.contains("height = 40") && !t.contains("radius = 3\n") && !t.contains("border_px = 4"), "{t}");
         assert!(t.contains("middle_click_close") && t.contains("enabled"), "{t}");
+    }
+}
+
+#[cfg(test)]
+mod wallpaper_navigation_tests {
+    use super::*;
+    use crate::settings::{model::tests_support::model_with, system::registry};
+    #[test]
+    fn wallpaper_has_its_own_pane_and_leaves_appearance_selection_intact() {
+        let (mut m, _) = model_with("[general]\n");
+        m.sel.tab = Tab::Palettes;
+        m.apply("ap:go:wallpaper", CtlVal::Click);
+        assert_eq!(m.sel.goto, registry::pane_index("wallpaper"));
+        assert_eq!(m.sel.tab, Tab::Palettes);
+        m.sel.pane = registry::pane_index("wallpaper").unwrap();
+        assert!(m.wallpaper_open());
+        assert!(!Tab::ALL.contains(&Tab::Wallpaper));
+        assert!(m.items(m.sel.pane).iter().all(|i| !matches!(i,Item::Card(rows) if rows.iter().any(|r|r.ctls.iter().any(|c|c.id=="ap:tab")))));
     }
 }

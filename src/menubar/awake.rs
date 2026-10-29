@@ -149,6 +149,8 @@ pub fn refresh() -> bool {
         let _ = std::fs::remove_file(&f);
         return false;
     }
+    #[cfg(not(test))]
+    sys::reconcile_stay_awake();
     // Switched off by someone else: the expiry is stale (not while an `omarchy` toggle may still be landing).
     if !on && until.is_some() && std::fs::metadata(&f).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|e| e.as_secs() > 10) {
         let _ = std::fs::remove_file(&f);

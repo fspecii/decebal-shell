@@ -124,12 +124,18 @@ pub struct Theme {
     pub panel_alpha: f32,
     pub bar_alpha: f32,
     pub blur: f32,
+    pub glass_refraction: f32,
+    pub glass_edge: f32,
+    pub glass_highlight: f32,
+    pub glass_grain: f32,
+    pub glass_blur: f32,
     pub shadow: f32,
     pub outline: f32,
     pub dock_icon_size: f32,
     pub dock_padding: f32,
     pub bar_height: f32,
     pub titlebar_style: String,
+    pub window_buttons_right: bool,
     pub titlebar_height: i64,
     /// `flat` (a full-width strip), `floating` (a horizontal pill with a margin around it) or `vertical`
     /// (caelestia's layout: a bar down the left screen edge, no dock).
@@ -278,6 +284,11 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("panel_alpha", Kind::Num(0.5, 1.0), "Spotlight / Launchpad / Control Center opacity"),
     ("bar_alpha", Kind::Num(0.0, 1.0), "menu bar opacity (needs a compositor below 1)"),
     ("blur", Kind::Num(0.0, 1.0), "frosted background on X11 with configured picom"),
+    ("glass_refraction", Kind::Num(0.0, 32.0), "edge lens displacement in pixels; enables native X11 glass"),
+    ("glass_edge", Kind::Num(2.0, 40.0), "width of the rounded glass bezel in pixels"),
+    ("glass_highlight", Kind::Num(0.0, 1.0), "directional glass rim highlight strength"),
+    ("glass_grain", Kind::Num(0.0, 0.03), "subtle deterministic material grain"),
+    ("glass_blur", Kind::Num(0.0, 24.0), "native glass backdrop softening radius"),
     ("shadow", Kind::Num(0.0, 1.5), "drop shadow strength"),
     ("outline", Kind::Num(0.0, 1.0), "alpha of the 1px outline around popups"),
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
@@ -538,6 +549,11 @@ impl Def {
             panel_alpha: clampf(num("panel_alpha", 0.97) * opacity as f64, 0.3, 1.0),
             bar_alpha: clampf(num("bar_alpha", 1.0), 0.0, 1.0),
             blur: clampf(num("blur", 0.0), 0.0, 1.0),
+            glass_refraction: clampf(num("glass_refraction", 0.0), 0.0, 32.0),
+            glass_edge: clampf(num("glass_edge", 12.0), 2.0, 40.0),
+            glass_highlight: clampf(num("glass_highlight", 0.35), 0.0, 1.0),
+            glass_grain: clampf(num("glass_grain", 0.003), 0.0, 0.03),
+            glass_blur: clampf(num("glass_blur", 4.0), 0.0, 24.0),
             shadow: clampf(num("shadow", 1.0), 0.0, 1.5),
             outline: clampf(num("outline", 0.14), 0.0, 1.0),
             dock_icon_size: clampf(num("dock_icon_size", 47.0), 24.0, 128.0),
@@ -546,6 +562,14 @@ impl Def {
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
             bar_position: crate::config::BarPosition::default(),
             control_center: Default::default(),
+            window_buttons_right: self
+                .extra
+                .get("decoration")
+                .and_then(|v| v.get("buttons"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| matches!(*s, "left" | "right"))
+                .map(|s| s == "right")
+                .unwrap_or_else(|| matches!(get("titlebar_style"),Some(V::S(s)) if s=="classic")),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
             font_family: fonts.primary_ui().to_string(),

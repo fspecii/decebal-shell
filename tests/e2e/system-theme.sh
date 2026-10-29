@@ -6,6 +6,8 @@
 # (btop, foot, the browser policy that needs sudo) are replaced by logging shims, so nothing outside this directory is touched.
 # Only PIDs started here are killed.
 set -u
+# Automatic app propagation is enabled only after private HOME and private D-Bus exist.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 T=${CARGO_TARGET_DIR:-$HERE/target}
 BIN=${DECEBAL_BIN:-$T/${PROFILE:-$([ -x "$T/release/decthemectl" ] && echo release || echo debug)}}
@@ -14,7 +16,7 @@ N=${E2E_DISPLAY:-:92}
 [ "$N" = ":1" ] && { echo "refusing the live display"; exit 2; }
 # never share a display with somebody else's server
 if [ -e "/tmp/.X11-unix/X${N#:}" ] || [ -e "/tmp/.X${N#:}-lock" ]; then echo "display $N is in use; set E2E_DISPLAY to a free one"; exit 77; fi
-for t in Xvfb xrdb import dbus-run-session gsettings python3; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
+for t in Xvfb xrdb import dbus-run-session dbus-daemon gsettings python3; do command -v $t >/dev/null || { echo "$t needed"; exit 77; }; done
 OMARCHY=${OMARCHY_PATH:-/usr/share/omarchy}
 [ -d "$OMARCHY/default/themed" ] || OMARCHY=
 
@@ -38,6 +40,11 @@ export GSETTINGS_BACKEND=keyfile RDWM_CONFIG=$XDG_CONFIG_HOME/rdwm/config.toml R
 [ -n "$OMARCHY" ] && export OMARCHY_PATH=$OMARCHY
 mkdir -p "$XDG_CONFIG_HOME"/{gtk-3.0,gtk-4.0,qt6ct,alacritty,foot,kitty,omarchy,rdwm} "$XDG_STATE_HOME/omarchy/current" "$XDG_RUNTIME_DIR" "$TMP/shims" "$XDG_DATA_HOME" "$HOME/Documents"
 chmod 700 "$XDG_RUNTIME_DIR"
+# Activation services inherit this private HOME/XDG environment, never the real session.
+mapfile -t SYSTEM_THEME_BUS < <(dbus-daemon --session --fork --print-address=1 --print-pid=1)
+export DBUS_SESSION_BUS_ADDRESS=${SYSTEM_THEME_BUS[0]}
+PIDS+=("${SYSTEM_THEME_BUS[1]}")
+export DECEBAL_SYSTEM_AUTOMATIC=1
 for s in omarchy-restart-btop omarchy-theme-set-foot; do printf '#!/bin/sh\necho "%s $*" >> "$HOME/shim.log"\n' $s > "$TMP/shims/$s"; chmod +x "$TMP/shims/$s"; done
 printf '#!/bin/sh\necho "browser: $(cat "$HOME/.local/state/omarchy/current/theme/chromium.theme")" >> "$HOME/shim.log"\n' > "$TMP/shims/omarchy-theme-set-browser"
 chmod +x "$TMP/shims/omarchy-theme-set-browser"
@@ -54,7 +61,13 @@ BEFORE=$(snapshot)
 ctl() { decthemectl "$@"; }
 sysval() { sed -n "s/^@define-color $1 \(#[0-9a-f]*\);.*/\1/p" "$CFG/gtk-4.0/gtk.css" | head -1; }
 
-echo "== off by default: nothing outside decebal changes"
+echo "== automatic by default"
+ctl apply nord --mode dark --no-rdwm >/dev/null
+[ -e $CFG/gtk-4.0/gtk.css ] && pass "default theme apply propagates to GTK" || fail "automatic GTK apply missing"
+[[ "$(ctl system status)" == "Apply to all apps: on"* ]] && pass "status defaults on" || fail "automatic status"
+ctl system off >/dev/null
+eq "opt-out restores original app files" "$(snapshot)" "$BEFORE"
+echo "== explicit off: nothing outside decebal changes"
 ctl apply nord --mode dark --no-rdwm >/dev/null
 [ ! -e $CFG/gtk-4.0/gtk.css ] && pass "no gtk.css before 'system on'" || fail "gtk.css written while off"
 eq "snapshot unchanged" "$(snapshot)" "$BEFORE"
@@ -88,7 +101,7 @@ if [ -n "$OMARCHY" ]; then
   has "alacritty background is the theme's" $T/alacritty.toml 'background = "#2e3440"'
   has "foot background" $T/foot.ini 'background=2e3440'
   has "kitty accent" $T/kitty.conf 'active_border_color #88c0d0'
-  has "browser colour handed to Omarchy's helper" $HOME/shim.log 'browser: 46,52,64'
+  hasnt "browser helper remains opt-in" $HOME/shim.log 'browser:'
   has "btop reload helper ran" $HOME/shim.log 'omarchy-restart-btop'
   has "foot OSC helper ran" $HOME/shim.log 'omarchy-theme-set-foot'
   [ -e $XDG_CONFIG_HOME/omarchy/themes/decebal/colors.toml ] && pass "theme dir written" || fail "theme dir"

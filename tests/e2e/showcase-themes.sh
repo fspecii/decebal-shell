@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The showcase themes (themes/<id>/ with wallpapers) end to end, on a private Xvfb with a private rdwm, HOME and runtime dir:
 # validate, install, apply (dark and light), check rdwm's config (style, wallpaper, borders), that the bar and dock survive, and take
 # one screenshot per theme (two fake windows, decsettings, bar, dock) into $SHOTS.

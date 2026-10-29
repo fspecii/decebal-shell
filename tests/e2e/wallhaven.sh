@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # End-to-end test of System Settings > Wallpaper > Wallhaven on a private Xvfb + rdwm, against a LOCAL fake of
 # wallhaven.cc (tests/e2e/fakes/wallhaven_server.py on 127.0.0.1, WALLHAVEN_API_BASE points the app at it).
 # Nothing here talks to the real wallhaven.cc, the real desktop or the real rdwm socket.

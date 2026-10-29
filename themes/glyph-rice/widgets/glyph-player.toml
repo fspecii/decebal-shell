@@ -1,0 +1,39 @@
+format = 1
+id = "glyph-player"
+name = "Glyph player"
+size = [460, 170]
+refresh = 1000
+[root]
+type = "col"
+padding = 24
+gap = 10
+background = "popup"
+radius = 32
+border = "border@0.4"
+[[root.children]]
+type = "text"
+text = "NOW PLAYING"
+size = 12
+color = "text_secondary"
+[[root.children]]
+type = "text"
+text = "{media.title|No active player}"
+size = 24
+max_chars = 28
+[[root.children]]
+type = "text"
+text = "{media.artist|Media unavailable}"
+size = 13
+color = "text_secondary"
+[[root.children]]
+type = "button"
+background = "accent"
+radius = 20
+height = 36
+width = 48
+on_click = "media play-pause"
+[[root.children.children]]
+type = "icon"
+name = "play"
+size = 18
+color = "accent_text"

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Private Xvfb + rdwm; no live desktop paths, sockets or signals are used.
 set -eu
 HERE=$(cd "$(dirname "$0")/../.." && pwd)

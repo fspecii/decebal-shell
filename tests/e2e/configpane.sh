@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # End-to-end test of the Configuration pane of decsettings on a private Xvfb with a private rdwm (x11 backend).
 # Types into the text editor, saves, saves a preset, exports it, then imports it into a SECOND private HOME
 # (own XDG dirs, own decsettings instance) and checks the import preview, the safety checks and the CLI.

@@ -51,6 +51,7 @@ pub enum Tab {
     #[default]
     Backgrounds,
     Wallhaven,
+    Live,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -669,8 +670,12 @@ fn chip(id: &str, label: &str, on: bool, enabled: bool) -> Ctl {
 
 /// The "My backgrounds | Wallhaven" switch at the top of the pane.
 pub fn tab_card(wh: &Wh) -> Item {
-    let cur = if wh.tab == Tab::Wallhaven { "wallhaven" } else { "backgrounds" };
-    Item::Card(vec![Row::new("Pictures from").ctl(seg("wh:tab", &[("My backgrounds", "backgrounds"), ("Wallhaven", "wallhaven")], cur))])
+    let cur = match wh.tab {
+        Tab::Wallhaven => "wallhaven",
+        Tab::Live => "live",
+        Tab::Backgrounds => "backgrounds",
+    };
+    Item::Card(vec![Row::new("Pictures from").ctl(seg("wh:tab", &[("My backgrounds", "backgrounds"), ("Wallhaven", "wallhaven"), ("Live wallpapers", "live")], cur))])
 }
 
 fn tidy_path(p: &std::path::Path) -> String {
@@ -876,7 +881,12 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     let mut delay = SEARCH_DEBOUNCE;
     match (parts, v) {
         (["wh", "tab"], CtlVal::Str(s)) => {
-            m.wh.tab = if s == "wallhaven" { Tab::Wallhaven } else { Tab::Backgrounds };
+            m.wh.tab = match s.as_str() {
+                "wallhaven" => Tab::Wallhaven,
+                "live" => Tab::Live,
+                _ => Tab::Backgrounds,
+            };
+            m.sel.reset_scroll = true;
             return;
         }
         (["wh", "view"], CtlVal::Str(s)) => {

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The Stay Awake coffee cup of the bar end to end: the real decbar on a private Xvfb with a private rdwm, a fake `omarchy` that
-# flips the stay-awake indicator the way `omarchy toggle idle` does, and the fake system tools of tests/fakebin.
+# isolates unrelated Omarchy probes. Stay Awake itself uses real decutil/X11 inhibition.
 #   tests/e2e/awake.sh                 (E2E_DISPLAY=:172 by default; SHOTS=dir keeps the screenshots; PROFILE=debug uses debug binaries)
 # Checks: the cup shows while the indicator exists; a click on it turns Stay Awake off (indicator gone, one toggle, icon gone) on the
 # macOS bar and on the Caelestia pill bar; a hover popup on the pill bar and a right-click popup on the horizontal bar say what it
@@ -106,7 +108,7 @@ echo "== an expired timed session ends when the bar starts"
 style macos
 DECBAR_DEBUG_TRAY=$TMP/tray decbar >"$TMP/decbar.log" 2>&1 & BARPID=$!; PIDS+=($BARPID)
 until_ok "the bar switched the expired Stay Awake off" 8 indicator_gone
-eq "through the same toggle the Control Center uses" "$(toggles)" 1
+xset q | grep -Eq "timeout: +600" && pass "expired session leaves the idle timeout restored" || fail "idle timeout not restored"
 [ ! -e "$UNTIL" ] && pass "and dropped the expiry" || fail "expiry file left"
 kill $BARPID; wait $BARPID 2>/dev/null; sleep 0.3
 : > "$FAKE_STATE/omarchy.log"
@@ -124,7 +126,7 @@ xdotool key Escape; xdotool mousemove 800 450; sleep 0.5
 read -r AX AY <<< "$(tray_xy Awake)"; AY=${AY:-12}
 xdotool mousemove "$AX" "$AY" click 1
 until_ok "a click on the cup turns Stay Awake off (indicator gone)" 6 indicator_gone
-eq "with exactly one toggle" "$(toggles)" 1
+xset q | grep -Eq "timeout: +600" && pass "turning off restores the X11 idle timeout" || fail "X11 timeout not restored"
 until_ok "and the cup disappears from the bar" 6 no_tray Awake
 
 echo "== Caelestia pill bar: the cup"
@@ -144,7 +146,7 @@ nepx "hovering the cup opens the popup beside the bar" 62 "$AY" "$UNDER"
 shot 20-caelestia-hover
 xdotool click 1
 until_ok "clicking it turns Stay Awake off" 6 indicator_gone
-eq "with one toggle" "$(toggles)" 1
+xset q | grep -Eq "timeout: +600" && pass "pill toggle restores the X11 idle timeout" || fail "X11 timeout not restored"
 until_ok "and the cup is gone" 6 no_tray Awake
 shot 21-caelestia-off
 

@@ -137,7 +137,19 @@ fn gtk3_extras(p: &Palette) -> String {
 pub fn css(p: &Palette, gtk4: bool) -> String {
     let mut s = format!("/* {}: {} */\n", p.name, if p.dark { "dark" } else { "light" });
     s.push_str(&colors(p));
-    if !gtk4 {
+    if gtk4 {
+        // libadwaita 1.6+ migrated to native CSS variables. Named colour aliases
+        // remain for older GTK; current Files reads the hyphenated variables.
+        s.push_str(":root {\n");
+        for line in colors(p).lines() {
+            if let Some(rest) = line.strip_prefix("@define-color ") {
+                if let Some((name, value)) = rest.split_once(' ') {
+                    let _ = writeln!(s, "  --{}: {}", name.replace('_', "-"), value);
+                }
+            }
+        }
+        s.push_str("}\n");
+    } else {
         s.push_str(&gtk3_extras(p));
     }
     s
@@ -212,6 +224,7 @@ impl Target for Gtk {
             plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings(p, cfg, font.as_deref()) });
         }
         let g = |k: &str, v: String| ("org.gnome.desktop.interface".to_string(), k.to_string(), v);
+        plan.gsettings.push(g("gtk-theme", if p.dark { "'Adwaita-dark'" } else { "'Adwaita'" }.into()));
         plan.gsettings.push(g("color-scheme", if p.dark { "'prefer-dark'" } else { "'prefer-light'" }.into()));
         if let Some(f) = &font {
             plan.gsettings.push(g("font-name", format!("'{f}'")));
@@ -251,7 +264,8 @@ mod tests {
         assert!(!g4.contains("headerbar, .titlebar"), "gtk 4 keeps libadwaita's own header bar rules");
         assert!(g3.contains(&format!("headerbar, .titlebar {{ background-color: {}; background-image: none;", p.titlebar.hex())));
         assert!(g3.contains(&format!("window, .background {{ background-color: {};", p.bg.hex())));
-        assert_eq!(g4.lines().filter(|l| l.starts_with("@define-color")).count(), g4.matches(";\n").count());
+        assert!(g4.contains(&format!("--window-bg-color: {};", p.bg.hex())));
+        assert!(g4.contains(&format!("--sidebar-bg-color: {};", p.sidebar.hex())));
     }
 
     #[test]

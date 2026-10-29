@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # Theme engine end to end, on a private Xvfb with a private rdwm, HOME and runtime dir:
 #   validate + pack + install a community-style theme package (examples/themes/sunset-grid), apply it (rdwm config, dock, wallpaper,
 #   widgets), see its desktop widgets appear and react to a click, preview-and-revert, undo, uninstall, the safety refusals, and the

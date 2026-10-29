@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This desktop test must not retint apps through an inherited session bus.
+export DECEBAL_SYSTEM_AUTOMATIC=0
 # The vertical Caelestia bar end to end: the real decbar and decdock on a private Xvfb with a private rdwm and fake system tools.
 #   tests/e2e/vbar.sh                  (E2E_DISPLAY=:97 by default; SHOTS=dir keeps the screenshots; PROFILE=debug uses debug binaries)
 # It checks that `decthemectl style caelestia` moves the bar to the left edge, that the strut is published and rdwm tiles

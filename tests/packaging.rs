@@ -160,7 +160,7 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
 fn the_old_mac_names_are_installed_as_deprecated_wrappers() {
     // Programs added after the rename have no old name and get no wrapper.
     let mut bins = cargo_bins();
-    for new in ["declock", "decmon"] {
+    for new in ["declock", "decmon", "decwall"] {
         bins.remove(new);
     }
     assert!(read("Makefile").contains("contrib/compat/mac-compat"), "Makefile does not install the compatibility wrappers");
@@ -208,5 +208,28 @@ fn the_theme_gallery_lists_every_shipped_package_with_its_screenshot() {
         let shot = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png"));
         let len = std::fs::metadata(&shot).unwrap_or_else(|e| panic!("{}: {e}", shot.display())).len();
         assert!(len < 400 * 1024, "{id}.png is {len} bytes");
+    }
+}
+
+#[test]
+fn shared_widgets_have_x11_login_and_service_entries() {
+    for name in ["decebal-widgets.desktop", "decebal-widgets.service"] {
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contrib").join(name).exists());
+        assert!(read("Makefile").contains(name));
+        assert!(read("PKGBUILD").contains(name));
+    }
+    assert!(read("contrib/decebal-widgets.desktop").contains("Exec=decwidgets autostart"));
+    let unit = read("contrib/decebal-widgets.service");
+    assert!(unit.contains("ExecStart=/usr/bin/decwidgets daemon") && unit.contains("Restart=on-failure"));
+}
+
+#[test]
+fn live_wallpapers_ship_optional_session_host() {
+    assert!(read("contrib/decebal-live-wallpaper.desktop").contains("Exec=decwall daemon"));
+    assert!(read("contrib/decebal-live-wallpaper.desktop").contains("OnlyShowIn=rdwm;"));
+    assert!(read("contrib/decebal-live-wallpaper.service").contains("ExecStart=/usr/bin/decwall daemon"));
+    for file in ["Makefile", "PKGBUILD"] {
+        assert!(read(file).contains("decebal-live-wallpaper.desktop"));
+        assert!(read(file).contains("decebal-live-wallpaper.service"));
     }
 }

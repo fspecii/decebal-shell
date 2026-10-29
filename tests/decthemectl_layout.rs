@@ -14,6 +14,7 @@ fn sandbox(name: &str) -> PathBuf {
 fn ctl(d: &Path, args: &[&str]) -> (bool, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_decthemectl"))
         .args(args)
+        .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
         .env("HOME", d.join("home"))
         .env("XDG_CONFIG_HOME", d.join("cfg"))
         .env("DECEBAL_CONFIG", d.join("cfg/omarchy"))

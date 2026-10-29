@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Decebal live wallpapers
+Comment=Restore video wallpapers and pause them behind fullscreen applications
+Exec=decwall daemon
+OnlyShowIn=rdwm;
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

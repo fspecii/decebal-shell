@@ -2,12 +2,12 @@ format = 1
 id = "orbit-glass"
 name = "Orbit Glass"
 screenshots = ["screenshots/main.png"]
-version = "1.0.0"
+version = "2.0.0"
 author = "decebal"
 license = "MIT"
-description = "A restrained orbital desktop: floating navigation, sculpted rounded windows and original luminous geometric artwork. Desktop structure remains independent of the selected color palette."
+description = "An orbital command deck: right glass navigation rail, compact launcher, precise window chrome and an original eclipse field."
 min_shell_version = "0.1.0"
-tags = ["glass", "orbital", "floating", "geometric"]
+tags = ["glass", "orbital", "right-rail", "command-deck"]
 
 [colors.dark]
 background = "#101726"
@@ -52,52 +52,61 @@ ok = "#246147"
 warn = "#805b14"
 
 [metrics]
-radius = 18
-dock_roundness = 0.82
-dock_alpha = 0.88
-popup_alpha = 0.98
-panel_alpha = 0.98
-bar_alpha = 0.96
-shadow = 1.0
-outline = 0.16
-dock_padding = 10
+glass_refraction = 7
+glass_edge = 10
+glass_highlight = 0.25
+glass_grain = 0.003
+glass_blur = 5
+radius = 16
+dock_roundness = 0.52
+dock_alpha = 0.22
+popup_alpha = 0.88
+panel_alpha = 0.90
+bar_alpha = 0.18
+shadow = 1.15
+blur = 0.80
+outline = 0.24
+dock_padding = 8
 
 [font]
-ui = ["Inter", "Noto Sans"]
-title = ["Inter", "Noto Sans"]
-mono = ["JetBrains Mono", "DejaVu Sans Mono"]
-display = ["Rubik", "Inter", "Noto Sans"]
+ui = ["Adwaita Sans", "Inter", "Noto Sans"]
+title = ["JetBrainsMono Nerd Font", "Adwaita Mono", "monospace"]
+mono = ["JetBrainsMono Nerd Font", "Adwaita Mono", "monospace"]
+display = ["Adwaita Sans", "Inter"]
 scale = 1.0
 
 [wallpaper]
+dark = "wallpapers/dark.png"
+light = "wallpapers/light.png"
 images = ["wallpapers/dark.png", "wallpapers/light.png"]
 mode = "fill"
 
 [decoration]
-style = "arc"
-height = 32
-radius = 16
+style = "minimal"
+height = 28
+radius = 10
 title_align = "center"
 
 [rdwm]
-gap_inner = 10
-gap_outer = 10
+gap_inner = 16
+gap_outer = 20
 border_px = 1
 smart_gaps = false
-mfact = 0.55
+mfact = 0.60
 layouts = ["tile", "monocle", "floating"]
 
 [bar]
 enabled = true
-style = "floating"
+style = "vertical"
+position = "right"
 height = 28
 
 [dock]
 enabled = true
 style = "mac"
-size = 46
-roundness = 0.82
-magnification = 1.15
+size = 42
+roundness = 0.52
+magnification = 1.0
 
 [control_center]
 enabled = true
@@ -106,24 +115,3 @@ style = "card"
 
 [hot_corners]
 top_right = "control-center"
-
-[[widgets]]
-use = "builtin:clock-card"
-place = "desktop"
-anchor = "top-right"
-x = -52
-y = 88
-
-[[widgets]]
-use = "builtin:cpu-ram-ring"
-place = "desktop"
-anchor = "top-right"
-x = -52
-y = 246
-
-[[widgets]]
-use = "builtin:now-playing-mini"
-place = "desktop"
-anchor = "top-right"
-x = -52
-y = 386

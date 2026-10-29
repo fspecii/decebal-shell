@@ -9,7 +9,7 @@ pub const HELP: &str = "decthemectl apply-system [--dry-run] [--only gtk,qt,...]
 decthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
                                  off puts every changed file and setting back (originals are saved by the first apply)
 decthemectl system status [--json]
-decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11
+decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11 terminals
 decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font  (VALUE none = unset; signals and gtk-font take on|off:
                                  gtk-font, on by default, writes the theme's font to GTK's settings.ini and gsettings when it names an installed one)";
 

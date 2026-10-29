@@ -1,0 +1,33 @@
+format = 1
+id = "glyph-system"
+name = "Glyph system"
+size = [460, 190]
+refresh = 1000
+[root]
+type = "col"
+padding = 24
+gap = 12
+background = "popup"
+radius = 32
+border = "border@0.4"
+[[root.children]]
+type = "text"
+text = "SYSTEM · {host.name}"
+size = 12
+color = "text_secondary"
+[[root.children]]
+type = "text"
+text = "CPU {cpu.usage:pct}    MEM {mem.used:bytes}"
+size = 24
+[[root.children]]
+type = "graph"
+series = "cpu.history"
+height = 40
+width = 412
+max = 1
+color = "text"
+[[root.children]]
+type = "text"
+text = "DISK {disk.usage:pct} · UP {uptime:dur}"
+size = 12
+color = "text_secondary"

@@ -163,6 +163,13 @@ pub(crate) fn set_glass_hint(conn: &RustConnection, win: Window, enabled: bool) 
     Ok(())
 }
 
+/// Diagnostic capability flag: native scene sampling is active for this surface.
+pub(crate) fn set_native_glass_hint(conn: &RustConnection, win: Window, enabled: bool) -> Result<(), Error> {
+    let atom = conn.intern_atom(false, b"_DECEBAL_GLASS_NATIVE").map_err(err)?.reply().map_err(err)?.atom;
+    conn.change_property32(PropMode::REPLACE, win, atom, AtomEnum::CARDINAL, &[u32::from(enabled)]).map_err(err)?;
+    Ok(())
+}
+
 /// Clicks go only to `rects` (all of the window when empty).
 /// Rectangles covering the pixels of `pm` that are not (nearly) transparent, merged vertically.
 /// Capped: a pathological image degrades to its bounding box.
@@ -281,6 +288,9 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut rects = app.input_rects();
     let clip = !has_compositor(&conn, screen_num);
     let mut glass_hint = None;
+    let mut native_hint = None;
+    let mut material_renderer = super::glass::Renderer::default();
+    let mut material_deadline = Instant::now();
     set_input_shape(&conn, win, &rects, (w, h))?;
 
     let gc = conn.generate_id().map_err(err)?;
@@ -294,12 +304,19 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     app.resized(w, h);
     let mut dirty = true;
+    let mut material_foreground: Option<Pixmap> = None;
     let mut last_visible: Vec<Rectangle> = Vec::new();
     let mut grabbed = false;
     let mut ptr_grabbed = false;
     let mut next_tick: Option<Instant> = Some(Instant::now());
 
     loop {
+        let native_material = crate::glass::Material::from_theme(&crate::theme::th());
+        let native_poll = native_material.enabled() && !app.glass_regions().is_empty();
+        let material_due = native_poll && Instant::now() >= material_deadline;
+        if material_due {
+            material_deadline = Instant::now() + std::time::Duration::from_millis(250);
+        }
         if app.quit_requested() {
             return Ok(());
         }
@@ -348,18 +365,39 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
             ptr_grabbed = false;
         }
 
-        if dirty {
+        if dirty || material_due {
+            if native_poll {
+                if material_foreground.as_ref().is_none_or(|fg| (fg.width(), fg.height()) != size) {
+                    material_foreground = Pixmap::new(size.0.max(1), size.1.max(1));
+                    dirty = true;
+                }
+                if let Some(fg) = material_foreground.as_mut() {
+                    if dirty {
+                        app.draw(fg);
+                    }
+                    pm.data_mut().copy_from_slice(fg.data());
+                }
+            } else {
+                app.draw(&mut pm);
+                material_foreground = None;
+            }
             dirty = false;
-            app.draw(&mut pm);
-            let glass = crate::theme::th().blur > 0.0;
-            if glass_hint != Some(glass) {
-                set_glass_hint(&conn, win, glass)?;
-                glass_hint = Some(glass);
+            let glass = crate::theme::th().blur > 0.0 || native_material.enabled();
+            let material_shape = glass.then(|| glass_rects(&pm));
+            let native = material_renderer.paint(&conn, &screen, win, pos, &mut pm, &app.glass_regions(), native_material);
+            let compositor_glass = glass && !native;
+            if glass_hint != Some(compositor_glass) {
+                set_glass_hint(&conn, win, compositor_glass)?;
+                glass_hint = Some(compositor_glass);
+            }
+            if native_hint != Some(native) {
+                set_native_glass_hint(&conn, win, native)?;
+                native_hint = Some(native);
             }
             if clip || glass || !last_visible.is_empty() {
                 // Glass must not blur the unused transparent popup canvas over other windows.
                 let vis = if glass {
-                    glass_rects(&pm)
+                    material_shape.unwrap_or_default()
                 } else if clip {
                     visible_rects(&pm)
                 } else {
@@ -432,6 +470,10 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         }
         let mut timeout = next_tick.map(|t| t.saturating_duration_since(Instant::now()));
         if let Some(wait) = idle_wait {
+            timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
+        }
+        if native_poll {
+            let wait = material_deadline.saturating_duration_since(Instant::now());
             timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
         }
         let ready = poll_readable(&[conn.stream().as_raw_fd(), wake.fd()], timeout).map_err(err)?;

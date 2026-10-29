@@ -1,6 +1,6 @@
-# Wallpapers: My backgrounds and Wallhaven
+# Wallpapers: backgrounds, Wallhaven and live videos
 
-System Settings > Wallpaper has two tabs, switched by **Pictures from**:
+System Settings > Wallpaper is a separate sidebar section with three tabs, switched by **Pictures from**:
 
 * **My backgrounds**: the pictures in `~/.config/omarchy/backgrounds/**` (or `$DECEBAL_CONFIG/backgrounds`), scaling,
   background colour and a path field. Picking one writes `[wallpaper] image` in rdwm's `config.toml`; rdwm applies it
@@ -98,3 +98,7 @@ so the tab stays around 30 MB resident in total. Workers start only when the tab
   Walks through browsing, selecting, setting, downloading, favourites, infinite scroll, search, filters, the API key
   (file mode, never in URLs or other files), random, offline, 429 and the CLI. `SHOTS=dir` saves screenshots.
 * `WALLHAVEN_API_BASE=http://127.0.0.1:PORT/api/v1` also makes image requests to that host acceptable, for testing only.
+
+## Live wallpapers
+
+The **Live wallpapers** tab adds muted local videos and a Wikimedia Commons video search with source/licence information. Playback pauses on each output covered by a visible fullscreen app, retaining a frozen frame. An extracted image remains the normal rdwm wallpaper as a fallback. See [Live wallpapers](live-wallpapers.md) for dependencies, power behaviour, CLI commands and validation.
