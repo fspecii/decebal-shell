@@ -413,9 +413,10 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
             conn.flush().map_err(err)?;
         }
 
-        // Drain everything already queued before sleeping.
+        // Bound input draining so a busy mouse cannot postpone animation timers indefinitely.
         let mut handled = false;
-        while let Some(ev) = conn.poll_for_event().map_err(err)? {
+        for _ in 0..256 {
+            let Some(ev) = conn.poll_for_event().map_err(err)? else { break };
             handled = true;
             match ev {
                 Event::Expose(_) => dirty = true,
@@ -459,11 +460,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 _ => {}
             }
         }
-        if handled || dirty {
-            continue;
-        }
-
-        let idle_wait = app.idle();
+        let idle_wait = if handled || dirty { None } else { app.idle() };
         if let Some(d) = app.tick_in() {
             let t = Instant::now() + d;
             next_tick = Some(next_tick.map_or(t, |n| n.min(t)));
@@ -475,6 +472,11 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
         if native_poll {
             let wait = material_deadline.saturating_duration_since(Instant::now());
             timeout = Some(timeout.map_or(wait, |t| t.min(wait)));
+        }
+        // Even when another redraw is ready, service pending wakes and due ticks.
+        // Skipping this poll froze dock easing during continuous pointer motion.
+        if handled || dirty {
+            timeout = Some(std::time::Duration::ZERO);
         }
         let ready = poll_readable(&[conn.stream().as_raw_fd(), wake.fd()], timeout).map_err(err)?;
         if ready[1] {
