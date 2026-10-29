@@ -45,3 +45,6 @@ The isolated config folder contains `decebal.json` with `{"theme":{"name":"nextk
 ### Integration review
 
 The integrated package in `decebal-theme-studio` passed `decthemectl theme validate themes/nextkde` with SHA-256 `af5e008f353b4a9ecd1648ab9ccb8415482b74565341752f2e6cfb9ff6463973`. Eighteen isolated file-definition renders passed: three widgets × NextKDE/Windows 11/Caelestia × dark/light. NextKDE dark system, Windows light clock and Caelestia dark weather renders were visually inspected; cards adapt their colors and radii without depending on the active desktop style. Outputs are private temporary QA artifacts, not installed theme content. The then-current `target/debug/decwidgets` predates registration, so these were file-based renderer checks; the parent integration build verifies compiled built-in registration and runs the full suite.
+
+
+Parent integration completed a fresh compiled registry build, the 30-check private desktop theme application run, and dark/light gallery captures (`docs/themes/nextkde*.png`). The package now also includes an actual desktop screenshot at `screenshots/main.png`; this changes the package content hash from the earlier bounded review. Settings was visually checked at normal and narrow sizes. The release and combined test results are recorded in the project handoff.

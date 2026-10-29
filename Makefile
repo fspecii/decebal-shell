@@ -104,3 +104,10 @@ test:
 	cargo test --all-features
 
 .PHONY: all install install-session uninstall test e2e-decsettings e2e-theme e2e-system e2e-fonts e2e-notify e2e-clip e2e-hot e2e-session e2e-dash e2e-vbar e2e-procmon e2e-awake e2e-layouts
+
+# Shared widgets and the new design gallery, each on an isolated desktop.
+e2e-widgets-settings:
+	tests/e2e/widgets-settings.sh
+
+e2e-theme-studio:
+	tests/e2e/theme-studio.sh
