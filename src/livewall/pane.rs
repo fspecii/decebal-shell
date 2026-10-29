@@ -5,7 +5,7 @@ use super::{
 };
 use crate::settings::{
     model::{CtlVal, Model},
-    ui::{Ctl, Item, Kind, Row},
+    ui::{Ctl, Item, Kind, Row, Thumb},
 };
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
@@ -15,6 +15,10 @@ use std::time::{Duration, Instant};
 pub struct State {
     pub path: String,
     pub commons: bool,
+    pub selected: Option<u64>,
+    pub preview_frames: u64,
+    player: Option<super::preview::Player>,
+    frame: Option<std::rc::Rc<tiny_skia::Pixmap>>,
     pub query: String,
     pub results: Vec<Media>,
     pub next: Option<u64>,
@@ -24,6 +28,7 @@ pub struct State {
 }
 enum Done {
     Search(Page, bool),
+    Preview(u64, PathBuf),
     Applied,
     Disabled,
 }
@@ -32,72 +37,79 @@ fn button(id: &str, label: &str, enabled: bool) -> Ctl {
     c.enabled = enabled;
     c
 }
+impl State {
+    pub fn motion_frame(&self) -> Option<std::rc::Rc<tiny_skia::Pixmap>> {
+        self.frame.clone()
+    }
+    pub fn preview_active(&self) -> bool {
+        self.player.is_some()
+    }
+    pub fn thumbnail_path(&self, id: &str) -> Option<&std::path::Path> {
+        let id = if id == "lw:motion" { self.selected? } else { id.strip_prefix("lw:pick:")?.parse::<u64>().ok()? };
+        self.results.iter().find(|m| m.id == id)?.preview.as_deref()
+    }
+    fn stop_preview(&mut self) {
+        self.player = None;
+        self.frame = None;
+        self.preview_frames = 0;
+    }
+}
 pub fn items(m: &Model) -> Vec<Item> {
     let lw = &m.lw;
     let c = Config::load();
-    let mut rows = vec![
-        Row::new("Video file").detail("MP4, WebM, MKV, MOV or OGV; videos are always muted").ctl(Ctl::new("lw:path", Kind::Text { val: lw.path.clone(), hint: "/path/to/video.webm".into() })),
-        Row::new("Local video").ctl(button("lw:set", "Use this video", !lw.busy && !lw.path.trim().is_empty())),
-        Row::new("Pause behind fullscreen apps").detail("Keep the current frame; resume when this monitor's fullscreen app leaves").ctl(Ctl::new("lw:pause", Kind::Toggle(c.pause_fullscreen))),
-        Row::new("Frame rate limit").detail("Lower rates save power; default 24 fps").ctl(Ctl::new("lw:fps", Kind::Stepper { v: c.fps as f64, min: 1., max: 60., step: 1., unit: "fps".into() })),
-        Row::new("Playback").detail(if c.enabled { c.video.display().to_string() } else { "Still wallpaper".into() }).ctl(button("lw:off", "Stop animation", c.enabled && !lw.busy)),
-    ];
-    if lw.busy {
-        rows.push(Row::new("Working…").detail("Downloading or preparing wallpaper; your current selection stays until it is ready"));
-    }
-    let mut out = vec![crate::settings::wallhaven::tab_card(&m.wh), Item::Header("Live wallpapers".into()), Item::Card(rows)];
-    if c.poster.is_file() {
-        out.push(Item::Preview { id: c.poster.to_string_lossy().into_owned(), caption: "Still frame fallback".into() });
-    }
-    let status = crate::settings::io::json_load(&super::host::status_path());
-    if let Some(errors) = status["errors"].as_array() {
-        for e in errors {
-            if let Some(e) = e.as_str() {
-                out.push(Item::Note { text: e.into(), warn: true });
-            }
-        }
-    }
-    out.push(Item::Note {
-        text: "Requires ffmpeg and mpv on X11; Wayland uses mpvpaper. Playback pauses on covered outputs. Selecting a picture or a theme wallpaper stops the video.".into(),
-        warn: false,
-    });
-    out.push(Item::Header(if lw.commons { "Wikimedia Commons videos" } else { "DesktopHut live wallpapers" }.into()));
-    out.push(Item::Card(vec![
-        Row::new("Source").ctl(Ctl::new("lw:provider", Kind::Seg(vec![("DesktopHut".into(), "desktophut".into()), ("Commons".into(), "commons".into())], Some(usize::from(lw.commons))))),
-        Row::new("Search").detail("Try clouds, waterfall, ocean or abstract animation").ctl(Ctl::new("lw:query", Kind::Text { val: lw.query.clone(), hint: "landscape nature".into() })),
-        Row::new("Find videos")
-            .detail(if lw.commons { "Openly licensed videos; no API key required" } else { "Curated animated wallpapers; leave search empty to browse recent uploads" })
-            .ctl(button("lw:search", if lw.commons { "Search Commons" } else { "Search DesktopHut" }, !lw.busy)),
-    ]));
-    out.push(Item::Note {
-        text: if lw.commons {
-            "Commons is a general media library. Check each source page for content and attribution."
+    let mut source = Ctl::new("lw:provider", Kind::Seg(vec![("DesktopHut".into(), "desktophut".into()), ("Commons".into(), "commons".into())], Some(usize::from(lw.commons))));
+    source.enabled = !lw.busy;
+    let search_card = Item::Card(vec![
+        Row::new("").ctl(source),
+        Row::new("Search").ctl(Ctl::new("lw:query", Kind::Text { val: lw.query.clone(), hint: "Search wallpapers, or leave empty for recent uploads".into() })),
+        Row::new("").ctl(button("lw:search", if lw.commons { "Search Commons" } else { "Browse DesktopHut" }, !lw.busy)),
+    ]);
+    let mut out = vec![crate::settings::wallhaven::tab_card(&m.wh), Item::Header("Live wallpapers".into())];
+    if let Some(media) = lw.results.iter().find(|v| Some(v.id) == lw.selected) {
+        let playing = lw.player.is_some();
+        out.push(Item::Card(vec![Row::new(&media.title).detail(if playing {
+            "Live preview · muted · your desktop is unchanged"
+        } else if lw.busy {
+            "Loading video preview…"
         } else {
-            "DesktopHut downloads use the original MP4. Check source terms; wallpapers are not assumed to be openly licensed."
-        }
-        .to_string()
-            + " Downloads keep source details beside the video.",
-        warn: false,
-    });
-    for media in &lw.results {
-        if let Some(p) = &media.preview {
-            out.push(Item::Preview { id: p.to_string_lossy().into_owned(), caption: media.title.clone() });
-        }
-        out.push(Item::Card(vec![
-            Row::new(&media.title).detail(if media.bytes == 0 {
-                "MP4 · resolution and size on source page · ".to_string() + &media.license
-            } else {
-                format!("{} × {} · {:.1} MB · {}", media.width, media.height, media.bytes as f64 / 1048576., media.license)
-            }),
-            Row::new("Creator").detail(&media.artist).ctl(button(&format!("lw:source:{}", media.id), "Source and licence", true)),
-            Row::new("Live wallpaper").ctl(button(&format!("lw:use:{}", media.id), "Download and use", !lw.busy)),
-        ]));
+            "No video preview available; open Source for details"
+        })]));
+        out.push(Item::Preview { id: "lw:motion".into(), caption: if playing { "Playing preview".into() } else { "Preview".into() } });
+        out.push(Item::Card(vec![Row::new("").ctl(button(&format!("lw:use:{}", media.id), "Use wallpaper", !lw.busy)).ctl(button(&format!("lw:source:{}", media.id), "Source", true)).ctl(button(
+            "lw:close-preview",
+            "Close",
+            true,
+        ))]));
+    }
+    out.push(search_card);
+    out.push(Item::Header(format!("Wallpapers ({})", lw.results.len())));
+    if lw.results.is_empty() {
+        out.push(Item::Note { text: if lw.busy { "Finding wallpapers…" } else { "Browse recent uploads or search for a style. Select a thumbnail to watch a preview." }.into(), warn: false });
+    } else {
+        out.push(Item::Thumbs(lw.results.iter().map(|media| Thumb { id: format!("lw:pick:{}", media.id), caption: media.title.clone(), selected: lw.selected == Some(media.id) }).collect()));
     }
     if lw.next.is_some() {
-        out.push(Item::Card(vec![Row::new("More results").ctl(button("lw:more", "Load more", !lw.busy))]));
+        out.push(Item::Card(vec![Row::new("More wallpapers").ctl(button("lw:more", "Load more", !lw.busy))]));
     }
+    out.push(Item::Header("Playback & local videos".into()));
+    out.push(Item::Card(vec![
+        Row::new("Video file").ctl(Ctl::new("lw:path", Kind::Text { val: lw.path.clone(), hint: "/path/to/video.mp4".into() })).ctl(button(
+            "lw:set",
+            "Use video",
+            !lw.busy && !lw.path.trim().is_empty(),
+        )),
+        Row::new("Pause behind fullscreen apps").detail("Keep a frame; resume when the app leaves fullscreen").ctl(Ctl::new("lw:pause", Kind::Toggle(c.pause_fullscreen))),
+        Row::new("Frame rate limit").ctl(Ctl::new("lw:fps", Kind::Stepper { v: c.fps as f64, min: 1., max: 60., step: 1., unit: "fps".into() })),
+        Row::new("Desktop playback").detail(if c.enabled { "Animated wallpaper" } else { "Still wallpaper" }).ctl(button("lw:off", "Stop animation", c.enabled && !lw.busy)),
+    ]));
+    let status = crate::settings::io::json_load(&super::host::status_path());
+    for e in status["errors"].as_array().into_iter().flatten().filter_map(|e| e.as_str()) {
+        out.push(Item::Note { text: e.into(), warn: true });
+    }
+    out.push(Item::Note { text: "Previews are muted and stop when you leave this tab. Use wallpaper downloads the original video. Check the source page for terms and credits.".into(), warn: false });
     out
 }
+
 fn work(m: &mut Model, f: impl FnOnce() -> Result<Done, String> + Send + 'static) {
     if m.lw.busy {
         return;
@@ -115,10 +127,27 @@ fn work(m: &mut Model, f: impl FnOnce() -> Result<Done, String> + Send + 'static
 pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
     match (id, v) {
         ("lw:provider", CtlVal::Str(s)) if !m.lw.busy && matches!(s.as_str(), "commons" | "desktophut") => {
+            m.lw.stop_preview();
+            m.lw.selected = None;
             m.lw.commons = s == "commons";
             m.lw.results.clear();
             m.lw.next = None;
             m.lw.last_search = None;
+        }
+        ("lw:close-preview", CtlVal::Click) => {
+            m.lw.stop_preview();
+            m.lw.selected = None;
+        }
+        (id, CtlVal::Click) if (id.starts_with("lw:pick:") || id.starts_with("lw:preview:")) && !m.lw.busy => {
+            let id = id.rsplit(':').next().and_then(|s| s.parse::<u64>().ok());
+            if let Some(media) = m.lw.results.iter().find(|a| Some(a.id) == id).cloned() {
+                m.lw.stop_preview();
+                m.lw.selected = Some(media.id);
+                m.sel.reset_scroll = true;
+                if !media.motion.is_empty() {
+                    work(m, move || super::desktophut::preview(&media).map(|p| Done::Preview(media.id, p)));
+                }
+            }
         }
         ("lw:path", CtlVal::Str(s)) => m.lw.path = s,
         ("lw:query", CtlVal::Str(s)) => m.lw.query = s,
@@ -157,6 +186,8 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             let query = m.lw.query.clone();
             let commons = m.lw.commons;
             if !m.lw.busy {
+                m.lw.stop_preview();
+                m.lw.selected = None;
                 m.lw.last_search = Some(Instant::now());
                 work(m, move || (if commons { catalog::search(&query, offset) } else { super::desktophut::search(&query, offset) }).map(|p| Done::Search(p, append)));
             }
@@ -164,6 +195,7 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
         (id, CtlVal::Click) if id.starts_with("lw:use:") => {
             let id = id.trim_start_matches("lw:use:").parse::<u64>().ok();
             if let Some(media) = m.lw.results.iter().find(|a| Some(a.id) == id).cloned() {
+                m.lw.stop_preview();
                 let paths = m.paths.clone();
                 work(m, move || {
                     let p = if media.page.starts_with("https://www.desktophut.com/") { super::desktophut::download(&media)? } else { catalog::download(&media)? };
@@ -183,12 +215,32 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
     m.dirty = true;
 }
 pub fn pump(m: &mut Model) -> bool {
+    let active = m.wallpaper_open() && m.wh.tab == crate::settings::wallhaven::Tab::Live;
+    let mut redraw = false;
+    if !active && m.lw.selected.is_some() {
+        m.lw.stop_preview();
+        m.lw.selected = None;
+        redraw = true;
+    }
+    if let Some(player) = &mut m.lw.player {
+        if let Some(bytes) = player.latest() {
+            m.lw.frame = tiny_skia::Pixmap::from_vec(bytes, tiny_skia::IntSize::from_wh(super::preview::WIDTH, super::preview::HEIGHT).unwrap()).map(std::rc::Rc::new);
+            m.lw.preview_frames += 1;
+            redraw = true;
+            m.dirty = true;
+        }
+        if player.ended() {
+            m.lw.player = None;
+            m.say("Could not play this preview. You can still open its source page.", true);
+            redraw = true;
+        }
+    }
     let result = m.lw.rx.as_ref().and_then(|rx| match rx.try_recv() {
         Ok(r) => Some(r),
         Err(mpsc::TryRecvError::Disconnected) => Some(Err("Wallpaper worker stopped".into())),
         Err(_) => None,
     });
-    let Some(result) = result else { return false };
+    let Some(result) = result else { return redraw };
     m.lw.busy = false;
     m.lw.rx = None;
     match result {
@@ -204,6 +256,14 @@ pub fn pump(m: &mut Model) -> bool {
             m.lw.next = p.next;
             if m.lw.results.is_empty() {
                 m.say("No supported videos found. Try another search.", false);
+            }
+        }
+        Ok(Done::Preview(id, path)) => {
+            if active && m.lw.selected == Some(id) {
+                match super::preview::Player::start(&path, m.wake.clone()) {
+                    Ok(player) => m.lw.player = Some(player),
+                    Err(e) => m.say(e, true),
+                }
             }
         }
         Ok(Done::Applied) => {

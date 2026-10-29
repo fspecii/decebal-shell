@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory(prefix='decebal-live-test-') as tmp:
         check(any(c['id']=='lw:pause' for c in layout()['ctls']),'Settings exposes fullscreen power control')
         check(any(c['id']=='th:dynamic' for c in layout()['ctls']),'Wallpaper has a direct colour-matching box')
         def click_control(cid, part=None):
-            for _ in range(35):
+            for _ in range(120):
                 candidate=next((c for c in layout()['ctls'] if c['id']==cid),None)
                 if candidate:
                     r=candidate['rect'] if part is None else candidate['parts'][part]
@@ -133,13 +133,40 @@ with tempfile.TemporaryDirectory(prefix='decebal-live-test-') as tmp:
         wait(lambda:any(c['id']=='lw:search' and c['value']=='Search Commons' for c in layout()['ctls']))
         check(True,'Live wallpaper source can switch to Commons')
         click_control('lw:provider', 0)
-        wait(lambda:any(c['id']=='lw:search' and c['value']=='Search DesktopHut' for c in layout()['ctls']))
+        wait(lambda:any(c['id']=='lw:search' and c['value']=='Browse DesktopHut' for c in layout()['ctls']))
         check(True,'DesktopHut is available as the curated live wallpaper source')
         if os.environ.get('DESKTOPHUT_NETWORK_SMOKE') == '1':
             click_control('lw:search')
-            wait(lambda:any(c['id'].startswith('lw:use:') for c in layout()['ctls']), timeout=120)
-            check(True,'DesktopHut search populates actual Settings download cards')
-            check(bool(list((d/'cache/decebal/live-wallpapers').glob('desktophut-*'))),'DesktopHut result thumbnails are cached')
+            wait(lambda:any(c['id'].startswith('lw:pick:') for c in layout()['thumbs']), timeout=120)
+            check(True,'DesktopHut search populates a compact thumbnail grid')
+            check(bool(list((d/'cache/decebal/live-wallpapers').glob('desktophut-*.webp'))),'DesktopHut result thumbnails are cached')
+            initial_cfg=cfg.read_bytes()
+            first_id=next(c['id'] for c in layout()['thumbs'] if c['id'].startswith('lw:pick:'))
+            for _ in range(120):
+                tile=next(c for c in layout()['thumbs'] if c['id']==first_id); r=tile['rect']
+                if 80 < r[1] and r[1]+r[3] < 570: break
+                run('xdotool','mousemove','--window',wid,490,520);run('xdotool','click','4' if r[1]<=80 else '5');time.sleep(.1)
+            run('import','-window',wid,'/tmp/decebal-live-gallery.png')
+            run('xdotool','mousemove','--window',wid,int(r[0]+r[2]/2),int(r[1]+r[3]/2));run('xdotool','click','1')
+            wait(lambda:layout().get('live_preview_frames',0)>=4,timeout=90)
+            check(True,'selecting a thumbnail plays an embedded live video preview')
+            check(cfg.read_bytes()==initial_cfg,'video preview leaves desktop wallpaper unchanged')
+            run('import','-window',wid,'/tmp/decebal-live-preview.png')
+            click_control('lw:close-preview')
+            wait(lambda:not layout().get('live_preview_active',False))
+            check(True,'closing preview stops the decoder')
+            for _ in range(120):
+                tile=next(c for c in layout()['thumbs'] if c['id']==first_id); r=tile['rect']
+                if 80 < r[1] and r[1]+r[3] < 570: break
+                run('xdotool','mousemove','--window',wid,490,520);run('xdotool','click','4' if r[1]<=80 else '5');time.sleep(.1)
+            run('xdotool','mousemove','--window',wid,int(r[0]+r[2]/2),int(r[1]+r[3]/2));run('xdotool','click','1')
+            wait(lambda:layout().get('live_preview_frames',0)>=2,timeout=90)
+            click_control('wh:tab', 0)
+            wait(lambda:not layout().get('live_preview_active',False))
+            check(True,'leaving Live wallpapers stops the video preview')
+            click_control('wh:tab', 2)
+            wait(lambda:any(c['id']=='lw:provider' for c in layout()['ctls']))
+
         shellpath=d/'config/omarchy/decebal.json'
         click_control('th:dynamic')
         wait(lambda:json.loads(shellpath.read_text())['theme']['dynamic']['enabled'] is True)

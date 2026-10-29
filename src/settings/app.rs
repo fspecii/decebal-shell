@@ -260,6 +260,12 @@ impl SettingsApp {
     // ------------------------------------------------------------ thumbnails
 
     fn request_thumb(&mut self, id: &str) {
+        if id.starts_with("lw:pick:") || id == "lw:motion" {
+            if let Some(path) = self.m.lw.thumbnail_path(id).map(|p| p.to_string_lossy().into_owned()) {
+                self.request_thumb(&path);
+            }
+            return;
+        }
         if id.is_empty() || self.thumb_req.contains(id) || self.thumbs.borrow().contains(&id.to_string()) {
             return;
         }
@@ -471,7 +477,15 @@ impl SettingsApp {
         self.scroll = self.scroll.clamp(0.0, max_scroll);
         let thumbs = &self.thumbs;
         let wh = &self.m.wh;
+        let lw = &self.m.lw;
         let lookup = |id: &str| -> Option<Rc<Pixmap>> {
+            if id == "lw:motion" {
+                if let Some(frame) = lw.motion_frame() {
+                    return Some(frame);
+                }
+            }
+            let local = lw.thumbnail_path(id).map(|p| p.to_string_lossy().into_owned());
+            let id = local.as_deref().unwrap_or(id);
             if id.starts_with("wh:") {
                 return wh.thumb(id);
             }
@@ -550,7 +564,7 @@ impl SettingsApp {
             "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 100.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
-            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
         });
         let tmp = path.with_extension("tmp");
         if std::fs::write(&tmp, doc.to_string()).is_ok() {

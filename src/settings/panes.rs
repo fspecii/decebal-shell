@@ -1056,6 +1056,9 @@ pub fn set_wallpaper(m: &mut Model, path: &str) {
 }
 
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
+    if let Some(id) = id.strip_prefix("w:").filter(|id| id.starts_with("lw:")) {
+        return crate::livewall::pane::apply(m, id, v);
+    }
     let parts: Vec<&str> = id.split(':').collect();
     if id.starts_with("wc:") {
         return super::widgetchoice::apply(m, id, v);

@@ -261,7 +261,11 @@ pub(super) fn wallpaper_tab(m: &Model) -> Vec<Item> {
     let colors = super::wallpapercolors::items(&c.sel, &c.now);
     let mut colors = colors;
     colors.push(super::wallpapercolors::save_items(m));
-    out.splice(1.min(out.len())..1.min(out.len()), colors);
+    if m.wh.tab == super::wallhaven::Tab::Live {
+        out.extend(colors);
+    } else {
+        out.splice(1.min(out.len())..1.min(out.len()), colors);
+    }
     out
 }
 

@@ -8,10 +8,13 @@ use std::time::Duration;
 const ROOT: &str = "https://www.desktophut.com";
 const LIMIT: u64 = 512 * 1024 * 1024;
 fn agent() -> ureq::Agent {
+    agent_for(Duration::from_secs(45))
+}
+fn agent_for(timeout: Duration) -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(8))
         .timeout_read(Duration::from_secs(20))
-        .timeout(Duration::from_secs(45))
+        .timeout(timeout)
         .redirects(0)
         .user_agent(concat!("Decebal/", env!("CARGO_PKG_VERSION"), " live wallpaper picker"))
         .build()
@@ -22,6 +25,9 @@ fn safe_path(url: &str) -> Option<&str> {
 }
 pub fn trusted_media(url: &str) -> bool {
     safe_path(url).is_some_and(|p| p.starts_with("/files/") && p.ends_with(".mp4"))
+}
+fn trusted_preview(url: &str) -> bool {
+    safe_path(url).is_some_and(|p| p.starts_with("/previews/") && p.ends_with(".mp4"))
 }
 fn trusted_image(url: &str) -> bool {
     safe_path(url).is_some_and(|p| p.starts_with("/images/") && [".jpg", ".jpeg", ".png", ".webp"].iter().any(|ext| p.ends_with(ext)))
@@ -120,6 +126,7 @@ pub fn parse_gallery(html: &str, page: u64) -> Page {
             license: "See source terms".into(),
             artist: "DesktopHut contributor".into(),
             preview: None,
+            motion: elements(body, "video").first().and_then(|(t, _)| attr(t, "data-src")).filter(|u| trusted_preview(u)).unwrap_or("").into(),
         });
         if media.len() == 48 {
             break;
@@ -174,7 +181,11 @@ pub fn search(query: &str, offset: u64) -> Result<Page, String> {
         return Err("DesktopHut returned no wallpapers. Try another search; the site may also be temporarily unavailable.".into());
     }
     std::fs::create_dir_all(super::cache()).map_err(|e| e.to_string())?;
-    for m in result.media.iter_mut().take(12) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    for m in result.media.iter_mut() {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
         if m.thumb.is_empty() {
             continue;
         }
@@ -187,10 +198,10 @@ pub fn search(query: &str, offset: u64) -> Result<Page, String> {
     Ok(result)
 }
 fn fetch(url: &str, dest: &Path, limit: u64, mp4: bool) -> Result<(), String> {
-    if !(if mp4 { trusted_media(url) } else { trusted_image(url) }) {
+    if !(if mp4 { trusted_media(url) || trusted_preview(url) } else { trusted_image(url) }) {
         return Err("Unsupported DesktopHut media URL".into());
     }
-    let response = agent().get(url).call().map_err(|e| format!("DesktopHut: {e}"))?;
+    let response = agent_for(Duration::from_secs(if mp4 { 45 } else { 5 })).get(url).call().map_err(|e| format!("DesktopHut: {e}"))?;
     if response.header("Content-Length").and_then(|s| s.parse::<u64>().ok()).is_some_and(|n| n > limit) {
         return Err("DesktopHut file exceeds download limit".into());
     }
@@ -210,6 +221,17 @@ fn fetch(url: &str, dest: &Path, limit: u64, mp4: bool) -> Result<(), String> {
     }
     result
 }
+pub fn preview(m: &Media) -> Result<PathBuf, String> {
+    if !trusted_preview(&m.motion) {
+        return Err("This wallpaper has no supported video preview".into());
+    }
+    std::fs::create_dir_all(super::cache()).map_err(|e| e.to_string())?;
+    let path = super::cache().join(format!("desktophut-preview-{}.mp4", m.id));
+    if !path.is_file() {
+        fetch(&m.motion, &path, 16 * 1024 * 1024, true)?;
+    }
+    Ok(path)
+}
 pub fn download_page(page: &str) -> Result<PathBuf, String> {
     let m = Media {
         id: id(page),
@@ -223,6 +245,7 @@ pub fn download_page(page: &str) -> Result<PathBuf, String> {
         license: "See source terms".into(),
         artist: "DesktopHut contributor".into(),
         preview: None,
+        motion: String::new(),
     };
     download(&m)
 }
@@ -241,7 +264,7 @@ pub fn download(m: &Media) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const GALLERY: &str = r#"<link rel='next' href='/?page=2'><a href='/clouds' class='wallpaper-card' aria-label='Clouds &amp; sky'><img src='https://www.desktophut.com/images/clouds.webp'></a><a class='wallpaper-card' href='https://evil.com/clouds'></a><a class='wallpaper-card' href='/clouds'></a>"#;
+    const GALLERY: &str = r#"<link rel='next' href='/?page=2'><a href='/clouds' class='wallpaper-card' aria-label='Clouds &amp; sky'><img src='https://www.desktophut.com/images/clouds.webp'><video data-src='https://www.desktophut.com/previews/clouds.mp4'></video></a><a class='wallpaper-card' href='https://evil.com/clouds'></a><a class='wallpaper-card' href='/clouds'></a>"#;
     #[test]
     fn gallery_has_safe_deduplicated_results_and_next_page() {
         let p = parse_gallery(GALLERY, 1);
@@ -252,6 +275,8 @@ mod tests {
         let large_page = (0..26).map(|n| format!("<a class=\"wallpaper-card\" href=\"/wallpaper-{n}\"></a>")).collect::<String>();
         assert_eq!(parse_gallery(&large_page, 1).media.len(), 26, "preview limit must not discard the rest of a page");
         assert!(!p.media[0].thumb.is_empty());
+        assert_eq!(p.media[0].motion, "https://www.desktophut.com/previews/clouds.mp4");
+        assert!(!trusted_preview("https://evil.com/previews/clouds.mp4"));
         assert_eq!(parse_gallery("<a href='/x'>not a wallpaper</a>", 1).media.len(), 0);
     }
     #[test]

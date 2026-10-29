@@ -776,8 +776,8 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 y += h + u(18.0);
             }
             Item::Preview { id, caption } => {
-                let ph = cw * 0.38;
-                let pw = ph * 16.0 / 10.0;
+                let ph = if id == "lw:motion" { cw * 9.0 / 16.0 } else { cw * 0.38 };
+                let pw = if id == "lw:motion" { cw } else { ph * 16.0 / 10.0 };
                 let px0 = x0 + (cw - pw) / 2.0;
                 fill_rounded(pm, px0 - u(2.0), y - u(2.0), pw + u(4.0), ph + u(4.0), u(10.0), crate::theme::th().ink(0.10));
                 match thumb(id) {

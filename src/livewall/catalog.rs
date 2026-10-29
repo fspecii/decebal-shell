@@ -20,6 +20,8 @@ pub struct Media {
     pub license: String,
     pub artist: String,
     pub preview: Option<PathBuf>,
+    #[serde(default)]
+    pub motion: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
@@ -118,6 +120,7 @@ pub fn parse(v: &Value) -> Page {
                 license,
                 artist: plain(meta["Artist"]["value"].as_str().unwrap_or("See source page")),
                 preview: None,
+                motion: String::new(),
             })
         })
         .collect();

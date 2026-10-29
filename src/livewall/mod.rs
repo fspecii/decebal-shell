@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod desktophut;
 pub mod host;
 pub mod pane;
+pub mod preview;
 
 use crate::settings::{
     io::{self, Paths},
