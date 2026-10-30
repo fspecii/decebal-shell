@@ -238,6 +238,22 @@ impl Source {
         }
     }
 
+    /// The theme with what `decebal.json` says about the bar, the panels and the Control Center filled in.
+    fn with_shell(&self, t: Theme) -> Theme {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let written = doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse);
+        let workspaces = doc.get("workspaces").and_then(|w| serde_json::from_value(w.clone()).ok()).unwrap_or(crate::config::Toggle::Word(crate::config::Word::Auto));
+        Theme {
+            bar_layout: crate::config::BarLayout::from_json(&doc["bar"]),
+            bar_position: written.unwrap_or_default(),
+            bar_position_written: written,
+            panel_user: crate::panel::UserPanel::from_bar_json(&doc["bar"]),
+            panel_workspaces: workspaces,
+            control_center: doc.get("control_center").map(crate::controlcenter::settings::Settings::from_json).unwrap_or_default(),
+            ..t
+        }
+    }
+
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
     pub fn build(&self, sel: &Selection, system_dark: bool) -> (Theme, Option<String>) {
         let (id, implied) = self.find(&sel.name).unwrap_or_else(|| (sel.name.clone(), None));
@@ -246,13 +262,10 @@ impl Source {
             sel.mode = m;
         }
         match self.theme_for(&id, &sel, system_dark) {
-            Ok(t) => (Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..t }, None),
+            Ok(t) => (self.with_shell(t), None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                (
-                    Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) },
-                    Some(e),
-                )
+                (self.with_shell(resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark)), Some(e))
             }
         }
     }

@@ -418,8 +418,8 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             Some(p @ ("top" | "bottom")) => {
                 o.insert("windowsPosition".into(), json!(p));
             }
-            Some(p) => notes.push(format!("dock.position = {p}: only top and bottom are supported by the dock today, left out")),
-            None => {}
+            // left / right have no old key: the theme's `[dock] position` is read where the dock is placed (crate::panel)
+            Some(_) | None => {}
         }
         if let Some(m) = dock.get("magnification") {
             o.insert("magnification".into(), m.clone());
