@@ -20,17 +20,17 @@ are not permission to run upstream installers or replace accepted Settings.
 
 ## Included typography/icon assets
 
-Google Sans Flex: SIL OFL1.1, fullfonts/OFL.txt. Static500/700 copied unchanged from
+Google Sans Flex: SIL OFL1.1, fullOFL.txt. Static500/700 copied unchanged from
 pinned common. Regular400 is an explicitly documented STATIC instance of upstream
 variable regular at all source default axes. Embedded source copyright/name metadata
 preserved; not a substitute typeface. The unsupported variable regular is not bundled.
 
 Material Symbols Rounded variable font: exact upstream bytes, Apache2.0, full
-fonts/MaterialSymbolsRounded-LICENSE.txt. Native owner registers package fonts only
+MaterialSymbolsRounded-LICENSE.txt. Native owner registers package fonts only
 inside the process and renders actual PUA glyphs; no global font install/fc-cache.
 Source icon axes: FILL0,GRAD-25dark/0light,opsz24,wght400unfilled/500filled.
 Detailed source paths, build tool/version, source/output hashes and licenses are in
-[fonts/BUILD.md](fonts/BUILD.md). SoftwareMIT does not relicense the fonts.
+[FONT-BUILD.md](FONT-BUILD.md). SoftwareMIT does not relicense the fonts.
 
 ## Artwork and reference images
 
