@@ -31,6 +31,14 @@ Files: ~/.cache/decebal/apps.tsv (app index, refreshed in the background),
        ~/.local/state/decebal/spotlight-history (usage counts for ranking).";
 
 fn main() {
+    // Install the dedicated close handler before publishing the singleton lock
+    // or starting workers. Argument/helper modes retain ordinary signal handling.
+    let _guard = if std::env::args_os().len() == 1 {
+        let Some(guard) = decebal::single::acquire_clean_toggle("decspot") else { return };
+        Some(guard)
+    } else {
+        None
+    };
     decebal::compat::init();
     decebal::mem::limit_arenas();
     if let Some(a) = std::env::args().nth(1) {
@@ -53,9 +61,6 @@ fn main() {
         }
         return;
     }
-    let Some(_guard) = decebal::single::acquire("decspot") else {
-        return;
-    };
     if let Err(e) = run_window(Spotlight::new()) {
         decebal::log_error!("fatal: {e}");
         eprintln!("decspot: {e}");

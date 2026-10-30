@@ -35,6 +35,40 @@ pub fn acquire(name: &str) -> Option<File> {
     acquire_signalling(name, libc::SIGTERM)
 }
 
+/// Single-instance toggle for ephemeral launchers. Call before publishing the lock.
+/// A second invocation sends SIGUSR1, which the holder treats as a successful
+/// close. SIGTERM and crashes keep their ordinary status, so launch monitoring
+/// still reports genuine failures. The launcher stores no unsaved editor state.
+/// Unlike a blocked/sigwait signal, this disposition is reset on exec: launched
+/// applications inherit neither a blocked signal nor our close handler.
+/// This does not replace [`acquire`] for applications with a different lifecycle.
+pub fn acquire_clean_toggle(name: &str) -> Option<File> {
+    extern "C" fn close_launcher(_: libc::c_int) {
+        // SAFETY: _exit is async-signal-safe. These ephemeral launchers have no
+        // editor draft to flush; the OS releases their windows, grabs and locks.
+        unsafe { libc::_exit(0) };
+    }
+    // SAFETY: install the process's dedicated toggle disposition before any
+    // other launcher threads or its discoverable singleton lock exist.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = close_launcher as *const () as usize;
+        libc::sigemptyset(&mut action.sa_mask);
+        if libc::sigaction(libc::SIGUSR1, &action, std::ptr::null_mut()) != 0 {
+            return None;
+        }
+        // A parent may reserve this signal too. Unblock only our dedicated
+        // toggle after its handler exists, still before publishing the lock.
+        let mut toggle: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut toggle);
+        libc::sigaddset(&mut toggle, libc::SIGUSR1);
+        if libc::pthread_sigmask(libc::SIG_UNBLOCK, &toggle, std::ptr::null_mut()) != 0 {
+            return None;
+        }
+    }
+    acquire_signalling(name, libc::SIGUSR1)
+}
+
 /// `Some(guard)` when no other instance holds the lock `name`; otherwise `None` and the running instance is left alone.
 /// For daemons a supervisor restarts (decbar and its bottom half): a second copy simply exits instead of replacing the first.
 pub fn hold(name: &str) -> Option<File> {

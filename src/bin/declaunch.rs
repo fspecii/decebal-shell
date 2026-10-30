@@ -11,6 +11,14 @@ Type to filter, arrow keys to move, Enter or click to launch, Esc to close.
 It opens as a normal window; give it a floating, centred window rule (see contrib/).";
 
 fn main() {
+    // Install the dedicated close handler before publishing the singleton lock
+    // or starting workers. Argument/helper modes retain ordinary signal handling.
+    let _guard = if std::env::args_os().len() == 1 {
+        let Some(guard) = decebal::single::acquire_clean_toggle("declaunch") else { return };
+        Some(guard)
+    } else {
+        None
+    };
     decebal::compat::init();
     decebal::mem::limit_arenas();
     if let Some(a) = std::env::args().nth(1) {
@@ -24,9 +32,6 @@ fn main() {
         }
         return;
     }
-    let Some(_guard) = decebal::single::acquire("declaunch") else {
-        return;
-    };
     if let Err(e) = run_window(Launcher::new()) {
         decebal::log_error!("fatal: {e}");
         eprintln!("declaunch: {e}");
