@@ -261,59 +261,155 @@ impl HistoryItem {
     }
 }
 
+#[path = "history_store.rs"]
+mod history_store;
 #[derive(Default)]
 pub struct History {
-    /// Newest first.
+    /// Newest first, including unsaved changes when persistence fails.
     pub items: Vec<HistoryItem>,
     path: Option<PathBuf>,
+    base: Vec<HistoryItem>,
+    upserts: Vec<HistoryItem>,
+    removed: std::collections::BTreeMap<u32, HistoryItem>,
+    clearing: bool,
+    error: Option<String>,
 }
-
 impl History {
-    pub fn load() -> History {
-        let path = state_dir().join("notification-history.json");
-        let items = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Vec<HistoryItem>>(&t).ok()).unwrap_or_default();
-        History { items: items.into_iter().take(MAX_HISTORY).collect(), path: Some(path) }
+    pub fn load() -> Self {
+        Self::at_path(state_dir().join("notification-history.json"))
     }
-
-    pub fn in_memory() -> History {
-        History::default()
+    fn at_path(path: PathBuf) -> Self {
+        let result = history_store::Store::open(&path).and_then(|s| s.read());
+        match result {
+            Ok(items) => Self { base: items.clone(), items, path: Some(path), ..Self::default() },
+            Err(error) => Self { path: Some(path), error: Some(error), ..Self::default() },
+        }
     }
-
-    /// Adds (or, for a replaced id, updates) an entry at the top.
+    pub fn in_memory() -> Self {
+        Self::default()
+    }
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+    pub fn pending(&self) -> bool {
+        self.clearing || !self.upserts.is_empty() || !self.removed.is_empty()
+    }
+    pub fn clear_pending(&self) -> bool {
+        self.clearing
+    }
+    /// Incoming delivery remains available even when durable history is unavailable.
     pub fn push(&mut self, item: HistoryItem) {
+        let item = bounded_item(item);
         self.items.retain(|i| i.id != item.id);
-        self.items.insert(0, item);
+        self.items.insert(0, item.clone());
         self.items.truncate(MAX_HISTORY);
-        self.save();
+        self.removed.remove(&item.id);
+        self.upserts.retain(|i| i.id != item.id);
+        self.upserts.insert(0, item);
+        self.upserts.truncate(MAX_HISTORY);
+        let _ = self.retry();
     }
-
     pub fn remove(&mut self, id: u32) -> bool {
         let before = self.items.len();
         self.items.retain(|i| i.id != id);
-        let changed = self.items.len() != before;
-        if changed {
-            self.save();
+        if before == self.items.len() {
+            return false;
         }
-        changed
+        self.upserts.retain(|i| i.id != id);
+        if let Some(base) = self.base.iter().find(|i| i.id == id) {
+            self.removed.insert(id, base.clone());
+        }
+        let _ = self.retry();
+        true
     }
-
-    pub fn clear(&mut self) {
+    /// An unsuccessful clear keeps its explicit intent pending for Retry, but never
+    /// replaces a corrupt/unsafe file. The UI must report that the clear is unsaved.
+    pub fn clear(&mut self) -> Result<(), String> {
         self.items.clear();
-        self.save();
+        self.upserts.clear();
+        self.removed.clear();
+        self.clearing = true;
+        self.retry()
     }
-
-    fn save(&self) {
-        let Some(path) = &self.path else { return };
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+    pub fn retry(&mut self) -> Result<(), String> {
+        let result = self.persist();
+        self.error = result.as_ref().err().cloned();
+        result
+    }
+    fn persist(&mut self) -> Result<(), String> {
+        let Some(path) = self.path.clone() else {
+            self.base = self.items.clone();
+            self.upserts.clear();
+            self.removed.clear();
+            self.clearing = false;
+            return Ok(());
+        };
+        let store = history_store::Store::open(&path)?;
+        let mut disk = store.read()?;
+        if self.clearing {
+            disk.clear();
+        } else {
+            disk.retain(|i| self.removed.get(&i.id) != Some(i));
         }
-        if let Ok(text) = serde_json::to_string(&self.items) {
-            let tmp = path.with_extension("json.tmp");
-            if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(&tmp, path);
+        let mut used: std::collections::BTreeSet<_> = disk.iter().chain(self.items.iter()).chain(self.upserts.iter()).map(|i| i.id).collect();
+        for item in self.upserts.iter().rev() {
+            if let Some(old) = disk.iter_mut().find(|i| i.id == item.id) {
+                if self.base.iter().find(|i| i.id == item.id) != Some(old) && old != item {
+                    // Recovery can reveal an older disk entry using an active RAM ID.
+                    // Rekey only the old record; active notification IDs stay stable.
+                    let id = (1..=u32::MAX).find(|id| !used.contains(id)).ok_or("No history ID is available for recovery")?;
+                    used.insert(id);
+                    old.id = id;
+                }
             }
+            disk.retain(|i| i.id != item.id);
+            disk.insert(0, item.clone());
         }
+        disk.truncate(MAX_HISTORY);
+        // Retry after a load error with no mutations is a safe reload, not an overwrite.
+        if self.pending() {
+            store.write(&disk)?;
+        }
+        self.items = disk;
+        self.base = self.items.clone();
+        self.upserts.clear();
+        self.removed.clear();
+        self.clearing = false;
+        Ok(())
     }
+}
+fn shorten(s: &mut String, limit: usize) {
+    if s.len() <= limit {
+        return;
+    }
+    let mut end = limit.saturating_sub(3).min(s.len());
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s.truncate(end);
+    s.push('…');
+}
+fn bounded_item(mut item: HistoryItem) -> HistoryItem {
+    for (s, n) in [(&mut item.app, 256), (&mut item.icon, 1024), (&mut item.summary, 1024), (&mut item.body, 4096), (&mut item.entry, 256)] {
+        shorten(s, n);
+    }
+    // JSON escaping can expand control characters six-fold. Bound encoded size as
+    // well as source text, without ever splitting a UTF-8 character.
+    while serde_json::to_vec(&item).is_ok_and(|v| v.len() > 8192) {
+        let s = if item.body.len() > 64 {
+            &mut item.body
+        } else if item.summary.len() > 64 {
+            &mut item.summary
+        } else if item.icon.len() > 64 {
+            &mut item.icon
+        } else if item.app.len() > 64 {
+            &mut item.app
+        } else {
+            &mut item.entry
+        };
+        shorten(s, (s.len() / 2).max(4));
+    }
+    item
 }
 
 /// "now", "5m ago", "2h ago", "3d ago".
@@ -424,7 +520,7 @@ mod tests {
         assert_eq!(h.items[0].id, 110);
         assert_eq!(h.items.iter().filter(|i| i.id == 110).count(), 1);
         assert!(h.remove(110) && !h.remove(110));
-        h.clear();
+        h.clear().unwrap();
         assert!(h.items.is_empty());
     }
 
@@ -434,5 +530,198 @@ mod tests {
         assert_eq!(ago(0, 300), "5m ago");
         assert_eq!(ago(0, 7300), "2h ago");
         assert_eq!(ago(0, 200_000), "2d ago");
+    }
+}
+
+#[cfg(test)]
+mod persistence_tests {
+    use super::*;
+    use std::{
+        fs,
+        os::unix::fs::PermissionsExt,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    struct Temp(PathBuf);
+    impl Temp {
+        fn new() -> Self {
+            let p = std::env::temp_dir().join(format!("decebal-history-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            fs::create_dir(&p).unwrap();
+            Self(p)
+        }
+        fn path(&self) -> PathBuf {
+            self.0.join("decebal/notification-history.json")
+        }
+        fn history(&self) -> History {
+            History::at_path(self.path())
+        }
+    }
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            if self.path().parent().is_some_and(|p| p.is_dir()) {
+                let _ = fs::set_permissions(self.path().parent().unwrap(), fs::Permissions::from_mode(0o700));
+            }
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    fn item(id: u32, summary: &str) -> HistoryItem {
+        HistoryItem { id, app: "Fixture".into(), icon: String::new(), summary: summary.into(), body: "Private body".into(), entry: String::new(), time: 123 }
+    }
+    fn disk(path: &std::path::Path, items: &[HistoryItem]) {
+        fs::write(path, serde_json::to_vec(items).unwrap()).unwrap();
+    }
+    #[test]
+    fn private_atomic_history_survives_restart_and_ignores_legacy_temporary_file() {
+        let t = Temp::new();
+        let mut h = t.history();
+        assert!(h.error().is_none());
+        let legacy = t.path().with_extension("json.tmp");
+        fs::write(&legacy, b"unrelated draft").unwrap();
+        h.push(item(1, "Saved"));
+        assert!(h.error().is_none());
+        assert!(!h.pending());
+        assert_eq!(fs::metadata(t.path()).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(fs::metadata(t.path().parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(fs::read(&legacy).unwrap(), b"unrelated draft");
+        assert_eq!(t.history().items, h.items);
+        assert!(!fs::read_dir(t.path().parent().unwrap()).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(".notification-history-")));
+    }
+    #[test]
+    fn corrupt_history_is_preserved_and_retry_merges_repaired_id_collision() {
+        let t = Temp::new();
+        let _ = t.history();
+        fs::write(t.path(), b"private sentinel broken json").unwrap();
+        let mut h = t.history();
+        assert!(h.error().unwrap().contains("valid JSON"));
+        h.push(item(1, "New live record"));
+        assert!(h.pending());
+        assert!(!h.error().unwrap().contains("sentinel"));
+        assert_eq!(fs::read(t.path()).unwrap(), b"private sentinel broken json");
+        disk(&t.path(), &[item(1, "Recovered older record")]);
+        h.retry().unwrap();
+        assert_eq!(h.items[0].id, 1);
+        assert_eq!(h.items[0].summary, "New live record");
+        assert_eq!(h.items[1].summary, "Recovered older record");
+        assert_ne!(h.items[1].id, 1);
+        assert!(!h.pending());
+        assert!(h.error().is_none());
+        assert_eq!(t.history().items, h.items);
+    }
+    #[test]
+    fn symbolic_file_directory_and_nonregular_targets_are_never_followed() {
+        let t = Temp::new();
+        let mut h = t.history();
+        let victim = t.0.join("victim");
+        fs::write(&victim, b"private untouched").unwrap();
+        std::os::unix::fs::symlink(&victim, t.path()).unwrap();
+        h.push(item(1, "Pending"));
+        assert!(h.error().is_some());
+        assert_eq!(fs::read(&victim).unwrap(), b"private untouched");
+        fs::remove_file(t.path()).unwrap();
+        h.retry().unwrap();
+        assert_eq!(t.history().items.len(), 1);
+        fs::remove_file(t.path()).unwrap();
+        fs::create_dir(t.path()).unwrap();
+        h.push(item(2, "Pending again"));
+        assert!(h.error().is_some());
+        assert!(t.path().is_dir());
+        let t2 = Temp::new();
+        let external = t2.0.join("external");
+        fs::create_dir(&external).unwrap();
+        std::os::unix::fs::symlink(&external, t2.0.join("decebal")).unwrap();
+        assert!(t2.history().error().is_some());
+        assert!(fs::read_dir(external).unwrap().next().is_none());
+    }
+    #[test]
+    fn read_only_directory_keeps_failed_removal_and_clear_pending_until_retry() {
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        let t = Temp::new();
+        let mut h = t.history();
+        h.push(item(1, "Existing"));
+        let before = fs::read(t.path()).unwrap();
+        let dir = t.path().parent().unwrap().to_path_buf();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+        assert!(h.remove(1));
+        assert!(h.pending());
+        assert!(h.error().is_some());
+        assert_eq!(fs::read(t.path()).unwrap(), before);
+        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o500);
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        disk(&t.path(), &[item(1, "Existing"), item(2, "External record")]);
+        h.retry().unwrap();
+        assert_eq!(h.items, vec![item(2, "External record")]);
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+        assert!(h.clear().is_err());
+        assert!(h.items.is_empty());
+        assert!(h.clear_pending());
+        assert_eq!(t.history().items.len(), 1);
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        h.retry().unwrap();
+        assert!(t.history().items.is_empty());
+        assert!(!h.pending());
+    }
+    #[test]
+    fn unreadable_file_is_preserved_and_private_permissions_do_not_add_owner_access() {
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        let t = Temp::new();
+        let mut h = t.history();
+        h.push(item(1, "Saved"));
+        let before = fs::read(t.path()).unwrap();
+        fs::set_permissions(t.path(), fs::Permissions::from_mode(0o0)).unwrap();
+        h.push(item(2, "Unsaved"));
+        assert!(h.error().is_some());
+        assert_eq!(fs::metadata(t.path()).unwrap().permissions().mode() & 0o777, 0);
+        fs::set_permissions(t.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(fs::read(t.path()).unwrap(), before);
+        h.retry().unwrap();
+        assert_eq!(t.history().items.len(), 2);
+    }
+    #[test]
+    fn oversized_and_duplicate_id_history_stays_untouched() {
+        let t = Temp::new();
+        let mut h = t.history();
+        let oversized = vec![b'x'; (1 << 20) + 1];
+        fs::write(t.path(), &oversized).unwrap();
+        h.push(item(1, "Pending"));
+        assert!(h.error().unwrap().contains("1 MiB"));
+        assert_eq!(fs::read(t.path()).unwrap(), oversized);
+        disk(&t.path(), &[item(1, "One"), item(1, "Two")]);
+        let before = fs::read(t.path()).unwrap();
+        assert!(h.retry().is_err());
+        assert_eq!(fs::read(t.path()).unwrap(), before);
+    }
+    #[test]
+    fn huge_remote_text_is_bounded_without_splitting_unicode_or_poisoning_history() {
+        let t = Temp::new();
+        let mut h = t.history();
+        let mut huge = item(1, &"🦀".repeat(30_000));
+        huge.body = "\u{0001}".repeat(30_000);
+        h.push(huge);
+        assert!(h.error().is_none());
+        assert!(serde_json::to_vec(&h.items[0]).unwrap().len() <= 8192);
+        assert!(h.items[0].summary.ends_with('…'));
+        for id in 2..=110 {
+            h.push(item(id, "Next"));
+            assert!(h.error().is_none(), "push {id} failed: {:?}", h.error());
+        }
+        assert_eq!(t.history().items.len(), MAX_HISTORY);
+        assert_eq!(h.items[0].id, 110);
+        assert!(fs::metadata(t.path()).unwrap().len() < 1 << 20);
+    }
+    #[test]
+    fn contended_lock_is_recoverable_instead_of_blocking_delivery() {
+        let t = Temp::new();
+        let mut h = t.history();
+        let lock = history_store::Store::open(&t.path()).unwrap();
+        h.push(item(1, "Pending"));
+        assert!(h.error().is_some());
+        assert!(h.pending());
+        drop(lock);
+        h.retry().unwrap();
+        assert!(h.error().is_none());
     }
 }

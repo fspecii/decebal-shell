@@ -36,6 +36,8 @@ const INTROSPECT: &str = r#"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Obj
   </interface>
   <interface name="org.decebal.Notifications">
     <method name="ToggleHistory"/><method name="ShowHistory"/><method name="ClearHistory"/>
+    <method name="RetryHistory"/>
+    <method name="GetHistoryStatus"><arg direction="out" type="s"/><arg direction="out" type="b"/><arg direction="out" type="b"/></method>
     <method name="GetDnd"><arg direction="out" type="b"/></method><method name="SetDnd"><arg direction="in" type="b"/></method>
   </interface>
 </node>"#;
@@ -70,21 +72,29 @@ impl Daemon {
         Daemon { next_id: 1 }
     }
 
-    fn fresh_id(&mut self) -> u32 {
-        let id = self.next_id;
-        self.next_id = self.next_id.checked_add(1).unwrap_or(1);
-        id
+    fn sync_history_ids(&mut self, history: &History) {
+        self.next_id = self.next_id.max(history.items.iter().map(|i| i.id).max().unwrap_or(0).saturating_add(1)).max(1);
+    }
+    fn fresh_id(&mut self, history: &History) -> u32 {
+        loop {
+            let id = self.next_id.max(1);
+            self.next_id = id.checked_add(1).unwrap_or(1);
+            if !history.items.iter().any(|item| item.id == id) {
+                return id;
+            }
+        }
     }
 
     /// Answers one method call: the reply to send (None for no-reply calls) and the UI effects.
     pub fn dispatch(&mut self, m: &Message, sh: &mut Shared) -> (Option<Message>, Vec<Effect>) {
+        self.sync_history_ids(&sh.history);
         let mut fx = Vec::new();
         let reply = match (m.iface.as_str(), m.member.as_str()) {
             (BUS_NAME, "Notify") => match m.args().ok().as_deref().and_then(parse_notify) {
                 Some(mut n) => {
                     sh.cfg.refresh();
                     let live = n.replaces != 0 && n.replaces < self.next_id;
-                    n.id = if live { n.replaces } else { self.fresh_id() };
+                    n.id = if live { n.replaces } else { self.fresh_id(&sh.history) };
                     let id = n.id;
                     if !sh.cfg.is_muted(&n.app, &n.entry) {
                         if !n.transient {
@@ -133,9 +143,23 @@ impl Daemon {
                 fx.push(Effect::ShowHistory);
                 Message::reply_to(m, "", Vec::new())
             }
-            (EXT_IFACE, "ClearHistory") => {
-                sh.history.clear();
-                Message::reply_to(m, "", Vec::new())
+            (EXT_IFACE, "ClearHistory") => match sh.history.clear() {
+                Ok(()) => Message::reply_to(m, "", Vec::new()),
+                Err(e) => Message::error_to(m, "org.freedesktop.DBus.Error.Failed", &e),
+            },
+            (EXT_IFACE, "RetryHistory") => match sh.history.retry() {
+                Ok(()) => {
+                    self.sync_history_ids(&sh.history);
+                    Message::reply_to(m, "", Vec::new())
+                }
+                Err(e) => Message::error_to(m, "org.freedesktop.DBus.Error.Failed", &e),
+            },
+            (EXT_IFACE, "GetHistoryStatus") => {
+                let mut w = Writer::default();
+                w.string(sh.history.error().unwrap_or(""));
+                w.u32(u32::from(sh.history.pending()));
+                w.u32(u32::from(sh.history.clear_pending()));
+                Message::reply_to(m, "sbb", w.buf)
             }
             (EXT_IFACE, "GetDnd") => {
                 sh.cfg.refresh();
@@ -153,6 +177,8 @@ impl Daemon {
             },
             _ => Message::error_to(m, "org.freedesktop.DBus.Error.UnknownMethod", &format!("no method {}.{}", m.iface, m.member)),
         };
+        // Push/retry/remove may merge durable entries that were unavailable at startup.
+        self.sync_history_ids(&sh.history);
         // flags bit 0 = NO_REPLY_EXPECTED
         let reply = if m.flags & 1 != 0 { None } else { Some(reply) };
         (reply, fx)
@@ -199,7 +225,7 @@ pub fn run_daemon() -> Result<Start, String> {
     let mut sh = Shared { cfg: Config::load(), history: History::load() };
     let mut daemon = Daemon::new();
     // Start id numbering above anything persisted so a restart never reuses a visible id.
-    daemon.next_id = sh.history.items.iter().map(|i| i.id).max().unwrap_or(0).saturating_add(1);
+    daemon.sync_history_ids(&sh.history);
 
     loop {
         let timeout = ui.next_deadline().map(|d| d.saturating_duration_since(Instant::now()));
@@ -217,6 +243,10 @@ pub fn run_daemon() -> Result<Start, String> {
                     continue;
                 }
                 let (reply, effects) = daemon.dispatch(&msg, &mut sh);
+                daemon.sync_history_ids(&sh.history);
+                if matches!(msg.member.as_str(), "Notify" | "CloseNotification" | "ClearHistory" | "RetryHistory") {
+                    ui.refresh_history(&sh);
+                }
                 if let Some(r) = reply {
                     conn.send(&r).map_err(|e| e.to_string())?;
                 }
@@ -232,6 +262,7 @@ pub fn run_daemon() -> Result<Start, String> {
             }
         }
         events.extend(ui.pump(&mut sh)?);
+        daemon.sync_history_ids(&sh.history);
         events.extend(ui.expire(Instant::now()));
         for ev in events {
             let sig = match ev {
@@ -395,6 +426,38 @@ mod tests {
         let (wire, _) = Message::decode(&r.unwrap().encode(8)).unwrap().unwrap();
         let Value::Array(caps) = &wire.args().unwrap()[0] else { panic!() };
         assert!(caps.iter().any(|c| c.as_str() == Some("actions")));
+    }
+
+    #[test]
+    fn recovered_history_ids_are_reserved_before_and_after_dispatch() {
+        let (mut d, mut sh) = (Daemon::new(), shared(Config::default()));
+        let (_, effects) = d.dispatch(&notify_call("a", 0, 1, false), &mut sh);
+        let Effect::Show(n) = &effects[0] else { panic!() };
+        let mut recovered = HistoryItem::from(n);
+        recovered.id = 700;
+        sh.history.push(recovered.clone());
+        let (reply, _) = d.dispatch(&notify_call("b", 0, 1, false), &mut sh);
+        assert_eq!(reply_id(reply), 701);
+        recovered.id = u32::MAX;
+        sh.history.push(recovered);
+        let (reply, _) = d.dispatch(&notify_call("c", 0, 1, false), &mut sh);
+        let id = reply_id(reply);
+        assert_ne!(id, 0);
+        assert_ne!(id, u32::MAX);
+        assert_eq!(sh.history.items.iter().filter(|i| i.id == id).count(), 1);
+    }
+    #[test]
+    fn history_status_and_retry_have_typed_replies() {
+        let (mut d, mut sh) = (Daemon::new(), shared(Config::default()));
+        let m = Message::call(BUS_NAME, PATH, EXT_IFACE, "GetHistoryStatus", "", vec![]);
+        let (reply, _) = d.dispatch(&m, &mut sh);
+        let reply = reply.unwrap();
+        assert_eq!(reply.sig, "sbb");
+        assert_eq!(reply.args().unwrap(), vec![Value::Str(String::new()), Value::Bool(false), Value::Bool(false)]);
+        for method in ["RetryHistory", "ClearHistory"] {
+            let m = Message::call(BUS_NAME, PATH, EXT_IFACE, method, "", vec![]);
+            assert_eq!(d.dispatch(&m, &mut sh).0.unwrap().kind, dbus::RETURN);
+        }
     }
 
     #[test]

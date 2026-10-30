@@ -265,6 +265,9 @@ struct HistWin {
     w: u32,
     h: u32,
     scroll: usize,
+    rows: usize,
+    x: i32,
+    y: i32,
     hover: Option<usize>,
 }
 
@@ -574,11 +577,12 @@ impl Ui {
         }
         let events = self.close_all();
         self.pal = Palette::current();
-        let rows = sh.history.items.len().clamp(1, HIST_MAX_ROWS);
-        let (w, h) = ((HIST_W * self.s).round() as u32, ((HIST_HEADER + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32);
+        let capacity = self.history_capacity(sh);
+        let rows = sh.history.items.len().clamp(1, capacity);
+        let (w, h) = ((HIST_W * self.s).round() as u32, ((hist_header(sh) + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32);
         let x = self.mon.x + self.mon.w - w as i32 - self.right_gap();
         let Ok(win) = self.make_window(x, self.top(), w, h, true) else { return events };
-        self.hist = Some(HistWin { win, w, h, scroll: 0, hover: None });
+        self.hist = Some(HistWin { win, w, h, scroll: 0, rows: capacity, x, y: self.top(), hover: None });
         let pm = paint_history(&mut self.fonts, &self.pal, self.s, sh, self.hist.as_ref(), &self.icon_cache);
         self.set_shape(win, &pm);
         let _ = self.conn.map_window(win);
@@ -589,6 +593,7 @@ impl Ui {
         let _ = self.conn.grab_pointer(true, win, mask, GrabMode::ASYNC, GrabMode::ASYNC, x11rb::NONE, x11rb::NONE, x11rb::CURRENT_TIME);
         let _ = self.conn.flush();
         self.fonts.trim();
+        self.history_debug(sh);
         events
     }
 
@@ -601,17 +606,34 @@ impl Ui {
         }
     }
 
+    pub fn refresh_history(&mut self, sh: &Shared) {
+        if self.hist.is_some() {
+            self.redraw_history(sh);
+        }
+    }
+
+    fn history_capacity(&self, sh: &Shared) -> usize {
+        let available = (self.mon.y + self.mon.h - self.top() - 10).max(1) as f32 / self.s;
+        ((available - hist_header(sh) - 10.) / HIST_ROW).floor().clamp(1., HIST_MAX_ROWS as f32) as usize
+    }
+
     fn redraw_history(&mut self, sh: &Shared) {
+        let capacity = self.history_capacity(sh);
+        if let Some(h) = &mut self.hist {
+            h.rows = capacity;
+            h.scroll = h.scroll.min(sh.history.items.len().saturating_sub(capacity));
+        }
         // Make sure every visible row has its icon cached before painting (painting only reads the cache).
         let scroll = self.hist.as_ref().map_or(0, |h| h.scroll);
         let size = (32.0 * self.s).round() as u32;
-        let items: Vec<HistoryItem> = sh.history.items.iter().skip(scroll).take(HIST_MAX_ROWS).cloned().collect();
+        let items: Vec<HistoryItem> = sh.history.items.iter().skip(scroll).take(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows)).cloned().collect();
         for it in &items {
             self.icon_cached(&it.icon, &it.app, &it.entry, size);
         }
         let Some(win) = self.hist.as_ref().map(|h| h.win) else { return };
-        let rows = sh.history.items.len().clamp(1, HIST_MAX_ROWS);
-        let nh = ((HIST_HEADER + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32;
+        let capacity = self.history_capacity(sh);
+        let rows = sh.history.items.len().clamp(1, capacity);
+        let nh = ((hist_header(sh) + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32;
         if let Some(h) = self.hist.as_mut() {
             if h.h != nh {
                 h.h = nh;
@@ -623,6 +645,17 @@ impl Ui {
         present(&self.conn, win, self.gc, &pm, self.depth);
         let _ = self.conn.flush();
         self.fonts.trim();
+        self.history_debug(sh);
+    }
+
+    fn history_debug(&self, sh: &Shared) {
+        let Some(path) = std::env::var_os("DECNOTIFY_DEBUG_HISTORY") else { return };
+        let Some(hw) = &self.hist else { return };
+        let (clear, _, _) = hist_rects(self.s, hw.scroll, sh, hw.rows);
+        let rect = |r: R| [r.x, r.y, r.w, r.h];
+        let items: Vec<_> = sh.history.items.iter().map(|i| serde_json::json!({"id":i.id,"summary":i.summary})).collect();
+        let data = serde_json::json!({"window":hw.win,"origin":[hw.x,hw.y],"error":sh.history.error(),"pending":sh.history.pending(),"clear_pending":sh.history.clear_pending(),"items":items,"retry_rect":history_retry(self.s,sh).map(rect),"clear_rect":rect(clear)});
+        let _ = std::fs::write(path, data.to_string());
     }
 
     // ---- events
@@ -687,7 +720,7 @@ impl Ui {
                 self.redraw(i);
             }
         } else if self.hist.as_ref().is_some_and(|h| h.win == win) {
-            let (_, _, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh);
+            let (_, _, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh, self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
             let hover = rows.iter().position(|r| r.contains(x, y));
             if let Some(h) = self.hist.as_mut() {
                 if h.hover != hover {
@@ -731,7 +764,7 @@ impl Ui {
         let Some(hw) = self.hist.as_ref() else { return };
         let (win, hw_w, hw_h) = (hw.win, hw.w as f32, hw.h as f32);
         if e.event == win && (e.detail == 4 || e.detail == 5) {
-            let max = sh.history.items.len().saturating_sub(HIST_MAX_ROWS);
+            let max = sh.history.items.len().saturating_sub(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
             if let Some(h) = self.hist.as_mut() {
                 h.scroll = if e.detail == 4 { h.scroll.saturating_sub(1) } else { (h.scroll + 1).min(max) };
             }
@@ -742,9 +775,11 @@ impl Ui {
             self.close_history();
             return;
         }
-        let (clear, dnd, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh);
-        if clear.contains(x, y) {
-            sh.history.clear();
+        let (clear, dnd, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh, self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
+        if history_retry(self.s, sh).is_some_and(|r| r.contains(x, y)) {
+            let _ = sh.history.retry();
+        } else if clear.contains(x, y) {
+            let _ = sh.history.clear();
             if let Some(h) = self.hist.as_mut() {
                 h.scroll = 0;
             }
@@ -758,7 +793,7 @@ impl Ui {
             if let Some(id) = sh.history.items.get(scroll + i).map(|it| it.id) {
                 sh.history.remove(id);
             }
-            let max = sh.history.items.len().saturating_sub(HIST_MAX_ROWS);
+            let max = sh.history.items.len().saturating_sub(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
             if let Some(h) = self.hist.as_mut() {
                 h.scroll = h.scroll.min(max);
             }
@@ -804,7 +839,7 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     let mut pm = Pixmap::new(w, h).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"));
     gfx::fill_rounded(&mut pm, 0.0, 0.0, w as f32, h as f32, 16.0 * s, pal.bg_color());
     gfx::stroke_rounded(&mut pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, 16.0 * s, pal.border, 1.0);
-    let (clear, dnd, rows) = hist_rects(s, hw.map_or(0, |h| h.scroll), sh);
+    let (clear, dnd, rows) = hist_rects(s, hw.map_or(0, |h| h.scroll), sh, hw.map_or(HIST_MAX_ROWS, |h| h.rows));
     fonts.draw_as(Role::Title, &mut pm, "Notifications", 16.0 * s, 13.0 * s, 16.0 * s, Weight::Bold, pal.title);
     let (ar, ag, ab) = pal.accent;
     fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + 3.0 * s, 12.0 * s, Weight::Medium, color(ar, ag, ab, 1.0));
@@ -818,10 +853,29 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     let knob_x = if sh.cfg.dnd { sx + sw - sh_ + 2.0 * s } else { sx + 2.0 * s };
     gfx::fill_circle(&mut pm, knob_x + (sh_ - 4.0 * s) / 2.0, sy + sh_ / 2.0, (sh_ - 4.0 * s) / 2.0, Color::WHITE);
 
+    if let Some(error) = sh.history.error() {
+        let r = history_retry(s, sh).expect("error exposes retry");
+        gfx::fill_rounded(&mut pm, 12. * s, 84. * s, w as f32 - 24. * s, 76. * s, 8. * s, pal.button);
+        let title = if sh.history.clear_pending() {
+            "Clear is not saved"
+        } else if sh.history.pending() {
+            "History is not saved"
+        } else {
+            "History is unavailable"
+        };
+        fonts.draw(&mut pm, title, 22. * s, 92. * s, 12. * s, Weight::SemiBold, pal.title);
+        let reason = ellipsize(fonts, error, 11. * s, Weight::Regular, w as f32 - 120. * s);
+        fonts.draw(&mut pm, &reason, 22. * s, 113. * s, 11. * s, Weight::Regular, pal.body);
+        let help = if sh.history.pending() { "Unsaved changes remain here for this session" } else { "History file preserved; repair the problem and Retry" };
+        fonts.draw(&mut pm, &ellipsize(fonts, help, 10. * s, Weight::Regular, w as f32 - 44. * s), 22. * s, 140. * s, 10. * s, Weight::Regular, pal.body);
+        gfx::fill_rounded(&mut pm, r.x, r.y, r.w, r.h, 6. * s, color(ar, ag, ab, 1.));
+        fonts.draw(&mut pm, "Retry", r.x + 12. * s, r.y + 7. * s, 12. * s, Weight::Medium, accent_text(pal));
+    }
+
     if sh.history.items.is_empty() {
         let msg = "No Notifications";
         let t = fonts.measure(msg, 13.0 * s, Weight::Medium);
-        fonts.draw(&mut pm, msg, (w as f32 - t) / 2.0, (HIST_HEADER + 20.0) * s, 13.0 * s, Weight::Medium, pal.dim);
+        fonts.draw(&mut pm, msg, (w as f32 - t) / 2.0, (hist_header(sh) + 20.0) * s, 13.0 * s, Weight::Medium, pal.dim);
         return pm;
     }
     let scroll = hw.map_or(0, |h| h.scroll);
@@ -848,18 +902,40 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     pm
 }
 
-fn hist_rects(s: f32, scroll: usize, sh: &Shared) -> (R, R, Vec<R>) {
+fn accent_text(pal: &Palette) -> Color {
+    let (r, g, b) = crate::theme::Rgb(pal.accent.0, pal.accent.1, pal.accent.2).readable_on().t();
+    color(r, g, b, 1.0)
+}
+
+fn hist_header(sh: &Shared) -> f32 {
+    HIST_HEADER + if sh.history.error().is_some() { 84. } else { 0. }
+}
+
+fn history_retry(s: f32, sh: &Shared) -> Option<R> {
+    sh.history.error().map(|_| R { x: (HIST_W - 86.) * s, y: 108. * s, w: 62. * s, h: 30. * s })
+}
+
+fn hist_rects(s: f32, scroll: usize, sh: &Shared, limit: usize) -> (R, R, Vec<R>) {
     let w = HIST_W * s;
     let clear = R { x: w - 70.0 * s, y: 14.0 * s, w: 56.0 * s, h: 22.0 * s };
     let dnd = R { x: 12.0 * s, y: 44.0 * s, w: w - 24.0 * s, h: 30.0 * s };
-    let n = sh.history.items.len().saturating_sub(scroll).min(HIST_MAX_ROWS);
-    let rows = (0..n).map(|i| R { x: 0.0, y: (HIST_HEADER + i as f32 * HIST_ROW) * s, w, h: HIST_ROW * s }).collect();
+    let n = sh.history.items.len().saturating_sub(scroll).min(limit);
+    let rows = (0..n).map(|i| R { x: 0.0, y: (hist_header(sh) + i as f32 * HIST_ROW) * s, w, h: HIST_ROW * s }).collect();
     (clear, dnd, rows)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retry_text_is_readable_on_dark_and_light_accents() {
+        let mut pal = Palette::dark();
+        pal.accent = (0, 0, 0);
+        assert_eq!(accent_text(&pal), Color::WHITE);
+        pal.accent = (255, 255, 255);
+        assert_eq!(accent_text(&pal), Color::BLACK);
+    }
 
     #[test]
     fn wrapping_respects_width_and_line_limit() {
