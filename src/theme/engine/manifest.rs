@@ -504,9 +504,10 @@ pub fn analyze(text: &str) -> Analysis {
     if let Some(min) = meta.get("min_shell_version").and_then(Value::as_str).and_then(schema::parse_version) {
         let cur = schema::parse_version(env!("CARGO_PKG_VERSION")).unwrap_or((0, 0, 0));
         if min > cur {
+            let line = doc.get("min_shell_version").map_or(0, |item| cx.line(item));
             cx.diags.push(Diag {
                 level: Level::Error,
-                line: 0,
+                line,
                 key: "min_shell_version".into(),
                 msg: format!("needs decebal {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
             });
@@ -617,7 +618,7 @@ mod tests {
         let future = GOOD.replacen("format = 1", "format = 1\nmin_shell_version = \"999.0.0\"", 1);
         let checked = analyze(&future);
         assert!(checked.def.is_none());
-        assert!(checked.diags.iter().any(|d| d.key == "min_shell_version" && d.level == Level::Error));
+        assert!(checked.diags.iter().any(|d| d.key == "min_shell_version" && d.level == Level::Error && d.line == 3));
         let compatible = GOOD.replacen("format = 1", "format = 1\nmin_shell_version = \"0.1.0\"", 1);
         assert!(analyze(&compatible).def.is_some());
     }

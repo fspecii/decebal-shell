@@ -1555,6 +1555,12 @@ impl WindowApp for SettingsApp {
             return self.key_edit(ev);
         }
         if ev.key == Key::Escape {
+            if self.m.widget_choice.is_some() {
+                super::widgetchoice::apply(&mut self.m, "wc:cancel", CtlVal::Click);
+                self.it.focus = None;
+                self.zone = Zone::Sidebar;
+                return Response::REDRAW;
+            }
             return match self.zone {
                 Zone::Search if !self.search.text().is_empty() => self.key_search(ev),
                 Zone::Content if self.it.focus.is_some() => {
@@ -1661,6 +1667,29 @@ mod key_tests {
         std::fs::create_dir_all(&d).unwrap();
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent".into(), socket: d.join("none.sock") };
         SettingsApp::new(paths, None)
+    }
+
+    #[test]
+    fn escape_cancels_widget_choice_without_closing_settings_or_writing() {
+        let mut a = app();
+        super::super::io::json_set(&a.m.paths.shell_json(), "widgets", Some(serde_json::json!({"enabled":true,"items":[{"use":"builtin:clock-card","x":345}]}))).unwrap();
+        let before = std::fs::read(a.m.paths.shell_json()).unwrap();
+        a.m.widget_choice = Some(super::super::widgetchoice::Pending {
+            selection: crate::theme::model::Selection::default(),
+            reset_colors: true,
+            empty_desktop: false,
+            widgets: serde_json::json!({"enabled":true}),
+            style: None,
+        });
+        a.zone = Zone::Sidebar;
+        let response = a.key(&ev(Key::Escape, None));
+        assert!(!matches!(response.action, Some(Action::Close)), "Escape cancels a pending choice, not its parent window");
+        assert!(a.m.widget_choice.is_none());
+        assert_eq!(std::fs::read(a.m.paths.shell_json()).unwrap(), before);
+        assert!(matches!(a.key(&ev(Key::Escape, None)).action, Some(Action::Close)), "ordinary sidebar Escape keeps its documented close behavior");
+        let mut close = ev(Key::Char, Some('w'));
+        close.ctrl = true;
+        assert!(matches!(a.key(&close).action, Some(Action::Close)), "Ctrl+W remains the explicit close shortcut");
     }
 
     #[test]

@@ -187,3 +187,7 @@ turned off, so activation environments do not retain stale overrides. The update
 rdwm wrapper transfers known exports from a bounded child before launching the WM
 and imports even an explicit empty font override. Installing that system wrapper
 requires administrator access; an older installed wrapper still drops the exports.
+
+When a theme asks whether to replace a custom widget layout, Escape cancels that
+pending choice and keeps Settings open without saving changes. Outside an edit,
+popup or pending choice, the documented sidebar Escape close shortcut remains.
