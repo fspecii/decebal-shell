@@ -29,10 +29,8 @@ const BANNER_W: f32 = 344.0;
 const MARGIN: f32 = 12.0;
 const GAP: f32 = 10.0;
 const HIST_W: f32 = 380.0;
-const HIST_HEADER: f32 = 84.0;
 const HIST_ROW: f32 = 60.0;
 const HIST_MAX_ROWS: usize = 8;
-const KEYCODE_ESCAPE: u8 = 9;
 
 /// What the front end reports back to the D-Bus side.
 #[derive(Debug, Clone, PartialEq)]
@@ -152,14 +150,18 @@ impl R {
 // ------------------------------------------------------------- text helpers
 
 fn ellipsize(f: &Fonts, s: &str, px: f32, wt: Weight, max_w: f32) -> String {
-    if f.measure(s, px, wt) <= max_w {
+    ellipsize_role(f, Role::Ui, s, px, wt, max_w)
+}
+
+fn ellipsize_role(f: &Fonts, role: Role, s: &str, px: f32, wt: Weight, max_w: f32) -> String {
+    if f.measure_as(role, s, px, wt) <= max_w {
         return s.to_string();
     }
     let mut out: Vec<char> = s.chars().collect();
     while !out.is_empty() {
         out.pop();
         let cand: String = out.iter().collect::<String>() + "\u{2026}";
-        if f.measure(&cand, px, wt) <= max_w {
+        if f.measure_as(role, &cand, px, wt) <= max_w {
             return cand;
         }
     }
@@ -272,12 +274,26 @@ fn draw_icon(fonts: &mut Fonts, pm: &mut Pixmap, icon: Option<&Pixmap>, app: &st
     let (r, g, b) = tile_color(app);
     gfx::fill_rounded(pm, x, y, size, size, size * 0.23, color(r, g, b, 1.0));
     let letter: String = app.chars().find(|c| c.is_alphanumeric()).map(|c| c.to_uppercase().collect()).unwrap_or_else(|| "!".into());
-    let px = size * 0.5;
+    let px = size * 0.5 / crate::theme::live::font_scale().max(0.1);
     let w = fonts.measure(&letter, px, Weight::SemiBold);
     fonts.draw(pm, &letter, x + (size - w) / 2.0, y + size * 0.22, px, Weight::SemiBold, Color::WHITE);
 }
 
 // ----------------------------------------------------------------- banners
+
+struct BannerLayout {
+    w: u32,
+    h: u32,
+    title: String,
+    body: Vec<String>,
+    btns: Vec<(R, String, String)>,
+    close: R,
+    icon_at: R,
+    text_x: f32,
+    title_y: f32,
+    body_y: f32,
+    body_line: f32,
+}
 
 struct Banner {
     n: Notification,
@@ -295,6 +311,101 @@ struct Banner {
     btns: Vec<(R, String, String)>,
     close: R,
     icon_at: R,
+    text_x: f32,
+    title_y: f32,
+    body_y: f32,
+    body_line: f32,
+}
+
+/// A displaced visible notification retains its absolute deadline. A new queued
+/// notification starts its lifetime only when it first becomes visible.
+struct Pending {
+    n: Notification,
+    started: Option<Option<Instant>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistFocus {
+    Clear,
+    Dnd,
+    Retry,
+    Item(u32),
+}
+
+impl HistFocus {
+    fn id(self) -> String {
+        match self {
+            Self::Clear => "clear".into(),
+            Self::Dnd => "dnd".into(),
+            Self::Retry => "retry".into(),
+            Self::Item(id) => format!("item:{id}"),
+        }
+    }
+}
+
+fn line_height(fonts: &Fonts, role: Role, px: f32, weight: Weight, s: f32) -> f32 {
+    (fonts.ascent_as(role, px, weight) + px * crate::theme::live::font_scale() * 0.3 + 2.0 * s).ceil()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ErrorLayout {
+    card: R,
+    retry: R,
+    title_y: f32,
+    reason_y: f32,
+    help_y: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HistoryLayout {
+    clear: R,
+    dnd: R,
+    error: Option<ErrorLayout>,
+    title_y: f32,
+    header: f32,
+    row: f32,
+    title_line: f32,
+    body_line: f32,
+}
+
+impl HistoryLayout {
+    fn new(fonts: &Fonts, s: f32, w: f32, error: bool) -> Self {
+        let clear_h = line_height(fonts, Role::Ui, 12.0 * s, Weight::Medium, s).max(14.0 * s) + 8.0 * s;
+        let clear_w = (fonts.measure("Clear", 12.0 * s, Weight::Medium) + 16.0 * s).min((w - 28.0 * s).max(1.0));
+        let title_h = line_height(fonts, Role::Title, 16.0 * s, Weight::Bold, s).max(clear_h);
+        let clear = R { x: (w - clear_w - 14.0 * s).max(0.0), y: 11.0 * s, w: clear_w, h: clear_h };
+        let dnd_h = (line_height(fonts, Role::Ui, 12.5 * s, Weight::Medium, s) + 10.0 * s).max(30.0 * s);
+        let dnd = R { x: 12.0 * s, y: 13.0 * s + title_h + 9.0 * s, w: (w - 24.0 * s).max(1.0), h: dnd_h };
+        let mut header = dnd.y + dnd.h + 8.0 * s;
+        let error = error.then(|| {
+            let title_lh = line_height(fonts, Role::Ui, 12.0 * s, Weight::SemiBold, s);
+            let reason_lh = line_height(fonts, Role::Ui, 11.0 * s, Weight::Regular, s);
+            let help_lh = line_height(fonts, Role::Ui, 10.0 * s, Weight::Regular, s);
+            let retry_h = line_height(fonts, Role::Ui, 12.0 * s, Weight::Medium, s) + 10.0 * s;
+            let retry_w = (fonts.measure("Retry", 12.0 * s, Weight::Medium) + 24.0 * s).min((w - 44.0 * s).max(1.0));
+            let title_y = header + 6.0 * s;
+            let reason_y = title_y + title_lh + 3.0 * s;
+            let retry = R { x: (w - 22.0 * s - retry_w).max(0.0), y: reason_y, w: retry_w, h: retry_h };
+            let help_y = reason_y + reason_lh.max(retry_h) + 3.0 * s;
+            let card = R { x: 12.0 * s, y: header, w: (w - 24.0 * s).max(1.0), h: help_y + help_lh + 6.0 * s - header };
+            header = card.y + card.h + 6.0 * s;
+            ErrorLayout { card, retry, title_y, reason_y, help_y }
+        });
+        let title_line = line_height(fonts, Role::Ui, 12.5 * s, Weight::SemiBold, s);
+        let body_line = line_height(fonts, Role::Ui, 12.0 * s, Weight::Regular, s);
+        let app_line = line_height(fonts, Role::Ui, 10.5 * s, Weight::Regular, s);
+        let row = (16.0 * s + title_line + body_line + app_line).max(HIST_ROW * s);
+        Self { clear, dnd, error, title_y: 13.0 * s, header, row, title_line, body_line }
+    }
+
+    fn row_rect(self, i: usize, w: f32) -> R {
+        R { x: 0.0, y: self.header + i as f32 * self.row, w, h: self.row }
+    }
+}
+
+fn shifted(mut r: R, pan: f32) -> R {
+    r.y -= pan;
+    r
 }
 
 struct HistWin {
@@ -306,6 +417,11 @@ struct HistWin {
     x: i32,
     y: i32,
     hover: Option<usize>,
+    focus: Option<HistFocus>,
+    ring: bool,
+    pan: f32,
+    content_h: f32,
+    layout: HistoryLayout,
 }
 
 struct Atoms {
@@ -326,11 +442,12 @@ pub struct Ui {
     pal: Palette,
     at: Atoms,
     banners: Vec<Banner>,
-    pending: VecDeque<Notification>,
+    pending: VecDeque<Pending>,
     hist: Option<HistWin>,
     icon_cache: HashMap<String, Option<Pixmap>>,
     default_secs: u32,
     theme_wake: UnixStream,
+    theme_generation: u64,
 }
 
 fn cerr<E: std::fmt::Display>(e: E) -> String {
@@ -367,6 +484,7 @@ impl Ui {
         let root = screen.root;
         let gc = conn.generate_id().map_err(cerr)?;
         conn.create_gc(gc, root, &CreateGCAux::new()).map_err(cerr)?;
+        conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::STRUCTURE_NOTIFY | EventMask::PROPERTY_CHANGE)).map_err(cerr)?;
         let atom = |name: &str| -> Result<Atom, String> { Ok(conn.intern_atom(false, name.as_bytes()).map_err(cerr)?.reply().map_err(cerr)?.atom) };
         let at = Atoms { wtype: atom("_NET_WM_WINDOW_TYPE")?, wtype_notification: atom("_NET_WM_WINDOW_TYPE_NOTIFICATION")?, wm_name: atom("_NET_WM_NAME")?, utf8: atom("UTF8_STRING")? };
         let mon = panel_monitor(&conn, root, (i32::from(screen.width_in_pixels), i32::from(screen.height_in_pixels)));
@@ -394,6 +512,7 @@ impl Ui {
             icon_cache: HashMap::new(),
             default_secs: 5,
             theme_wake,
+            theme_generation: crate::theme::live::generation(),
         })
     }
 
@@ -408,16 +527,48 @@ impl Ui {
     pub fn refresh_theme(&mut self, sh: &Shared) {
         let mut bytes = [0; 64];
         while self.theme_wake.read(&mut bytes).is_ok_and(|n| n > 0) {}
+        let generation = crate::theme::live::generation();
         let pal = Palette::current();
-        if pal == self.pal {
+        if pal == self.pal && generation == self.theme_generation {
             return;
         }
         self.pal = pal;
+        self.theme_generation = generation;
+        self.reflow(sh);
+    }
+
+    fn reflow(&mut self, sh: &Shared) {
+        for i in 0..self.banners.len() {
+            let n = self.banners[i].n.clone();
+            let layout = self.layout(&n);
+            self.apply_banner_layout(i, layout);
+        }
+        self.restack();
+        self.promote();
         for i in 0..self.banners.len() {
             self.redraw(i);
         }
         self.refresh_history(sh);
         let _ = self.conn.flush();
+    }
+
+    fn monitor_reflow(&mut self, sh: &Shared) {
+        let fallback = self.conn.get_geometry(self.root).ok().and_then(|cookie| cookie.reply().ok()).map(|r| (i32::from(r.width), i32::from(r.height))).unwrap_or((self.mon.w, self.mon.h));
+        self.mon = panel_monitor(&self.conn, self.root, fallback);
+        self.reflow(sh);
+    }
+
+    fn available_height(&self) -> f32 {
+        (self.mon.y + self.mon.h - self.top() - self.px(MARGIN).round() as i32).max(1) as f32
+    }
+
+    fn surface_width(&self, base: f32) -> f32 {
+        let growth = (crate::theme::live::font_scale() - 1.0).max(0.0);
+        (base * self.s * (1.0 + growth * 0.5)).min((self.mon.w - self.right_gap() - self.px(MARGIN).round() as i32).max(1) as f32).max(1.0)
+    }
+
+    fn x_for(&self, w: u32) -> i32 {
+        (self.mon.x + self.mon.w - w as i32 - self.right_gap()).max(self.mon.x)
     }
 
     fn px(&self, v: f32) -> f32 {
@@ -428,7 +579,7 @@ impl Ui {
         // below the classic bar; with the Caelestia pill bar below it when it runs along the top (`top`, `split`), else near the edge
         let th = crate::theme::th();
         let below = if th.pill_bar().is_some() { 12.0 + th.bar_insets().top as f32 / self.s } else { crate::theme::BAR_HEIGHT + 8.0 };
-        self.mon.y + self.px(below).round() as i32
+        self.mon.y + (self.px(below).round() as i32).min((self.mon.h - 1).max(0))
     }
 
     /// Gap between the banners and the right screen edge: the margin, plus the pill bar when it sits on the right edge.
@@ -478,43 +629,99 @@ impl Ui {
             self.update_banner(i, n, secs);
             return;
         }
-        if let Some(p) = self.pending.iter_mut().find(|p| p.id == n.id) {
-            *p = n;
+        if let Some(p) = self.pending.iter_mut().find(|p| p.n.id == n.id) {
+            if p.started.is_some() {
+                p.started = Some(n.deadline(secs));
+            }
+            p.n = n;
+            self.banner_debug();
             return;
         }
-        if self.banners.len() >= MAX_VISIBLE {
-            self.pending.push_back(n);
+        let layout = self.layout(&n);
+        if self.banners.len() >= MAX_VISIBLE || !self.fits_banner(layout.h) {
+            self.pending.push_back(Pending { n, started: None });
+            self.banner_debug();
             return;
         }
         self.create_banner(n, secs);
     }
 
-    #[allow(clippy::type_complexity)]
-    fn layout(&mut self, n: &Notification) -> (u32, u32, String, Vec<String>, Vec<(R, String, String)>, R, R) {
+    fn layout(&self, n: &Notification) -> BannerLayout {
         let s = self.s;
-        let w = BANNER_W * s;
-        let (pad, icon, gap) = (14.0 * s, 36.0 * s, 10.0 * s);
-        let tx = pad + icon + gap;
-        let tw = w - tx - pad;
-        let title_w = tw - 44.0 * s;
-        let title = ellipsize(&self.fonts, &n.summary, 13.0 * s, Weight::SemiBold, title_w);
-        let body = wrap(&self.fonts, &n.body, 12.0 * s, Weight::Regular, tw, 3);
-        let bottom = 12.0 * s + 17.0 * s + 15.0 * s * body.len() as f32;
-        let mut h = (bottom + 12.0 * s).max(pad * 2.0 + icon);
+        let w = self.surface_width(BANNER_W);
+        let pad = (14.0 * s).min(w * 0.08);
+        let icon = (36.0 * s).min(w * 0.16);
+        let tx = pad + icon + 10.0 * s;
+        let tw = (w - tx - pad).max(1.0);
+        let title_line = line_height(&self.fonts, Role::Title, 13.0 * s, Weight::SemiBold, s);
+        let body_line = line_height(&self.fonts, Role::Ui, 12.0 * s, Weight::Regular, s);
+        let close_size = (18.0 * s * crate::theme::live::font_scale().max(1.0)).min(tw * 0.35);
+        let stamp_width = self.fonts.measure("now", 11.0 * s, Weight::Regular).max(close_size) + 8.0 * s;
+        let title = ellipsize_role(&self.fonts, Role::Title, &n.summary, 13.0 * s, Weight::SemiBold, (tw - stamp_width).max(1.0));
+        let title_y = pad.min(12.0 * s);
+        let body_y = title_y + title_line + 4.0 * s;
+        let acts: Vec<_> = n.actions.iter().filter(|(k, l)| k != "default" && !l.is_empty()).take(3).collect();
+        let button_h = line_height(&self.fonts, Role::Ui, 12.0 * s, Weight::Medium, s) + 10.0 * s;
+        let required_w: f32 = acts.iter().map(|(_, label)| self.fonts.measure(label, 12.0 * s, Weight::Medium) + 16.0 * s).sum::<f32>() + acts.len().saturating_sub(1) as f32 * 6.0 * s;
+        let vertical_h = acts.len() as f32 * button_h + acts.len().saturating_sub(1) as f32 * 6.0 * s;
+        let max_h = self.available_height();
+        let stacked = required_w > tw && body_y + vertical_h + 8.0 * s + pad <= max_h;
+        let actions_h = if acts.is_empty() {
+            0.0
+        } else if stacked {
+            vertical_h + 8.0 * s
+        } else {
+            button_h + 8.0 * s
+        };
+        let max_lines = ((max_h - body_y - actions_h - pad) / body_line).floor().clamp(0.0, 3.0) as usize;
+        let body = if max_lines == 0 { Vec::new() } else { wrap(&self.fonts, &n.body, 12.0 * s, Weight::Regular, tw, max_lines) };
+        let bottom = (body_y + body_line * body.len() as f32).max(pad + icon);
         let mut btns = Vec::new();
-        let acts: Vec<&(String, String)> = n.actions.iter().filter(|(k, l)| k != "default" && !l.is_empty()).take(3).collect();
+        let mut h = bottom + pad;
         if !acts.is_empty() {
-            let by = (bottom + 8.0 * s).max(pad + icon + 4.0 * s);
-            let bw = (tw - 6.0 * s * (acts.len() as f32 - 1.0)) / acts.len() as f32;
-            for (i, (k, l)) in acts.iter().enumerate() {
-                let r = R { x: tx + i as f32 * (bw + 6.0 * s), y: by, w: bw, h: 26.0 * s };
-                btns.push((r, ellipsize(&self.fonts, l, 12.0 * s, Weight::Medium, bw - 12.0 * s), k.clone()));
+            let by = bottom + 8.0 * s;
+            let bw = if stacked { tw } else { ((tw - 6.0 * s * acts.len().saturating_sub(1) as f32) / acts.len() as f32).max(1.0) };
+            for (i, (key, label)) in acts.iter().enumerate() {
+                let r = R { x: tx + if stacked { 0.0 } else { i as f32 * (bw + 6.0 * s) }, y: by + if stacked { i as f32 * (button_h + 6.0 * s) } else { 0.0 }, w: bw, h: button_h };
+                btns.push((r, ellipsize(&self.fonts, label, 12.0 * s, Weight::Medium, (bw - 12.0 * s).max(1.0)), (*key).clone()));
             }
-            h = by + 26.0 * s + 12.0 * s;
+            h = by + if stacked { vertical_h } else { button_h } + pad;
         }
-        let close = R { x: w - pad - 18.0 * s, y: 11.0 * s, w: 18.0 * s, h: 18.0 * s };
-        let icon_at = R { x: pad, y: pad, w: icon, h: icon };
-        (w.round() as u32, h.round() as u32, title, body, btns, close, icon_at)
+        BannerLayout {
+            w: w.round().max(1.0) as u32,
+            h: h.ceil().min(max_h).max(1.0) as u32,
+            title,
+            body,
+            btns,
+            close: R { x: (w - pad - close_size).max(0.0), y: title_y, w: close_size, h: close_size },
+            icon_at: R { x: pad, y: pad, w: icon, h: icon },
+            text_x: tx,
+            title_y,
+            body_y,
+            body_line,
+        }
+    }
+
+    fn fits_banner(&self, height: u32) -> bool {
+        self.banners.iter().map(|b| b.h as f32 + self.px(GAP)).sum::<f32>() + height as f32 <= self.available_height()
+    }
+
+    fn apply_banner_layout(&mut self, i: usize, layout: BannerLayout) {
+        let b = &mut self.banners[i];
+        b.w = layout.w;
+        b.h = layout.h;
+        b.title = layout.title;
+        b.body = layout.body;
+        b.btns = layout.btns;
+        b.close = layout.close;
+        b.icon_at = layout.icon_at;
+        b.text_x = layout.text_x;
+        b.title_y = layout.title_y;
+        b.body_y = layout.body_y;
+        b.body_line = layout.body_line;
+        b.hover_btn = None;
+        b.hover_close = false;
+        let _ = self.conn.configure_window(b.win, &ConfigureWindowAux::new().width(b.w).height(b.h));
     }
 
     fn resolve_icon(&mut self, n: &Notification) -> Option<Pixmap> {
@@ -523,45 +730,102 @@ impl Ui {
     }
 
     fn create_banner(&mut self, n: Notification, secs: u32) {
-        let (w, h, title, body, btns, close, icon_at) = self.layout(&n);
+        let layout = self.layout(&n);
         let icon = self.resolve_icon(&n);
-        let x = self.mon.x + self.mon.w - w as i32 - self.right_gap();
-        let Ok(win) = self.make_window(x, self.top(), w, h, false) else { return };
+        let Ok(win) = self.make_window(self.x_for(layout.w), self.top(), layout.w, layout.h, false) else { return };
         let deadline = n.deadline(secs);
-        let b = Banner { n, win, w, h, y: self.top(), deadline, hovered: false, hover_btn: None, hover_close: false, icon, title, body, btns, close, icon_at };
-        let pm = paint_banner(&mut self.fonts, &self.pal, self.s, &b);
-        self.set_shape(win, &pm);
-        let _ = self.conn.map_window(win);
-        present(&self.conn, win, self.gc, &pm, self.depth);
+        let b = Banner {
+            n,
+            win,
+            w: layout.w,
+            h: layout.h,
+            y: self.top(),
+            deadline,
+            hovered: false,
+            hover_btn: None,
+            hover_close: false,
+            icon,
+            title: layout.title,
+            body: layout.body,
+            btns: layout.btns,
+            close: layout.close,
+            icon_at: layout.icon_at,
+            text_x: layout.text_x,
+            title_y: layout.title_y,
+            body_y: layout.body_y,
+            body_line: layout.body_line,
+        };
         self.banners.insert(0, b);
+        self.redraw(0);
+        let _ = self.conn.map_window(win);
         self.fonts.trim();
         self.restack();
     }
 
     fn update_banner(&mut self, i: usize, n: Notification, secs: u32) {
-        let (w, h, title, body, btns, close, icon_at) = self.layout(&n);
+        let layout = self.layout(&n);
         let icon = self.resolve_icon(&n);
         let b = &mut self.banners[i];
         b.deadline = n.deadline(secs);
         b.hovered = false;
-        (b.n, b.w, b.h, b.title, b.body, b.btns, b.close, b.icon_at, b.icon) = (n, w, h, title, body, btns, close, icon_at, icon);
-        let win = b.win;
-        let _ = self.conn.configure_window(win, &ConfigureWindowAux::new().width(w).height(h));
+        b.n = n;
+        b.icon = icon;
+        self.apply_banner_layout(i, layout);
         self.restack();
-        self.redraw(i);
+        for index in 0..self.banners.len() {
+            self.redraw(index);
+        }
     }
 
     fn restack(&mut self) {
         let mut y = self.top();
         let gap = self.px(GAP).round() as i32;
-        let x_of = |w: u32, mon: &MonRect, m: i32| mon.x + mon.w - w as i32 - m;
-        let m = self.right_gap();
+        let bottom = self.top() + self.available_height() as i32;
+        let mut keep = 0;
+        for b in &self.banners {
+            if y + b.h as i32 > bottom {
+                break;
+            }
+            keep += 1;
+            y += b.h as i32 + gap;
+        }
+        for b in self.banners.drain(keep..).rev() {
+            let _ = self.conn.destroy_window(b.win);
+            let deadline = if b.hovered && b.n.lifetime(self.default_secs).is_some() { Some(Instant::now() + Duration::from_secs(u64::from((self.default_secs / 2).max(2)))) } else { b.deadline };
+            self.pending.push_front(Pending { n: b.n, started: Some(deadline) });
+        }
+        let x = self.mon.x;
+        let right = self.mon.x + self.mon.w - self.right_gap();
+        y = self.top();
         for b in &mut self.banners {
             b.y = y;
-            let _ = self.conn.configure_window(b.win, &ConfigureWindowAux::new().x(x_of(b.w, &self.mon, m)).y(y));
+            let _ = self.conn.configure_window(b.win, &ConfigureWindowAux::new().x((right - b.w as i32).max(x)).y(y));
             y += b.h as i32 + gap;
         }
         let _ = self.conn.flush();
+        self.banner_debug();
+    }
+
+    /// Opt-in geometry/state evidence, without notification text or artwork.
+    fn banner_debug(&self) {
+        let Some(path) = std::env::var_os("DECNOTIFY_DEBUG_BANNERS") else { return };
+        let rect = |r: R| [r.x, r.y, r.w, r.h];
+        let active: Vec<_> = self
+            .banners
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "id": b.n.id, "window": b.win, "rect": [self.x_for(b.w), b.y, b.w as i32, b.h as i32],
+                    "title_rect": [b.text_x, b.title_y, (b.close.x - b.text_x).max(0.0), b.body_y - b.title_y],
+                    "body_rects": (0..b.body.len()).map(|i| [b.text_x, b.body_y + i as f32 * b.body_line, b.w as f32 - b.text_x, b.body_line]).collect::<Vec<_>>(),
+                    "buttons": b.btns.iter().map(|(r,_,key)| serde_json::json!({"rect":rect(*r),"key":key})).collect::<Vec<_>>(),
+                    "close_rect":rect(b.close), "deadline":b.deadline.map(|d|format!("{d:?}"))
+                })
+            })
+            .collect();
+        let queued: Vec<_> = self.pending.iter().map(|p| serde_json::json!({"id":p.n.id,"started":p.started.is_some(),"deadline":p.started.flatten().map(|d|format!("{d:?}"))})).collect();
+        let data = serde_json::json!({"font_scale":crate::theme::live::font_scale(),"generation":self.theme_generation,"active":active,"queued":queued});
+        let _ = std::fs::write(path, data.to_string());
     }
 
     fn redraw(&mut self, i: usize) {
@@ -582,8 +846,9 @@ impl Ui {
             self.restack();
             return vec![UiEvent::Closed(id, reason)];
         }
-        if let Some(i) = self.pending.iter().position(|p| p.id == id) {
+        if let Some(i) = self.pending.iter().position(|p| p.n.id == id) {
             self.pending.remove(i);
+            self.banner_debug();
             return vec![UiEvent::Closed(id, reason)];
         }
         Vec::new()
@@ -591,18 +856,20 @@ impl Ui {
 
     fn promote(&mut self) {
         while self.banners.len() < MAX_VISIBLE {
-            let Some(n) = self.pending.pop_front() else { break };
-            // Queued entries start their clock when they become visible.
-            self.create_banner_at_end(n, self.default_secs);
-        }
-    }
-
-    fn create_banner_at_end(&mut self, n: Notification, secs: u32) {
-        let before = self.banners.len();
-        self.create_banner(n, secs);
-        // create_banner inserts at the top; a promoted entry belongs below the ones already shown.
-        if self.banners.len() > before && before > 0 {
-            let b = self.banners.remove(0);
+            let Some(next) = self.pending.front() else { break };
+            if !self.fits_banner(self.layout(&next.n).h) {
+                break;
+            }
+            let pending = self.pending.pop_front().expect("front checked");
+            let before = self.banners.len();
+            self.create_banner(pending.n, self.default_secs);
+            if self.banners.len() <= before {
+                break;
+            }
+            let mut b = self.banners.remove(0);
+            if let Some(deadline) = pending.started {
+                b.deadline = deadline;
+            }
             self.banners.push(b);
             self.restack();
         }
@@ -610,7 +877,7 @@ impl Ui {
 
     /// Drops every banner and queued entry (used when the history panel opens).
     pub fn close_all(&mut self) -> Vec<UiEvent> {
-        let ids: Vec<u32> = self.banners.iter().map(|b| b.n.id).chain(self.pending.iter().map(|p| p.id)).collect();
+        let ids: Vec<u32> = self.banners.iter().map(|b| b.n.id).chain(self.pending.iter().map(|p| p.n.id)).collect();
         let mut out = Vec::new();
         for id in ids {
             out.extend(self.close(id, 2));
@@ -619,11 +886,17 @@ impl Ui {
     }
 
     pub fn next_deadline(&self) -> Option<Instant> {
-        self.banners.iter().filter_map(|b| b.deadline).min()
+        self.banners.iter().filter_map(|b| b.deadline).chain(self.pending.iter().filter_map(|p| p.started.flatten())).min()
     }
 
     pub fn expire(&mut self, now: Instant) -> Vec<UiEvent> {
-        let due: Vec<u32> = self.banners.iter().filter(|b| b.deadline.is_some_and(|d| d <= now)).map(|b| b.n.id).collect();
+        let due: Vec<u32> = self
+            .banners
+            .iter()
+            .filter(|b| b.deadline.is_some_and(|d| d <= now))
+            .map(|b| b.n.id)
+            .chain(self.pending.iter().filter(|p| p.started.flatten().is_some_and(|d| d <= now)).map(|p| p.n.id))
+            .collect();
         due.into_iter().flat_map(|id| self.close(id, 1)).collect()
     }
 
@@ -639,16 +912,12 @@ impl Ui {
             return Vec::new();
         }
         let events = self.close_all();
-        let capacity = self.history_capacity(sh);
-        let rows = sh.history.items.len().clamp(1, capacity);
-        let (w, h) = ((HIST_W * self.s).round() as u32, ((hist_header(sh) + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32);
-        let x = self.mon.x + self.mon.w - w as i32 - self.right_gap();
+        let (w, h, rows, layout, content_h) = self.history_dimensions(sh);
+        let x = self.x_for(w);
         let Ok(win) = self.make_window(x, self.top(), w, h, true) else { return events };
-        self.hist = Some(HistWin { win, w, h, scroll: 0, rows: capacity, x, y: self.top(), hover: None });
-        let pm = paint_history(&mut self.fonts, &self.pal, self.s, sh, self.hist.as_ref(), &self.icon_cache);
-        self.set_shape(win, &pm);
+        self.hist = Some(HistWin { win, w, h, scroll: 0, rows, x, y: self.top(), hover: None, focus: None, ring: false, pan: 0.0, content_h, layout });
+        self.redraw_history(sh);
         let _ = self.conn.map_window(win);
-        present(&self.conn, win, self.gc, &pm, self.depth);
         let _ = self.conn.set_input_focus(InputFocus::POINTER_ROOT, win, x11rb::CURRENT_TIME);
         let _ = self.conn.grab_keyboard(true, win, x11rb::CURRENT_TIME, GrabMode::ASYNC, GrabMode::ASYNC);
         let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION;
@@ -674,49 +943,136 @@ impl Ui {
         }
     }
 
-    fn history_capacity(&self, sh: &Shared) -> usize {
-        let available = (self.mon.y + self.mon.h - self.top() - 10).max(1) as f32 / self.s;
-        ((available - hist_header(sh) - 10.) / HIST_ROW).floor().clamp(1., HIST_MAX_ROWS as f32) as usize
+    fn history_dimensions(&self, sh: &Shared) -> (u32, u32, usize, HistoryLayout, f32) {
+        let w = self.surface_width(HIST_W).round().max(1.0) as u32;
+        let layout = HistoryLayout::new(&self.fonts, self.s, w as f32, sh.history.error().is_some());
+        let available = self.available_height();
+        let rows = ((available - layout.header - 8.0 * self.s) / layout.row).floor().clamp(1.0, HIST_MAX_ROWS as f32) as usize;
+        let count = sh.history.items.len().clamp(1, rows);
+        let content = layout.header + count as f32 * layout.row + 8.0 * self.s;
+        (w, content.ceil().min(available).max(1.0) as u32, rows, layout, content)
     }
 
     fn redraw_history(&mut self, sh: &Shared) {
-        let capacity = self.history_capacity(sh);
-        if let Some(h) = &mut self.hist {
-            h.rows = capacity;
-            h.scroll = h.scroll.min(sh.history.items.len().saturating_sub(capacity));
+        let (w, h, capacity, layout, content_h) = self.history_dimensions(sh);
+        let x = self.x_for(w);
+        let y = self.top();
+        if let Some(hw) = &mut self.hist {
+            hw.rows = capacity;
+            hw.scroll = hw.scroll.min(sh.history.items.len().saturating_sub(capacity));
+            hw.layout = layout;
+            hw.content_h = content_h;
+            hw.pan = hw.pan.clamp(0.0, (content_h - h as f32).max(0.0));
+            if hw.focus.is_some_and(|focus| !history_order(sh).contains(&focus)) {
+                hw.focus = Some(HistFocus::Dnd);
+            }
+            if (hw.w, hw.h, hw.x, hw.y) != (w, h, x, y) {
+                (hw.w, hw.h, hw.x, hw.y) = (w, h, x, y);
+                let _ = self.conn.configure_window(hw.win, &ConfigureWindowAux::new().x(x).y(y).width(w).height(h));
+            }
+            if hw.ring {
+                reveal_history_focus(hw, sh, self.s);
+            }
         }
-        // Make sure every visible row has its icon cached before painting (painting only reads the cache).
         let scroll = self.hist.as_ref().map_or(0, |h| h.scroll);
         let size = (32.0 * self.s).round() as u32;
-        let items: Vec<HistoryItem> = sh.history.items.iter().skip(scroll).take(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows)).cloned().collect();
+        let items: Vec<HistoryItem> = sh.history.items.iter().skip(scroll).take(capacity).cloned().collect();
         for it in &items {
             self.icon_cached(&it.icon, &it.app, &it.entry, size);
         }
-        let Some(win) = self.hist.as_ref().map(|h| h.win) else { return };
-        let capacity = self.history_capacity(sh);
-        let rows = sh.history.items.len().clamp(1, capacity);
-        let nh = ((hist_header(sh) + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32;
-        if let Some(h) = self.hist.as_mut() {
-            if h.h != nh {
-                h.h = nh;
-                let _ = self.conn.configure_window(win, &ConfigureWindowAux::new().height(nh));
-            }
-        }
-        let pm = paint_history(&mut self.fonts, &self.pal, self.s, sh, self.hist.as_ref(), &self.icon_cache);
-        self.set_shape(win, &pm);
-        present(&self.conn, win, self.gc, &pm, self.depth);
+        let Some(hw) = &self.hist else { return };
+        let pm = paint_history(&mut self.fonts, &self.pal, self.s, sh, Some(hw), &self.icon_cache);
+        self.set_shape(hw.win, &pm);
+        present(&self.conn, hw.win, self.gc, &pm, self.depth);
         let _ = self.conn.flush();
         self.fonts.trim();
         self.history_debug(sh);
     }
 
+    fn activate_history(&mut self, target: HistFocus, sh: &mut Shared) {
+        match target {
+            HistFocus::Retry => {
+                let _ = sh.history.retry();
+            }
+            HistFocus::Clear => {
+                let _ = sh.history.clear();
+                if let Some(h) = &mut self.hist {
+                    h.scroll = 0;
+                }
+            }
+            HistFocus::Dnd => {
+                let on = !sh.cfg.dnd;
+                if Config::save_dnd(on).is_ok() {
+                    sh.cfg.dnd = on;
+                }
+            }
+            HistFocus::Item(id) => {
+                let index = sh.history.items.iter().position(|item| item.id == id);
+                sh.history.remove(id);
+                if let Some(hw) = &mut self.hist {
+                    hw.scroll = hw.scroll.min(sh.history.items.len().saturating_sub(hw.rows));
+                    hw.focus = index.and_then(|i| sh.history.items.get(i.min(sh.history.items.len().saturating_sub(1)))).map(|item| HistFocus::Item(item.id)).or(Some(HistFocus::Dnd));
+                }
+            }
+        }
+        self.redraw_history(sh);
+    }
+
+    fn history_key(&mut self, e: KeyPressEvent, sh: &mut Shared) {
+        let sym =
+            self.conn.get_keyboard_mapping(e.detail, 1).ok().and_then(|cookie| cookie.reply().ok()).and_then(|reply| reply.keysyms.first().copied()).unwrap_or(if e.detail == 9 { 0xff1b } else { 0 });
+        if sym == 0xff1b {
+            self.close_history();
+            return;
+        }
+        let Some(hw) = &mut self.hist else { return };
+        match sym {
+            0xff09 | 0xfe20 => {
+                let order = history_order(sh);
+                let backwards = e.state.contains(KeyButMask::SHIFT) || sym == 0xfe20;
+                let index = hw.focus.and_then(|focus| order.iter().position(|target| *target == focus));
+                let next = match (index, backwards) {
+                    (Some(0) | None, true) => order.len() - 1,
+                    (Some(i), true) => i - 1,
+                    (Some(i), false) => (i + 1) % order.len(),
+                    (None, false) => 0,
+                };
+                hw.focus = Some(order[next]);
+                hw.ring = true;
+                if let HistFocus::Item(id) = order[next] {
+                    if let Some(index) = sh.history.items.iter().position(|item| item.id == id) {
+                        if index < hw.scroll {
+                            hw.scroll = index;
+                        }
+                        if index >= hw.scroll + hw.rows {
+                            hw.scroll = index + 1 - hw.rows;
+                        }
+                    }
+                }
+                reveal_history_focus(hw, sh, self.s);
+                self.redraw_history(sh);
+            }
+            0xff0d | 0xff8d | 0x20 => {
+                if let Some(target) = hw.focus {
+                    self.activate_history(target, sh);
+                }
+            }
+            0xffff => {
+                if let Some(target @ HistFocus::Item(_)) = hw.focus {
+                    self.activate_history(target, sh);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn history_debug(&self, sh: &Shared) {
         let Some(path) = std::env::var_os("DECNOTIFY_DEBUG_HISTORY") else { return };
         let Some(hw) = &self.hist else { return };
-        let (clear, _, _) = hist_rects(self.s, hw.scroll, sh, hw.rows);
+        let (clear, dnd, rows) = hist_rects(hw, sh);
         let rect = |r: R| [r.x, r.y, r.w, r.h];
         let items: Vec<_> = sh.history.items.iter().map(|i| serde_json::json!({"id":i.id,"summary":i.summary})).collect();
-        let data = serde_json::json!({"window":hw.win,"origin":[hw.x,hw.y],"error":sh.history.error(),"pending":sh.history.pending(),"clear_pending":sh.history.clear_pending(),"items":items,"retry_rect":history_retry(self.s,sh).map(rect),"clear_rect":rect(clear)});
+        let data = serde_json::json!({"window":hw.win,"origin":[hw.x,hw.y],"error":sh.history.error(),"pending":sh.history.pending(),"clear_pending":sh.history.clear_pending(),"items":items,"retry_rect":hw.layout.error.map(|e|rect(shifted(e.retry,hw.pan))),"clear_rect":rect(clear),"dnd_rect":rect(dnd),"row_rects":rows.into_iter().map(rect).collect::<Vec<_>>(),"size":[hw.w,hw.h],"scroll":hw.scroll,"pan":hw.pan,"focus":hw.focus.map(HistFocus::id),"font_scale":crate::theme::live::font_scale()});
         let _ = std::fs::write(path, data.to_string());
     }
 
@@ -766,7 +1122,12 @@ impl Ui {
             }
             Event::MotionNotify(e) => self.motion(e.event, f32::from(e.event_x), f32::from(e.event_y), sh),
             Event::ButtonPress(e) => self.press(e, sh, out),
-            Event::KeyPress(e) if e.detail == KEYCODE_ESCAPE && self.hist.is_some() => self.close_history(),
+            Event::KeyPress(e) if self.hist.is_some() => self.history_key(e, sh),
+            Event::ConfigureNotify(e) if e.window == self.root => self.monitor_reflow(sh),
+            Event::PropertyNotify(e) if e.window == self.root && e.atom == u32::from(AtomEnum::RESOURCE_MANAGER) => {
+                self.s = xft_scale(&self.conn, self.root);
+                self.monitor_reflow(sh);
+            }
             _ => {}
         }
     }
@@ -782,7 +1143,7 @@ impl Ui {
                 self.redraw(i);
             }
         } else if self.hist.as_ref().is_some_and(|h| h.win == win) {
-            let (_, _, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh, self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
+            let (_, _, rows) = hist_rects(self.hist.as_ref().expect("history checked"), sh);
             let hover = rows.iter().position(|r| r.contains(x, y));
             if let Some(h) = self.hist.as_mut() {
                 if h.hover != hover {
@@ -826,9 +1187,15 @@ impl Ui {
         let Some(hw) = self.hist.as_ref() else { return };
         let (win, hw_w, hw_h) = (hw.win, hw.w as f32, hw.h as f32);
         if e.event == win && (e.detail == 4 || e.detail == 5) {
-            let max = sh.history.items.len().saturating_sub(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
-            if let Some(h) = self.hist.as_mut() {
-                h.scroll = if e.detail == 4 { h.scroll.saturating_sub(1) } else { (h.scroll + 1).min(max) };
+            if let Some(h) = &mut self.hist {
+                let max_pan = (h.content_h - h.h as f32).max(0.0);
+                let old_pan = h.pan;
+                h.pan = (h.pan + if e.detail == 4 { -30.0 * self.s } else { 30.0 * self.s }).clamp(0.0, max_pan);
+                if (h.pan - old_pan).abs() < 0.1 {
+                    let max = sh.history.items.len().saturating_sub(h.rows);
+                    h.scroll = if e.detail == 4 { h.scroll.saturating_sub(1) } else { (h.scroll + 1).min(max) };
+                }
+                h.ring = false;
             }
             self.redraw_history(sh);
             return;
@@ -837,30 +1204,23 @@ impl Ui {
             self.close_history();
             return;
         }
-        let (clear, dnd, rows) = hist_rects(self.s, self.hist.as_ref().map_or(0, |h| h.scroll), sh, self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
-        if history_retry(self.s, sh).is_some_and(|r| r.contains(x, y)) {
-            let _ = sh.history.retry();
+        let (clear, dnd, rows) = hist_rects(hw, sh);
+        let target = if hw.layout.error.is_some_and(|layout| shifted(layout.retry, hw.pan).contains(x, y)) {
+            Some(HistFocus::Retry)
         } else if clear.contains(x, y) {
-            let _ = sh.history.clear();
-            if let Some(h) = self.hist.as_mut() {
-                h.scroll = 0;
-            }
+            Some(HistFocus::Clear)
         } else if dnd.contains(x, y) {
-            let on = !sh.cfg.dnd;
-            if Config::save_dnd(on).is_ok() {
-                sh.cfg.dnd = on;
+            Some(HistFocus::Dnd)
+        } else {
+            rows.iter().position(|r| r.contains(x, y)).and_then(|i| sh.history.items.get(hw.scroll + i)).map(|item| HistFocus::Item(item.id))
+        };
+        if let Some(target) = target {
+            if let Some(hw) = &mut self.hist {
+                hw.focus = Some(target);
+                hw.ring = false;
             }
-        } else if let Some(i) = rows.iter().position(|r| r.contains(x, y)) {
-            let scroll = self.hist.as_ref().map_or(0, |h| h.scroll);
-            if let Some(id) = sh.history.items.get(scroll + i).map(|it| it.id) {
-                sh.history.remove(id);
-            }
-            let max = sh.history.items.len().saturating_sub(self.hist.as_ref().map_or(HIST_MAX_ROWS, |h| h.rows));
-            if let Some(h) = self.hist.as_mut() {
-                h.scroll = h.scroll.min(max);
-            }
+            self.activate_history(target, sh);
         }
-        self.redraw_history(sh);
     }
 }
 
@@ -871,26 +1231,26 @@ fn paint_banner(fonts: &mut Fonts, pal: &Palette, s: f32, b: &Banner) -> Pixmap 
         gfx::fill_rounded(&mut pm, 0.0, 0.0, w, h, 16.0 * s, pal.bg_color());
         gfx::stroke_rounded(&mut pm, 0.5, 0.5, w - 1.0, h - 1.0, 16.0 * s, pal.border, 1.0);
         draw_icon(fonts, &mut pm, b.icon.as_ref(), &b.n.app, b.icon_at.x, b.icon_at.y, b.icon_at.w);
-        let tx = 14.0 * s + 36.0 * s + 10.0 * s;
-        fonts.draw_as(Role::Title, &mut pm, &b.title, tx, 12.0 * s, 13.0 * s, Weight::SemiBold, pal.title);
+        let tx = b.text_x;
+        fonts.draw_as(Role::Title, &mut pm, &b.title, tx, b.title_y, 13.0 * s, Weight::SemiBold, pal.title);
         for (i, line) in b.body.iter().enumerate() {
-            fonts.draw(&mut pm, line, tx, 12.0 * s + 17.0 * s + i as f32 * 15.0 * s, 12.0 * s, Weight::Regular, pal.body);
+            fonts.draw(&mut pm, line, tx, b.body_y + i as f32 * b.body_line, 12.0 * s, Weight::Regular, pal.body);
         }
         if b.hovered {
             let c = b.close;
             let bg = if b.hover_close { pal.button_hover } else { pal.button };
             gfx::fill_circle(&mut pm, c.x + c.w / 2.0, c.y + c.h / 2.0, c.w / 2.0, bg);
             let t = fonts.measure("\u{d7}", 14.0 * s, Weight::Medium);
-            fonts.draw(&mut pm, "\u{d7}", c.x + (c.w - t) / 2.0, c.y + 1.0 * s, 14.0 * s, Weight::Medium, pal.title);
+            fonts.draw(&mut pm, "\u{d7}", c.x + (c.w - t) / 2.0, c.y + (c.h - line_height(fonts, Role::Ui, 14.0 * s, Weight::Medium, s)) / 2.0, 14.0 * s, Weight::Medium, pal.title);
         } else {
             let t = fonts.measure("now", 11.0 * s, Weight::Regular);
-            fonts.draw(&mut pm, "now", w - 14.0 * s - t, 13.0 * s, 11.0 * s, Weight::Regular, pal.dim);
+            fonts.draw(&mut pm, "now", w - 14.0 * s - t, b.title_y, 11.0 * s, Weight::Regular, pal.dim);
         }
         for (i, (r, label, _)) in b.btns.iter().enumerate() {
             let bg = if b.hover_btn == Some(i) { pal.button_hover } else { pal.button };
             gfx::fill_rounded(&mut pm, r.x, r.y, r.w, r.h, 7.0 * s, bg);
             let t = fonts.measure(label, 12.0 * s, Weight::Medium);
-            fonts.draw(&mut pm, label, r.x + (r.w - t) / 2.0, r.y + 5.0 * s, 12.0 * s, Weight::Medium, pal.title);
+            fonts.draw(&mut pm, label, r.x + (r.w - t) / 2.0, r.y + (r.h - line_height(fonts, Role::Ui, 12.0 * s, Weight::Medium, s)) / 2.0, 12.0 * s, Weight::Medium, pal.title);
         }
         pm
     }
@@ -901,13 +1261,19 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     let mut pm = Pixmap::new(w, h).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"));
     gfx::fill_rounded(&mut pm, 0.0, 0.0, w as f32, h as f32, 16.0 * s, pal.bg_color());
     gfx::stroke_rounded(&mut pm, 0.5, 0.5, w as f32 - 1.0, h as f32 - 1.0, 16.0 * s, pal.border, 1.0);
-    let (clear, dnd, rows) = hist_rects(s, hw.map_or(0, |h| h.scroll), sh, hw.map_or(HIST_MAX_ROWS, |h| h.rows));
-    fonts.draw_as(Role::Title, &mut pm, "Notifications", 16.0 * s, 13.0 * s, 16.0 * s, Weight::Bold, pal.title);
+    let Some(hw) = hw else { return pm };
+    let layout = hw.layout;
+    let pan = hw.pan;
+    let (clear, dnd, rows) = hist_rects(hw, sh);
+    let title = ellipsize_role(fonts, Role::Title, "Notifications", 16.0 * s, Weight::Bold, (clear.x - 24.0 * s).max(1.0));
+    fonts.draw_as(Role::Title, &mut pm, &title, 16.0 * s, layout.title_y - pan, 16.0 * s, Weight::Bold, pal.title);
+    let clear_line = line_height(fonts, Role::Ui, 12.0 * s, Weight::Medium, s);
+    fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + (clear.h - clear_line) / 2.0, 12.0 * s, Weight::Medium, pal.link);
     let (ar, ag, ab) = pal.accent;
-    fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + 3.0 * s, 12.0 * s, Weight::Medium, pal.link);
-    // Do Not Disturb row with a switch.
     gfx::fill_rounded(&mut pm, dnd.x, dnd.y, dnd.w, dnd.h, 8.0 * s, pal.button);
-    fonts.draw(&mut pm, "Do Not Disturb", dnd.x + 10.0 * s, dnd.y + 7.0 * s, 12.5 * s, Weight::Medium, pal.title);
+    let dnd_line = line_height(fonts, Role::Ui, 12.5 * s, Weight::Medium, s);
+    let label = ellipsize(fonts, "Do Not Disturb", 12.5 * s, Weight::Medium, (dnd.w - 64.0 * s).max(1.0));
+    fonts.draw(&mut pm, &label, dnd.x + 10.0 * s, dnd.y + (dnd.h - dnd_line) / 2.0, 12.5 * s, Weight::Medium, pal.title);
     let (sw, sh_) = (34.0 * s, 20.0 * s);
     let (sx, sy) = (dnd.x + dnd.w - sw - 10.0 * s, dnd.y + (dnd.h - sh_) / 2.0);
     let track = if sh.cfg.dnd { color(ar, ag, ab, 1.0) } else { pal.button_hover };
@@ -915,9 +1281,10 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     let knob_x = if sh.cfg.dnd { sx + sw - sh_ + 2.0 * s } else { sx + 2.0 * s };
     gfx::fill_circle(&mut pm, knob_x + (sh_ - 4.0 * s) / 2.0, sy + sh_ / 2.0, (sh_ - 4.0 * s) / 2.0, if sh.cfg.dnd { accent_text(pal) } else { pal.title });
 
-    if let Some(error) = sh.history.error() {
-        let r = history_retry(s, sh).expect("error exposes retry");
-        gfx::fill_rounded(&mut pm, 12. * s, 84. * s, w as f32 - 24. * s, 76. * s, 8. * s, pal.button);
+    if let (Some(error), Some(el)) = (sh.history.error(), layout.error) {
+        let card = shifted(el.card, pan);
+        let retry = shifted(el.retry, pan);
+        gfx::fill_rounded(&mut pm, card.x, card.y, card.w, card.h, 8.0 * s, pal.button);
         let title = if sh.history.clear_pending() {
             "Clear is not saved"
         } else if sh.history.pending() {
@@ -925,41 +1292,56 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
         } else {
             "History is unavailable"
         };
-        fonts.draw(&mut pm, title, 22. * s, 92. * s, 12. * s, Weight::SemiBold, pal.title);
-        let reason = ellipsize(fonts, error, 11. * s, Weight::Regular, w as f32 - 120. * s);
-        fonts.draw(&mut pm, &reason, 22. * s, 113. * s, 11. * s, Weight::Regular, pal.body);
+        fonts.draw(&mut pm, &ellipsize(fonts, title, 12.0 * s, Weight::SemiBold, (card.w - 20.0 * s).max(1.0)), 22.0 * s, el.title_y - pan, 12.0 * s, Weight::SemiBold, pal.title);
+        let reason = ellipsize(fonts, error, 11.0 * s, Weight::Regular, (retry.x - 30.0 * s).max(1.0));
+        fonts.draw(&mut pm, &reason, 22.0 * s, el.reason_y - pan, 11.0 * s, Weight::Regular, pal.body);
         let help = if sh.history.pending() { "Unsaved changes remain here for this session" } else { "History file preserved; repair the problem and Retry" };
-        fonts.draw(&mut pm, &ellipsize(fonts, help, 10. * s, Weight::Regular, w as f32 - 44. * s), 22. * s, 140. * s, 10. * s, Weight::Regular, pal.body);
-        gfx::fill_rounded(&mut pm, r.x, r.y, r.w, r.h, 6. * s, color(ar, ag, ab, 1.));
-        fonts.draw(&mut pm, "Retry", r.x + 12. * s, r.y + 7. * s, 12. * s, Weight::Medium, accent_text(pal));
+        fonts.draw(&mut pm, &ellipsize(fonts, help, 10.0 * s, Weight::Regular, (card.w - 20.0 * s).max(1.0)), 22.0 * s, el.help_y - pan, 10.0 * s, Weight::Regular, pal.body);
+        gfx::fill_rounded(&mut pm, retry.x, retry.y, retry.w, retry.h, 6.0 * s, color(ar, ag, ab, 1.0));
+        let retry_line = line_height(fonts, Role::Ui, 12.0 * s, Weight::Medium, s);
+        let label = ellipsize(fonts, "Retry", 12.0 * s, Weight::Medium, (retry.w - 12.0 * s).max(1.0));
+        let width = fonts.measure(&label, 12.0 * s, Weight::Medium);
+        fonts.draw(&mut pm, &label, retry.x + (retry.w - width) / 2.0, retry.y + (retry.h - retry_line) / 2.0, 12.0 * s, Weight::Medium, accent_text(pal));
     }
 
     if sh.history.items.is_empty() {
-        let msg = "No Notifications";
-        let t = fonts.measure(msg, 13.0 * s, Weight::Medium);
-        fonts.draw(&mut pm, msg, (w as f32 - t) / 2.0, (hist_header(sh) + 20.0) * s, 13.0 * s, Weight::Medium, pal.dim);
-        return pm;
-    }
-    let scroll = hw.map_or(0, |h| h.scroll);
-    let now = unix_now();
-    for (i, r) in rows.iter().enumerate() {
-        let item = &sh.history.items[scroll + i];
-        if hw.is_some_and(|h| h.hover == Some(i)) {
-            gfx::fill_rounded(&mut pm, 8.0 * s, r.y, w as f32 - 16.0 * s, r.h - 4.0 * s, 10.0 * s, pal.button);
+        let msg = ellipsize(fonts, "No Notifications", 13.0 * s, Weight::Medium, (w as f32 - 24.0 * s).max(1.0));
+        let width = fonts.measure(&msg, 13.0 * s, Weight::Medium);
+        fonts.draw(&mut pm, &msg, (w as f32 - width) / 2.0, layout.header + 16.0 * s - pan, 13.0 * s, Weight::Medium, pal.dim);
+    } else {
+        let now = unix_now();
+        for (i, r) in rows.iter().enumerate() {
+            let item = &sh.history.items[hw.scroll + i];
+            if hw.hover == Some(i) {
+                gfx::fill_rounded(&mut pm, 8.0 * s, r.y, w as f32 - 16.0 * s, r.h - 4.0 * s, 10.0 * s, pal.button);
+            }
+            let size = (32.0 * s).round() as u32;
+            let icon = icons.get(&format!("{}|{}|{}|{}", item.icon, item.app, item.entry, size)).and_then(Option::as_ref);
+            draw_icon(fonts, &mut pm, icon, &item.app, 18.0 * s, r.y + 11.0 * s, 32.0 * s);
+            let tx = 62.0 * s;
+            let when = ago(item.time, now);
+            let tw = fonts.measure(&when, 11.0 * s, Weight::Regular);
+            fonts.draw(&mut pm, &when, w as f32 - 18.0 * s - tw, r.y + 8.0 * s, 11.0 * s, Weight::Regular, pal.dim);
+            let title = ellipsize(fonts, &item.summary, 12.5 * s, Weight::SemiBold, (w as f32 - tx - tw - 30.0 * s).max(1.0));
+            fonts.draw(&mut pm, &title, tx, r.y + 8.0 * s, 12.5 * s, Weight::SemiBold, pal.title);
+            let body = ellipsize(fonts, item.body.lines().next().unwrap_or(""), 12.0 * s, Weight::Regular, (w as f32 - tx - 18.0 * s).max(1.0));
+            fonts.draw(&mut pm, &body, tx, r.y + 8.0 * s + layout.title_line, 12.0 * s, Weight::Regular, pal.body);
+            let app = ellipsize(fonts, &item.app, 10.5 * s, Weight::Regular, (w as f32 - tx - 18.0 * s).max(1.0));
+            fonts.draw(&mut pm, &app, tx, r.y + 8.0 * s + layout.title_line + layout.body_line, 10.5 * s, Weight::Regular, pal.dim);
         }
-        let size = (32.0 * s).round() as u32;
-        let icon = icons.get(&format!("{}|{}|{}|{}", item.icon, item.app, item.entry, size)).and_then(Option::as_ref);
-        draw_icon(fonts, &mut pm, icon, &item.app, 18.0 * s, r.y + 11.0 * s, 32.0 * s);
-        let tx = 62.0 * s;
-        let when = ago(item.time, now);
-        let tw = fonts.measure(&when, 11.0 * s, Weight::Regular);
-        fonts.draw(&mut pm, &when, w as f32 - 18.0 * s - tw, r.y + 10.0 * s, 11.0 * s, Weight::Regular, pal.dim);
-        let title = ellipsize(fonts, &item.summary, 12.5 * s, Weight::SemiBold, w as f32 - tx - tw - 30.0 * s);
-        fonts.draw(&mut pm, &title, tx, r.y + 9.0 * s, 12.5 * s, Weight::SemiBold, pal.title);
-        let first = item.body.lines().next().unwrap_or("");
-        let body = ellipsize(fonts, first, 12.0 * s, Weight::Regular, w as f32 - tx - 18.0 * s);
-        fonts.draw(&mut pm, &body, tx, r.y + 27.0 * s, 12.0 * s, Weight::Regular, pal.body);
-        fonts.draw(&mut pm, &ellipsize(fonts, &item.app, 10.5 * s, Weight::Regular, w as f32 - tx - 18.0 * s), tx, r.y + 42.0 * s, 10.5 * s, Weight::Regular, pal.dim);
+    }
+    if hw.ring {
+        if let Some(r) = history_focus_rect(hw, sh) {
+            let row = matches!(hw.focus, Some(HistFocus::Item(_)));
+            let inset = if row { 6.0 * s } else { -3.0 * s };
+            let y_inset = if row { 1.0 * s } else { -3.0 * s };
+            gfx::stroke_rounded(&mut pm, r.x + inset, r.y + y_inset, (r.w - inset * 2.0).max(1.0), (r.h - y_inset * 2.0).max(1.0), 7.0 * s, pal.link, 2.0 * s);
+        }
+    }
+    if hw.content_h > h as f32 {
+        let thumb = ((h as f32 / hw.content_h) * h as f32).max(10.0 * s);
+        let y = (h as f32 - thumb) * hw.pan / (hw.content_h - h as f32).max(1.0);
+        gfx::fill_rounded(&mut pm, (w as f32 - 4.0 * s).max(0.0), y, 3.0 * s, thumb, 1.5 * s, pal.dim);
     }
     pm
 }
@@ -969,26 +1351,120 @@ fn accent_text(pal: &Palette) -> Color {
     color(r, g, b, 1.0)
 }
 
-fn hist_header(sh: &Shared) -> f32 {
-    HIST_HEADER + if sh.history.error().is_some() { 84. } else { 0. }
+fn history_order(sh: &Shared) -> Vec<HistFocus> {
+    let mut order = vec![HistFocus::Clear, HistFocus::Dnd];
+    if sh.history.error().is_some() {
+        order.push(HistFocus::Retry);
+    }
+    order.extend(sh.history.items.iter().map(|item| HistFocus::Item(item.id)));
+    order
 }
 
-fn history_retry(s: f32, sh: &Shared) -> Option<R> {
-    sh.history.error().map(|_| R { x: (HIST_W - 86.) * s, y: 108. * s, w: 62. * s, h: 30. * s })
+fn hist_rects(hw: &HistWin, sh: &Shared) -> (R, R, Vec<R>) {
+    let n = sh.history.items.len().saturating_sub(hw.scroll).min(hw.rows);
+    (shifted(hw.layout.clear, hw.pan), shifted(hw.layout.dnd, hw.pan), (0..n).map(|i| shifted(hw.layout.row_rect(i, hw.w as f32), hw.pan)).collect())
 }
 
-fn hist_rects(s: f32, scroll: usize, sh: &Shared, limit: usize) -> (R, R, Vec<R>) {
-    let w = HIST_W * s;
-    let clear = R { x: w - 70.0 * s, y: 14.0 * s, w: 56.0 * s, h: 22.0 * s };
-    let dnd = R { x: 12.0 * s, y: 44.0 * s, w: w - 24.0 * s, h: 30.0 * s };
-    let n = sh.history.items.len().saturating_sub(scroll).min(limit);
-    let rows = (0..n).map(|i| R { x: 0.0, y: (hist_header(sh) + i as f32 * HIST_ROW) * s, w, h: HIST_ROW * s }).collect();
-    (clear, dnd, rows)
+fn reveal_history_focus(hw: &mut HistWin, sh: &Shared, s: f32) {
+    if let Some(HistFocus::Item(id)) = hw.focus {
+        if let Some(index) = sh.history.items.iter().position(|item| item.id == id) {
+            if index < hw.scroll {
+                hw.scroll = index;
+            }
+            if index >= hw.scroll + hw.rows {
+                hw.scroll = index + 1 - hw.rows;
+            }
+        }
+    }
+    if let Some(r) = history_focus_rect(hw, sh) {
+        let margin = (4.0 * s).min(hw.h as f32 / 4.0);
+        if r.y < margin {
+            hw.pan = (hw.pan + r.y - margin).max(0.0);
+        }
+        if r.y + r.h > hw.h as f32 - margin {
+            hw.pan = (hw.pan + r.y + r.h - hw.h as f32 + margin).min((hw.content_h - hw.h as f32).max(0.0));
+        }
+    }
+}
+
+fn history_focus_rect(hw: &HistWin, sh: &Shared) -> Option<R> {
+    let r = match hw.focus? {
+        HistFocus::Clear => hw.layout.clear,
+        HistFocus::Dnd => hw.layout.dnd,
+        HistFocus::Retry => hw.layout.error?.retry,
+        HistFocus::Item(id) => {
+            let i = sh.history.items.iter().position(|item| item.id == id)?;
+            if i < hw.scroll || i >= hw.scroll + hw.rows {
+                return None;
+            }
+            hw.layout.row_rect(i - hw.scroll, hw.w as f32)
+        }
+    };
+    Some(shifted(r, hw.pan))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn measured_history_metrics_keep_lines_and_controls_separate() {
+        let fonts = Fonts::load().expect("test fonts");
+        for (scale, width) in [(1.0, 296.0), (1.0, 380.0), (2.0, 600.0)] {
+            let m = HistoryLayout::new(&fonts, scale, width, true);
+            assert!(m.dnd.y >= m.clear.y + m.clear.h);
+            assert!(m.clear.x >= 0.0 && m.clear.x + m.clear.w <= width);
+            let e = m.error.unwrap();
+            assert!(e.card.y >= m.dnd.y + m.dnd.h);
+            assert!(e.reason_y >= e.title_y + line_height(&fonts, Role::Ui, 12.0 * scale, Weight::SemiBold, scale));
+            assert!(e.help_y >= e.retry.y + e.retry.h);
+            assert!(e.retry.x >= 0.0 && e.retry.x + e.retry.w <= width);
+            assert!(e.retry.h >= line_height(&fonts, Role::Ui, 12.0 * scale, Weight::Medium, scale));
+            assert!(m.header >= e.card.y + e.card.h);
+            let row = m.row_rect(0, width);
+            assert!(row.h >= 16.0 * scale + m.title_line + m.body_line + line_height(&fonts, Role::Ui, 10.5 * scale, Weight::Regular, scale));
+            assert!(m.row_rect(1, width).y >= row.y + row.h);
+        }
+    }
+
+    #[test]
+    fn history_focus_uses_notification_ids_and_matches_visible_hit_rows() {
+        let fonts = Fonts::load().expect("test fonts");
+        let mut sh = Shared { cfg: Config::default(), history: super::super::model::History::in_memory() };
+        for id in 1..=5 {
+            sh.history.push(HistoryItem { id, app: "Fixture".into(), icon: String::new(), summary: format!("Item {id}"), body: "Body".into(), entry: String::new(), time: 0 });
+        }
+        assert_eq!(history_order(&sh), vec![HistFocus::Clear, HistFocus::Dnd, HistFocus::Item(5), HistFocus::Item(4), HistFocus::Item(3), HistFocus::Item(2), HistFocus::Item(1)]);
+        let hw = HistWin {
+            win: 0,
+            w: 296,
+            h: 300,
+            scroll: 3,
+            rows: 2,
+            x: 0,
+            y: 0,
+            hover: None,
+            focus: Some(HistFocus::Item(2)),
+            ring: true,
+            pan: 10.0,
+            content_h: 310.0,
+            layout: HistoryLayout::new(&fonts, 1.0, 296.0, false),
+        };
+        let (_, _, rows) = hist_rects(&hw, &sh);
+        assert_eq!(history_focus_rect(&hw, &sh), Some(rows[0]));
+        assert!(rows[0].contains(rows[0].x + rows[0].w / 2.0, rows[0].y + rows[0].h / 2.0));
+        sh.history.remove(2);
+        assert!(!history_order(&sh).contains(&HistFocus::Item(2)));
+        assert!(history_focus_rect(&hw, &sh).is_none(), "a removed ID cannot target the row that replaces it");
+        let mut hw = hw;
+        hw.focus = Some(HistFocus::Item(1));
+        hw.scroll = 0;
+        hw.h = 134;
+        hw.content_h = hw.layout.header + hw.rows as f32 * hw.layout.row + 8.0;
+        reveal_history_focus(&mut hw, &sh, 1.0);
+        let r = history_focus_rect(&hw, &sh).unwrap();
+        assert!(r.y >= 4.0 && r.y + r.h <= hw.h as f32 - 4.0, "focused row and ring remain in the viewport: {r:?}");
+    }
 
     #[test]
     fn resolved_theme_palette_preserves_popup_accent_and_readable_text() {
@@ -1032,7 +1508,21 @@ mod tests {
         let mut cfg = Config::default();
         cfg.dnd = true;
         let sh = Shared { cfg, history: super::super::model::History::default() };
-        let hist = HistWin { win: 0, w: 380, h: 160, rows: 1, scroll: 0, x: 0, y: 0, hover: None };
+        let hist = HistWin {
+            win: 0,
+            w: 380,
+            h: 160,
+            rows: 1,
+            scroll: 0,
+            x: 0,
+            y: 0,
+            hover: None,
+            focus: None,
+            ring: false,
+            pan: 0.0,
+            content_h: 160.0,
+            layout: HistoryLayout::new(&fonts, 1.0, 380.0, false),
+        };
         let pm = paint_history(&mut fonts, &p, 1., &sh, Some(&hist), &HashMap::new());
         let pixel = pm.pixel(190, 125).unwrap();
         assert_eq!((pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()), (0, 0, 0, 255));
