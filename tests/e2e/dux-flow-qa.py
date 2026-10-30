@@ -2,6 +2,7 @@
 """Independent native Settings input/draft QA; private Xvfb and paths only.
 
 SETTINGS_BIN=/absolute/decsettings DUX_FLOW_EVIDENCE_DIR=/tmp/evidence python3 ...
+SETTINGS_TEST_LONG_RUNTIME=1 also exercises navigation beyond the Unix socket path limit.
 No build, desktop bus, live app, WM restart or system setting is used.
 """
 import json
@@ -39,6 +40,10 @@ for key, child in {'HOME':'home','XDG_CONFIG_HOME':'cfg','XDG_CONFIG_DIRS':'noco
     'XDG_DATA_DIRS':'nodata','DECEBAL_CONFIG':'cfg/omarchy','DECEBAL_THEMES':'themes',
     'DECEBAL_SYSTEM_THEMES':'system-themes','DECEBAL_PALETTES':'palettes','DECEBAL_WIDGETS':'widgets'}.items():
     path = root / child; path.mkdir(parents=True, exist_ok=True); env[key] = str(path)
+if os.environ.get('SETTINGS_TEST_LONG_RUNTIME') == '1':
+    runtime = root / ('runtime-' + 'x' * 100)
+    runtime.mkdir(mode=0o700)
+    env['XDG_RUNTIME_DIR'] = str(runtime)
 os.chmod(env['XDG_RUNTIME_DIR'], 0o700)
 env.update(DISPLAY=f':{number}', DECEBAL_BACKEND='x11', XDG_SESSION_TYPE='x11',
     DBUS_SESSION_BUS_ADDRESS='unix:path='+str(root/'missing-session'),

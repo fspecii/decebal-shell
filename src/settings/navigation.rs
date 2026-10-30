@@ -11,9 +11,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{sync_channel, Receiver},
-    Arc,
+    Arc, Mutex,
 };
 use std::time::Duration;
+
+// Serialize same-process listener replacement and inode-checked cleanup. Across
+// processes the caller's Settings instance lock remains the ownership boundary.
+static ENDPOINT_HANDOFF: Mutex<()> = Mutex::new(());
 
 pub fn resolve(name: &str) -> Option<String> {
     let name = match name {
@@ -30,9 +34,24 @@ pub fn endpoint() -> io::Result<PathBuf> {
     std::env::var_os("WAYLAND_DISPLAY").hash(&mut hash);
     std::env::var_os("DISPLAY").hash(&mut hash);
     let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    endpoint_in(&base, hash.finish(), Path::new("/tmp"))
+}
+
+fn endpoint_in(base: &Path, display: u64, fallback: &Path) -> io::Result<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    use std::os::unix::ffi::OsStrExt;
     // SAFETY: geteuid has no arguments or memory accesses.
     let uid = unsafe { libc::geteuid() };
-    let dir = base.join(format!("decsettings-{uid}"));
+    let mut dir = base.join(format!("decsettings-{uid}"));
+    let mut file = format!("{display:x}.sock");
+    // Linux sockaddr_un has 108 bytes including the terminating NUL. Hashing
+    // the display alone cannot shorten an unusually long runtime directory.
+    if dir.join(&file).as_os_str().as_bytes().len() > 107 {
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        base.hash(&mut hash);
+        dir = fallback.join(format!("decsettings-{uid}"));
+        file = format!("{:x}-{display:x}.sock", hash.finish());
+    }
     match fs::create_dir(&dir) {
         Ok(()) => fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
@@ -42,7 +61,11 @@ pub fn endpoint() -> io::Result<PathBuf> {
     if !md.is_dir() || md.uid() != uid || md.mode() & 0o777 != 0o700 {
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Settings runtime directory must be owned by this user with mode 0700"));
     }
-    Ok(dir.join(format!("{:x}.sock", hash.finish())))
+    let path = dir.join(file);
+    if path.as_os_str().as_bytes().len() > 107 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Settings socket path exceeds the Unix socket limit"));
+    }
+    Ok(path)
 }
 
 pub fn send(path: &Path, pane: &str) -> io::Result<()> {
@@ -86,8 +109,11 @@ pub struct Listener {
 impl Listener {
     /// Caller must hold the Settings instance lock before removing a stale endpoint.
     pub fn bind(path: PathBuf) -> io::Result<Self> {
-        if path.exists() {
-            fs::remove_file(&path)?;
+        let _handoff = ENDPOINT_HANDOFF.lock().unwrap_or_else(|e| e.into_inner());
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
         }
         let listener = UnixListener::bind(&path)?;
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
@@ -153,6 +179,7 @@ impl Listener {
                     Err(_) => break,
                 }
             }
+            let _handoff = ENDPOINT_HANDOFF.lock().unwrap_or_else(|e| e.into_inner());
             if fs::symlink_metadata(&self.path).is_ok_and(|md| (md.dev(), md.ino()) == self.identity) {
                 let _ = fs::remove_file(&self.path);
             }
@@ -173,6 +200,43 @@ impl Drop for Requests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn long_runtime_paths_bind_and_keep_sessions_separate() {
+        use std::os::unix::ffi::OsStrExt;
+        let root = std::env::temp_dir().join(format!("settings-long-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let a = root.join("runtime".repeat(20));
+        let b = root.join("other".repeat(30));
+        let fallback = root.join("short");
+        fs::create_dir_all(&fallback).unwrap();
+        let path = endpoint_in(&a, 42, &fallback).unwrap();
+        assert!(path.as_os_str().as_bytes().len() <= 107);
+        assert_ne!(path, endpoint_in(&b, 42, &fallback).unwrap());
+        assert_ne!(path, endpoint_in(&a, 43, &fallback).unwrap());
+        assert_eq!(path, endpoint_in(&a, 42, &fallback).unwrap());
+        let unicode = endpoint_in(&root.join("é".repeat(42)), 42, &fallback).unwrap();
+        assert!(unicode.as_os_str().as_bytes().len() <= 107, "the socket budget counts bytes, not characters");
+        assert_eq!(fs::metadata(path.parent().unwrap()).unwrap().mode() & 0o777, 0o700);
+        let listener = Listener::bind(path.clone()).unwrap().for_config(&a.join("config.toml"));
+        let requests = listener.start(Arc::new(|| {}));
+        send_for_config(&path, "widgets", &a.join("config.toml")).unwrap();
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), "widgets");
+        assert!(send_for_config(&path, "widgets", &b.join("config.toml")).is_err());
+        drop(requests);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn short_runtime_paths_keep_existing_endpoints_and_reject_unsafe_directories() {
+        let root = std::env::temp_dir().join(format!("settings-endpoint-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = endpoint_in(&root, 42, &root).unwrap();
+        assert_eq!(path.file_name().unwrap(), "2a.sock");
+        assert!(path.starts_with(&root));
+        fs::set_permissions(path.parent().unwrap(), fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(endpoint_in(&root, 42, &root).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn old_listener_cannot_remove_replacement_endpoint() {
         let dir = std::env::temp_dir().join(format!("settings-navigation-handoff-{}", std::process::id()));
