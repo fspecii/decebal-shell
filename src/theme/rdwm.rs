@@ -83,6 +83,33 @@ pub fn apply_with(cfg: &mut Cfg, t: &Theme, db: &super::fontdb::FontDb) -> Resul
     Ok(())
 }
 
+/// Theme shadow strength maps to the WM's unified SSD carrier, when the running
+/// parser supports it. An upgraded offline CLI must not write keys an old live WM rejects.
+pub fn apply_shadows(cfg: &mut Cfg, theme: &Theme, paths: &Paths, offline: &crate::settings::schema::Schema) -> Result<bool, String> {
+    let live = if paths.socket.exists() {
+        io::ipc_call(&paths.socket, &serde_json::json!({"cmd":"schema"})).ok().and_then(|v| crate::settings::schema::Schema::from_json(&v))
+    } else if offline.live {
+        Some(offline.clone())
+    } else {
+        None
+    };
+    let supports = live.is_some_and(|s| ["shadow", "shadow_opacity", "shadow_inactive_opacity"].iter().all(|k| s.has("decoration", k)));
+    shadow_values(cfg, theme.shadow, supports)?;
+    Ok(supports)
+}
+
+fn shadow_values(cfg: &mut Cfg, strength: f32, supports: bool) -> Result<(), String> {
+    if !supports {
+        return Ok(());
+    }
+    let strength = if strength.is_finite() { strength.clamp(0.0, 1.5) } else { 0.0 };
+    cfg.set("decoration", "shadow", &Val::Bool(strength > 0.0))?;
+    cfg.set("decoration", "shadow_opacity", &Val::Int((strength * 35.0).round() as i64))?;
+    cfg.set("decoration", "shadow_inactive_opacity", &Val::Int((strength * 18.0).round() as i64))?;
+    // Leave the user's bounded blur radius alone; rdwm supplies its own default.
+    Ok(())
+}
+
 /// Result of [`write_config`].
 #[derive(Debug, PartialEq, Eq)]
 pub enum Wrote {
@@ -96,6 +123,7 @@ pub fn write_config(paths: &Paths, t: &Theme) -> Result<Wrote, String> {
     let old = std::fs::read_to_string(&paths.rdwm_config).unwrap_or_default();
     let mut cfg = Cfg::parse(&old).map_err(|e| format!("{}: {e}", paths.rdwm_config.display()))?;
     apply_to(&mut cfg, t)?;
+    apply_shadows(&mut cfg, t, paths, &crate::settings::schema::Schema::load(&paths.rdwmctl))?;
     let text = cfg.text();
     if text == old {
         return Ok(Wrote::Unchanged);
@@ -156,6 +184,58 @@ mod tests {
         let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
         assert_eq!(cfg.get("decoration", "style"), Some(Val::Str("classic".into())));
         assert_eq!(cfg.get("decoration", "height"), Some(Val::Int(36)));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn shadow_strength_is_bounded_and_zero_disables_the_carrier() {
+        for (strength, on, active, inactive) in [(0.0, false, 0, 0), (0.65, true, 23, 12), (1.0, true, 35, 18), (9.0, true, 53, 27), (f32::NAN, false, 0, 0)] {
+            let mut cfg = Cfg::parse("[decoration]\nshadow_radius = 24 # user radius\n").unwrap();
+            shadow_values(&mut cfg, strength, true).unwrap();
+            assert_eq!(cfg.get("decoration", "shadow"), Some(Val::Bool(on)));
+            assert_eq!(cfg.get("decoration", "shadow_opacity"), Some(Val::Int(active)));
+            assert_eq!(cfg.get("decoration", "shadow_inactive_opacity"), Some(Val::Int(inactive)));
+            assert!(cfg.text().contains("shadow_radius = 24 # user radius"));
+        }
+        let mut cfg = Cfg::parse("# old parser\n[decoration]\nshadow = false\n").unwrap();
+        let before = cfg.text();
+        shadow_values(&mut cfg, 1.0, false).unwrap();
+        assert_eq!(cfg.text(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn live_old_schema_wins_over_a_new_offline_cli() {
+        use std::io::{BufRead, Write};
+        use std::os::unix::net::UnixListener;
+        let (dir, _, mut paths) = crate::theme::engine::apply::tests::sandbox("shadow-live-schema");
+        paths.socket = dir.join("wm.sock");
+        let listener = UnixListener::bind(&paths.socket).unwrap();
+        let worker = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            std::io::BufReader::new(socket.try_clone().unwrap()).read_line(&mut line).unwrap();
+            assert_eq!(serde_json::from_str::<serde_json::Value>(&line).unwrap()["cmd"], "schema");
+            writeln!(socket, "{{\"ok\":true,\"keys\":[]}}").unwrap();
+        });
+        let mut schema = crate::settings::schema::Schema::snapshot();
+        for key in ["shadow", "shadow_opacity", "shadow_inactive_opacity"] {
+            schema.keys.push(crate::settings::schema::KeyMeta {
+                section: "decoration".into(),
+                key: key.into(),
+                ty: "int".into(),
+                default: serde_json::json!(0),
+                min: None,
+                max: None,
+                choices: vec![],
+                desc: String::new(),
+            });
+        }
+        schema.live = true;
+        let mut cfg = Cfg::default();
+        assert!(!apply_shadows(&mut cfg, &theme("macos", true), &paths, &schema).unwrap());
+        assert!(cfg.get("decoration", "shadow").is_none());
+        worker.join().unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 

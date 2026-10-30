@@ -388,3 +388,12 @@ switch is enabled after the same palette is already current. Per-target opt-outs
 remain respected. GTK custom CSS is read at application startup; existing GTK
 processes need reopening for a complete palette change. Decebal does not silently
 terminate applications with open documents or file operations.
+
+### Whole-window shadows on X11
+
+Themes' `metrics.shadow` now drives a unified shadow around server-decorated
+applications in supporting rdwm sessions. Zero frees the shadow carrier. The
+renderer needs a compositor and keeps geometry-only moves free of pixel uploads.
+An already running older rdwm remains unchanged until a new session; apply the
+theme there to pick up its strength. Custom/CSD decorations and Wayland remain
+separate work. See [implementation and limits](window-shadow-design.md).

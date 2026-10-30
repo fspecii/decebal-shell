@@ -404,6 +404,9 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         let mut cfg = Cfg::parse(&old).map_err(|e| format!("{}: {e}", paths.rdwm_config.display()))?;
         rdwm::apply_to(&mut cfg, &theme)?;
         let schema = Schema::load(&paths.rdwmctl);
+        if !rdwm::apply_shadows(&mut cfg, &theme, paths, &schema)? && theme.shadow > 0.0 {
+            notes.push("Window shadows require a supporting rdwm session; current configuration retained".into());
+        }
         let mut attempt = extra.clone();
         if let Some(radius) = sel.radius {
             if let Some(Value::Object(d)) = attempt.get_mut("decoration") {

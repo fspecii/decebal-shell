@@ -148,3 +148,8 @@ e2e-welcome-accessibility: all
 .PHONY: e2e-curated-wallpaper
 e2e-curated-wallpaper: all
 	MS_BIN_DIR=$(CURDIR)/target/release tests/e2e/curated-wallpaper.sh
+
+# Requires a matching rdwm build with unified X11 shadow support.
+.PHONY: e2e-theme-shadows
+e2e-theme-shadows: all
+	MS_BIN_DIR=$(CURDIR)/target/release tests/e2e/theme-shadows.sh

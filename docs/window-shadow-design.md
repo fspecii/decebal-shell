@@ -1,8 +1,25 @@
 # Decebal / rdwm: unified window-shadow design
 
-2026-10-30. Read-only source research; no WM/config/process changes. This is a proposed implementation, not a tested shadow feature.
+2026-10-30. The source research below guided the implemented X11 SSD carrier.
 
-## Current evidence
+Implementation checkpoint: `shadow`, `shadow_radius`, `shadow_opacity` and
+`shadow_inactive_opacity` are typed rdwm decoration settings, default off. Decebal
+maps finite theme strength 0..1.5 to focused/unfocused opacity, preserves a manual
+radius, and consults the actual live parser before adding fields. An upgraded
+CLI cannot cause an older running WM to reject a theme reload.
+
+Private Xvfb/Picom xrender verification passed 45 native assertions: all four
+edge pixels, no caption/body seam, unchanged app interiors, input transparency,
+stacking, fullscreen/workspace/minimize/death/disable and compositor stop/start.
+First and subsequent rapid moves upload zero shadow pixels. Resize uploads use
+bounded peripheral chunks; falloff kernels are cached (full nine-slice corner
+caching remains a possible optimization). Two test carrier drawables represented
+3,853,184 backing pixel bytes, excluding server overhead and compositor copies.
+Actual NVIDIA frame timing, multi-monitor DPI transitions and Wayland remain
+separate gates; this is not a claim that the complete premium-effect scope below
+has been verified. No live WM was restarted during testing.
+
+## Source evidence recorded before implementation
 
 - `crates/rdwm-x11/src/frames.rs:1–7` explicitly documents no reparenting. `make_frame` (line 256) creates one root-child ARGB InputOutput titlebar and three InputOnly resize strips. `Frame::windows` currently returns those four windows; there is no whole-window drawable.
 - `Cmd::Decorate` in `crates/rdwm-core/src/api.rs:354` supplies the correct complete outer frame rectangle (caption and body), after the client's Configure. `Wm::th` / `frame_rect` in `crates/rdwm-core/src/wm/decor.rs:41/71` already define fullscreen/undecorated suppression and geometry.
@@ -53,3 +70,16 @@ A compositor rule for the WM carrier/caption can explicitly specify `shadow=fals
 ## Main risks / scope
 
 One additional ARGB drawable per server-decorated app costs server/GPU memory; excessive blur margins magnify it. Client transparency reveals interior mistakes immediately. Geometry batching is not atomic across distinct X windows, so fast-drag pixels must be verified rather than inferred from X request counts. Fullscreen, transients, multi-monitor scale changes and compositor restarts are mandatory, not optional polish. Native CSD shadows/corners remain a separate case. This proposal is the smallest real seam-free X11 path identified from the current architecture; enabling `shadow=true` globally is not equivalent.
+
+## Using the implemented X11 effect
+
+After upgrading, start a new rdwm session before expecting the backend effect.
+A running older WM remains unchanged. Applying a theme in the new session maps
+`metrics.shadow` (0..1.5) to active/inactive opacity; zero disables and frees
+carriers. The manually configured `decoration.shadow_radius` is preserved.
+A new CLI checks the running parser, so theme application remains compatible
+with the older WM until the session changes. There is no live WM restart during
+installation. Wayland and undecorated/CSD windows do not use this effect yet.
+
+Run `make e2e-shadows` in rdwm for native raster/input/lifecycle gates, and
+`make e2e-theme-shadows` in the shell checkout for theme-to-runtime integration.
