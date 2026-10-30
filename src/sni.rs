@@ -4,8 +4,8 @@ use std::{
     collections::HashMap,
     sync::atomic::{AtomicU64, Ordering},
     sync::{
-        Arc, Mutex,
         mpsc::{self, Receiver, SyncSender},
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -138,10 +138,18 @@ fn strings(v: &[&str]) -> Vec<u8> {
     }
 }
 fn un(v: &Value) -> &Value {
-    if let Value::Variant(x) = v { un(x) } else { v }
+    if let Value::Variant(x) = v {
+        un(x)
+    } else {
+        v
+    }
 }
 fn dict(v: &Value) -> &[(Value, Value)] {
-    if let Value::Dict(d) = un(v) { d } else { &[] }
+    if let Value::Dict(d) = un(v) {
+        d
+    } else {
+        &[]
+    }
 }
 fn prop<'a>(d: &'a [(Value, Value)], name: &str) -> Option<&'a Value> {
     d.iter().find(|(k, _)| k.as_str() == Some(name)).map(|(_, v)| un(v))
