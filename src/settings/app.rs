@@ -72,6 +72,7 @@ pub struct SettingsApp {
     thumb_tx: Option<Sender<String>>,
     thumb_rx: Option<Receiver<(String, Option<Pixmap>)>>,
     navigation: Option<super::navigation::Requests>,
+    preview_updates: Option<crate::theme::engine::preview::PreviewUpdates>,
     waker: Option<Waker>,
     wake_slot: Arc<Mutex<Option<Waker>>>,
     sidebar_hits: Vec<(Rect, usize)>,
@@ -147,6 +148,7 @@ impl SettingsApp {
             thumb_tx: None,
             thumb_rx: None,
             navigation: None,
+            preview_updates: None,
             waker: None,
             wake_slot,
             sidebar_hits: Vec::new(),
@@ -662,7 +664,7 @@ impl SettingsApp {
             "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= self.nav_top() && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
-            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "theme_previews_painted": self.frame.theme_previews_painted, "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
         });
         let tmp = path.with_extension("tmp");
         if std::fs::write(&tmp, doc.to_string()).is_ok() {
@@ -1278,6 +1280,7 @@ impl WindowApp for SettingsApp {
     fn set_waker(&mut self, waker: Waker) {
         *self.wake_slot.lock().unwrap() = Some(waker.clone());
         self.waker = Some(waker.clone());
+        self.preview_updates = Some(crate::theme::engine::preview::subscribe_updates(waker.clone()));
         waker(); // Drain navigation accepted while the native backend was starting.
         self.start_thumb_worker();
         let tw = waker.clone();

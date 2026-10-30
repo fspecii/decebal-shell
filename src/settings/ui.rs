@@ -414,6 +414,8 @@ pub struct Placed {
 
 #[derive(Debug, Clone, Default)]
 pub struct Frame {
+    /// Gallery images actually painted in this frame (native debug evidence).
+    pub theme_previews_painted: usize,
     pub placed: Vec<Placed>,
     pub thumbs: Vec<(Rect, String)>,
     pub layouts: Vec<(Rect, String)>,

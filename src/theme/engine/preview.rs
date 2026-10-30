@@ -19,7 +19,7 @@ use std::{
     process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc, Mutex, OnceLock,
+        mpsc, Arc, Mutex, OnceLock, Weak,
     },
     time::{Duration, Instant},
 };
@@ -33,6 +33,51 @@ static CHANGED: AtomicBool = AtomicBool::new(false);
 static PENDING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 type Results = HashMap<String, (Instant, Result<Option<PathBuf>, String>)>;
 static RESULTS: OnceLock<Mutex<Results>> = OnceLock::new();
+
+type CompletionWake = Arc<dyn Fn() + Send + Sync>;
+#[derive(Default)]
+struct CompletionListeners {
+    next: AtomicU64,
+    callbacks: Mutex<Vec<(u64, CompletionWake)>>,
+}
+impl CompletionListeners {
+    fn subscribe(self: &Arc<Self>, wake: CompletionWake) -> PreviewUpdates {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        self.callbacks.lock().unwrap_or_else(|e| e.into_inner()).push((id, wake));
+        PreviewUpdates { listeners: Arc::downgrade(self), id }
+    }
+
+    fn notify(&self) {
+        let callbacks: Vec<_> = self.callbacks.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(_, wake)| wake.clone()).collect();
+        // Never call a UI callback while holding the registry lock.
+        for wake in callbacks {
+            wake();
+        }
+    }
+}
+static COMPLETIONS: OnceLock<Arc<CompletionListeners>> = OnceLock::new();
+
+/// Keeps a window subscribed to background gallery/preview completion.
+pub struct PreviewUpdates {
+    listeners: Weak<CompletionListeners>,
+    id: u64,
+}
+impl Drop for PreviewUpdates {
+    fn drop(&mut self) {
+        if let Some(listeners) = self.listeners.upgrade() {
+            listeners.callbacks.lock().unwrap_or_else(|e| e.into_inner()).retain(|(id, _)| *id != self.id);
+        }
+    }
+}
+
+/// Wake an event-driven window when discovery or image generation completes.
+pub fn subscribe_updates(wake: CompletionWake) -> PreviewUpdates {
+    let updates = COMPLETIONS.get_or_init(|| Arc::new(CompletionListeners::default())).subscribe(wake.clone());
+    if CHANGED.load(Ordering::Acquire) {
+        wake();
+    }
+    updates
+}
 
 fn request_id(src: &Source, selection: &Selection) -> String {
     format!("{:?}:{}", src.themes_dir, selection.to_json())
@@ -408,7 +453,7 @@ pub fn request(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, S
                     p.remove(&id);
                 }
                 if changed {
-                    CHANGED.store(true, Ordering::Release);
+                    notify_changed();
                 }
             }
         });
@@ -424,6 +469,9 @@ pub fn request(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, S
 }
 pub(crate) fn notify_changed() {
     CHANGED.store(true, Ordering::Release);
+    if let Some(listeners) = COMPLETIONS.get() {
+        listeners.notify();
+    }
 }
 pub fn take_changed() -> bool {
     CHANGED.swap(false, Ordering::AcqRel)
@@ -600,6 +648,22 @@ pub fn worker(file: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod performance_tests {
     use super::*;
+    #[test]
+    fn completion_wakes_registered_windows_and_unsubscribes_on_drop() {
+        let listeners = Arc::new(CompletionListeners::default());
+        let (tx, rx) = mpsc::channel();
+        let registration = listeners.subscribe(Arc::new(move || {
+            tx.send(()).unwrap();
+        }));
+        let worker = listeners.clone();
+        std::thread::spawn(move || worker.notify()).join().unwrap();
+        rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        drop(registration);
+        listeners.notify();
+        assert!(rx.try_recv().is_err(), "a closed window must not retain a callback");
+        assert!(listeners.callbacks.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn official_preview_only_uses_downloaded_recommendations_and_tracks_their_content() {
         let dir = std::env::temp_dir().join(format!("curated-preview-{}", std::process::id()));

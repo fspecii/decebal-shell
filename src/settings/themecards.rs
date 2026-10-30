@@ -117,6 +117,7 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             match generated.as_ref().or(c.screenshot.as_ref()).and_then(shot) {
                 Some(img) => {
                     draw_contain(pm, &img, px, py, pw, ph);
+                    fr.theme_previews_painted += 1;
                 }
                 None => {
                     fill_rounded(pm, px, py, pw, ph, u(8.0), pal::card());

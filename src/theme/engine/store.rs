@@ -227,6 +227,7 @@ pub fn gallery_list(src: &Source) -> Vec<Info> {
                 let mut g = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
                 let changed = g.as_ref().is_none_or(|(path, _, old)| path != &src.themes_dir || old != &infos);
                 *g = Some((src.themes_dir, Instant::now(), infos));
+                drop(g);
                 PENDING.store(false, std::sync::atomic::Ordering::Release);
                 if changed {
                     super::preview::notify_changed();

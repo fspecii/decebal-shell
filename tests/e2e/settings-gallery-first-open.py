@@ -107,12 +107,12 @@ def main():
                 sample = {'seconds': round(time.monotonic() - start, 3), 'frames': current['frames'],
                           'loaded_thumbs': current.get('loaded_thumbs', 0),
                           'theme_previews_painted': current.get('theme_previews_painted', 0), 'pngs': len(pngs),
-                          'cards': sum(c['id'].startswith('l:tcard:') for c in current['ctls'])}
-                state = tuple(sample[k] for k in ('frames', 'theme_previews_painted', 'pngs', 'cards'))
+                          'card_controls': sum(c['id'].startswith('l:tcard:') for c in current['ctls'])}
+                state = tuple(sample[k] for k in ('frames', 'theme_previews_painted', 'pngs', 'card_controls'))
                 if state != previous:
                     result['samples'].append(sample)
                     previous = state
-                if first_gallery is None and sample['cards']:
+                if first_gallery is None and sample['card_controls']:
                     first_gallery = sample
                     capture('gallery-first-frame', current)
                 if first_png is None and pngs:
