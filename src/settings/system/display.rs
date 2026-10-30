@@ -2,6 +2,8 @@
 //! 15 second "Keep changes?" confirmation that reverts by itself; scale (Xft.dpi + rdwm `[decoration] scale`);
 //! night shift (gammastep/redshift) when installed.
 
+pub mod wayland;
+
 use super::confirm::{self, CONFIRM_SECS};
 use super::run::{Cmd, Runner};
 use super::{Action, Dom, Done, Hub};
@@ -80,6 +82,9 @@ impl Output {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct State {
+    pub wayland: Option<wayland::Snapshot>,
+    /// Worker request start, including failed Wayland queries (never X11).
+    pub wayland_query_started: Option<Instant>,
     pub available: bool,
     pub error: Option<String>,
     pub outputs: Vec<Output>,
@@ -181,13 +186,20 @@ pub fn parse_xrandr(text: &str) -> Vec<Output> {
     outs
 }
 
+/// Physical outputs follow the session compositor, even if this window uses XWayland.
+pub fn physical_wayland_session() -> bool {
+    physical_wayland_env(|key| std::env::var_os(key))
+}
+fn physical_wayland_env(mut env: impl FnMut(&str) -> Option<std::ffi::OsString>) -> bool {
+    env("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) || env("XDG_SESSION_TYPE").is_some_and(|v| v == "wayland")
+}
 pub fn load(r: &dyn Runner) -> State {
-    load_env(r, super::run::wayland_session())
+    load_env(r, physical_wayland_session())
 }
 
 pub fn load_env(r: &dyn Runner, wayland: bool) -> State {
     if wayland {
-        return State { error: Some("This is a Wayland session: displays are arranged by the compositor (xrandr only reaches XWayland), so they are not changed here.".into()), ..State::default() };
+        return wayland::load(r);
     }
     let night = ["gammastep", "redshift"].iter().find(|t| r.exists(t)).map(|t| t.to_string());
     if !r.exists("xrandr") {
@@ -197,7 +209,7 @@ pub fn load_env(r: &dyn Runner, wayland: bool) -> State {
     if !o.ok {
         return State { error: Some(format!("xrandr could not talk to the X server: {}", o.error_text("xrandr"))), night_tool: night, ..State::default() };
     }
-    State { available: true, error: None, outputs: parse_xrandr(&o.stdout), night_tool: night }
+    State { wayland: None, wayland_query_started: None, available: true, error: None, outputs: parse_xrandr(&o.stdout), night_tool: night }
 }
 
 // ---------------------------------------------------------------- planning
@@ -553,6 +565,12 @@ fn mode_label(m: &Mode) -> String {
 }
 
 pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
+    if let Some(s) = h.disp.data.as_ref().and_then(|s| s.wayland.as_ref()) {
+        return wayland::items(h, s);
+    }
+    if physical_wayland_session() {
+        return super::sound::unavailable("Wayland display settings", h.disp.data.as_ref().and_then(|s| s.error.as_deref()).unwrap_or("Reading compositor display capabilities…"));
+    }
     let mut v = Vec::new();
     // confirmation banner
     if let Some(left) = h.sh.confirm.lock().unwrap().seconds_left(Instant::now()) {
@@ -644,6 +662,13 @@ pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
 }
 
 pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
+    if act.starts_with("wl-") {
+        return wayland::apply(h, act, arg, val);
+    }
+    if physical_wayland_session() {
+        h.say("X11 display controls are unavailable in a Wayland session", true);
+        return;
+    }
     let r: Result<(), String> = (|| {
         match (act, &val) {
             ("keep", _) => h.display_keep(),
@@ -783,7 +808,7 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
     }
 
     fn st() -> State {
-        State { available: true, error: None, outputs: parse_xrandr(TWO), night_tool: None }
+        State { wayland: None, wayland_query_started: None, available: true, error: None, outputs: parse_xrandr(TWO), night_tool: None }
     }
     fn lines(v: &[Cmd]) -> Vec<String> {
         v.iter().map(|c| c.line()).collect()
@@ -862,6 +887,28 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
         assert_eq!(c.prog, "sh");
         assert_eq!(c.args.last().unwrap(), "120");
         assert!(dpi_cmd(5).is_err());
+    }
+
+    #[test]
+    fn physical_wayland_detection_ignores_xwayland_rendering_and_tool_overrides() {
+        use std::ffi::OsString;
+        for (display, session, expected) in [(Some("wayland-private"), Some("x11"), true), (None, Some("wayland"), true), (Some(""), Some("x11"), false), (None, None, false)] {
+            for (backend, forced) in [("x11", "1"), ("wayland", ""), ("auto", "1")] {
+                let values =
+                    std::collections::HashMap::from([("WAYLAND_DISPLAY", display), ("XDG_SESSION_TYPE", session), ("DECEBAL_BACKEND", Some(backend)), ("DECSETTINGS_FORCE_X11_TOOLS", Some(forced))]);
+                let actual = physical_wayland_env(|key| values.get(key).copied().flatten().map(OsString::from));
+                assert_eq!(actual, expected);
+                let runner = FakeRunner::new().ok("xrandr --query", XVFB);
+                let state = load_env(&runner, actual);
+                if expected {
+                    assert!(!state.available);
+                    assert!(runner.lines().iter().all(|line| !line.contains("xrandr")));
+                } else {
+                    assert!(state.available);
+                    assert_eq!(runner.lines(), ["xrandr --query"]);
+                }
+            }
+        }
     }
 
     #[test]

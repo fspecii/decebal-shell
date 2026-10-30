@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "protocol": 1,
+  "backend": "drm-pixman",
+  "generation": 7,
+  "capabilities": {
+    "position": true,
+    "scale": true,
+    "transform": true,
+    "mode": true,
+    "enabled": true,
+    "persist": true,
+    "primary": false,
+    "mirror": false,
+    "scale_min": 0.25,
+    "scale_max": 8.0,
+    "transforms": [
+      "normal",
+      "90",
+      "180",
+      "270",
+      "flipped",
+      "flipped-90",
+      "flipped-180",
+      "flipped-270"
+    ]
+  },
+  "outputs": [
+    {
+      "name": "nested-0",
+      "current": {
+        "enabled": true,
+        "mode": {
+          "width": 1280,
+          "height": 800,
+          "refresh_mhz": 60000
+        },
+        "x": 0,
+        "y": 0,
+        "scale": 1.0,
+        "transform": "normal"
+      },
+      "modes": [
+        {
+          "width": 1280,
+          "height": 800,
+          "refresh_mhz": 60000
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "refresh_mhz": 59940
+        }
+      ],
+      "capabilities": {
+        "position": true,
+        "scale": true,
+        "transform": true,
+        "mode": true,
+        "enabled": true,
+        "persist": true,
+        "primary": false,
+        "mirror": false,
+        "scale_min": 0.25,
+        "scale_max": 8.0,
+        "transforms": [
+          "normal",
+          "90",
+          "180",
+          "270",
+          "flipped",
+          "flipped-90",
+          "flipped-180",
+          "flipped-270"
+        ]
+      }
+    }
+  ],
+  "pending": null,
+  "warning": null,
+  "instance": "fixture-instance-1"
+}

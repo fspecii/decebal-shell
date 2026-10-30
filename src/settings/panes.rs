@@ -956,6 +956,10 @@ impl Model {
     }
 
     fn pane_displays(&self) -> Vec<Item> {
+        self.pane_displays_for(super::system::display::physical_wayland_session() || self.sys.disp.data.as_ref().is_some_and(|s| s.wayland.is_some()))
+    }
+
+    fn pane_displays_for(&self, wayland: bool) -> Vec<Item> {
         let mut items = Vec::new();
         let mons = self.rt.state["monitors"].as_array().cloned().unwrap_or_default();
         if !self.rt.running {
@@ -989,7 +993,9 @@ impl Model {
             .detail(format!("mode {} · colour {}", wp["mode"].as_str().unwrap_or("fill"), wp["color"].as_str().unwrap_or("")))]));
         }
         items.extend(self.table_items(&self.table_spec("wallpaper.output").expect("spec"), None));
-        items.extend(self.table_items(&self.table_spec("output").expect("spec"), None));
+        if !wayland {
+            items.extend(self.table_items(&self.table_spec("output").expect("spec"), None));
+        }
         items
     }
 
@@ -1572,6 +1578,21 @@ mod tests {
     use std::collections::HashSet;
 
     const BIG: &str = "# c\n[general]\nlayouts = [\"bsp\", \"tile\"]\ntags = [\"a\", \"b\"]\n[[tag_layout]]\ntag = 2\nlayout = \"grid\"\n[[bind]]\nmods = [\"super\"]\nkey = \"Return\"\naction = \"spawn\"\n[[bind]]\nkeys = [\"super+x\", \"r\"]\naction = \"reload\"\n[[rule]]\nclass = \"mpv\"\nfloating = true\n[[autostart]]\ncommand = \"decbar &\"\n[[plugin]]\ncommand = \"p\"\n[[scratchpad]]\nname = \"t\"\ncommand = \"foot\"\n[[wallpaper.output]]\nmatch = \"*\"\n[[output]]\nname = \"DP-1\"\n[[mode]]\nname = \"resize\"\n[[mode.bind]]\nkeys = \"h\"\naction = \"setmfact\"\n";
+
+    #[test]
+    fn wayland_displays_hide_raw_output_edits_but_keep_wallpaper_and_x11_tables() {
+        let (m, path) = model_with(BIG);
+        let ids = |items: Vec<Item>| -> Vec<String> {
+            items.into_iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flatten().flat_map(|r| r.ctls.into_iter().map(|c| c.id)).collect()
+        };
+        let wayland = ids(m.pane_displays_for(true));
+        assert!(!wayland.iter().any(|id| id.starts_with("t:output:")));
+        assert!(wayland.iter().any(|id| id.starts_with("t:wallpaper.output:")));
+        let x11 = ids(m.pane_displays_for(false));
+        assert!(x11.iter().any(|id| id == "t:output:@add"));
+        assert!(x11.iter().any(|id| id.starts_with("t:wallpaper.output:")));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), BIG);
+    }
 
     fn pane_of(id: &str) -> usize {
         PANES.iter().position(|p| p.id == id).unwrap()

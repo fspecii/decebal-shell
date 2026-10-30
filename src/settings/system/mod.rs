@@ -110,6 +110,8 @@ pub struct UndoRec {
 
 #[derive(Default)]
 pub struct Done {
+    pub display_job_done: bool,
+    pub display_reset: bool,
     pub data: Option<Data>,
     pub msg: Option<(String, bool)>,
     pub refresh: Option<Dom>,
@@ -203,6 +205,7 @@ pub struct Shared {
     active: Mutex<Option<Dom>>,
     pub visible: AtomicBool,
     pub confirm: Mutex<Confirm>,
+    pub wayland_pending: AtomicBool,
     /// Latest session settings (see `exec_action_with`).
     pub session: Mutex<Session>,
     poller: Mutex<Option<std::thread::Thread>>,
@@ -210,12 +213,20 @@ pub struct Shared {
 
 impl Shared {
     pub fn spawn(self: &Arc<Self>, f: impl FnOnce(&dyn Runner) -> Done + Send + 'static) {
+        let _ = self.try_spawn(f);
+    }
+
+    pub fn try_spawn(self: &Arc<Self>, f: impl FnOnce(&dyn Runner) -> Done + Send + 'static) -> bool {
         let me = self.clone();
-        let _ = std::thread::Builder::new().name("decsettings-job".into()).stack_size(512 * 1024).spawn(move || {
-            let d = f(me.runner.as_ref());
-            me.results.lock().unwrap().push_back(d);
-            (me.wake)();
-        });
+        std::thread::Builder::new()
+            .name("decsettings-job".into())
+            .stack_size(512 * 1024)
+            .spawn(move || {
+                let d = f(me.runner.as_ref());
+                me.results.lock().unwrap().push_back(d);
+                (me.wake)();
+            })
+            .is_ok()
     }
 
     pub fn refresh(self: &Arc<Self>, dom: Dom) {
@@ -223,11 +234,14 @@ impl Shared {
             return;
         }
         let me = self.clone();
-        self.spawn(move |r| {
+        let started = self.try_spawn(move |r| {
             let data = load(dom, r);
             me.inflight.lock().unwrap().remove(&dom);
             Done { data, ..Done::default() }
         });
+        if !started {
+            self.inflight.lock().unwrap().remove(&dom);
+        }
     }
 
     pub(crate) fn wake_poller(&self) {
@@ -271,6 +285,7 @@ pub struct Hub {
     pub net: Slot<network::State>,
     pub bt: Slot<bluetooth::State>,
     pub disp: Slot<display::State>,
+    pub ui_disp: display::wayland::Draft,
     pub input: Slot<input::State>,
     pub power: Slot<power::State>,
     pub dt: Slot<datetime::State>,
@@ -307,6 +322,7 @@ impl Hub {
             active: Mutex::new(None),
             visible: AtomicBool::new(true),
             confirm: Mutex::new(Confirm::default()),
+            wayland_pending: AtomicBool::new(false),
             session: Mutex::new(session.clone()),
             poller: Mutex::new(None),
         });
@@ -316,6 +332,7 @@ impl Hub {
             net: Slot::default(),
             bt: Slot::default(),
             disp: Slot::default(),
+            ui_disp: Default::default(),
             input: Slot::default(),
             power: Slot::default(),
             dt: Slot::default(),
@@ -446,7 +463,41 @@ impl Hub {
                     self.ui_bt.scanning = false;
                     self.bt = Slot { data: Some(s), at: now }
                 }
-                Some(Data::Disp(s)) => self.disp = Slot { data: Some(s), at: now },
+                Some(Data::Disp(mut s)) => {
+                    if d.display_job_done {
+                        self.ui_disp.busy = false;
+                    }
+                    let accepted = if let Some(w) = s.wayland.as_mut() {
+                        self.ui_disp.accept(w)
+                    } else if let Some(started) = s.wayland_query_started {
+                        self.ui_disp.accept_failure(started)
+                    } else {
+                        true
+                    };
+                    if !accepted && s.wayland.is_none() {
+                        if let Some(error) = &s.error {
+                            msgs.push((format!("An older display refresh failed: {error}"), true));
+                        }
+                    }
+                    if accepted {
+                        if d.display_reset {
+                            self.ui_disp.dirty = false;
+                        }
+                        if let Some(w) = &s.wayland {
+                            self.ui_disp.receive(w);
+                        }
+                        self.sh.wayland_pending.store(s.wayland.as_ref().is_some_and(|w| w.pending.is_some()), Ordering::Relaxed);
+                        self.sh.wake_poller();
+                        self.disp = Slot { data: Some(s), at: now };
+                    } else if d.display_reset {
+                        // A newer query/result already won; complete the old action
+                        // against that state, without reviving its pending token.
+                        self.ui_disp.dirty = false;
+                        if let Some(w) = self.disp.data.as_ref().and_then(|s| s.wayland.as_ref()) {
+                            self.ui_disp.receive(w);
+                        }
+                    }
+                }
                 Some(Data::Input(s)) => self.input = Slot { data: Some(s), at: now },
                 Some(Data::Power(s)) => self.power = Slot { data: Some(s), at: now },
                 Some(Data::Dt(s)) => self.dt = Slot { data: Some(s), at: now },
@@ -477,7 +528,7 @@ impl Hub {
                 self.sh.refresh(dom);
             }
         }
-        if self.sh.confirm.lock().unwrap().active() {
+        if self.sh.confirm.lock().unwrap().active() || self.sh.wayland_pending.load(Ordering::Relaxed) {
             changed = true;
         }
         (changed, msgs)
@@ -489,10 +540,15 @@ fn poll_loop(sh: Arc<Shared>) {
     loop {
         let dom = *sh.active.lock().unwrap();
         let visible = sh.visible.load(Ordering::Relaxed);
+        let wl_pending = sh.wayland_pending.load(Ordering::Relaxed);
         let pending = sh.confirm.lock().unwrap().active();
-        if dom.filter(|_| visible).is_none_or(|d| d.poll_every().is_none()) && !pending {
+        if dom.filter(|_| visible).is_none_or(|d| d.poll_every().is_none()) && !pending && !wl_pending {
             std::thread::park_timeout(Duration::from_secs(600));
             continue;
+        }
+        if wl_pending {
+            sh.refresh(Dom::Display);
+            (sh.wake)();
         }
         if pending {
             let step = sh.confirm.lock().unwrap().poll(Instant::now());
@@ -528,7 +584,14 @@ impl Model {
 
     /// Called from the UI tick: applies finished jobs, shows their messages. True = repaint.
     pub fn sys_poll(&mut self) -> bool {
+        let pending_before = self.sys.disp.data.as_ref().and_then(|s| s.wayland.as_ref()).and_then(|s| s.pending.as_ref()).map(|p| p.token.clone());
         let (changed, msgs) = self.sys.drain();
+        let pending_after = self.sys.disp.data.as_ref().and_then(|s| s.wayland.as_ref()).and_then(|s| s.pending.as_ref()).map(|p| p.token.clone());
+        if pending_after.is_some() && pending_after != pending_before && super::panes::PANES.get(self.sel.pane).is_some_and(|p| p.id == "displays") {
+            // Apply lives below the connector rows. Reveal Keep/Revert once, not
+            // on every countdown refresh (which must still permit scrolling).
+            self.sel.reset_scroll = true;
+        }
         for (t, e) in msgs {
             self.say(t, e);
         }
@@ -630,6 +693,10 @@ impl Model {
     }
 
     fn apply_scale(&mut self, v: CtlVal) {
+        if display::physical_wayland_session() {
+            self.say("Use the per-output scale control in Wayland Displays", true);
+            return;
+        }
         let CtlVal::Str(s) = v else { return };
         if s == "auto" {
             self.edit(|c| {
