@@ -1,10 +1,14 @@
 # Next desktop-readiness work
 
-Checkpoint 2026-10-30 after source `27300f8` / test freeze `08c07a2` and the
+Checkpoint 2026-10-30 after production source/layout `1d0d4b9`, QA `2f8fd5d`,
+Dux evidence `c372f45` and the
 reviewed production rollout. Implemented baselines are separated from remaining
 work below; see [current evidence matrix](desktop-readiness-audit.md). Latest full
-library gate: 1,597 passed, zero failed, nine ignored (prior production baseline:
-1,591). Tests and deployment evidence are recorded in that matrix.
+library gate: 1,604 passed, zero failed, ten ignored (prior gates: 1,591 and
+1,597). Tests and deployment evidence are recorded in that matrix.
+
+Remaining product gaps also include actual bar-item editing lists, full Files
+layouts and screen-reader accessibility; theme/profile labels alone do not satisfy them.
 
 ## 1. Third-party application indicators
 
@@ -110,8 +114,15 @@ cannot substitute for it.
   production-tested (old producer compatibility included). Continue provider,
   provenance and race coverage rather than treating a cached success as network
   availability or a universal non-AI guarantee.
-- The new Dux Settings/widgets thread and separate Theme Specialist package are
-  background work, not integrated. Track user feedback and validation there.
+- Dux Settings styling, resource/focus cards and the Specialist's Dux Lavender
+  package are integrated, release-tested and installed without applying a theme
+  or replacing the user's widget layout. New widget host2869626 is active;
+  open Settings keeps its old image/drafts until the user reopens it. Four-card
+  native painter/input checks pass at1280×720/200%; this is not a full Dux runtime.
+- Notification colours now follow cached live palettes in source/on disk; exact
+  release theme/history checks pass. Legacy live daemon670409 remains retained.
+  Full enlarged-text notification reflow and live icon-pack cache invalidation
+  remain open, alongside safe durable-history runtime handoff.
 - NextKDE magnification metadata/runtime repair is complete. rdwm `9788af9`
   workarea-only float fit is accepted (504 core/two ignored; release panel7,
   fullscreen11, snap10), installed in both user WM bindirs for next login.
