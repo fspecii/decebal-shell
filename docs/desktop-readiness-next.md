@@ -1,8 +1,10 @@
 # Next desktop-readiness work
 
-Source review, 2026-10-30. These are proposed implementation assignments, not
-completed features. See [current evidence matrix](desktop-readiness-audit.md).
-No tests or live changes were performed for this report.
+Checkpoint 2026-10-30 after source `27300f8` / test freeze `08c07a2` and the
+reviewed production rollout. Implemented baselines are separated from remaining
+work below; see [current evidence matrix](desktop-readiness-audit.md). Latest full
+library gate: 1,597 passed, zero failed, nine ignored (prior production baseline:
+1,591). Tests and deployment evidence are recorded in that matrix.
 
 ## 1. Third-party application indicators
 
@@ -10,7 +12,9 @@ No tests or live changes were performed for this report.
 Windows taskbars, with cached images, typed input, nested/dynamic menus and paged
 overflow. Private Host/UI tests and actual OBS checks pass; see
 [scope and limits](app-indicators.md). Custom icon paths, overlays, external-host
-lifecycle and bounded retries are implemented. Remaining work includes XEmbed,
+lifecycle, bounded retries and worker-side icon/theme generation refresh are
+implemented. Named icons/tint change without app signals, new GetAll or paint I/O.
+Remaining work includes XEmbed,
 Wayland activation/global coordinates and wider real-app compatibility.
 
 **User trigger:** start a chat/sync/VPN application that registers an indicator,
@@ -20,20 +24,14 @@ then close its normal window. The app should remain reachable from its indicator
 `menubar/indicators.rs`, `menubar/vbar.rs` and `dock_app/windows.rs` render and
 route input. Actual private native tests exercise all three surfaces and OBS.
 
-**Implementation:** add a session-bus StatusNotifier watcher/host with bounded
-icon/pixmap decoding and ownership/lifecycle handling, then expose its items in
-bar/taskbar layouts. Keep bus/property requests outside painting. Implement
-activate, context menu and scroll via protocol calls; safe menus must use item
-IDs/typed actions rather than shell strings. Define explicit XEmbed scope; do not
-call SNI support universal legacy tray support. Preserve rail-only dock disabling.
+**Accepted baseline:** private real D-Bus fixtures and native UI cover two hosts,
+items/pixels, typed actions, disabled/check/nested/lazy menus, death/reownership,
+malformed bounds, missing bus/reconnect, host theme A→B/tint and stable keys. Actual
+OBS works in the private native session; crowded rail paging is exercised.
 
-**Acceptance:** a private D-Bus fixture registers/unregisters two items, changes
-icons/tooltips/status, dies and returns, and owns unique names. Real rendered
-icons and clicks reach the correct fixture. Malformed/oversize pixmaps are
-bounded, repeated restarts leave no duplicate items, and missing session bus
-leaves built-in controls usable. Test both horizontal taskbar and vertical rail.
-Then verify at least one real application; a mock protocol pass alone is not full
-compatibility evidence.
+**Next acceptance:** expand real-app/Wayland activation and coordinate coverage;
+define XEmbed scope explicitly. Keep all requests/decoding off paint, typed IDs
+instead of shell execution, bounded retries and rail-only dock disabling.
 
 ## 2. Timer login recovery — implemented in this batch
 
@@ -43,19 +41,14 @@ compatibility evidence.
 saved wall-clock deadline persists but no completion worker is started until
 Timer opens.
 
-**Evidence:** `src/bin/dectimer.rs` spawns its worker when normal UI startup finds
-Running/Complete state. `src/timer.rs::{Store::worker,Store::spawn_worker}` enforce
-single-worker ownership and at-most-once completion claims. Packaging supplies a
-normal desktop entry only; no Timer login invocation found in `contrib`, Makefile
-or rdwm session supervisor. This limitation is explicitly documented in
-`docs/notes-timer.md`.
+**Evidence:** `dectimer autostart` and `contrib/decebal-timer.desktop` now exist;
+packaging and the project checkpoint record the login entry. Store locking,
+at-most-once claims and atomic-binary-upgrade recovery are implemented. This
+supersedes the earlier “no login invocation” finding. See `docs/notes-timer.md`.
 
-**Implementation:** add a headless idempotent recovery command and a packaged
-login hook/service that exits immediately for idle/paused/claimed state. Reuse the
-existing state lock, delivery claim and error recording. Do not run a permanent
-service when no countdown is active. Avoid duplicate worker ownership between UI,
-login and an existing active helper. Keep the no-UI CLI distinct from `--new` note
-or normal timer launch.
+**Remaining integration:** verify clean-login/upgrade sessions on real hardware;
+retain the explicit crash-after-claim notification-loss tradeoff. No resident
+worker is needed for idle/paused/claimed state, and recovery must never open UI.
 
 **Acceptance:** isolated XDG state tests simulate a future active deadline, an
 already elapsed unclaimed deadline, paused state, corrupt state and an existing
@@ -106,6 +99,25 @@ cannot substitute for it.
 - Installed system session-wrapper migration needs administrator authentication;
   use the already prepared reviewable bundle rather than pretending user-binary
   replacement updated `/usr/bin`.
-- Notification-history persistence errors are currently swallowed in
-  `src/notify/model.rs::History::save`; review private permissions and expose a
-  recoverable persistence failure instead of silently claiming durable history.
+- Notification history source/disk binaries now expose durable private storage
+  failures and Retry, with native recovery evidence. The old live daemon was
+  intentionally retained to avoid losing unknown session-only state; its safe
+  handoff remains pending. Do not describe that old process as private/durable
+  merely because new files were installed.
+- Follow-theme Files defaults are implemented, including palette-independent
+  selection and dark native evidence. Full Explorer/Finder layouts remain open.
+- Curated photo following plus post-photo Dynamic refresh is implemented and
+  production-tested (old producer compatibility included). Continue provider,
+  provenance and race coverage rather than treating a cached success as network
+  availability or a universal non-AI guarantee.
+- The new Dux Settings/widgets thread and separate Theme Specialist package are
+  background work, not integrated. Track user feedback and validation there.
+- NextKDE magnification metadata/runtime repair is complete. rdwm `9788af9`
+  workarea-only float fit is accepted (504 core/two ignored; release panel7,
+  fullscreen11, snap10), installed in both user WM bindirs for next login.
+  Ordinary free floats adapt only to a new reserved area; explicit resize/drag
+  clears the limit and fullscreen is excluded. Running WM1714917 remains old,
+  so general overlap protection is not active yet. No WM restart was used.
+- Post-photo colour refresh rereads the latest selection with bounded retries;
+  this is not a cross-process compare-and-swap. Stronger synchronization against
+  arbitrary external edits after the final reread remains a separate limit.
