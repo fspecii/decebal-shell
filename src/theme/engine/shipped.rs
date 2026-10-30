@@ -37,20 +37,16 @@ fn every_theme_folder_is_a_valid_package_whose_id_is_its_folder() {
 }
 
 #[test]
-fn showcase_themes_ship_a_wallpaper_a_screenshot_and_a_description() {
+fn showcase_themes_ship_descriptions_and_native_layouts_without_wallpaper_defaults() {
     for id in SHOWCASE {
         let dir = themes_root().join(id);
         let entries = package::read_dir(&dir, &Limits::default()).unwrap();
-        assert!(entries.iter().any(|e| e.path.starts_with("wallpapers/")), "{id}: wallpaper");
-        for e in entries.iter().filter(|e| e.path.starts_with("wallpapers/")) {
-            assert!(e.data.len() < 300 * 1024, "{id}: {} is {} bytes", e.path, e.data.len());
-        }
+        assert!(!entries.iter().any(|e| e.path.starts_with("wallpapers/") || e.path.starts_with("screenshots/")), "{id}: retired generated assets");
         let text = std::fs::read_to_string(dir.join("theme.toml")).unwrap();
         assert!(text.contains("\ndescription = \"") && text.contains("\ntags = ["), "{id}: description and tags");
-        assert!(entries.iter().any(|e| e.path.starts_with("screenshots/")), "{id}: screenshot");
-        let png = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png"));
-        let len = std::fs::metadata(&png).unwrap_or_else(|e| panic!("{}: {e}", png.display())).len();
-        assert!(len < 400 * 1024, "{id}: docs screenshot is {len} bytes");
+        let def = src_def(id);
+        assert!(!def.extra.contains_key("wallpaper") && !def.extra.contains_key("screenshots"), "{id}: independent wallpaper");
+        assert!(dir.join("README.md").is_file(), "{id}: package guidance");
         assert!(std::fs::read_to_string(themes_root().join("../docs/themes.md")).unwrap().contains(&format!("decthemectl theme apply {id}")), "{id} in docs/themes.md");
     }
 }

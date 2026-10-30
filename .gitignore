@@ -3,3 +3,7 @@
 /.claude/
 !themes/**/*.png
 !docs/**/*.png
+
+# Python validation helpers
+__pycache__/
+*.py[cod]

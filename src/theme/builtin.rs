@@ -152,7 +152,7 @@ mod contrast_tests {
     const NEW_PACKAGES: &[&str] = &["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"];
 
     #[test]
-    fn the_pill_bar_packages_are_distinct_and_ship_their_wallpaper() {
+    fn the_pill_bar_packages_are_distinct_and_keep_wallpaper_independent() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut seen = std::collections::HashSet::new();
         for id in NEW_PACKAGES {
@@ -160,17 +160,11 @@ mod contrast_tests {
             let get = |sec: &str, key: &str| d.extra.get(sec).and_then(|s| s.get(key)).cloned().unwrap_or_default().to_string();
             assert_eq!(get("bar", "style"), "\"vertical\"", "{id}: a pill bar");
             assert!(seen.insert((get("bar", "position"), get("dock", "style"), get("decoration", "style"))), "{id}: bar position, dock and titlebar style must differ from the other themes");
-            let img = get("wallpaper", "image").trim_matches('"').to_string();
-            let f = root.join("themes").join(id).join(&img);
-            let len = std::fs::metadata(&f).unwrap_or_else(|e| panic!("{id}: {}: {e}", f.display())).len();
-            assert!(len > 1000 && len < 300 * 1024, "{id}: wallpaper is {len} bytes");
-            assert!(root.join("docs/themes").join(format!("{id}.png")).is_file(), "{id}: docs/themes/{id}.png (the screenshot) is missing");
+            assert!(!d.extra.contains_key("wallpaper") && !d.extra.contains_key("screenshots"), "{id}: retired artwork defaults");
+            assert!(root.join("themes").join(id).join("README.md").is_file(), "{id}: compatibility guidance");
+            assert!(!root.join("docs/themes").join(format!("{id}.png")).exists(), "{id}: retired documentation artwork");
         }
-        assert_eq!(get_of("material-you-dynamic", "match_colors"), "true");
-    }
-
-    fn get_of(id: &str, key: &str) -> String {
-        def(id).unwrap().extra.get("wallpaper").and_then(|s| s.get(key)).cloned().unwrap_or_default().to_string()
+        assert!(!def("material-you-dynamic").unwrap().extra.contains_key("wallpaper"), "wallpaper colour matching is an explicit independent preference");
     }
 }
 
