@@ -149,6 +149,8 @@ pub enum Glyph {
     Keyboard,
     Rocket,
     Monitor,
+    /// Icon-theme pane: a small grid of app icons.
+    Icons,
     /// Glyph of a system pane (`system::glyphs`).
     Sys(u8),
 }
@@ -240,6 +242,13 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
             }
             fill_circle(pm, cx, cy - 2.5 * u, 2.2 * u, color(bg.0, bg.1, bg.2, 1.0));
             line(pm, &[(cx - 3.0 * u, cy + 10.0 * u), (cx + 3.0 * u, cy + 10.0 * u)], 2.0 * u, color(255, 255, 255, 0.7));
+        }
+        Glyph::Icons => {
+            for (dx, dy, s) in [(-8.5, -8.5, 7.5), (1.0, -8.5, 7.5), (-8.5, 1.0, 7.5), (1.0, 1.0, 7.5)] {
+                fill_rounded(pm, cx + dx * u, cy + dy * u, s * u, s * u, 2.0 * u, white);
+            }
+            fill_rounded(pm, cx - 3.2 * u, cy - 3.2 * u, 6.4 * u, 6.4 * u, 1.6 * u, color(bg.0, bg.1, bg.2, 1.0));
+            fill_rounded(pm, cx - 1.6 * u, cy - 1.6 * u, 3.2 * u, 3.2 * u, 0.8 * u, white);
         }
         Glyph::Sys(k) => super::system::glyphs::draw(pm, k, bg, cx, cy, u),
         Glyph::Monitor => {

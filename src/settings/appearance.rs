@@ -4,8 +4,9 @@
 //!
 //! * **Themes**: pick the desktop design.
 //! * **Palettes**: colours for every theme, light / dark / auto and wallpaper colours.
-//! * **Customise**: one section at a time (Colours, Fonts, Window style, Dock & Bar, Icons and, once it exists, Control Center),
-//!   each with a one-line explanation and a "Reset to theme default".
+//! * **Customise**: one section at a time (Colours, Fonts, Window style, Dock & Bar and, once it exists, Control Center),
+//!   each with a one-line explanation and a "Reset to theme default". Icons and Wallpaper have their own panes next to
+//!   Appearance.
 //! * **Wallpaper**: the pictures (My backgrounds and Wallhaven).
 //! * **All apps**: one switch that themes GTK, Qt, terminals and the browser; the per-app choices sit under "Advanced".
 //!
@@ -13,7 +14,8 @@
 //!
 //! Nothing here stores anything new: the tabs only arrange the builders of the older panes (themepane, fontpane, iconspane,
 //! systempane, wallhaven, the window-style and dock builders in panes.rs). Old pane names (`decsettings theme`, `icons`,
-//! `wallpaper`, `desktop`) resolve to a tab through [`resolve`]. The static [`INDEX`] makes every setting findable by search.
+//! `wallpaper`, `desktop`) resolve to a tab through [`resolve`]; `icons` and `wallpaper` open their own panes. The static
+//! [`INDEX`] makes every setting findable by search.
 
 use super::model::{CtlVal, Model};
 use super::themepane::Ctx;
@@ -103,7 +105,7 @@ impl Section {
             Section::Fonts => "Which fonts the desktop uses and how big its text is.",
             Section::WindowStyle => "How windows look: title bars, the close / minimise / zoom buttons and borders.",
             Section::DockBar => "The dock, the menu bar, hot corners and which apps are pinned.",
-            Section::Icons => "Which icon set the dock, launchers and menus use.",
+            Section::Icons => "Which icon set the dock, launchers and menus use. Icons has its own pane in the sidebar.",
             Section::ControlCenter => "What the Control Center shows.",
         }
     }
@@ -122,8 +124,8 @@ pub struct View {
 /// Where a pane name given to `decsettings NAME` (or any link) opens. `None` = not an Appearance name.
 ///
 /// Old names keep working: `theme`, `icons`, `wallpaper`, `desktop` (and `dock`, `fonts`, `windowstyle`, `colours`, `allapps`) open
-/// the tab / section that now holds them; `appearance` opens the Theme tab; `appearance/fonts`, `appearance/customise` and so on
-/// are the explicit forms.
+/// the pane / tab / section that now holds them (`icons` and `wallpaper` are panes of their own next to Appearance);
+/// `appearance` opens the Theme tab; `appearance/fonts`, `appearance/customise` and so on are the explicit forms.
 pub fn resolve(name: &str) -> Option<View> {
     let n = name.trim().to_lowercase();
     let n = n.strip_prefix("appearance/").unwrap_or(&n);
@@ -143,6 +145,17 @@ pub fn resolve(name: &str) -> Option<View> {
     }
 }
 
+impl View {
+    /// The sidebar pane that shows this view, when it is not the Appearance pane itself (Wallpaper and Icons panes).
+    pub fn pane(self) -> Option<&'static str> {
+        match self.tab {
+            Tab::Wallpaper => Some("wallpaper"),
+            Tab::Customise if self.section == Section::Icons => Some("icons"),
+            _ => None,
+        }
+    }
+}
+
 /// Every tab, and every section of Customise (tests and the screenshot tour).
 pub fn views() -> Vec<View> {
     let mut v: Vec<View> = Tab::ALL.iter().filter(|t| **t != Tab::Customise).map(|t| View { tab: *t, section: Section::Colours }).collect();
@@ -159,7 +172,8 @@ pub fn control_center_items(_m: &Model) -> Option<Vec<Item>> {
 }
 
 fn sections(m: &Model) -> Vec<Section> {
-    Section::ALL.into_iter().filter(|s| *s != Section::ControlCenter || control_center_items(m).is_some()).collect()
+    // Icons has its own pane next to Appearance; Control Center appears once something fills the slot.
+    Section::ALL.into_iter().filter(|s| *s != Section::ControlCenter || control_center_items(m).is_some()).filter(|s| *s != Section::Icons).collect()
 }
 
 /// Lazy data for the visible tab (called before every paint).
@@ -248,6 +262,7 @@ fn customise_tab(m: &Model) -> Vec<Item> {
             out.extend(m.dock_bar_items());
             out.push(reset_card("ap:reset:dock", "Dock spacing, magnification, transparency, roundness and style go back to their defaults"));
         }
+        // Icons has its own pane (see `View::pane`); this stays so a legacy `show` of the view still renders the controls.
         Section::Icons => out.extend(super::iconspane::items(m)),
         Section::ControlCenter => out.extend(control_center_items(m).unwrap_or_default()),
     }
@@ -307,12 +322,12 @@ pub fn show(m: &mut Model, view: View) {
     m.dirty = true;
 }
 
-/// Selects the Appearance pane (by index in `PANES`) on `view`.
+/// Selects the pane that shows `view` (Appearance, Wallpaper or Icons) on `view`.
 pub fn open(m: &mut Model, view: View) {
-    if let Some(i) = super::system::registry::pane_index(if view.tab == Tab::Wallpaper { "wallpaper" } else { "appearance" }) {
+    if let Some(i) = super::system::registry::pane_index(view.pane().unwrap_or("appearance")) {
         m.sel.goto = Some(i);
     }
-    if view.tab != Tab::Wallpaper {
+    if view.pane().is_none() {
         show(m, view);
     } else {
         m.sel.reset_scroll = true;
@@ -465,7 +480,7 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Customise, Section::DockBar, "Dwell time", "hot corner delay"),
     (Tab::Customise, Section::DockBar, "Add an app", "pin dock launcher favourites"),
     (Tab::Customise, Section::DockBar, "Pinned apps", "dock favourites favorites add remove reorder launchers"),
-    // Customise > Icons
+    // Customise > Icons (also the Icons pane; `registry::search` sends these to the Icons pane)
     (Tab::Customise, Section::Icons, "Icon theme", "papirus tela whitesur adwaita breeze yaru auto gtk gsettings icon pack"),
     (Tab::Customise, Section::Icons, "Icon size", "scale artwork padding dock"),
     (Tab::Customise, Section::Icons, "Tint symbolic icons", "monochrome text colour"),
@@ -530,6 +545,8 @@ mod tests {
         assert_eq!(v("theme"), View { tab: Tab::Theme, section: Section::Colours });
         assert_eq!(v("appearance").tab, Tab::Theme);
         assert_eq!(v("icons"), View { tab: Tab::Customise, section: Section::Icons });
+        assert_eq!(v("icons").pane(), Some("icons"), "icons opens its own pane");
+        assert_eq!(v("icon").pane(), Some("icons"));
         assert_eq!(v("desktop"), View { tab: Tab::Customise, section: Section::DockBar });
         assert_eq!(v("wallpaper").tab, Tab::Wallpaper);
         assert_eq!(v("appearance/fonts"), View { tab: Tab::Customise, section: Section::Fonts });
@@ -649,5 +666,20 @@ mod wallpaper_navigation_tests {
         assert!(m.wallpaper_open());
         assert!(!Tab::ALL.contains(&Tab::Wallpaper));
         assert!(m.items(m.sel.pane).iter().all(|i| !matches!(i,Item::Card(rows) if rows.iter().any(|r|r.ctls.iter().any(|c|c.id=="ap:tab")))));
+    }
+
+    #[test]
+    fn icons_have_their_own_pane_and_leave_appearance_selection_intact() {
+        let (mut m, _) = model_with("[general]\n");
+        m.sel.tab = Tab::Palettes;
+        m.apply("ap:go:icons", CtlVal::Click);
+        assert_eq!(m.sel.goto, registry::pane_index("icons"));
+        assert_eq!(m.sel.tab, Tab::Palettes, "the Icons pane does not change the Appearance tab");
+        m.sel.pane = registry::pane_index("icons").unwrap();
+        let its = m.items(m.sel.pane);
+        assert!(its.iter().any(|i| matches!(i, Item::Card(rows) if rows.iter().any(|r| r.ctls.iter().any(|c| c.id == "ic:use")))), "the Icons pane shows the icon theme chooser");
+        assert!(!Tab::ALL.contains(&Tab::Wallpaper));
+        // Icons is no longer a visible Customise section: the pane is the one discoverable home
+        assert!(!sections(&m).contains(&Section::Icons));
     }
 }

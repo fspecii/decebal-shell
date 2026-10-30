@@ -35,9 +35,9 @@ Appearance
                 Fonts         text size · font preset · interface / titles / monospace / clock fonts
                 Window style  windows follow the theme · title bars · window buttons · borders · their colours
                 Dock & Bar    dock style, spacing, magnification... · menu bar workspace dots · window manager strip · hot corners · pinned apps
-                Icons         icon theme (preview grid) · size · tint · fallback
                 Control Center  (a slot: hidden until the Control Center has settings, see below)
   Wallpaper   My backgrounds / Wallhaven · scaling · background colour · image file · link to "Match wallpaper colours"
+  Icons       icon theme (preview grid) · size · tint · fallback
   All apps    one switch "Apply theme to all apps"; under "Advanced" -> "Show options": per-app targets, GTK font,
               icon and cursor theme for apps, Apply now
 Config & Presets  (sidebar entry right under Appearance: presets, import / export, edit the files as text)
@@ -73,7 +73,7 @@ setting, not a look.
 
 Nothing stored changed: `config.toml`, `decebal.json`, `dock-settings.json`, `decthemectl` and every saved format are as before;
 the tabs only arrange the builders that already existed. Old names keep working (`decsettings theme|icons|wallpaper|desktop`
-open Theme / Customise > Icons / Wallpaper / Customise > Dock & Bar; `appearance` opens the Theme tab; `appearance/fonts`,
+open the Theme tab / the Icons pane / the Wallpaper pane / Customise > Dock & Bar; `appearance` opens the Theme tab; `appearance/fonts`,
 `appearance/window`, `appearance/dock`, `appearance/colours`, `appearance/apps` are explicit forms). The dock's "Settings" entry
 (`decsettings desktop`) lands on Dock & Bar.
 
@@ -87,7 +87,7 @@ searches end to end.
 ### Slot for the Control Center
 
 `appearance::control_center_items(&Model) -> Option<Vec<Item>>` returns `None` today. When it returns `Some(items)`, a "Control
-Center" section appears in Customise, between Icons and the end of the section bar. No other file needs to change.
+Center" section appears at the end of the Customise section bar. No other file needs to change.
 
 ## Scroll performance
 

@@ -48,18 +48,19 @@ that every key the panes use exists in it (and the snapshot against an installed
 
 ## Appearance pane
 One pane (`decsettings appearance`, source `src/settings/appearance.rs`) holds everything about how the desktop looks, in five tabs:
-Themes (desktop designs and layout) · Palettes (colour sets, light/dark/auto, Match wallpaper colours, accent) · Customise (sections Colours, Fonts, Window style, Dock & Bar, Icons,
-Control Center once it has settings; each with a one-line explanation and a reset) · Wallpaper (My backgrounds, Wallhaven) · All apps (one
-switch, per-app choices under Advanced). The rationale and before/after screenshots are in `docs/settings-design.md`.
+Themes (desktop designs and layout) · Palettes (colour sets, light/dark/auto, Match wallpaper colours, accent) · Customise (sections Colours, Fonts, Window style, Dock & Bar,
+Control Center once it has settings; each with a one-line explanation and a reset) · All apps (one switch, per-app choices under Advanced).
+Wallpaper and Icons are panes of their own next to Appearance (see below). The rationale and before/after screenshots are in `docs/settings-design.md`.
 It arranges the builders of themepane, fontpane, iconspane, systempane and wallhaven; the shared decebal theme: miniature desktops, light/dark/auto,
 accent swatches, translucency, corner radius and text size. A choice edits rdwm's colour keys through the same
 comment-preserving store (validated, one reload) and writes `decebal.json`; every running decebal program follows within
 half a second. Details: `docs/theming.md`. (`src/settings/themepane.rs`)
 
 ## Icons
-Appearance > Customise > Icons (`decsettings icons`) (`src/settings/iconspane.rs`): the installed icon themes (Auto first; symbolic-only and cursor-only ones
+A pane of its own next to Wallpaper (`decsettings icons`, `src/settings/iconspane.rs`, sidebar section Appearance): the installed icon themes (Auto first; symbolic-only and cursor-only ones
 greyed out), a 4 x 4 preview of common icons for the highlighted theme, Use this theme, icon size, symbolic tint, fallback
-theme and reset. It edits the `icons` object of `decebal.json` (`docs/icons.md`).
+theme and reset. It edits the `icons` object of `decebal.json` (`docs/icons.md`). The old `Appearance > Customise > Icons`
+section is no longer shown; the route still resolves to the pane.
 
 ## Panes
 General (versions, file, reload, open in editor, restore, tags, chord timeout) · Appearance (see above: window style = title bars, borders, colours, window buttons; Dock & Bar = dock sliders, menu-bar workspaces, hot corners, pinned apps; Wallpaper tab = My backgrounds and Wallhaven, see wallpapers.md, live preview, mode, colour, path, lazily decoded thumbnails of `~/.config/omarchy/backgrounds/**`) · Config & Presets (the old Configuration pane) ·

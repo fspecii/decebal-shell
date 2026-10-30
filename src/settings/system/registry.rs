@@ -13,7 +13,7 @@ pub struct Section {
 
 pub const SECTIONS: &[Section] = &[
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Appearance", panes: &["appearance", "wallpaper", "widgets", "config"] },
+    Section { title: "Appearance", panes: &["appearance", "wallpaper", "icons", "widgets", "config"] },
     Section { title: "Displays", panes: &["displays"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
@@ -161,8 +161,13 @@ pub fn search(q: &str, extra: &[(usize, String)]) -> Vec<Hit> {
         }
     }
     if let Some(pane) = pane_index("appearance") {
-        for (tab, _, label, words) in crate::settings::appearance::INDEX {
-            let pane = if *tab == crate::settings::appearance::Tab::Wallpaper { pane_index("wallpaper").unwrap_or(pane) } else { pane };
+        for (tab, sec, label, words) in crate::settings::appearance::INDEX {
+            // Wallpaper and Icons are panes of their own: their settings open there, not in Appearance.
+            let pane = match (tab, sec) {
+                (_, crate::settings::appearance::Section::Icons) => pane_index("icons").unwrap_or(pane),
+                (_, _) if *tab == crate::settings::appearance::Tab::Wallpaper => pane_index("wallpaper").unwrap_or(pane),
+                _ => pane,
+            };
             if all_match(&format!("{label} {words}"), &ts) && !PANES[pane].title.eq_ignore_ascii_case(label) {
                 add(&mut hits, pane, label);
             }
@@ -235,6 +240,17 @@ mod tests {
         let tiling = pane_index("tiling").unwrap();
         let h = search("gap", &[(tiling, "Gap between windows".into())]);
         assert!(h.iter().any(|x| x.pane == tiling && x.label.as_deref() == Some("Gap between windows")));
+    }
+
+    #[test]
+    fn icon_settings_open_the_icons_pane() {
+        let icons = pane_index("icons").unwrap();
+        for q in ["icon", "papirus", "symbolic tint"] {
+            let h = search(q, &[]);
+            assert!(h.iter().any(|x| x.pane == icons), "{q}: {h:?}");
+        }
+        let h = search("papirus", &[]);
+        assert_eq!(h[0].pane, icons, "icon theme hits open the Icons pane: {h:?}");
     }
 
     #[test]

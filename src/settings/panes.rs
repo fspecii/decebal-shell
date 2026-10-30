@@ -31,6 +31,13 @@ pub const PANES: &[PaneDef] = &[
     },
     PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "background pictures wallhaven live animated video commons wallpaper scaling" },
     PaneDef {
+        id: "icons",
+        title: "Icons",
+        glyph: Glyph::Icons,
+        color: (255, 214, 10),
+        keywords: "icon icons theme papirus tela whitesur adwaita breeze yaru auto gtk gsettings icon pack preview grid size scale symbolic tint monochrome fallback hicolor cursor mouse pointer",
+    },
+    PaneDef {
         id: "widgets",
         title: "Widgets",
         glyph: Glyph::Tiles,
@@ -388,6 +395,7 @@ impl Model {
             "general" => self.pane_general(),
             "appearance" => super::appearance::items(self),
             "wallpaper" => super::appearance::wallpaper_tab(self),
+            "icons" => super::iconspane::items(self),
             "widgets" => super::widgetspane::items(self),
             "tiling" => self.pane_tiling(),
             "windows" => self.pane_windows(),

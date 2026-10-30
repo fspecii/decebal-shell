@@ -121,11 +121,11 @@ impl SettingsApp {
         });
         let mut m = Model::new(paths, schema, queue, wake);
         if let Some(p) = start_pane {
-            // the old names of the panes that became Appearance tabs (theme, icons, wallpaper, desktop) open that tab
+            // the old names of the panes that became Appearance tabs (theme, icons, wallpaper, desktop) open where they live now
             match super::appearance::resolve(p) {
                 Some(v) => {
-                    m.sel.pane = pane_index(if v.tab == super::appearance::Tab::Wallpaper { "wallpaper" } else { "appearance" });
-                    if v.tab != super::appearance::Tab::Wallpaper {
+                    m.sel.pane = pane_index(v.pane().unwrap_or("appearance"));
+                    if v.pane().is_none() {
                         super::appearance::show(&mut m, v);
                     }
                     m.sel.reset_scroll = false;
@@ -1570,6 +1570,15 @@ mod key_tests {
             let dir = std::path::PathBuf::from(dir);
             std::fs::create_dir_all(&dir).unwrap();
             pixels.save_png(dir.join(if crate::theme::th().dark { "picker-dark.png" } else { "picker-light.png" })).unwrap();
+        }
+    }
+
+    #[test]
+    fn legacy_pane_names_open_their_pane_at_startup() {
+        let initial = app();
+        for (name, pane) in [("icons", "icons"), ("wallpaper", "wallpaper"), ("theme", "appearance"), ("appearance/fonts", "appearance")] {
+            let a = SettingsApp::new(initial.m.paths.clone(), Some(name));
+            assert_eq!(PANES[a.m.sel.pane].id, pane, "{name}");
         }
     }
 
