@@ -8,6 +8,10 @@ export MS_BIN_DIR=${MS_BIN_DIR:-$HERE/target/release}
 source "$HERE/tests/e2e/env.sh"
 N=${E2E_DISPLAY:-:284}
 case "$N" in :0|:1) exit 2;; esac
+if [ -e "/tmp/.X11-unix/X${N#:}" ] || [ -e "/tmp/.X${N#:}-lock" ]; then
+    echo "Display $N is already in use; choose another E2E_DISPLAY" >&2
+    exit 77
+fi
 cleanup() { if [ -e "$XDG_RUNTIME_DIR/decdock.lock" ]; then kill "$(cat "$XDG_RUNTIME_DIR/decdock.lock")" 2>/dev/null || true; fi; e2e_down; }
 trap cleanup EXIT
 e2e_up "$N"

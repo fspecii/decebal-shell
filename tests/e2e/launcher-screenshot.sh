@@ -7,6 +7,10 @@ export MS_BIN_DIR=${MS_BIN_DIR:-$HERE/target/release}
 source "$HERE/tests/e2e/env.sh"
 N=${E2E_DISPLAY:-:287}
 case "$N" in :0|:1) exit 2;; esac
+if [ -e "/tmp/.X11-unix/X${N#:}" ] || [ -e "/tmp/.X${N#:}-lock" ]; then
+    echo "Display $N is already in use; choose another E2E_DISPLAY" >&2
+    exit 77
+fi
 E2E_CONFIG_SRC=$(mktemp); export E2E_CONFIG_SRC
 cat > "$E2E_CONFIG_SRC" <<'TOML'
 [general]
