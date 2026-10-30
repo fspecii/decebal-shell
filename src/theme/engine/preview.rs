@@ -34,9 +34,51 @@ static PENDING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 type Results = HashMap<String, (Instant, Result<Option<PathBuf>, String>)>;
 static RESULTS: OnceLock<Mutex<Results>> = OnceLock::new();
 
+fn request_id(src: &Source, selection: &Selection) -> String {
+    format!("{:?}:{}", src.themes_dir, selection.to_json())
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedPreview {
+    version: String,
+    key: String,
+}
+fn saved_file(dir: &Path, id: &str) -> PathBuf {
+    let mut hash = sha256::Sha256::default();
+    hash.update(id.as_bytes());
+    dir.join("saved").join(format!("{}.json", sha256::hex(&hash.finish())))
+}
+fn read_saved(dir: &Path, id: &str) -> Option<PathBuf> {
+    let entry: SavedPreview = serde_json::from_slice(&fs::read(saved_file(dir, id)).ok()?).ok()?;
+    if entry.version != VERSION || entry.key.len() != 64 || !entry.key.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let path = dir.join(format!("{}.png", entry.key));
+    path.is_file().then_some(path)
+}
+fn save_preview(dir: &Path, id: &str, key: &str) -> Result<(), String> {
+    let path = saved_file(dir, id);
+    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let bytes = serde_json::to_vec(&SavedPreview { version: VERSION.into(), key: key.into() }).map_err(|e| e.to_string())?;
+    // Avoid disk writes on every background validation of an unchanged preview.
+    if fs::read(&path).ok().as_deref() == Some(bytes.as_slice()) {
+        return Ok(());
+    }
+    let tmp = path.with_extension(format!("{}-{}.tmp", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed)));
+    fs::write(&tmp, bytes).and_then(|_| fs::rename(&tmp, &path)).map_err(|e| e.to_string())
+}
+
 pub fn cached(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, String> {
-    let id = format!("{:?}:{}", src.themes_dir, selection.to_json());
-    RESULTS.get().and_then(|r| r.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()).map(|(_, result)| result).unwrap_or(Ok(None))
+    let id = request_id(src, selection);
+    let results = RESULTS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some((_, result)) = results.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned() {
+        return result;
+    }
+    // One tiny saved reference is enough to show last session's PNG immediately.
+    // Asset/font validation remains on the worker; never recompute a fingerprint here.
+    let result = Ok(read_saved(&cache_dir(), &id));
+    results.lock().unwrap_or_else(|e| e.into_inner()).insert(id, (Instant::now() - Duration::from_secs(2), result.clone()));
+    result
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -179,11 +221,14 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
             }
         }
     }
-    for path in [Some(renderer()), deco_renderer()].into_iter().flatten() {
-        hash.update(path.as_os_str().as_encoded_bytes());
-        if let Ok(m) = fs::metadata(path) {
-            hash.update(&m.len().to_le_bytes());
-            hash.update(format!("{:?}", m.modified()).as_bytes());
+    // VERSION is the output contract: unrelated rebuilds/install locations must
+    // not invalidate every stored image. Bump it when native rendering changes.
+    hash.update(if deco_renderer().is_some() { b"native-decorations" } else { b"no-decorations" });
+    // Explicit custom renderers remain content-addressed, independent of mtime/path.
+    for variable in ["DECEBAL_THEME_PREVIEW_BIN", "DECEBAL_DECO_RENDERER"] {
+        if let Some(path) = std::env::var_os(variable) {
+            hash.update(variable.as_bytes());
+            hash.update(&fs::read(path).map_err(|e| e.to_string())?);
         }
     }
     Ok(sha256::hex(&hash.finish()))
@@ -275,33 +320,40 @@ pub fn generate(src: &Source, selection: &Selection) -> Result<PathBuf, String> 
             return Err(e);
         }
     }
+    save_preview(&dir, &request_id(src, selection), &key)?;
     prune(&dir);
     Ok(output)
 }
 
 fn prune(dir: &Path) {
     let Ok(entries) = fs::read_dir(dir) else { return };
-    let mut files: Vec<_> = entries
-        .flatten()
-        .filter_map(|e| {
-            let p = e.path();
-            let stem = p.file_stem()?.to_str()?;
-            (stem.len() == 64 && stem.chars().all(|c| c.is_ascii_hexdigit()) && matches!(p.extension()?.to_str()?, "png" | "json" | "error"))
-                .then(|| (e.metadata().ok().and_then(|m| m.modified().ok()), p))
-        })
-        .collect();
-    files.sort_by_key(|e| e.0);
-    let excess = files.len().saturating_sub(256);
-    for (_, p) in files.into_iter().take(excess) {
-        let _ = fs::remove_file(p);
+    // A PNG and its JSON sidecar are one preview, not two independent artifacts.
+    let mut groups = HashMap::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else { continue };
+        if stem.len() != 64 || !stem.bytes().all(|b| b.is_ascii_hexdigit()) || !matches!(path.extension().and_then(|e| e.to_str()), Some("png" | "json" | "error")) {
+            continue;
+        }
+        let modified = entry.metadata().ok().and_then(|m| m.modified().ok());
+        groups.entry(stem.to_owned()).and_modify(|old: &mut Option<std::time::SystemTime>| *old = (*old).max(modified)).or_insert(modified);
+    }
+    let mut groups: Vec<_> = groups.into_iter().collect();
+    groups.sort_by_key(|(_, modified)| *modified);
+    let excess = groups.len().saturating_sub(256);
+    for (key, _) in groups.into_iter().take(excess) {
+        for extension in ["png", "json", "error"] {
+            let _ = fs::remove_file(dir.join(format!("{key}.{extension}")));
+        }
     }
 }
 
 /// Automatic lazy generation on gallery discovery/import/change. One bounded worker, no per-card process storm.
 pub fn request(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, String> {
-    // Only memory lookup and bounded enqueue on the GUI thread. No stat/read/font lookup.
+    // Memory/saved-reference lookup and bounded enqueue only; no asset/font fingerprinting on the GUI thread.
     static QUEUE: OnceLock<mpsc::SyncSender<(String, Source, Selection)>> = OnceLock::new();
-    let id = format!("{:?}:{}", src.themes_dir, selection.to_json());
+    let _ = cached(src, selection);
+    let id = request_id(src, selection);
     let results = RESULTS.get_or_init(|| Mutex::new(HashMap::new()));
     let cached = results.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned();
     let queue = QUEUE.get_or_init(|| {
@@ -521,6 +573,46 @@ mod performance_tests {
         assert!(asset_digest(&path).is_err());
         fs::remove_dir_all(dir).unwrap();
     }
+    #[test]
+    fn saved_reference_survives_restart_without_fingerprinting_assets() {
+        let dir = std::env::temp_dir().join(format!("preview-saved-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let key = "a".repeat(64);
+        let png = dir.join(format!("{key}.png"));
+        fs::write(&png, b"saved preview").unwrap();
+        save_preview(&dir, "theme and selection", &key).unwrap();
+        let stamp = fs::metadata(saved_file(&dir, "theme and selection")).unwrap().modified().unwrap();
+        assert_eq!(read_saved(&dir, "theme and selection"), Some(png.clone()));
+        save_preview(&dir, "theme and selection", &key).unwrap();
+        assert_eq!(fs::metadata(saved_file(&dir, "theme and selection")).unwrap().modified().unwrap(), stamp);
+        fs::remove_file(png).unwrap();
+        assert_eq!(read_saved(&dir, "theme and selection"), None);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn pruning_counts_complete_previews_instead_of_sidecars() {
+        let dir = std::env::temp_dir().join(format!("preview-prune-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for n in 0..256 {
+            for ext in ["png", "json"] {
+                fs::write(dir.join(format!("{n:064x}.{ext}")), b"preview").unwrap();
+            }
+        }
+        prune(&dir);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 512, "256 images and metadata must all survive");
+        for ext in ["png", "json"] {
+            fs::write(dir.join(format!("{:064x}.{ext}", 256)), b"new").unwrap();
+        }
+        prune(&dir);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 512);
+        for entry in fs::read_dir(&dir).unwrap().flatten() {
+            assert!(entry.path().with_extension("png").is_file());
+            assert!(entry.path().with_extension("json").is_file());
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn gui_request_never_waits_for_asset_digest_lock() {
         let _guard = DIGESTS.lock().unwrap_or_else(|e| e.into_inner());

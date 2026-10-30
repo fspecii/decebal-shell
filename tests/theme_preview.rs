@@ -52,7 +52,10 @@ fn wall(dir: &std::path::Path, color: [u8; 3]) {
     image::RgbImage::from_pixel(20, 20, image::Rgb(color)).save(dir.join("themes/probe/wallpapers/a.png")).unwrap();
 }
 fn render(dir: &std::path::Path, src: &Source, mode: &str) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_decthemectl"))
+    render_bin(dir, src, mode, std::path::Path::new(env!("CARGO_BIN_EXE_decthemectl")))
+}
+fn render_bin(dir: &std::path::Path, src: &Source, mode: &str, bin: &std::path::Path) -> String {
+    let out = Command::new(bin)
         .args(["theme", "render", "probe", "--mode", mode, "--png"])
         .arg(dir.join(format!("result-{mode}.png")))
         .env("DECEBAL_CONFIG", dir)
@@ -119,4 +122,24 @@ fn fingerprint_includes_resolved_palette_and_builtin_widget_sources() {
     fs::write(dir.join("themes/probe/theme.toml"), writer::def_to_manifest(&def, &Header { id: "probe".into(), name: "Preview probe".into(), version: Some("1.0.0".into()), ..Default::default() }))
         .unwrap();
     assert_ne!(a, preview::fingerprint(&src, &dark).unwrap());
+}
+
+#[test]
+fn fresh_process_and_reinstalled_renderer_reuse_stored_png_without_rewriting_it() {
+    let (dir, src) = fixture();
+    let a = dir.join("first-install/decthemectl");
+    let b = dir.join("second-install/decthemectl");
+    for executable in [&a, &b] {
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        fs::copy(env!("CARGO_BIN_EXE_decthemectl"), executable).unwrap();
+    }
+    let first = render_bin(&dir, &src, "dark", &a);
+    let path = std::path::PathBuf::from(first.split("(cache ").nth(1).unwrap().trim().trim_end_matches(')'));
+    let sentinel = std::time::UNIX_EPOCH + std::time::Duration::from_secs(123456);
+    fs::File::options().write(true).open(&path).unwrap().set_times(fs::FileTimes::new().set_modified(sentinel)).unwrap();
+    fs::File::options().write(true).open(&b).unwrap().set_times(fs::FileTimes::new().set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600))).unwrap();
+    assert_eq!(render_bin(&dir, &src, "dark", &b), first, "a new process and install path must find the same stored preview");
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), sentinel, "the native worker must not rewrite an unchanged PNG");
+    assert_eq!(fs::read_dir(dir.join("cache/decebal/theme-previews/saved")).unwrap().count(), 1, "persistent gallery reference is reused");
+    fs::remove_dir_all(dir).unwrap();
 }

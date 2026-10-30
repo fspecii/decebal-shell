@@ -64,7 +64,7 @@ registration limit; previews show the real installed fallback, not a font mockup
 Cache: `$XDG_CACHE_HOME/decebal/theme-previews` (normal XDG fallback).
 SHA256 keys include raw manifests, inherited package assets, widget definitions,
 builtin widget source, effective selection/palette, resolved installed font file
-identity, native renderer version and helper binary identity. Screenshots and
+identity, the native renderer output-contract version and optional helper availability. Default binary paths and mtimes do not invalidate previews; explicit custom helpers are content-addressed. Screenshots and
 root documentation are excluded to avoid self-invalidating generated evidence.
 Wallpaper files outside the conventional directory are included too. Changes to
 palette contents, layout, artwork or widget code therefore choose a new artifact.
@@ -85,14 +85,12 @@ One bounded background render worker handles gallery requests. The fontconfig ca
 lives at `theme-previews/fontconfig` across jobs rather than in disposable job homes;
 system font caches remain readable, and original user font directories remain read-only.
 The existing parent helper autodiscovery beside the running executable is preserved.
-Queue order remains gallery order (32 pending maximum); viewport priority is deferred
-because visibility belongs to card painting while package requests precede layout.
-Offscreen themes may still queue; this patch does not claim faster native painting.
+Only visible cards enqueue jobs (32 pending maximum). Offscreen themes do not delay visible previews.
  Rendering times out after
 45 seconds, publishes PNGs atomically, wakes the gallery and retains a failure
 reason under the same key instead of retrying forever. The gallery fits the whole
 image, including its sample-data footer, rather than cropping it. The persistent
-cache is bounded to 256 own artifacts; decoded thumbnails are bounded to 64.
+cache is bounded to 256 complete previews (PNG and metadata count together); decoded thumbnails are bounded to 64.
 No generated preview is installed into a theme or changes its integrity hash.
 
 ## Verification and evidence
@@ -123,3 +121,11 @@ slots, with PNG evidence in `target/preview-fit-evidence/`. The gallery now uses
 uniform contain pixmap transform directly, without a cover crop or rounded edge mask.
 
 The gallery queues rendering only for visible cards. Off-screen cards retain metadata and cached results without entering the render queue, so they cannot delay the previews currently in view.
+
+Saved references under `theme-previews/saved` let Settings show the last PNG
+immediately after restarting. Only the small reference is read on first lookup;
+asset/font fingerprints are checked on the background worker. Unchanged previews
+and references are not rewritten. Rendering changes require an explicit VERSION
+bump; an unrelated application rebuild does not discard the gallery cache.
+`tests/theme_preview.rs` verifies reuse across fresh processes and copied/touched
+renderer binaries while palette, wallpaper, widget and layout changes invalidate.
