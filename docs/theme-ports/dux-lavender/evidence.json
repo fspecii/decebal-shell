@@ -3,7 +3,8 @@
   "base": "08c07a2",
   "shared_widgets": [
     "de48c1c",
-    "37c115f"
+    "37c115f",
+    "380cd1a802a5d1693aebf960d11ebee0878f05e0"
   ],
   "files": {
     "docs/theme-ports/dux-lavender/captions/materia-dark-1x.png": {
@@ -179,100 +180,324 @@
         1920,
         1200
       ],
-      "sha256": "ce379971643661a074eb0547c095054c722266670d1a076af4ddf0021c4172bd"
+      "sha256": "eb69cf568553033101060d67fb909f87dc0f1a56f15b31eb1a68613871b84954"
     },
     "docs/theme-ports/automatic/dux-lavender-light.png": {
       "size": [
         1920,
         1200
       ],
-      "sha256": "cc9838dfe10a734910a88e1b507013fe76d5af7440dd7c32241588a2794a2514"
+      "sha256": "ac918e44514008f51f96acf802ca41177a97ab579081087cf3478e267707ace6"
     },
     "docs/theme-ports/dux-lavender/widgets/clock-card-dark-200-sample.png": {
       "size": [
-        236,
-        136
+        472,
+        233
       ],
-      "sha256": "46572ce28175d9e97f4d5179335e46e83918615f357c048c7e66cf2b021ffadf"
+      "sha256": "6316a157442f0159f8fd919aa9afb68287da953fa41f7cbaa6f94706f2829ce7"
     },
     "docs/theme-ports/dux-lavender/widgets/clock-card-light-200-sample.png": {
       "size": [
-        236,
-        136
+        472,
+        233
       ],
-      "sha256": "57e1d9a7bb691281a1347edc12eafb29ef828c6e50d78c77a4abeb028e620a01"
+      "sha256": "25611040178c756be37ab7e03a7b14e7fdb808a05f541391ddb4b96991c3598f"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-100-fixed-sample.png": {
       "size": [
         1280,
         720
       ],
-      "sha256": "b7236166e61d673e40657809002efe108f1b8695c42ae9b90916faa6948678ae"
+      "sha256": "9038212033f85159de6d1f769f01a15599827b57e62064f54cab1adc15a64af5"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-200-fixed-sample.png": {
       "size": [
         1280,
         720
       ],
-      "sha256": "7003768cab29a5a10805299540057af4f2b7cd710d5c1e25cca70a64b8632cc0"
+      "sha256": "cb9cc10b8b8cb19583e19a22f8c70c446fd8feb387b3b799ef9497cc3a8f05ea"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-100-fixed-sample.png": {
       "size": [
         1280,
         720
       ],
-      "sha256": "296366a3f22f12189862441387de48df23df0eb91c6a23adb30a89c80c4df681"
+      "sha256": "3c550abfdade035714b191794290ab22731fe21846e8f83994c1e23b2402a1b9"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-200-fixed-sample.png": {
       "size": [
         1280,
         720
       ],
-      "sha256": "114f6965d512af03d6a748d0c136adc2f726291f7f6e73d3a4825bb6b935a149"
+      "sha256": "bdaf5555dab7a92d599cf0818f1b2dab265647c26654d1dac8f7e12ffda62567"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-100-fixed-sample.png": {
       "size": [
         1920,
         1080
       ],
-      "sha256": "989b2cf1f2a9978bfa70f99385f7fea5fcd5acdf0fac9e07ca349b7e27cd732c"
+      "sha256": "0c6e86b7d10849a8f1a9e0f5a467fe3b8408363839f590f0a44c3751e9ac2bc7"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-200-fixed-sample.png": {
       "size": [
         1920,
         1080
       ],
-      "sha256": "4c56c121a5b17ba6b181709cc1da23fb634309ca1ca90852c1f298d57a584fc2"
+      "sha256": "12e5c453fb619088f6df6dcb79a718edc29d13c1379afa5f489481c80cb4a58d"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-100-fixed-sample.png": {
       "size": [
         1920,
         1080
       ],
-      "sha256": "0fab8a2d34164f2e24d0191c6b59441dc79c466c1e488b561449d012c4ff094d"
+      "sha256": "48c27f731f5e1eacad0aa1b593dbf25fcbabf12aad96a32aa39af2ed80ea8ae1"
     },
     "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-200-fixed-sample.png": {
       "size": [
         1920,
         1080
       ],
-      "sha256": "5fc9381bf50cff7e20770f6900b1168664fa34bc6d0da8a968788d27f63851c3"
+      "sha256": "14a743af1a77f2d7a50286595aaafc188055f948c8b25bcb98b81702be1315b0"
     },
     "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-200-sample.png": {
       "size": [
-        310,
-        76
+        620,
+        91
       ],
-      "sha256": "3ade946cc379c7e1f38a6b280e12efaad3140e649dcbfa5b9e6c30615316013a"
+      "sha256": "770af2754dd7482369cfe1e982a2788b94bb08b24d82111b95686f50d7acb2f4"
     },
     "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-200-sample.png": {
+      "size": [
+        620,
+        91
+      ],
+      "sha256": "156edcbc6401149323b22cef6b667bffe7436c073c93d801d7e75fafa3615d2c"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-100-missing.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "29612a157aac05d9a3ee9b56bb7afb7aac9de1795f9297f0d1636731cf2fafc8"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-100-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "94b5ba06fb6ed3683a3c189925eda2408ffb6c37ee1e28d43774d79db9a3d509"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-200-missing.png": {
+      "size": [
+        472,
+        199
+      ],
+      "sha256": "41c69382425a53e1bff7895f0889f35551b13af83810c3a3bbbf5a4a490b2bbd"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-100-missing.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "d294e803f5aff3eb252b4a3c8e958dbf8ed57c6528919f24a4ed91c1399dac5c"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-100-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "acd63e0d3c40778bf653f9ac7e2275e3c4f48472f71a18da604e877a8e3ed6f9"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-200-missing.png": {
+      "size": [
+        472,
+        199
+      ],
+      "sha256": "7ea793472c328a63b7d66dc58451f6b0e73b51cea7e27461187ec6d0c8de61e2"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-100-fixed-missing.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6257867af4e954a616d0a2d027e23f0d3f36d6fe1746a8db4f89d19915603256"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-200-fixed-missing.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "a173573fbdd371565494fb4b08c503fd937d5a819ddb4f99238ca2e776fe7b5c"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-100-fixed-missing.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "bfca754c2b87b4a9716c192a2bed27b5d3f3a395d660b6423114923c99f69071"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-200-fixed-missing.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "cb836a3de906d128bb1bd27d51a21a7c7600ab81eed761f5f49427bb62333e7e"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-100-fixed-missing.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "eb14a52f88cd9acd58443dd7794e68df834ee7bf34320036c7fb0f82992ea9de"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-200-fixed-missing.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "cba4901ea37f42b9790026b8d0165ce7649d08c3a937a4ff7620939b6c151a14"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-100-fixed-missing.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "faf3b46cc9d1cd28e638be0298d264f983eaf216293df457ade73b2610ae6a16"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-200-fixed-missing.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "8e8e5097b85b8137217f01d8cbd349b9d51b7e84932579f26df90e207016c9df"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-100-missing.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "0dcd76c8ab1dfeb450095e9f1b5f8db796d687d08e13bfc5da46e481aec28863"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-100-sample.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "af7d672f10436af1b9fd56ff1de08ba7dd0ce4ea2574fd68d30e9b7059414bc9"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-200-missing.png": {
+      "size": [
+        320,
+        363
+      ],
+      "sha256": "f2211d16bd7d0a0fa03ae39d6f6ed289adc500ebeaeec4c3a276577e1af80b94"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-100-missing.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "c23db28ce0ad4111860532600feeca2c6b4bc3d70280cc2b7d069914c082487d"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-100-sample.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "0637e419cf5704b96cb670502ad8cc101c6d7e90d1b4d823f2dfaa363cf17b08"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-200-missing.png": {
+      "size": [
+        320,
+        363
+      ],
+      "sha256": "a332747cdc8517af2c9737140b047365c0bef768761c1c02978eae0a36fd51dc"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-100-missing.png": {
       "size": [
         310,
         76
       ],
-      "sha256": "82ae9c3913243a8f4b38e67a48a15017d31cffeef5333809804e9c5b45a6ca2b"
+      "sha256": "458db76cd5cb8da2b24a5b0668d6d3b2937b27ec94b9fb1660b46f35280eb4e0"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-100-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "c8fb034f95f71acaffb78bcb15690168fe2857a1ff222fe7daf3adf4a3fa0196"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-200-missing.png": {
+      "size": [
+        620,
+        91
+      ],
+      "sha256": "9bd9d0fe6b87e277a4b11ef7601d5bc517b0a99fa8cc15362dce20cd9cd01cf2"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-100-missing.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "c0006b66568e5576d5bf039c6b46bf07e93f8c1c5028ca6eb41a660e3c9d2961"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-100-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "679c57f634c0b53e72acaabbe9617b2618991b77441c0dfd8dbbe7ae3c080520"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-200-missing.png": {
+      "size": [
+        620,
+        91
+      ],
+      "sha256": "12e6f7a42f6d47d034ab0b6e38d845141dcdd5fb51ae31d8a14041ba016374a3"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-100-missing.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "b94d35cd289c67a3c56ef535bdc78460d72ffd9b479c8df9a0ca32b92f53ad16"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-100-sample.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "cd5ccb57c4dac9be032611bac67ef6858c5d64a792c2feba1dbca15ae063944b"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-200-missing.png": {
+      "size": [
+        320,
+        324
+      ],
+      "sha256": "db274cd3835dbd8fabc31fc59c6afc987ae4f89ee9e3eec43803160bb4d08d25"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-100-missing.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "653280757da9e64980ab7f58e078078d23fe0d16e554531b591c3a4cc4fe0d73"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-100-sample.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "97749791fdc8cde19bc15eaf34d77c7a143e68e84311354dc9ef3d34f10c6fa6"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-200-missing.png": {
+      "size": [
+        320,
+        324
+      ],
+      "sha256": "bdfdda6a3a8e3eacf2f2784ea7e1d784b6c529d75956f440dbce6afc4a930918"
     }
   },
   "short_output_parent": "fca4442",
-  "scope": "All-four native card bounds at1280x720/1920x1080,100/200text. Fixed clock clips at200; geometry is not readability acceptance."
+  "scope": "Final native all-four layout/readable sample clock/date/media/actions at1280x720 and1920x1080,100/200text,both modes,sample/missing. No live host/compositor."
 }

@@ -1,6 +1,8 @@
 {
-  "data": "fixed samples; native widgets only, no live host/compositor",
+  "data": "fixed samples or explicit missing providers; native widgets only, no live host/compositor",
+  "shared_fix": "380cd1a802a5d1693aebf960d11ebee0878f05e0",
   "text_scale": 1.0,
+  "state": "sample",
   "rectangles": [
     {
       "widget": "builtin:clock-card",
@@ -14,10 +16,10 @@
     {
       "widget": "builtin:now-playing-mini",
       "rect": [
-        32,
-        224,
-        342,
-        300
+        1578,
+        972,
+        1888,
+        1048
       ]
     },
     {

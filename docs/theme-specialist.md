@@ -220,3 +220,15 @@ regenerate combined proof only after actual commit/dimensions available. Old
 screenshots show prior layout/readability gaps and are historical. Parent1af0592
 resolved oldNextKDEaudit mismatch; parent312de68 inspected read-only. No live edit,
 install/restart/push/newrootcherry-pick/all-binary build.
+
+
+Final Dux companion acceptance: frozen380cd1a reused separately as25839b5; layout
+alreadydb79caa. Actual200%clock472x233weather/472x199missing, media620x91;
+100%sizesunchanged. Combined16nativecanvases nowprove all4cards1280x720/1920x1080,
+100/200dark/light sample/missing; clock/date full text, mediaMidnightCity/M83,
+node/action bounds+centre-hit equality. At720/200clockends305,focusstarts325;
+mediabottomright starts628,597. No overlaps. OldclippedPNGs replaced and prior
+pendingnotes superseded for measuredfont/fixture/scale cases. No newhostpacking.
+Onlylib+singleCLIbuilt; isolatedtest compiled directlyfromcargo artifact deps,
+4tests pass. Parent integrates380cd1aonce, db79caa layout and final evidence delta;
+no duplicate sharedcode in package commit. NextKDEaudit1af0592 resolvedhistorical.

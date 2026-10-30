@@ -1,0 +1,13 @@
+col [0.0 0.0 320.0 363.0] bg r=20
+  text [18.0 18.0 284.0 28.0] text="FOCUS / Unavailable" size=11 bold
+  text [18.0 56.0 284.0 70.0] text="--:--:--" size=28 bold
+  text [18.0 136.0 284.0 33.0] text="Open Timer to prepa…" size=13
+  bar [18.0 179.0 284.0 4.0] frac=0.00 thick=4
+  col [18.0 193.0 284.0 92.0] bg r=8 click
+    text [30.0 205.0 260.0 25.0] text="LATEST NOTE" size=10 bold
+    text [30.0 238.0 260.0 35.0] text="Capture a thought" size=14
+  row [18.0 295.0 284.0 50.0]
+    button [18.0 295.0 117.8 50.0] bg r=8 click
+      text [42.7 305.0 68.5 30.0] text="Timer" size=12 bold
+    button [143.8 295.0 158.2 50.0] bg r=8 click
+      text [168.5 305.0 108.9 30.0] text="New note" size=12

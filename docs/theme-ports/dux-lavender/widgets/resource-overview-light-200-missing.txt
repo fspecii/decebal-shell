@@ -1,0 +1,10 @@
+col [0.0 0.0 320.0 324.0] bg r=20 click
+  text [18.0 18.0 284.0 28.0] text="SYSTEM / OVERVIEW" size=11 bold
+  text [18.0 56.0 284.0 40.0] text="CPU  Unavailable" size=16 bold
+  bar [18.0 106.0 284.0 4.0] frac=0.00 thick=4
+  text [18.0 120.0 284.0 40.0] text="RAM  Unavailable" size=16 bold
+  bar [18.0 170.0 284.0 4.0] frac=0.00 thick=4
+  col [18.0 184.0 284.0 122.0] bg r=8
+    text [28.0 194.0 264.0 30.0] text="Root free   Unavailable" size=12
+    text [28.0 230.0 264.0 30.0] text="Receive   Unavailable" size=12
+    text [28.0 266.0 264.0 30.0] text="Send   Unavailable" size=12

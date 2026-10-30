@@ -1,0 +1,4 @@
+row [0.0 0.0 310.0 76.0] bg r=20
+  col [12.0 20.5 286.0 35.0]
+    text [12.0 20.5 286.0 18.0] text="Nothing playing" size=14 bold
+    text [12.0 40.5 286.0 15.0] text="" size=12

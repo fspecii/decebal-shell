@@ -1,0 +1,43 @@
+{
+  "shared_commit": "380cd1a802a5d1693aebf960d11ebee0878f05e0",
+  "layout_commit": "db79caad96e031d7586d4149fbbe5e16bdc0d58b",
+  "library_build": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "--lib",
+    "-j2",
+    "--message-format=json"
+  ],
+  "integration_compile": [
+    "rustc",
+    "--edition=2021",
+    "--test",
+    "tests/dux_theme.rs",
+    "--crate-name",
+    "dux_theme",
+    "-L",
+    "dependency=/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/target/debug/deps",
+    "-o",
+    "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/target/dux-theme-final-tests",
+    "--extern",
+    "decebal=/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/target/debug/libdecebal.rlib",
+    "--extern",
+    "serde_json=/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/target/debug/deps/libserde_json-ec581bbdfa469b96.rlib",
+    "--extern",
+    "tiny_skia=/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/target/debug/deps/libtiny_skia-1c3eab1928f5a9cb.rlib"
+  ],
+  "integration_env": {
+    "CARGO_MANIFEST_DIR": "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch",
+    "DECEBAL_DUX_EVIDENCE": "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-rice-theme-batch/docs/theme-ports/dux-lavender/widgets"
+  },
+  "integration_run": [
+    "target/dux-theme-final-tests",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "result": "4passed/0failed; full clock/date/meaningful media and safe action bounds,32per-card states+16combinedcanvases",
+  "build_scope": "library and decthemectl only; no all-binaries or release build",
+  "test_log": "\nrunning 4 tests\ntest dux_combined_layout_preserves_readable_text_and_action_bounds ... clock-card 100% sample: 236x136\nnow-playing-mini 100% sample: 310x76\nresource-overview 100% sample: 320x248\nfocus-hub 100% sample: 320x292\nclock-card 100% missing: 236x136\nnow-playing-mini 100% missing: 310x76\nresource-overview 100% missing: 320x248\nfocus-hub 100% missing: 320x292\nclock-card 100% sample: 236x136\nnow-playing-mini 100% sample: 310x76\nresource-overview 100% sample: 320x248\nfocus-hub 100% sample: 320x292\nclock-card 100% missing: 236x136\nnow-playing-mini 100% missing: 310x76\nresource-overview 100% missing: 320x248\nfocus-hub 100% missing: 320x292\nclock-card 200% sample: 472x233\nnow-playing-mini 200% sample: 620x91\nresource-overview 200% sample: 320x324\nfocus-hub 200% sample: 320x363\nclock-card 200% missing: 472x199\nnow-playing-mini 200% missing: 620x91\nresource-overview 200% missing: 320x324\nfocus-hub 200% missing: 320x363\nclock-card 200% sample: 472x233\nnow-playing-mini 200% sample: 620x91\nresource-overview 200% sample: 320x324\nfocus-hub 200% sample: 320x363\nclock-card 200% missing: 472x199\nnow-playing-mini 200% missing: 620x91\nresource-overview 200% missing: 320x324\nfocus-hub 200% missing: 320x363\nok\ntest dux_follow_theme_choices_resolve_to_reviewed_originals ... ok\ntest dux_native_cards_use_safe_shared_definitions_and_honest_missing_states ... ok\ntest dux_package_preserves_wallpaper_and_custom_widget_review ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.52s\n\n"
+}

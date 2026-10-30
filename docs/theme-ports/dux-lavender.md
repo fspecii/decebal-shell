@@ -1,5 +1,10 @@
 # Dux Lavender — native package evidence
 
+**Current acceptance:** the four-corner layout and shared companion fix now pass
+combined100/200% text QA at1280×720. See the final section below. Earlier clipping
+and pending-handoff notes are historical and superseded; regenerated images are
+current. Parent1af0592 already resolved the historical NextKDE audit mismatch.
+
 Inspected pinned Dux Shell README desktop/dashboard screenshots, stock theme source,
 current dashboard QML, first-party plugin README/Pomodoro manifest and registry.
 See [package attribution](../../themes/dux-lavender/ATTRIBUTION.md) and
@@ -155,3 +160,59 @@ are preliminary, not substituted for actual renderer measurements.
 Parent source312de68 inspected read-only. NextKDE audit mismatch was resolved in
 parent1af0592; earlier failure text above is historical, not an outstanding failure
 of current root. No new root cherry-pick or runtime edits in this layout checkpoint.
+
+
+## Final companion readability acceptance — shared380cd1a
+
+Shared source `380cd1a802a5d1693aebf960d11ebee0878f05e0` cherry-picked **separately**
+as local25839b5. Package layout commit is`db79caad96e031d7586d4149fbbe5e16bdc0d58b`:
+media bottom-right(-32,-32), focus bottom-left(32,-32), clock top-left(32,72),
+resources top-right(-32,72). Parent integrates the original shared commit once,
+then layout/evidence deltas; the evidence commit contains no shared widget source.
+No package palette/font/art/default change is needed.
+
+Actual Dux-native sizes match the frozen handoff:
+
+| Widget | 100% both states | 200% sample | 200% missing |
+| --- | --- | --- | --- |
+| clock-card |236×136|472×233|472×199|
+| now-playing-mini |310×76|620×91|620×91|
+| resource-overview |320×248|320×324|320×324|
+| focus-hub |320×292|320×363|320×363|
+
+All16 combined native canvases (1280×720/1920×1080 × dark/light ×100/200% ×
+sample/missing) are in `dux-lavender/widgets/combined-*`, with exact JSON bounds.
+At1280×720/200%sample: clock(32,72)-(504,305), focus(32,325)-(352,688),
+resources(928,72)-(1248,396), media(628,597)-(1248,688). Minimum clock/focus gap20px;
+no pair overlaps or escapes the output/bar inset. Missing weather shrinks the clock
+height to199px; it does not move other anchors. Four shared definitions and actual
+native layout/paint sizes drive composition, not hardcoded per-theme mockups.
+
+Viewed combined100%/200% dark/light and missing-state canvases. Full HH:MM and
+complete sample date render; sample media Midnight City/M83 remain meaningful and
+unclipped. Tests compare clock/date leaf text to the full native formatter output,
+check title/artist presence, every node/action rectangle against root bounds and
+centre-hit action equality. Sample player has all three transport buttons; missing
+player has Nothing playing and no transport. No action was dispatched to the live
+desktop. Focus long-note/title ellipsis is intentional and remains visible in QA.
+
+Validation:4focused Dux integration tests pass with serial process-local font
+publication; lib+targeted-test strictClippy/format/diff checks pass. To avoid an
+all-binaries rebuild, built library only (`cargo build --lib --locked --offline
+-j2 --message-format=json`), used its actual compiler-artifact dependency paths to
+compile `tests/dux_theme.rs` directly with rustc --test, then ran that one test
+binary serially. Only decthemectl was additionally built for updated automatic
+package previews. No release/all-binary build, live provider probe, install or
+restart. Build command/dependency record is in `dux-lavender/validation.json`.
+
+Automatic100%package previews regenerated with actual new renderer definitions;
+all combined/individual evidence hashes refreshed in evidence.json. Earlier
+clipped companion PNGs are replaced by final renders at the same paths. The earlier
+pending/readability caveats in this chronological report are therefore **resolved
+for these measured fonts, fixture strings, scales and viewport sizes**. Other
+fonts/locales, >200%text, narrower/shorter screens, physicalDPI and live compositor
+shadows remain outside this bounded acceptance. General host packing was not added.
+
+Follow theme choices remain exact reviewed l3edjp/39zjq6 hashes, no package wallpaper
+default or download. MIT source attribution unchanged. No runtime/Settings/rdwm
+implementation copied/edited by this evidence delta; no live configuration changes.

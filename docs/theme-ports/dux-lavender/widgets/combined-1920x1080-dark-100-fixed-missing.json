@@ -1,0 +1,44 @@
+{
+  "data": "fixed samples or explicit missing providers; native widgets only, no live host/compositor",
+  "shared_fix": "380cd1a802a5d1693aebf960d11ebee0878f05e0",
+  "text_scale": 1.0,
+  "state": "missing",
+  "rectangles": [
+    {
+      "widget": "builtin:clock-card",
+      "rect": [
+        32,
+        72,
+        268,
+        208
+      ]
+    },
+    {
+      "widget": "builtin:now-playing-mini",
+      "rect": [
+        1578,
+        972,
+        1888,
+        1048
+      ]
+    },
+    {
+      "widget": "builtin:resource-overview",
+      "rect": [
+        1568,
+        72,
+        1888,
+        320
+      ]
+    },
+    {
+      "widget": "builtin:focus-hub",
+      "rect": [
+        32,
+        756,
+        352,
+        1048
+      ]
+    }
+  ]
+}

@@ -43,22 +43,23 @@ not a tabbed popover with a calendar, avatar, per-core/temperature bars or art p
 Materia is an existing rdwm structural design, not a Dux-owned compositor decoration.
 Blur/shadows depend on compositor support; evidence uses actual native foreground
 renderers and labelled fixed samples, not live telemetry or compositor shadows.
-At 100% text the four-card layout is checked at 1280×720 and 1920×1080.
-All four card bounds also fit at 200% text on 1280×720 and 1920×1080, proven by
-combined native renders. Existing clock/media cards have fixed geometry: the clock
-clips time/date at 200% and media text truncates. This is a known readability gap,
-not a fully accessible 200% profile; shared-card reflow is a parent follow-up. Very short/narrow displays
-or larger desktop scaling may need the user to reposition/reduce cards. Settings/accessibility work
-belongs to the independent native thread, not this package.
+At 100% and 200% text the complete four-card layout is checked at 1280×720 and
+1920×1080 in dark/light and sample/missing-provider states. Shared commit
+`380cd1a802a5d1693aebf960d11ebee0878f05e0` preserves standard sizes/fonts and enables
+measured companion-card growth. At 200%: clock472×233 with weather /472×199 without,
+media620×91, resource320×324, focus320×363. Full time/date and meaningful sample
+title/artist fit; transport hit targets stay in bounds. Focus note/title ellipsis
+for long prose is intentional, not a claim that arbitrary text fits unbounded.
+Very short/narrow displays, larger scaling, other fonts/locales and physical DPI
+still need review. Settings/accessibility work belongs to the independent native
+thread, not this package.
 
 Primary references, exact commits and MIT notice: [ATTRIBUTION.md](ATTRIBUTION.md)
 and [LICENSE.md](LICENSE.md). Regeneration/tests and inspected evidence:
 [../../docs/theme-ports/dux-lavender.md](../../docs/theme-ports/dux-lavender.md).
 
 
-Layout follow-up: media now anchors lower-right, opposite lower-left focus. Shared
-clock/media accessible sizing is being implemented separately. Existing committed
-combined screenshots predate this move and are historical until regenerated with
-the exact shared fix; their 200% clipping is not a current acceptance claim. The
-reported larger dimensions are provisional until the native agent hands off its
-commit and measured bounds. No widget DSL implementation is duplicated here.
+Final four-corner layout: clock upper-left, resources upper-right, focus lower-left,
+media lower-right. Updated combined screenshots/layout JSON and readability/action
+assertions supersede the earlier clipped200% evidence. Shared implementation is
+reused as a separate dependency; no widget code is copied into this package.

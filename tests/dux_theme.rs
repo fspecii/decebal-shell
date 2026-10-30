@@ -109,49 +109,88 @@ fn dux_native_cards_use_safe_shared_definitions_and_honest_missing_states() {
 // Process-local theme publication controls native font measurement. This test owns it;
 // run the integration binary with --test-threads=1 when collecting evidence.
 #[test]
-fn dux_placement_uses_native_card_bounds_and_allows_accessible_new_cards() {
-    use decebal::widgets::config::place_clear;
+fn dux_combined_layout_preserves_readable_text_and_action_bounds() {
+    use decebal::widgets::{
+        config::place_clear,
+        layout::{Item, Leaf},
+    };
+    fn contained(it: &Item, root: &Item) {
+        assert!(it.rect.x >= 0. && it.rect.y >= 0. && it.rect.x + it.rect.w <= root.rect.w + 0.01 && it.rect.y + it.rect.h <= root.rect.h + 0.01, "out-of-bounds {:?}", it.rect);
+        if it.on_click.is_some() {
+            let hit = layout::hit(root, it.rect.x + it.rect.w / 2., it.rect.y + it.rect.h / 2.).expect("visible action centre");
+            assert_eq!(hit.on_click, it.on_click);
+        }
+        for child in &it.children {
+            contained(child, root);
+        }
+    }
     let def = Def::parse(include_str!("../themes/dux-lavender/theme.toml")).unwrap();
     let mut fonts = decebal::text::Fonts::load().unwrap();
     for scale in [1.0, 2.0] {
         for dark in [true, false] {
-            let th = decebal::accessibility::Preferences { font_scale: Some(scale), ..Default::default() }.apply(def.resolve("dux-lavender", dark, &Selection::default()));
-            decebal::theme::live::publish_theme(th.clone());
-            let mut cards = Vec::new();
-            for spec in def.extra["widgets"].as_array().unwrap() {
-                let id = spec["use"].as_str().unwrap().strip_prefix("builtin:").unwrap();
-                let widget = samples::get(id).unwrap();
-                let card = paint::render(&widget, &data::sample(), &th, &mut fonts, &root().join("widgets"), 0).unwrap();
-                if scale > 1.0 {
+            for missing in [false, true] {
+                let th = decebal::accessibility::Preferences { font_scale: Some(scale), ..Default::default() }.apply(def.resolve("dux-lavender", dark, &Selection::default()));
+                decebal::theme::live::publish_theme(th.clone());
+                let mut data = data::sample();
+                if missing {
+                    data.vals.clear();
+                    data.tags.clear();
+                }
+                let state = if missing { "missing" } else { "sample" };
+                let mut cards = Vec::new();
+                for spec in def.extra["widgets"].as_array().unwrap() {
+                    let id = spec["use"].as_str().unwrap().strip_prefix("builtin:").unwrap();
+                    let widget = samples::get(id).unwrap();
+                    let tree = layout::layout(&widget, &layout::Ctx { data: &data, metrics: &paint::FontMetrics(&fonts), theme_radius: th.radius }, None);
+                    contained(&tree, &tree);
+                    let dump = layout::dump(&tree);
+                    if id == "clock-card" {
+                        for (index, template) in [(0, "{clock:%H:%M}"), (1, "{clock:%A, %e %B}")] {
+                            let Leaf::Text { s, .. } = &tree.children[index].leaf else { panic!("clock text") };
+                            assert_eq!(s, &decebal::widgets::fmt::Fmt::parse(template).unwrap().eval(&data));
+                        }
+                    }
+                    if id == "now-playing-mini" {
+                        if missing {
+                            assert!(dump.contains("Nothing playing") && !dump.contains("PlayPause"));
+                        } else {
+                            assert!(dump.contains("Midnight City") && dump.contains("M83"));
+                            assert_eq!(tree.children.iter().filter(|it| it.on_click.is_some()).count(), 3);
+                        }
+                    }
+                    let card = paint::render(&widget, &data, &th, &mut fonts, &root().join("widgets"), 0).unwrap();
+                    eprintln!("{id} {}% {state}: {}x{}", scale * 100., card.width(), card.height());
                     if let Ok(out) = std::env::var("DECEBAL_DUX_EVIDENCE") {
-                        card.save_png(PathBuf::from(out).join(format!("{id}-{}-200-sample.png", if dark { "dark" } else { "light" }))).unwrap();
+                        let stem = format!("{id}-{}-{}-{state}", if dark { "dark" } else { "light" }, (scale * 100.) as u32);
+                        card.save_png(PathBuf::from(&out).join(format!("{stem}.png"))).unwrap();
+                        fs::write(PathBuf::from(out).join(format!("{stem}.txt")), dump).unwrap();
                     }
+                    cards.push((spec, card.width() as i32, card.height() as i32, card));
                 }
-                cards.push((spec, card.width() as i32, card.height() as i32, card));
-            }
-            for (width, height) in [(1920, 1080), (1280, 720)] {
-                let rects: Vec<_> = cards
-                    .iter()
-                    .map(|(spec, w, h, _)| {
-                        let (x, y) =
-                            place_clear(spec["anchor"].as_str().unwrap(), spec["x"].as_i64().unwrap() as i32, spec["y"].as_i64().unwrap() as i32, (0, 0, width, height), *w, *h, th.bar_insets());
-                        assert!(x >= 0 && y >= th.bar_insets().top && x + w <= width && y + h <= height);
-                        (x, y, x + w, y + h)
-                    })
-                    .collect();
-                if let Ok(out) = std::env::var("DECEBAL_DUX_EVIDENCE") {
-                    let mut canvas = decebal::gfx::pixmap(width as u32, height as u32).unwrap();
-                    canvas.fill(th.background.color(1.0));
-                    for ((_, _, _, card), r) in cards.iter().zip(&rects) {
-                        canvas.draw_pixmap(r.0, r.1, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+                for (width, height) in [(1920, 1080), (1280, 720)] {
+                    let rects: Vec<_> = cards
+                        .iter()
+                        .map(|(spec, w, h, _)| {
+                            let (x, y) =
+                                place_clear(spec["anchor"].as_str().unwrap(), spec["x"].as_i64().unwrap() as i32, spec["y"].as_i64().unwrap() as i32, (0, 0, width, height), *w, *h, th.bar_insets());
+                            assert!(x >= 0 && y >= th.bar_insets().top && x + w <= width && y + h <= height);
+                            (x, y, x + w, y + h)
+                        })
+                        .collect();
+                    for (i, a) in rects.iter().enumerate() {
+                        for b in rects.iter().skip(i + 1) {
+                            assert!(a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1, "card overlap at {width}x{height},scale{scale}: {a:?}/{b:?}");
+                        }
                     }
-                    let stem = format!("combined-{width}x{height}-{}-{}-fixed-sample", if dark { "dark" } else { "light" }, (scale * 100.0) as u32);
-                    canvas.save_png(PathBuf::from(&out).join(format!("{stem}.png"))).unwrap();
-                    fs::write(PathBuf::from(out).join(format!("{stem}.json")),serde_json::to_string_pretty(&json!({"data":"fixed samples; native widgets only, no live host/compositor","text_scale":scale,"rectangles":cards.iter().zip(&rects).map(|((spec,_,_,_),r)|json!({"widget":spec["use"],"rect":r})).collect::<Vec<_>>()})).unwrap()).unwrap();
-                }
-                for (i, a) in rects.iter().enumerate() {
-                    for b in rects.iter().skip(i + 1) {
-                        assert!(a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1, "card overlap at {width}x{height},scale{scale}: {a:?}/{b:?}");
+                    if let Ok(out) = std::env::var("DECEBAL_DUX_EVIDENCE") {
+                        let mut canvas = decebal::gfx::pixmap(width as u32, height as u32).unwrap();
+                        canvas.fill(th.background.color(1.));
+                        for ((_, _, _, card), r) in cards.iter().zip(&rects) {
+                            canvas.draw_pixmap(r.0, r.1, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+                        }
+                        let stem = format!("combined-{width}x{height}-{}-{}-fixed-{state}", if dark { "dark" } else { "light" }, (scale * 100.) as u32);
+                        canvas.save_png(PathBuf::from(&out).join(format!("{stem}.png"))).unwrap();
+                        fs::write(PathBuf::from(out).join(format!("{stem}.json")),serde_json::to_string_pretty(&json!({"data":"fixed samples or explicit missing providers; native widgets only, no live host/compositor","shared_fix":"380cd1a802a5d1693aebf960d11ebee0878f05e0","text_scale":scale,"state":state,"rectangles":cards.iter().zip(&rects).map(|((spec,_,_,_),r)|json!({"widget":spec["use"],"rect":r})).collect::<Vec<_>>()})).unwrap()).unwrap();
                     }
                 }
             }
