@@ -90,3 +90,28 @@ Raw metrics and limitations are in the port ledger. font.files stays unchanged.
 |`replica-upstream-clock-408x400-light-100.png`|`6e459e8901c6b9a6bb9507695d2898b82dcf7aa1075656847ef2f25cec6f8d90`|
 |`replica-upstream-clock-102x184-light-200.png`|`36fae9e0068d1d5b6813b4901fce5edcd9944e982bf6661ce8cdc12c6b6cd933`|
 |`replica-upstream-clock-408x400-light-200.png`|`6e459e8901c6b9a6bb9507695d2898b82dcf7aa1075656847ef2f25cec6f8d90`|
+
+## Section3 native acceptance — a8068ec
+
+Supersedes the pending source-only checkpoint above. Same-size actual native
+clock crops,102×184/408×400,dark/light100/200,09/08/date fixed samples; no live
+telemetry claim. Eight source/native digit boxes within2px; source and native
+rasterizers differ. Native date elision intentionally preserves bounds at minimum
+12×text-scale. Fifth font.files entry now registers the exact original variable;
+static UI faces are unchanged. Full evidence/metrics/comparison:
+`/tmp/decebal-dux-clock-final`, including source-comparison.json.
+Native-owner gates:16normal+4missing renders, identical separate reduced-motion
+process outputs,8actual dashboard windows including short-output scrolling. Native
+X11 library1635pass/0fail/16ignored and strict all-target Clippy pass per handoff.
+Native Wayland host/seconds/analog/animation are not accepted by these gates.
+
+|File|SHA256|
+|---|---|
+|`replica-native-clock-102x184-dark-100.png`|`b55150e18d10344f63468b026b6cce4477fe560a4d297374dfa978f815fd76f9`|
+|`replica-native-clock-102x184-dark-200.png`|`6d977d7ad1d54e0f96cff9a9861e07e96a191dc65b7db12c1309a7ba8680c87a`|
+|`replica-native-clock-102x184-light-100.png`|`e9a745627fe9e2caf7d73a122b7f26f8810b8e7b41e1141695fe1bab9505e7bd`|
+|`replica-native-clock-102x184-light-200.png`|`8830b59a798933b4ae47a9d43bc11408870f51f387b18c638b455b16a83c5e2a`|
+|`replica-native-clock-408x400-dark-100.png`|`4d0f841c9d290d97f956536063544cc8934b57415bab5ef4aa6fc5500fe4918a`|
+|`replica-native-clock-408x400-dark-200.png`|`4d0f841c9d290d97f956536063544cc8934b57415bab5ef4aa6fc5500fe4918a`|
+|`replica-native-clock-408x400-light-100.png`|`31626764276eabd7b04c000be219a6d33b294f3b2d43c867793890dcb46b4398`|
+|`replica-native-clock-408x400-light-200.png`|`31626764276eabd7b04c000be219a6d33b294f3b2d43c867793890dcb46b4398`|

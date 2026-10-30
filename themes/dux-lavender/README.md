@@ -41,7 +41,7 @@ are preserved. Parent owns integration, minimum-version enforcement and activati
 Bundled Google Sans Flex static400/500/700 uses the actual upstream typeface.
 400 is a documented static default-axis instance;500/700 are unchanged upstream
 static faces. Material Symbols Rounded is the exact upstream variable icon font.
-`font.files` registers those4files only in the shell process. No system font
+`font.files` registers those4UI/icon files plus the original variable clock font as fifth entry only in the shell process. No system font
 installation, fontconfig-cache edit, or unsupported variable regular face. Semantic
 icons use the real source outlines/PUA mappings; Adwaita/hicolor remains only the
 application-icon preference. Source DIcon axes are FILL0,GRAD-25dark/0light,opsz24,
@@ -71,7 +71,7 @@ card/tab preset. Settings remains an action. `[desktop] widgets="none"` replaces
 the previous generic corner-card profile only through existing Ask/Keep/Replace/Cancel
 confirmation; no `[[widgets]]` entries accompany this explicit empty profile.
 
-Clock variable axes, expressive artwork/motion, calendar event creation, hourly
+Expressive artwork/motion, calendar event creation, hourly
 weather, Control Center device/detail sheets and editable grids remain differences.
 Missing telemetry/artwork stays unavailable. Parent controls integration/activation.
 
@@ -102,3 +102,14 @@ rows grow84px to fix the upstream56px overlap; icons36/search48 remain fixed.
 This is Apps-only: source All/Files/Plugins, history, richer actions, fuzzy ranking
 and expressive motion are not implemented. No painted inert provider tabs imply
 those capabilities. Notification visuals remain separate. No full replica claim.
+
+## Section3 variable clock
+
+Requires native`a8068ec`. The fifth font.files entry registers exact original Google
+Sans Flex variable bytes under the same OFL; static UI400/500/700 remain selected
+for ordinary text. The README clock requests wght750/ROND100/opszheight/2 and fits
+actual ink metrics. Eight fixed-size actual source/native comparisons pass within
+2px; antialiasing/advance differences remain. Supporting dates deliberately fit
+and elide at the12×text-scale minimum rather than reproduce Qt's cramped clip.
+Missing font shows Clock font unavailable, never generic replacement digits.
+No seconds, analog mode, animated digits or native Wayland-host acceptance claimed.

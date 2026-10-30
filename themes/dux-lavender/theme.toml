@@ -68,7 +68,7 @@ glass_blur = 3
 shadow = 0.45
 
 [font]
-files = ["fonts/GoogleSansFlex-400.ttf", "fonts/GoogleSansFlex-500.ttf", "fonts/GoogleSansFlex-700.ttf", "fonts/MaterialSymbolsRounded.ttf"]
+files = ["fonts/GoogleSansFlex-400.ttf", "fonts/GoogleSansFlex-500.ttf", "fonts/GoogleSansFlex-700.ttf", "fonts/MaterialSymbolsRounded.ttf", "fonts/GoogleSansFlex-Variable.ttf"]
 ui = ["Google Sans Flex", "Noto Sans"]
 title = ["Google Sans Flex", "Noto Sans"]
 mono = ["Adwaita Mono", "JetBrains Mono", "monospace"]

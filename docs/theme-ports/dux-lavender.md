@@ -381,3 +381,20 @@ Raw properties/child boxes: `/tmp/decebal-dux-replica-specialist/clock-capture/s
 harness/config/logs/captures in that directory. No live display, global fonts,
 reference writes or application launch. Native comparison awaits native renderer;
 these source captures do not certify native axes or whole-clock parity.
+
+### Section3 package registration — requires nativea8068ec
+
+Original variable font is now fifth font.files entry; previous prerequisite/pending
+notes above are historical. Exact original bytes/SHA/OFL and static first-four
+order unchanged. Source wght750/ROND100 and height-derived opsz feed native cached
+ink-based digit fitting. Native digit sizes80.824081/201.786667 versus source
+80.832095/201.786667. Eight matched digit bounds are within2px; fractional advance
+and Qt/tiny-skia antialiasing differ. Dates deliberately fit/elide within the clock
+at minimum12×scale; the cramped source small-date output is not replicated.
+
+Native owner passed16normal+4missing renders twice with identical reduced-motion
+PNGs,8X11 dashboard windows across modes/scales/short outputs and scrolling.
+Evidence `/tmp/decebal-dux-clock-final`; representative eight fixed-size native
+crops are retained beside eight actual source crops in package evidence. No
+seconds/analog/animated digits/native Wayland host or whole-replica completion
+claim. Parent controls source integration and live activation.

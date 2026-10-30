@@ -48,4 +48,4 @@ Follow theme preference and custom-widget confirmation are preserved.
 
 Section3 test prerequisite: original GoogleSansFlex variable font is included
 unchanged as fonts/GoogleSansFlex-Variable.ttf under the same pinned source/OFL
-provenance above. It is not selected by font.files yet; static UI assets unchanged.
+provenance above. It is registered as fifth font.files entry for native a8068ec; static UI assets unchanged.
