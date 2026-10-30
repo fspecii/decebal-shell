@@ -134,6 +134,31 @@ fn run(cx: &mut Ctx, cmd: &str, args: &[&str]) -> bool {
     r.ok
 }
 
+// pgrep's 1 means no matching process; other failures must remain visible.
+// Recheck after a failed helper to tolerate btop exiting between probe and reload.
+const BTOP_RELOAD: &str = r#"
+pgrep -u "$1" -x btop >/dev/null
+probe=$?
+case "$probe" in 1) exit 0;; 0) ;; *) exit "$probe";; esac
+omarchy-restart-btop
+reload=$?
+[ "$reload" -eq 0 ] && exit 0
+pgrep -u "$1" -x btop >/dev/null
+[ "$?" -eq 1 ] && exit 0
+exit "$reload"
+"#;
+
+fn reload_btop(cx: &mut Ctx) {
+    if !cx.env.has("btop") || !cx.env.has("omarchy-restart-btop") {
+        return;
+    }
+    let uid = unsafe { libc::geteuid() }.to_string();
+    let result = cx.env.run.run("sh", &["-c", BTOP_RELOAD, "decebal-btop-reload", &uid], &[]);
+    if !result.ok {
+        cx.report.warnings.push(format!("omarchy-restart-btop: {}", result.stderr.trim().lines().last().filter(|s| !s.is_empty()).unwrap_or("reload failed")));
+    }
+}
+
 /// Sockets of kitty instances this user can address.
 fn kitty_sockets(env: &Env) -> Vec<PathBuf> {
     let uid = unsafe { libc::geteuid() };
@@ -299,9 +324,7 @@ impl Target for Omarchy {
                     return;
                 }
                 reload_terminals(cx);
-                if cx.env.has("btop") {
-                    run(cx, "omarchy-restart-btop", &[]);
-                }
+                reload_btop(cx);
             }
             Kind::Browser => {
                 if browser_passwordless(cx.env) {
@@ -335,9 +358,7 @@ impl Target for Omarchy {
                 if cx.env.omarchy_path.as_ref().is_some_and(|o| o.join("themes").join(&prev).is_dir()) || cx.env.config_home.join("omarchy/themes").join(&prev).is_dir() {
                     if set_theme(cx, &prev) {
                         reload_terminals(cx);
-                        if cx.env.has("btop") {
-                            run(cx, "omarchy-restart-btop", &[]);
-                        }
+                        reload_btop(cx);
                         sub_steps(cx);
                         if cx.cfg.is_on(&Omarchy::new(Kind::Hooks), cx.env) && Omarchy::new(Kind::Hooks).available(cx.env).is_ok() {
                             run(cx, "omarchy-hook", &["theme-set", &prev]);
@@ -454,7 +475,7 @@ mod tests {
         let set = calls.iter().position(|c| c.starts_with("omarchy-theme-set decebal")).expect("omarchy-theme-set called");
         assert!(calls[set].contains("OMARCHY_THEME_HEADLESS=1") && calls[set].contains("OMARCHY_THEME_SKIP_BACKGROUND=1"), "{}", calls[set]);
         assert!(calls.iter().skip(set).any(|c| c.starts_with("omarchy-theme-set-foot")));
-        assert!(calls.iter().skip(set).any(|c| c.starts_with("omarchy-restart-btop")));
+        assert!(calls.iter().skip(set).any(|c| c.contains("decebal-btop-reload")));
         assert!(!calls.iter().any(|c| c.contains("restart-terminal") || c.contains("restart-helix") || c.contains("hyprctl") || c.contains("keyboard") || c.contains("gnome")), "{calls:?}");
         assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         // the same palette again: files unchanged, and (the theme being current) nothing is re-run
@@ -467,6 +488,55 @@ mod tests {
         let calls = fake.calls.borrow().clone();
         assert!(calls.iter().any(|c| c.starts_with("omarchy-theme-set tokyo-night")), "{calls:?}");
         assert!(!env.config_home.join("omarchy/themes/decebal").exists());
+    }
+
+    #[test]
+    fn btop_reload_skips_missing_executable() {
+        let root = tmp("btop-missing");
+        let (env, fake) = env(&root, &["omarchy-restart-btop", "omarchy-theme-set"]);
+        let cfg = Config { enabled: true, ..Config::default() };
+        let report = apply(&env, &cfg, &palette(true), &Opts { only: Some(vec!["omarchy".into()]), ..Default::default() }).unwrap();
+        assert!(report.warnings.is_empty());
+        assert!(!fake.calls.borrow().iter().any(|c| c.contains("decebal-btop-reload")));
+    }
+
+    #[test]
+    fn btop_reload_command_handles_absence_running_failure_and_exit_race() {
+        use super::super::{Out, Report, Runner, State};
+        use std::os::unix::fs::PermissionsExt;
+        struct PrivateRunner(PathBuf);
+        impl Runner for PrivateRunner {
+            fn which(&self, cmd: &str) -> Option<PathBuf> {
+                Some(self.0.join(cmd))
+            }
+            fn run(&self, cmd: &str, args: &[&str], _: &[(&str, &str)]) -> Out {
+                assert_eq!(cmd, "sh");
+                let result = std::process::Command::new("/bin/sh").args(args).env("HOME", &self.0).env("PATH", &self.0).output().unwrap();
+                Out { ok: result.status.success(), stdout: String::from_utf8_lossy(&result.stdout).into_owned(), stderr: String::from_utf8_lossy(&result.stderr).into_owned() }
+            }
+        }
+        for (name, probe, reload, ok, called) in [
+            ("absent", "exit 1", "exit 0", true, false),
+            ("running", "exit 0", "exit 0", true, true),
+            ("failed", "exit 0", "echo reload-broken >&2; exit 2", false, true),
+            ("probe-failed", "echo probe-broken >&2; exit 2", "exit 0", false, false),
+            ("exit-race", "[ -f \"$HOME/reloaded\" ] && exit 1; exit 0", "exit 1", true, true),
+        ] {
+            let root = tmp(&format!("btop-command-{name}"));
+            std::fs::create_dir_all(&root).unwrap();
+            for (tool, body) in [("pgrep", probe.to_string()), ("omarchy-restart-btop", format!("echo called > \"$HOME/reloaded\"\n{reload}"))] {
+                let path = root.join(tool);
+                std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let (mut env, _) = env(&root, &[]);
+            env.run = Box::new(PrivateRunner(root.to_path_buf()));
+            let (palette, cfg, mut state, mut report) = (palette(true), Config::default(), State::default(), Report::default());
+            reload_btop(&mut Ctx { p: &palette, cfg: &cfg, env: &env, st: &mut state, report: &mut report });
+            assert_eq!(report.warnings.is_empty(), ok, "{name}: {:?}", report.warnings);
+            assert_eq!(root.join("reloaded").exists(), called, "{name}");
+            std::fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

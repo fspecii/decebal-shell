@@ -48,6 +48,9 @@ export DECEBAL_SYSTEM_AUTOMATIC=1
 for s in omarchy-restart-btop omarchy-theme-set-foot; do printf '#!/bin/sh\necho "%s $*" >> "$HOME/shim.log"\n' $s > "$TMP/shims/$s"; chmod +x "$TMP/shims/$s"; done
 printf '#!/bin/sh\necho "browser: $(cat "$HOME/.local/state/omarchy/current/theme/chromium.theme")" >> "$HOME/shim.log"\n' > "$TMP/shims/omarchy-theme-set-browser"
 chmod +x "$TMP/shims/omarchy-theme-set-browser"
+# Model a running btop for the reload assertion; process discovery stays private.
+printf '#!/bin/sh\nfor name do :; done\n[ "$name" = btop ]\n' > "$TMP/shims/pgrep"
+chmod +x "$TMP/shims/pgrep"
 export PATH=$TMP/shims:$BIN:$PATH
 CFG=$XDG_CONFIG_HOME
 printf '/* my own css */\nbutton { border-radius: 2px; }\n' > $CFG/gtk-3.0/gtk.css
