@@ -18,6 +18,7 @@ pub mod dbus;
 pub mod dlog;
 pub mod dock;
 pub mod dock_app;
+pub mod dock_lifecycle;
 pub mod dock_menu;
 pub mod expose;
 pub mod fuzzy;

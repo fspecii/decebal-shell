@@ -286,7 +286,10 @@ impl Model {
                         }
                     }
                 }
-                self.say("Saved (restart the panel to apply)", false);
+                if let Err(e) = crate::dock_lifecycle::reconcile(&self.paths.shell_json()) {
+                    crate::log_warn!("dock: {e}");
+                }
+                self.say("Saved", false);
             }
             Err(e) => self.say(format!("Not saved: {e}"), true),
         }

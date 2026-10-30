@@ -588,6 +588,9 @@ fn stamp_id() -> String {
 pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
     let mut applied = Applied { theme_id: plan.id.clone(), dark: plan.dark, files: Vec::new(), notes: plan.notes.clone(), reloaded: false, undo_id: String::new() };
     if plan.writes.is_empty() {
+        if let Err(e) = crate::dock_lifecycle::reconcile(&paths.shell_json()) {
+            crate::log_warn!("dock: {e}");
+        }
         crate::theme::system::request(&paths.shell_json());
         return Ok(applied);
     }
@@ -620,6 +623,9 @@ pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Stri
         applied.reloaded = rdwm::reload(paths).unwrap_or(false);
     }
     crate::theme::live::reload();
+    if let Err(e) = crate::dock_lifecycle::reconcile(&paths.shell_json()) {
+        crate::log_warn!("dock: {e}");
+    }
     crate::theme::system::request(&paths.shell_json()); // "Apply to all apps", when the user switched it on
     #[cfg(feature = "x11")]
     {
@@ -703,6 +709,9 @@ pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, 
         let _ = rdwm::reload(paths);
     }
     crate::theme::live::reload();
+    if let Err(e) = crate::dock_lifecycle::reconcile(&paths.shell_json()) {
+        crate::log_warn!("dock: {e}");
+    }
     crate::theme::system::request(&paths.shell_json());
     Ok(theme)
 }

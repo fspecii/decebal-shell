@@ -64,3 +64,17 @@ constructors with ones built from the theme module to follow it; sizes are `task
 * `src/dock_app/windows.rs`: input, settings changes, popups, menu glue of `DockApp` in the Windows style.
 * `src/app.rs`: `App::surface_spec` (the app can re-specify edge/margin/reserved space at runtime) and `App::quit_requested`; both backends honour them (X11 republishes `_NET_WM_STRUT_PARTIAL`, Wayland re-sets anchor/margin/exclusive zone).
 * `tests/e2e/taskbar.sh`: Xvfb + rdwm end-to-end test (needs `Xvfb xdotool import xprop`, builds the fake windows from `examples/fakewin`).
+
+
+### Theme process lifecycle
+
+Applying a theme (or undoing it) reconciles the actual dock process.
+`dock.enabled = true` runs one dock; `false` stops it; `auto` runs it only
+when the theme has no vertical bar. Disabled docks exit instead of retaining
+a hidden renderer. Theme changes clear stale session-supervisor suppression
+when the dock is needed again. Manual appearance edits use the same policy.
+The dock holds a singleton lock, so a supervisor and Settings cannot create
+two copies. `decdock --wanted` reports the policy and `--reconcile` applies it
+without changing theme configuration. Offline preview transactions do not
+reconcile a different configuration path. Native regression:
+`bash tests/e2e/theme-dock-lifecycle.sh`.
