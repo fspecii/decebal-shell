@@ -783,9 +783,9 @@ impl Model {
         if self.schema.has("wallpaper.frame", "enabled") && (!self.rt.running || self.rt.state["wallpaper"]["frame"].is_object()) {
             let mut frame = Vec::new();
             frame.extend(self.r_toggle("wallpaper.frame", "enabled", "Rounded desktop frame", "A rounded border around the wallpaper, behind apps; works with every theme"));
-            frame.extend(self.r_slider("wallpaper.frame", "radius", "Corner radius", "Logical pixels; scales with each output", 1.0, " px", Some(128.0)));
+            frame.extend(self.r_slider("wallpaper.frame", "radius", "Corner radius", "Logical pixels; follows display scaling", 1.0, " px", Some(128.0)));
             frame.extend(self.r_slider("wallpaper.frame", "thickness", "Frame thickness", "Does not move or resize your apps", 1.0, " px", Some(64.0)));
-            frame.extend(self.r_color("wallpaper.frame", "color", "Frame colour", "Blank or reset follows the wallpaper background colour"));
+            frame.extend(self.r_color("wallpaper.frame", "color", "Frame colour", "Reset to follow the wallpaper background colour"));
             items.push(Item::Header("Desktop frame".into()));
             items.push(Item::Card(frame));
         }
