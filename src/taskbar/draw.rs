@@ -73,13 +73,31 @@ impl Colors {
         Colors::windows11(false)
     }
 
-    /// The active theme when it is already in the wanted mode, else the Windows 11 palette of that mode.
+    /// Resolve a forced mode from the selected design and its colour overrides.
+    /// Called only when settings/theme generation changes, never while painting.
+    fn selected_mode(src: &crate::theme::live::Source, selection: &Selection, light: bool, accessibility: crate::accessibility::Preferences) -> Result<Colors, String> {
+        let mut selection = selection.clone();
+        selection.mode = if light { crate::theme::Mode::Light } else { crate::theme::Mode::Dark };
+        if let Some(dynamic) = selection.dynamic.as_mut() {
+            // The taskbar's explicit mode overrides wallpaper brightness locally.
+            dynamic.follow_mode = false;
+        }
+        let id = src.find(&selection.name).map(|v| v.0).unwrap_or_else(|| selection.name.clone());
+        let theme = src.theme_for(&id, &selection, !light)?;
+        Ok(Colors::from_theme(&accessibility.apply(theme)))
+    }
+
+    /// Keep the active palette, accent and accessibility colours in either forced mode.
     pub fn pick(light: bool) -> Colors {
         let t = crate::theme::th();
         if t.dark != light {
             Colors::from_theme(&t)
         } else {
-            Colors::windows11(!light)
+            let src = crate::theme::live::Source::discover();
+            Self::selected_mode(&src, &src.selection(), light, crate::accessibility::Preferences::from_env()).unwrap_or_else(|error| {
+                crate::log_error!("taskbar forced-mode theme: {error}");
+                Colors::from_theme(&t)
+            })
         }
     }
 }
@@ -526,6 +544,34 @@ mod tests {
         assert!(c.light && c.bg == t.dock.t() && c.accent == t.accent.t() && c.ink == t.text.t());
         assert_eq!(Colors::dark().bg, (32, 32, 32));
         assert_eq!(Colors::light().accent, (0, 95, 184));
+    }
+
+    #[test]
+    fn forced_modes_preserve_selected_palette_accent_dynamic_and_accessibility() {
+        use crate::theme::{live::Source, Mode};
+        let src = Source { shell_json: std::env::temp_dir().join("unused-taskbar-selection.json"), themes_dir: std::env::temp_dir().join("unused-taskbar-themes") };
+        for palette in ["catppuccin", "nord", "gruvbox"] {
+            let selection = Selection { name: "windows11".into(), palette: Some(palette.into()), mode: Mode::Dark, ..Selection::default() };
+            for light in [false, true] {
+                let colors = Colors::selected_mode(&src, &selection, light, Default::default()).unwrap();
+                let mut expected = selection.clone();
+                expected.mode = if light { Mode::Light } else { Mode::Dark };
+                let theme = src.theme_for("windows11", &expected, !light).unwrap();
+                assert_eq!(colors, Colors::from_theme(&theme));
+                assert_ne!(colors.accent, if light { Colors::light().accent } else { Colors::dark().accent });
+                let contrast = Colors::selected_mode(&src, &selection, light, crate::accessibility::Preferences { high_contrast: true, ..Default::default() }).unwrap();
+                assert_eq!(contrast.bg, if light { (255, 255, 255) } else { (0, 0, 0) });
+            }
+        }
+        let dynamic = crate::theme::Dynamic { enabled: true, follow_mode: true, ..Default::default() };
+        let selection = Selection { name: "windows11".into(), accent: Some(crate::theme::Rgb(222, 77, 44)), dynamic: Some(dynamic), ..Default::default() };
+        let before = selection.clone();
+        for light in [false, true] {
+            let colors = Colors::selected_mode(&src, &selection, light, Default::default()).unwrap();
+            assert_eq!(colors.light, light);
+            assert_eq!(colors.accent, (222, 77, 44));
+        }
+        assert_eq!(selection, before, "forcing taskbar mode must not alter saved preferences");
     }
 
     #[test]

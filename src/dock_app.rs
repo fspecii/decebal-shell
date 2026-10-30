@@ -601,21 +601,26 @@ impl App for DockApp {
     }
 
     fn tick(&mut self) -> Tick {
-        if self.is_windows() {
-            return self.win_tick();
-        }
         let mut changed = self.poll_config();
         let theme_gen = crate::theme::generation();
         if theme_gen != self.theme_gen {
             // repaint with the new colours; settings keys the file leaves out default to the theme's values
             self.theme_gen = theme_gen;
             if let Some(w) = &self.watch {
-                self.dock.settings = std::fs::read_to_string(&w.settings_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+                // Defaults can depend on theme tokens; use the normal settings
+                // transition path so a simultaneous style change stays coherent.
+                let settings = std::fs::read_to_string(&w.settings_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+                self.apply_settings(settings);
             }
             if self.is_windows() {
                 self.win_apply_settings();
             }
             changed = true;
+        }
+        if self.is_windows() {
+            let mut tick = self.win_tick();
+            tick.redraw |= changed;
+            return tick;
         }
         changed |= self.sync_items();
         let moving = self.dock.step(self.surface.0 as f32);
@@ -833,6 +838,40 @@ mod tests {
         calls: Arc<Mutex<Calls>>,
         fx: Rc<RefCell<Spawned>>,
         dir: PathBuf,
+    }
+
+    #[test]
+    fn windows_taskbar_recolours_on_theme_generation_without_restarting() {
+        const CHILD: &str = "DECEBAL_TASKBAR_GENERATION_TEST_CHILD";
+        // Publishing a process-global theme must not interfere with parallel tests.
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "dock_app::tests::windows_taskbar_recolours_on_theme_generation_without_restarting", "--nocapture"])
+                .env(CHILD, "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        let mut rig = rig("windows-generation", &[], vec![]);
+        std::fs::write(rig.dir.join("settings.json"), r#"{"style":"windows"}"#).unwrap();
+        rig.app.tick();
+        let original = std::ptr::from_ref(rig.app.win.as_deref().unwrap());
+        let src = crate::theme::live::Source { shell_json: rig.dir.join("decebal.json"), themes_dir: rig.dir.join("themes") };
+        for palette in ["catppuccin", "nord", "gruvbox"] {
+            let selection = crate::theme::Selection { name: "windows11".into(), palette: Some(palette.into()), mode: crate::theme::Mode::Dark, ..Default::default() };
+            let theme = src.theme_for("windows11", &selection, true).unwrap();
+            let expected = crate::taskbar::draw::Colors::from_theme(&theme);
+            crate::theme::live::publish_theme(theme);
+            assert!(rig.app.tick().redraw);
+            assert_eq!(rig.app.win.as_ref().unwrap().colors, expected);
+            assert_eq!(std::ptr::from_ref(rig.app.win.as_deref().unwrap()), original);
+        }
+        for style in ["mac", "windows"] {
+            std::fs::write(rig.dir.join("settings.json"), format!(r#"{{"style":"{style}"}}"#)).unwrap();
+            assert!(rig.app.tick().redraw);
+            assert_eq!(rig.app.is_windows(), style == "windows");
+        }
     }
 
     fn win(id: u64, app: &str, title: &str) -> Window {

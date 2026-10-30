@@ -362,7 +362,8 @@ impl DockApp {
     // ----------------------------------------------------------------- tick
 
     pub(super) fn win_tick(&mut self) -> Tick {
-        let mut changed = self.poll_config();
+        // Common tick has already polled settings and refreshed theme-dependent caches.
+        let mut changed = false;
         if self.win.is_none() {
             self.win_init();
             changed = true;
