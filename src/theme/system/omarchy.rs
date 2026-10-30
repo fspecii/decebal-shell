@@ -253,10 +253,10 @@ impl Target for Omarchy {
                 }
             }
             Kind::Editors => {
-                if ["code", "code-insiders", "codium", "cursor", "obsidian"].iter().any(|c| env.has(c)) {
+                if ["code", "code-insiders", "codium", "cursor", "obsidian", "t3", "t3code", "pi", "claude", "hermes"].iter().any(|c| env.has(c)) {
                     Ok(())
                 } else {
-                    Err("no VS Code, Cursor or Obsidian installed".into())
+                    Err("no supported editor or coding app installed".into())
                 }
             }
             Kind::Hooks => {
@@ -271,8 +271,9 @@ impl Target for Omarchy {
     fn default_on(&self, env: &Env) -> bool {
         match self.kind {
             Kind::Core => self.available(env).is_ok(),
-            Kind::Browser => false,
-            Kind::Editors | Kind::Hooks => false,
+            Kind::Browser => self.available(env).is_ok() && browser_passwordless(env),
+            Kind::Editors => self.available(env).is_ok(),
+            Kind::Hooks => false,
         }
     }
 
@@ -301,7 +302,18 @@ impl Target for Omarchy {
                 if cx.env.has("btop") {
                     run(cx, "omarchy-restart-btop", &[]);
                 }
-                sub_steps(cx);
+            }
+            Kind::Browser => {
+                if browser_passwordless(cx.env) {
+                    run(cx, "omarchy-theme-set-browser", &[]);
+                } else {
+                    cx.report.warnings.push("Browser theme was not applied: Omarchy's passwordless browser policy rule is unavailable".into());
+                }
+            }
+            Kind::Editors => {
+                for helper in ["omarchy-theme-set-vscode", "omarchy-theme-set-obsidian", "omarchy-theme-set-t3code", "omarchy-theme-set-pi", "omarchy-theme-set-claude", "omarchy-theme-set-hermes"] {
+                    run(cx, helper, &[]);
+                }
             }
             Kind::Hooks => {
                 let written = cx.report.wrote.iter().any(|w| w.starts_with(theme_dir(cx.env)));
@@ -309,7 +321,6 @@ impl Target for Omarchy {
                     run(cx, "omarchy-hook", &["theme-set", THEME]);
                 }
             }
-            _ => {}
         }
     }
 
@@ -465,12 +476,14 @@ mod tests {
         fake.answers.borrow_mut().push(("sudo -n -l -l".into(), "    Commands:\n\t!authenticate /usr/bin/omarchy-theme-set-browser-policy ??????\n".into()));
         std::fs::create_dir_all(env.config_home.join("omarchy/hooks/theme-set.d")).unwrap();
         let mut cfg = Config { enabled: true, ..Config::default() };
+        cfg.targets.insert("browser".into(), false);
+        cfg.targets.insert("editors".into(), false);
         apply(&env, &cfg, &palette(false), &Opts::default()).unwrap();
         let calls = fake.calls.borrow().clone();
-        assert!(!calls.iter().any(|c| c.starts_with("omarchy-theme-set-browser")), "browser remains opt-in even with passwordless sudo");
+        assert!(!calls.iter().any(|c| c.starts_with("omarchy-theme-set-browser")), "explicit browser opt-out is respected");
         assert!(
             !calls.iter().any(|c| c.starts_with("omarchy-theme-set-vscode") || c.starts_with("omarchy-hook") || c.contains("restart-terminal")),
-            "editors, hooks and signals are off by default: {calls:?}"
+            "disabled editors, hooks and signals are respected: {calls:?}"
         );
         cfg.targets.insert("browser".into(), true);
         cfg.targets.insert("editors".into(), true);
@@ -481,6 +494,30 @@ mod tests {
         let calls = fake.calls.borrow().clone();
         for want in ["omarchy-theme-set-browser", "omarchy-theme-set-vscode", "omarchy-theme-set-obsidian", "omarchy-hook theme-set decebal", "omarchy-restart-terminal", "omarchy-restart-helix"] {
             assert!(calls.iter().any(|c| c.starts_with(want)), "{want} in {calls:?}");
+        }
+    }
+
+    #[test]
+    fn enabling_apps_retints_an_already_staged_palette() {
+        let d = tmp("omarchy-retint-existing");
+        let (env, fake) = omarchy_env(&d, &["code", "chromium", "omarchy-theme-set-browser", "sudo"]);
+        fake.answers.borrow_mut().push(("sudo -n -l -l".into(), "Options: !authenticate".into()));
+        let mut cfg = Config::default();
+        assert!(Omarchy::new(Kind::Browser).default_on(&env));
+        assert!(Omarchy::new(Kind::Editors).default_on(&env));
+        cfg.targets.insert("browser".into(), false);
+        cfg.targets.insert("editors".into(), false);
+        apply(&env, &cfg, &palette(true), &Opts::default()).unwrap();
+        let current = env.state_home.join("omarchy/current");
+        std::fs::create_dir_all(&current).unwrap();
+        std::fs::write(current.join("theme.name"), "decebal").unwrap();
+        cfg.targets.clear();
+        fake.calls.borrow_mut().clear();
+        apply(&env, &cfg, &palette(true), &Opts::default()).unwrap();
+        let calls = fake.calls.borrow();
+        assert!(!calls.iter().any(|c| c.starts_with("omarchy-theme-set decebal")));
+        for helper in ["omarchy-theme-set-browser", "omarchy-theme-set-vscode", "omarchy-theme-set-obsidian"] {
+            assert_eq!(calls.iter().filter(|c| c.starts_with(helper)).count(), 1, "{helper}: {calls:?}");
         }
     }
 
