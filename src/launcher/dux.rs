@@ -34,31 +34,68 @@ impl Layout {
 pub(super) struct State {
     pub layout: Layout,
     comments: Vec<String>,
+    comments_loaded: HashSet<usize>,
+    locales: Vec<String>,
     images: HashMap<usize, Pixmap>,
     pub symbols: SymbolCache,
     generation: (u64, u64),
     pub buffer: Option<Pixmap>,
 }
-fn comment(app: &AppEntry) -> String {
-    let path = std::path::Path::new(&app.file);
-    if path.extension().is_none_or(|ext| ext != "desktop") || !std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= 64 * 1024) {
-        return String::new();
+// Freedesktop locale fallback: country+modifier, country, modifier, language.
+// https://specifications.freedesktop.org/desktop-entry/latest/localized-keys.html
+fn locale_keys(locale: &str) -> Vec<String> {
+    let (raw, modifier) = locale.split_once('@').unwrap_or((locale, ""));
+    let main = raw.split('.').next().unwrap_or("");
+    if main.is_empty() || main == "C" || main == "POSIX" {
+        return vec![];
     }
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return String::new();
-    };
+    let language = main.split('_').next().unwrap_or(main);
+    let mut out = Vec::new();
+    for key in [
+        if modifier.is_empty() { main.to_string() } else { format!("{main}@{modifier}") },
+        main.into(),
+        if modifier.is_empty() { language.to_string() } else { format!("{language}@{modifier}") },
+        language.into(),
+    ] {
+        if !out.contains(&key) {
+            out.push(key);
+        }
+    }
+    out
+}
+fn comment_text(text: &str, locales: &[String]) -> String {
     let mut entry = false;
+    let mut values = HashMap::new();
     for line in text.lines() {
         if line.starts_with('[') {
             entry = line.trim() == "[Desktop Entry]";
         } else if entry {
-            if let Some(value) = line.strip_prefix("Comment=") {
-                return value.chars().filter(|c| !c.is_control()).take(240).collect();
+            if let Some((key, value)) = line.split_once('=') {
+                if key == "Comment" || key.starts_with("Comment[") && key.ends_with(']') {
+                    values.entry(key).or_insert(value);
+                }
             }
         }
     }
-    String::new()
+    let value = locales.iter().find_map(|key| values.get(format!("Comment[{key}]").as_str())).or_else(|| values.get("Comment"));
+    value.map_or_else(String::new, |value| value.chars().filter(|c| !c.is_control()).take(240).collect())
 }
+fn comment(app: &AppEntry, locales: &[String]) -> String {
+    use std::io::Read;
+    let path = std::path::Path::new(&app.file);
+    if path.extension().is_none_or(|ext| ext != "desktop") || !std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= 64 * 1024) {
+        return String::new();
+    }
+    let Ok(file) = std::fs::File::open(path) else {
+        return String::new();
+    };
+    let mut text = String::new();
+    if file.take(64 * 1024 + 1).read_to_string(&mut text).is_err() || text.len() > 64 * 1024 {
+        return String::new();
+    }
+    comment_text(&text, locales)
+}
+
 impl State {
     pub fn stale(&self) -> bool {
         self.generation != (crate::theme::generation(), crate::icons::live::generation())
@@ -68,7 +105,9 @@ impl State {
         symbols.prepare_material();
         Self {
             layout: Layout::new(size, crate::theme::live::font_scale()),
-            comments: apps.iter().map(comment).collect(),
+            comments: vec![String::new(); apps.len()],
+            comments_loaded: HashSet::new(),
+            locales: locale_keys(&["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|key| std::env::var(key).ok().filter(|s| !s.is_empty())).unwrap_or_default()),
             images: HashMap::new(),
             symbols,
             generation: (crate::theme::generation(), crate::icons::live::generation()),
@@ -87,6 +126,9 @@ impl State {
         self.images.retain(|index, _| keys.contains(index));
         for index in keys {
             if let Some(app) = apps.get(index) {
+                if self.comments_loaded.insert(index) {
+                    self.comments[index] = comment(app, &self.locales);
+                }
                 self.images.entry(index).or_insert_with(|| icons.get(&app.icon, 36).clone());
             }
         }
@@ -264,6 +306,22 @@ impl Launcher {
 mod tests {
     use super::*;
     #[test]
+    fn comments_use_locale_fallback_and_remain_unread_at_construction() {
+        assert_eq!(locale_keys("sr_RS.UTF-8@Latn"), ["sr_RS@Latn", "sr_RS", "sr@Latn", "sr"]);
+        let text = "[Desktop Entry]\nComment=Default\nComment[sr]=Language\nComment[sr@Latn]=Modifier\nComment[sr_RS]=Country\n[Desktop Action Test]\nComment[sr_RS]=Wrong section\n";
+        assert_eq!(comment_text(text, &locale_keys("sr_RS.UTF-8@Latn")), "Country");
+        assert_eq!(comment_text(text, &locale_keys("sr_ME@Latn")), "Modifier");
+        assert_eq!(comment_text(text, &locale_keys("C.UTF-8")), "Default");
+        let path = std::env::temp_dir().join(format!("dux-comment-lazy-{}.desktop", std::process::id()));
+        std::fs::write(&path, "[Desktop Entry]\nComment=Must not be loaded yet\n").unwrap();
+        let apps = vec![AppEntry { file: path.to_string_lossy().into_owned(), ..Default::default() }];
+        let state = State::new(&apps, (620, 620));
+        std::fs::remove_file(path).unwrap();
+        assert!(state.comments_loaded.is_empty());
+        assert_eq!(state.comments, [""], "constructing the launcher must not read every desktop description");
+    }
+
+    #[test]
     fn compact_source_geometry_and_short_list_hit_targets() {
         let layout = Layout::new((620, 620), 1.0);
         assert_eq!(layout.rows, 8);
@@ -306,7 +364,9 @@ mod evidence {
                     launcher.set_screen(960, height + 100);
                     assert_eq!(launcher.initial_size(), (620, height), "popup must fit monitor before native creation");
                     launcher.resize(620, height);
-                    launcher.dux.as_mut().unwrap().comments.iter_mut().for_each(|s| *s = "Installed application description fixture".into());
+                    let state = launcher.dux.as_mut().unwrap();
+                    state.comments.iter_mut().for_each(|s| *s = "Installed application description fixture".into());
+                    state.comments_loaded.extend(0..state.comments.len());
                     let mut pixels = Pixmap::new(620, height).unwrap();
                     launcher.draw(&mut pixels);
                     let state = launcher.dux.as_ref().unwrap();

@@ -105,3 +105,12 @@ modal enter/exit motion remain outstanding. Reduced motion has no extra timer
 or worker here. Layer-shell/frame-connected emergence and global keyboard entry
 remain backend/platform work. These limits are separate from the functioning
 native app query, navigation and trusted application launch path.
+
+Desktop descriptions are now cached on demand for visible rows, not reread for
+every installed app at construction. Reads are capped at64KiB per entry and
+respect LC_MESSAGES locale fallback (country/modifier/language/plain Comment)
+from the freedesktop desktop-entry specification:
+https://specifications.freedesktop.org/desktop-entry/latest/localized-keys.html .
+The shared application index and visible icon/description preparation retain
+their existing synchronous event-time I/O boundary; this is not a fully async
+application-index implementation. No file reads occur in painting.
