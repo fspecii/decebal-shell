@@ -1,4 +1,4 @@
-# Dux replica port — sections 1–2
+# Dux port — bar, dashboard, Control Center and Applications
 
 The original lavender/four-corner theme was not a replica. This package is being
 ported in source order: **bar → dashboard/control centre → native widgets →
@@ -13,6 +13,28 @@ The source bar is a rounded band containing individual widget pills and three
 **layout groups**, not three enormous pills. Independent-island treatment is a
 separate profile, not stock parity. Requires native renderer/schema/font-registration commit `8addeef` (or its integrated equivalent).
 The band starts at4,4; first face8,9. Text scale200% enlarges text only, not band geometry.
+
+## Version1.2.0 compatibility and scope
+
+Requires Decebal0.2.0. This metadata checkpoint targets parent candidate`0c01f41`:
+stock Purple bar, historical README dashboard, Control Center and section4
+Applications-only list launcher. It does not claim a complete Dux replica.
+Native source/integrated dependencies are explicit:
+
+| Capability | Original native commit | Parent integrated commit |
+| --- | --- | --- |
+|Bar/private font registration|`8addeef`|`4c20ef5`|
+|Dashboard/Control Center/explicit empty desktop|`1b45fdf`|`eff0175`|
+|Applications-provider launcher|`8eedcc0`|`b56ca4b`|
+
+This metadata-only delta adds no selectors, layouts, assets or font registrations.
+The parent checkpoint retains its four font.files entries (static400/500/700 and
+Material). Original variable-clock preparation/registration is separate future
+integration work and is not a dependency of this checkpoint. Applications excludes
+source All/Files/Plugins/history/richer actions/fuzzy/motion. Dashboard profile
+`readme` is historical, not current upstream defaults; expressive shapes/controls
+and other parity gaps remain. Accepted Settings and independent wallpaper choice
+are preserved. Parent owns integration, minimum-version enforcement and activation.
 
 ## Native typography and icons
 

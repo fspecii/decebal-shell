@@ -1,11 +1,11 @@
 format = 1
 id = "dux-lavender"
 name = "Dux Lavender"
-version = "1.1.0"
+version = "1.2.0"
 author = "Decebal Theme Specialist; palette adapted from Dux Labs"
 license = "MIT"
-description = "Dux replica port, sections 1–2: stock Purple native bar, historical README dashboard profile and tonal Control Center. Remaining visual parity is tracked explicitly. Wallpaper stays independent."
-min_shell_version = "0.1.0"
+description = "Dux port: stock Purple bar, historical README dashboard, Control Center and Applications list launcher (section 4). Partial source fidelity; full replica parity is not claimed. Wallpaper stays independent."
+min_shell_version = "0.2.0"
 tags = ["dux-inspired", "material", "lavender", "native-widgets", "dark-light"]
 
 [colors.dark]
