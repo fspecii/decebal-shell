@@ -142,6 +142,8 @@ pub fn cursor_cmd(size: u32) -> Result<Cmd, String> {
 
 pub fn access_items(h: &Hub) -> Vec<Item> {
     let s = &h.session;
+    let mut reset_font = Ctl::new("s:acc:font-theme:", Kind::Button { label: "Use theme".into(), danger: false });
+    reset_font.enabled = s.font_scale.is_some();
     let o = cursor_sizes();
     let sel = s.cursor_size.and_then(|c| o.iter().position(|(_, v)| v.parse::<u32>().ok() == Some(c)));
     vec![
@@ -152,7 +154,8 @@ pub fn access_items(h: &Hub) -> Vec<Item> {
             Row::new("Reduce motion").detail("Disables dock magnification and launch bounce").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
             Row::new("Text size")
                 .detail("Overrides Decebal theme text size (80–200%)")
-                .ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() })),
+                .ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() }))
+                .ctl(reset_font),
             Row::new("High contrast").detail("Uses opaque, high-contrast Decebal surfaces and text").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
         ]),
         Item::Note {
@@ -164,6 +167,9 @@ pub fn access_items(h: &Hub) -> Vec<Item> {
 }
 
 pub fn access_apply(h: &mut Hub, act: &str, val: CtlVal) {
+    if act == "font-theme" && val == CtlVal::Click && h.session.font_scale.is_none() {
+        return;
+    }
     let mut s = h.session.clone();
     let mut cmds = vec![];
     let r: Result<(), String> = (|| {
@@ -175,6 +181,9 @@ pub fn access_apply(h: &mut Hub, act: &str, val: CtlVal) {
             }
             ("motion", CtlVal::Bool(b)) => s.reduce_motion = *b,
             ("contrast", CtlVal::Bool(b)) => s.high_contrast = *b,
+            ("font-theme", CtlVal::Click) => {
+                s.font_scale = None;
+            }
             ("font", CtlVal::Num(n)) => {
                 if !(80.0..=200.0).contains(n) {
                     return Err("Text size must be between 80 % and 200 %".into());
@@ -214,6 +223,81 @@ mod tests {
         let c = cursor_cmd(32).unwrap();
         assert_eq!(c.args.last().unwrap(), "32");
         assert!(cursor_cmd(2).is_err() && cursor_cmd(9999).is_err());
+    }
+
+    #[test]
+    fn text_size_control_can_return_to_theme_without_losing_pending_preferences() {
+        use super::super::session::Session;
+        use crate::settings::model::tests_support::model_with;
+        use std::time::{Duration, Instant};
+
+        fn control(h: &Hub, id: &str) -> Ctl {
+            access_items(h)
+                .into_iter()
+                .filter_map(|i| match i {
+                    Item::Card(rows) => Some(rows),
+                    _ => None,
+                })
+                .flatten()
+                .flat_map(|r| r.ctls)
+                .find(|c| c.id == id)
+                .unwrap()
+        }
+        fn saved(h: &mut Hub, d: &std::path::Path, expected: &Session) {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let (_, msgs) = h.drain();
+                assert!(msgs.iter().all(|(_, error)| !error), "{msgs:?}");
+                if Session::load(d) == *expected && Session::sh_path(d).exists() {
+                    // The JSON rename precedes the shell rename; wait for both outputs.
+                    let sh = std::fs::read_to_string(Session::sh_path(d)).unwrap();
+                    if sh == expected.to_sh() {
+                        break;
+                    }
+                }
+                assert!(Instant::now() < deadline, "session save timed out");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        let (mut model, cfg) = model_with("");
+        let d = cfg.parent().unwrap().join("session-test");
+        let fr = Arc::new(FakeRunner::lenient());
+        model.sys = Hub::with(fr.clone(), d.clone(), Arc::new(|| {}));
+        let reset = control(&model.sys, "s:acc:font-theme:");
+        assert_eq!(reset.kind, Kind::Button { label: "Use theme".into(), danger: false });
+        assert!(!reset.enabled);
+        model.sys_apply(&reset.id, CtlVal::Click);
+        assert!(!Session::json_path(&d).exists());
+
+        // Queue other preferences without waiting for their async saves.
+        model.sys_apply("s:prv:secs:", CtlVal::Str("300".into()));
+        model.sys_apply("s:prv:suspend:", CtlVal::Bool(true));
+        model.sys_apply("s:acc:cursor:", CtlVal::Str("48".into()));
+        model.sys_apply("s:acc:motion:", CtlVal::Bool(true));
+        model.sys_apply("s:acc:contrast:", CtlVal::Bool(true));
+        let font = control(&model.sys, "s:acc:font:");
+        model.sys_apply(&font.id, CtlVal::Num(125.0));
+        let expected_override = model.sys.session.clone();
+        assert_eq!(expected_override.font_scale, Some(1.25));
+        saved(&mut model.sys, &d, &expected_override);
+        assert!(std::fs::read_to_string(Session::sh_path(&d)).unwrap().contains("export DECEBAL_FONT_SCALE=1.25\n"));
+        let commands_before_reset = fr.lines();
+        let reset = control(&model.sys, "s:acc:font-theme:");
+        assert!(reset.enabled);
+        model.sys_apply(&reset.id, CtlVal::Click);
+        let mut expected_theme = expected_override;
+        expected_theme.font_scale = None;
+        assert_eq!(model.sys.session, expected_theme);
+        saved(&mut model.sys, &d, &expected_theme);
+        assert!(std::fs::read_to_string(Session::sh_path(&d)).unwrap().contains("export DECEBAL_FONT_SCALE=''\n"));
+        assert_eq!(fr.lines(), commands_before_reset);
+        assert!(!control(&model.sys, &reset.id).enabled);
+        model.sys_apply(&reset.id, CtlVal::Click);
+        assert_eq!(model.sys.session, expected_theme);
+        // All command execution above goes through FakeRunner, including cursor xrdb.
+        assert_eq!(fr.lines().len(), 1);
+        let _ = std::fs::remove_dir_all(cfg.parent().unwrap());
     }
 
     #[test]

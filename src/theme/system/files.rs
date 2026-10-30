@@ -1,7 +1,10 @@
-//! File edits for the system theme pipeline: the three ways a target may change a file, atomic writes,
+//! File edits for the system theme pipeline: managed edits, atomic writes,
 //! and the state (manifest + backups) that lets `decthemectl system off` put everything back.
 //!
 //! * [`Edit::Whole`]: decebal owns the file (colour scheme files, the generated Omarchy theme, ...).
+//! * [`Edit::Detached`]: replace a known legacy GTK stylepack symlink with a managed local CSS block.
+//!   `extra.detached_links` retains its exact link destination for off; ordinary dotfile links stay linked.
+//!   Old whole-file backups repair the shared pack only when its recorded written hash still matches.
 //! * [`Edit::Block`]: a marked block inside a file that also holds the user's own content (`gtk.css`, `~/.Xresources`).
 //! * [`Edit::Ini`]: a few keys of an INI file (`settings.ini`, `qt6ct.conf`); every other line stays.
 //!
@@ -51,20 +54,36 @@ impl Comment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Edit {
-    Whole { path: PathBuf, text: String },
-    Block { path: PathBuf, comment: Comment, text: String },
-    Ini { path: PathBuf, sets: Vec<(String, String, String)> },
+    Whole {
+        path: PathBuf,
+        text: String,
+    },
+    /// Replace a known legacy stylepack link itself; never write through it.
+    Detached {
+        path: PathBuf,
+        text: String,
+    },
+    Block {
+        path: PathBuf,
+        comment: Comment,
+        text: String,
+    },
+    Ini {
+        path: PathBuf,
+        sets: Vec<(String, String, String)>,
+    },
 }
 
 impl Edit {
     pub fn path(&self) -> &Path {
         match self {
-            Edit::Whole { path, .. } | Edit::Block { path, .. } | Edit::Ini { path, .. } => path,
+            Edit::Whole { path, .. } | Edit::Detached { path, .. } | Edit::Block { path, .. } | Edit::Ini { path, .. } => path,
         }
     }
     fn kind(&self) -> &'static str {
         match self {
             Edit::Whole { .. } => "whole",
+            Edit::Detached { .. } => "whole",
             Edit::Block { .. } => "block",
             Edit::Ini { .. } => "ini",
         }
@@ -73,6 +92,7 @@ impl Edit {
     pub fn render(&self, cur: Option<&str>) -> String {
         match self {
             Edit::Whole { text, .. } => text.clone(),
+            Edit::Detached { text, .. } => with_block("", Comment::Css, text),
             Edit::Block { comment, text, .. } => with_block(cur.unwrap_or(""), *comment, text),
             Edit::Ini { sets, .. } => {
                 let mut t = cur.unwrap_or("").to_string();
@@ -210,9 +230,24 @@ pub fn fnv(b: &[u8]) -> u64 {
     b.iter().fold(0xcbf29ce484222325u64, |h, x| (h ^ *x as u64).wrapping_mul(0x100000001b3))
 }
 
-/// Temp file in the target's directory, then rename. Symlinks are written through; permissions are kept.
+/// Temp file in the target's directory, then rename. Resolvable symlinks are written through; permissions are kept.
+/// Unresolved symlinks are rejected rather than replaced with a regular file.
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    write_atomic_mode(path, text, true)
+}
+
+fn write_atomic_mode(path: &Path, text: &str, follow: bool) -> Result<(), String> {
+    let target = if follow {
+        match std::fs::canonicalize(path) {
+            Ok(target) => target,
+            Err(e) if path.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) => {
+                return Err(format!("{}: cannot resolve symlink: {e}", path.display()));
+            }
+            Err(_) => path.to_path_buf(),
+        }
+    } else {
+        path.to_path_buf()
+    };
     let dir = target.parent().ok_or("path has no directory")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -346,7 +381,7 @@ pub fn plan(edits: &[Edit]) -> Vec<Change> {
         let new = e.render(cur.as_deref());
         if let Some(i) = prior {
             out[i].new = new;
-            if let Edit::Whole { .. } = e {
+            if matches!(e, Edit::Whole { .. } | Edit::Detached { .. }) {
                 out[i].edit = e.clone();
             }
         } else {
@@ -358,69 +393,131 @@ pub fn plan(edits: &[Edit]) -> Vec<Change> {
 
 /// Writes the planned changes. The first time a file is touched its original is saved. If a write fails the files
 /// already written by this call are put back and nothing is recorded.
+// Snapshot the directory entry as well as its contents, so rollback can restore links.
+#[derive(Clone)]
+enum Snapshot {
+    Missing,
+    Link(PathBuf),
+    File(String),
+}
+impl Snapshot {
+    fn read(path: &Path) -> Result<Self, String> {
+        match std::fs::symlink_metadata(path) {
+            Ok(m) if m.file_type().is_symlink() => std::fs::read_link(path).map(Self::Link).map_err(|e| e.to_string()),
+            Ok(_) => std::fs::read_to_string(path).map(Self::File).map_err(|e| e.to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::Missing),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    fn restore(&self, path: &Path) -> Result<(), String> {
+        match self {
+            Self::File(text) => write_atomic_mode(path, text, false),
+            Self::Missing => std::fs::remove_file(path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }).map_err(|e| e.to_string()),
+            Self::Link(target) => {
+                let tmp = path.with_extension(format!("decebal-link-{}", std::process::id()));
+                std::os::unix::fs::symlink(target, &tmp).map_err(|e| e.to_string())?;
+                let result = std::fs::rename(&tmp, path).map_err(|e| e.to_string());
+                if result.is_err() {
+                    let _ = std::fs::remove_file(tmp);
+                }
+                result
+            }
+        }
+    }
+}
+
 pub fn commit(changes: &[Change], state_dir: &Path, st: &mut State) -> Result<Vec<PathBuf>, String> {
     let bdir = state_dir.join("backups");
-    let mut done: Vec<(&Change, bool)> = Vec::new();
+    let mut done: Vec<(PathBuf, Snapshot)> = Vec::new();
     let mut wrote = Vec::new();
-    let mut new_state = st.clone();
-    for c in changes {
-        if c.is_noop() {
-            continue;
-        }
-        let key = c.path.to_string_lossy().into_owned();
-        let first = !new_state.files.contains_key(&key);
-        let mut res: Result<(), String> = Ok(());
-        let mut orig = None;
-        if first {
-            if let Some(old) = &c.old {
-                let n = backup_name(&c.path);
-                res = std::fs::create_dir_all(&bdir).map_err(|e| format!("{}: {e}", bdir.display())).and_then(|_| write_atomic(&bdir.join(&n), old));
-                orig = Some(n);
-            } else {
-                let mut p = c.path.parent();
-                let mut missing = Vec::new();
-                while let Some(d) = p {
-                    if d.exists() {
-                        break;
+    let mut next = st.clone();
+    let result = (|| -> Result<(), String> {
+        for c in changes {
+            let detach = matches!(c.edit, Edit::Detached { .. });
+            if c.is_noop() && !detach {
+                continue;
+            }
+            let key = c.path.to_string_lossy().into_owned();
+            let snapshot = Snapshot::read(&c.path)?;
+            // Older versions saved the shared pack's original under either the link
+            // name or its canonical target. Recover it only while its written hash matches.
+            if detach {
+                let Snapshot::Link(link) = &snapshot else {
+                    return Err(format!("{}: legacy link changed during apply", c.path.display()));
+                };
+                let target = c.path.canonicalize().map_err(|e| e.to_string())?;
+                let target_key = target.to_string_lossy().into_owned();
+                let old_key = if next.files.contains_key(&key) { key.clone() } else { target_key.clone() };
+                if let Some(old) = next.files.get(&old_key).cloned() {
+                    if old.owner != c.owner {
+                        return Err(format!("{}: legacy backup belongs to another target", c.path.display()));
                     }
-                    missing.push(d.to_string_lossy().into_owned());
-                    p = d.parent();
+                    if let Some(name) = old.orig {
+                        let original = std::fs::read_to_string(bdir.join(name)).map_err(|e| e.to_string())?;
+                        let current = std::fs::read_to_string(&target).map_err(|e| e.to_string())?;
+                        if fnv(current.as_bytes()) == old.written {
+                            done.push((target.clone(), Snapshot::File(current)));
+                            write_atomic(&target, &original)?;
+                        }
+                    }
+                    next.files.remove(&old_key);
                 }
-                for d in missing.into_iter().rev() {
-                    if !new_state.dirs.contains(&d) {
-                        new_state.dirs.push(d);
+                next.extra.entry("detached_links").or_insert_with(|| json!({})).as_object_mut().ok_or("invalid detached_links state")?.insert(key.clone(), json!(link));
+            }
+            let first = !next.files.contains_key(&key);
+            let mut orig = None;
+            if first {
+                if let Some(old) = &c.old {
+                    let n = backup_name(&c.path);
+                    std::fs::create_dir_all(&bdir).map_err(|e| e.to_string())?;
+                    let backup = bdir.join(&n);
+                    done.push((backup.clone(), Snapshot::read(&backup)?));
+                    write_atomic(&backup, old)?;
+                    orig = Some(n);
+                } else {
+                    let mut p = c.path.parent();
+                    while let Some(d) = p {
+                        if d.exists() {
+                            break;
+                        }
+                        let d = d.to_string_lossy().into_owned();
+                        if !next.dirs.contains(&d) {
+                            next.dirs.push(d);
+                        }
+                        p = p.and_then(Path::parent);
                     }
                 }
             }
-        }
-        if res.is_ok() {
-            res = write_atomic(&c.path, &c.new);
-        }
-        if let Err(e) = res {
-            for (d, existed) in done.into_iter().rev() {
-                match (&d.old, existed) {
-                    (Some(o), _) => {
-                        let _ = write_atomic(&d.path, o);
-                    }
-                    (None, _) => {
-                        let _ = std::fs::remove_file(&d.path);
-                    }
-                }
+            // Ordinary dotfile symlinks retain the existing write-through policy.
+            let rollback_path = if !detach { c.path.canonicalize().unwrap_or_else(|_| c.path.clone()) } else { c.path.clone() };
+            let rollback_snapshot = if !detach { Snapshot::read(&rollback_path)? } else { snapshot };
+            done.push((rollback_path, rollback_snapshot));
+            write_atomic_mode(&c.path, &c.new, !detach)?;
+            if first {
+                next.files.insert(key.clone(), Entry { orig, written: 0, kind: c.edit.kind().into(), comment: None, owner: c.owner.clone() });
             }
-            return Err(e);
+            let ent = next.files.get_mut(&key).unwrap();
+            ent.written = fnv(c.new.as_bytes());
+            ent.kind = c.edit.kind().into();
+            ent.comment = match &c.edit {
+                Edit::Block { comment, .. } => Some(*comment),
+                Edit::Detached { .. } => Some(Comment::Css),
+                _ => ent.comment,
+            };
+            wrote.push(c.path.clone());
         }
-        done.push((c, first));
-        if first {
-            new_state.files.insert(key.clone(), Entry { orig, written: 0, kind: c.edit.kind().into(), comment: None, owner: c.owner.clone() });
+        next.save(state_dir)
+    })();
+    if let Err(e) = result {
+        let mut errors = Vec::new();
+        for (path, snapshot) in done.into_iter().rev() {
+            if let Err(e) = snapshot.restore(&path) {
+                errors.push(format!("{}: {e}", path.display()));
+            }
         }
-        let ent = new_state.files.get_mut(&key).unwrap();
-        ent.written = fnv(c.new.as_bytes());
-        ent.kind = c.edit.kind().into();
-        ent.comment = if let Edit::Block { comment, .. } = &c.edit { Some(*comment) } else { ent.comment };
-        wrote.push(c.path.clone());
+        return Err(if errors.is_empty() { e } else { format!("{e}; rollback failed: {}", errors.join("; ")) });
     }
-    *st = new_state;
-    st.save(state_dir)?;
+    *st = next;
     Ok(wrote)
 }
 
@@ -445,13 +542,21 @@ pub fn restore(state_dir: &Path, st: &mut State, owner: Option<&str>) -> Vec<(St
         let path = PathBuf::from(&k);
         let cur = std::fs::read_to_string(&path).ok();
         let untouched = cur.as_deref().map(|c| fnv(c.as_bytes())) == Some(ent.written);
-        let outcome = if untouched || cur.is_none() {
-            match &ent.orig {
-                Some(n) => match std::fs::read_to_string(bdir.join(n)) {
-                    Ok(o) => write_atomic(&path, &o).map(|_| Restored::Exact),
-                    Err(e) => Err(e.to_string()),
-                },
-                None => std::fs::remove_file(&path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }).map(|_| Restored::Exact).map_err(|e| e.to_string()),
+        let detached = st.extra.get("detached_links").and_then(|v| v.get(&k)).is_some();
+        let missing = path.symlink_metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
+        // An unreadable or non-UTF-8 local file can contain user edits. Only a
+        // genuinely absent detached entry may be restored without a matching hash.
+        let outcome = if untouched || (cur.is_none() && (!detached || missing)) {
+            if let Some(link) = st.extra.get("detached_links").and_then(|v| v.get(&k)).and_then(Value::as_str) {
+                Snapshot::Link(PathBuf::from(link)).restore(&path).map(|_| Restored::Exact)
+            } else {
+                match &ent.orig {
+                    Some(n) => match std::fs::read_to_string(bdir.join(n)) {
+                        Ok(o) => write_atomic(&path, &o).map(|_| Restored::Exact),
+                        Err(e) => Err(e.to_string()),
+                    },
+                    None => std::fs::remove_file(&path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }).map(|_| Restored::Exact).map_err(|e| e.to_string()),
+                }
             }
         } else if let (Some(c), Some(cur)) = (ent.comment, cur.as_deref()) {
             let stripped = strip_block(cur, c);
@@ -469,6 +574,12 @@ pub fn restore(state_dir: &Path, st: &mut State, owner: Option<&str>) -> Vec<(St
                     let _ = std::fs::remove_file(bdir.join(n));
                 }
                 st.files.remove(&k);
+                if let Some(links) = st.extra.get_mut("detached_links").and_then(Value::as_object_mut) {
+                    links.remove(&k);
+                    if links.is_empty() {
+                        st.extra.remove("detached_links");
+                    }
+                }
                 report.push((k, r));
             }
             Err(e) => report.push((format!("{k}: {e}"), Restored::Kept)),
@@ -594,6 +705,150 @@ mod tests {
         assert!(commit(&ch, &state, &mut st).is_err());
         assert_eq!(std::fs::read_to_string(&a).unwrap(), "orig\n");
         assert!(st.files.is_empty());
+    }
+
+    fn legacy_fixture(name: &str) -> (crate::theme::system::testutil::TmpDir, PathBuf, PathBuf, PathBuf) {
+        let d = tmp(name);
+        let target = d.join("pack/gtk.css");
+        let link = d.join("gtk/gtk.css");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::fs::write(&target, "pack original\n").unwrap();
+        std::os::unix::fs::symlink("../pack/gtk.css", &link).unwrap();
+        let state = d.join("state");
+        (d, target, link, state)
+    }
+
+    fn detached(path: &Path) -> Vec<Change> {
+        let mut changes = plan(&[Edit::Detached { path: path.into(), text: "generated {}\n".into() }]);
+        changes[0].owner = "gtk".into();
+        changes
+    }
+
+    #[test]
+    fn detached_link_reapply_off_and_user_edits() {
+        let (d, target, link, state) = legacy_fixture("detach");
+        let mut st = State::default();
+        commit(&detached(&link), &state, &mut st).unwrap();
+        assert!(!link.symlink_metadata().unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "pack original\n");
+        let reapply = plan(&[Edit::Block { path: link.clone(), comment: Comment::Css, text: "next {}\n".into() }]);
+        commit(&reapply, &state, &mut st).unwrap();
+        assert!(!std::fs::read_to_string(&link).unwrap().contains("generated"));
+        st = State::load(&state);
+        assert_eq!(restore(&state, &mut st, None)[0].1, Restored::Exact);
+        assert_eq!(std::fs::read_link(&link).unwrap(), PathBuf::from("../pack/gtk.css"));
+        commit(&detached(&link), &state, &mut st).unwrap();
+        let css = std::fs::read_to_string(&link).unwrap() + "user {}\n";
+        std::fs::write(&link, css).unwrap();
+        assert_eq!(restore(&state, &mut st, None)[0].1, Restored::BlockRemoved);
+        assert_eq!(std::fs::read_to_string(&link).unwrap(), "user {}\n");
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "pack original\n");
+        assert!(st.is_empty());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn old_manifest_recovery_preserves_user_modified_packs() {
+        for canonical in [false, true] {
+            for user_edit in [false, true] {
+                let (d, target, link, state) = legacy_fixture("detach-migrate");
+                let mut st = State::default();
+                let key_path = if canonical { &target } else { &link };
+                let mut old = plan(&[Edit::Whole { path: key_path.clone(), text: "old generated\n".into() }]);
+                old[0].owner = "gtk".into();
+                commit(&old, &state, &mut st).unwrap();
+                if user_edit {
+                    std::fs::write(&target, "user pack\n").unwrap();
+                }
+                commit(&detached(&link), &state, &mut st).unwrap();
+                assert_eq!(std::fs::read_to_string(&target).unwrap(), if user_edit { "user pack\n" } else { "pack original\n" });
+                assert!(!st.files.contains_key(&target.to_string_lossy().into_owned()));
+                restore(&state, &mut st, None);
+                assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
+                assert_eq!(std::fs::read_to_string(&target).unwrap(), if user_edit { "user pack\n" } else { "pack original\n" });
+                std::fs::remove_dir_all(d).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn detached_rollback_restores_link_and_pack_and_reports_failures() {
+        for block_rollback in [false, true] {
+            let (d, target, link, state) = legacy_fixture("detach-rollback");
+            let mut st = State::default();
+            let mut old = plan(&[Edit::Whole { path: target.clone(), text: "old generated\n".into() }]);
+            old[0].owner = "gtk".into();
+            commit(&old, &state, &mut st).unwrap();
+            let before = st.clone();
+            let mut changes = detached(&link);
+            let blocker = d.join("blocker");
+            std::fs::write(&blocker, "file").unwrap();
+            changes.extend(plan(&[Edit::Whole { path: blocker.join("impossible"), text: "x".into() }]));
+            if block_rollback {
+                std::fs::write(link.with_extension(format!("decebal-link-{}", std::process::id())), "block").unwrap();
+            }
+            let error = commit(&changes, &state, &mut st).unwrap_err();
+            assert_eq!(st, before);
+            assert_eq!(std::fs::read_to_string(&target).unwrap(), "old generated\n");
+            if block_rollback {
+                assert!(error.contains("rollback failed"));
+            } else {
+                assert_eq!(std::fs::read_link(&link).unwrap(), PathBuf::from("../pack/gtk.css"));
+            }
+            std::fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn detached_manifest_save_failure_rolls_back_directory_entry() {
+        let (d, target, link, state) = legacy_fixture("detach-save-failure");
+        std::fs::create_dir_all(state.join("manifest.json")).unwrap();
+        let mut st = State::default();
+        assert!(commit(&detached(&link), &state, &mut st).is_err());
+        assert!(st.is_empty());
+        assert_eq!(std::fs::read_link(&link).unwrap(), PathBuf::from("../pack/gtk.css"));
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "pack original\n");
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn ordinary_symlink_target_bytes_roll_back_after_later_failure() {
+        let (d, target, link, state) = legacy_fixture("ordinary-link-rollback");
+        let fail = d.join("blocker");
+        std::fs::write(&fail, "file").unwrap();
+        let mut st = State::default();
+        let changes = plan(&[Edit::Whole { path: link.clone(), text: "changed\n".into() }, Edit::Whole { path: fail.join("child"), text: "fail\n".into() }]);
+        assert!(commit(&changes, &state, &mut st).is_err());
+        assert!(st.is_empty());
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "pack original\n");
+        assert_eq!(std::fs::read_link(link).unwrap(), PathBuf::from("../pack/gtk.css"));
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn unresolved_ordinary_symlinks_are_rejected_without_losing_links() {
+        let (d, target, link, state) = legacy_fixture("dangling-link");
+        std::fs::remove_file(&target).unwrap();
+        let mut st = State::default();
+        let changes = plan(&[Edit::Whole { path: link.clone(), text: "new\n".into() }]);
+        assert!(commit(&changes, &state, &mut st).unwrap_err().contains("cannot resolve symlink"));
+        assert_eq!(std::fs::read_link(&link).unwrap(), PathBuf::from("../pack/gtk.css"));
+        assert!(!target.exists());
+        assert!(st.is_empty());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn off_keeps_non_utf8_user_edits_in_detached_file() {
+        let (d, target, link, state) = legacy_fixture("detach-nonutf8");
+        let mut st = State::default();
+        commit(&detached(&link), &state, &mut st).unwrap();
+        std::fs::write(&link, [0xff, 0xfe]).unwrap();
+        assert_eq!(restore(&state, &mut st, None)[0].1, Restored::Kept);
+        assert_eq!(std::fs::read(link).unwrap(), [0xff, 0xfe]);
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "pack original\n");
+        std::fs::remove_dir_all(d).unwrap();
     }
 
     #[test]

@@ -170,7 +170,7 @@ The legacy singleton lock is still shared across displays, so a request to a
 Settings instance on another display fails rather than closing it.
 
 Accessibility exports are consumed by newly started Decebal processes. Text size
-80–200% overrides the theme's text scale in memory; high contrast supplies opaque,
+80–200% overrides the theme's text scale in memory; **Use theme** clears that override; high contrast supplies opaque,
 readable shell colors; reduced motion disables dock magnification and launch bounce.
 Stored theme, palette and widget layout are retained. Settings rows, controls and
 wrapped notes adapt to large text. This is not screen-reader integration or a

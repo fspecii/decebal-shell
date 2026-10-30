@@ -238,8 +238,8 @@ impl Target for Gtk {
         for (dir, gtk4) in [("gtk-3.0", false), ("gtk-4.0", true)] {
             let path = env.config_home.join(dir).join("gtk.css");
             if legacy_stylesheet(&path, env) {
-                // Whole-file edits participate in the same original-byte backup/undo transaction.
-                plan.edits.push(Edit::Whole { path, text: css_with_profile(p, cfg, gtk4) });
+                // Detach the config entry; the shared stylepack is never our output file.
+                plan.edits.push(Edit::Detached { path, text: css_with_profile(p, cfg, gtk4) });
             } else {
                 plan.edits.push(Edit::Block { path, comment: Comment::Css, text: css_with_profile(p, cfg, gtk4) });
             }
@@ -361,7 +361,8 @@ mod tests {
         let opts = super::super::Opts { only: Some(vec!["gtk".into()]), ..Default::default() };
         super::super::apply(&env, &cfg, &palette(true), &opts).unwrap();
         assert!(!std::fs::read_to_string(&linked).unwrap().contains("#123456"));
-        assert!(linked.symlink_metadata().unwrap().file_type().is_symlink());
+        assert!(!linked.symlink_metadata().unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), original);
         super::super::off(&env, &cfg, &palette(true)).unwrap();
         assert_eq!(std::fs::read_to_string(&linked).unwrap(), original);
         std::fs::remove_dir_all(d).unwrap();

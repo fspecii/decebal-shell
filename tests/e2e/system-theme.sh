@@ -217,6 +217,40 @@ eq "files identical to the start" "$(snapshot)" "$BEFORE"
 [[ "$(ctl system status)" == "Apply to all apps: off"* ]] && pass "status says off again" || fail "status after off"
 ctl system off >/dev/null 2>&1 && pass "off twice is harmless" || fail "second off failed"
 
+echo "== native GTK symlink recovery"
+# All fixtures and subprocesses remain inside the private HOME/XDG + D-Bus above.
+DOTFILE=$HOME/dotfiles/gtk3.css
+PACK=$CFG/omarchy/desktop-styles/e2e-legacy/gtk.css
+mkdir -p "$(dirname "$DOTFILE")" "$(dirname "$PACK")"
+cp "$CFG/gtk-3.0/gtk.css" "$DOTFILE"
+rm "$CFG/gtk-3.0/gtk.css"
+ln -s ../../dotfiles/gtk3.css "$CFG/gtk-3.0/gtk.css"
+printf 'window { background-color: #123456; }\n' > "$PACK"
+ln -s ../omarchy/desktop-styles/e2e-legacy/gtk.css "$CFG/gtk-4.0/gtk.css"
+PACK_BEFORE=$(sha256sum "$PACK")
+DOTFILE_BEFORE=$(sha256sum "$DOTFILE")
+ctl system on >"$TMP/links-on.log" 2>&1 || fail "symlink system on" "$(cat "$TMP/links-on.log")"
+[ -L "$CFG/gtk-3.0/gtk.css" ] && pass "ordinary GTK dotfile symlink stays linked" || fail "ordinary GTK symlink detached"
+has "ordinary symlink target receives managed CSS" "$DOTFILE" 'decebal system theme'
+[ ! -L "$CFG/gtk-4.0/gtk.css" ] && pass "known legacy GTK link becomes local managed CSS" || fail "legacy GTK symlink not detached"
+eq "shared legacy pack unchanged by on" "$(sha256sum "$PACK")" "$PACK_BEFORE"
+has "detached GTK CSS receives palette" "$CFG/gtk-4.0/gtk.css" 'decebal system theme'
+ctl apply-system >"$TMP/links-reapply.log" 2>&1 || fail "symlink reapply" "$(cat "$TMP/links-reapply.log")"
+eq "reapply keeps one managed GTK block" "$(grep -c '>>> decebal system theme' "$CFG/gtk-4.0/gtk.css")" "1"
+eq "shared legacy pack unchanged by reapply" "$(sha256sum "$PACK")" "$PACK_BEFORE"
+ctl system off >"$TMP/links-off.log" 2>&1 || fail "symlink system off" "$(cat "$TMP/links-off.log")"
+eq "ordinary dotfile target bytes restored" "$(sha256sum "$DOTFILE")" "$DOTFILE_BEFORE"
+eq "ordinary relative link restored unchanged" "$(readlink "$CFG/gtk-3.0/gtk.css")" "../../dotfiles/gtk3.css"
+eq "legacy relative link restored" "$(readlink "$CFG/gtk-4.0/gtk.css")" "../omarchy/desktop-styles/e2e-legacy/gtk.css"
+eq "shared legacy pack unchanged by off" "$(sha256sum "$PACK")" "$PACK_BEFORE"
+ctl system on >"$TMP/links-edited-on.log" 2>&1 || fail "second symlink system on"
+printf '/* user change after apply */\nbutton { margin: 7px; }\n' >> "$CFG/gtk-4.0/gtk.css"
+ctl system off >"$TMP/links-edited-off.log" 2>&1 || fail "edited symlink system off"
+[ ! -L "$CFG/gtk-4.0/gtk.css" ] && pass "off preserves edited detached local CSS" || fail "off replaced user edits with symlink"
+has "off retains detached user CSS" "$CFG/gtk-4.0/gtk.css" 'margin: 7px'
+hasnt "off removes only managed CSS from edited local file" "$CFG/gtk-4.0/gtk.css" 'decebal system theme'
+eq "user edits never affect shared legacy pack" "$(sha256sum "$PACK")" "$PACK_BEFORE"
+
 echo "== the GUI switch (decsettings unit tests cover the pane); screenshots in $SHOTS"
 echo "$PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ]
