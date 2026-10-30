@@ -1,14 +1,14 @@
 //! The settings window: sidebar, content pane, popups, keyboard navigation and the glue between
 //! pointer/keyboard events and the [`Model`].
 
-use super::icons::pane_icon_tonal;
+use super::icons::pane_glyph;
 use super::io::{self, Ev, Paths};
 use super::model::{CtlVal, Model};
 use super::panes::PANES;
 use super::schema::Schema;
 use super::system::registry::{self, Hit, SECTIONS};
 use super::ui::fill_px;
-use super::ui::{self, draw_items, inside, pal, part_at, Frame, Interact, Item, Kind, Opt, Painter, Placed, Rect};
+use super::ui::{self, draw_items, focus_ring, inside, pal, part_at, Frame, Head, Interact, Item, Kind, Opt, Painter, Placed, Rect};
 use crate::app::Button;
 use crate::gfx::{color, fill_circle, fill_rounded, soft_shadow, stroke_rounded};
 use crate::text::{Fonts, Weight};
@@ -237,6 +237,25 @@ impl SettingsApp {
         &self.m
     }
 
+    /// Enlarged text grows the sidebar header and rows instead of overlapping them.
+    fn text_growth(&self) -> f32 {
+        crate::theme::live::font_scale().max(1.0) - 1.0
+    }
+
+    /// Bottom of the sidebar header (the search field); the scrolled list starts here.
+    fn nav_top(&self) -> f32 {
+        self.s * (64.0 + 20.0 * self.text_growth())
+    }
+
+    /// One quiet line under the page title. Appearance describes its current tab; other panes say what they hold.
+    fn page_context(&self) -> String {
+        let id = PANES[self.m.sel.pane.min(PANES.len() - 1)].id;
+        if id == "appearance" {
+            return self.m.sel.tab.blurb().to_string();
+        }
+        pane_context(id).to_string()
+    }
+
     fn sb(&self) -> f32 {
         (self.size.0 as f32 * 0.34).clamp(156.0 * self.s * crate::theme::live::font_scale().max(1.0), SIDEBAR_W * self.s * crate::theme::live::font_scale().max(1.0))
     }
@@ -386,16 +405,16 @@ impl SettingsApp {
         fill_px(pm, 0.0, 0.0, sbw, h, pal::sidebar());
         fill_px(pm, sbw - 1.0, 0.0, 1.0, h, pal::sep());
         let rows = self.sidebar_rows();
-        let top = u(100.0);
+        let top = self.nav_top();
         // layout pass: y of every row relative to the list top
         let text_growth = crate::theme::live::font_scale().max(1.0) - 1.0;
         let heights: Vec<f32> = rows
             .iter()
             .enumerate()
             .map(|(n, r)| match r {
-                SbRow::Header(_) => u(if n == 0 { 22.0 } else { 30.0 } + 10.0 * text_growth),
-                SbRow::Pane(_) => u(34.0 + 13.0 * text_growth),
-                SbRow::Hit(..) => u(28.0 + 12.0 * text_growth),
+                SbRow::Header(_) => u(if n == 0 { 24.0 } else { 32.0 } + 10.0 * text_growth),
+                SbRow::Pane(_) => u(36.0 + 13.0 * text_growth),
+                SbRow::Hit(..) => u(46.0 + 18.0 * text_growth),
             })
             .collect();
         let total: f32 = heights.iter().sum::<f32>() + u(10.0);
@@ -429,8 +448,8 @@ impl SettingsApp {
             match r {
                 SbRow::Header(t) => {
                     if ry + hh > top && ry < h {
-                        let label = p.fit(t, sbw - u(32.0), u(10.5), Weight::SemiBold);
-                        p.text(pm, &label, u(20.0), ry + hh - u(10.0), u(10.5), Weight::SemiBold, pal::sub());
+                        let label = p.fit(t, sbw - u(40.0), u(11.0), Weight::SemiBold);
+                        p.text(pm, &label, u(22.0), ry + hh - u(10.0), u(11.0), Weight::SemiBold, pal::sub());
                     }
                 }
                 SbRow::Pane(i) => {
@@ -439,20 +458,30 @@ impl SettingsApp {
                     let selected = self.m.sel.pane == *i;
                     let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
                     if ry + hh > top && ry < h {
-                        if selected {
-                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().accent.color(0.16));
-                            fill_rounded(pm, rect.0, rect.1 + u(7.0), u(3.0), rect.3 - u(14.0), u(1.5), pal::accent());
-                            if self.zone == Zone::Sidebar {
-                                stroke_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), pal::accent(), u(1.0));
-                            }
-                        } else if hover {
-                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
-                        }
                         let theme = crate::theme::th();
-                        let badge = theme.accent.over(theme.sidebar, if selected { 0.16 } else { 0.06 }).color(1.0);
-                        pane_icon_tonal(pm, def.glyph, badge, if selected { pal::accent() } else { pal::sub() }, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
-                        let label = p.fit(def.title, rect.2 - u(50.0), u(13.0), Weight::Regular);
-                        p.text(pm, &label, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
+                        // Flat navigation: the selected route is one tonal row with an edge marker; glyphs sit directly on it.
+                        let bg = if selected {
+                            pal::tonal(theme.sidebar, 0.16)
+                        } else if hover {
+                            pal::ink_over(theme.sidebar, 0.06)
+                        } else {
+                            pal::sidebar()
+                        };
+                        if selected || hover {
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), bg);
+                        }
+                        if selected {
+                            fill_rounded(pm, rect.0, rect.1 + u(8.0), u(3.0), rect.3 - u(16.0), u(1.5), pal::accent());
+                            if self.zone == Zone::Sidebar && self.it.ring {
+                                focus_ring(pm, rect, u(8.0), s);
+                            }
+                        }
+                        // The glyph grows with enlarged text so it stays in proportion to its label.
+                        let gs = u(20.0 + 12.0 * text_growth);
+                        let tx = rect.0 + u(12.0) + gs + u(10.0);
+                        pane_glyph(pm, def.glyph, bg, if selected { pal::accent() } else { pal::sub() }, rect.0 + u(12.0), rect.1 + (rect.3 - gs) / 2.0, gs);
+                        let label = p.fit(def.title, rect.0 + rect.2 - tx - u(8.0), u(13.0), if selected { Weight::Medium } else { Weight::Regular });
+                        p.text(pm, &label, tx, rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
                     }
                     self.sidebar_hits.push((rect, *i));
                     self.sidebar_labels.push(None);
@@ -463,8 +492,12 @@ impl SettingsApp {
                         if self.it.hover.as_deref() == Some(&format!("pane:{i}")) {
                             fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
                         }
-                        let t = p.fit(&format!("{}  \u{203a}  {}", PANES[*i].title, label), rect.2 - u(52.0), u(12.0), Weight::Regular);
-                        p.text(pm, &t, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(12.0), Weight::Regular, pal::sub());
+                        // A search hit reads as a setting first and its pane second, each on a line of its own.
+                        let tx = rect.0 + u(14.0);
+                        let name = p.fit(label, rect.2 - u(28.0), u(13.0), Weight::Regular);
+                        p.text(pm, &name, tx, rect.1 + rect.3 * 0.36, u(13.0), Weight::Regular, pal::text());
+                        let place = p.fit(PANES[*i].title, rect.2 - u(28.0), u(11.0), Weight::Regular);
+                        p.text(pm, &place, tx, rect.1 + rect.3 * 0.72, u(11.0), Weight::Regular, pal::sub());
                     }
                     self.sidebar_hits.push((rect, *i));
                     self.sidebar_labels.push(Some(label.clone()));
@@ -474,29 +507,37 @@ impl SettingsApp {
         if rows.is_empty() {
             p.text(pm, "No results", u(24.0), top + u(14.0), u(13.0), Weight::Regular, pal::faint());
         }
-        // search field on top of the scrolled list
+        // search field on top of the scrolled list (no caption above it: the window title already says Settings)
         fill_px(pm, 0.0, 0.0, sbw - 1.0, top, pal::sidebar());
-        p.text(pm, "Settings", u(20.0), u(26.0), u(22.0), Weight::Bold, pal::text());
-        let sr = (u(12.0), u(50.0), sbw - u(24.0), u(32.0));
+        let sr = (u(12.0), u(16.0), sbw - u(24.0), u(32.0 + 20.0 * text_growth));
         self.search_rect = sr;
         let focused = self.zone == Zone::Search;
-        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(10.0), if focused { pal::window() } else { pal::field() });
+        let radius = u(10.0);
+        fill_rounded(pm, sr.0, sr.1, sr.2, sr.3, radius, if focused { pal::window() } else { pal::field() });
         if focused {
-            stroke_rounded(pm, sr.0, sr.1, sr.2, sr.3, u(8.0), pal::accent(), u(1.5));
+            stroke_rounded(pm, sr.0, sr.1, sr.2, sr.3, radius, pal::accent(), u(1.5));
         }
         // magnifier glyph
-        let (mx, my) = (sr.0 + u(14.0), sr.1 + sr.3 / 2.0 - u(1.0));
+        let (mx, my) = (sr.0 + u(16.0), sr.1 + sr.3 / 2.0 - u(1.0));
         stroke_circle(pm, mx, my, u(4.5), pal::sub(), u(1.4));
         stroke_line(pm, mx + u(3.4), my + u(3.4), mx + u(7.0), my + u(7.0), pal::sub(), u(1.5));
         let text = self.search.text().to_string();
+        let clear_w = if text.is_empty() { 0.0 } else { u(28.0) };
+        let tx = sr.0 + u(34.0);
         if text.is_empty() {
-            p.text(pm, "Search", sr.0 + u(28.0), sr.1 + sr.3 / 2.0, u(13.0), Weight::Regular, pal::faint());
+            let hint = p.fit("Search settings", sr.2 - u(46.0), u(13.0), Weight::Regular);
+            p.text(pm, &hint, tx, sr.1 + sr.3 / 2.0, u(13.0), Weight::Regular, pal::faint());
         } else {
-            let t = p.fit(&text, sr.2 - u(40.0), u(13.0), Weight::Regular);
-            p.text(pm, &t, sr.0 + u(28.0), sr.1 + sr.3 / 2.0, u(13.0), Weight::Regular, pal::text());
+            let t = p.fit(&text, sr.2 - u(46.0) - clear_w, u(13.0), Weight::Regular);
+            p.text(pm, &t, tx, sr.1 + sr.3 / 2.0, u(13.0), Weight::Regular, pal::text());
+            // clear button
+            let (cx, cy) = (sr.0 + sr.2 - u(16.0), sr.1 + sr.3 / 2.0);
+            fill_circle(pm, cx, cy, u(8.0), crate::theme::th().ink(0.14));
+            stroke_line(pm, cx - u(3.0), cy - u(3.0), cx + u(3.0), cy + u(3.0), pal::text(), u(1.3));
+            stroke_line(pm, cx - u(3.0), cy + u(3.0), cx + u(3.0), cy - u(3.0), pal::text(), u(1.3));
         }
         if focused {
-            let cx = sr.0 + u(28.0) + p.measure(self.search.before_cursor(), u(13.0), Weight::Regular);
+            let cx = tx + p.measure(self.search.before_cursor(), u(13.0), Weight::Regular);
             fill_px(pm, cx, sr.1 + u(7.0), u(1.2), sr.3 - u(14.0), pal::accent());
         }
         // sidebar scrollbar
@@ -525,6 +566,8 @@ impl SettingsApp {
         };
         self.stats.1 += t_items.elapsed().as_micros() as u64;
         let title = PANES[self.m.sel.pane.min(PANES.len() - 1)].title;
+        let context = self.page_context();
+        let head = Head { title, context: &context };
         // sync interaction state
         self.it.edit = self.edit.as_ref().map(|(id, f)| (id.clone(), f.text().to_string(), f.cursor()));
         self.it.recording = self.m.sel.recording.as_ref().map(|r| (if r == "new" { "k:new:keys".to_string() } else { r.clone() }, self.m.sel.rec_mods.clone()));
@@ -549,14 +592,14 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
         // a separate content layer would cost a second full-window pixmap.
-        let mut frame = draw_items(pm, &mut p, title, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
+        let mut frame = draw_items(pm, &mut p, head, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
         // A shorter page than the last one (another tab, a collapsed list): the scroll was clamped with the old height,
         // so paint again at the right offset instead of leaving the page shifted until the next event.
         let max_now = (frame.height - h).max(0.0);
         if self.scroll > max_now + 0.5 {
             self.scroll = max_now;
             pm.fill(pal::window());
-            frame = draw_items(pm, &mut p, title, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
+            frame = draw_items(pm, &mut p, head, &items, self.scroll.round(), sbw, w, &self.it, &lookup);
         }
         // lazy thumbnails: only what is visible (plus one row of margin); the big preview goes first
         let mut wanted: Vec<String> = Vec::new();
@@ -616,7 +659,7 @@ impl SettingsApp {
         let (preview, warns) = self.dump_meta.clone();
         let doc = json!({
             "pane": PANES[self.m.sel.pane].id, "tab": self.m.sel.tab.id(), "section": self.m.sel.section.id(), "scroll": self.scroll, "ctls": ctls,
-            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= 100.0 * self.s && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
+            "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= self.nav_top() && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
             "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
@@ -695,7 +738,7 @@ impl SettingsApp {
     // ------------------------------------------------------------ helpers for events
 
     fn sidebar_hit(&self, x: f32, y: f32) -> Option<usize> {
-        if y < 100.0 * self.s {
+        if y < self.nav_top() {
             return None;
         }
         self.sidebar_hits.iter().find(|(r, _)| inside(*r, x, y)).map(|(_, i)| *i)
@@ -1146,6 +1189,36 @@ impl SettingsApp {
     }
 }
 
+/// One line of orientation under a page title: what the page holds, in the words of the sidebar and search keywords.
+fn pane_context(id: &str) -> &'static str {
+    match id {
+        "general" => "About this config, reloading, backup and restore, and basic window-manager options.",
+        "wallpaper" => "Pictures, live backgrounds and Wallhaven for your desktop.",
+        "icons" => "Icon theme, size, tint and cursor used by the dock, launchers and menus.",
+        "widgets" => "Desktop widgets: which are shown, where they sit and how each one looks.",
+        "tiling" => "How windows are arranged: layouts, master area, gaps and per-tag choices.",
+        "windows" => "Focus, snapping, fullscreen and other window behaviour.",
+        "rules" => "Rules that float, tag or place particular windows.",
+        "keyboard" => "Keyboard shortcuts and modes, with conflict checks.",
+        "autostart" => "Programs and plugins started with the session.",
+        "displays" => "Monitors, resolution, scale and per-output settings.",
+        "sound" => "Output and input devices, volume and mute.",
+        "network" => "Wi-Fi, wired connections and VPN.",
+        "bluetooth" => "Pair and manage Bluetooth devices.",
+        "notifications" => "Banners, Do Not Disturb and notification history.",
+        "inputdev" => "Keyboard layout, key repeat, mouse and touchpad.",
+        "power" => "Power profile, screen blanking, sleep and the lid.",
+        "defaults" => "The apps that open web links, mail, files and media.",
+        "datetime" => "Time zone, clock format and network time.",
+        "users" => "Your account, picture, shell and login screen.",
+        "privacy" => "Screen lock, timeouts and encryption.",
+        "storage" => "System information, disk usage and versions.",
+        "config" => "Edit the settings files as text, and save, import or export presets.",
+        "accessibility" => "Text size, cursor size, contrast and reduced motion.",
+        _ => "",
+    }
+}
+
 fn stroke_circle(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: tiny_skia::Color, w: f32) {
     stroke_rounded(pm, cx - r, cy - r, 2.0 * r, 2.0 * r, r, c, w);
 }
@@ -1286,7 +1359,9 @@ impl WindowApp for SettingsApp {
         } else {
             self.frame.at(cx, cy).map(|p| p.ctl.id.clone()).or_else(|| self.frame.thumbs.iter().chain(self.frame.layouts.iter()).find(|(r, _)| inside(*r, cx, cy)).map(|(_, id)| id.clone()))
         };
-        if before != self.it.hover || self.m.dirty {
+        let part_before = self.it.hover_part;
+        self.it.hover_part = if x < self.sb() { None } else { self.it.hover.as_deref().and_then(|id| self.frame.find(id)).and_then(|p| part_at(&p.parts, cx, cy)) };
+        if before != self.it.hover || part_before != self.it.hover_part || self.m.dirty {
             self.reuse_items = !self.m.dirty;
             Response::REDRAW
         } else {
@@ -1360,6 +1435,10 @@ impl WindowApp for SettingsApp {
             self.commit_edit();
             if inside(self.search_rect, x, y) {
                 self.zone = Zone::Search;
+                let r = self.search_rect;
+                if !self.search.text().is_empty() && x > r.0 + r.2 - 28.0 * self.s {
+                    self.search.clear();
+                }
                 return Response::REDRAW;
             }
             if let Some(i) = self.sidebar_hit(x, y) {
@@ -1422,7 +1501,7 @@ impl WindowApp for SettingsApp {
             return Response::REDRAW;
         }
         if x < self.sb() {
-            let max = (self.sb_total - (self.size.1 as f32 - 100.0 * self.s)).max(0.0);
+            let max = (self.sb_total - (self.size.1 as f32 - self.nav_top())).max(0.0);
             let old = self.sb_scroll;
             self.sb_scroll = (self.sb_scroll + dy * self.s * 0.6).clamp(0.0, max);
             return if (old - self.sb_scroll).abs() > 0.1 { Response::REDRAW } else { Response::NONE };

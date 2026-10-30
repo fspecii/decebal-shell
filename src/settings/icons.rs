@@ -177,8 +177,14 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
 /// Native vector glyph with theme-derived badge and ink; no per-frame raster allocation.
 #[allow(clippy::too_many_arguments)]
 pub fn pane_icon_tonal(pm: &mut Pixmap, g: Glyph, bg: tiny_skia::Color, fg: tiny_skia::Color, x: f32, y: f32, size: f32) {
-    let r = size * 0.24;
-    fill_rounded(pm, x, y, size, size, r, bg);
+    fill_rounded(pm, x, y, size, size, size * 0.24, bg);
+    pane_glyph(pm, g, bg, fg, x, y, size);
+}
+
+/// The glyph alone, with no badge behind it. `bg` must be the opaque colour it is drawn on: cut-outs (gear hub, brush
+/// bite, ...) are painted in it.
+#[allow(clippy::too_many_arguments)]
+pub fn pane_glyph(pm: &mut Pixmap, g: Glyph, bg: tiny_skia::Color, fg: tiny_skia::Color, x: f32, y: f32, size: f32) {
     let (cx, cy, u) = (x + size / 2.0, y + size / 2.0, size / 24.0);
     let mut muted = fg;
     muted.set_alpha(fg.alpha() * 0.75 / 0.96);
@@ -323,6 +329,22 @@ mod tests {
             pane_icon_tonal(&mut pm, glyph, bg, fg, 4.0, 4.0, 48.0);
             assert!(pm.data().chunks_exact(4).any(|p| p[1] > 50), "missing foreground: {glyph:?}");
             assert!(pm.data().chunks_exact(4).all(|p| p[0] <= 80 && p[1] <= 100 && p[2] <= 90), "hardcoded ink: {glyph:?}");
+        }
+    }
+
+    #[test]
+    fn flat_glyphs_draw_ink_without_a_badge() {
+        let bg = color(24, 24, 28, 1.0);
+        let fg = color(120, 190, 255, 1.0);
+        let mut glyphs = vec![Glyph::Gear, Glyph::Brush, Glyph::Dock, Glyph::Photo, Glyph::Tiles, Glyph::Windows, Glyph::Rules, Glyph::Keyboard, Glyph::Rocket, Glyph::Monitor];
+        glyphs.extend((0..super::super::system::glyphs::COUNT).map(Glyph::Sys));
+        for g in glyphs {
+            let mut pm = Pixmap::new(48, 48).unwrap();
+            pane_glyph(&mut pm, g, bg, fg, 4.0, 4.0, 40.0);
+            let px = pm.data().chunks_exact(4);
+            assert!(px.clone().any(|p| p[3] > 0), "nothing drawn: {g:?}");
+            // the badge corner is untouched: nothing but the glyph is painted
+            assert_eq!(&pm.data()[4 * (4 * 48 + 4)..4 * (4 * 48 + 4) + 4], &[0, 0, 0, 0], "badge fill leaked: {g:?}");
         }
     }
 

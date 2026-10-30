@@ -120,6 +120,30 @@ separately. Strict X11 all-target Clippy with warnings denied and formatting pas
 physical-monitor acceptance claim. No QML runtime, new collectors, note bodies,
 arbitrary exec actions or theme files are introduced.
 
+### Second pass: structural Settings refinement
+
+The first pass only recoloured navigation. This pass changes structure, still in `src/settings/{app,ui,icons,appearance}.rs`
+with no new data, I/O in paint, theme file or hardcoded palette (every colour is a blend of existing theme tokens):
+
+- **Header and search.** Search is now the top of the sidebar (as in Dux's `SettingsSidebar`); the redundant in-window
+  "Settings" caption is gone and the header grows with enlarged text (previously it collided with the field at 200% text).
+  A clear button joins Esc. Every page has its title plus one wrapped context line (`pane_context`, `Tab::blurb`).
+- **Flat navigation.** No icon badges or nested boxes: glyphs sit directly on the row, the selected route is one tonal row
+  with an edge marker, and the keyboard ring is the shared `ui::focus_ring` (shown only after keyboard use). Search hits
+  read as setting name over pane name instead of "Pane > Setting" ellipses.
+- **Primary/secondary page navigation.** `Item::Nav` replaces the card-wrapped segmented controls: Appearance tabs are an
+  underlined strip, Customise sections are chips. Each is still one `Kind::Seg` control (`ap:tab`, `ap:sec`, one part per
+  option) so IDs, mouse hits and Left/Right keys are unchanged, but it wraps onto more lines instead of truncating
+  ("Custom…", "Window …" before).
+- **Rows.** Stacking is decided per row (a segmented choice that does not fit moves under its label, Dux's compact
+  button-group row) and long details wrap and grow their row instead of ending in an ellipsis. Segmented controls use the
+  same tonal selection as navigation.
+
+Evidence: `tests/e2e/settings-capture.py` renders the same private-Xvfb matrix (panes x light/dark x UI 100/125/200% x text
+100/125/200% x normal/short). Focused tests: `ui::tests::{navigation_wraps_keeps_every_label_and_stays_one_segmented_control,
+long_details_wrap_and_grow_their_row_instead_of_ending_in_an_ellipsis, page_header_context_wraps_below_the_title}` and
+`icons::tests::flat_glyphs_draw_ink_without_a_badge`; real keyboard/draft flows remain `tests/e2e/dux-flow-qa.py`.
+
 ## Upstream MIT notice
 
 The stock palette excerpt above is from dux-shell; first-party widget references are from dux-plugins. Both pinned repositories carry this notice:

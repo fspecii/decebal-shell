@@ -74,6 +74,19 @@ pub mod pal {
     pub fn orange() -> Color {
         th().warn.color(1.0)
     }
+    /// Opaque tonal accent: the theme accent blended over `base` (selected rows, chips, segments).
+    pub fn tonal(base: crate::theme::Rgb, a: f32) -> Color {
+        th().accent.over(base, a).color(1.0)
+    }
+    /// Opaque text-ink blended over `base` (hover fills that glyphs must punch holes in).
+    pub fn ink_over(base: crate::theme::Rgb, a: f32) -> Color {
+        th().text.over(base, a).color(1.0)
+    }
+}
+
+/// The one keyboard focus outline: a 2px accent ring 2px outside `r`.
+pub fn focus_ring(pm: &mut Pixmap, r: Rect, radius: f32, s: f32) {
+    stroke_rounded(pm, r.0 - 2.0 * s, r.1 - 2.0 * s, r.2 + 4.0 * s, r.3 + 4.0 * s, radius + 2.0 * s, crate::theme::th().accent.color(0.85), 2.0 * s);
 }
 
 // ---------------------------------------------------------------- description
@@ -168,6 +181,14 @@ impl Row {
 pub enum Item {
     /// Small caption above a card.
     Header(String),
+    /// Page navigation drawn as a flat strip (`secondary`: chips, otherwise underlined tabs). Same control as a segmented
+    /// choice (`Kind::Seg`, one part per option) but it wraps onto more lines instead of truncating labels.
+    Nav {
+        id: String,
+        opts: Vec<Opt>,
+        sel: Option<usize>,
+        secondary: bool,
+    },
     Card(Vec<Row>),
     /// Wrapped explanatory text under a card (or an inline error when `warn`).
     Note {
@@ -257,6 +278,19 @@ pub struct LayoutTile {
     pub name: String,
     pub symbol: String,
     pub selected: bool,
+}
+
+/// The page header: title and an optional one-line context under it.
+#[derive(Debug, Clone, Copy)]
+pub struct Head<'a> {
+    pub title: &'a str,
+    pub context: &'a str,
+}
+
+impl<'a> Head<'a> {
+    pub fn new(title: &'a str) -> Self {
+        Head { title, context: "" }
+    }
 }
 
 // ---------------------------------------------------------------- text helper
@@ -353,6 +387,8 @@ impl Painter<'_> {
 #[derive(Debug, Clone, Default)]
 pub struct Interact {
     pub hover: Option<String>,
+    /// Which part of the hovered control the pointer is over (navigation strips highlight one option).
+    pub hover_part: Option<usize>,
     pub focus: Option<String>,
     /// Slider being dragged: id and the value shown meanwhile.
     pub drag: Option<(String, f64)>,
@@ -549,7 +585,8 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 let sw = (p.measure(l, u(12.0), Weight::Regular) + u(22.0)).min((w - u(4.0)) / opts.len().max(1) as f32);
                 let r = (sx, rect.1 + u(2.0), sw, h_field - u(4.0));
                 if *sel == Some(i) {
-                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(pal::window()));
+                    fill_rounded(pm, r.0, r.1, r.2, r.3, u(5.5), a(pal::tonal(crate::theme::th().surface, 0.30)));
+                    stroke_rounded(pm, r.0 + u(0.5), r.1 + u(0.5), r.2 - u(1.0), r.3 - u(1.0), u(5.0), a(crate::theme::th().accent.color(0.55)), u(1.0));
                 }
                 let text_size = u(if ctl_width(p, c) > max_width { 11.0 } else { 12.0 });
                 let label = p.fit(l, (sw - u(4.0)).max(0.0), text_size, Weight::Regular);
@@ -680,7 +717,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         }
     }
     if focus && it.ring && c.enabled {
-        stroke_rounded(pm, rect.0 - u(2.0), rect.1 - u(2.0), rect.2 + u(4.0), rect.3 + u(4.0), u(8.0), crate::theme::th().accent.color(0.85), u(2.0));
+        focus_ring(pm, rect, u(6.0), s);
     }
     Placed { rect, ctl: c.clone(), parts, row_rect, label: String::new() }
 }
@@ -707,7 +744,7 @@ fn chevrons(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, c: Color) {
 /// Lays out and paints `items` into `pm`, in the column starting at x = `ox` and `width` wide.
 /// `scroll` is subtracted from y; the frame's rectangles are in `pm` coordinates. Thumbnails are looked up by `thumb`.
 #[allow(clippy::too_many_arguments)]
-pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item], scroll: f32, ox: f32, width: f32, it: &Interact, thumb: &dyn Fn(&str) -> Option<std::rc::Rc<Pixmap>>) -> Frame {
+pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], scroll: f32, ox: f32, width: f32, it: &Interact, thumb: &dyn Fn(&str) -> Option<std::rc::Rc<Pixmap>>) -> Frame {
     let s = p.s;
     let u = |v: f32| v * s;
     let mut fr = Frame::default();
@@ -716,8 +753,19 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
     let metrics = TextLayout::live();
     let mut y = u(28.0) - scroll;
-    p.text_as(Role::Title, pm, title, x0, y + u(18.0 + metrics.extra(14.0)), u(25.0), Weight::SemiBold, pal::text());
+    p.text_as(Role::Title, pm, head.title, x0, y + u(18.0 + metrics.extra(14.0)), u(25.0), Weight::SemiBold, pal::text());
+    let page_top = y;
     y += u(62.0 + metrics.extra(30.0));
+    if !head.context.is_empty() {
+        // One quiet line of orientation under the title; it wraps rather than truncates.
+        let lines = p.wrap(head.context, cw, u(12.5), Weight::Regular);
+        let lh = u(17.0 * metrics.0);
+        let first = page_top + u(48.0 + metrics.extra(40.0));
+        for (i, l) in lines.iter().enumerate() {
+            p.text(pm, l, x0, first + lh * i as f32, u(12.5), Weight::Regular, pal::sub());
+        }
+        y = y.max(first + lh * (lines.len() as f32 - 0.5) + u(16.0));
+    }
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
@@ -737,6 +785,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
             Item::IconThemes(rows) => y = super::iconspane::draw_list(pm, p, rows, x0, y, cw, it, &mut fr),
             Item::IconGrid(g) => y = super::iconspane::draw_grid(pm, p, g, x0, y, cw),
             Item::ThemeCards(cards) => y = super::themecards::draw(pm, p, cards, x0, y, cw, it, &mut fr),
+            Item::Nav { id, opts, sel, secondary } => y = draw_nav(pm, p, id, opts, *sel, *secondary, x0, y, cw, it, &mut fr),
             Item::Header(t) => {
                 y += u(6.0);
                 p.text(pm, t, x0, y + u(8.0 + metrics.extra(7.0)), u(12.0), Weight::SemiBold, pal::text());
@@ -760,22 +809,53 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 }
             }
             Item::Card(rows) => {
-                let stacked = cw < u(380.0)
-                    || (metrics.0 > 1.0
-                        && rows.iter().any(|r| {
-                            let controls: f32 = r.ctls.iter().map(|c| ctl_width(p, c) + u(10.0)).sum();
-                            controls + p.measure(&r.label, u(13.0), Weight::Regular) + u(2.0 * CARD_PAD) > cw
-                        }));
-                let height = |r: &Row| u(metrics.row(r) + if stacked && !r.label.is_empty() { (32.0 + metrics.extra(20.0)) * r.ctls.len() as f32 } else { 0.0 });
-                let h: f32 = rows.iter().map(height).sum();
+                // A row whose controls do not fit beside its label moves them onto a line of their own (Dux's compact
+                // button-group row) instead of shrinking or truncating them; narrow cards and enlarged text do it for any control.
+                let narrow = cw < u(380.0);
+                let stack: Vec<bool> = rows
+                    .iter()
+                    .map(|r| {
+                        if r.label.is_empty() {
+                            return false;
+                        }
+                        let controls: f32 = r.ctls.iter().map(|c| ctl_width(p, c) + u(10.0)).sum();
+                        let tight = controls + p.measure(&r.label, u(13.0), Weight::Regular) + u(2.0 * CARD_PAD) > cw;
+                        narrow || (tight && (metrics.0 > 1.0 || r.ctls.iter().any(|c| matches!(c.kind, Kind::Seg(..)))))
+                    })
+                    .collect();
+                // A detail that does not fit beside the controls wraps (and its row grows) rather than ending in an ellipsis.
+                let detail_lines: Vec<Vec<String>> = rows
+                    .iter()
+                    .zip(&stack)
+                    .map(|(r, st)| {
+                        if r.detail.is_empty() {
+                            return Vec::new();
+                        }
+                        let controls: f32 = if *st { 0.0 } else { r.ctls.iter().map(|c| ctl_width(p, c).min(cw) + u(10.0)).sum() };
+                        let avail = (cw - u(2.0 * CARD_PAD) - if r.chip.is_some() { u(28.0) } else { 0.0 } - controls).max(u(80.0));
+                        if p.measure(&r.detail, u(11.0), Weight::Regular) <= avail {
+                            Vec::new()
+                        } else {
+                            p.wrap(&r.detail, avail, u(11.0), Weight::Regular)
+                        }
+                    })
+                    .collect();
+                let detail_lh = u(14.0 * metrics.0);
+                let heights: Vec<f32> = rows
+                    .iter()
+                    .zip(&stack)
+                    .zip(&detail_lines)
+                    .map(|((r, st), dl)| u(metrics.row(r) + if *st { (32.0 + metrics.extra(20.0)) * r.ctls.len() as f32 } else { 0.0 }) + dl.len().saturating_sub(1) as f32 * detail_lh)
+                    .collect();
+                let h: f32 = heights.iter().sum();
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
                 if cw > u(1.0) && h > u(1.0) {
                     stroke_rounded(pm, x0 + u(0.5), y + u(0.5), cw - u(1.0), h - u(1.0), u(CARD_R), pal::sep(), u(1.0));
                 }
                 let mut ry = y;
                 for (i, r) in rows.iter().enumerate() {
-                    let rh = height(r);
-                    let stacked = stacked && !r.label.is_empty();
+                    let rh = heights[i];
+                    let stacked = stack[i];
                     let cy = if stacked && !r.ctls.is_empty() { ry + rh - u(22.0 + metrics.extra(10.0)) } else { ry + rh / 2.0 };
                     let row_rect = (x0, ry, cw, rh);
                     if r.selected {
@@ -816,12 +896,21 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     let avail = (if stacked { x0 + cw - u(CARD_PAD) - lx } else { right - lx }).max(u(40.0));
                     let label_cy = if stacked && !r.ctls.is_empty() { ry + u(20.0 + metrics.extra(if r.detail.is_empty() { 10.0 } else { 18.0 })) } else { cy };
                     let (label_offset, detail_offset) = metrics.label_offsets(!r.detail.is_empty());
-                    let ly = label_cy + u(label_offset);
+                    // Side-by-side rows keep their wrapped text centred; stacked rows pin the label to the top.
+                    let dl = &detail_lines[i];
+                    let shift = if stacked { 0.0 } else { dl.len().saturating_sub(1) as f32 * detail_lh / 2.0 };
+                    let ly = label_cy + u(label_offset) - shift;
                     let label = p.fit(&r.label, avail, u(13.0), Weight::Regular);
                     p.text(pm, &label, lx, ly, u(13.0), Weight::Regular, pal::text());
-                    if !r.detail.is_empty() {
-                        let d = p.fit(&r.detail, avail, u(11.0), Weight::Regular);
-                        p.text(pm, &d, lx, label_cy + u(detail_offset), u(11.0), Weight::Regular, pal::sub());
+                    if dl.is_empty() {
+                        if !r.detail.is_empty() {
+                            let d = p.fit(&r.detail, avail, u(11.0), Weight::Regular);
+                            p.text(pm, &d, lx, label_cy + u(detail_offset), u(11.0), Weight::Regular, pal::sub());
+                        }
+                    } else {
+                        for (k, l) in dl.iter().enumerate() {
+                            p.text(pm, l, lx, label_cy + u(detail_offset) - shift + detail_lh * k as f32, u(11.0), Weight::Regular, pal::sub());
+                        }
                     }
                     ry += rh;
                 }
@@ -1046,6 +1135,74 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     fr
 }
 
+/// Flat page navigation (see [`Item::Nav`]): underlined tabs or chips, wrapped onto as many lines as the width needs so every
+/// label stays complete. One `Placed` with one part per option keeps the control id, mouse hits and Left/Right keys of a segmented choice.
+#[allow(clippy::too_many_arguments)]
+fn draw_nav(pm: &mut Pixmap, p: &mut Painter, id: &str, opts: &[Opt], sel: Option<usize>, secondary: bool, x0: f32, y: f32, cw: f32, it: &Interact, fr: &mut Frame) -> f32 {
+    let s = p.s;
+    let u = |v: f32| v * s;
+    let m = TextLayout::live();
+    let (th, pad, gap, px) = if secondary { (u(28.0 + m.extra(16.0)), u(14.0), u(8.0), u(12.5)) } else { (u(36.0 + m.extra(20.0)), u(14.0), 0.0, u(13.0)) };
+    let step = th + if secondary { gap } else { 0.0 };
+    let mut parts: Vec<Rect> = Vec::new();
+    let (mut x, mut line) = (x0, 0usize);
+    for (l, _) in opts {
+        // Always measured in the selected weight so a choice never moves its neighbours.
+        let w = (p.measure(l, px, Weight::Medium) + 2.0 * pad).min(cw);
+        if x > x0 && x + w > x0 + cw + 0.5 {
+            x = x0;
+            line += 1;
+        }
+        parts.push((x, y + line as f32 * step, w, th));
+        x += w + gap;
+    }
+    let lines = line + 1;
+    let hover_id = it.hover.as_deref() == Some(id);
+    let hover_part = if hover_id { it.hover_part } else { None };
+    let th_ = crate::theme::th();
+    if !secondary {
+        for n in 0..lines {
+            fill_px(pm, x0, y + (n as f32 + 1.0) * step - 1.0, cw, 1.0, pal::sep());
+        }
+    }
+    for (i, ((l, _), r)) in opts.iter().zip(&parts).enumerate() {
+        let on = sel == Some(i);
+        let hot = hover_part == Some(i);
+        let label = p.fit(l, r.2 - 2.0 * pad + u(4.0), px, Weight::Medium);
+        if secondary {
+            if on {
+                fill_rounded(pm, r.0, r.1, r.2, r.3, r.3 / 2.0, pal::tonal(th_.background, 0.20));
+                stroke_rounded(pm, r.0 + u(0.5), r.1 + u(0.5), r.2 - u(1.0), r.3 - u(1.0), r.3 / 2.0, th_.accent.color(0.55), u(1.0));
+            } else {
+                fill_rounded(pm, r.0, r.1, r.2, r.3, r.3 / 2.0, if hot { th_.ink(0.08) } else { th_.ink(0.04) });
+            }
+        } else {
+            if hot && !on {
+                fill_rounded(pm, r.0 + u(2.0), r.1 + u(4.0), r.2 - u(4.0), r.3 - u(8.0), u(7.0), th_.ink(0.06));
+            }
+            if on {
+                fill_rounded(pm, r.0 + pad, r.1 + r.3 - u(3.0), r.2 - 2.0 * pad, u(3.0), u(1.5), pal::accent());
+            }
+        }
+        p.text_center(
+            pm,
+            &label,
+            r.0 + r.2 / 2.0,
+            r.1 + r.3 / 2.0 - if secondary { 0.0 } else { u(1.0) },
+            px,
+            if on { Weight::Medium } else { Weight::Regular },
+            if on { pal::text() } else { pal::sub() },
+        );
+    }
+    let rect = (x0, y, cw, lines as f32 * step - if secondary { gap } else { 0.0 });
+    if it.focus.as_deref() == Some(id) && it.ring {
+        let r = sel.and_then(|i| parts.get(i)).or(parts.first()).copied().unwrap_or(rect);
+        focus_ring(pm, r, if secondary { r.3 / 2.0 } else { u(7.0) }, s);
+    }
+    fr.placed.push(Placed { rect, ctl: Ctl::new(id, Kind::Seg(opts.to_vec(), sel)), parts, row_rect: rect, label: String::new() });
+    y + rect.3 + u(if secondary { 12.0 } else { 14.0 })
+}
+
 /// Palette tiles show semantic swatches only. Desktop designs use generated native previews.
 pub(super) fn draw_theme_preview(pm: &mut Pixmap, r: Rect, s: f32, t: &ThemeTile) {
     let (x, y, w, h) = r;
@@ -1192,7 +1349,7 @@ mod tests {
                 Row::new("Actions").ctl(Ctl::new("a", Kind::Button { label: "Reset".into(), danger: false })).ctl(Ctl::new("b", Kind::Button { label: "Apply".into(), danger: false })),
             ])];
             let sidebar = 164.0 * scale;
-            let fr = draw_items(&mut pm, &mut p, "Settings", &items, 0.0, sidebar, 316.0 * scale, &Interact::default(), &|_| None);
+            let fr = draw_items(&mut pm, &mut p, Head::new("Settings"), &items, 0.0, sidebar, 316.0 * scale, &Interact::default(), &|_| None);
             assert_eq!(fr.focus_order(), ["s", "n", "m", "a", "b"]);
             for control in &fr.placed {
                 assert!(control.rect.0 >= sidebar, "{} escaped the content area", control.ctl.id);
@@ -1205,6 +1362,60 @@ mod tests {
     }
 
     #[test]
+    fn navigation_wraps_keeps_every_label_and_stays_one_segmented_control() {
+        let opts: Vec<Opt> = ["Themes", "Palettes", "Customise", "All apps", "Window style", "Dock & Bar"].iter().map(|l| (l.to_string(), l.to_lowercase())).collect();
+        for secondary in [false, true] {
+            for (cw, scale) in [(900.0, 1.0), (300.0, 1.0), (300.0, 2.0), (180.0, 1.0)] {
+                let mut pm = Pixmap::new((cw * scale + 120.0) as u32, 600).unwrap();
+                let mut p = Painter { fonts: None, s: scale };
+                let items = vec![Item::Nav { id: "nav".into(), opts: opts.clone(), sel: Some(2), secondary }];
+                let width = cw * scale;
+                let fr = draw_items(&mut pm, &mut p, Head::new("T"), &items, 0.0, 60.0, width + 64.0 * scale, &Interact::default(), &|_| None);
+                let nav = fr.find("nav").expect("one control");
+                assert!(matches!(&nav.ctl.kind, Kind::Seg(o, Some(2)) if *o == opts));
+                assert_eq!(nav.parts.len(), opts.len());
+                assert_eq!(fr.focus_order(), ["nav"]);
+                for (i, a) in nav.parts.iter().enumerate() {
+                    assert!(a.0 >= nav.rect.0 - 0.5 && a.0 + a.2 <= nav.rect.0 + nav.rect.2 + 0.5, "part {i} escapes the strip (cw {cw}, {secondary})");
+                    for b in &nav.parts[i + 1..] {
+                        let overlap = a.0 < b.0 + b.2 - 0.5 && b.0 < a.0 + a.2 - 0.5 && a.1 < b.1 + b.3 - 0.5 && b.1 < a.1 + a.3 - 0.5;
+                        assert!(!overlap, "parts overlap (cw {cw}, {secondary})");
+                    }
+                    assert!(fr.at(a.0 + a.2 / 2.0, a.1 + a.3 / 2.0).is_some_and(|p| p.ctl.id == "nav"));
+                }
+                if cw < 400.0 {
+                    assert!(nav.parts.iter().any(|r| r.1 > nav.parts[0].1), "narrow strips wrap instead of truncating (cw {cw})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn long_details_wrap_and_grow_their_row_instead_of_ending_in_an_ellipsis() {
+        let mut pm = Pixmap::new(700, 700).unwrap();
+        let mut p = Painter { fonts: None, s: 1.0 };
+        let detail = "A rather long explanation of what this setting does that cannot possibly fit beside its control on one line of the card";
+        let short = vec![Item::Card(vec![Row::new("Short").detail("fits").ctl(Ctl::new("t", Kind::Toggle(true)))])];
+        let long = vec![Item::Card(vec![Row::new("Long").detail(detail).ctl(Ctl::new("t", Kind::Toggle(true)))])];
+        let a = draw_items(&mut pm, &mut p, Head::new("T"), &short, 0.0, 0.0, 440.0, &Interact::default(), &|_| None);
+        let b = draw_items(&mut pm, &mut p, Head::new("T"), &long, 0.0, 0.0, 440.0, &Interact::default(), &|_| None);
+        assert!(b.height > a.height + 10.0, "{} vs {}", b.height, a.height);
+        let t = b.find("t").unwrap();
+        assert!(t.rect.1 >= t.row_rect.1 && t.rect.1 + t.rect.3 <= t.row_rect.1 + t.row_rect.3);
+    }
+
+    #[test]
+    fn page_header_context_wraps_below_the_title() {
+        let mut pm = Pixmap::new(700, 500).unwrap();
+        let mut p = Painter { fonts: None, s: 1.0 };
+        let items = vec![Item::Card(vec![Row::new("A").ctl(Ctl::new("t", Kind::Toggle(true)))])];
+        let plain = draw_items(&mut pm, &mut p, Head::new("Title"), &items, 0.0, 0.0, 700.0, &Interact::default(), &|_| None);
+        let ctx = Head { title: "Title", context: "One quiet line of orientation that is long enough to need wrapping when the page is narrow, so the next control moves down" };
+        let with = draw_items(&mut pm, &mut p, ctx, &items, 0.0, 0.0, 300.0, &Interact::default(), &|_| None);
+        assert!(with.find("t").unwrap().rect.1 > plain.find("t").unwrap().rect.1 + 20.0);
+    }
+
+    #[test]
     fn items_draw_and_record_hits() {
         let mut pm = Pixmap::new(700, 600).unwrap();
         let mut p = Painter { fonts: None, s: 1.0 };
@@ -1212,7 +1423,7 @@ mod tests {
             Row::new("A").ctl(Ctl::new("t", Kind::Toggle(true))),
             Row::new("B").detail("d").ctl(Ctl::new("s", Kind::Slider { v: 3.0, min: 0.0, max: 10.0, step: 1.0, unit: "px".into() })),
         ])];
-        let fr = draw_items(&mut pm, &mut p, "T", &items, 0.0, 0.0, 700.0, &Interact::default(), &|_| None);
+        let fr = draw_items(&mut pm, &mut p, Head::new("T"), &items, 0.0, 0.0, 700.0, &Interact::default(), &|_| None);
         assert_eq!(fr.placed.len(), 2);
         let t = fr.find("t").unwrap();
         assert!(fr.at(t.rect.0 + 3.0, t.rect.1 + 3.0).is_some_and(|p| p.ctl.id == "t"));

@@ -54,6 +54,17 @@ impl Tab {
         }
     }
 
+    /// What the current tab is for: the context line under the page title.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Tab::Theme => "Pick a desktop design: its bar, dock, window style and fonts.",
+            Tab::Palettes => "Recolour every theme: a colour set, light or dark, and your accent.",
+            Tab::Customise => "Change single things on top of the theme, one section at a time.",
+            Tab::Wallpaper => "Pictures for your desktop.",
+            Tab::Apps => "Bring the theme to GTK, Qt, terminals and the browser.",
+        }
+    }
+
     pub fn parse(s: &str) -> Option<Tab> {
         if s == "wallpaper" {
             return Some(Tab::Wallpaper);
@@ -189,14 +200,14 @@ pub fn prepare(m: &mut Model) {
 fn tab_bar(m: &Model) -> Item {
     let opts: Vec<(String, String)> = Tab::ALL.iter().map(|t| (t.title().to_string(), t.id().to_string())).collect();
     let sel = Tab::ALL.iter().position(|t| *t == m.sel.tab);
-    Item::Card(vec![Row::new("").ctl(Ctl::new("ap:tab", Kind::Seg(opts, sel)))])
+    Item::Nav { id: "ap:tab".into(), opts, sel, secondary: false }
 }
 
 fn section_bar(m: &Model) -> Vec<Item> {
     let secs = sections(m);
     let opts: Vec<(String, String)> = secs.iter().map(|t| (t.title().to_string(), t.id().to_string())).collect();
     let sel = secs.iter().position(|t| *t == m.sel.section);
-    vec![Item::Card(vec![Row::new("Customise").ctl(Ctl::new("ap:sec", Kind::Seg(opts, sel)))]), Item::Note { text: m.sel.section.blurb().into(), warn: false }]
+    vec![Item::Nav { id: "ap:sec".into(), opts, sel, secondary: true }, Item::Note { text: m.sel.section.blurb().into(), warn: false }]
 }
 
 fn go_button(id: &str, label: &str) -> Ctl {
@@ -204,7 +215,7 @@ fn go_button(id: &str, label: &str) -> Ctl {
 }
 
 pub fn items(m: &Model) -> Vec<Item> {
-    let mut out = vec![tab_bar(m), Item::Space(6.0)];
+    let mut out = vec![tab_bar(m)];
     match m.sel.tab {
         Tab::Theme => out.extend(theme_tab(m)),
         Tab::Palettes => out.extend(palettes_tab(m)),
@@ -582,7 +593,10 @@ mod tests {
                 m.sel.section = s;
                 let its = items(&m);
                 assert!(!its.is_empty(), "{t:?}/{s:?}");
-                assert!(matches!(&its[0], Item::Card(r) if r[0].ctls[0].id == "ap:tab"), "the tab bar leads {t:?}/{s:?}");
+                assert!(matches!(&its[0], Item::Nav { id, secondary: false, .. } if id == "ap:tab"), "the tab bar leads {t:?}/{s:?}");
+                if t == Tab::Customise {
+                    assert!(matches!(&its[1], Item::Nav { id, secondary: true, .. } if id == "ap:sec"), "the section chips follow {t:?}/{s:?}");
+                }
                 if t != Tab::Customise {
                     break; // sections only matter in Customise
                 }
