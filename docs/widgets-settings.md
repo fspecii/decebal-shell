@@ -234,7 +234,19 @@ larger. Existing files keep their fixed geometry, and an explicit layout fit
 still wins. It does not scale fonts down. New cards use this opt-in and fit a
 480-pixel-high display at 100% and 200% text size; custom placements and multiple
 cards still need enough desktop space. Native Wayland widget hosting remains
-unsupported. Visual evidence can be reproduced with the isolated renderer test:
+unsupported.
+
+Widgets can also opt into `text_scale_width = true`: their declared width grows
+with enlarged text size (bounded to 16–2000 logical pixels). It defaults to
+false, keeps the declared width as a minimum at 100% or smaller text, and an explicit
+layout fit still wins. Natural-size widgets already use measured glyph widths
+and are not scaled twice.
+The shared Clock card and Now playing mini use it with `auto_height` to keep the
+complete time/date and meaningful track labels visible at larger text sizes.
+Their artwork and transport controls retain their normal sizes; long arbitrary
+track titles can still be ellipsized. Themes must leave room for the larger cards.
+
+Visual evidence can be reproduced with the isolated renderer test:
 
 ```sh
 WIDGET_EVIDENCE_DIR=/tmp/dux-widgets cargo test --lib overview_and_focus_native_scale_evidence -- --ignored --test-threads=1

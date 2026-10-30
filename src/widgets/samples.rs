@@ -345,6 +345,18 @@ mod tests {
         }
     }
 
+    #[test]
+    fn companion_cards_opt_into_text_width_without_changing_standard_size() {
+        for (id, size) in [("clock-card", (236., 136.)), ("now-playing-mini", (310., 76.))] {
+            let def = get(id).unwrap();
+            assert!(def.text_scale_width && def.auto_height);
+            let d = sample();
+            let it = layout(&def, &Ctx { data: &d, metrics: &Fixed, theme_radius: 14. }, None);
+            assert_eq!((it.rect.w, it.rect.h), size);
+            assert!(def.commands.is_empty());
+        }
+    }
+
     /// Changes process-global font scale; run alone, never alongside other renderer tests.
     /// WIDGET_EVIDENCE_DIR=/tmp/dux-widgets cargo test --lib overview_and_focus_native_scale_evidence -- --ignored --test-threads=1
     #[test]
@@ -356,17 +368,20 @@ mod tests {
         fn contained(it: &Item, root: &Item) {
             assert!(it.rect.x >= 0.0 && it.rect.y >= 0.0);
             assert!(it.rect.x + it.rect.w <= root.rect.w + 0.01 && it.rect.y + it.rect.h <= root.rect.h + 0.01, "{:?}", it.rect);
+            if it.on_click.is_some() {
+                assert!(crate::widgets::layout::hit(root, it.rect.x + it.rect.w / 2., it.rect.y + it.rect.h / 2.).is_some(), "visible interactive target");
+            }
             for child in &it.children {
                 contained(child, root);
             }
         }
         let mut fonts = crate::text::Fonts::load().unwrap();
-        for scale in [1.0, 2.0] {
+        for scale in [0.8, 1.0, 1.25, 2.0] {
             for dark in [true, false] {
                 let th =
                     crate::accessibility::Preferences { font_scale: Some(scale), ..Default::default() }.apply(crate::theme::builtin::def("nord").unwrap().resolve("nord", dark, &Selection::default()));
                 crate::theme::live::publish_theme(th.clone());
-                for id in ["resource-overview", "focus-hub"] {
+                for id in ["resource-overview", "focus-hub", "clock-card", "now-playing-mini"] {
                     let def = get(id).unwrap();
                     for (state, data) in [("sample", sample()), ("unavailable", crate::widgets::data::Data::empty())] {
                         let it = layout(&def, &Ctx { data: &data, metrics: &paint::FontMetrics(&fonts), theme_radius: th.radius }, None);
@@ -381,6 +396,25 @@ mod tests {
                         if id == "focus-hub" {
                             let crate::widgets::layout::Leaf::Text { s, .. } = &it.children[1].leaf else { panic!("countdown") };
                             assert_eq!(s, &crate::widgets::fmt::Fmt::parse("{timer.remaining|--:--:--}").unwrap().eval(&data), "countdown must remain fully readable at {scale}");
+                        }
+                        if id == "clock-card" {
+                            for (index, template) in [(0, "{clock:%H:%M}"), (1, "{clock:%A, %e %B}")] {
+                                let crate::widgets::layout::Leaf::Text { s, .. } = &it.children[index].leaf else { panic!("clock text") };
+                                assert_eq!(s, &crate::widgets::fmt::Fmt::parse(template).unwrap().eval(&data), "clock/date must remain complete at {scale}");
+                            }
+                            assert_eq!(it.rect.w, 236. * scale.max(1.));
+                        }
+                        if id == "now-playing-mini" {
+                            assert_eq!(it.rect.w, 310. * scale.max(1.));
+                            let text = dump(&it);
+                            if state == "sample" {
+                                assert!(text.contains("Midnight City") && text.contains("M83"), "{text}");
+                                for action in ["media prev", "media play-pause", "media next"] {
+                                    assert!(def.actions.contains(&crate::widgets::actions::Action::parse(action, Trust::Theme).unwrap()));
+                                }
+                            } else {
+                                assert!(text.contains("Nothing playing"));
+                            }
                         }
                         let pm = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
                         if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {

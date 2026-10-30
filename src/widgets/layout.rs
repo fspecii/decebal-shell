@@ -22,6 +22,9 @@ impl Rect {
 
 pub trait Metrics {
     fn text_width(&self, s: &str, px: f32, bold: bool) -> f32;
+    fn text_scale(&self) -> f32 {
+        1.0
+    }
     fn mono_cell_width(&self, px: f32) -> f32 {
         px * 0.6
     }
@@ -331,6 +334,13 @@ pub fn layout(def: &WidgetDef, cx: &Ctx, fit: Option<(f32, f32)>) -> Item {
     let (nw, nh) = natural(&def.root, cx);
     let (w, h) = fit.unwrap_or_else(|| {
         let (w, h) = def.size.unwrap_or((nw, nh));
+        let scale = cx.metrics.text_scale();
+        let w = if def.text_scale_width && def.size.is_some() {
+            let scale = if scale.is_finite() { scale.clamp(1.0, 8.0) } else { 1.0 };
+            (w * scale).clamp(16.0, 2000.0)
+        } else {
+            w
+        };
         (w, if def.auto_height { h.max(nh).min(2000.0) } else { h })
     });
     arrange(&def.root, cx, Rect { x: 0.0, y: 0.0, w, h })

@@ -3,6 +3,8 @@ id = "now-playing-mini"
 name = "Now playing"
 description = "Cover, title and artist of the current MPRIS player, with play/pause and skip buttons."
 size = [310, 76]
+auto_height = true
+text_scale_width = true
 
 [root]
 type = "row"

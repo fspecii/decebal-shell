@@ -15,6 +15,9 @@ use tiny_skia::{Color, FillRule, FilterQuality, Paint, Pattern, Pixmap, SpreadMo
 pub struct FontMetrics<'a>(pub &'a Fonts);
 
 impl Metrics for FontMetrics<'_> {
+    fn text_scale(&self) -> f32 {
+        crate::theme::live::font_scale()
+    }
     fn text_width(&self, s: &str, px: f32, bold: bool) -> f32 {
         self.0.measure(s, px, if bold { Weight::Bold } else { Weight::Regular })
     }

@@ -3,6 +3,8 @@ id = "clock-card"
 name = "Clock card"
 description = "Big time, the date and the weather, on a translucent card."
 size = [236, 136]
+auto_height = true
+text_scale_width = true
 refresh = 1000
 
 [root]

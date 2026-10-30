@@ -6,6 +6,7 @@
 //! name = "Clock card"
 //! size = [220, 120]            # optional; the natural size of the content otherwise
 //! auto_height = true          # optional: size height is a minimum, grows for larger text
+//! text_scale_width = true     # optional: declared width follows effective text scale
 //! refresh = 1000               # ms between redraws, 250..60000 (default 1000)
 //!
 //! [root]                       # one root node; children are [[root.children]] tables
@@ -163,6 +164,8 @@ pub struct WidgetDef {
     pub size: Option<(f32, f32)>,
     /// Opt in to a content-measured minimum height; explicit layout fits still win.
     pub auto_height: bool,
+    /// Opt in to scaling the base width with the effective text scale.
+    pub text_scale_width: bool,
     pub refresh_ms: u32,
     pub commands: Vec<CommandDef>,
     pub root: Node,
@@ -578,8 +581,8 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
     let root = doc.as_table();
     let mut cx = Cx { text, trust, errs: Vec::new(), paths: BTreeSet::new(), assets: Vec::new(), actions: Vec::new(), commands: BTreeSet::new(), nodes: 0 };
     for (k, item) in root.iter() {
-        if !matches!(k, "format" | "id" | "name" | "description" | "size" | "auto_height" | "refresh" | "commands" | "root") {
-            cx.err(item, k, "unknown key (format, id, name, description, size, auto_height, refresh, commands, root)");
+        if !matches!(k, "format" | "id" | "name" | "description" | "size" | "auto_height" | "text_scale_width" | "refresh" | "commands" | "root") {
+            cx.err(item, k, "unknown key (format, id, name, description, size, auto_height, text_scale_width, refresh, commands, root)");
         }
     }
     if root.get("format").and_then(Item::as_integer) != Some(1) {
@@ -599,6 +602,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
         cx.err(root.get("size").unwrap_or(&Item::None), "size", "must be [width, height], each 16..2000");
     }
     let auto_height = flag(&mut cx, root, "", "auto_height").unwrap_or(false);
+    let text_scale_width = flag(&mut cx, root, "", "text_scale_width").unwrap_or(false);
     let refresh_ms = num(&mut cx, root, "", "refresh", 250.0, 60000.0).unwrap_or(1000.0) as u32;
     let mut commands = Vec::new();
     if let Some(c) = root.get("commands") {
@@ -641,7 +645,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
         return Err(cx.errs.join("\n"));
     }
     let root = node.ok_or("`root`: invalid")?;
-    Ok(WidgetDef { id, name, description, size, auto_height, refresh_ms, commands, root, assets: cx.assets, paths: cx.paths, actions: cx.actions })
+    Ok(WidgetDef { id, name, description, size, auto_height, text_scale_width, refresh_ms, commands, root, assets: cx.assets, paths: cx.paths, actions: cx.actions })
 }
 
 impl Node {
@@ -701,6 +705,48 @@ width = 80
         assert_eq!(layout(&def, &cx, Some((100.0, 20.0))).rect.h, 20.0);
         assert_eq!(layout(&parse(&source.replace("auto_height=true", "auto_height=false"), Trust::Theme).unwrap(), &cx, None).rect.h, 16.0);
         assert!(parse(&source.replace("auto_height=true", "auto_height=1"), Trust::Theme).unwrap_err().contains("must be true or false"));
+    }
+
+    #[test]
+    fn responsive_width_is_opt_in_bounded_and_explicit_fit_wins() {
+        use crate::widgets::{
+            data::Data,
+            layout::{layout, Ctx, Fixed, Metrics},
+        };
+        struct Scaled(f32);
+        impl Metrics for Scaled {
+            fn text_width(&self, s: &str, px: f32, bold: bool) -> f32 {
+                Fixed.text_width(s, px, bold)
+            }
+            fn text_scale(&self) -> f32 {
+                self.0
+            }
+        }
+        let source = "format=1\nsize=[1000,40]\ntext_scale_width=true\n[root]\ntype=\"text\"\ntext=\"Example\"\n";
+        let def = parse(source, Trust::Theme).unwrap();
+        let data = Data::empty();
+        for (scale, width) in [(1., 1000.), (1.25, 1250.), (2., 2000.), (8., 2000.), (f32::NAN, 1000.), (f32::INFINITY, 1000.), (-1., 1000.), (0.5, 1000.), (0.75, 1000.)] {
+            let cx = Ctx { data: &data, metrics: &Scaled(scale), theme_radius: 0. };
+            assert_eq!(layout(&def, &cx, None).rect.w, width);
+            assert_eq!(layout(&def, &cx, Some((200., 30.))).rect.w, 200.);
+            let fixed = parse(&source.replace("text_scale_width=true", "text_scale_width=false"), Trust::Theme).unwrap();
+            assert_eq!(layout(&fixed, &cx, None).rect.w, 1000.);
+        }
+        // Natural widths already come from scaled glyph metrics; do not scale twice.
+        struct Natural;
+        impl Metrics for Natural {
+            fn text_width(&self, s: &str, px: f32, bold: bool) -> f32 {
+                Fixed.text_width(s, px, bold) * 2.
+            }
+            fn text_scale(&self) -> f32 {
+                2.
+            }
+        }
+        let natural = parse(&source.replace("size=[1000,40]\n", ""), Trust::Theme).unwrap();
+        let cx = Ctx { data: &data, metrics: &Natural, theme_radius: 0. };
+        let ordinary = parse(&source.replace("size=[1000,40]\n", "").replace("text_scale_width=true", "text_scale_width=false"), Trust::Theme).unwrap();
+        assert_eq!(layout(&natural, &cx, None).rect.w, layout(&ordinary, &cx, None).rect.w);
+        assert!(parse(&source.replace("text_scale_width=true", "text_scale_width=1"), Trust::Theme).is_err());
     }
 
     #[test]
