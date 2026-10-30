@@ -66,13 +66,15 @@ def main():
         ledger = []
         with (evidence / "native.log").open("w") as log:
             for screen_height in (720, 420):
-                display = next(f":{n}" for n in range(440, 470) if not Path(f"/tmp/.X11-unix/X{n}").exists())
+                display = next(f":{n}" for n in range(440, 470) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
                 env["DISPLAY"] = display
                 server = subprocess.Popen(["Xvfb", display, "-screen", "0", f"960x{screen_height}x24", "-nolisten", "tcp"], env=env, stdout=log, stderr=log)
                 launcher = None
                 try:
                     def run(*args, check=True):
+                        assert server.poll() is None, "owned private Xvfb exited"
                         return subprocess.run(args, env=env, check=check, capture_output=True, text=True).stdout.strip()
+                    wait(lambda: server.poll() is None and Path(f"/tmp/.X{display[1:]}-lock").exists() and int(Path(f"/tmp/.X{display[1:]}-lock").read_text().strip()) == server.pid, "owned private Xvfb")
                     wait(lambda: run("xdotool", "getdisplaygeometry", check=False), "private display ready")
                     for scale in (1, 2):
                         env["DECEBAL_FONT_SCALE"] = str(scale)

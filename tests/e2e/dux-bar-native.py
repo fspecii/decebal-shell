@@ -48,7 +48,7 @@ def main():
             path = root / "bin" / app
             path.write_text("#!/bin/sh\nexit 1\n")
             path.chmod(0o755)
-        display = next(f":{n}" for n in range(310, 350) if not Path(f"/tmp/.X11-unix/X{n}").exists())
+        display = next(f":{n}" for n in range(310, 350) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
         env = dict(os.environ, HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"), XDG_CACHE_HOME=str(root / "cache"), XDG_STATE_HOME=str(root / "state"), XDG_DATA_HOME=str(root / "data"), XDG_RUNTIME_DIR=str(root / "run"), DECEBAL_CONFIG=str(root / "config"), DECEBAL_THEMES=str(themes), DECEBAL_SYSTEM_THEMES=str(root / "empty-themes"), DISPLAY=display, DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DBUS_SESSION_BUS_ADDRESS=f"unix:path={private}/no-bus", DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={private}/no-system", RDWMCTL=str(root / "bin/rdwmctl"), DUX_CALLS=str(calls), PATH=f'{root / "bin"}:{os.environ["PATH"]}')
         for key in ["WAYLAND_DISPLAY", "RDWM_SOCK", "PULSE_SERVER", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE"]:
             env.pop(key, None)
@@ -57,7 +57,9 @@ def main():
             bar = None
             try:
                 def run(*args, check=True):
+                    assert server.poll() is None, "owned private Xvfb exited"
                     return subprocess.run(args, env=env, text=True, capture_output=True, check=check).stdout.strip()
+                wait(lambda: server.poll() is None and Path(f"/tmp/.X{display[1:]}-lock").exists() and int(Path(f"/tmp/.X{display[1:]}-lock").read_text().strip()) == server.pid, "owned private Xvfb")
                 wait(lambda: run("xdotool", "getdisplaygeometry", check=False), "private Xvfb ready")
                 results = []
                 for scale, background, mode in [(1,"band","dark"),(2,"band","dark"),(1,"band","light"),(2,"band","light"),(1,"islands","dark"),(2,"islands","dark")]:

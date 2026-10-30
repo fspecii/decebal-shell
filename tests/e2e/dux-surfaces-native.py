@@ -68,7 +68,7 @@ def main():
         for section, key, value in (("dashboard", "style", '"dux"'), ("dashboard", "profile", '"readme"'), ("control_center", "style", '"dux"'), ("bar", "style", '"dux"')):
             source = set_key(source, section, key, value)
         (copy / "theme.toml").write_text(source)
-        display = next(f":{n}" for n in range(320, 380) if not Path(f"/tmp/.X11-unix/X{n}").exists())
+        display = next(f":{n}" for n in range(320, 380) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
         env = dict(os.environ, HOME=str(root / "home"), DISPLAY=display, DECEBAL_BACKEND="x11",
                    XDG_CONFIG_HOME=str(root / "config"), XDG_CACHE_HOME=str(root / "cache"),
                    XDG_DATA_HOME=str(root / "data"), XDG_STATE_HOME=str(root / "state"),
@@ -85,6 +85,7 @@ def main():
             server = subprocess.Popen(["Xvfb", display, "-screen", "0", "960x720x24", "-nolisten", "tcp"], env=env, stdout=log, stderr=log)
             try:
                 def run(*args, check=True):
+                    assert server.poll() is None, "owned private Xvfb exited"
                     return subprocess.run(args, env=env, check=check, text=True, capture_output=True, timeout=8).stdout.strip()
 
                 def capture(window, name):
@@ -102,6 +103,8 @@ def main():
                             return image
                         assert time.monotonic()<deadline, f"native frame remained blank: {path}"
                         time.sleep(.1)
+
+                wait(lambda: server.poll() is None and Path(f"/tmp/.X{display[1:]}-lock").exists() and int(Path(f"/tmp/.X{display[1:]}-lock").read_text().strip()) == server.pid, "owned private Xvfb")
 
                 wait(lambda: run("xdotool", "getdisplaygeometry", check=False), "private display ready")
                 for scale in (1, 2):
