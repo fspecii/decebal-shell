@@ -42,7 +42,7 @@ def main():
                    DECEBAL_SYSTEM_AUTOMATIC='0', DBUS_SESSION_BUS_ADDRESS=f'unix:path={tmp}/no-session-bus',
                    DBUS_SYSTEM_BUS_ADDRESS=f'unix:path={tmp}/no-system-bus', RDWM_SOCK=str(root / 'no-wm'),
                    RDWMCTL='/nonexistent/rdwmctl', DECSETTINGS_DEBUG_LAYOUT=str(root / 'layout.json'),
-                   DECEBAL_THEME_PREVIEW_BIN=str(installed / 'decthemectl'),
+                   DECEBAL_THEME_PREVIEW_BIN=os.environ.get('SETTINGS_RENDERER_BIN', str(installed / 'decthemectl')),
                    DECEBAL_DECO_RENDERER=str(installed / 'decebal-deco-preview'))
         result.update(display=display, renderer=env['DECEBAL_THEME_PREVIEW_BIN'], deco_renderer=env['DECEBAL_DECO_RENDERER'])
         def run(*args):
