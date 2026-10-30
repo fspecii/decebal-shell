@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='welcome-shortcuts-') as t:
     for key in ('HOME','XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_STATE_HOME','XDG_CACHE_HOME','XDG_RUNTIME_DIR','XDG_CONFIG_DIRS','XDG_DATA_DIRS','DECEBAL_CONFIG','DECEBAL_THEMES','DECEBAL_SYSTEM_THEMES','DECEBAL_PALETTES','DECEBAL_WIDGETS'):
         p=root/key;p.mkdir(mode=0o700);env[key]=str(p)
     number=next(n for n in range(710,760) if not Path(f'/tmp/.X11-unix/X{n}').exists() and not Path(f'/tmp/.X{n}-lock').exists())
-    env.update(DISPLAY=f':{number}',XDG_SESSION_TYPE='x11',DECEBAL_BACKEND='x11',DECEBAL_SYSTEM_AUTOMATIC='0',DBUS_SESSION_BUS_ADDRESS='unix:path='+t+'/no-session',DBUS_SYSTEM_BUS_ADDRESS='unix:path='+t+'/no-system',RDWM_SOCK=env['XDG_RUNTIME_DIR']+'/rdwm.sock',RDWMCTL='/home/ambsd/.local/share/rdwm-decebal/bin/rdwmctl')
+    env.update(DISPLAY=f':{number}',XDG_SESSION_TYPE='x11',DECEBAL_BACKEND='x11',DECEBAL_SYSTEM_AUTOMATIC='0',DBUS_SESSION_BUS_ADDRESS='unix:path='+t+'/no-session',DBUS_SYSTEM_BUS_ADDRESS='unix:path='+t+'/no-system',RDWM_SOCK=env['XDG_RUNTIME_DIR']+'/rdwm.sock',RDWMCTL=str(wm_binary.with_name('rdwmctl')))
     cfg=root/'config.toml';cfg.write_text('''[general]
 default_binds = false
 [decoration]
