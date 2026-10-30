@@ -81,7 +81,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     let mut out = vec![
         Item::Header("Themes".into()),
         Item::Note {
-            text: "Themes define the desktop design: bar, dock, window decorations, fonts and wallpaper. Applying a theme restores its own colour palette. Choose other colours in Palettes; adjust details in Customise."
+            text: "Themes define the desktop design: bar, dock, window decorations and fonts. Applying a theme restores its colour palette. Wallpaper stays independent unless Follow theme wallpaper is on in Wallpaper settings. Choose other colours in Palettes; adjust details in Customise."
                 .into(),
             warn: false,
         },

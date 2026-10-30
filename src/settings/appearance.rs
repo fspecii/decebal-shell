@@ -218,6 +218,9 @@ pub fn items(m: &Model) -> Vec<Item> {
 fn theme_tab(m: &Model) -> Vec<Item> {
     let c = Ctx::new(m);
     let mut out = super::themepane::layout_items(&c);
+    if let Some(note) = super::wallhaven::follow_theme_notice(m) {
+        out.push(note);
+    }
     out.extend(super::packages::items(m));
     out.push(Item::Header("More".into()));
     out.push(Item::Card(vec![
@@ -272,6 +275,7 @@ fn customise_tab(m: &Model) -> Vec<Item> {
 pub(super) fn wallpaper_tab(m: &Model) -> Vec<Item> {
     let c = Ctx::new(m);
     let mut out = m.pane_wallpaper();
+    out.splice(1.min(out.len())..1.min(out.len()), super::wallhaven::follow_theme_items(m));
     // The source switch stays first; colour matching belongs to this pane for every source.
     let colors = super::wallpapercolors::items(&c.sel, &c.now);
     let mut colors = colors;

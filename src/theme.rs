@@ -57,5 +57,6 @@ pub mod rdwm;
 pub mod style;
 pub use fonts::Role;
 pub mod system;
+pub mod wallpaper_follow;
 pub use live::{current, current as th, generation, take_changed};
 pub use model::{Dynamic, Insets, Mode, Rgb, Selection, Theme};

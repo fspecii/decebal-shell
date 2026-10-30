@@ -69,6 +69,7 @@ pub struct Model {
     pub shell: Value,
     pub sel: Selection,
     pub notice: Option<Notice>,
+    wallpaper_follow_error_seen: Option<String>,
     /// The file on disk is currently not valid TOML (mid-edit by someone else).
     pub file_error: Option<String>,
     /// Set whenever something visible changed.
@@ -115,6 +116,7 @@ impl Model {
             rt: Runtime::default(),
             sel: Selection::default(),
             notice: None,
+            wallpaper_follow_error_seen: None,
             file_error: None,
             dirty: true,
             queue,
@@ -131,6 +133,7 @@ impl Model {
             synced_at: None,
         };
         m.rt = io::poll_runtime(&m.paths.socket);
+        m.refresh_wallpaper_follow_notice();
         m
     }
 
@@ -141,7 +144,15 @@ impl Model {
 
     pub fn watched_files(&self) -> Vec<std::path::PathBuf> {
         let env = crate::theme::system::Env::discover();
-        vec![self.paths.rdwm_config.clone(), self.paths.dock_settings(), self.paths.dock_pinned(), self.paths.shell_json(), env.state_dir.join("pending"), env.state_dir.join("last-result.json")]
+        vec![
+            self.paths.rdwm_config.clone(),
+            self.paths.dock_settings(),
+            self.paths.dock_pinned(),
+            self.paths.shell_json(),
+            env.state_dir.join("pending"),
+            env.state_dir.join("last-result.json"),
+            crate::theme::wallpaper_follow::status_path(&self.paths),
+        ]
     }
 
     // ------------------------------------------------------------ notices
@@ -197,7 +208,16 @@ impl Model {
             self.shell = s;
             self.say("Reloaded from disk", false);
         }
+        self.refresh_wallpaper_follow_notice();
         self.dirty = true;
+    }
+
+    fn refresh_wallpaper_follow_notice(&mut self) {
+        let state = crate::theme::wallpaper_follow::status(&self.paths);
+        if crate::theme::wallpaper_follow::enabled(&self.paths) && state.error && !state.generation.is_empty() && self.wallpaper_follow_error_seen.as_deref() != Some(state.generation.as_str()) {
+            self.wallpaper_follow_error_seen = Some(state.generation);
+            self.say(state.message, true);
+        }
     }
 
     pub fn on_event(&mut self, ev: Ev) {
@@ -430,6 +450,12 @@ impl Model {
     }
 
     fn apply_key(&mut self, sec: &str, key: &str, v: CtlVal) {
+        if sec == "wallpaper" {
+            if let Err(error) = crate::theme::wallpaper_follow::cancel(&self.paths) {
+                self.say(error, true);
+                return;
+            }
+        }
         let Some(m) = self.schema.get(sec, key).cloned() else {
             self.say(format!("Unknown setting {sec}.{key}"), true);
             return;
@@ -710,5 +736,35 @@ mod tests {
         assert_eq!(sel(0), "none");
         m.apply("hc:top_left", CtlVal::Str("teleport".into()));
         assert!(m.notice.as_ref().is_some_and(|n| n.error), "an unknown action is refused");
+    }
+}
+
+#[cfg(test)]
+mod wallpaper_follow_notice_tests {
+    #[test]
+    fn async_photo_failure_is_a_persistent_notice_once_per_request() {
+        let (mut m, _) = super::tests_support::model_with("[general]\nborder_px=1\n");
+        super::io::json_set(&m.paths.shell_json(), "wallpaper", Some(serde_json::json!({"followTheme":true}))).unwrap();
+        let path = crate::theme::wallpaper_follow::status_path(&m.paths);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let fail = |generation: &str| {
+            std::fs::write(
+                &path,
+                serde_json::json!({"generation":generation,"message":"Theme applied; wallpaper unchanged: Wallhaven is unavailable","pending":false,"error":true,"pid":null}).to_string(),
+            )
+            .unwrap()
+        };
+        fail("first");
+        m.on_files_changed();
+        assert!(m.notice.as_ref().is_some_and(|n| n.error && n.text.contains("Theme applied; wallpaper unchanged")));
+        let at = m.notice.as_ref().unwrap().at;
+        m.on_files_changed();
+        assert_eq!(m.notice.as_ref().unwrap().at, at);
+        m.notice = None;
+        m.on_files_changed();
+        assert!(m.notice.is_none(), "dismissed errors must not keep forcing a new notice/scroll");
+        fail("second");
+        m.on_files_changed();
+        assert!(m.notice.as_ref().is_some_and(|n| n.error));
     }
 }

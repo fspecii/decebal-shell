@@ -97,6 +97,8 @@ pub struct SettingsApp {
     /// (building them reads theme folders, fonts and icon themes: ~27 ms for the Theme pane, per wheel notch).
     items_cache: Option<(usize, Vec<Item>)>,
     reuse_items: bool,
+    /// Reveal a new persistent error once, without preventing later scrolling.
+    last_error_notice: Option<std::time::Instant>,
 }
 
 enum SbRow {
@@ -162,6 +164,7 @@ impl SettingsApp {
             stats: (0, 0, 0),
             items_cache: None,
             reuse_items: false,
+            last_error_notice: None,
         }
     }
 
@@ -725,6 +728,12 @@ impl SettingsApp {
 
     /// Follows what the model asked for: another pane (a button in a tab) and a scroll back to the top (another tab).
     fn follow_requests(&mut self) {
+        let error = self.m.notice.as_ref().filter(|n| n.error).map(|n| n.at);
+        if error.is_some() && error != self.last_error_notice {
+            self.scroll = 0.0;
+            self.it.focus = None;
+        }
+        self.last_error_notice = error;
         if let Some(i) = self.m.sel.goto.take() {
             self.select_pane(i);
         }
@@ -1610,6 +1619,28 @@ mod key_tests {
         assert!(a.m.widget_choice.is_none());
         let shell = super::super::io::json_load(&a.m.paths.shell_json());
         assert_eq!(shell["theme"]["name"], "glyph-rice");
+    }
+
+    #[test]
+    fn a_new_error_is_visible_after_scrolling_and_does_not_trap_the_view() {
+        let mut a = app();
+        a.scroll = 500.0;
+        a.m.say("Not applied: rejected configuration", true);
+        a.follow_requests();
+        assert_eq!(a.scroll, 0.0, "the persistent error banner must be visible");
+        a.scroll = 150.0;
+        a.follow_requests();
+        assert_eq!(a.scroll, 150.0, "a visible error must not prevent further scrolling");
+        a.m.say("Not applied: rejected configuration", true);
+        a.follow_requests();
+        assert_eq!(a.scroll, 0.0, "a new failure must be revealed again");
+        a.scroll = 150.0;
+        a.m.notice = None;
+        a.follow_requests();
+        assert_eq!(a.scroll, 150.0);
+        a.m.say("Not applied: rejected configuration", true);
+        a.follow_requests();
+        assert_eq!(a.scroll, 0.0, "a retry after clearing the error must be visible");
     }
 
     /// Drives the Widgets page like a user: open the form, edit the name, create, and check the saved widget and layout.

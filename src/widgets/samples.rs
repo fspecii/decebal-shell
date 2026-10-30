@@ -4,6 +4,7 @@ use super::dsl::{self, WidgetDef};
 use super::Trust;
 
 pub const SAMPLES: &[(&str, &str)] = &[
+    ("tty-clock", include_str!("../../themes/terminal-minimal/widgets/tty-clock.toml")),
     ("quick-note", include_str!("../../widgets/quick-note.toml")),
     ("timer-card", include_str!("../../widgets/timer-card.toml")),
     ("fetch-summary", include_str!("../../widgets/fetch-summary.toml")),

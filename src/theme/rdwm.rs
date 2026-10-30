@@ -15,6 +15,19 @@ fn hex(c: super::model::Rgb) -> Val {
     Val::Str(c.hex())
 }
 
+/// Bound the composed SSD radius after package-specific titlebar edits. A saved
+/// shell radius can exceed a new theme's shorter titlebar; keep that preference
+/// while making the effective window-manager configuration valid.
+pub fn clamp_decoration_radius(cfg: &mut Cfg) -> Result<Option<i64>, String> {
+    match (cfg.get("decoration", "height"), cfg.get("decoration", "radius")) {
+        (Some(Val::Int(height)), Some(Val::Int(radius))) if height >= 0 && radius > height => {
+            cfg.set("decoration", "radius", &Val::Int(height))?;
+            Ok(Some(height))
+        }
+        _ => Ok(None),
+    }
+}
+
 /// `rdwmctl check-config`; an rdwmctl too old to have it (it answers with its usage text) counts as "syntax only".
 fn validate(paths: &Paths, text: &str) -> Result<(), String> {
     match io::validate(&paths.rdwmctl, &paths.rdwm_config, text) {
@@ -167,6 +180,34 @@ pub struct Report {
 mod tests {
     use super::*;
     use crate::theme::model::Selection;
+
+    #[test]
+    fn short_titlebars_bound_only_the_effective_window_radius() {
+        let mut cfg = Cfg::parse("[decoration]\nheight = 20\nradius = 24 # stored shell preference is separate\n").unwrap();
+        assert_eq!(clamp_decoration_radius(&mut cfg).unwrap(), Some(20));
+        assert_eq!(cfg.get("decoration", "radius"), Some(Val::Int(20)));
+        assert!(cfg.text().contains("# stored shell preference is separate"));
+        assert_eq!(clamp_decoration_radius(&mut cfg).unwrap(), None);
+        cfg.set("decoration", "radius", &Val::Int(0)).unwrap();
+        assert_eq!(clamp_decoration_radius(&mut cfg).unwrap(), None);
+    }
+
+    #[test]
+    fn terminal_minimal_keeps_global_radius_but_applies_a_legal_ssd() {
+        let (dir, src, paths) = crate::theme::engine::apply::tests::sandbox("terminal-radius");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let selection = Selection { name: "terminal-minimal".into(), radius: Some(24.0), sync_rdwm: true, ..Selection::default() };
+        apply(&src, &paths, &selection).unwrap();
+        assert_eq!(src.selection().radius, Some(24.0));
+        let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("decoration", "height"), Some(Val::Int(20)));
+        assert_eq!(cfg.get("decoration", "radius"), Some(Val::Int(20)));
+        let widgets = crate::widgets::config::WidgetsConfig::load(&paths.shell_json());
+        assert_eq!(widgets.items[0].use_, "builtin:tty-clock");
+        assert!(widgets.items[0].source.is_none());
+        assert_eq!(crate::widgets::config::resolve(&widgets.items[0], &src.themes_dir, false).unwrap().def.id, "tty-clock");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     fn theme(name: &str, dark: bool) -> Theme {
         let d = crate::theme::builtin::def(name).unwrap();

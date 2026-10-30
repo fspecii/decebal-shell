@@ -34,6 +34,35 @@ fn text(v: &Value, k: &str) -> String {
 pub fn known(id: &str) -> bool {
     catalogue().is_ok_and(|c| c.images.contains_key(id))
 }
+/// Exact bytes of the original photograph reviewed with the shipped catalogue.
+pub fn reviewed_digest(id: &str) -> Option<&'static str> {
+    let image = catalogue().ok()?.images.get(id)?;
+    eligible_reviewed(image).then(|| image["full_resolution_review"]["sha256"].as_str()).flatten()
+}
+pub fn reviewed_originals() -> Vec<(String, String, u32, u32)> {
+    catalogue()
+        .map(|c| {
+            c.images
+                .iter()
+                .filter_map(|(id, v)| {
+                    if !eligible_reviewed(v) {
+                        return None;
+                    }
+                    let hash = v["full_resolution_review"]["sha256"].as_str()?;
+                    let dims = v["resolution"].as_array()?;
+                    Some((id.clone(), hash.into(), u32::try_from(dims.first()?.as_u64()?).ok()?, u32::try_from(dims.get(1)?.as_u64()?).ok()?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+fn eligible_reviewed(image: &Value) -> bool {
+    image["purity"] == "sfw"
+        && image["ai_review"]["flagged_ai"] == false
+        && image["ai_review"]["returned_ai_boolean"] != true
+        && image["tags"].as_array().is_some_and(|tags| !tags.iter().any(|t| t["id"] == 133451) && !rejected_tags(tags.iter().filter_map(|t| t["name"].as_str())))
+        && image["full_resolution_review"]["sha256"].as_str().is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+}
 pub fn rejected_tags<'a>(tags: impl IntoIterator<Item = &'a str>) -> bool {
     tags.into_iter().any(|s| {
         let s = s.to_ascii_lowercase().replace(['_', '-'], " ");

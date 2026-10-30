@@ -34,6 +34,8 @@ pub struct Plan {
     pub writes: Vec<Write>,
     pub notes: Vec<String>,
     pub rdwm_changed: bool,
+    /// Opt-in curated background request, suppressed for previews.
+    pub follow_wallpaper: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -321,7 +323,9 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
                     Some(s) => {
                         o.insert("source".into(), json!(s));
                     }
-                    None if crate::widgets::samples::source(&use_).is_some() => {}
+                    None if crate::widgets::samples::source(&use_).is_some() => {
+                        o.insert("use".into(), json!(format!("builtin:{use_}")));
+                    }
                     None => {
                         notes.push(format!("widget `{use_}` is not in the package or its parents, left out"));
                         continue;
@@ -425,6 +429,12 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         loop {
             let mut c = cfg.clone();
             rdwm_extras(&mut c, &attempt, &schema, &mut notes)?;
+            if let Some(radius) = rdwm::clamp_decoration_radius(&mut c)? {
+                let note = format!("Window corner radius limited to the {radius}px titlebar; your saved radius preference is unchanged");
+                if !notes.contains(&note) {
+                    notes.push(note);
+                }
+            }
             text = c.text();
             if text == old {
                 break;
@@ -461,7 +471,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             }
         }
     }
-    Ok(Plan { id, dark: theme.dark, selection: sel, writes, notes, rdwm_changed })
+    Ok(Plan { id, dark: theme.dark, selection: sel, writes, notes, rdwm_changed, follow_wallpaper: reset_colors || !same_theme || src.build(&previous, system_dark()).0.dark != theme.dark })
 }
 
 // ---------------------------------------------------------------- execute and undo
@@ -473,12 +483,17 @@ fn stamp_id() -> String {
 
 /// Writes the plan: undo record first, then each file atomically; any failure restores what was already written.
 pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
+    // An older photo must not commit while this transaction changes theme files.
+    if plan.follow_wallpaper && plan.selection.sync_rdwm && crate::theme::wallpaper_follow::enabled(paths) {
+        crate::theme::wallpaper_follow::cancel(paths)?;
+    }
     let mut applied = Applied { theme_id: plan.id.clone(), dark: plan.dark, files: Vec::new(), notes: plan.notes.clone(), reloaded: false, undo_id: String::new() };
     if plan.writes.is_empty() {
         if let Err(e) = crate::dock_lifecycle::reconcile(&paths.shell_json()) {
             crate::log_warn!("dock: {e}");
         }
         crate::theme::system::request(&paths.shell_json());
+        follow_wallpaper(paths, &plan, &mut applied);
         return Ok(applied);
     }
     let uid = stamp_id();
@@ -523,7 +538,16 @@ pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Stri
             }
         }
     }
+    follow_wallpaper(paths, &plan, &mut applied);
     Ok(applied)
+}
+
+fn follow_wallpaper(paths: &Paths, plan: &Plan, applied: &mut Applied) {
+    if plan.follow_wallpaper && plan.selection.sync_rdwm {
+        if let Err(error) = crate::theme::wallpaper_follow::request(paths, &plan.id, plan.dark) {
+            applied.notes.push(error);
+        }
+    }
 }
 
 fn restore(w: &Write) -> Result<(), String> {
@@ -591,15 +615,19 @@ fn restore_theme(w: &Write, paths: &Paths) -> Result<(), String> {
     } else if w.path == paths.shell_json() {
         let mut old: Value = serde_json::from_str(w.old.as_deref().unwrap_or("{}")).map_err(|e| e.to_string())?;
         let current: Value = serde_json::from_str(if live.is_empty() { "{}" } else { &live }).map_err(|e| e.to_string())?;
-        if old.get("theme_wallpaper") != current.get("theme_wallpaper") {
-            let object = old.as_object_mut().ok_or("undo shell settings must be an object")?;
-            object.shift_remove("theme_wallpaper");
-            if let Some(wallpaper) = current.get("theme_wallpaper") {
-                object.insert("theme_wallpaper".into(), wallpaper.clone());
+        let mut changed = false;
+        let object = old.as_object_mut().ok_or("undo shell settings must be an object")?;
+        for key in ["theme_wallpaper", "wallpaper"] {
+            if object.get(key) != current.get(key) {
+                changed = true;
+                object.shift_remove(key);
+                if let Some(value) = current.get(key) {
+                    object.insert(key.into(), value.clone());
+                }
             }
-            if w.old.is_some() || !object.is_empty() {
-                return io::write_atomic(&w.path, &text_of(&old));
-            }
+        }
+        if changed && (w.old.is_some() || !object.is_empty()) {
+            return io::write_atomic(&w.path, &text_of(&old));
         }
     }
     restore(w)
@@ -639,7 +667,8 @@ pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, 
 
 /// Applies a theme now and puts everything back after `secs` (or on `cancel`). Blocks; run it on a thread.
 pub fn preview(src: &Source, paths: &Paths, name: &str, secs: u64, cancel: &std::sync::atomic::AtomicBool) -> Result<Applied, String> {
-    let plan = plan_with_widgets(src, paths, name, &src.selection(), WidgetChoice::Keep)?;
+    let mut plan = plan_with_widgets(src, paths, name, &src.selection(), WidgetChoice::Keep)?;
+    plan.follow_wallpaper = false;
     let a = execute(src, paths, plan)?;
     if a.undo_id.is_empty() {
         return Ok(a);

@@ -698,6 +698,27 @@ fn start_download(m: &mut Model, apply: bool) {
         .ok();
 }
 
+pub fn follow_theme_notice(m: &Model) -> Option<Item> {
+    if !crate::theme::wallpaper_follow::enabled(&m.paths) {
+        return None;
+    }
+    let status = crate::theme::wallpaper_follow::status(&m.paths);
+    (status.pending || status.error).then_some(Item::Note { text: status.message, warn: status.error })
+}
+pub fn follow_theme_items(m: &Model) -> Vec<Item> {
+    let on = crate::theme::wallpaper_follow::enabled(&m.paths);
+    let mut rows = vec![Row::new("Follow theme wallpaper")
+        .detail("Use the matching curated Wallhaven photo when applying a theme or changing light/dark mode. Off keeps your own wallpaper. Applies static photo backgrounds; turn off live wallpapers first. Photos download in the background; theme previews never download them.")
+        .ctl(Ctl::new("wh:follow-theme", Kind::Toggle(on)))];
+    let status = crate::theme::wallpaper_follow::status(&m.paths);
+    if on && status.error {
+        rows.push(Row::new("Matching wallpaper needs attention").detail(&status.message).ctl(button("wh:follow-retry", "Retry", true)));
+    } else if on && !status.message.is_empty() {
+        rows.push(Row::new(if status.pending { "Preparing wallpaper…" } else { "Theme wallpaper" }).detail(&status.message));
+    }
+    vec![Item::Card(rows)]
+}
+
 // ---------------------------------------------------------------- controls
 
 fn opt(l: &str, v: &str) -> Opt {
@@ -985,6 +1006,20 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     let mut changed_filters = false;
     let mut delay = SEARCH_DEBOUNCE;
     match (parts, v) {
+        (["wh", "follow-theme"], CtlVal::Bool(on)) => {
+            match crate::theme::wallpaper_follow::set_enabled_async(&m.paths, on) {
+                Ok(()) => m.say(if on { "Wallpaper follows theme; matching photo is being prepared" } else { "Wallpaper stays independent" }, false),
+                Err(error) => m.say(error, true),
+            }
+            return;
+        }
+        (["wh", "follow-retry"], CtlVal::Click) => {
+            match crate::theme::wallpaper_follow::set_enabled_async(&m.paths, true) {
+                Ok(()) => m.say("Retrying matching wallpaper", false),
+                Err(error) => m.say(error, true),
+            }
+            return;
+        }
         (["wh", "curated"], CtlVal::Click) => {
             m.wh.tab = Tab::Wallhaven;
             m.wh.view = View::Curated;

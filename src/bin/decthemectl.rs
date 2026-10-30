@@ -53,6 +53,7 @@ decthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale
                                  fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
                                  cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (decthemectl font list)
 decthemectl icons list|set NAME|status|reset|scale N|tint on|off|fallback NAME   icon theme settings (decthemectl icons help)
+decthemectl wallpaper follow on|off|retry|status [--json]   automatically match curated photos to themes (off by default)
 decthemectl wallpaper live set VIDEO | off | status | search WORDS | download ID
                                  Muted video wallpapers, paused behind fullscreen apps (see docs/live-wallpapers.md)
 decthemectl wallpaper wallhaven random|search WORDS   a wallpaper from wallhaven.cc (see docs/wallpapers.md)
@@ -406,6 +407,24 @@ fn main() {
         }
         return;
     }
+    if early.first().map(String::as_str) == Some("--import-reviewed-wallpapers") {
+        let Some(source) = early.get(1) else { die("reviewed import needs a source directory") };
+        if early.len() > 3 || early.get(2).is_some_and(|s| s != "--apply") {
+            die("reviewed import accepts only SOURCE [--apply]")
+        }
+        match decebal::theme::wallpaper_follow::import_reviewed(&Paths::discover(), std::path::Path::new(source), early.get(2).is_some()) {
+            Ok(records) => println!("{}", serde_json::to_string_pretty(&records).unwrap()),
+            Err(error) => die(&error),
+        }
+        return;
+    }
+    if early.first().map(String::as_str) == Some("--wallpaper-follow-worker") {
+        let Some(path) = early.get(1) else { die("wallpaper worker needs a request file") };
+        if let Err(e) = decebal::theme::wallpaper_follow::worker(std::path::Path::new(path)) {
+            die(&e);
+        }
+        return;
+    }
     decebal::compat::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let src = Source::discover();
@@ -514,14 +533,25 @@ fn main() {
                 }
                 i += 1;
             }
-            if widget_choice == decebal::theme::engine::apply::WidgetChoice::Ask {
-                apply(&src, &sel);
+            let paths = Paths::discover();
+            let mut plan = decebal::theme::engine::apply::plan_selection_with_widgets(&src, &paths, &sel, widget_choice).unwrap_or_else(|e| die(&e));
+            // This command applies a complete design, including an explicitly
+            // enabled matching photo even when reapplying the same design.
+            plan.follow_wallpaper = true;
+            let changed = plan.rdwm_changed;
+            let result = decebal::theme::engine::apply::execute(&src, &paths, plan).unwrap_or_else(|e| die(&e));
+            let rd = if !sel.sync_rdwm {
+                "rdwm untouched (--no-rdwm)"
+            } else if !changed {
+                "rdwm config already up to date"
+            } else if result.reloaded {
+                "rdwm config updated and reloaded"
             } else {
-                let plan = decebal::theme::engine::apply::plan_selection_with_widgets(&src, &Paths::discover(), &sel, widget_choice).unwrap_or_else(|e| die(&e));
-                let result = decebal::theme::engine::apply::execute(&src, &Paths::discover(), plan).unwrap_or_else(|e| die(&e));
-                println!("applied {}", result.theme_id);
-            }
+                "rdwm config updated (rdwm is not running)"
+            };
+            println!("applied {} ({}); {rd}", result.theme_id, if result.dark { "dark" } else { "light" });
         }
+
         Some("set") => {
             let (Some(k), Some(v)) = (args.get(1), args.get(2)) else { die("set needs KEY VALUE") };
             let mut sel = src.selection();
@@ -632,7 +662,13 @@ fn main() {
                 }
             }
         }
-        Some("wallpaper") => match if args.get(1).map(String::as_str) == Some("live") { decebal::livewall::cli(&args[2..]) } else { decebal::settings::wallhaven::cli::run(&args[1..]) } {
+        Some("wallpaper") => match if args.get(1).map(String::as_str) == Some("follow") {
+            decebal::theme::wallpaper_follow::cli(&args[2..])
+        } else if args.get(1).map(String::as_str) == Some("live") {
+            decebal::livewall::cli(&args[2..])
+        } else {
+            decebal::settings::wallhaven::cli::run(&args[1..])
+        } {
             Ok(line) => println!("{line}"),
             Err(e) => die(&e),
         },

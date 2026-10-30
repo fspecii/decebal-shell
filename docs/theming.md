@@ -325,6 +325,12 @@ decthemectl system set gtk-font off    # keep your own GTK font (the theme's fon
 decthemectl apply-system [--dry-run] [--only gtk,qt]   # run it by hand; --dry-run lists the files it would write
 ```
 
+**File manager appearance** defaults to **Follow theme**: Windows 11/Frutiger Aero
+use the Explorer-inspired Files profile; macOS/Graphite use Finder-inspired Files;
+other themes keep Native Files geometry. Explicit Native/Explorer/Finder choices
+stay fixed across themes. GTK integration must be on and Files must be reopened.
+See [Files profiles and limits](file-manager-profiles.md).
+
 The palette comes from the resolved theme (background, sidebar, surface, popup, titlebar, text, accent, red/green/yellow/blue, dark or
 light). Each target renders from it (`src/theme/system/*.rs`):
 
