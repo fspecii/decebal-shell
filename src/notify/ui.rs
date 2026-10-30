@@ -534,6 +534,14 @@ impl Ui {
         }
         self.pal = pal;
         self.theme_generation = generation;
+        // The shared watcher also wakes us for icon-pack changes. Drop both
+        // successful and missing lookups, and refresh retained banner artwork
+        // without replacing notifications or resetting their expiry/hover state.
+        self.icon_cache.clear();
+        for i in 0..self.banners.len() {
+            let n = self.banners[i].n.clone();
+            self.banners[i].icon = self.resolve_icon(&n);
+        }
         self.reflow(sh);
     }
 
