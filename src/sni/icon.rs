@@ -117,6 +117,42 @@ pub(super) fn overlay(base: Arc<Pixmap>, badge: Option<Arc<Pixmap>>) -> Arc<Pixm
     result.draw_pixmap((result.width() - side) as i32, (result.height() - side) as i32, small.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
     Arc::new(result)
 }
+/// Only the properties needed to redraw an icon. Retains at most two already-bounded pixmaps,
+/// rather than keeping an application's entire D-Bus reply alive between theme changes.
+#[derive(Clone, Default)]
+pub(super) struct Source {
+    pub name: String,
+    pub root: String,
+    pub base: Option<Arc<Pixmap>>,
+    pub overlay_name: String,
+    pub overlay: Option<Arc<Pixmap>>,
+}
+impl Source {
+    pub fn depends_on_theme(&self) -> bool {
+        !self.name.is_empty() || !self.overlay_name.is_empty() || self.base.is_none()
+    }
+    fn named(&self, name: &str) -> Option<Arc<Pixmap>> {
+        if name.is_empty() {
+            return None;
+        }
+        if let Some(icon) = custom(&self.root, name) {
+            let (scale, tint) = crate::icons::live::render_settings();
+            let mut rendered = crate::icons::raster::fit(&icon, 32, ((32.0 * scale).round() as u32).max(1))?;
+            if tint && crate::icons::raster::is_symbolic(&Path::new(&self.root).join(name)) {
+                crate::icons::raster::tint(&mut rendered, crate::theme::th().text.t());
+            }
+            Some(Arc::new(rendered))
+        } else {
+            crate::icons::load_named(name, 32).map(Arc::new)
+        }
+    }
+    pub fn render(&self, icons: &mut crate::icons::IconCache) -> Arc<Pixmap> {
+        let base = self.named(&self.name).or_else(|| self.base.clone()).unwrap_or_else(|| Arc::new(icons.get(&self.name, 32).clone()));
+        let badge = self.named(&self.overlay_name).or_else(|| self.overlay.clone());
+        overlay(base, badge)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +181,19 @@ mod tests {
         std::fs::write(root.join("embed.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><image href="file:///tmp/example.png"/></svg>"##).unwrap();
         assert!(custom(root.to_str().unwrap(), "embed").is_none());
         std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn raw_sources_are_reused_without_named_lookup() {
+        let mut pixmap = Pixmap::new(2, 2).unwrap();
+        pixmap.fill(tiny_skia::Color::from_rgba8(11, 22, 33, 255));
+        let base = Arc::new(pixmap);
+        let source = Source { base: Some(base.clone()), ..Default::default() };
+        assert!(!source.depends_on_theme());
+        let rendered = source.render(&mut crate::icons::IconCache::default());
+        assert!(Arc::ptr_eq(&rendered, &base));
+        assert!(Source::default().depends_on_theme());
+        assert!(Source { name: "app".into(), base: Some(base.clone()), ..Default::default() }.depends_on_theme());
+        assert!(Source { overlay_name: "badge".into(), base: Some(base), ..Default::default() }.depends_on_theme());
     }
     #[test]
     fn relative_paths_never_escape() {

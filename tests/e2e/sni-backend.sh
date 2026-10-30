@@ -4,12 +4,13 @@ set -euo pipefail
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
 export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
-for MODE in external owned lifecycle; do
+for MODE in external owned lifecycle icons; do
  ROOT=$(mktemp -d /tmp/decebal-sni-backend.XXXXXX)
  cleanup() { set +e; [[ -n ${TEST_PID:-} ]] && kill "$TEST_PID" 2>/dev/null; [[ -n ${FIXTURE_PID:-} ]] && kill "$FIXTURE_PID" 2>/dev/null; [[ -n ${BUS_PID:-} ]] && kill "$BUS_PID" 2>/dev/null; wait 2>/dev/null; rm -rf "$ROOT"; }
  trap cleanup EXIT
  export HOME="$ROOT/home" XDG_CONFIG_HOME="$ROOT/config" XDG_CACHE_HOME="$ROOT/cache" XDG_STATE_HOME="$ROOT/state" XDG_DATA_HOME="$ROOT/data" XDG_RUNTIME_DIR="$ROOT/runtime" DECEBAL_SNI_TEST_ROOT="$ROOT"
- mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_DATA_HOME" "$XDG_RUNTIME_DIR"
+ export DECEBAL_CONFIG="$ROOT/config/omarchy"
+ mkdir -p "$DECEBAL_CONFIG" "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_DATA_HOME" "$XDG_RUNTIME_DIR"
  chmod 700 "$XDG_RUNTIME_DIR"
  unset DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_PID
  export DBUS_SESSION_BUS_ADDRESS="unix:path=$ROOT/bus" DECEBAL_SNI_WATCHER_MODE="$MODE"
@@ -22,6 +23,7 @@ for MODE in external owned lifecycle; do
  }
  TEST=private_bus_backend
  if [[ $MODE == lifecycle ]]; then TEST=private_bus_reconnect; else start_services; fi
+ if [[ $MODE == icons ]]; then TEST=private_icon_theme_refresh; fi
  echo "Testing real backend: $MODE"
  (cd "$REPO"; CARGO_BUILD_JOBS=4 cargo test --lib "sni::private_tests::$TEST" -- --ignored --exact --test-threads=1) & TEST_PID=$!
  STARTED=false; RESTARTED=false

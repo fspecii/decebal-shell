@@ -215,3 +215,64 @@ fn host_registration_lifecycle(conn: &mut Conn, watcher_owner: &str) {
     conn.call_blocking(Message::call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReleaseName", "s", strings(&[name]))).unwrap();
     assert_eq!(signals(&mut observer, watcher_owner, Duration::from_millis(250)).iter().filter(|m| *m == "StatusNotifierHostUnregistered").count(), 1);
 }
+
+#[test]
+#[ignore = "run tests/e2e/sni-backend.sh; never use a live session bus"]
+fn private_icon_theme_refresh() {
+    let root = PathBuf::from(std::env::var("DECEBAL_SNI_TEST_ROOT").expect("private fixture root"));
+    assert!(root.to_string_lossy().starts_with("/tmp/decebal-sni-backend."));
+    assert_eq!(std::env::var("DBUS_SESSION_BUS_ADDRESS").unwrap(), format!("unix:path={}/bus", root.display()));
+    let config = crate::icons::config::shell_json();
+    assert!(config.starts_with(&root));
+    let icon_root = PathBuf::from(std::env::var_os("XDG_DATA_HOME").unwrap()).join("icons");
+    assert!(icon_root.starts_with(&root));
+    for (theme, base, badge) in [("SniThemeA", "#123456", "#77bb33"), ("SniThemeB", "#dc572a", "#9955ff")] {
+        let directory = icon_root.join(theme).join("32x32/apps");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(icon_root.join(theme).join("index.theme"), format!("[Icon Theme]\nName={theme}\nDirectories=32x32/apps\n[32x32/apps]\nSize=32\nType=Fixed\nContext=Applications\n")).unwrap();
+        for (name, colour) in [("fixture-theme-symbolic", base), ("fixture-badge-symbolic", badge)] {
+            std::fs::write(directory.join(format!("{name}.svg")), format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="{colour}" d="M0 0h32v32H0z"/></svg>"#))
+                .unwrap();
+        }
+    }
+    fn select(path: &std::path::Path, theme: &str, tint: bool) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, serde_json::json!({"icons":{"theme":theme,"fallback":"none","monochrome_tint":tint}}).to_string()).unwrap();
+    }
+    select(&config, "SniThemeA", false);
+    let mut conn = Conn::session().unwrap();
+    let host = Host::start(Arc::new(|| {}));
+    let s = wait(&host, |s| s.items.len() == 2);
+    let key = s.items.iter().find(|i| i.title == "Fixture red").unwrap().key;
+    let watcher = owner(&mut conn);
+    update(&mut conn, 1, "theme-named", "1");
+    update(&mut conn, 1, "overlay", "theme-named");
+    fn pixels(s: &Snapshot, key: u64, base: [u8; 4], badge: [u8; 4]) -> bool {
+        s.items.iter().any(|i| i.key == key && i.icon.as_ref().is_some_and(|p| p.data()[..4] == base && p.data()[p.data().len() - 4..] == badge))
+    }
+    let a = wait(&host, |s| pixels(s, key, [18, 52, 86, 255], [119, 187, 51, 255]));
+    let image_a = a.items.iter().find(|i| i.key == key).unwrap().icon.clone().unwrap();
+    // Finish all initial remote traffic, then change only the local icon configuration.
+    thread::sleep(Duration::from_millis(150));
+    let get_all = events(&root).iter().filter(|r| r["method"] == "GetAll").count();
+    let new_icon = events(&root).iter().filter(|r| r["method"] == "NewIcon").count();
+    select(&config, "SniThemeB", false);
+    let b = wait(&host, |s| pixels(s, key, [220, 87, 42, 255], [153, 85, 255, 255]));
+    assert!(b.generation > a.generation);
+    assert_eq!(owner(&mut conn), watcher);
+    assert_eq!(&image_a.data()[..4], &[18, 52, 86, 255], "published snapshot image was mutated");
+    select(&config, "SniThemeB", true);
+    let colour = crate::theme::th().text;
+    let tinted = [colour.0, colour.1, colour.2, 255];
+    wait(&host, |s| pixels(s, key, tinted, tinted));
+    // Theme generation alone must repaint symbolic pixels even when icon settings and app are unchanged.
+    let original = crate::theme::th();
+    let mut changed = (*original).clone();
+    changed.text = crate::theme::Rgb(31, 197, 112);
+    crate::theme::live::publish_theme(changed);
+    wait(&host, |s| pixels(s, key, [31, 197, 112, 255], [31, 197, 112, 255]));
+    crate::theme::live::publish_theme((*original).clone());
+    assert_eq!(get_all, events(&root).iter().filter(|r| r["method"] == "GetAll").count(), "local icon refresh fetched remote properties");
+    assert_eq!(new_icon, events(&root).iter().filter(|r| r["method"] == "NewIcon").count(), "test relied on an app NewIcon signal");
+    assert_eq!(owner(&mut conn), watcher);
+}

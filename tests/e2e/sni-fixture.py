@@ -127,6 +127,7 @@ class Item(Properties):
         self.color = 'f03c5a' if index == 1 else '18c7e8'
         self.bad = ''
         self.named = False
+        self.theme_named = False
         self.overlay = ''
         self.failures = a.initial_failures
         self.menu = Menu(self.bus, index)
@@ -153,9 +154,9 @@ class Item(Properties):
         empty = dbus.Array([], signature='(iiay)')
         return {'Category': dbus.String('ApplicationStatus'), 'Id': dbus.String('fixture-' + str(self.index)),
             'Title': dbus.String(self.title), 'Status': dbus.String(self.status), 'WindowId': dbus.Int32(0),
-            'IconThemePath': dbus.String(str(icon_root) if self.named else ''), 'IconName': dbus.String('fixture-custom' if self.named else ''), 'IconPixmap': empty if self.named else pixmap,
-            'OverlayIconName': dbus.String('fixture-badge' if self.overlay == 'named' else ''), 'OverlayIconPixmap': dbus.Array([dbus.Struct((dbus.Int32(1), dbus.Int32(1), dbus.ByteArray(bytes.fromhex('ffffcc00'))), signature='iiay')], signature='(iiay)') if self.overlay == 'pixmap' else empty,
-            'AttentionIconName': dbus.String('fixture-custom' if self.named else ''), 'AttentionIconPixmap': empty if self.named else pixmap,
+            'IconThemePath': dbus.String(str(icon_root) if self.named else ''), 'IconName': dbus.String('fixture-custom' if self.named else 'fixture-theme-symbolic' if self.theme_named else ''), 'IconPixmap': empty if self.named else pixmap,
+            'OverlayIconName': dbus.String('fixture-badge' if self.overlay == 'named' else 'fixture-badge-symbolic' if self.overlay == 'theme-named' else ''), 'OverlayIconPixmap': dbus.Array([dbus.Struct((dbus.Int32(1), dbus.Int32(1), dbus.ByteArray(bytes.fromhex('ffffcc00'))), signature='iiay')], signature='(iiay)') if self.overlay == 'pixmap' else empty,
+            'AttentionIconName': dbus.String('fixture-custom' if self.named else 'fixture-theme-symbolic' if self.theme_named else ''), 'AttentionIconPixmap': empty if self.named else pixmap,
             'AttentionMovieName': dbus.String(''), 'Menu': dbus.ObjectPath('/' if self.menu.mode == 'none' else '/Menu'),
             'ItemIsMenu': dbus.Boolean(self.index == 2),
             'ToolTip': dbus.Struct((dbus.String(''), empty, dbus.String(self.title), dbus.String('Private fixture')), signature='sa(iiay)ss')}
@@ -169,7 +170,7 @@ class Item(Properties):
     @dbus.service.method(SNI, in_signature='is', out_signature='')
     def Scroll(self, delta, orientation): log('Scroll', item=self.index, delta=int(delta), orientation=str(orientation))
     @dbus.service.signal(SNI, signature='')
-    def NewIcon(self): pass
+    def NewIcon(self): log('NewIcon', item=self.index)
     @dbus.service.signal(SNI, signature='')
     def NewTitle(self): pass
     @dbus.service.signal(SNI, signature='s')
@@ -232,6 +233,7 @@ class Control(dbus.service.Object):
             bytes.fromhex(str(value))
             item.color = str(value); item.bad = ''; item.NewIcon()
         elif field == 'named': item.named = bool(int(value)); item.NewIcon()
+        elif field == 'theme-named': item.theme_named = bool(int(value)); item.NewIcon()
         elif field == 'overlay': item.overlay = str(value); item.NewIcon()
         elif field == 'failures': item.failures = min(20, max(0, int(value))); item.title = 'Retried properties'; item.NewTitle()
         elif field == 'menu':

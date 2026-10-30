@@ -4,8 +4,8 @@ use std::{
     collections::HashMap,
     sync::atomic::{AtomicU64, Ordering},
     sync::{
-        mpsc::{self, Receiver, SyncSender},
         Arc, Mutex,
+        mpsc::{self, Receiver, SyncSender},
     },
     time::{Duration, Instant},
 };
@@ -91,6 +91,7 @@ struct Entry {
     menu_path: String,
     item: Item,
     ready: bool,
+    icon_source: Option<icon::Source>,
     failures: u8,
 }
 enum Pending {
@@ -106,6 +107,7 @@ enum Pending {
 }
 struct Worker {
     icons: crate::icons::IconCache,
+    icon_generation: (u64, u64),
     host_name: String,
     hosts: HashMap<String, String>,
     conn: Conn,
@@ -136,18 +138,10 @@ fn strings(v: &[&str]) -> Vec<u8> {
     }
 }
 fn un(v: &Value) -> &Value {
-    if let Value::Variant(x) = v {
-        un(x)
-    } else {
-        v
-    }
+    if let Value::Variant(x) = v { un(x) } else { v }
 }
 fn dict(v: &Value) -> &[(Value, Value)] {
-    if let Value::Dict(d) = un(v) {
-        d
-    } else {
-        &[]
-    }
+    if let Value::Dict(d) = un(v) { d } else { &[] }
 }
 fn prop<'a>(d: &'a [(Value, Value)], name: &str) -> Option<&'a Value> {
     d.iter().find(|(k, _)| k.as_str() == Some(name)).map(|(_, v)| un(v))
@@ -211,6 +205,7 @@ impl Worker {
             aliases: vec![alias],
             menu_path: String::new(),
             ready: false,
+            icon_source: None,
             failures: 0,
             item: Item {
                 key,
@@ -233,6 +228,19 @@ impl Worker {
     fn retry_watcher(&mut self) {
         if let Some(delay) = retry_delay(&mut self.watcher_failures) {
             self.watcher_refresh = Some(Instant::now() + delay);
+        }
+    }
+    fn refresh_icons(&mut self) {
+        let generation = (crate::icons::generation(), crate::theme::generation());
+        if self.icon_generation == generation {
+            return;
+        }
+        self.icon_generation = generation;
+        for entry in &mut self.entries {
+            if let Some(source) = entry.icon_source.as_ref().filter(|source| source.depends_on_theme()) {
+                entry.item.icon = Some(source.render(&mut self.icons));
+                self.dirty = true;
+            }
         }
     }
     fn add_host(&mut self, name: String, owner: String) {
@@ -414,20 +422,19 @@ impl Worker {
                         if e.item.icon_name.is_empty() {
                             e.item.icon_name = text(d, "IconName")
                         };
-                        let theme_path = text(d, "IconThemePath");
-                        let base = icon::custom(&theme_path, &e.item.icon_name)
-                            .or_else(|| prop(d, if attention { "AttentionIconPixmap" } else { "IconPixmap" }).and_then(pixmap))
-                            .or_else(|| prop(d, "IconPixmap").and_then(pixmap))
-                            .unwrap_or_else(|| Arc::new(self.icons.get(&e.item.icon_name, 32).clone()));
-                        let overlay_name = text(d, "OverlayIconName");
-                        let overlay = icon::custom(&theme_path, &overlay_name).or_else(|| prop(d, "OverlayIconPixmap").and_then(pixmap)).or_else(|| {
-                            if overlay_name.is_empty() {
-                                None
-                            } else {
-                                crate::icons::load_named(&overlay_name, 32).map(Arc::new)
-                            }
-                        });
-                        e.item.icon = Some(icon::overlay(base, overlay));
+                        let attention_pixmap = if attention { prop(d, "AttentionIconPixmap").and_then(pixmap) } else { None };
+                        // A dedicated attention pixmap wins over the normal icon's name when the
+                        // application supplies no dedicated attention name.
+                        let source_name = if attention && text(d, "AttentionIconName").is_empty() && attention_pixmap.is_some() { String::new() } else { e.item.icon_name.clone() };
+                        let source = icon::Source {
+                            name: source_name,
+                            root: text(d, "IconThemePath"),
+                            base: attention_pixmap.or_else(|| prop(d, "IconPixmap").and_then(pixmap)),
+                            overlay_name: text(d, "OverlayIconName"),
+                            overlay: prop(d, "OverlayIconPixmap").and_then(pixmap),
+                        };
+                        e.item.icon = Some(source.render(&mut self.icons));
+                        e.icon_source = Some(source);
                         e.item.item_is_menu = prop(d, "ItemIsMenu").and_then(Value::as_bool).unwrap_or(false);
                         e.item.tooltip = prop(d, "ToolTip")
                             .and_then(|v| if let Value::Struct(v) = v { Some(v.iter().skip(2).filter_map(Value::as_str).collect::<Vec<_>>().join("\n").chars().take(8192).collect()) } else { None })
@@ -716,6 +723,7 @@ fn run(rx: Receiver<Action>, state: Arc<Mutex<Snapshot>>, wake: Arc<dyn Fn() + S
         let host_name = format!("org.kde.StatusNotifierHost.decebal_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         let mut w = Worker {
             icons: crate::icons::IconCache::default(),
+            icon_generation: (crate::icons::generation(), crate::theme::generation()),
             host_name: host_name.clone(),
             hosts: HashMap::new(),
             conn,
@@ -770,6 +778,8 @@ fn run(rx: Receiver<Action>, state: Arc<Mutex<Snapshot>>, wake: Arc<dyn Fn() + S
             if failed {
                 break;
             }
+            // Icons/theme generations are polled only on the worker; snapshots and actions do no I/O.
+            w.refresh_icons();
             let now = Instant::now();
             if !w.own && !w.watcher.is_empty() && w.watcher_refresh.is_some_and(|t| t <= now) {
                 w.watcher_refresh = None;
