@@ -584,6 +584,19 @@ fn update_timer(d: &mut Data, result: Result<crate::timer::Snapshot, String>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn note_widget_values_are_literal_bounded_and_cleared_on_error() {
+        let mut d = super::Data::empty();
+        let note = crate::notes::Note { id: "0".repeat(32), revision: 1, updated_ms: 1, title: "Private thought".into(), body: "Literal {cpu.usage} stays text".into() };
+        super::update_notes(&mut d, Ok(crate::notes::Snapshot { notes: vec![note], corrupt_count: 0 }));
+        let text = crate::widgets::fmt::Fmt::parse("{notes.excerpt}").unwrap().eval(&d);
+        assert_eq!(text, "Literal {cpu.usage} stays text");
+        super::update_notes(&mut d, Err(crate::notes::Error::Invalid));
+        assert_eq!(d.get("notes.count"), Some(&super::Val::Num(0.)));
+        assert_eq!(d.get("notes.title"), Some(&super::Val::Text("Capture a thought".into())));
+        assert!(!crate::widgets::fmt::Fmt::parse("{notes.excerpt}").unwrap().eval(&d).contains("cpu.usage"));
+    }
+
     use super::*;
 
     #[test]
