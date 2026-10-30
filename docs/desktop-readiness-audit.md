@@ -1,10 +1,43 @@
 # Desktop readiness audit — current checkpoint
 
-Refreshed 2026-10-30 after the live shell/WM rollout from shell `8f432c9`
-and rdwm `d547b9c`. Evidence below is scoped to the workflow it exercises;
+Refreshed 2026-10-30 after the live shell/WM rollout from shell `f9a03b0`
+and rdwm helper `2f81eb8`. Evidence below is scoped to the workflow it exercises;
 it does not establish KDE/GNOME parity or physical hardware readiness.
 
 ## Latest accepted iteration
+
+- Combined follow-up: all-bin optimized build passed (9m 30s),1,643 library tests
+  passed/0 failed/11 ignored, strict all-target Clippy and formatting passed.
+  Production inputs were frozen and 506 file hashes verified unchanged after build.
+- Window Tracker ownership `446be5d` closes the remaining window-group worker
+  leak. Eight native X11 cycles preserve surviving-clone UTF-8/legacy title
+  updates and real activation; four private headless Wayland cycles release
+  collectors. Optimized media-free widget integration returns to 2 threads/8 FDs
+  after four enable/disable cycles, rather than leaking one collector per cycle.
+  Initial protocol setup/in-flight replies keep their synchronous boundary; this
+  does not add display-server reconnect or hardware Wayland control acceptance.
+- Optional notification sounds `f9a03b0` are default-off. Named/local-file hints,
+  suppress-sound, DND, muted apps and silent replacement updates are supported.
+  One lazy worker, one pending event, short expiry/rate limiting, sealed bounded
+  audio snapshots and five-second player cleanup prevent unbounded audible backlogs.
+  Exact optimized private fake-player/bus regression 14/14 passed. Requires
+  canberra-gtk-play plus a sound theme; no audible hardware test was performed.
+  See [sound policy and limits](notification-sounds.md).
+- Native popup startup focus repair `0773371` passes exact optimized startup,
+  genuine foreign-focus close and Escape checks. Old optimized dashboard exited
+  normally with status 0 before window discovery. This explains that reproduced
+  apparent-crash case, not the user's still-unspecified flicker/crash report.
+- Guarded explicit same-build WM reload now supports `--force`; without it an
+  already-current binary is a no-op. Private tests cover both paths. Live reload
+  completed with the same three app XIDs/geometries/view/focus restored, followed
+  by new Settings/bar/widget/notifier processes. Current Glyph Rice and wallpaper
+  stayed unchanged; dock remains disabled. Persistent notification history was
+  byte-identical before/after and typed persistence status reports no errors.
+- Latest durable release/reload evidence and backups:
+  `~/.local/state/decebal/deployments/latest-20261030-202210/` and
+  `~/.local/state/rdwm/restarts/20261030-202306-mn94ulb4/`.
+
+## Previous accepted gallery/palette iteration
 
 - Settings first-open repair: gallery discovery and generated-image completion
   now wake the native event loop. The old optimized binary failed after exactly
@@ -23,8 +56,8 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
   rebuilds. Exact optimized NextKDE/glass private test 18/18 passed, including
   repeated group changes, media interaction, changing title and backdrop pixels.
   The old live daemon was replaced; a one-second live sample dropped from
-  approximately 400% to 2%CPU. Window-group Tracker worker shutdown remains a
-  separate follow-up; no universal idle-power or performance claim.
+  approximately 400% to 2%CPU. Window-group Tracker worker shutdown is repaired in the follow-up above;
+  there is no universal idle-power or performance claim.
 - Notification font/viewport reflow, queue promotion/deadlines and keyboard
   actions passed the optimized 12-case native matrix: dark/light × 100/200% text
   ×normal/narrow/tiny screens. Existing IDs/history/focus survive ordinary
@@ -133,7 +166,7 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
 | Familiar file management | Follow-theme preference is the default when absent: Windows11/Frutiger Aero → Explorer, macOS/Graphite → Finder, others Native; explicit choices remain fixed. Private native list/grid/navigation/create-folder checks include dark Windows11 with independent Nord; [limits](file-manager-profiles.md) | **Visual Nautilus profiles, not complete Explorer/Finder replicas.** No ribbon, Finder column view, replacement navigation or new file-operation model. Existing GTK windows may require reopening. |
 | Move, snap, tile and resize | rdwm implements Shift snapping, freely movable centred fullscreen exit, tiling formation; existing macOS/snap/resize suites and checkpoint evidence | User confirmed smoothness with Picom no-frame-pacing; repeatable NVIDIA first-drag/resize frame timing remains unproven. Do not infer 60fps from geometry or upload counters. |
 | Premium window effects | Unified SSD X11 shadow carrier with correct group stacking/input transparency and bounded peripheral uploads; native debug/release 45 checks | Native shadow controls use cached live-parser capability and reject stale unsupported events. Latest accepted WM is now running; hardware/mixed-DPI acceptance remains. CSD/undecorated windows and Wayland shadows absent. Mixed-DPI/resource/performance checks on real hardware remain. |
-| Notifications and history | Bounded private atomic persistence, recovery/error/Retry, failed-clear durability and typed status; optimized font/viewport/keyboard matrix above; live new daemon activated | Legacy in-memory-only history reset during the explicitly announced reload. Optional notification sounds are being implemented, not accepted yet. Cached notification app icons still need icon-pack generation refresh. No AT-SPI/native Wayland frontend. |
+| Notifications and history | Bounded private atomic persistence, recovery/error/Retry, failed-clear durability and typed status; optimized font/viewport/keyboard matrix above; live new daemon activated | Legacy in-memory-only history reset during the explicitly announced reload. Default-off optional sounds passed the private optimized policy/lifecycle gate above; real audible hardware acceptance remains. Cached notification app icons still need icon-pack generation refresh. No AT-SPI/native Wayland frontend. |
 | Tray/background application controls | Bounded SNI/DBusMenu across bar/rail/taskbar, custom paths/overlays, dynamic submenus and typed input; actual OBS and private pixels/lifecycle tests pass. Worker refreshes icon/theme generations from cached sources without paint I/O or new GetAll/app NewIcon; A→B/tint/stable-key regression passed; [guide](app-indicators.md) | No XEmbed, attention movies, hover tooltips or menu-item icons. Wayland activation/global coordinates and native app matrix remain. Extremely short/custom rails can exhaust space. |
 | Network, audio and Bluetooth | Native settings backed by nmcli, pactl/wpctl and bluetoothctl; `settings/system/{network,sound,bluetooth}.rs`, fake-command fixtures | Depends on installed services/tools. Parser/fake-runner coverage does not establish real Wi-Fi auth, VPN credentials, device hotplug, headset profile switching or service restart recovery. |
 | Arrange displays and scale text | X11 xrandr workflow retained; native rdwm Wayland typed capability/query/apply/Keep/Revert, per-output scale/transform/position/modes/power where supported, stale epoch protection and persisted confirmation. Actual nested Wayland Settings and X11/forced-X11 release checks passed; [contract](wayland-displays.md) | Requires matching rdwm protocol v1. Nested host owns physical modes/power, so those controls are honestly disabled. Physical DRM enable/disable/mode, hotplug and mixed-DPI hardware matrix remain. |
@@ -157,8 +190,8 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
 
 ## Next implementation batch
 
-[Concrete next work and acceptance gates](desktop-readiness-next.md) records earlier priorities. Current work closes window-tracker lifetimes, optional
-notification sounds and the section-by-section Dux replica; the latest notifier
+[Concrete next work and acceptance gates](desktop-readiness-next.md) records earlier priorities. Window-tracker lifetimes and optional
+notification sounds are accepted above; current work continues the section-by-section Dux replica; the latest notifier
 and WM handoffs have completed, while hardware acceptance remains open.
 These do not erase the larger missing file-manager fidelity, accessibility,
 portal, toolkit and hardware requirements in the matrix.
@@ -174,7 +207,7 @@ not merely a manifest, control label or large aggregate test count.
 
 At the accepted rollout, the user's current choice was Glyph Rice/dark with
 Wallhaven `zpzqeg.jpg`; workspace 2 stayed visible. Settings, bar, notifier and
-widget host run the accepted optimized build, and rdwm runs SHA`4b8091fa…d028`.
+widget host run optimized source `f9a03b0`, and rdwm runs SHA`4b8091fa…d028`.
 The dock is disabled for this rail theme: no hidden dock process was retained.
 Picom and application processes were preserved. Later user selections must be
 read from the running session, never restored from this audit snapshot.
@@ -201,3 +234,9 @@ more specific failure observation. Do not attribute unrelated private test/core
 events to the live desktop.
 
 The overall desktop-readiness goal remains ACTIVE.
+
+
+Small integration follow-ups for the next source batch: add Notification sounds
+to the static Settings search index and CLI settings help, and refine the DND row
+wording to acknowledge critical visual alerts. These do not invalidate the sound
+policy/playback tests; they remain usability work, not claimed complete.
