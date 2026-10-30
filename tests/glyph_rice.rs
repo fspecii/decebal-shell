@@ -23,15 +23,15 @@ fn glyph_package_is_safe_and_packs_reproducibly() {
 }
 
 #[test]
-fn glyph_restores_colours_preserves_widgets_and_selects_variant_art() {
+fn glyph_restores_colours_and_preserves_widgets_and_independent_wallpaper() {
     let dir = std::env::temp_dir().join(format!("glyph-contract-{}", std::process::id()));
     fs::create_dir_all(dir.join("shell")).unwrap();
     let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/glyph-rdwmctl".into(), socket: dir.join("no.sock") };
-    fs::write(&paths.rdwm_config, "[decoration]\nbuttons = false\n").unwrap();
+    fs::write(&paths.rdwm_config, "[wallpaper]\nimage = \"/private/chosen.jpg\"\nmode = \"fit\"\n[decoration]\nbuttons = false\n").unwrap();
     let src = Source { shell_json: paths.shell_json(), themes_dir: root().parent().unwrap().to_path_buf() };
     let widgets = json!({"enabled":false,"future":42,"items":[{"use":"builtin:clock-card","enabled":false,"x":123,"options":{"private":"retain"}}]});
     fs::write(paths.shell_json(), json!({"theme":{"name":"nord","palette":"nord"},"widgets":widgets,"unrelated":123}).to_string()).unwrap();
-    for (mode, bg, fg, artwork) in [(Mode::Dark, "#000000", "#f2f2f2", "dark.png"), (Mode::Light, "#e9e9e9", "#0b0b0b", "light.png")] {
+    for (mode, bg, fg) in [(Mode::Dark, "#000000", "#f2f2f2"), (Mode::Light, "#e9e9e9", "#0b0b0b")] {
         let base = Selection { mode, palette: Some("nord".into()), ..Selection::default() };
         let p = apply::plan_with_widgets(&src, &paths, "glyph-rice", &base, apply::WidgetChoice::Keep).unwrap();
         assert!(p.selection.palette.is_none());
@@ -47,7 +47,9 @@ fn glyph_restores_colours_preserves_widgets_and_selects_variant_art() {
         assert_eq!(shell["dock"]["enabled"], false);
         assert_eq!(shell["bar"]["position"], "left");
         let config = &p.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new;
-        assert!(config.contains(artwork));
+        let parsed = decebal::settings::tomlcfg::Cfg::parse(config).unwrap();
+        assert_eq!(parsed.get("wallpaper", "image"), Some(decebal::settings::tomlcfg::Val::Str("/private/chosen.jpg".into())));
+        assert_eq!(parsed.get("wallpaper", "mode"), Some(decebal::settings::tomlcfg::Val::Str("fit".into())));
         assert!(config.contains("buttons = true"), "must recover from the old port's disabled buttons");
     }
     fs::remove_dir_all(dir).unwrap();

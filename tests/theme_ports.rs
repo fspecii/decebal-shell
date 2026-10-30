@@ -61,6 +61,7 @@ fn port_packages_pack_and_keep_custom_layout_choices() {
         fs::create_dir_all(dir.join("shell")).unwrap();
         let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("no.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: path.parent().unwrap().into() };
+        fs::write(&paths.rdwm_config, "[wallpaper]\nimage = \"/private/photo.jpg\"\nmode = \"center\"\n").unwrap();
         let custom = json!({"enabled":true,"items":[{"use":"builtin:clock-card","x":321,"options":{"private":"retain"}}]});
         fs::write(paths.shell_json(), json!({"theme":{"name":"nord"},"widgets":custom}).to_string()).unwrap();
         let before = fs::read(paths.shell_json()).unwrap();
@@ -78,18 +79,9 @@ fn port_packages_pack_and_keep_custom_layout_choices() {
                 }
                 assert_eq!(shell["dock"]["enabled"], false);
                 let config = &p.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new;
-                let artwork = if *id == "sweeteh" {
-                    if mode == Mode::Dark {
-                        "julia-ly-pD0yNIuaLho-unsplash.jpg"
-                    } else {
-                        "jack-b-JUvlf3OT6kc-unsplash.jpg"
-                    }
-                } else if mode == Mode::Dark {
-                    "dark.png"
-                } else {
-                    "light.png"
-                };
-                assert!(config.contains(artwork));
+                let cfg = decebal::settings::tomlcfg::Cfg::parse(config).unwrap();
+                assert_eq!(cfg.get("wallpaper", "image"), Some(decebal::settings::tomlcfg::Val::Str("/private/photo.jpg".into())));
+                assert_eq!(cfg.get("wallpaper", "mode"), Some(decebal::settings::tomlcfg::Val::Str("center".into())));
                 assert!(!config.contains("buttons = \"none\""));
             }
         }
