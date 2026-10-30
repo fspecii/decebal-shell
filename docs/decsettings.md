@@ -165,6 +165,11 @@ private Xvfb with rdwm and the fake tools in `tests/e2e/fakes/` (screenshots in 
 guide. A specific destination navigates an existing Settings instance without
 closing it or discarding drafts. Requests use a private per-display local socket,
 with bounded data-only messages. An explicit conflicting `--config` is refused.
+If the runtime directory exceeds Linux's Unix-socket path limit, navigation uses
+a short socket under a user-owned mode-0700 `/tmp/decsettings-UID` directory. Its
+name includes separate runtime-directory and display hashes, so independent
+runtime directories keep separate navigation endpoints. Ordinary runtime paths
+keep their existing names. An unsafe owner or directory mode is refused.
 X11 requests reveal/focus through the WM; Wayland retains compositor focus policy.
 The legacy singleton lock is still shared across displays, so a request to a
 Settings instance on another display fails rather than closing it.
