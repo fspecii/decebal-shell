@@ -33,12 +33,18 @@ DBusGMainLoop(set_as_default=True)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--root', required=True)
 parser.add_argument('--watcher', action='store_true')
+parser.add_argument('--initial-failures', type=int, default=0)
 a = parser.parse_args()
 root = Path(a.root).resolve()
 address = os.environ.get('DBUS_SESSION_BUS_ADDRESS', '')
 if address != 'unix:path=' + str(root / 'bus'):
     raise SystemExit('Refusing anything except the explicitly private fixture bus')
 root.mkdir(parents=True, exist_ok=True)
+icon_root = root / 'icons'
+(icon_root / '32x32/status').mkdir(parents=True, exist_ok=True)
+(icon_root / 'index.theme').write_text('[Icon Theme]\nName=Private SNI\nDirectories=32x32/status\n[32x32/status]\nSize=32\nType=Fixed\n')
+for name, color in [('fixture-custom', '#4178e0'), ('fixture-badge', '#ffcc00')]:
+    (icon_root / '32x32/status' / (name + '.svg')).write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="' + color + '" d="M0 0h32v32H0z"/></svg>')
 
 def log(method, **kw):
     with (root / 'events.jsonl').open('a') as f:
@@ -58,6 +64,8 @@ class Menu(Properties):
     def __init__(self, connection, index):
         self.index = index
         self.checked = True
+        self.mode = ''
+        self.dynamic_open = False
         super().__init__(connection, '/Menu')
 
     def properties(self, interface):
@@ -75,16 +83,25 @@ class Menu(Properties):
     @dbus.service.method(MENU, in_signature='iias', out_signature='u(ia{sv}av)')
     def GetLayout(self, parent, depth, names):
         log('GetLayout', item=self.index, parent=int(parent), depth=int(depth))
-        nested = self.node(5, 'More', [self.node(6, 'Nested action')], **{'children-display': dbus.String('submenu')})
+        nested = self.node(5, 'More', [] if self.mode == 'dynamic' and not self.dynamic_open else [self.node(6, 'Nested action')], **{'children-display': dbus.String('submenu')})
         tree = self.node(0, children=[self.node(1, 'Open window'),
             self.node(2, 'Checked option', **{'toggle-type': dbus.String('checkmark'), 'toggle-state': dbus.Int32(int(self.checked))}),
             self.node(3, 'Disabled action', enabled=dbus.Boolean(False)),
             self.node(4, type=dbus.String('separator')), nested])
+        if self.mode == 'oversize': tree = self.node(0, children=[self.node(i + 1, 'Overflow') for i in range(256)])
+        elif self.mode == 'duplicate': tree = self.node(0, children=[self.node(1, 'One'), self.node(1, 'Duplicate')])
+        elif self.mode == 'deep':
+            tree = self.node(20, 'Deep leaf')
+            for i in range(10): tree = self.node(i, 'Deep', [tree])
+        elif self.mode == 'disabled-parent': tree = self.node(0, children=[self.node(5, 'Disabled parent', [self.node(6, 'Nested action')], enabled=dbus.Boolean(False))])
         return dbus.UInt32(1), nested if int(parent) == 5 else tree
 
     @dbus.service.method(MENU, in_signature='i', out_signature='b')
     def AboutToShow(self, ident):
         log('AboutToShow', item=self.index, id=int(ident))
+        if int(ident) == 5 and self.mode == 'dynamic':
+            self.dynamic_open = True
+            return True
         return False
 
     @dbus.service.method(MENU, in_signature='isvu', out_signature='')
@@ -109,6 +126,9 @@ class Item(Properties):
         self.status = 'Active'
         self.color = 'f03c5a' if index == 1 else '18c7e8'
         self.bad = ''
+        self.named = False
+        self.overlay = ''
+        self.failures = a.initial_failures
         self.menu = Menu(self.bus, index)
         super().__init__(self.bus, '/StatusNotifierItem')
         self.register()
@@ -122,6 +142,10 @@ class Item(Properties):
             pass
 
     def properties(self, interface):
+        if self.failures:
+            self.failures -= 1
+            log('GetAllFailure', item=self.index, remaining=self.failures)
+            raise dbus.exceptions.DBusException('Transient fixture failure', name='org.freedesktop.DBus.Error.Failed')
         size = 513 if self.bad == 'oversize' else 24
         pixels = bytes.fromhex('ff' + self.color) * (24 * 24)
         if self.bad: pixels = pixels[:4]
@@ -129,10 +153,10 @@ class Item(Properties):
         empty = dbus.Array([], signature='(iiay)')
         return {'Category': dbus.String('ApplicationStatus'), 'Id': dbus.String('fixture-' + str(self.index)),
             'Title': dbus.String(self.title), 'Status': dbus.String(self.status), 'WindowId': dbus.Int32(0),
-            'IconThemePath': dbus.String(''), 'IconName': dbus.String(''), 'IconPixmap': pixmap,
-            'OverlayIconName': dbus.String(''), 'OverlayIconPixmap': empty,
-            'AttentionIconName': dbus.String(''), 'AttentionIconPixmap': pixmap,
-            'AttentionMovieName': dbus.String(''), 'Menu': dbus.ObjectPath('/Menu'),
+            'IconThemePath': dbus.String(str(icon_root) if self.named else ''), 'IconName': dbus.String('fixture-custom' if self.named else ''), 'IconPixmap': empty if self.named else pixmap,
+            'OverlayIconName': dbus.String('fixture-badge' if self.overlay == 'named' else ''), 'OverlayIconPixmap': dbus.Array([dbus.Struct((dbus.Int32(1), dbus.Int32(1), dbus.ByteArray(bytes.fromhex('ffffcc00'))), signature='iiay')], signature='(iiay)') if self.overlay == 'pixmap' else empty,
+            'AttentionIconName': dbus.String('fixture-custom' if self.named else ''), 'AttentionIconPixmap': empty if self.named else pixmap,
+            'AttentionMovieName': dbus.String(''), 'Menu': dbus.ObjectPath('/' if self.menu.mode == 'none' else '/Menu'),
             'ItemIsMenu': dbus.Boolean(self.index == 2),
             'ToolTip': dbus.Struct((dbus.String(''), empty, dbus.String(self.title), dbus.String('Private fixture')), signature='sa(iiay)ss')}
 
@@ -156,9 +180,14 @@ class Watcher(Properties):
         self.name = dbus.service.BusName(WATCH, bus, do_not_queue=True)
         self.items = []
         self.hosts = []
+        self.failures = a.initial_failures
         super().__init__(bus, '/StatusNotifierWatcher')
 
     def properties(self, interface):
+        if self.failures:
+            self.failures -= 1
+            log('GetAllFailure', item=0, remaining=self.failures)
+            raise dbus.exceptions.DBusException('Transient watcher failure', name='org.freedesktop.DBus.Error.Failed')
         return {'RegisteredStatusNotifierItems': dbus.Array(self.items, signature='s'),
             'IsStatusNotifierHostRegistered': dbus.Boolean(bool(self.hosts)), 'ProtocolVersion': dbus.Int32(0)}
 
@@ -202,6 +231,14 @@ class Control(dbus.service.Object):
             if len(value) != 6: raise ValueError('Expected six hexadecimal digits')
             bytes.fromhex(str(value))
             item.color = str(value); item.bad = ''; item.NewIcon()
+        elif field == 'named': item.named = bool(int(value)); item.NewIcon()
+        elif field == 'overlay': item.overlay = str(value); item.NewIcon()
+        elif field == 'failures': item.failures = min(20, max(0, int(value))); item.title = 'Retried properties'; item.NewTitle()
+        elif field == 'menu':
+            item.menu.mode = str(value)
+            item.menu.dynamic_open = False
+            item.NewTitle()
+            item.menu.LayoutUpdated(2, 0)
         elif field == 'bad':
             if value not in ('oversize', 'truncated', ''): raise ValueError('Invalid malformed mode')
             item.bad = str(value); item.NewIcon()

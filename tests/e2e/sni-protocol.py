@@ -29,6 +29,7 @@ for _ in range(100):
     if len(registered) == 2: break
     time.sleep(.02)
 assert len(registered) == 2, registered
+assert set(map(str, registered)) == {C + ".Item1/StatusNotifierItem", C + ".Item2/StatusNotifierItem"}, registered
 for i, color in ((1, 'f03c5a'), (2, '18c7e8')):
     item = bus.get_object(C + '.Item' + str(i), '/StatusNotifierItem')
     p = item.GetAll(S, dbus_interface=P)

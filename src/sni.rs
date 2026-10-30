@@ -9,6 +9,8 @@ use std::{
     },
     time::{Duration, Instant},
 };
+mod icon;
+
 const WATCH: &str = "org.kde.StatusNotifierWatcher";
 const WP: &str = "/StatusNotifierWatcher";
 const ITEM: &str = "org.kde.StatusNotifierItem";
@@ -43,6 +45,7 @@ pub struct MenuItem {
     pub separator: bool,
     pub toggle: Option<bool>,
     pub children: Vec<MenuItem>,
+    pub submenu: bool,
     pub icon_name: String,
 }
 #[derive(Clone, Default)]
@@ -57,6 +60,7 @@ pub enum Action {
     Secondary { key: u64, x: i32, y: i32 },
     Scroll { key: u64, delta: i32, horizontal: bool },
     OpenMenu { key: u64, x: i32, y: i32 },
+    OpenSubmenu { key: u64, id: i32 },
     MenuEvent { key: u64, id: i32, timestamp: u32 },
 }
 #[derive(Clone)]
@@ -69,7 +73,8 @@ impl Host {
         let (tx, rx) = mpsc::sync_channel(64);
         let state = Arc::new(Mutex::new(Snapshot::default()));
         let s = state.clone();
-        std::thread::Builder::new().name("sni-host".into()).spawn(move || run(rx, s, wake)).expect("start SNI worker");
+        // Failure drops the receiver, leaving a disconnected host and existing desktop controls usable.
+        let _ = std::thread::Builder::new().name("sni-host".into()).spawn(move || run(rx, s, wake));
         Self { state, tx }
     }
     pub fn snapshot(&self) -> Snapshot {
@@ -86,9 +91,11 @@ struct Entry {
     menu_path: String,
     item: Item,
     ready: bool,
+    failures: u8,
 }
 enum Pending {
     Own,
+    HostOwner(String, String),
     Owner(String, String, Option<String>),
     Props(u64),
     WatchOwner,
@@ -99,13 +106,25 @@ enum Pending {
 }
 struct Worker {
     icons: crate::icons::IconCache,
+    host_name: String,
+    hosts: HashMap<String, String>,
     conn: Conn,
     entries: Vec<Entry>,
     pending: HashMap<u32, (Instant, Pending, String)>,
     own: bool,
     watcher: String,
+    watcher_failures: u8,
+    watcher_refresh: Option<Instant>,
     dirty: bool,
     refresh: HashMap<u64, Instant>,
+}
+fn retry_delay(failures: &mut u8) -> Option<Duration> {
+    if *failures >= 5 {
+        return None;
+    }
+    let delay = Duration::from_millis(250u64 << *failures);
+    *failures += 1;
+    Some(delay)
 }
 fn strings(v: &[&str]) -> Vec<u8> {
     {
@@ -156,17 +175,30 @@ impl Worker {
     #[allow(clippy::too_many_arguments)]
     fn rpc(&mut self, d: &str, p: &str, i: &str, m: &str, s: &str, b: Vec<u8>, kind: Pending) {
         if self.pending.len() >= 128 {
+            if let Pending::Props(k) = kind {
+                self.retry(k);
+            }
             return;
         }
+        let retry_key = if let Pending::Props(k) = &kind { Some(*k) } else { None };
         if let Ok(serial) = self.conn.send(&Message::call(d, p, i, m, s, b)) {
-            self.pending.insert(serial, (Instant::now(), kind, d.to_string()));
+            let expected = if d == WATCH && !self.watcher.is_empty() { self.watcher.clone() } else { d.to_string() };
+            self.pending.insert(serial, (Instant::now(), kind, expected));
+        } else if let Some(key) = retry_key {
+            self.retry(key);
         }
     }
     fn bus(&mut self, m: &str, s: &str, b: Vec<u8>, p: Pending) {
         self.rpc("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", m, s, b, p)
     }
     fn register(&mut self, owner: String, path: String, alias: String) {
-        if !owner.starts_with(':') || !service(&owner) || !self.entries.iter().all(|e| e.owner != owner || e.path != path) {
+        if !owner.starts_with(':') || !service(&owner) {
+            return;
+        }
+        if let Some(e) = self.entries.iter_mut().find(|e| e.owner == owner && e.path == path) {
+            if !e.aliases.contains(&alias) && e.aliases.len() < 32 {
+                e.aliases.push(alias);
+            }
             return;
         }
         if self.entries.len() >= 32 {
@@ -179,6 +211,7 @@ impl Worker {
             aliases: vec![alias],
             menu_path: String::new(),
             ready: false,
+            failures: 0,
             item: Item {
                 key,
                 title: String::new(),
@@ -195,6 +228,25 @@ impl Worker {
         self.fetch(key);
         if self.own {
             self.signal("StatusNotifierItemRegistered", Some(&format!("{owner}{path}")));
+        }
+    }
+    fn retry_watcher(&mut self) {
+        if let Some(delay) = retry_delay(&mut self.watcher_failures) {
+            self.watcher_refresh = Some(Instant::now() + delay);
+        }
+    }
+    fn add_host(&mut self, name: String, owner: String) {
+        if self.hosts.len() >= 32 || self.hosts.get(&name) == Some(&owner) {
+            return;
+        }
+        self.hosts.insert(name, owner);
+        self.signal("StatusNotifierHostRegistered", None);
+    }
+    fn retry(&mut self, key: u64) {
+        if let Some(e) = self.entries.iter_mut().find(|e| e.item.key == key) {
+            if let Some(delay) = retry_delay(&mut e.failures) {
+                self.refresh.insert(key, Instant::now() + delay);
+            }
         }
     }
     fn fetch(&mut self, key: u64) {
@@ -221,7 +273,12 @@ impl Worker {
     }
     fn action(&mut self, a: Action) {
         let key = match a {
-            Action::Activate { key, .. } | Action::Secondary { key, .. } | Action::Scroll { key, .. } | Action::OpenMenu { key, .. } | Action::MenuEvent { key, .. } => key,
+            Action::Activate { key, .. }
+            | Action::Secondary { key, .. }
+            | Action::Scroll { key, .. }
+            | Action::OpenMenu { key, .. }
+            | Action::OpenSubmenu { key, .. }
+            | Action::MenuEvent { key, .. } => key,
         };
         let Some(idx) = self.entries.iter().position(|e| e.item.key == key) else { return };
         let e = &self.entries[idx];
@@ -254,15 +311,26 @@ impl Worker {
                     self.rpc(&o, &mp, MENU, "AboutToShow", "i", w.buf, Pending::About(key));
                     return;
                 }
+                self.entries[idx].item.menu_loading = false;
+                self.entries[idx].item.menu_error = Some("This app does not export a menu; its own context menu was requested.".into());
+                self.dirty = true;
                 w.u32(x as u32);
                 w.u32(y as u32);
                 ("ContextMenu", "ii")
             }
-            Action::MenuEvent { id, timestamp, .. } => {
-                fn allowed(v: &[MenuItem], id: i32) -> bool {
-                    v.iter().any(|n| n.id == id && n.enabled && n.visible && !n.separator && n.children.is_empty() || allowed(&n.children, id))
+            Action::OpenSubmenu { id, .. } => {
+                if mp.is_empty() || mp == "/" || !e.item.menu.as_ref().is_some_and(|m| menu_target(m, id, true)) {
+                    return;
                 }
-                if !e.item.menu.as_ref().is_some_and(|v| allowed(v, id)) {
+                self.entries[idx].item.menu_loading = true;
+                self.entries[idx].item.menu_error = None;
+                self.dirty = true;
+                w.u32(id as u32);
+                self.rpc(&o, &mp, MENU, "AboutToShow", "i", w.buf, Pending::About(key));
+                return;
+            }
+            Action::MenuEvent { id, timestamp, .. } => {
+                if !e.item.menu.as_ref().is_some_and(|v| menu_target(v, id, false)) {
                     return;
                 }
                 w.u32(id as u32);
@@ -288,24 +356,37 @@ impl Worker {
         match p {
             Pending::Own => {
                 self.own = ok && a.first().and_then(Value::as_u32).is_some_and(|n| n == 1 || n == 4);
-                if !self.own {
+                if self.own {
+                    self.hosts.insert(self.host_name.clone(), self.conn.unique.clone());
+                    self.signal("StatusNotifierHostRegistered", None);
+                } else {
                     self.bus("GetNameOwner", "s", strings(&[WATCH]), Pending::WatchOwner);
                 }
             }
             Pending::WatchOwner => {
                 if let Some(owner) = a.first().and_then(Value::as_str).filter(|s| s.starts_with(':')) {
                     self.watcher = owner.into();
-                    self.rpc(WATCH, WP, WATCH, "RegisterStatusNotifierHost", "s", strings(&[&self.conn.unique.clone()]), Pending::Ignore);
+                    self.watcher_failures = 0;
+                    self.watcher_refresh = None;
+                    self.rpc(WATCH, WP, WATCH, "RegisterStatusNotifierHost", "s", strings(&[&self.host_name.clone()]), Pending::Ignore);
                     self.rpc(WATCH, WP, PROP, "GetAll", "s", strings(&[WATCH]), Pending::WatchProps);
+                }
+            }
+            Pending::HostOwner(name, expected) => {
+                if ok && a.first().and_then(Value::as_str) == Some(expected.as_str()) {
+                    self.add_host(name, expected);
                 }
             }
             Pending::WatchProps => {
                 if let Some(Value::Array(v)) = a.first().and_then(|v| prop(dict(v), "RegisteredStatusNotifierItems")) {
+                    self.watcher_failures = 0;
                     for v in v.iter().take(32) {
                         if let Some(s) = v.as_str() {
                             self.address(s)
                         }
                     }
+                } else {
+                    self.retry_watcher();
                 }
             }
             Pending::Owner(alias, path, expected) => {
@@ -316,7 +397,7 @@ impl Worker {
                 }
             }
             Pending::Props(key) => {
-                if ok {
+                if ok && matches!(a.first(), Some(Value::Dict(_))) {
                     if let Some(e) = self.entries.iter_mut().find(|e| e.item.key == key) {
                         let d = a.first().map(dict).unwrap_or(&[]);
                         e.item.title = text(d, "Title");
@@ -333,13 +414,23 @@ impl Worker {
                         if e.item.icon_name.is_empty() {
                             e.item.icon_name = text(d, "IconName")
                         };
-                        e.item.icon = prop(d, if attention { "AttentionIconPixmap" } else { "IconPixmap" })
-                            .and_then(pixmap)
+                        let theme_path = text(d, "IconThemePath");
+                        let base = icon::custom(&theme_path, &e.item.icon_name)
+                            .or_else(|| prop(d, if attention { "AttentionIconPixmap" } else { "IconPixmap" }).and_then(pixmap))
                             .or_else(|| prop(d, "IconPixmap").and_then(pixmap))
-                            .or_else(|| Some(Arc::new(self.icons.get(&e.item.icon_name, 32).clone())));
+                            .unwrap_or_else(|| Arc::new(self.icons.get(&e.item.icon_name, 32).clone()));
+                        let overlay_name = text(d, "OverlayIconName");
+                        let overlay = icon::custom(&theme_path, &overlay_name).or_else(|| prop(d, "OverlayIconPixmap").and_then(pixmap)).or_else(|| {
+                            if overlay_name.is_empty() {
+                                None
+                            } else {
+                                crate::icons::load_named(&overlay_name, 32).map(Arc::new)
+                            }
+                        });
+                        e.item.icon = Some(icon::overlay(base, overlay));
                         e.item.item_is_menu = prop(d, "ItemIsMenu").and_then(Value::as_bool).unwrap_or(false);
                         e.item.tooltip = prop(d, "ToolTip")
-                            .and_then(|v| if let Value::Struct(v) = v { Some(v.iter().skip(2).filter_map(Value::as_str).collect::<Vec<_>>().join("\n")) } else { None })
+                            .and_then(|v| if let Value::Struct(v) = v { Some(v.iter().skip(2).filter_map(Value::as_str).collect::<Vec<_>>().join("\n").chars().take(8192).collect()) } else { None })
                             .unwrap_or_default();
                         let mp = text(d, "Menu");
                         if mp != e.menu_path {
@@ -347,8 +438,11 @@ impl Worker {
                             e.menu_path = if path(&mp) { mp } else { String::new() }
                         }
                         e.ready = true;
+                        e.failures = 0;
                         self.dirty = true;
                     }
+                } else {
+                    self.retry(key);
                 }
             }
             Pending::About(k) => self.layout(k),
@@ -358,7 +452,16 @@ impl Worker {
                     e.item.menu_error = None;
                     if ok {
                         let mut count = 0;
-                        e.item.menu = a.get(1).and_then(|v| menu_node(v, 0, &mut count)).map(|n| Arc::new(n.children));
+                        e.item.menu = a
+                            .get(1)
+                            .and_then(|v| menu_node(v, 0, &mut count))
+                            .filter(|root| {
+                                fn unique(n: &MenuItem, seen: &mut std::collections::HashSet<i32>) -> bool {
+                                    n.id >= 0 && seen.insert(n.id) && n.children.iter().all(|c| unique(c, seen))
+                                }
+                                unique(root, &mut std::collections::HashSet::new())
+                            })
+                            .map(|n| Arc::new(n.children));
                         if e.item.menu.is_none() {
                             e.item.menu_error = Some("Invalid application menu".into())
                         }
@@ -396,8 +499,14 @@ impl Worker {
         if m.iface == "org.freedesktop.DBus" && m.member == "NameOwnerChanged" && m.sender == "org.freedesktop.DBus" {
             let s: Vec<_> = a.iter().filter_map(Value::as_str).collect();
             if s.len() == 3 {
+                let before = self.hosts.len();
+                self.hosts.retain(|name, owner| !(name == s[0] && owner != s[2] || owner == s[0] && s[2].is_empty()));
+                if self.own && self.hosts.len() < before {
+                    self.signal("StatusNotifierHostUnregistered", None);
+                }
                 let old: Vec<_> = self.entries.iter().filter(|e| e.owner == s[0] || (e.aliases.iter().any(|x| x == s[0]) && e.owner != s[2])).map(|e| format!("{}{}", e.owner, e.path)).collect();
                 self.entries.retain(|e| !old.contains(&format!("{}{}", e.owner, e.path)));
+                self.refresh.retain(|key, _| self.entries.iter().any(|e| e.item.key == *key));
                 if !old.is_empty() {
                     self.dirty = true;
                     for id in old {
@@ -408,6 +517,7 @@ impl Worker {
                 }
                 if s[0] == WATCH && !self.own {
                     self.watcher.clear();
+                    self.watcher_refresh = None;
                     if s[2].is_empty() {
                         let mut w = Writer::default();
                         w.string(WATCH);
@@ -428,6 +538,7 @@ impl Worker {
             } else if m.member == "StatusNotifierItemUnregistered" {
                 if let Some(s) = a.first().and_then(Value::as_str) {
                     self.entries.retain(|e| format!("{}{}", e.owner, e.path) != s && !e.aliases.iter().any(|x| format!("{}{}", x, e.path) == s));
+                    self.refresh.retain(|key, _| self.entries.iter().any(|e| e.item.key == *key));
                     self.dirty = true;
                 }
             }
@@ -439,7 +550,10 @@ impl Worker {
             if is_menu && m.iface == MENU && cached {
                 self.layout(k)
             } else if m.iface == ITEM || m.iface == PROP {
-                self.refresh.insert(k, Instant::now() + Duration::from_millis(40));
+                if let Some(e) = self.entries.iter_mut().find(|e| e.item.key == k) {
+                    e.failures = 0;
+                }
+                self.refresh.entry(k).or_insert_with(|| Instant::now() + Duration::from_millis(40));
             }
         }
     }
@@ -447,6 +561,10 @@ impl Worker {
         let mut w = Writer::default();
         let mut sig = "";
         let mut error = None;
+        if m.iface == WATCH && matches!(m.member.as_str(), "RegisterStatusNotifierItem" | "RegisterStatusNotifierHost") && (m.sig != "s" || a.len() != 1) {
+            let _ = self.conn.send(&Message::error_to(m, "org.freedesktop.DBus.Error.InvalidArgs", "Expected a single service string"));
+            return;
+        }
         if m.iface == WATCH && m.member == "RegisterStatusNotifierItem" {
             if let Some(s) = a.first().and_then(Value::as_str) {
                 if s.starts_with('/') && path(s) {
@@ -464,7 +582,15 @@ impl Worker {
                 error = Some("InvalidArgs")
             }
         } else if m.iface == WATCH && m.member == "RegisterStatusNotifierHost" {
-            self.signal("StatusNotifierHostRegistered", None)
+            if let Some(name) = a.first().and_then(Value::as_str).filter(|n| service(n)) {
+                if name == m.sender {
+                    self.add_host(name.into(), m.sender.clone());
+                } else if self.hosts.len() < 32 {
+                    self.bus("GetNameOwner", "s", strings(&[name]), Pending::HostOwner(name.into(), m.sender.clone()));
+                }
+            } else {
+                error = Some("InvalidArgs");
+            }
         } else if m.iface == PROP && (m.member == "GetAll" || m.member == "Get") {
             if a.first().and_then(Value::as_str) != Some(WATCH) {
                 error = Some("UnknownInterface")
@@ -487,7 +613,7 @@ impl Worker {
         } else if m.iface == "org.freedesktop.DBus.Peer" && m.member == "Ping" {
         } else if m.iface == "org.freedesktop.DBus.Introspectable" && m.member == "Introspect" {
             sig = "s";
-            w.string("<node><interface name='org.kde.StatusNotifierWatcher'><method name='RegisterStatusNotifierItem'><arg type='s' direction='in'/></method><method name='RegisterStatusNotifierHost'><arg type='s' direction='in'/></method><property name='RegisteredStatusNotifierItems' type='as' access='read'/><property name='IsStatusNotifierHostRegistered' type='b' access='read'/><property name='ProtocolVersion' type='i' access='read'/></interface></node>")
+            w.string("<node><interface name='org.kde.StatusNotifierWatcher'><method name='RegisterStatusNotifierItem'><arg type='s' direction='in'/></method><method name='RegisterStatusNotifierHost'><arg type='s' direction='in'/></method><property name='RegisteredStatusNotifierItems' type='as' access='read'/><property name='IsStatusNotifierHostRegistered' type='b' access='read'/><property name='ProtocolVersion' type='i' access='read'/><signal name='StatusNotifierItemRegistered'><arg type='s'/></signal><signal name='StatusNotifierItemUnregistered'><arg type='s'/></signal><signal name='StatusNotifierHostRegistered'/><signal name='StatusNotifierHostUnregistered'/></interface></node>")
         } else {
             error = Some("UnknownMethod")
         }
@@ -506,7 +632,7 @@ impl Worker {
             }
             "IsStatusNotifierHostRegistered" => {
                 w.sig("b");
-                w.u32(1)
+                w.u32(u32::from(!self.hosts.is_empty()))
             }
             "ProtocolVersion" => {
                 w.sig("i");
@@ -543,6 +669,9 @@ fn pixmap(v: &Value) -> Option<Arc<tiny_skia::Pixmap>> {
     }
     Some(Arc::new(p))
 }
+fn menu_target(nodes: &[MenuItem], id: i32, submenu: bool) -> bool {
+    nodes.iter().any(|n| n.enabled && n.visible && !n.separator && (n.id == id && n.submenu == submenu || menu_target(&n.children, id, submenu)))
+}
 fn menu_node(v: &Value, depth: usize, count: &mut usize) -> Option<MenuItem> {
     if depth > 8 || *count >= 256 {
         return None;
@@ -553,12 +682,14 @@ fn menu_node(v: &Value, depth: usize, count: &mut usize) -> Option<MenuItem> {
         return None;
     }
     let id = i32::try_from(s[0].as_int()?).ok()?;
+    if !matches!(un(&s[1]), Value::Dict(_)) {
+        return None;
+    }
     let d = dict(&s[1]);
     let mut children = Vec::new();
-    if let Value::Array(v) = un(&s[2]) {
-        for v in v {
-            children.push(menu_node(v, depth + 1, count)?);
-        }
+    let Value::Array(v) = un(&s[2]) else { return None };
+    for v in v {
+        children.push(menu_node(v, depth + 1, count)?);
     }
     Some(MenuItem {
         id,
@@ -567,6 +698,7 @@ fn menu_node(v: &Value, depth: usize, count: &mut usize) -> Option<MenuItem> {
         visible: prop(d, "visible").and_then(Value::as_bool).unwrap_or(true),
         separator: text(d, "type") == "separator",
         toggle: if text(d, "toggle-type").is_empty() { None } else { prop(d, "toggle-state").and_then(Value::as_int).map(|n| n == 1) },
+        submenu: text(d, "children-display") == "submenu" || !children.is_empty(),
         children,
         icon_name: text(d, "icon-name"),
     })
@@ -581,7 +713,25 @@ fn run(rx: Receiver<Action>, state: Arc<Mutex<Snapshot>>, wake: Arc<dyn Fn() + S
             },
         };
         let _ = conn.set_nonblocking(true);
-        let mut w = Worker { icons: crate::icons::IconCache::default(), conn, entries: Vec::new(), pending: HashMap::new(), own: false, watcher: String::new(), dirty: true, refresh: HashMap::new() };
+        let host_name = format!("org.kde.StatusNotifierHost.decebal_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        let mut w = Worker {
+            icons: crate::icons::IconCache::default(),
+            host_name: host_name.clone(),
+            hosts: HashMap::new(),
+            conn,
+            entries: Vec::new(),
+            pending: HashMap::new(),
+            own: false,
+            watcher: String::new(),
+            watcher_failures: 0,
+            watcher_refresh: None,
+            dirty: true,
+            refresh: HashMap::new(),
+        };
+        let mut host_request = Writer::default();
+        host_request.string(&host_name);
+        host_request.u32(4);
+        w.bus("RequestName", "su", host_request.buf, Pending::Ignore);
         for rule in [
             "type='signal',interface='org.freedesktop.DBus',member='NameOwnerChanged'",
             "type='signal',interface='org.kde.StatusNotifierWatcher'",
@@ -621,6 +771,10 @@ fn run(rx: Receiver<Action>, state: Arc<Mutex<Snapshot>>, wake: Arc<dyn Fn() + S
                 break;
             }
             let now = Instant::now();
+            if !w.own && !w.watcher.is_empty() && w.watcher_refresh.is_some_and(|t| t <= now) {
+                w.watcher_refresh = None;
+                w.rpc(WATCH, WP, PROP, "GetAll", "s", strings(&[WATCH]), Pending::WatchProps);
+            }
             let keys: Vec<_> = w.refresh.iter().filter(|(_, t)| **t <= now).map(|(k, _)| *k).collect();
             for k in keys {
                 w.refresh.remove(&k);
@@ -628,7 +782,14 @@ fn run(rx: Receiver<Action>, state: Arc<Mutex<Snapshot>>, wake: Arc<dyn Fn() + S
             }
             let expired: Vec<_> = w.pending.iter().filter(|(_, (t, _, _))| now.duration_since(*t) > Duration::from_secs(5)).map(|(k, _)| *k).collect();
             for k in expired {
-                if let Some((_, Pending::Layout(id) | Pending::About(id), _)) = w.pending.remove(&k) {
+                let expired = w.pending.remove(&k);
+                if let Some((_, Pending::WatchProps, _)) = &expired {
+                    w.retry_watcher();
+                }
+                if let Some((_, Pending::Props(id), _)) = &expired {
+                    w.retry(*id);
+                }
+                if let Some((_, Pending::Layout(id) | Pending::About(id), _)) = expired {
                     if let Some(e) = w.entries.iter_mut().find(|e| e.item.key == id) {
                         e.item.menu_loading = false;
                         e.item.menu_error = Some("Application menu timed out".into());
@@ -687,6 +848,16 @@ mod tests {
             tree = node(i, vec![tree]);
         }
         assert!(menu_node(&tree, 0, &mut 0).is_none());
+    }
+    #[test]
+    fn transient_property_retry_is_capped_and_exponential() {
+        let mut failures = 0;
+        let delays: Vec<_> = std::iter::from_fn(|| retry_delay(&mut failures)).map(|d| d.as_millis()).collect();
+        assert_eq!(delays, vec![250, 500, 1000, 2000, 4000]);
+        assert_eq!(failures, 5);
+        assert!(retry_delay(&mut failures).is_none());
+        failures = 0;
+        assert_eq!(retry_delay(&mut failures), Some(Duration::from_millis(250)));
     }
     #[test]
     fn string_arguments_are_not_an_array() {

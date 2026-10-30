@@ -53,6 +53,19 @@ fn private_bus_backend() {
     let second = Host::start(Arc::new(|| {}));
     wait(&second, |s| s.items.len() == 2);
     assert_eq!(owner(&mut conn), watcher_owner, "second host stole watcher");
+    // A single signal followed by transient GetAll errors must recover without another signal.
+    update(&mut conn, 1, "failures", "2");
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.title == "Retried properties"));
+    assert!(events(&root).iter().filter(|r| r["method"] == "GetAllFailure").count() >= 6);
+    update(&mut conn, 1, "named", "1");
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.icon.as_ref().is_some_and(|p| p.width() == 32 && p.data()[..4] == [65, 120, 224, 255])));
+    for overlay in ["pixmap", "named"] {
+        update(&mut conn, 1, "overlay", overlay);
+        wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.icon.as_ref().is_some_and(|p| p.data()[..4] == [65, 120, 224, 255] && p.data()[p.data().len() - 4..] == [255, 204, 0, 255])));
+        update(&mut conn, 1, "overlay", "");
+        wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.icon.as_ref().is_some_and(|p| p.data()[p.data().len() - 4..] == [65, 120, 224, 255])));
+    }
+    update(&mut conn, 1, "named", "0");
     update(&mut conn, 1, "title", "Backend changed");
     update(&mut conn, 1, "status", "NeedsAttention");
     update(&mut conn, 1, "color", "4fe187");
@@ -83,6 +96,33 @@ fn private_bus_backend() {
     host.send(Action::MenuEvent { key: red.key, id: 2, timestamp: 101 });
     host.send(Action::MenuEvent { key: red.key, id: 6, timestamp: 102 });
     wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.as_ref().is_some_and(|m| m[1].toggle == Some(false))));
+    for mode in ["oversize", "deep", "duplicate"] {
+        update(&mut conn, 1, "menu", mode);
+        wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.is_none() && i.menu_error.is_some()));
+        update(&mut conn, 1, "menu", "");
+        host.send(Action::OpenMenu { key: red.key, x: 0, y: 0 });
+        wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.is_some() && i.menu_error.is_none()));
+    }
+    update(&mut conn, 1, "menu", "dynamic");
+    host.send(Action::OpenMenu { key: red.key, x: 0, y: 0 });
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.as_ref().is_some_and(|m| m.len() == 5 && m[4].submenu && m[4].children.is_empty())));
+    host.send(Action::OpenSubmenu { key: red.key, id: 5 });
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.as_ref().is_some_and(|m| m.len() == 5 && m[4].children.first().is_some_and(|n| n.id == 6))));
+    assert!(events(&root).iter().any(|r| r["method"] == "AboutToShow" && r["id"] == 5));
+    update(&mut conn, 1, "menu", "disabled-parent");
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.as_ref().is_some_and(|m| m.len() == 1 && !m[0].enabled)));
+    let nested_before = events(&root).iter().filter(|r| r["method"] == "Event" && r["id"] == 6).count();
+    host.send(Action::MenuEvent { key: red.key, id: 6, timestamp: 999 });
+    update(&mut conn, 1, "menu", "none");
+    wait(&host, |s| s.items.iter().any(|i| i.key == red.key && i.menu.is_none()));
+    host.send(Action::OpenMenu { key: red.key, x: 17, y: 19 });
+    let end = Instant::now() + Duration::from_secs(3);
+    while !events(&root).iter().any(|r| r["method"] == "ContextMenu") {
+        assert!(Instant::now() < end);
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(nested_before, events(&root).iter().filter(|r| r["method"] == "Event" && r["id"] == 6).count());
+    assert!(host.snapshot().items.iter().find(|i| i.key == red.key).unwrap().menu_error.as_deref().is_some_and(|e| e.contains("does not export")));
     control(&mut conn, "Drop", "i", dbus::body_u32(1));
     wait(&host, |s| s.items.len() == 1);
     let count = events(&root).iter().filter(|r| r["method"] == "Activate").count();
@@ -93,6 +133,9 @@ fn private_bus_backend() {
     thread::sleep(Duration::from_millis(150));
     assert_eq!(count, events(&root).iter().filter(|r| r["method"] == "Activate").count(), "stale key targeted reowned service");
     assert_eq!(owner(&mut conn), watcher_owner);
+    if std::env::var("DECEBAL_SNI_WATCHER_MODE").as_deref() == Ok("owned") {
+        host_registration_lifecycle(&mut conn, &watcher_owner);
+    }
     let records = events(&root);
     for name in ["Activate", "SecondaryActivate", "Scroll", "AboutToShow", "GetLayout", "Event"] {
         assert!(records.iter().any(|r| r["method"] == name), "missing {name}");
@@ -101,4 +144,74 @@ fn private_bus_backend() {
     assert!(records.iter().any(|r| r["method"] == "Event" && r["id"] == 6));
     drop(second);
     drop(host);
+}
+
+#[test]
+#[ignore = "run tests/e2e/sni-backend.sh; never use a live session bus"]
+fn private_bus_reconnect() {
+    let root = PathBuf::from(std::env::var("DECEBAL_SNI_TEST_ROOT").expect("private fixture root"));
+    assert!(root.to_string_lossy().starts_with("/tmp/decebal-sni-backend."));
+    assert_eq!(std::env::var("DBUS_SESSION_BUS_ADDRESS").unwrap(), format!("unix:path={}/bus", root.display()));
+    assert!(!root.join("bus").exists(), "missing-bus test must start before private daemon");
+    let before = Instant::now();
+    let host = Host::start(Arc::new(|| {}));
+    for _ in 0..100 {
+        assert!(!host.snapshot().connected);
+        let _ = host.send(Action::Activate { key: u64::MAX, x: 999, y: 999 });
+    }
+    assert!(before.elapsed() < Duration::from_millis(500), "missing bus blocked caller");
+    std::fs::write(root.join("start-request"), b"start").unwrap();
+    let before_restart = wait(&host, |s| s.items.len() == 2);
+    let old_keys: Vec<_> = before_restart.items.iter().map(|i| i.key).collect();
+    std::fs::write(root.join("restart-request"), b"restart").unwrap();
+    wait(&host, |s| !s.connected && s.items.is_empty());
+    for key in &old_keys {
+        host.send(Action::Activate { key: *key, x: 999, y: 999 });
+    }
+    let after_restart = wait(&host, |s| s.connected && s.items.len() == 2);
+    assert!(after_restart.items.iter().all(|i| !old_keys.contains(&i.key)));
+    for key in old_keys {
+        host.send(Action::Activate { key, x: 999, y: 999 });
+    }
+    host.send(Action::Activate { key: after_restart.items[0].key, x: 123, y: 456 });
+    let end = Instant::now() + Duration::from_secs(3);
+    while !events(&root).iter().any(|r| r["method"] == "Activate" && r["x"] == 123) {
+        assert!(Instant::now() < end);
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!events(&root).iter().any(|r| r["method"] == "Activate" && r["x"] == 999));
+}
+
+fn host_registration_lifecycle(conn: &mut Conn, watcher_owner: &str) {
+    let mut observer = Conn::session().unwrap();
+    observer
+        .call_blocking(Message::call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch", "s", strings(&["type='signal',interface='org.kde.StatusNotifierWatcher'"])))
+        .unwrap();
+    observer.set_nonblocking(true).unwrap();
+    fn signals(observer: &mut Conn, owner: &str, duration: Duration) -> Vec<String> {
+        let end = Instant::now() + duration;
+        let mut names = Vec::new();
+        while Instant::now() < end {
+            assert!(observer.fill().unwrap());
+            while let Some(m) = observer.next_message().unwrap() {
+                if m.kind == dbus::SIGNAL && m.sender == owner {
+                    names.push(m.member);
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        names
+    }
+    let name = "org.kde.StatusNotifierHost.BackendFixture";
+    assert!(conn.request_name(name, false).unwrap());
+    let register = |conn: &mut Conn| conn.call_blocking(Message::call(WATCH, WP, WATCH, "RegisterStatusNotifierHost", "s", strings(&[name]))).unwrap();
+    assert_eq!(register(conn).kind, dbus::RETURN);
+    assert_eq!(signals(&mut observer, watcher_owner, Duration::from_millis(250)).iter().filter(|m| *m == "StatusNotifierHostRegistered").count(), 1);
+    register(conn);
+    assert!(signals(&mut observer, watcher_owner, Duration::from_millis(150)).is_empty(), "duplicate host registration emitted another signal");
+    let mut impostor = Conn::session().unwrap();
+    register(&mut impostor);
+    assert!(signals(&mut observer, watcher_owner, Duration::from_millis(150)).is_empty(), "non-owner registered someone else's host");
+    conn.call_blocking(Message::call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReleaseName", "s", strings(&[name]))).unwrap();
+    assert_eq!(signals(&mut observer, watcher_owner, Duration::from_millis(250)).iter().filter(|m| *m == "StatusNotifierHostUnregistered").count(), 1);
 }
