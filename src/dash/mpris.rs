@@ -584,6 +584,37 @@ impl Mpris {
     }
 }
 
+/// Drains the wake-up socket and the command queue. The flag is true once the [`Mpris`] handle has been dropped: its write end
+/// of the socket is closed (EOF reads as 0 bytes, and a closed socket is always "readable") and the command sender is gone.
+fn drain_commands(wake_rd: &mut UnixStream, rx: &Receiver<Cmd>, woken: bool) -> (Vec<Cmd>, bool) {
+    let mut dropped = false;
+    if woken {
+        let mut sink = [0u8; 64];
+        loop {
+            match wake_rd.read(&mut sink) {
+                Ok(0) => {
+                    dropped = true;
+                    break;
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    }
+    let mut cmds = Vec::new();
+    loop {
+        match rx.try_recv() {
+            Ok(cmd) => cmds.push(cmd),
+            Err(std::sync::mpsc::TryRecvError::Empty) => break,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                dropped = true;
+                break;
+            }
+        }
+    }
+    (cmds, dropped)
+}
+
 fn worker(shared: &Mutex<Snapshot>, rx: &Receiver<Cmd>, mut wake_rd: UnixStream, waker: &dyn Fn()) -> std::io::Result<()> {
     let mut conn = Conn::session()?;
     conn.set_nonblocking(true)?;
@@ -607,11 +638,12 @@ fn worker(shared: &Mutex<Snapshot>, rx: &Receiver<Cmd>, mut wake_rd: UnixStream,
         let ready = crate::backend::poll_readable(&[conn.fd(), wake_rd.as_raw_fd()], timeout)?;
         let now = Instant::now();
         let mut changed = false;
-        if ready[1] {
-            let mut sink = [0u8; 64];
-            while matches!(wake_rd.read(&mut sink), Ok(n) if n > 0) {}
+        let (cmds, handle_dropped) = drain_commands(&mut wake_rd, rx, ready[1]);
+        if handle_dropped {
+            // The owner is gone: stop instead of polling a closed wake-up socket forever (that is a 100% CPU spin per leaked worker).
+            return Ok(());
         }
-        while let Ok(cmd) = rx.try_recv() {
+        for cmd in cmds {
             let reqs = model.on_command(&cmd, now);
             changed |= matches!(cmd, Cmd::Volume(..) | Cmd::Seek(..));
             send_all(&mut conn, &mut model, reqs)?;
@@ -675,6 +707,34 @@ pub fn format_time(us: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dropped_handle_ends_the_worker_loop_instead_of_spinning() {
+        // Alive: nothing to read, commands are delivered in order and the worker keeps waiting.
+        let (tx, rx) = channel();
+        let (wake, mut wake_rd) = UnixStream::pair().unwrap();
+        wake_rd.set_nonblocking(true).unwrap();
+        let (cmds, dropped) = drain_commands(&mut wake_rd, &rx, false);
+        assert!(cmds.is_empty() && !dropped);
+        tx.send(Cmd::Polling(true)).unwrap();
+        (&wake).write_all(&[1]).unwrap();
+        let (cmds, dropped) = drain_commands(&mut wake_rd, &rx, true);
+        assert!(matches!(cmds.as_slice(), [Cmd::Polling(true)]) && !dropped, "a wake byte is not a shutdown");
+        // Dropped handle: sender and write end are gone. The read end is "readable" forever, so this must be detected.
+        drop(tx);
+        drop(wake);
+        let (cmds, dropped) = drain_commands(&mut wake_rd, &rx, true);
+        assert!(cmds.is_empty() && dropped);
+        // Either half alone is enough, and pending commands still arrive before the shutdown is reported.
+        let (tx, rx) = channel();
+        let (wake, mut wake_rd) = UnixStream::pair().unwrap();
+        wake_rd.set_nonblocking(true).unwrap();
+        tx.send(Cmd::Polling(false)).unwrap();
+        drop(tx);
+        let (cmds, dropped) = drain_commands(&mut wake_rd, &rx, false);
+        assert!(matches!(cmds.as_slice(), [Cmd::Polling(false)]) && dropped);
+        drop(wake);
+    }
 
     fn s(v: &str) -> Value {
         Value::Str(v.into())

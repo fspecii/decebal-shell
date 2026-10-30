@@ -157,7 +157,13 @@ pub fn run(paths: Paths) -> Result<(), String> {
                     Err(e) => eprintln!("decwidgets: {}: {e}", inst.use_),
                 }
             }
-            live = if wins.is_empty() { None } else { Some(Live::new(&used, &commands, waker.clone())) };
+            // A rebuild (new theme, wallpaper or colours) usually leaves the data the cards need unchanged: keep the running
+            // collectors and their history. Only a different set of data groups or commands replaces (and so stops) them.
+            live = match live.take() {
+                _ if wins.is_empty() => None,
+                Some(l) if l.matches(&used, &commands) => Some(l),
+                _ => Some(Live::new(&used, &commands, waker.clone())),
+            };
             if wins.is_empty() {
                 fonts.trim();
                 crate::mem::trim();

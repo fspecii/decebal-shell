@@ -138,41 +138,71 @@ pub type Shared = Arc<Mutex<Option<LayoutState>>>;
 
 /// Starts the watcher. `on_change` runs on the watcher thread whenever the shown state changed.
 pub fn spawn_watcher<F: Fn() + Send + 'static>(shared: Shared, on_change: F) {
+    spawn_watcher_until(shared, on_change, Arc::new(std::sync::atomic::AtomicBool::new(false)), false);
+}
+
+/// Like [`spawn_watcher`], but the thread ends once `stop` is set (checked at least once a second): a data source that is
+/// replaced must not leave its watcher, socket and wake-ups behind. `poll_stop` makes the blocking subscription read wake
+/// up regularly to look at the flag; the bar's never-stopping watcher keeps its plain blocking read.
+pub fn spawn_watcher_until<F: Fn() + Send + 'static>(shared: Shared, on_change: F, stop: Arc<std::sync::atomic::AtomicBool>, poll_stop: bool) {
+    use std::sync::atomic::Ordering::Relaxed;
     std::thread::spawn(move || {
         let set = |v: Option<LayoutState>| {
             let mut g = shared.lock().unwrap_or_else(|p| p.into_inner());
             if *g != v {
                 *g = v;
                 drop(g);
-                on_change();
+                if !stop.load(Relaxed) {
+                    on_change();
+                }
             }
         };
-        loop {
+        // Sleeps in short slices so a stop request is honoured promptly.
+        let nap = |d: Duration| {
+            let end = std::time::Instant::now() + d;
+            while !stop.load(Relaxed) && std::time::Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(100).min(d));
+            }
+        };
+        while !stop.load(Relaxed) {
             let path = socket_path();
             if !path.exists() {
                 set(None);
-                std::thread::sleep(Duration::from_secs(5));
+                nap(Duration::from_secs(5));
                 continue;
             }
             let Ok(mut s) = UnixStream::connect(&path) else {
                 set(None);
-                std::thread::sleep(Duration::from_secs(3));
+                nap(Duration::from_secs(3));
                 continue;
             };
             set(request(r#"{"cmd":"get_state"}"#).and_then(|l| parse_state(&l)));
             if s.write_all(b"{\"cmd\":\"subscribe\",\"events\":[\"layout\",\"tag_view\",\"focus\",\"urgent\",\"window_new\",\"window_gone\"]}\n").is_err() {
-                std::thread::sleep(Duration::from_secs(3));
+                nap(Duration::from_secs(3));
                 continue;
             }
+            if poll_stop {
+                let _ = s.set_read_timeout(Some(Duration::from_secs(1)));
+            }
             // Blocks until rdwm sends something; EOF means rdwm went away.
-            for line in BufReader::new(&mut s).lines() {
-                let Ok(line) = line else { break };
-                if line.contains("\"event\"") {
-                    set(request(r#"{"cmd":"get_state"}"#).and_then(|l| parse_state(&l)));
+            let mut reader = BufReader::new(&mut s);
+            let mut line = String::new();
+            while !stop.load(Relaxed) {
+                match reader.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) if line.ends_with('\n') => {
+                        if line.contains("\"event\"") {
+                            set(request(r#"{"cmd":"get_state"}"#).and_then(|l| parse_state(&l)));
+                        }
+                        line.clear();
+                    }
+                    Ok(_) => {}
+                    Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut | std::io::ErrorKind::Interrupted) => {}
+                    Err(_) => break,
                 }
             }
             set(None);
-            std::thread::sleep(Duration::from_secs(2));
+            nap(Duration::from_secs(2));
         }
     });
 }
@@ -264,6 +294,18 @@ mod tests {
     use super::*;
 
     const STATE: &str = r#"{"ok":true,"state":{"focused":null,"monitors":[{"id":0,"layout":"tile","symbol":"[]="},{"id":1,"layout":"bsp","symbol":"[+]"}],"selected_mon":1}}"#;
+
+    #[test]
+    fn a_stopped_watcher_releases_its_state_without_touching_the_socket() {
+        let shared: Shared = Arc::new(Mutex::new(None));
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        spawn_watcher_until(shared.clone(), || panic!("a stopped watcher must not report changes"), stop, true);
+        let end = std::time::Instant::now() + Duration::from_secs(5);
+        while Arc::strong_count(&shared) > 1 {
+            assert!(std::time::Instant::now() < end, "watcher thread did not end");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 
     #[test]
     fn state_uses_the_selected_monitor() {

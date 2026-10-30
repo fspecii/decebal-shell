@@ -316,6 +316,10 @@ pub fn groups_of(paths: &BTreeSet<String>) -> BTreeSet<String> {
 /// Real data. Only the groups some widget names are sampled; `update` is cheap and meant to run about once a second.
 pub struct Live {
     groups: BTreeSet<String>,
+    /// The command definitions the runners were started for (`matches` compares them).
+    commands: Vec<CommandDef>,
+    /// Set when this source is dropped: its command runners and WM watcher end instead of outliving it.
+    stop: Arc<std::sync::atomic::AtomicBool>,
     sampler: Option<crate::dash::sysinfo::Sampler>,
     gpu: Arc<Mutex<Option<crate::dash::sysinfo::Gpu>>>,
     gpu_at: Option<std::time::Instant>,
@@ -339,13 +343,14 @@ impl Live {
         let groups = groups_of(paths);
         let has = |g: &str| groups.contains(g);
         let tags: crate::menubar::rdwm::Shared = Arc::new(Mutex::new(None));
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         if has("workspace") {
             let w = waker.clone();
-            crate::menubar::rdwm::spawn_watcher(tags.clone(), move || w.wake());
+            crate::menubar::rdwm::spawn_watcher_until(tags.clone(), move || w.wake(), stop.clone(), true);
         }
         let cmds = Arc::new(Mutex::new(HashMap::new()));
         for c in commands {
-            spawn_command(c.clone(), cmds.clone(), wake_fn(&waker));
+            spawn_command(c.clone(), cmds.clone(), wake_fn(&waker), stop.clone());
         }
         let mut wm: Option<Box<dyn crate::menubar::active::ActiveWindow>> = None;
         if has("window") {
@@ -354,6 +359,8 @@ impl Live {
             wm = Some(Box::new(w));
         }
         Live {
+            commands: commands.to_vec(),
+            stop,
             fetch: has("fetch").then(|| super::fetch::Fetch::new(waker.clone())),
             sampler: ["cpu", "mem", "swap", "disk", "net", "uptime"].iter().any(|g| has(g)).then(|| crate::dash::sysinfo::Sampler::new(crate::dash::sysinfo::Paths::default())),
             gpu: Arc::new(Mutex::new(None)),
@@ -367,6 +374,12 @@ impl Live {
             wm,
             groups,
         }
+    }
+
+    /// True when this source already collects exactly `paths` and runs exactly `commands`: a rebuild of the cards (theme,
+    /// wallpaper or colour change) then keeps it, with its history, instead of tearing down and restarting every worker.
+    pub fn matches(&self, paths: &BTreeSet<String>, commands: &[CommandDef]) -> bool {
+        self.groups == groups_of(paths) && self.commands == commands
     }
 
     pub fn update(&mut self, d: &mut Data) {
@@ -502,10 +515,21 @@ impl Live {
     }
 }
 
-/// Runs a user command on a worker thread every `interval` seconds (at least 1), keeping the first line of stdout.
-fn spawn_command(c: CommandDef, out: Arc<Mutex<HashMap<String, String>>>, waker: Arc<dyn Fn() + Send + Sync>) {
+impl Drop for Live {
+    fn drop(&mut self) {
+        // The MPRIS worker ends by itself when its handle is dropped (see `dash::mpris::drain_commands`).
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Runs a user command on a worker thread every `interval` seconds (at least 1), keeping the first line of stdout, until `stop` is set.
+fn spawn_command(c: CommandDef, out: Arc<Mutex<HashMap<String, String>>>, waker: Arc<dyn Fn() + Send + Sync>, stop: Arc<std::sync::atomic::AtomicBool>) {
     use std::io::Read;
+    use std::sync::atomic::Ordering::Relaxed;
     std::thread::spawn(move || loop {
+        if stop.load(Relaxed) {
+            return;
+        }
         let child = std::process::Command::new("sh").arg("-c").arg(&c.run).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn();
         if let Ok(mut child) = child {
             let start = std::time::Instant::now();
@@ -541,7 +565,10 @@ fn spawn_command(c: CommandDef, out: Arc<Mutex<HashMap<String, String>>>, waker:
                 waker();
             }
         }
-        std::thread::sleep(std::time::Duration::from_secs(u64::from(c.interval.max(1))));
+        let wait_until = std::time::Instant::now() + std::time::Duration::from_secs(u64::from(c.interval.max(1)));
+        while !stop.load(Relaxed) && std::time::Instant::now() < wait_until {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
     });
 }
 
@@ -584,6 +611,46 @@ fn update_timer(d: &mut Data, result: Result<crate::timer::Snapshot, String>) {
 
 #[cfg(test)]
 mod tests {
+    fn test_waker() -> crate::app::Waker {
+        crate::app::Waker::new(std::os::unix::net::UnixStream::pair().unwrap().0)
+    }
+
+    fn wait_until(what: &str, mut cond: impl FnMut() -> bool) {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !cond() {
+            assert!(std::time::Instant::now() < end, "timed out: {what}");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn a_rebuild_keeps_a_source_whose_groups_and_commands_did_not_change() {
+        let wake = test_waker();
+        let paths: BTreeSet<String> = ["user.name", "host.name"].map(String::from).into();
+        let cmd = CommandDef { name: "x".into(), run: "true".into(), interval: 60 };
+        let live = Live::new(&paths, &[], wake.clone());
+        assert!(live.matches(&paths, &[]));
+        assert!(live.matches(&["host.name".to_string(), "user.display".to_string()].into(), &[]), "other paths of the same groups still match");
+        assert!(!live.matches(&["media.title".to_string()].into(), &[]), "a new group needs a new source");
+        assert!(!live.matches(&paths, std::slice::from_ref(&cmd)));
+        let with_cmd = Live::new(&paths, std::slice::from_ref(&cmd), wake);
+        assert!(with_cmd.matches(&paths, std::slice::from_ref(&cmd)));
+        assert!(!with_cmd.matches(&paths, &[CommandDef { interval: 61, ..cmd }]), "a changed command restarts its runner");
+    }
+
+    #[test]
+    fn dropping_a_source_ends_its_command_runners() {
+        let wake = test_waker();
+        let cmd = CommandDef { name: "tick".into(), run: "echo hi".into(), interval: 1 };
+        let live = Live::new(&["cmd.tick".to_string()].into(), std::slice::from_ref(&cmd), wake);
+        let (stop, out) = (live.stop.clone(), live.cmds.clone());
+        wait_until("the command ran once", || out.lock().unwrap().get("tick").is_some_and(|v| v == "hi"));
+        assert!(Arc::strong_count(&out) > 2, "the runner shares the result map");
+        drop(live);
+        assert!(stop.load(std::sync::atomic::Ordering::Relaxed));
+        wait_until("the runner thread released the map", || Arc::strong_count(&out) == 1);
+    }
+
     #[test]
     fn note_widget_values_are_literal_bounded_and_cleared_on_error() {
         let mut d = super::Data::empty();
