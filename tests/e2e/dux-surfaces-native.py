@@ -55,7 +55,7 @@ def main():
             shutil.copy2(binaries / name, root / "bin" / name)
         calls = root / "settings-calls"
         fixture = root / "bin/decsettings"
-        fixture.write_text('#!/bin/sh\necho entered >> "$DUX_SETTINGS_CALLS.entered"\nif [ -n "$DUX_SETTINGS_FIXTURE_DELAY" ]; then sleep "$DUX_SETTINGS_FIXTURE_DELAY"; fi\nprintf "%s\\n" "$*" >> "$DUX_SETTINGS_CALLS"\n')
+        fixture.write_text('#!/bin/sh\ndate +%s.%N >> "$DUX_SETTINGS_CALLS.entered"\nif [ -n "$DUX_SETTINGS_FIXTURE_DELAY" ]; then sleep "$DUX_SETTINGS_FIXTURE_DELAY"; fi\nprintf "%s\\n" "$*" >> "$DUX_SETTINGS_CALLS"\ndate +%s.%N >> "$DUX_SETTINGS_CALLS.completed"\n')
         fixture.chmod(0o755)
         curl = root / "bin/curl"
         curl.write_text("#!/bin/sh\nexit 1\n")
@@ -166,14 +166,14 @@ def main():
                             capture("root", f"control-{scale * 100}-{mode}-before-header")
                             previous_calls = len(calls.read_text().splitlines()) if calls.exists() else 0
                             header = 72 + (scale - 1) * 24
-                            click_start=time.monotonic()
-                            diagnostic={"before_click_dump":panel_dump.read_text(),"window_geometry":run("xdotool","getwindowgeometry","--shell",panel_window),"pointer":run("xdotool","getmouselocation","--shell"),"click_window_relative":[round(x+556),round(y+16+header/2)],"exit_before":panel.poll()}
+                            click_start=time.monotonic();click_wall=time.time()
+                            diagnostic={"click_start_wall":click_wall,"before_click_dump":panel_dump.read_text(),"window_geometry":run("xdotool","getwindowgeometry","--shell",panel_window),"pointer":run("xdotool","getmouselocation","--shell"),"click_window_relative":[round(x+556),round(y+16+header/2)],"exit_before":panel.poll()}
                             (evidence/f"control-{scale*100}-{mode}-click-diagnostic.json").write_text(json.dumps(diagnostic,indent=2))
                             run("xdotool", "mousemove", "--window", panel_window, str(round(x + 556)), str(round(y + 16 + header / 2)), "click", "1")
                             def header_action_arrived():
                                 if panel.poll() is not None and "exit_observed_seconds" not in diagnostic:
                                     diagnostic["exit_observed_seconds"]=time.monotonic()-click_start
-                                return calls.exists() and len(calls.read_text().splitlines()) > previous_calls
+                                return calls.exists() and len(calls.read_text().splitlines()) > previous_calls and Path(str(calls)+".completed").exists() and len(Path(str(calls)+".completed").read_text().splitlines()) > previous_calls
                             try:
                                 wait(header_action_arrived, "Control Center native Settings action")
                             except AssertionError:
@@ -182,6 +182,11 @@ def main():
                                 (evidence / f"control-{scale*100}-{mode}-failure.txt").write_text(f"exit={panel.poll()}\n"+panel_dump.read_text())
                                 raise
                             panel.wait(timeout=5)
+                            diagnostic.update(exit_after=panel.poll(),completion_observed_seconds=time.monotonic()-click_start,fixture_entered=Path(str(calls)+".entered").read_text(),fixture_completed=Path(str(calls)+".completed").read_text(),fixture_calls=calls.read_text())
+                            if os.environ.get("DUX_SETTINGS_FIXTURE_DELAY"):
+                                assert "exit_observed_seconds" in diagnostic, "popup exit was not observed before fixture completion"
+                                assert float(diagnostic["fixture_completed"].splitlines()[-1]) > click_wall+diagnostic["exit_observed_seconds"], "fixture must complete after observed popup exit"
+                            (evidence/f"control-{scale*100}-{mode}-click-diagnostic.json").write_text(json.dumps(diagnostic,indent=2))
                             processes.remove(panel)
                             panel_dump.unlink(missing_ok=True)
                         if os.environ.get("DUX_SURFACE_HOST_PART") != "control":

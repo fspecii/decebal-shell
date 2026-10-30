@@ -25,7 +25,9 @@ with tempfile.TemporaryDirectory(prefix='dux-cc-fallback-') as tmp:
  # Keep sibling_or_path inside the fixture too; symlinks resolve to the real package.
  isolated_binary=r/'bin/decbar';shutil.copy2(binary,isolated_binary)
  assert hashlib.sha256(isolated_binary.read_bytes()).digest()==hashlib.sha256(binary.read_bytes()).digest()
+ real_settings=os.environ.get("REAL_SETTINGS_BINARY")
  settings=r/'bin/decsettings';settings.write_text('#!/bin/sh\necho settings >> \"$DUX_FALLBACK_CALLS\"\n');settings.chmod(0o755)
+ if real_settings:shutil.copy2(Path(real_settings).resolve(),settings)
  for name in ('curl','nmcli','pactl','wpctl','playerctl','bluetoothctl','brightnessctl','decutil','rdwmctl'):
   p=r/'bin'/name;p.write_text('#!/bin/sh\nexit 1\n');p.chmod(0o755)
  display=next(f':{n}' for n in range(740,780) if not Path(f'/tmp/.X11-unix/X{n}').exists() and not Path(f'/tmp/.X{n}-lock').exists())
@@ -51,7 +53,26 @@ with tempfile.TemporaryDirectory(prefix='dux-cc-fallback-') as tmp:
    subprocess.run(['xdotool','key','Return'],env=env,check=True);time.sleep(.15)
    assert app.poll() is None and not (r/'calls').exists(),'unfocused Enter launched an invisible target'
    subprocess.run(['xdotool','key','Down','Return'],env=env,check=True)
-   wait(lambda:(r/'calls').exists(),'focused Settings action')
+   if real_settings:
+    settings_window=wait(lambda:subprocess.run(['xdotool','search','--class','decsettings'],env=env,text=True,capture_output=True).stdout.strip(),'real Settings window').splitlines()[0]
+    def owned_settings_pid():
+     for proc in Path('/proc').iterdir():
+      if proc.name.isdigit():
+       try:
+        if (proc/'exe').resolve()==settings.resolve():return int(proc.name)
+       except (OSError,PermissionError):pass
+     return None
+    pid=wait(owned_settings_pid,'owned real Settings PID')
+    assert Path(f'/proc/{pid}/exe').resolve()==settings.resolve(),'unexpected Settings executable'
+    try:
+     wait(lambda:app.poll() is not None,'Control Center exited after launch');time.sleep(2)
+     assert Path(f'/proc/{pid}').exists(),'real Settings died after popup exit'
+     subprocess.run(['xdotool','getwindowgeometry',settings_window],env=env,check=True,capture_output=True)
+     ImageGrab.grab(xdisplay=display).save(out/'real-settings-after-popup-exit.png')
+     (out/'real-settings.json').write_text(json.dumps({'bar_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'settings_sha256':hashlib.sha256(settings.read_bytes()).hexdigest(),'popup_exit':app.poll(),'settings_pid':pid,'settings_xid':settings_window,'alive_after_popup_exit_seconds':2})+'\n')
+    finally:os.kill(pid,15)
+   else:
+    wait(lambda:(r/'calls').exists(),'focused Settings action')
    (out/'keyboard.json').write_text(json.dumps({'unfocused_enter_inert':True,'focused_settings_works':True})+'\n')
    (out/'result.json').write_text(json.dumps({'sha':hashlib.sha256(binary.read_bytes()).hexdigest(),'theme':'macos','package_fonts':False,'icons':checks,'rect':rect},indent=2)+'\n');print('PASS classic-theme Dux CC has visible semantic symbols')
   finally:

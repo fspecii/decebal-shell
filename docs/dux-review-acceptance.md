@@ -165,3 +165,30 @@ using the probe runner, whose child has a parent-death kill signal. The thread
 or child can disappear with the overlay before application launch. This needs a
 production repair and targeted candidate rerun; no production edit was made by
 the investigating agent. Deployment should remain gated on that result.
+
+## Launch lifetime repair: exact debug native proof
+
+Root's repaired debug bar was copied to an immutable private directory and
+hashed `d22a040353815e4f0c4ec0138e66212a96dcee7afbbe100999f620c828ec10ec`.
+The targeted header case and then all four standalone Control Center cases
+(100/200%, dark/light) passed with `DUX_SETTINGS_FIXTURE_DELAY=.2`.
+`/tmp/decebal-popup-launch-after-matrix/*click-diagnostic.json` records fixture
+entry/completion wall-clock timestamps and the already observed normal overlay
+exit. Completion occurs 103–199ms after observed exit in the four cases. This
+proves the child survives the caller, rather than merely winning a fast fixture
+race. Delayed mode now asserts that timestamp ordering.
+
+An optional product launch check is available with
+`REAL_SETTINGS_BINARY=/absolute/decsettings` on the fallback harness. It copies
+the real Settings binary beside the exact bar in private configuration/buses,
+selects Settings by real keyboard navigation, requires the owned Settings
+PID/executable and XID to remain alive for two seconds after popup exit, captures
+the window, then terminates that owned PID. It does not interact with the live
+Settings process. The repaired debug bar plus pinned optimized Settings SHA
+`e2cf1aaf39f4ba48913a3b44485c8f368df7477e99a24f7b120746626ef49135`
+passed: `/tmp/decebal-popup-launch-real-settings-final/real-settings.json`.
+The captured Settings General page was visually inspected.
+
+This resolves the demonstrated caller-lifetime failure for the exact repaired
+debug bar. Root still owns the final optimized rebuild and corresponding gates;
+the older 55c90da optimized candidate remains superseded for launch acceptance.
