@@ -11,6 +11,7 @@
 pub mod art;
 pub mod charts;
 mod draw;
+mod dux;
 pub mod info;
 pub mod layout;
 pub mod mpris;
@@ -38,6 +39,7 @@ enum Drag {
 
 pub struct Dash {
     tab: Tab,
+    dux: dux::State,
     alpha: bool,
     anchor: PopupAnchor,
     fonts: Option<Fonts>,
@@ -78,7 +80,9 @@ pub struct Dash {
 /// along the top edge (`top`, `split`), else near the top edge of the screen.
 fn default_top() -> i32 {
     let th = crate::theme::th();
-    if th.pill_bar().is_some() {
+    if th.bar_style == "dux" {
+        (th.bar_height + 2.0 * th.bar_layout.margin + layout::BAR_GAP).ceil() as i32
+    } else if th.pill_bar().is_some() {
         th.bar_insets().top + 10
     } else {
         crate::theme::BAR_HEIGHT as i32 + layout::BAR_GAP as i32
@@ -91,10 +95,17 @@ impl Dash {
         let weather = weather::load_cached();
         Dash {
             tab,
+            dux: dux::State::for_tab(tab),
             alpha: false,
             anchor: PopupAnchor { top: top.unwrap_or_else(default_top), center_x, edge: Edge::Top },
             fonts: Fonts::load(),
-            symbols: SymbolCache::default(),
+            symbols: {
+                let mut symbols = SymbolCache::default();
+                if crate::theme::th().dashboard_style == "dux" {
+                    symbols.prepare_material();
+                }
+                symbols
+            },
             waker: None,
             visible: Arc::new(AtomicBool::new(true)),
             stats: Arc::new(Mutex::new((0, Stats::default()))),
@@ -179,6 +190,9 @@ impl Dash {
         let g = crate::theme::generation();
         if g != self.theme_seen {
             self.theme_seen = g;
+            if self.dux_enabled() {
+                self.symbols.prepare_material();
+            }
             redraw = true;
         }
         let mut stats_changed = false;
@@ -297,7 +311,7 @@ impl Dash {
             }
         }
         let m = Mpris::start(waker.clone());
-        m.send(Cmd::Polling(self.tab == Tab::Media));
+        m.send(Cmd::Polling(self.tab == Tab::Media || self.dux_enabled()));
         self.mpris = Some(m);
     }
 }
@@ -336,11 +350,15 @@ impl WindowApp for Dash {
     }
 
     fn initial_size(&self) -> (u32, u32) {
-        (layout::CARD_W as u32, layout::CARD_H as u32)
+        if self.dux_enabled() {
+            self.dux_size()
+        } else {
+            (layout::CARD_W as u32, layout::CARD_H as u32)
+        }
     }
 
     fn content_size(&self) -> Option<(u32, u32)> {
-        Some((layout::CARD_W as u32, layout::CARD_H as u32))
+        Some(self.initial_size())
     }
 
     fn set_waker(&mut self, waker: Waker) {
@@ -350,9 +368,13 @@ impl WindowApp for Dash {
         self.waker = Some(waker);
     }
 
-    fn set_screen(&mut self, _: u32, _: u32) {}
+    fn set_screen(&mut self, width: u32, height: u32) {
+        self.dux.screen = (width, height);
+    }
 
-    fn resize(&mut self, _: u32, _: u32) {}
+    fn resize(&mut self, width: u32, height: u32) {
+        self.dux.size = (width, height);
+    }
 
     fn set_rounded(&mut self, _: bool) {}
 
@@ -361,10 +383,17 @@ impl WindowApp for Dash {
     }
 
     fn draw(&mut self, pm: &mut Pixmap) {
-        self.paint(pm);
+        if self.dux_enabled() {
+            self.dux_paint(pm);
+        } else {
+            self.paint(pm);
+        }
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
+        if self.dux_enabled() {
+            return self.dux_motion(x, y);
+        }
         let media = self.media_layout();
         if let Some(d) = self.drag {
             match d {
@@ -392,6 +421,9 @@ impl WindowApp for Dash {
     }
 
     fn pointer_leave(&mut self) -> Response {
+        if self.dux_enabled() {
+            return self.dux_leave();
+        }
         if self.hover.take().is_some() {
             Response::REDRAW
         } else {
@@ -400,6 +432,9 @@ impl WindowApp for Dash {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
+        if self.dux_enabled() {
+            return self.dux_button(x, y, button, pressed);
+        }
         if button != Button::Left {
             return Response::NONE;
         }
@@ -470,6 +505,9 @@ impl WindowApp for Dash {
     }
 
     fn scroll(&mut self, _: f32, _: f32, dy: f32) -> Response {
+        if self.dux_enabled() {
+            return self.dux_scroll(dy);
+        }
         if self.tab == Tab::Media {
             self.adjust_volume(if dy > 0.0 { -5 } else { 5 })
         } else {
@@ -478,6 +516,9 @@ impl WindowApp for Dash {
     }
 
     fn key(&mut self, ev: &KeyEvent) -> Response {
+        if self.dux_enabled() {
+            return self.dux_key(ev);
+        }
         match layout::key_action(self.tab, ev) {
             KeyAction::None => Response::NONE,
             KeyAction::Close => Response::act(Action::Close),

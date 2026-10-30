@@ -21,6 +21,14 @@ pub struct Overlay {
     bar: DecBar,
     place: Placement,
     surface: (u32, u32),
+    scroll: f32,
+    focus: Option<Target>,
+    buffer: Option<Pixmap>,
+    mask: Option<tiny_skia::Mask>,
+    material_seen: u64,
+    viewport_items: Vec<controlcenter::Item>,
+    viewport_source: Vec<controlcenter::Item>,
+    viewport_stamp: (f32, u32),
     started: Instant,
     ready: bool,
     entered: bool,
@@ -38,6 +46,14 @@ impl Overlay {
             bar,
             place,
             surface: (0, 0),
+            scroll: 0.0,
+            focus: None,
+            buffer: None,
+            mask: None,
+            material_seen: 0,
+            viewport_items: Vec::new(),
+            viewport_source: Vec::new(),
+            viewport_stamp: (-1.0, 0),
             started: Instant::now(),
             ready: false,
             entered: false,
@@ -61,6 +77,10 @@ impl Overlay {
     fn open(&mut self, waker: Waker) {
         self.bar.waker = Some(waker.clone());
         crate::theme::live::start_watcher(move || waker.wake());
+        if self.dux() {
+            self.bar.symbols.prepare_material();
+            self.material_seen = crate::theme::generation();
+        }
         self.bar.embed.pinned = Some((0.0, 0.0));
         self.bar.open_control();
         self.sync();
@@ -72,7 +92,8 @@ impl Overlay {
         if w <= 0.0 || h <= 0.0 {
             return;
         }
-        let origin = self.place.origin(w, h, controlcenter::PANEL_W, self.bar.cc_height);
+        let origin = self.place.origin(w, h, self.bar.cc_width(), self.viewport_height());
+        self.scroll = self.scroll.clamp(0.0, (self.bar.cc_height - self.viewport_height()).max(0.0));
         self.bar.embed.pinned = Some(origin);
         self.bar.embed.origin = origin;
         self.bar.embed.screen_w = w;
@@ -86,11 +107,82 @@ impl Overlay {
         self.quit = true;
         self.bar.close()
     }
+
+    fn dux(&self) -> bool {
+        self.bar.cc_style() == controlcenter::settings::Style::Dux
+    }
+
+    fn viewport_height(&self) -> f32 {
+        if self.dux() {
+            self.bar.cc_height.min((self.surface.1 as f32 - self.place.inset_y - EDGE_GAP).max(1.0))
+        } else {
+            self.bar.cc_height
+        }
+    }
+
+    fn viewport_rect(&self) -> Option<InputRect> {
+        let mut rect = self.bar.status_rect()?;
+        if self.dux() {
+            rect.h = self.viewport_height().ceil() as i32;
+        }
+        Some(rect)
+    }
+
+    /// Reuse the viewport allocation and corner mask; only cached snapshots are
+    /// painted. The buffer clips both native glyphs and slider hit decoration.
+    fn draw_viewport(&mut self, pm: &mut Pixmap) {
+        let width = self.bar.cc_width().ceil() as u32;
+        let height = self.viewport_height().ceil().max(1.0) as u32;
+        if self.buffer.as_ref().is_none_or(|b| b.width() != width || b.height() != height) {
+            self.buffer = Pixmap::new(width, height);
+            self.mask = tiny_skia::Mask::new(width, height).and_then(|mut mask| {
+                let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, 28.0)?;
+                mask.fill_path(&path, tiny_skia::FillRule::Winding, true, tiny_skia::Transform::identity());
+                Some(mask)
+            });
+        }
+        let Some(buffer) = self.buffer.as_mut() else { return };
+        crate::gfx::clear(buffer);
+        let scale = crate::theme::live::font_scale().max(1.0);
+        if self.viewport_source != self.bar.cc_items || self.viewport_stamp != (self.scroll, height) {
+            self.viewport_source.clone_from(&self.bar.cc_items);
+            self.viewport_items.clear();
+            self.viewport_items.extend(self.bar.cc_items.iter().filter(|it| it.r.y + it.r.h * scale >= self.scroll && it.r.y <= self.scroll + height as f32).cloned().map(|mut it| {
+                it.r.y -= self.scroll;
+                it
+            }));
+            self.viewport_stamp = (self.scroll, height);
+        }
+        let items = &self.viewport_items;
+        if let Some(fonts) = self.bar.fonts.as_mut() {
+            controlcenter::draw(
+                buffer,
+                &controlcenter::View { origin: (0.0, 0.0), items, height: height as f32, hover: self.bar.cc_hover, style: controlcenter::settings::Style::Dux },
+                fonts,
+                &mut self.bar.symbols,
+            );
+            if let Some(focus) = self.focus.and_then(|wanted| self.bar.cc_items.iter().find(|item| item.target == Some(wanted)).map(|item| (wanted, item.r))) {
+                let r = focus.1;
+                stroke_rounded(buffer, r.x + 1.0, r.y - self.scroll + 1.0, r.w - 2.0, r.h - 2.0, 12.0, crate::theme::th().accent_c(), 2.0);
+            }
+        }
+        if self.bar.cc_height > height as f32 {
+            let track = height as f32 - 32.0;
+            let thumb = (track * height as f32 / self.bar.cc_height).max(24.0);
+            let y = 16.0 + (track - thumb) * self.scroll / (self.bar.cc_height - height as f32);
+            fill_rounded(buffer, width as f32 - 7.0, y, 3.0, thumb, 1.5, crate::theme::th().text_secondary.color(0.5));
+        }
+        if let Some(mask) = &self.mask {
+            buffer.apply_mask(mask);
+        }
+        let (x, y) = self.bar.embed.origin;
+        crate::gfx::blit_scaled(pm, buffer, x, y, width as f32, height as f32, 1.0);
+    }
 }
 
 impl App for Overlay {
     fn size(&self) -> (u32, u32) {
-        (0, Overlay::surface_height(&self.place))
+        (0, if self.dux() { (self.place.inset_y + self.bar.cc_height + EDGE_GAP).ceil().max(1.0) as u32 } else { Overlay::surface_height(&self.place) })
     }
 
     fn surface_spec(&self) -> Option<SurfaceSpec> {
@@ -113,9 +205,13 @@ impl App for Overlay {
         }
         self.surface = (pm.width(), pm.height());
         self.sync();
-        self.bar.status_draw(pm);
-        if let (Some(r), Some((path, last))) = (self.bar.status_rect(), self.debug.as_mut()) {
-            let text = format!("panel {} {} {} {}\nsurface {} {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height());
+        if self.dux() {
+            self.draw_viewport(pm);
+        } else {
+            self.bar.status_draw(pm);
+        }
+        if let (Some(r), Some((path, last))) = (self.viewport_rect(), self.debug.as_mut()) {
+            let text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height(), self.scroll, self.bar.cc_height);
             if *last != text {
                 let _ = std::fs::write(&*path, &text);
                 *last = text;
@@ -127,7 +223,7 @@ impl App for Overlay {
         self.entered = true;
         self.left_at = None;
         self.sync();
-        self.bar.status_motion(x, y)
+        self.bar.status_motion(x, if self.dux() { y + self.scroll } else { y })
     }
 
     fn pointer_leave(&mut self) -> bool {
@@ -140,13 +236,13 @@ impl App for Overlay {
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
         self.left_at = None;
         self.sync();
-        if button == Button::Left && self.bar.status_press(x, y) {
+        let inside = self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
+        if button == Button::Left && inside && self.bar.status_press(x, if self.dux() { y + self.scroll } else { y }) {
             if !self.open_now() {
                 self.quit = true;
             }
             return true;
         }
-        let inside = self.bar.status_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
         if !inside {
             return self.close();
         }
@@ -159,6 +255,17 @@ impl App for Overlay {
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
         self.sync();
+        if self.dux() {
+            if self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32) {
+                let (ox, oy) = self.bar.embed.origin;
+                if controlcenter::hit(&self.bar.cc_items, x - ox, y - oy + self.scroll).is_some_and(|(target, _)| matches!(target, Target::Volume | Target::Brightness)) {
+                    return self.bar.status_wheel(x, y + self.scroll, dy);
+                }
+                self.scroll = (self.scroll + dy * 40.0).clamp(0.0, (self.bar.cc_height - self.viewport_height()).max(0.0));
+                return true;
+            }
+            return false;
+        }
         self.bar.status_wheel(x, y, dy)
     }
 
@@ -166,6 +273,62 @@ impl App for Overlay {
         match key {
             Key::Escape => self.close(),
         }
+    }
+
+    fn nav_key(&mut self, key: crate::app::NavKey) -> bool {
+        if !self.dux() {
+            return false;
+        }
+        let mut targets = Vec::new();
+        for item in &self.bar.cc_items {
+            if let Some(target) = item.target {
+                if !targets.iter().any(|(seen, _)| *seen == target) {
+                    targets.push((target, item.r));
+                }
+            }
+        }
+        if targets.is_empty() {
+            return false;
+        }
+        match key {
+            crate::app::NavKey::Up | crate::app::NavKey::Down => {
+                let step = if key == crate::app::NavKey::Up { -1 } else { 1 };
+                let index = targets.iter().position(|(target, _)| Some(*target) == self.focus).map_or(0, |i| (i as i32 + step).rem_euclid(targets.len() as i32) as usize);
+                self.focus = Some(targets[index].0);
+                self.bar.cc_hover = Some(targets[index].0);
+                let r = targets[index].1;
+                if r.y < self.scroll {
+                    self.scroll = r.y.max(0.0);
+                } else if r.y + r.h > self.scroll + self.viewport_height() {
+                    self.scroll = r.y + r.h - self.viewport_height();
+                }
+                self.sync();
+                true
+            }
+            crate::app::NavKey::Enter => {
+                let active = match self.focus {
+                    Some(wanted) => targets.iter().find(|(target, _)| *target == wanted),
+                    None => targets.first(),
+                };
+                let Some(&(target, rect)) = active else { return false };
+                if matches!(target, Target::Volume | Target::Brightness) {
+                    return false;
+                }
+                self.bar.activate(target, rect.x, rect.w, rect.x + rect.w / 2.0);
+                if !self.open_now() {
+                    self.quit = true;
+                }
+                self.sync();
+                true
+            }
+        }
+    }
+
+    fn glass_regions(&self) -> Vec<crate::glass::Region> {
+        if !self.dux() {
+            return Vec::new();
+        }
+        self.viewport_rect().map(|r| vec![crate::glass::Region { x: r.x as f32, y: r.y as f32, w: r.w as f32, h: r.h as f32, radius: 28.0 }]).unwrap_or_default()
     }
 
     fn wants_keyboard(&self) -> bool {
@@ -180,7 +343,7 @@ impl App for Overlay {
         if !self.ready {
             return Vec::new();
         }
-        self.bar.status_rect().into_iter().collect()
+        self.viewport_rect().into_iter().collect()
     }
 
     fn quit_requested(&self) -> bool {
@@ -193,6 +356,11 @@ impl App for Overlay {
 
     fn tick(&mut self) -> Tick {
         let mut redraw = self.bar.status_tick();
+        if self.dux() && self.material_seen != crate::theme::generation() {
+            self.bar.symbols.prepare_material();
+            self.material_seen = crate::theme::generation();
+            redraw = true;
+        }
         if !self.ready && (redraw || self.started.elapsed() >= READY_WAIT) {
             self.ready = true;
             redraw = true;
@@ -209,6 +377,53 @@ impl App for Overlay {
             }
         }
         Tick { redraw, next: Some(next) }
+    }
+}
+
+/// The native surface evidence test runs alone with an actual Dux theme. This
+/// verifies keyboard behavior against cached device state and recorded setters,
+/// without touching a live device or starting a worker.
+#[cfg(test)]
+pub(crate) fn assert_slider_keyboard_inert() {
+    struct RestoreDry(bool);
+    impl Drop for RestoreDry {
+        fn drop(&mut self) {
+            sys::set_dry_run(self.0);
+        }
+    }
+    let _restore = RestoreDry(sys::is_dry_run());
+    sys::set_dry_run(true);
+    sys::take_log();
+    let place = crate::controlcenter::settings::place(&crate::controlcenter::settings::Host::Nothing, crate::controlcenter::settings::Corner::Auto);
+    let mut overlay = Overlay::new(place, false);
+    *overlay.bar.shared.snap.lock().unwrap() = Snapshot { volume: Some(sys::Volume { level: 0.67, muted: false }), brightness: Some(73), ..Snapshot::default() };
+    overlay.bar.open_control();
+    overlay.resized(960, 720);
+    assert!(overlay.dux() && overlay.open_now());
+    for target in [Target::Volume, Target::Brightness] {
+        assert!(overlay.bar.cc_items.iter().any(|item| item.target == Some(target)));
+        overlay.focus = Some(target);
+        overlay.nav_key(crate::app::NavKey::Enter);
+        assert!(overlay.bar.cc_drag.is_none(), "keyboard must not arm pointer drag");
+        let state = overlay.bar.snapshot();
+        assert_eq!(state.volume.as_ref().unwrap().level, 0.67);
+        assert_eq!(state.brightness, Some(73));
+        assert!(sys::take_log().is_empty(), "keyboard must not issue midpoint setters");
+    }
+    let mut bar = DecBar::new(Box::new(super::active::StaticApp("Native fixture".into())));
+    *bar.shared.snap.lock().unwrap() = Snapshot { volume: Some(sys::Volume { level: 0.67, muted: false }), brightness: Some(73), ..Snapshot::default() };
+    bar.open_control();
+    bar.resized(960, 720);
+    assert!(bar.dux() && bar.open == Open::Control);
+    for target in [Target::Volume, Target::Brightness] {
+        assert!(bar.cc_items.iter().any(|item| item.target == Some(target)));
+        bar.cc_viewport.focus = Some(target);
+        bar.nav_key(crate::app::NavKey::Enter);
+        assert!(bar.cc_drag.is_none(), "mainbar keyboard must not arm pointer drag");
+        let state = bar.snapshot();
+        assert_eq!(state.volume.as_ref().unwrap().level, 0.67);
+        assert_eq!(state.brightness, Some(73));
+        assert!(sys::take_log().is_empty(), "mainbar keyboard must not issue midpoint setters");
     }
 }
 

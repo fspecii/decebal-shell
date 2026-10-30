@@ -230,7 +230,7 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "rdwm"];
+const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),
@@ -510,6 +510,9 @@ pub fn analyze(text: &str) -> Analysis {
                 msg: format!("needs decebal {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
             });
         }
+    }
+    if extra.get("desktop").and_then(|v| v.get("widgets")).and_then(Value::as_str) == Some("none") && extra.get("widgets").and_then(Value::as_array).is_some_and(|items| !items.is_empty()) {
+        cx.diags.push(Diag { level: Level::Error, line: 0, key: "desktop.widgets".into(), msg: "an explicit empty desktop profile cannot also declare widgets".into() });
     }
     if extra.get("bar").and_then(|b| b.get("style")).and_then(Value::as_str) == Some("dux") {
         if let Some(bar) = doc.get("bar").and_then(Item::as_table) {

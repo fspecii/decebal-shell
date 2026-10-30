@@ -423,7 +423,7 @@ mod tests {
         let s = run_ok(&["schema"], &src, &paths);
         assert!(s.contains("colors.dark.accent") && s.contains("decoration.style") && s.contains("[pending:"), "{s}");
         let j: serde_json::Value = serde_json::from_str(&run_ok(&["schema", "--json"], &src, &paths)).unwrap();
-        assert!(j.as_array().unwrap().iter().any(|r| r["key"] == "font.files" && r["applied"] == false));
+        assert!(j.as_array().unwrap().iter().any(|r| r["key"] == "font.files" && r["applied"] == true));
         assert!(run_err(&["bogus"], &src, &paths).contains("unknown theme command"));
         let _ = std::fs::remove_dir_all(d);
     }

@@ -3,6 +3,7 @@
 //! `layout` turns a [`Snapshot`] of system state into a flat display list; `draw` paints it and
 //! `hit` maps pointer positions back to [`Target`]s, so drawing and input share one layout.
 
+mod dux;
 pub mod settings;
 pub mod sys;
 
@@ -14,13 +15,22 @@ use tiny_skia::Pixmap;
 
 pub const PANEL_W: f32 = 340.0;
 
-/// Shared native layout contract; section two supplies the Dux surface implementation.
-pub fn panel_width(_style: Style) -> f32 {
-    PANEL_W
+/// The Dux grid uses two expanded four-cell tiles (source CcMetrics); legacy widths stay fixed.
+pub fn panel_width(style: Style) -> f32 {
+    if style == Style::Dux {
+        600.0
+    } else {
+        PANEL_W
+    }
 }
 
-pub fn layout_styled(s: &Snapshot, tiles: &Tiles, _style: Style) -> (Vec<Item>, f32) {
-    layout_with(s, tiles)
+/// Native style composition; callers use the same item list for painting and input.
+pub fn layout_styled(s: &Snapshot, tiles: &Tiles, style: Style) -> (Vec<Item>, f32) {
+    if style == Style::Dux {
+        dux::layout(s, tiles)
+    } else {
+        layout_with(s, tiles)
+    }
 }
 const PAD: f32 = 12.0;
 const GAP: f32 = 10.0;
@@ -28,6 +38,8 @@ const GAP: f32 = 10.0;
 /// Everything the panel shows, gathered off the UI thread.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Snapshot {
+    /// User name and uptime captured by the background snapshot worker.
+    pub user: Option<(String, String)>,
     pub net: Option<sys::Net>,
     pub bluetooth: Option<sys::Bluetooth>,
     pub volume: Option<sys::Volume>,
@@ -47,6 +59,15 @@ impl Snapshot {
     /// Collects every probe. Slow and blocking: call from a worker thread only.
     pub fn collect() -> Snapshot {
         Snapshot {
+            user: {
+                let user = crate::dash::info::load_user();
+                let uptime = std::fs::read_to_string("/proc/uptime")
+                    .ok()
+                    .and_then(|s| s.split_whitespace().next()?.parse::<f64>().ok())
+                    .map(crate::dash::sysinfo::format_uptime)
+                    .unwrap_or_else(|| "Uptime unavailable".into());
+                Some((user.display, uptime))
+            },
             net: sys::probe_net(),
             bluetooth: sys::probe_bluetooth(),
             volume: None,
@@ -414,11 +435,17 @@ pub fn hit(items: &[Item], px: f32, py: f32) -> Option<(Target, R)> {
     items.iter().rev().find(|i| i.target.is_some() && i.r.contains(px, py)).and_then(|i| i.target.map(|t| (t, i.r)))
 }
 
-fn ink_rgba(ink: Ink) -> (u8, u8, u8, f32) {
+fn ink_rgba(ink: Ink, dux: bool) -> (u8, u8, u8, f32) {
     let th = crate::theme::th();
     match ink {
         Ink::Primary => th.text.a(1.0),
-        Ink::Secondary => th.text.a(0.55),
+        Ink::Secondary => {
+            if dux {
+                th.text_secondary.a(1.0)
+            } else {
+                th.text.a(0.55)
+            }
+        }
         Ink::White => th.accent_text.a(1.0),
     }
 }
@@ -438,8 +465,11 @@ pub struct View<'a> {
 pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut SymbolCache) {
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
     let (panel_r, tile_r, fluent) = look(view.style);
-    fill_rounded(pm, ox, oy, PANEL_W, height, panel_r, crate::theme::th().overlay.color(crate::theme::th().panel_alpha * 0.9));
-    stroke_rounded(pm, ox + 0.5, oy + 0.5, PANEL_W - 1.0, height - 1.0, (panel_r - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
+    let dux = view.style == Style::Dux;
+    fill_rounded(pm, ox, oy, panel_width(view.style), height, panel_r, crate::theme::th().overlay.color(crate::theme::th().panel_alpha * if dux { 1.0 } else { 0.9 }));
+    if !dux || crate::theme::th().outline > 0.0 {
+        stroke_rounded(pm, ox + 0.5, oy + 0.5, panel_width(view.style) - 1.0, height - 1.0, (panel_r - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
+    }
 
     for it in items {
         let (x, y, w, h) = (ox + it.r.x, oy + it.r.y, it.r.w, it.r.h);
@@ -447,13 +477,21 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
         let hovered = it.target.is_some() && it.target == hover;
         match &it.draw {
             Draw::Tile => {
-                fill_rounded(pm, x, y, w, h, tile_r, crate::theme::th().ink(0.09));
-                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
+                fill_rounded(pm, x, y, w, h, tile_r, if dux { crate::theme::th().surface.color(1.0) } else { crate::theme::th().ink(0.09) });
+                if !dux {
+                    stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
+                }
             }
             Draw::SmallTile { on } => {
-                let c = if *on { crate::theme::th().accent_c() } else { crate::theme::th().ink(if hovered { 0.14 } else { 0.09 }) };
+                let c = if *on {
+                    crate::theme::th().accent_c()
+                } else if dux {
+                    crate::theme::th().surface.color(1.0)
+                } else {
+                    crate::theme::th().ink(if hovered { 0.14 } else { 0.09 })
+                };
                 fill_rounded(pm, x, y, w, h, tile_r, c);
-                if !on {
+                if !on && !dux {
                     stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
                 }
             }
@@ -464,19 +502,25 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 } else {
                     fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, c);
                 }
-                let ink = if *on { crate::theme::th().accent_text.t() } else { crate::theme::th().text.t() };
-                blit_symbol(pm, symbols, icon, ink, 17.0, x + w / 2.0, y + h / 2.0);
+                let ink = if *on {
+                    crate::theme::th().accent_text.t()
+                } else if dux {
+                    crate::theme::th().accent.t()
+                } else {
+                    crate::theme::th().text.t()
+                };
+                blit_symbol(pm, symbols, dux, icon, ink, 17.0, x + w / 2.0, y + h / 2.0);
             }
             Draw::Hit => {}
             Draw::Glyph { icon, size, ink } => {
                 if hovered && it.target.is_some() && *size >= 16.0 && w <= 28.0 {
                     fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, crate::theme::th().ink(0.14));
                 }
-                let (r, g, b, _) = ink_rgba(*ink);
-                blit_symbol(pm, symbols, icon, (r, g, b), *size, x + w / 2.0, y + h / 2.0);
+                let (r, g, b, _) = ink_rgba(*ink, dux);
+                blit_symbol(pm, symbols, dux, icon, (r, g, b), *size, x + w / 2.0, y + h / 2.0);
             }
             Draw::Text { text, size, weight, ink, align } => {
-                let (r, g, b, a) = ink_rgba(*ink);
+                let (r, g, b, a) = ink_rgba(*ink, dux);
                 let shown = fit(text, w, *size, *weight, fonts);
                 let tw = fonts.measure(&shown, *size, *weight);
                 let tx = match align {
@@ -489,8 +533,11 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
             Draw::Slider { value, icon } => {
                 fill_rounded(pm, x, y, w, h, h / 2.0, crate::theme::th().ink(0.14));
                 let fw = (w * value.clamp(0.0, 1.0)).max(h);
-                fill_rounded(pm, x, y, fw, h, h / 2.0, crate::theme::th().text.color(0.92));
-                blit_symbol(pm, symbols, icon, crate::theme::th().overlay.t(), 15.0, x + 6.0 + 7.5, y + h / 2.0);
+                fill_rounded(pm, x, y, fw, h, h / 2.0, if dux { crate::theme::th().accent_c() } else { crate::theme::th().text.color(0.92) });
+                if dux {
+                    fill_rounded(pm, x + fw - 2.0, y - 3.0, 4.0, h + 6.0, 2.0, crate::theme::th().accent_c());
+                }
+                blit_symbol(pm, symbols, dux, icon, crate::theme::th().overlay.t(), 15.0, x + 6.0 + 7.5, y + h / 2.0);
             }
         }
     }
@@ -501,6 +548,7 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
 pub fn look(style: Style) -> (f32, f32, bool) {
     let th = crate::theme::th();
     match style {
+        Style::Dux => (28.0, 12.0, true),
         Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
         _ => (th.r(2.0), 16.0, false),
     }
@@ -518,9 +566,11 @@ pub fn fit(s: &str, max_w: f32, size: f32, weight: Weight, fonts: &Fonts) -> Str
     format!("{}…", out.trim_end())
 }
 
-fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, name: &str, rgb: (u8, u8, u8), size: f32, cx: f32, cy: f32) {
-    let px = (size * 2.0).ceil() as u32;
-    if let Some(sym) = symbols.get(name, rgb, px) {
+#[allow(clippy::too_many_arguments)]
+fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, material: bool, name: &str, rgb: (u8, u8, u8), size: f32, cx: f32, cy: f32) {
+    let px = (size * if material { 1.0 } else { 2.0 }).ceil() as u32;
+    let symbol = if material { symbols.get_material(name, rgb, px) } else { symbols.get(name, rgb, px) };
+    if let Some(sym) = symbol {
         crate::gfx::blit_scaled(pm, sym, cx - size / 2.0, cy - size / 2.0, size, size, 1.0);
     }
 }
@@ -531,6 +581,7 @@ mod tests {
 
     fn full() -> Snapshot {
         Snapshot {
+            user: None,
             net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: "Wired".into() }),
             bluetooth: Some(sys::Bluetooth { powered: true, connected: 1 }),
             volume: Some(sys::Volume { level: 0.5, muted: false }),

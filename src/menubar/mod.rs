@@ -3,6 +3,7 @@
 
 pub mod active;
 pub mod awake;
+mod ccviewport;
 pub mod clock;
 mod embed;
 pub mod gate;
@@ -282,6 +283,7 @@ pub struct DecBar {
     // Control Center
     cc_items: Vec<controlcenter::Item>,
     cc_height: f32,
+    cc_viewport: ccviewport::Viewport,
     cc_hover: Option<Target>,
     cc_drag: Option<Target>,
     cc_last_send: Instant,
@@ -383,6 +385,7 @@ impl DecBar {
             waker: None,
             cc_items: Vec::new(),
             cc_height: 0.0,
+            cc_viewport: ccviewport::Viewport::default(),
             cc_hover: None,
             cc_drag: None,
             cc_last_send: Instant::now(),
@@ -817,6 +820,7 @@ impl DecBar {
         let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
         self.cc_items = items;
         self.cc_height = h;
+        self.cc_viewport = ccviewport::Viewport::default();
         self.open = Open::Control;
         self.last_full_refresh = Instant::now();
         self.spawn_snapshot(true);
@@ -825,6 +829,34 @@ impl DecBar {
     /// How the panel is painted: the theme's `control_center.style`, `auto` meaning the flyout look under the Windows taskbar.
     fn cc_style(&self) -> crate::controlcenter::settings::Style {
         crate::theme::th().control_center.style.resolve(self.embed.taskbar)
+    }
+
+    fn cc_clipped(&self) -> bool {
+        !self.embedded && self.cc_style() == controlcenter::settings::Style::Dux && !self.pill_bar()
+    }
+    fn cc_visible_height(&self) -> f32 {
+        if self.cc_clipped() {
+            ccviewport::height(self.cc_height, self.panel_origin().1, self.height as f32)
+        } else {
+            self.cc_height
+        }
+    }
+    fn cc_point(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+        let origin = self.panel_origin();
+        if self.cc_clipped() {
+            self.cc_viewport.point(x, y, origin, self.cc_width(), self.cc_visible_height())
+        } else {
+            Some((x - origin.0, y - origin.1))
+        }
+    }
+    fn cc_sync_viewport(&mut self) {
+        if !self.cc_clipped() {
+            return;
+        }
+        self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
+        if let Some((_, rect)) = ccviewport::targets(&self.cc_items).into_iter().find(|(target, _)| Some(*target) == self.cc_viewport.focus) {
+            self.cc_viewport.reveal(rect, self.cc_height, self.cc_visible_height());
+        }
     }
 
     fn cc_width(&self) -> f32 {
@@ -836,6 +868,7 @@ impl DecBar {
         let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
         self.cc_items = items;
         self.cc_height = h;
+        self.cc_sync_viewport();
     }
 
     // ------------------------------------------------------------- actions
@@ -1217,6 +1250,7 @@ impl App for DecBar {
     fn resized(&mut self, w: u32, h: u32) {
         self.width = w;
         self.height = h;
+        self.cc_sync_viewport();
     }
 
     fn surface_origin(&mut self, x: i32, y: i32) {
@@ -1235,6 +1269,8 @@ impl App for DecBar {
             return;
         }
         self.width = pm.width();
+        self.height = pm.height();
+        self.cc_sync_viewport();
         self.draw_bar(pm);
         let indicator_rects = if self.dux() {
             self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, (i.x, i.y, i.w, i.h))) } else { None }).collect::<Vec<_>>()
@@ -1256,9 +1292,16 @@ impl App for DecBar {
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
                 let style = self.cc_style();
+                let clipped = self.cc_clipped();
+                let width = self.cc_width();
+                let height = self.cc_visible_height();
                 if let Some(f) = self.fonts.as_mut() {
-                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
-                    controlcenter::draw(pm, &view, f, &mut self.symbols);
+                    if clipped {
+                        self.cc_viewport.draw(pm, (ox, oy), width, height, &self.cc_items, self.cc_hover, f, &mut self.symbols);
+                    } else {
+                        let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
+                        controlcenter::draw(pm, &view, f, &mut self.symbols);
+                    }
                 }
             }
             Open::Popup(_) => {
@@ -1303,7 +1346,7 @@ impl App for DecBar {
             }
             Open::Control => {
                 let (x, y) = self.panel_origin();
-                regions.push(crate::glass::Region { x, y, w: self.cc_width(), h: self.cc_height, radius: controlcenter::look(self.cc_style()).0 });
+                regions.push(crate::glass::Region { x, y, w: self.cc_width(), h: self.cc_visible_height(), radius: controlcenter::look(self.cc_style()).0 });
             }
             Open::Popup(_) => {
                 if let Some(p) = &self.popup {
@@ -1375,8 +1418,8 @@ impl App for DecBar {
                 }
             }
             Open::Control => {
-                let (ox, oy) = self.panel_origin();
-                let hover = controlcenter::hit(&self.cc_items, x - ox, y - oy).map(|h| h.0);
+                let hover = self.cc_point(x, y).and_then(|(px, py)| controlcenter::hit(&self.cc_items, px, py)).map(|h| h.0);
+                self.cc_viewport.focus = None;
                 if hover != self.cc_hover {
                     self.cc_hover = hover;
                     redraw = true;
@@ -1557,10 +1600,12 @@ impl App for DecBar {
                 }
             }
             Open::Control => {
-                let (ox, oy) = self.panel_origin();
-                if let Some((t, r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) {
-                    self.activate(t, r.x, r.w, x - ox);
-                    return true;
+                if let Some((px, py)) = self.cc_point(x, y) {
+                    if let Some((t, r)) = controlcenter::hit(&self.cc_items, px, py) {
+                        self.cc_viewport.focus = None;
+                        self.activate(t, r.x, r.w, px);
+                        return true;
+                    }
                 }
                 false
             }
@@ -1605,8 +1650,21 @@ impl App for DecBar {
         if self.open != Open::Control {
             return false;
         }
-        let (ox, oy) = self.panel_origin();
-        let Some((t @ (Target::Brightness | Target::Volume), r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) else { return false };
+        let Some((px, py)) = self.cc_point(x, y) else {
+            return false;
+        };
+        let hit = controlcenter::hit(&self.cc_items, px, py);
+        if self.cc_clipped() && !matches!(hit, Some((Target::Brightness | Target::Volume, _))) {
+            if self.cc_drag.is_some() {
+                return false;
+            }
+            let old = self.cc_viewport.scroll;
+            self.cc_viewport.focus = None;
+            self.cc_viewport.scroll += dy.signum() * 44.0;
+            self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
+            return old != self.cc_viewport.scroll;
+        }
+        let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return false };
         let snap = self.snapshot();
         let cur = match t {
             Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
@@ -1624,23 +1682,32 @@ impl App for DecBar {
     }
 
     fn nav_key(&mut self, key: crate::app::NavKey) -> bool {
-        if !self.dux() || self.open != Open::Control {
+        if self.cc_style() != controlcenter::settings::Style::Dux || self.open != Open::Control {
             return false;
         }
-        let targets: Vec<_> = self.cc_items.iter().filter_map(|item| item.target.map(|target| (target, item.r))).collect();
+        let targets = ccviewport::targets(&self.cc_items);
         if targets.is_empty() {
             return false;
         }
-        let current = targets.iter().position(|(target, _)| Some(*target) == self.cc_hover);
+        let current = targets.iter().position(|(target, _)| Some(*target) == self.cc_viewport.focus.or(self.cc_hover));
         match key {
             crate::app::NavKey::Up | crate::app::NavKey::Down => {
                 let step = if key == crate::app::NavKey::Up { -1 } else { 1 };
                 let index = current.map_or(0, |index| (index as i32 + step).rem_euclid(targets.len() as i32) as usize);
-                self.cc_hover = Some(targets[index].0);
+                let (target, rect) = targets[index];
+                self.cc_viewport.focus = Some(target);
+                self.cc_hover = Some(target);
+                if self.cc_clipped() {
+                    self.cc_viewport.reveal(rect, self.cc_height, self.cc_visible_height());
+                }
                 true
             }
             crate::app::NavKey::Enter => {
                 let (target, rect) = targets[current.unwrap_or(0)];
+                // Enter selects a command, not an arbitrary midpoint slider value.
+                if matches!(target, Target::Volume | Target::Brightness) {
+                    return false;
+                }
                 self.activate(target, rect.x, rect.w, rect.x + rect.w / 2.0);
                 true
             }
@@ -1678,7 +1745,7 @@ impl App for DecBar {
             }
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
-                rects.push(InputRect { x: ox.floor() as i32, y: bh as i32, w: self.cc_width() as i32, h: (oy + self.cc_height - bh).ceil() as i32 });
+                rects.push(InputRect { x: ox.floor() as i32, y: bh as i32, w: self.cc_width() as i32, h: (oy + self.cc_visible_height() - bh).ceil() as i32 });
             }
             Open::Popup(kind) => {
                 // The gap between the item and the popup belongs to the popup, so the pointer stays on

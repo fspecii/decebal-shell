@@ -213,10 +213,15 @@ pub fn custom_widgets(w: &Value) -> bool {
     w.get("items").and_then(Value::as_array).is_some_and(|items| !items.is_empty()) && w.get("theme_baseline") != Some(&widget_layout(w))
 }
 
+/// Explicit authored empty profile, distinct from a legacy widgetless theme.
+pub fn empty_desktop_profile(extra: &serde_json::Map<String, Value>) -> bool {
+    extra.get("desktop").and_then(|v| v.get("widgets")).and_then(Value::as_str) == Some("none")
+}
+
 pub fn widgets_need_confirmation(src: &Source, paths: &Paths, name: &str) -> Result<bool, String> {
     let (id, _) = src.find(name).ok_or("Unknown theme")?;
     let def = src.load_def(&id)?;
-    Ok(def.extra.get("widgets").and_then(Value::as_array).is_some_and(|items| items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false)))
+    Ok((empty_desktop_profile(&def.extra) || def.extra.get("widgets").and_then(Value::as_array).is_some_and(|items| items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false))))
         && custom_widgets(&io::json_load(&paths.shell_json())["widgets"]))
 }
 
@@ -338,7 +343,24 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             }
             items.push(inst);
         }
-        if !items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false)) {
+        if empty_desktop_profile(&extra) {
+            if custom && widget_choice == WidgetChoice::Ask {
+                return Err("This theme requests an empty desktop. Choose --keep-widgets or --replace-widgets, or review the choice in Settings.".into());
+            }
+            if custom && widget_choice == WidgetChoice::Keep {
+                if let Some(enabled) = w.shift_remove("custom_enabled_before_theme") {
+                    w.insert("enabled".into(), enabled);
+                }
+                w.shift_remove("theme_widgets_absent");
+                w.shift_remove("theme_baseline");
+            } else {
+                w.insert("items".into(), json!([]));
+                w.insert("enabled".into(), json!(false));
+                w.shift_remove("custom_enabled_before_theme");
+                w.shift_remove("theme_widgets_absent");
+                w.insert("theme_baseline".into(), widget_layout(&Value::Object(w.clone())));
+            }
+        } else if !items.iter().any(|w| w.get("enabled").and_then(Value::as_bool) != Some(false)) {
             if custom {
                 let enabled = previous_widgets.get("enabled").and_then(Value::as_bool).unwrap_or(true);
                 w.entry("custom_enabled_before_theme").or_insert(json!(enabled));
@@ -1157,5 +1179,35 @@ y = -30
         assert_eq!(cfg.get("wallpaper", "image"), Some(Val::Str("/my/during-preview.png".into())));
         assert_eq!(io::json_load(&paths.shell_json())["theme_wallpaper"]["images"], json!(["/my/during-preview.png"]));
         let _ = std::fs::remove_dir_all(d);
+    }
+    #[test]
+    fn explicit_empty_desktop_preserves_ask_keep_replace_and_legacy_semantics() {
+        let (dir, src, paths) = sandbox("explicit-empty-desktop");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let package = src.themes_dir.join("empty-profile");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(package.join("theme.toml"), "format=1\nname=\"Empty desktop\"\n[desktop]\nwidgets=\"none\"\n").unwrap();
+        for enabled in [true, false] {
+            let custom = json!({"enabled":enabled,"allow_exec":false,"future":7,"items":[{"use":"builtin:clock-card","x":73}]});
+            io::json_set(&paths.shell_json(), "widgets", Some(custom.clone())).unwrap();
+            let before = std::fs::read(paths.shell_json()).unwrap();
+            assert!(widgets_need_confirmation(&src, &paths, "empty-profile").unwrap());
+            assert!(plan_with_widgets(&src, &paths, "empty-profile", &src.selection(), WidgetChoice::Ask).is_err());
+            assert_eq!(std::fs::read(paths.shell_json()).unwrap(), before, "Ask/cancel must be read-only");
+            let keep = plan_with_widgets(&src, &paths, "empty-profile", &src.selection(), WidgetChoice::Keep).unwrap();
+            execute(&src, &paths, keep).unwrap();
+            let kept = io::json_load(&paths.shell_json())["widgets"].clone();
+            assert_eq!(kept["items"], custom["items"]);
+            assert_eq!(kept["enabled"], enabled);
+            assert_eq!(kept["future"], 7);
+            let replace = plan_with_widgets(&src, &paths, "empty-profile", &src.selection(), WidgetChoice::Replace).unwrap();
+            execute(&src, &paths, replace).unwrap();
+            let replaced = io::json_load(&paths.shell_json())["widgets"].clone();
+            assert_eq!(replaced["items"], json!([]));
+            assert_eq!(replaced["enabled"], false);
+            assert_eq!(replaced["allow_exec"], false);
+            assert!(!custom_widgets(&replaced));
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -551,6 +551,16 @@ pub struct Mpris {
 }
 
 impl Mpris {
+    /// A recording transport for UI regression tests: no worker, no bus and no
+    /// unbounded lifetime. Keep the returned peer alive while recording writes.
+    #[cfg(test)]
+    pub(crate) fn test_sink() -> (Mpris, Receiver<Cmd>, UnixStream) {
+        let (tx, rx) = channel();
+        let (wake, peer) = UnixStream::pair().expect("test socketpair");
+        wake.set_nonblocking(true).unwrap();
+        (Mpris { shared: Arc::new(Mutex::new(Snapshot::default())), tx, wake }, rx, peer)
+    }
+
     /// Starts the worker; `waker` is called (from the worker) whenever a new snapshot is published.
     pub fn start(waker: Arc<dyn Fn() + Send + Sync>) -> Mpris {
         let shared = Arc::new(Mutex::new(Snapshot::default()));

@@ -57,7 +57,7 @@ struct Setup {
 impl Setup {
     fn new(plan: FontPlan) -> Setup {
         let installed = fontdb::get();
-        let all = installed.with_package_faces(&plan.package_faces);
+        let all = if plan.package_faces.is_empty() { installed } else { std::sync::Arc::new(installed.with_package_faces(&plan.package_faces)) };
         let resolved = plan.resolve(&all);
         let used: Vec<String> = resolved.roles.iter().flatten().cloned().collect();
         let db = all.subset(&used);

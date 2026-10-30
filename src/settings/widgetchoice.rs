@@ -12,6 +12,7 @@ use serde_json::Value;
 pub struct Pending {
     pub selection: Selection,
     pub reset_colors: bool,
+    pub empty_desktop: bool,
     pub widgets: Value,
     pub style: Option<crate::theme::style::Style>,
 }
@@ -24,7 +25,13 @@ pub fn request(m: &mut Model, sel: &Selection, reset_colors: bool) -> bool {
     }
     match apply::widgets_need_confirmation(&src, &m.paths, &sel.name) {
         Ok(true) => {
-            m.widget_choice = Some(Pending { selection: sel.clone(), reset_colors, style: None, widgets: super::io::json_load(&m.paths.shell_json())["widgets"].clone() });
+            m.widget_choice = Some(Pending {
+                selection: sel.clone(),
+                reset_colors,
+                empty_desktop: src.load_def(&src.find(&sel.name).map_or_else(|| sel.name.clone(), |p| p.0)).is_ok_and(|d| apply::empty_desktop_profile(&d.extra)),
+                style: None,
+                widgets: super::io::json_load(&m.paths.shell_json())["widgets"].clone(),
+            });
             m.dirty = true;
             m.sel.reset_scroll = true;
             true
@@ -36,10 +43,17 @@ pub fn request(m: &mut Model, sel: &Selection, reset_colors: bool) -> bool {
 pub fn items(m: &Model) -> Vec<Item> {
     let Some(p) = &m.widget_choice else { return Vec::new() };
     vec![
-        Item::Note { text: format!("{} includes widgets. Replace your custom widget layout? Nothing changes until you choose.", p.selection.name), warn: false },
+        Item::Note {
+            text: if p.empty_desktop {
+                format!("{} requests an empty desktop. Keep your custom widgets or use the empty theme layout? Nothing changes until you choose.", p.selection.name)
+            } else {
+                format!("{} includes widgets. Replace your custom widget layout? Nothing changes until you choose.", p.selection.name)
+            },
+            warn: false,
+        },
         Item::Card(vec![Row::new("Widget layout")
             .ctl(Ctl::new("wc:keep", Kind::Button { label: "Keep my layout".into(), danger: false }))
-            .ctl(Ctl::new("wc:replace", Kind::Button { label: "Use theme widgets".into(), danger: false }))
+            .ctl(Ctl::new("wc:replace", Kind::Button { label: if p.empty_desktop { "Use empty desktop".into() } else { "Use theme widgets".into() }, danger: false }))
             .ctl(Ctl::new("wc:cancel", Kind::Button { label: "Cancel".into(), danger: false }))]),
     ]
 }
@@ -77,7 +91,20 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             if let Some(st) = p.style {
                 super::themepane::apply_style(m, st);
             }
-            m.say(format!("Applied {} with {}", a.theme_id, if choice == WidgetChoice::Keep { "your widget layout" } else { "the theme's widgets" }), false);
+            m.say(
+                format!(
+                    "Applied {} with {}",
+                    a.theme_id,
+                    if choice == WidgetChoice::Keep {
+                        "your widget layout"
+                    } else if p.empty_desktop {
+                        "the empty desktop layout"
+                    } else {
+                        "the theme's widgets"
+                    }
+                ),
+                false,
+            );
         }
         Err(e) => m.say(format!("Not applied: {e}"), true),
     }
@@ -122,5 +149,17 @@ mod tests {
         m.apply("l:tcard:apply:nord", CtlVal::Click);
         assert!(m.widget_choice.is_none());
         assert_eq!(io::json_load(&m.paths.shell_json())["widgets"]["enabled"], false);
+    }
+    #[test]
+    fn cancel_an_explicit_empty_profile_leaves_custom_layout_byte_identical() {
+        let (mut m, _) = model_with("[general]\n");
+        let custom = json!({"enabled":true,"allow_exec":false,"items":[{"use":"builtin:clock-card","x":73}]});
+        io::json_set(&m.paths.shell_json(), "widgets", Some(custom.clone())).unwrap();
+        let before = std::fs::read(m.paths.shell_json()).unwrap();
+        m.widget_choice = Some(Pending { selection: Selection::default(), reset_colors: true, empty_desktop: true, widgets: custom, style: None });
+        assert!(matches!(&items(&m)[0],Item::Note {text,..} if text.contains("empty desktop")));
+        apply(&mut m, "wc:cancel", CtlVal::Click);
+        assert!(m.widget_choice.is_none());
+        assert_eq!(std::fs::read(m.paths.shell_json()).unwrap(), before);
     }
 }
