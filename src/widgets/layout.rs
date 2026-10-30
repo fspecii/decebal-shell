@@ -329,7 +329,10 @@ fn flow(out: &mut Vec<Item>, kids: &[&Node], cx: &Ctx, inner: Rect, horizontal: 
 /// Lays out `def` for the data in `cx`. The root gets `def.size` (or its natural size); pass `fit` to override.
 pub fn layout(def: &WidgetDef, cx: &Ctx, fit: Option<(f32, f32)>) -> Item {
     let (nw, nh) = natural(&def.root, cx);
-    let (w, h) = fit.or(def.size).unwrap_or((nw, nh));
+    let (w, h) = fit.unwrap_or_else(|| {
+        let (w, h) = def.size.unwrap_or((nw, nh));
+        (w, if def.auto_height { h.max(nh).min(2000.0) } else { h })
+    });
     arrange(&def.root, cx, Rect { x: 0.0, y: 0.0, w, h })
 }
 

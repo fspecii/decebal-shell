@@ -1,0 +1,78 @@
+format = 1
+id = "resource-overview"
+name = "Resource overview"
+description = "CPU and memory load, root free space and network rates together; open Dashboard for details."
+size = [320, 248]
+auto_height = true
+refresh = 1000
+
+[root]
+type = "col"
+align = "stretch"
+padding = 18
+gap = 10
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "SYSTEM / OVERVIEW"
+size = 11
+weight = "bold"
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "CPU   {cpu.usage:pct|Unavailable}"
+size = 18
+weight = "bold"
+color = "text"
+
+[[root.children]]
+type = "bar"
+value = "cpu.usage"
+height = 4
+color = "accent"
+track = "border@0.5"
+
+[[root.children]]
+type = "text"
+text = "RAM   {mem.usage:pct|Unavailable}"
+size = 18
+weight = "bold"
+color = "text"
+
+[[root.children]]
+type = "bar"
+value = "mem.usage"
+height = 4
+color = "accent"
+track = "border@0.5"
+
+[[root.children]]
+type = "col"
+align = "stretch"
+padding = 10
+gap = 6
+background = "surface"
+radius = 8
+
+[[root.children.children]]
+type = "text"
+text = "Root free   {disk.free:bytes|Unavailable}"
+size = 12
+color = "text_secondary"
+
+[[root.children.children]]
+type = "text"
+text = "Receive   {net.rx:rate|Unavailable}"
+size = 12
+color = "text_secondary"
+
+[[root.children.children]]
+type = "text"
+text = "Send   {net.tx:rate|Unavailable}"
+size = 12
+color = "text_secondary"

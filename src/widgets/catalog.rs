@@ -21,6 +21,8 @@ fn hex(s: &str) -> String {
 fn suggested(name: &str, source: Option<String>) -> Instance {
     let (anchor, x, y) = match name.strip_prefix("builtin:").unwrap_or(name) {
         "next-weather" => ("top-right", -40, 310),
+        "resource-overview" => ("bottom-right", -40, -40),
+        "focus-hub" => ("top-right", -40, 70),
         "next-system" => ("bottom-right", -40, -110),
         "cpu-ram-ring" => ("top-right", -40, 260),
         "now-playing-mini" => ("bottom-right", -40, -110),

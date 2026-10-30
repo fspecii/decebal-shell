@@ -208,3 +208,34 @@ escape sequences or control characters are rejected. Full-block characters fill
 pixel-snapped cells without font-dependent seams; other characters use the
 configured monospace role. If logo extraction fails, system data remains visible
 with an explicit logo-unavailable status; no fabricated fallback logo is used.
+
+### Compact resource and focus cards
+
+`builtin:resource-overview` (320 × 248 logical pixels) groups CPU/RAM meters,
+root free space and receive/send rates; clicking it opens Dashboard. Values come
+from the existing shared system sampler. A missing value says Unavailable; a
+measured zero remains zero. It deliberately makes no GPU, temperature or process
+list promise.
+
+`builtin:focus-hub` (320 × 292) joins the existing shared countdown with the latest
+note title. Timer opens the existing countdown app; New note opens a blank note;
+the muted latest-note panel opens Notes. It never starts/replaces a countdown or
+reads note bodies for display. Countdown recovery and note storage are unchanged.
+No shell commands, network requests, cover art or extra collectors are introduced.
+Both cards are available in the shared Widgets catalog for every theme.
+
+These are independently implemented native adaptations of Dux's compact metric
+groups and Pomodoro hierarchy; see `dux-adaptation-handoff.md` for pinned upstream
+sources and license boundaries. Semantic colours follow the selected palette.
+
+The optional widget-level `auto_height = true` makes `size`'s height a minimum:
+layout grows to measured content (up to 2000 pixels) when accessibility text is
+larger. Existing files keep their fixed geometry, and an explicit layout fit
+still wins. It does not scale fonts down. New cards use this opt-in and fit a
+480-pixel-high display at 100% and 200% text size; custom placements and multiple
+cards still need enough desktop space. Native Wayland widget hosting remains
+unsupported. Visual evidence can be reproduced with the isolated renderer test:
+
+```sh
+WIDGET_EVIDENCE_DIR=/tmp/dux-widgets cargo test --lib overview_and_focus_native_scale_evidence -- --ignored --test-threads=1
+```

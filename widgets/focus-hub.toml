@@ -1,0 +1,102 @@
+format = 1
+id = "focus-hub"
+name = "Focus hub"
+description = "Shared countdown and latest note title with safe Timer and New note shortcuts. Does not reveal note bodies."
+size = [320, 292]
+auto_height = true
+refresh = 1000
+
+[root]
+type = "col"
+align = "stretch"
+padding = 18
+gap = 10
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+
+[[root.children]]
+type = "text"
+text = "FOCUS / {timer.status|Unavailable}"
+size = 11
+weight = "bold"
+color = "text_secondary"
+
+[[root.children]]
+type = "text"
+text = "{timer.remaining|--:--:--}"
+size = 28
+weight = "bold"
+color = "accent"
+
+[[root.children]]
+type = "text"
+text = "{timer.title|Open Timer to prepare a focus session}"
+size = 13
+color = "text"
+max_chars = 60
+
+[[root.children]]
+type = "bar"
+value = "timer.progress"
+height = 4
+color = "accent"
+track = "border@0.5"
+
+[[root.children]]
+type = "col"
+align = "stretch"
+padding = 12
+gap = 8
+background = "surface"
+radius = 8
+on_click = "open notes"
+
+[[root.children.children]]
+type = "text"
+text = "LATEST NOTE"
+size = 10
+weight = "bold"
+color = "text_secondary"
+
+[[root.children.children]]
+type = "text"
+text = "{notes.title|Capture a thought}"
+size = 14
+color = "text"
+max_chars = 60
+
+[[root.children]]
+type = "row"
+align = "stretch"
+gap = 8
+
+[[root.children.children]]
+type = "button"
+padding = 10
+background = "accent"
+radius = 8
+on_click = "open timer"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "Timer"
+size = 12
+weight = "bold"
+color = "accent_text"
+
+[[root.children.children]]
+type = "button"
+padding = 10
+background = "surface"
+border = "border@0.6"
+radius = 8
+on_click = "open quick-note"
+grow = 1
+
+[[root.children.children.children]]
+type = "text"
+text = "New note"
+size = 12
+color = "text"

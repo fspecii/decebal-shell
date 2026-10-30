@@ -4,6 +4,8 @@ use super::dsl::{self, WidgetDef};
 use super::Trust;
 
 pub const SAMPLES: &[(&str, &str)] = &[
+    ("resource-overview", include_str!("../../widgets/resource-overview.toml")),
+    ("focus-hub", include_str!("../../widgets/focus-hub.toml")),
     ("tty-clock", include_str!("../../themes/terminal-minimal/widgets/tty-clock.toml")),
     ("quick-note", include_str!("../../widgets/quick-note.toml")),
     ("timer-card", include_str!("../../widgets/timer-card.toml")),
@@ -284,6 +286,103 @@ mod tests {
                 if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {
                     let mode = if dark { "dark" } else { "light" };
                     transparent.save_png(Path::new(&dir).join(format!("{id}-catppuccin-{mode}-transparent.png"))).unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overview_and_focus_use_live_paths_and_allowlisted_navigation() {
+        use crate::widgets::{
+            actions::{Action, Open},
+            data::{Data, Val},
+            layout::{hit, Item, Leaf, Metrics},
+        };
+        struct Scaled(f32);
+        impl Metrics for Scaled {
+            fn text_width(&self, s: &str, px: f32, bold: bool) -> f32 {
+                Fixed.text_width(s, px * self.0, bold)
+            }
+            fn line_height(&self, px: f32) -> f32 {
+                (px * self.0 * 1.25).ceil()
+            }
+        }
+        fn contained(it: &Item, root: &Item) {
+            assert!(it.rect.x >= 0.0 && it.rect.y >= 0.0);
+            assert!(it.rect.x + it.rect.w <= root.rect.w + 0.01 && it.rect.y + it.rect.h <= root.rect.h + 0.01, "{:?}", it.rect);
+            if it.on_click.is_some() && it.children.is_empty() {
+                assert!(hit(root, it.rect.x + it.rect.w / 2.0, it.rect.y + it.rect.h / 2.0).is_some());
+            }
+            for child in &it.children {
+                contained(child, root);
+            }
+        }
+        for id in ["resource-overview", "focus-hub"] {
+            let def = get(id).unwrap();
+            assert!(def.auto_height && def.commands.is_empty() && def.assets.is_empty());
+            assert!(def.actions.iter().all(|a| matches!(a, Action::Open(_))));
+            let mut zero = Data::empty();
+            for path in ["cpu.usage", "mem.usage", "disk.free", "net.rx", "net.tx"] {
+                zero.set(path, Val::Num(0.0));
+            }
+            for scale in [1.0, 2.0] {
+                for data in [Data::empty(), sample(), zero.clone()] {
+                    let it = layout(&def, &Ctx { data: &data, metrics: &Scaled(scale), theme_radius: 14.0 }, None);
+                    contained(&it, &it);
+                    assert!(it.rect.h <= 480.0, "{id} at {scale}: {}", it.rect.h);
+                    if id == "resource-overview" && data.num("cpu.usage") == Some(0.0) {
+                        let text = dump(&it);
+                        assert!(text.contains("CPU   0%") && !text.contains("Unavailable"));
+                        assert!(matches!(it.on_click, Some(Action::Open(Open::Dashboard))));
+                    }
+                    if id == "focus-hub" {
+                        assert!(!def.paths.contains("notes.excerpt"));
+                        assert!(def.actions.contains(&Action::Open(Open::Timer)) && def.actions.contains(&Action::Open(Open::QuickNote)));
+                        assert!(it.children.iter().any(|c| matches!(&c.leaf, Leaf::Text { s, .. } if !s.is_empty())));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Changes process-global font scale; run alone, never alongside other renderer tests.
+    /// WIDGET_EVIDENCE_DIR=/tmp/dux-widgets cargo test --lib overview_and_focus_native_scale_evidence -- --ignored --test-threads=1
+    #[test]
+    #[ignore = "isolated native renderer evidence at process-global accessibility scales"]
+    fn overview_and_focus_native_scale_evidence() {
+        use crate::theme::model::Selection;
+        use crate::widgets::{layout::Item, paint};
+        use std::path::Path;
+        fn contained(it: &Item, root: &Item) {
+            assert!(it.rect.x >= 0.0 && it.rect.y >= 0.0);
+            assert!(it.rect.x + it.rect.w <= root.rect.w + 0.01 && it.rect.y + it.rect.h <= root.rect.h + 0.01, "{:?}", it.rect);
+            for child in &it.children {
+                contained(child, root);
+            }
+        }
+        let mut fonts = crate::text::Fonts::load().unwrap();
+        for scale in [1.0, 2.0] {
+            for dark in [true, false] {
+                let th =
+                    crate::accessibility::Preferences { font_scale: Some(scale), ..Default::default() }.apply(crate::theme::builtin::def("nord").unwrap().resolve("nord", dark, &Selection::default()));
+                crate::theme::live::publish_theme(th.clone());
+                for id in ["resource-overview", "focus-hub"] {
+                    let def = get(id).unwrap();
+                    for (state, data) in [("sample", sample()), ("unavailable", crate::widgets::data::Data::empty())] {
+                        let it = layout(&def, &Ctx { data: &data, metrics: &paint::FontMetrics(&fonts), theme_radius: th.radius }, None);
+                        contained(&it, &it);
+                        assert!(it.rect.h <= 480.0);
+                        if id == "focus-hub" {
+                            let crate::widgets::layout::Leaf::Text { s, .. } = &it.children[1].leaf else { panic!("countdown") };
+                            assert_eq!(s, &crate::widgets::fmt::Fmt::parse("{timer.remaining|--:--:--}").unwrap().eval(&data), "countdown must remain fully readable at {scale}");
+                        }
+                        let pm = paint::render(&def, &data, &th, &mut fonts, Path::new("."), 16).unwrap();
+                        if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {
+                            std::fs::create_dir_all(&dir).unwrap();
+                            pm.save_png(Path::new(&dir).join(format!("{id}-{}-{}-{state}.png", if dark { "dark" } else { "light" }, (scale * 100.0) as u32))).unwrap();
+                        }
+                        eprintln!("{id} {}% {state}: {}x{}", scale * 100.0, it.rect.w, it.rect.h);
+                    }
                 }
             }
         }

@@ -5,6 +5,7 @@
 //! id = "clock-card"
 //! name = "Clock card"
 //! size = [220, 120]            # optional; the natural size of the content otherwise
+//! auto_height = true          # optional: size height is a minimum, grows for larger text
 //! refresh = 1000               # ms between redraws, 250..60000 (default 1000)
 //!
 //! [root]                       # one root node; children are [[root.children]] tables
@@ -160,6 +161,8 @@ pub struct WidgetDef {
     pub name: String,
     pub description: String,
     pub size: Option<(f32, f32)>,
+    /// Opt in to a content-measured minimum height; explicit layout fits still win.
+    pub auto_height: bool,
     pub refresh_ms: u32,
     pub commands: Vec<CommandDef>,
     pub root: Node,
@@ -575,8 +578,8 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
     let root = doc.as_table();
     let mut cx = Cx { text, trust, errs: Vec::new(), paths: BTreeSet::new(), assets: Vec::new(), actions: Vec::new(), commands: BTreeSet::new(), nodes: 0 };
     for (k, item) in root.iter() {
-        if !matches!(k, "format" | "id" | "name" | "description" | "size" | "refresh" | "commands" | "root") {
-            cx.err(item, k, "unknown key (format, id, name, description, size, refresh, commands, root)");
+        if !matches!(k, "format" | "id" | "name" | "description" | "size" | "auto_height" | "refresh" | "commands" | "root") {
+            cx.err(item, k, "unknown key (format, id, name, description, size, auto_height, refresh, commands, root)");
         }
     }
     if root.get("format").and_then(Item::as_integer) != Some(1) {
@@ -595,6 +598,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
     if root.get("size").is_some() && size.is_none() {
         cx.err(root.get("size").unwrap_or(&Item::None), "size", "must be [width, height], each 16..2000");
     }
+    let auto_height = flag(&mut cx, root, "", "auto_height").unwrap_or(false);
     let refresh_ms = num(&mut cx, root, "", "refresh", 250.0, 60000.0).unwrap_or(1000.0) as u32;
     let mut commands = Vec::new();
     if let Some(c) = root.get("commands") {
@@ -637,7 +641,7 @@ pub fn parse(text: &str, trust: Trust) -> Result<WidgetDef, String> {
         return Err(cx.errs.join("\n"));
     }
     let root = node.ok_or("`root`: invalid")?;
-    Ok(WidgetDef { id, name, description, size, refresh_ms, commands, root, assets: cx.assets, paths: cx.paths, actions: cx.actions })
+    Ok(WidgetDef { id, name, description, size, auto_height, refresh_ms, commands, root, assets: cx.assets, paths: cx.paths, actions: cx.actions })
 }
 
 impl Node {
@@ -682,6 +686,22 @@ type = "bar"
 value = "mem.usage"
 width = 80
 "##;
+
+    #[test]
+    fn auto_height_is_a_strict_opt_in_and_explicit_fit_wins() {
+        use crate::widgets::{
+            data::Data,
+            layout::{layout, Ctx, Fixed},
+        };
+        let source = "format=1\nsize=[120,16]\nauto_height=true\n[root]\ntype=\"text\"\ntext=\"Example\"\nsize=40\n";
+        let def = parse(source, Trust::Theme).unwrap();
+        let data = Data::empty();
+        let cx = Ctx { data: &data, metrics: &Fixed, theme_radius: 0.0 };
+        assert_eq!(layout(&def, &cx, None).rect.h, 50.0);
+        assert_eq!(layout(&def, &cx, Some((100.0, 20.0))).rect.h, 20.0);
+        assert_eq!(layout(&parse(&source.replace("auto_height=true", "auto_height=false"), Trust::Theme).unwrap(), &cx, None).rect.h, 16.0);
+        assert!(parse(&source.replace("auto_height=true", "auto_height=1"), Trust::Theme).unwrap_err().contains("must be true or false"));
+    }
 
     #[test]
     fn a_nested_widget_parses() {
