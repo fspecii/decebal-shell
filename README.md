@@ -16,6 +16,9 @@ One codebase, two display backends:
 
 The backend is picked automatically (`DECEBAL_BACKEND=wayland|x11` forces one).
 
+New here? Start with the [first-session guide](docs/getting-started.md) for familiar tools,
+window controls, customization and recovery.
+
 ## What is in it
 
 | Program | What | Idle memory (release) |
