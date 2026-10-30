@@ -86,6 +86,7 @@ def main():
                         window = int(result.stdout.splitlines()[0])
                         break
                     time.sleep(.05)
+                (evidence / "startup.json").write_text(json.dumps({"window": window, "process_returncode": child.poll(), "binary": str(binary)}, indent=2))
                 assert window, "popup did not map"
                 time.sleep(1)
                 assert child.poll() is None, "stale startup FocusOut closed popup"
