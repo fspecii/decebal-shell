@@ -5,7 +5,9 @@ They use the current Decebal palette and native window decorations.
 
 Notes autosaves as you type. Use Tab to move between title and body, Ctrl+N for
 another note, Ctrl+S to retry saving, Ctrl+Shift+S to save a conflicting draft as a
-copy, and Ctrl+C/X/V for the clipboard. Selecting another note first saves the
+copy, and Ctrl+C/X/V for the clipboard. Ctrl+PageUp / Ctrl+PageDown select the
+previous / next note in the sidebar and scroll it into view, stopping at the ends.
+Selecting another note first saves the
 current draft. An external change never gets silently overwritten. A failed save
 keeps the draft and prevents an ordinary window close; force-killing a process
 can still lose an unsaved draft. Notes are local plaintext, not encrypted or

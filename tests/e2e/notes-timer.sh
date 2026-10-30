@@ -44,6 +44,13 @@ notes=data/'decebal/notes'
 note=wait(lambda:next(iter(notes.glob('*.json')),None),'note not autosaved')
 wait(lambda:json.loads(note.read_text())['body'].endswith('tomorrow.'),'body not persisted')
 assert json.loads(note.read_text())['title']=='A useful thought'
+# Existing notes must be reachable without clicking the sidebar. A new note is
+# newest/first; Ctrl+PageDown returns to the original, where typing must save.
+run('xdotool','key','ctrl+n');run('xdotool','type','--clearmodifiers','Second thought')
+run('xdotool','key','Tab');run('xdotool','type','--clearmodifiers','Second body')
+wait(lambda:len(list(notes.glob('*.json')))==2,'second note not saved')
+run('xdotool','key','ctrl+Next');run('xdotool','type','--clearmodifiers','Keyboard selected. ')
+wait(lambda:'Keyboard selected.' in json.loads(note.read_text())['body'],'keyboard note selection did not reach original note')
 # Notes' visible Focus timer action launches the sibling app with only its title.
 g=dict(line.split('=',1) for line in run('xdotool','getwindowgeometry','--shell',w).splitlines())
 run('xdotool','mousemove','--window',w,str(int(g['WIDTH'])-165),'32','click','1')

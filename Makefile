@@ -43,14 +43,15 @@ uninstall:
 	for t in $(SHOWCASE_THEMES); do rm -rf $(DESTDIR)$(PREFIX)/share/decebal/themes/$$t; done
 
 # Extra login session "Hyprland (decebal)": the Rust shell without Quickshell (Omarchy + SDDM + hyprlock/hypridle/mako).
+# Export literal values instead of interpolating them into a shell recipe.
+# The installer rejects non-portable PREFIX characters before writing files.
+export PREFIX DESTDIR
 install-session:
-	install -Dm755 contrib/session/decebal-session $(DESTDIR)$(PREFIX)/bin/decebal-session
-	install -Dm755 contrib/compat/mac-compat $(DESTDIR)$(PREFIX)/bin/macshell-session
-	install -Dm755 contrib/session/omarchy-launch-shell $(DESTDIR)$(PREFIX)/lib/decebal/shim/omarchy-launch-shell
-	install -Dm755 contrib/session/omarchy-shell $(DESTDIR)$(PREFIX)/lib/decebal/shim/omarchy-shell
-	for f in hypridle.conf hyprlock.conf mako.conf; do install -Dm644 contrib/session/$$f $(DESTDIR)$(PREFIX)/share/decebal/$$f; done
-	for f in hyprland-layers.lua hyprland-dechaven.lua hyprland-declaunch.lua; do install -Dm644 contrib/$$f $(DESTDIR)$(PREFIX)/share/decebal/$$f; done
-	install -Dm644 contrib/session/hyprland-decebal.desktop $(DESTDIR)$(PREFIX)/share/wayland-sessions/hyprland-decebal.desktop
+	python3 contrib/session/install.py
+
+.PHONY: check-session-install
+check-session-install:
+	python3 tests/session-install.py
 
 # End-to-end tests against rdwm on a private Xvfb (need Xvfb, xdotool, jq and a built rdwm; see the scripts).
 e2e-theme: all

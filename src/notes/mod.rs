@@ -111,6 +111,32 @@ impl Notes {
             self.status = "New note · Ctrl+S to save".into()
         }
     }
+    fn select_note(&mut self, note: Note) {
+        if !self.save(false) {
+            return;
+        }
+        self.load(note);
+        if let Some(index) = self.rows.iter().position(|n| self.base.as_ref().is_some_and(|b| b.id == n.id)) {
+            let visible = ((self.h as f32 - 146.) / 60.).max(1.) as usize;
+            if index < self.list_top {
+                self.list_top = index;
+            } else if index >= self.list_top + visible {
+                self.list_top = index + 1 - visible;
+            }
+        }
+    }
+    fn step_note(&mut self, previous: bool) {
+        let selected = self.base.as_ref().and_then(|base| self.rows.iter().position(|n| n.id == base.id));
+        let index = match selected {
+            Some(index) if previous => index.checked_sub(1),
+            Some(index) => index.checked_add(1).filter(|i| *i < self.rows.len()),
+            None if previous => self.rows.len().checked_sub(1),
+            None => (!self.rows.is_empty()).then_some(0),
+        };
+        if let Some(note) = index.and_then(|i| self.rows.get(i)).cloned() {
+            self.select_note(note);
+        }
+    }
     fn focus_timer(&mut self) {
         if !self.save(false) {
             return;
@@ -317,9 +343,7 @@ impl WindowApp for Notes {
             } else if y >= 104. {
                 let i = self.list_top + ((y - 104.) / 60.) as usize;
                 if let Some(n) = self.rows.get(i).cloned() {
-                    if self.save(false) {
-                        self.load(n)
-                    }
+                    self.select_note(n)
                 }
             }
         } else if y < 58. && x > self.w as f32 - 100. {
@@ -358,7 +382,9 @@ impl WindowApp for Notes {
         Response::REDRAW
     }
     fn key(&mut self, e: &KeyEvent) -> Response {
-        if e.ctrl && e.ch == Some('s') {
+        if e.ctrl && matches!(e.key, Key::PageUp | Key::PageDown) {
+            self.step_note(e.key == Key::PageUp);
+        } else if e.ctrl && e.ch == Some('s') {
             self.save(e.shift);
         } else if e.ctrl && e.shift && e.ch == Some('t') {
             self.focus_timer();
@@ -483,6 +509,65 @@ mod tests {
     }
     fn key(ch: char, ctrl: bool, shift: bool) -> KeyEvent {
         KeyEvent { key: Key::Char, text: if ctrl { String::new() } else { ch.to_string() }, ch: Some(ch), ctrl, shift, alt: false }
+    }
+    fn page(previous: bool) -> KeyEvent {
+        KeyEvent { key: if previous { Key::PageUp } else { Key::PageDown }, text: String::new(), ch: None, ctrl: true, shift: false, alt: false }
+    }
+    #[test]
+    fn keyboard_note_selection_reveals_rows_and_stops_at_boundaries() {
+        let t = Temp::new();
+        for i in 0..5 {
+            t.store().create(&format!("Note {i}"), "body").unwrap();
+        }
+        let mut app = Notes::new(t.store(), false);
+        app.resize(900, 266); // Two sidebar rows fit.
+        let ids: Vec<_> = app.rows.iter().map(|n| n.id.clone()).collect();
+        app.key(&page(true));
+        assert_eq!(app.base.as_ref().unwrap().id, ids[0]);
+        for (i, id) in ids.iter().enumerate().skip(1) {
+            assert_eq!(app.key(&page(false)).action, None);
+            assert_eq!(&app.base.as_ref().unwrap().id, id);
+            assert!(i >= app.list_top && i < app.list_top + 2);
+        }
+        app.key(&page(false));
+        assert_eq!(app.base.as_ref().unwrap().id, ids[4]);
+        for id in ids.iter().rev().skip(1) {
+            app.key(&page(true));
+            assert_eq!(&app.base.as_ref().unwrap().id, id);
+        }
+        assert_eq!(app.list_top, 0);
+        let mut empty = Notes::new(Temp::new().store(), true);
+        empty.key(&page(false));
+        empty.key(&page(true));
+        assert!(empty.base.is_none());
+    }
+    #[test]
+    fn keyboard_note_selection_saves_before_loading_and_keeps_conflicted_draft() {
+        let t = Temp::new();
+        t.store().create("One", "one").unwrap();
+        t.store().create("Two", "two").unwrap();
+        let mut app = Notes::new(t.store(), false);
+        let original = app.base.clone().unwrap();
+        let target = app.rows[1].clone();
+        app.body.insert_str(" saved");
+        app.key(&page(false));
+        assert_eq!(app.base.as_ref().unwrap().id, target.id);
+        assert_eq!(app.store.read(&original.id).unwrap().body, " saved".to_string() + &original.body);
+        assert!(!app.dirty());
+
+        app.load(app.rows[0].clone());
+        let base = app.base.clone().unwrap();
+        let external = app.store.update(&base, "Changed elsewhere", "external body").unwrap();
+        app.title.insert_str("draft ");
+        let draft = app.title.text();
+        let top = app.list_top;
+        app.key(&page(false));
+        assert_eq!(app.base.as_ref().unwrap().id, base.id);
+        assert_eq!(app.title.text(), draft);
+        assert!(app.dirty());
+        assert_eq!(app.list_top, top);
+        assert_eq!(app.store.read(&base.id).unwrap(), external);
+        assert!(app.status.contains("draft preserved"));
     }
     #[test]
     fn draft_flow_and_failure() {
