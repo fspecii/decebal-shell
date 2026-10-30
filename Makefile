@@ -120,7 +120,7 @@ e2e-glass:
 
 # Recent end-to-end regressions, each on a separate private X11 desktop.
 .PHONY: e2e-desktop-smoke e2e-theme-dock e2e-launcher-screenshot e2e-preview-cache e2e-widget-creator-icons
-e2e-desktop-smoke: e2e-theme-dock e2e-launcher-screenshot e2e-preview-cache e2e-widget-creator-icons
+e2e-desktop-smoke: e2e-theme-dock e2e-launcher-screenshot e2e-preview-cache e2e-widget-creator-icons e2e-notes-timer
 
 e2e-theme-dock: all
 	tests/e2e/theme-dock-lifecycle.sh
