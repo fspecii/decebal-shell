@@ -13,6 +13,15 @@ use crate::text::{Fonts, Weight};
 use tiny_skia::Pixmap;
 
 pub const PANEL_W: f32 = 340.0;
+
+/// Shared native layout contract; section two supplies the Dux surface implementation.
+pub fn panel_width(_style: Style) -> f32 {
+    PANEL_W
+}
+
+pub fn layout_styled(s: &Snapshot, tiles: &Tiles, _style: Style) -> (Vec<Item>, f32) {
+    layout_with(s, tiles)
+}
 const PAD: f32 = 12.0;
 const GAP: f32 = 10.0;
 

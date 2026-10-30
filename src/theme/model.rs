@@ -140,6 +140,9 @@ pub struct Theme {
     /// `flat` (a full-width strip), `floating` (a horizontal pill with a margin around it) or `vertical`
     /// (caelestia's layout: a bar down the left screen edge, no dock).
     pub bar_style: String,
+    pub bar_layout: crate::config::BarLayout,
+    pub dashboard_style: String,
+    pub dashboard_profile: String,
     /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
     /// Where the Caelestia pill bar sits (`decebal.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
     /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
@@ -293,12 +296,14 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
     ("outline", Kind::Num(0.0, 1.0), "alpha of the 1px outline around popups"),
     ("dock_icon_size", Kind::Num(24.0, 128.0), "dock icon size in px (consumed by the dock layout)"),
     ("dock_padding", Kind::Num(4.0, 40.0), "dock panel padding in px (consumed by the dock layout)"),
-    ("bar_height", Kind::Num(20.0, 40.0), "menu bar height in px (consumed by the bar layout)"),
+    ("bar_height", Kind::Num(20.0, 80.0), "menu bar height in px (consumed by the bar layout)"),
     (
         "bar_style",
-        Kind::Choice(&["flat", "floating", "vertical"]),
+        Kind::Choice(&["flat", "floating", "vertical", "dux"]),
         "menu bar shape: a full-width strip, a floating pill, or the Caelestia pill bar on a screen edge (left by default, see `bar.position`; the dock hides with it)",
     ),
+    ("dashboard_style", Kind::Choice(&["default", "dux"]), "native dashboard composition"),
+    ("dashboard_profile", Kind::Choice(&["readme"]), "configured Dux README dashboard profile; not current upstream defaults"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
     ("font_family", Kind::Str, "the font of text, titles and display numbers (fontconfig family); unavailable fonts fall back to the preset, Inter and sans-serif"),
@@ -558,8 +563,11 @@ impl Def {
             outline: clampf(num("outline", 0.14), 0.0, 1.0),
             dock_icon_size: clampf(num("dock_icon_size", 47.0), 24.0, 128.0),
             dock_padding: clampf(num("dock_padding", 16.0), 4.0, 40.0),
-            bar_height: clampf(num("bar_height", 26.0), 20.0, 40.0),
+            bar_height: clampf(num("bar_height", if text_of("bar_style").as_deref() == Some("dux") { 38.0 } else { 26.0 }), 20.0, 80.0),
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
+            bar_layout: crate::config::BarLayout::default(),
+            dashboard_style: text_of("dashboard_style").unwrap_or_else(|| "default".into()),
+            dashboard_profile: text_of("dashboard_profile").unwrap_or_else(|| "readme".into()),
             bar_position: crate::config::BarPosition::default(),
             control_center: Default::default(),
             window_buttons_right: self

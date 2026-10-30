@@ -132,7 +132,7 @@ pub const FIELDS: &[Field] = &[
     Field { path: "font.preset", ty: Ty::Choice(crate::theme::fonts::PRESET_IDS), desc: "named font preset that supplies every role you do not set", status: Wired },
     Field { path: "font.scale", ty: Ty::Num(0.8, 1.4), desc: "text size multiplier", status: Wired },
     Field { path: "font.fallback", ty: Ty::List(Elem::Text(80), 8), desc: "families appended after the chains given in this file (CJK, emoji, icon fonts)", status: Wired },
-    Field { path: "font.files", ty: Ty::Assets(Font, 8), desc: "font files bundled in the package", status: Pending("bundled fonts are not registered with fontconfig yet") },
+    Field { path: "font.files", ty: Ty::Assets(Font, 8), desc: "package-local native fonts registered only in the shell process; no system font installation", status: Wired },
     Field { path: "wallpaper.dark", ty: Ty::Asset(Image), desc: "bundled wallpaper for dark mode", status: Wired },
     Field { path: "wallpaper.light", ty: Ty::Asset(Image), desc: "bundled wallpaper for light mode", status: Wired },
     Field { path: "wallpaper.image", ty: Ty::Asset(Image), desc: "a bundled wallpaper", status: Wired },
@@ -155,11 +155,18 @@ pub const FIELDS: &[Field] = &[
     Field { path: "decoration.button_order", ty: Ty::List(Elem::Choice(BUTTON_NAMES), 3), desc: "order of the buttons from the outer edge in", status: Pending("rdwm has no button-order key: the style decides") },
     Field { path: "bar.enabled", ty: Ty::Tri, desc: "show the menu bar (`auto` = hidden while the taskbar-style dock is up)", status: Wired },
     Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "which screen edge the Caelestia pill bar sits on (with bar.style = \"vertical\"); `split` is a top and a bottom bar", status: Wired },
-    Field { path: "bar.style", ty: Ty::Choice(&["flat", "floating", "vertical"]), desc: "flat strip, floating pill or vertical bar down the left edge", status: Wired },
-    Field { path: "bar.height", ty: Ty::Int(20, 40), desc: "bar height (width when vertical) in px", status: Wired },
-    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "items on the left of the bar, in order (names, or `widget:<id>`)", status: Pending("decbar has no item lists yet; stored in decebal.json bar.left") },
-    Field { path: "bar.center", ty: Ty::List(Elem::Ident, 24), desc: "items in the middle of the bar, in order", status: Pending("needs the bar layouts branch; stored in decebal.json bar.center") },
-    Field { path: "bar.right", ty: Ty::List(Elem::Ident, 24), desc: "items on the right of the bar, in order", status: Pending("needs the bar layouts branch; stored in decebal.json bar.right") },
+    Field { path: "bar.style", ty: Ty::Choice(&["flat", "floating", "vertical", "dux"]), desc: "flat strip, floating pill, vertical rail or three independent Dux islands", status: Wired },
+    Field { path: "bar.height", ty: Ty::Int(20, 80), desc: "bar height (width when vertical) in px", status: Wired },
+    Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "native items in the left Dux island; other bar styles retain their existing layout", status: Wired },
+    Field { path: "bar.center", ty: Ty::List(Elem::Ident, 24), desc: "native items in the centre Dux island; other bar styles retain their existing layout", status: Wired },
+    Field { path: "bar.right", ty: Ty::List(Elem::Ident, 24), desc: "native items in the right Dux island; other bar styles retain their existing layout", status: Wired },
+    Field { path: "bar.background", ty: Ty::Choice(&["band", "islands"]), desc: "Dux stock band with individual widget pills, or an explicit independent-islands variant", status: Wired },
+    Field { path: "bar.margin", ty: Ty::Int(0, 48), desc: "Dux island distance from the screen edge in logical pixels", status: Wired },
+    Field { path: "bar.spacing", ty: Ty::Int(0, 24), desc: "Dux item gap in logical pixels", status: Wired },
+    Field { path: "bar.band_radius", ty: Ty::Int(0, 48), desc: "Dux background band radius (source windowRadius L16); independent of widget pill radius", status: Wired },
+    Field { path: "bar.radius", ty: Ty::Int(0, 48), desc: "Dux island corner radius in logical pixels", status: Wired },
+    Field { path: "dashboard.profile", ty: Ty::Choice(&["readme"]), desc: "configured README-era clock/calendar/user/resource/media profile, not current upstream dashboard defaults", status: Wired },
+    Field { path: "dashboard.style", ty: Ty::Choice(&["default", "dux"]), desc: "native dashboard composition; default preserves the existing dashboard", status: Wired },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },
     Field { path: "dock.style", ty: Ty::Choice(&["mac", "windows"]), desc: "macOS floating dock or the Windows 11 taskbar", status: Wired },
     Field { path: "dock.position", ty: Ty::Choice(&["bottom", "top", "left", "right"]), desc: "screen edge of the dock", status: Pending("only bottom/top are wired (windows taskbar); left/right need the dock layouts work") },
@@ -256,7 +263,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

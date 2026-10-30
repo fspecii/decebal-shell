@@ -189,7 +189,7 @@ impl DecBar {
     /// Extent of the open popup: (width, height), or None when none is open.
     pub fn status_size(&self) -> Option<(f32, f32)> {
         if self.open == Open::Control {
-            return Some((controlcenter::PANEL_W, self.cc_height));
+            return Some((self.cc_width(), self.cc_height));
         }
         self.popup.as_ref().map(|p| (p.w, p.h)).or(self.calendar.as_ref().map(|_| (Calendar::W, Calendar::H)))
     }
@@ -244,7 +244,7 @@ impl DecBar {
     pub fn status_rect(&self) -> Option<InputRect> {
         if self.open == Open::Control {
             let (x, y) = self.embed.origin;
-            return Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: controlcenter::PANEL_W.ceil() as i32, h: self.cc_height.ceil() as i32 });
+            return Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: self.cc_width().ceil() as i32, h: self.cc_height.ceil() as i32 });
         }
         let (x, y) = self.popup.as_ref().map(|p| (p.x, p.y)).or(self.calendar.as_ref().map(|c| (c.x, c.y)))?;
         let (w, h) = self.status_size()?;

@@ -130,6 +130,8 @@ pub fn shapes(name: &str) -> Option<String> {
         }
         "snowflake" => stroke("M12 3.5v17M4.6 7.75l14.8 8.5M4.6 16.25l14.8-8.5M9.8 5.4L12 7.6l2.2-2.2M9.8 18.6l2.2-2.2 2.2 2.2", None),
         "gamepad" => stroke("M7.5 8h9a4.5 4.5 0 0 1 4.4 5.3l-.7 3.8a2.3 2.3 0 0 1-4 1L14.5 16h-5l-2.2 2.1a2.3 2.3 0 0 1-4-1l-.7-3.8A4.5 4.5 0 0 1 7.5 8zM8 10.5v3M6.5 12h3", None) + &fill("M15.6 11.1a.9.9 0 1 0 0 1.8a.9.9 0 1 0 0-1.8zM17.9 12.9a.9.9 0 1 0 0 1.8a.9.9 0 1 0 0-1.8z", None),
+        "apps" => fill("M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z", None),
+        "clipboard" => stroke("M9 5H6a2 2 0 0 0-2 2v13h16V7a2 2 0 0 0-2-2h-3M9 3h6v5H9zM8 12h8M8 16h6", None),
         "bell" => stroke("M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0", None),
         "bell-off" => stroke("M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0", Some(0.45)) + &stroke("M4.5 4.5L19.5 19.5", None),
         "eye" => stroke("M2.5 12s3.6-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.6 6.5-9.5 6.5S2.5 12 2.5 12z", None) + "<circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"C\"/>",
@@ -275,15 +277,105 @@ pub fn render(name: &str, color: (u8, u8, u8), px: u32) -> Option<Pixmap> {
     Some(pm)
 }
 
+fn material_codepoint(name: &str) -> Option<char> {
+    char::from_u32(match name {
+        "apps" => 0xe5c3,
+        "play" => 0xe037,
+        "pause" => 0xe034,
+        "backward" => 0xe045,
+        "forward" => 0xe044,
+        "bell" => 0xe7f4,
+        "clipboard" => 0xe14f,
+        "switches" => 0xe8b8,
+        "chart" => 0xe66b,
+        "wifi-0" | "wifi-1" | "wifi-2" | "wifi-3" => 0xe63e,
+        "wifi-off" => 0xe648,
+        "ethernet" => 0xe8be,
+        "speaker-0" | "speaker-1" | "speaker-2" | "speaker-3" => 0xe050,
+        "speaker-muted" => 0xe04f,
+        "bluetooth" | "bluetooth-connected" => 0xe1a7,
+        "bluetooth-off" => 0xe1a9,
+        "power" => 0xe8ac,
+        "layout" => 0xe8f1,
+        "sun" | "sun-small" => 0xe1ac,
+        "weather-clear" => 0xe81a,
+        "moon" | "dark-mode" | "weather-moon" => 0xe51c,
+        "night-shift" => 0xf03d,
+        "cup" => 0xefef,
+        "screenshot" => 0xec08,
+        "weather-partly" => 0xf172,
+        "weather-cloud" => 0xf15c,
+        "weather-fog" => 0xe818,
+        "weather-storm" => 0xebdb,
+        "weather-snow" => 0xe2cd,
+        "weather-rain" => 0xf176,
+        "gear" => 0xe8b8,
+        "memory" => 0xe322,
+        "developer_board" => 0xe30d,
+        "cloud" => 0xe2bd,
+        "sunny" => 0xe81a,
+        "battery" => 0xe1a4,
+        "record" => 0xf679,
+        "gamepad" => 0xea28,
+        "eye" => 0xe8f4,
+        "magnifyingglass" => 0xe8b6,
+        "lock" => 0xe897,
+        _ => return None,
+    })
+}
+
 type SymbolKey = (String, (u8, u8, u8), u32);
 
 /// Caches rendered symbols.
 #[derive(Default)]
 pub struct SymbolCache {
     map: HashMap<SymbolKey, Option<Pixmap>>,
+    material: Option<(Vec<u8>, crate::theme::fontdb::FaceRef)>,
+    material_map: HashMap<SymbolKey, Option<Pixmap>>,
 }
 
 impl SymbolCache {
+    /// Resolve licensed package Material Symbols once at startup/theme reload, outside paint.
+    pub fn prepare_material(&mut self) -> bool {
+        self.material_map.clear();
+        let db = crate::theme::fontdb::FontDb::default().with_package_faces(&crate::theme::th().fonts.package_faces);
+        self.material =
+            db.resolve("Material Symbols Rounded").and_then(|family| db.face(&family, crate::theme::fontdb::FC_REGULAR)).and_then(|face| std::fs::read(&face.file).ok().map(|bytes| (bytes, face)));
+        self.material.is_some()
+    }
+
+    /// Actual Material Symbols outlines, never substituted with SF-style artwork.
+    /// Missing package fonts or unsupported outlines return None.
+    pub fn get_material(&mut self, name: &str, color: (u8, u8, u8), px: u32) -> Option<&Pixmap> {
+        let ch = material_codepoint(name)?;
+        let (bytes, face) = self.material.as_ref()?;
+        self.material_map
+            .entry((name.to_string(), color, px))
+            .or_insert_with(|| {
+                let axes = [(*b"FILL", 0.0), (*b"GRAD", if crate::theme::th().dark { -25.0 } else { 0.0 }), (*b"opsz", 24.0)];
+                let glyph = crate::textface::raster_outline_axes(bytes, face, ch, px as f32, &axes)?;
+                if glyph.width == 0 || glyph.height == 0 {
+                    return None;
+                }
+                let mut image = Pixmap::new(px, px)?;
+                let left = (px as i32 - glyph.width as i32) / 2;
+                let top = (px as i32 - glyph.height as i32) / 2;
+                for y in 0..glyph.height {
+                    for x in 0..glyph.width {
+                        let (dx, dy) = (left + x as i32, top + y as i32);
+                        if dx < 0 || dy < 0 || dx >= px as i32 || dy >= px as i32 {
+                            continue;
+                        }
+                        let a = glyph.bitmap[y * glyph.width + x];
+                        let i = (dy as usize * px as usize + dx as usize) * 4;
+                        image.data_mut()[i..i + 4].copy_from_slice(&[(color.0 as u16 * a as u16 / 255) as u8, (color.1 as u16 * a as u16 / 255) as u8, (color.2 as u16 * a as u16 / 255) as u8, a]);
+                    }
+                }
+                Some(image)
+            })
+            .as_ref()
+    }
+
     pub fn get(&mut self, name: &str, color: (u8, u8, u8), px: u32) -> Option<&Pixmap> {
         self.map.entry((name.to_string(), color, px)).or_insert_with(|| render(name, color, px)).as_ref()
     }
@@ -379,5 +471,27 @@ mod tests {
         let mut c = SymbolCache::default();
         assert_eq!(c.get("play", (255, 255, 255), 32).map(|p| p.width()), Some(32));
         assert!(c.get("nope", (255, 255, 255), 32).is_none());
+    }
+    #[test]
+    #[ignore = "requires DUX_MATERIAL_FONT licensed package asset"]
+    fn package_material_icons_are_actual_cached_outlines() {
+        let path = std::path::PathBuf::from(std::env::var_os("DUX_MATERIAL_FONT").expect("DUX_MATERIAL_FONT"));
+        let db = crate::theme::fontdb::FontDb::default().with_package_files(std::slice::from_ref(&path));
+        let family = db.resolve("Material Symbols Rounded").expect("Material family");
+        let face = db.face(&family, crate::theme::fontdb::FC_REGULAR).unwrap();
+        let mut cache = SymbolCache { material: Some((std::fs::read(path).unwrap(), face)), ..Default::default() };
+        for size in [14, 28] {
+            for name in ["apps", "play", "pause", "backward", "forward", "bell", "clipboard", "switches", "power"] {
+                let image = cache.get_material(name, (208, 188, 255), size).unwrap();
+                assert!(image.data().chunks_exact(4).any(|p| p[3] > 0), "missing {name}");
+                assert_eq!(image.width(), size);
+                if let Some(dir) = std::env::var_os("DUX_ICON_EVIDENCE") {
+                    std::fs::create_dir_all(&dir).unwrap();
+                    image.save_png(std::path::Path::new(&dir).join(format!("{name}-{size}.png"))).unwrap();
+                }
+            }
+        }
+        assert_eq!(cache.material_map.len(), 18);
+        assert!(cache.get_material("apple", (255, 255, 255), 14).is_none());
     }
 }

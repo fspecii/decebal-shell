@@ -1,0 +1,612 @@
+//! Native Dux DBar sections: three independently placed tonal containers.
+//!
+//! Source contract: DBar/BarSection.qml and Theme.qml (default band38, face28,
+//! text12, icons14, spacing4); BarWidgetDefaults.js
+//! canonical item IDs. Layout is shared by paint, pointer input and material geometry.
+//! Data below is a cached snapshot; system sampling and MPRIS live on workers.
+use super::*;
+use crate::dash::mpris::{self, Cmd};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Kind {
+    Tray(Tray),
+    Media,
+    Previous,
+    Toggle,
+    Next,
+    Notifications,
+    Clipboard,
+    Cpu,
+    Memory,
+}
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Item {
+    pub kind: Kind,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+#[derive(Debug, Clone)]
+pub(super) struct Group {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub radius: f32,
+}
+#[derive(Default)]
+pub(super) struct Layout {
+    pub items: Vec<Item>,
+    pub groups: Vec<Group>,
+}
+impl Layout {
+    pub fn faces(&self) -> Vec<Group> {
+        let category = |kind| match kind {
+            Kind::Previous | Kind::Toggle | Kind::Next | Kind::Media => 1,
+            Kind::Tray(Tray::Indicator(_) | Tray::Indicators) => 2,
+            _ => 0,
+        };
+        let mut faces = Vec::new();
+        let mut index = 0;
+        while index < self.items.len() {
+            let first = self.items[index];
+            let mut last = first;
+            let key = category(first.kind);
+            index += 1;
+            while key != 0 && index < self.items.len() && category(self.items[index].kind) == key {
+                last = self.items[index];
+                index += 1;
+            }
+            faces.push(Group { x: first.x, y: first.y, w: last.x + last.w - first.x, h: first.h, radius: self.groups.first().map_or(first.h / 2.0, |g| g.radius) });
+        }
+        faces
+    }
+    pub fn hit(&self, x: f32, y: f32) -> Option<&Item> {
+        self.items.iter().find(|i| x >= i.x && x < i.x + i.w && y >= i.y && y < i.y + i.h)
+    }
+}
+
+/// Place center on the monitor's center, never the free space's center. On crowded
+/// monitors remove optional wide content first, retaining both left and right controls.
+fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, mut groups: [Vec<(Kind, f32)>; 3]) -> Layout {
+    let pad = 0.0;
+    let size = |v: &Vec<(Kind, f32)>| if v.is_empty() { 0.0 } else { v.iter().map(|(_, w)| w).sum::<f32>() + gap * v.len().saturating_sub(1) as f32 + 2.0 * pad };
+    let available = (width - margin * 2.0).max(0.0);
+    // Remove detail before interaction. Never paint/hit overlapping groups.
+    for optional in [Kind::Tray(Tray::Window), Kind::Media, Kind::Tray(Tray::Weather), Kind::Cpu, Kind::Memory, Kind::Clipboard, Kind::Previous, Kind::Next, Kind::Tray(Tray::Battery)] {
+        let total = groups.iter().map(size).sum::<f32>() + 2.0 * gap;
+        let side = size(&groups[0]).max(size(&groups[2]));
+        if total <= available && side * 2.0 + size(&groups[1]) + 2.0 * gap <= available {
+            break;
+        }
+        for group in &mut groups {
+            group.retain(|(kind, _)| *kind != optional);
+        }
+    }
+    // At extreme widths an omitted group is preferable to inaccessible painted overlap.
+    if groups.iter().map(size).sum::<f32>() + 2.0 * gap > available {
+        groups[1].clear();
+    }
+    let lw = size(&groups[0]);
+    let rw = size(&groups[2]);
+    if lw + rw + gap > available {
+        groups[0].retain(|(kind, _)| *kind == Kind::Tray(Tray::Logo));
+    }
+    if size(&groups[0]) + size(&groups[2]) + gap > available {
+        groups[0].clear();
+    }
+    if size(&groups[2]) > available {
+        groups[2].retain(|(kind, _)| *kind == Kind::Tray(Tray::Control));
+    }
+    let sizes = groups.each_ref().map(size);
+    // Upstream CenterLayout's default index centering keeps the configured
+    // middle clock on the output centre, even when the preceding music is absent.
+    let centered_start = |items: &Vec<(Kind, f32)>| {
+        if let Some(index) = items.iter().position(|(kind, _)| *kind == Kind::Tray(Tray::Clock)) {
+            width / 2.0 - items[..index].iter().map(|(_, w)| *w).sum::<f32>() - gap * index as f32 - items[index].1 / 2.0
+        } else {
+            (width - size(items)) / 2.0
+        }
+    };
+    let cx = centered_start(&groups[1]);
+    let center_fits = cx >= margin + sizes[0] + gap && cx + sizes[1] <= width - margin - sizes[2] - gap;
+    if !center_fits {
+        groups[1].clear();
+    }
+    let sizes = groups.each_ref().map(size);
+    let starts = [margin, centered_start(&groups[1]), width - margin - sizes[2]];
+    let mut result = Layout::default();
+    for (index, contents) in groups.into_iter().enumerate() {
+        if contents.is_empty() || starts[index] < 0.0 || sizes[index] > available {
+            continue;
+        }
+        result.groups.push(Group { x: starts[index], y: top, w: sizes[index], h: height, radius: radius.min(height / 2.0) });
+        let mut x = starts[index] + pad;
+        for (kind, w) in contents {
+            result.items.push(Item { kind, x, y: top, w, h: height });
+            x += w + gap;
+        }
+    }
+    result
+}
+
+/// Dux expressiveEffects cubic-bezier(.34,.8,.34,1), 200ms.
+fn effects(progress: f32) -> f32 {
+    let (mut lo, mut hi) = (0.0f32, 1.0f32);
+    for _ in 0..12 {
+        let t = (lo + hi) / 2.0;
+        let x = 3.0 * (1.0 - t).powi(2) * t * 0.34 + 3.0 * (1.0 - t) * t * t * 0.34 + t * t * t;
+        if x < progress {
+            lo = t;
+        } else {
+            hi = t;
+        }
+    }
+    let t = (lo + hi) / 2.0;
+    3.0 * (1.0 - t).powi(2) * t * 0.8 + 3.0 * (1.0 - t) * t * t + t * t * t
+}
+
+impl DecBar {
+    pub(super) fn dux_animating(&self) -> bool {
+        self.dux() && !self.dux_reduce_motion && self.dux_effect.is_some_and(|(_, at, _)| at.elapsed() < Duration::from_millis(200))
+    }
+    fn dux_hover_opacity(&self, kind: Kind) -> f32 {
+        if self.dux_reduce_motion {
+            return if self.dux_hover == Some(kind) { 0.08 } else { 0.0 };
+        }
+        if let Some((target, at, entering)) = self.dux_effect.filter(|(target, _, _)| *target == kind) {
+            let _ = target;
+            let progress = (at.elapsed().as_secs_f32() / 0.2).clamp(0.0, 1.0);
+            let value = effects(progress);
+            return 0.08 * if entering { value } else { 1.0 - value };
+        }
+        if self.dux_hover == Some(kind) {
+            0.08
+        } else {
+            0.0
+        }
+    }
+    pub(super) fn dux(&self) -> bool {
+        !self.embedded && crate::theme::th().bar_style == "dux"
+    }
+    pub(super) fn bar_bottom(&self) -> f32 {
+        if self.dux() {
+            let th = crate::theme::th();
+            th.bar_height + 2.0 * th.bar_layout.margin
+        } else {
+            BAR_HEIGHT
+        }
+    }
+    fn dux_player(&self) -> Option<mpris::Player> {
+        let snap = self.dux_mpris.as_ref()?.snapshot();
+        mpris::pick_active(&snap.players, None).cloned()
+    }
+    fn dux_window_title(&self) -> &str {
+        self.v_win.as_ref().map_or("", |(id, title)| if title.is_empty() { id.as_str() } else { title.as_str() })
+    }
+    fn dux_measure(&self, text: &str, size: f32) -> f32 {
+        self.fonts.as_ref().map_or(text.chars().count() as f32 * size * 0.6, |f| f.measure(text, size, Weight::Regular))
+    }
+    fn dux_workspace_width(&self) -> f32 {
+        let scale = 1.0;
+        let face = (crate::theme::th().bar_height - 10.0).max(16.0) * scale;
+        self.workspaces.iter().map(|w| face * if w.active { 1.05 } else { 0.7 }).sum::<f32>() + 8.0 * scale * self.workspaces.len().saturating_sub(1) as f32 + 2.0 * (8.0 * face / 30.0).round()
+    }
+    fn dux_workspace_cells(&self, item: Item) -> Vec<(usize, f32, f32)> {
+        let scale = 1.0;
+        let mut x = item.x + (8.0 * item.h / 30.0).round();
+        self.workspaces
+            .iter()
+            .enumerate()
+            .map(|(index, ws)| {
+                let w = item.h * if ws.active { 1.05 } else { 0.7 };
+                let result = (index, x, w);
+                x += w + 8.0 * scale;
+                result
+            })
+            .collect()
+    }
+    pub(super) fn dux_regions(&self) -> Vec<crate::glass::Region> {
+        let th = crate::theme::th();
+        let scale = 1.0;
+        if th.bar_layout.background == "band" {
+            let margin = th.bar_layout.margin * scale;
+            let height = th.bar_height * scale;
+            vec![crate::glass::Region { x: margin, y: margin, w: (self.width as f32 - margin * 2.0).max(0.0), h: height, radius: th.bar_layout.band_radius.min(height / 2.0) }]
+        } else {
+            self.dux_layout().faces().into_iter().map(|g| crate::glass::Region { x: g.x, y: g.y, w: g.w, h: g.h, radius: g.radius }).collect()
+        }
+    }
+    pub(super) fn dux_layout(&self) -> Layout {
+        let th = crate::theme::th();
+        let settings = &th.bar_layout;
+        let scale = 1.0;
+        let cell = 28.0 * scale;
+        let snap = self.snapshot();
+        let weather = self.shared.weather.lock().ok().and_then(|v| v.clone());
+        let player = self.dux_player();
+        let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+        let mut groups: [Vec<(Kind, f32)>; 3] = Default::default();
+        for (out, ids) in groups.iter_mut().zip([&settings.left, &settings.center, &settings.right]) {
+            for id in ids {
+                let item = match id.as_str() {
+                    "launcherButton" => (Kind::Tray(Tray::Logo), cell),
+                    "workspaceSwitcher" if !self.workspaces.is_empty() => (Kind::Tray(Tray::Workspaces), self.dux_workspace_width()),
+                    "focusedWindow" if self.v_win.is_some() => (Kind::Tray(Tray::Window), self.dux_measure(self.dux_window_title(), 12.0).min(160.0 * scale) + 14.0 * scale),
+                    "music" if player.is_some() => {
+                        out.extend([(Kind::Previous, cell), (Kind::Toggle, cell), (Kind::Next, cell)]);
+                        (Kind::Media, 114.0 * scale)
+                    }
+                    "clock" => (Kind::Tray(Tray::Clock), self.dux_measure(&self.clock_text, 12.0) + 14.0 * scale),
+                    "weather" => {
+                        (Kind::Tray(Tray::Weather), weather.as_ref().map_or(self.dux_measure("--°C", 12.0) + 32.0 * scale, |w| self.dux_measure(&format!("{}°C", w.temp_c), 12.0) + 32.0 * scale))
+                    }
+                    "battery" if snap.battery.is_some() => (Kind::Tray(Tray::Battery), 64.0 * scale),
+                    "systemTray" => {
+                        out.extend(self.indicator_kinds(6).into_iter().map(|k| (Kind::Tray(k), cell)));
+                        continue;
+                    }
+                    "clipboard" => (Kind::Clipboard, cell),
+                    "cpuUsage" if perf.and_then(|p| p.0).is_some() => (Kind::Cpu, self.dux_measure("100%", 12.0) + 32.0 * scale),
+                    "memUsage" if perf.and_then(|p| p.1).is_some() => (Kind::Memory, self.dux_measure("100%", 12.0) + 32.0 * scale),
+                    "notificationButton" => (Kind::Notifications, cell),
+                    "controlCenterButton" if th.control_center.enabled => (Kind::Tray(Tray::Control), cell),
+                    "network" => (Kind::Tray(Tray::Network), cell),
+                    "audio" => (Kind::Tray(Tray::Audio), cell),
+                    "bluetooth" if snap.bluetooth.is_some() => (Kind::Tray(Tray::Bluetooth), cell),
+                    "dashboard" => (Kind::Tray(Tray::Dash), cell),
+                    "power" => (Kind::Tray(Tray::Power), cell),
+                    "layout" => (Kind::Tray(Tray::Layout), cell),
+                    _ => continue,
+                };
+                out.push(item);
+            }
+        }
+        place(self.width as f32, (settings.margin + 4.0) * scale, settings.spacing * scale, (th.bar_height - 10.0).max(16.0) * scale, (settings.margin + 5.0) * scale, settings.radius * scale, groups)
+    }
+    fn dux_text(&mut self, pm: &mut Pixmap, text: &str, item: Item, secondary: bool) {
+        let Some(fonts) = self.fonts.as_mut() else { return };
+        let scale = 1.0;
+        let mut text = text.to_string();
+        let size = 12.0;
+        while !text.is_empty() && fonts.measure(&text, size, Weight::Regular) > item.w - 14.0 * scale {
+            text.pop();
+            if fonts.measure(&format!("{text}…"), size, Weight::Regular) <= item.w - 14.0 * scale {
+                text.push('…');
+                break;
+            }
+        }
+        let th = crate::theme::th();
+        let (top, bottom) = fonts.ink_vertical(&text, size, Weight::Regular).unwrap_or((0.0, 0.0));
+        let y = item.y + (item.h - (bottom - top)) / 2.0 - top - fonts.ascent(size, Weight::Regular);
+        fonts.draw(pm, &text, item.x + 7.0 * scale, y, size, Weight::Regular, if secondary { th.text_secondary.color(1.0) } else { th.bar_text.color(1.0) });
+    }
+    fn dux_symbol(&mut self, pm: &mut Pixmap, name: &str, item: Item, active: bool) {
+        let th = crate::theme::th();
+        let scale = 1.0;
+        let size: f32 = 14.0 * scale;
+        let ink = if active { th.accent.t() } else { th.bar_text.t() };
+        if let Some(icon) = self.symbols.get_material(name, ink, size.round() as u32) {
+            crate::gfx::blit_scaled(pm, icon, (item.x + (item.w - size) / 2.0).round(), (item.y + (item.h - size) / 2.0).round(), size, size, 1.0);
+        }
+    }
+    pub(super) fn dux_draw(&mut self, pm: &mut Pixmap) {
+        let th = crate::theme::th();
+        let lay = self.dux_layout();
+        let snap = self.snapshot();
+        let player = self.dux_player();
+        let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+        let wx = self.shared.weather.lock().ok().and_then(|v| v.clone());
+        let scale = 1.0;
+        if th.bar_layout.background == "band" {
+            let margin = th.bar_layout.margin * scale;
+            let height = th.bar_height * scale;
+            fill_rounded(pm, margin, margin, self.width as f32 - margin * 2.0, height, th.bar_layout.band_radius.min(height / 2.0), th.background.color(1.0));
+        }
+        for face in lay.faces() {
+            fill_rounded(pm, face.x, face.y, face.w, face.h, face.radius, th.bar_c());
+        }
+        for item in lay.items {
+            let hover_opacity = self.dux_hover_opacity(item.kind);
+            if hover_opacity > 0.0 {
+                fill_rounded(pm, item.x, item.y + 4.0 * scale, item.w, item.h - 8.0 * scale, (th.bar_layout.radius * scale).min(item.h / 2.0), th.bar_text.color(hover_opacity));
+            }
+            match item.kind {
+                Kind::Media => self.dux_text(pm, player.as_ref().map_or("No media", |p| p.meta.title.as_str()), item, true),
+                Kind::Previous => self.dux_symbol(pm, "backward", item, false),
+                Kind::Toggle => self.dux_symbol(pm, if player.as_ref().is_some_and(|p| p.status == mpris::Status::Playing) { "pause" } else { "play" }, item, true),
+                Kind::Next => self.dux_symbol(pm, "forward", item, false),
+                Kind::Notifications => self.dux_symbol(pm, "bell", item, false),
+                Kind::Clipboard => self.dux_symbol(pm, "clipboard", item, false),
+                Kind::Cpu | Kind::Memory => {
+                    let value = perf.and_then(|p| if item.kind == Kind::Cpu { p.0 } else { p.1 });
+                    let text = value.map_or_else(|| "—%".to_string(), |v| format!("{:.0}%", v * 100.0));
+                    let icon = Item { x: item.x + 7.0, w: 14.0, ..item };
+                    self.dux_symbol(pm, if item.kind == Kind::Cpu { "memory" } else { "developer_board" }, icon, false);
+                    self.dux_text(pm, &text, Item { x: item.x + 18.0, w: item.w - 18.0, ..item }, true);
+                }
+                Kind::Tray(Tray::Window) => {
+                    let title = self.dux_window_title().to_string();
+                    self.dux_text(pm, &title, item, true);
+                }
+                Kind::Tray(Tray::Clock) => {
+                    let title = self.clock_text.clone();
+                    self.dux_text(pm, &title, item, false);
+                }
+                Kind::Tray(Tray::Weather) => {
+                    let icon = Item { x: item.x + 7.0, w: 14.0, ..item };
+                    self.dux_symbol(pm, wx.as_ref().map_or("weather-clear", |w| weather::symbol_for(w.code, w.night)), icon, false);
+                    let label = Item { x: item.x + 18.0, w: item.w - 18.0, ..item };
+                    if let Some(w) = &wx {
+                        self.dux_text(pm, &format!("{}°C", w.temp_c), label, false);
+                    } else {
+                        self.dux_text(pm, "--°C", label, true);
+                    }
+                }
+                Kind::Tray(Tray::Battery) => {
+                    let title = snap.battery.as_ref().map_or_else(|| "—%".into(), |b| format!("{}%", b.percent));
+                    self.dux_symbol(pm, "battery", Item { x: item.x + 7.0, w: 14.0, ..item }, false);
+                    self.dux_text(pm, &title, Item { x: item.x + 18.0, w: item.w - 18.0, ..item }, false);
+                }
+                Kind::Tray(Tray::Workspaces) => {
+                    for (index, x, width) in self.dux_workspace_cells(item) {
+                        let ws = &self.workspaces[index];
+                        let height = item.h * 0.5;
+                        fill_rounded(
+                            pm,
+                            x,
+                            item.y + (item.h - height) / 2.0,
+                            width,
+                            height,
+                            height / 2.0,
+                            if ws.active { th.accent.color(1.0) } else { th.bar_text.color(if ws.occupied { 0.28 } else { 0.16 }) },
+                        );
+                    }
+                }
+                Kind::Tray(Tray::Indicator(key)) => self.indicator_draw(pm, key, item.x + item.w / 2.0, item.y + item.h / 2.0, 14.0 * scale),
+                Kind::Tray(Tray::Indicators) => self.indicator_overflow_draw(pm, item.x + item.w / 2.0, item.y + item.h / 2.0, 14.0 * scale),
+                Kind::Tray(kind) => self.dux_symbol(
+                    pm,
+                    match kind {
+                        Tray::Logo => "apps",
+                        Tray::Power => "power",
+                        Tray::Control => snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-muted"),
+                        Tray::Network => {
+                            if snap.net.as_ref().is_some_and(|n| n.wifi_enabled) {
+                                "wifi-3"
+                            } else {
+                                "wifi-off"
+                            }
+                        }
+                        Tray::Audio => snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-2"),
+                        Tray::Bluetooth => "bluetooth",
+                        Tray::Layout => "layout",
+                        _ => "chart",
+                    },
+                    item,
+                    self.open == Open::Control && kind == Tray::Control,
+                ),
+            }
+        }
+    }
+    pub(super) fn dux_custom_press(&mut self, x: f32, y: f32, button: Button) -> bool {
+        let layout = self.dux_layout();
+        let kind = layout.hit(x, y).map(|i| i.kind);
+        if button == Button::Left {
+            if let Some(item) = layout.hit(x, y).filter(|i| i.kind == Kind::Tray(Tray::Workspaces)) {
+                if let Some((index, _, _)) = self.dux_workspace_cells(*item).into_iter().find(|(_, left, width)| x >= *left && x < *left + *width) {
+                    self.close();
+                    self.active.switch_workspace(index);
+                    return true;
+                }
+                // The pill's inset/gap must not fall through to the legacy equal-width dot hit test.
+                return true;
+            }
+        }
+        if button != Button::Left {
+            return false;
+        }
+        match kind {
+            Some(Kind::Tray(Tray::Logo)) => {
+                self.close();
+                crate::launch::spawn_argv(&[crate::launch::sibling_or_path("declaunch")]);
+                true
+            }
+            Some(Kind::Tray(Tray::Clock)) => {
+                let item = layout.hit(x, y).unwrap();
+                let span = Span { x: item.x, w: item.w };
+                self.close();
+                self.dashboard(span);
+                true
+            }
+            Some(Kind::Previous | Kind::Toggle | Kind::Next) => {
+                if let (Some(worker), Some(player)) = (&self.dux_mpris, self.dux_player()) {
+                    worker.send(match kind {
+                        Some(Kind::Previous) => Cmd::Previous(player.bus),
+                        Some(Kind::Next) => Cmd::Next(player.bus),
+                        _ => Cmd::PlayPause(player.bus),
+                    });
+                }
+                true
+            }
+            Some(Kind::Notifications) => {
+                self.close();
+                sys::spawn(&["decnotify", "history"]);
+                true
+            }
+            Some(Kind::Clipboard) => {
+                self.close();
+                sys::spawn(&["decclip"]);
+                true
+            }
+            Some(Kind::Media) => {
+                self.close();
+                let argv = vec![crate::launch::sibling_or_path("decdash"), "media".into()];
+                crate::launch::spawn_argv(&argv);
+                true
+            }
+            Some(Kind::Cpu | Kind::Memory) => {
+                self.close();
+                self.process_monitor(Vec::new());
+                true
+            }
+            _ => false,
+        }
+    }
+    pub(super) fn dux_tick(&mut self) {
+        let generation = crate::theme::generation();
+        if self.dux_material_generation != generation && (self.dux() || self.cc_style() == controlcenter::settings::Style::Dux) {
+            self.symbols.prepare_material();
+            self.dux_material_generation = generation;
+        }
+        if !self.dux() {
+            self.dux_mpris = None;
+            return;
+        }
+        if cfg!(test) {
+            return;
+        }
+        self.v_refresh_window();
+        let settings = &crate::theme::th().bar_layout;
+        let configured = |id: &str| settings.left.iter().chain(&settings.center).chain(&settings.right).any(|name| name == id);
+        if !configured("music") {
+            self.dux_mpris = None;
+        }
+        if configured("music") && self.dux_mpris.is_none() {
+            let shared = self.shared.clone();
+            let wake = self.waker.clone();
+            self.dux_mpris = Some(mpris::Mpris::start(Arc::new(move || {
+                shared.changed.store(true, Ordering::SeqCst);
+                if let Some(w) = &wake {
+                    w.wake();
+                }
+            })));
+        }
+        if !configured("cpuUsage") && !configured("memUsage") {
+            return;
+        }
+        if self.dux_refresh.elapsed() < Duration::from_secs(2) || self.dux_busy.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        self.dux_refresh = Instant::now();
+        let sampler = self.dux_sampler.clone();
+        let result = self.dux_perf.clone();
+        let busy = self.dux_busy.clone();
+        let shared = self.shared.clone();
+        let wake = self.waker.clone();
+        std::thread::spawn(move || {
+            let values = sampler.lock().ok().map(|mut s| {
+                let stats = s.sample(Instant::now());
+                (stats.primed.then_some(stats.cpu), (stats.mem.total_kb > 0).then_some(stats.mem.used_frac()))
+            });
+            if let Ok(mut output) = result.lock() {
+                *output = values;
+            }
+            busy.store(false, Ordering::SeqCst);
+            shared.changed.store(true, Ordering::SeqCst);
+            if let Some(w) = wake {
+                w.wake();
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Process-global theme/font publication: run alone with private config and package fonts.
+    #[test]
+    #[ignore = "isolated actual-font Dux bar raster evidence"]
+    fn dux_bar_native_render_evidence() {
+        use serde_json::json;
+        let output = std::path::PathBuf::from(std::env::var_os("DUX_BAR_EVIDENCE_DIR").expect("explicit private evidence path required"));
+        assert!(std::env::var_os("DECEBAL_CONFIG").is_some(), "explicit private config required");
+        std::fs::create_dir_all(&output).unwrap();
+        let source = crate::theme::live::Source::discover();
+        let selection = source.selection();
+        let mut ledger = Vec::new();
+        for (mode, dark) in [(crate::theme::model::Mode::Dark, true), (crate::theme::model::Mode::Light, false)] {
+            let mut selection = selection.clone();
+            selection.mode = mode;
+            let base = source.build(&selection, dark).0;
+            assert!(!base.fonts.files.is_empty(), "real package Google Sans/Material font files required");
+            assert!(base.fonts.package_faces.iter().flat_map(|face| &face.names).any(|name| name == "Google Sans Flex"), "actual Google Sans face required");
+            for scale in [1.0, 2.0] {
+                for band in [38.0, 26.0] {
+                    for width in [720, 1280, 1920] {
+                        let mut theme = base.clone();
+                        theme.bar_style = "dux".into();
+                        theme.bar_height = band;
+                        theme.font_scale = scale;
+                        theme.bar_layout = crate::config::BarLayout::default();
+                        crate::theme::live::publish_theme(theme);
+                        let mut bar = DecBar::new(Box::new(active::StaticApp("Native renderer fixture".into())));
+                        assert!(bar.symbols.get_material("apps", ink(), 14).is_some(), "actual Material Symbols outline missing");
+                        let family = bar.fonts.as_ref().and_then(|fonts| fonts.family_for(crate::text::Role::Ui, 'A')).unwrap();
+                        assert!(family.contains("Google Sans"), "unexpected native fallback: {family}");
+                        bar.width = width;
+                        bar.clock_text = "14:07  •  Fri 30".into();
+                        bar.workspaces = (0..3).map(|n| Workspace { name: (n + 1).to_string(), active: n == 0, occupied: n < 2, urgent: false }).collect();
+                        bar.v_win = Some(("fixture".into(), "Native renderer fixture".into()));
+                        *bar.shared.snap.lock().unwrap() = Snapshot::default();
+                        *bar.shared.weather.lock().unwrap() = None;
+                        let layout = bar.dux_layout();
+                        assert!(!layout.groups.is_empty());
+                        let logo = layout.items.iter().find(|item| item.kind == Kind::Tray(Tray::Logo)).unwrap();
+                        assert_eq!((logo.x, logo.y, logo.h), (8.0, 9.0, (band - 10.0).max(16.0)));
+                        let material = bar.dux_regions();
+                        assert_eq!((material[0].x, material[0].y, material[0].w, material[0].h), (4.0, 4.0, width as f32 - 8.0, band));
+                        assert_eq!(bar.surface_spec().unwrap().reserve, (band + 8.0) as i32);
+                        assert!(!bar.input_rects().iter().any(|r| r.x <= 0 && r.y <= 0));
+                        for g in &layout.groups {
+                            assert_eq!(g.h, (band - 10.0).max(16.0));
+                            assert!(g.x >= 0.0 && g.x + g.w <= width as f32);
+                        }
+                        for (index, g) in layout.groups.iter().enumerate() {
+                            for other in layout.groups.iter().skip(index + 1) {
+                                assert!(g.x + g.w <= other.x || other.x + other.w <= g.x);
+                            }
+                        }
+                        let mut pixels = Pixmap::new(width, (bar.bar_bottom() + 16.0).ceil() as u32).unwrap();
+                        bar.draw(&mut pixels);
+                        assert!(pixels.data().chunks_exact(4).any(|p| p[3] > 0));
+                        assert_eq!(pixels.pixel(0, 0).unwrap().alpha(), 0);
+                        let name = format!("bar-{}-{}-{}-{}.png", if dark { "dark" } else { "light" }, (scale * 100.0) as u32, band as u32, width);
+                        pixels.save_png(output.join(&name)).unwrap();
+                        ledger.push(json!({"png":name,"mode":if dark { "dark" } else { "light" },"font":family,"scale":scale,"band":band,"width":width,"input":bar.input_rects().iter().map(|r|json!([r.x,r.y,r.w,r.h])).collect::<Vec<_>>(),"groups":layout.groups.iter().map(|g|json!([g.x,g.y,g.w,g.h,g.radius])).collect::<Vec<_>>(),"items":layout.items.iter().map(|i|json!({"kind":format!("{:?}",i.kind),"rect":[i.x,i.y,i.w,i.h]})).collect::<Vec<_>>(),"cpu":null,"memory":null,"weather":null,"media":null,"background":"band"}));
+                    }
+                }
+            }
+        }
+        std::fs::write(output.join("bar-layouts.json"), serde_json::to_string_pretty(&ledger).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn default_index_centering_keeps_clock_centred_when_music_is_missing() {
+        let layout = place(1920.0, 8.0, 4.0, 28.0, 9.0, 14.0, [vec![], vec![(Kind::Tray(Tray::Clock), 100.0), (Kind::Tray(Tray::Weather), 60.0)], vec![]]);
+        let clock = layout.items.iter().find(|i| i.kind == Kind::Tray(Tray::Clock)).unwrap();
+        assert_eq!(clock.x + clock.w / 2.0, 960.0);
+    }
+
+    #[test]
+    fn three_groups_never_overlap_and_gaps_are_not_input() {
+        for scale in [1.0, 2.0] {
+            for width in [180.0, 320.0, 480.0, 800.0, 1280.0, 1920.0] {
+                let groups = [
+                    vec![(Kind::Tray(Tray::Logo), 28.0 * scale), (Kind::Tray(Tray::Workspaces), 90.0 * scale), (Kind::Tray(Tray::Window), 160.0 * scale)],
+                    vec![(Kind::Media, 114.0 * scale), (Kind::Tray(Tray::Clock), 100.0 * scale)],
+                    vec![(Kind::Notifications, 28.0 * scale), (Kind::Tray(Tray::Control), 28.0 * scale)],
+                ];
+                let layout = place(width, 8.0 * scale, 4.0 * scale, 28.0 * scale, 5.0 * scale, 14.0 * scale, groups);
+                for (index, g) in layout.groups.iter().enumerate() {
+                    assert!(g.x >= 0.0 && g.x + g.w <= width);
+                    for other in layout.groups.iter().skip(index + 1) {
+                        assert!(g.x + g.w <= other.x || other.x + other.w <= g.x);
+                    }
+                }
+                assert!(layout.hit(0.0, 0.0).is_none());
+            }
+        }
+    }
+}

@@ -41,6 +41,13 @@ pub fn format_with(tm: &Tm, hour12: bool, date: &str) -> String {
     }
 }
 
+/// Dux ClockContent default order: time, bullet separator, short weekday/day.
+/// Clock preferences (12/24h) retain their meaning; this is presentation only.
+pub fn format_dux(tm: &Tm, hour12: bool) -> String {
+    let time = format_with(tm, hour12, "none");
+    format!("{}  •  {} {}", time, DAYS[(tm.wday % 7) as usize], tm.mday)
+}
+
 /// Local time for a unix timestamp, via the C library so the system timezone is honoured.
 pub fn local_tm(unix_secs: i64) -> Option<Tm> {
     let t: libc::time_t = unix_secs as libc::time_t;

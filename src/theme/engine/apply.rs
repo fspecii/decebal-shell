@@ -283,7 +283,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     shell.as_object_mut().expect("object").insert("theme".into(), sel.to_json());
     if let Some(Value::Object(bar)) = extra.get("bar") {
         let o = obj_mut(&mut shell, "bar");
-        for k in ["enabled", "position", "left", "center", "right"] {
+        for k in ["enabled", "position", "left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
             if let Some(v) = bar.get(k) {
                 o.insert(k.into(), v.clone());
             }

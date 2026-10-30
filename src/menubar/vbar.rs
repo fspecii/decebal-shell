@@ -1408,7 +1408,7 @@ fn clock_dash_argv(place: Place) -> Vec<String> {
 }
 
 /// Starts a UI program (dashboard, session menu). In dry-run mode (tests) the command is only recorded.
-fn launch_ui(argv: Vec<String>) {
+pub(super) fn launch_ui(argv: Vec<String>) {
     if sys::is_dry_run() {
         let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         sys::spawn(&refs);

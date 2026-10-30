@@ -13,6 +13,7 @@ pub mod menus;
 pub mod overlay;
 pub mod popup;
 pub mod rdwm;
+mod segmented;
 mod status;
 pub mod symbols;
 pub mod vbar;
@@ -251,6 +252,8 @@ struct Shared {
     vol_set_at: Mutex<Option<Instant>>,
 }
 
+type ResourceSample = (Option<f32>, Option<f32>);
+
 pub struct DecBar {
     indicator_host: Option<crate::sni::Host>,
     indicators: crate::sni::Snapshot,
@@ -327,6 +330,15 @@ pub struct DecBar {
     logo_symbol: String,
     locks: lock::Locks,
     lock_watcher: bool,
+    dux_mpris: Option<crate::dash::mpris::Mpris>,
+    dux_perf: Arc<Mutex<Option<ResourceSample>>>,
+    dux_sampler: Arc<Mutex<crate::dash::sysinfo::Sampler>>,
+    dux_busy: Arc<AtomicBool>,
+    dux_refresh: Instant,
+    dux_hover: Option<segmented::Kind>,
+    dux_material_generation: u64,
+    dux_effect: Option<(segmented::Kind, Instant, bool)>,
+    dux_reduce_motion: bool,
 }
 
 impl DecBar {
@@ -405,7 +417,20 @@ impl DecBar {
             logo_symbol: String::new(),
             locks: lock::Locks::default(),
             lock_watcher: false,
+            dux_mpris: None,
+            dux_perf: Arc::new(Mutex::new(None)),
+            dux_sampler: Arc::new(Mutex::new(crate::dash::sysinfo::Sampler::new(crate::dash::sysinfo::Paths::default()))),
+            dux_busy: Arc::new(AtomicBool::new(false)),
+            dux_refresh: Instant::now() - Duration::from_secs(5),
+            dux_hover: None,
+            dux_material_generation: 0,
+            dux_effect: None,
+            dux_reduce_motion: crate::accessibility::Preferences::from_env().reduce_motion,
         };
+        if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
+            bar.symbols.prepare_material();
+        }
+        bar.dux_material_generation = crate::theme::generation();
         bar.was_place = bar.place();
         if bar.was_place.is_some() {
             bar.logo_symbol = vbar::logo_symbol();
@@ -582,6 +607,9 @@ impl DecBar {
     }
 
     fn spans(&self) -> Vec<Span> {
+        if self.dux() {
+            return Vec::new();
+        }
         let dx = inset();
         let mut spans = title_spans(&self.menus, |m| self.label_w(m));
         if dx > 0.0 {
@@ -640,6 +668,9 @@ impl DecBar {
     }
 
     fn tray(&self) -> Vec<(Tray, Span)> {
+        if self.dux() {
+            return self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, Span { x: i.x, w: i.w })) } else { None }).collect();
+        }
         tray_spans(self.width as f32 - inset(), &self.tray_items())
     }
 
@@ -652,7 +683,7 @@ impl DecBar {
         let menu = self.menus.get(idx)?;
         let span = *self.spans().get(idx)?;
         let f = self.fonts.as_ref();
-        let mut d = Dropdown::layout(menu, span.x, BAR_HEIGHT + MENU_GAP, |s| f.map(|f| f.measure(s, TEXT_PX, Weight::Regular)).unwrap_or(7.0 * s.chars().count() as f32));
+        let mut d = Dropdown::layout(menu, span.x, self.bar_bottom() + MENU_GAP, |s| f.map(|f| f.measure(s, TEXT_PX, Weight::Regular)).unwrap_or(7.0 * s.chars().count() as f32));
         // Keep it on screen.
         let over = d.x + d.w - self.width as f32;
         if over > 0.0 && self.width > 0 {
@@ -669,14 +700,14 @@ impl DecBar {
             return self.v_panel_origin();
         }
         let right = self.tray().iter().find(|(k, _)| *k == Tray::Control).map(|(_, s)| s.x + s.w).unwrap_or(self.width as f32);
-        ((right - controlcenter::PANEL_W).max(0.0), BAR_HEIGHT + PANEL_GAP)
+        ((right - self.cc_width()).max(0.0), self.bar_bottom() + PANEL_GAP)
     }
 
     fn open_bottom(&self) -> Option<f32> {
         match self.open {
             Open::None => None,
             Open::Menu(i) => self.dropdown(i).map(|d| d.y + d.h),
-            Open::Control => Some(BAR_HEIGHT + PANEL_GAP + self.cc_height),
+            Open::Control => Some(self.bar_bottom() + PANEL_GAP + self.cc_height),
             Open::Popup(_) => self.popup.as_ref().map(|p| p.y + p.h).or(self.calendar.as_ref().map(|c| c.y + Calendar::H)),
         }
     }
@@ -783,7 +814,7 @@ impl DecBar {
 
     fn open_control(&mut self) {
         let snap = self.snapshot();
-        let (items, h) = controlcenter::layout_with(&snap, &crate::theme::th().control_center.tiles);
+        let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
         self.cc_items = items;
         self.cc_height = h;
         self.open = Open::Control;
@@ -796,9 +827,13 @@ impl DecBar {
         crate::theme::th().control_center.style.resolve(self.embed.taskbar)
     }
 
+    fn cc_width(&self) -> f32 {
+        controlcenter::panel_width(self.cc_style())
+    }
+
     fn relayout_control(&mut self) {
         let snap = self.snapshot();
-        let (items, h) = controlcenter::layout_with(&snap, &crate::theme::th().control_center.tiles);
+        let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
         self.cc_items = items;
         self.cc_height = h;
     }
@@ -983,6 +1018,10 @@ impl DecBar {
     }
 
     fn draw_bar(&mut self, pm: &mut Pixmap) {
+        if self.dux() {
+            self.dux_draw(pm);
+            return;
+        }
         let w = pm.width() as f32;
         if floating() {
             let th = crate::theme::th();
@@ -1171,7 +1210,7 @@ impl App for DecBar {
         Some(if let Some(p) = self.place() {
             DecBar::v_spec(p)
         } else {
-            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" }
+            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: self.bar_bottom().ceil() as i32, stretch: true, namespace: "decebal-bar" }
         })
     }
 
@@ -1197,7 +1236,11 @@ impl App for DecBar {
         }
         self.width = pm.width();
         self.draw_bar(pm);
-        let indicator_rects = self.tray().into_iter().map(|(k, s)| (k, (s.x, 0., s.w, BAR_HEIGHT))).collect::<Vec<_>>();
+        let indicator_rects = if self.dux() {
+            self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, (i.x, i.y, i.w, i.h))) } else { None }).collect::<Vec<_>>()
+        } else {
+            self.tray().into_iter().map(|(k, s)| (k, (s.x, 0., s.w, BAR_HEIGHT))).collect::<Vec<_>>()
+        };
         self.indicator_debug(&indicator_rects);
         if self.debug_tray.is_some() {
             let text: String = self.tray().iter().map(|(k, s)| format!("{:?} {}\n", k, (s.x + s.w / 2.0).round())).collect();
@@ -1243,6 +1286,8 @@ impl App for DecBar {
             if self.pill_bar() {
                 let radius = self.v_geo().pill_width() / 2.0;
                 regions.extend(self.v_layout().pills.into_iter().map(|(_, r)| crate::glass::Region { x: r.x, y: r.y, w: r.w, h: r.h, radius: radius.min(r.w.min(r.h) / 2.0) }));
+            } else if self.dux() {
+                regions.extend(self.dux_regions());
             } else if floating() {
                 let height = BAR_HEIGHT - 2.0 * PILL_MARGIN_Y;
                 regions.push(crate::glass::Region { x: PILL_MARGIN_X, y: PILL_MARGIN_Y, w: self.width as f32 - 2.0 * PILL_MARGIN_X, h: height, radius: height / 2.0 });
@@ -1258,7 +1303,7 @@ impl App for DecBar {
             }
             Open::Control => {
                 let (x, y) = self.panel_origin();
-                regions.push(crate::glass::Region { x, y, w: controlcenter::PANEL_W, h: self.cc_height, radius: controlcenter::look(self.cc_style()).0 });
+                regions.push(crate::glass::Region { x, y, w: self.cc_width(), h: self.cc_height, radius: controlcenter::look(self.cc_style()).0 });
             }
             Open::Popup(_) => {
                 if let Some(p) = &self.popup {
@@ -1278,6 +1323,15 @@ impl App for DecBar {
         }
         let mut redraw = false;
         self.leave_at = None;
+        if self.dux() && self.cc_drag.is_none() && self.popup_drag.is_none() && y < self.bar_bottom() {
+            let next = self.dux_layout().hit(x, y).map(|i| i.kind);
+            let changed = next != self.dux_hover;
+            if changed {
+                self.dux_effect = next.map(|kind| (kind, Instant::now(), true)).or_else(|| self.dux_hover.map(|kind| (kind, Instant::now(), false)));
+            }
+            self.dux_hover = next;
+            return changed;
+        }
         // Dragging a slider keeps tracking even outside its rectangle.
         if let (Some(t), Open::Control) = (self.cc_drag, self.open) {
             let (ox, _) = self.panel_origin();
@@ -1300,7 +1354,7 @@ impl App for DecBar {
                 self.leave_at = Some(Instant::now());
             }
         }
-        let title = if y < BAR_HEIGHT { self.title_hit(x) } else { None };
+        let title = if y < self.bar_bottom() { self.title_hit(x) } else { None };
         if title != self.hover_title {
             self.hover_title = title;
             redraw = true;
@@ -1341,7 +1395,11 @@ impl App for DecBar {
     }
 
     fn pointer_leave(&mut self) -> bool {
-        let redraw = self.hover_title.take().is_some();
+        let old = self.dux_hover.take();
+        if let Some(kind) = old {
+            self.dux_effect = Some((kind, Instant::now(), false));
+        }
+        let redraw = self.hover_title.take().is_some() || old.is_some();
         let redraw = self.v_hover.take().is_some() || redraw;
         self.v_hover_ws = None;
         self.v_hover_open = None;
@@ -1360,12 +1418,20 @@ impl App for DecBar {
             return self.v_button(x, y, button);
         }
         self.leave_at = None;
+        if self.dux() && y < self.bar_bottom() {
+            if self.dux_layout().hit(x, y).is_none() {
+                return self.close();
+            }
+            if self.dux_custom_press(x, y, button) {
+                return true;
+            }
+        }
         // A click anywhere else (the pointer is grabbed on X11, so such clicks reach us) closes.
         if self.open != Open::None && !self.over_open_ui(x, y) {
             self.close();
             return true;
         }
-        if y < BAR_HEIGHT {
+        if y < self.bar_bottom() {
             if let Some((kind, _)) = self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) {
                 match kind {
                     Tray::Indicator(key) => {
@@ -1391,7 +1457,7 @@ impl App for DecBar {
                 }
             }
         }
-        if button == Button::Middle && y < BAR_HEIGHT {
+        if button == Button::Middle && y < self.bar_bottom() {
             // Middle click on the sound icon mutes.
             if self.tray().iter().any(|(k, s)| *k == Tray::Audio && x >= s.x && x < s.x + s.w) {
                 self.toggle_mute_now();
@@ -1401,13 +1467,13 @@ impl App for DecBar {
                 return true;
             }
         }
-        if button == Button::Right && y < BAR_HEIGHT && self.awake_options(x) {
+        if button == Button::Right && y < self.bar_bottom() && self.awake_options(x) {
             return true;
         }
         if button != Button::Left {
             return false;
         }
-        if y < BAR_HEIGHT {
+        if y < self.bar_bottom() {
             if let Some(i) = self.title_hit(x) {
                 if self.open == Open::Menu(i) {
                     self.close();
@@ -1423,7 +1489,8 @@ impl App for DecBar {
                 }
                 match kind {
                     Tray::Workspaces => {
-                        if let Some(i) = workspace_hit(s, self.workspaces.len(), x) {
+                        let scale = if self.dux() { crate::theme::live::font_scale().max(1.0) } else { 1.0 };
+                        if let Some(i) = workspace_hit(Span { x: s.x, w: s.w / scale }, self.workspaces.len(), s.x + (x - s.x) / scale) {
                             self.close();
                             self.active.switch_workspace(i);
                         }
@@ -1443,9 +1510,19 @@ impl App for DecBar {
                         self.dashboard(s);
                         return true;
                     }
-                    Tray::Spotlight => {
+                    Tray::Logo | Tray::Spotlight => {
                         self.close();
                         self.spotlight();
+                        return true;
+                    }
+                    Tray::Power => {
+                        self.close();
+                        vbar::launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
+                        return true;
+                    }
+                    Tray::Window => {
+                        self.close();
+                        self.dashboard(s);
                         return true;
                     }
                     Tray::Awake => {
@@ -1522,7 +1599,7 @@ impl App for DecBar {
         if self.pill_bar() && self.v_scroll(x, y, dy) {
             return true;
         }
-        if !self.pill_bar() && y < BAR_HEIGHT && self.tray_scroll(x, dy) {
+        if !self.pill_bar() && y < self.bar_bottom() && self.tray_scroll(x, dy) {
             return true;
         }
         if self.open != Open::Control {
@@ -1546,6 +1623,30 @@ impl App for DecBar {
         }
     }
 
+    fn nav_key(&mut self, key: crate::app::NavKey) -> bool {
+        if !self.dux() || self.open != Open::Control {
+            return false;
+        }
+        let targets: Vec<_> = self.cc_items.iter().filter_map(|item| item.target.map(|target| (target, item.r))).collect();
+        if targets.is_empty() {
+            return false;
+        }
+        let current = targets.iter().position(|(target, _)| Some(*target) == self.cc_hover);
+        match key {
+            crate::app::NavKey::Up | crate::app::NavKey::Down => {
+                let step = if key == crate::app::NavKey::Up { -1 } else { 1 };
+                let index = current.map_or(0, |index| (index as i32 + step).rem_euclid(targets.len() as i32) as usize);
+                self.cc_hover = Some(targets[index].0);
+                true
+            }
+            crate::app::NavKey::Enter => {
+                let (target, rect) = targets[current.unwrap_or(0)];
+                self.activate(target, rect.x, rect.w, rect.x + rect.w / 2.0);
+                true
+            }
+        }
+    }
+
     fn wants_keyboard(&self) -> bool {
         self.open != Open::None
     }
@@ -1562,31 +1663,36 @@ impl App for DecBar {
             return self.v_input_rects();
         }
         let w = self.width.max(1) as i32;
-        let mut rects = vec![InputRect { x: 0, y: 0, w, h: BAR_HEIGHT as i32 }];
+        let bh = self.bar_bottom();
+        let mut rects = if self.dux() {
+            self.dux_regions().into_iter().map(|g| InputRect { x: g.x.floor() as i32, y: g.y.floor() as i32, w: g.w.ceil() as i32, h: g.h.ceil() as i32 }).collect()
+        } else {
+            vec![InputRect { x: 0, y: 0, w, h: bh as i32 }]
+        };
         match self.open {
             Open::Menu(i) => {
                 if let Some(d) = self.dropdown(i) {
                     // Starts at the bar's bottom edge so the pointer never leaves the surface in the gap above the menu.
-                    rects.push(InputRect { x: d.x.floor() as i32, y: BAR_HEIGHT as i32, w: d.w.ceil() as i32, h: (d.y + d.h - BAR_HEIGHT).ceil() as i32 });
+                    rects.push(InputRect { x: d.x.floor() as i32, y: bh as i32, w: d.w.ceil() as i32, h: (d.y + d.h - bh).ceil() as i32 });
                 }
             }
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
-                rects.push(InputRect { x: ox.floor() as i32, y: BAR_HEIGHT as i32, w: controlcenter::PANEL_W as i32, h: (oy + self.cc_height - BAR_HEIGHT).ceil() as i32 });
+                rects.push(InputRect { x: ox.floor() as i32, y: bh as i32, w: self.cc_width() as i32, h: (oy + self.cc_height - bh).ceil() as i32 });
             }
             Open::Popup(kind) => {
                 // The gap between the item and the popup belongs to the popup, so the pointer stays on
                 // the surface on its way down (the popup may be clamped away from the item).
                 if let Some(span) = self.tray_span(kind) {
-                    let top = self.popup.as_ref().map(|p| p.y).or(self.calendar.as_ref().map(|c| c.y)).unwrap_or(BAR_HEIGHT);
-                    if top > BAR_HEIGHT {
-                        rects.push(InputRect { x: span.x.floor() as i32, y: BAR_HEIGHT as i32, w: span.w.ceil() as i32, h: (top - BAR_HEIGHT).ceil() as i32 });
+                    let top = self.popup.as_ref().map(|p| p.y).or(self.calendar.as_ref().map(|c| c.y)).unwrap_or(bh);
+                    if top > bh {
+                        rects.push(InputRect { x: span.x.floor() as i32, y: bh as i32, w: span.w.ceil() as i32, h: (top - bh).ceil() as i32 });
                     }
                 }
                 if let Some(p) = &self.popup {
-                    rects.push(InputRect { x: p.x.floor() as i32, y: BAR_HEIGHT as i32, w: p.w.ceil() as i32, h: (p.y + p.h - BAR_HEIGHT).ceil() as i32 });
+                    rects.push(InputRect { x: p.x.floor() as i32, y: bh as i32, w: p.w.ceil() as i32, h: (p.y + p.h - bh).ceil() as i32 });
                 } else if let Some(c) = &self.calendar {
-                    rects.push(InputRect { x: c.x.floor() as i32, y: BAR_HEIGHT as i32, w: Calendar::W.ceil() as i32, h: (c.y + Calendar::H - BAR_HEIGHT).ceil() as i32 });
+                    rects.push(InputRect { x: c.x.floor() as i32, y: bh as i32, w: Calendar::W.ceil() as i32, h: (c.y + Calendar::H - bh).ceil() as i32 });
                 }
             }
             Open::None => {}
@@ -1638,6 +1744,7 @@ impl App for DecBar {
     fn tick_in(&self) -> Option<Duration> {
         let leave = self.leave_at.map(|t| CLOSE_DELAY.saturating_sub(t.elapsed()));
         let hover = self.v_hover_open.map(|(_, t)| vbar::HOVER_DELAY.saturating_sub(t.elapsed()));
+        let hover = if self.dux_animating() { Some(Duration::from_millis(16)) } else { hover };
         match (leave, hover) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
@@ -1664,7 +1771,9 @@ impl App for DecBar {
 
 impl DecBar {
     fn tick_inner(&mut self) -> Tick {
+        self.dux_tick();
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        redraw |= self.dux_animating();
         redraw |= self.indicator_tick();
         let mut close_in = None;
         let place = self.place();
@@ -1716,7 +1825,7 @@ impl DecBar {
         if self.last_minute != Some(minute) {
             self.last_minute = Some(minute);
             let cs = crate::config::shell_settings();
-            self.clock_text = clock::format_with(&tm, cs.clock_hour12, &cs.clock_date);
+            self.clock_text = if self.dux() { clock::format_dux(&tm, cs.clock_hour12) } else { clock::format_with(&tm, cs.clock_hour12, &cs.clock_date) };
             redraw = true;
             // Once a minute: a cheap data refresh, the active app name, and stale weather.
             self.spawn_snapshot(false);
@@ -1735,6 +1844,13 @@ impl DecBar {
             self.spawn_snapshot(true);
         }
         let wake = next_wake(&tm, matches!(self.open, Open::Control | Open::Popup(_)));
+        let wake = if self.dux_animating() {
+            wake.min(Duration::from_millis(16))
+        } else if self.dux() {
+            wake.min(Duration::from_secs(2))
+        } else {
+            wake
+        };
         Tick { redraw, next: Some(close_in.map_or(wake, |c| c.min(wake))) }
     }
 }

@@ -137,6 +137,62 @@ impl FontDb {
         db
     }
 
+    /// Adds bounded validated theme files to this process only. Never calls fc-cache,
+    /// changes installed fonts, or runs during steady-state glyph painting.
+    pub fn with_package_files(&self, files: &[PathBuf]) -> FontDb {
+        self.with_package_faces(&Self::read_package_faces(files))
+    }
+
+    /// Parse package metadata during theme loading, never from native drawing.
+    pub fn read_package_faces(files: &[PathBuf]) -> Vec<Face> {
+        let mut bundled = Vec::new();
+        for path in files.iter().take(8) {
+            let Ok(meta) = std::fs::metadata(path) else { continue };
+            if !meta.is_file() || meta.len() > 16 << 20 {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(path) else { continue };
+            let Ok(face) = ttf_parser::Face::parse(&bytes, 0) else { continue };
+            let family = |id| face.names().into_iter().filter(|n| n.name_id == id).find_map(|n| n.to_string());
+            let Some(name) = family(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| family(ttf_parser::name_id::FAMILY)) else { continue };
+            let weight = match face.weight().to_number() {
+                0..=349 => 50,
+                350..=449 => FC_REGULAR,
+                450..=549 => FC_MEDIUM,
+                550..=649 => FC_SEMIBOLD,
+                _ => FC_BOLD,
+            };
+            let variable = face.is_variable();
+
+            bundled.push(Face {
+                names: vec![name],
+                weight_lo: weight,
+                weight_hi: weight,
+                slant: if face.is_italic() { 100 } else { 0 },
+                width: 100,
+                file: path.clone(),
+                index: 0,
+                variable,
+                mono: face.is_monospaced(),
+            });
+        }
+        bundled
+    }
+
+    /// Pure merge of metadata prepared by the theme loader.
+    pub fn with_package_faces(&self, faces: &[Face]) -> FontDb {
+        let mut db = self.clone();
+        for face in faces.iter().filter(|f| f.variable) {
+            db.variable_files.insert(face.file.clone());
+        }
+        let bundled = faces.iter().cloned();
+        db.faces.splice(0..0, bundled);
+        db.by_norm.clear();
+        db.families.clear();
+        db.index();
+        db
+    }
+
     /// Builds the name lookup and the picker list from `faces`.
     fn index(&mut self) {
         let mut seen = HashSet::new();
@@ -438,5 +494,33 @@ mod tests {
         assert!(db.family_count() > 0 && !db.picker_families().is_empty());
         let sans = db.resolve("sans-serif").expect("fontconfig has a default sans");
         assert!(db.face(&sans, FC_REGULAR).is_some_and(|f| f.file.is_file()));
+    }
+    #[test]
+    fn package_font_registration_is_private_and_rejects_invalid_files() {
+        let db = FontDb::default();
+        let files = vec![std::env::temp_dir().join("missing-decebal-package-font.ttf")];
+        assert!(db.with_package_files(&files).is_empty());
+        assert!(db.is_empty());
+    }
+
+    /// DUX_FONT_DIR=/readonly/upstream/fonts/google-sans-flex cargo test --lib package_google_sans -- --ignored
+    #[test]
+    #[ignore = "requires licensed upstream Google Sans Flex assets in DUX_FONT_DIR"]
+    fn package_google_sans_faces_have_real_native_outlines() {
+        let dir = PathBuf::from(std::env::var_os("DUX_FONT_DIR").expect("DUX_FONT_DIR"));
+        let files: Vec<_> = ["GoogleSansFlex-400.ttf", "GoogleSansFlex-500.ttf", "GoogleSansFlex-700.ttf"].iter().map(|n| dir.join(n)).collect();
+        let installed = FontDb::default();
+        let registered = installed.with_package_files(&files);
+        let family = registered.resolve("Google Sans Flex").expect("actual package family registered");
+        assert!(!installed.has_family("Google Sans Flex"), "registration must not mutate installed database");
+        for weight in [FC_REGULAR, FC_MEDIUM, FC_BOLD] {
+            let face = registered.face(&family, weight).unwrap();
+            assert!(files.contains(&face.file));
+            let bytes = std::fs::read(&face.file).unwrap();
+            for ch in ['A', 'g', '0', '5'] {
+                let glyph = crate::textface::raster_outline(&bytes, &face, ch, 24.0).expect("native outline raster");
+                assert!(glyph.advance > 0.0 && glyph.bitmap.iter().any(|v| *v > 0), "missing glyph {ch} at {weight}");
+            }
+        }
     }
 }

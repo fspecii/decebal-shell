@@ -56,7 +56,8 @@ struct Setup {
 
 impl Setup {
     fn new(plan: FontPlan) -> Setup {
-        let all = fontdb::get();
+        let installed = fontdb::get();
+        let all = installed.with_package_faces(&plan.package_faces);
         let resolved = plan.resolve(&all);
         let used: Vec<String> = resolved.roles.iter().flatten().cloned().collect();
         let db = all.subset(&used);
@@ -263,6 +264,22 @@ impl Fonts {
         let a = self.spec(role, 0, weight).and_then(|s| textface::ascent(self.backing(&s.face.file)?.bytes(), s.face.index, px)).unwrap_or(px * 0.9);
         self.ascents.borrow_mut().insert(key, a);
         a
+    }
+
+    /// Actual cached glyph ink extents relative to the baseline, after accessibility
+    /// text enlargement. Lets fixed source-sized native controls center real ink.
+    pub fn ink_vertical(&self, text: &str, px: f32, weight: Weight) -> Option<(f32, f32)> {
+        let mut bounds: Option<(f32, f32)> = None;
+        for ch in text.chars() {
+            let Some(glyph) = self.glyph(Role::Ui, ch, px, weight) else { continue };
+            if glyph.height == 0 {
+                continue;
+            }
+            let top = -(glyph.height as f32) - glyph.ymin as f32;
+            let bottom = -(glyph.ymin as f32);
+            bounds = Some(bounds.map_or((top, bottom), |(a, b)| (a.min(top), b.max(bottom))));
+        }
+        bounds
     }
 
     /// Advance width of `text` at pixel size `px`.

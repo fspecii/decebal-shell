@@ -17,7 +17,7 @@ pub const TILE_NAMES: [&str; 7] = ["connectivity", "focus", "display", "sound", 
 /// Values of `position`.
 pub const POSITION_NAMES: [&str; 5] = ["auto", "top-right", "top-left", "bottom-right", "bottom-left"];
 /// Values of `style`.
-pub const STYLE_NAMES: [&str; 3] = ["auto", "card", "fluent"];
+pub const STYLE_NAMES: [&str; 4] = ["auto", "card", "fluent", "dux"];
 
 /// Which tile groups the panel shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +134,8 @@ pub enum Style {
     Card,
     /// The Windows 11 flyout: tiles and panel take the theme's radius as it is (8 px in the Windows 11 theme).
     Fluent,
+    /// Source-measured Dux two-column tiles and tonal strip sliders.
+    Dux,
 }
 
 impl Style {
@@ -142,6 +144,7 @@ impl Style {
             "auto" => Style::Auto,
             "card" => Style::Card,
             "fluent" => Style::Fluent,
+            "dux" => Style::Dux,
             _ => return None,
         })
     }
@@ -151,6 +154,7 @@ impl Style {
             Style::Auto => "auto",
             Style::Card => "card",
             Style::Fluent => "fluent",
+            Style::Dux => "dux",
         }
     }
 
@@ -243,7 +247,10 @@ impl Host {
         if shell.bar_visible(dock.style) {
             return match pill {
                 Some(position) => Host::Pill { position, thickness: crate::theme::pill_bar_thickness(position) },
-                None => Host::MenuBar { thickness: crate::theme::BAR_HEIGHT },
+                None => {
+                    let th = crate::theme::th();
+                    Host::MenuBar { thickness: if th.bar_style == "dux" { th.bar_height + 2.0 * th.bar_layout.margin } else { crate::theme::BAR_HEIGHT } }
+                }
             };
         }
         Host::Nothing

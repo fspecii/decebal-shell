@@ -215,7 +215,7 @@ impl DecBar {
         }
         self.close();
         let Some(span) = self.tray_span(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| self.tray_span(Tray::Indicators)).flatten()) else { return };
-        let y = BAR_HEIGHT + MENU_GAP;
+        let y = self.bar_bottom() + MENU_GAP;
         let width = self.width as f32;
         if kind == Tray::Clock {
             let Some(today) = clock::today() else { return };

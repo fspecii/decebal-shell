@@ -59,6 +59,11 @@ impl Source {
         doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse).unwrap_or_default()
     }
 
+    pub fn bar_layout(&self) -> crate::config::BarLayout {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        crate::config::BarLayout::from_json(&doc["bar"])
+    }
+
     /// `control_center` of the same file (every default when absent).
     pub fn control_center(&self) -> crate::controlcenter::settings::Settings {
         let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -183,7 +188,50 @@ impl Source {
     /// follows light/dark), overrides applied, then "match wallpaper" recolours it when it is on.
     pub fn theme_for(&self, id: &str, sel: &Selection, system_dark: bool) -> Result<Theme, String> {
         let def = self.load_def(id)?;
-        Ok(resolve_with(&def, id, sel, system_dark))
+        let mut theme = resolve_with(&def, id, sel, system_dark);
+        self.package_font_files(id, 0, &mut theme.fonts.files);
+        theme.fonts.file_versions = theme
+            .fonts
+            .files
+            .iter()
+            .map(|file| {
+                std::fs::metadata(file).map(|meta| (meta.len(), meta.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos()))).unwrap_or_default()
+            })
+            .collect();
+        theme.fonts.package_faces = super::fontdb::FontDb::read_package_faces(&theme.fonts.files);
+        Ok(theme)
+    }
+
+    /// Package fonts are resolved outside painting and remain private to this process.
+    /// Canonical containment rejects symlinks escaping the package root.
+    fn package_font_files(&self, id: &str, depth: usize, out: &mut Vec<PathBuf>) {
+        if depth > 8 || out.len() >= 8 {
+            return;
+        }
+        let path = self.user_file(id);
+        let Ok(text) = std::fs::read_to_string(&path) else { return };
+        let Ok(def) = Def::parse(&text) else { return };
+        let Some(base) = path.parent().and_then(|p| p.canonicalize().ok()) else { return };
+        if let Some(files) = def.extra.get("font").and_then(|f| f.get("files")).and_then(|f| f.as_array()) {
+            for file in files.iter().filter_map(|f| f.as_str()) {
+                if out.len() >= 8 {
+                    break;
+                }
+                if engine::archive::safe_rel_path(file).is_err() {
+                    continue;
+                }
+                let Ok(full) = base.join(file).canonicalize() else { continue };
+                if !full.starts_with(&base) || !std::fs::metadata(&full).is_ok_and(|m| m.is_file() && m.len() <= 16 << 20) {
+                    continue;
+                }
+                if !out.contains(&full) {
+                    out.push(full);
+                }
+            }
+        }
+        if let Some(parent) = def.inherit {
+            self.package_font_files(&parent, depth + 1, out);
+        }
     }
 
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
@@ -194,10 +242,13 @@ impl Source {
             sel.mode = m;
         }
         match self.theme_for(&id, &sel, system_dark) {
-            Ok(t) => (Theme { bar_position: self.bar_position(), control_center: self.control_center(), ..t }, None),
+            Ok(t) => (Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..t }, None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                (Theme { bar_position: self.bar_position(), control_center: self.control_center(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) }, Some(e))
+                (
+                    Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) },
+                    Some(e),
+                )
             }
         }
     }

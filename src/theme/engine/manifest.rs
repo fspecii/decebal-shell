@@ -230,7 +230,7 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "rdwm"];
+const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),
@@ -403,6 +403,8 @@ fn lift_tokens(extra: &Map<String, Value>, common: &mut Tokens) {
     num("font", "scale", "font_scale", common);
     num("metrics", "blur", "blur", common);
     text("bar", "style", "bar_style", common);
+    text("dashboard", "style", "dashboard_style", common);
+    text("dashboard", "profile", "dashboard_profile", common);
     num("bar", "height", "bar_height", common);
     num("dock", "size", "dock_icon_size", common);
     num("dock", "roundness", "dock_roundness", common);
@@ -507,6 +509,23 @@ pub fn analyze(text: &str) -> Analysis {
                 key: "min_shell_version".into(),
                 msg: format!("needs decebal {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
             });
+        }
+    }
+    if extra.get("bar").and_then(|b| b.get("style")).and_then(Value::as_str) == Some("dux") {
+        if let Some(bar) = doc.get("bar").and_then(Item::as_table) {
+            for slot in ["left", "center", "right"] {
+                if let Some(list) = bar.get(slot).and_then(Item::as_array) {
+                    for value in list.iter() {
+                        if let Some(id) = value.as_str() {
+                            if !crate::config::DUX_BAR_ITEMS.contains(&id) {
+                                if let Some(item) = bar.get(slot) {
+                                    cx.err(item, &format!("bar.{slot}"), format!("unknown native Dux item `{id}`; no arbitrary widgets or commands"));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     if !cx.diags.iter().any(|d| d.level == Level::Error) {
@@ -768,5 +787,25 @@ format = "%H:%M"
         assert!(is_v1("format=1"));
         assert!(!is_v1("name = \"x\"\n[metrics]\nformat_x = 1\n"));
         assert!(!is_v1("name = \"format = 1\"\n"));
+    }
+    #[test]
+    fn native_dux_contract_is_opt_in_and_rejects_script_or_unknown_items() {
+        let source = "format=1\nname=\"Dux native fixture\"\n[bar]\nstyle=\"dux\"\nheight=38\nmargin=8\nspacing=4\nradius=14\nleft=[\"launcherButton\",\"workspaceSwitcher\",\"focusedWindow\"]\ncenter=[\"music\",\"clock\",\"weather\"]\nright=[\"systemTray\",\"clipboard\",\"cpuUsage\",\"memUsage\",\"notificationButton\",\"battery\",\"controlCenterButton\"]\n[dashboard]\nstyle=\"dux\"\n";
+        let a = analyze(source);
+        assert!(a.diags.is_empty(), "{:?}", a.diags);
+        let def = a.def.unwrap();
+        let theme = def.resolve("fixture", true, &crate::theme::model::Selection::default());
+        assert_eq!(theme.bar_style, "dux");
+        assert_eq!(theme.bar_height, 38.0);
+        assert_eq!(theme.dashboard_style, "dux");
+        for bad in ["exec", "widget:untrusted", "typo"] {
+            let invalid = analyze(&source.replace("launcherButton", bad));
+            assert!(invalid.def.is_none());
+            assert!(invalid.diags.iter().any(|d| d.key == "bar.left"));
+        }
+        // Earlier styles retain their previously accepted declarative lists.
+        assert!(analyze(&source.replace("style=\"dux\"", "style=\"floating\"").replace("launcherButton", "legacy-item").replace("[dashboard]\nstyle=\"floating\"", "[dashboard]\nstyle=\"default\""))
+            .def
+            .is_some());
     }
 }

@@ -171,9 +171,17 @@ const MAX_PIXELS: usize = 1 << 20;
 /// Rasterises one glyph from its outline: ttf-parser reads the outline (and applies the weight axis of a variable
 /// font), tiny-skia fills it with anti-aliasing. Metrics follow fontdue's: integer bearings, fractional advance.
 pub fn raster_outline(bytes: &[u8], face: &FaceRef, ch: char, px: f32) -> Option<Glyph> {
+    raster_outline_axes(bytes, face, ch, px, &[])
+}
+
+/// Explicit variable axes for native Material Symbols; ordinary text keeps its weight policy.
+pub fn raster_outline_axes(bytes: &[u8], face: &FaceRef, ch: char, px: f32, axes: &[([u8; 4], f32)]) -> Option<Glyph> {
     let mut f = parse(bytes, face.index)?;
     if face.variable {
         let _ = f.set_variation(ttf_parser::Tag::from_bytes(b"wght"), css_weight(face.weight));
+    }
+    for (tag, value) in axes {
+        let _ = f.set_variation(ttf_parser::Tag::from_bytes(tag), *value);
     }
     let gid = f.glyph_index(ch)?;
     let s = px / f.units_per_em() as f32;

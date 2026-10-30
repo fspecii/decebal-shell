@@ -236,6 +236,12 @@ fn dedup(v: Vec<String>) -> Vec<String> {
 /// The wanted fonts of a resolved theme: the preset in use and one chain of family names per role, before looking at what is installed.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FontPlan {
+    /// Validated package-local files, resolved once per theme generation.
+    pub files: Vec<std::path::PathBuf>,
+    /// File versions ensure atomic package updates invalidate native glyph caches.
+    pub file_versions: Vec<(u64, u128)>,
+    /// Parsed outside painting by Source; glyph setup only merges this metadata.
+    pub package_faces: Vec<super::fontdb::Face>,
     pub preset: String,
     pub chains: [Vec<String>; 4],
 }
@@ -265,7 +271,7 @@ impl FontPlan {
             c.extend(p.chain(r).iter().map(|s| s.to_string()));
             chains[r.idx()] = dedup(c);
         }
-        FontPlan { preset: p.id.to_string(), chains }
+        FontPlan { files: Vec::new(), file_versions: Vec::new(), package_faces: Vec::new(), preset: p.id.to_string(), chains }
     }
 
     /// The font that gives the interface its look, as a theme author wrote it (empty = automatic).

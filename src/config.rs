@@ -286,6 +286,75 @@ impl Default for BarSettings {
     }
 }
 
+/// Native Dux bar item IDs. Lists are declarative; no command or widget execution.
+pub const DUX_BAR_ITEMS: &[&str] = &[
+    "launcherButton",
+    "workspaceSwitcher",
+    "focusedWindow",
+    "music",
+    "clock",
+    "weather",
+    "systemTray",
+    "clipboard",
+    "notificationButton",
+    "battery",
+    "controlCenterButton",
+    "network",
+    "audio",
+    "bluetooth",
+    "dashboard",
+    "power",
+    "layout",
+    "cpuUsage",
+    "memUsage",
+];
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct BarLayout {
+    pub left: Vec<String>,
+    pub center: Vec<String>,
+    pub right: Vec<String>,
+    pub margin: f32,
+    pub spacing: f32,
+    pub radius: f32,
+    pub background: String,
+    pub band_radius: f32,
+}
+impl Default for BarLayout {
+    fn default() -> Self {
+        let names = |v: &[&str]| v.iter().map(|s| (*s).to_string()).collect();
+        Self {
+            left: names(&["launcherButton", "workspaceSwitcher", "focusedWindow"]),
+            center: names(&["music", "clock", "weather"]),
+            right: names(&["systemTray", "clipboard", "cpuUsage", "memUsage", "notificationButton", "battery", "controlCenterButton"]),
+            margin: 4.0,
+            spacing: 4.0,
+            radius: 14.0,
+            background: "band".into(),
+            band_radius: 16.0,
+        }
+    }
+}
+impl BarLayout {
+    pub fn from_json(v: &serde_json::Value) -> Self {
+        let mut out: Self = serde_json::from_value(v.clone()).unwrap_or_default();
+        let mut seen = std::collections::BTreeSet::new();
+        for group in [&mut out.left, &mut out.center, &mut out.right] {
+            group.retain(|id| DUX_BAR_ITEMS.contains(&id.as_str()) && seen.insert(id.clone()));
+            group.truncate(24);
+        }
+        out.margin = out.margin.clamp(0.0, 48.0);
+        out.spacing = out.spacing.clamp(0.0, 24.0);
+        out.radius = out.radius.clamp(0.0, 48.0);
+        out.band_radius = out.band_radius.clamp(0.0, 48.0);
+        if !matches!(out.background.as_str(), "band" | "islands") {
+            out.background = "band".into();
+        }
+        out
+    }
+}
+
 /// `decebal.json` -> `"dock": { "enabled": true | false | "auto" }`: whether decdock shows at all. `"auto"` hides it while the
 /// theme's bar is the vertical one (`bar_style = "vertical"`: Caelestia has no dock). Default `true`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -489,6 +558,20 @@ mod tests {
         assert_eq!(Pinned::default().or_default(&none), vec!["launchpad", "trash"]);
         let p = Pinned { pinned: vec!["a".into()], order: vec![] };
         assert_eq!(p.or_default(&none), vec!["a"]);
+    }
+
+    #[test]
+    fn dux_bar_contract_is_bounded_declarative_and_keeps_explicit_empty_slots() {
+        let layout = BarLayout::from_json(
+            &serde_json::json!({"left": [], "center": ["clock", "clock", "exec:sh"], "right": ["clock", "notificationButton", "widget:unknown"], "margin": 999, "spacing": -1, "radius": 999}),
+        );
+        assert!(layout.left.is_empty());
+        assert_eq!(layout.center, ["clock"]);
+        assert_eq!(layout.right, ["notificationButton"]);
+        assert_eq!((layout.margin, layout.spacing, layout.radius), (48.0, 0.0, 48.0));
+        let default = BarLayout::default();
+        assert_eq!(default.left, ["launcherButton", "workspaceSwitcher", "focusedWindow"]);
+        assert!(default.right.iter().any(|id| id == "cpuUsage"));
     }
 
     #[test]
