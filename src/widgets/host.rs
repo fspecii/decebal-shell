@@ -313,6 +313,12 @@ fn new_window(conn: &RustConnection, screen: &Screen, argb_visual: Option<u32>, 
     let name = format!("decwidgets: {}", res.def.name);
     conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_NAME, AtomEnum::STRING, name.as_bytes()).map_err(err)?;
     conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_CLASS, AtomEnum::STRING, b"decwidgets\0decwidgets\0").map_err(err)?;
+    // These override-redirect cards are desktop content, not popup overlays.
+    // Publish their standard stacking role before mapping so a shell frame can
+    // stay above them without ever covering unknown popups or screen lockers.
+    let state = conn.intern_atom(false, b"_NET_WM_STATE").map_err(err)?.reply().map_err(err)?.atom;
+    let below = conn.intern_atom(false, b"_NET_WM_STATE_BELOW").map_err(err)?.reply().map_err(err)?.atom;
+    conn.change_property32(PropMode::REPLACE, id, state, AtomEnum::ATOM, &[below]).map_err(err)?;
     let gc = conn.generate_id().map_err(err)?;
     conn.create_gc(gc, id, &CreateGCAux::new()).map_err(err)?;
     let glass = crate::theme::th().blur > 0.0;

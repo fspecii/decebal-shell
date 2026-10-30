@@ -530,14 +530,17 @@ impl Model {
         let mut out = vec![Item::Header("Window shadows".into())];
         if !shadow_controls_supported(self, wayland) {
             let text = if wayland {
-                "Window shadows are currently available for rdwm title bars on X11. Wayland windows keep their compositor’s effects."
+                "This Wayland compositor has not advertised rdwm window shadows. Upgrade to a supporting session; saved settings are kept."
             } else if self.rt.running {
                 "This running window manager does not expose window shadows yet. Start a new supporting rdwm session after upgrading, then apply your theme."
             } else {
-                "Connect to a supporting rdwm X11 session to change window shadows. Your saved settings are kept."
+                "Connect to a supporting rdwm session to change window shadows. Your saved settings are kept."
             };
             out.push(Item::Note { text: text.into(), warn: false });
             return out;
+        }
+        if wayland {
+            out.push(Item::Note { text: "Applies to rdwm-decorated windows. Apps with their own title bars manage their own shadows.".into(), warn: false });
         }
         let mut rows = Vec::new();
         rows.extend(self.r_toggle("decoration", "shadow", "Show window shadows", "One continuous shadow around the app and its title bar; off releases its resources"));
@@ -554,7 +557,12 @@ impl Model {
             }
         }
         out.push(Item::Card(rows));
-        out.push(Item::Note { text: "Requires rdwm title bars and a running X11 compositor. Applying a theme updates shadow strength; softness keeps your chosen value.".into(), warn: false });
+        let detail = if wayland {
+            "Requires rdwm title bars. Applying a theme updates shadow strength; softness keeps your chosen value."
+        } else {
+            "Requires rdwm title bars and a running X11 compositor. Applying a theme updates shadow strength; softness keeps your chosen value."
+        };
+        out.push(Item::Note { text: detail.into(), warn: false });
         out
     }
 
@@ -782,10 +790,10 @@ impl Model {
         // configuration they cannot reload.
         if self.schema.has("wallpaper.frame", "enabled") && (!self.rt.running || self.rt.state["wallpaper"]["frame"].is_object()) {
             let mut frame = Vec::new();
-            frame.extend(self.r_toggle("wallpaper.frame", "enabled", "Rounded desktop frame", "A rounded border around the wallpaper, behind apps; works with every theme"));
+            frame.extend(self.r_toggle("wallpaper.frame", "enabled", "Rounded desktop frame", "Rounded shell frame around the desktop; works with every theme"));
             frame.extend(self.r_slider("wallpaper.frame", "radius", "Corner radius", "Logical pixels; follows display scaling", 1.0, " px", Some(128.0)));
             frame.extend(self.r_slider("wallpaper.frame", "thickness", "Frame thickness", "Does not move or resize your apps", 1.0, " px", Some(64.0)));
-            frame.extend(self.r_color("wallpaper.frame", "color", "Frame colour", "Reset to follow the wallpaper background colour"));
+            frame.extend(self.r_color("wallpaper.frame", "color", "Frame colour", "Reset to follow the desktop frame default"));
             items.push(Item::Header("Desktop frame".into()));
             items.push(Item::Card(frame));
         }
@@ -1221,8 +1229,8 @@ const SHADOW_KEYS: &[&str] = &["shadow", "shadow_radius", "shadow_opacity", "sha
 /// Watcher data comes from the running parser, not the potentially newer offline CLI.
 /// A false master switch is a supported-but-disabled feature, not a missing capability.
 fn shadow_controls_supported(m: &Model, wayland: bool) -> bool {
-    !wayland
-        && m.rt.running
+    m.rt.running
+        && (!wayland || m.rt.effects.as_ref().is_some_and(super::io::Effects::supports_ssd_shadows))
         && m.rt.config["decoration"]["shadow"].is_boolean()
         && SHADOW_KEYS[1..].iter().all(|k| m.rt.config["decoration"][k].as_u64().is_some())
         && SHADOW_KEYS.iter().all(|k| m.schema.has("decoration", k))
@@ -1233,7 +1241,7 @@ fn apply_shadow(m: &mut Model, key: &str, value: CtlVal, wayland: bool) {
         return;
     }
     if !shadow_controls_supported(m, wayland) {
-        m.say("Window shadows need a supporting rdwm X11 session; settings were kept", false);
+        m.say("Window shadows need a supporting rdwm session; settings were kept", false);
         return;
     }
     m.apply(&format!("r:decoration:{key}"), value);
@@ -1672,6 +1680,38 @@ mod tests {
         assert!(shadow_controls_supported(&m, false), "false means supported but disabled");
         assert!(shadow_ctls(m.window_shadow_items(true)).is_empty(), "Wayland parses the keys but has no carrier renderer");
         assert_eq!(std::fs::read(&path).unwrap(), before, "painting does not write or run a command");
+    }
+
+    #[test]
+    fn wayland_shadow_controls_need_live_effects_and_discard_stale_events() {
+        let (mut m, path) = shadow_model("# keep this\n[decoration]\nenabled = true\n");
+        m.rt.running = true;
+        m.rt.config = live_shadow_config();
+        let before = std::fs::read(&path).unwrap();
+        // `true` is the actual Wayland session, including when Settings renders
+        // through forced X11/XWayland. A schema-only old WM stays unavailable.
+        assert!(shadow_ctls(m.window_shadow_items(true)).is_empty());
+        m.rt.effects = Some(super::super::io::Effects { protocol: 1, backend: "wayland".into(), instance: "new-compositor".into(), ssd_shadows: true });
+        assert_eq!(shadow_ctls(m.window_shadow_items(true)).len(), 4);
+        assert_eq!(std::fs::read(&path).unwrap(), before, "drawing only consumes the cached worker reply");
+        apply_shadow(&mut m, "shadow", CtlVal::Bool(true), true);
+        assert!(m.flag("decoration", "shadow"));
+        let saved = std::fs::read(&path).unwrap();
+        m.rt.observed = 20;
+        m.dirty = false;
+        let mut heartbeat = m.rt.clone();
+        heartbeat.observed = 21;
+        m.on_event(super::super::io::Ev::Runtime(Box::new(heartbeat)));
+        assert!(!m.dirty, "an identical heartbeat advances ordering without repainting");
+        assert_eq!(m.rt.observed, 21);
+        let mut stale = m.rt.clone();
+        stale.observed = 20;
+        m.on_event(super::super::io::Ev::Runtime(Box::new(super::super::io::Runtime { observed: 22, ..Default::default() })));
+        m.on_event(super::super::io::Ev::Runtime(Box::new(stale)));
+        assert!(!m.rt.running, "a late supported reply cannot undo a newer disconnect");
+        assert!(shadow_ctls(m.window_shadow_items(true)).is_empty());
+        apply_shadow(&mut m, "shadow_radius", CtlVal::Num(40.0), true);
+        assert_eq!(std::fs::read(&path).unwrap(), saved, "stale queued UI actions cannot write after disconnect");
     }
 
     #[test]

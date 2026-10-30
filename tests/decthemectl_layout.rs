@@ -21,6 +21,10 @@ fn ctl(d: &Path, args: &[&str]) -> (bool, String, String) {
         .env("DECEBAL_THEMES", d.join("cfg/themes"))
         .env("DECSETTINGS_CONFIG", d.join("cfg/rdwm.toml"))
         .env("RDWMCTL", "/nonexistent/rdwmctl")
+        .env("DISPLAY", "")
+        .env("WAYLAND_DISPLAY", "")
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/decebal-test-bus")
+        .env("XDG_RUNTIME_DIR", d.join("run"))
         .env_remove("RDWM_SOCK")
         .output()
         .expect("decthemectl runs");

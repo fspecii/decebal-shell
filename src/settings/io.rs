@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -240,6 +241,10 @@ pub fn json_set(path: &Path, key: &str, v: Option<Value>) -> Result<(), String> 
 
 /// One request/reply round trip on rdwm's socket. Short timeouts: the UI must never hang on it.
 pub fn ipc_call(sock: &Path, req: &Value) -> Result<Value, String> {
+    ipc_call_inner(sock, req, true)
+}
+
+fn ipc_call_inner(sock: &Path, req: &Value, warn: bool) -> Result<Value, String> {
     let mut s = UnixStream::connect(sock).map_err(|e| {
         crate::log_trace!("rdwm socket {}: {e}", sock.display());
         e.to_string()
@@ -252,7 +257,9 @@ pub fn ipc_call(sock: &Path, req: &Value) -> Result<Value, String> {
     BufReader::new(s).read_line(&mut line).map_err(|e| e.to_string())?;
     let v: Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
     if v["ok"] == Value::Bool(false) {
-        crate::log_warn!("rdwm ipc {req} failed: {}", v["error"].as_str().unwrap_or("error"));
+        if warn {
+            crate::log_warn!("rdwm ipc {req} failed: {}", v["error"].as_str().unwrap_or("error"));
+        }
         return Err(v["error"].as_str().unwrap_or("error").to_string());
     }
     Ok(v)
@@ -271,7 +278,38 @@ pub enum Ev {
     Reload(Result<(), String>),
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+/// Explicit support advertised by the live compositor, never inferred from schema keys.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Effects {
+    pub protocol: u32,
+    pub backend: String,
+    pub instance: String,
+    pub ssd_shadows: bool,
+}
+
+impl Effects {
+    fn from_reply(reply: &Value) -> Option<Self> {
+        let instance = reply["instance"].as_str()?;
+        let effects = &reply["effects"];
+        if reply["ok"] != true
+            || reply["protocol"] != 1
+            || !matches!(reply["backend"].as_str()?, "nested-pixman" | "nested-gles" | "drm-pixman" | "drm-gles")
+            || instance.is_empty()
+            || instance.len() > 128
+            || instance.chars().any(char::is_control)
+            || effects["protocol"] != 1
+            || effects["backend"] != "wayland"
+        {
+            return None;
+        }
+        Some(Self { protocol: 1, backend: "wayland".into(), instance: instance.into(), ssd_shadows: effects["ssd_shadows"].as_bool()? })
+    }
+    pub fn supports_ssd_shadows(&self) -> bool {
+        self.protocol == 1 && self.backend == "wayland" && !self.instance.is_empty() && self.ssd_shadows
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Runtime {
     pub running: bool,
     pub state: Value,
@@ -280,14 +318,45 @@ pub struct Runtime {
     /// Error text of the last failed reload, if rdwm still holds one.
     pub error: Option<String>,
     pub version: Option<String>,
+    pub effects: Option<Effects>,
+    /// Monotonic request start. Excluded from equality so idle polls do not repaint.
+    pub observed: u64,
+}
+
+impl PartialEq for Runtime {
+    fn eq(&self, other: &Self) -> bool {
+        self.running == other.running
+            && self.state == other.state
+            && self.config == other.config
+            && self.binds == other.binds
+            && self.error == other.error
+            && self.version == other.version
+            && self.effects == other.effects
+    }
 }
 
 pub type Queue = Arc<Mutex<VecDeque<Ev>>>;
 
 pub fn poll_runtime(sock: &Path) -> Runtime {
-    let Ok(state) = ipc_call(sock, &serde_json::json!({"cmd":"get_state"})) else { return Runtime::default() };
+    poll_runtime_for(sock, std::env::var_os("WAYLAND_DISPLAY").is_some_and(|s| !s.is_empty()))
+}
+
+fn poll_runtime_for(sock: &Path, wayland: bool) -> Runtime {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(1);
+    let observed = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let offline = || Runtime { observed, ..Runtime::default() };
+    let before = stamp(sock);
+    let Ok(state) = ipc_call(sock, &serde_json::json!({"cmd":"get_state"})) else { return offline() };
     let config = ipc_call(sock, &serde_json::json!({"cmd":"get_config"})).unwrap_or(Value::Null);
     let binds = ipc_call(sock, &serde_json::json!({"cmd":"bind","op":"list"})).unwrap_or(Value::Null);
+    // This executes on the existing watcher/reload worker (or before startup),
+    // never from a paint or input handler. Older compositors failing this probe
+    // are normal; do not emit a warning every second.
+    let effects = if wayland { ipc_call_inner(sock, &serde_json::json!({"cmd":"output_query"}), false).ok().as_ref().and_then(Effects::from_reply) } else { None };
+    // A replacement socket cannot combine one compositor's config with another's effects.
+    if before.0.is_none() || stamp(sock) != before {
+        return offline();
+    }
     Runtime {
         running: true,
         version: config["version"].as_str().map(String::from),
@@ -295,7 +364,20 @@ pub fn poll_runtime(sock: &Path) -> Runtime {
         state: state["state"].clone(),
         config: config["config"].clone(),
         binds: binds["binds"].clone(),
+        effects,
+        observed,
     }
+}
+
+/// Coalesce runtime heartbeats without discarding file/reload events. An older
+/// reload worker must not overwrite a newer watcher result or disconnect.
+pub fn queue_runtime(queue: &Queue, rt: Runtime) {
+    let mut queue = queue.lock().unwrap();
+    if queue.iter().any(|ev| matches!(ev, Ev::Runtime(newer) if newer.observed > rt.observed)) {
+        return;
+    }
+    queue.retain(|ev| !matches!(ev, Ev::Runtime(_)));
+    queue.push_back(Ev::Runtime(Box::new(rt)));
 }
 
 /// Polls file stamps every 500 ms and rdwm's state every second; wakes the UI only on change.
@@ -319,9 +401,10 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
                 }
                 if n % 2 == 0 {
                     let rt = poll_runtime(&sock);
-                    if last.as_ref() != Some(&rt) {
-                        last = Some(rt.clone());
-                        queue.lock().unwrap().push_back(Ev::Runtime(Box::new(rt)));
+                    let changed = last.as_ref() != Some(&rt);
+                    last = Some(rt.clone());
+                    queue_runtime(&queue, rt);
+                    if changed {
                         wake();
                     }
                 }
@@ -359,6 +442,130 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    fn effects_reply() -> Value {
+        serde_json::json!({"ok":true,"protocol":1,"instance":"fixture-1","backend":"nested-pixman",
+            "effects":{"protocol":1,"backend":"wayland","ssd_shadows":true,"csd_shadows":false}})
+    }
+
+    #[test]
+    fn effects_require_explicit_current_protocol_and_backend() {
+        let reply = effects_reply();
+        assert!(Effects::from_reply(&reply).unwrap().supports_ssd_shadows());
+        for broken in [
+            serde_json::json!({"ok":true}),
+            {
+                let mut v = reply.clone();
+                v["effects"] = Value::Null;
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["effects"]["protocol"] = 2.into();
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["protocol"] = 2.into();
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["instance"] = "".into();
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["backend"] = "x11".into();
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["effects"]["backend"] = "x11".into();
+                v
+            },
+            {
+                let mut v = reply.clone();
+                v["effects"]["ssd_shadows"] = "yes".into();
+                v
+            },
+        ] {
+            assert!(Effects::from_reply(&broken).is_none(), "{broken}");
+        }
+        let mut disabled = reply;
+        disabled["effects"]["ssd_shadows"] = false.into();
+        assert!(!Effects::from_reply(&disabled).unwrap().supports_ssd_shadows());
+    }
+
+    fn runtime_server(path: &Path, effects: Value, replace_socket: bool) -> std::thread::JoinHandle<()> {
+        use std::os::unix::net::UnixListener;
+        let listener = UnixListener::bind(path).unwrap();
+        let path = path.to_owned();
+        std::thread::spawn(move || {
+            for _ in 0..4 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut text = String::new();
+                BufReader::new(stream.try_clone().unwrap()).read_line(&mut text).unwrap();
+                let request: Value = serde_json::from_str(&text).unwrap();
+                let reply = match request["cmd"].as_str().unwrap() {
+                    "get_state" => serde_json::json!({"ok":true,"state":{"fixture":true}}),
+                    "get_config" => serde_json::json!({"ok":true,"config":{"decoration":{"shadow":false}}}),
+                    "bind" => serde_json::json!({"ok":true,"binds":[]}),
+                    "output_query" => {
+                        if replace_socket {
+                            std::fs::remove_file(&path).unwrap();
+                            let _replacement = UnixListener::bind(&path).unwrap();
+                        }
+                        effects.clone()
+                    }
+                    other => panic!("unexpected request {other}"),
+                };
+                writeln!(stream, "{reply}").unwrap();
+            }
+        })
+    }
+
+    #[test]
+    fn runtime_worker_clears_old_unknown_and_disconnected_effects() {
+        let root = tmpdir("runtime-effects");
+        let sock = root.join("wm.sock");
+        let server = runtime_server(&sock, effects_reply(), false);
+        let supported = poll_runtime_for(&sock, true);
+        server.join().unwrap();
+        assert!(supported.running);
+        assert!(supported.effects.unwrap().supports_ssd_shadows());
+        std::fs::remove_file(&sock).unwrap();
+        let server = runtime_server(&sock, serde_json::json!({"ok":false,"error":"unknown command"}), false);
+        let old = poll_runtime_for(&sock, true);
+        server.join().unwrap();
+        assert!(old.running);
+        assert!(old.effects.is_none(), "an older compositor may parse config keys but cannot render this effect");
+        std::fs::remove_file(&sock).unwrap();
+        let disconnected = poll_runtime_for(&sock, true);
+        assert!(!disconnected.running);
+        assert!(disconnected.effects.is_none());
+        assert!(disconnected.observed > old.observed);
+        let server = runtime_server(&sock, effects_reply(), true);
+        let replaced = poll_runtime_for(&sock, true);
+        server.join().unwrap();
+        assert!(!replaced.running, "do not combine different socket instances");
+        assert!(replaced.effects.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_heartbeats_coalesce_and_reject_old_reload_results() {
+        let queue: Queue = Default::default();
+        queue.lock().unwrap().push_back(Ev::FilesChanged);
+        queue_runtime(&queue, Runtime { running: true, observed: 2, ..Runtime::default() });
+        queue_runtime(&queue, Runtime { running: false, observed: 4, ..Runtime::default() });
+        queue_runtime(&queue, Runtime { running: true, observed: 3, ..Runtime::default() });
+        let queue = queue.lock().unwrap();
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue[0], Ev::FilesChanged);
+        assert!(matches!(&queue[1], Ev::Runtime(rt) if rt.observed == 4 && !rt.running));
+        assert_eq!(Runtime { observed: 1, ..Runtime::default() }, Runtime { observed: 2, ..Runtime::default() }, "observations alone must not repaint");
     }
 
     #[test]

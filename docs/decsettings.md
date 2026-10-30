@@ -211,3 +211,19 @@ loaded tiles repeatedly disappeared and reappeared.
 `DECSETTINGS_BIN=target/release/decsettings python3 tests/e2e/wallpaper-cache.py`
 checks 73 synthetic images on private Xvfb at 1759×1194 and 2600×1700, including
 visible pixels after redraw, bounded memory and zero decoding once settled.
+
+### Live window-shadow support
+
+Window shadows use the running WM's advertised support, not just a newer
+`rdwmctl` schema. X11 keeps its existing live-parser check. A Wayland session
+(including Settings forced through XWayland) additionally requires the live
+`output_query.effects` protocol 1 reply with `backend="wayland"` and
+`ssd_shadows=true`. Older or disconnected compositors keep the controls
+unavailable without changing saved values. Client-decorated apps still manage
+their own shadows.
+
+The existing background runtime watcher performs the query. Paint only reads
+its cached result. Socket replacement invalidates a mixed-instance poll;
+coalesced, ordered runtime observations prevent a late reload worker from
+restoring support after a newer disconnect. Identical idle observations do not
+request another repaint.

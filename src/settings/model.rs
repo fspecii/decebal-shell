@@ -227,9 +227,13 @@ impl Model {
                 self.on_files_changed()
             }
             Ev::Runtime(rt) => {
+                if rt.observed < self.rt.observed {
+                    return;
+                }
+                let changed = self.rt != *rt;
                 let before = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
                 self.rt = *rt;
-                self.dirty = true;
+                self.dirty |= changed;
                 // the wallpaper was changed behind our back (rdwmctl, a script): "Match wallpaper" follows it
                 let now = self.rt.state["wallpaper"]["image"].as_str().map(String::from);
                 if let (Some(img), true) = (now.as_deref(), now != before) {
@@ -257,7 +261,7 @@ impl Model {
             queue.lock().unwrap().push_back(Ev::Reload(r));
             // refresh the runtime view right away (new effective config, wallpaper, ...)
             let rt = io::poll_runtime(&sock);
-            queue.lock().unwrap().push_back(Ev::Runtime(Box::new(rt)));
+            io::queue_runtime(&queue, rt);
             wake();
         });
     }

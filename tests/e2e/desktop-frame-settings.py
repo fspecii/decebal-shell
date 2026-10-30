@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,12 @@ def sha(path):
 
 result = {'settings': {'path': str(settings), 'sha256': sha(settings)},
           'rdwmctl': {'path': str(bins / 'rdwmctl'), 'sha256': sha(bins / 'rdwmctl')}, 'cases': []}
+build = None
+if os.environ.get('RDWM_BUILD_MANIFEST'):
+    manifest_path = Path(os.environ['RDWM_BUILD_MANIFEST'])
+    build = json.loads(manifest_path.read_text())
+    assert build['binaries']['rdwmctl'] == result['rdwmctl']['sha256']
+    result['build'] = {'revision': build['head'], 'input_fingerprint': build['input_fingerprint'], 'manifest_sha256': sha(manifest_path)}
 
 def native_stack(display):
     lib = C.CDLL('libX11.so.6')
@@ -57,6 +64,23 @@ def cpu_ticks(pid):
     return int(fields[11]) + int(fields[12])
 
 
+def compositor_owner(display):
+    lib = C.CDLL('libX11.so.6')
+    lib.XOpenDisplay.argtypes = [C.c_char_p]
+    lib.XOpenDisplay.restype = C.c_void_p
+    lib.XInternAtom.argtypes = [C.c_void_p, C.c_char_p, C.c_int]
+    lib.XInternAtom.restype = C.c_ulong
+    lib.XGetSelectionOwner.argtypes = [C.c_void_p, C.c_ulong]
+    lib.XGetSelectionOwner.restype = C.c_ulong
+    lib.XCloseDisplay.argtypes = [C.c_void_p]
+    connection = lib.XOpenDisplay(display.encode())
+    assert connection
+    try:
+        return lib.XGetSelectionOwner(connection, lib.XInternAtom(connection, b'_NET_WM_CM_S0', 0))
+    finally:
+        lib.XCloseDisplay(connection)
+
+
 def wait(fn, label, seconds=15):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -73,6 +97,8 @@ for label, wm_binary, supports in [('updated-wm', bins / 'rdwm', True)] + ([('ol
     case = out / label
     case.mkdir(exist_ok=True)
     record = {'case': label, 'wm': str(wm_binary), 'wm_sha256': sha(wm_binary), 'supports_frame': supports}
+    if supports and build:
+        assert record['wm_sha256'] == build['binaries']['rdwm'], 'candidate differs from compiled manifest'
     processes, logs = [], []
     try:
         with tempfile.TemporaryDirectory(prefix='frame-settings-') as temporary:
@@ -145,6 +171,15 @@ floating = true
                 return process.stdout.splitlines()
             server = start(['Xvfb', display, '-screen', '0', '1400x1800x24', '-nolisten', 'tcp', '-noreset'], 'xvfb')
             wait(lambda: server.poll() is None and Path(f'/tmp/.X{display[1:]}-lock').exists() and int(Path(f'/tmp/.X{display[1:]}-lock').read_text()) == server.pid and Path(f'/tmp/.X11-unix/X{display[1:]}').exists(), 'owned Xvfb')
+            if os.environ.get('FRAME_PICOM_CONFIG'):
+                picom = shutil.which('picom')
+                assert picom, 'picom is required for this compositor gate'
+                private_picom = root / 'picom.conf'
+                shutil.copy2(os.environ['FRAME_PICOM_CONFIG'], private_picom)
+                compositor = start([picom, '--config', private_picom], 'picom')
+                wait(lambda: compositor_owner(display), 'private compositor selection')
+                assert compositor.poll() is None
+                record['compositor'] = {'binary_sha256': sha(Path(picom)), 'config_sha256': sha(private_picom), 'selection_owner': compositor_owner(display)}
             wm = start([wm_binary, '--backend', 'x11', '--config', config], 'wm')
             wait(lambda: Path(env['RDWM_SOCK']).exists(), 'private WM socket')
             wait(state, 'actual native WM state')
@@ -217,6 +252,8 @@ padding = 0
                                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
                     return [int(value) for value in process.stdout.splitlines()]
                 widget_ids = wait(lambda: named_windows('^decwidgets$'), 'real widget host window')
+                for widget_id in widget_ids:
+                    assert '_NET_WM_STATE_BELOW' in run('xprop', '-id', widget_id, '_NET_WM_STATE'), 'desktop widget stacking role missing'
                 live_ids = wait(lambda: named_windows('^Decwall$'), 'real live wallpaper desktop window')
                 def player_running():
                     runtime = json.loads(run(settings.parent / 'decwall', 'status'))['runtime']
@@ -239,14 +276,25 @@ padding = 0
                     frames = [int(value) for value in strip_windows()]
                     if not all(value in stack for value in live_ids + frames + widget_ids):
                         return None
-                    return stack if max(stack.index(value) for value in live_ids) < min(stack.index(value) for value in frames) and max(stack.index(value) for value in frames) < min(stack.index(value) for value in widget_ids) else None
-                wait(ordered_hosts, 'real video < frame < real edge widget stacking')
+                    return stack if (max(stack.index(value) for value in live_ids) < min(stack.index(value) for value in widget_ids)
+                                     and max(stack.index(value) for value in widget_ids) < stack.index(int(window))
+                                     and stack.index(int(window)) < min(stack.index(value) for value in frames)) else None
+                wait(ordered_hosts, 'real video < widgets < app < shell frame stacking')
                 for _ in range(3):
                     run(bins / 'rdwmctl', 'action', 'view', '2')
                     run(bins / 'rdwmctl', 'action', 'view', '1')
                     time.sleep(.2)
-                    assert ordered_hosts(), 'workspace restack moved the frame over widgets'
-                    assert ImageGrab.grab(xdisplay=display).convert('RGB').getpixel((5, 5)) == (242, 201, 76), 'frame trims edge widget after restack'
+                    assert ordered_hosts(), 'workspace restack changed shell frame/widget ordering'
+                    pixels = ImageGrab.grab(xdisplay=display).convert('RGB')
+                    assert pixels.getpixel((5, 5)) == (16, 32, 48), 'shell frame does not cover outer widget edge'
+                    assert pixels.getpixel((30, 30)) == (242, 201, 76), 'shell frame covers widget inside its cutout'
+                run(bins / 'rdwmctl', 'action', 'view', '2')
+                time.sleep(.2)
+                empty_stack = native_stack(display)
+                assert max(empty_stack.index(value) for value in widget_ids) < min(empty_stack.index(int(value)) for value in strip_windows()), 'empty-workspace widgets moved above the shell frame'
+                assert ImageGrab.grab(xdisplay=display).convert('RGB').getpixel((5, 5)) == (16, 32, 48), 'empty-workspace frame does not cover outer card edge'
+                run(bins / 'rdwmctl', 'action', 'view', '1')
+                time.sleep(.2)
                 start_ticks = {str(process.pid): cpu_ticks(process.pid) for process in (wm, widget_host)}
                 begin = time.monotonic()
                 samples = []
@@ -254,7 +302,8 @@ padding = 0
                     time.sleep(.1)
                     stack = ordered_hosts()
                     pixel = ImageGrab.grab(xdisplay=display).convert('RGB').getpixel((5, 5))
-                    assert stack and pixel == (242, 201, 76), 'layering/edge widget changes while actual video runs'
+                    assert stack and pixel == (16, 32, 48), 'shell frame edge changes while actual video runs'
+                    assert ImageGrab.grab(xdisplay=display).convert('RGB').getpixel((30, 30)) == (242, 201, 76), 'widget inside the cutout changed'
                     assert all(process.poll() is None for process in (wm, app, widget_host, wall_host))
                     samples.append({'seconds': round(time.monotonic() - begin, 3), 'edge_pixel': pixel, 'stack': stack})
                 tick_delta = {str(process.pid): cpu_ticks(process.pid) - start_ticks[str(process.pid)] for process in (wm, widget_host)}
@@ -262,8 +311,28 @@ padding = 0
                 assert shell_path.read_bytes() == hosts_shell_before, 'frame toggling mutated theme/widget configuration'
                 assert player_running(), 'real player stopped during stacking checks'
                 record['real_hosts'].update(cpu_ticks=tick_delta, sample_duration=time.monotonic() - begin,
-                                            samples=samples, layer_order='video < frame < widgets < apps')
+                                            samples=samples, layer_order='video < widgets < apps < shell frame')
                 capture('frame-with-real-video-and-edge-widget')
+                # Join the real colour producer to the real WM consumer. The
+                # bottom edge stays clear of the top bar, so it measures the
+                # frame itself rather than the panel covering it.
+                shell['bar']['enabled'] = True
+                shell_path.write_text(json.dumps(shell, indent=2) + '\n')
+                real_bar = start([settings.parent / 'decbar', '--app', 'Frame fixture'], 'real-bar')
+                def themed_edge():
+                    colour = json.loads(run(settings.parent / 'decthemectl', 'get', '--json'))['colors']['background']
+                    expected_rgb = tuple(bytes.fromhex(colour[1:]))
+                    return expected_rgb if ImageGrab.grab(xdisplay=display).convert('RGB').getpixel((700, 1795)) == expected_rgb else None
+                first_colour = wait(themed_edge, 'real bar startup must colour the native frame')
+                shell['theme']['palette'] = 'gruvbox'
+                shell_path.write_text(json.dumps(shell, indent=2) + '\n')
+                second_colour = wait(lambda: (colour if colour != first_colour else None) if (colour := themed_edge()) else None,
+                                     'live palette change must colour the native frame')
+                assert real_bar.poll() is None and player_running()
+                record['real_hosts']['bar_theme_bridge'] = {'bar_sha256': sha(settings.parent / 'decbar'), 'startup_rgb': first_colour, 'changed_rgb': second_colour}
+                capture('frame-with-real-bar-theme-colour')
+                real_bar.terminate()
+                real_bar.wait(timeout=4)
                 target = next(c for c in controls() if c['id'] == 'r:wallpaper.frame:enabled')
                 x, y, w, h = target['rect']
                 run('xdotool', 'mousemove', '--window', window, round(x + w / 2), round(y + h / 2), 'click', '1')
@@ -278,6 +347,8 @@ padding = 0
                 assert shell_path.read_bytes() == before_shell
                 capture('unsupported-old-session')
                 record['old_live_wm_hides_controls_despite_new_offline_cli'] = True
+            if os.environ.get('FRAME_PICOM_CONFIG'):
+                assert compositor.poll() is None and compositor_owner(display), 'private compositor stopped during acceptance'
             record.update(passed=True, settings_pid=app.pid, wm_pid=wm.pid, display=display)
     except Exception as error:
         record.update(passed=False, failure=str(error))
