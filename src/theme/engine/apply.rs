@@ -810,14 +810,13 @@ y = -30
 "##;
 
     pub fn install_sunset(src: &Source) {
-        install_sunset_with_font(src, "Inter");
+        install_sunset_manifest(src, SUNSET);
     }
 
-    fn install_sunset_with_font(src: &Source, family: &str) {
+    fn install_sunset_manifest(src: &Source, manifest: &str) {
         let widget = "format = 1\n[root]\ntype = \"text\"\ntext = \"{clock:%H:%M}\"\n";
-        let manifest = SUNSET.replacen("ui = \"Inter\"", &format!("ui = {}", toml_edit::Value::from(family)), 1);
         let entries = vec![
-            Entry { path: "theme.toml".into(), data: manifest.into_bytes() },
+            Entry { path: "theme.toml".into(), data: manifest.as_bytes().to_vec() },
             Entry { path: "wallpapers/sunset.png".into(), data: png(32, 18, [200, 80, 40]) },
             Entry { path: "widgets/clock-card.toml".into(), data: widget.as_bytes().to_vec() },
         ];
@@ -941,7 +940,9 @@ y = -30
         // one user's optional Inter installation. Unavailable faces are correctly
         // omitted by the production renderer and have separate fallback tests.
         let family = crate::theme::fontdb::get().picker_families().into_iter().next().expect("theme font integration requires an installed font");
-        install_sunset_with_font(&src, &family);
+        let face = toml_edit::Value::from(family.as_str());
+        let manifest = SUNSET.replacen("ui = \"Inter\"", &format!("ui = {face}\ntitle = {face}"), 1);
+        install_sunset_manifest(&src, &manifest);
         let a = apply(&src, &paths, "sunset", &Selection::default()).unwrap();
         assert_eq!((a.theme_id.as_str(), a.dark), ("sunset", true));
         assert!(!a.undo_id.is_empty());
