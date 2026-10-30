@@ -1373,7 +1373,13 @@ impl App for DecBar {
                 self.dux_effect = next.map(|kind| (kind, Instant::now(), true)).or_else(|| self.dux_hover.map(|kind| (kind, Instant::now(), false)));
             }
             self.dux_hover = next;
-            return changed;
+            let cc_changed = self.cc_hover.take().is_some();
+            let focus_changed = self.cc_viewport.focus.take().is_some();
+            return changed || cc_changed || focus_changed;
+        }
+        if let Some(kind) = self.dux_hover.take() {
+            self.dux_effect = Some((kind, Instant::now(), false));
+            redraw = true;
         }
         // Dragging a slider keeps tracking even outside its rectangle.
         if let (Some(t), Open::Control) = (self.cc_drag, self.open) {
@@ -1443,6 +1449,7 @@ impl App for DecBar {
             self.dux_effect = Some((kind, Instant::now(), false));
         }
         let redraw = self.hover_title.take().is_some() || old.is_some();
+        let redraw = self.cc_hover.take().is_some() || redraw;
         let redraw = self.v_hover.take().is_some() || redraw;
         self.v_hover_ws = None;
         self.v_hover_open = None;
@@ -1650,6 +1657,8 @@ impl App for DecBar {
         if self.open != Open::Control {
             return false;
         }
+        self.cc_viewport.focus = None;
+        self.cc_hover = None;
         let Some((px, py)) = self.cc_point(x, y) else {
             return false;
         };
@@ -1660,7 +1669,7 @@ impl App for DecBar {
             }
             let old = self.cc_viewport.scroll;
             self.cc_viewport.focus = None;
-            self.cc_viewport.scroll += dy.signum() * 44.0;
+            self.cc_viewport.scroll += dy * ccviewport::SCROLL_STEP;
             self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
             return old != self.cc_viewport.scroll;
         }
@@ -1689,7 +1698,7 @@ impl App for DecBar {
         if targets.is_empty() {
             return false;
         }
-        let current = targets.iter().position(|(target, _)| Some(*target) == self.cc_viewport.focus.or(self.cc_hover));
+        let current = targets.iter().position(|(target, _)| Some(*target) == self.cc_viewport.focus);
         match key {
             crate::app::NavKey::Up | crate::app::NavKey::Down => {
                 let step = if key == crate::app::NavKey::Up { -1 } else { 1 };
@@ -1703,7 +1712,8 @@ impl App for DecBar {
                 true
             }
             crate::app::NavKey::Enter => {
-                let (target, rect) = targets[current.unwrap_or(0)];
+                let Some(index) = current else { return false };
+                let (target, rect) = targets[index];
                 // Enter selects a command, not an arbitrary midpoint slider value.
                 if matches!(target, Target::Volume | Target::Brightness) {
                     return false;
@@ -1838,8 +1848,8 @@ impl App for DecBar {
 
 impl DecBar {
     fn tick_inner(&mut self) -> Tick {
-        self.dux_tick();
-        let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        let mut redraw = self.dux_tick();
+        redraw |= self.shared.changed.swap(false, Ordering::SeqCst);
         redraw |= self.dux_animating();
         redraw |= self.indicator_tick();
         let mut close_in = None;
@@ -1913,7 +1923,7 @@ impl DecBar {
         let wake = next_wake(&tm, matches!(self.open, Open::Control | Open::Popup(_)));
         let wake = if self.dux_animating() {
             wake.min(Duration::from_millis(16))
-        } else if self.dux() {
+        } else if self.dux_samples_resources() {
             wake.min(Duration::from_secs(2))
         } else {
             wake

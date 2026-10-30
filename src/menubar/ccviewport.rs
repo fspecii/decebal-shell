@@ -5,6 +5,8 @@ use crate::menubar::symbols::SymbolCache;
 use crate::text::Fonts;
 use tiny_skia::{Mask, Pixmap};
 
+pub(super) const SCROLL_STEP: f32 = 40.0;
+
 #[derive(Default)]
 pub(super) struct Viewport {
     pub scroll: f32,
@@ -76,6 +78,15 @@ impl Viewport {
         controlcenter::draw(buffer, &controlcenter::View { origin: (0.0, 0.0), items: &self.translated, height: height as f32, hover, style: Style::Dux }, fonts, symbols);
         if let Some((_, focus)) = targets(items).into_iter().find(|(target, _)| Some(*target) == self.focus) {
             crate::gfx::stroke_rounded(buffer, focus.x + 1.0, focus.y - self.scroll + 1.0, focus.w - 2.0, focus.h - 2.0, 12.0, crate::theme::th().accent_c(), 2.0);
+        }
+        if !items.is_empty() && height as f32 > 32.0 {
+            let content = items.iter().map(|item| item.r.y + item.r.h).fold(0.0f32, f32::max) + 16.0;
+            if content > height as f32 {
+                let track = height as f32 - 32.0;
+                let thumb = (track * height as f32 / content).max(24.0);
+                let y = 16.0 + (track - thumb) * self.scroll / (content - height as f32);
+                crate::gfx::fill_rounded(buffer, width as f32 - 7.0, y, 3.0, thumb, 1.5, crate::theme::th().text_secondary.color(0.5));
+            }
         }
         if let Some(mask) = &self.mask {
             buffer.apply_mask(mask);

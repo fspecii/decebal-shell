@@ -223,6 +223,7 @@ impl App for Overlay {
         self.entered = true;
         self.left_at = None;
         self.sync();
+        self.focus = None;
         self.bar.status_motion(x, if self.dux() { y + self.scroll } else { y })
     }
 
@@ -230,11 +231,12 @@ impl App for Overlay {
         if self.entered && !self.bar.status_dragging() {
             self.left_at = Some(Instant::now());
         }
-        false
+        self.bar.cc_hover.take().is_some()
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button) -> bool {
         self.left_at = None;
+        self.focus = None;
         self.sync();
         let inside = self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
         if button == Button::Left && inside && self.bar.status_press(x, if self.dux() { y + self.scroll } else { y }) {
@@ -256,12 +258,14 @@ impl App for Overlay {
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
         self.sync();
         if self.dux() {
+            self.focus = None;
+            self.bar.cc_hover = None;
             if self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32) {
                 let (ox, oy) = self.bar.embed.origin;
                 if controlcenter::hit(&self.bar.cc_items, x - ox, y - oy + self.scroll).is_some_and(|(target, _)| matches!(target, Target::Volume | Target::Brightness)) {
                     return self.bar.status_wheel(x, y + self.scroll, dy);
                 }
-                self.scroll = (self.scroll + dy * 40.0).clamp(0.0, (self.bar.cc_height - self.viewport_height()).max(0.0));
+                self.scroll = (self.scroll + dy * ccviewport::SCROLL_STEP).clamp(0.0, (self.bar.cc_height - self.viewport_height()).max(0.0));
                 return true;
             }
             return false;
@@ -308,7 +312,7 @@ impl App for Overlay {
             crate::app::NavKey::Enter => {
                 let active = match self.focus {
                     Some(wanted) => targets.iter().find(|(target, _)| *target == wanted),
-                    None => targets.first(),
+                    None => None,
                 };
                 let Some(&(target, rect)) = active else { return false };
                 if matches!(target, Target::Volume | Target::Brightness) {
@@ -400,6 +404,10 @@ pub(crate) fn assert_slider_keyboard_inert() {
     overlay.bar.open_control();
     overlay.resized(960, 720);
     assert!(overlay.dux() && overlay.open_now());
+    overlay.focus = None;
+    overlay.bar.cc_hover = Some(Target::Screenshot);
+    assert!(!overlay.nav_key(crate::app::NavKey::Enter), "Enter without explicit keyboard focus must be inert");
+    assert!(sys::take_log().is_empty());
     for target in [Target::Volume, Target::Brightness] {
         assert!(overlay.bar.cc_items.iter().any(|item| item.target == Some(target)));
         overlay.focus = Some(target);
@@ -415,6 +423,31 @@ pub(crate) fn assert_slider_keyboard_inert() {
     bar.open_control();
     bar.resized(960, 720);
     assert!(bar.dux() && bar.open == Open::Control);
+    bar.cc_hover = Some(Target::Screenshot);
+    bar.cc_viewport.focus = None;
+    assert!(!bar.nav_key(crate::app::NavKey::Enter), "stale pointer hover must never become a keyboard command");
+    assert!(sys::take_log().is_empty());
+    bar.pointer_leave();
+    assert!(bar.cc_hover.is_none());
+    bar.dux_hover = Some(super::segmented::Kind::Tray(Tray::Logo));
+    bar.pointer_motion(500.0, bar.bar_bottom() + 20.0);
+    assert!(bar.dux_hover.is_none(), "moving into panel clears bar hover");
+    struct TitleFixture(std::rc::Rc<std::cell::RefCell<String>>);
+    impl active::ActiveWindow for TitleFixture {
+        fn active_app_name(&self) -> Option<String> {
+            Some("Same app".into())
+        }
+        fn active_title(&self) -> Option<String> {
+            Some(self.0.borrow().clone())
+        }
+    }
+    let title = std::rc::Rc::new(std::cell::RefCell::new("First title".into()));
+    let mut title_bar = DecBar::new(Box::new(TitleFixture(title.clone())));
+    assert!(title_bar.dux_tick());
+    assert!(!title_bar.dux_tick());
+    *title.borrow_mut() = "Second title".into();
+    assert!(title_bar.dux_tick(), "title-only changes must request an actual repaint");
+    assert!(!title_bar.dux_tick());
     for target in [Target::Volume, Target::Brightness] {
         assert!(bar.cc_items.iter().any(|item| item.target == Some(target)));
         bar.cc_viewport.focus = Some(target);

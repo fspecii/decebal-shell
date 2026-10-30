@@ -171,12 +171,7 @@ impl DecBar {
         !self.embedded && crate::theme::th().bar_style == "dux"
     }
     pub(super) fn bar_bottom(&self) -> f32 {
-        if self.dux() {
-            let th = crate::theme::th();
-            th.bar_height + 2.0 * th.bar_layout.margin
-        } else {
-            BAR_HEIGHT
-        }
+        crate::theme::bar_bottom_for(&crate::theme::th(), true)
     }
     fn dux_player(&self) -> Option<mpris::Player> {
         let snap = self.dux_mpris.as_ref()?.snapshot();
@@ -268,15 +263,8 @@ impl DecBar {
     fn dux_text(&mut self, pm: &mut Pixmap, text: &str, item: Item, secondary: bool) {
         let Some(fonts) = self.fonts.as_mut() else { return };
         let scale = 1.0;
-        let mut text = text.to_string();
         let size = 12.0;
-        while !text.is_empty() && fonts.measure(&text, size, Weight::Regular) > item.w - 14.0 * scale {
-            text.pop();
-            if fonts.measure(&format!("{text}…"), size, Weight::Regular) <= item.w - 14.0 * scale {
-                text.push('…');
-                break;
-            }
-        }
+        let text = controlcenter::fit(text, item.w - 14.0 * scale, size, Weight::Regular, fonts);
         let th = crate::theme::th();
         let (top, bottom) = fonts.ink_vertical(&text, size, Weight::Regular).unwrap_or((0.0, 0.0));
         let y = item.y + (item.h - (bottom - top)) / 2.0 - top - fonts.ascent(size, Weight::Regular);
@@ -454,7 +442,7 @@ impl DecBar {
             _ => false,
         }
     }
-    pub(super) fn dux_tick(&mut self) {
+    pub(super) fn dux_tick(&mut self) -> bool {
         let generation = crate::theme::generation();
         if self.dux_material_generation != generation && (self.dux() || self.cc_style() == controlcenter::settings::Style::Dux) {
             self.symbols.prepare_material();
@@ -462,12 +450,12 @@ impl DecBar {
         }
         if !self.dux() {
             self.dux_mpris = None;
-            return;
+            return false;
         }
+        let redraw = self.v_refresh_window();
         if cfg!(test) {
-            return;
+            return redraw;
         }
-        self.v_refresh_window();
         let settings = &crate::theme::th().bar_layout;
         let configured = |id: &str| settings.left.iter().chain(&settings.center).chain(&settings.right).any(|name| name == id);
         if !configured("music") {
@@ -484,10 +472,10 @@ impl DecBar {
             })));
         }
         if !configured("cpuUsage") && !configured("memUsage") {
-            return;
+            return redraw;
         }
         if self.dux_refresh.elapsed() < Duration::from_secs(2) || self.dux_busy.swap(true, Ordering::SeqCst) {
-            return;
+            return redraw;
         }
         self.dux_refresh = Instant::now();
         let sampler = self.dux_sampler.clone();
@@ -496,6 +484,13 @@ impl DecBar {
         let shared = self.shared.clone();
         let wake = self.waker.clone();
         std::thread::spawn(move || {
+            struct BusyGuard(Arc<AtomicBool>);
+            impl Drop for BusyGuard {
+                fn drop(&mut self) {
+                    self.0.store(false, Ordering::SeqCst);
+                }
+            }
+            let _busy = BusyGuard(busy);
             let values = sampler.lock().ok().map(|mut s| {
                 let stats = s.sample(Instant::now());
                 (stats.primed.then_some(stats.cpu), (stats.mem.total_kb > 0).then_some(stats.mem.used_frac()))
@@ -503,12 +498,19 @@ impl DecBar {
             if let Ok(mut output) = result.lock() {
                 *output = values;
             }
-            busy.store(false, Ordering::SeqCst);
             shared.changed.store(true, Ordering::SeqCst);
             if let Some(w) = wake {
                 w.wake();
             }
         });
+        redraw
+    }
+
+    pub(super) fn dux_samples_resources(&self) -> bool {
+        self.dux() && {
+            let layout = &crate::theme::th().bar_layout;
+            layout.left.iter().chain(&layout.center).chain(&layout.right).any(|id| matches!(id.as_str(), "cpuUsage" | "memUsage"))
+        }
     }
 }
 

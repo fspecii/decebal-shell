@@ -478,7 +478,9 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
         match &it.draw {
             Draw::Tile => {
                 fill_rounded(pm, x, y, w, h, tile_r, if dux { crate::theme::th().surface.color(1.0) } else { crate::theme::th().ink(0.09) });
-                if !dux {
+                if dux && hovered {
+                    stroke_rounded(pm, x + 1.0, y + 1.0, w - 2.0, h - 2.0, tile_r, crate::theme::th().accent_c(), 2.0);
+                } else if !dux {
                     stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
                 }
             }
@@ -491,6 +493,9 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                     crate::theme::th().ink(if hovered { 0.14 } else { 0.09 })
                 };
                 fill_rounded(pm, x, y, w, h, tile_r, c);
+                if dux && hovered {
+                    stroke_rounded(pm, x + 1.0, y + 1.0, w - 2.0, h - 2.0, tile_r, if *on { crate::theme::th().accent_text.color(1.0) } else { crate::theme::th().accent_c() }, 2.0);
+                }
                 if !on && !dux {
                     stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (tile_r - 0.5).max(0.0), crate::theme::th().ink(0.07), 1.0);
                 }
@@ -501,6 +506,9 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                     fill_rounded(pm, x, y, w, h, tile_r.min(w * 0.3), c);
                 } else {
                     fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, c);
+                }
+                if dux && hovered {
+                    stroke_rounded(pm, x + 1.0, y + 1.0, w - 2.0, h - 2.0, tile_r, if *on { crate::theme::th().accent_text.color(1.0) } else { crate::theme::th().accent_c() }, 2.0);
                 }
                 let ink = if *on {
                     crate::theme::th().accent_text.t()
@@ -531,6 +539,9 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 fonts.draw(pm, &shown, tx, y, *size, *weight, color(r, g, b, a));
             }
             Draw::Slider { value, icon } => {
+                // The item keeps the source's full-row pointer/wheel target;
+                // only the visible track is thin.
+                let (y, h) = if dux { (y + (h - 14.0) / 2.0, 14.0) } else { (y, h) };
                 fill_rounded(pm, x, y, w, h, h / 2.0, crate::theme::th().ink(0.14));
                 let fw = (w * value.clamp(0.0, 1.0)).max(h);
                 fill_rounded(pm, x, y, fw, h, h / 2.0, if dux { crate::theme::th().accent_c() } else { crate::theme::th().text.color(0.92) });
@@ -559,18 +570,40 @@ pub fn fit(s: &str, max_w: f32, size: f32, weight: Weight, fonts: &Fonts) -> Str
     if fonts.measure(s, size, weight) <= max_w {
         return s.to_string();
     }
-    let mut out: String = s.to_string();
-    while !out.is_empty() && fonts.measure(&format!("{out}…"), size, weight) > max_w {
-        out.pop();
+    if fonts.measure("…", size, weight) > max_w {
+        return String::new();
     }
-    format!("{}…", out.trim_end())
+    let boundaries: Vec<_> = s.char_indices().map(|(index, _)| index).chain(std::iter::once(s.len())).collect();
+    let (mut lo, mut hi) = (0, boundaries.len() - 1);
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        let candidate = format!("{}…", s[..boundaries[mid]].trim_end());
+        if fonts.measure(&candidate, size, weight) <= max_w {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    format!("{}…", s[..boundaries[lo]].trim_end())
 }
 
 #[allow(clippy::too_many_arguments)]
 fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, material: bool, name: &str, rgb: (u8, u8, u8), size: f32, cx: f32, cy: f32) {
-    let px = (size * if material { 1.0 } else { 2.0 }).ceil() as u32;
-    let symbol = if material { symbols.get_material(name, rgb, px) } else { symbols.get(name, rgb, px) };
-    if let Some(sym) = symbol {
+    // Keep this look usable in themes without licensed package Material faces.
+    // The semantic fallback is intentional; Dux packages still use actual Material glyphs.
+    if material {
+        if let Some(sym) = symbols.get_material(name, rgb, size.ceil() as u32) {
+            crate::gfx::blit_scaled(pm, sym, cx - size / 2.0, cy - size / 2.0, size, size, 1.0);
+            return;
+        }
+    }
+    let fallback = match name {
+        "contrast" => "dark-mode",
+        "gear" => "switches",
+        "do_not_disturb_on" => "moon",
+        _ => name,
+    };
+    if let Some(sym) = symbols.get(fallback, rgb, (size * 2.0).ceil() as u32) {
         crate::gfx::blit_scaled(pm, sym, cx - size / 2.0, cy - size / 2.0, size, size, 1.0);
     }
 }
@@ -594,6 +627,52 @@ mod tests {
             light: false,
             battery: None,
             util: Some(sys::Utils::default()),
+        }
+    }
+
+    #[test]
+    fn fitted_unicode_labels_stay_inside_the_available_width() {
+        let fonts = Fonts::load().expect("test fonts");
+        let text = "A long title — 日本語 · symbols ".repeat(30);
+        let fitted = fit(&text, 100.0, 12.0, Weight::Regular, &fonts);
+        assert!(fitted.ends_with('…'));
+        assert!(fonts.measure(&fitted, 12.0, Weight::Regular) <= 100.0);
+        assert_eq!(fit(&text, 0.0, 12.0, Weight::Regular, &fonts), "");
+    }
+
+    #[test]
+    fn dux_symbols_have_semantic_fallback_without_package_fonts() {
+        let mut symbols = SymbolCache::default();
+        let mut a = Pixmap::new(32, 32).unwrap();
+        let mut b = Pixmap::new(32, 32).unwrap();
+        blit_symbol(&mut a, &mut symbols, true, "contrast", (255, 255, 255), 20.0, 16.0, 16.0);
+        blit_symbol(&mut b, &mut symbols, true, "do_not_disturb_on", (255, 255, 255), 20.0, 16.0, 16.0);
+        assert!(a.data().chunks_exact(4).any(|pixel| pixel[3] != 0));
+        assert!(b.data().chunks_exact(4).any(|pixel| pixel[3] != 0));
+        assert_ne!(a.data(), b.data());
+        for name in [
+            "person",
+            "gear",
+            "wifi-3",
+            "bluetooth",
+            "night-shift",
+            "cup",
+            "record",
+            "gamepad",
+            "eye",
+            "speaker-2",
+            "sun-small",
+            "backward",
+            "forward",
+            "play",
+            "pause",
+            "screenshot",
+            "bell",
+            "switches",
+        ] {
+            let mut pm = Pixmap::new(32, 32).unwrap();
+            blit_symbol(&mut pm, &mut symbols, true, name, (255, 255, 255), 20.0, 16.0, 16.0);
+            assert!(pm.data().chunks_exact(4).any(|pixel| pixel[3] != 0), "missing fallback for {name}");
         }
     }
 

@@ -40,7 +40,9 @@ pub fn items(m: &Model) -> Vec<Item> {
     let mut rows = vec![
         Row::new("Show the Control Center").detail("Its button in the bar or taskbar, `decutil control-center` and the hot-corner action").ctl(Ctl::new("cc:enabled", Kind::Toggle(s.enabled))),
         Row::new("Opens in").detail("Where a key or hot corner opens it. Auto: beside the bar's own button").ctl(Ctl::new("cc:position", Kind::Popup(choices(&POSITION_NAMES), pos))),
-        Row::new("Look").detail("Auto: the Windows flyout look under the taskbar, rounded cards elsewhere").ctl(Ctl::new("cc:style", Kind::Popup(choices(&STYLE_NAMES), style))),
+        Row::new("Look")
+            .detail("Auto follows the desktop theme. Dux uses package Material icons when available, otherwise standard symbols.")
+            .ctl(Ctl::new("cc:style", Kind::Popup(choices(&STYLE_NAMES), style))),
     ];
     for (name, label, detail) in TILE_LABELS {
         rows.push(Row::new(label).detail(detail).ctl(Ctl::new(format!("cc:tile:{name}"), Kind::Toggle(s.tiles.get(name).unwrap_or(true)))));

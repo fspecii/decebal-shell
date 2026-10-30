@@ -57,7 +57,7 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
     }
     if tiles.focus {
         tile(
-            "moon",
+            "do_not_disturb_on",
             "Do Not Disturb",
             match s.dnd {
                 Some(true) => "Enabled",
@@ -67,7 +67,7 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
             s.dnd == Some(true),
             s.dnd.map(|_| Target::Focus),
         );
-        tile("dark-mode", "Appearance", if s.light { "Light" } else { "Dark" }, !s.light, Some(Target::DarkMode));
+        tile("contrast", "Appearance", if s.light { "Light" } else { "Dark" }, !s.light, Some(Target::DarkMode));
         tile(
             "night-shift",
             "Night Mode",
@@ -101,12 +101,12 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
                 continue;
             }
             out.push(item(pad, y, inner, slider_h, Draw::Tile, None));
-            out.push(text(pad + 12.0, y + 8.0, 116.0 * scale.min(1.5), label, 12.0, Weight::Medium, Ink::Primary));
+            out.push(text(pad + 12.0, y + (slider_h - 16.0 * scale) / 2.0, 116.0 * scale.min(1.5), label, 12.0, Weight::Medium, Ink::Primary));
             let x = pad + 132.0 * scale.min(1.5);
             if let Some(value) = value {
-                out.push(item(x, y + (slider_h - 14.0) / 2.0, inner - (x - pad) - 16.0, 14.0, Draw::Slider { value, icon }, Some(target)));
+                out.push(item(x, y, inner - (x - pad) - 16.0, slider_h, Draw::Slider { value, icon }, Some(target)));
             } else {
-                out.push(text(x, y + 8.0, inner - (x - pad) - 12.0, "Unavailable", 12.0, Weight::Regular, Ink::Secondary));
+                out.push(text(x, y + (slider_h - 16.0 * scale) / 2.0, inner - (x - pad) - 12.0, "Unavailable", 12.0, Weight::Regular, Ink::Secondary));
             }
             y += slider_h + gap;
         }
@@ -144,6 +144,21 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn slider_targets_cover_the_full_row_and_icons_use_source_names() {
+        let s = Snapshot { volume: Some(sys::Volume { level: 0.5, muted: false }), brightness: Some(50), dnd: Some(false), ..Snapshot::default() };
+        let (items, _) = layout(&s, &Tiles::ALL);
+        for target in [Target::Volume, Target::Brightness] {
+            let item = items.iter().find(|item| item.target == Some(target)).unwrap();
+            assert!(item.r.h >= 48.0);
+            for offset in [1.0, item.r.h - 1.0] {
+                assert_eq!(hit(&items, item.r.x + item.r.w / 2.0, item.r.y + offset).map(|hit| hit.0), Some(target));
+            }
+        }
+        assert!(items.iter().any(|item| matches!(item.draw, Draw::Circle { icon: "contrast", .. })));
+        assert!(items.iter().any(|item| matches!(item.draw, Draw::Circle { icon: "do_not_disturb_on", .. })));
+    }
+
     #[test]
     fn unavailable_tiles_are_honest_and_inert_and_targets_share_the_paint_grid() {
         let (items, height) = layout(&Snapshot::default(), &Tiles::ALL);
