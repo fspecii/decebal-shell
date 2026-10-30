@@ -78,16 +78,16 @@ and tiny-skia antialiasing or complete variable-icon visual parity.
 A separate read-only check reran the actual cmap/GSUB verifier against the
 combined root: all 60 aliases passed with the same pinned Material font hash.
 All four candidate files were inspected with FontTools: Google Sans Flex static
-weights 400/500/700 plus Material Symbols Rounded variable weight400. Every file
+weights 400/500/700 plus Material Symbols Rounded variable weight 400. Every file
 is below the 16 MiB per-input limit; no fifth/original variable clock font was
 included. Evidence is in `/tmp/dux-material-cmap-combined-ac7a4b7.json` and
 `/tmp/dux-font-combined-acceptance-ac7a4b7.json`.
 
 The source grid constants and formulas were compared with pinned upstream
 DDash `DashMetrics.qml`, `CcMetrics.qml` and the comfortable density tokens:
-six128px columns, five8px gaps, two12px outer pads produce832px; a four-column
-span is536px and a four-row span is408px. The native wide grid now uses those
-span equations. Narrow/enlarged-text reflow and its92px navigation/content inset
+six 128px columns, five 8px gaps, two 12px outer pads produce 832px; a four-column
+span is 536px and a four-row span is 408px. The native wide grid now uses those
+span equations. Narrow/enlarged-text reflow and its 92px navigation/content inset
 are explicit native adaptations, not a claim of a matched section-two upstream
 screenshot. These checks inspect source/metadata; they do not replace the
 parent's compiled grid tests or final optimized native window tests.
