@@ -5,6 +5,7 @@
 //! started unconditionally from an X11 session script.
 
 pub mod model;
+pub mod sound;
 #[cfg(feature = "x11")]
 pub mod ui;
 
@@ -52,6 +53,7 @@ pub struct Shared {
 #[derive(Debug, PartialEq)]
 pub enum Effect {
     Show(model::Notification),
+    Sound(sound::Request),
     Close(u32),
     ToggleHistory,
     ShowHistory,
@@ -100,6 +102,11 @@ impl Daemon {
                         if !n.transient {
                             sh.history.push(HistoryItem::from(&n));
                         }
+                        if sh.cfg.sounds && !sh.cfg.dnd && n.replaces == 0 {
+                            if let Some(request) = m.args().ok().and_then(|a| sound::request(&a, n.lifetime(sh.cfg.banner_seconds))) {
+                                fx.push(Effect::Sound(request));
+                            }
+                        }
                         if !sh.cfg.dnd || n.urgency >= 2 {
                             fx.push(Effect::Show(n));
                         }
@@ -115,7 +122,13 @@ impl Daemon {
                 }
                 Message::reply_to(m, "", Vec::new())
             }
-            (BUS_NAME, "GetCapabilities") => Message::reply_to(m, "as", dbus::body_strings(&["actions", "body", "icon-static"])),
+            (BUS_NAME, "GetCapabilities") => {
+                let mut caps = vec!["actions", "body", "icon-static"];
+                if sound::backend().is_some() {
+                    caps.push("sound");
+                }
+                Message::reply_to(m, "as", dbus::body_strings(&caps))
+            }
             (BUS_NAME, "GetServerInformation") => {
                 let mut w = Writer::default();
                 for s in ["decnotify", "decebal", env!("CARGO_PKG_VERSION"), "1.2"] {
@@ -224,6 +237,7 @@ pub fn run_daemon() -> Result<Start, String> {
     conn.set_nonblocking(true).map_err(|e| e.to_string())?;
     let mut sh = Shared { cfg: Config::load(), history: History::load() };
     let mut daemon = Daemon::new();
+    let mut sounds: Option<sound::Player> = None;
     // Start id numbering above anything persisted so a restart never reuses a visible id.
     daemon.sync_history_ids(&sh.history);
 
@@ -247,6 +261,9 @@ pub fn run_daemon() -> Result<Start, String> {
                 }
                 let (reply, effects) = daemon.dispatch(&msg, &mut sh);
                 daemon.sync_history_ids(&sh.history);
+                if !sh.cfg.sounds || sh.cfg.dnd {
+                    sounds.take();
+                }
                 if matches!(msg.member.as_str(), "Notify" | "CloseNotification" | "ClearHistory" | "RetryHistory") {
                     ui.refresh_history(&sh);
                 }
@@ -256,6 +273,7 @@ pub fn run_daemon() -> Result<Start, String> {
                 for fx in effects {
                     match fx {
                         Effect::Show(n) => ui.show(n, sh.cfg.banner_seconds),
+                        Effect::Sound(request) => sounds.get_or_insert_with(sound::Player::new).submit(request),
                         Effect::Close(id) => events.extend(ui.close(id, 3)),
                         Effect::ToggleHistory => events.extend(ui.toggle_history(&sh)),
                         Effect::ShowHistory if !ui.history_open() => events.extend(ui.toggle_history(&sh)),
@@ -265,6 +283,9 @@ pub fn run_daemon() -> Result<Start, String> {
             }
         }
         events.extend(ui.pump(&mut sh)?);
+        if !sh.cfg.sounds || sh.cfg.dnd {
+            sounds.take();
+        }
         daemon.sync_history_ids(&sh.history);
         events.extend(ui.expire(Instant::now()));
         for ev in events {

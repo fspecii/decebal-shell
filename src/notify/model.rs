@@ -17,6 +17,7 @@ const MAX_IMAGE_EDGE: i64 = 1024;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub dnd: bool,
+    pub sounds: bool,
     pub banner_seconds: u32,
     pub muted_apps: Vec<String>,
     mtime: Option<SystemTime>,
@@ -24,7 +25,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { dnd: false, banner_seconds: 5, muted_apps: Vec::new(), mtime: None }
+        Self { dnd: false, sounds: false, banner_seconds: 5, muted_apps: Vec::new(), mtime: None }
     }
 }
 
@@ -52,6 +53,9 @@ impl Config {
         let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else { return c };
         if let Some(b) = doc.get("dnd").and_then(|v| v.as_bool()) {
             c.dnd = b;
+        }
+        if let Some(b) = doc.get("sounds").and_then(|v| v.as_bool()) {
+            c.sounds = b;
         }
         if let Some(n) = doc.get("banner_seconds").and_then(|v| v.as_integer()) {
             c.banner_seconds = n.clamp(1, 120) as u32;

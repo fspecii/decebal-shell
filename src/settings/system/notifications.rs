@@ -20,13 +20,14 @@ use toml_edit::{Array, DocumentMut, Item as TItem, Value};
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotifCfg {
     pub dnd: bool,
+    pub sounds: bool,
     pub banner_seconds: u32,
     pub muted_apps: Vec<String>,
 }
 
 impl Default for NotifCfg {
     fn default() -> Self {
-        NotifCfg { dnd: false, banner_seconds: 5, muted_apps: vec![] }
+        NotifCfg { dnd: false, sounds: false, banner_seconds: 5, muted_apps: vec![] }
     }
 }
 
@@ -38,6 +39,7 @@ impl NotifCfg {
         let Ok(doc) = text.parse::<DocumentMut>() else { return d };
         NotifCfg {
             dnd: doc.get("dnd").and_then(|v| v.as_bool()).unwrap_or(d.dnd),
+            sounds: doc.get("sounds").and_then(|v| v.as_bool()).unwrap_or(false),
             banner_seconds: doc.get("banner_seconds").and_then(|v| v.as_integer()).map(|n| n.clamp(0, 60) as u32).unwrap_or(d.banner_seconds),
             muted_apps: doc.get("muted_apps").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
         }
@@ -60,6 +62,7 @@ impl NotifCfg {
             arr.push(a.as_str());
         }
         set_value(&mut doc, "dnd", Value::from(self.dnd));
+        set_value(&mut doc, "sounds", Value::from(self.sounds));
         set_value(&mut doc, "banner_seconds", Value::from(self.banner_seconds as i64));
         set_value(&mut doc, "muted_apps", Value::Array(arr));
         doc.to_string()
@@ -108,6 +111,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
         Row::new("Banner duration")
             .detail(if c.banner_seconds == 0 { "Banners stay until you click them".to_string() } else { "How long a banner stays on screen".to_string() })
             .ctl(Ctl::new("s:not:secs:", Kind::Stepper { v: c.banner_seconds as f64, min: 0.0, max: 60.0, step: 1.0, unit: " s".into() })),
+        Row::new("Notification sounds").detail("Play event sounds with canberra-gtk-play; silent during Do Not Disturb").ctl(Ctl::new("s:not:sounds:", Kind::Toggle(c.sounds))),
         Row::new("Send a test notification").detail("Needs notify-send and a running notification daemon").ctl(Ctl::new("s:not:test:", Kind::Button { label: "Send test".into(), danger: false })),
     ]));
     v.push(Item::Header("Muted apps".into()));
@@ -132,6 +136,7 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
     let r: Result<(), String> = (|| {
         match (act, &val) {
             ("dnd", CtlVal::Bool(b)) => n.dnd = *b,
+            ("sounds", CtlVal::Bool(b)) => n.sounds = *b,
             ("secs", CtlVal::Num(s)) => {
                 if !(0.0..=60.0).contains(s) {
                     return Err("Banner duration must be between 0 and 60 seconds".into());
@@ -203,7 +208,7 @@ mod tests {
     #[test]
     fn render_keeps_comments_and_unknown_keys() {
         let old = "# my notes\ndnd = false # inline\nfuture_key = \"x\"\n";
-        let c = NotifCfg { dnd: true, banner_seconds: 8, muted_apps: vec!["A".into()] };
+        let c = NotifCfg { dnd: true, sounds: true, banner_seconds: 8, muted_apps: vec!["A".into()] };
         let t = c.render(old);
         assert!(t.contains("# my notes") && t.contains("future_key = \"x\"") && t.contains("# inline"));
         assert_eq!(NotifCfg::parse(&t), c);
@@ -221,9 +226,12 @@ mod tests {
         apply(&mut h, "newapp", "", CtlVal::Str("slack".into()));
         apply(&mut h, "mute", "", CtlVal::Click);
         assert!(h.msgs.iter().any(|m| m.1 && m.0.contains("already")));
-        assert_eq!(NotifCfg::load(&d), NotifCfg { dnd: true, banner_seconds: 12, muted_apps: vec!["Slack".into()] });
+        assert_eq!(NotifCfg::load(&d), NotifCfg { dnd: true, sounds: false, banner_seconds: 12, muted_apps: vec!["Slack".into()] });
         apply(&mut h, "unmute", "0", CtlVal::Click);
         assert!(NotifCfg::load(&d).muted_apps.is_empty());
+        apply(&mut h, "sounds", "", CtlVal::Bool(true));
+        assert!(NotifCfg::load(&d).sounds);
+        assert!(items(&h).iter().any(|item| matches!(item, Item::Card(rows) if rows.iter().any(|r| r.label == "Notification sounds"))));
         apply(&mut h, "unmute", "5", CtlVal::Click);
         apply(&mut h, "secs", "", CtlVal::Num(999.0));
         assert_eq!(h.msgs.iter().filter(|m| m.1).count(), 3);
