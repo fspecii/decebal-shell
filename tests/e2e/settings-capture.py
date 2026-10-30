@@ -93,6 +93,7 @@ def main():
                 try:
                     win = wait_for(lambda: run("xdotool", "search", "--class", "DecSettings", env=e).splitlines()[0])
                     run("xdotool", "windowsize", win, str(w), str(h), env=e)
+                    run("xdotool", "windowfocus", win, env=e)
                     time.sleep(0.8)
                     wait_for(lambda: json.loads(layout.read_text()))
                     if c.get("search"):
