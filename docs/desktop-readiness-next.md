@@ -1,11 +1,10 @@
 # Next desktop-readiness work
 
-Checkpoint 2026-10-30 after production source/layout `1d0d4b9`, QA `2f8fd5d`,
-Dux evidence `c372f45` and the
-reviewed production rollout. Implemented baselines are separated from remaining
-work below; see [current evidence matrix](desktop-readiness-audit.md). Latest full
-library gate: 1,604 passed, zero failed, ten ignored (prior gates: 1,591 and
-1,597). Tests and deployment evidence are recorded in that matrix.
+Checkpoint 2026-10-30 after Settings output-management source `b29e632` and the
+reviewed Settings-only rollout. Latest library gate: **1,617 passed, zero failed,
+ten ignored**; formatting and strict all-target Clippy passed. Exact release
+Wayland, X11 and forced-X11-in-Wayland native checks passed; see the
+[current evidence matrix](desktop-readiness-audit.md).
 
 Remaining product gaps also include actual bar-item editing lists, full Files
 layouts and screen-reader accessibility; theme/profile labels alone do not satisfy them.
@@ -63,31 +62,29 @@ session test kills only its own worker to model logout and proves completion on
 next recovery without launching Timer. Explicitly retain the known crash-after-
 claim notification-loss tradeoff or change that contract deliberately.
 
-## 3. Native rdwm Wayland output controls with timed rollback
+## 3. Wayland Displays — implemented and privately validated
 
-**User trigger:** open Displays in a Wayland session to arrange a monitor or
-change resolution/scale. Current UI returns “displays are arranged by the
-compositor”; it cannot perform the basic desktop task.
+The native adapter and staged Settings workflow now implement typed rdwm
+capability/query/apply/confirm/revert. Keep persists through the compositor;
+its timer safely reverts if Settings closes or crashes. Instance/generation
+and reply-order guards protect drafts and confirmation state. Unsupported
+compositors stay explicit; forcing X11 rendering never selects xrandr against
+actual Wayland. The raw output table no longer bypasses the transaction.
 
-**Evidence:** `src/settings/system/display.rs::load_env` returns unavailable when
-Wayland is true. X11 already has output models, plans and a timed Keep/revert flow.
-rdwm configuration supports `[[output]]` through `crates/rdwm-core/src/wlcfg.rs`;
-Wayland output state exists in `crates/rdwm-wayland/src/state.rs`. XDG output
-advertisement is not a writable output-management protocol.
+Exact release native nested tests exercised actual pixels/input, per-head caps,
+Apply/Keep/Revert, Settings SIGKILL timeout, stale reset, persisted compositor
+restart and X11/forced-X11 regression. Settings was installed to both user bindirs
+without output/configuration changes or any app/compositor restart. The user's
+current X11 session is unchanged; matching rdwm protocol v1 is required for the
+new controls in Wayland. See [scope/contract](wayland-displays.md).
 
-**Implementation:** first define a typed backend capability/query/apply interface
-with mode, position, scale, transform and enable constraints. Use rdwm's actual
-Wayland configuration/IPC path, not xrandr against Xwayland and not an assumed
-wlr-output-management implementation. Reuse bounded plan confirmation and
-rollback. Keep unsupported compositors explicit, preserve unknown output/config
-fields, and do not allow an unconfirmed last-output disable.
+**Remaining acceptance:** physical DRM modes, disable/enable lifecycle, hot-unplug
+and mixed-DPI multi-output hardware checks. Nested mode/power are host-owned and
+correctly disabled; nested pixel evidence cannot establish physical driver safety.
+Other compositors require explicit adapters rather than protocol assumptions.
 
-**Acceptance:** private nested compositor tests query actual output properties,
-apply/revert a supported change, cancel or time out to the exact prior state,
-reject invalid scales/modes, and preserve other output fields. Cover hot-unplug
-while confirmation is open and denied/failed apply. A mixed-DPI physical two-output
-session remains a separate required manual/hardware gate; nested pixel evidence
-cannot substitute for it.
+Claude's structural Settings UI redesign is a separate ACTIVE thread; keep it
+independent from this functional output-management source and rollout.
 
 ## Other explicit requirements remain open
 
@@ -117,7 +114,7 @@ cannot substitute for it.
 - Dux Settings styling, resource/focus cards and the Specialist's Dux Lavender
   package are integrated, release-tested and installed without applying a theme
   or replacing the user's widget layout. New widget host2869626 is active;
-  open Settings keeps its old image/drafts until the user reopens it. Four-card
+  the then-open Settings window was preserved and later closed by the user. Four-card
   native painter/input checks pass at1280×720/200%; this is not a full Dux runtime.
 - Notification colours now follow cached live palettes in source/on disk; exact
   release theme/history checks pass. Legacy live daemon670409 remains retained.

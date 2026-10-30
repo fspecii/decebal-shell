@@ -78,3 +78,16 @@ Evidence: `/tmp/rdwm-output-settings-epoch-final/settings-checks.json` and
 the rdwm repository. These are debug-artifact results, not release/hardware claims.
 No live session, compositor, configuration or installed binary was changed for
 this verification. Physical DRM mode/power/hotplug testing still requires hardware.
+
+Exact default-feature release Settings (SHA256
+`cef4fb9fbfbe71fb3835517d128db0e0562747baef77bab6e20a66996e83cbd5`)
+subsequently passed all three native workflows: actual nested Wayland,
+independent X11, and forced X11 rendering inside the owned Wayland context.
+Evidence directories are `/tmp/rdwm-output-settings-release-final/`,
+`/tmp/rdwm-output-settings-x11-release-final/` and
+`/tmp/rdwm-output-settings-forced-x11-release-final/`. A guarded Settings-only
+install replaced both user-bin copies, without launching apps, changing outputs,
+restarting the compositor or modifying configuration. Journal:
+`~/.local/state/decebal/deployments/wayland-settings-20261030-165644/journal.json`.
+The earlier debug-only statement applies to its preceding checkpoint; this
+release result still does not establish physical DRM/hotplug readiness.

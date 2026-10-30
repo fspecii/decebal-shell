@@ -1,12 +1,35 @@
 # Desktop readiness audit — current checkpoint
 
-Refreshed 2026-10-30 from accepted production code/layout `1d0d4b9`,
-independent QA `2f8fd5d` and final Dux evidence `c372f45`, with production deployment evidence below. This records actual
-source, private native tests and bounded live rollout; it is not proof of
-KDE/GNOME parity or a hardware validation claim. The original audit is preserved
-at `a895427:docs/desktop-readiness-audit.md`; its claims are historical.
+Refreshed 2026-10-30 from Settings output-management source `b29e632`,
+independent native QA and the guarded Settings-only rollout below. Earlier Dux
+source/evidence (`1d0d4b9`, `2f8fd5d`, `c372f45`) remains a separate checkpoint.
+These records do not establish KDE/GNOME parity or physical hardware readiness.
+The original audit at `a895427:docs/desktop-readiness-audit.md` is historical.
 
 ## Evidence boundaries
+
+- Latest Wayland Displays gate: **1,617 default-feature library tests passed,
+  zero failed, ten ignored**, plus 25 focused Displays tests, the raw-editor guard,
+  formatting and strict all-target Clippy. Typed worker IPC supports staged
+  connector mode/rate, position, scale, transform and enabled drafts according
+  to actual capabilities. Compositor-owned provisional Keep/Revert survives
+  Settings close/crash; confirmation persists via the compositor. Instance and
+  generation guards reject stale/reordered replies and drafts across restart;
+  delayed errors remain visible without erasing newer state or extending timers.
+- Exact release Settings `cef4fb9fbfbe71fb3835517d128db0e0562747baef77bab6e20a66996e83cbd5`
+  passed real private nested Wayland input/pixels, Apply/Keep/Revert, crash timeout,
+  stale reset and X11 legacy regression. Forced X11 rendering inside an actual
+  Wayland session still exposes typed capabilities, with no xrandr/raw-output
+  bypass. Independent QA also validated the versioned compositor release and
+  restart persistence; physical DRM mode/power/hotplug remains untested hardware.
+- Settings-only deployment journal:
+  `~/.local/state/decebal/deployments/wayland-settings-20261030-165644/journal.json`.
+  Two installed Settings paths match the reviewed hash, with atomic per-file
+  replacements/backups and a pinned read-only inventory controller. Protected
+  configuration hashes, processes and WM state were identical before/after.
+  No Settings process was open or launched, and no compositor/output/app changes
+  were made. Current session stays X11. New controls require matching rdwm output
+  protocol v1; this Settings rollout did not install or restart a compositor.
 
 - Latest Dux/notification integration: **1,604 default-feature library tests passed,
   zero failed, ten ignored**; formatting and strict all-target Clippy passed.
@@ -74,11 +97,11 @@ at `a895427:docs/desktop-readiness-audit.md`; its claims are historical.
 | Notifications and history | Source/new binaries provide bounded private atomic history, symlink/permission/lock safety, surfaced error/Retry, failed-clear durability, merge/rekey and typed CLI status; 31 focused notification tests plus exact-release native theme changes, EACCES/corrupt/symlink/restart checks passed; popup/accent/text follow cached live theme without resetting history/DND; [guide](notification-history.md) | **Old live daemon still runs.** Its persisted 38 records were backed up; no active banner at observation. RAM-only state is unknown and no forced handoff occurred. New permissions/error handling takes effect only after a separately reviewed restart/session. Notification sounds remain unimplemented; fixed row metrics do not fully reflow at 200%, and cached app icons do not refresh on icon-pack changes. |
 | Tray/background application controls | Bounded SNI/DBusMenu across bar/rail/taskbar, custom paths/overlays, dynamic submenus and typed input; actual OBS and private pixels/lifecycle tests pass. Worker refreshes icon/theme generations from cached sources without paint I/O or new GetAll/app NewIcon; A→B/tint/stable-key regression passed; [guide](app-indicators.md) | No XEmbed, attention movies, hover tooltips or menu-item icons. Wayland activation/global coordinates and native app matrix remain. Extremely short/custom rails can exhaust space. |
 | Network, audio and Bluetooth | Native settings backed by nmcli, pactl/wpctl and bluetoothctl; `settings/system/{network,sound,bluetooth}.rs`, fake-command fixtures | Depends on installed services/tools. Parser/fake-runner coverage does not establish real Wi-Fi auth, VPN credentials, device hotplug, headset profile switching or service restart recovery. |
-| Arrange displays and scale text | X11 xrandr resolution/rate/rotation/placement/mirroring plus timed revert; Xft/deco scale; `settings/system/display.rs` | No per-output fractional-DPI user workflow demonstrated. Wayland `load_env` explicitly returns unavailable; no native output-management adapter here. Hotplug/mixed-DPI hardware matrix missing. |
+| Arrange displays and scale text | X11 xrandr workflow retained; native rdwm Wayland typed capability/query/apply/Keep/Revert, per-output scale/transform/position/modes/power where supported, stale epoch protection and persisted confirmation. Actual nested Wayland Settings and X11/forced-X11 release checks passed; [contract](wayland-displays.md) | Requires matching rdwm protocol v1. Nested host owns physical modes/power, so those controls are honestly disabled. Physical DRM enable/disable/mode, hotplug and mixed-DPI hardware matrix remain. |
 | Accessibility and readable settings | Runtime scale, high contrast, reduced dock motion; reset-to-theme text size; wrapped rows and 200% Settings tests; `accessibility.rs`, `settings/system/access.rs` | No AccessKit/AT-SPI integration found. Complex editors/widgets and keyboard-only end-to-end operation need verification. Next-login exports on this machine still need the updated system wrapper installed. |
 | Learn the desktop from inside the session | Spotlight Getting Started and Settings Welcome aliases/cards, same-instance deep links, draft preservation; `spotlight.rs`, `settings/panes.rs`, `bin/decsettings.rs` | Guide is reachable; no mandatory automatic first-login tour. Static shortcut labels can differ from custom bindings. Windows/macOS migration tasks are not all covered by geometry profiles. |
 | Install, upgrade and recover session | Explicit config validation, supervised components, default PAM lock, atomic user-binary rollout/backup; rdwm session sources bounded known exports | `/usr/bin/rdwm-decebal-session` remains older until administrator installation of prepared `session-preferences-5c58c1c` bundle. Source tests passing do not repair that installed wrapper. Bare system CLI may differ from user session binaries. |
-| Use Wayland as a complete daily desktop | rdwm Wayland backend and shell Wayland paths exist; live wallpaper uses mpvpaper | Native widgets unavailable; unified shadows X11-only; display controls unavailable; focus tokens, screen capture/portals and complete app/toolkit workflow need private-compositor and hardware checks. X11 results do not establish Wayland readiness. |
+| Use Wayland as a complete daily desktop | rdwm Wayland backend and shell Wayland paths exist; live wallpaper uses mpvpaper | Native widgets unavailable; unified shadows X11-only; display management requires the tested rdwm protocol rather than arbitrary compositor support; focus tokens, screen capture/portals and complete app/toolkit workflow need private-compositor and hardware checks. X11 results do not establish Wayland readiness. |
 
 ## Original findings reconciled
 
@@ -109,14 +132,12 @@ not merely a manifest, control label or large aggregate test count.
 
 ## Current live choices and pending work
 
-The user explicitly enabled automatic curated-photo following. The earlier
-Caelestia/dark rollout selected Wallhaven p82qrj; subsequent **user selection** is
-NextKDE/dark with runtime `wallhaven-57o619.png`, following on and live-video mode
-off. Video selection/provider/power preferences were retained. Final pair install
-preserved the user's then-current shell/dock bytes and open Settings rather than
-restoring the older Caelestia snapshot. Independent palette/widget choices remain
-user-owned. The colour-hook follow-up was tested and installed without forcing a
-new live photo, theme or mode.
+The user explicitly enabled automatic curated-photo following. Earlier Caelestia
+and NextKDE choices are historical. Fresh Settings-only rollout inventory found
+**Caelestia/dark**, radius24, palette `wallpaper-wallpaper-colours` and runtime
+`wallhaven-p82qrj.jpg` in fill mode, with following on. These user-selected
+preferences and the custom widget layout were unchanged by the binary update.
+No theme apply, photo refresh or restoration of an older snapshot occurred.
 
 A generated/upscaled Tidal Loom image is an explicitly permitted, isolated
 experiment, not an applied wallpaper or catalogue/default asset. Its README and
@@ -124,10 +145,11 @@ provenance remain in the user trial directory; no theme artwork was replaced.
 
 Dux Settings hierarchy, native resource/focus cards and the Theme Specialist's
 Dux Lavender package are integrated and installed. The package is available in
-the gallery, **not applied**: NextKDE/dark, radius24, photo/follow settings and
-custom widget layout remained unchanged. The new widget host understands the new
-DSL/builtins. Open Settings retains its old in-memory image/drafts; reopen later
-to see the new styling. Notification colour coherence is installed on disk but
+the gallery, **not automatically applied**. The Dux rollout preserved the
+then-current NextKDE choices; later user changes are recorded above. The new
+widget host understands the new DSL/builtins. The old Settings window was left
+draft-safe during that rollout and was subsequently closed by the user; none was
+open or launched during the latest Settings-only update. Notification colour coherence is installed on disk but
 legacy daemon670409 remains pending a separately safe handoff. User-reported dock overlap
 with floating apps has accepted rdwm source `9788af9`: ordinary free floats fit a
 new reserved workarea only; explicit resize/drag clears that limit and fullscreen
@@ -139,3 +161,7 @@ Running WM1714917 is unchanged: this general fix is **not active yet**. The
 separately approved T3-only correction to client553,27/2147×1328 is not evidence
 that the entire live WM was upgraded. The broader
 readiness goal remains ACTIVE.
+
+Claude’s structural Settings UI redesign remains a separate active thread. The
+overall desktop-readiness goal remains ACTIVE; full Files layouts, accessibility,
+bar-item lists and physical Wayland acceptance are still substantial work.
