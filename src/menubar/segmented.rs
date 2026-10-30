@@ -420,12 +420,12 @@ impl DecBar {
             }
             Some(Kind::Notifications) => {
                 self.close();
-                sys::spawn(&["decnotify", "history"]);
+                sys::spawn_application(&["decnotify", "history"]);
                 true
             }
             Some(Kind::Clipboard) => {
                 self.close();
-                sys::spawn(&["decclip"]);
+                sys::spawn_application(&["decclip"]);
                 true
             }
             Some(Kind::Media) => {

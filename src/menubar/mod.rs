@@ -917,7 +917,7 @@ impl DecBar {
                         if tool == "nmtui" {
                             continue;
                         }
-                        sys::spawn(&["sh", "-c", &format!("sleep 0.15; {tool}")]);
+                        sys::spawn_application(&["sh", "-c", "sleep 0.15; exec \"$@\"", "network-editor", tool]);
                         break;
                     }
                 }
@@ -954,9 +954,9 @@ impl DecBar {
                 self.close();
                 if let Some(m) = sys::decutil() {
                     // Let the panel disappear before the first frame is grabbed.
-                    sys::spawn(&["sh", "-c", &format!("sleep 0.25; '{m}' record toggle")]);
+                    sys::spawn_application(&["sh", "-c", "sleep 0.25; exec \"$@\"", "screen-recording", &m, "record", "toggle"]);
                 } else if sys::have("omarchy") {
-                    sys::spawn(&["sh", "-c", "sleep 0.15; omarchy capture screenrecording"]);
+                    sys::spawn_application(&["sh", "-c", "sleep 0.15; exec omarchy capture screenrecording"]);
                 }
             }
             Target::IdleInhibit => {
@@ -982,13 +982,13 @@ impl DecBar {
             Target::Notifications => {
                 self.close();
                 // The history panel of decnotify (a toggle), once the control center is gone.
-                sys::spawn(&["sh", "-c", "sleep 0.15; decnotify history"]);
+                sys::spawn_application(&["sh", "-c", "sleep 0.15; exec decnotify history"]);
             }
             Target::Settings => {
                 self.close();
                 if let Some(argv) = settings_command(sys::have("decsettings"), sys::have("omarchy-menu")) {
                     let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
-                    sys::spawn(&argv);
+                    sys::spawn_application(&argv);
                 }
             }
         }

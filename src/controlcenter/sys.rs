@@ -140,7 +140,7 @@ pub fn take_log() -> Vec<String> {
     LOG.lock().map(|mut l| std::mem::take(&mut *l)).unwrap_or_default()
 }
 
-/// Fire-and-forget (setters): detached, errors ignored, never blocks the caller.
+/// Bounded asynchronous setter. Do not use for applications that must outlive a popup.
 pub fn spawn(argv: &[&str]) {
     if DRY_RUN.load(Ordering::SeqCst) {
         if let Ok(mut l) = LOG.lock() {
@@ -153,6 +153,19 @@ pub fn spawn(argv: &[&str]) {
         let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         let _ = run(&refs, Duration::from_secs(10));
     });
+}
+
+/// Start a user-requested application/action before its popup can exit. The
+/// existing launcher gives it an independent session, without probe deadlines or
+/// parent-death signals. Probes and bounded setters keep using `run`/`spawn`.
+pub fn spawn_application(argv: &[&str]) -> bool {
+    if DRY_RUN.load(Ordering::SeqCst) {
+        if let Ok(mut log) = LOG.lock() {
+            log.push(argv.join(" "));
+        }
+        return true;
+    }
+    crate::launch::spawn_argv(&argv.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>())
 }
 
 pub fn have(tool: &str) -> bool {
@@ -725,10 +738,10 @@ pub fn toggle_appearance() {
     if mode != Mode::Auto {
         let next = if is_light() { "dark" } else { "light" };
         let ctl = crate::launch::sibling_or_path("decthemectl");
-        spawn(&[&ctl, "set", "mode", next]);
+        spawn_application(&[&ctl, "set", "mode", next]);
     }
     if have("desktop-style") {
-        spawn(&["desktop-style", "appearance", "toggle"]);
+        spawn_application(&["desktop-style", "appearance", "toggle"]);
     }
 }
 
@@ -964,6 +977,31 @@ mod tests {
             std::fs::read_to_string(format!("/proc/{pid}/stat")).map(|s| s.rsplit(") ").next().unwrap_or("").starts_with('Z')).unwrap_or(true)
         });
         assert!(gone, "the sleep outlived the thread that spawned it");
+    }
+
+    #[test]
+    fn application_launch_survives_the_calling_popup_process() {
+        const CHILD: &str = "DECEBAL_APPLICATION_LIFETIME_CHILD";
+        if let Some(marker) = std::env::var_os(CHILD) {
+            assert!(spawn_application(&["sh", "-c", "sleep 0.2; printf ready > \"$1\"", "application-fixture", marker.to_str().unwrap()]));
+            std::process::exit(0); // The application must start even after this popup is gone.
+        }
+        let root = std::env::temp_dir().join(format!("decebal-app-lifetime-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();
+        let marker = root.join("ready");
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "controlcenter::sys::tests::application_launch_survives_the_calling_popup_process", "--nocapture"])
+            .env(CHILD, &marker)
+            .env("XDG_STATE_HOME", root.join("state"))
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !marker.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(std::fs::read_to_string(&marker).unwrap_or_default(), "ready", "app launch must not be queued on a dying thread or killed with its popup");
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

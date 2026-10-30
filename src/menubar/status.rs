@@ -468,7 +468,7 @@ impl DecBar {
             }
             Act::NetworkEditor => {
                 self.close();
-                sys::spawn(&["sh", "-c", "sleep 0.15; nm-connection-editor"]);
+                sys::spawn_application(&["sh", "-c", "sleep 0.15; exec nm-connection-editor"]);
             }
             Act::BtToggle => {
                 let on = self.snapshot().bluetooth.map(|b| b.powered).unwrap_or(false);
