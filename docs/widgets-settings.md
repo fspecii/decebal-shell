@@ -239,3 +239,17 @@ unsupported. Visual evidence can be reproduced with the isolated renderer test:
 ```sh
 WIDGET_EVIDENCE_DIR=/tmp/dux-widgets cargo test --lib overview_and_focus_native_scale_evidence -- --ignored --test-threads=1
 ```
+
+Actual native host/input verification (requires Xvfb, xdotool and ImageMagick;
+no installation is performed):
+
+```sh
+python3 tests/e2e/dux-widgets-native.py /absolute/build/path/decwidgets /tmp/dux-widget-host
+```
+
+This isolates HOME, XDG paths, display and bus; copies the binary alongside safe
+application-open fixtures; verifies four mapped/painted native windows and eight
+actual pointer clicks at 100/200% on a 640 × 480 display; and retains screenshots
+and geometry/action JSON. The final measured 200% heights are 324 pixels for
+Resource overview and 363 for Focus hub. Note titles can ellipsize, while numeric
+countdowns and missing-resource status remain fully readable.

@@ -332,7 +332,7 @@ mod tests {
                     assert!(it.rect.h <= 480.0, "{id} at {scale}: {}", it.rect.h);
                     if id == "resource-overview" && data.num("cpu.usage") == Some(0.0) {
                         let text = dump(&it);
-                        assert!(text.contains("CPU   0%") && !text.contains("Unavailable"));
+                        assert!(text.contains("CPU  0%") && !text.contains("Unavailable"));
                         assert!(matches!(it.on_click, Some(Action::Open(Open::Dashboard))));
                     }
                     if id == "focus-hub" {
@@ -372,6 +372,12 @@ mod tests {
                         let it = layout(&def, &Ctx { data: &data, metrics: &paint::FontMetrics(&fonts), theme_radius: th.radius }, None);
                         contained(&it, &it);
                         assert!(it.rect.h <= 480.0);
+                        if id == "resource-overview" {
+                            for (index, template) in [(1, "CPU  {cpu.usage:pct|Unavailable}"), (3, "RAM  {mem.usage:pct|Unavailable}")] {
+                                let crate::widgets::layout::Leaf::Text { s, .. } = &it.children[index].leaf else { panic!("metric") };
+                                assert_eq!(s, &crate::widgets::fmt::Fmt::parse(template).unwrap().eval(&data), "metric must remain fully readable at {scale}");
+                            }
+                        }
                         if id == "focus-hub" {
                             let crate::widgets::layout::Leaf::Text { s, .. } = &it.children[1].leaf else { panic!("countdown") };
                             assert_eq!(s, &crate::widgets::fmt::Fmt::parse("{timer.remaining|--:--:--}").unwrap().eval(&data), "countdown must remain fully readable at {scale}");

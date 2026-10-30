@@ -25,8 +25,8 @@ color = "text_secondary"
 
 [[root.children]]
 type = "text"
-text = "CPU   {cpu.usage:pct|Unavailable}"
-size = 18
+text = "CPU  {cpu.usage:pct|Unavailable}"
+size = 16
 weight = "bold"
 color = "text"
 
@@ -39,8 +39,8 @@ track = "border@0.5"
 
 [[root.children]]
 type = "text"
-text = "RAM   {mem.usage:pct|Unavailable}"
-size = 18
+text = "RAM  {mem.usage:pct|Unavailable}"
+size = 16
 weight = "bold"
 color = "text"
 
