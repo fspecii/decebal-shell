@@ -55,7 +55,7 @@ def main():
             shutil.copy2(binaries / name, root / "bin" / name)
         calls = root / "settings-calls"
         fixture = root / "bin/decsettings"
-        fixture.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$DUX_SETTINGS_CALLS"\n')
+        fixture.write_text('#!/bin/sh\necho entered >> "$DUX_SETTINGS_CALLS.entered"\nif [ -n "$DUX_SETTINGS_FIXTURE_DELAY" ]; then sleep "$DUX_SETTINGS_FIXTURE_DELAY"; fi\nprintf "%s\\n" "$*" >> "$DUX_SETTINGS_CALLS"\n')
         fixture.chmod(0o755)
         curl = root / "bin/curl"
         curl.write_text("#!/bin/sh\nexit 1\n")
@@ -76,7 +76,8 @@ def main():
                    DECEBAL_THEMES=str(root / "themes"), DECEBAL_SYSTEM_THEMES=str(root / "themes"),
                    DBUS_SESSION_BUS_ADDRESS=f"unix:path={private}/no-session-bus",
                    DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={private}/no-system-bus",
-                   DECEBAL_SYSTEM_AUTOMATIC="0", DUX_SETTINGS_CALLS=str(calls))
+                   DECEBAL_SYSTEM_AUTOMATIC="0", DUX_SETTINGS_CALLS=str(calls),
+                   DECEBAL_LOG="debug", DECEBAL_LOG_DIR=str(root / "diagnostic-logs"))
         for key in ("WAYLAND_DISPLAY", "RDWM_SOCK", "PULSE_SERVER", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE", "XAUTHORITY"):
             env.pop(key, None)
         env["PATH"] = str(root / "bin") + os.pathsep + env.get("PATH", "")
@@ -110,6 +111,8 @@ def main():
                 for scale in (1, 2):
                     env["DECEBAL_FONT_SCALE"] = str(scale)
                     for mode in ("dark", "light"):
+                        if os.environ.get("DUX_SURFACE_CASE") and os.environ["DUX_SURFACE_CASE"] != f"{scale*100}-{mode}":
+                            continue
                         config = {"theme": {"name": theme_id, "mode": mode}, "control_center": {"style": "dux"}, "bar": {"enabled": True}}
                         (root / "config/omarchy/decebal.json").write_text(json.dumps(config))
                         if os.environ.get("DUX_SURFACE_HOST_PART") not in ("control", "bar"):
@@ -160,12 +163,22 @@ def main():
                             capture("root", f"control-{scale * 100}-{mode}-keyboard")
                             run("xdotool", "mousemove", "--window", panel_window, str(round(x + width / 2)), str(round(y + height / 2)), "click", "--repeat", "100", "--delay", "5", "4")
                             wait(lambda: panel_dump.exists() and any(line.startswith("scroll 0 ") for line in panel_dump.read_text().splitlines()), "Control Center returned to top before header action")
+                            capture("root", f"control-{scale * 100}-{mode}-before-header")
                             previous_calls = len(calls.read_text().splitlines()) if calls.exists() else 0
                             header = 72 + (scale - 1) * 24
+                            click_start=time.monotonic()
+                            diagnostic={"before_click_dump":panel_dump.read_text(),"window_geometry":run("xdotool","getwindowgeometry","--shell",panel_window),"pointer":run("xdotool","getmouselocation","--shell"),"click_window_relative":[round(x+556),round(y+16+header/2)],"exit_before":panel.poll()}
+                            (evidence/f"control-{scale*100}-{mode}-click-diagnostic.json").write_text(json.dumps(diagnostic,indent=2))
                             run("xdotool", "mousemove", "--window", panel_window, str(round(x + 556)), str(round(y + 16 + header / 2)), "click", "1")
+                            def header_action_arrived():
+                                if panel.poll() is not None and "exit_observed_seconds" not in diagnostic:
+                                    diagnostic["exit_observed_seconds"]=time.monotonic()-click_start
+                                return calls.exists() and len(calls.read_text().splitlines()) > previous_calls
                             try:
-                                wait(lambda: len(calls.read_text().splitlines()) > previous_calls, "Control Center native Settings action")
+                                wait(header_action_arrived, "Control Center native Settings action")
                             except AssertionError:
+                                diagnostic.update(fixture_entered=Path(str(calls)+".entered").read_text() if Path(str(calls)+".entered").exists() else None,fixture_calls=calls.read_text() if calls.exists() else None,exit_after=panel.poll(),seconds_after_click=time.monotonic()-click_start,after_click_dump=panel_dump.read_text(),remaining_windows=run("xdotool","search","--name","^decebal-control-center$",check=False),pointer_after=run("xdotool","getmouselocation","--shell"))
+                                (evidence/f"control-{scale*100}-{mode}-click-diagnostic.json").write_text(json.dumps(diagnostic,indent=2))
                                 (evidence / f"control-{scale*100}-{mode}-failure.txt").write_text(f"exit={panel.poll()}\n"+panel_dump.read_text())
                                 raise
                             panel.wait(timeout=5)
@@ -202,6 +215,8 @@ def main():
                             bar.terminate();bar.wait(timeout=5);processes.remove(bar)
 
             finally:
+                if (root/"diagnostic-logs").exists():
+                    shutil.copytree(root/"diagnostic-logs",evidence/"diagnostic-logs",dirs_exist_ok=True)
                 for process in processes:
                     process.terminate()
                     process.wait(timeout=5)

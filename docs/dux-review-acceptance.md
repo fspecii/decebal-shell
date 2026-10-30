@@ -142,3 +142,26 @@ supersedes that harness failure. No production code changed for this correction.
 This acceptance covers the named X11 regressions and standalone slider host;
 all earlier limits regarding other hosts, Wayland, hardware and accessibility
 remain. No live display input, actual setters, installation or restart occurred.
+
+## Standalone header-action investigation
+
+The broader optimized matrix later exposed an unresolved Settings launch exit
+race; the preceding bounded fallback pass does not supersede this failure.
+`DUX_SURFACE_HOST_PART=control DUX_SURFACE_CASE=100-dark` restricts
+`tests/e2e/dux-surfaces-native.py` to that single case. It now saves live X
+geometry, pointer position, current panel dump, intended click, observed process
+exit timing, fixture entry/completion and private DLOG files before cleanup.
+`DUX_SETTINGS_FIXTURE_DELAY=.2` optionally separates fixture entry and completion
+for lifecycle diagnosis; normal runs add no sleep.
+
+Targeted evidence `/tmp/decebal-review2-native/header-diagnostic` and
+`header-lifecycle` reproduces the failure with stable panel origin352,54,
+surface960×638 and content576. The clicked gear location908,106 is correct in
+the inspected before-header capture; no stale coordinate or asynchronous resize
+is required. The bar exits normally and the Settings fixture never enters.
+Source inspection identifies a plausible launch-lifetime defect: the Settings
+action closes the standalone overlay while `sys::spawn` merely queues a thread
+using the probe runner, whose child has a parent-death kill signal. The thread
+or child can disappear with the overlay before application launch. This needs a
+production repair and targeted candidate rerun; no production edit was made by
+the investigating agent. Deployment should remain gated on that result.
