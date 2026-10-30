@@ -229,8 +229,11 @@ pub fn run_daemon() -> Result<Start, String> {
 
     loop {
         let timeout = ui.next_deadline().map(|d| d.saturating_duration_since(Instant::now()));
-        let ready = crate::backend::poll_readable(&[conn.fd(), ui.fd()], timeout).map_err(|e| e.to_string())?;
+        let ready = crate::backend::poll_readable(&[conn.fd(), ui.fd(), ui.theme_fd()], timeout).map_err(|e| e.to_string())?;
         let mut events = Vec::new();
+        if ready[2] {
+            ui.refresh_theme(&sh);
+        }
         if ready[0] {
             if !conn.fill().map_err(|e| e.to_string())? {
                 return Ok(Start::Ran); // bus went away: the session is ending

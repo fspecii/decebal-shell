@@ -11,7 +11,9 @@ use crate::gfx::{self, color};
 use crate::icons;
 use crate::text::{Fonts, Role, Weight};
 use std::collections::{HashMap, VecDeque};
+use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
+use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 use tiny_skia::{Color, Pixmap};
 use x11rb::connection::{Connection, RequestConnection};
@@ -41,7 +43,7 @@ pub enum UiEvent {
 }
 
 /// Colours. The adaptation point for the shared theme module: build a `Palette` from whatever it exposes.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     pub bg: (u8, u8, u8),
     pub border: Color,
@@ -51,6 +53,7 @@ pub struct Palette {
     pub button: Color,
     pub button_hover: Color,
     pub accent: (u8, u8, u8),
+    pub link: Color,
 }
 
 impl Palette {
@@ -64,6 +67,7 @@ impl Palette {
             button: color(255, 255, 255, 0.12),
             button_hover: color(255, 255, 255, 0.22),
             accent: (10, 132, 255),
+            link: color(10, 132, 255, 1.0),
         }
     }
 
@@ -77,15 +81,32 @@ impl Palette {
             button: color(0, 0, 0, 0.07),
             button_hover: color(0, 0, 0, 0.14),
             accent: (0, 122, 255),
+            link: color(0, 122, 255, 1.0),
         }
     }
 
-    /// Follows the same dark/light switch the control center uses.
+    /// Read only the process-wide resolved theme cache; no I/O in rendering.
     pub fn current() -> Palette {
-        if crate::controlcenter::sys::is_light() {
-            Palette::light()
-        } else {
-            Palette::dark()
+        Self::from_theme(&crate::theme::th())
+    }
+
+    fn from_theme(theme: &crate::theme::Theme) -> Palette {
+        let bg = theme.popup;
+        // Keep all label backgrounds on the same side of the contrast boundary.
+        let shade = if bg.readable_on() == crate::theme::Rgb(0, 0, 0) { crate::theme::Rgb(255, 255, 255) } else { crate::theme::Rgb(0, 0, 0) };
+        let button = shade.over(bg, 0.08);
+        let hover = shade.over(bg, 0.14);
+        let readable = |fg, backgrounds: &[crate::theme::Rgb]| readable_foreground(fg, backgrounds).color(1.0);
+        Palette {
+            bg: bg.t(),
+            border: theme.border.color(1.0),
+            title: readable(theme.text, &[bg, button, hover]),
+            body: readable(theme.text_secondary, &[bg, button]),
+            dim: readable(theme.text_faint, &[bg]),
+            button: button.color(1.0),
+            button_hover: hover.color(1.0),
+            accent: theme.accent.t(),
+            link: readable(theme.accent, &[bg]),
         }
     }
 
@@ -96,6 +117,22 @@ impl Palette {
     fn bg_pixel(&self) -> u32 {
         (u32::from(self.bg.0) << 16) | (u32::from(self.bg.1) << 8) | u32::from(self.bg.2)
     }
+}
+
+/// Preserve theme colours where possible; tiny notification text needs 4.5:1.
+fn readable_foreground(fg: crate::theme::Rgb, backgrounds: &[crate::theme::Rgb]) -> crate::theme::Rgb {
+    use crate::theme::model::{contrast, Rgb};
+    let score = |c| backgrounds.iter().map(|bg| contrast(c, *bg)).fold(f32::INFINITY, f32::min);
+    let black = Rgb(0, 0, 0);
+    let white = Rgb(255, 255, 255);
+    let fallback = if score(black) >= score(white) { black } else { white };
+    for step in 0..=100 {
+        let candidate = fallback.over(fg, step as f32 / 100.0);
+        if score(candidate) >= 4.5 {
+            return candidate;
+        }
+    }
+    fallback
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -293,6 +330,7 @@ pub struct Ui {
     hist: Option<HistWin>,
     icon_cache: HashMap<String, Option<Pixmap>>,
     default_secs: u32,
+    theme_wake: UnixStream,
 }
 
 fn cerr<E: std::fmt::Display>(e: E) -> String {
@@ -334,6 +372,12 @@ impl Ui {
         let mon = panel_monitor(&conn, root, (i32::from(screen.width_in_pixels), i32::from(screen.height_in_pixels)));
         let s = xft_scale(&conn, root);
         let fonts = Fonts::load().ok_or("no usable font found")?;
+        let (theme_wake, wake) = UnixStream::pair().map_err(cerr)?;
+        theme_wake.set_nonblocking(true).map_err(cerr)?;
+        wake.set_nonblocking(true).map_err(cerr)?;
+        crate::theme::live::start_watcher(move || {
+            let _ = (&wake).write(&[1]);
+        });
         Ok(Ui {
             conn,
             root,
@@ -349,11 +393,31 @@ impl Ui {
             hist: None,
             icon_cache: HashMap::new(),
             default_secs: 5,
+            theme_wake,
         })
     }
 
     pub fn fd(&self) -> RawFd {
         self.conn.stream().as_raw_fd()
+    }
+
+    pub fn theme_fd(&self) -> RawFd {
+        self.theme_wake.as_raw_fd()
+    }
+
+    pub fn refresh_theme(&mut self, sh: &Shared) {
+        let mut bytes = [0; 64];
+        while self.theme_wake.read(&mut bytes).is_ok_and(|n| n > 0) {}
+        let pal = Palette::current();
+        if pal == self.pal {
+            return;
+        }
+        self.pal = pal;
+        for i in 0..self.banners.len() {
+            self.redraw(i);
+        }
+        self.refresh_history(sh);
+        let _ = self.conn.flush();
     }
 
     fn px(&self, v: f32) -> f32 {
@@ -409,7 +473,6 @@ impl Ui {
 
     /// Shows `n` (or updates the banner / queued entry with the same id).
     pub fn show(&mut self, n: Notification, secs: u32) {
-        self.pal = Palette::current();
         self.default_secs = secs;
         if let Some(i) = self.banners.iter().position(|b| b.n.id == n.id) {
             self.update_banner(i, n, secs);
@@ -576,7 +639,6 @@ impl Ui {
             return Vec::new();
         }
         let events = self.close_all();
-        self.pal = Palette::current();
         let capacity = self.history_capacity(sh);
         let rows = sh.history.items.len().clamp(1, capacity);
         let (w, h) = ((HIST_W * self.s).round() as u32, ((hist_header(sh) + rows as f32 * HIST_ROW + 10.0) * self.s).round() as u32);
@@ -842,16 +904,16 @@ fn paint_history(fonts: &mut Fonts, pal: &Palette, s: f32, sh: &Shared, hw: Opti
     let (clear, dnd, rows) = hist_rects(s, hw.map_or(0, |h| h.scroll), sh, hw.map_or(HIST_MAX_ROWS, |h| h.rows));
     fonts.draw_as(Role::Title, &mut pm, "Notifications", 16.0 * s, 13.0 * s, 16.0 * s, Weight::Bold, pal.title);
     let (ar, ag, ab) = pal.accent;
-    fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + 3.0 * s, 12.0 * s, Weight::Medium, color(ar, ag, ab, 1.0));
+    fonts.draw(&mut pm, "Clear", clear.x + 8.0 * s, clear.y + 3.0 * s, 12.0 * s, Weight::Medium, pal.link);
     // Do Not Disturb row with a switch.
     gfx::fill_rounded(&mut pm, dnd.x, dnd.y, dnd.w, dnd.h, 8.0 * s, pal.button);
     fonts.draw(&mut pm, "Do Not Disturb", dnd.x + 10.0 * s, dnd.y + 7.0 * s, 12.5 * s, Weight::Medium, pal.title);
     let (sw, sh_) = (34.0 * s, 20.0 * s);
     let (sx, sy) = (dnd.x + dnd.w - sw - 10.0 * s, dnd.y + (dnd.h - sh_) / 2.0);
-    let track = if sh.cfg.dnd { color(ar, ag, ab, 1.0) } else { color(120, 120, 128, 0.5) };
+    let track = if sh.cfg.dnd { color(ar, ag, ab, 1.0) } else { pal.button_hover };
     gfx::fill_rounded(&mut pm, sx, sy, sw, sh_, sh_ / 2.0, track);
     let knob_x = if sh.cfg.dnd { sx + sw - sh_ + 2.0 * s } else { sx + 2.0 * s };
-    gfx::fill_circle(&mut pm, knob_x + (sh_ - 4.0 * s) / 2.0, sy + sh_ / 2.0, (sh_ - 4.0 * s) / 2.0, Color::WHITE);
+    gfx::fill_circle(&mut pm, knob_x + (sh_ - 4.0 * s) / 2.0, sy + sh_ / 2.0, (sh_ - 4.0 * s) / 2.0, if sh.cfg.dnd { accent_text(pal) } else { pal.title });
 
     if let Some(error) = sh.history.error() {
         let r = history_retry(s, sh).expect("error exposes retry");
@@ -927,6 +989,56 @@ fn hist_rects(s: f32, scroll: usize, sh: &Shared, limit: usize) -> (R, R, Vec<R>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolved_theme_palette_preserves_popup_accent_and_readable_text() {
+        use crate::theme::model::{contrast, Rgb, Selection};
+        let rgb = |c: Color| Rgb((c.red() * 255.).round() as u8, (c.green() * 255.).round() as u8, (c.blue() * 255.).round() as u8);
+        for (id, _) in crate::theme::builtin::BUILTIN {
+            for dark in [true, false] {
+                let t = crate::theme::builtin::def(id).unwrap().resolve(id, dark, &Selection::default());
+                let p = Palette::from_theme(&t);
+                assert_eq!(p.bg, t.popup.t());
+                assert_eq!(p.accent, t.accent.t());
+                for background in [t.popup, rgb(p.button), rgb(p.button_hover)] {
+                    assert!(contrast(rgb(p.title), background) >= 4.49, "{id} dark={dark}");
+                }
+                for text in [p.body, p.dim, p.link] {
+                    assert!(contrast(rgb(text), t.popup) >= 4.49, "{id} dark={dark}");
+                    assert_eq!(text.alpha(), 1.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resolved_dynamic_and_accessibility_palettes_drive_notification_paint() {
+        use crate::theme::model::{Dynamic, Rgb, Selection, Surfaces};
+        let mut t = crate::theme::builtin::def("macos").unwrap().resolve("macos", true, &Selection::default());
+        let before = Palette::from_theme(&t);
+        let d = Dynamic { enabled: true, surfaces: Surfaces::Full, strength: 1., colors: crate::theme::extract::Extracted::from_color(Rgb(180, 20, 90)), ..Default::default() };
+        t = crate::theme::dynamic::apply_to(t, &d, false);
+        let after = Palette::from_theme(&t);
+        assert_ne!(before, after);
+        assert_eq!(after.bg, t.popup.t());
+        assert_eq!(after.accent, t.accent.t());
+        let accessible = crate::accessibility::Preferences { high_contrast: true, reduce_motion: true, ..Default::default() }.apply(t);
+        let p = Palette::from_theme(&accessible);
+        assert_eq!(p.bg, (0, 0, 0));
+        assert_eq!(p.title, Color::WHITE);
+        assert_eq!(p.accent, (255, 255, 0));
+        // Native history renderer uses these exact colours, without reading files.
+        let mut fonts = Fonts::load().expect("test fonts");
+        let mut cfg = Config::default();
+        cfg.dnd = true;
+        let sh = Shared { cfg, history: super::super::model::History::default() };
+        let hist = HistWin { win: 0, w: 380, h: 160, rows: 1, scroll: 0, x: 0, y: 0, hover: None };
+        let pm = paint_history(&mut fonts, &p, 1., &sh, Some(&hist), &HashMap::new());
+        let pixel = pm.pixel(190, 125).unwrap();
+        assert_eq!((pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()), (0, 0, 0, 255));
+        let thumb = pm.pixel(348, 59).unwrap();
+        assert_eq!((thumb.red(), thumb.green(), thumb.blue()), (0, 0, 0), "yellow high-contrast switch needs a dark thumb");
+    }
 
     #[test]
     fn retry_text_is_readable_on_dark_and_light_accents() {
