@@ -44,6 +44,13 @@ def main():
                    RDWMCTL='/nonexistent/rdwmctl', DECSETTINGS_DEBUG_LAYOUT=str(root / 'layout.json'),
                    DECEBAL_THEME_PREVIEW_BIN=os.environ.get('SETTINGS_RENDERER_BIN', str(installed / 'decthemectl')),
                    DECEBAL_DECO_RENDERER=str(installed / 'decebal-deco-preview'))
+        if os.environ.get('SETTINGS_THEMES_DIR'):
+            theme_source = Path(os.environ['SETTINGS_THEMES_DIR']).resolve()
+            shutil.copytree(theme_source, root / 'themes', symlinks=False)
+            env['DECEBAL_THEMES'] = str(root / 'themes')
+            env['DECEBAL_SYSTEM_THEMES'] = str(root / 'empty')
+            result['theme_fixture_source'] = str(theme_source)
+        result['renderer_sha256'] = hashlib.sha256(Path(env['DECEBAL_THEME_PREVIEW_BIN']).read_bytes()).hexdigest()
         result.update(display=display, renderer=env['DECEBAL_THEME_PREVIEW_BIN'], deco_renderer=env['DECEBAL_DECO_RENDERER'])
         def run(*args):
             return subprocess.check_output(args, env=env, text=True, stderr=subprocess.DEVNULL).strip()

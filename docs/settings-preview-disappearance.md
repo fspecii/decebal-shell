@@ -48,3 +48,9 @@ errors use the fatal error log; normal Settings backend return is logged too.
 An external signal can bypass these records, so the next live Settings launch
 will also use a parent wait-status log. These diagnostics do not establish the
 cause of the historical disappearance.
+
+## Sole-click acceptance gate
+
+Current debug SHA `979d8c4b779726afb882cc6efd805e263c0601869f2757887b4bc9cbf375e4cd` passes the separate `settings-gallery-first-open.py` gate with **exactly one Appearance click and no subsequent input**, using fresh private caches. Built-in-only fixture: gallery at 0.355s, first generated PNG at 1.360s, painted preview on a new frame at 1.605s. A private copy of repository packages: gallery at 0.405s, first PNG at 1.365s, painted preview at 1.659s. Evidence is `/tmp/settings-current-first-open` and `/tmp/settings-current-first-open-packages`.
+
+This proves the current first-open wake path works without the stress harness's deliberate re-entry. The installed older renderer was used; it does not establish successful rendering of every 0.2-only package such as Dux. Repeat the same gate using optimized Settings and matching optimized helper before deployment. The gate now accepts `SETTINGS_THEMES_DIR` to copy package fixtures privately and records the renderer SHA.
