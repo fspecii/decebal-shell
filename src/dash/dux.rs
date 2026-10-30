@@ -33,6 +33,7 @@ pub(super) struct State {
     focus: Option<Target>,
     seek: Option<f32>,
     volume: Option<f32>,
+    unmuted_volume: Option<(String, f64)>,
 }
 
 impl State {
@@ -580,7 +581,39 @@ impl Dash {
         self.dux_activate(Target::Seek(position as f32 / length as f32))
     }
 
+    // The Media page owns source player shortcuts when no individual control
+    // has keyboard focus. Overview keeps page navigation and explicit controls.
+    fn dux_media_key(&mut self, ev: &KeyEvent) -> Option<Response> {
+        if self.dux.page != 1 || self.dux.focus.is_some() || ev.ctrl || ev.alt || self.active().is_none() {
+            return None;
+        }
+        Some(match (ev.key, ev.ch) {
+            (Key::Left, _) | (Key::Char, Some('h')) => self.dux_adjust_seek(-5),
+            (Key::Right, _) | (Key::Char, Some('l')) => self.dux_adjust_seek(5),
+            (Key::Up, _) | (Key::Char, Some('k')) => self.adjust_volume(5),
+            (Key::Down, _) | (Key::Char, Some('j')) => self.adjust_volume(-5),
+            (Key::Char, Some(' ')) => self.dux_activate(Target::Play),
+            (Key::Char, Some(digit @ '0'..='9')) => self.dux_activate(Target::Seek((digit as u8 - b'0') as f32 / 10.0)),
+            (Key::Char, Some('m')) => {
+                let player = self.active()?;
+                let volume = player.volume?;
+                let bus = player.bus.clone();
+                let next = if volume > 0.0 {
+                    self.dux.unmuted_volume = Some((bus, volume));
+                    0.0
+                } else {
+                    self.dux.unmuted_volume.as_ref().filter(|(saved, _)| saved == &bus).map_or(0.5, |(_, value)| *value)
+                };
+                self.dux_activate(Target::Volume(next as f32))
+            }
+            _ => return None,
+        })
+    }
+
     pub(super) fn dux_key(&mut self, ev: &KeyEvent) -> Response {
+        if let Some(response) = self.dux_media_key(ev) {
+            return response;
+        }
         match ev.key {
             Key::Escape => Response::act(Action::Close),
             Key::Left if matches!(self.dux.focus, Some(Target::Volume(_))) => self.adjust_volume(-5),
@@ -710,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn media_arrows_scroll_without_slider_focus_and_space_activates_only_focus() {
+    fn media_page_keys_control_the_player_while_overview_requires_control_focus() {
         let mut dash = Dash::new(Tab::Media, None, None);
         dash.dux.size = (832, 300);
         let mut player = Player::new("org.mpris.MediaPlayer2.fixture", Instant::now());
@@ -725,11 +758,26 @@ mod tests {
         dash.mpris = Some(sink);
         let key = |key, ch| KeyEvent { key, text: String::new(), ch, ctrl: false, shift: false, alt: false };
         dash.dux_key(&key(Key::Down, None));
-        assert!(dash.dux.scroll > 0.0);
-        assert!(commands.try_recv().is_err(), "ordinary arrows must not change player volume");
+        assert_eq!(dash.dux.scroll, 0.0);
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Volume(_, value)) if (value - 0.45).abs() < 0.001));
+        dash.dux_key(&key(Key::Right, None));
+        assert_eq!(dash.dux.page, 1);
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Seek(_, value)) if (value - 25_000_000).abs() < 32));
+        dash.dux_key(&key(Key::Char, Some('8')));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Seek(_, value)) if (value - 80_000_000).abs() < 32));
+        dash.dux_key(&key(Key::Char, Some('m')));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Volume(_, value)) if value == 0.0));
+        dash.players[0].volume = Some(0.0);
+        dash.dux_key(&key(Key::Char, Some('m')));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Volume(_, value)) if (value - 0.5).abs() < 0.001));
+        dash.players[0].volume = Some(0.5);
         dash.dux_key(&key(Key::Char, Some(' ')));
-        assert!(commands.try_recv().is_err(), "Space without focus must not operate the player");
+        assert!(matches!(commands.try_recv(), Ok(Cmd::PlayPause(_))));
         dash.dux.page = 0;
+        dash.dux_key(&key(Key::Down, None));
+        assert!(dash.dux.scroll > 0.0);
+        dash.dux_key(&key(Key::Char, Some(' ')));
+        assert!(commands.try_recv().is_err(), "Overview must not trigger the player without focus");
         dash.dux.focus = Some(Target::NextMonth);
         dash.dux_key(&key(Key::Char, Some(' ')));
         assert_eq!(dash.dux.month, 1);

@@ -1,6 +1,6 @@
 # Maintainer: ambsd <fspecii@gmail.com>
 pkgname=decebal
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Decebal: customisable, rice-friendly desktop environment for rdwm (dock, bar, launcher, settings, themes, widgets) for Wayland and X11'
 arch=('x86_64' 'aarch64')

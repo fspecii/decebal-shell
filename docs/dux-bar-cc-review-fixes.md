@@ -59,3 +59,24 @@ checks here do not establish hardware FPS, Wayland popup coordinates or AT-SPI.
 
 No installation, live input/audio/configuration, restart or release build was
 performed by this agent. Source production is frozen after this validation.
+
+## Follow-up independent source review
+
+Claude found no X11 install blocker in the reviewed repair candidate, while
+requiring final optimized acceptance. Root corrected two remaining source issues:
+
+- Palette/mode edits on the same theme retain hand-edited bar island/layout keys.
+  Applying a complete theme or switching designs still restores the new design's
+  declared layout/defaults, preventing inheritance from the previous theme.
+- On the Media page, when no individual control has keyboard focus, Space toggles
+  playback, arrows/HJKL seek or adjust volume, M mutes/restores volume and 0–9
+  seek by percentage. Overview retains scrolling/page navigation and explicit
+  control activation. Focused sliders retain their keyboard adjustment semantics;
+  Space cannot commit their placeholder value. This follows the pinned source's
+  Media shortcuts while retaining explicit native control focus.
+
+PKGBUILD now matches Cargo 0.2.0. Wayland activation still requires a compositor
+activation token and is not implemented by this X11 release. Remaining font-cache
+eviction/fallback and event-driven bar visibility I/O are disclosed limitations,
+not full-replica or hardware-performance acceptance. The reported historical
+Settings disappearance remains unconfirmed.
