@@ -109,6 +109,9 @@ impl DockApp {
         if self.win.is_none() {
             let scale = *self.scale.get_or_insert_with(crate::backend::ui_scale);
             self.win = Some(Box::new(WinState::new(&self.dock.settings, scale)));
+            if let Some(win) = self.win.as_mut() {
+                win.status.status_surface_origin(self.surface_origin.0, self.surface_origin.1);
+            }
         }
         self.win_apply_settings();
         if let (Some(w), Some(waker)) = (self.win.as_mut(), self.waker.clone()) {
@@ -186,7 +189,9 @@ impl DockApp {
     pub(super) fn win_layout(&self) -> Option<Layout> {
         let w = self.win.as_ref()?;
         let s = &self.dock.settings;
-        let kinds = w.status.status_kinds();
+        let builtin_count = w.status.status_kinds_with_limit(0).len();
+        let slots = taskbar::indicator_capacity(&w.m, self.win_width(), s.windows_search, w.buttons.len(), builtin_count, w.clock_w);
+        let kinds = w.status.status_kinds_with_limit(slots);
         Some(taskbar::layout(
             &w.m,
             &Inputs {
@@ -243,7 +248,17 @@ impl DockApp {
     /// Places the open status popup against the strip.
     fn win_place_popup(&mut self) {
         let (edge, up, width) = (self.win_edge(), !self.on_top(), self.win_width());
+        let indicator_anchor = self.win.as_ref().and_then(|w| w.status.status_open_kind()).and_then(|kind| {
+            if !matches!(kind, Tray::Indicator(_) | Tray::Indicators) {
+                return None;
+            }
+            let layout = self.win_layout()?;
+            layout.rect_of(Hit::Tray(kind)).or_else(|| layout.rect_of(Hit::Tray(Tray::Indicators))).map(|r| r.cx())
+        });
         if let Some(w) = self.win.as_mut() {
+            if let Some(x) = indicator_anchor {
+                w.status.status_indicator_anchor(x);
+            }
             w.status.status_place(edge, up, width);
         }
     }
@@ -301,7 +316,14 @@ impl DockApp {
         if let Some(strip) = w.painter.draw_strip(&frame) {
             pm.draw_pixmap(0, y0 as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
         }
+        for (kind, r) in &layout.tray {
+            if let Tray::Indicator(key) = kind {
+                w.status.status_draw_indicator(pm, *key, r.cx(), y0 + r.cy(), 18.0 * w.m.scale);
+            }
+        }
         w.status.status_draw(pm);
+        let indicator_rects: Vec<_> = layout.tray.iter().map(|(kind, r)| (*kind, (r.x, y0 + r.y, r.w, r.h))).collect();
+        w.status.status_debug_indicators(&indicator_rects);
         self.win_dump(&layout, y0);
         let bottom = self.menu.as_ref().map(|m| self.win_menu_bottom(m.menu.size().1));
         if let (Some(m), Some(bottom)) = (&mut self.menu, bottom) {
@@ -449,6 +471,10 @@ impl DockApp {
     }
 
     pub(super) fn win_scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if self.win.as_mut().is_some_and(|w| w.status.status_wheel(x, y, dy)) {
+            self.win_place_popup();
+            return true;
+        }
         let hit = self.win_hit(x, y);
         let Some(layout) = self.win_layout() else { return false };
         let Some(w) = self.win.as_mut() else { return false };
@@ -515,6 +541,11 @@ impl DockApp {
                 }
                 false
             }
+            (button @ (Button::Middle | Button::Right), Some(Hit::Tray(kind @ (Tray::Indicator(_) | Tray::Indicators)))) => {
+                let handled = self.win.as_mut().is_some_and(|w| w.status.status_indicator_button(kind, button, x, y));
+                self.win_place_popup();
+                handled
+            }
             (Button::Middle, Some(Hit::Tray(Tray::Audio))) => self.win.as_mut().is_some_and(|w| w.status.status_mute()),
             (Button::Right, Some(Hit::Task(i))) => {
                 self.win_open_task_menu(i);
@@ -561,7 +592,7 @@ impl DockApp {
 
     // ---------------------------------------------------------------- actions
 
-    fn win_click(&mut self, hit: Hit, _x: f32) {
+    fn win_click(&mut self, hit: Hit, x: f32) {
         match hit {
             Hit::Start => {
                 if !self.effects.launch("launchpad") {
@@ -577,8 +608,13 @@ impl DockApp {
             Hit::Tray(kind) => {
                 self.win_place_popup();
                 let cx = self.win_layout().and_then(|l| l.rect_of(hit)).map(|r| r.cx());
+                let cy = self.win_strip_top() + self.win_bar_h() / 2.0;
                 if let (Some(w), Some(cx)) = (self.win.as_mut(), cx) {
-                    w.status.status_toggle(kind, cx);
+                    if matches!(kind, Tray::Indicator(_) | Tray::Indicators) {
+                        w.status.status_indicator_button(kind, Button::Left, x, cy);
+                    } else {
+                        w.status.status_toggle(kind, cx);
+                    }
                 }
                 self.win_place_popup();
             }

@@ -77,6 +77,7 @@ pub struct DockApp {
     pinned: Vec<String>,
     /// Real surface size, as last reported by the backend.
     surface: (u32, u32),
+    surface_origin: (i32, i32),
     tracker: Option<Tracker>,
     track_windows: bool,
     waker: Option<Waker>,
@@ -116,6 +117,7 @@ impl DockApp {
             desktops: HashMap::new(),
             animating: false,
             win: None,
+            surface_origin: (0, 0),
             scale: None,
             gate: std::cell::RefCell::new(None),
         }
@@ -470,6 +472,13 @@ impl App for DockApp {
 
     fn resized(&mut self, w: u32, h: u32) {
         self.surface = (w, h);
+    }
+
+    fn surface_origin(&mut self, x: i32, y: i32) {
+        self.surface_origin = (x, y);
+        if let Some(win) = &mut self.win {
+            win.status.status_surface_origin(x, y);
+        }
     }
 
     fn draw(&mut self, pm: &mut Pixmap) {

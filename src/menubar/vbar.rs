@@ -24,6 +24,7 @@
 //! rectangles in that frame and [`Geo`] rotates / mirrors them onto the surface of the chosen edge. Drawing,
 //! hit-testing, popout placement and the tests all share the result, so a horizontal bar is the same bar turned.
 
+use super::indicators::IndicatorPress;
 use super::popup::Popup;
 use super::*;
 use crate::backend::Anchor;
@@ -321,6 +322,60 @@ pub struct Layout {
     pub pills: Vec<(Pill, VRect)>,
     /// Hit targets: the single-item pills as a whole, the icons of the tray and status pills one by one.
     pub items: Vec<(Tray, VRect)>,
+}
+
+/// Extra application cells that fit without displacing the fixed head/tail pills.
+/// The optional focused-window pill gives way first; an overflow cell is counted
+/// by the shared indicator selector, so its menu never requires an extra slot.
+fn indicator_capacity(geo: &Geo, part: Part, c: &Content) -> usize {
+    if part == Part::Head {
+        return 0;
+    }
+    let d = Dim::of(geo.horizontal());
+    let head = if part == Part::All { EDGE + geo.pill_width() + GAP + if c.workspaces > 0 { workspaces_len(c.workspaces, geo.horizontal()) + GAP } else { 0.0 } } else { EDGE };
+    let mut tail = EDGE + geo.pill_width() + GAP + d.clock_len + GAP;
+    for kinds in [&c.tray, &c.status] {
+        if !kinds.is_empty() {
+            tail += group_len(kinds, geo.horizontal()) + GAP;
+        }
+    }
+    let overhead = if c.status.is_empty() { 2.0 * CELL_PAD + GAP } else { 0.0 };
+    ((geo.len() - head - tail - overhead).max(0.0) / ICON_CELL).floor().min(32.0) as usize
+}
+
+/// A short rail prefers one reachable app-overflow target to duplicate shortcuts.
+/// Informational weather/lock state and optional layout/monitor launchers give
+/// way first. Basic sound/connectivity/awake buttons only fold when the existing
+/// Control Center exposes that same group. Battery, clock, power and workspace
+/// targets remain. Some extreme (<600px) or deliberately disabled Control Center
+/// combinations physically cannot fit all fixed targets; never overlap them to
+/// pretend that an application icon is reachable.
+fn fit_indicator_content(geo: &Geo, part: Part, c: &mut Content, active: bool, control: Option<controlcenter::settings::Tiles>) -> usize {
+    if part == Part::Head {
+        return 0;
+    }
+    let mut capacity = indicator_capacity(geo, part, c);
+    if !active || capacity > 0 {
+        return capacity;
+    }
+    for kind in [Tray::Weather, Tray::Lock, Tray::Agents, Tray::Layout, Tray::Network, Tray::Bluetooth, Tray::Audio, Tray::Awake] {
+        let may_fold = match kind {
+            Tray::Network | Tray::Bluetooth => control.is_some_and(|tiles| tiles.connectivity),
+            Tray::Audio => control.is_some_and(|tiles| tiles.sound),
+            Tray::Awake => control.is_some_and(|tiles| tiles.actions),
+            _ => true,
+        };
+        if !may_fold {
+            continue;
+        }
+        c.status.retain(|current| *current != kind);
+        c.tray.retain(|current| *current != kind);
+        capacity = indicator_capacity(geo, part, c);
+        if capacity > 0 {
+            break;
+        }
+    }
+    capacity
 }
 
 impl Layout {
@@ -664,7 +719,12 @@ impl DecBar {
         }
         let text_max = Dim::of(self.v_geo().horizontal()).win_text_max;
         let window = if self.v_win.is_some() { (2.0 * 8.0 + WIN_ICON + 8.0 + self.v_win_len.min(text_max)).ceil() } else { 0.0 };
-        Content { workspaces: self.v_workspaces().len(), window, tray, status }
+        let mut content = Content { workspaces: self.v_workspaces().len(), window, tray, status };
+        let controls = crate::theme::th().control_center;
+        let active = self.indicators.items.iter().any(|item| item.status != crate::sni::Status::Passive);
+        let capacity = fit_indicator_content(&self.v_geo(), self.v_part(), &mut content, active, controls.enabled.then_some(controls.tiles));
+        content.status.extend(self.indicator_kinds(capacity));
+        content
     }
 
     pub(super) fn v_layout(&self) -> Layout {
@@ -734,7 +794,8 @@ impl DecBar {
     /// Opens the popup of `kind` beside its icon (or window pill) on the screen side of the strip.
     pub(super) fn v_open_popup(&mut self, kind: Tray) {
         self.close();
-        let Some(item) = self.v_layout().item(kind) else { return };
+        let layout = self.v_layout();
+        let Some(item) = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten()) else { return };
         let Some((rows, w, compact)) = self.build_popup(kind) else { return };
         let mut p = Popup::layout(rows, 0.0, 0.0, w, compact);
         (p.x, p.y) = self.v_geo().popout_origin(item, p.w, p.h);
@@ -753,7 +814,8 @@ impl DecBar {
     /// After a rebuild the popup may have grown: put it back beside its icon, on screen (a bottom bar's popup grows upwards).
     pub(super) fn v_clamp_popup(&mut self) {
         let Open::Popup(kind) = self.open else { return };
-        let item = self.v_layout().item(kind);
+        let layout = self.v_layout();
+        let item = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten());
         let geo = self.v_geo();
         if let (Some(p), Some(item)) = (self.popup.as_mut(), item) {
             (p.x, p.y) = geo.popout_origin(item, p.w, p.h);
@@ -849,7 +911,9 @@ impl DecBar {
                     Open::None => self.v_hover_open = Some((kind, Instant::now())),
                     _ => {}
                 }
-            } else if hover.is_some() && matches!(self.open, Open::Popup(_)) {
+            } else if hover.is_some_and(|kind| self.open != Open::Popup(kind) && !(kind == Tray::Indicators && matches!(self.open, Open::Popup(Tray::Indicator(_)))))
+                && matches!(self.open, Open::Popup(_))
+            {
                 // onto an item without a popup of its own: the popup was a hover and goes away
                 self.close();
             }
@@ -882,6 +946,20 @@ impl DecBar {
             return true;
         }
         let target = self.v_target(x, y);
+        if let Some((Tray::Indicator(key), _)) = target {
+            return match self.indicator_press(key, button, x.round() as i32, y.round() as i32) {
+                IndicatorPress::Ignored => false,
+                IndicatorPress::Handled => true,
+                IndicatorPress::Menu => {
+                    self.v_open_popup(Tray::Indicator(key));
+                    true
+                }
+            };
+        }
+        if matches!(target, Some((Tray::Indicators, _))) && matches!(button, Button::Left | Button::Right) {
+            self.v_open_popup(Tray::Indicators);
+            return true;
+        }
         if button == Button::Middle {
             if matches!(target, Some((Tray::Audio, _))) {
                 self.toggle_mute_now();
@@ -977,6 +1055,9 @@ impl DecBar {
             return false;
         }
         let target = self.v_target(x, y).map(|t| t.0);
+        if let Some(Tray::Indicator(key)) = target {
+            return self.indicator_scroll(key, dy);
+        }
         if target == Some(Tray::Workspaces) {
             rdwm::send_action(if dy > 0.0 { "viewnext" } else { "viewprev" }, &[]);
             return false;
@@ -1162,6 +1243,12 @@ impl DecBar {
                         self.v_symbol(pm, &format!("wx:{:x}", weather::nerd_codepoint(w.code, w.night)), 17.0, cx, cy, text);
                     }
                 }
+                Tray::Indicator(key) => self.indicator_draw(pm, *key, cx, cy, 18.0),
+                Tray::Indicators => {
+                    for offset in [-5.0, 0.0, 5.0] {
+                        fill_rounded(pm, cx + offset - 1.5, cy - 1.5, 3.0, 3.0, 1.5, th.text.color(1.0));
+                    }
+                }
                 Tray::Dash | Tray::Spotlight => {}
             }
         }
@@ -1182,6 +1269,8 @@ impl DecBar {
             }
             Open::Menu(_) | Open::None => {}
         }
+        let indicator_rects: Vec<_> = lay.items.iter().map(|(kind, r)| (*kind, (r.x, r.y, r.w, r.h))).collect();
+        self.indicator_debug(&indicator_rects);
         if let Some((path, last)) = self.debug_tray.as_mut() {
             let text: String = lay.items.iter().map(|(k, r)| format!("{:?} {} {}\n", k, r.cx().round(), r.cy().round())).collect();
             if *last != text {
@@ -1783,6 +1872,124 @@ mod tests {
 
     fn bar() -> DecBar {
         bar_at(BarPosition::Left, Process::Main)
+    }
+
+    #[test]
+    fn a_600px_rail_keeps_application_overflow_reachable_without_hiding_basic_controls() {
+        for edge in [Anchor::Left, Anchor::Right] {
+            let geo = Geo::new(edge, SURFACE_W as f32, 600.0);
+            let base = Content {
+                workspaces: 9,
+                window: 200.0,
+                tray: vec![Tray::Layout, Tray::Awake, Tray::Agents, Tray::Control],
+                status: vec![Tray::Lock, Tray::Weather, Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery],
+            };
+            assert_eq!(indicator_capacity(&geo, Part::All, &base), 0);
+            let mut content = base.clone();
+            let count = fit_indicator_content(&geo, Part::All, &mut content, true, Some(controlcenter::settings::Tiles::ALL));
+            assert!(count >= 1);
+            assert_eq!(content.workspaces, 9);
+            assert!(content.tray.contains(&Tray::Control));
+            assert!(content.status.contains(&Tray::Battery));
+            // These controls remain available in their existing Control Center groups.
+            let snapshot = Snapshot {
+                volume: Some(sys::Volume { level: 0.5, muted: false }),
+                net: Some(sys::Net::default()),
+                bluetooth: Some(sys::Bluetooth { powered: true, connected: 0 }),
+                awake: true,
+                brightness: Some(50),
+                media: Some(sys::Media { playing: true, title: "Sample".into(), artist: "Artist".into() }),
+                util: Some(sys::Utils::default()),
+                dnd: Some(false),
+                ..Snapshot::default()
+            };
+            let (controls, control_height) = controlcenter::layout_with(&snapshot, &controlcenter::settings::Tiles::ALL);
+            assert!(control_height <= geo.h - 2.0 * POP_MARGIN, "the complete fallback panel fits the same 600px screen");
+            for target in [Target::Wifi, Target::Bluetooth, Target::Volume, Target::StayAwake] {
+                assert!(controls.iter().any(|item| item.target == Some(target)), "folded {target:?} must remain reachable");
+            }
+            content.status.push(Tray::Indicators);
+            let lay = layout(&geo, Part::All, &content);
+            for kind in [Tray::Workspaces, Tray::Clock, Tray::Power, Tray::Control, Tray::Battery, Tray::Indicators] {
+                let target = lay.item(kind).unwrap();
+                assert_eq!(lay.hit(target.cx(), target.cy()).map(|hit| hit.0), Some(kind), "{edge:?} {kind:?} must be an independent target");
+            }
+            let mut spans: Vec<_> = lay.pills.iter().map(|(_, r)| along(&geo, r)).collect();
+            spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+            assert!(spans.windows(2).all(|r| r[0].1 <= r[1].0));
+            assert!(spans.iter().all(|r| r.0 >= EDGE && r.1 <= geo.len() - EDGE));
+            let mut custom = base.clone();
+            fit_indicator_content(&geo, Part::All, &mut custom, true, None);
+            assert!(custom.status.contains(&Tray::Audio) && custom.status.contains(&Tray::Network) && custom.status.contains(&Tray::Bluetooth));
+            assert!(custom.tray.contains(&Tray::Awake), "disabled controls cannot be used as a hidden fallback");
+            let mut no_apps = base.clone();
+            fit_indicator_content(&geo, Part::All, &mut no_apps, false, Some(controlcenter::settings::Tiles::ALL));
+            assert_eq!(no_apps, base, "without app indicators existing layout is unchanged");
+        }
+    }
+
+    #[test]
+    fn application_cells_fit_the_free_span_and_head_only_never_duplicates_them() {
+        for edge in [Anchor::Left, Anchor::Right, Anchor::Top, Anchor::Bottom] {
+            let geo = if edge.is_side() { Geo::new(edge, SURFACE_W as f32, 900.0) } else { Geo::new(edge, 1600.0, SURFACE_H as f32) };
+            for part in [Part::All, Part::Tail] {
+                let mut content = full();
+                let count = indicator_capacity(&geo, part, &content);
+                assert!(count > 0);
+                content.status.extend((0..count).map(|key| Tray::Indicator(key as u64)));
+                let lay = layout(&geo, part, &content);
+                let mut spans: Vec<_> = lay.pills.iter().map(|(_, r)| along(&geo, r)).collect();
+                spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+                assert!(spans.windows(2).all(|r| r[0].1 <= r[1].0 + 0.01), "{edge:?}/{part:?}: {spans:?}");
+                assert!(spans.iter().all(|r| r.0 >= EDGE && r.1 <= geo.len() - EDGE + 0.01));
+            }
+            assert_eq!(indicator_capacity(&geo, Part::Head, &full()), 0);
+        }
+    }
+
+    #[test]
+    fn rail_indicators_paint_cached_pixels_and_hidden_menus_anchor_to_overflow() {
+        for position in [BarPosition::Left, BarPosition::Right, BarPosition::Top, BarPosition::Bottom] {
+            let mut bar = bar_at(position, Process::Main);
+            if bar.v_geo().horizontal() {
+                bar.width = 900;
+            }
+            let mut icon = Pixmap::new(8, 8).unwrap();
+            icon.fill(tiny_skia::Color::from_rgba8(240, 60, 90, 255));
+            let icon = std::sync::Arc::new(icon);
+            bar.indicators.items = (1..=32)
+                .map(|key| crate::sni::Item {
+                    key,
+                    title: format!("App {key}"),
+                    tooltip: String::new(),
+                    status: if key == 2 { crate::sni::Status::Passive } else { crate::sni::Status::Active },
+                    icon_name: String::new(),
+                    icon: Some(icon.clone()),
+                    item_is_menu: false,
+                    menu: None,
+                    menu_loading: false,
+                    menu_error: None,
+                })
+                .collect();
+            let lay = bar.v_layout();
+            assert!(lay.item(Tray::Indicator(2)).is_none());
+            let cell = lay.item(Tray::Indicator(1)).expect("first visible application");
+            assert!(lay.item(Tray::Indicators).is_some(), "the remaining apps stay reachable");
+            let mut pm = Pixmap::new(bar.width, bar.height).unwrap();
+            bar.v_draw(&mut pm);
+            let pixel = pm.pixel(cell.cx() as u32, cell.cy() as u32).unwrap();
+            assert_eq!((pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()), (240, 60, 90, 255));
+            assert!(bar.v_button(cell.cx(), cell.cy(), Button::Right));
+            bar.v_motion(cell.cx(), cell.cy());
+            assert_eq!(bar.open, Open::Popup(Tray::Indicator(1)), "moving within an app icon must not dismiss its own menu");
+            bar.v_open_popup(Tray::Indicator(32));
+            bar.v_clamp_popup();
+            assert_eq!(bar.open, Open::Popup(Tray::Indicator(32)));
+            let p = bar.popup.as_ref().unwrap();
+            let expected = bar.v_geo().popout_origin(lay.item(Tray::Indicators).unwrap(), p.w, p.h);
+            assert_eq!((p.x, p.y), expected);
+            TEST_VERTICAL.with(|f| f.set(false));
+        }
     }
 
     #[test]

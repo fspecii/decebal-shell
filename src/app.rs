@@ -65,6 +65,8 @@ pub trait App {
     fn size(&self) -> (u32, u32);
     /// The surface's real size is now `w` x `h` (called after every configure).
     fn resized(&mut self, _w: u32, _h: u32) {}
+    /// Known screen-space surface origin (X11). Wayland may not expose one.
+    fn surface_origin(&mut self, _x: i32, _y: i32) {}
     /// Paint the whole surface. `pm` is the real surface size.
     fn draw(&mut self, pm: &mut Pixmap);
     /// Visible material bounds, separate from foreground content and unused canvas.

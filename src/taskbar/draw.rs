@@ -376,6 +376,13 @@ impl Painter {
                     draw_layout_icon(pm, name, (cx - w / 2.0).round(), (cy - h / 2.0).round(), w, h, (c.ink.0, c.ink.1, c.ink.2, 0.95));
                 }
             }
+            Tray::Indicator(_) => {} // host overlays cached worker pixels after the strip
+            Tray::Indicators => {
+                for offset in [-5.0, 0.0, 5.0] {
+                    let dot = 3.0 * m.scale;
+                    fill_rounded(pm, cx + offset * m.scale - dot / 2.0, cy - dot / 2.0, dot, dot, dot / 2.0, rgba(c.ink, 1.0));
+                }
+            }
             Tray::Battery => draw_battery(pm, f, cx, cy),
             Tray::Weather => self.symbol(pm, f.weather.unwrap_or("weather-cloud"), c.ink, 16.0 * m.scale, cx, cy),
             k => {

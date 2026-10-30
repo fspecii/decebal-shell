@@ -97,6 +97,8 @@ impl DecBar {
     pub(super) fn build_popup(&self, kind: Tray) -> Option<(Vec<Row>, f32, bool)> {
         let snap = self.snapshot();
         match kind {
+            Tray::Indicator(key) => Some(self.indicator_rows(key)),
+            Tray::Indicators => Some(self.overflow_rows()),
             Tray::Layout => {
                 let cur = self.layout_state()?;
                 let mut rows = vec![Row::header("Window Layout").detail(&rdwm::title_of(&cur.name))];
@@ -212,7 +214,7 @@ impl DecBar {
             return self.v_open_popup(kind);
         }
         self.close();
-        let Some(span) = self.tray_span(kind) else { return };
+        let Some(span) = self.tray_span(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| self.tray_span(Tray::Indicators)).flatten()) else { return };
         let y = BAR_HEIGHT + MENU_GAP;
         let width = self.width as f32;
         if kind == Tray::Clock {
@@ -329,6 +331,7 @@ impl DecBar {
     pub(super) fn tray_scroll(&mut self, x: f32, dy: f32) -> bool {
         let Some((kind, _)) = self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) else { return false };
         match kind {
+            Tray::Indicator(key) => self.indicator_scroll(key, dy),
             Tray::Audio => {
                 let Some(v) = self.snapshot().volume else { return false };
                 let cur = if v.muted { 0.0 } else { v.level };
@@ -371,6 +374,9 @@ impl DecBar {
             self.popup_drag = Some(row);
             self.popup_slide(row, x, true);
         } else {
+            if matches!(act, Act::IndicatorOpen(_)) {
+                self.indicator_anchor = ((x as i32).saturating_add(self.indicator_origin.0), (y as i32).saturating_add(self.indicator_origin.1));
+            }
             self.run_act(act);
         }
         true
@@ -403,6 +409,12 @@ impl DecBar {
 
     pub(super) fn run_act(&mut self, act: Act) {
         match act {
+            a @ (Act::IndicatorOpen(_) | Act::IndicatorActivate(_) | Act::IndicatorEvent { .. } | Act::IndicatorSubmenu(_) | Act::IndicatorBack | Act::IndicatorPage(_)) => {
+                self.indicator_action(&a);
+                if self.embedded {
+                    self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+                }
+            }
             Act::None | Act::VolumeSlider | Act::BrightnessSlider => {}
             Act::AwakeOff => {
                 self.close();

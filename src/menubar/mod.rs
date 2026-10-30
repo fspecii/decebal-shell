@@ -6,6 +6,7 @@ pub mod awake;
 pub mod clock;
 mod embed;
 pub mod gate;
+mod indicators;
 pub mod lock;
 pub use embed::GAP as STATUS_GAP;
 pub mod menus;
@@ -144,6 +145,8 @@ pub(crate) fn sample_weather() -> Weather {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tray {
+    Indicator(u64),
+    Indicators,
     Workspaces,
     Layout,
     Weather,
@@ -163,6 +166,7 @@ pub enum Tray {
     Power,
     Lock,
 }
+pub type IndicatorRect = (Tray, (f32, f32, f32, f32));
 
 /// Width of one workspace dot cell and the padding around the group.
 const WS_SLOT: f32 = 14.0;
@@ -248,6 +252,13 @@ struct Shared {
 }
 
 pub struct DecBar {
+    indicator_host: Option<crate::sni::Host>,
+    indicators: crate::sni::Snapshot,
+    indicator_path: Vec<i32>,
+    indicator_page: usize,
+    indicator_origin: (i32, i32),
+    indicator_anchor: (i32, i32),
+    indicator_debug_file: Option<(std::path::PathBuf, String)>,
     fonts: Option<Fonts>,
     symbols: SymbolCache,
     active: Box<dyn ActiveWindow>,
@@ -335,6 +346,13 @@ impl DecBar {
             vol_set_at: Mutex::new(None),
         });
         let mut bar = DecBar {
+            indicator_host: None,
+            indicators: crate::sni::Snapshot::default(),
+            indicator_path: Vec::new(),
+            indicator_page: 0,
+            indicator_origin: (0, 0),
+            indicator_anchor: (0, 0),
+            indicator_debug_file: std::env::var_os("DECBAR_DEBUG_INDICATORS").map(|p| (p.into(), String::new())),
             fonts: Fonts::load(),
             symbols: SymbolCache::default(),
             active,
@@ -507,6 +525,7 @@ impl DecBar {
     /// Starts the push sources (layout changes from rdwm, volume changes) that wake the loop through `waker`.
     fn start_watchers(&mut self, waker: Waker) {
         self.waker = Some(waker.clone());
+        self.ensure_indicator_host();
         self.ensure_lock_watcher();
         let tw = waker.clone();
         crate::theme::live::start_watcher(move || tw.wake());
@@ -611,11 +630,22 @@ impl DecBar {
         }
         let clock_w = self.fonts.as_ref().map(|f| f.measure(&self.clock_text, TEXT_PX, Weight::Regular)).unwrap_or(100.0) + 17.0;
         items.push((Tray::Clock, clock_w));
+        let left_end = self.spans().last().map_or(LEFT_PAD, |s| s.x + s.w);
+        let used: f32 = items.iter().map(|(_, w)| *w).sum();
+        let available = (self.width as f32 - inset() - RIGHT_PAD - left_end - used - 12.).max(0.);
+        let limit = (available / BTN_W).floor() as usize;
+        let indicators = self.indicator_kinds(limit.clamp(1, 8));
+        items.splice(0..0, indicators.into_iter().map(|k| (k, BTN_W)));
         items
     }
 
     fn tray(&self) -> Vec<(Tray, Span)> {
         tray_spans(self.width as f32 - inset(), &self.tray_items())
+    }
+
+    fn title_hit(&self, x: f32) -> Option<usize> {
+        let limit = self.tray().first().map_or(self.width as f32, |(_, s)| s.x - 8.);
+        self.spans().iter().position(|s| s.x + s.w <= limit && x >= s.x && x < s.x + s.w)
     }
 
     fn dropdown(&self, idx: usize) -> Option<Dropdown> {
@@ -965,8 +995,12 @@ impl DecBar {
 
         // Left: titles.
         let spans = self.spans();
+        let title_limit = self.tray().first().map_or(w, |(_, s)| s.x - 8.);
         let menus = self.menus.clone();
         for (i, (m, s)) in menus.iter().zip(&spans).enumerate() {
+            if s.x + s.w > title_limit {
+                continue;
+            }
             let active = self.open == Open::Menu(i);
             let hovered = self.hover_title == Some(i);
             let alpha = if active {
@@ -996,6 +1030,8 @@ impl DecBar {
                 fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(0.18));
             }
             match kind {
+                Tray::Indicator(key) => self.indicator_draw(pm, key, cx, 13., 17.),
+                Tray::Indicators => self.indicator_overflow_draw(pm, cx, 13., 17.),
                 Tray::Layout => self.draw_layout_item(pm, s),
                 Tray::Battery => {
                     if let Some(b) = &snap.battery {
@@ -1144,6 +1180,10 @@ impl App for DecBar {
         self.height = h;
     }
 
+    fn surface_origin(&mut self, x: i32, y: i32) {
+        self.indicator_origin = (x, y);
+    }
+
     fn draw(&mut self, pm: &mut Pixmap) {
         crate::gfx::clear(pm);
         if self.pill_bar() {
@@ -1157,6 +1197,8 @@ impl App for DecBar {
         }
         self.width = pm.width();
         self.draw_bar(pm);
+        let indicator_rects = self.tray().into_iter().map(|(k, s)| (k, (s.x, 0., s.w, BAR_HEIGHT))).collect::<Vec<_>>();
+        self.indicator_debug(&indicator_rects);
         if self.debug_tray.is_some() {
             let text: String = self.tray().iter().map(|(k, s)| format!("{:?} {}\n", k, (s.x + s.w / 2.0).round())).collect();
             if let Some((path, last)) = self.debug_tray.as_mut() {
@@ -1258,7 +1300,7 @@ impl App for DecBar {
                 self.leave_at = Some(Instant::now());
             }
         }
-        let title = if y < BAR_HEIGHT { self.spans().iter().position(|s| x >= s.x && x < s.x + s.w) } else { None };
+        let title = if y < BAR_HEIGHT { self.title_hit(x) } else { None };
         if title != self.hover_title {
             self.hover_title = title;
             redraw = true;
@@ -1323,6 +1365,32 @@ impl App for DecBar {
             self.close();
             return true;
         }
+        if y < BAR_HEIGHT {
+            if let Some((kind, _)) = self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) {
+                match kind {
+                    Tray::Indicator(key) => {
+                        match self.indicator_press(key, button, x as i32, y as i32) {
+                            indicators::IndicatorPress::Menu => self.open_popup(kind),
+                            indicators::IndicatorPress::Handled => {
+                                self.close();
+                            }
+                            indicators::IndicatorPress::Ignored => return false,
+                        }
+                        return true;
+                    }
+                    Tray::Indicators if button == Button::Left || button == Button::Right => {
+                        self.indicator_page = 0;
+                        if self.open == Open::Popup(kind) {
+                            self.close();
+                        } else {
+                            self.open_popup(kind);
+                        }
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
         if button == Button::Middle && y < BAR_HEIGHT {
             // Middle click on the sound icon mutes.
             if self.tray().iter().any(|(k, s)| *k == Tray::Audio && x >= s.x && x < s.x + s.w) {
@@ -1340,7 +1408,7 @@ impl App for DecBar {
             return false;
         }
         if y < BAR_HEIGHT {
-            if let Some(i) = self.spans().iter().position(|s| x >= s.x && x < s.x + s.w) {
+            if let Some(i) = self.title_hit(x) {
                 if self.open == Open::Menu(i) {
                     self.close();
                 } else {
@@ -1448,6 +1516,9 @@ impl App for DecBar {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if self.indicator_menu_scroll(x, y, dy) {
+            return true;
+        }
         if self.pill_bar() && self.v_scroll(x, y, dy) {
             return true;
         }
@@ -1594,6 +1665,7 @@ impl App for DecBar {
 impl DecBar {
     fn tick_inner(&mut self) -> Tick {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        redraw |= self.indicator_tick();
         let mut close_in = None;
         let place = self.place();
         let vertical = place.is_some();

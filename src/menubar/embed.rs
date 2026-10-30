@@ -5,6 +5,7 @@
 //!
 //! Everything here is a thin, additive layer over the private parts of `DecBar` and `status.rs`.
 
+use super::indicators::IndicatorPress;
 use super::popup::{CalHit, Calendar, Popup};
 use super::*;
 use crate::app::InputRect;
@@ -20,8 +21,8 @@ pub struct Place {
     x: f32,
     right_aligned: bool,
     /// y of the strip edge the popup hangs from, and whether it opens upward (strip at the bottom).
-    edge: f32,
-    up: bool,
+    pub(super) edge: f32,
+    pub(super) up: bool,
     pub(super) screen_w: f32,
     /// Top-left of the open Control Center panel (surface coordinates), set by [`DecBar::status_place`].
     pub(super) origin: (f32, f32),
@@ -58,6 +59,12 @@ impl DecBar {
 
     /// The status items that exist on this machine, in tray order (left to right).
     pub fn status_kinds(&self) -> Vec<Tray> {
+        self.status_kinds_with_limit(32)
+    }
+
+    /// Fit-aware form used by taskbar hosts; the shared selector reserves its
+    /// own overflow cell when some applications do not fit.
+    pub fn status_kinds_with_limit(&self, indicator_slots: usize) -> Vec<Tray> {
         let snap = self.snapshot();
         let mut out = Vec::new();
         if self.layout_state().is_some() {
@@ -78,11 +85,48 @@ impl DecBar {
         if snap.battery.is_some() {
             out.push(Tray::Battery);
         }
+        out.extend(self.indicator_kinds(indicator_slots));
         // the quick-settings button, like Windows 11's: last in the tray group, next to the clock
         if crate::theme::th().control_center.enabled {
             out.push(Tray::Control);
         }
         out
+    }
+
+    /// The backend reports root-space surface origin; native menus remain in
+    /// local surface coordinates, while protocol activation receives root points.
+    pub fn status_surface_origin(&mut self, x: i32, y: i32) {
+        self.indicator_origin = (x, y);
+    }
+
+    /// Keep an open application menu attached as other tray items appear, vanish
+    /// or move into overflow. Does not reopen/reload the menu or change its path.
+    pub fn status_indicator_anchor(&mut self, x: f32) {
+        if matches!(self.open, Open::Popup(Tray::Indicator(_) | Tray::Indicators)) {
+            self.embed.x = x;
+        }
+    }
+
+    /// Paint only cached worker pixels, after the taskbar paints its plates.
+    pub fn status_draw_indicator(&self, pm: &mut Pixmap, key: u64, cx: f32, cy: f32, size: f32) {
+        self.indicator_draw(pm, key, cx, cy, size);
+    }
+
+    /// Shared typed protocol actions; true means this was an indicator target.
+    pub fn status_indicator_button(&mut self, kind: Tray, button: Button, x: f32, y: f32) -> bool {
+        match kind {
+            Tray::Indicator(key) => match self.indicator_press(key, button, x.round() as i32, y.round() as i32) {
+                IndicatorPress::Ignored => false,
+                IndicatorPress::Handled => true,
+                IndicatorPress::Menu => self.status_toggle(kind, x),
+            },
+            Tray::Indicators if matches!(button, Button::Left | Button::Right) => self.status_toggle(kind, x),
+            _ => false,
+        }
+    }
+
+    pub fn status_debug_indicators(&mut self, rects: &[IndicatorRect]) {
+        self.indicator_debug(rects);
     }
 
     /// Latest system data (volume, network, battery, light/dark theme).
@@ -297,6 +341,10 @@ impl DecBar {
 
     /// Wheel over the open Control Center panel: the display and sound sliders move in steps of 5%.
     pub fn status_wheel(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if self.indicator_menu_scroll(x, y, dy) {
+            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+            return true;
+        }
         if self.open != Open::Control {
             return false;
         }
@@ -314,6 +362,7 @@ impl DecBar {
     /// Wheel over the status item `kind`: volume steps of 5%, layout cycling.
     pub fn status_scroll(&mut self, kind: Tray, dy: f32) -> bool {
         match kind {
+            Tray::Indicator(key) => self.indicator_scroll(key, dy),
             Tray::Control => false,
             Tray::Audio => {
                 let Some(v) = self.snapshot().volume else { return false };
@@ -346,6 +395,7 @@ impl DecBar {
     /// True when something visible changed. Call at least once a minute.
     pub fn status_tick(&mut self) -> bool {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        redraw |= self.indicator_tick();
         redraw |= crate::theme::take_changed();
         if self.open == Open::Control {
             if redraw && self.cc_drag.is_none() {
@@ -389,6 +439,46 @@ impl DecBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn indicator(key: u64, status: crate::sni::Status) -> crate::sni::Item {
+        let mut pm = Pixmap::new(8, 8).unwrap();
+        pm.fill(tiny_skia::Color::from_rgba8(240, 60, 90, 255));
+        crate::sni::Item {
+            key,
+            title: format!("App {key}"),
+            tooltip: String::new(),
+            status,
+            icon_name: String::new(),
+            icon: Some(std::sync::Arc::new(pm)),
+            item_is_menu: false,
+            menu: None,
+            menu_loading: false,
+            menu_error: None,
+        }
+    }
+
+    #[test]
+    fn embedded_indicators_use_shared_visibility_fit_pixels_and_popup() {
+        let mut bar = DecBar::status_engine();
+        assert!(bar.indicator_host.is_none(), "constructing a status model never starts a bus worker");
+        bar.indicators.items =
+            vec![indicator(1, crate::sni::Status::Active), indicator(2, crate::sni::Status::Passive), indicator(3, crate::sni::Status::NeedsAttention), indicator(4, crate::sni::Status::Active)];
+        let external = |kinds: Vec<Tray>| kinds.into_iter().filter(|k| matches!(k, Tray::Indicator(_) | Tray::Indicators)).collect::<Vec<_>>();
+        assert_eq!(external(bar.status_kinds_with_limit(0)), vec![]);
+        assert_eq!(external(bar.status_kinds_with_limit(1)), vec![Tray::Indicators]);
+        assert_eq!(external(bar.status_kinds_with_limit(2)), vec![Tray::Indicator(1), Tray::Indicators]);
+        assert_eq!(external(bar.status_kinds_with_limit(3)), vec![Tray::Indicator(1), Tray::Indicator(3), Tray::Indicator(4)]);
+        let mut pm = Pixmap::new(80, 80).unwrap();
+        bar.status_draw_indicator(&mut pm, 1, 40.0, 40.0, 18.0);
+        let pixel = pm.pixel(40, 40).unwrap();
+        assert_eq!((pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()), (240, 60, 90, 255));
+        bar.status_place(752.0, true, 1280.0);
+        assert!(bar.status_indicator_button(Tray::Indicator(1), Button::Right, 800.0, 780.0));
+        assert_eq!(bar.status_open_kind(), Some(Tray::Indicator(1)));
+        assert!(bar.status_rect().is_some());
+        bar.status_close();
+        assert!(!bar.status_indicator_button(Tray::Indicator(2), Button::Left, 800.0, 780.0), "passive icons cannot receive activation");
+    }
 
     #[test]
     fn calendar_hangs_from_the_clock_above_a_bottom_strip_and_below_a_top_one() {

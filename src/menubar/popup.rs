@@ -15,6 +15,15 @@ const PAD: f32 = 5.0;
 /// What a row does when clicked.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Act {
+    IndicatorOpen(u64),
+    IndicatorActivate(u64),
+    IndicatorEvent {
+        key: u64,
+        id: i32,
+    },
+    IndicatorSubmenu(i32),
+    IndicatorBack,
+    IndicatorPage(isize),
     None,
     SetLayout(String),
     IncMaster(i32),
@@ -189,7 +198,9 @@ impl Popup {
             match &r.kind {
                 Kind::Separator => fill_rect(pm, self.x + 8.0, y + h / 2.0, self.w - 16.0, 1.0, crate::theme::th().ink(0.12)),
                 Kind::Header => {
-                    fonts.draw(pm, &r.label, self.x + 12.0, top, TEXT_PX, Weight::Bold, crate::theme::th().text_c());
+                    let room = if r.detail.is_empty() { self.w - 24. } else { self.w * 0.4 };
+                    let shown = controlcenter::fit(&r.label, room, TEXT_PX, Weight::Bold, fonts);
+                    fonts.draw(pm, &shown, self.x + 12.0, top, TEXT_PX, Weight::Bold, crate::theme::th().text_c());
                     if !r.detail.is_empty() {
                         let shown = controlcenter::fit(&r.detail, self.w * 0.55, 11.0, Weight::Regular, fonts);
                         let dw = fonts.measure(&shown, 11.0, Weight::Regular);

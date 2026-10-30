@@ -218,6 +218,30 @@ pub struct Inputs<'a> {
     pub scroll: f32,
 }
 
+/// Number of application-indicator cells that leave the native Start/search,
+/// clock, builtin tray and at least one task target unobscured. Overflow is a
+/// normal cell, selected by the shared status engine inside this same budget.
+pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: usize, builtins: usize, clock_text_w: f32) -> usize {
+    let search_w = match search {
+        WinSearch::None => 0.0,
+        WinSearch::Button => m.search_btn_w,
+        WinSearch::Box => m.search_box_w,
+    };
+    let fixed = m.pad * 1.75
+        + m.start_w
+        + search_w
+        + if search_w > 0.0 { m.gap } else { 0.0 }
+        + if buttons > 0 { m.icon_min + m.gap } else { 0.0 }
+        + m.desktop_w
+        + (clock_text_w + 2.0 * m.clock_pad).ceil()
+        + m.gap.max(4.0 * m.scale)
+        + builtins as f32 * m.tray_w;
+    if !width.is_finite() {
+        return 0;
+    }
+    ((width - fixed).max(0.0) / m.tray_w).floor().min(32.0) as usize
+}
+
 pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
     let h = m.bar_h;
     // Right edge: show-desktop sliver, clock, tray icons.
@@ -328,6 +352,31 @@ pub fn reorder_target(pinned: &[String], dragged: &str, over: &str) -> Option<(u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn application_indicator_budget_preserves_task_and_system_targets() {
+        for align in [WinAlign::Left, WinAlign::Center] {
+            for search in [WinSearch::None, WinSearch::Button, WinSearch::Box] {
+                for scale in [0.75, 1.0, 2.0] {
+                    let m = Metrics::new(scale, align);
+                    for width in [640.0, 1280.0, 3440.0] {
+                        let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale);
+                        let mut kinds = vec![Tray::Audio, Tray::Network, Tray::Battery, Tray::Control];
+                        kinds.extend((0..capacity).map(|key| Tray::Indicator(key as u64)));
+                        let l = layout(&m, &Inputs { width, align, labels: WinLabels::Never, search, buttons: 8, tray: &kinds, clock_text_w: 72.0 * scale, scroll: 0.0 });
+                        if capacity > 0 {
+                            let left = l.tray.first().unwrap().1.x;
+                            let fixed_right = l.search.map_or(l.start.x + l.start.w, |r| r.x + r.w);
+                            assert!(left >= fixed_right + m.icon_min, "{align:?} {search:?} scale {scale} width {width}");
+                            assert!(l.clip.1 <= left);
+                            assert!(l.tray.iter().all(|(_, r)| r.x >= 0.0 && r.x + r.w <= l.clock.x));
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(indicator_capacity(&Metrics::new(1.0, WinAlign::Center), f32::NAN, WinSearch::None, 0, 0, 0.0), 0);
+    }
 
     fn m() -> Metrics {
         Metrics::new(1.0, WinAlign::Center)

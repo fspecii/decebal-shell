@@ -303,6 +303,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut pos = (x, y);
     let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error("pixmap".into()))?;
     app.resized(w, h);
+    app.surface_origin(x, y);
     let mut dirty = true;
     let mut material_foreground: Option<Pixmap> = None;
     let mut last_visible: Vec<Rectangle> = Vec::new();
@@ -336,6 +337,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 pm = p;
             }
             app.resized(size.0, size.1);
+            app.surface_origin(pos.0, pos.1);
             dirty = true;
         }
         let new_rects = app.input_rects();
