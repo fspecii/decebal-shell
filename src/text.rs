@@ -266,6 +266,13 @@ impl Fonts {
         a
     }
 
+    /// Physical line height; callers use it outside paint when preparing a cached clock.
+    pub fn line_height(&self, px: f32, weight: Weight) -> f32 {
+        self.sync_theme();
+        let px = px * crate::theme::live::font_scale();
+        self.spec(Role::Ui, 0, weight).and_then(|s| textface::line_height(self.backing(&s.face.file)?.bytes(), s.face.index, px)).unwrap_or(px * 1.25)
+    }
+
     /// Actual cached glyph ink extents relative to the baseline, after accessibility
     /// text enlargement. Lets fixed source-sized native controls center real ink.
     pub fn ink_vertical(&self, text: &str, px: f32, weight: Weight) -> Option<(f32, f32)> {
@@ -350,7 +357,7 @@ fn blend_color_glyph(pm: &mut Pixmap, rgba: &[u8], gw: usize, gh: usize, gx: i32
 }
 
 /// Source-over blend of an 8-bit coverage bitmap tinted with a straight (non-premultiplied) colour.
-fn blend_glyph(pm: &mut Pixmap, bitmap: &[u8], gw: usize, gh: usize, gx: i32, gy: i32, c: (f32, f32, f32, f32)) {
+pub(crate) fn blend_glyph(pm: &mut Pixmap, bitmap: &[u8], gw: usize, gh: usize, gx: i32, gy: i32, c: (f32, f32, f32, f32)) {
     let (pw, ph) = (pm.width() as i32, pm.height() as i32);
     let stride = pm.width() as usize * 4;
     let data = pm.data_mut();

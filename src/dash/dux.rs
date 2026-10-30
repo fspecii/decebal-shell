@@ -24,6 +24,7 @@ const PAGES: [(&str, &str); 4] = [("Overview", "dashboard"), ("Media", "music_no
 
 #[derive(Default)]
 pub(super) struct State {
+    pub clock: crate::clockface::AsyncClock,
     pub screen: (u32, u32),
     pub size: (u32, u32),
     page: usize,
@@ -39,6 +40,7 @@ pub(super) struct State {
 impl State {
     pub(super) fn for_tab(tab: Tab) -> Self {
         Self {
+            clock: if crate::theme::th().dashboard_style == "dux" { crate::clockface::AsyncClock::load(&crate::theme::th().fonts) } else { Default::default() },
             page: match tab {
                 Tab::Overview => 0,
                 Tab::Media => 1,
@@ -138,6 +140,34 @@ impl Dash {
         let width = if self.dux.size.0 > 0 { self.dux.size.0 } else { self.dux_size().0 };
         Grid::new(width as f32, crate::theme::live::font_scale().max(1.0))
     }
+    /// Prepare the current minute and geometry outside paint. Only time-string
+    /// changes reuse the same digit bitmaps; theme changes explicitly reload.
+    pub(super) fn prepare_dux_clock(&mut self) -> bool {
+        if !self.dux_enabled() || !self.dux.clock.enabled() {
+            return false;
+        }
+        let Some(tm) = crate::menubar::clock::now() else {
+            return false;
+        };
+        let g = self.dux_grid();
+        let hour = if self.hour12 {
+            if tm.hour % 12 == 0 {
+                12
+            } else {
+                tm.hour % 12
+            }
+        } else {
+            tm.hour
+        };
+        self.dux.clock.request(crate::clockface::Input {
+            width: (g.clock.w - 32.0 * g.scale).max(1.0),
+            height: (g.clock.h - 32.0 * g.scale).max(1.0),
+            hours: format!("{hour:02}"),
+            minutes: format!("{:02}", tm.min),
+            date: info::long_date(tm.wday, tm.mday, tm.mon),
+            scale: g.scale,
+        })
+    }
     #[allow(clippy::too_many_arguments)]
     fn dtext(&mut self, pm: &mut Pixmap, value: &str, r: Rect, size: f32, weight: Weight, ink: Color, centered: bool) {
         let Some(fonts) = self.fonts.as_mut() else { return };
@@ -164,31 +194,16 @@ impl Dash {
         if self.dux.page == 0 {
             let clock = g.shift(g.clock, self.dux.scroll);
             Self::dcard(pm, clock);
-            if let Some(tm) = crate::menubar::clock::now() {
-                let hour = if self.hour12 {
-                    if tm.hour % 12 == 0 {
-                        12
-                    } else {
-                        tm.hour % 12
+            if self.dux.clock.enabled() {
+                let inset = 16.0 * s;
+                if !self.dux.clock.paint(pm, (clock.x + inset, clock.y + inset), th.accent_c(), th.sub()) {
+                    // Pending preparation: native vector dots need no font lookup.
+                    for i in 0..3 {
+                        fill_circle(pm, clock.cx() + (i as f32 - 1.0) * 8.0, clock.cy(), 2.0, th.sub());
                     }
-                } else {
-                    tm.hour
-                };
-                for (i, value) in [format!("{hour:02}"), format!("{:02}", tm.min)].iter().enumerate() {
-                    let r = Rect::new(clock.x + 8.0 * s, clock.y + (26.0 + i as f32 * 66.0) * s, clock.w - 16.0 * s, 64.0 * s);
-                    let Some(fonts) = self.fonts.as_mut() else { continue };
-                    let w = fonts.measure_as(Role::Display, value, 54.0, Weight::Medium);
-                    fonts.draw_as(Role::Display, pm, value, r.cx() - w / 2.0, r.y, 54.0, Weight::Medium, th.accent_c());
                 }
-                self.dtext(
-                    pm,
-                    &info::long_date(tm.wday, tm.mday, tm.mon),
-                    Rect::new(clock.x + 8.0 * s, clock.bottom() - 38.0 * s, clock.w - 16.0 * s, 24.0 * s),
-                    11.0,
-                    Weight::Regular,
-                    th.sub(),
-                    true,
-                );
+            } else {
+                self.dux_legacy_clock(pm, clock, s);
             }
             self.dux_weather(pm, g.shift(g.weather, self.dux.scroll), s);
             let user = g.shift(g.user, self.dux.scroll);
@@ -243,6 +258,29 @@ impl Dash {
         }
         if th.outline > 0.0 {
             stroke_rounded(pm, 0.5, 0.5, pm.width() as f32 - 1.0, pm.height() as f32 - 1.0, 27.5, th.outline_c(), 1.0);
+        }
+    }
+    /// Preserve the deployed four-font package until its separately authored
+    /// fifth-font activation. This is the unchanged production0.2 clock path.
+    fn dux_legacy_clock(&mut self, pm: &mut Pixmap, clock: Rect, s: f32) {
+        let th = crate::theme::th();
+        if let Some(tm) = crate::menubar::clock::now() {
+            let hour = if self.hour12 {
+                if tm.hour % 12 == 0 {
+                    12
+                } else {
+                    tm.hour % 12
+                }
+            } else {
+                tm.hour
+            };
+            for (i, value) in [format!("{hour:02}"), format!("{:02}", tm.min)].iter().enumerate() {
+                let r = Rect::new(clock.x + 8.0 * s, clock.y + (26.0 + i as f32 * 66.0) * s, clock.w - 16.0 * s, 64.0 * s);
+                let Some(fonts) = self.fonts.as_mut() else { continue };
+                let w = fonts.measure_as(Role::Display, value, 54.0, Weight::Medium);
+                fonts.draw_as(Role::Display, pm, value, r.cx() - w / 2.0, r.y, 54.0, Weight::Medium, th.accent_c());
+            }
+            self.dtext(pm, &info::long_date(tm.wday, tm.mday, tm.mon), Rect::new(clock.x + 8.0 * s, clock.bottom() - 38.0 * s, clock.w - 16.0 * s, 24.0 * s), 11.0, Weight::Regular, th.sub(), true);
         }
     }
     fn dux_weather(&mut self, pm: &mut Pixmap, r: Rect, s: f32) {
@@ -908,6 +946,13 @@ mod tests {
                         dash.dux.page = page;
                         dash.dux.scroll = 0.0;
                         let mut pixels = Pixmap::new(dash.dux.size.0, dash.dux.size.1).unwrap();
+                        dash.prepare_dux_clock();
+                        dash.dux.clock.wait_prepared();
+                        if let Some(metrics) = dash.dux.clock.metrics() {
+                            let clock = dash.dux_grid().clock;
+                            assert_eq!(metrics.width, clock.w - 32.0 * scale);
+                            assert_eq!(metrics.height, 168.0 * scale, "preserve root's 96px row / 8px gap / 200px clock cell");
+                        }
                         dash.dux_paint(&mut pixels);
                         assert!(pixels.data().chunks_exact(4).any(|p| p[3] > 0));
                         pixels
@@ -922,6 +967,8 @@ mod tests {
                             }
                             dash.dux_scroll(100.0);
                             assert!(dash.dux.scroll > 0.0);
+                            dash.prepare_dux_clock();
+                            dash.dux.clock.wait_prepared();
                             dash.dux_paint(&mut pixels);
                             pixels
                                 .save_png(dir.join(format!("dash-{}-{}-{}-scrolled.png", (scale * 100.0) as u32, if dark { "dark" } else { "light" }, if available { "sample" } else { "missing" })))

@@ -33,7 +33,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # gzip for the .decebal-preset bundles (already in the tree through png/resvg)
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 fontdue = "0.9"
-ttf-parser = "0.21"
+ttf-parser = { version = "0.21", features = ["gvar-alloc"] }
 libc = "0.2"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

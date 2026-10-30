@@ -115,6 +115,12 @@ pub fn ascent(bytes: &[u8], index: u32, px: f32) -> Option<f32> {
     Some(f.ascender() as f32 * px / f.units_per_em() as f32)
 }
 
+/// Font's typographic line box in physical pixels (used during clock preparation).
+pub fn line_height(bytes: &[u8], index: u32, px: f32) -> Option<f32> {
+    let f = parse(bytes, index)?;
+    Some((f.ascender() as f32 - f.descender() as f32 + f.line_gap() as f32) * px / f.units_per_em() as f32)
+}
+
 /// Parses on a short-lived thread (see [`crate::mem::limit_arenas`]): fontdue turns every glyph of the face into
 /// small allocations (13 MB for Inter). On the main heap they interleave with long-lived data and leave about 5 MB
 /// resident after the face is dropped; in the worker arena nothing else lives next to them, so the whole region

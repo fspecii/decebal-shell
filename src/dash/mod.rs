@@ -92,7 +92,7 @@ impl Dash {
     /// `center_x`: where under the bar the card hangs (the monitor's middle when `None`).
     pub fn new(tab: Tab, center_x: Option<i32>, top: Option<i32>) -> Dash {
         let weather = weather::load_cached();
-        Dash {
+        let mut dash = Dash {
             tab,
             dux: dux::State::for_tab(tab),
             alpha: false,
@@ -129,7 +129,9 @@ impl Dash {
             drag_value: None,
             last_vol_sent: None,
             theme_seen: crate::theme::generation(),
-        }
+        };
+        dash.prepare_dux_clock();
+        dash
     }
 
     pub fn tab(&self) -> Tab {
@@ -191,6 +193,12 @@ impl Dash {
             self.theme_seen = g;
             if self.dux_enabled() {
                 self.symbols.prepare_material();
+                self.dux.clock.sync(&crate::theme::th().fonts);
+                if let Some(waker) = self.waker.clone() {
+                    self.dux.clock.set_waker(waker);
+                }
+            } else {
+                self.dux.clock = Default::default();
             }
             redraw = true;
         }
@@ -234,6 +242,8 @@ impl Dash {
         // The clock, rings and graphs move once a second; the Media tab only while something plays.
         let playing = self.active().is_some_and(|p| p.status == Status::Playing);
         redraw |= stats_changed && (self.tab != Tab::Media || playing);
+        redraw |= self.dux.clock.poll();
+        redraw |= self.prepare_dux_clock();
         redraw
     }
 
@@ -363,16 +373,21 @@ impl WindowApp for Dash {
     fn set_waker(&mut self, waker: Waker) {
         let w = waker.clone();
         crate::theme::live::start_watcher(move || w());
+        if self.dux_enabled() {
+            self.dux.clock.set_waker(waker.clone());
+        }
         self.start_workers(&waker);
         self.waker = Some(waker);
     }
 
     fn set_screen(&mut self, width: u32, height: u32) {
         self.dux.screen = (width, height);
+        self.prepare_dux_clock();
     }
 
     fn resize(&mut self, width: u32, height: u32) {
         self.dux.size = (width, height);
+        self.prepare_dux_clock();
     }
 
     fn set_rounded(&mut self, _: bool) {}

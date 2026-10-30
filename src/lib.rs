@@ -11,6 +11,7 @@ pub mod calc;
 pub mod capture;
 pub mod clip;
 pub mod clipboard;
+pub mod clockface;
 pub mod compat;
 pub mod config;
 pub mod controlcenter;

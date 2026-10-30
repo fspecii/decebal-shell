@@ -139,9 +139,12 @@ remain the parent's responsibility.
   original hourly chart/sky animation and forecast-provider options remain absent.
 - Media artwork uses native rounded geometry; the original variable expressive
   shape and all press/transition curves are not yet reproduced.
-- Clock composition is stacked HH/MM for the README profile. The original
-  variable Google Sans Flex digit axes (ROND100, weight750, optical size and
-  ink-based fitting) require the next native display-text rendering stage.
+- Clock variable digit axes and ink-based fitting are supplied by the bounded
+  follow-up described in [native-dux-clock.md](native-dux-clock.md). Its original
+  variable font requires a fifth package font entry; the deployed four-font
+  profile keeps its existing clock until separate activation. Registered
+  variable-font snapshot failures are explicit.
+  Analog mode, seconds and digit transition animation remain separate capabilities.
 - Control Center detail sheets, device selection subpages, microphone controls,
   lock/power header actions and its editable grid need separate typed capabilities.
   The source-correct Material person fallback is present; real Control Center
