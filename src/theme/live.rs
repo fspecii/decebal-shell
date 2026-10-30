@@ -190,15 +190,8 @@ impl Source {
         let def = self.load_def(id)?;
         let mut theme = resolve_with(&def, id, sel, system_dark);
         self.package_font_files(id, 0, &mut theme.fonts.files);
-        theme.fonts.file_versions = theme
-            .fonts
-            .files
-            .iter()
-            .map(|file| {
-                std::fs::metadata(file).map(|meta| (meta.len(), meta.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos()))).unwrap_or_default()
-            })
-            .collect();
-        theme.fonts.package_faces = super::fontdb::FontDb::read_package_faces(&theme.fonts.files);
+        theme.fonts.file_versions = theme.fonts.files.iter().map(|file| super::fontdb::package_file_version(file)).collect();
+        theme.fonts.package_faces = super::fontdb::FontDb::read_package_faces_versioned(&theme.fonts.files, &theme.fonts.file_versions);
         Ok(theme)
     }
 
@@ -213,17 +206,28 @@ impl Source {
         let Ok(def) = Def::parse(&text) else { return };
         let Some(base) = path.parent().and_then(|p| p.canonicalize().ok()) else { return };
         if let Some(files) = def.extra.get("font").and_then(|f| f.get("files")).and_then(|f| f.as_array()) {
-            for file in files.iter().filter_map(|f| f.as_str()) {
+            for file in files.iter().filter_map(|f| f.as_str()).take(8) {
                 if out.len() >= 8 {
                     break;
                 }
+                let requested = base.join(file);
                 if engine::archive::safe_rel_path(file).is_err() {
+                    super::fontdb::report_package_reference(&requested, "unsafe relative path");
                     continue;
                 }
-                let Ok(full) = base.join(file).canonicalize() else { continue };
-                if !full.starts_with(&base) || !std::fs::metadata(&full).is_ok_and(|m| m.is_file() && m.len() <= 16 << 20) {
+                let full = match requested.canonicalize() {
+                    Ok(path) => path,
+                    Err(error) => {
+                        super::fontdb::report_package_reference(&requested, &format!("cannot resolve font: {error}"));
+                        continue;
+                    }
+                };
+                if !full.starts_with(&base) {
+                    super::fontdb::report_package_reference(&requested, "escapes package root");
                     continue;
                 }
+                // The cache performs bounded regular-file reads and reports size,
+                // read and parse failures. Do not silently discard oversize fonts here.
                 if !out.contains(&full) {
                     out.push(full);
                 }
@@ -475,6 +479,41 @@ mod tests {
         std::fs::create_dir_all(d.join("themes")).unwrap();
         let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
+    }
+
+    #[test]
+    fn oversized_package_font_reaches_the_diagnostic_cache() {
+        let (dir, src) = sandbox("oversize-font-diagnostic");
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(dir);
+        let package = src.themes_dir.join("font-limit");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("theme.toml"),
+            r#"format = 1
+id = "font-limit"
+name = "Font limit"
+version = "0.2.0"
+author = "Test"
+license = "MIT"
+extends = "macos"
+[font]
+files = ["oversized.ttf"]
+"#,
+        )
+        .unwrap();
+        let file = package.join("oversized.ttf");
+        std::fs::File::create(&file).unwrap().set_len(16 * 1024 * 1024 + 1).unwrap();
+        let selection = Selection { name: "font-limit".into(), ..Selection::default() };
+        let theme = src.theme_for("font-limit", &selection, true).unwrap();
+        assert_eq!(theme.fonts.files, vec![file.canonicalize().unwrap()], "Source must not silently discard an oversize reference");
+        assert!(theme.fonts.package_faces.is_empty(), "the bounded diagnostic loader rejects it");
+        assert_eq!(theme.fonts.file_versions[0].0, 16 * 1024 * 1024 + 1);
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! with resvg. Rasterised glyphs are cached per (name, size, colour).
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 
 /// `#rrggbb` for an sRGB colour.
@@ -86,6 +87,7 @@ const CLOUD: &str = "M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.
 pub fn shapes(name: &str) -> Option<String> {
     Some(match name {
         "apple" => fill("M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z", None),
+        "person" => "<circle cx=\"12\" cy=\"7.5\" r=\"3.5\" fill=\"none\" stroke=\"C\" stroke-width=\"2\"/>".to_string() + &stroke("M5 21v-2a7 7 0 0 1 14 0v2z", None),
         "wifi-0" => wifi(0, false),
         "wifi-1" => wifi(1, false),
         "wifi-2" => wifi(2, false),
@@ -298,16 +300,19 @@ fn material_codepoint(name: &str) -> Option<char> {
         "power" => 0xe8ac,
         "layout" => 0xe8f1,
         "sun" | "sun-small" => 0xe1ac,
-        "weather-clear" => 0xe81a,
-        "moon" | "dark-mode" | "weather-moon" => 0xe51c,
+        "weather-clear" => 0xf157,
+        "moon" | "dark-mode" => 0xe51c,
+        "weather-moon" => 0xf159,
+        "contrast" => 0xeb37,
+        "do_not_disturb_on" => 0xe15c,
         "night-shift" => 0xf03d,
-        "cup" => 0xefef,
+        "cup" => 0xe541,
         "screenshot" => 0xec08,
         "weather-partly" => 0xf172,
         "weather-cloud" => 0xf15c,
         "weather-fog" => 0xe818,
         "weather-storm" => 0xebdb,
-        "weather-snow" => 0xe2cd,
+        "weather-snow" => 0xe810,
         "weather-rain" => 0xf176,
         "gear" => 0xe8b8,
         "person" => 0xe7fd,
@@ -337,27 +342,52 @@ type SymbolKey = (String, (u8, u8, u8), u32);
 #[derive(Default)]
 pub struct SymbolCache {
     map: HashMap<SymbolKey, Option<Pixmap>>,
-    material: Option<(Vec<u8>, crate::theme::fontdb::FaceRef)>,
+    material: Option<(Arc<[u8]>, crate::theme::fontdb::FaceRef)>,
+    material_dark: bool,
     material_map: HashMap<SymbolKey, Option<Pixmap>>,
 }
 
 impl SymbolCache {
     /// Resolve licensed package Material Symbols once at startup/theme reload, outside paint.
     pub fn prepare_material(&mut self) -> bool {
-        self.material_map.clear();
-        let db = crate::theme::fontdb::FontDb::default().with_package_faces(&crate::theme::th().fonts.package_faces);
-        self.material =
-            db.resolve("Material Symbols Rounded").and_then(|family| db.face(&family, crate::theme::fontdb::FC_REGULAR)).and_then(|face| std::fs::read(&face.file).ok().map(|bytes| (bytes, face)));
+        let theme = crate::theme::th();
+        let db = crate::theme::fontdb::FontDb::default().with_package_faces(&theme.fonts.package_faces);
+        let material = db.resolve("Material Symbols Rounded").and_then(|family| db.face(&family, crate::theme::fontdb::FC_REGULAR)).and_then(|face| {
+            let version = theme.fonts.files.iter().zip(&theme.fonts.file_versions).find(|(p, _)| **p == face.file)?.1;
+            crate::theme::fontdb::package_font_bytes(&face.file, *version).map(|bytes| (bytes, face))
+        });
+        let same = match (&self.material, &material) {
+            (Some((a, af)), Some((b, bf))) => Arc::ptr_eq(a, b) && af == bf,
+            (None, None) => true,
+            _ => false,
+        };
+        if !same || self.material_dark != theme.dark {
+            self.material_map.clear();
+        }
+        self.material_dark = theme.dark;
+        self.material = material;
         self.material.is_some()
     }
 
     /// Actual Material Symbols outlines, never substituted with SF-style artwork.
     /// Missing package fonts or unsupported outlines return None.
     pub fn get_material(&mut self, name: &str, color: (u8, u8, u8), px: u32) -> Option<&Pixmap> {
+        const MAX_ENTRIES: usize = 256;
+        const MAX_BYTES: usize = 4 * 1024 * 1024;
+        if !(1..=256).contains(&px) {
+            return None;
+        }
         let ch = material_codepoint(name)?;
+        let key = (name.to_string(), color, px);
+        if !self.material_map.contains_key(&key) {
+            let used: usize = self.material_map.values().flatten().map(|image| image.data().len()).sum();
+            if self.material_map.len() >= MAX_ENTRIES || used + px as usize * px as usize * 4 > MAX_BYTES {
+                self.material_map.clear();
+            }
+        }
         let (bytes, face) = self.material.as_ref()?;
         self.material_map
-            .entry((name.to_string(), color, px))
+            .entry(key)
             .or_insert_with(|| {
                 let axes = [(*b"FILL", 0.0), (*b"GRAD", if crate::theme::th().dark { -25.0 } else { 0.0 }), (*b"opsz", 24.0)];
                 let glyph = crate::textface::raster_outline_axes(bytes, face, ch, px as f32, &axes)?;
@@ -365,8 +395,14 @@ impl SymbolCache {
                     return None;
                 }
                 let mut image = Pixmap::new(px, px)?;
-                let left = (px as i32 - glyph.width as i32) / 2;
-                let top = (px as i32 - glyph.height as i32) / 2;
+                // Match centered Text's advance/em-box placement, retaining optical
+                // side bearings instead of recentering each glyph's ink rectangle.
+                let font = ttf_parser::Face::parse(bytes, face.index).ok()?;
+                let scale = px as f32 / font.units_per_em() as f32;
+                let height = (font.ascender() as f32 - font.descender() as f32) * scale;
+                let baseline = ((px as f32 - height) / 2.0 + font.ascender() as f32 * scale).round() as i32;
+                let left = ((px as f32 - glyph.advance) / 2.0).floor() as i32 + glyph.xmin;
+                let top = baseline - glyph.ymin - glyph.height as i32;
                 for y in 0..glyph.height {
                     for x in 0..glyph.width {
                         let (dx, dy) = (left + x as i32, top + y as i32);
@@ -414,6 +450,7 @@ mod tests {
         "magnifyingglass",
         "chart",
         "switches",
+        "person",
         "moon",
         "sun",
         "sun-small",
@@ -480,16 +517,62 @@ mod tests {
         assert!(c.get("nope", (255, 255, 255), 32).is_none());
     }
     #[test]
+    fn every_material_mapping_resolves_in_the_shipped_cmap() {
+        let bytes = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("themes/dux-lavender/fonts/MaterialSymbolsRounded.ttf")).unwrap();
+        let font = ttf_parser::Face::parse(&bytes, 0).unwrap();
+        // Enumerate the actual mapping arms so adding an alias cannot omit this coverage.
+        let source = include_str!("symbols.rs");
+        let body = source.split("fn material_codepoint").nth(1).unwrap().split("type SymbolKey").next().unwrap();
+        let mut count = 0;
+        for line in body.lines().filter(|line| line.contains("=> 0x")) {
+            for name in line.split("=>").next().unwrap().split('|') {
+                let name = name.trim().trim_matches('"');
+                let cp = material_codepoint(name).unwrap();
+                assert!(font.glyph_index(cp).is_some(), "{name}: U+{:04X} absent", cp as u32);
+                count += 1;
+            }
+        }
+        assert!(count >= 50);
+        assert_ne!(material_codepoint("contrast"), material_codepoint("do_not_disturb_on"));
+        assert_eq!(material_codepoint("cup"), char::from_u32(0xe541));
+        assert_eq!(material_codepoint("weather-clear"), char::from_u32(0xf157));
+        assert_eq!(material_codepoint("weather-moon"), char::from_u32(0xf159));
+    }
+
+    #[test]
     #[ignore = "requires DUX_MATERIAL_FONT licensed package asset"]
     fn package_material_icons_are_actual_cached_outlines() {
         let path = std::path::PathBuf::from(std::env::var_os("DUX_MATERIAL_FONT").expect("DUX_MATERIAL_FONT"));
         let db = crate::theme::fontdb::FontDb::default().with_package_files(std::slice::from_ref(&path));
         let family = db.resolve("Material Symbols Rounded").expect("Material family");
         let face = db.face(&family, crate::theme::fontdb::FC_REGULAR).unwrap();
-        let mut cache = SymbolCache { material: Some((std::fs::read(path).unwrap(), face)), ..Default::default() };
+        assert!(std::env::var_os("DECEBAL_CONFIG").is_some(), "explicit private config required");
+        let version = crate::theme::fontdb::package_file_version(&path);
+        let mut theme = (*crate::theme::th()).clone();
+        theme.fonts.files = vec![path.clone()];
+        theme.fonts.file_versions = vec![version];
+        theme.fonts.package_faces = crate::theme::fontdb::FontDb::read_package_faces(std::slice::from_ref(&path));
+        crate::theme::live::publish_theme(theme);
+        let mut cache = SymbolCache::default();
+        assert!(cache.prepare_material());
+        let mut other = SymbolCache::default();
+        assert!(other.prepare_material());
+        assert!(Arc::ptr_eq(&cache.material.as_ref().unwrap().0, &other.material.as_ref().unwrap().0), "bar/overlay caches share one byte snapshot");
+        let bytes = cache.material.as_ref().unwrap().0.clone();
+        let names: Vec<_> = include_str!("symbols.rs")
+            .split("fn material_codepoint")
+            .nth(1)
+            .unwrap()
+            .split("type SymbolKey")
+            .next()
+            .unwrap()
+            .lines()
+            .filter(|line| line.contains("=> 0x"))
+            .flat_map(|line| line.split("=>").next().unwrap().split('|').map(|name| name.trim().trim_matches('"')))
+            .collect();
         for size in [14, 28] {
-            for name in ["apps", "play", "pause", "backward", "forward", "bell", "clipboard", "switches", "power"] {
-                let image = cache.get_material(name, (208, 188, 255), size).unwrap();
+            for name in &names {
+                let image = cache.get_material(name, (208, 188, 255), size).unwrap_or_else(|| panic!("outline unavailable: {name} at {size}px"));
                 assert!(image.data().chunks_exact(4).any(|p| p[3] > 0), "missing {name}");
                 assert_eq!(image.width(), size);
                 if let Some(dir) = std::env::var_os("DUX_ICON_EVIDENCE") {
@@ -498,7 +581,36 @@ mod tests {
                 }
             }
         }
-        assert_eq!(cache.material_map.len(), 18);
+        assert_eq!(cache.material_map.len(), names.len() * 2);
+        assert!(cache.prepare_material());
+        assert!(Arc::ptr_eq(&bytes, &cache.material.as_ref().unwrap().0));
+        assert_eq!(cache.material_map.len(), names.len() * 2, "unchanged preparation preserves raster entries");
+        // Source Text centers the advance/em box. For this pinned font the
+        // 1056/-96 metrics at UPEM960 place the centered baseline exactly at px.
+        for name in ["play", "forward"] {
+            let cp = material_codepoint(name).unwrap();
+            let axes = [(*b"FILL", 0.0), (*b"GRAD", if crate::theme::th().dark { -25.0 } else { 0.0 }), (*b"opsz", 24.0)];
+            let glyph = crate::textface::raster_outline_axes(&bytes, &face, cp, 14.0, &axes).unwrap();
+            let left = ((14.0 - glyph.advance) / 2.0).floor() as i32 + glyph.xmin;
+            let top = 14 - glyph.ymin - glyph.height as i32;
+            let image = cache.get_material(name, (208, 188, 255), 14).unwrap();
+            for y in 0..14usize {
+                for x in 0..14usize {
+                    let gx = x as i32 - left;
+                    let gy = y as i32 - top;
+                    let expected = if gx >= 0 && gy >= 0 && gx < glyph.width as i32 && gy < glyph.height as i32 { glyph.bitmap[gy as usize * glyph.width + gx as usize] } else { 0 };
+                    assert_eq!(image.data()[(y * 14 + x) * 4 + 3], expected, "{name} em-box position at{x},{y}");
+                }
+            }
+        }
+        for color in 0..300u16 {
+            assert!(cache.get_material("play", (color as u8, (color >> 8) as u8, 17), 14).is_some());
+            assert!(cache.material_map.len() <= 256);
+            assert!(cache.material_map.values().flatten().map(|image| image.data().len()).sum::<usize>() <= 4 * 1024 * 1024);
+        }
+        assert!(cache.prepare_material());
+        assert!(Arc::ptr_eq(&bytes, &cache.material.as_ref().unwrap().0), "palette churn must not reread font bytes");
+        assert!(cache.get_material("play", (1, 2, 3), 257).is_none());
         assert!(cache.get_material("apple", (255, 255, 255), 14).is_none());
     }
 }

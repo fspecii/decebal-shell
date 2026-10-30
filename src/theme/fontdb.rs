@@ -7,7 +7,7 @@
 //! the settings window keeps one and scans again when it is old ([`rescan_if_older`]).
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// Case, space and punctuation-insensitive family key: "JetBrains Mono" == "JetBrainsMono".
@@ -58,6 +58,143 @@ pub struct FaceRef {
     /// The file is a variable font: set `wght` to get the requested weight.
     pub variable: bool,
     pub weight: i32,
+}
+
+/// Package font inputs are immutable snapshots shared by all icon caches in this process.
+/// Metadata/version changes invalidate both positive and negative cache entries.
+const MAX_PACKAGE_FONT_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_PACKAGE_CACHE_BYTES: usize = 128 * 1024 * 1024;
+const MAX_PACKAGE_CACHE_ENTRIES: usize = 32;
+type PackageVersion = (u64, u128);
+type PackageKey = (PathBuf, PackageVersion);
+
+struct PackageFont {
+    bytes: Arc<[u8]>,
+    face: Face,
+}
+#[derive(Default)]
+struct PackageFonts {
+    entries: HashMap<PackageKey, Option<Arc<PackageFont>>>,
+    order: std::collections::VecDeque<PackageKey>,
+    bytes: usize,
+    #[cfg(test)]
+    loads: usize,
+}
+impl PackageFonts {
+    fn load(&mut self, path: &Path, version: PackageVersion) -> Option<Arc<PackageFont>> {
+        let key = (path.to_path_buf(), version);
+        if let Some(value) = self.entries.get(&key) {
+            let value = value.clone();
+            self.order.retain(|k| k != &key);
+            self.order.push_back(key);
+            return value;
+        }
+        #[cfg(test)]
+        {
+            self.loads += 1;
+        }
+        let loaded = match read_package_font(path, version) {
+            Ok(font) => Some(Arc::new(font)),
+            Err(problem) => {
+                crate::log_warn!("package font {} rejected: {problem}", path.display());
+                None
+            }
+        };
+        self.bytes += loaded.as_ref().map_or(0, |f| f.bytes.len());
+        self.entries.insert(key.clone(), loaded.clone());
+        self.order.push_back(key);
+        while self.entries.len() > MAX_PACKAGE_CACHE_ENTRIES || self.bytes > MAX_PACKAGE_CACHE_BYTES {
+            if let Some(key) = self.order.pop_front() {
+                if let Some(Some(font)) = self.entries.remove(&key) {
+                    self.bytes -= font.bytes.len();
+                }
+            } else {
+                break;
+            }
+        }
+        loaded
+    }
+}
+static PACKAGE_FONTS: std::sync::OnceLock<Mutex<PackageFonts>> = std::sync::OnceLock::new();
+
+/// Source reference failures happen before a canonical file can enter the byte cache.
+/// Bound and deduplicate their diagnostics without probing rejected/outside paths.
+pub fn report_package_reference(path: &Path, problem: &str) {
+    static REPORTED: std::sync::OnceLock<Mutex<std::collections::VecDeque<PathBuf>>> = std::sync::OnceLock::new();
+    let mut seen = REPORTED.get_or_init(|| Mutex::new(std::collections::VecDeque::new())).lock().unwrap_or_else(|p| p.into_inner());
+    if seen.iter().any(|p| p == path) {
+        return;
+    }
+    if seen.len() == 128 {
+        seen.pop_front();
+    }
+    seen.push_back(path.to_path_buf());
+    crate::log_warn!("package font reference {} rejected: {problem}", path.display());
+}
+
+fn metadata_version(meta: &std::fs::Metadata) -> PackageVersion {
+    use std::hash::{Hash, Hasher};
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    meta.modified().ok().hash(&mut hash);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        // Atomic replacement with retained size/mtime is still a different input.
+        (meta.dev(), meta.ino(), meta.ctime(), meta.ctime_nsec()).hash(&mut hash);
+    }
+    (meta.len(), u128::from(hash.finish()))
+}
+/// Cheap version probe for the theme loader; the value is opaque, not a timestamp.
+pub fn package_file_version(path: &Path) -> PackageVersion {
+    std::fs::metadata(path).map(|m| metadata_version(&m)).unwrap_or_default()
+}
+
+fn read_package_font(path: &Path, version: PackageVersion) -> Result<PackageFont, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let meta = file.metadata().map_err(|e| e.to_string())?;
+    if !meta.is_file() {
+        return Err("not a regular file".into());
+    }
+    if meta.len() == 0 || meta.len() > MAX_PACKAGE_FONT_BYTES {
+        return Err(format!("size {} outside 1..={MAX_PACKAGE_FONT_BYTES} bytes", meta.len()));
+    }
+    if metadata_version(&meta) != version {
+        return Err("changed before loading; retry on next theme refresh".into());
+    }
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    (&file).take(MAX_PACKAGE_FONT_BYTES + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 != meta.len() || metadata_version(&file.metadata().map_err(|e| e.to_string())?) != version {
+        return Err("changed while loading; retry on next theme refresh".into());
+    }
+    let face = ttf_parser::Face::parse(&bytes, 0).map_err(|e| format!("invalid font: {e:?}"))?;
+    let family = |id| face.names().into_iter().filter(|n| n.name_id == id).find_map(|n| n.to_string());
+    let name = family(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| family(ttf_parser::name_id::FAMILY)).ok_or("missing font family")?;
+    let weight = match face.weight().to_number() {
+        0..=349 => 50,
+        350..=449 => FC_REGULAR,
+        450..=549 => FC_MEDIUM,
+        550..=649 => FC_SEMIBOLD,
+        _ => FC_BOLD,
+    };
+    let metadata = Face {
+        names: vec![name],
+        weight_lo: weight,
+        weight_hi: weight,
+        slant: if face.is_italic() { 100 } else { 0 },
+        width: 100,
+        file: path.to_path_buf(),
+        index: 0,
+        variable: face.is_variable(),
+        mono: face.is_monospaced(),
+    };
+    Ok(PackageFont { bytes: Arc::from(bytes), face: metadata })
+}
+
+/// Lookup only: callers prepare metadata/bytes during theme loading, never from paint.
+/// A missing entry does not fall back to filesystem I/O.
+pub fn package_font_bytes(path: &Path, version: PackageVersion) -> Option<Arc<[u8]>> {
+    PACKAGE_FONTS.get()?.lock().unwrap_or_else(|p| p.into_inner()).entries.get(&(path.to_path_buf(), version))?.as_ref().map(|font| font.bytes.clone())
 }
 
 /// Suffixes that may follow a requested family name when matching "Noto Sans CJK" to "Noto Sans CJK JP".
@@ -143,40 +280,15 @@ impl FontDb {
         self.with_package_faces(&Self::read_package_faces(files))
     }
 
-    /// Parse package metadata during theme loading, never from native drawing.
+    /// Parse each immutable file version once, outside native drawing.
     pub fn read_package_faces(files: &[PathBuf]) -> Vec<Face> {
-        let mut bundled = Vec::new();
-        for path in files.iter().take(8) {
-            let Ok(meta) = std::fs::metadata(path) else { continue };
-            if !meta.is_file() || meta.len() > 16 << 20 {
-                continue;
-            }
-            let Ok(bytes) = std::fs::read(path) else { continue };
-            let Ok(face) = ttf_parser::Face::parse(&bytes, 0) else { continue };
-            let family = |id| face.names().into_iter().filter(|n| n.name_id == id).find_map(|n| n.to_string());
-            let Some(name) = family(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| family(ttf_parser::name_id::FAMILY)) else { continue };
-            let weight = match face.weight().to_number() {
-                0..=349 => 50,
-                350..=449 => FC_REGULAR,
-                450..=549 => FC_MEDIUM,
-                550..=649 => FC_SEMIBOLD,
-                _ => FC_BOLD,
-            };
-            let variable = face.is_variable();
+        let versions: Vec<_> = files.iter().map(|p| package_file_version(p)).collect();
+        Self::read_package_faces_versioned(files, &versions)
+    }
 
-            bundled.push(Face {
-                names: vec![name],
-                weight_lo: weight,
-                weight_hi: weight,
-                slant: if face.is_italic() { 100 } else { 0 },
-                width: 100,
-                file: path.clone(),
-                index: 0,
-                variable,
-                mono: face.is_monospaced(),
-            });
-        }
-        bundled
+    pub fn read_package_faces_versioned(files: &[PathBuf], versions: &[(u64, u128)]) -> Vec<Face> {
+        let mut cache = PACKAGE_FONTS.get_or_init(|| Mutex::new(PackageFonts::default())).lock().unwrap_or_else(|p| p.into_inner());
+        files.iter().zip(versions).take(8).filter_map(|(path, version)| cache.load(path, *version).map(|font| font.face.clone())).collect()
     }
 
     /// Pure merge of metadata prepared by the theme loader.
@@ -501,6 +613,73 @@ mod tests {
         let files = vec![std::env::temp_dir().join("missing-decebal-package-font.ttf")];
         assert!(db.with_package_files(&files).is_empty());
         assert!(db.is_empty());
+    }
+
+    #[test]
+    fn package_snapshots_reuse_reads_and_invalidate_on_atomic_replacement() {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!("font-cache-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(dir.clone());
+        let path = dir.join("face.ttf");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("themes/dux-lavender/fonts/GoogleSansFlex-400.ttf");
+        std::fs::copy(&fixture, &path).unwrap();
+        let version = package_file_version(&path);
+        let mut cache = PackageFonts::default();
+        let first = cache.load(&path, version).unwrap();
+        for _ in 0..20 {
+            let next = cache.load(&path, package_file_version(&path)).unwrap();
+            assert!(Arc::ptr_eq(&first, &next));
+            assert!(Arc::ptr_eq(&first.bytes, &next.bytes));
+        }
+        assert_eq!(cache.loads, 1, "unchanged theme generations must not reopen/parse the file");
+        let replacement = dir.join("next.ttf");
+        std::fs::copy(&fixture, &replacement).unwrap();
+        std::fs::File::open(&replacement).unwrap().set_times(std::fs::FileTimes::new().set_modified(std::fs::metadata(&path).unwrap().modified().unwrap())).unwrap();
+        std::fs::rename(&replacement, &path).unwrap();
+        let new_version = package_file_version(&path);
+        assert_ne!(version, new_version, "same-size/mtime atomic replacement is a new input");
+        let second = cache.load(&path, new_version).unwrap();
+        assert!(!Arc::ptr_eq(&first.bytes, &second.bytes));
+        assert_eq!(cache.loads, 2);
+        assert_eq!(first.bytes, second.bytes, "the held old snapshot survives replacement unchanged");
+    }
+
+    #[test]
+    fn rejected_package_fonts_are_bounded_and_negative_cached() {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!("bad-font-cache-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(dir.clone());
+        let path = dir.join("too-large.ttf");
+        std::fs::File::create(&path).unwrap().set_len(MAX_PACKAGE_FONT_BYTES + 1).unwrap();
+        let mut cache = PackageFonts::default();
+        for _ in 0..10 {
+            assert!(cache.load(&path, package_file_version(&path)).is_none());
+        }
+        assert_eq!(cache.loads, 1, "one rejection diagnostic/attempt per unchanged file version");
+        assert_eq!(cache.bytes, 0, "oversize input is rejected before allocating file bytes");
+        std::fs::write(&path, b"not a font").unwrap();
+        assert!(cache.load(&path, package_file_version(&path)).is_none());
+        assert_eq!(cache.loads, 2, "a corrected/replaced input gets a fresh attempt");
+        for i in 0..MAX_PACKAGE_CACHE_ENTRIES + 4 {
+            let missing = dir.join(format!("missing-{i}.ttf"));
+            assert!(cache.load(&missing, (0, 0)).is_none());
+        }
+        assert!(cache.entries.len() <= MAX_PACKAGE_CACHE_ENTRIES);
+        assert!(cache.bytes <= MAX_PACKAGE_CACHE_BYTES);
     }
 
     /// DUX_FONT_DIR=/readonly/upstream/fonts/google-sans-flex cargo test --lib package_google_sans -- --ignored
