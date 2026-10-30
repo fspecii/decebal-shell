@@ -9,6 +9,17 @@ use crate::window_app::Key;
 use layout::Rect;
 use tiny_skia::Color;
 
+// Comfortable-density values from the pinned DDash/DashMetrics.qml and
+// ControlCenter/CcMetrics.qml. Header chrome remains outside the card grid.
+const GRID_COLUMNS: f32 = 6.0;
+const GRID_COLUMN: f32 = 128.0;
+const GRID_GAP: f32 = 8.0;
+const GRID_ROW: f32 = 96.0;
+const GRID_PAD: f32 = 12.0;
+const GRID_TOP: f32 = 92.0;
+const GRID_WIDTH: f32 = GRID_COLUMNS * GRID_COLUMN + (GRID_COLUMNS - 1.0) * GRID_GAP + 2.0 * GRID_PAD;
+const GRID_HEIGHT: f32 = GRID_TOP + 5.0 * GRID_ROW + 4.0 * GRID_GAP + GRID_PAD;
+
 const PAGES: [(&str, &str); 4] = [("Overview", "dashboard"), ("Media", "music_note"), ("Weather", "wb_sunny"), ("Settings", "settings")];
 
 #[derive(Default)]
@@ -30,7 +41,7 @@ impl State {
             page: match tab {
                 Tab::Overview => 0,
                 Tab::Media => 1,
-                Tab::Performance => 2,
+                Tab::Performance => 0,
             },
             ..Self::default()
         }
@@ -67,34 +78,39 @@ struct Grid {
 impl Grid {
     fn new(width: f32, scale: f32) -> Self {
         let s = scale;
-        let pad = 12.0 * s;
-        let gap = 12.0 * s;
+        let pad = GRID_PAD * s;
+        // Pinned DashMetrics: 6 × 128 columns, five 8px gaps, 12px
+        // outer padding = 832px. Cells use the shared 96px row unit.
+        let gap = GRID_GAP * s;
+        let row = GRID_ROW * s;
+        let span_h = |n: f32| n * row + (n - 1.0) * gap;
         let inner = (width - pad * 2.0).max(100.0);
         let tabs = std::array::from_fn(|i| Rect::new(pad + i as f32 * inner / 4.0, 8.0 * s, inner / 4.0, 64.0 * s));
-        let y = 92.0 * s;
+        let y = GRID_TOP * s;
         let wide = width >= 780.0 * s;
         let (clock, weather, user, resources, calendar, media) = if wide {
-            let narrow = inner / 6.0;
-            let center = inner - narrow * 2.0 - gap * 2.0;
-            let main_x = pad + narrow + gap;
-            let media_x = main_x + center + gap;
+            let cell = (inner - 5.0 * gap) / 6.0;
+            let x = |col: f32| pad + col * (cell + gap);
+            let span_w = |n: f32| n * cell + (n - 1.0) * gap;
             (
-                Rect::new(pad, y, narrow, 216.0 * s),
-                Rect::new(main_x, y, center * 0.48, 120.0 * s),
-                Rect::new(main_x + center * 0.48 + gap, y, inner - narrow - gap - center * 0.48 - gap, 120.0 * s),
-                Rect::new(pad, y + 228.0 * s, narrow, 276.0 * s),
-                Rect::new(main_x, y + 132.0 * s, center, 372.0 * s),
-                Rect::new(media_x, y + 132.0 * s, width - pad - media_x, 372.0 * s),
+                Rect::new(x(0.0), y, span_w(1.0), span_h(2.0)),
+                Rect::new(x(1.0), y, span_w(2.0), span_h(1.0)),
+                Rect::new(x(3.0), y, span_w(3.0), span_h(1.0)),
+                Rect::new(x(0.0), y + 2.0 * (row + gap), span_w(1.0), span_h(3.0)),
+                Rect::new(x(1.0), y + row + gap, span_w(4.0), span_h(4.0)),
+                Rect::new(x(5.0), y + row + gap, span_w(1.0), span_h(4.0)),
             )
         } else {
+            // Accessibility adaptation: keep the row unit and enlarged text,
+            // reflow to two columns and scroll rather than shrinking content.
             let half = (inner - gap) / 2.0;
             (
-                Rect::new(pad, y, half, 216.0 * s),
-                Rect::new(pad + half + gap, y, half, 216.0 * s),
-                Rect::new(pad, y + 228.0 * s, inner, 120.0 * s),
-                Rect::new(pad, y + 744.0 * s, half, 372.0 * s),
-                Rect::new(pad, y + 360.0 * s, inner, 372.0 * s),
-                Rect::new(pad + half + gap, y + 744.0 * s, half, 372.0 * s),
+                Rect::new(pad, y, half, span_h(2.0)),
+                Rect::new(pad + half + gap, y, half, span_h(2.0)),
+                Rect::new(pad, y + 2.0 * (row + gap), inner, span_h(1.0)),
+                Rect::new(pad, y + 7.0 * (row + gap), half, span_h(3.0)),
+                Rect::new(pad, y + 3.0 * (row + gap), inner, span_h(4.0)),
+                Rect::new(pad + half + gap, y + 7.0 * (row + gap), half, span_h(4.0)),
             )
         };
         let bottom = resources.bottom().max(media.bottom()) + pad;
@@ -107,14 +123,14 @@ impl Grid {
 
 impl Dash {
     pub(super) fn dux_enabled(&self) -> bool {
-        crate::theme::th().dashboard_style == "dux"
+        crate::theme::th().dashboard_style == "dux" && self.tab != Tab::Performance
     }
     pub(super) fn dux_size(&self) -> (u32, u32) {
         let s = crate::theme::live::font_scale().max(1.0);
         let (sw, sh) = self.dux.screen;
         (
-            ((832.0 * s) as u32).min(if sw > 0 { sw.saturating_sub(32).max(320) } else { 1680 }),
-            ((608.0 * s) as u32).min(if sh > 0 { sh.saturating_sub(default_top().max(0) as u32 + 24).max(240) } else { 1216 }),
+            ((GRID_WIDTH * s) as u32).min(if sw > 0 { sw.saturating_sub(32).max(320) } else { 1680 }),
+            ((GRID_HEIGHT * s) as u32).min(if sh > 0 { sh.saturating_sub(default_top().max(0) as u32 + 24).max(240) } else { 1216 }),
         )
     }
     fn dux_grid(&self) -> Grid {
@@ -176,7 +192,7 @@ impl Dash {
             self.dux_weather(pm, g.shift(g.weather, self.dux.scroll), s);
             let user = g.shift(g.user, self.dux.scroll);
             Self::dcard(pm, user);
-            let avatar = Rect::new(user.x + 20.0 * s, user.y + 20.0 * s, 72.0 * s, 72.0 * s);
+            let avatar = Rect::new(user.x + 16.0 * s, user.y + 24.0 * s, 48.0 * s, 48.0 * s);
             if let Some(image) = &self.avatar {
                 super::charts::image_circle(pm, image, avatar);
             } else {
@@ -184,10 +200,10 @@ impl Dash {
                 self.dtext(pm, &self.user.initial(), Rect::new(avatar.x, avatar.y + 18.0 * s, avatar.w, 40.0 * s), 28.0, Weight::Medium, th.accent_text_c(), true);
             }
             let tx = avatar.right() + 16.0 * s;
-            self.dtext(pm, &self.user.display.clone(), Rect::new(tx, user.y + 18.0 * s, user.right() - tx - 12.0 * s, 30.0 * s), 18.0, Weight::Medium, th.text_c(), false);
-            self.dtext(pm, &self.user.host.clone(), Rect::new(tx, user.y + 49.0 * s, user.right() - tx - 12.0 * s, 24.0 * s), 12.0, Weight::Regular, th.sub(), false);
+            self.dtext(pm, &self.user.display.clone(), Rect::new(tx, user.y + 10.0 * s, user.right() - tx - 12.0 * s, 30.0 * s), 18.0, Weight::Medium, th.text_c(), false);
+            self.dtext(pm, &self.user.host.clone(), Rect::new(tx, user.y + 39.0 * s, user.right() - tx - 12.0 * s, 24.0 * s), 12.0, Weight::Regular, th.sub(), false);
             let uptime = self.cur.uptime.map(sysinfo::format_uptime).unwrap_or_else(|| "Uptime unavailable".into());
-            self.dtext(pm, &uptime, Rect::new(tx, user.y + 76.0 * s, user.right() - tx - 12.0 * s, 24.0 * s), 12.0, Weight::Regular, th.sub(), false);
+            self.dtext(pm, &uptime, Rect::new(tx, user.y + 64.0 * s, user.right() - tx - 12.0 * s, 24.0 * s), 12.0, Weight::Regular, th.sub(), false);
             self.dux_calendar(pm, g.shift(g.calendar, self.dux.scroll), s);
             self.dux_resources(pm, g.shift(g.resources, self.dux.scroll), s);
             self.dux_media(pm, g.shift(g.media, self.dux.scroll), s, false);
@@ -282,7 +298,7 @@ impl Dash {
             }
         } else {
             self.dicon(pm, "sun-small", Rect::new(r.cx() - 20.0 * s, r.y + 20.0 * s, 40.0 * s, 40.0 * s), true);
-            self.dtext(pm, "Weather unavailable", Rect::new(r.x + 12.0 * s, r.y + 78.0 * s, r.w - 24.0 * s, 32.0 * s), 13.0, Weight::Regular, th.sub(), true);
+            self.dtext(pm, "Weather unavailable", Rect::new(r.x + 12.0 * s, r.y + 62.0 * s, r.w - 24.0 * s, 26.0 * s), 13.0, Weight::Regular, th.sub(), true);
         }
     }
     fn dux_calendar(&mut self, pm: &mut Pixmap, r: Rect, s: f32) {
@@ -442,6 +458,8 @@ impl Dash {
         match target {
             Target::Page(page) => {
                 self.dux.page = page;
+                self.dux.focus = self.dux.focus.and_then(|target| matches!(target, Target::Page(_)).then_some(Target::Page(page)));
+                self.dux.hover = None;
                 self.dux.scroll = 0.0;
                 self.dux.seek = None;
                 self.dux.volume = None;
@@ -555,13 +573,24 @@ impl Dash {
         self.dux.scroll = (self.dux.scroll + dy * 40.0).clamp(0.0, (self.dux_bottom(&g) - height).max(0.0));
         Response::REDRAW
     }
+    fn dux_adjust_seek(&mut self, seconds: i64) -> Response {
+        let Some(player) = self.active().filter(|p| p.can_seek) else { return Response::NONE };
+        let Some(length) = player.meta.length_us.filter(|n| *n > 0) else { return Response::NONE };
+        let position = player.position_us.saturating_add(seconds.saturating_mul(1_000_000)).clamp(0, length);
+        self.dux_activate(Target::Seek(position as f32 / length as f32))
+    }
+
     pub(super) fn dux_key(&mut self, ev: &KeyEvent) -> Response {
         match ev.key {
             Key::Escape => Response::act(Action::Close),
+            Key::Left if matches!(self.dux.focus, Some(Target::Volume(_))) => self.adjust_volume(-5),
+            Key::Right if matches!(self.dux.focus, Some(Target::Volume(_))) => self.adjust_volume(5),
+            Key::Left | Key::Down if matches!(self.dux.focus, Some(Target::Seek(_))) => self.dux_adjust_seek(-5),
+            Key::Right | Key::Up if matches!(self.dux.focus, Some(Target::Seek(_))) => self.dux_adjust_seek(5),
             Key::Left => self.dux_activate(Target::Page((self.dux.page + 2) % 3)),
             Key::Right => self.dux_activate(Target::Page((self.dux.page + 1) % 3)),
-            Key::Up if self.dux.page == 1 => self.adjust_volume(5),
-            Key::Down if self.dux.page == 1 => self.adjust_volume(-5),
+            Key::Up if matches!(self.dux.focus, Some(Target::Volume(_))) => self.adjust_volume(5),
+            Key::Down if matches!(self.dux.focus, Some(Target::Volume(_))) => self.adjust_volume(-5),
             Key::PageDown | Key::Down => self.dux_scroll(4.0),
             Key::PageUp | Key::Up => self.dux_scroll(-4.0),
             Key::Home => {
@@ -596,10 +625,10 @@ impl Dash {
                 None => Response::NONE,
             },
             Key::Char if matches!(ev.ch, Some('1'..='3')) => self.dux_activate(Target::Page((ev.ch.unwrap() as u8 - b'1') as usize)),
-            Key::Char if ev.ch == Some(' ') => {
-                self.command(Cmd::PlayPause);
-                Response::NONE
-            }
+            Key::Char if ev.ch == Some(' ') => match self.dux.focus {
+                Some(Target::Seek(_) | Target::Volume(_)) | None => Response::NONE,
+                Some(target) => self.dux_activate(target),
+            },
             _ => Response::NONE,
         }
     }
@@ -668,6 +697,62 @@ mod tests {
             other => panic!("unexpected {other:?}"),
         }
     }
+    #[test]
+    fn comfortable_source_grid_matches_pinned_dashmetrics_equations() {
+        let g = Grid::new(832.0, 1.0);
+        assert_eq!(g.clock, Rect::new(12.0, 92.0, 128.0, 200.0));
+        assert_eq!(g.weather, Rect::new(148.0, 92.0, 264.0, 96.0));
+        assert_eq!(g.user, Rect::new(420.0, 92.0, 400.0, 96.0));
+        assert_eq!(g.resources, Rect::new(12.0, 300.0, 128.0, 304.0));
+        assert_eq!(g.calendar, Rect::new(148.0, 196.0, 536.0, 408.0));
+        assert_eq!(g.media, Rect::new(692.0, 196.0, 128.0, 408.0));
+        assert_eq!(g.bottom, 616.0);
+    }
+
+    #[test]
+    fn media_arrows_scroll_without_slider_focus_and_space_activates_only_focus() {
+        let mut dash = Dash::new(Tab::Media, None, None);
+        dash.dux.size = (832, 300);
+        let mut player = Player::new("org.mpris.MediaPlayer2.fixture", Instant::now());
+        player.ready = true;
+        player.volume = Some(0.5);
+        player.position_us = 20_000_000;
+        player.meta.length_us = Some(100_000_000);
+        player.can_seek = true;
+        dash.auto = Some(player.bus.clone());
+        dash.players.push(player);
+        let (sink, commands, _peer) = Mpris::test_sink();
+        dash.mpris = Some(sink);
+        let key = |key, ch| KeyEvent { key, text: String::new(), ch, ctrl: false, shift: false, alt: false };
+        dash.dux_key(&key(Key::Down, None));
+        assert!(dash.dux.scroll > 0.0);
+        assert!(commands.try_recv().is_err(), "ordinary arrows must not change player volume");
+        dash.dux_key(&key(Key::Char, Some(' ')));
+        assert!(commands.try_recv().is_err(), "Space without focus must not operate the player");
+        dash.dux.page = 0;
+        dash.dux.focus = Some(Target::NextMonth);
+        dash.dux_key(&key(Key::Char, Some(' ')));
+        assert_eq!(dash.dux.month, 1);
+        assert!(commands.try_recv().is_err());
+        dash.dux_activate(Target::Page(1));
+        assert!(dash.dux.focus.is_none(), "page changes must clear controls absent from the new page");
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Polling(true))));
+        dash.dux.focus = Some(Target::Volume(0.0));
+        dash.dux_key(&key(Key::Up, None));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Volume(_, v)) if (v-0.55).abs()<0.001));
+        dash.dux.focus = Some(Target::Seek(0.0));
+        dash.dux_key(&key(Key::Up, None));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::Seek(_, v)) if (v-25_000_000).abs()<32));
+        dash.dux_key(&key(Key::Char, Some(' ')));
+        assert!(commands.try_recv().is_err(), "Space on a slider must not commit zero");
+        dash.dux.focus = Some(Target::Play);
+        dash.dux_key(&key(Key::Char, Some(' ')));
+        assert!(matches!(commands.try_recv(), Ok(Cmd::PlayPause(_))));
+        let perf = Dash::new(Tab::Performance, None, None);
+        assert!(!perf.dux_enabled(), "Performance uses the actual shared performance page, never Weather");
+        assert_eq!(perf.dux.page, 0);
+    }
+
     #[test]
     fn source_grid_and_large_text_reflow_keep_cards_separate_and_in_bounds() {
         for (width, scale) in [(840.0, 1.0), (960.0, 2.0), (480.0, 1.0), (720.0, 2.0)] {

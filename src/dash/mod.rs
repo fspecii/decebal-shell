@@ -80,12 +80,11 @@ pub struct Dash {
 /// along the top edge (`top`, `split`), else near the top edge of the screen.
 fn default_top() -> i32 {
     let th = crate::theme::th();
-    if th.bar_style == "dux" {
-        (th.bar_height + 2.0 * th.bar_layout.margin + layout::BAR_GAP).ceil() as i32
-    } else if th.pill_bar().is_some() {
-        th.bar_insets().top + 10
+    let bottom = crate::theme::bar_bottom();
+    if th.pill_bar().is_some() {
+        bottom.ceil() as i32 + 10
     } else {
-        crate::theme::BAR_HEIGHT as i32 + layout::BAR_GAP as i32
+        bottom.ceil() as i32 + crate::dash::layout::BAR_GAP as i32
     }
 }
 

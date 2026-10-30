@@ -39,6 +39,28 @@ pub fn pill_bar_thickness(position: crate::config::BarPosition) -> f32 {
     }
 }
 
+/// Logical top-edge extent of a visible bar. Placement consumers share this with
+/// the bar renderer instead of assuming the classic 26px height. Side/bottom rails
+/// do not occupy the top edge. `visible` is explicit so forced native bar fixtures
+/// can ignore the user's process gate without doing file I/O while painting.
+pub fn bar_bottom_for(theme: &model::Theme, visible: bool) -> f32 {
+    if !visible {
+        return 0.0;
+    }
+    if theme.pill_bar().is_some() {
+        theme.bar_insets().top as f32
+    } else if theme.bar_style == "dux" {
+        theme.bar_height + 2.0 * theme.bar_layout.margin
+    } else {
+        BAR_HEIGHT
+    }
+}
+
+/// Current top-edge bar extent for popup placement (outside the paint path).
+pub fn bar_bottom() -> f32 {
+    bar_bottom_for(&th(), crate::config::shell_settings().bar_visible(crate::config::dock_settings().style))
+}
+
 pub const BAR_BG: (u8, u8, u8) = (19, 19, 19);
 
 // Shared, switchable theme (colours, metrics, fonts): see docs/theming.md. Kept in `theme/` so this
@@ -60,3 +82,29 @@ pub mod system;
 pub mod wallpaper_follow;
 pub use live::{current, current as th, generation, take_changed};
 pub use model::{Dynamic, Insets, Mode, Rgb, Selection, Theme};
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    #[test]
+    fn top_edge_extent_covers_classic_dux_rails_and_disabled_bars() {
+        let mut theme = model::Def::parse("name = 'fixture'").unwrap().resolve("fixture", true, &Selection::default());
+        assert_eq!(bar_bottom_for(&theme, true), 26.0);
+        theme.bar_style = "dux".into();
+        theme.bar_height = 38.0;
+        theme.bar_layout.margin = 4.0;
+        assert_eq!(bar_bottom_for(&theme, true), 46.0);
+        assert_eq!(bar_bottom_for(&theme, false), 0.0);
+        theme.bar_style = "vertical".into();
+        for (position, expected) in [
+            (crate::config::BarPosition::Top, 40.0),
+            (crate::config::BarPosition::Split, 40.0),
+            (crate::config::BarPosition::Left, 0.0),
+            (crate::config::BarPosition::Right, 0.0),
+            (crate::config::BarPosition::Bottom, 0.0),
+        ] {
+            theme.bar_position = position;
+            assert_eq!(bar_bottom_for(&theme, true), expected);
+        }
+    }
+}

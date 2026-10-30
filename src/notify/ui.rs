@@ -578,7 +578,7 @@ impl Ui {
     fn top(&self) -> i32 {
         // below the classic bar; with the Caelestia pill bar below it when it runs along the top (`top`, `split`), else near the edge
         let th = crate::theme::th();
-        let below = if th.pill_bar().is_some() { 12.0 + th.bar_insets().top as f32 / self.s } else { crate::theme::BAR_HEIGHT + 8.0 };
+        let below = if th.pill_bar().is_some() { 12.0 + crate::theme::bar_bottom() / self.s } else { crate::theme::bar_bottom() + 8.0 };
         self.mon.y + (self.px(below).round() as i32).min((self.mon.h - 1).max(0))
     }
 

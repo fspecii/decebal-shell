@@ -121,10 +121,11 @@ pub struct Monitor {
 /// Where the popup hangs by default: just under the classic bar, or under the pill bar along the top edge (as the dashboard does).
 pub fn default_top() -> i32 {
     let th = crate::theme::th();
+    let bottom = crate::theme::bar_bottom();
     if th.pill_bar().is_some() {
-        th.bar_insets().top + 10
+        bottom.ceil() as i32 + 10
     } else {
-        crate::theme::BAR_HEIGHT as i32 + crate::dash::layout::BAR_GAP as i32
+        bottom.ceil() as i32 + crate::dash::layout::BAR_GAP as i32
     }
 }
 
