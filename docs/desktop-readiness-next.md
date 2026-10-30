@@ -6,21 +6,19 @@ No tests or live changes were performed for this report.
 
 ## 1. Third-party application indicators
 
-**Backend checkpoint:** `src/sni.rs` now provides a dormant worker foundation.
-`bash tests/e2e/sni-backend.sh` passed real Host tests against two private items,
-owned/external watchers, signals, pixels, menus, actions and reownership. It is
-not started by the bar or dock yet. Visible layouts/input, real-app verification,
-custom icon paths, overlays, external-host unregistration and initial-property
-retries remain. The original UI acceptance criteria below still apply.
+**Integration checkpoint:** SNI now renders in horizontal bars, vertical rails and
+Windows taskbars, with cached images, typed input, nested/dynamic menus and paged
+overflow. Private Host/UI tests and actual OBS checks pass; see
+[scope and limits](app-indicators.md). Custom icon paths, overlays, external-host
+lifecycle and bounded retries are implemented. Remaining work includes XEmbed,
+Wayland activation/global coordinates and wider real-app compatibility.
 
 **User trigger:** start a chat/sync/VPN application that registers an indicator,
-then close its normal window. The current built-in status “tray” provides no
-application-specific reopen/menu affordance.
+then close its normal window. The app should remain reachable from its indicator.
 
-**Evidence:** `src/menubar/mod.rs::Tray` is a fixed enum of shell controls;
-`src/taskbar/mod.rs` still lays out that fixed list. The SNI backend is not wired
-into either surface; no XEmbed manager exists. Existing D-Bus patterns live in
-`src/dbus.rs` and `src/notify/mod.rs`.
+**Evidence:** `src/sni.rs` supplies worker snapshots and typed actions;
+`menubar/indicators.rs`, `menubar/vbar.rs` and `dock_app/windows.rs` render and
+route input. Actual private native tests exercise all three surfaces and OBS.
 
 **Implementation:** add a session-bus StatusNotifier watcher/host with bounded
 icon/pixmap decoding and ownership/lifecycle handling, then expose its items in

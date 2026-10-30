@@ -18,6 +18,7 @@ The backend is picked automatically (`DECEBAL_BACKEND=wayland|x11` forces one).
 
 New here? Start with the [first-session guide](docs/getting-started.md) for familiar tools,
 window controls, customization and recovery.
+Background apps can use [native app indicators and menus](docs/app-indicators.md) in the bar, rail and Windows taskbar.
 
 ## What is in it
 

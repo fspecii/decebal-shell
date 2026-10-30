@@ -145,6 +145,13 @@ e2e-notes-timer: all
 e2e-file-manager-profiles:
 	bash tests/e2e/file-manager-profiles.sh
 
+.PHONY: e2e-app-indicators
+e2e-app-indicators: all
+	bash tests/e2e/sni-fixture.sh
+	bash tests/e2e/sni-backend.sh
+	PROFILE=release bash tests/e2e/sni-ui.sh
+	PROFILE=release bash tests/e2e/sni-ui.sh --tiny-rail
+
 e2e-welcome-accessibility: all
 	tests/e2e/welcome-accessibility.sh
 
