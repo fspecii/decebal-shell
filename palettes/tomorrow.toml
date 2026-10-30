@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Chris Kempson (http://chriskempson.com)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/tomorrow-night.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Tomorrow"
+description = "Tomorrow Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/tomorrow-night.yaml
+[dark]
+background = "#1d1f21" # base00
+sidebar = "#1d1f21" # base00
+surface = "#282a2e" # base01
+bar = "#1d1f21" # base00
+bar_text = "#ffffff" # base07
+popup = "#282a2e" # base01
+dock = "#1d1f21" # base00
+overlay = "#282a2e" # base01
+titlebar = "#282a2e" # base01
+titlebar_inactive = "#1d1f21" # base00
+border = "#373b41" # base02
+text = "#ffffff" # base07
+text_secondary = "#b4b7b4" # base04
+text_faint = "#969896" # base03
+accent = "#81a2be" # base0D
+accent_text = "#1d1f21" # base00
+danger = "#cc6666" # base08
+ok = "#b5bd68" # base0B
+warn = "#f0c674" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/tomorrow.yaml
+[light]
+background = "#ffffff" # base00
+sidebar = "#ffffff" # base00
+surface = "#e0e0e0" # base01
+bar = "#ffffff" # base00
+bar_text = "#1d1f21" # base07
+popup = "#e0e0e0" # base01
+dock = "#ffffff" # base00
+overlay = "#e0e0e0" # base01
+titlebar = "#e0e0e0" # base01
+titlebar_inactive = "#ffffff" # base00
+border = "#c5c8c6" # base02
+text = "#1d1f21" # base07
+text_secondary = "#373b41" # base05
+text_faint = "#373b41" # base05
+accent = "#4271ae" # base0D
+accent_text = "#ffffff" # base00
+danger = "#c82829" # base08
+ok = "#6f8901" # base0B ; Decebal contrast adaptation
+warn = "#9b7c0d" # base0A ; Decebal contrast adaptation

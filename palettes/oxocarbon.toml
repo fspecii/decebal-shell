@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: shaunsingh/IBM, Tinted Theming (https://github.com/tinted-theming)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oxocarbon-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Oxocarbon"
+description = "Oxocarbon Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oxocarbon-dark.yaml
+[dark]
+background = "#161616" # base00
+sidebar = "#161616" # base00
+surface = "#262626" # base01
+bar = "#161616" # base00
+bar_text = "#ffffff" # base06
+popup = "#262626" # base01
+dock = "#161616" # base00
+overlay = "#262626" # base01
+titlebar = "#262626" # base01
+titlebar_inactive = "#161616" # base00
+border = "#393939" # base02
+text = "#ffffff" # base06
+text_secondary = "#dde1e6" # base04
+text_faint = "#08bdba" # base07
+accent = "#33b1ff" # base0D
+accent_text = "#161616" # base00
+danger = "#ee5396" # base08
+ok = "#42be65" # base0B
+warn = "#ff6f00" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oxocarbon-light.yaml
+[light]
+background = "#f2f4f8" # base00
+sidebar = "#f2f4f8" # base00
+surface = "#dde1e6" # base01
+bar = "#f2f4f8" # base00
+bar_text = "#272d35" # base07
+popup = "#dde1e6" # base01
+dock = "#f2f4f8" # base00
+overlay = "#dde1e6" # base01
+titlebar = "#dde1e6" # base01
+titlebar_inactive = "#f2f4f8" # base00
+border = "#bec6cf" # base02
+text = "#272d35" # base07
+text_secondary = "#525f70" # base05
+text_faint = "#68788d" # base04
+accent = "#0f62fe" # base0D
+accent_text = "#f2f4f8" # base00
+danger = "#ba648d" # base08 ; Decebal contrast adaptation
+ok = "#3a9056" # base0B ; Decebal contrast adaptation
+warn = "#ce600c" # base0A ; Decebal contrast adaptation

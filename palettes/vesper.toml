@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: FormalSnake (https://github.com/formalsnake)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/vesper.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Vesper"
+description = "Vesper Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/vesper.yaml
+[dark]
+background = "#101010" # base00
+sidebar = "#101010" # base00
+surface = "#232323" # base01
+bar = "#101010" # base00
+bar_text = "#d5d5d5" # base07
+popup = "#232323" # base01
+dock = "#101010" # base00
+overlay = "#232323" # base01
+titlebar = "#232323" # base01
+titlebar_inactive = "#101010" # base00
+border = "#222222" # base02
+text = "#d5d5d5" # base07
+text_secondary = "#999999" # base04
+text_faint = "#999999" # base04
+accent = "#ffc799" # base0A
+accent_text = "#101010" # base00
+danger = "#de6e6e" # base08
+ok = "#5f8787" # base0B
+warn = "#ffc799" # base0A
+
+# Decebal light adaptation using the dark source colours
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/vesper.yaml
+[light]
+background = "#d5d5d5" # base07
+sidebar = "#d5d5d5" # base07
+surface = "#d5d5d5" # base07
+bar = "#d5d5d5" # base07
+bar_text = "#101010" # base00
+popup = "#d5d5d5" # base07
+dock = "#d5d5d5" # base07
+overlay = "#d5d5d5" # base07
+titlebar = "#d5d5d5" # base07
+titlebar_inactive = "#d5d5d5" # base07
+border = "#222222" # base02
+text = "#101010" # base00
+text_secondary = "#333333" # base03
+text_faint = "#333333" # base03
+accent = "#876c4f" # base0F
+accent_text = "#ffffff" # decebal.contrast.white ; Decebal contrast adaptation
+danger = "#b75c5c" # base08 ; Decebal contrast adaptation
+ok = "#597e7e" # base0B ; Decebal contrast adaptation
+warn = "#90725a" # base0A ; Decebal contrast adaptation

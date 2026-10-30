@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: https://github.com/voronianski/oceanic-next-color-scheme
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oceanicnext.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "OceanicNext"
+description = "OceanicNext Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oceanicnext.yaml
+[dark]
+background = "#1b2b34" # base00
+sidebar = "#1b2b34" # base00
+surface = "#343d46" # base01
+bar = "#1b2b34" # base00
+bar_text = "#d8dee9" # base07
+popup = "#343d46" # base01
+dock = "#1b2b34" # base00
+overlay = "#343d46" # base01
+titlebar = "#343d46" # base01
+titlebar_inactive = "#1b2b34" # base00
+border = "#4f5b66" # base02
+text = "#d8dee9" # base07
+text_secondary = "#a7adba" # base04
+text_faint = "#a7adba" # base04
+accent = "#5fb3b3" # base0C
+accent_text = "#1b2b34" # base00
+danger = "#ec5f67" # base08
+ok = "#99c794" # base0B
+warn = "#fac863" # base0A
+
+# Decebal light adaptation using the dark source colours
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oceanicnext.yaml
+[light]
+background = "#d8dee9" # base07
+sidebar = "#d8dee9" # base07
+surface = "#d8dee9" # base07
+bar = "#d8dee9" # base07
+bar_text = "#1b2b34" # base00
+popup = "#d8dee9" # base07
+dock = "#d8dee9" # base07
+overlay = "#d8dee9" # base07
+titlebar = "#d8dee9" # base07
+titlebar_inactive = "#d8dee9" # base07
+border = "#4f5b66" # base02
+text = "#1b2b34" # base00
+text_secondary = "#4f5b66" # base02
+text_faint = "#65737e" # base03
+accent = "#65737e" # base03
+accent_text = "#ffffff" # decebal.contrast.white ; Decebal contrast adaptation
+danger = "#ce5760" # base08 ; Decebal contrast adaptation
+ok = "#64856c" # base0B ; Decebal contrast adaptation
+warn = "#8f7c4c" # base0A ; Decebal contrast adaptation

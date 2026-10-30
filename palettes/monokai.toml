@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Wimer Hazenberg (http://www.monokai.nl)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/monokai.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Monokai"
+description = "Monokai Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/monokai.yaml
+[dark]
+background = "#272822" # base00
+sidebar = "#272822" # base00
+surface = "#383830" # base01
+bar = "#272822" # base00
+bar_text = "#f9f8f5" # base07
+popup = "#383830" # base01
+dock = "#272822" # base00
+overlay = "#383830" # base01
+titlebar = "#383830" # base01
+titlebar_inactive = "#272822" # base00
+border = "#49483e" # base02
+text = "#f9f8f5" # base07
+text_secondary = "#f5f4f1" # base06
+text_faint = "#a59f85" # base04
+accent = "#f92672" # base08
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#f92672" # base08
+ok = "#a6e22e" # base0B
+warn = "#f4bf75" # base0A
+
+# Decebal light adaptation using the dark source colours
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/monokai.yaml
+[light]
+background = "#f9f8f5" # base07
+sidebar = "#f9f8f5" # base07
+surface = "#f5f4f1" # base06
+bar = "#f9f8f5" # base07
+bar_text = "#272822" # base00
+popup = "#f5f4f1" # base06
+dock = "#f9f8f5" # base07
+overlay = "#f5f4f1" # base06
+titlebar = "#f5f4f1" # base06
+titlebar_inactive = "#f9f8f5" # base07
+border = "#49483e" # base02
+text = "#272822" # base00
+text_secondary = "#49483e" # base02
+text_faint = "#75715e" # base03
+accent = "#f92672" # base08
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#f92672" # base08
+ok = "#749929" # base0B ; Decebal contrast adaptation
+warn = "#a98756" # base0A ; Decebal contrast adaptation

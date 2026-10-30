@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Nasser Alshammari (https://github.com/nashamri/spacemacs-theme)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/spacemacs.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Spacemacs"
+description = "Spacemacs Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/spacemacs.yaml
+[dark]
+background = "#1f2022" # base00
+sidebar = "#1f2022" # base00
+surface = "#282828" # base01
+bar = "#1f2022" # base00
+bar_text = "#f8f8f8" # base07
+popup = "#282828" # base01
+dock = "#1f2022" # base00
+overlay = "#282828" # base01
+titlebar = "#282828" # base01
+titlebar_inactive = "#1f2022" # base00
+border = "#444155" # base02
+text = "#f8f8f8" # base07
+text_secondary = "#b8b8b8" # base04
+text_faint = "#a3a3a3" # base05
+accent = "#4f97d7" # base0D
+accent_text = "#1f2022" # base00
+danger = "#f2241f" # base08
+ok = "#67b11d" # base0B
+warn = "#b1951d" # base0A
+
+# Decebal light adaptation using the dark source colours
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/spacemacs.yaml
+[light]
+background = "#f8f8f8" # base07
+sidebar = "#f8f8f8" # base07
+surface = "#e8e8e8" # base06
+bar = "#f8f8f8" # base07
+bar_text = "#1f2022" # base00
+popup = "#e8e8e8" # base06
+dock = "#f8f8f8" # base07
+overlay = "#e8e8e8" # base06
+titlebar = "#e8e8e8" # base06
+titlebar_inactive = "#f8f8f8" # base07
+border = "#444155" # base02
+text = "#1f2022" # base00
+text_secondary = "#585858" # base03
+text_faint = "#585858" # base03
+accent = "#a31db1" # base0E
+accent_text = "#f8f8f8" # base07
+danger = "#f2241f" # base08
+ok = "#59941e" # base0B ; Decebal contrast adaptation
+warn = "#9b831e" # base0A ; Decebal contrast adaptation

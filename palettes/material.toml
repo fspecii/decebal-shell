@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Nate Peterson
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/material.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Material"
+description = "Material Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/material.yaml
+[dark]
+background = "#263238" # base00
+sidebar = "#263238" # base00
+surface = "#2e3c43" # base01
+bar = "#263238" # base00
+bar_text = "#ffffff" # base07
+popup = "#2e3c43" # base01
+dock = "#263238" # base00
+overlay = "#2e3c43" # base01
+titlebar = "#2e3c43" # base01
+titlebar_inactive = "#263238" # base00
+border = "#314549" # base02
+text = "#ffffff" # base07
+text_secondary = "#b2ccd6" # base04
+text_faint = "#b2ccd6" # base04
+accent = "#89ddff" # base0C
+accent_text = "#263238" # base00
+danger = "#f07178" # base08
+ok = "#c3e88d" # base0B
+warn = "#ffcb6b" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/material-lighter.yaml
+[light]
+background = "#fafafa" # base00
+sidebar = "#fafafa" # base00
+surface = "#e7eaec" # base01
+bar = "#fafafa" # base00
+bar_text = "#000000" # base07
+popup = "#e7eaec" # base01
+dock = "#fafafa" # base00
+overlay = "#e7eaec" # base01
+titlebar = "#e7eaec" # base01
+titlebar_inactive = "#fafafa" # base00
+border = "#cceae7" # base02
+text = "#000000" # base07
+text_secondary = "#000000" # base07
+text_faint = "#000000" # base07
+accent = "#6182b8" # base0D
+accent_text = "#000000" # base07
+danger = "#eb4c67" # base08 ; Decebal contrast adaptation
+ok = "#718f45" # base0B ; Decebal contrast adaptation
+warn = "#ae7c1e" # base0A ; Decebal contrast adaptation

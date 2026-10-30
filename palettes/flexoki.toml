@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Steph Ango (https://github.com/kepano/flexoki)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/flexoki-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Flexoki"
+description = "Flexoki Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/flexoki-dark.yaml
+[dark]
+background = "#100f0f" # base00
+sidebar = "#100f0f" # base00
+surface = "#1c1b1a" # base01
+bar = "#100f0f" # base00
+bar_text = "#fffcf0" # base07
+popup = "#1c1b1a" # base01
+dock = "#100f0f" # base00
+overlay = "#1c1b1a" # base01
+titlebar = "#1c1b1a" # base01
+titlebar_inactive = "#100f0f" # base00
+border = "#282726" # base02
+text = "#fffcf0" # base07
+text_secondary = "#878580" # base04
+text_faint = "#878580" # base04
+accent = "#4385be" # base0D
+accent_text = "#100f0f" # base00
+danger = "#d14d41" # base08
+ok = "#879a39" # base0B
+warn = "#d0a215" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/flexoki-light.yaml
+[light]
+background = "#fffcf0" # base00
+sidebar = "#fffcf0" # base00
+surface = "#f2f0e5" # base01
+bar = "#fffcf0" # base00
+bar_text = "#100f0f" # base07
+popup = "#f2f0e5" # base01
+dock = "#fffcf0" # base00
+overlay = "#f2f0e5" # base01
+titlebar = "#f2f0e5" # base01
+titlebar_inactive = "#fffcf0" # base00
+border = "#e6e4d9" # base02
+text = "#100f0f" # base07
+text_secondary = "#403e3c" # base05
+text_faint = "#403e3c" # base05
+accent = "#205ea6" # base0D
+accent_text = "#fffcf0" # base00
+danger = "#af3029" # base08
+ok = "#66800b" # base0B
+warn = "#ad8301" # base0A

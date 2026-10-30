@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: cjayross (https://github.com/cjayross), Tinted Theming (https://github.com/tinted-theming)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/edge-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Edge"
+description = "Edge Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/edge-dark.yaml
+[dark]
+background = "#262729" # base00
+sidebar = "#262729" # base00
+surface = "#313235" # base01
+bar = "#262729" # base00
+bar_text = "#e4e5e6" # base07
+popup = "#313235" # base01
+dock = "#262729" # base00
+overlay = "#313235" # base01
+titlebar = "#313235" # base01
+titlebar_inactive = "#262729" # base00
+border = "#3d3f42" # base02
+text = "#e4e5e6" # base07
+text_secondary = "#afb2b5" # base05
+text_faint = "#95989d" # base04
+accent = "#73b3e7" # base0D
+accent_text = "#262729" # base00
+danger = "#e77171" # base08
+ok = "#a1bf78" # base0B
+warn = "#dbb774" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/edge-light.yaml
+[light]
+background = "#fafafa" # base00
+sidebar = "#fafafa" # base00
+surface = "#fafafa" # base00
+bar = "#fafafa" # base00
+bar_text = "#2e2e38" # base07
+popup = "#fafafa" # base00
+dock = "#fafafa" # base00
+overlay = "#fafafa" # base00
+titlebar = "#fafafa" # base00
+titlebar_inactive = "#fafafa" # base00
+border = "#acb1b9" # base02
+text = "#2e2e38" # base07
+text_secondary = "#5e646f" # base04
+text_faint = "#5e646f" # base04
+accent = "#6587bf" # base0D
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#db7070" # base08
+ok = "#7a9c4a" # base0B ; Decebal contrast adaptation
+warn = "#a59125" # base0A ; Decebal contrast adaptation

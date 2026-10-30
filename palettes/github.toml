@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Tinted Theming (https://github.com/tinted-theming)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/github-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "GitHub"
+description = "GitHub Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/github-dark.yaml
+[dark]
+background = "#0d1117" # base00
+sidebar = "#0d1117" # base00
+surface = "#151b23" # base01
+bar = "#0d1117" # base00
+bar_text = "#ffffff" # base07
+popup = "#151b23" # base01
+dock = "#0d1117" # base00
+overlay = "#151b23" # base01
+titlebar = "#151b23" # base01
+titlebar_inactive = "#0d1117" # base00
+border = "#2f3742" # base02
+text = "#ffffff" # base07
+text_secondary = "#9198a1" # base04
+text_faint = "#656c76" # base03
+accent = "#58a6ff" # base0D
+accent_text = "#0d1117" # base00
+danger = "#ff7b72" # base08
+ok = "#3fb950" # base0B
+warn = "#d29922" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/github.yaml
+[light]
+background = "#ffffff" # base00
+sidebar = "#ffffff" # base00
+surface = "#f6f8fa" # base01
+bar = "#ffffff" # base00
+bar_text = "#1f2328" # base07
+popup = "#f6f8fa" # base01
+dock = "#ffffff" # base00
+overlay = "#f6f8fa" # base01
+titlebar = "#f6f8fa" # base01
+titlebar_inactive = "#ffffff" # base00
+border = "#d1d9e0" # base02
+text = "#1f2328" # base07
+text_secondary = "#59636e" # base04
+text_faint = "#818b98" # base03
+accent = "#0969da" # base0D
+accent_text = "#ffffff" # base00
+danger = "#cf222e" # base08
+ok = "#116329" # base0B
+warn = "#9a6700" # base0A

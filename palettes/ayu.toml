@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Tinted Theming (https://github.com/tinted-theming), Ayu Theme (https://github.com/ayu-theme)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/ayu-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Ayu"
+description = "Ayu Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/ayu-dark.yaml
+[dark]
+background = "#0b0e14" # base00
+sidebar = "#0b0e14" # base00
+surface = "#131721" # base01
+bar = "#0b0e14" # base00
+bar_text = "#f2f0e7" # base07
+popup = "#131721" # base01
+dock = "#0b0e14" # base00
+overlay = "#131721" # base01
+titlebar = "#131721" # base01
+titlebar_inactive = "#0b0e14" # base00
+border = "#202229" # base02
+text = "#f2f0e7" # base07
+text_secondary = "#bfbdb6" # base04
+text_faint = "#bfbdb6" # base04
+accent = "#ffb454" # base0A
+accent_text = "#0b0e14" # base00
+danger = "#f07178" # base08
+ok = "#aad94c" # base0B
+warn = "#ffb454" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/ayu-light.yaml
+[light]
+background = "#f8f9fa" # base00
+sidebar = "#f8f9fa" # base00
+surface = "#f8f9fa" # base00
+bar = "#f8f9fa" # base00
+bar_text = "#404447" # base07
+popup = "#f8f9fa" # base00
+dock = "#f8f9fa" # base00
+overlay = "#f8f9fa" # base00
+titlebar = "#f8f9fa" # base00
+titlebar_inactive = "#f8f9fa" # base00
+border = "#d2d4d8" # base02
+text = "#404447" # base07
+text_secondary = "#5c6166" # base05
+text_faint = "#8a9199" # base04
+accent = "#a37acc" # base0E
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#e16d6e" # base08 ; Decebal contrast adaptation
+ok = "#619f48" # base0B ; Decebal contrast adaptation
+warn = "#b48948" # base0A ; Decebal contrast adaptation

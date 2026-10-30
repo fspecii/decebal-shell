@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Lalit Magant (http://github.com/tilal6991)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/onedark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "One Dark / One Light"
+description = "One Dark / One Light Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/onedark.yaml
+[dark]
+background = "#282c34" # base00
+sidebar = "#282c34" # base00
+surface = "#353b45" # base01
+bar = "#282c34" # base00
+bar_text = "#c8ccd4" # base07
+popup = "#353b45" # base01
+dock = "#282c34" # base00
+overlay = "#353b45" # base01
+titlebar = "#353b45" # base01
+titlebar_inactive = "#282c34" # base00
+border = "#3e4451" # base02
+text = "#c8ccd4" # base07
+text_secondary = "#abb2bf" # base05
+text_faint = "#abb2bf" # base05
+accent = "#61afef" # base0D
+accent_text = "#282c34" # base00
+danger = "#e06c75" # base08
+ok = "#98c379" # base0B
+warn = "#e5c07b" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/one-light.yaml
+[light]
+background = "#fafafa" # base00
+sidebar = "#fafafa" # base00
+surface = "#f0f0f1" # base01
+bar = "#fafafa" # base00
+bar_text = "#090a0b" # base07
+popup = "#f0f0f1" # base01
+dock = "#fafafa" # base00
+overlay = "#f0f0f1" # base01
+titlebar = "#f0f0f1" # base01
+titlebar_inactive = "#fafafa" # base00
+border = "#e5e5e6" # base02
+text = "#090a0b" # base07
+text_secondary = "#696c77" # base04
+text_faint = "#696c77" # base04
+accent = "#4078f2" # base0D
+accent_text = "#090a0b" # base07
+danger = "#ca1243" # base08
+ok = "#4d9b4c" # base0B ; Decebal contrast adaptation
+warn = "#ba7f01" # base0A ; Decebal contrast adaptation

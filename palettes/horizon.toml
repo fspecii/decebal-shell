@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Michaël Ball (http://github.com/michael-ball/)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/horizon-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Horizon"
+description = "Horizon Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/horizon-dark.yaml
+[dark]
+background = "#1c1e26" # base00
+sidebar = "#1c1e26" # base00
+surface = "#232530" # base01
+bar = "#1c1e26" # base00
+bar_text = "#e3e6ee" # base07
+popup = "#232530" # base01
+dock = "#1c1e26" # base00
+overlay = "#232530" # base01
+titlebar = "#232530" # base01
+titlebar_inactive = "#1c1e26" # base00
+border = "#2e303e" # base02
+text = "#e3e6ee" # base07
+text_secondary = "#9da0a2" # base04
+text_faint = "#6f6f70" # base03
+accent = "#e93c58" # base08
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#e93c58" # base08
+ok = "#efaf8e" # base0B
+warn = "#efb993" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/horizon-light.yaml
+[light]
+background = "#fdf0ed" # base00
+sidebar = "#fdf0ed" # base00
+surface = "#fadad1" # base01
+bar = "#fdf0ed" # base00
+bar_text = "#201c1d" # base07
+popup = "#fadad1" # base01
+dock = "#fdf0ed" # base00
+overlay = "#fadad1" # base01
+titlebar = "#fadad1" # base01
+titlebar_inactive = "#fdf0ed" # base00
+border = "#f9cbbe" # base02
+text = "#201c1d" # base07
+text_secondary = "#403c3d" # base05
+text_faint = "#403c3d" # base05
+accent = "#da103f" # base0D
+accent_text = "#fdf0ed" # base00
+danger = "#b16c72" # base08 ; Decebal contrast adaptation
+ok = "#60896f" # base0B ; Decebal contrast adaptation
+warn = "#8c7c79" # base0A ; Decebal contrast adaptation

@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Bram de Haan (http://atelierbramdehaan.nl)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/atelier-forest.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Atelier Forest"
+description = "Atelier Forest Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/atelier-forest.yaml
+[dark]
+background = "#1b1918" # base00
+sidebar = "#1b1918" # base00
+surface = "#2c2421" # base01
+bar = "#1b1918" # base00
+bar_text = "#f1efee" # base07
+popup = "#2c2421" # base01
+dock = "#1b1918" # base00
+overlay = "#2c2421" # base01
+titlebar = "#2c2421" # base01
+titlebar_inactive = "#1b1918" # base00
+border = "#68615e" # base02
+text = "#f1efee" # base07
+text_secondary = "#9c9491" # base04
+text_faint = "#766e6b" # base03
+accent = "#7b9726" # base0B
+accent_text = "#1b1918" # base00
+danger = "#f22c40" # base08
+ok = "#7b9726" # base0B
+warn = "#c38418" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/atelier-forest-light.yaml
+[light]
+background = "#f1efee" # base00
+sidebar = "#f1efee" # base00
+surface = "#e6e2e0" # base01
+bar = "#f1efee" # base00
+bar_text = "#1b1918" # base07
+popup = "#e6e2e0" # base01
+dock = "#f1efee" # base00
+overlay = "#e6e2e0" # base01
+titlebar = "#e6e2e0" # base01
+titlebar_inactive = "#f1efee" # base00
+border = "#a8a19f" # base02
+text = "#1b1918" # base07
+text_secondary = "#68615e" # base05
+text_faint = "#766e6b" # base04
+accent = "#df5320" # base09
+accent_text = "#1b1918" # base07
+danger = "#f22c40" # base08
+ok = "#718a25" # base0B ; Decebal contrast adaptation
+warn = "#ae7618" # base0A ; Decebal contrast adaptation

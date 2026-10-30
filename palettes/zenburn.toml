@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: elnawe
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/zenburn.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Zenburn"
+description = "Zenburn Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/zenburn.yaml
+[dark]
+background = "#383838" # base00
+sidebar = "#383838" # base00
+surface = "#404040" # base01
+bar = "#383838" # base00
+bar_text = "#ffffff" # base07
+popup = "#404040" # base01
+dock = "#383838" # base00
+overlay = "#404040" # base01
+titlebar = "#404040" # base01
+titlebar_inactive = "#383838" # base00
+border = "#606060" # base02
+text = "#ffffff" # base07
+text_secondary = "#c0c0c0" # base06
+text_faint = "#c0c0c0" # base06
+accent = "#e0cf9f" # base0A
+accent_text = "#383838" # base00
+danger = "#dca3a3" # base08
+ok = "#769276" # base0B ; Decebal contrast adaptation
+warn = "#e0cf9f" # base0A
+
+# Decebal light adaptation using the dark source colours
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/zenburn.yaml
+[light]
+background = "#ffffff" # base07
+sidebar = "#ffffff" # base07
+surface = "#c0c0c0" # base06
+bar = "#ffffff" # base07
+bar_text = "#383838" # base00
+popup = "#c0c0c0" # base06
+dock = "#ffffff" # base07
+overlay = "#c0c0c0" # base06
+titlebar = "#c0c0c0" # base06
+titlebar_inactive = "#ffffff" # base07
+border = "#606060" # base02
+text = "#383838" # base00
+text_secondary = "#404040" # base01
+text_faint = "#606060" # base02
+accent = "#000000" # base0F
+accent_text = "#ffffff" # base07
+danger = "#7b6363" # base08 ; Decebal contrast adaptation
+ok = "#566f56" # base0B ; Decebal contrast adaptation
+warn = "#6e6959" # base0A ; Decebal contrast adaptation

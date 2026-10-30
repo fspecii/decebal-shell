@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: FredHappyface (https://github.com/fredHappyface)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base24/bluloco-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Bluloco"
+description = "Bluloco Base16/Base24 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base24/bluloco-dark.yaml
+[dark]
+background = "#1e2027" # base00
+sidebar = "#1e2027" # base00
+surface = "#202328" # base11
+bar = "#1e2027" # base00
+bar_text = "#fefefe" # base07
+popup = "#202328" # base11
+dock = "#1e2027" # base00
+overlay = "#202328" # base11
+titlebar = "#202328" # base11
+titlebar_inactive = "#1e2027" # base00
+border = "#60697a" # base02
+text = "#fefefe" # base07
+text_secondary = "#969faf" # base04
+text_faint = "#7b8494" # base03
+accent = "#189ffd" # base0A
+accent_text = "#1e2027" # base00
+danger = "#f71041" # base08
+ok = "#23974a" # base0B
+warn = "#f6bd47" # base13
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base24/bluloco-light.yaml
+[light]
+background = "#f7f7f7" # base00
+sidebar = "#f7f7f7" # base00
+surface = "#cbccd4" # base01
+bar = "#f7f7f7" # base00
+bar_text = "#000000" # base06
+popup = "#cbccd4" # base01
+dock = "#f7f7f7" # base00
+overlay = "#cbccd4" # base01
+titlebar = "#cbccd4" # base01
+titlebar_inactive = "#f7f7f7" # base00
+border = "#dddee8" # base02
+text = "#000000" # base06
+text_secondary = "#38383a" # base05
+text_faint = "#6f6f74" # base04
+accent = "#1d44dd" # base0D
+accent_text = "#f7f7f7" # base00
+danger = "#c80d41" # base08
+ok = "#1f8337" # base0B ; Decebal contrast adaptation
+warn = "#896e1d" # base13 ; Decebal contrast adaptation

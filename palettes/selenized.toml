@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Jan Warchol (https://github.com/jan-warchol/selenized) / adapted to base16 by ali
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/selenized-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Selenized"
+description = "Selenized Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/selenized-dark.yaml
+[dark]
+background = "#103c48" # base00
+sidebar = "#103c48" # base00
+surface = "#184956" # base01
+bar = "#103c48" # base00
+bar_text = "#cad8d9" # base06
+popup = "#184956" # base01
+dock = "#103c48" # base00
+overlay = "#184956" # base01
+titlebar = "#184956" # base01
+titlebar_inactive = "#103c48" # base00
+border = "#2d5b69" # base02
+text = "#cad8d9" # base06
+text_secondary = "#adbcbc" # base05
+text_faint = "#adbcbc" # base05
+accent = "#4695f7" # base0D
+accent_text = "#000000" # decebal.contrast.black ; Decebal contrast adaptation
+danger = "#fa5750" # base08
+ok = "#75b938" # base0B
+warn = "#dbb32d" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/selenized-light.yaml
+[light]
+background = "#fbf3db" # base00
+sidebar = "#fbf3db" # base00
+surface = "#ece3cc" # base01
+bar = "#fbf3db" # base00
+bar_text = "#3a4d53" # base06
+popup = "#ece3cc" # base01
+dock = "#fbf3db" # base00
+overlay = "#ece3cc" # base01
+titlebar = "#ece3cc" # base01
+titlebar_inactive = "#fbf3db" # base00
+border = "#d5cdb6" # base02
+text = "#3a4d53" # base06
+text_secondary = "#53676d" # base05
+text_faint = "#53676d" # base05
+accent = "#006dce" # base0D
+accent_text = "#fbf3db" # base00
+danger = "#cc1729" # base08
+ok = "#428b00" # base0B
+warn = "#9e7e07" # base0A ; Decebal contrast adaptation

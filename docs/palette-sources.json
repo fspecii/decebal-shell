@@ -1,0 +1,4832 @@
+{
+  "schema": 1,
+  "description": "Literal upstream source colours mapped to Decebal roles; on-accent foreground may use labelled black/white contrast fallback; explicitly labelled status roles may be mixed toward the source foreground for readability. Tinted files are authored Base16/Base24 adaptations, not first-party full desktop themes.",
+  "palettes": [
+    {
+      "id": "ayu",
+      "name": "Ayu",
+      "description": "Ayu Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/ayu-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/ayu-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Tinted Theming (https://github.com/tinted-theming), Ayu Theme (https://github.com/ayu-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "e6f397c63d899cc6632409fa7b4493b337aa6c39779dff98e3dab85c43036fbb",
+            "colours": {
+              "base00": "#0b0e14",
+              "base01": "#131721",
+              "base02": "#202229",
+              "base03": "#3e4b59",
+              "base04": "#bfbdb6",
+              "base05": "#e6e1cf",
+              "base06": "#ece8db",
+              "base07": "#f2f0e7",
+              "base08": "#f07178",
+              "base09": "#ff8f40",
+              "base0A": "#ffb454",
+              "base0B": "#aad94c",
+              "base0C": "#95e6cb",
+              "base0D": "#59c2ff",
+              "base0E": "#d2a6ff",
+              "base0F": "#e6b450"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#131721"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#f2f0e7"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#131721"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#131721"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#131721"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#202229"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#f2f0e7"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#bfbdb6"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#bfbdb6"
+            },
+            "accent": {
+              "source_key": "base0A",
+              "hex": "#ffb454"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#0b0e14"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f07178"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#aad94c"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ffb454"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/ayu-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/ayu-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Tinted Theming (https://github.com/tinted-theming), Ayu Theme (https://github.com/ayu-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "37812ef9d5be55da62b148d8ca2c5b9b0b0b7ac9aadfdb0dcc22811047551d65",
+            "colours": {
+              "base00": "#f8f9fa",
+              "base01": "#edeff1",
+              "base02": "#d2d4d8",
+              "base03": "#a0a6ac",
+              "base04": "#8a9199",
+              "base05": "#5c6166",
+              "base06": "#4e5257",
+              "base07": "#404447",
+              "base08": "#f07171",
+              "base09": "#fa8d3e",
+              "base0A": "#f2ae49",
+              "base0B": "#6cbf49",
+              "base0C": "#4cbf99",
+              "base0D": "#399ee6",
+              "base0E": "#a37acc",
+              "base0F": "#e6ba7e"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "surface": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#404447"
+            },
+            "popup": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "overlay": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "titlebar": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#f8f9fa"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#d2d4d8"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#404447"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#5c6166"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#8a9199"
+            },
+            "accent": {
+              "source_key": "base0E",
+              "hex": "#a37acc"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#e16d6e",
+              "upstream_hex": "#f07171",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.083,
+                "towards_source_key": "base07",
+                "towards_hex": "#404447",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#619f48",
+              "upstream_hex": "#6cbf49",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.257,
+                "towards_source_key": "base07",
+                "towards_hex": "#404447",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#b48948",
+              "upstream_hex": "#f2ae49",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.346,
+                "towards_source_key": "base07",
+                "towards_hex": "#404447",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "one-dark",
+      "name": "One Dark / One Light",
+      "description": "One Dark / One Light Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/onedark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/onedark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Lalit Magant (http://github.com/tilal6991)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "890c1cea4a835ea1e59ca605387304546c9711cc9366c0c9c83cc11e42e1d338",
+            "colours": {
+              "base00": "#282c34",
+              "base01": "#353b45",
+              "base02": "#3e4451",
+              "base03": "#545862",
+              "base04": "#565c64",
+              "base05": "#abb2bf",
+              "base06": "#b6bdca",
+              "base07": "#c8ccd4",
+              "base08": "#e06c75",
+              "base09": "#d19a66",
+              "base0A": "#e5c07b",
+              "base0B": "#98c379",
+              "base0C": "#56b6c2",
+              "base0D": "#61afef",
+              "base0E": "#c678dd",
+              "base0F": "#be5046"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#353b45"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#c8ccd4"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#353b45"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#353b45"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#353b45"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#3e4451"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#c8ccd4"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#abb2bf"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#abb2bf"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#61afef"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#282c34"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#e06c75"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#98c379"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#e5c07b"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/one-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/one-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Daniel Pfeifer (http://github.com/purpleKarrot)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "d87ac75e1a404e817e2ccf06d60a775c5238cb19249688e9442f4c9cf811b3a9",
+            "colours": {
+              "base00": "#fafafa",
+              "base01": "#f0f0f1",
+              "base02": "#e5e5e6",
+              "base03": "#a0a1a7",
+              "base04": "#696c77",
+              "base05": "#383a42",
+              "base06": "#202227",
+              "base07": "#090a0b",
+              "base08": "#ca1243",
+              "base09": "#d75f00",
+              "base0A": "#c18401",
+              "base0B": "#50a14f",
+              "base0C": "#0184bc",
+              "base0D": "#4078f2",
+              "base0E": "#a626a4",
+              "base0F": "#986801"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#f0f0f1"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#090a0b"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#f0f0f1"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#f0f0f1"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#f0f0f1"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#e5e5e6"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#090a0b"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#696c77"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#696c77"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#4078f2"
+            },
+            "accent_text": {
+              "source_key": "base07",
+              "hex": "#090a0b"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ca1243"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#4d9b4c",
+              "upstream_hex": "#50a14f",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.037,
+                "towards_source_key": "base07",
+                "towards_hex": "#090a0b",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ba7f01",
+              "upstream_hex": "#c18401",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.037,
+                "towards_source_key": "base07",
+                "towards_hex": "#090a0b",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "horizon",
+      "name": "Horizon",
+      "description": "Horizon Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/horizon-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/horizon-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Michaël Ball (http://github.com/michael-ball/)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "2835390582810f5d369e29c220169e9bd5a8b2473c68382193e9f6a6245ba200",
+            "colours": {
+              "base00": "#1c1e26",
+              "base01": "#232530",
+              "base02": "#2e303e",
+              "base03": "#6f6f70",
+              "base04": "#9da0a2",
+              "base05": "#cbced0",
+              "base06": "#dcdfe4",
+              "base07": "#e3e6ee",
+              "base08": "#e93c58",
+              "base09": "#e58d7d",
+              "base0A": "#efb993",
+              "base0B": "#efaf8e",
+              "base0C": "#24a8b4",
+              "base0D": "#df5273",
+              "base0E": "#b072d1",
+              "base0F": "#e4a382"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1c1e26"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1c1e26"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#232530"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1c1e26"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#e3e6ee"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#232530"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1c1e26"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#232530"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#232530"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1c1e26"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#2e303e"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#e3e6ee"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#9da0a2"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#6f6f70"
+            },
+            "accent": {
+              "source_key": "base08",
+              "hex": "#e93c58"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#e93c58"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#efaf8e"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#efb993"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/horizon-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/horizon-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Michaël Ball (http://github.com/michael-ball/)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "a55a63001460456bf7a1a9f4d3dac68b75f8659374fad7183fa1ab5bd34605b4",
+            "colours": {
+              "base00": "#fdf0ed",
+              "base01": "#fadad1",
+              "base02": "#f9cbbe",
+              "base03": "#bdb3b1",
+              "base04": "#948c8a",
+              "base05": "#403c3d",
+              "base06": "#302c2d",
+              "base07": "#201c1d",
+              "base08": "#f7939b",
+              "base09": "#f6661e",
+              "base0A": "#fbe0d9",
+              "base0B": "#94e1b0",
+              "base0C": "#dc3318",
+              "base0D": "#da103f",
+              "base0E": "#1d8991",
+              "base0F": "#e58c92"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#fadad1"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#201c1d"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#fadad1"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#fadad1"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#fadad1"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#f9cbbe"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#201c1d"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#403c3d"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#403c3d"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#da103f"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#fdf0ed"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#b16c72",
+              "upstream_hex": "#f7939b",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.324,
+                "towards_source_key": "base07",
+                "towards_hex": "#201c1d",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#60896f",
+              "upstream_hex": "#94e1b0",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.445,
+                "towards_source_key": "base07",
+                "towards_hex": "#201c1d",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#8c7c79",
+              "upstream_hex": "#fbe0d9",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.508,
+                "towards_source_key": "base07",
+                "towards_hex": "#201c1d",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "material",
+      "name": "Material",
+      "description": "Material Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/material.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/material.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Nate Peterson",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "91a72d5a51b3e90aa515817b4e4fbc5de6133c58b69f9e92540be43c0c87f5a3",
+            "colours": {
+              "base00": "#263238",
+              "base01": "#2e3c43",
+              "base02": "#314549",
+              "base03": "#546e7a",
+              "base04": "#b2ccd6",
+              "base05": "#eeffff",
+              "base06": "#eeffff",
+              "base07": "#ffffff",
+              "base08": "#f07178",
+              "base09": "#f78c6c",
+              "base0A": "#ffcb6b",
+              "base0B": "#c3e88d",
+              "base0C": "#89ddff",
+              "base0D": "#82aaff",
+              "base0E": "#c792ea",
+              "base0F": "#ff5370"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#2e3c43"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#2e3c43"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#2e3c43"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#2e3c43"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#314549"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#b2ccd6"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#b2ccd6"
+            },
+            "accent": {
+              "source_key": "base0C",
+              "hex": "#89ddff"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#263238"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f07178"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#c3e88d"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ffcb6b"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/material-lighter.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/material-lighter.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Nate Peterson",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "854bc777b0feaa8004675d88f863ca83db5898b515ca37cbaa2525b8300b274f",
+            "colours": {
+              "base00": "#fafafa",
+              "base01": "#e7eaec",
+              "base02": "#cceae7",
+              "base03": "#ccd7da",
+              "base04": "#8796b0",
+              "base05": "#80cbc4",
+              "base06": "#43a39a",
+              "base07": "#000000",
+              "base08": "#ff5370",
+              "base09": "#f76d47",
+              "base0A": "#ffb62c",
+              "base0B": "#91b859",
+              "base0C": "#39adb5",
+              "base0D": "#6182b8",
+              "base0E": "#7c4dff",
+              "base0F": "#e53935"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#e7eaec"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#000000"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#e7eaec"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#e7eaec"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#e7eaec"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#cceae7"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#000000"
+            },
+            "text_secondary": {
+              "source_key": "base07",
+              "hex": "#000000"
+            },
+            "text_faint": {
+              "source_key": "base07",
+              "hex": "#000000"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#6182b8"
+            },
+            "accent_text": {
+              "source_key": "base07",
+              "hex": "#000000"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#eb4c67",
+              "upstream_hex": "#ff5370",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.079,
+                "towards_source_key": "base07",
+                "towards_hex": "#000000",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#718f45",
+              "upstream_hex": "#91b859",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.221,
+                "towards_source_key": "base07",
+                "towards_hex": "#000000",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ae7c1e",
+              "upstream_hex": "#ffb62c",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.316,
+                "towards_source_key": "base07",
+                "towards_hex": "#000000",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "papercolor",
+      "name": "PaperColor",
+      "description": "PaperColor Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/papercolor-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/papercolor-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Jon Leopard (http://github.com/jonleopard), Tinted Theming (https://github.com/tinted-theming), based on PaperColor Theme (https://github.com/NLKNguyen/papercolor-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "c9909f72c05897d2aa06b447333af75f6e95f092a23cea5d528896970ac56f6d",
+            "colours": {
+              "base00": "#1c1c1c",
+              "base01": "#363636",
+              "base02": "#424242",
+              "base03": "#585858",
+              "base04": "#808080",
+              "base05": "#9e9e9e",
+              "base06": "#b8b8b8",
+              "base07": "#d0d0d0",
+              "base08": "#ff5faf",
+              "base09": "#d7af5f",
+              "base0A": "#ffaf00",
+              "base0B": "#5faf5f",
+              "base0C": "#00afaf",
+              "base0D": "#5fafd7",
+              "base0E": "#af87d7",
+              "base0F": "#af005f"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#363636"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#d0d0d0"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#363636"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#363636"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#363636"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#424242"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#d0d0d0"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#9e9e9e"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#808080"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#5fafd7"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1c1c1c"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ff5faf"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#5faf5f"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ffaf00"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/papercolor-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/papercolor-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Jon Leopard (http://github.com/jonleopard), Tinted Theming (https://github.com/tinted-theming), based on PaperColor Theme (https://github.com/NLKNguyen/papercolor-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "a85ff395951975eb80b434c35500eaa37b9739a36ca875225dcdda771c6c1332",
+            "colours": {
+              "base00": "#eeeeee",
+              "base01": "#c4c4c4",
+              "base02": "#9e9e9e",
+              "base03": "#858585",
+              "base04": "#6b6b6b",
+              "base05": "#5e5e5e",
+              "base06": "#525252",
+              "base07": "#444444",
+              "base08": "#d70000",
+              "base09": "#d75f00",
+              "base0A": "#d75f00",
+              "base0B": "#008700",
+              "base0C": "#0087af",
+              "base0D": "#005f87",
+              "base0E": "#8700af",
+              "base0F": "#af0000"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#c4c4c4"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#444444"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#c4c4c4"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#c4c4c4"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#c4c4c4"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#9e9e9e"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#444444"
+            },
+            "text_secondary": {
+              "source_key": "base07",
+              "hex": "#444444"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#6b6b6b"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#005f87"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#eeeeee"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#d70000"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#097e09",
+              "upstream_hex": "#008700",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.127,
+                "towards_source_key": "base07",
+                "towards_hex": "#444444",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#a75616",
+              "upstream_hex": "#d75f00",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.324,
+                "towards_source_key": "base07",
+                "towards_hex": "#444444",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "edge",
+      "name": "Edge",
+      "description": "Edge Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/edge-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/edge-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "cjayross (https://github.com/cjayross), Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "5f294609d243ddb577f4e68142490e7b2d7f129acbfac1abedd6f828b1917b76",
+            "colours": {
+              "base00": "#262729",
+              "base01": "#313235",
+              "base02": "#3d3f42",
+              "base03": "#4a4c4f",
+              "base04": "#95989d",
+              "base05": "#afb2b5",
+              "base06": "#caccce",
+              "base07": "#e4e5e6",
+              "base08": "#e77171",
+              "base09": "#eba31a",
+              "base0A": "#dbb774",
+              "base0B": "#a1bf78",
+              "base0C": "#5ebaa5",
+              "base0D": "#73b3e7",
+              "base0E": "#d390e7",
+              "base0F": "#5ebaa5"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#313235"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#e4e5e6"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#313235"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#313235"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#313235"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#3d3f42"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#e4e5e6"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#afb2b5"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#95989d"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#73b3e7"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#262729"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#e77171"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#a1bf78"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#dbb774"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/edge-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/edge-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "cjayross (https://github.com/cjayross), Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "b88b775c8507e4f175a3320c728dada7cc40661b26387231e0c6067e4f437dcc",
+            "colours": {
+              "base00": "#fafafa",
+              "base01": "#e3e5e8",
+              "base02": "#acb1b9",
+              "base03": "#9197a1",
+              "base04": "#5e646f",
+              "base05": "#474752",
+              "base06": "#3a3a46",
+              "base07": "#2e2e38",
+              "base08": "#db7070",
+              "base09": "#eba31a",
+              "base0A": "#ebcc1a",
+              "base0B": "#7c9f4b",
+              "base0C": "#509c93",
+              "base0D": "#6587bf",
+              "base0E": "#b870ce",
+              "base0F": "#509c93"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "surface": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#2e2e38"
+            },
+            "popup": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "overlay": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "titlebar": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fafafa"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#acb1b9"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#2e2e38"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#5e646f"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#5e646f"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#6587bf"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#db7070"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#7a9c4a",
+              "upstream_hex": "#7c9f4b",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.027,
+                "towards_source_key": "base07",
+                "towards_hex": "#2e2e38",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#a59125",
+              "upstream_hex": "#ebcc1a",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.371,
+                "towards_source_key": "base07",
+                "towards_hex": "#2e2e38",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "oxocarbon",
+      "name": "Oxocarbon",
+      "description": "Oxocarbon Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/oxocarbon-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oxocarbon-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "shaunsingh/IBM, Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "478607f7eba529ed8ec48668fed4fb7372fc5140d6f46c0e6519b4c7c243a325",
+            "colours": {
+              "base00": "#161616",
+              "base01": "#262626",
+              "base02": "#393939",
+              "base03": "#525252",
+              "base04": "#dde1e6",
+              "base05": "#f2f4f8",
+              "base06": "#ffffff",
+              "base07": "#08bdba",
+              "base08": "#ee5396",
+              "base09": "#ff7eb6",
+              "base0A": "#ff6f00",
+              "base0B": "#42be65",
+              "base0C": "#3ddbd9",
+              "base0D": "#33b1ff",
+              "base0E": "#be95ff",
+              "base0F": "#82cfff"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#262626"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "bar_text": {
+              "source_key": "base06",
+              "hex": "#ffffff"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#262626"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#262626"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#262626"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#393939"
+            },
+            "text": {
+              "source_key": "base06",
+              "hex": "#ffffff"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#dde1e6"
+            },
+            "text_faint": {
+              "source_key": "base07",
+              "hex": "#08bdba"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#33b1ff"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#161616"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ee5396"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#42be65"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ff6f00"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/oxocarbon-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oxocarbon-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "shaunsingh/IBM, Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "5457271832e5bf3af0a55b26125e7a311296f5865adbff92a2e903a4bc72d0e6",
+            "colours": {
+              "base00": "#f2f4f8",
+              "base01": "#dde1e6",
+              "base02": "#bec6cf",
+              "base03": "#a1acba",
+              "base04": "#68788d",
+              "base05": "#525f70",
+              "base06": "#3d4652",
+              "base07": "#272d35",
+              "base08": "#ff7eb6",
+              "base09": "#ee5396",
+              "base0A": "#ff6f00",
+              "base0B": "#42be65",
+              "base0C": "#673ab7",
+              "base0D": "#0f62fe",
+              "base0E": "#be95ff",
+              "base0F": "#803800"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#dde1e6"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#272d35"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#dde1e6"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#dde1e6"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#dde1e6"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#bec6cf"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#272d35"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#525f70"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#68788d"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#0f62fe"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#f2f4f8"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ba648d",
+              "upstream_hex": "#ff7eb6",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.318,
+                "towards_source_key": "base07",
+                "towards_hex": "#272d35",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#3a9056",
+              "upstream_hex": "#42be65",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.314,
+                "towards_source_key": "base07",
+                "towards_hex": "#272d35",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ce600c",
+              "upstream_hex": "#ff6f00",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.225,
+                "towards_source_key": "base07",
+                "towards_hex": "#272d35",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "selenized",
+      "name": "Selenized",
+      "description": "Selenized Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/selenized-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/selenized-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Jan Warchol (https://github.com/jan-warchol/selenized) / adapted to base16 by ali",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "078918f563b0addde71a1278187a2935240808b08bc8c3ddf7f3b0ee25f9ade8",
+            "colours": {
+              "base00": "#103c48",
+              "base01": "#184956",
+              "base02": "#2d5b69",
+              "base03": "#72898f",
+              "base04": "#72898f",
+              "base05": "#adbcbc",
+              "base06": "#cad8d9",
+              "base07": "#cad8d9",
+              "base08": "#fa5750",
+              "base09": "#ed8649",
+              "base0A": "#dbb32d",
+              "base0B": "#75b938",
+              "base0C": "#41c7b9",
+              "base0D": "#4695f7",
+              "base0E": "#af88eb",
+              "base0F": "#f275be"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#103c48"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#103c48"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#184956"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#103c48"
+            },
+            "bar_text": {
+              "source_key": "base06",
+              "hex": "#cad8d9"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#184956"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#103c48"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#184956"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#184956"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#103c48"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#2d5b69"
+            },
+            "text": {
+              "source_key": "base06",
+              "hex": "#cad8d9"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#adbcbc"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#adbcbc"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#4695f7"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#fa5750"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#75b938"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#dbb32d"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/selenized-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/selenized-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Jan Warchol (https://github.com/jan-warchol/selenized) / adapted to base16 by ali",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "e571d8857c76624e94283dfbf7c31d33850d52e053fbf32b4a5beeedeb83e953",
+            "colours": {
+              "base00": "#fbf3db",
+              "base01": "#ece3cc",
+              "base02": "#d5cdb6",
+              "base03": "#909995",
+              "base04": "#909995",
+              "base05": "#53676d",
+              "base06": "#3a4d53",
+              "base07": "#3a4d53",
+              "base08": "#cc1729",
+              "base09": "#bc5819",
+              "base0A": "#a78300",
+              "base0B": "#428b00",
+              "base0C": "#00978a",
+              "base0D": "#006dce",
+              "base0E": "#825dc0",
+              "base0F": "#c44392"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#ece3cc"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "bar_text": {
+              "source_key": "base06",
+              "hex": "#3a4d53"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#ece3cc"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#ece3cc"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#ece3cc"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#d5cdb6"
+            },
+            "text": {
+              "source_key": "base06",
+              "hex": "#3a4d53"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#53676d"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#53676d"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#006dce"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#fbf3db"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#cc1729"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#428b00"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#9e7e07",
+              "upstream_hex": "#a78300",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.084,
+                "towards_source_key": "base06",
+                "towards_hex": "#3a4d53",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "bluloco",
+      "name": "Bluloco",
+      "description": "Bluloco Base16/Base24 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base24/bluloco-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base24/bluloco-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "FredHappyface (https://github.com/fredHappyface)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "ac75be46f551815cb808f16fe133a266d9fd57309ebb5fac8c3f14fb7dd7e74f",
+            "colours": {
+              "base00": "#1e2027",
+              "base01": "#494f5c",
+              "base02": "#60697a",
+              "base03": "#7b8494",
+              "base04": "#969faf",
+              "base05": "#b1bac9",
+              "base06": "#ccd5e4",
+              "base07": "#fefefe",
+              "base08": "#f71041",
+              "base09": "#fc7e57",
+              "base0A": "#189ffd",
+              "base0B": "#23974a",
+              "base0C": "#366f99",
+              "base0D": "#285afe",
+              "base0E": "#8c62fd",
+              "base0F": "#7b0820",
+              "base10": "#404651",
+              "base11": "#202328",
+              "base12": "#fb496d",
+              "base13": "#f6bd47",
+              "base14": "#37bc58",
+              "base15": "#4fabad",
+              "base16": "#189ffd",
+              "base17": "#fb57f6"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "surface": {
+              "source_key": "base11",
+              "hex": "#202328"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#fefefe"
+            },
+            "popup": {
+              "source_key": "base11",
+              "hex": "#202328"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "overlay": {
+              "source_key": "base11",
+              "hex": "#202328"
+            },
+            "titlebar": {
+              "source_key": "base11",
+              "hex": "#202328"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#60697a"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#fefefe"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#969faf"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#7b8494"
+            },
+            "accent": {
+              "source_key": "base0A",
+              "hex": "#189ffd"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1e2027"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f71041"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#23974a"
+            },
+            "warn": {
+              "source_key": "base13",
+              "hex": "#f6bd47"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base24/bluloco-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base24/bluloco-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "FredHappyface (https://github.com/fredHappyface)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "8eb4a204e8ae4718b8ff10988941fe0ac1f4e9ac9d672b34d51435bcc8d380fc",
+            "colours": {
+              "base00": "#f7f7f7",
+              "base01": "#cbccd4",
+              "base02": "#dddee8",
+              "base03": "#a6a7ae",
+              "base04": "#6f6f74",
+              "base05": "#38383a",
+              "base06": "#000000",
+              "base07": "#1c1d21",
+              "base08": "#c80d41",
+              "base09": "#d44d16",
+              "base0A": "#1085d9",
+              "base0B": "#208839",
+              "base0C": "#1e4d7a",
+              "base0D": "#1d44dd",
+              "base0E": "#6d1bed",
+              "base0F": "#640620",
+              "base10": "#93949a",
+              "base11": "#494a4d",
+              "base12": "#fb496d",
+              "base13": "#b79326",
+              "base14": "#34b253",
+              "base15": "#5a7fac",
+              "base16": "#1085d9",
+              "base17": "#c00cb2"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#cbccd4"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "bar_text": {
+              "source_key": "base06",
+              "hex": "#000000"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#cbccd4"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#cbccd4"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#cbccd4"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#dddee8"
+            },
+            "text": {
+              "source_key": "base06",
+              "hex": "#000000"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#38383a"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#6f6f74"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#1d44dd"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#f7f7f7"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#c80d41"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#1f8337",
+              "upstream_hex": "#208839",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.034,
+                "towards_source_key": "base06",
+                "towards_hex": "#000000",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base13",
+              "hex": "#896e1d",
+              "upstream_hex": "#b79326",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.249,
+                "towards_source_key": "base06",
+                "towards_hex": "#000000",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "GitHub Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/github-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/github-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "f693b4ce33fc6e88d2ca7b4b14c38ef011b3d06a316ee1335559b65409724d04",
+            "colours": {
+              "base00": "#0d1117",
+              "base01": "#151b23",
+              "base02": "#2f3742",
+              "base03": "#656c76",
+              "base04": "#9198a1",
+              "base05": "#d1d7e0",
+              "base06": "#f0f6fc",
+              "base07": "#ffffff",
+              "base08": "#ff7b72",
+              "base09": "#ffa657",
+              "base0A": "#d29922",
+              "base0B": "#3fb950",
+              "base0C": "#39c5cf",
+              "base0D": "#58a6ff",
+              "base0E": "#be8fff",
+              "base0F": "#ffa198"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#151b23"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#151b23"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#151b23"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#151b23"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#2f3742"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#9198a1"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#656c76"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#58a6ff"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#0d1117"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ff7b72"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#3fb950"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#d29922"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/github.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/github.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Tinted Theming (https://github.com/tinted-theming)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "c079b154caca718e2e883053850feb2ee689284b54f1ed432ef3766c3d1eaf2a",
+            "colours": {
+              "base00": "#ffffff",
+              "base01": "#f6f8fa",
+              "base02": "#d1d9e0",
+              "base03": "#818b98",
+              "base04": "#59636e",
+              "base05": "#454c54",
+              "base06": "#25292e",
+              "base07": "#1f2328",
+              "base08": "#cf222e",
+              "base09": "#953800",
+              "base0A": "#9a6700",
+              "base0B": "#116329",
+              "base0C": "#1b7c83",
+              "base0D": "#0969da",
+              "base0E": "#8250df",
+              "base0F": "#a40e26"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#f6f8fa"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#1f2328"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#f6f8fa"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#f6f8fa"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#f6f8fa"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#d1d9e0"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#1f2328"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#59636e"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#818b98"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#0969da"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#cf222e"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#116329"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#9a6700"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "tomorrow",
+      "name": "Tomorrow",
+      "description": "Tomorrow Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/tomorrow-night.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/tomorrow-night.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Chris Kempson (http://chriskempson.com)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "d8f80157b8087065e11ffbad97f3676468b75086a70314e2c44a68ce774dcb36",
+            "colours": {
+              "base00": "#1d1f21",
+              "base01": "#282a2e",
+              "base02": "#373b41",
+              "base03": "#969896",
+              "base04": "#b4b7b4",
+              "base05": "#c5c8c6",
+              "base06": "#e0e0e0",
+              "base07": "#ffffff",
+              "base08": "#cc6666",
+              "base09": "#de935f",
+              "base0A": "#f0c674",
+              "base0B": "#b5bd68",
+              "base0C": "#8abeb7",
+              "base0D": "#81a2be",
+              "base0E": "#b294bb",
+              "base0F": "#a3685a"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#282a2e"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#282a2e"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#282a2e"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#282a2e"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#373b41"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#b4b7b4"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#969896"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#81a2be"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1d1f21"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#cc6666"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#b5bd68"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#f0c674"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/tomorrow.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/tomorrow.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Chris Kempson (http://chriskempson.com)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "356b0ae07b7f1da7fb722101ea68cc8181b9fe2b41abbb3faf8f023703ed41f0",
+            "colours": {
+              "base00": "#ffffff",
+              "base01": "#e0e0e0",
+              "base02": "#c5c8c6",
+              "base03": "#b4b7b4",
+              "base04": "#969896",
+              "base05": "#373b41",
+              "base06": "#282a2e",
+              "base07": "#1d1f21",
+              "base08": "#c82829",
+              "base09": "#f5871f",
+              "base0A": "#eab700",
+              "base0B": "#718c00",
+              "base0C": "#3e999f",
+              "base0D": "#4271ae",
+              "base0E": "#8959a8",
+              "base0F": "#a3685a"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#e0e0e0"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#1d1f21"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#e0e0e0"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#e0e0e0"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#e0e0e0"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#c5c8c6"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#1d1f21"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#373b41"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#373b41"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#4271ae"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#ffffff"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#c82829"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#6f8901",
+              "upstream_hex": "#718c00",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.023,
+                "towards_source_key": "base07",
+                "towards_hex": "#1d1f21",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#9b7c0d",
+              "upstream_hex": "#eab700",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.385,
+                "towards_source_key": "base07",
+                "towards_hex": "#1d1f21",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "flexoki",
+      "name": "Flexoki",
+      "description": "Flexoki Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/flexoki-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/flexoki-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Steph Ango (https://github.com/kepano/flexoki)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "1cdfe249f9203bd7a9bef8c83a78ee6e2e3a86270cd280ced931356b844a067d",
+            "colours": {
+              "base00": "#100f0f",
+              "base01": "#1c1b1a",
+              "base02": "#282726",
+              "base03": "#575653",
+              "base04": "#878580",
+              "base05": "#cecdc3",
+              "base06": "#e6e4d9",
+              "base07": "#fffcf0",
+              "base08": "#d14d41",
+              "base09": "#da702c",
+              "base0A": "#d0a215",
+              "base0B": "#879a39",
+              "base0C": "#3aa99f",
+              "base0D": "#4385be",
+              "base0E": "#8b7ec8",
+              "base0F": "#ce5d97"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#1c1b1a"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#fffcf0"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#1c1b1a"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#1c1b1a"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#1c1b1a"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#282726"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#fffcf0"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#878580"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#878580"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#4385be"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#100f0f"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#d14d41"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#879a39"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#d0a215"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/flexoki-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/flexoki-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Steph Ango (https://github.com/kepano/flexoki)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "72b785355c1fed44048da8be331b1019ac26b4ec1f4c72822e7160e58e918e22",
+            "colours": {
+              "base00": "#fffcf0",
+              "base01": "#f2f0e5",
+              "base02": "#e6e4d9",
+              "base03": "#cecdc3",
+              "base04": "#9f9d96",
+              "base05": "#403e3c",
+              "base06": "#282726",
+              "base07": "#100f0f",
+              "base08": "#af3029",
+              "base09": "#bc5215",
+              "base0A": "#ad8301",
+              "base0B": "#66800b",
+              "base0C": "#24837b",
+              "base0D": "#205ea6",
+              "base0E": "#5e409d",
+              "base0F": "#a02f6f"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#f2f0e5"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#100f0f"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#f2f0e5"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#f2f0e5"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#f2f0e5"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#e6e4d9"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#100f0f"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#403e3c"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#403e3c"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#205ea6"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#fffcf0"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#af3029"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#66800b"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ad8301"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "atelier-forest",
+      "name": "Atelier Forest",
+      "description": "Atelier Forest Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/atelier-forest.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/atelier-forest.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Bram de Haan (http://atelierbramdehaan.nl)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "32f8b58d1dd795f773f9cc3fd6ce9bc683e9a6351e02342c7107fc58dd9b9a91",
+            "colours": {
+              "base00": "#1b1918",
+              "base01": "#2c2421",
+              "base02": "#68615e",
+              "base03": "#766e6b",
+              "base04": "#9c9491",
+              "base05": "#a8a19f",
+              "base06": "#e6e2e0",
+              "base07": "#f1efee",
+              "base08": "#f22c40",
+              "base09": "#df5320",
+              "base0A": "#c38418",
+              "base0B": "#7b9726",
+              "base0C": "#3d97b8",
+              "base0D": "#407ee7",
+              "base0E": "#6666ea",
+              "base0F": "#c33ff3"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#2c2421"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#f1efee"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#2c2421"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#2c2421"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#2c2421"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#68615e"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#f1efee"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#9c9491"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#766e6b"
+            },
+            "accent": {
+              "source_key": "base0B",
+              "hex": "#7b9726"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1b1918"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f22c40"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#7b9726"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#c38418"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/atelier-forest-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/atelier-forest-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Bram de Haan (http://atelierbramdehaan.nl)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "f14a9a8860677fca39a9b67e2f1adc304c6ddf9a415b98ef41cb5c4e4dbc1369",
+            "colours": {
+              "base00": "#f1efee",
+              "base01": "#e6e2e0",
+              "base02": "#a8a19f",
+              "base03": "#9c9491",
+              "base04": "#766e6b",
+              "base05": "#68615e",
+              "base06": "#2c2421",
+              "base07": "#1b1918",
+              "base08": "#f22c40",
+              "base09": "#df5320",
+              "base0A": "#c38418",
+              "base0B": "#7b9726",
+              "base0C": "#3d97b8",
+              "base0D": "#407ee7",
+              "base0E": "#6666ea",
+              "base0F": "#c33ff3"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#f1efee"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#f1efee"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#e6e2e0"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#f1efee"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#1b1918"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#e6e2e0"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#f1efee"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#e6e2e0"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#e6e2e0"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#f1efee"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#a8a19f"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#1b1918"
+            },
+            "text_secondary": {
+              "source_key": "base05",
+              "hex": "#68615e"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#766e6b"
+            },
+            "accent": {
+              "source_key": "base09",
+              "hex": "#df5320"
+            },
+            "accent_text": {
+              "source_key": "base07",
+              "hex": "#1b1918"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f22c40"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#718a25",
+              "upstream_hex": "#7b9726",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.1,
+                "towards_source_key": "base07",
+                "towards_hex": "#1b1918",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ae7618",
+              "upstream_hex": "#c38418",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.127,
+                "towards_source_key": "base07",
+                "towards_hex": "#1b1918",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "synth-midnight",
+      "name": "Synth Midnight",
+      "description": "Synth Midnight Base16 source colours, mapped for readable desktop surfaces.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/synth-midnight-dark.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/synth-midnight-dark.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Michaël Ball (http://github.com/michael-ball/)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "baacb5f43f4626bdab341ed698faae6ed34a65e88eccdf83666884526a4f11f8",
+            "colours": {
+              "base00": "#050608",
+              "base01": "#1a1b1c",
+              "base02": "#28292a",
+              "base03": "#474849",
+              "base04": "#a3a5a6",
+              "base05": "#c1c3c4",
+              "base06": "#cfd1d2",
+              "base07": "#dddfe0",
+              "base08": "#b53b50",
+              "base09": "#ea770d",
+              "base0A": "#c9d364",
+              "base0B": "#06ea61",
+              "base0C": "#42fff9",
+              "base0D": "#03aeff",
+              "base0E": "#ea5ce2",
+              "base0F": "#cd6320"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#1a1b1c"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#dddfe0"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#1a1b1c"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#1a1b1c"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#1a1b1c"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#28292a"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#dddfe0"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#a3a5a6"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#a3a5a6"
+            },
+            "accent": {
+              "source_key": "base0E",
+              "hex": "#ea5ce2"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#050608"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#b53b50"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#06ea61"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#c9d364"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/synth-midnight-light.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/synth-midnight-light.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Michaël Ball (http://github.com/michael-ball/)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "fb32e20678b0e01c2bd0770fa81a3351e5bf44eec09e649f46af66db69cde622",
+            "colours": {
+              "base00": "#dddfe0",
+              "base01": "#cfd1d2",
+              "base02": "#c1c3c4",
+              "base03": "#a3a5a6",
+              "base04": "#474849",
+              "base05": "#28292a",
+              "base06": "#1a1b1c",
+              "base07": "#050608",
+              "base08": "#b53b50",
+              "base09": "#ea770d",
+              "base0A": "#c9d364",
+              "base0B": "#06ea61",
+              "base0C": "#42fff9",
+              "base0D": "#03aeff",
+              "base0E": "#ea5ce2",
+              "base0F": "#cd6320"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#dddfe0"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#dddfe0"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#cfd1d2"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#dddfe0"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#050608"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#cfd1d2"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#dddfe0"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#cfd1d2"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#cfd1d2"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#dddfe0"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#c1c3c4"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#050608"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#474849"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#474849"
+            },
+            "accent": {
+              "source_key": "base08",
+              "hex": "#b53b50"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.white",
+              "hex": "#ffffff",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#b53b50"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#06873a",
+              "upstream_hex": "#06ea61",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.433,
+                "towards_source_key": "base07",
+                "towards_hex": "#050608",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#73793c",
+              "upstream_hex": "#c9d364",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.437,
+                "towards_source_key": "base07",
+                "towards_hex": "#050608",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "spacemacs",
+      "name": "Spacemacs",
+      "description": "Spacemacs Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/spacemacs.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/spacemacs.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Nasser Alshammari (https://github.com/nashamri/spacemacs-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "1b8bcf499ced6934c34a333747be5cc33cea861c1cf95390129214491c1aca07",
+            "colours": {
+              "base00": "#1f2022",
+              "base01": "#282828",
+              "base02": "#444155",
+              "base03": "#585858",
+              "base04": "#b8b8b8",
+              "base05": "#a3a3a3",
+              "base06": "#e8e8e8",
+              "base07": "#f8f8f8",
+              "base08": "#f2241f",
+              "base09": "#ffa500",
+              "base0A": "#b1951d",
+              "base0B": "#67b11d",
+              "base0C": "#2d9574",
+              "base0D": "#4f97d7",
+              "base0E": "#a31db1",
+              "base0F": "#b03060"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#282828"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#282828"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#282828"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#282828"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#444155"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#b8b8b8"
+            },
+            "text_faint": {
+              "source_key": "base05",
+              "hex": "#a3a3a3"
+            },
+            "accent": {
+              "source_key": "base0D",
+              "hex": "#4f97d7"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f2241f"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#67b11d"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#b1951d"
+            }
+          }
+        },
+        "light": {
+          "kind": "Decebal light adaptation using the dark source colours",
+          "source": {
+            "file": "base16/spacemacs.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/spacemacs.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Nasser Alshammari (https://github.com/nashamri/spacemacs-theme)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "1b8bcf499ced6934c34a333747be5cc33cea861c1cf95390129214491c1aca07",
+            "colours": {
+              "base00": "#1f2022",
+              "base01": "#282828",
+              "base02": "#444155",
+              "base03": "#585858",
+              "base04": "#b8b8b8",
+              "base05": "#a3a3a3",
+              "base06": "#e8e8e8",
+              "base07": "#f8f8f8",
+              "base08": "#f2241f",
+              "base09": "#ffa500",
+              "base0A": "#b1951d",
+              "base0B": "#67b11d",
+              "base0C": "#2d9574",
+              "base0D": "#4f97d7",
+              "base0E": "#a31db1",
+              "base0F": "#b03060"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "sidebar": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "surface": {
+              "source_key": "base06",
+              "hex": "#e8e8e8"
+            },
+            "bar": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "bar_text": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "popup": {
+              "source_key": "base06",
+              "hex": "#e8e8e8"
+            },
+            "dock": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "overlay": {
+              "source_key": "base06",
+              "hex": "#e8e8e8"
+            },
+            "titlebar": {
+              "source_key": "base06",
+              "hex": "#e8e8e8"
+            },
+            "titlebar_inactive": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#444155"
+            },
+            "text": {
+              "source_key": "base00",
+              "hex": "#1f2022"
+            },
+            "text_secondary": {
+              "source_key": "base03",
+              "hex": "#585858"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#585858"
+            },
+            "accent": {
+              "source_key": "base0E",
+              "hex": "#a31db1"
+            },
+            "accent_text": {
+              "source_key": "base07",
+              "hex": "#f8f8f8"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f2241f"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#59941e",
+              "upstream_hex": "#67b11d",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.197,
+                "towards_source_key": "base00",
+                "towards_hex": "#1f2022",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#9b831e",
+              "upstream_hex": "#b1951d",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.15,
+                "towards_source_key": "base00",
+                "towards_hex": "#1f2022",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "monokai",
+      "name": "Monokai",
+      "description": "Monokai Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/monokai.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/monokai.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Wimer Hazenberg (http://www.monokai.nl)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "fd949370aadb9d0847ee46091dec77122975021b59259222ba765b290cc71b85",
+            "colours": {
+              "base00": "#272822",
+              "base01": "#383830",
+              "base02": "#49483e",
+              "base03": "#75715e",
+              "base04": "#a59f85",
+              "base05": "#f8f8f2",
+              "base06": "#f5f4f1",
+              "base07": "#f9f8f5",
+              "base08": "#f92672",
+              "base09": "#fd971f",
+              "base0A": "#f4bf75",
+              "base0B": "#a6e22e",
+              "base0C": "#a1efe4",
+              "base0D": "#66d9ef",
+              "base0E": "#ae81ff",
+              "base0F": "#cc6633"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#383830"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#383830"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#383830"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#383830"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#49483e"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "text_secondary": {
+              "source_key": "base06",
+              "hex": "#f5f4f1"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#a59f85"
+            },
+            "accent": {
+              "source_key": "base08",
+              "hex": "#f92672"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f92672"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#a6e22e"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#f4bf75"
+            }
+          }
+        },
+        "light": {
+          "kind": "Decebal light adaptation using the dark source colours",
+          "source": {
+            "file": "base16/monokai.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/monokai.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "Wimer Hazenberg (http://www.monokai.nl)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "fd949370aadb9d0847ee46091dec77122975021b59259222ba765b290cc71b85",
+            "colours": {
+              "base00": "#272822",
+              "base01": "#383830",
+              "base02": "#49483e",
+              "base03": "#75715e",
+              "base04": "#a59f85",
+              "base05": "#f8f8f2",
+              "base06": "#f5f4f1",
+              "base07": "#f9f8f5",
+              "base08": "#f92672",
+              "base09": "#fd971f",
+              "base0A": "#f4bf75",
+              "base0B": "#a6e22e",
+              "base0C": "#a1efe4",
+              "base0D": "#66d9ef",
+              "base0E": "#ae81ff",
+              "base0F": "#cc6633"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "sidebar": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "surface": {
+              "source_key": "base06",
+              "hex": "#f5f4f1"
+            },
+            "bar": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "bar_text": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "popup": {
+              "source_key": "base06",
+              "hex": "#f5f4f1"
+            },
+            "dock": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "overlay": {
+              "source_key": "base06",
+              "hex": "#f5f4f1"
+            },
+            "titlebar": {
+              "source_key": "base06",
+              "hex": "#f5f4f1"
+            },
+            "titlebar_inactive": {
+              "source_key": "base07",
+              "hex": "#f9f8f5"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#49483e"
+            },
+            "text": {
+              "source_key": "base00",
+              "hex": "#272822"
+            },
+            "text_secondary": {
+              "source_key": "base02",
+              "hex": "#49483e"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#75715e"
+            },
+            "accent": {
+              "source_key": "base08",
+              "hex": "#f92672"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.black",
+              "hex": "#000000",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#f92672"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#749929",
+              "upstream_hex": "#a6e22e",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.39,
+                "towards_source_key": "base00",
+                "towards_hex": "#272822",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#a98756",
+              "upstream_hex": "#f4bf75",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.368,
+                "towards_source_key": "base00",
+                "towards_hex": "#272822",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "oceanic-next",
+      "name": "OceanicNext",
+      "description": "OceanicNext Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/oceanicnext.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oceanicnext.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "https://github.com/voronianski/oceanic-next-color-scheme",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "1b4e2f337847c3c8cadc9f9abac4245c789747e5d586f2171d95bff401082af7",
+            "colours": {
+              "base00": "#1b2b34",
+              "base01": "#343d46",
+              "base02": "#4f5b66",
+              "base03": "#65737e",
+              "base04": "#a7adba",
+              "base05": "#c0c5ce",
+              "base06": "#cdd3de",
+              "base07": "#d8dee9",
+              "base08": "#ec5f67",
+              "base09": "#f99157",
+              "base0A": "#fac863",
+              "base0B": "#99c794",
+              "base0C": "#5fb3b3",
+              "base0D": "#6699cc",
+              "base0E": "#c594c5",
+              "base0F": "#ab7967"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#343d46"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#343d46"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#343d46"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#343d46"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#4f5b66"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#a7adba"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#a7adba"
+            },
+            "accent": {
+              "source_key": "base0C",
+              "hex": "#5fb3b3"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ec5f67"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#99c794"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#fac863"
+            }
+          }
+        },
+        "light": {
+          "kind": "Decebal light adaptation using the dark source colours",
+          "source": {
+            "file": "base16/oceanicnext.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/oceanicnext.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "https://github.com/voronianski/oceanic-next-color-scheme",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "1b4e2f337847c3c8cadc9f9abac4245c789747e5d586f2171d95bff401082af7",
+            "colours": {
+              "base00": "#1b2b34",
+              "base01": "#343d46",
+              "base02": "#4f5b66",
+              "base03": "#65737e",
+              "base04": "#a7adba",
+              "base05": "#c0c5ce",
+              "base06": "#cdd3de",
+              "base07": "#d8dee9",
+              "base08": "#ec5f67",
+              "base09": "#f99157",
+              "base0A": "#fac863",
+              "base0B": "#99c794",
+              "base0C": "#5fb3b3",
+              "base0D": "#6699cc",
+              "base0E": "#c594c5",
+              "base0F": "#ab7967"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "sidebar": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "surface": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "bar": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "bar_text": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "popup": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "dock": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "overlay": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "titlebar": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "titlebar_inactive": {
+              "source_key": "base07",
+              "hex": "#d8dee9"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#4f5b66"
+            },
+            "text": {
+              "source_key": "base00",
+              "hex": "#1b2b34"
+            },
+            "text_secondary": {
+              "source_key": "base02",
+              "hex": "#4f5b66"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#65737e"
+            },
+            "accent": {
+              "source_key": "base03",
+              "hex": "#65737e"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.white",
+              "hex": "#ffffff",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#ce5760",
+              "upstream_hex": "#ec5f67",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.145,
+                "towards_source_key": "base00",
+                "towards_hex": "#1b2b34",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#64856c",
+              "upstream_hex": "#99c794",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.42,
+                "towards_source_key": "base00",
+                "towards_hex": "#1b2b34",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#8f7c4c",
+              "upstream_hex": "#fac863",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.481,
+                "towards_source_key": "base00",
+                "towards_hex": "#1b2b34",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "zenburn",
+      "name": "Zenburn",
+      "description": "Zenburn Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/zenburn.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/zenburn.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "elnawe",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "bf43d9f9bc7c5308acac8512b64021fec2c1528b357a5f7fbaa21ab82b01eff7",
+            "colours": {
+              "base00": "#383838",
+              "base01": "#404040",
+              "base02": "#606060",
+              "base03": "#6f6f6f",
+              "base04": "#808080",
+              "base05": "#dcdccc",
+              "base06": "#c0c0c0",
+              "base07": "#ffffff",
+              "base08": "#dca3a3",
+              "base09": "#dfaf8f",
+              "base0A": "#e0cf9f",
+              "base0B": "#5f7f5f",
+              "base0C": "#93e0e3",
+              "base0D": "#7cb8bb",
+              "base0E": "#dc8cc3",
+              "base0F": "#000000"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#404040"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#404040"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#404040"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#404040"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#606060"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "text_secondary": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "text_faint": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "accent": {
+              "source_key": "base0A",
+              "hex": "#e0cf9f"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#dca3a3"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#769276",
+              "upstream_hex": "#5f7f5f",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.145,
+                "towards_source_key": "base07",
+                "towards_hex": "#ffffff",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#e0cf9f"
+            }
+          }
+        },
+        "light": {
+          "kind": "Decebal light adaptation using the dark source colours",
+          "source": {
+            "file": "base16/zenburn.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/zenburn.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "elnawe",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "bf43d9f9bc7c5308acac8512b64021fec2c1528b357a5f7fbaa21ab82b01eff7",
+            "colours": {
+              "base00": "#383838",
+              "base01": "#404040",
+              "base02": "#606060",
+              "base03": "#6f6f6f",
+              "base04": "#808080",
+              "base05": "#dcdccc",
+              "base06": "#c0c0c0",
+              "base07": "#ffffff",
+              "base08": "#dca3a3",
+              "base09": "#dfaf8f",
+              "base0A": "#e0cf9f",
+              "base0B": "#5f7f5f",
+              "base0C": "#93e0e3",
+              "base0D": "#7cb8bb",
+              "base0E": "#dc8cc3",
+              "base0F": "#000000"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "sidebar": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "surface": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "bar": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "bar_text": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "popup": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "dock": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "overlay": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "titlebar": {
+              "source_key": "base06",
+              "hex": "#c0c0c0"
+            },
+            "titlebar_inactive": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#606060"
+            },
+            "text": {
+              "source_key": "base00",
+              "hex": "#383838"
+            },
+            "text_secondary": {
+              "source_key": "base01",
+              "hex": "#404040"
+            },
+            "text_faint": {
+              "source_key": "base02",
+              "hex": "#606060"
+            },
+            "accent": {
+              "source_key": "base0F",
+              "hex": "#000000"
+            },
+            "accent_text": {
+              "source_key": "base07",
+              "hex": "#ffffff"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#7b6363",
+              "upstream_hex": "#dca3a3",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.594,
+                "towards_source_key": "base00",
+                "towards_hex": "#383838",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#566f56",
+              "upstream_hex": "#5f7f5f",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.219,
+                "towards_source_key": "base00",
+                "towards_hex": "#383838",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#6e6959",
+              "upstream_hex": "#e0cf9f",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.676,
+                "towards_source_key": "base00",
+                "towards_hex": "#383838",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "vesper",
+      "name": "Vesper",
+      "description": "Vesper Base16 source colours, mapped for readable desktop surfaces. Light mode is a Decebal adaptation, not an upstream light scheme.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "base16/vesper.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/vesper.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "FormalSnake (https://github.com/formalsnake)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "69a1c6daa7c5b411f41ec0504efe89dc7828a7d0a8e9c4c15a57eb5e79359edb",
+            "colours": {
+              "base00": "#101010",
+              "base01": "#232323",
+              "base02": "#222222",
+              "base03": "#333333",
+              "base04": "#999999",
+              "base05": "#b7b7b7",
+              "base06": "#c1c1c1",
+              "base07": "#d5d5d5",
+              "base08": "#de6e6e",
+              "base09": "#dab083",
+              "base0A": "#ffc799",
+              "base0B": "#5f8787",
+              "base0C": "#60a592",
+              "base0D": "#8eaaaa",
+              "base0E": "#d69094",
+              "base0F": "#876c4f"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "sidebar": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "surface": {
+              "source_key": "base01",
+              "hex": "#232323"
+            },
+            "bar": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "bar_text": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "popup": {
+              "source_key": "base01",
+              "hex": "#232323"
+            },
+            "dock": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "overlay": {
+              "source_key": "base01",
+              "hex": "#232323"
+            },
+            "titlebar": {
+              "source_key": "base01",
+              "hex": "#232323"
+            },
+            "titlebar_inactive": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#222222"
+            },
+            "text": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "text_secondary": {
+              "source_key": "base04",
+              "hex": "#999999"
+            },
+            "text_faint": {
+              "source_key": "base04",
+              "hex": "#999999"
+            },
+            "accent": {
+              "source_key": "base0A",
+              "hex": "#ffc799"
+            },
+            "accent_text": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#de6e6e"
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#5f8787"
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#ffc799"
+            }
+          }
+        },
+        "light": {
+          "kind": "Decebal light adaptation using the dark source colours",
+          "source": {
+            "file": "base16/vesper.yaml",
+            "url": "https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/vesper.yaml",
+            "commit": "dd2a1379533372ad79560bb4392570782a8a0a9d",
+            "author": "FormalSnake (https://github.com/formalsnake)",
+            "license": "MIT (Copyright 2022 Tinted Theming)",
+            "sha256": "69a1c6daa7c5b411f41ec0504efe89dc7828a7d0a8e9c4c15a57eb5e79359edb",
+            "colours": {
+              "base00": "#101010",
+              "base01": "#232323",
+              "base02": "#222222",
+              "base03": "#333333",
+              "base04": "#999999",
+              "base05": "#b7b7b7",
+              "base06": "#c1c1c1",
+              "base07": "#d5d5d5",
+              "base08": "#de6e6e",
+              "base09": "#dab083",
+              "base0A": "#ffc799",
+              "base0B": "#5f8787",
+              "base0C": "#60a592",
+              "base0D": "#8eaaaa",
+              "base0E": "#d69094",
+              "base0F": "#876c4f"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "sidebar": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "surface": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "bar": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "bar_text": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "popup": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "dock": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "overlay": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "titlebar": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "titlebar_inactive": {
+              "source_key": "base07",
+              "hex": "#d5d5d5"
+            },
+            "border": {
+              "source_key": "base02",
+              "hex": "#222222"
+            },
+            "text": {
+              "source_key": "base00",
+              "hex": "#101010"
+            },
+            "text_secondary": {
+              "source_key": "base03",
+              "hex": "#333333"
+            },
+            "text_faint": {
+              "source_key": "base03",
+              "hex": "#333333"
+            },
+            "accent": {
+              "source_key": "base0F",
+              "hex": "#876c4f"
+            },
+            "accent_text": {
+              "source_key": "decebal.contrast.white",
+              "hex": "#ffffff",
+              "adaptation": "Accessibility on-accent foreground; not an upstream colour"
+            },
+            "danger": {
+              "source_key": "base08",
+              "hex": "#b75c5c",
+              "upstream_hex": "#de6e6e",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.187,
+                "towards_source_key": "base00",
+                "towards_hex": "#101010",
+                "target_contrast": 3.0
+              }
+            },
+            "ok": {
+              "source_key": "base0B",
+              "hex": "#597e7e",
+              "upstream_hex": "#5f8787",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.072,
+                "towards_source_key": "base00",
+                "towards_hex": "#101010",
+                "target_contrast": 3.0
+              }
+            },
+            "warn": {
+              "source_key": "base0A",
+              "hex": "#90725a",
+              "upstream_hex": "#ffc799",
+              "adaptation": "Decebal status contrast adaptation; not an upstream colour",
+              "method": {
+                "space": "sRGB channel interpolation, nearest 8-bit integer",
+                "mix": 0.463,
+                "towards_source_key": "base00",
+                "towards_hex": "#101010",
+                "target_contrast": 3.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "nightfox",
+      "name": "Nightfox / Dayfox",
+      "description": "Nightfox and Dayfox original source colours, mapped to desktop roles.",
+      "variants": {
+        "dark": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "lua/nightfox/palette/nightfox.lua",
+            "url": "https://github.com/EdenEast/nightfox.nvim/blob/4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a/lua/nightfox/palette/nightfox.lua",
+            "commit": "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a",
+            "author": "James Simpson / EdenEast",
+            "license": "MIT (Copyright 2021 James Simpson)",
+            "sha256": "78b787bb79226de1b92b550dcb2942c9f56e3994363b591448bdbf1bc6bcaaf5",
+            "colours": {
+              "black": "#393b44",
+              "red": "#c94f6d",
+              "green": "#81b29a",
+              "yellow": "#dbc074",
+              "blue": "#719cd6",
+              "magenta": "#9d79d6",
+              "cyan": "#63cdcf",
+              "white": "#dfdfe0",
+              "orange": "#f4a261",
+              "pink": "#d67ad2",
+              "comment": "#738091",
+              "bg0": "#131a24",
+              "bg1": "#192330",
+              "bg2": "#212e3f",
+              "bg3": "#29394f",
+              "bg4": "#39506d",
+              "fg0": "#d6d6d7",
+              "fg1": "#cdcecf",
+              "fg2": "#aeafb0",
+              "fg3": "#71839b",
+              "sel0": "#2b3b51",
+              "sel1": "#3c5372"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "sidebar": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "surface": {
+              "source_key": "bg2",
+              "hex": "#212e3f"
+            },
+            "bar": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "bar_text": {
+              "source_key": "white",
+              "hex": "#dfdfe0"
+            },
+            "popup": {
+              "source_key": "bg2",
+              "hex": "#212e3f"
+            },
+            "dock": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "overlay": {
+              "source_key": "bg2",
+              "hex": "#212e3f"
+            },
+            "titlebar": {
+              "source_key": "bg2",
+              "hex": "#212e3f"
+            },
+            "titlebar_inactive": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "border": {
+              "source_key": "bg4",
+              "hex": "#39506d"
+            },
+            "text": {
+              "source_key": "white",
+              "hex": "#dfdfe0"
+            },
+            "text_secondary": {
+              "source_key": "fg2",
+              "hex": "#aeafb0"
+            },
+            "text_faint": {
+              "source_key": "fg3",
+              "hex": "#71839b"
+            },
+            "accent": {
+              "source_key": "blue",
+              "hex": "#719cd6"
+            },
+            "accent_text": {
+              "source_key": "bg1",
+              "hex": "#192330"
+            },
+            "danger": {
+              "source_key": "red",
+              "hex": "#c94f6d"
+            },
+            "ok": {
+              "source_key": "green",
+              "hex": "#81b29a"
+            },
+            "warn": {
+              "source_key": "yellow",
+              "hex": "#dbc074"
+            }
+          }
+        },
+        "light": {
+          "kind": "source dark/light variant mapped to Decebal roles",
+          "source": {
+            "file": "lua/nightfox/palette/dayfox.lua",
+            "url": "https://github.com/EdenEast/nightfox.nvim/blob/4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a/lua/nightfox/palette/dayfox.lua",
+            "commit": "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a",
+            "author": "James Simpson / EdenEast",
+            "license": "MIT (Copyright 2021 James Simpson)",
+            "sha256": "9fbf77ca954bcb13b3415f51743954854184fecf9f695486fd3c353d8d3c34e0",
+            "colours": {
+              "black": "#352c24",
+              "red": "#a5222f",
+              "green": "#396847",
+              "yellow": "#ac5402",
+              "blue": "#2848a9",
+              "magenta": "#6e33ce",
+              "cyan": "#287980",
+              "white": "#f2e9e1",
+              "orange": "#955f61",
+              "pink": "#a440b5",
+              "comment": "#837a72",
+              "bg0": "#e4dcd4",
+              "bg1": "#f6f2ee",
+              "bg2": "#dbd1dd",
+              "bg3": "#d3c7bb",
+              "bg4": "#aab0ad",
+              "fg0": "#302b5d",
+              "fg1": "#3d2b5a",
+              "fg2": "#643f61",
+              "fg3": "#824d5b",
+              "sel0": "#e7d2be",
+              "sel1": "#a4c1c2"
+            }
+          },
+          "roles": {
+            "background": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "sidebar": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "surface": {
+              "source_key": "bg2",
+              "hex": "#dbd1dd"
+            },
+            "bar": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "bar_text": {
+              "source_key": "black",
+              "hex": "#352c24"
+            },
+            "popup": {
+              "source_key": "bg2",
+              "hex": "#dbd1dd"
+            },
+            "dock": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "overlay": {
+              "source_key": "bg2",
+              "hex": "#dbd1dd"
+            },
+            "titlebar": {
+              "source_key": "bg2",
+              "hex": "#dbd1dd"
+            },
+            "titlebar_inactive": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "border": {
+              "source_key": "bg4",
+              "hex": "#aab0ad"
+            },
+            "text": {
+              "source_key": "black",
+              "hex": "#352c24"
+            },
+            "text_secondary": {
+              "source_key": "fg2",
+              "hex": "#643f61"
+            },
+            "text_faint": {
+              "source_key": "fg3",
+              "hex": "#824d5b"
+            },
+            "accent": {
+              "source_key": "blue",
+              "hex": "#2848a9"
+            },
+            "accent_text": {
+              "source_key": "bg1",
+              "hex": "#f6f2ee"
+            },
+            "danger": {
+              "source_key": "red",
+              "hex": "#a5222f"
+            },
+            "ok": {
+              "source_key": "green",
+              "hex": "#396847"
+            },
+            "warn": {
+              "source_key": "yellow",
+              "hex": "#ac5402"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

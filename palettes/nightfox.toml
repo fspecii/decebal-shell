@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: James Simpson / EdenEast
+# Source: https://github.com/EdenEast/nightfox.nvim/blob/4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a/lua/nightfox/palette/nightfox.lua
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Nightfox / Dayfox"
+description = "Nightfox and Dayfox original source colours, mapped to desktop roles."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/EdenEast/nightfox.nvim/blob/4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a/lua/nightfox/palette/nightfox.lua
+[dark]
+background = "#192330" # bg1
+sidebar = "#192330" # bg1
+surface = "#212e3f" # bg2
+bar = "#192330" # bg1
+bar_text = "#dfdfe0" # white
+popup = "#212e3f" # bg2
+dock = "#192330" # bg1
+overlay = "#212e3f" # bg2
+titlebar = "#212e3f" # bg2
+titlebar_inactive = "#192330" # bg1
+border = "#39506d" # bg4
+text = "#dfdfe0" # white
+text_secondary = "#aeafb0" # fg2
+text_faint = "#71839b" # fg3
+accent = "#719cd6" # blue
+accent_text = "#192330" # bg1
+danger = "#c94f6d" # red
+ok = "#81b29a" # green
+warn = "#dbc074" # yellow
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/EdenEast/nightfox.nvim/blob/4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a/lua/nightfox/palette/dayfox.lua
+[light]
+background = "#f6f2ee" # bg1
+sidebar = "#f6f2ee" # bg1
+surface = "#dbd1dd" # bg2
+bar = "#f6f2ee" # bg1
+bar_text = "#352c24" # black
+popup = "#dbd1dd" # bg2
+dock = "#f6f2ee" # bg1
+overlay = "#dbd1dd" # bg2
+titlebar = "#dbd1dd" # bg2
+titlebar_inactive = "#f6f2ee" # bg1
+border = "#aab0ad" # bg4
+text = "#352c24" # black
+text_secondary = "#643f61" # fg2
+text_faint = "#824d5b" # fg3
+accent = "#2848a9" # blue
+accent_text = "#f6f2ee" # bg1
+danger = "#a5222f" # red
+ok = "#396847" # green
+warn = "#ac5402" # yellow

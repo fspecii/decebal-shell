@@ -1,0 +1,52 @@
+# Source research: docs/rice-palettes.md and docs/palette-sources.json
+# Original scheme author: Michaël Ball (http://github.com/michael-ball/)
+# Source: https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/synth-midnight-dark.yaml
+# Licence notice: docs/palette-sources-LICENSES.txt
+name = "Synth Midnight"
+description = "Synth Midnight Base16 source colours, mapped for readable desktop surfaces."
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/synth-midnight-dark.yaml
+[dark]
+background = "#050608" # base00
+sidebar = "#050608" # base00
+surface = "#1a1b1c" # base01
+bar = "#050608" # base00
+bar_text = "#dddfe0" # base07
+popup = "#1a1b1c" # base01
+dock = "#050608" # base00
+overlay = "#1a1b1c" # base01
+titlebar = "#1a1b1c" # base01
+titlebar_inactive = "#050608" # base00
+border = "#28292a" # base02
+text = "#dddfe0" # base07
+text_secondary = "#a3a5a6" # base04
+text_faint = "#a3a5a6" # base04
+accent = "#ea5ce2" # base0E
+accent_text = "#050608" # base00
+danger = "#b53b50" # base08
+ok = "#06ea61" # base0B
+warn = "#c9d364" # base0A
+
+# source dark/light variant mapped to Decebal roles
+# https://github.com/tinted-theming/schemes/blob/dd2a1379533372ad79560bb4392570782a8a0a9d/base16/synth-midnight-light.yaml
+[light]
+background = "#dddfe0" # base00
+sidebar = "#dddfe0" # base00
+surface = "#cfd1d2" # base01
+bar = "#dddfe0" # base00
+bar_text = "#050608" # base07
+popup = "#cfd1d2" # base01
+dock = "#dddfe0" # base00
+overlay = "#cfd1d2" # base01
+titlebar = "#cfd1d2" # base01
+titlebar_inactive = "#dddfe0" # base00
+border = "#c1c3c4" # base02
+text = "#050608" # base07
+text_secondary = "#474849" # base04
+text_faint = "#474849" # base04
+accent = "#b53b50" # base08
+accent_text = "#ffffff" # decebal.contrast.white ; Decebal contrast adaptation
+danger = "#b53b50" # base08
+ok = "#06873a" # base0B ; Decebal contrast adaptation
+warn = "#73793c" # base0A ; Decebal contrast adaptation
