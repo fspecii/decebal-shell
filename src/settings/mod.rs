@@ -27,6 +27,7 @@ pub mod tomlcfg;
 pub mod ui;
 pub mod wallhaven;
 pub mod wallpapercolors;
+pub mod welcome_shortcuts;
 pub mod widgetbuilder;
 pub mod widgetchoice;
 pub mod widgetspane;

@@ -428,15 +428,16 @@ impl Model {
     /// the panes that hold the real settings (no resets, no installs, nothing is launched).
     fn pane_welcome(&self) -> Vec<Item> {
         let btn = |id: &str, label: &str| Ctl::new(format!("w:go:{id}"), Kind::Button { label: label.into(), danger: false });
-        let items = vec![
+        let guide = super::welcome_shortcuts::guide(&self.rt);
+        let mut items = vec![
             Item::Header("Welcome to Decebal".into()),
             Item::Note {
-                text: "Decebal supplies the desktop shell: this Settings app, app search, panels, notifications, wallpapers and widgets. A window manager still handles application windows; the integrated rdwm session is the main path for the shortcuts below.".into(),
+                text: "Decebal supplies the desktop shell: this Settings app, app search, panels, notifications, wallpapers and widgets. A window manager still handles application windows; the integrated rdwm session supplies the live shortcut list below.".into(),
                 warn: false,
             },
             Item::Card(vec![
                 Row::new("Search everything")
-                    .detail("Spotlight (rdwm sample default: Super+Space) finds apps and system commands; declaunch lists every installed app. Bindings are editable in Shortcuts.")
+                    .detail("Spotlight finds apps and system commands; Applications lists installed apps. Your actual bindings are shown above and are editable in Shortcuts.")
                     .ctl(btn("keyboard", "Shortcuts")),
                 Row::new("Pick a theme, then change its parts")
                     .detail("Appearance → Themes chooses a look; Palettes controls colours and Customise holds fonts, window decorations and panel controls — no TOML editing needed.")
@@ -451,7 +452,7 @@ impl Model {
             ]),
             Item::Header("Move windows comfortably".into()),
             Item::Card(vec![Row::new("Fullscreen and snapping")
-                .detail("In the current rdwm sample profile, Super+F enters fullscreen; press it again to return to a centered, freely movable window. Hold Shift while dragging for a snap zone; ordinary dragging stays free.")
+                .detail("Use your Fullscreen shortcut above. Hold Shift while dragging for a snap zone; ordinary dragging stays free. Windows & Snapping explains the available window behavior.")
                 .ctl(btn("windows", "Windows & Snapping"))]),
             Item::Header("Good to know".into()),
             Item::Note {
@@ -468,10 +469,16 @@ impl Model {
                     .ctl(btn("general", "About & recovery")),
             ]),
             Item::Note {
-                text: "Keys marked as rdwm sample defaults come from the sample profile; see Shortcuts for the bindings this machine actually uses.".into(),
+                text: "The live list identifies known actions and direct application commands. Custom launch scripts stay labelled as custom instead of guessing what they run.".into(),
                 warn: false,
             },
         ];
+        let mut shortcuts = vec![Item::Header("Your shortcuts".into()), Item::Note { text: guide.status.into(), warn: !self.rt.running }];
+        for (label, keys) in guide.rows {
+            shortcuts.push(Item::Card(vec![Row::new(label).detail(keys)]));
+        }
+        shortcuts.push(Item::Card(vec![Row::new("All shortcuts and modes").ctl(btn("keyboard", "Shortcuts"))]));
+        items.splice(2..2, shortcuts);
         // Guide instructions must remain readable, including with larger text: row
         // details are a single-line summary, while Notes wrap to the available width.
         let mut readable = Vec::new();
@@ -1720,6 +1727,25 @@ mod tests {
         assert!(m.sel.goto.is_none());
         apply_special(&mut m, "w:go:wallpaper", CtlVal::Num(1.0));
         assert!(m.sel.goto.is_none());
+    }
+
+    #[test]
+    fn welcome_uses_cached_running_shortcuts_and_never_sample_keys() {
+        let (mut m, _dir) = model_with(BIG);
+        m.rt.running = true;
+        m.rt.binds = serde_json::json!([
+            {"keys":["alt+space"],"action":"spawn","args":["decspot"]},
+            {"keys":["super+shift+f"],"action":"fullscreen_center"}
+        ]);
+        let text = |items: Vec<Item>| items.into_iter().filter_map(|i| if let Item::Note { text, .. } = i { Some(text) } else { None }).collect::<Vec<_>>().join("\n");
+        let welcome = pane_of("welcome");
+        let live = text(m.items(welcome));
+        assert!(live.contains("Alt+Space") && live.contains("Super+Shift+F"), "{live}");
+        assert!(!live.contains("Super+Space") && !live.contains("sample default"), "{live}");
+        m.rt.running = false;
+        let disconnected = text(m.items(welcome));
+        assert!(disconnected.contains("rdwm is not connected"));
+        assert!(!disconnected.contains("Alt+Space"), "stale cached keys must not look live");
     }
 
     #[test]
