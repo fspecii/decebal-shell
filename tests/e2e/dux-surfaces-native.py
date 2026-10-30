@@ -135,7 +135,7 @@ def main():
                             wait(lambda: calls.exists() and len(calls.read_text().splitlines()) > previous_calls and calls.read_text().splitlines()[-1] == "appearance", "native Settings sibling action")
                             dash.wait(timeout=5)
                             processes.remove(dash)
-                        if os.environ.get("DUX_SURFACE_HOST_PART") != "bar":
+                        if os.environ.get("DUX_SURFACE_HOST_PART") not in ("bar", "dash"):
                             panel_dump = root / "panel.json"
                             env["DECBAR_DEBUG_PANEL"] = str(panel_dump)
                             panel = subprocess.Popen([str(root / "bin/decbar"), "--control-center"], env=env, stdout=log, stderr=log)
@@ -189,7 +189,7 @@ def main():
                             (evidence/f"control-{scale*100}-{mode}-click-diagnostic.json").write_text(json.dumps(diagnostic,indent=2))
                             processes.remove(panel)
                             panel_dump.unlink(missing_ok=True)
-                        if os.environ.get("DUX_SURFACE_HOST_PART") != "control":
+                        if os.environ.get("DUX_SURFACE_HOST_PART") not in ("control", "dash"):
                             config["bar"]={"enabled":True,"background":"band","margin":4,"spacing":4,"radius":14,"left":["launcherButton"],"center":["clock"],"right":["controlCenterButton"]}
                             (root / "config/omarchy/decebal.json").write_text(json.dumps(config))
                             tray=root/"bar-tray.txt"

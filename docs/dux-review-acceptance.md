@@ -220,3 +220,12 @@ These are exact optimized X11 regression results, not claims about hardware
 animation, Wayland, AT-SPI or every embedded-host interaction. Root owns the
 remaining combined desktop gates and any subsequent deployment. This reviewer
 performed no cargo build, production edit, live input, install or restart.
+
+
+Final optimized Shell source0e2fd63 also passed stock bar10captures, mainbar
+ControlCenter32captures, Applications launcher32captures, and the four-case
+Dashboard page/scroll/Settings-action matrix16captures. A tests-only `dash`
+host filter permits independent Dashboard execution without repeating the two
+ControlCenter hosts. Results: `/tmp/decebal-review3-native/full/result.json`
+and `/tmp/decebal-review3-native/dashboard`. Production fingerprints remain
+unchanged after these tests.
