@@ -410,7 +410,7 @@ Test without touching your session: `make e2e-notify` (private `dbus-daemon` and
 ## Icon themes
 
 Application, folder and MIME icons follow the freedesktop icon theme of your choice: System Settings -> Icons
-(Appearance > Customise > Icons, `decsettings icons`, a list of the installed themes with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
+(`decsettings icons`, a separate sidebar page beside Wallpaper with a preview grid), or `decthemectl icons list|set NAME|status|reset`.
 `Auto` (the default) follows `gsettings` / GTK's `settings.ini`. The settings live in `decebal.json` under `icons`
 (`theme`, `size_scale`, `monochrome_tint`, `fallback`); programs follow within half a second. Lookup rules, caches and
 the keys a preset/bundle should export: `docs/icons.md`. Recommended Arch packages: `contrib/icon-themes.md`.
