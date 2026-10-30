@@ -32,10 +32,10 @@ impl Style {
 /// Geometry only: all colours remain provided by the current GTK palette.
 /// Avoid changing column padding/margins: Nautilus uses these for hit testing.
 pub fn css(style: Style) -> String {
-    let (radius, sidebar_radius, row_gap, cell_padding, header_padding) = match style {
+    let (radius, sidebar_radius, row_gap, cell_padding, header_padding, grid_inset) = match style {
         Style::Native => return String::new(),
-        Style::Explorer => (2, 2, 1, 3, 4),
-        Style::Finder => (7, 8, 3, 5, 6),
+        Style::Explorer => (2, 2, 1, 3, 4, 8),
+        Style::Finder => (7, 8, 3, 5, 6, 12),
     };
     format!(
         "/* Files visual profile: {} (native file operations) */\n\
@@ -43,9 +43,11 @@ pub fn css(style: Style) -> String {
 .nautilus-window placessidebar row {{ border-radius: {sidebar_radius}px; margin-top: {row_gap}px; margin-bottom: {row_gap}px; }}\n\
 .nautilus-window .nautilus-list-view columnview > listview > row {{ border-radius: {radius}px; margin-top: {row_gap}px; margin-bottom: {row_gap}px; }}\n\
 .nautilus-window .nautilus-list-view #NautilusViewCell {{ padding-top: {cell_padding}px; padding-bottom: {cell_padding}px; }}\n\
+.nautilus-window .nautilus-grid-view gridview {{ padding: {grid_inset}px; }}\n\
 .nautilus-window .nautilus-grid-view gridview > child {{ border-radius: {radius}px; }}\n\
 .nautilus-window .nautilus-grid-view #NautilusViewCell {{ border-radius: {radius}px; }}\n\
-.nautilus-window #NautilusPathBar {{ border-radius: {radius}px; }}\n",
+.nautilus-window #NautilusPathBar {{ border-radius: {radius}px; }}\n\
+.nautilus-window #NautilusPathButton {{ border-radius: {radius}px; }}\n",
         style.id()
     )
 }
@@ -53,6 +55,19 @@ pub fn css(style: Style) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grid_and_breadcrumb_geometry_follow_the_profile_without_shrinking_controls() {
+        for (style, radius, inset) in [(Style::Explorer, 2, 8), (Style::Finder, 7, 12)] {
+            let sheet = css(style);
+            assert!(sheet.contains(&format!(".nautilus-window .nautilus-grid-view gridview {{ padding: {inset}px; }}")));
+            assert!(sheet.contains(&format!(".nautilus-window #NautilusPathButton {{ border-radius: {radius}px; }}")));
+            // Keep native click targets, breadcrumb overflow and column hit testing.
+            for forbidden in ["min-width:", "min-height:", "padding-left:", "padding-right:", "margin-left:", "margin-right:", "overflow:"] {
+                assert!(!sheet.contains(forbidden), "{forbidden}");
+            }
+        }
+    }
 
     #[test]
     fn profiles_are_distinct_scoped_geometry_with_native_palette() {

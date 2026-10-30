@@ -1,4 +1,4 @@
-//! "Create widget": a no-code way to make a user widget from a few safe templates (clock, analog clock, system metrics, note).
+//! "Create widget": a no-code way to make a user widget from a few safe templates (clocks, system metrics, static notes and linked app cards).
 //!
 //! The form edits a [`Draft`] kept in the model. [`Draft::source`] turns it into an ordinary widget file of the safe DSL (no
 //! `exec`, no `[commands]`), which is validated with the same parser the desktop uses, saved under [`config::user_dir`] with a
@@ -35,10 +35,12 @@ pub enum Template {
     Analog,
     Metrics,
     Note,
+    QuickNote,
+    Timer,
 }
 
 impl Template {
-    pub const ALL: [Template; 4] = [Template::Clock, Template::Analog, Template::Metrics, Template::Note];
+    pub const ALL: [Template; 6] = [Template::Clock, Template::Analog, Template::Metrics, Template::Note, Template::QuickNote, Template::Timer];
 
     fn key(self) -> &'static str {
         match self {
@@ -46,6 +48,8 @@ impl Template {
             Template::Analog => "analog-clock",
             Template::Metrics => "system-metrics",
             Template::Note => "note",
+            Template::QuickNote => "quick-note",
+            Template::Timer => "timer",
         }
     }
 
@@ -54,7 +58,9 @@ impl Template {
             Template::Clock => "Digital clock",
             Template::Analog => "Analog clock",
             Template::Metrics => "System metrics",
-            Template::Note => "Note",
+            Template::Note => "Static note",
+            Template::QuickNote => "Quick note · Notes app",
+            Template::Timer => "Timer · shared countdown",
         }
     }
 
@@ -64,6 +70,8 @@ impl Template {
             Template::Analog => "My analog clock",
             Template::Metrics => "System monitor",
             Template::Note => "My note",
+            Template::QuickNote => "My quick notes",
+            Template::Timer => "My timer",
         }
     }
 
@@ -257,6 +265,35 @@ impl Draft {
                         doc.node(2, &[("type", q("spacer"))]);
                         doc.node(2, &[("type", q("text")), ("text", q(value)), ("size", num(12.0 * k)), ("weight", q("bold")), ("color", q("text"))]);
                     }
+                }
+            }
+            Template::QuickNote | Template::Timer => {
+                doc.0.push_str("refresh = 1000\n");
+                let notes = self.template == Template::QuickNote;
+                let mut root = card(Some(320.0), [18.0, 18.0], 12.0, "stretch", false);
+                root.push(("on_click", q(if notes { "open notes" } else { "open timer" })));
+                doc.node(0, &root);
+                for (text, size, bold) in if notes {
+                    [("{notes.title}", 20.0, true), ("{notes.excerpt}", 14.0, false), ("{notes.status}", 11.0, false)]
+                } else {
+                    [("{timer.title}", 15.0, false), ("{timer.remaining}", 36.0, true), ("{timer.status}", 12.0, false)]
+                } {
+                    doc.node(
+                        1,
+                        &[
+                            ("type", q("text")),
+                            ("text", q(text)),
+                            ("size", num(size * k)),
+                            ("weight", q(if bold { "bold" } else { "regular" })),
+                            ("color", q(if bold { "text" } else { "text_secondary" })),
+                        ],
+                    );
+                }
+                if notes {
+                    doc.node(1, &[("type", q("button")), ("on_click", q("open quick-note")), ("height", num(34.0 * k)), ("background", q("surface")), ("radius", num(8.0 * k))]);
+                    doc.node(2, &[("type", q("text")), ("text", q("New note")), ("size", num(14.0 * k)), ("color", q("accent"))]);
+                } else {
+                    doc.node(1, &[("type", q("bar")), ("value", q("timer.progress")), ("height", num(5.0 * k)), ("color", q("accent")), ("track", q("border"))]);
                 }
             }
             Template::Note => {
@@ -523,7 +560,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     let mut out = vec![Item::Header("Create a widget".into())];
     let Some(d) = &m.widget_builder else {
         out.push(Item::Card(vec![Row::new("Make your own widget")
-            .detail("Pick a clock, system meters or a note, choose its size and place, and add it to your desktop. No code needed.")
+            .detail("Pick a clock, system meters, a note or a shared app widget, then choose its size and place. No code needed.")
             .ctl(Ctl::new("wg:new:open", Kind::Button { label: "Create widget…".into(), danger: false }))]));
         return out;
     };
@@ -552,11 +589,23 @@ pub fn items(m: &Model) -> Vec<Item> {
             rows.push(toggle("disk", "Disk", "How full the root drive is", d.disk));
             rows.push(toggle("net", "Network", "Download and upload speed", d.net));
         }
+        Template::QuickNote | Template::Timer => {}
         Template::Note => rows.push(
             Row::new("Note")
                 .detail(format!("Up to {TEXT_MAX} characters, shown as typed; long notes wrap onto several lines"))
                 .ctl(Ctl::new("wg:new:text", Kind::Text { val: d.text.clone(), hint: "Type your note".into() })),
         ),
+    }
+    if matches!(d.template, Template::QuickNote | Template::Timer) {
+        out.push(Item::Note {
+            text: if d.template == Template::QuickNote {
+                "Shows your latest saved Notes entry. Click to open Notes; New note starts a blank entry. Desktop content can be private; this preview uses fictional data."
+            } else {
+                "Shares the Timer app countdown. Click to open its controls; closing the app keeps an active countdown running. This preview uses fictional data."
+            }
+            .into(),
+            warn: false,
+        });
     }
     rows.push(
         Row::new("Size")
@@ -821,6 +870,23 @@ mod tests {
     }
 
     #[test]
+    fn linked_templates_use_shared_data_and_allowlisted_app_actions() {
+        use crate::widgets::actions::{Action, Open};
+        for (template, path, open) in [(Template::QuickNote, "notes.title", Open::Notes), (Template::Timer, "timer.remaining", Open::Timer)] {
+            let d = Draft { template, text: String::new(), ..Draft::new() };
+            assert!(d.problems().is_empty(), "linked notes do not require static text");
+            let def = dsl::parse(&d.source("linked").unwrap(), Trust::Theme).unwrap();
+            assert!(def.paths.iter().any(|p| p == path));
+            assert!(def.actions.contains(&Action::Open(open)));
+            if template == Template::QuickNote {
+                assert!(def.actions.contains(&Action::Open(Open::QuickNote)));
+            }
+            let drawn = crate::widgets::layout::dump(&layout(&def, &Ctx { data: &data::sample(), metrics: &Fixed, theme_radius: 10.0 }, None));
+            assert!(!drawn.contains("{notes.") && !drawn.contains("{timer."));
+        }
+    }
+
+    #[test]
     fn user_text_is_shown_literally_and_cannot_inject_data_references_or_toml() {
         let tricky = "{cpu.usage} \"]\n[root]\ntype = \"button\"\non_click = \"exec rm -rf ~\" }}";
         let d = Draft { template: Template::Note, name: "{mem.usage} \"quoted\" \\ name".into(), text: clean(tricky, TEXT_MAX), ..Draft::new() };
@@ -926,6 +992,27 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
         assert!(dir.join("shopping-list-2.toml").is_file());
         assert_eq!(load(&m)["widgets"]["items"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn linked_widgets_create_through_the_form_and_preserve_existing_layout() {
+        let (mut m, _) = model_with("[general]\n");
+        let sb = sandbox(&m.paths.shell_dir);
+        let kept = json!({"use":"builtin:clock-card","x":21,"enabled":true});
+        save(&m, json!({"enabled":true,"allow_exec":false,"items":[kept.clone()]}));
+        for (key, stem, path) in [("quick-note", "my-quick-notes", "notes.title"), ("timer", "my-timer", "timer.remaining")] {
+            m.apply("wg:new:open", CtlVal::Click);
+            m.apply("wg:new:template", CtlVal::Str(key.into()));
+            m.apply("wg:new:create", CtlVal::Click);
+            assert!(m.widget_builder.is_none(), "{:?}", m.notice.as_ref().map(|n| &n.text));
+            let file = std::fs::read_to_string(sb.dir.join(format!("{stem}.toml"))).unwrap();
+            let def = dsl::parse(&file, Trust::User).unwrap();
+            assert!(def.paths.iter().any(|p| p == path));
+        }
+        let doc = load(&m);
+        assert_eq!(doc["widgets"]["items"][0], kept);
+        assert_eq!(doc["widgets"]["items"].as_array().unwrap().len(), 3);
+        assert_eq!(doc["widgets"]["allow_exec"], false);
     }
 
     #[test]

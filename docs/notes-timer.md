@@ -14,7 +14,10 @@ cloud-synchronised. Files live under `$XDG_DATA_HOME/decebal/notes` (normally
 
 Timer accepts seconds or MM:SS, with clickable 5/15/25-minute presets. Click the
 duration to replace it, then Start; Pause/Resume and Reset share state with its
-widget. Enter/Space controls the timer, R resets it, and Escape closes its window.
+widget. Reopening restores its saved duration; a duration change from another
+window or widget updates the input, while normal countdown refreshes preserve a
+duration you are editing. Reset restores the shared duration. Enter/Space controls
+the timer, R resets it, and Escape closes its window.
 A single lightweight completion worker stays alive only for an active countdown.
 Closing the window does not stop the countdown. Time asleep counts; manual clock
 changes affect the remaining time. Desktop notifications require `notify-send`.

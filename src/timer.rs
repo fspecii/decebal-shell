@@ -336,12 +336,26 @@ impl TimerApp {
     pub fn new(store: Store) -> Self {
         let result = store.snapshot();
         let error = result.as_ref().err().cloned().or_else(|| result.as_ref().ok().and_then(|s| s.notification_error.clone()));
-        Self { store, input: "05:00".into(), error, fonts: None, poll_token: std::sync::Arc::new(()), snapshot: result.unwrap_or_default(), replace_input: false, size: (560, 460) }
+        let snapshot = result.unwrap_or_default();
+        let input = Self::duration_input(snapshot.duration);
+        Self { store, input, error, fonts: None, poll_token: std::sync::Arc::new(()), snapshot, replace_input: false, size: (560, 460) }
+    }
+    fn duration_input(seconds: u64) -> String {
+        // The editable field accepts MM:SS, unlike the HH:MM:SS countdown.
+        format!("{:02}:{:02}", seconds / 60, seconds % 60)
+    }
+    fn sync_snapshot(&mut self, snapshot: Snapshot, reset_input: bool) {
+        if reset_input || snapshot.duration != self.snapshot.duration {
+            self.input = Self::duration_input(snapshot.duration);
+            self.replace_input = false;
+        }
+        self.snapshot = snapshot;
     }
     fn perform(&mut self, a: TimerAction) {
+        let reset_input = matches!(a, TimerAction::Reset);
         match self.store.apply(a) {
             Ok(s) => {
-                self.snapshot = s;
+                self.sync_snapshot(s, reset_input);
                 self.error = None;
                 if self.snapshot.status == Status::Running {
                     if let Err(e) = self.store.spawn_worker() {
@@ -541,7 +555,7 @@ impl WindowApp for TimerApp {
         match self.store.snapshot() {
             Ok(s) => {
                 self.error = s.notification_error.clone();
-                self.snapshot = s;
+                self.sync_snapshot(s, false);
             }
             Err(e) => self.error = Some(e),
         }
@@ -654,6 +668,29 @@ mod tests {
         assert!(s.apply_at(TimerAction::Pause, &FakeClock(1)).is_err());
         start(&s);
         assert_eq!(s.snapshot_at(&FakeClock(1)).unwrap().remaining, 60);
+    }
+    #[test]
+    fn duration_input_follows_shared_state_without_clobbering_drafts() {
+        let t = Temp::new();
+        let store = t.store();
+        store.apply_at(TimerAction::Start { seconds: 1500, title: "Focus".into() }, &FakeClock(100)).unwrap();
+        let mut app = TimerApp::new(store.clone());
+        assert_eq!(app.input, "25:00", "reopening keeps the persisted duration");
+        app.input = "12:34".into();
+        app.replace_input = true;
+        app.tick();
+        assert_eq!(app.input, "12:34", "routine polling preserves the user's draft");
+        assert!(app.replace_input);
+        store.apply_at(TimerAction::Start { seconds: 3661, title: "Shared".into() }, &FakeClock(100)).unwrap();
+        app.tick();
+        assert_eq!(app.input, "61:01", "another app or widget can change the duration");
+        assert_eq!(parse_duration(&app.input).unwrap(), 3661);
+        assert!(!app.replace_input);
+        app.input = "5".into();
+        app.perform(TimerAction::Reset);
+        assert_eq!(app.input, "61:01", "reset restores the shared duration");
+        assert_eq!(app.snapshot.status, Status::Ready);
+        assert_eq!(parse_duration(&TimerApp::duration_input(86400)).unwrap(), 86400);
     }
     #[test]
     fn native_controls_and_preview_are_visible() {

@@ -21,7 +21,11 @@ Definition errors appear beside the affected widget. Invalid JSON is left intact
 | Digital clock | Large time and optional date | 24-hour or 12-hour time, show the date |
 | Analog clock | A round clock face | Seconds hand |
 | System metrics | Titled card with bars and live values | Processor, memory, root disk, network speed (at least one) |
-| Note | A title and your text, wrapped onto up to six lines | The note itself (up to 200 characters) |
+| Static note | A title and your text, wrapped onto up to six lines | The note itself (up to 200 characters) |
+| Quick note · Notes app | Latest saved note, with Open and New note actions | Shared with Notes; no static text required |
+| Timer · shared countdown | Remaining time, status and progress | Click to open Timer controls |
+
+Quick note and Timer previews use fictional data. On the desktop, Quick note can reveal private content; its text is edited in Notes. The timer uses the app’s persisted countdown and continues while the app is closed. Neither template runs shell commands.
 
 Every type also has a **Name** (1 to 40 characters; the title of metrics and note cards), a **Size** (Small, Medium or Large scales the whole card), and a **Position** (screen anchor plus horizontal and vertical offsets, like any other card). The suggested position sits clear of the cards already on the desktop until you type an offset yourself.
 
