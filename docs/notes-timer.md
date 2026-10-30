@@ -23,8 +23,16 @@ Closing the window does not stop the countdown. Time asleep counts; manual clock
 changes affect the remaining time. Desktop notifications require `notify-send`.
 A notification failure appears when the app is reopened. Delivery is at most once:
 a crash between a durable completion claim and notification delivery can lose the
-notification. A machine restart resumes the saved deadline when Timer is reopened;
-there is no login autostart service yet.
+notification. The packaged XDG login entry runs `dectimer autostart` without
+opening a window, including after switching desktop sessions.
+It resumes future deadlines or delivers an elapsed, unclaimed timer after login.
+Missing, idle, paused and already delivered state exits immediately without a
+resident helper. Duplicate login/service/UI starts share the same worker lock.
+Corrupt state is left intact and reported to the session log. An optional
+`decebal-timer.service` provides the same recovery under `graphical-session.target`;
+it is not enabled by installation and does not restart an idle timer. Install the
+login entry (or enable that service) for reboot recovery; a binary-only update does
+not itself create an autostart entry.
 
 In **Settings → Widgets**, add **Quick note** and **Timer** from the built-in
 catalog. The note card shows a bounded excerpt of the most recently saved note;
@@ -33,5 +41,5 @@ comfortable displaying private content. The timer card reads the same countdown
 as the app. Neither widget needs `allow_exec`. Gallery previews use fictional
 sample data and never read private notes. Existing widget layouts remain intact.
 
-CLI: `decnotes [--new]`, `dectimer`, `decwidgets add builtin:quick-note`,
+CLI: `decnotes [--new]`, `dectimer`, `dectimer autostart`, `decwidgets add builtin:quick-note`,
 `decwidgets add builtin:timer-card`. Both apps support `--help` and `--version`.

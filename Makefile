@@ -4,10 +4,10 @@ SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-
 # Programs that did not exist under the old macshell name get no mac* compatibility wrapper.
 NO_COMPAT = declock decmon decwall decnotes dectimer
 BINS = decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets decnotes dectimer
-UNITS = decebal-live-wallpaper.service decebal-widgets.service decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
+UNITS = decebal-timer.service decebal-live-wallpaper.service decebal-widgets.service decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 # Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
 ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber orbit-glass paper-signal moss-atlas signal-deck nextkde
-AUTOSTART = decebal-live-wallpaper.desktop decebal-widgets.desktop decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
+AUTOSTART = decebal-timer.desktop decebal-live-wallpaper.desktop decebal-widgets.desktop decebal-dock.desktop decebal-bar.desktop decebal-notify.desktop decebal-clip.desktop decebal-hot.desktop decebal-wallpaper-colors.desktop
 
 all:
 	cargo build --release --locked
@@ -153,3 +153,14 @@ e2e-curated-wallpaper: all
 .PHONY: e2e-theme-shadows
 e2e-theme-shadows: all
 	MS_BIN_DIR=$(CURDIR)/target/release tests/e2e/theme-shadows.sh
+
+.PHONY: e2e-timer-recovery e2e-shadow-controls check-theme-art
+e2e-timer-recovery: all
+	TIMER_BIN=$(CURDIR)/target/release/dectimer python3 tests/timer-recovery.py
+
+e2e-shadow-controls: all
+	MS_BIN_DIR=$(CURDIR)/target/release tests/e2e/shadow-controls.sh
+
+check-theme-art:
+	python3 tests/wallpaper-package-contract.py
+	python3 tests/retire-generated-assets.py

@@ -259,6 +259,20 @@ impl Store {
         }
         Ok(true)
     }
+    /// Login recovery stays headless and read-only when there is no work. The
+    /// existing worker lock arbitrates recovery, normal UI and duplicate logins.
+    pub fn recover(&self) -> Result<()> {
+        if self.recovery_needed(&WallClock)? {
+            self.worker()?;
+        }
+        Ok(())
+    }
+
+    fn recovery_needed(&self, clock: &impl Clock) -> Result<bool> {
+        let state = self.snapshot_at(clock)?;
+        Ok(state.status == Status::Running || (state.status == Status::Complete && !state.claimed))
+    }
+
     pub fn worker(&self) -> Result<()> {
         let guard = self.lock()?;
         let worker = OpenOptions::new().write(true).create(true).truncate(false).mode(0o600).custom_flags(libc::O_NOFOLLOW).open(self.dir.join("worker.lock")).map_err(err)?;
@@ -295,6 +309,9 @@ impl Store {
 
     /// Detached helper exits as soon as the timer pauses, resets, or completes.
     pub fn spawn_worker(&self) -> Result<()> {
+        if !self.recovery_needed(&WallClock)? {
+            return Ok(());
+        }
         Command::new(std::env::current_exe().map_err(err)?).arg("--timer-worker").arg(&self.dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(err)?;
         Ok(())
     }
@@ -604,6 +621,34 @@ mod tests {
         assert_eq!(t.store().snapshot().unwrap().status, Status::Ready);
         assert!(!t.0.exists());
     }
+    #[test]
+    fn recovery_is_readonly_for_missing_idle_paused_and_claimed_state() {
+        let t = Temp::new();
+        let store = t.store();
+        assert!(!store.recovery_needed(&FakeClock(100)).unwrap());
+        store.recover().unwrap();
+        store.spawn_worker().unwrap();
+        assert!(!t.0.exists(), "idle login/UI must not create state or worker locks");
+        start(&store);
+        assert!(store.recovery_needed(&FakeClock(120)).unwrap());
+        assert!(store.recovery_needed(&FakeClock(200)).unwrap(), "elapsed unclaimed timer needs delivery");
+        store.apply_at(TimerAction::Pause, &FakeClock(120)).unwrap();
+        let before = fs::read(t.0.join("timer.json")).unwrap();
+        store.recover().unwrap();
+        assert_eq!(fs::read(t.0.join("timer.json")).unwrap(), before);
+        assert!(!t.0.join("worker.lock").exists());
+        store.apply_at(TimerAction::Reset, &FakeClock(120)).unwrap();
+        store.recover().unwrap();
+        assert!(!t.0.join("worker.lock").exists());
+        start(&store);
+        store.notify_due(&FakeClock(200), &FakeNotify(AtomicUsize::new(0))).unwrap();
+        store.recover().unwrap();
+        assert!(!t.0.join("worker.lock").exists(), "already delivered state needs no resident helper");
+        fs::write(t.0.join("timer.json"), b"broken state").unwrap();
+        assert!(store.recover().unwrap_err().contains("Corrupt"));
+        assert_eq!(fs::read(t.0.join("timer.json")).unwrap(), b"broken state");
+    }
+
     #[test]
     fn lifecycle_restart_suspend() {
         let t = Temp::new();

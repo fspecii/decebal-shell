@@ -1,0 +1,12 @@
+[Unit]
+Description=Recover an active Decebal Timer countdown
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/dectimer autostart
+Restart=no
+
+[Install]
+WantedBy=graphical-session.target

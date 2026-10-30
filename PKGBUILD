@@ -64,6 +64,8 @@ package() {
   install -Dm644 contrib/decebal-dock.desktop "$pkgdir/etc/xdg/autostart/decebal-dock.desktop"
   install -Dm644 contrib/decebal-clip.service "$pkgdir/usr/lib/systemd/user/decebal-clip.service"
   install -Dm644 contrib/decebal-clip.desktop "$pkgdir/etc/xdg/autostart/decebal-clip.desktop"
+  install -Dm644 contrib/decebal-timer.service "$pkgdir/usr/lib/systemd/user/decebal-timer.service"
+  install -Dm644 contrib/decebal-timer.desktop "$pkgdir/etc/xdg/autostart/decebal-timer.desktop"
   install -Dm644 contrib/decebal-live-wallpaper.service "$pkgdir/usr/lib/systemd/user/decebal-live-wallpaper.service"
   install -Dm644 contrib/decebal-live-wallpaper.desktop "$pkgdir/etc/xdg/autostart/decebal-live-wallpaper.desktop"
   install -Dm644 contrib/decebal-widgets.service "$pkgdir/usr/lib/systemd/user/decebal-widgets.service"

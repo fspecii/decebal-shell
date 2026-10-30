@@ -142,11 +142,19 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
     for f in ["docs/theme-engine.md", "tests/e2e/theme-engine.sh", "widgets/clock-card.toml", "themes/nord/theme.toml"] {
         assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f).exists(), "{f} missing");
     }
-    // the asset themes are documented with a screenshot each and installed by make and the PKGBUILD
+    // Documentation may include native evidence, but package previews are generated at runtime.
+    // Hidden palette aliases deliberately have no artwork or screenshot defaults.
     let gallery = read("docs/themes.md");
     for id in ["nothing-dot", "nothing-light", "brutalist", "terminal-minimal", "terminal-amber"] {
-        assert!(gallery.contains(&format!("decthemectl theme apply {id}")) && gallery.contains(&format!("themes/{id}.png")), "docs/themes.md: {id}");
-        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png")).exists(), "{id} screenshot");
+        assert!(gallery.contains(&format!("decthemectl theme apply {id}")), "docs/themes.md: {id}");
+        let manifest: toml_edit::DocumentMut = read(&format!("themes/{id}/theme.toml")).parse().unwrap();
+        assert!(manifest.get("wallpaper").is_none(), "{id}: wallpaper remains independent");
+    }
+    for link in gallery.split("](").skip(1) {
+        let target = link.split(')').next().unwrap();
+        if target.starts_with("themes/") {
+            assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs").join(target).is_file(), "broken native evidence link: {target}");
+        }
     }
     // every theme folder (manifest, wallpapers, widgets, screenshots) is installed by one generic loop
     assert!(read("Makefile").contains("cd themes && find . -type f") && read("PKGBUILD").contains("cd themes && find . -type f"), "themes are not installed by Makefile/PKGBUILD");
@@ -201,13 +209,14 @@ fn a_wrapper_runs_the_new_program_with_the_same_arguments() {
 }
 
 #[test]
-fn the_theme_gallery_lists_every_shipped_package_with_its_screenshot() {
+fn compatibility_designs_remain_documented_without_generated_screenshots() {
     let doc = read("docs/themes.md");
     for id in ["caelestia-mocha", "rose-pine", "tokyo-night", "kanagawa", "material-you-dynamic"] {
-        assert!(doc.contains(&format!("decthemectl theme apply {id}")) && doc.contains(&format!("themes/{id}.png")), "docs/themes.md does not show {id}");
-        let shot = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("docs/themes/{id}.png"));
-        let len = std::fs::metadata(&shot).unwrap_or_else(|e| panic!("{}: {e}", shot.display())).len();
-        assert!(len < 400 * 1024, "{id}.png is {len} bytes");
+        assert!(doc.contains(&format!("decthemectl theme apply {id}")), "docs/themes.md does not document {id}");
+        assert!(!doc.contains(&format!("themes/{id}.png")), "{id}: retired artwork must not remain in the gallery");
+        let manifest: toml_edit::DocumentMut = read(&format!("themes/{id}/theme.toml")).parse().unwrap();
+        assert!(manifest.get("wallpaper").is_none() && manifest.get("screenshots").is_none(), "{id}: retired asset defaults");
+        assert!(!read(&format!("themes/{id}/README.md")).is_empty());
     }
 }
 
@@ -231,5 +240,19 @@ fn live_wallpapers_ship_optional_session_host() {
     for file in ["Makefile", "PKGBUILD"] {
         assert!(read(file).contains("decebal-live-wallpaper.desktop"));
         assert!(read(file).contains("decebal-live-wallpaper.service"));
+    }
+}
+
+#[test]
+fn timer_recovery_ships_headless_login_entry_and_non_restarting_service() {
+    let desktop = read("contrib/decebal-timer.desktop");
+    assert!(desktop.contains("Exec=dectimer autostart") && desktop.contains("TryExec=dectimer"));
+    assert!(!desktop.contains("OnlyShowIn=") && desktop.contains("NoDisplay=true"));
+    let service = read("contrib/decebal-timer.service");
+    assert!(service.contains("Type=exec") && service.contains("ExecStart=/usr/bin/dectimer autostart"));
+    assert!(service.contains("Restart=no") && !service.contains("RemainAfterExit"));
+    for path in ["Makefile", "PKGBUILD"] {
+        let text = read(path);
+        assert!(text.contains("decebal-timer.desktop") && text.contains("decebal-timer.service"));
     }
 }

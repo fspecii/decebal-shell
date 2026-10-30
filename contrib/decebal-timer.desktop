@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Decebal Timer recovery
+Comment=Resume an active countdown after login without opening a window
+Exec=dectimer autostart
+TryExec=dectimer
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

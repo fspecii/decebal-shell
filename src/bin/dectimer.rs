@@ -3,6 +3,12 @@ fn main() {
     let result = (|| -> Result<(), String> {
         let mut args = std::env::args_os().skip(1);
         match args.next() {
+            Some(a) if a == "autostart" => {
+                if args.next().is_some() {
+                    return Err("Unexpected autostart argument".into());
+                }
+                return Store::discover()?.recover();
+            }
             Some(a) if a == "--timer-worker" => {
                 let dir = args.next().ok_or("Missing worker state directory")?;
                 if args.next().is_some() {
@@ -11,7 +17,7 @@ fn main() {
                 return Store::in_dir(dir).worker();
             }
             Some(a) if a == "--help" || a == "-h" => {
-                println!("dectimer — native countdown timer\nUsage: dectimer [--help | --version]\nF1/F2/F3 presets; enter seconds or MM:SS. Enter/Space start/pause/resume; R reset; Esc close.\nCountdown includes suspend and time closed; notifications need notify-send.");
+                println!("dectimer — native countdown timer\nUsage: dectimer [autostart | --help | --version]\nF1/F2/F3 presets; enter seconds or MM:SS. Enter/Space start/pause/resume; R reset; Esc close.\nCountdown includes suspend and time closed; notifications need notify-send.\nAutostart recovers a saved active countdown headlessly, then exits when finished.");
                 return Ok(());
             }
             Some(a) if a == "--version" || a == "-V" => {
