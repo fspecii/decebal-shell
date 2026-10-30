@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real CLI/worker regression using only private paths, loopback HTTP and fake rdwm IPC."""
-import contextlib,http.server,json,os,pathlib,signal,socket,struct,subprocess,tempfile,threading,time,zlib
+import contextlib,http.server,json,os,pathlib,signal,socket,struct,subprocess,tempfile,threading,time,zlib,shutil
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 BIN=pathlib.Path(os.environ.get('MS_BIN_DIR',str(ROOT/'target'/os.environ.get('PROFILE','release'))))/'decthemectl'
 assert BIN.is_file(), 'Build decthemectl before this test'
@@ -224,9 +224,10 @@ else:print('SKIP colour-write EACCES stage: requires an unprivileged test uid')
 old_producer=pathlib.Path(os.environ.get('WALLPAPER_OLD_PRODUCER',str(pathlib.Path.home()/'.local/share/rdwm-decebal/bin/decthemectl')))
 if old_producer.is_file():
  with case(delay=True,delay_all=True) as c:
+  prior=c.root/'old-bin'/'decthemectl';prior.parent.mkdir();shutil.copy2(old_producer,prior)
   doc=json.loads((c.shell/'decebal.json').read_text());doc['theme']={'name':'macos','mode':'dark'}
   (c.shell/'decebal.json').write_text(json.dumps(doc));before,old=setup_dynamic(c)
-  previous=subprocess.run([str(old_producer),'wallpaper','follow','on'],env=c.env,text=True,capture_output=True,timeout=15)
+  previous=subprocess.run([str(prior),'wallpaper','follow','on'],env=c.env,text=True,capture_output=True,timeout=15)
   assert previous.returncode==0,('old producer failed in isolated fixture',previous.stdout,previous.stderr)
   assert c.started.wait(3),'old producer did not start its private worker'
   state=c.status();job=c.shell/'wallpaper-follow'/(state['generation']+'.json');legacy_bytes=job.read_bytes()
