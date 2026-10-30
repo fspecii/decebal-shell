@@ -192,3 +192,31 @@ The captured Settings General page was visually inspected.
 This resolves the demonstrated caller-lifetime failure for the exact repaired
 debug bar. Root still owns the final optimized rebuild and corresponding gates;
 the older 55c90da optimized candidate remains superseded for launch acceptance.
+
+## Final optimized candidate acceptance, source 0e2fd63
+
+All requested native gates passed on the first attempt against root's pinned
+`/tmp/decebal-review3-release-artifacts/bin`. Exact hashes and gate paths are
+recorded in `/tmp/decebal-review3-native/acceptance-manifest.json`:
+
+- `decbar`: `fa1747f7918721e2f96c2a65622acb16dccdd03fed50587fb0a11b5ab0501a7d`
+- `decsettings`: `96e25b700af19ab8659244f2b80500afda7ca6c3d85316b7156583d82a9ae607`
+
+`surfaces-control` passed all four standalone cases with delayed Settings
+completion 106–107ms after already observed popup exit. `real-settings` proved
+the matching real Settings PID/XID remained alive for two seconds after popup
+exit, then terminated that owned private process. The real Settings screenshot
+was visually inspected. These optimized results supersede the earlier launch
+failure and debug-only launch repair evidence for these gates.
+
+`placement` passed bar bottom46/banner54/monitor50. `title` repainted the same-app
+title-only change in59ms. `fallback` passed all three no-font icons, inert
+unfocused Return and explicitly focused Settings fixture launch. `sliders`
+passed eight full-row pointer commits, eight wheel commits and stale-Enter
+safety at100/200% with the short viewport. Focused Volume perimeter checks and
+full-target reveal passed; both scale screenshots were visually inspected.
+
+These are exact optimized X11 regression results, not claims about hardware
+animation, Wayland, AT-SPI or every embedded-host interaction. Root owns the
+remaining combined desktop gates and any subsequent deployment. This reviewer
+performed no cargo build, production edit, live input, install or restart.
