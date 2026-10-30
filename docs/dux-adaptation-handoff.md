@@ -73,6 +73,53 @@ The implementation owner must attach actual native-render evidence at 100% / 200
 
 No theme creation, source-root edits, live configuration changes, installation, restart, push or PR are authorized in this workstream. Parent reviews and integrates the worktree commits.
 
+### Native implementation and reviewed evidence
+
+Settings commit `1f4f30b` replaces fixed rainbow navigation badges with semantic
+tonal glyphs, a selected-route edge marker and keyboard focus outline. Section
+labels align with outlined content groups. Routing, item IDs, drafts, item caches
+and adaptive control geometry are retained. The shared painter adds no file,
+image or network work.
+
+Widget-only base commit `de48c1c` registers both cards independently of Settings.
+Include follow-up `37c115f` when integrating: full CPU/RAM
+unavailable labels must remain readable at 200%. Actual native font measurements
+after that correction are **320×248 / 320×324** for resource-overview at 100/200%
+and **320×292 / 320×363** for focus-hub. These are card sizes; exported renderer
+evidence adds a 16-pixel margin on each edge. Both modes and sample/unavailable
+states have the same heights with the tested installed fonts. Other font choices
+can change measured height. At 200%, resource y=72 ends at 396; focus y=336 would
+overlap. The specialist has since chosen resource top-right (32,72) and focus bottom-right
+(32,32). That still requires at least 807 pixels of output height at 200% for a
+16-pixel gap; a 720-pixel output needs a different arrangement. Use actual card
+extents and output bounds, rather
+than fixed nominal-height stacking. Simultaneous card placement on short outputs
+remains a package/layout responsibility; no workarea implementation is changed.
+
+Reproduce native Settings QA with `SETTINGS_BIN=/path/to/decsettings python3
+tests/e2e/settings-dux-native.py`. It creates a private Xvfb and HOME/XDG paths,
+blocks the inherited desktop bus, selects explicit light/dark modes, captures
+100/200% UI scale at normal/short heights and exercises actual content scrolling.
+It checks background luminance so a dark capture cannot be mislabeled light.
+The existing native geometry tests additionally cover enlarged text metrics.
+Reviewed captures live under `/tmp/decebal-dux-settings-evidence`; widget painter
+captures are under `/tmp/decebal-dux-widget-evidence`. These are actual native
+pixels, not screenshot surfaces or browser mockups.
+
+Final `37c115f` native host QA also passed four actual mapped/painted windows at
+100/200% text size on a private 640×480 display, and eight real mouse actions
+captured by private sibling app fixtures. Reproduce with `python3
+tests/e2e/dux-widgets-native.py /path/to/decwidgets /tmp/evidence`. Evidence is in
+`/tmp/decebal-dux-native-widget-host-final`, including `checks.json`, screenshots
+and the host log. Parent visually reviewed the corrected unavailable-state card
+and final 200% focus host capture. All private test processes were cleaned up.
+
+The X11 library suite passed **1595 tests, zero failed, 10 ignored** before the
+small final resource-label correction; its affected native renderer test passed
+separately. Strict X11 all-target Clippy with warnings denied and formatting passed. This is not a Wayland host, screen-reader, mixed-DPI or
+physical-monitor acceptance claim. No QML runtime, new collectors, note bodies,
+arbitrary exec actions or theme files are introduced.
+
 ## Upstream MIT notice
 
 The stock palette excerpt above is from dux-shell; first-party widget references are from dux-plugins. Both pinned repositories carry this notice:
