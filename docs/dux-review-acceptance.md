@@ -99,3 +99,11 @@ edge commits, eight wheel commits and inert stale Return passed. The 200%
 short screenshot was visually inspected: the brightness row is fully visible
 after scrolling. This smoke result verifies the harness and is **not acceptance
 of the subsequent combined optimized candidate**. Re-run with that pinned binary.
+
+The slider harness additionally navigates with real Down/Down keys from no
+focus through Settings to Volume (the source target order for the restricted
+tile list). It requires the complete target to be revealed and more than thirty
+additional blue perimeter pixels away from the painted track, saves
+`volume-keyboard-focus.png` at both scales, and asserts navigation and Enter on
+the focused slider emit no setters. Harness-only smoke against the older hash
+above passed: 388/322 focus-ring pixels at 100/200%, with no baseline ring.

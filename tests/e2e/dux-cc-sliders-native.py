@@ -71,8 +71,29 @@ for scale,height in [(1,720),(2,240)]:
       before=len(setters());xd('key','Return');time.sleep(.15)
       assert len(setters())==before and app.poll() is None,'stale pointer Enter changed slider'
      ImageGrab.grab(xdisplay=display).save(case/(name+'.png'))
+    # Source target order with only sound/display: Settings, Volume, Brightness.
+    # First Down chooses Settings from no focus; second Down reveals Volume.
+    before=len(setters());xd('key','Down');time.sleep(.1)
+    baseline=ImageGrab.grab(xdisplay=display).convert('RGB');baseline_rect,baseline_scroll=metadata()
+    xd('key','Down')
+    def focused_ring():
+     focus_rect,focus_scroll=metadata();fx,fy,fw,fh=focus_rect
+     assert first_y-focus_scroll>=0 and first_y+row_h-focus_scroll<=fh,'keyboard did not reveal complete Volume target'
+     image=ImageGrab.grab(xdisplay=display).convert('RGB')
+     # Focus stroke is on the row perimeter, away from its middle painted track.
+     points=[(round(fx+track_x+dx),round(fy+first_y-focus_scroll+dy)) for dx in range(16,round(track_w)-16) for dy in (1,2)]
+     blue=lambda pixel:pixel[2]>pixel[0]+40 and pixel[2]>pixel[1]+20
+     count=sum(blue(image.getpixel(point)) for point in points)
+     baseline_count=sum(blue(baseline.getpixel(point)) for point in points) if baseline_scroll==focus_scroll else 0
+     return (image,focus_rect,focus_scroll,count,baseline_count) if count>baseline_count+30 else None
+    focused,focus_rect,focus_scroll,ring_pixels,baseline_ring_pixels=wait(focused_ring,'visible keyboard Volume focus ring')
+    focused.save(case/'volume-keyboard-focus.png')
+    assert len(setters())==before,'keyboard navigation unexpectedly changed a slider'
+    xd('key','Return');time.sleep(.15)
+    assert len(setters())==before and app.poll() is None,'Enter on focused slider issued a setter'
+    keyboard={'target':'volume','revealed':True,'rect':focus_rect,'scroll':focus_scroll,'ring_pixels':ring_pixels,'baseline_ring_pixels':baseline_ring_pixels,'navigation_and_enter_no_setter':True}
     (case/'setters.log').write_text('\n'.join(setters())+'\n')
-    result['cases'].append({'font_percent':scale*100,'screen_height':height,'panel':rect,'scroll':scroll,'checks':checks,'stale_enter_inert':True})
+    result['cases'].append({'font_percent':scale*100,'screen_height':height,'panel':rect,'scroll':scroll,'checks':checks,'stale_enter_inert':True,'keyboard_focus':keyboard})
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n')
    finally:
     if app is not None and app.poll() is None:app.terminate();app.wait(timeout=5)
