@@ -753,14 +753,20 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
     let metrics = TextLayout::live();
     let mut y = u(28.0) - scroll;
-    p.text_as(Role::Title, pm, head.title, x0, y + u(18.0 + metrics.extra(14.0)), u(25.0), Weight::SemiBold, pal::text());
+    // The title wraps (a very narrow page with enlarged text) rather than being cut at the edge.
+    let title_lines = wrap_title(p, head.title, cw, u(25.0));
+    let title_lh = u(30.0 * metrics.0);
+    for (i, l) in title_lines.iter().enumerate() {
+        p.text_as(Role::Title, pm, l, x0, y + u(18.0 + metrics.extra(14.0)) + title_lh * i as f32, u(25.0), Weight::SemiBold, pal::text());
+    }
+    let title_extra = title_lh * (title_lines.len() - 1) as f32;
     let page_top = y;
-    y += u(62.0 + metrics.extra(30.0));
+    y += u(62.0 + metrics.extra(30.0)) + title_extra;
     if !head.context.is_empty() {
         // One quiet line of orientation under the title; it wraps rather than truncates.
         let lines = p.wrap(head.context, cw, u(12.5), Weight::Regular);
         let lh = u(17.0 * metrics.0);
-        let first = page_top + u(48.0 + metrics.extra(40.0));
+        let first = page_top + u(48.0 + metrics.extra(40.0)) + title_extra;
         for (i, l) in lines.iter().enumerate() {
             p.text(pm, l, x0, first + lh * i as f32, u(12.5), Weight::Regular, pal::sub());
         }
@@ -1135,6 +1141,37 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
     fr
 }
 
+/// Greedy word wrap of the page title in its own font; a single word wider than `max` is split by characters.
+fn wrap_title(p: &Painter, title: &str, max: f32, px: f32) -> Vec<String> {
+    let fits = |t: &str| p.measure_as(Role::Title, t, px, Weight::SemiBold) <= max;
+    let mut lines: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in title.split_whitespace() {
+        let cand = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
+        if fits(&cand) {
+            cur = cand;
+            continue;
+        }
+        if !cur.is_empty() {
+            lines.push(std::mem::take(&mut cur));
+        }
+        for ch in word.chars() {
+            let mut cand = cur.clone();
+            cand.push(ch);
+            if !cur.is_empty() && !fits(&cand) {
+                lines.push(std::mem::take(&mut cur));
+                cur.push(ch);
+            } else {
+                cur = cand;
+            }
+        }
+    }
+    if !cur.is_empty() || lines.is_empty() {
+        lines.push(cur);
+    }
+    lines
+}
+
 /// Flat page navigation (see [`Item::Nav`]): underlined tabs or chips, wrapped onto as many lines as the width needs so every
 /// label stays complete. One `Placed` with one part per option keeps the control id, mouse hits and Left/Right keys of a segmented choice.
 #[allow(clippy::too_many_arguments)]
@@ -1402,6 +1439,18 @@ mod tests {
         assert!(b.height > a.height + 10.0, "{} vs {}", b.height, a.height);
         let t = b.find("t").unwrap();
         assert!(t.rect.1 >= t.row_rect.1 && t.rect.1 + t.rect.3 <= t.row_rect.1 + t.row_rect.3);
+    }
+
+    #[test]
+    fn long_titles_wrap_and_never_lose_characters() {
+        let p = Painter { fonts: None, s: 1.0 };
+        for max in [400.0, 120.0, 60.0] {
+            let lines = wrap_title(&p, "Appearance and Windows", max, 25.0);
+            assert_eq!(lines.concat().replace(' ', ""), "AppearanceandWindows");
+            assert!(lines.iter().all(|l| !l.is_empty()));
+        }
+        assert_eq!(wrap_title(&p, "Sound", 400.0, 25.0), ["Sound"]);
+        assert_eq!(wrap_title(&p, "", 400.0, 25.0), [""]);
     }
 
     #[test]

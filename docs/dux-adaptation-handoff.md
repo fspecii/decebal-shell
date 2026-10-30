@@ -142,7 +142,11 @@ with no new data, I/O in paint, theme file or hardcoded palette (every colour is
 Evidence: `tests/e2e/settings-capture.py` renders the same private-Xvfb matrix (panes x light/dark x UI 100/125/200% x text
 100/125/200% x normal/short). Focused tests: `ui::tests::{navigation_wraps_keeps_every_label_and_stays_one_segmented_control,
 long_details_wrap_and_grow_their_row_instead_of_ending_in_an_ellipsis, page_header_context_wraps_below_the_title}` and
-`icons::tests::flat_glyphs_draw_ink_without_a_badge`; real keyboard/draft flows remain `tests/e2e/dux-flow-qa.py`.
+`icons::tests::flat_glyphs_draw_ink_without_a_badge`, `ui::tests::long_titles_wrap_and_never_lose_characters` and
+`app::key_tests::arrow_keys_keep_the_page_navigation_focused_while_switching_tabs`; real keyboard/draft flows remain
+`tests/e2e/dux-flow-qa.py`. Known limits (unchanged from the baseline): leaving a text field by pointer or Ctrl+F commits
+it (only IPC route changes suspend a draft); at about 560 px wide with 200% text the sidebar keeps its full labels and
+leaves the page roughly 250 px, where row labels and popup values can still ellipsise; theme-card metadata lines ellipsise.
 
 ## Upstream MIT notice
 

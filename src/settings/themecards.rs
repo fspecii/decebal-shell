@@ -80,7 +80,9 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
     let columns = if cw >= u(600.0) { 2 } else { 1 };
     let cw = (cw - u(16.0) * (columns - 1) as f32) / columns as f32;
     let preview_h = if cw >= u(300.0) { 160.0 } else { 120.0 };
-    let row_height = u(preview_h + 192.0);
+    // Enlarged text lengthens the text block and wraps the action buttons onto a second line: the card grows with it.
+    let g = crate::theme::live::font_scale().max(1.0);
+    let row_height = u(preview_h + 192.0 + 120.0 * (g - 1.0));
     for (index, c) in cards.iter().enumerate() {
         let x0 = origin_x + (index % columns) as f32 * (cw + u(16.0));
         let y = origin_y + (index / columns) as f32 * row_height;
@@ -125,22 +127,22 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
             let text_y = y + u(preview_h + 8.0);
             let tw = x0 + cw - tx - u(12.0);
             let name = p.fit(&c.name, tw - if c.current { u(70.0) } else { 0.0 }, u(15.0), Weight::SemiBold);
-            let nw = p.text(pm, &name, tx, text_y + u(24.0), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
+            let nw = p.text(pm, &name, tx, text_y + u(24.0 * g), u(15.0), Weight::SemiBold, if c.error.is_some() { pal::red() } else { pal::text() });
             if c.current {
-                p.text(pm, "In use", tx + nw + u(10.0), text_y + u(24.0), u(11.0), Weight::Medium, pal::accent());
+                p.text(pm, "In use", tx + nw + u(10.0), text_y + u(24.0 * g), u(11.0), Weight::Medium, pal::accent());
             }
             let meta = p.fit(&c.meta, tw, u(11.0), Weight::Regular);
-            p.text(pm, &meta, tx, text_y + u(42.0), u(11.0), Weight::Regular, pal::faint());
+            p.text(pm, &meta, tx, text_y + u(42.0 * g), u(11.0), Weight::Regular, pal::faint());
             let desc = match &c.error {
                 Some(e) => format!("Cannot be used: {e}"),
                 None if c.hash_mismatch => "Warning: the files do not match the package's content hash".to_string(),
                 None => c.description.clone(),
             };
             let d = p.fit(&desc, tw, u(12.0), Weight::Regular);
-            p.text(pm, &d, tx, text_y + u(60.0), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
+            p.text(pm, &d, tx, text_y + u(60.0 * g), u(12.0), Weight::Regular, if c.error.is_some() || c.hash_mismatch { pal::red() } else { pal::sub() });
             if !c.tags.is_empty() {
                 let t = p.fit(&c.tags, tw, u(10.5), Weight::Regular);
-                p.text(pm, &t, tx, text_y + u(76.0), u(10.5), Weight::Regular, pal::faint());
+                p.text(pm, &t, tx, text_y + u(76.0 * g), u(10.5), Weight::Regular, pal::faint());
             }
         }
 

@@ -414,7 +414,7 @@ impl SettingsApp {
             .map(|(n, r)| match r {
                 SbRow::Header(_) => u(if n == 0 { 24.0 } else { 32.0 } + 10.0 * text_growth),
                 SbRow::Pane(_) => u(36.0 + 13.0 * text_growth),
-                SbRow::Hit(..) => u(46.0 + 18.0 * text_growth),
+                SbRow::Hit(..) => u(46.0 + 26.0 * text_growth),
             })
             .collect();
         let total: f32 = heights.iter().sum::<f32>() + u(10.0);
@@ -495,9 +495,9 @@ impl SettingsApp {
                         // A search hit reads as a setting first and its pane second, each on a line of its own.
                         let tx = rect.0 + u(14.0);
                         let name = p.fit(label, rect.2 - u(28.0), u(13.0), Weight::Regular);
-                        p.text(pm, &name, tx, rect.1 + rect.3 * 0.36, u(13.0), Weight::Regular, pal::text());
+                        p.text(pm, &name, tx, rect.1 + rect.3 * 0.34, u(13.0), Weight::Regular, pal::text());
                         let place = p.fit(PANES[*i].title, rect.2 - u(28.0), u(11.0), Weight::Regular);
-                        p.text(pm, &place, tx, rect.1 + rect.3 * 0.72, u(11.0), Weight::Regular, pal::sub());
+                        p.text(pm, &place, tx, rect.1 + rect.3 * 0.74, u(11.0), Weight::Regular, pal::sub());
                     }
                     self.sidebar_hits.push((rect, *i));
                     self.sidebar_labels.push(Some(label.clone()));
@@ -773,7 +773,10 @@ impl SettingsApp {
         }
         if std::mem::take(&mut self.m.sel.reset_scroll) {
             self.scroll = 0.0;
-            self.it.focus = None;
+            // Switching a page tab or section with the arrow keys keeps that strip focused so the next arrow continues.
+            if !self.it.focus.as_deref().is_some_and(|f| f == "ap:tab" || f == "ap:sec") {
+                self.it.focus = None;
+            }
         }
     }
 
@@ -1689,6 +1692,28 @@ mod key_tests {
         assert!(a.m.widget_choice.is_none());
         let shell = super::super::io::json_load(&a.m.paths.shell_json());
         assert_eq!(shell["theme"]["name"], "glyph-rice");
+    }
+
+    #[test]
+    fn arrow_keys_keep_the_page_navigation_focused_while_switching_tabs() {
+        let initial = app();
+        let mut a = SettingsApp::new(initial.m.paths.clone(), Some("appearance"));
+        a.resize(1200, 900);
+        let mut pixels = Pixmap::new(1200, 900).unwrap();
+        a.draw(&mut pixels);
+        a.zone = Zone::Content;
+        a.it.focus = Some("ap:tab".into());
+        for want in [super::super::appearance::Tab::Palettes, super::super::appearance::Tab::Customise] {
+            a.key(&ev(Key::Right, None));
+            a.draw(&mut pixels);
+            assert_eq!(a.m.sel.tab, want);
+            assert_eq!(a.it.focus.as_deref(), Some("ap:tab"), "focus must survive the tab switch so the next arrow continues");
+        }
+        a.it.focus = Some("ap:sec".into());
+        a.key(&ev(Key::Right, None));
+        a.draw(&mut pixels);
+        assert_eq!(a.m.sel.section, super::super::appearance::Section::Fonts);
+        assert_eq!(a.it.focus.as_deref(), Some("ap:sec"));
     }
 
     #[test]
