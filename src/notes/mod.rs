@@ -218,6 +218,12 @@ impl WindowApp for Notes {
     }
     fn set_screen(&mut self, _: u32, _: u32) {}
     fn resize(&mut self, w: u32, h: u32) {
+        // Keep an on-screen editing caret visible after a smaller viewport,
+        // without jumping away from a passage the user scrolled to read.
+        let ed = if self.focus_body { &mut self.body } else { &mut self.title };
+        if ed.cursor.line >= ed.top && ed.cursor.line < ed.top.saturating_add(ed.page) {
+            ed.reveal = true;
+        }
         self.w = w;
         self.h = h
     }
@@ -268,18 +274,21 @@ impl WindowApp for Notes {
             let lineh = px + 10.;
             let maxlines = if index == 0 { 1 } else { ((h - y - 72.) / lineh).max(1.) as usize };
             ed.page = maxlines;
-            if ed.cursor.line < ed.top {
-                ed.top = ed.cursor.line
-            }
-            if ed.cursor.line >= ed.top + maxlines {
-                ed.top = ed.cursor.line + 1 - maxlines
-            }
             let active = self.focus_body == (index == 1);
             let prefix: String = ed.line(ed.cursor.line).chars().take(ed.cursor.col).collect();
             let cx = f.measure(&prefix, px, Weight::Regular);
-            if active {
-                ed.left = (cx - width + 4.).max(0.);
+            if ed.reveal {
+                if ed.cursor.line < ed.top {
+                    ed.top = ed.cursor.line
+                } else if ed.cursor.line >= ed.top + maxlines {
+                    ed.top = ed.cursor.line + 1 - maxlines
+                }
+                if active {
+                    ed.left = (cx - width + 4.).max(0.);
+                }
+                ed.reveal = false;
             }
+            ed.top = ed.top.min(ed.line_count().saturating_sub(maxlines));
             for (i, line) in ed.lines().iter().skip(ed.top).take(maxlines).enumerate() {
                 let line_no = ed.top + i;
                 if let Some((a, b)) = ed.selection() {
@@ -313,7 +322,7 @@ impl WindowApp for Notes {
             if ed.text().is_empty() {
                 f.draw(pm, if index == 0 { "Untitled note" } else { "Start writing…" }, x, y, px, Weight::Regular, t.text_faint.color(1.));
             }
-            if active {
+            if active && ed.cursor.line >= ed.top && ed.cursor.line < ed.top + maxlines {
                 fill_rect(pm, x + (cx - ed.left).max(0.), y + (ed.cursor.line - ed.top) as f32 * lineh, 1.5, px, t.accent.color(1.));
             }
         }
@@ -374,10 +383,14 @@ impl WindowApp for Notes {
         Response::REDRAW
     }
     fn scroll(&mut self, x: f32, _: f32, dy: f32) -> Response {
+        if dy == 0. {
+            return Response::NONE;
+        }
         if x < (self.w as f32 * 0.28).clamp(100., 240.) {
             self.list_top = if dy > 0. { (self.list_top + 1).min(self.rows.len().saturating_sub(1)) } else { self.list_top.saturating_sub(1) }
         } else {
-            self.body.top = if dy > 0. { (self.body.top + 3).min(self.body.line_count().saturating_sub(1)) } else { self.body.top.saturating_sub(3) }
+            self.body.top = if dy > 0. { self.body.top.saturating_add(3).min(self.body.line_count().saturating_sub(self.body.page)) } else { self.body.top.saturating_sub(3) };
+            self.body.reveal = false;
         }
         Response::REDRAW
     }
@@ -512,6 +525,54 @@ mod tests {
     }
     fn page(previous: bool) -> KeyEvent {
         KeyEvent { key: if previous { Key::PageUp } else { Key::PageDown }, text: String::new(), ch: None, ctrl: true, shift: false, alt: false }
+    }
+    #[test]
+    fn wheel_viewport_survives_paint_and_resize_until_edit_reveals_caret() {
+        let t = Temp::new();
+        let body = (0..40).map(|i| format!("Passage {i:02}")).collect::<Vec<_>>().join("\n");
+        t.store().create("Reading", &body).unwrap();
+        let mut app = Notes::new(t.store(), false);
+        app.resize(900, 320);
+        let mut pm = Pixmap::new(900, 320).unwrap();
+        app.draw(&mut pm);
+        assert_eq!(app.body.cursor, Pos::new(0, 0));
+        assert_eq!(app.body.top, 0);
+        let before = pm.clone();
+        app.scroll(500., 200., 1.);
+        app.draw(&mut pm); // Cursor is above the viewport; must not underflow.
+        assert_eq!(app.body.top, 3);
+        assert!(!app.body.reveal);
+        assert_ne!(pm.data(), before.data(), "wheel scrolling must change painted content");
+        app.draw(&mut pm);
+        assert_eq!(app.body.top, 3, "ordinary redraws must preserve reading position");
+        app.resize(900, 280);
+        let mut smaller = Pixmap::new(900, 280).unwrap();
+        app.draw(&mut smaller);
+        assert_eq!(app.body.top, 3, "resize preserves a reading viewport away from the caret");
+        app.key(&key('x', false, false));
+        app.draw(&mut smaller);
+        assert_eq!(app.body.top, 0, "editing requests caret reveal again");
+        assert_eq!(app.store.latest().unwrap().unwrap().body, format!("x{body}"));
+    }
+    #[test]
+    fn resize_reveals_visible_caret_and_clamps_scroll_to_full_pages() {
+        let t = Temp::new();
+        t.store().create("Reading", &(0..12).map(|i| format!("Line {i}")).collect::<Vec<_>>().join("\n")).unwrap();
+        let mut app = Notes::new(t.store(), false);
+        app.resize(900, 620);
+        app.body.set_cursor(Pos::new(11, 0), false);
+        app.draw(&mut Pixmap::new(900, 620).unwrap());
+        app.resize(900, 280);
+        app.draw(&mut Pixmap::new(900, 280).unwrap());
+        assert!(app.body.cursor.line >= app.body.top && app.body.cursor.line < app.body.top + app.body.page);
+        app.scroll(500., 200., 1.);
+        assert_eq!(app.body.top, app.body.line_count().saturating_sub(app.body.page));
+        let top = app.body.top;
+        app.scroll(500., 200., 0.);
+        assert_eq!(app.body.top, top);
+        app.resize(900, 1000);
+        app.draw(&mut Pixmap::new(900, 1000).unwrap());
+        assert_eq!(app.body.top, 0, "a viewport larger than the document starts at its beginning");
     }
     #[test]
     fn keyboard_note_selection_reveals_rows_and_stops_at_boundaries() {

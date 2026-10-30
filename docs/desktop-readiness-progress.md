@@ -38,11 +38,15 @@ argument vectors were updated, checked and reloaded, preserving other settings a
 workspace/window membership.
 
 Remaining work includes curated Wallhaven assets for each theme (sole specialist),
-proper whole-window shadows/premium decoration integration, safe recovery from old
+Wayland/CSD shadow integration, safe recovery from old
 GTK style-pack symlinks, Qt/Wayland capture verification, accessibility layout checks
 for other complex surfaces, and broader newcomer/performance gates. rdwm uses a
-separate caption window rather than a reparented full frame; simply enabling global
-Picom shadows is not evidence of a correct whole-window shadow.
+separate caption window rather than a reparented full frame. Its unified X11
+shadow carrier now covers the whole SSD frame, independently of Picom's own
+shadow feature. The current optimized WM passed 45 private composited pixel,
+input, stacking, movement/upload and lifecycle assertions in
+`tests/e2e/x11-shadows.sh` (log `/tmp/rdwm-shadow-current-optimized.log`). This
+does not establish Wayland or CSD support.
 
 
 Validation checkpoint:1513 library tests passed (6 ignored), strict all-target

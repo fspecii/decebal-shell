@@ -30,8 +30,7 @@ def private():
     wm = subprocess.Popen([os.environ['RDWM_BIN'], '--backend', 'x11', '--config', os.environ['PRIVATE_CONFIG']], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(.3)
-        for p in paths:
-            assert run(binary, 'reveal', '--', str(p)) == 'selected'
+        def selected_item(p):
             until = time.monotonic() + 6
             actual = ''
             while time.monotonic() < until:
@@ -44,14 +43,64 @@ def private():
                     clip = subprocess.run(['xclip', '-selection', 'clipboard', '-o', '-t', 'text/uri-list'], capture_output=True, text=True, timeout=2)
                     actual = clip.stdout.strip()
                     if urlsplit(actual).scheme == 'file' and unquote(urlsplit(actual).path) == str(p):
-                        break
+                        return wid
                 time.sleep(.1)
-            assert urlsplit(actual).scheme == 'file' and unquote(urlsplit(actual).path) == str(p), (p.name, actual)
+            raise AssertionError((p.name, actual))
+
+        for p in paths:
+            assert run(binary, 'reveal', '--', str(p)) == 'selected'
+            wid = selected_item(p)
+
+        # Exercise the actual search -> Ctrl+Enter -> detached utility route.
+        # Only the private search producer is faked; both consumer binaries and
+        # the file manager are real. The unique query has no app/command match,
+        # so the result order is Packages, File, Web.
+        spot_binary = Path(os.environ.get('DECSPOT_BIN', str(Path(binary).parent/'decspot'))).resolve()
+        assert (spot_binary.parent/'decutil').resolve() == Path(binary).resolve(), 'Spotlight needs the matching sibling decutil'
+        needle = fixtures/'revealneedle-native #%.txt'
+        needle.write_text('actual Spotlight route fixture')
+        tools = home/'search-tools'
+        tools.mkdir()
+        producer = tools/'plocate'
+        marker = tools/'query-finished'
+        producer.write_text('#!'+sys.executable+'\nfrom pathlib import Path\nimport sys\n'
+                            'Path('+repr(str(marker))+').write_text(sys.argv[-1])\n'
+                            'print('+repr(str(needle))+')\n')
+        producer.chmod(0o700)
+        spot_env = dict(os.environ, PATH=str(tools)+':'+os.environ['PATH'])
+        spot_log = home/'spotlight.log'
+        with spot_log.open('w') as log:
+            spot = subprocess.Popen([str(spot_binary)], env=spot_env, stdout=log, stderr=log)
+            try:
+                deadline = time.monotonic()+5
+                spot_wid = None
+                while time.monotonic()<deadline:
+                    result = subprocess.run(['xdotool','search','--onlyvisible','--name','^Spotlight$'], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        spot_wid = result.stdout.splitlines()[-1]
+                        break
+                    time.sleep(.05)
+                assert spot_wid, 'Spotlight did not open'
+                run('xdotool','type','--clearmodifiers','--delay','20','revealneedle')
+                deadline = time.monotonic()+4
+                while time.monotonic()<deadline and (not marker.exists() or marker.read_text()!='revealneedle'):
+                    time.sleep(.05)
+                assert marker.exists() and marker.read_text()=='revealneedle', 'search producer was not queried'
+                time.sleep(.3)  # Allow the completed worker snapshot to reach the UI.
+                run('xdotool','key','--clearmodifiers','Down','ctrl+Return')
+                spot.wait(timeout=4)
+                assert spot.returncode == 0, spot_log.read_text()
+                assert subprocess.run(['xdotool','search','--onlyvisible','--name','^Spotlight$'], capture_output=True).returncode != 0
+                wid = selected_item(needle)
+            finally:
+                if spot.poll() is None:
+                    spot.terminate()
+                    spot.wait(timeout=3)
         out = Path(os.environ['REVEAL_NATIVE_EVIDENCE'])
         out.mkdir(parents=True, exist_ok=True)
         subprocess.run(['import', '-window', wid, str(out/'selection.png')], check=True)
-        (out/'result.json').write_text(json.dumps({'selected_exact_items': len(paths), 'directory_and_symlink': True, 'clipboard_uri_verified': True}, indent=2)+'\n')
-        print('PASS native Nautilus exact selection for six special-name/file/directory/symlink cases')
+        (out/'result.json').write_text(json.dumps({'selected_exact_items': len(paths), 'directory_and_symlink': True, 'clipboard_uri_verified': True, 'spotlight_ctrl_enter_exact_selection': True, 'spotlight_closed': True}, indent=2)+'\n')
+        print('PASS native Nautilus exact selection for six special-name/file/directory/symlink cases and actual Spotlight Ctrl+Enter')
     finally:
         subprocess.run(['nautilus', '--quit'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         wm.terminate()

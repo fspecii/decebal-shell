@@ -47,8 +47,26 @@ assert json.loads(note.read_text())['title']=='A useful thought'
 # Existing notes must be reachable without clicking the sidebar. A new note is
 # newest/first; Ctrl+PageDown returns to the original, where typing must save.
 run('xdotool','key','ctrl+n');run('xdotool','type','--clearmodifiers','Second thought')
-run('xdotool','key','Tab');run('xdotool','type','--clearmodifiers','Second body')
+run('xdotool','key','Tab')
+subprocess.run(['xclip','-selection','clipboard'],input='\n'.join('Reading passage %02d'%i for i in range(80)),text=True,check=True)
+run('xdotool','key','ctrl+v')
 wait(lambda:len(list(notes.glob('*.json')))==2,'second note not saved')
+wait(lambda:any(json.loads(p.read_text())['body'].endswith('Reading passage 79') for p in notes.glob('*.json')),'long note typing did not finish')
+# A reading viewport away from the caret must survive another redraw. Compare
+# only the body, excluding status messages and the independently painted sidebar.
+from PIL import Image,ImageChops
+def body_pixels(label):
+ p=state/(label+'.png');subprocess.run(['import','-window',w,str(p)],check=True)
+ if os.environ.get('ECOSYSTEM_EVIDENCE_DIR'):
+  out=pathlib.Path(os.environ['ECOSYSTEM_EVIDENCE_DIR']);out.mkdir(parents=True,exist_ok=True);shutil.copy2(p,out/p.name)
+ im=Image.open(p).convert('RGB');side=max(100,min(im.width*.28,240))
+ return im.crop((int(side+20),146,im.width-20,im.height-58))
+time.sleep(.15);bottom=body_pixels('before-wheel')
+run('xdotool','mousemove','--window',w,'400','250','click','4');time.sleep(.15)
+reading=body_pixels('after-wheel')
+assert ImageChops.difference(bottom,reading).getbbox(), 'wheel did not change the note body viewport'
+run('xdotool','key','ctrl+s');time.sleep(.15)
+assert not ImageChops.difference(reading,body_pixels('after-redraw')).getbbox(), 'redraw snapped reading viewport back to caret'
 run('xdotool','key','ctrl+Next');run('xdotool','type','--clearmodifiers','Keyboard selected. ')
 wait(lambda:'Keyboard selected.' in json.loads(note.read_text())['body'],'keyboard note selection did not reach original note')
 # Notes' visible Focus timer action launches the sibling app with only its title.
