@@ -4,7 +4,7 @@ name = "Tokyo Night"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Tokyo Night (Day in light mode): electric blue and violet on deep navy with a neon skyline wallpaper, a split bar (top and bottom pills), a compact dock and rounded dot-button titlebars."
+description = "Tokyo Night (Day in light mode): electric blue and violet on deep navy, a split bar, compact dock and rounded dot-button captions."
 min_shell_version = "0.1.0"
 tags = ["tokyo-night", "neon", "split-bar", "dark", "light"]
 
@@ -21,11 +21,6 @@ outline = 0.1
 preset = "jetbrains"
 ui = ["Inter", "Noto Sans"]
 title = ["JetBrains Mono", "Inter"]
-
-[wallpaper]
-image = "wallpapers/neon-grid.jpg"
-mode = "fill"
-color = "#16161e"
 
 [decoration]
 style = "nord"

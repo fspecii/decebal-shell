@@ -4,9 +4,8 @@ name = "Everforest"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "A calm green-forest palette in soft rounded shapes: a bottom bar with a floating, rounded dock above it, gentle sage and moss accents on a deep slate-green base, soft Adwaita-style titlebars, and a layered misty-hills wallpaper with a pale moon. Light variant is a cream parchment."
+description = "A calm green-forest palette in soft rounded shapes: a bottom bar with a floating rounded dock, sage and moss accents, and Adwaita-style captions. The light variant is cream parchment."
 min_shell_version = "0.1.0"
-screenshots = ["screenshots/main.jpg"]
 tags = ["everforest", "green", "calm", "rounded", "dark", "light", "nature"]
 
 [colors.dark]
@@ -64,11 +63,6 @@ dock_padding = 12
 [font]
 preset = "noto"
 scale = 1.0
-
-[wallpaper]
-image = "wallpapers/forest.png"
-mode = "fill"
-color = "#2d353b"
 
 [decoration]
 style = "adwaita"

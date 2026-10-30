@@ -4,10 +4,9 @@ name = "Nothing Light"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "The light companion of Nothing Dot: off-white paper, black type, one red accent, square flat windows, a light dot-grid wallpaper and the same Glyph-style ring clock and battery. Always light, whatever the system mode."
+description = "The light companion of Nothing Dot: off-white paper, black type, one red accent, square flat windows and the same native ring clock and battery. Always light, whatever the system mode."
 min_shell_version = "0.1.0"
 tags = ["light", "monochrome", "dot-matrix", "flat", "red-accent"]
-screenshots = ["screenshots/main.png"]
 
 [metrics]
 radius = 2
@@ -47,11 +46,6 @@ accent_text = "#ffffff"
 danger = "#b3120f"
 ok = "#2a2a2a"
 warn = "#6e6e68"
-
-[wallpaper]
-image = "wallpapers/dots-light.png"
-mode = "fill"
-color = "#f1f1ee"
 
 [decoration]
 style = "classic"

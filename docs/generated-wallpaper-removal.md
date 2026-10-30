@@ -1,5 +1,10 @@
 # Retire generated theme wallpaper defaults — 2026-10-30
 
+> Follow-up: [hidden compatibility cleanup](hidden-wallpaper-removal.md) extends
+> this policy to all 34 shipped packages. The visible-package counts below record
+> the original 401ebc9 checkpoint; the audit JSON now includes eight further aliases.
+
+
 All **21 visible shipped nonlegacy packages**, including Aster, now omit the entire
 `[wallpaper]` section. Applying a design or changing its mode sets no wallpaper
 image, scaling mode, background colour, slideshow or download. Photography is an

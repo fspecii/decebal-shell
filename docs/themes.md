@@ -1,29 +1,30 @@
 # Themes gallery
 
-Five Caelestia-inspired theme packages ship with decebal (`themes/<id>/`, compiled in; the wallpapers are installed to
-`/usr/share/decebal/themes/<id>/wallpapers/` by `make install` / the PKGBUILD, which is where a built-in theme finds its
-picture). Each has a dark and a light variant, a generated wallpaper under 300 KB (no third-party artwork) and a different mix of bar position, dock
-style and titlebar style. The screenshots (`docs/themes/<id>.png`, light variants `<id>-light.png`) are taken by `tests/e2e/themes.sh` on a private Xvfb
-with `SHOTS=docs/themes tests/e2e/themes.sh`. The System Settings window in front is the Theme pane, which also lists them.
+Compatibility designs remain loadable by ID; legacy colour aliases belong in
+Palettes rather than the visible theme gallery. All shipped packages now omit
+wallpaper defaults, including hidden aliases still copied by `make install`.
+Generated-art screenshots are retired. Choose photography explicitly in separate
+Wallpaper settings. See [hidden cleanup](hidden-wallpaper-removal.md) and
+[visible-package retirement](generated-wallpaper-removal.md).
 
 Apply one with `decthemectl theme apply <id>` (`--preview 10` to try it for 10 seconds, `decthemectl theme undo` to go back).
 Anything can then be overridden by the user: `decthemectl theme duplicate <id> mine` makes an editable copy. See [theme-engine.md](theme-engine.md) and [caelestia.md](caelestia.md).
 
 | Theme | Look | Bar | Dock | Titlebars | Apply |
 |---|---|---|---|---|---|
-| ![Caelestia Mocha](themes/caelestia-mocha.png) | **Caelestia Mocha**: Catppuccin Mocha (Latte in light mode) in the Caelestia shape: a vertical pill bar on the left edge, 20 px radii, tonal mauve surfaces, no dock, Materia circle buttons. | left | hidden (auto) | materia | `decthemectl theme apply caelestia-mocha` |
-| ![Rose Pine](themes/rose-pine.png) | **Rose Pine**: Rose Pine dusk (Dawn in light mode): muted rose and gold on plum, a pill bar along the top, a round magnifying dock, traffic-light titlebars. | top | mac, pill | macos | `decthemectl theme apply rose-pine` |
-| ![Tokyo Night](themes/tokyo-night.png) | **Tokyo Night**: Tokyo Night (Day in light mode): electric blue and violet on navy with a neon skyline wallpaper, a split top and bottom bar, a compact dock, dot buttons. | split | mac, compact | nord | `decthemectl theme apply tokyo-night` |
-| ![Kanagawa](themes/kanagawa.png) | **Kanagawa**: Kanagawa Wave (Lotus in light mode): ink-wash blues on sumi ink, a pill bar on the right, serif window titles, a left-aligned Windows-style taskbar, thin minimal titlebars. | right | windows taskbar | minimal | `decthemectl theme apply kanagawa` |
-| ![Material You Dynamic](themes/material-you-dynamic.png) | **Material You Dynamic**: Match wallpaper is on (vibrant scheme, full surfaces), so the shell takes its colours from the picture; a generated aurora gradient is bundled. Bottom pill bar, floating dock, Breeze titlebars. | bottom | mac, floating | breeze | `decthemectl theme apply material-you-dynamic` |
+| **Caelestia Mocha** | **Caelestia Mocha**: Catppuccin Mocha (Latte in light mode) in the Caelestia shape: a vertical pill bar on the left edge, 20 px radii, tonal mauve surfaces, no dock, Materia circle buttons. | left | hidden (auto) | materia | `decthemectl theme apply caelestia-mocha` |
+| **Rose Pine** | **Rose Pine**: Rose Pine dusk (Dawn in light mode): muted rose and gold on plum, a pill bar along the top, a round magnifying dock, traffic-light titlebars. | top | mac, pill | macos | `decthemectl theme apply rose-pine` |
+| **Tokyo Night** | **Tokyo Night**: Tokyo Night (Day in light mode): electric blue and violet on navy with a split top and bottom bar, a compact dock, dot buttons. | split | mac, compact | nord | `decthemectl theme apply tokyo-night` |
+| **Kanagawa** | **Kanagawa**: Kanagawa Wave (Lotus in light mode): ink-wash blues on sumi ink, a pill bar on the right, serif window titles, a left-aligned Windows-style taskbar, thin minimal titlebars. | right | windows taskbar | minimal | `decthemectl theme apply kanagawa` |
+| **Material You Dynamic** | **Material You Dynamic**: fixed compatibility colours with optional Match wallpaper chosen separately. Bottom pill bar, floating dock, Breeze titlebars. | bottom | mac, floating | breeze | `decthemectl theme apply material-you-dynamic` |
 
 Tags: caelestia-mocha `catppuccin pill vertical-bar`, rose-pine `rose-pine top-bar dock`, tokyo-night `neon split-bar`, kanagawa `ink right-bar serif taskbar`, material-you-dynamic `material-you dynamic wallpaper`.
 
-`material-you-dynamic` writes `theme.dynamic` (Match wallpaper) when applied and the next theme switches it off again; change the wallpaper and the colours follow, see [theming.md](theming.md#match-wallpaper).
+The old `material-you-dynamic` wallpaper-owned extraction defaults are retired. Opt into Match wallpaper independently when desired, see [theming.md](theming.md#match-wallpaper).
 
 ## Showcase packages (gruvbox, everforest, synthwave, frutiger aero, adwaita-like)
 
-Five data-only theme packages beyond the built-ins. They live in `themes/<id>/` (manifest, generated wallpapers, screenshot), are installed to
+Five data-only theme packages beyond the built-ins. They live in `themes/<id>/` (manifest and optional widget assets), are installed to
 `/usr/share/decebal/themes/<id>/` by `make install`, and are used like any theme:
 
 ```
@@ -32,7 +33,7 @@ decthemectl theme apply <id> --preview 10    # try it for 10 s, then everything 
 decthemectl theme undo
 ```
 
-Wallpapers are procedurally generated (no third-party artwork, each under 300 KB) and no fonts are bundled: font lists name families that are
+Generated wallpapers are no longer shipped by these packages. Font lists name families that are
 commonly installed and fall back down the list. Screenshots are taken on a private Xvfb by `tests/e2e/showcase-themes.sh`. What the engine
 cannot do yet (real glow or blur, bar item lists, a left-side window-button order) is described in [theme-engine.md](theme-engine.md).
 
@@ -40,7 +41,7 @@ cannot do yet (real glow or blur, bar item lists, a left-side window-button orde
 
 ![Gruvbox Dark](themes/gruvbox-dark.png)
 
-Warm retro tiling rice: a thin flat bar on top, square corners everywhere, tight gaps and Gruvbox's earthy palette (cream text on charcoal, orange accent), with flat GTK-style titlebars and topographic contour lines on the wallpaper. A light 'paper' variant is included.
+Warm retro tiling rice: thin top bar, square corners, tight gaps, cream on charcoal and earthy orange accents. Includes a light paper variant.
 
 Tags: gruvbox, retro, warm, tiling, square, dark, light. Apply: `decthemectl theme apply gruvbox-dark`
 
@@ -48,19 +49,19 @@ Light variant: ![Gruvbox Dark light](themes/gruvbox-dark-light.png)
 
 ## Everforest
 
-![Everforest](themes/everforest.png)
+**Everforest**
 
-A calm green-forest palette in soft rounded shapes: a bottom bar with a floating, rounded dock above it, gentle sage and moss accents on a deep slate-green base, soft Adwaita-style titlebars, and a layered misty-hills wallpaper with a pale moon. Light variant is a cream parchment.
+A calm green-forest palette in soft rounded shapes: a bottom bar with a floating rounded dock, sage and moss accents, and Adwaita-style captions. The light variant is cream parchment.
 
 Tags: everforest, green, calm, rounded, dark, light, nature. Apply: `decthemectl theme apply everforest`
 
-Light variant: ![Everforest light](themes/everforest-light.png)
+Light variant: **Everforest light**
 
 ## Synthwave
 
 ![Synthwave](themes/synthwave.png)
 
-Neon magenta and cyan on deep purple night: hot-pink accents, cyan borders on focused windows, a vertical pill bar on the left, dark glassy rounded surfaces and a generated retro sun-and-grid wallpaper with stars. The engine has no real glow, so the neon comes from saturated borders and bright accents; a light 'daybreak' variant keeps the same hues.
+Neon magenta and cyan on deep purple: hot-pink accents, focused cyan borders, left pill bar and rounded dark surfaces. A light daybreak variant retains the hues; native borders provide colour, not compositor glow.
 
 Tags: synthwave, neon, cyberpunk, purple, dark, light, retro. Apply: `decthemectl theme apply synthwave`
 
@@ -68,7 +69,7 @@ Tags: synthwave, neon, cyberpunk, purple, dark, light, retro. Apply: `decthemect
 
 ![Frutiger Aero](themes/frutiger-aero.png)
 
-Early-2010s optimism: glossy light-aqua and sky-blue surfaces, big rounded glassy cards, a bubbles-and-hills sky wallpaper, a Windows 7 style taskbar with glass caption buttons on the right, and fresh green accents. Mostly a light theme; the dark variant is a deep-ocean version of the same look.
+Glossy light-aqua and sky-blue surfaces, rounded glassy cards, a Windows-style taskbar and fresh green accents. Deep-ocean dark and airy light variants.
 
 Tags: frutiger-aero, aqua, glass, light, dark, skeuomorphic, windows7. Apply: `decthemectl theme apply frutiger-aero`
 
@@ -76,7 +77,7 @@ Tags: frutiger-aero, aqua, glass, light, dark, skeuomorphic, windows7. Apply: `d
 
 ![Adwaita-like](themes/gnome-adwaita-like.png)
 
-A clean libadwaita-inspired look in light and dark: rounded headerbar-style titlebars with a centred title and round flat buttons, the familiar blue/grey Adwaita palette, a slim top panel with a centred-feeling clock, soft blurred-colour wallpapers (one per variant) and Cantarell/Inter type. Not affiliated with or endorsing any GNOME project; no logos used.
+A libadwaita-inspired dark/light design: rounded headerbar-style captions, blue/grey surfaces, slim top panel and installed-font fallbacks. Unaffiliated with GNOME.
 
 Tags: adwaita, libadwaita, clean, light, dark, rounded. Apply: `decthemectl theme apply gnome-adwaita-like`
 
@@ -88,33 +89,33 @@ Light variant: ![Adwaita-like light](themes/gnome-adwaita-like-light.png)
 |---|---|---|
 | Gruvbox Dark | warm retro tiling: thin flat bar, square corners | `decthemectl theme apply gruvbox-dark` |
 | Everforest | calm green forest, soft rounded, floating dock | `decthemectl theme apply everforest` |
-| Synthwave | neon magenta and cyan on deep purple, sun-and-grid wallpaper | `decthemectl theme apply synthwave` |
+| Synthwave | neon magenta and cyan on deep purple, restrained native borders | `decthemectl theme apply synthwave` |
 | Frutiger Aero | glossy aqua and sky blue, glass cards, taskbar | `decthemectl theme apply frutiger-aero` |
 | Adwaita-like | clean libadwaita-inspired headerbars, centred titles | `decthemectl theme apply gnome-adwaita-like` |
 
 ## Theme gallery
 
 Ready-made looks that ship with decebal. Each one is a [theme package](theme-engine.md): colours for dark (and light where it makes sense),
-fonts per role, titlebar style, bar and dock, a generated wallpaper and a few desktop widgets. Apply one with
+fonts per role, titlebar style, bar and dock, and optional desktop widgets. Wallpaper is selected separately. Apply one with
 
 ```
-decthemectl theme apply <id>              # whole package: colours, titlebars, bar, dock, wallpaper, widgets
+decthemectl theme apply <id>              # whole design: colours, titlebars, bar, dock, widgets
 decthemectl theme apply <id> --preview 10 # try it for 10 s, then everything is put back
 decthemectl theme undo                    # step back
 ```
 
-or with **System Settings -> Theme -> Theme packages**. The manifest is compiled into the programs; the wallpaper, widgets and screenshot live in
-`themes/<id>/` and are installed by `make install` / the PKGBUILD / the .deb into `/usr/share/decebal/themes/<id>/`. Without that folder a
-theme still applies (colours, fonts, titlebars, bar, dock) and `theme apply` prints a note that the wallpaper is missing. All wallpapers are
-generated procedurally (PIL), under 30 KB each. Fonts are only named, never bundled: every chain ends in common monospace families.
+or with **System Settings -> Theme -> Theme packages**. Package assets are installed
+under `/usr/share/decebal/themes/<id>/`. Themes set no wallpaper image/mode/colour
+and trigger no photo downloads. Explicit Wallpaper selection remains independent;
+unknown-license Wallhaven photos are recommendations rather than bundled assets.
 
 | theme | look | apply |
 |---|---|---|
-| ![Nothing Dot](themes/nothing-dot.png) | **Nothing Dot** (dark + light): dot-matrix monochrome after Nothing OS. Black or off-white, one red accent, square flat windows, a dot-grid wallpaper with a single red dot, a Glyph-style ring clock and battery. Titles and big numbers use Doto / DotGothic16 when installed, otherwise JetBrains Mono. | `decthemectl theme apply nothing-dot` |
-| ![Nothing Light](themes/nothing-light.png) | **Nothing Light**: the paper companion. Always light (the package has no dark variant), same ring widgets, light dot grid. | `decthemectl theme apply nothing-light` |
+| ![Nothing Dot](themes/nothing-dot.png) | **Nothing Dot** (dark + light): dot-matrix monochrome after Nothing OS. Black or off-white, one red accent, square flat windows, a native Glyph-style ring clock and battery. Titles and big numbers use Doto / DotGothic16 when installed, otherwise JetBrains Mono. | `decthemectl theme apply nothing-dot` |
+| **Nothing Light** | **Nothing Light**: the paper companion. Always light (the package has no dark variant), same native ring widgets. | `decthemectl theme apply nothing-light` |
 | ![Brutalist](themes/brutalist.png) | **Brutalist** (dark + light): zero radius, 4 px borders, black and signal yellow at full contrast, monospace everywhere, flat yellow bar, a Windows-style square taskbar and a slab clock. The light variant is yellow paper with black ink. | `decthemectl theme apply brutalist` |
 | ![Terminal Minimal](themes/terminal-minimal.png) | **Terminal Minimal** (dark + light): green phosphor on black, a 20 px bar, no dock, thin titlebars, a plain tty clock on the desktop. Light variant: dark green ink on paper. | `decthemectl theme apply terminal-minimal` |
-| ![Terminal Amber](themes/terminal-amber.png) | **Terminal Amber** (dark + light): the same minimal terminal shell in amber phosphor (it `extends` Terminal Minimal and only changes colours, wallpaper and borders). Light variant: brown ink on cream. | `decthemectl theme apply terminal-amber` |
+| **Terminal Amber** | **Terminal Amber** (dark + light): the same minimal terminal shell in amber phosphor (it `extends` Terminal Minimal and only changes colours and borders). Light variant: brown ink on cream. | `decthemectl theme apply terminal-amber` |
 
 Add `light` or `dark` to pick a variant of a theme that has both: `decthemectl theme apply "brutalist light"`.
 
@@ -171,7 +172,7 @@ surface; the built-in palettes are tested that way against every theme in both m
 
 ## Tests
 
-`cargo test` also applies every palette to every theme in both modes and checks contrast. `cargo test` checks that every shipped theme parses, validates as a package (wallpaper, widgets, screenshot present, compiled-in manifest equal
+`cargo test` also applies every palette to every theme in both modes and checks contrast. `cargo test` checks that every shipped theme parses, validates as a package (optional assets validated, compiled-in manifest equal
 to the file) and applies; `tests/e2e/theme-engine.sh` applies each one on a private Xvfb and rdwm and takes the screenshots.
 
 
@@ -192,23 +193,23 @@ MS_BIN_DIR="$PWD/target/debug" dbus-run-session -- tests/e2e/appearance.sh :97
 
 ## New desktop designs
 
-These original theme packages have dark and light colours, bundled original wallpapers, and support the shared Widgets library. A selected palette applies across all five.
+These original theme packages have dark and light colours, independently selected photography, and support the shared Widgets library. A selected palette applies across all five.
 
 | Theme | Desktop design | Apply |
 |---|---|---|
 | ![NextKDE](themes/nextkde.png) **NextKDE** | Soft glass, slim global top bar and floating dock; inspired by [NextKDE](https://github.com/NextKde/NextKde). | `decthemectl theme apply nextkde` |
-| ![Orbit Glass](themes/orbit-glass.png) **Orbit Glass** | Floating navigation, rounded windows and orbital artwork. | `decthemectl theme apply orbit-glass` |
+| ![Orbit Glass](themes/orbit-glass.png) **Orbit Glass** | Floating navigation, rounded windows and a right-hand rail. | `decthemectl theme apply orbit-glass` |
 | ![Paper Signal](themes/paper-signal.png) **Paper Signal** | Slim panel, square windows and an editorial paper composition. | `decthemectl theme apply paper-signal` |
 | ![Moss Atlas](themes/moss-atlas.png) **Moss Atlas** | Right instrument rail, generous curves and organic terrain. | `decthemectl theme apply moss-atlas` |
 | ![Signal Deck](themes/signal-deck.png) **Signal Deck** | Split navigation, technical typography and orbital geometry. | `decthemectl theme apply signal-deck` |
 
-Research and provenance: [glass and paper](theme-research-glass-paper.md), [organic and retro](theme-research-organic-retro.md), [NextKDE](nextkde-port.md). Screenshots are captured on a private Xvfb desktop by `tests/e2e/theme-studio.sh`. The light artwork is bundled as an alternative wallpaper; changing colour mode alone keeps the selected wallpaper.
+Research and provenance: [glass and paper](theme-research-glass-paper.md), [organic and retro](theme-research-organic-retro.md), [NextKDE](nextkde-port.md). Screenshots are captured on a private Xvfb desktop by `tests/e2e/theme-studio.sh`. No wallpaper art is bundled for these designs; changing theme/mode preserves the independently selected wallpaper.
 
 Applying a theme selects the theme's own colours and clears the previous palette/custom accent. Afterwards, any palette can still be applied to that design. Widget selections and positions remain independent of this colour reset.
 
 ## Kiln Court and Tidal Loom
 
-Two original dark/light rice packages with 4K wallpapers and optional shared
+Two original dark/light rice packages with separately selected photography and optional shared
 widget layouts. **Kiln Court** uses clay vaults, a bottom pill panel, no dock and
 an upper-left clock/resource pair. **Tidal Loom** uses woven bands, a left rail,
 compact taskbar and an upper-right clock/system pair. Apply with
@@ -216,12 +217,11 @@ compact taskbar and an upper-right clock/system pair. Apply with
 
 See [design, attribution, native render evidence and follow-ups](rice-batch.md).
 The gallery images are labelled headless compositions with real native widget
-pixels and sample data. Light artwork is bundled for manual selection; changing
-color mode preserves the selected wallpaper.
+pixels and sample data. Generated art is retired; changing theme/mode preserves independently selected wallpaper.
 
 ## Screenshot ports
 
-- **Mountain Neon Dot**: generated alpine art, teal/rose/cyan, transparent stacked
+- **Mountain Neon Dot**: teal/rose/cyan, separately selected photography, transparent stacked
   dot clock, three widget islands, explicitly unconfigured homelab templates.
   [Mapping, provenance and limits](../themes/mountain-neon-dot/README.md).
 - **Glyph Rice 1.1**: giant font-independent dot clock, six monochrome dashboard

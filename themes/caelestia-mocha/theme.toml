@@ -22,11 +22,6 @@ preset = "rubik"
 title = ["Rubik", "Inter"]
 mono = ["JetBrains Mono", "Noto Sans Mono"]
 
-[wallpaper]
-image = "wallpapers/mocha.jpg"
-mode = "fill"
-color = "#181825"
-
 [decoration]
 style = "materia"
 height = 34

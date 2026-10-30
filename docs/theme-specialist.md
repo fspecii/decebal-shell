@@ -147,3 +147,20 @@ packages. No runtime renderer/helper, parent picker/cache/Settings/accessibility
 rdwm, live config/install/process or push changes. Parent owns managed-install stale
 asset cleanup and explicit runtime photo selection. Physical multi-display crop,
 watermarks and marginal fine Glyph text remain caveats.
+
+## Hidden compatibility follow-up — 2026-10-30
+
+401ebc9 accepted for parent integration. Extended its art policy to eight hidden
+aliases still shipped by make install: caelestia-mocha, everforest, kanagawa,
+material-you-dynamic, nothing-light, rose-pine, terminal-amber, tokyo-night. Removed
+eight generated wallpapers, eight package shots and 14 doc shots; no remaining
+art-only generator found. All 34 shipped manifests now omit wallpaper sections.
+Exact colour tables, structure and Terminal Amber inheritance are preserved by
+canonical manifest/widget hashes; legitimate Sweeteh photos remain unchanged.
+
+Material You's old wallpaper-owned match/scheme defaults are removed, not moved
+into an unsupported field. Fixed compatibility palettes remain exact; optional
+Match wallpaper is separate. No catalogue searches/new IDs, runtime/src/helper
+changes, native controls, installs/live deletion/restarts/push or new agents.
+Parent owns legacy canonical-output snapshot expectations; do not change core
+golden tests here. Follow-up audit: hidden-wallpaper-removal.md + existing JSON.

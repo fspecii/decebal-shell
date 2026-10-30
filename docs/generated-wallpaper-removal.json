@@ -434,6 +434,241 @@
       "preserved_widget_files": {},
       "accepted_parent_manifest_sha256": "b565be4d8b920cd2cdf54641937c8ad1c4338f3b426cd78d8b8c34a1dd6c44e6",
       "parent_baseline_note": "Parent already disabled the duplicate dock (8f0d079). Cleanup patch leaves dock keys untouched; allow the accepted parent baseline during integration as well as this checkout baseline."
+    },
+    {
+      "theme_id": "caelestia-mocha",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/caelestia-mocha/wallpapers/mocha.jpg",
+          "sha256": "938fa154d110ac3a476cd0f24287dbfc99a5e7c74794b8cf071b5aa6b4824041",
+          "bytes": 39515
+        },
+        {
+          "path": "themes/caelestia-mocha/screenshots/main.png",
+          "sha256": "b762854a99435cb1448cc59904f89edec64e39fe8375b8592e39c40bb7873456",
+          "bytes": 127479
+        },
+        {
+          "path": "docs/themes/caelestia-mocha.png",
+          "sha256": "b762854a99435cb1448cc59904f89edec64e39fe8375b8592e39c40bb7873456",
+          "bytes": 127479
+        },
+        {
+          "path": "docs/themes/caelestia-mocha-light.png",
+          "sha256": "7e848b814789a8d5bff6e9eadaa4ef345f1c9086fb0902ecec277e61b7d0cf35",
+          "bytes": 126391
+        }
+      ],
+      "preserved_manifest_sha256": "7db372fe78794d2b91ef997cd33d6fe7ed8da3b74c0a5199736e178057bae2dc",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "everforest",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/everforest/wallpapers/forest.png",
+          "sha256": "7c8b2295a0be5a8c23b8f923d5356f45921530d725a0466eaabeb2d673c5d0ae",
+          "bytes": 140497
+        },
+        {
+          "path": "themes/everforest/screenshots/main.jpg",
+          "sha256": "5f041733a1b958447e7589fda18766ee2ea056aff60dc57448ec7649b38db163",
+          "bytes": 32683
+        },
+        {
+          "path": "docs/themes/everforest.png",
+          "sha256": "583095b33b2241be44b8bb33272a9530f8011060286bca76c6a4e4dee7c71b5f",
+          "bytes": 80906
+        },
+        {
+          "path": "docs/themes/everforest-light.png",
+          "sha256": "4dfd1e81f510a0cd2727edbaf894ce5479f4c93ac105340aeeb667b680b2725e",
+          "bytes": 73770
+        }
+      ],
+      "preserved_manifest_sha256": "ad848e0831744a77d4e5774d11468bb38d30670344df331df672b384f62b8f2d",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "kanagawa",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/kanagawa/wallpapers/wave.jpg",
+          "sha256": "a9222ceb06f5fe6e53f7315eb88ba3c09e236dffd0e3e452f1828ba899c051ba",
+          "bytes": 39535
+        },
+        {
+          "path": "themes/kanagawa/screenshots/main.png",
+          "sha256": "09bbadcfe536273e9221fbc5ba6dc18d30c590a4fbc383f73f8c17d6dd0b46f8",
+          "bytes": 123555
+        },
+        {
+          "path": "docs/themes/kanagawa.png",
+          "sha256": "09bbadcfe536273e9221fbc5ba6dc18d30c590a4fbc383f73f8c17d6dd0b46f8",
+          "bytes": 123555
+        },
+        {
+          "path": "docs/themes/kanagawa-light.png",
+          "sha256": "8408c5623c89edae7c72610d1c9d8e1d46aba6fb55a988a4b2f0bad031d351bc",
+          "bytes": 124158
+        }
+      ],
+      "preserved_manifest_sha256": "597251318bfa73b0a48c3272a2e0061f01a00c6d2c3651b677f35f43f44ea802",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "material-you-dynamic",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/material-you-dynamic/wallpapers/aurora.jpg",
+          "sha256": "37b9fd01d10f0ce28ca17f116f9a15849de7438358c9a061984d61272a5bee97",
+          "bytes": 42698
+        },
+        {
+          "path": "themes/material-you-dynamic/screenshots/main.png",
+          "sha256": "254317fef0cf63765f0e5695c85b611357290bdafef8db90c86de69154dde466",
+          "bytes": 130597
+        },
+        {
+          "path": "docs/themes/material-you-dynamic.png",
+          "sha256": "254317fef0cf63765f0e5695c85b611357290bdafef8db90c86de69154dde466",
+          "bytes": 130597
+        },
+        {
+          "path": "docs/themes/material-you-dynamic-light.png",
+          "sha256": "9e8e36b521ba1964bcd384c09ac8ddb2f8a93cc622f9a8d3159a926441cfc0e1",
+          "bytes": 131252
+        }
+      ],
+      "preserved_manifest_sha256": "0a9ac2acbd19406f153955cf0e88c904a277b35df42afced8d7fb167488f9d49",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "nothing-light",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/nothing-light/wallpapers/dots-light.png",
+          "sha256": "cf4256e8f47037d2c8cc9d28cfaa4ed58f2a70cd1e26ef35050a804dde176351",
+          "bytes": 25476
+        },
+        {
+          "path": "themes/nothing-light/screenshots/main.png",
+          "sha256": "60fb06d4b838476e024a9da78fb8f9afbb455d009e5b146167b2855830dc6dc6",
+          "bytes": 43288
+        },
+        {
+          "path": "docs/themes/nothing-light.png",
+          "sha256": "60fb06d4b838476e024a9da78fb8f9afbb455d009e5b146167b2855830dc6dc6",
+          "bytes": 43288
+        }
+      ],
+      "preserved_manifest_sha256": "dd969a8951e32d671b2a0af1be0c5a548f02dbc3c127cc108c1a56457d807deb",
+      "preserved_widget_files": {
+        "themes/nothing-light/widgets/dot-battery.toml": "aa4fac8afde891d6c0c0dc39612de68b999cb6790e17b202416dc54f81fa91b3",
+        "themes/nothing-light/widgets/dot-clock.toml": "9964c169a331172709bbaa502cc74a2f0c56218d489769b9b601989bfa64cc62"
+      }
+    },
+    {
+      "theme_id": "rose-pine",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/rose-pine/wallpapers/dusk.jpg",
+          "sha256": "8e057fe50038aff50dafd0c3491aa85f6c06589566f41aeceb439be8d26bc734",
+          "bytes": 46263
+        },
+        {
+          "path": "themes/rose-pine/screenshots/main.png",
+          "sha256": "a93c3ce38cface55922ec6a697477c615bb0a5d4835771b37f7267a736943406",
+          "bytes": 116994
+        },
+        {
+          "path": "docs/themes/rose-pine.png",
+          "sha256": "a93c3ce38cface55922ec6a697477c615bb0a5d4835771b37f7267a736943406",
+          "bytes": 116994
+        },
+        {
+          "path": "docs/themes/rose-pine-light.png",
+          "sha256": "9337ea2250d41823a8c5a20c2846068c66f7afaa6915cedb9112460008a560e0",
+          "bytes": 117085
+        }
+      ],
+      "preserved_manifest_sha256": "e618596962fadbc6ebfd151e07ce0c79d2179b96150332bbeb6ecee9d39d64c9",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "terminal-amber",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/terminal-amber/wallpapers/phosphor.png",
+          "sha256": "abebd6c8861cf9031b1d26c741df6f9bc5e309e0b73cf30d13adbad733cd5180",
+          "bytes": 3267
+        },
+        {
+          "path": "themes/terminal-amber/screenshots/main.png",
+          "sha256": "a8a2c46dfcd7ea07cc31b0832de7423481f161babbb403ab48b76d4aa14f5433",
+          "bytes": 30489
+        },
+        {
+          "path": "docs/themes/terminal-amber.png",
+          "sha256": "a8a2c46dfcd7ea07cc31b0832de7423481f161babbb403ab48b76d4aa14f5433",
+          "bytes": 30489
+        }
+      ],
+      "preserved_manifest_sha256": "b7cc633577e3bfe690306355ecbfabf18a965c05a8d2d6dc59b383428a67feb5",
+      "preserved_widget_files": {
+        "themes/terminal-amber/widgets/tty-clock.toml": "d8a90de7a8de50ff26e8d98af0b773f44ec6e373e223934c65d970386dcf2a9b"
+      }
+    },
+    {
+      "theme_id": "tokyo-night",
+      "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+      "scope": "hidden_legacy_compatibility",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/tokyo-night/wallpapers/neon-grid.jpg",
+          "sha256": "147bd77fdf13b5e5bb398e47dc6842f896c1b851701f8a30b667fa6f32e221c1",
+          "bytes": 76957
+        },
+        {
+          "path": "themes/tokyo-night/screenshots/main.png",
+          "sha256": "8719074817b61616b8526245fe3fca99903ebf2631e1b7c590ac80fbf8cbb3ad",
+          "bytes": 136345
+        },
+        {
+          "path": "docs/themes/tokyo-night.png",
+          "sha256": "8719074817b61616b8526245fe3fca99903ebf2631e1b7c590ac80fbf8cbb3ad",
+          "bytes": 136345
+        },
+        {
+          "path": "docs/themes/tokyo-night-light.png",
+          "sha256": "a5e95470df48ba14369bfaf6159bbc3170945f0e55858563dd39c3c1160773dd",
+          "bytes": 137041
+        }
+      ],
+      "preserved_manifest_sha256": "126d39a526eaeedd39ee3e5b71387ba0d8e3e1b0e4290063c037c3be7daa127d",
+      "preserved_widget_files": {}
     }
   ],
   "removed_tools": [
@@ -442,5 +677,21 @@
       "sha256": "a053bc2eee5f0bba23cf97dd3ceb05999bbc058ab438a5510c3448d4f80fc12b",
       "bytes": 2554
     }
-  ]
+  ],
+  "scope": "visible and hidden shipped theme packages; examples/test fixtures excluded",
+  "hidden_compatibility_followup": {
+    "baseline_commit": "401ebc932cd19c1268787746f75f8283b944f35e",
+    "theme_ids": [
+      "caelestia-mocha",
+      "everforest",
+      "kanagawa",
+      "material-you-dynamic",
+      "nothing-light",
+      "rose-pine",
+      "terminal-amber",
+      "tokyo-night"
+    ],
+    "art_only_generators_found": [],
+    "note": "Remaining helper tools render native UI evidence, not wallpaper art; no runtime or canonical-output tests modified."
+  }
 }

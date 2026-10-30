@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class PackageArtPolicy(unittest.TestCase):
     def test_preserved_palette_layout_widgets_and_declared_asset_removals(self):
         audit = json.loads((ROOT/'docs/generated-wallpaper-removal.json').read_text())
-        self.assertEqual(len(audit['themes']), 17)
+        self.assertEqual(len(audit['themes']), 25)
         for record in audit['themes']:
             with self.subTest(theme=record['theme_id']):
                 manifest = tomllib.loads((ROOT/'themes'/record['theme_id']/'theme.toml').read_text())
@@ -40,6 +40,19 @@ class PackageArtPolicy(unittest.TestCase):
                 photos = list((package/'wallpapers').glob('*'))
                 self.assertEqual(len(photos), 2 if ident=='sweeteh' else 0)
                 self.assertFalse((package/'ARTWORK.md').exists())
+
+    def test_every_shipped_package_is_art_free_except_attributed_upstream_photos(self):
+        packages = sorted((ROOT/'themes').glob('*/theme.toml'))
+        self.assertEqual(len(packages), 34)
+        for path in packages:
+            with self.subTest(package=path.parent.name):
+                manifest = tomllib.loads(path.read_text())
+                self.assertNotIn('wallpaper', manifest)
+                photos = list((path.parent/'wallpapers').glob('*'))
+                self.assertEqual(len(photos), 2 if path.parent.name=='sweeteh' else 0)
+                self.assertFalse((path.parent/'ARTWORK.md').exists())
+        amber = tomllib.loads((ROOT/'themes/terminal-amber/theme.toml').read_text())
+        self.assertEqual(amber['extends'], 'terminal-minimal')
 
     def test_retained_sweeteh_upstream_photos_are_byte_identical(self):
         photos = {'julia-ly-pD0yNIuaLho-unsplash.jpg':'794f829ff0176679f21a0f19f17cc3e524c58222c4f02faf82cf35564822fb2f',

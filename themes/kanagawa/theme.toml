@@ -23,11 +23,6 @@ title = ["Noto Serif", "DejaVu Serif", "Liberation Serif"]
 display = ["Noto Serif", "DejaVu Serif"]
 mono = ["JetBrains Mono", "Noto Sans Mono"]
 
-[wallpaper]
-image = "wallpapers/wave.jpg"
-mode = "fill"
-color = "#16161d"
-
 [decoration]
 style = "minimal"
 height = 28

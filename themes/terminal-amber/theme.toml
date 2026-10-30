@@ -7,7 +7,6 @@ license = "MIT"
 description = "The amber-phosphor sibling of Terminal Minimal: warm amber on black, same tiny bar, no dock, square monospace everything. The light variant is brown ink on cream paper."
 min_shell_version = "0.1.0"
 tags = ["dark", "light", "terminal", "minimal", "amber", "phosphor", "monospace"]
-screenshots = ["screenshots/main.png"]
 extends = "terminal-minimal"
 
 [colors.dark]
@@ -51,10 +50,6 @@ accent_text = "#ffffff"
 danger = "#b3120f"
 ok = "#6b4700"
 warn = "#7a5a00"
-
-[wallpaper]
-image = "wallpapers/phosphor.png"
-color = "#050300"
 
 [rdwm]
 focused_border = "#ffb000"

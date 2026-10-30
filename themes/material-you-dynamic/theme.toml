@@ -4,7 +4,7 @@ name = "Material You Dynamic"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Material You that follows your wallpaper: Match wallpaper is switched on with a vibrant tonal scheme and full surface recolouring, so the whole shell takes its colours from the picture (a generated aurora gradient is bundled). A pill bar along the bottom edge, a floating dock above it, Breeze titlebars."
+description = "Material You compatibility design: a bottom pill bar, floating dock and Breeze captions. Choose wallpaper independently; enable Match wallpaper separately to opt into recolouring."
 min_shell_version = "0.1.0"
 tags = ["material-you", "dynamic", "wallpaper", "pill", "bottom-bar", "dark", "light"]
 
@@ -20,16 +20,6 @@ outline = 0.06
 [font]
 preset = "rubik"
 title = ["Google Sans Flex", "Rubik", "Inter"]
-
-[wallpaper]
-image = "wallpapers/aurora.jpg"
-mode = "fill"
-color = "#141218"
-match_colors = true
-scheme = "vibrant"
-surfaces = "full"
-strength = 0.8
-follow_mode = true
 
 [decoration]
 style = "breeze"

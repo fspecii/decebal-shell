@@ -22,11 +22,6 @@ preset = "inter"
 title = ["Inter Display", "Inter"]
 mono = ["JetBrains Mono", "Noto Sans Mono"]
 
-[wallpaper]
-image = "wallpapers/dusk.jpg"
-mode = "fill"
-color = "#191724"
-
 [decoration]
 style = "macos"
 height = 32
