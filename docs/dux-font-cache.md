@@ -72,3 +72,31 @@ and tiny-skia antialiasing or complete variable-icon visual parity.
   with a private DECEBAL_CONFIG and the explicit DUX_MATERIAL_FONT asset.
 - Parent must rerun relevant final native package/window gates against its final
   optimized build. This change does not install fonts or modify the live desktop.
+
+## Combined source acceptance at `ac7a4b7`
+
+A separate read-only check reran the actual cmap/GSUB verifier against the
+combined root: all 60 aliases passed with the same pinned Material font hash.
+All four candidate files were inspected with FontTools: Google Sans Flex static
+weights 400/500/700 plus Material Symbols Rounded variable weight400. Every file
+is below the 16 MiB per-input limit; no fifth/original variable clock font was
+included. Evidence is in `/tmp/dux-material-cmap-combined-ac7a4b7.json` and
+`/tmp/dux-font-combined-acceptance-ac7a4b7.json`.
+
+The source grid constants and formulas were compared with pinned upstream
+DDash `DashMetrics.qml`, `CcMetrics.qml` and the comfortable density tokens:
+six128px columns, five8px gaps, two12px outer pads produce832px; a four-column
+span is536px and a four-row span is408px. The native wide grid now uses those
+span equations. Narrow/enlarged-text reflow and its92px navigation/content inset
+are explicit native adaptations, not a claim of a matched section-two upstream
+screenshot. These checks inspect source/metadata; they do not replace the
+parent's compiled grid tests or final optimized native window tests.
+
+The reviewed integration still routes Source's strong file versions into the
+bounded metadata/byte cache and uses lookup-only Material preparation. Source
+font/cache/symbol/grid files were unchanged from `ac7a4b7` at this check. No
+additional production regression was identified. This check did not run Cargo,
+change production, touch a display/audio device or exercise the live desktop.
+The OS I/O/cache-retention boundaries above, glyph rasterizer antialiasing,
+standalone-font-edit refresh limitation, variable clock typography and complete
+replica/native-window/hardware acceptance remain outside this source check.
