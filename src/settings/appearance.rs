@@ -432,6 +432,10 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     ),
     (Tab::Customise, Section::WindowStyle, "Title bar height", "titlebar size thick"),
     (Tab::Customise, Section::WindowStyle, "Window corner radius", "rounded titlebar radius"),
+    (Tab::Customise, Section::WindowStyle, "Show window shadows", "shadow shadows whole window effect compositor x11 decoration"),
+    (Tab::Customise, Section::WindowStyle, "Shadow softness", "shadow falloff blur radius margin"),
+    (Tab::Customise, Section::WindowStyle, "Focused shadow strength", "shadow opacity active window strength"),
+    (Tab::Customise, Section::WindowStyle, "Unfocused shadow strength", "shadow opacity inactive window strength"),
     (Tab::Customise, Section::WindowStyle, "Title alignment", "center left title text"),
     (Tab::Customise, Section::WindowStyle, "Title text size", "titlebar font size"),
     (Tab::Customise, Section::WindowStyle, "Window buttons", "close minimise minimize zoom traffic lights"),
@@ -521,6 +525,15 @@ pub fn view_of_label(label: &str) -> Option<View> {
 mod tests {
     use super::*;
     use crate::settings::model::tests_support::model_with;
+
+    #[test]
+    fn shadow_search_labels_open_window_style() {
+        for label in ["Show window shadows", "Shadow softness", "Focused shadow strength", "Unfocused shadow strength"] {
+            let view = view_of_label(label).expect("shadow setting is indexed");
+            assert_eq!(view.tab, Tab::Customise);
+            assert_eq!(view.section, Section::WindowStyle);
+        }
+    }
 
     #[test]
     fn themes_and_palettes_have_separate_controls_and_search_destinations() {

@@ -27,7 +27,7 @@ pub const PANES: &[PaneDef] = &[
         glyph: Glyph::Brush,
         color: (88, 86, 214),
         // the words of every tab (Theme, Customise, Wallpaper, All apps); the individual settings are indexed in `appearance::INDEX`
-        keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven live animated video commons match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
+        keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border shadow shadows dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven live animated video commons match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
     },
     PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "background pictures wallhaven live animated video commons wallpaper scaling" },
     PaneDef {
@@ -520,6 +520,38 @@ impl Model {
         vec![Item::Header("About".into()), Item::Card(about), Item::Header("Configuration".into()), Item::Card(act), Item::Header("Behaviour".into()), Item::Card(beh)]
     }
 
+    fn window_shadow_items(&self, wayland: bool) -> Vec<Item> {
+        let mut out = vec![Item::Header("Window shadows".into())];
+        if !shadow_controls_supported(self, wayland) {
+            let text = if wayland {
+                "Window shadows are currently available for rdwm title bars on X11. Wayland windows keep their compositor’s effects."
+            } else if self.rt.running {
+                "This running window manager does not expose window shadows yet. Start a new supporting rdwm session after upgrading, then apply your theme."
+            } else {
+                "Connect to a supporting rdwm X11 session to change window shadows. Your saved settings are kept."
+            };
+            out.push(Item::Note { text: text.into(), warn: false });
+            return out;
+        }
+        let mut rows = Vec::new();
+        rows.extend(self.r_toggle("decoration", "shadow", "Show window shadows", "One continuous shadow around the app and its title bar; off releases its resources"));
+        rows.extend(self.r_slider("decoration", "shadow_radius", "Shadow softness", "Falloff margin in logical pixels", 1.0, " px", Some(48.0)));
+        rows.extend(self.r_slider("decoration", "shadow_opacity", "Focused shadow strength", "Opacity for the active window; themes can set this strength", 1.0, "%", Some(100.0)));
+        rows.extend(self.r_slider("decoration", "shadow_inactive_opacity", "Unfocused shadow strength", "Opacity for other windows; zero releases their shadows", 1.0, "%", Some(100.0)));
+        for row in &mut rows {
+            for control in &mut row.ctls {
+                // Recheck runtime capability when a queued event is handled, too.
+                control.id = control.id.replace("r:decoration:", "shadow:");
+                if control.id != "shadow:shadow" {
+                    control.enabled = self.flag("decoration", "shadow");
+                }
+            }
+        }
+        out.push(Item::Card(rows));
+        out.push(Item::Note { text: "Requires rdwm title bars and a running X11 compositor. Applying a theme updates shadow strength; softness keeps your chosen value.".into(), warn: false });
+        out
+    }
+
     /// Appearance > Customise > Window style: title bars, window buttons, borders and their colours.
     pub(super) fn window_style_items(&self) -> Vec<Item> {
         let mut deco = Vec::new();
@@ -571,15 +603,16 @@ impl Model {
         cols.extend(self.r_color("decoration", "focused_fg", "Focused title text", ""));
         cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused title bar", ""));
         cols.extend(self.r_color("decoration", "unfocused_fg", "Unfocused title text", ""));
-        vec![
-            Item::Header("Title bars".into()),
-            Item::Card(deco),
+        let mut out = vec![Item::Header("Title bars".into()), Item::Card(deco)];
+        out.extend(self.window_shadow_items(window_shadow_wayland_session()));
+        out.extend([
             Item::Header("Borders".into()),
             Item::Card(border),
             Item::Header("Colours".into()),
             Item::Card(cols),
             Item::Note { text: "Right-click a control to reset it to its default.".into(), warn: false },
-        ]
+        ]);
+        out
     }
 
     /// The window manager's own strip (off while the menu bar runs): shown under Dock & Bar.
@@ -1153,7 +1186,39 @@ pub fn set_wallpaper(m: &mut Model, path: &str) {
     m.walls = None; // the folder may have a new picture
 }
 
+// For this compositor effect, forcing Settings/X11 tools through XWayland does
+// not make the actual Wayland window manager grow an X11 shadow backend.
+fn window_shadow_wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
+}
+
+const SHADOW_KEYS: &[&str] = &["shadow", "shadow_radius", "shadow_opacity", "shadow_inactive_opacity"];
+
+/// Watcher data comes from the running parser, not the potentially newer offline CLI.
+/// A false master switch is a supported-but-disabled feature, not a missing capability.
+fn shadow_controls_supported(m: &Model, wayland: bool) -> bool {
+    !wayland
+        && m.rt.running
+        && m.rt.config["decoration"]["shadow"].is_boolean()
+        && SHADOW_KEYS[1..].iter().all(|k| m.rt.config["decoration"][k].as_u64().is_some())
+        && SHADOW_KEYS.iter().all(|k| m.schema.has("decoration", k))
+}
+
+fn apply_shadow(m: &mut Model, key: &str, value: CtlVal, wayland: bool) {
+    if !SHADOW_KEYS.contains(&key) {
+        return;
+    }
+    if !shadow_controls_supported(m, wayland) {
+        m.say("Window shadows need a supporting rdwm X11 session; settings were kept", false);
+        return;
+    }
+    m.apply(&format!("r:decoration:{key}"), value);
+}
+
 pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
+    if let Some(key) = id.strip_prefix("shadow:") {
+        return apply_shadow(m, key, v, window_shadow_wayland_session());
+    }
     if let Some(id) = id.strip_prefix("w:").filter(|id| id.starts_with("lw:")) {
         return crate::livewall::pane::apply(m, id, v);
     }
@@ -1519,6 +1584,87 @@ mod tests {
         } else {
             vec![Default::default()]
         }
+    }
+
+    fn shadow_model(text: &str) -> (Model, PathBuf) {
+        let (mut m, path) = model_with(text);
+        for (key, ty, default, min, max) in [
+            ("shadow", "bool", json!(false), None, None),
+            ("shadow_radius", "int", json!(16), Some(1.0), Some(48.0)),
+            ("shadow_opacity", "int", json!(22), Some(0.0), Some(100.0)),
+            ("shadow_inactive_opacity", "int", json!(12), Some(0.0), Some(100.0)),
+        ] {
+            m.schema.keys.retain(|k| !(k.section == "decoration" && k.key == key));
+            m.schema.keys.push(super::super::schema::KeyMeta { section: "decoration".into(), key: key.into(), ty: ty.into(), default, min, max, choices: vec![], desc: String::new() });
+        }
+        m.schema.live = true; // A newly installed CLI alone is not sufficient.
+        (m, path)
+    }
+
+    fn shadow_ctls(items: Vec<Item>) -> Vec<Ctl> {
+        items.into_iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flatten().flat_map(|r| r.ctls).collect()
+    }
+
+    fn live_shadow_config() -> Value {
+        json!({"decoration":{"shadow":false,"shadow_radius":16,"shadow_opacity":22,"shadow_inactive_opacity":12}})
+    }
+
+    #[test]
+    fn shadow_controls_need_the_live_parser_and_never_probe_during_paint() {
+        let (mut m, path) = shadow_model("# preserved\n[decoration]\nenabled = true\n");
+        let before = std::fs::read(&path).unwrap();
+        m.rt.running = true;
+        for config in [
+            json!({"decoration":{"enabled":true}}),
+            json!({"decoration":{"shadow":false}}),
+            json!({"decoration":{"shadow":false,"shadow_radius":null,"shadow_opacity":22,"shadow_inactive_opacity":12}}),
+        ] {
+            m.rt.config = config;
+            assert!(!shadow_controls_supported(&m, false));
+            let items = m.window_shadow_items(false);
+            assert!(shadow_ctls(items).is_empty());
+            apply_shadow(&mut m, "shadow", CtlVal::Bool(true), false);
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+        m.rt.config = live_shadow_config();
+        m.rt.running = false;
+        assert!(shadow_ctls(m.window_shadow_items(false)).is_empty(), "stale runtime data cannot enable controls");
+        m.rt.running = true;
+        assert!(shadow_controls_supported(&m, false), "false means supported but disabled");
+        assert!(shadow_ctls(m.window_shadow_items(true)).is_empty(), "Wayland parses the keys but has no carrier renderer");
+        assert_eq!(std::fs::read(&path).unwrap(), before, "painting does not write or run a command");
+    }
+
+    #[test]
+    fn shadow_controls_supporting_live_parser_have_ranges_and_safe_stale_events() {
+        let (mut m, path) = shadow_model("# mine\n[decoration]\nenabled = true\n");
+        m.rt.running = true;
+        m.rt.config = live_shadow_config();
+        let controls = shadow_ctls(m.window_shadow_items(false));
+        assert_eq!(controls.len(), 4);
+        assert!(matches!(controls[0].kind, Kind::Toggle(false)));
+        assert!(controls[0].enabled);
+        assert!(controls[1..].iter().all(|c| !c.enabled));
+        assert!(matches!(controls[1].kind, Kind::Slider { min: 1.0, max: 48.0, step: 1.0, .. }));
+        for c in &controls[2..] {
+            assert!(matches!(c.kind, Kind::Slider { min: 0.0, max: 100.0, step: 1.0, .. }));
+        }
+        apply_shadow(&mut m, "shadow", CtlVal::Bool(true), false);
+        apply_shadow(&mut m, "shadow_radius", CtlVal::Num(24.0), false);
+        apply_shadow(&mut m, "shadow_opacity", CtlVal::Num(37.0), false);
+        apply_shadow(&mut m, "shadow_inactive_opacity", CtlVal::Num(8.0), false);
+        assert!(shadow_ctls(m.window_shadow_items(false)).iter().all(|c| c.enabled));
+        assert_eq!(m.store.cfg.get("decoration", "shadow"), Some(Val::Bool(true)));
+        assert_eq!(m.store.cfg.get("decoration", "shadow_radius"), Some(Val::Int(24)));
+        assert_eq!(m.store.cfg.get("decoration", "shadow_opacity"), Some(Val::Int(37)));
+        assert_eq!(m.store.cfg.get("decoration", "shadow_inactive_opacity"), Some(Val::Int(8)));
+        let before = std::fs::read(&path).unwrap();
+        m.rt.config = json!({"decoration":{"enabled":true}});
+        apply_shadow(&mut m, "shadow_opacity", CtlVal::Num(99.0), false);
+        assert_eq!(std::fs::read(&path).unwrap(), before, "old queued controls must not write through a newer offline CLI");
+        m.rt.config = live_shadow_config();
+        apply_shadow(&mut m, "shadow", CtlVal::Reset, false);
+        assert!(!m.store.cfg.has("decoration", "shadow"));
     }
 
     #[test]
