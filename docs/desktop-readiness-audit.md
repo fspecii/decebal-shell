@@ -1,12 +1,51 @@
 # Desktop readiness audit — current checkpoint
 
-Refreshed 2026-10-30 from Settings output-management source `b29e632`,
-independent native QA and the guarded Settings-only rollout below. Earlier Dux
-source/evidence (`1d0d4b9`, `2f8fd5d`, `c372f45`) remains a separate checkpoint.
-These records do not establish KDE/GNOME parity or physical hardware readiness.
-The original audit at `a895427:docs/desktop-readiness-audit.md` is historical.
+Refreshed 2026-10-30 after the live shell/WM rollout from shell `8f432c9`
+and rdwm `d547b9c`. Evidence below is scoped to the workflow it exercises;
+it does not establish KDE/GNOME parity or physical hardware readiness.
 
-## Evidence boundaries
+## Latest accepted iteration
+
+- Settings first-open repair: gallery discovery and generated-image completion
+  now wake the native event loop. The old optimized binary failed after exactly
+  one Appearance click; optimized Settings `fb48aacd…6333` passed with the final
+  optimized renderer, no additional input, completed PNGs and later frames that
+  painted them. Fresh live Settings on workspace2 painted six previews after
+  one click. Preview generation remains asynchronous and its PNGs persist.
+- Twenty researched rice palettes bring the catalogue to33. Fifteen source
+  dark/light pairs and five explicitly adapted light variants have pinned
+  primary-source data, role mappings, hashes and licence notices. See
+  [palette research](rice-palettes.md); source palettes are not complete desktop
+  theme replicas, and role readability adaptations are labelled.
+- The widget CPU regression was reproduced: dropping an MPRIS owner left a
+  permanently readable EOF wake socket, one100% worker per rebuild. Commit
+  `8074170` stops that worker and preserves compatible Live collectors across
+  rebuilds. Exact optimized NextKDE/glass private test18/18 passed, including
+  repeated group changes, media interaction, changing title and backdrop pixels.
+  The old live daemon was replaced; a one-second live sample dropped from
+  approximately400% to2%CPU. Window-group Tracker worker shutdown remains a
+  separate follow-up; no universal idle-power or performance claim.
+- Notification font/viewport reflow, queue promotion/deadlines and keyboard
+  actions passed the optimized12-case native matrix: dark/light ×100/200%text
+  ×normal/narrow/tiny screens. Existing IDs/history/focus survive ordinary
+  font-only reflow. Extreme short layouts scroll/ellipsise rather than promising
+  all content is visible. No screen-reader or native Wayland-notifier claim.
+- Full optimized all-bin build passed. Strict affected-library/bin Clippy,
+  formatting and focused integration tests passed. The combined pre-CPU library
+  run was1635passed/0failed/11ignored; later CPU changes had separate focused
+  integration and optimized native gates. These are distinct source checkpoints.
+- Guarded X11 WM restart captured/restored the actual three floating clients'
+  flags, geometry, workspace view and focus. Wrapper and client identities
+  survived. Latest focus, XFCE decorations, workarea and gesture code is now
+  running, not merely installed for next login. Hardware swipes remain untested.
+  Restart helper `contrib/rdwm-restart-x11.py` in the sibling rdwm repository
+  currently refuses tiled/fullscreen/snapped/scratch and multi-monitor state.
+- Durable source/binary/backups and validation journals on this machine:
+  `~/.local/state/decebal/deployments/latest-20261030-195735/` and
+  `~/.local/state/rdwm/restarts/20261030-195402-qwxnjnxk/`.
+
+## Earlier acceptance evidence (historical deployments)
+
 
 - Latest Wayland Displays gate: **1,617 default-feature library tests passed,
   zero failed, ten ignored**, plus 25 focused Displays tests, the raw-editor guard,
@@ -93,8 +132,8 @@ The original audit at `a895427:docs/desktop-readiness-audit.md` is historical.
 | Create widgets and use small connected apps | No-code creator, shared Notes/Timer cards plus resource overview/focus hub, enlarged-text clock/media with unchanged 100% sizes, exact painter sample previews, private notes and conflict-safe saves; `settings/widgetbuilder.rs`, `notes/`, `timer.rs`; native release Notes/Timer log passed | Notes is local plaintext, not encrypted/synchronised. Headless login recovery is implemented and passed11unit/6realCLI checks; install its XDG entry to activate it. The crash-after-claim notification-loss tradeoff remains. Desktop widget host is X11-only. |
 | Familiar file management | Follow-theme preference is the default when absent: Windows11/Frutiger Aero → Explorer, macOS/Graphite → Finder, others Native; explicit choices remain fixed. Private native list/grid/navigation/create-folder checks include dark Windows11 with independent Nord; [limits](file-manager-profiles.md) | **Visual Nautilus profiles, not complete Explorer/Finder replicas.** No ribbon, Finder column view, replacement navigation or new file-operation model. Existing GTK windows may require reopening. |
 | Move, snap, tile and resize | rdwm implements Shift snapping, freely movable centred fullscreen exit, tiling formation; existing macOS/snap/resize suites and checkpoint evidence | User confirmed smoothness with Picom no-frame-pacing; repeatable NVIDIA first-drag/resize frame timing remains unproven. Do not infer 60fps from geometry or upload counters. |
-| Premium window effects | Unified SSD X11 shadow carrier with correct group stacking/input transparency and bounded peripheral uploads; native debug/release 45 checks | Native shadow controls use cached live-parser capability and reject stale unsupported events. New WM session and theme reapply required; current live WM is older. CSD/undecorated windows and Wayland shadows absent. Mixed-DPI/resource/performance checks on real hardware remain. |
-| Notifications and history | Source/new binaries provide bounded private atomic history, symlink/permission/lock safety, surfaced error/Retry, failed-clear durability, merge/rekey and typed CLI status; 31 focused notification tests plus exact-release native theme changes, EACCES/corrupt/symlink/restart checks passed; popup/accent/text follow cached live theme without resetting history/DND; [guide](notification-history.md) | **Old live daemon still runs.** Its persisted 38 records were backed up; no active banner at observation. RAM-only state is unknown and no forced handoff occurred. New permissions/error handling takes effect only after a separately reviewed restart/session. Notification sounds remain unimplemented; fixed row metrics do not fully reflow at 200%, and cached app icons do not refresh on icon-pack changes. |
+| Premium window effects | Unified SSD X11 shadow carrier with correct group stacking/input transparency and bounded peripheral uploads; native debug/release 45 checks | Native shadow controls use cached live-parser capability and reject stale unsupported events. Latest accepted WM is now running; hardware/mixed-DPI acceptance remains. CSD/undecorated windows and Wayland shadows absent. Mixed-DPI/resource/performance checks on real hardware remain. |
+| Notifications and history | Bounded private atomic persistence, recovery/error/Retry, failed-clear durability and typed status; optimized font/viewport/keyboard matrix above; live new daemon activated | Legacy in-memory-only history reset during the explicitly announced reload. Optional notification sounds are being implemented, not accepted yet. Cached notification app icons still need icon-pack generation refresh. No AT-SPI/native Wayland frontend. |
 | Tray/background application controls | Bounded SNI/DBusMenu across bar/rail/taskbar, custom paths/overlays, dynamic submenus and typed input; actual OBS and private pixels/lifecycle tests pass. Worker refreshes icon/theme generations from cached sources without paint I/O or new GetAll/app NewIcon; A→B/tint/stable-key regression passed; [guide](app-indicators.md) | No XEmbed, attention movies, hover tooltips or menu-item icons. Wayland activation/global coordinates and native app matrix remain. Extremely short/custom rails can exhaust space. |
 | Network, audio and Bluetooth | Native settings backed by nmcli, pactl/wpctl and bluetoothctl; `settings/system/{network,sound,bluetooth}.rs`, fake-command fixtures | Depends on installed services/tools. Parser/fake-runner coverage does not establish real Wi-Fi auth, VPN credentials, device hotplug, headset profile switching or service restart recovery. |
 | Arrange displays and scale text | X11 xrandr workflow retained; native rdwm Wayland typed capability/query/apply/Keep/Revert, per-output scale/transform/position/modes/power where supported, stale epoch protection and persisted confirmation. Actual nested Wayland Settings and X11/forced-X11 release checks passed; [contract](wayland-displays.md) | Requires matching rdwm protocol v1. Nested host owns physical modes/power, so those controls are honestly disabled. Physical DRM enable/disable/mode, hotplug and mixed-DPI hardware matrix remain. |
@@ -118,8 +157,9 @@ The original audit at `a895427:docs/desktop-readiness-audit.md` is historical.
 
 ## Next implementation batch
 
-[Concrete next work and acceptance gates](desktop-readiness-next.md) prioritises
-remaining indicator compatibility, legacy-daemon handoff and Wayland display management.
+[Concrete next work and acceptance gates](desktop-readiness-next.md) records earlier priorities. Current work closes window-tracker lifetimes, optional
+notification sounds and the section-by-section Dux replica; the latest notifier
+and WM handoffs have completed, while hardware acceptance remains open.
 These do not erase the larger missing file-manager fidelity, accessibility,
 portal, toolkit and hardware requirements in the matrix.
 
@@ -132,36 +172,32 @@ not merely a manifest, control label or large aggregate test count.
 
 ## Current live choices and pending work
 
-The user explicitly enabled automatic curated-photo following. Earlier Caelestia
-and NextKDE choices are historical. Fresh Settings-only rollout inventory found
-**Caelestia/dark**, radius24, palette `wallpaper-wallpaper-colours` and runtime
-`wallhaven-p82qrj.jpg` in fill mode, with following on. These user-selected
-preferences and the custom widget layout were unchanged by the binary update.
-No theme apply, photo refresh or restoration of an older snapshot occurred.
+At the accepted rollout, the user's current choice was Glyph Rice/dark with
+Wallhaven `zpzqeg.jpg`; workspace2 stayed visible. Settings, bar, notifier and
+widget host run the accepted optimized build, and rdwm runs SHA`4b8091fa…d028`.
+The dock is disabled for this rail theme: no hidden dock process was retained.
+Picom and application processes were preserved. Later user selections must be
+read from the running session, never restored from this audit snapshot.
 
-A generated/upscaled Tidal Loom image is an explicitly permitted, isolated
-experiment, not an applied wallpaper or catalogue/default asset. Its README and
-provenance remain in the user trial directory; no theme artwork was replaced.
+The user now requests building and reloading finished iterations so they can test
+while development proceeds. The guarded helper preserves supported X11 state and
+refuses unsupported layouts; it must not be replaced by `action quit`, which ends
+the session. The privileged system preference-export wrapper still needs its
+separate installation. Existing active session binaries do not repair that file.
 
-Dux Settings hierarchy, native resource/focus cards and the Theme Specialist's
-Dux Lavender package are integrated and installed. The package is available in
-the gallery, **not automatically applied**. The Dux rollout preserved the
-then-current NextKDE choices; later user changes are recorded above. The new
-widget host understands the new DSL/builtins. The old Settings window was left
-draft-safe during that rollout and was subsequently closed by the user; none was
-open or launched during the latest Settings-only update. Notification colour coherence is installed on disk but
-legacy daemon670409 remains pending a separately safe handoff. User-reported dock overlap
-with floating apps has accepted rdwm source `9788af9`: ordinary free floats fit a
-new reserved workarea only; explicit resize/drag clears that limit and fullscreen
-is excluded. Core 504 passed/two ignored and exact release panel7/fullscreen11/
-snap10 passed. Both user WM binaries are installed for **next login** (SHA256
-`bbff6f1077f2faee443f89457cc30d2195f47a0fd8aafe951b955f07d5ac629b`);
-journal: `~/.local/state/rdwm/deployments/workarea-20261030-153244/journal.json`.
-Running WM1714917 is unchanged: this general fix is **not active yet**. The
-separately approved T3-only correction to client553,27/2147×1328 is not evidence
-that the entire live WM was upgraded. The broader
-readiness goal remains ACTIVE.
+The structural Settings refinement is integrated. The rejected early Dux package
+is not evidence of replica parity. Source-pinned typography and section-specific
+bar/dashboard/control-center work continue in the assigned Dux thread. Candidate
+selectors stay inactive until their actual native host gates pass. Full Files
+Explorer/Finder layouts, AT-SPI, portals, Wayland widgets/shadows and the physical
+hardware matrix remain substantial work.
 
-Claude’s structural Settings UI redesign remains a separate active thread. The
-overall desktop-readiness goal remains ACTIVE; full Files layouts, accessibility,
-bar-item lists and physical Wayland acceptance are still substantial work.
+The user reported intermittent wallpaper flicker and a crash while testing themes.
+No corresponding live WM/Settings/Picom/Xorg core or OOM was found. The root pixmap
+stayed stable over ten samples; one200×200 wallpaper region was pixel-identical
+for60frames. Those narrow observations do not prove an intermittent-flicker fix
+or identify what disappeared. The report remains open pending reproduction or a
+more specific failure observation. Do not attribute unrelated private test/core
+events to the live desktop.
+
+The overall desktop-readiness goal remains ACTIVE.
