@@ -129,3 +129,7 @@ and references are not rewritten. Rendering changes require an explicit VERSION
 bump; an unrelated application rebuild does not discard the gallery cache.
 `tests/theme_preview.rs` verifies reuse across fresh processes and copied/touched
 renderer binaries while palette, wallpaper, widget and layout changes invalidate.
+
+`tests/e2e/theme-preview-cache.sh` opens the actual Settings gallery on private
+Xvfb, waits for its visible previews to settle, restarts Settings and verifies
+PNG/reference inode, size and mtime are unchanged with no render job running.
