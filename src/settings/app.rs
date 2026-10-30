@@ -12,18 +12,71 @@ use super::ui::{self, draw_items, focus_ring, inside, pal, part_at, Frame, Head,
 use crate::app::Button;
 use crate::gfx::{color, fill_circle, fill_rounded, soft_shadow, stroke_rounded};
 use crate::text::{Fonts, Weight};
-use crate::wallhaven::cache::Lru;
 use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use tiny_skia::Pixmap;
 
 const SIDEBAR_W: f32 = 236.0;
-const MAX_THUMBS: usize = 32;
+const MAX_THUMB_ENTRIES: usize = 512;
+const MAX_THUMB_BYTES: usize = 32 * 1024 * 1024;
+// Keep the current viewport resident, while bounding both pixel bytes and tiny
+// failed-decode entries. A fixed 32-entry LRU cannot hold a tall wallpaper grid.
+#[derive(Default)]
+struct ThumbCache {
+    entries: HashMap<String, (Rc<Pixmap>, u64)>,
+    wanted: HashSet<String>,
+    bytes: usize,
+    tick: u64,
+}
+impl ThumbCache {
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    fn contains(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+    fn get(&mut self, id: &str) -> Option<&Rc<Pixmap>> {
+        self.tick += 1;
+        self.entries.get_mut(id).map(|(image, stamp)| {
+            *stamp = self.tick;
+            &*image
+        })
+    }
+    fn insert(&mut self, id: String, image: Rc<Pixmap>) {
+        if !self.wanted.contains(&id) {
+            return;
+        }
+        if let Some((old, _)) = self.entries.remove(&id) {
+            self.bytes -= old.data().len();
+        }
+        let size = image.data().len();
+        while self.entries.len() >= MAX_THUMB_ENTRIES || self.bytes + size > MAX_THUMB_BYTES {
+            let oldest = self.entries.iter().filter(|(key, _)| !self.wanted.contains(*key)).min_by_key(|(_, (_, stamp))| *stamp).map(|(key, _)| key.clone());
+            let Some(oldest) = oldest else {
+                return;
+            };
+            self.bytes -= self.entries.remove(&oldest).unwrap().0.data().len();
+        }
+        self.tick += 1;
+        self.bytes += size;
+        self.entries.insert(id, (image, self.tick));
+    }
+}
+
+#[derive(Default)]
+struct ThumbWork {
+    pending: VecDeque<String>,
+    wanted: HashSet<String>,
+    inflight: Option<String>,
+    ready: HashSet<String>,
+    decoded: u64,
+}
+
 const SWATCHES: [&str; 18] = [
     "#ff453a", "#ff9f0a", "#ffd60a", "#30d158", "#63e6e2", "#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f", "#ac8e68", "#ffffff", "#d1d1d6", "#8e8e93", "#636366", "#48484a", "#2c2c2e", "#1c1c1e",
     "#000000",
@@ -67,9 +120,9 @@ pub struct SettingsApp {
     suspended_edits: HashMap<String, (String, TextField, f32)>,
     popup: Option<Popup>,
     colorpop: Option<ColorPop>,
-    thumbs: RefCell<Lru<String, Rc<Pixmap>>>,
-    thumb_req: HashSet<String>,
-    thumb_tx: Option<Sender<String>>,
+    thumbs: RefCell<ThumbCache>,
+    thumb_work: Arc<Mutex<ThumbWork>>,
+    thumb_tx: Option<SyncSender<()>>,
     thumb_rx: Option<Receiver<(String, Option<Pixmap>)>>,
     navigation: Option<super::navigation::Requests>,
     preview_updates: Option<crate::theme::engine::preview::PreviewUpdates>,
@@ -143,8 +196,8 @@ impl SettingsApp {
             suspended_edits: HashMap::new(),
             popup: None,
             colorpop: None,
-            thumbs: RefCell::new(Lru::new(MAX_THUMBS)),
-            thumb_req: HashSet::new(),
+            thumbs: RefCell::new(ThumbCache::default()),
+            thumb_work: Arc::new(Mutex::new(ThumbWork::default())),
             thumb_tx: None,
             thumb_rx: None,
             navigation: None,
@@ -347,38 +400,80 @@ impl SettingsApp {
 
     // ------------------------------------------------------------ thumbnails
 
-    fn request_thumb(&mut self, id: &str) {
-        if id.starts_with("lw:pick:") || id == "lw:motion" {
-            if let Some(path) = self.m.lw.thumbnail_path(id).map(|p| p.to_string_lossy().into_owned()) {
-                self.request_thumb(&path);
+    fn request_thumbs(&mut self, ids: &[String]) {
+        let mut wanted = Vec::new();
+        let mut seen = HashSet::new();
+        let mut cost = 0;
+        for id in ids {
+            let local = self.m.lw.thumbnail_path(id).map(|p| p.to_string_lossy().into_owned());
+            let id = local.as_deref().unwrap_or(id);
+            if id.is_empty() || id.starts_with("wh:") || id == "lw:motion" || id.starts_with("lw:pick:") || !seen.insert(id.to_owned()) {
+                continue;
             }
-            return;
+            let bytes = if id.ends_with("#big") { 560 * 350 * 4 } else { 176 * 111 * 4 };
+            if wanted.len() >= MAX_THUMB_ENTRIES || cost + bytes > MAX_THUMB_BYTES {
+                continue;
+            }
+            cost += bytes;
+            wanted.push(id.to_owned());
         }
-        if id.is_empty() || self.thumb_req.contains(id) || self.thumbs.borrow().contains(&id.to_string()) {
-            return;
-        }
+        let mut cache = self.thumbs.borrow_mut();
+        cache.wanted = wanted.iter().cloned().collect();
+        let mut work = self.thumb_work.lock().unwrap();
+        work.wanted = cache.wanted.clone();
+        // Replace, rather than append, the scroll queue. A running decode may
+        // finish, but obsolete results cannot evict the new viewport.
+        work.pending = wanted.into_iter().filter(|id| !cache.contains(id) && work.inflight.as_ref() != Some(id) && !work.ready.contains(id)).collect();
+        drop(work);
         if let Some(tx) = &self.thumb_tx {
-            self.thumb_req.insert(id.to_string());
-            let _ = tx.send(id.to_string());
+            let _ = tx.try_send(());
         }
     }
 
     fn start_thumb_worker(&mut self) {
-        let (req_tx, req_rx) = channel::<String>();
-        let (res_tx, res_rx) = channel::<(String, Option<Pixmap>)>();
+        let (req_tx, req_rx) = sync_channel::<()>(1);
+        let (res_tx, res_rx) = sync_channel::<(String, Option<Pixmap>)>(2);
         let waker = self.waker.clone();
+        let work = self.thumb_work.clone();
         std::thread::Builder::new()
             .name("decsettings-thumbs".into())
             .stack_size(1 << 20)
             .spawn(move || {
-                while let Ok(id) = req_rx.recv() {
-                    let big = id.ends_with("#big");
-                    let path = id.trim_end_matches("#big");
-                    let px = load_thumb(std::path::Path::new(path), if big { (560, 350) } else { (176, 111) });
-                    crate::mem::trim();
-                    let _ = res_tx.send((id, px));
-                    if let Some(w) = &waker {
-                        w();
+                while req_rx.recv().is_ok() {
+                    loop {
+                        if matches!(req_rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)) {
+                            return;
+                        }
+                        let id = {
+                            let mut state = work.lock().unwrap();
+                            let Some(id) = state.pending.pop_front() else {
+                                break;
+                            };
+                            state.inflight = Some(id.clone());
+                            id
+                        };
+                        let big = id.ends_with("#big");
+                        let path = id.trim_end_matches("#big");
+                        let px = load_thumb(std::path::Path::new(path), if big { (560, 350) } else { (176, 111) });
+                        crate::mem::trim();
+                        let keep = {
+                            let mut state = work.lock().unwrap();
+                            state.decoded += 1;
+                            state.inflight = None;
+                            let keep = state.wanted.contains(&id);
+                            if keep {
+                                state.ready.insert(id.clone());
+                            }
+                            keep
+                        };
+                        if keep {
+                            if res_tx.send((id, px)).is_err() {
+                                return;
+                            }
+                            if let Some(w) = &waker {
+                                w();
+                            }
+                        }
                     }
                 }
             })
@@ -391,11 +486,13 @@ impl SettingsApp {
         let mut any = false;
         if let Some(rx) = &self.thumb_rx {
             while let Ok((id, px)) = rx.try_recv() {
-                self.thumb_req.remove(&id);
-                // a failed decode caches a 1x1 transparent placeholder so it is not retried every frame
+                self.thumb_work.lock().unwrap().ready.remove(&id);
+                // Negative results remain cached inside the same bounded budget.
                 let px = px.unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1"));
-                self.thumbs.borrow_mut().insert(id, Rc::new(px));
-                any = true;
+                if self.thumbs.borrow().wanted.contains(&id) {
+                    self.thumbs.borrow_mut().insert(id, Rc::new(px));
+                    any = true;
+                }
             }
         }
         any
@@ -593,7 +690,7 @@ impl SettingsApp {
             if id.starts_with("wh:") {
                 return wh.thumb(id);
             }
-            thumbs.borrow_mut().get(&id.to_string()).filter(|p| p.width() > 1).cloned()
+            thumbs.borrow_mut().get(id).filter(|p| p.width() > 1).cloned()
         };
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         // Painted straight into the window buffer (the sidebar is drawn over the left edge afterwards):
@@ -626,9 +723,7 @@ impl SettingsApp {
             items.iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text.clone()) } else { None }).collect(),
         );
         let (online, local): (Vec<String>, Vec<String>) = wanted.into_iter().partition(|id| id.starts_with("wh:"));
-        for id in local {
-            self.request_thumb(&id);
-        }
+        self.request_thumbs(&local);
         if self.m.wallpaper_open() && self.m.wh.tab == super::wallhaven::Tab::Wallhaven {
             self.m.wh.set_visible(&online);
             super::wallhaven::on_paint(&mut self.m, self.frame.height, self.scroll, h);
@@ -663,12 +758,16 @@ impl SettingsApp {
             .collect();
         let rects = |v: &[(Rect, String)]| v.iter().map(|(r, id)| json!({"id": id, "rect": [r.0, r.1, r.2, r.3]})).collect::<Vec<_>>();
         let (preview, warns) = self.dump_meta.clone();
+        let (thumb_pending, thumb_decodes) = {
+            let work = self.thumb_work.lock().unwrap();
+            (work.pending.len(), work.decoded)
+        };
         let doc = json!({
             "pane": PANES[self.m.sel.pane].id, "tab": self.m.sel.tab.id(), "section": self.m.sel.section.id(), "scroll": self.scroll, "ctls": ctls,
             "panes": self.sidebar_hits.iter().map(|(r, i)| json!({"id": PANES[*i].id, "rect": [r.0, r.1, r.2, r.3], "visible": r.1 >= self.nav_top() && r.1 + r.3 <= self.size.1 as f32})).collect::<Vec<_>>(),
             "hit_labels": self.sidebar_labels, "thumbs": rects(&self.frame.thumbs), "layouts": rects(&self.frame.layouts), "preview": preview, "warnings": warns,
             "notice": self.m.notice.as_ref().map(|n| n.text.clone()), "search": [self.search_rect.0, self.search_rect.1, self.search_rect.2, self.search_rect.3],
-            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "theme_previews_painted": self.frame.theme_previews_painted, "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
+            "frames": self.stats.0, "items_us": self.stats.1, "paint_us": self.stats.2, "loaded_thumbs": self.thumbs.borrow().len(), "thumb_bytes": self.thumbs.borrow().bytes, "thumb_pending": thumb_pending, "thumb_decodes": thumb_decodes, "theme_previews_painted": self.frame.theme_previews_painted, "live_preview_frames": self.m.lw.preview_frames, "live_preview_active": self.m.lw.preview_active(), "wh_thumbs": self.m.wh.cached_thumbs(), "search_text": self.search.text(), "zone": format!("{:?}", self.zone), "focus": self.it.focus,
         });
         let tmp = path.with_extension("tmp");
         if std::fs::write(&tmp, doc.to_string()).is_ok() {
@@ -1641,6 +1740,97 @@ impl WindowApp for SettingsApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thumbnail_cache_holds_the_viewport_and_bounds_negative_entries() {
+        let mut cache = ThumbCache::default();
+        let ids: Vec<_> = (0..73).map(|i| i.to_string()).collect();
+        cache.wanted = ids.iter().cloned().collect();
+        for id in &ids {
+            cache.insert(id.clone(), Rc::new(Pixmap::new(176, 111).unwrap()));
+        }
+        assert_eq!(cache.len(), 73, "a valid viewport must not churn at 32 entries");
+        for id in &ids {
+            assert!(cache.get(id).is_some());
+        }
+        assert!(cache.bytes <= MAX_THUMB_BYTES);
+        for i in 0..MAX_THUMB_ENTRIES * 2 {
+            let id = format!("failed-{i}");
+            cache.wanted = HashSet::from([id.clone()]);
+            cache.insert(id, Rc::new(Pixmap::new(1, 1).unwrap()));
+        }
+        assert!(cache.len() <= MAX_THUMB_ENTRIES);
+        assert!(cache.bytes <= MAX_THUMB_BYTES);
+    }
+
+    #[test]
+    fn thumbnail_grid_keeps_hit_targets_but_never_looks_up_offscreen_images() {
+        let items = [Item::Thumbs((0..73).map(|i| ui::Thumb { id: i.to_string(), caption: "Fixture".into(), selected: false }).collect())];
+        let mut pixels = Pixmap::new(900, 600).unwrap();
+        let mut painter = Painter { fonts: None, s: 1.0 };
+        let looked = RefCell::new(Vec::new());
+        let frame = draw_items(&mut pixels, &mut painter, Head { title: "Wallpaper", context: "" }, &items, 400.0, 0.0, 900.0, &Interact::default(), &|id| {
+            looked.borrow_mut().push(id.to_owned());
+            None
+        });
+        assert_eq!(frame.thumbs.len(), 73);
+        assert!(!looked.borrow().is_empty());
+        assert!(looked.borrow().len() < 32);
+        for id in looked.borrow().iter() {
+            let r = frame.thumbs.iter().find(|(_, key)| key == id).unwrap().0;
+            assert!(r.1 < 600.0 && r.1 + r.3 + 34.0 > 0.0);
+        }
+    }
+
+    #[test]
+    fn thumbnail_worker_settles_and_replaces_its_scroll_queue() {
+        let root = std::env::temp_dir().join(format!("decebal-thumb-worker-{}-{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let paths = Paths { rdwm_config: root.join("config.toml"), shell_dir: root.join("shell"), rdwmctl: "/nonexistent".into(), socket: root.join("none.sock") };
+        let mut app = SettingsApp::new(paths, None);
+        let ids: Vec<_> = (0..73)
+            .map(|i| {
+                let path = root.join(format!("{i}.png"));
+                image::RgbaImage::from_pixel(16, 10, image::Rgba([200, 30, 100, 255])).save(&path).unwrap();
+                path.to_string_lossy().into_owned()
+            })
+            .collect();
+        app.start_thumb_worker();
+        app.request_thumbs(&ids[..48]);
+        let settle = |app: &mut SettingsApp, wanted: &[String]| {
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                app.drain_thumbs();
+                app.request_thumbs(wanted);
+                assert!(app.thumb_work.lock().unwrap().pending.len() <= wanted.len());
+                if wanted.iter().all(|id| app.thumbs.borrow().contains(id)) {
+                    break;
+                }
+                assert!(std::time::Instant::now() < until, "thumbnail worker did not settle");
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        };
+        settle(&mut app, &ids[..48]);
+        let decoded = app.thumb_work.lock().unwrap().decoded;
+        assert_eq!(decoded, 48);
+        for _ in 0..10 {
+            app.request_thumbs(&ids[..48]);
+            app.drain_thumbs();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert_eq!(app.thumb_work.lock().unwrap().decoded, decoded, "settled redraw must not decode again");
+        // Replace a pending batch before it starts; only the latest viewport
+        // remains queued, plus at most one already-running decode.
+        app.request_thumbs(&ids[48..]);
+        app.request_thumbs(&ids[..48]);
+        settle(&mut app, &ids[..48]);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        app.drain_thumbs();
+        assert!(app.thumb_work.lock().unwrap().decoded <= decoded + 1);
+        assert!(app.thumb_work.lock().unwrap().pending.is_empty());
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn thumbnails_decode_and_crop() {

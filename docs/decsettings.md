@@ -198,3 +198,16 @@ sessions: enable/disable, corner radius, thickness and colour. Resetting colour
 uses the wallpaper background. It sits behind applications and works independently
 of theme selection. An older live WM hides these controls even when a newer
 offline control tool is installed. The frame does not move or resize windows.
+
+### Wallpaper gallery cache
+
+Local wallpaper thumbnails use a bounded 32 MiB/512-entry cache. The current
+viewport and one margin row remain resident; offscreen tiles keep navigation
+and hit geometry without promoting their images in the cache. Scrolling replaces
+the pending decode list, with one active decode and at most two queued results.
+This fixes the old 32-entry loop where a tall gallery needed 44–49 images and
+loaded tiles repeatedly disappeared and reappeared.
+
+`DECSETTINGS_BIN=target/release/decsettings python3 tests/e2e/wallpaper-cache.py`
+checks 73 synthetic images on private Xvfb at 1759×1194 and 2600×1700, including
+visible pixels after redraw, bounded memory and zero decoding once settled.

@@ -929,7 +929,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
                 let pw = if id == "lw:motion" { cw } else { ph * 16.0 / 10.0 };
                 let px0 = x0 + (cw - pw) / 2.0;
                 fill_rounded(pm, px0 - u(2.0), y - u(2.0), pw + u(4.0), ph + u(4.0), u(10.0), crate::theme::th().ink(0.10));
-                match thumb(id) {
+                match if y + ph > 0.0 && y < pm.height() as f32 { thumb(id) } else { None } {
                     Some(t) => draw_cover(pm, &t, px0, y, pw, ph, u(8.0)),
                     None => {
                         fill_rounded(pm, px0, y, pw, ph, u(8.0), pal::card());
@@ -966,21 +966,23 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
                     let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0 + metrics.extra(16.0))), tw, th);
                     let cid = format!("w:{}", t.id);
-                    let hover = it.hover.as_deref() == Some(cid.as_str());
-                    if t.selected {
-                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), pal::accent(), u(2.5));
-                    } else if hover {
-                        stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), crate::theme::th().ink(0.3), u(2.0));
+                    if r.1 + r.3 + u(34.0 + metrics.extra(16.0)) > 0.0 && r.1 < pm.height() as f32 {
+                        let hover = it.hover.as_deref() == Some(cid.as_str());
+                        if t.selected {
+                            stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), pal::accent(), u(2.5));
+                        } else if hover {
+                            stroke_rounded(pm, r.0 - u(3.0), r.1 - u(3.0), r.2 + u(6.0), r.3 + u(6.0), u(10.0), crate::theme::th().ink(0.3), u(2.0));
+                        }
+                        match thumb(&t.id) {
+                            Some(img) => draw_cover(pm, &img, r.0, r.1, r.2, r.3, u(7.0)),
+                            None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), crate::theme::th().ink(0.07)),
+                        }
+                        if it.focus.as_deref() == Some(cid.as_str()) && it.ring {
+                            stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), crate::theme::th().accent.color(0.85), u(2.0));
+                        }
+                        let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
+                        p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0 + metrics.extra(7.0)), u(11.0), Weight::Regular, pal::sub());
                     }
-                    match thumb(&t.id) {
-                        Some(img) => draw_cover(pm, &img, r.0, r.1, r.2, r.3, u(7.0)),
-                        None => fill_rounded(pm, r.0, r.1, r.2, r.3, u(7.0), crate::theme::th().ink(0.07)),
-                    }
-                    if it.focus.as_deref() == Some(cid.as_str()) && it.ring {
-                        stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), crate::theme::th().accent.color(0.85), u(2.0));
-                    }
-                    let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
-                    p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0 + metrics.extra(7.0)), u(11.0), Weight::Regular, pal::sub());
                     fr.thumbs.push((r, t.id.clone()));
                     fr.placed.push(Placed {
                         rect: r,
