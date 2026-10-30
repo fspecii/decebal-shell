@@ -37,7 +37,7 @@ def main():
             path.write_text("#!/bin/sh\nexit 1\n")
             path.chmod(0o755)
         (root / "config/decebal.json").write_text(json.dumps({"theme": {"name": "nord", "mode": "dark"}}))
-        display = next(f":{n}" for n in range(460, 480) if not Path(f"/tmp/.X11-unix/X{n}").exists())
+        display = next(f":{n}" for n in range(460, 480) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
         env = dict(os.environ, HOME=str(root / "home"), DISPLAY=display,
                    XDG_CONFIG_HOME=str(root / "config"), XDG_CACHE_HOME=str(root / "cache"),
                    XDG_DATA_HOME=str(root / "data"), XDG_STATE_HOME=str(root / "state"),
@@ -66,7 +66,9 @@ def main():
             connection = None
             try:
                 for _ in range(100):
-                    if Path(f"/tmp/.X11-unix/X{display[1:]}").exists():
+                    assert server.poll() is None, "private Xvfb exited"
+                    lock = Path(f"/tmp/.X{display[1:]}-lock")
+                    if lock.exists() and int(lock.read_text().strip()) == server.pid and Path(f"/tmp/.X11-unix/X{display[1:]}").exists():
                         connection = x.XOpenDisplay(display.encode())
                         if connection:
                             break

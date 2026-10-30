@@ -10,29 +10,29 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
   now wake the native event loop. The old optimized binary failed after exactly
   one Appearance click; optimized Settings `fb48aacd…6333` passed with the final
   optimized renderer, no additional input, completed PNGs and later frames that
-  painted them. Fresh live Settings on workspace2 painted six previews after
+  painted them. Fresh live Settings on workspace 2 painted six previews after
   one click. Preview generation remains asynchronous and its PNGs persist.
-- Twenty researched rice palettes bring the catalogue to33. Fifteen source
+- Twenty researched rice palettes bring the catalogue to 33. Fifteen source
   dark/light pairs and five explicitly adapted light variants have pinned
   primary-source data, role mappings, hashes and licence notices. See
   [palette research](rice-palettes.md); source palettes are not complete desktop
   theme replicas, and role readability adaptations are labelled.
 - The widget CPU regression was reproduced: dropping an MPRIS owner left a
-  permanently readable EOF wake socket, one100% worker per rebuild. Commit
+  permanently readable EOF wake socket, one 100% worker per rebuild. Commit
   `8074170` stops that worker and preserves compatible Live collectors across
-  rebuilds. Exact optimized NextKDE/glass private test18/18 passed, including
+  rebuilds. Exact optimized NextKDE/glass private test 18/18 passed, including
   repeated group changes, media interaction, changing title and backdrop pixels.
   The old live daemon was replaced; a one-second live sample dropped from
-  approximately400% to2%CPU. Window-group Tracker worker shutdown remains a
+  approximately 400% to 2%CPU. Window-group Tracker worker shutdown remains a
   separate follow-up; no universal idle-power or performance claim.
 - Notification font/viewport reflow, queue promotion/deadlines and keyboard
-  actions passed the optimized12-case native matrix: dark/light ×100/200%text
+  actions passed the optimized 12-case native matrix: dark/light × 100/200% text
   ×normal/narrow/tiny screens. Existing IDs/history/focus survive ordinary
   font-only reflow. Extreme short layouts scroll/ellipsise rather than promising
   all content is visible. No screen-reader or native Wayland-notifier claim.
 - Full optimized all-bin build passed. Strict affected-library/bin Clippy,
   formatting and focused integration tests passed. The combined pre-CPU library
-  run was1635passed/0failed/11ignored; later CPU changes had separate focused
+  run was 1635 passed/0 failed/11 ignored; later CPU changes had separate focused
   integration and optimized native gates. These are distinct source checkpoints.
 - Guarded X11 WM restart captured/restored the actual three floating clients'
   flags, geometry, workspace view and focus. Wrapper and client identities
@@ -173,7 +173,7 @@ not merely a manifest, control label or large aggregate test count.
 ## Current live choices and pending work
 
 At the accepted rollout, the user's current choice was Glyph Rice/dark with
-Wallhaven `zpzqeg.jpg`; workspace2 stayed visible. Settings, bar, notifier and
+Wallhaven `zpzqeg.jpg`; workspace 2 stayed visible. Settings, bar, notifier and
 widget host run the accepted optimized build, and rdwm runs SHA`4b8091fa…d028`.
 The dock is disabled for this rail theme: no hidden dock process was retained.
 Picom and application processes were preserved. Later user selections must be
@@ -194,8 +194,8 @@ hardware matrix remain substantial work.
 
 The user reported intermittent wallpaper flicker and a crash while testing themes.
 No corresponding live WM/Settings/Picom/Xorg core or OOM was found. The root pixmap
-stayed stable over ten samples; one200×200 wallpaper region was pixel-identical
-for60frames. Those narrow observations do not prove an intermittent-flicker fix
+stayed stable over ten samples; one 200×200 wallpaper region was pixel-identical
+for 60 frames. Those narrow observations do not prove an intermittent-flicker fix
 or identify what disappeared. The report remains open pending reproduction or a
 more specific failure observation. Do not attribute unrelated private test/core
 events to the live desktop.
