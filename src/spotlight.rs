@@ -927,7 +927,8 @@ impl WindowApp for Spotlight {
         match ev.key {
             Key::Escape => Response::act(Action::Close),
             Key::Enter => self.activate(ev.ctrl || ev.alt),
-            Key::Down | Key::Tab => self.move_sel(1),
+            Key::Down => self.move_sel(1),
+            Key::Tab => self.move_sel(if ev.shift { -1 } else { 1 }),
             Key::Up => self.move_sel(-1),
             Key::PageDown => self.move_sel(MAX_ROWS as isize),
             Key::PageUp => self.move_sel(-(MAX_ROWS as isize)),
@@ -1128,6 +1129,24 @@ mod tests {
         s.key(&key(Key::Down, ""));
         assert_eq!(s.sel, 0);
         assert_eq!(s.scroll, 0);
+    }
+
+    #[test]
+    fn tab_navigation_is_reversible_and_disarms_confirmation() {
+        let mut s = spot();
+        type_text(&mut s, "a");
+        let n = s.items.len();
+        assert!(n > 1);
+        let backwards = crate::keysym::key_event(0xfe20, 0xff09, None, true, false, false).unwrap();
+        let query = s.field.text().to_owned();
+        assert_eq!(s.key(&backwards).action, None);
+        assert_eq!(s.sel, n - 1);
+        s.key(&key(Key::Tab, ""));
+        assert_eq!(s.sel, 0);
+        s.confirm = Some(0);
+        s.key(&backwards);
+        assert_eq!(s.confirm, None);
+        assert_eq!(s.field.text(), query);
     }
 
     #[test]

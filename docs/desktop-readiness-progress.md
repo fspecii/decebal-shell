@@ -31,8 +31,9 @@ Deployment boundary:
 The installed system `/usr/bin/rdwm-decebal-session` is still the old version because
 passwordless installation was refused (administrator authentication required).
 The source fix and sample keymap are pushed. This matters for next-login exports;
-restarting the current WM would not solve it and was not attempted. The current
-user's three screenshot chords matched the old defaults exactly; only those three
+restarting the WM does not replace that system script. A later guarded WM
+handoff activated the new user binary, while the system wrapper remains old.
+The current user's three screenshot chords matched the old defaults exactly; only those three
 argument vectors were updated, checked and reloaded, preserving other settings and
 workspace/window membership.
 
@@ -49,3 +50,44 @@ Clippy/format checks passed. Production native suites: system theme74/74, dock
 lifecycle9/9, guide/aliases/same-window navigation/200% high contrast, preview-cache
 restart and widget creator/Icons all pass. Separate cold-worker accessibility
 preview isolation test passes. Full production build includes all23 binaries.
+
+
+## 2026-10-30 optimized rollout update
+
+This supersedes the earlier 1,513-test and next-login-only deployment checkpoint,
+without broadening what those tests prove. Shell source `0e2fd63` is built and
+running; subsequent root commits through `1816055` add tests/documentation. The
+library checkpoint is 1,683 passed, 0 failed, 16 ignored, with strict all-target
+Clippy and format checks. Exact optimized native gates include Windows palette
+changes without process restart, first-click theme previews, cache corruption and
+warm relaunch, popup-launched application lifetime, Dux title redraw, popup
+placement, font fallback and slider input. The historical preview-browsing
+Settings disappearance has not been reproduced or assigned a confirmed cause.
+
+The shell handoff completed with configuration and notification-history hashes
+unchanged. The current notifier, widgets, bar and Settings hashes match the final
+optimized artifacts. Dux 1.2 is installed without selecting it or replacing the
+user's widget layout. Settings was refreshed after WM activation and exposes the
+Wallpaper desktop-frame capability.
+
+The optimized `efa8f1f` rdwm build is running after a completed guarded X11 handoff.
+The three then-current clients retained geometry, flags, tags, view and focus.
+An earlier failed attempt and rollback recentered an already overflowing floating
+window; the original overflowing position was not restored. Helper `d463d0a`
+refuses that case before signaling, with private unchanged-state regression
+coverage. Do not describe the later successful retry as undoing that earlier move.
+
+Evidence:
+
+- `/tmp/decebal-review3-native/acceptance-manifest.json`
+- `~/.local/state/decebal/deployments/review3-20261030-230112/shell-reload-journal.json`
+- `~/.local/state/rdwm/restarts/20261030-234119-fu60m41l/journal.json`
+- `/tmp/rdwm-restart-helper-test-_lquxo1i/result.json`
+- `/tmp/rdwm-desktop-frame-optimized-repaired/result.json`
+- `/tmp/rdwm-frame-settings-optimized-repaired/result.json`
+
+The desktop-frame acceptance includes real widget/video-wallpaper layering and
+Settings toggle integration in a private X11 session. Default-off frame support
+is not evidence for Wayland compositor operation or physical mixed-DPI output.
+System-wrapper migration, hardware gestures, AT-SPI, full Explorer/Finder
+workflows, full Dux fidelity and new-user/upgrade release acceptance remain open.

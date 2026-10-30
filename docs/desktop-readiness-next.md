@@ -1,16 +1,16 @@
 # Next desktop-readiness work
 
-Current priorities after the accepted tracker/sound/popup batch and pending native
-Dux integration:
+Current priorities after the 2026-10-30 optimized build and live rollout:
 
-- Finish independent review and exact optimized native acceptance for the Dux
-  bar, README-profile dashboard, Control Center and Applications launcher. Root
-  source through `b6b49ef` passes 1,662 library tests and 80 actual-font painter
-  checks; source integration is not a live deployment. Package folder/archive
-  validation passes. A full panel matrix had one startup-probe timeout near its
-  last mainbar case; isolated mainbar and dedicated Control Center/launcher gates
-  pass. The bounded diagnostic full rerun passed all36captures; retain the earlier
-  intermittent observation and startup diagnostics rather than inventing a cause.
+- Dux bar, README-profile dashboard, Control Center and Applications launcher
+  repairs have passed exact optimized native acceptance and are deployed in the
+  shell build from `0e2fd63`. Evidence is in
+  `/tmp/decebal-review3-native/acceptance-manifest.json`; it covers placement,
+  title-only redraw, missing-font fallback, sliders and application launches that
+  survive popup exit. The 1,683-pass library checkpoint and private captures are
+  evidence for their tested scope, not a full Dux replica or hardware acceptance.
+  Keep the earlier startup-probe timeout in the diagnostic history; later passing
+  matrices do not establish its original cause.
 - Continue the actual source-backed replica section by section: the native owner
   now has the original variable-clock typography task; the sole theme specialist
   owns its future licensed asset and selector update. Expressive artwork/motion,
@@ -67,8 +67,9 @@ instead of shell execution, bounded retries and rail-only dock disabling.
 **Integration checkpoint:** implemented headless `dectimer autostart`, portable XDG entry and optional non-restarting service; 11 unit and 6 real CLI checks passed. Release rollout and entry installation are tracked in the project checkpoint. The criteria below retain the original requirement and notification tradeoff.
 
 **User trigger:** start a countdown, log out/reboot, log in again and wait. The
-saved wall-clock deadline persists but no completion worker is started until
-Timer opens.
+saved wall-clock deadline must persist and its completion worker must recover
+without opening Timer. The headless login path implements that recovery; real
+clean-login acceptance remains open.
 
 **Evidence:** `dectimer autostart` and `contrib/decebal-timer.desktop` now exist;
 packaging and the project checkpoint record the login entry. Store locking,
@@ -100,9 +101,10 @@ actual Wayland. The raw output table no longer bypasses the transaction.
 Exact release native nested tests exercised actual pixels/input, per-head caps,
 Apply/Keep/Revert, Settings SIGKILL timeout, stale reset, persisted compositor
 restart and X11/forced-X11 regression. Settings was installed to both user bindirs
-without output/configuration changes or any app/compositor restart. The user's
-current X11 session is unchanged; matching rdwm protocol v1 is required for the
-new controls in Wayland. See [scope/contract](wayland-displays.md).
+without output/configuration changes or any app/compositor restart at that
+checkpoint. The current session remains X11, with the newer WM now running after
+a guarded handoff; this does not exercise Wayland. Matching rdwm protocol v1 is required
+for the new controls in Wayland. See [scope/contract](wayland-displays.md).
 
 **Remaining acceptance:** physical DRM modes, disable/enable lifecycle, hot-unplug
 and mixed-DPI multi-output hardware checks. Nested mode/power are host-owned and
@@ -121,16 +123,17 @@ its Dux theme fidelity follow-up is separate from functional output management.
   200% layout checks remain. External app accessibility is a separate toolkit duty.
 - Wayland widget surfaces, CSD/Wayland shadows, activation/capture/portal paths and
   Qt app pixel verification remain distinct work.
-- Real NVIDIA frame timing and mixed-DPI/carrier memory checks are pending after
-  a new WM session. Never restart the user's live WM as a test shortcut.
+- Real NVIDIA frame timing and mixed-DPI/carrier memory checks remain pending.
+  The new WM is active, but the successful X11 handoff is not performance evidence.
+  Use private fixtures first; live restart is a guarded deployment transaction,
+  not a substitute for those tests.
 - Installed system session-wrapper migration needs administrator authentication;
   use the already prepared reviewable bundle rather than pretending user-binary
   replacement updated `/usr/bin`.
-- Notification history source/disk binaries now expose durable private storage
-  failures and Retry, with native recovery evidence. The old live daemon was
-  intentionally retained to avoid losing unknown session-only state; its safe
-  handoff remains pending. Do not describe that old process as private/durable
-  merely because new files were installed.
+- Notification history exposes durable private storage failures and Retry, with
+  native recovery evidence. The current notifier is the optimized `0e2fd63` build;
+  its live handoff preserved the notification-history file byte-for-byte. Continue
+  enlarged-text reflow and real-session recovery acceptance separately.
 - Follow-theme Files defaults are implemented, including palette-independent
   selection and dark native evidence. Full Explorer/Finder layouts remain open.
 - Curated photo following plus post-photo Dynamic refresh is implemented and
@@ -139,19 +142,46 @@ its Dux theme fidelity follow-up is separate from functional output management.
   availability or a universal non-AI guarantee.
 - Dux Settings styling, resource/focus cards and the Specialist's Dux Lavender
   package are integrated, release-tested and installed without applying a theme
-  or replacing the user's widget layout. New widget host2869626 is active;
-  the then-open Settings window was preserved and later closed by the user. Four-card
-  native painter/input checks pass at1280×720/200%; this is not a full Dux runtime.
-- Notification colours now follow cached live palettes in source/on disk; exact
-  release theme/history checks pass. Legacy live daemon670409 remains retained.
-  Full enlarged-text notification reflow and live icon-pack cache invalidation
-  remain open, alongside safe durable-history runtime handoff.
+  or replacing the user's widget layout. The active bar, widget host and Settings
+  now match the optimized `0e2fd63` artifacts. Dux 1.2 is installed but is not the
+  selected theme. Four-card native painter/input checks pass at1280×720/200%; this
+  is not a full Dux runtime.
+- Notification colours follow cached live palettes in the deployed notifier;
+  exact release theme/history checks pass. Full enlarged-text notification reflow
+  and live icon-pack cache invalidation remain open.
 - NextKDE magnification metadata/runtime repair is complete. rdwm `9788af9`
   workarea-only float fit is accepted (504 core/two ignored; release panel7,
-  fullscreen11, snap10), installed in both user WM bindirs for next login.
+  fullscreen11, snap10), and included in the running `efa8f1f` WM build.
   Ordinary free floats adapt only to a new reserved area; explicit resize/drag
-  clears the limit and fullscreen is excluded. Running WM1714917 remains old,
-  so general overlap protection is not active yet. No WM restart was used.
+  clears the limit and fullscreen is excluded. Activation is complete; physical
+  display and broad app compatibility acceptance remain separate.
 - Post-photo colour refresh rereads the latest selection with bounded retries;
   this is not a cross-process compare-and-swap. Stronger synchronization against
   arbitrary external edits after the final reread remains a separate limit.
+
+## Latest live checkpoint — 2026-10-30
+
+The shell deployment journal is
+`~/.local/state/decebal/deployments/review3-20261030-230112/shell-reload-journal.json`.
+Its completed handoff preserved configuration and notification-history hashes.
+The running notifier, widget host, bar and Settings executable hashes match the
+optimized artifacts. Settings was subsequently refreshed on Wallpaper with its
+visible geometry and workspace preserved, and detects the new frame capability.
+
+The running WM is the optimized `efa8f1f` build (SHA-256
+`22eec653b2299f804999e258fb44548f8b5d125b93dbeb7175ea1446ec331236`).
+The successful journal is
+`~/.local/state/rdwm/restarts/20261030-234119-fu60m41l/journal.json`.
+It proves preservation of the three current clients' geometry, flags, tags, view
+and focus in that handoff. An earlier attempt rolled back after one pre-existing
+floating rectangle extended below the monitor and was recentered vertically.
+Helper `d463d0a` now refuses that condition before signaling; private tests prove
+refusal leaves geometry and process state unchanged. The successful retry
+preserved the then-current positions, not the earlier overflowing position.
+
+The optional desktop frame is default-off. Exact optimized private tests include
+real Settings controls, widgets and video wallpaper together, desktop stacking,
+external root-background ownership and edge-card visibility. These do not prove
+an actual Wayland compositor, mixed-DPI hardware or an exact Caelestia replica.
+The historical Settings disappearance during preview browsing remains unconfirmed;
+private preview stress and window-reuse tests passed without reproducing it.
