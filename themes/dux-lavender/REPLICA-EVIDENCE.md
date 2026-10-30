@@ -72,3 +72,21 @@ All/Files/Plugins provider claim; no matched full-modal pixel-parity claim.
 |---|---|
 |`replica-native-section4-launcher-720-100-dark-top.png`|`c2ff19f9ab54e4171cfd1bf703c7741b55c2b82209989e225e6b6a2613fd9444`|
 |`replica-native-section4-launcher-420-200-light-top.png`|`0155d9ec30abe5fab8f89455664c84003ce7c2b01f0cac470c54034df715ebb1`|
+
+## Section3 actual source DClockFace — native comparison pending
+
+Eight actual component grabs at content102×184/408×400, dark/light100/200,
+09/08 and Friday,30 October. Original variable font, ROND100/wght750; source-derived
+opsz92/200. Transparent component canvas; no painted mock or reference wallpaper.
+Raw metrics and limitations are in the port ledger. font.files stays unchanged.
+
+|File|SHA256|
+|---|---|
+|`replica-upstream-clock-102x184-dark-100.png`|`65e47c093dfc9a7374ca16c188b44e4151363c521410635930557252ac2e1eab`|
+|`replica-upstream-clock-408x400-dark-100.png`|`bb73076abbebff1bc9f971df399c4c744769e64f6fa875bfa8df3f55bf0cb342`|
+|`replica-upstream-clock-102x184-dark-200.png`|`b09d89d2b8b6afe9cd8691af7d20fc30ae192e070019ec13ff9644e6ac14fa9e`|
+|`replica-upstream-clock-408x400-dark-200.png`|`bb73076abbebff1bc9f971df399c4c744769e64f6fa875bfa8df3f55bf0cb342`|
+|`replica-upstream-clock-102x184-light-100.png`|`711127fc62398acc41b1236b609008e0626c3072521d858fcad0950361d3e528`|
+|`replica-upstream-clock-408x400-light-100.png`|`6e459e8901c6b9a6bb9507695d2898b82dcf7aa1075656847ef2f25cec6f8d90`|
+|`replica-upstream-clock-102x184-light-200.png`|`36fae9e0068d1d5b6813b4901fce5edcd9944e982bf6661ce8cdc12c6b6cd933`|
+|`replica-upstream-clock-408x400-light-200.png`|`6e459e8901c6b9a6bb9507695d2898b82dcf7aa1075656847ef2f25cec6f8d90`|

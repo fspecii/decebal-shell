@@ -45,3 +45,7 @@ softwareMIT alone is insufficient. No generated wallpaper is substituted for the
 upstream design. Wallhaven l3edjp/39zjq6 remain independent reviewed recommendations,
 not theme defaults; image authors/licences remain unknown in the catalogue. Existing
 Follow theme preference and custom-widget confirmation are preserved.
+
+Section3 test prerequisite: original GoogleSansFlex variable font is included
+unchanged as fonts/GoogleSansFlex-Variable.ttf under the same pinned source/OFL
+provenance above. It is not selected by font.files yet; static UI assets unchanged.

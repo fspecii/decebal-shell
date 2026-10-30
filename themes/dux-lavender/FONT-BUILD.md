@@ -9,10 +9,11 @@ No font installed globally; no fc-cache/config edits.
 
 GoogleSansFlex-400.ttf is a STATIC regular instance of upstream GoogleSansFlex.ttf,
 all axes pinned to source defaults: opsz18,wdth100,wght400,GRAD0,ROND0,slnt0. This
-removes fvar/gvar variability unsupported by the native regular-font rasterizer;
+removes fvar/gvar variability from the ordinary UI fontdue path;
 it does not substitute a different typeface. GoogleSansFlex-500/700.ttf are copied
-unchanged from upstream's own static instances. The variable regular is NOT
-bundled. All3static faces passed actual native fontdue rasterization for time,
+unchanged from upstream's own static instances. The original variable regular is now bundled separately as
+`fonts/GoogleSansFlex-Variable.ttf` for section3 private tests only; it is not yet
+listed in font.files. Static UI faces remain unchanged. All3static faces passed actual native fontdue rasterization for time,
 date,media andsystem sample strings, with nonempty coverage per nonspace glyph.
 
 Generation: official PyPI fonttools4.68.0 pure-Python wheel downloaded and SHA256
@@ -50,3 +51,15 @@ Variable regular source SHA256: `c6d53424121196b81de816b8daccf200e285dd506df4376
 |MaterialSymbolsRounded-LICENSE.txt|11358|`cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`|
 |MaterialSymbolsRounded.ttf|15141224|`7f3a16d9aa1b6f367eadc1614ad27308ae2c0e91e617e2069f122afd9f0c3c58`|
 |OFL.txt|4393|`425676ce436ceb37cdcd172e0bd4946f24c9eb3ed245b22971e60f5993d95723`|
+
+## Section3 variable-clock prerequisite (not activated)
+
+Exact upstream original `DCommon/assets/fonts/google-sans-flex/GoogleSansFlex.ttf`
+from pinned common43e05926 copied unchanged to fonts/GoogleSansFlex-Variable.ttf.
+4153300 bytes; SHA256 `c6d53424121196b81de816b8daccf200e285dd506df43766db3d7e8cdf06ee30`.
+Covered by existing complete package-root OFL.txt; no font conversion or new licence.
+Native owner proved existing ttf-parser0.21 optional gvar-alloc handles the source
+font's215 variation tuples for glyph A, exceeding its default32 stack bound.
+Renderer feature/cache and axis QA remain native ownership. font.files stays at
+four entries until renderer SHA/QA handoff; private native fixtures may add fifth.
+No font install or cache/config edit.

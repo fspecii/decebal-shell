@@ -347,3 +347,37 @@ shadows remain outside this bounded acceptance. General host packing was not add
 Follow theme choices remain exact reviewed l3edjp/39zjq6 hashes, no package wallpaper
 default or download. MIT source attribution unchanged. No runtime/Settings/rdwm
 implementation copied/edited by this evidence delta; no live configuration changes.
+
+### Section3 original font and actual DClockFace probe (not activated)
+
+Exact4153300-byte original variable font is now available as
+`fonts/GoogleSansFlex-Variable.ttf`, same pinned common source/OFL; SHA256
+`c6d53424121196b81de816b8daccf200e285dd506df43766db3d7e8cdf06ee30`.
+font.files remains FOUR entries: static UI400/500/700 and Material. Private native
+fixtures may add the fifth for tests; package activation awaits renderer SHA/QA.
+
+Actual unmodified common DClockFace was instantiated twice per private headless
+Sway startup:102×184 and408×400; hours09/minutes08, date Friday,30 October,
+roundedtrue, weight750, stock Purple dark/light, fontScale1/2. Four startups yielded
+eight raw component grabs, no painted wrapper/chrome or mock. Source uses automatic
+vertical layout for both sizes. fontFamily stays empty so variableFont=true,
+actual Google Sans Flex variable axes ROND100/wght750 are selected. Optical size
+is derived from vertical height/2:92 and200 (requested axis values, not a claim
+that the font's own axis range extends to200). No manual forced opsz108.
+
+| Content |Text scale|Digit size (pre-rounding)|Support size|Support height incl gap|Block top|
+|---|---|---|---|---|---|
+|102×184|100|80.832095|15.156018|23.546805|14.788930|
+|102×184|200|80.832095|28|44.4|4.988430|
+|408×400|100/200|201.786667|50|78|0|
+
+Dark/light geometry matches. Reference-size100 digitInk heights75 =>inkRatio.75;
+small rowAdvance1.261875/widthSize80.832095, large1.2159375/widthSize335.543562.
+The visible digit font pixel sizes round to81/202. Source support uses HorizontalFit
++elide/minimumPixelSize; small date is visibly cramped/tiny, especially with enlarged
+minimum text. Native comparison must distinguish ink-based display sizing from
+ordinary UI text enlargement and document any intentional date readability repair.
+Raw properties/child boxes: `/tmp/decebal-dux-replica-specialist/clock-capture/source-metrics.json`;
+harness/config/logs/captures in that directory. No live display, global fonts,
+reference writes or application launch. Native comparison awaits native renderer;
+these source captures do not certify native axes or whole-clock parity.
