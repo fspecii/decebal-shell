@@ -146,6 +146,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
 
     let (sw, sh) = (u32::from(screen.width_in_pixels), u32::from(screen.height_in_pixels));
     let popup = app.overlay();
+    let debug_popup_events = std::env::var_os("DECEBAL_DEBUG_POPUP_EVENTS").is_some();
     let passive = popup && app.popup_passive();
     // The size a popup takes depends on the UI scale, so tell the app before asking for it.
     app.set_scale(xft_scale(&conn, screen.root));
@@ -340,7 +341,18 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         _ => Response::NONE,
                     };
                 }
-                Event::FocusOut(f) if popup && app.popup_closes_on_focus_loss() && f.mode == NotifyMode::NORMAL && f.detail != NotifyDetail::INFERIOR => return Ok(()),
+                Event::FocusOut(f) if popup && app.popup_closes_on_focus_loss() && f.mode == NotifyMode::NORMAL && f.detail != NotifyDetail::INFERIOR => {
+                    // Mapping under PointerRoot and then explicitly focusing the popup can
+                    // queue a normal FocusOut followed by FocusIn for this same window.
+                    // Decide from the server's current focus, not that stale transition.
+                    let current_focus = conn.get_input_focus().ok().and_then(|cookie| cookie.reply().ok()).map(|reply| reply.focus);
+                    if debug_popup_events {
+                        eprintln!("popup focus event own={} mode={:?} detail={:?} current={:?}", win, f.mode, f.detail, current_focus);
+                    }
+                    if current_focus != Some(win) {
+                        return Ok(());
+                    }
+                }
                 Event::KeyRelease(k) => resp = app.key_release(keymap.lookup(k.detail, 0)),
                 Event::KeyPress(k) => {
                     let state: u16 = k.state.into();
