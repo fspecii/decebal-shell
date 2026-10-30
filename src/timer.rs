@@ -14,7 +14,7 @@ use std::{
         fd::AsRawFd,
         unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     },
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -110,6 +110,22 @@ pub struct Store {
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
+/// A running GUI can retain the old inode across an atomic package update.
+/// On Linux `current_exe` then names `dectimer (deleted)`, which cannot be spawned.
+/// Prefer an existing executable (including renamed standalone copies), otherwise
+/// use only the stable sibling installed by the same package, never a PATH search.
+fn worker_executable(current: &Path) -> Result<PathBuf> {
+    let executable = |path: &Path| fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+    if executable(current) {
+        return Ok(current.to_path_buf());
+    }
+    let sibling = current.with_file_name("dectimer");
+    if executable(&sibling) {
+        return Ok(sibling);
+    }
+    Err("Timer helper executable is unavailable. Reopen Timer after completing the update.".into())
+}
+
 impl Store {
     pub fn discover() -> Result<Self> {
         let base = std::env::var_os("XDG_STATE_HOME")
@@ -201,8 +217,11 @@ impl Store {
         let _guard = self.lock()?;
         let now = c.now();
         let mut s = self.read()?.at(now);
+        if matches!(action, TimerAction::StartIfIdle { .. }) && matches!(s.status, Status::Running | Status::Paused) {
+            return Err("An existing timer is active; finish or reset it before starting this task".into());
+        }
         match action {
-            TimerAction::Start { seconds, title } => {
+            TimerAction::Start { seconds, title } | TimerAction::StartIfIdle { seconds, title } => {
                 if !(1..=86400).contains(&seconds) || title.len() > 120 || title.chars().any(char::is_control) {
                     return Err("Use 1–86400 seconds and a title of at most 120 bytes".into());
                 }
@@ -312,13 +331,15 @@ impl Store {
         if !self.recovery_needed(&WallClock)? {
             return Ok(());
         }
-        Command::new(std::env::current_exe().map_err(err)?).arg("--timer-worker").arg(&self.dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(err)?;
+        let executable = worker_executable(&std::env::current_exe().map_err(err)?)?;
+        Command::new(executable).arg("--timer-worker").arg(&self.dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(err)?;
         Ok(())
     }
 }
 #[derive(Clone, Debug)]
 pub enum TimerAction {
     Start { seconds: u64, title: String },
+    StartIfIdle { seconds: u64, title: String },
     Pause,
     Resume,
     Reset,
@@ -348,6 +369,7 @@ pub struct TimerApp {
     snapshot: Snapshot,
     replace_input: bool,
     size: (u32, u32),
+    task: Option<String>,
 }
 impl TimerApp {
     pub fn new(store: Store) -> Self {
@@ -355,7 +377,25 @@ impl TimerApp {
         let error = result.as_ref().err().cloned().or_else(|| result.as_ref().ok().and_then(|s| s.notification_error.clone()));
         let snapshot = result.unwrap_or_default();
         let input = Self::duration_input(snapshot.duration);
-        Self { store, input, error, fonts: None, poll_token: std::sync::Arc::new(()), snapshot, replace_input: false, size: (560, 460) }
+        Self { store, input, error, fonts: None, poll_token: std::sync::Arc::new(()), snapshot, replace_input: false, size: (560, 460), task: None }
+    }
+    /// Prepare a named countdown without starting or overwriting shared state.
+    pub fn with_task(mut self, title: String) -> Result<Self> {
+        if title.trim().is_empty() || title.len() > 120 || title.chars().any(char::is_control) {
+            return Err("Task title must contain 1–120 UTF-8 bytes and no control characters".into());
+        }
+        if matches!(self.snapshot.status, Status::Running | Status::Paused) {
+            self.error = Some("An existing timer is active; finish or reset it before starting this task".into());
+        }
+        self.task = Some(title);
+        Ok(self)
+    }
+    fn task_title(&self) -> &str {
+        if matches!(self.snapshot.status, Status::Ready | Status::Complete) {
+            self.task.as_deref().unwrap_or(&self.snapshot.title)
+        } else {
+            &self.snapshot.title
+        }
     }
     fn duration_input(seconds: u64) -> String {
         // The editable field accepts MM:SS, unlike the HH:MM:SS countdown.
@@ -388,7 +428,7 @@ impl TimerApp {
             Status::Running => self.perform(TimerAction::Pause),
             Status::Paused => self.perform(TimerAction::Resume),
             _ => match parse_duration(&self.input) {
-                Ok(seconds) => self.perform(TimerAction::Start { seconds, title: "Timer".into() }),
+                Ok(seconds) => self.perform(TimerAction::StartIfIdle { seconds, title: self.task_title().to_owned() }),
                 Err(e) => self.error = Some(e),
             },
         }
@@ -426,14 +466,17 @@ impl WindowApp for TimerApp {
         use crate::gfx::fill_rounded;
         let t = crate::theme::th();
         pm.fill(t.background.color(1.));
+        fill_rounded(pm, 16., 12., 72., 30., 8., t.surface.color(1.));
         if self.fonts.is_none() {
             self.fonts = Fonts::load();
         }
         let w = self.size.0 as f32;
         let h = self.size.1 as f32;
+        fill_rounded(pm, w - 112., 12., 96., 30., 8., t.surface.color(1.));
         let cx = w / 2.;
         let top = ((h - 420.) / 2.).max(12.);
         let running = self.snapshot.status == Status::Running;
+        let task_title = self.task_title().to_owned();
         let label = match self.snapshot.status {
             Status::Running => "Pause",
             Status::Paused => "Resume",
@@ -453,11 +496,22 @@ impl WindowApp for TimerApp {
             fill_rounded(pm, cx - 160., top + 190., total * fraction, 4., 2., t.accent.color(1.));
         }
         if let Some(f) = &mut self.fonts {
+            f.draw(pm, "Notes", 30., 20., 13., Weight::Medium, t.text.color(1.));
+            f.draw(pm, "Widgets…", w - 100., 20., 13., Weight::Medium, t.text.color(1.));
+            if task_title != "Timer" {
+                let mut text = task_title.clone();
+                while !text.is_empty() && f.measure(&text, 13., Weight::Medium) > (w - 48.).max(1.) {
+                    text.pop();
+                }
+                let x = cx - f.measure(&text, 13., Weight::Medium) / 2.;
+                f.draw(pm, &text, x, top + 76., 13., Weight::Medium, t.text.color(1.));
+            }
             let mut center = |text: &str, y: f32, size: f32, weight: Weight, color| {
                 let x = cx - f.measure(text, size, weight) / 2.;
                 f.draw(pm, text, x, top + y, size, weight, color);
             };
             center("Timer", 8., 24., Weight::Medium, t.text.color(1.));
+
             center(
                 match self.snapshot.status {
                     Status::Ready => "Make time for your next task",
@@ -500,6 +554,18 @@ impl WindowApp for TimerApp {
     fn pointer_button(&mut self, x: f32, y: f32, b: Button, p: bool) -> Response {
         if b != Button::Left || !p {
             return Response::NONE;
+        }
+        if (16. ..88.).contains(&x) && (12. ..42.).contains(&y) {
+            if !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decnotes")]) {
+                self.error = Some("Could not open Notes; check that decnotes is installed".into());
+            }
+            return Response::REDRAW;
+        }
+        if (self.size.0 as f32 - 112. ..self.size.0 as f32 - 16.).contains(&x) && (12. ..42.).contains(&y) {
+            if !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decsettings"), "widgets".into()]) {
+                self.error = Some("Could not open Widget settings".into());
+            }
+            return Response::REDRAW;
         }
         let cx = self.size.0 as f32 / 2.;
         let y = y - ((self.size.1 as f32 - 420.) / 2.).max(12.);
@@ -571,7 +637,11 @@ impl WindowApp for TimerApp {
     fn tick(&mut self) -> Response {
         match self.store.snapshot() {
             Ok(s) => {
-                self.error = s.notification_error.clone();
+                // Polling may refresh worker diagnostics, but must not erase an
+                // explanation from the user's last action (e.g. an active timer).
+                if self.error.is_none() || self.error == self.snapshot.notification_error {
+                    self.error = s.notification_error.clone();
+                }
                 self.sync_snapshot(s, false);
             }
             Err(e) => self.error = Some(e),
@@ -616,6 +686,27 @@ mod tests {
         s.apply_at(TimerAction::Start { seconds: 60, title: "Tea".into() }, &FakeClock(100)).unwrap();
     }
     #[test]
+    fn worker_executable_survives_atomic_upgrade_without_a_path_search() {
+        let t = Temp::new();
+        fs::create_dir_all(&t.0).unwrap();
+        let renamed = t.0.join("my timer");
+        let installed = t.0.join("dectimer");
+        for path in [&renamed, &installed] {
+            fs::write(path, b"executable fixture").unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        assert_eq!(worker_executable(&renamed).unwrap(), renamed, "existing renamed copies keep their executable");
+        let deleted = t.0.join("dectimer (deleted)");
+        assert_eq!(worker_executable(&deleted).unwrap(), installed, "atomic updates retain a stable same-directory helper");
+        fs::set_permissions(&installed, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(worker_executable(&deleted).unwrap_err().contains("helper executable is unavailable"));
+        fs::remove_file(&installed).unwrap();
+        assert!(worker_executable(&deleted).is_err(), "a missing helper fails rather than searching PATH");
+        fs::create_dir(&installed).unwrap();
+        assert!(worker_executable(&deleted).is_err(), "a directory is never treated as an executable");
+    }
+
+    #[test]
     fn readonly_does_not_create() {
         let t = Temp::new();
         assert_eq!(t.store().snapshot().unwrap().status, Status::Ready);
@@ -635,6 +726,9 @@ mod tests {
         store.apply_at(TimerAction::Pause, &FakeClock(120)).unwrap();
         let before = fs::read(t.0.join("timer.json")).unwrap();
         store.recover().unwrap();
+        assert_eq!(fs::read(t.0.join("timer.json")).unwrap(), before);
+        // Another window can start between creating this UI and clicking Start.
+        assert!(t.store().apply(TimerAction::StartIfIdle { seconds: 25, title: "Stale UI".into() }).is_err());
         assert_eq!(fs::read(t.0.join("timer.json")).unwrap(), before);
         assert!(!t.0.join("worker.lock").exists());
         store.apply_at(TimerAction::Reset, &FakeClock(120)).unwrap();
@@ -736,6 +830,31 @@ mod tests {
         assert_eq!(app.input, "61:01", "reset restores the shared duration");
         assert_eq!(app.snapshot.status, Status::Ready);
         assert_eq!(parse_duration(&TimerApp::duration_input(86400)).unwrap(), 86400);
+    }
+    #[test]
+    fn note_task_is_a_draft_and_never_replaces_an_active_countdown() {
+        let t = Temp::new();
+        let store = t.store();
+        let app = TimerApp::new(store.clone()).with_task("A useful thought".into()).unwrap();
+        assert_eq!(app.task_title(), "A useful thought");
+        assert_eq!(store.snapshot().unwrap().status, Status::Ready);
+        assert_eq!(store.snapshot().unwrap().title, "Timer");
+        store.apply(TimerAction::Start { seconds: 60, title: "Existing task".into() }).unwrap();
+        let before = fs::read(t.0.join("timer.json")).unwrap();
+        let mut app = TimerApp::new(store.clone()).with_task("Next task".into()).unwrap();
+        assert_eq!(app.task_title(), "Existing task");
+        assert!(app.error.as_deref().unwrap().contains("existing timer"));
+        app.tick();
+        assert!(app.error.as_deref().unwrap().contains("existing timer"), "routine polling keeps the explanation visible");
+        assert_eq!(fs::read(t.0.join("timer.json")).unwrap(), before);
+        store.apply(TimerAction::Pause).unwrap();
+        let app2 = TimerApp::new(store).with_task("Later".into()).unwrap();
+        assert_eq!(app2.task_title(), "Existing task");
+        app.perform(TimerAction::Reset);
+        assert_eq!(app.task_title(), "Next task");
+        for title in ["".into(), "\nprivate".into(), "🦀".repeat(31)] {
+            assert!(TimerApp::new(t.store()).with_task(title).is_err());
+        }
     }
     #[test]
     fn native_controls_and_preview_are_visible() {

@@ -111,6 +111,18 @@ impl Notes {
             self.status = "New note · Ctrl+S to save".into()
         }
     }
+    fn focus_timer(&mut self) {
+        if !self.save(false) {
+            return;
+        }
+        // Only the title is shared; note bodies never become process arguments.
+        let title = timer_title(&self.title.text());
+        if crate::launch::spawn_argv(&[crate::launch::sibling_or_path("dectimer"), "--task".into(), title]) {
+            self.status = "Opened Timer · choose a duration and start when ready".into();
+        } else {
+            self.status = "Could not open Timer; check that dectimer is installed".into();
+        }
+    }
     fn edit(&mut self, e: &KeyEvent) {
         let ed = if self.focus_body { &mut self.body } else { &mut self.title };
         if e.ctrl {
@@ -193,7 +205,9 @@ impl WindowApp for Notes {
         let side = (w * 0.28).clamp(100., 240.);
         fill_rect(pm, 0., 0., side, h, t.sidebar.color(1.));
         fill_rounded(pm, 16., 58., side - 32., 34., 8., t.accent.color(1.));
+        fill_rounded(pm, 16., h - 48., side - 32., 32., 8., t.surface.color(1.));
         fill_rounded(pm, w - 96., 16., 80., 32., 8., t.accent.color(1.));
+        fill_rounded(pm, w - 230., 16., 124., 32., 8., t.surface.color(1.));
         if self.fonts.is_none() {
             self.fonts = Fonts::load()
         }
@@ -202,7 +216,9 @@ impl WindowApp for Notes {
         let sub = t.text_secondary.color(1.);
         f.draw(pm, "Notes", 20., 18., 22., Weight::SemiBold, ink);
         f.draw(pm, "+ New note", 26., 66., 14., Weight::Medium, t.accent_text.color(1.));
+        f.draw(pm, "Widgets…", 26., h - 40., 13., Weight::Medium, ink);
         f.draw(pm, "Save", w - 76., 24., 14., Weight::Medium, t.accent_text.color(1.));
+        f.draw(pm, "Focus timer", w - 215., 24., 14., Weight::Medium, ink);
         let visible = ((h - 146.) / 60.).max(0.) as usize;
         for (i, n) in self.rows.iter().skip(self.list_top).take(visible).enumerate() {
             let y = 110. + i as f32 * 60.;
@@ -292,7 +308,11 @@ impl WindowApp for Notes {
         }
         let side = (self.w as f32 * 0.28).clamp(100., 240.);
         if x < side {
-            if (58. ..92.).contains(&y) {
+            if (self.h as f32 - 48. ..self.h as f32 - 16.).contains(&y) {
+                if !crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decsettings"), "widgets".into()]) {
+                    self.status = "Could not open Widget settings".into();
+                }
+            } else if (58. ..92.).contains(&y) {
                 self.new_draft()
             } else if y >= 104. {
                 let i = self.list_top + ((y - 104.) / 60.) as usize;
@@ -304,6 +324,8 @@ impl WindowApp for Notes {
             }
         } else if y < 58. && x > self.w as f32 - 100. {
             self.save(false);
+        } else if (16. ..48.).contains(&y) && (self.w as f32 - 230. ..self.w as f32 - 106.).contains(&x) {
+            self.focus_timer();
         } else {
             self.focus_body = y >= 130.;
             let ed = if self.focus_body { &mut self.body } else { &mut self.title };
@@ -338,6 +360,8 @@ impl WindowApp for Notes {
     fn key(&mut self, e: &KeyEvent) -> Response {
         if e.ctrl && e.ch == Some('s') {
             self.save(e.shift);
+        } else if e.ctrl && e.shift && e.ch == Some('t') {
+            self.focus_timer();
         } else if e.ctrl && e.ch == Some('p') {
             if self.save(false) {
                 if let Some(callback) = &mut self.pin_latest {
@@ -371,6 +395,21 @@ impl WindowApp for Notes {
         Response::NONE
     }
 }
+/// Timer state permits at most 120 UTF-8 bytes and no control characters.
+fn timer_title(title: &str) -> String {
+    let mut out = String::new();
+    for c in title.trim().chars().filter(|c| !c.is_control()) {
+        if out.len() + c.len_utf8() > 120 {
+            break;
+        }
+        out.push(c);
+    }
+    if out.is_empty() {
+        "Focus time".into()
+    } else {
+        out
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,6 +419,13 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn focus_title_is_bounded_unicode_and_literal() {
+        assert_eq!(timer_title("  A {task}; $(literal)  "), "A {task}; $(literal)");
+        assert_eq!(timer_title("\n\t"), "Focus time");
+        assert_eq!(timer_title(&"🦀".repeat(40)), "🦀".repeat(30));
+        assert_eq!(timer_title("A\nB"), "AB");
+    }
     struct Temp(std::path::PathBuf);
     impl Temp {
         fn new() -> Self {

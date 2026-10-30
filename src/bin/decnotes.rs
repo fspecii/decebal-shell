@@ -21,7 +21,7 @@ fn main() {
             }
             "--new" => blank = true,
             "--help" | "-h" => {
-                println!("decnotes [--new]\nCtrl+N new · Ctrl+S save · Ctrl+Shift+S save copy · Tab title/body");
+                println!("decnotes [--new]\nCtrl+N new · Ctrl+S save · Ctrl+Shift+S save copy · Ctrl+Shift+T focus timer · Tab title/body");
                 return;
             }
             _ => {

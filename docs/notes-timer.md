@@ -12,6 +12,15 @@ can still lose an unsaved draft. Notes are local plaintext, not encrypted or
 cloud-synchronised. Files live under `$XDG_DATA_HOME/decebal/notes` (normally
 `~/.local/share/decebal/notes`), with private directory/file permissions.
 
+Click **Focus timer** in Notes (or Ctrl+Shift+T) to prepare a countdown for the
+current note. The note saves first; a save failure keeps the draft in Notes.
+Only its title is passed to Timer, bounded to 120 UTF-8 bytes, never the body.
+Choose a duration and press Start when ready. Opening this view does not start,
+reset or replace a running/paused countdown. Reset or finish the existing timer
+before starting the requested task. Its title then appears in the shared timer
+widget and completion notification. Timer's **Notes** button returns to Notes;
+both apps have **Widgets…** to open the widget catalog and creator.
+
 Timer accepts seconds or MM:SS, with clickable 5/15/25-minute presets. Click the
 duration to replace it, then Start; Pause/Resume and Reset share state with its
 widget. Reopening restores its saved duration; a duration change from another
@@ -42,5 +51,5 @@ comfortable displaying private content. The timer card reads the same countdown
 as the app. Neither widget needs `allow_exec`. Gallery previews use fictional
 sample data and never read private notes. Existing widget layouts remain intact.
 
-CLI: `decnotes [--new]`, `dectimer`, `dectimer autostart`, `decwidgets add builtin:quick-note`,
+CLI: `decnotes [--new]`, `dectimer [--task TITLE]`, `dectimer autostart`, `decwidgets add builtin:quick-note`,
 `decwidgets add builtin:timer-card`. Both apps support `--help` and `--version`.
