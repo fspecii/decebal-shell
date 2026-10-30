@@ -30,3 +30,11 @@ A separate **candidate**, not an attributed cause: launching generic `decsetting
 Before claiming a fix, capture one recurrence with a supervised launch recording wait status and timestamps, plus opt-in backend exit-reason logging (WM_DELETE, own-window destruction, app Close, connection failure). Record generic-instance signal requests with sender/target PID. This distinguishes a signal/toggle from a render error without guessing or silently changing window lifetime behavior.
 
 This bounded no-WM Xvfb exercise does not exclude interaction with rdwm, live compositor, user-installed packages, long-running resource growth, or a particular failing theme. No production changes were made for this investigation.
+
+## Generic reopen reliability change
+
+A subsequent bounded change removes the generic-launch toggle behavior: every Settings launch takes a non-signalling hold lock. A second generic launch sends a typed Activate IPC request, which returns the existing backend activation action without changing pane, scroll, search, popup, or the current edit. Explicit pane requests retain their existing navigation behavior. Explicit `--config` requests must match the running instance; rejection preserves its window. Reuse waits up to a two-second startup deadline (plus the bounded current IPC attempt), then reports failure rather than signalling or replacing anything.
+
+The private stress harness supports `SETTINGS_CHECK_REOPEN=1`: it checks both generic launch forms against the retained PID/XID/current pane and verifies mismatched config rejection. The model test also verifies an active unsaved editor remains active after Activate. This closes a concrete reliability problem, but does not establish why the historical preview-browsing window disappeared.
+
+Native reopen proof passed at `/tmp/settings-generic-reopen-proof/result.json`, debug binary SHA `979d8c4b779726afb882cc6efd805e263c0601869f2757887b4bc9cbf375e4cd`: both generic and matching-config launches exited 0 while original PID 3475714/XID 2097152 stayed on Appearance; mismatched config exited 1 and preserved the same PID/XID/pane. Preview stress and corrupt-cache warm launch also passed. Four navigation IPC tests, the model navigation/draft test, and lib/decsettings clippy with warnings denied passed.

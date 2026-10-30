@@ -143,6 +143,22 @@ def main():
             capture('after-stress', final)
             result.update(final_pane=final['pane'], final_frames=final['frames'],
                           unexpected_exit=app.poll(), corrupted_private_png=corrupted)
+            if os.environ.get('SETTINGS_CHECK_REOPEN') == '1':
+                original_pane = doc()['pane']
+                original_xid = window
+                reopen = []
+                for args, expected_status in [([], 0), (['--config', str(cfg)], 0),
+                                              (['--config', str(root / 'different.toml')], 1)]:
+                    launch = subprocess.run([str(binary), *args], env=env, text=True,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+                    assert launch.returncode == expected_status, launch.stderr
+                    time.sleep(.15)
+                    assert app.poll() is None, f'Reopen killed Settings: {app.returncode}'
+                    assert run('xdotool', 'search', '--class', 'DecSettings').splitlines() == [original_xid]
+                    assert doc()['pane'] == original_pane, 'Generic reopen changed current pane'
+                    reopen.append({'args': args, 'status': launch.returncode, 'stderr': launch.stderr,
+                                   'retained_pid': app.pid, 'retained_xid': original_xid, 'pane': doc()['pane']})
+                result['generic_reopen'] = reopen
             # Reload the same private cache in a fresh process, so corrupt data is
             # decoded again rather than hidden by the first process's pixmap cache.
             app.terminate()

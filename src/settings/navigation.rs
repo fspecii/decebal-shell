@@ -1,4 +1,4 @@
-//! Bounded, data-only pane requests to the running Settings model.
+//! Bounded, data-only activation and pane requests to the running Settings model.
 use super::{appearance, panes::PANES};
 use std::fs;
 use std::io::{self, Read, Write};
@@ -68,26 +68,40 @@ fn endpoint_in(base: &Path, display: u64, fallback: &Path) -> io::Result<PathBuf
     Ok(path)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Request {
+    Activate,
+    Pane(String),
+}
+
+pub fn activate(path: &Path, config: Option<&Path>) -> io::Result<()> {
+    send_request(path, Request::Activate, config)
+}
+
 pub fn send(path: &Path, pane: &str) -> io::Result<()> {
-    send_request(path, pane, None)
+    send_request(path, Request::Pane(pane.into()), None)
 }
 
 pub fn send_for_config(path: &Path, pane: &str, config: &Path) -> io::Result<()> {
-    send_request(path, pane, Some(config))
+    send_request(path, Request::Pane(pane.into()), Some(config))
 }
 
 fn absolute(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| if path.is_absolute() { path.to_owned() } else { std::env::current_dir().unwrap_or_default().join(path) })
 }
 
-fn send_request(path: &Path, pane: &str, config: Option<&Path>) -> io::Result<()> {
-    if pane.len() > 128 || resolve(pane).is_none() {
+fn send_request(path: &Path, request: Request, config: Option<&Path>) -> io::Result<()> {
+    if matches!(&request, Request::Pane(pane) if pane.len() > 128 || resolve(pane).is_none()) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "unknown Settings pane"));
     }
     let mut stream = UnixStream::connect(path)?;
     stream.set_read_timeout(Some(Duration::from_millis(250)))?;
     stream.set_write_timeout(Some(Duration::from_millis(250)))?;
-    let request = serde_json::json!({"pane": pane, "config": config.map(absolute)}).to_string();
+    let request = match request {
+        Request::Activate => serde_json::json!({"activate": true, "config": config.map(absolute)}),
+        Request::Pane(pane) => serde_json::json!({"pane": pane, "config": config.map(absolute)}),
+    }
+    .to_string();
     if request.len() > 2048 {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Settings request too large"));
     }
@@ -95,7 +109,7 @@ fn send_request(path: &Path, pane: &str, config: Option<&Path>) -> io::Result<()
     let mut ack = [0; 1];
     stream.read_exact(&mut ack)?;
     if ack != *b"K" {
-        return Err(io::Error::other("Settings refused pane request (the requested config may differ from the running window)"));
+        return Err(io::Error::other("Settings refused request (the requested config may differ from the running window)"));
     }
     Ok(())
 }
@@ -153,8 +167,13 @@ impl Listener {
                                 if let Ok(request) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                                     let matches_config = request.get("config").filter(|c| !c.is_null()).map(|c| c.as_str().map(PathBuf::from).as_ref() == self.config.as_ref()).unwrap_or(true);
                                     if matches_config {
-                                        if let Some(pane) = request.get("pane").and_then(|p| p.as_str()).filter(|p| p.len() <= 128).and_then(resolve) {
-                                            if tx.try_send(pane).is_ok() {
+                                        let action = match (request.get("activate"), request.get("pane")) {
+                                            (Some(serde_json::Value::Bool(true)), None) => Some(Request::Activate),
+                                            (None, Some(pane)) => pane.as_str().filter(|p| p.len() <= 128).and_then(resolve).map(Request::Pane),
+                                            _ => None,
+                                        };
+                                        if let Some(action) = action {
+                                            if tx.try_send(action).is_ok() {
                                                 wake();
                                                 let _ = stream.write_all(b"K");
                                             }
@@ -188,7 +207,7 @@ impl Listener {
     }
 }
 pub struct Requests {
-    pub rx: Receiver<String>,
+    pub rx: Receiver<Request>,
     stop: Arc<AtomicBool>,
 }
 impl Drop for Requests {
@@ -220,7 +239,7 @@ mod tests {
         let listener = Listener::bind(path.clone()).unwrap().for_config(&a.join("config.toml"));
         let requests = listener.start(Arc::new(|| {}));
         send_for_config(&path, "widgets", &a.join("config.toml")).unwrap();
-        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), "widgets");
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), Request::Pane("widgets".into()));
         assert!(send_for_config(&path, "widgets", &b.join("config.toml")).is_err());
         drop(requests);
         let _ = fs::remove_dir_all(root);
@@ -247,7 +266,7 @@ mod tests {
         let new = Listener::bind(path.clone()).unwrap().start(Arc::new(|| {}));
         std::thread::sleep(Duration::from_millis(550));
         send(&path, "welcome").unwrap();
-        assert_eq!(new.rx.recv_timeout(Duration::from_millis(500)).unwrap(), "welcome");
+        assert_eq!(new.rx.recv_timeout(Duration::from_millis(500)).unwrap(), Request::Pane("welcome".into()));
         drop(new);
         let _ = fs::remove_dir_all(dir);
     }
@@ -267,19 +286,23 @@ mod tests {
             count.fetch_add(1, Ordering::Relaxed);
         }));
         send(&path, "getting-started").unwrap();
-        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), "welcome");
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), Request::Pane("welcome".into()));
         assert_eq!(wakes.load(Ordering::Relaxed), 1);
         assert!(send_for_config(&path, "welcome", &dir.join("other.toml")).is_err());
         assert!(requests.rx.try_recv().is_err());
         send_for_config(&path, "welcome", &config).unwrap();
-        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), "welcome");
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), Request::Pane("welcome".into()));
+        activate(&path, Some(&config)).unwrap();
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), Request::Activate);
+        assert!(activate(&path, Some(&dir.join("other.toml"))).is_err());
+        assert!(requests.rx.try_recv().is_err());
         assert!(send(&path, "unknown").is_err());
         assert!(send(&path, &"x".repeat(1000)).is_err());
         let mut invalid = UnixStream::connect(&path).unwrap();
         invalid.write_all(&[b'x'; 140]).unwrap();
         drop(invalid);
         send(&path, "icons").unwrap();
-        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), "icons");
+        assert_eq!(requests.rx.recv_timeout(Duration::from_secs(1)).unwrap(), Request::Pane("icons".into()));
         drop(requests);
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while path.exists() && std::time::Instant::now() < deadline {

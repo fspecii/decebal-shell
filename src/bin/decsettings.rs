@@ -70,28 +70,29 @@ fn main() {
             std::process::exit(2);
         }));
     }
-    // Explicit destinations never signal or replace the existing Settings process.
-    let guard = if pane.is_some() { decebal::single::hold("decsettings") } else { decebal::single::acquire("decsettings") };
+    // Reopening Settings always reveals/reuses the current window; never toggle it off.
+    let guard = decebal::single::hold("decsettings");
     let endpoint = decebal::settings::navigation::endpoint().unwrap_or_else(|e| {
         eprintln!("decsettings: navigation endpoint: {e}");
         std::process::exit(1);
     });
     let Some(_guard) = guard else {
-        if let Some(pane) = pane.as_deref() {
-            // The lock is acquired before the listener is bound; tolerate a concurrent startup.
-            let mut last = None;
-            for _ in 0..20 {
-                let result = if explicit_config { decebal::settings::navigation::send_for_config(&endpoint, pane, &paths.rdwm_config) } else { decebal::settings::navigation::send(&endpoint, pane) };
-                match result {
-                    Ok(()) => return,
-                    Err(e) => last = Some(e),
-                }
-                std::thread::sleep(std::time::Duration::from_millis(50));
+        // The lock is acquired before the listener is bound; tolerate concurrent startup.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let error = loop {
+            let result = match pane.as_deref() {
+                Some(pane) if explicit_config => decebal::settings::navigation::send_for_config(&endpoint, pane, &paths.rdwm_config),
+                Some(pane) => decebal::settings::navigation::send(&endpoint, pane),
+                None => decebal::settings::navigation::activate(&endpoint, explicit_config.then_some(paths.rdwm_config.as_path())),
+            };
+            match result {
+                Ok(()) => return,
+                Err(e) if std::time::Instant::now() >= deadline => break e,
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
             }
-            eprintln!("decsettings: could not navigate running Settings: {}", last.unwrap());
-            std::process::exit(1);
-        }
-        return;
+        };
+        eprintln!("decsettings: could not reuse running Settings: {error}");
+        std::process::exit(1);
     };
     let listener = decebal::settings::navigation::Listener::bind(endpoint).unwrap_or_else(|e| {
         eprintln!("decsettings: navigation listener: {e}");
@@ -106,4 +107,5 @@ fn main() {
         eprintln!("decsettings: {e}");
         std::process::exit(1);
     }
+    decebal::log_info!("window backend returned normally");
 }

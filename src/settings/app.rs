@@ -215,7 +215,11 @@ impl SettingsApp {
 
     fn drain_navigation(&mut self) -> bool {
         let mut changed = false;
-        while let Some(pane) = self.navigation.as_ref().and_then(|n| n.rx.try_recv().ok()) {
+        while let Some(request) = self.navigation.as_ref().and_then(|n| n.rx.try_recv().ok()) {
+            let super::navigation::Request::Pane(pane) = request else {
+                changed = true;
+                continue; // Reveal the same window without touching its current work.
+            };
             // Retain drafts, but never let an invisible field capture keys on another page.
             if let Some((id, field)) = self.edit.take() {
                 self.suspended_edits.insert(self.edit_location(), (id, field, self.scroll));
@@ -1868,6 +1872,12 @@ mod key_tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("request.sock");
         a.listen_for_navigation(super::super::navigation::Listener::bind(path.clone()).unwrap());
+        super::super::navigation::activate(&path, None).unwrap();
+        let response = a.tick();
+        assert_eq!(response.action, Some(Action::Activate));
+        assert_eq!(PANES[a.m.sel.pane].id, "general");
+        assert_eq!(a.edit.as_ref().unwrap().1.text(), "draft not saved");
+        assert!(a.suspended_edits.is_empty());
         for (name, pane) in [("welcome", "welcome"), ("icons", "icons"), ("appearance/fonts", "appearance")] {
             super::super::navigation::send(&path, name).unwrap();
             assert!(a.tick().redraw);
