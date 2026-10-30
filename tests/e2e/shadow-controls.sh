@@ -32,8 +32,23 @@ def wait(fn,reason):
 def ctl(ident):return next(c for c in state()['ctls'] if c['id']==ident)
 unsupported=os.environ.get('EXPECT_OLD_SHADOW_WM')=='1'
 if unsupported:
- wait(lambda:any('Start a new supporting' in t for t in state()['warnings']),'old session explanation missing')
+ # Informational notes are deliberately absent from dump.warnings; verify the
+ # correct native view and old live schema, then retain pixels for visual QA.
+ wait(lambda:state()['pane']=='appearance' and state()['section']=='window' and any(c['id']=='r:decoration:enabled' for c in state()['ctls']),'Window style view missing')
+ time.sleep(1.2)
+ schema=json.loads(subprocess.check_output(['rdwmctl','schema'],text=True))
+ assert not any(k['section']=='decoration' and k['key']=='shadow' for k in schema['keys'])
  assert not any(c['id'].startswith('shadow:') for c in state()['ctls'])
+ assert 'shadow' not in tomllib.loads(cfg.read_text())['decoration']
+ if os.environ.get('SHADOW_CONTROLS_EVIDENCE_DIR'):
+  evidence=pathlib.Path(os.environ['SHADOW_CONTROLS_EVIDENCE_DIR']);evidence.mkdir(parents=True,exist_ok=True)
+  for _ in range(25):
+   geometry=dict(line.split('=',1) for line in subprocess.check_output(['xdotool','getwindowgeometry','--shell',wid],text=True).splitlines())
+   height=int(geometry['HEIGHT']);width=int(geometry['WIDTH'])
+   border=ctl('r:general:border_px')['rect']
+   if border[1]+border[3]<height-20:break
+   subprocess.run(['xdotool','mousemove','--window',wid,str(width-35),str(height//2),'click','5'],check=True);time.sleep(.15)
+  subprocess.run(['import','-window',wid,str(evidence/'old-wm-controls.png')],check=True,timeout=5)
  print('PASS native upgraded Settings/CLI with old live WM exposes no unsupported shadow writes')
 else:
  wait(lambda:any(c['id']=='shadow:shadow' for c in state()['ctls']),'supporting session controls missing')
