@@ -6,14 +6,21 @@ No tests or live changes were performed for this report.
 
 ## 1. Third-party application indicators
 
+**Backend checkpoint:** `src/sni.rs` now provides a dormant worker foundation.
+`bash tests/e2e/sni-backend.sh` passed real Host tests against two private items,
+owned/external watchers, signals, pixels, menus, actions and reownership. It is
+not started by the bar or dock yet. Visible layouts/input, real-app verification,
+custom icon paths, overlays, external-host unregistration and initial-property
+retries remain. The original UI acceptance criteria below still apply.
+
 **User trigger:** start a chat/sync/VPN application that registers an indicator,
 then close its normal window. The current built-in status “tray” provides no
 application-specific reopen/menu affordance.
 
 **Evidence:** `src/menubar/mod.rs::Tray` is a fixed enum of shell controls;
-`src/taskbar/mod.rs` lays out that fixed list. Source search finds no
-`org.kde.StatusNotifierWatcher`, StatusNotifierItem host or XEmbed manager.
-Existing D-Bus patterns live in `src/dbus.rs` and `src/notify/mod.rs`.
+`src/taskbar/mod.rs` still lays out that fixed list. The SNI backend is not wired
+into either surface; no XEmbed manager exists. Existing D-Bus patterns live in
+`src/dbus.rs` and `src/notify/mod.rs`.
 
 **Implementation:** add a session-bus StatusNotifier watcher/host with bounded
 icon/pixmap decoding and ownership/lifecycle handling, then expose its items in
