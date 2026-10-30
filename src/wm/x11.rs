@@ -1,6 +1,7 @@
 //! EWMH tracker (_NET_CLIENT_LIST / _NET_ACTIVE_WINDOW), used on dwm, i3, openbox, bspwm, ...
 
 use super::{mark_occupied, Control, Notify, Tracker, Window, Workspace};
+use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::*;
@@ -148,9 +149,13 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     tracker.set_control(conn.clone());
     let (wm_state, demands) = (atom(&conn.conn, "_NET_WM_STATE"), atom(&conn.conn, "_NET_WM_STATE_DEMANDS_ATTENTION"));
 
+    let Ok((tracker, stop)) = tracker.worker() else { return false };
     std::thread::spawn(move || {
         let conn = &conn.conn;
         loop {
+            if !matches!(crate::backend::poll_readable(&[stop.as_raw_fd()], Some(std::time::Duration::ZERO)), Ok(ready) if !ready[0]) {
+                return;
+            }
             let (windows, workspaces) = {
                 let active_win = prop32(conn, root, active, AtomEnum::WINDOW).first().copied().unwrap_or(0);
                 let mut urgent_desktops: Vec<u32> = Vec::new();
@@ -165,10 +170,14 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                                 urgent_desktops.push(d);
                             }
                         }
+                        let mut title = text_prop(conn, w, net_name, utf8);
+                        if title.is_empty() {
+                            title = text_prop(conn, w, AtomEnum::WM_NAME.into(), AtomEnum::STRING);
+                        }
                         Window {
                             id: w as u64,
                             app_id: parse_wm_class(&text_prop(conn, w, AtomEnum::WM_CLASS.into(), AtomEnum::STRING)),
-                            title: String::from_utf8_lossy(&text_prop(conn, w, net_name, utf8)).into_owned(),
+                            title: String::from_utf8_lossy(&title).into_owned(),
                             active: w == active_win,
                             desktop,
                         }
@@ -193,12 +202,22 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
             if tracker.replace(windows, workspaces) {
                 notify();
             }
-            // Block until something we display changes.
+            // Drain x11rb's queued events before polling its socket. Last-owner drop
+            // closes `stop`, waking this wait even when the X server has no events.
             loop {
-                match conn.wait_for_event() {
-                    Ok(Event::PropertyNotify(e)) if [client_list, active, current, names, number, wm_desktop].contains(&e.atom) || Some(e.atom) == wm_state => break,
-                    Ok(_) => {}
+                match conn.poll_for_event() {
+                    Ok(Some(Event::PropertyNotify(e)))
+                        if [client_list, active, current, names, number, wm_desktop, net_name, AtomEnum::WM_CLASS.into(), AtomEnum::WM_NAME.into()].contains(&e.atom) || Some(e.atom) == wm_state =>
+                    {
+                        break
+                    }
+                    Ok(Some(_)) => continue,
                     Err(_) => return,
+                    Ok(None) => {}
+                }
+                match crate::backend::poll_readable(&[conn.stream().as_raw_fd(), stop.as_raw_fd()], None) {
+                    Ok(ready) if !ready[1] => {}
+                    _ => return,
                 }
             }
         }

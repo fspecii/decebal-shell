@@ -8,6 +8,7 @@ pub mod wayland;
 #[cfg(feature = "x11")]
 pub mod x11;
 
+use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -101,14 +102,36 @@ pub fn display_name(app_id: &str) -> String {
     }
 }
 
-/// Handle to a running tracker thread plus its shared state.
-#[derive(Clone, Default)]
+/// Public handles own the lifetime; collectors share state without retaining this lease.
+/// Closing the write ends wakes even an idle protocol collector immediately on last-owner drop.
+#[derive(Default)]
+struct Owners {
+    wake: Mutex<Vec<UnixStream>>,
+}
+
+/// Handle to running tracker collectors plus their shared state. Clones keep tracking alive;
+/// dropping the last public handle wakes and ends all collectors without periodic polling.
+#[derive(Clone)]
 pub struct Tracker {
     state: Arc<Mutex<WmState>>,
     control: Arc<Mutex<Option<Arc<dyn Control>>>>,
+    owners: Option<Arc<Owners>>,
+}
+
+impl Default for Tracker {
+    fn default() -> Self {
+        Self { state: Arc::default(), control: Arc::default(), owners: Some(Arc::default()) }
+    }
 }
 
 impl Tracker {
+    /// A collector must not count as a public owner of its own lifetime.
+    fn worker(&self) -> std::io::Result<(Self, UnixStream)> {
+        let (write, read) = UnixStream::pair()?;
+        self.owners.as_ref().expect("only public tracker handles may start collectors").wake.lock().unwrap_or_else(|p| p.into_inner()).push(write);
+        Ok((Self { state: self.state.clone(), control: self.control.clone(), owners: None }, read))
+    }
+
     fn lock(&self) -> MutexGuard<'_, WmState> {
         // A poisoned lock only means a tracker thread panicked; the data is still usable.
         self.state.lock().unwrap_or_else(|p| p.into_inner())
@@ -220,6 +243,23 @@ impl ActiveWindow for Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn collectors_do_not_own_their_lifetime_and_last_public_clone_wakes_them() {
+        use std::os::fd::AsRawFd;
+        let t = Tracker::default();
+        let clone = t.clone();
+        let (worker, stop) = t.worker().unwrap();
+        let fd = stop.as_raw_fd();
+        drop(t);
+        assert_eq!(crate::backend::poll_readable(&[fd], Some(std::time::Duration::ZERO)).unwrap(), [false]);
+        clone.replace(vec![Window { title: "still alive".into(), ..Default::default() }], vec![]);
+        assert_eq!(worker.snapshot().windows[0].title, "still alive");
+        drop(clone);
+        assert_eq!(crate::backend::poll_readable(&[fd], Some(std::time::Duration::from_secs(1))).unwrap(), [true]);
+        // Keeping the worker's shared state alive cannot retain the public lease.
+        assert!(worker.owners.is_none());
+    }
 
     #[test]
     fn matches_exact_and_suffix() {

@@ -13,6 +13,7 @@ use smithay_client_toolkit::reexports::protocols_wlr::foreign_toplevel::v1::clie
     zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
 };
 use std::collections::HashMap;
+use std::os::fd::AsRawFd;
 use std::sync::{Arc, Mutex};
 use wayland_protocols::ext::workspace::v1::client::{
     ext_workspace_group_handle_v1::{self, ExtWorkspaceGroupHandleV1},
@@ -147,9 +148,42 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
         h.manager = globals.bind::<ExtWorkspaceManagerV1, _, _>(&qh, 1..=1, ()).ok();
     }
     tracker.set_control(Arc::new(Remote { conn: conn.clone(), handles: handles.clone() }));
+    let Ok((tracker, stop)) = tracker.worker() else { return false };
     std::thread::spawn(move || {
         let mut wm = Wm { tracker, notify, toplevels: HashMap::new(), workspaces: HashMap::new(), handles };
-        while queue.blocking_dispatch(&mut wm).is_ok() {}
+        loop {
+            if !matches!(crate::backend::poll_readable(&[stop.as_raw_fd()], Some(std::time::Duration::ZERO)), Ok(ready) if !ready[0]) {
+                return;
+            }
+            if queue.dispatch_pending(&mut wm).is_err() {
+                return;
+            }
+            match queue.flush() {
+                Ok(()) => {}
+                Err(smithay_client_toolkit::reexports::client::backend::WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // Only backpressure needs a writable wait; idle tracking has no timer.
+                    // A stop remains observable within this bounded wait.
+                    if crate::backend::poll_writable(conn.backend().poll_fd().as_raw_fd(), std::time::Duration::from_millis(100)).is_err() {
+                        return;
+                    }
+                    continue;
+                }
+                Err(_) => return,
+            }
+            let Some(guard) = queue.prepare_read() else { continue };
+            match crate::backend::poll_readable(&[guard.connection_fd().as_raw_fd(), stop.as_raw_fd()], None) {
+                Ok(ready) if !ready[1] => {
+                    if ready[0] {
+                        match guard.read() {
+                            Ok(_) => {}
+                            Err(smithay_client_toolkit::reexports::client::backend::WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                            Err(_) => return,
+                        }
+                    }
+                }
+                _ => return,
+            }
+        }
     });
     true
 }
