@@ -505,6 +505,7 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Apps, Section::Colours, "Theme font in GTK apps", "gtk font"),
     (Tab::Apps, Section::Colours, "X11 terminals", "xterm urxvt xresources"),
     (Tab::Apps, Section::Colours, "Choose what is themed", "advanced targets per app options"),
+    (Tab::Apps, Section::Colours, "File manager appearance", "files nautilus explorer windows finder macos profile spacing"),
     (Tab::Apps, Section::Colours, "GTK apps", "gtk3 gtk4 libadwaita nautilus omarchy hooks editors browser chrome qt kvantum x11 per app"),
     (Tab::Apps, Section::Colours, "Icon theme for apps", "gtk qt icons papirus"),
     (Tab::Apps, Section::Colours, "Cursor theme for apps", "xcursor gtk x11 pointer"),

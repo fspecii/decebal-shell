@@ -155,6 +155,15 @@ pub fn css(p: &Palette, gtk4: bool) -> String {
     s
 }
 
+/// Keep the native palette pipeline, then append only Nautilus-scoped geometry.
+pub fn css_with_profile(p: &Palette, cfg: &Config, gtk4: bool) -> String {
+    let mut s = css(p, gtk4);
+    if gtk4 {
+        s.push_str(&super::file_manager::css(cfg.file_manager_style));
+    }
+    s
+}
+
 /// `gtk-decoration-layout`: the window buttons on the left for the macOS titlebar style, on the right for classic.
 pub fn layout(p: &Palette) -> &'static str {
     if p.classic_buttons {
@@ -230,9 +239,9 @@ impl Target for Gtk {
             let path = env.config_home.join(dir).join("gtk.css");
             if legacy_stylesheet(&path, env) {
                 // Whole-file edits participate in the same original-byte backup/undo transaction.
-                plan.edits.push(Edit::Whole { path, text: css(p, gtk4) });
+                plan.edits.push(Edit::Whole { path, text: css_with_profile(p, cfg, gtk4) });
             } else {
-                plan.edits.push(Edit::Block { path, comment: Comment::Css, text: css(p, gtk4) });
+                plan.edits.push(Edit::Block { path, comment: Comment::Css, text: css_with_profile(p, cfg, gtk4) });
             }
             plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings(p, cfg, font.as_deref()) });
         }

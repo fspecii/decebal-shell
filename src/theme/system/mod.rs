@@ -17,6 +17,7 @@
 //! Nothing here runs unless the user switched it on (`decthemectl system on`, or the Theme pane).
 
 pub mod cli;
+pub mod file_manager;
 pub mod files;
 pub mod gtk;
 pub mod omarchy;
@@ -155,6 +156,8 @@ pub struct Config {
     pub cursor_theme: Option<String>,
     /// Also send the reload signals Omarchy uses for kitty (SIGUSR1), ghostty/btop (SIGUSR2) and helix (SIGUSR1).
     pub signals: bool,
+    /// Independent visual profile for Files; theme changes preserve this choice.
+    pub file_manager_style: file_manager::Style,
     /// Per-target options that differ from their default (see [`OPTIONS`]), `"options"` in the JSON.
     pub options: BTreeMap<String, bool>,
 }
@@ -165,7 +168,7 @@ pub const OPTIONS: &[(&str, bool, &str, &str)] =
 
 impl Default for Config {
     fn default() -> Self {
-        Self { enabled: true, targets: BTreeMap::new(), icon_theme: None, cursor_theme: None, signals: false, options: BTreeMap::new() }
+        Self { enabled: true, targets: BTreeMap::new(), icon_theme: None, cursor_theme: None, signals: false, file_manager_style: file_manager::Style::Native, options: BTreeMap::new() }
     }
 }
 
@@ -180,6 +183,7 @@ impl Config {
         let s = |k: &str| o.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
         c.icon_theme = s("iconTheme");
         c.cursor_theme = s("cursorTheme");
+        c.file_manager_style = o.get("fileManagerStyle").and_then(Value::as_str).and_then(file_manager::Style::parse).unwrap_or_default();
         c.signals = o.get("signals").and_then(Value::as_bool).unwrap_or(false);
         if let Some(t) = o.get("options").and_then(Value::as_object) {
             c.options = t.iter().filter(|(k, _)| OPTIONS.iter().any(|o| o.0 == k.as_str())).filter_map(|(k, v)| v.as_bool().map(|b| (k.clone(), b))).collect();
@@ -205,6 +209,7 @@ impl Config {
     pub fn to_json(&self) -> Value {
         let mut o = serde_json::Map::new();
         o.insert("enabled".into(), json!(self.enabled));
+        o.insert("fileManagerStyle".into(), json!(self.file_manager_style.id()));
         if !self.targets.is_empty() {
             o.insert("targets".into(), json!(self.targets));
         }
@@ -905,6 +910,18 @@ mod tests {
         c.save(&f).unwrap();
         assert_eq!(Config::load(&f), c);
         assert!(std::fs::read_to_string(&f).unwrap().contains("\"bar\""), "other keys kept");
+    }
+
+    #[test]
+    fn file_manager_profile_round_trip_and_invalid_fallback() {
+        for style in ["native", "explorer", "finder"] {
+            let c = Config::from_json(&json!({"fileManagerStyle": style}));
+            assert_eq!(c.file_manager_style.id(), style);
+            assert_eq!(Config::from_json(&c.to_json()), c);
+        }
+        for value in [json!(null), json!(42), json!("unknown"), json!("Finder")] {
+            assert_eq!(Config::from_json(&json!({"fileManagerStyle": value})).file_manager_style, file_manager::Style::Native);
+        }
     }
 
     #[test]

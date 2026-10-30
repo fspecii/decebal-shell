@@ -37,6 +37,11 @@ pub fn items(m: &Model) -> Vec<Item> {
     for warning in completion.warnings {
         out.push(Item::Note { text: warning, warn: true });
     }
+    let styles = [("Native Files", "native"), ("Windows Explorer inspired", "explorer"), ("macOS Finder inspired", "finder")];
+    let selected = styles.iter().position(|(_, id)| *id == cfg.file_manager_style.id());
+    out.push(Item::Card(vec![Row::new("File manager appearance")
+        .detail("Visual familiarity in GNOME Files: spacing and selection shapes. File operations and navigation stay native. Requires Apply to all apps and GTK apps; reopen Files to load changes.")
+        .ctl(Ctl::new("sy:files", Kind::Popup(styles.iter().map(|(label, id)| ((*label).into(), (*id).into())).collect(), selected)))]));
     let adv = m.sel.adv;
     out.push(Item::Header("Advanced".into()));
     out.push(Item::Card(vec![Row::new("Choose what is themed")
@@ -127,6 +132,13 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 system::request(&m.paths.shell_json());
             }
         }
+        (["sy", "files"], CtlVal::Str(s)) => {
+            let Some(style) = system::file_manager::Style::parse(&s) else { return };
+            cfg.file_manager_style = style;
+            if save(m, &cfg) && cfg.enabled {
+                system::request(&m.paths.shell_json());
+            }
+        }
         (["sy", "icon"], CtlVal::Str(s)) => {
             cfg.icon_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
             if save(m, &cfg) {
@@ -197,6 +209,22 @@ mod tests {
         assert!(!Config::load(&m.paths.shell_json()).options.contains_key("nonsense"));
         m.apply("sy:o:gtk.font", CtlVal::Bool(true));
         assert!(Config::load(&m.paths.shell_json()).options.is_empty());
+    }
+
+    #[test]
+    fn file_manager_choice_is_visible_without_advanced_and_routes_valid_values() {
+        let (mut m, _) = model_with("");
+        m.sel.adv = false;
+        assert!(items(&m)
+            .iter()
+            .any(|item| matches!(item, Item::Card(rows) if rows.iter().flat_map(|r| &r.ctls).any(|c| c.id == "sy:files" && matches!(&c.kind, Kind::Popup(opts, Some(0)) if opts.len() == 3)))));
+        // Disable propagation to keep this a settings-only routing test.
+        let cfg = Config { enabled: false, ..Config::default() };
+        cfg.save(&m.paths.shell_json()).unwrap();
+        m.apply("sy:files", CtlVal::Str("finder".into()));
+        assert_eq!(Config::load(&m.paths.shell_json()).file_manager_style.id(), "finder");
+        m.apply("sy:files", CtlVal::Str("invalid".into()));
+        assert_eq!(Config::load(&m.paths.shell_json()).file_manager_style.id(), "finder");
     }
 
     #[test]
