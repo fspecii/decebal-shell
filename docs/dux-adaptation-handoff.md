@@ -175,3 +175,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+### Verified second-pass integration (2026-10-30)
+
+Integrated as `d7fc8b4` and `21e6df0` onto the Wayland Displays branch; `38837ba` further isolates the capture harness. Integrated Settings tests: 355 passed, 0 failed, 1 ignored; formatting and strict lib/Settings clippy passed. The exact release binary passed private native keyboard/search/draft/scroll flows and light/dark, short-window and enlarged-text captures.
+
+Installed Settings SHA-256: `7163d095de3d4b2e28260b28eb3e593d1dfba1ba06a234344bc6741d28e76db5` in both session bindirs. Guarded deployment journal: `~/.local/state/decebal/deployments/dux2-settings-20261030-174121/journal.json`; process, configuration and WM-state invariants matched. No process restart or live settings change. The redesign loads on the next Settings launch. Durable build/gate records: `~/.local/state/decebal/builds/settings-dux2-38837ba`. The narrow-window limitations above remain.
