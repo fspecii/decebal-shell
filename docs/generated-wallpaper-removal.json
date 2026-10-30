@@ -244,7 +244,9 @@
         }
       ],
       "preserved_manifest_sha256": "eedb3bf63306a97771ada102140a6fbad5da6a1e6f80a289b80b1d2daa904520",
-      "preserved_widget_files": {}
+      "preserved_widget_files": {},
+      "accepted_parent_manifest_sha256": "f27882467c6fa346d1d2e91877be66ede14d08671b0910f732dc5903f2061234",
+      "accepted_parent_manifest_reason": "Accepted parent commit 27300f8 adds only dock.magnification = 1.4 to restore hover growth after flat themes; no artwork, palette, widget or asset-retirement changes. Original preserved_manifest_sha256 remains the retirement baseline."
     },
     {
       "theme_id": "nothing-dot",
