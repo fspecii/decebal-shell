@@ -379,6 +379,8 @@ const ELECTRON: &[&str] = &[
 pub fn builtin_rules() -> Vec<Rule> {
     let names = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     vec![
+        // Editor/automation hosts can export this; GUI Electron apps must start as apps, not Node.
+        Rule { names: names(ELECTRON), when: When::Always, args: vec![], env: vec![("ELECTRON_RUN_AS_NODE".into(), None)] },
         Rule { names: names(CHROMIUM), when: When::X11, args: vec!["--ozone-platform=x11".into()], env: vec![] },
         Rule { names: names(ELECTRON), when: When::X11, args: vec!["--ozone-platform=x11".into()], env: vec![("ELECTRON_OZONE_PLATFORM_HINT".into(), Some("x11".into()))] },
     ]
@@ -751,6 +753,18 @@ mod tests {
         assert_eq!(a.argv, sv(&["electron43", "--ozone-platform=x11", "/usr/lib/obsidian/app.asar"]));
         assert!(a.env.contains(&("ELECTRON_OZONE_PLATFORM_HINT".to_string(), Some("x11".to_string()))));
         assert_eq!(adjust(&sv(&["code", "--unity-launch"]), Session::X11, &builtin_rules(), &noenv).argv[1], "--ozone-platform=x11");
+    }
+
+    #[test]
+    fn electron_gui_launch_drops_inherited_node_only_mode() {
+        let inherited = |key: &str| (key == "ELECTRON_RUN_AS_NODE").then(|| "1".into());
+        for session in [Session::X11, Session::Wayland] {
+            for app in ["obsidian", "electron43", "code", "discord"] {
+                let adjusted = adjust(&sv(&[app]), session, &builtin_rules(), &inherited);
+                assert!(adjusted.env.contains(&("ELECTRON_RUN_AS_NODE".into(), None)), "{app}");
+            }
+        }
+        assert!(!adjust(&sv(&["node", "script.js"]), Session::X11, &builtin_rules(), &inherited).env.iter().any(|(key, _)| key == "ELECTRON_RUN_AS_NODE"));
     }
 
     #[test]

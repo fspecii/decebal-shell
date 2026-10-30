@@ -143,7 +143,7 @@ fn commands() -> &'static [(Item, &'static str)] {
     static CMDS: std::sync::OnceLock<Vec<(Item, &'static str)>> = std::sync::OnceLock::new();
     CMDS.get_or_init(|| {
         let user = std::env::var("USER").unwrap_or_default();
-        let shot = first_available(&[&["omarchy-capture-screenshot"], &["flameshot", "gui"], &["gnome-screenshot", "-i"], &["maim", "-s", "-u"], &["scrot", "-s"]]);
+        let shot = Some(Act::Argv(crate::capture::command()));
         let mut v = vec![
             (cmd("Install Packages", "Browse and install Arch packages", "download", GREEN, Act::Terminal("omarchy-pkg-install".into()), false), "app store add program software pacman"),
             (cmd("Remove Packages", "Uninstall programs from this computer", "trash-can", RED, Act::Terminal("omarchy-pkg-remove".into()), false), "uninstall delete program software pacman"),
@@ -470,9 +470,7 @@ fn run(act: &Act) {
             launch::spawn_app(a);
         }
         Act::Argv(a) => {
-            if let Some((p, rest)) = a.split_first() {
-                detached(p, rest);
-            }
+            launch::spawn_argv(a);
         }
         Act::Terminal(c) => run_in_terminal(c),
         Act::Shell(c) => detached("sh", &["-c".into(), c.clone()]),

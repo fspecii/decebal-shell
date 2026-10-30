@@ -8,6 +8,7 @@ pub mod app;
 pub mod apps;
 pub mod backend;
 pub mod calc;
+pub mod capture;
 pub mod clip;
 pub mod clipboard;
 pub mod compat;

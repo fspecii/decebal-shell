@@ -5,7 +5,7 @@ use decebal::util::{self, Cmd, Ctx, RealSys};
 const HELP: &str = "decutil - utilities behind the Control Center's quick toggles
 
 Usage:
-  decutil record start|stop|toggle|status [--region]
+  decutil screenshot [--fullscreen]\n                     select a region, save to Pictures, copy it and open the annotation editor (X11/Wayland)\n  decutil record start|stop|toggle|status [--region]
                      screen recording to ~/Videos/Recordings/recording-DATE.mp4 (ffmpeg x11grab on X11, wf-recorder on
                      Wayland); --region asks for an area with slop (slurp on Wayland); a notification says where it was saved
   decutil idle-inhibit on|off|toggle|status
@@ -27,6 +27,22 @@ fn main() {
     decebal::compat::init();
     decebal::mem::limit_arenas();
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "screenshot") {
+        if args.iter().skip(1).any(|a| a != "--fullscreen") {
+            eprintln!("decutil screenshot [--fullscreen]");
+            std::process::exit(2);
+        }
+        match decebal::capture::capture(args.iter().any(|a| a == "--fullscreen")) {
+            Ok(Some(path)) => println!("{}", path.display()),
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("Screenshot: {e}");
+                let _ = std::process::Command::new("notify-send").args(["-a", "Decebal", "Screenshot failed", &e]).status();
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if let Some(parsed) = util::control_center_args(&args) {
         match parsed {
             Ok(argv) => {

@@ -850,8 +850,7 @@ impl DecBar {
             }
             Target::Screenshot => {
                 self.close();
-                let cmd = if sys::have("omarchy") { "omarchy capture screenshot" } else { "grim -g \"$(slurp)\" \"$HOME/screenshot-$(date +%s).png\"" };
-                sys::spawn(&["sh", "-c", &format!("sleep 0.15; {cmd}")]);
+                crate::launch::spawn_argv(&crate::capture::command());
             }
             Target::Record => {
                 self.close();
