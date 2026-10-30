@@ -38,3 +38,13 @@ A subsequent bounded change removes the generic-launch toggle behavior: every Se
 The private stress harness supports `SETTINGS_CHECK_REOPEN=1`: it checks both generic launch forms against the retained PID/XID/current pane and verifies mismatched config rejection. The model test also verifies an active unsaved editor remains active after Activate. This closes a concrete reliability problem, but does not establish why the historical preview-browsing window disappeared.
 
 Native reopen proof passed at `/tmp/settings-generic-reopen-proof/result.json`, debug binary SHA `979d8c4b779726afb882cc6efd805e263c0601869f2757887b4bc9cbf375e4cd`: both generic and matching-config launches exited 0 while original PID 3475714/XID 2097152 stayed on Appearance; mismatched config exited 1 and preserved the same PID/XID/pane. Preview stress and corrupt-cache warm launch also passed. Four navigation IPC tests, the model navigation/draft test, and lib/decsettings clippy with warnings denied passed.
+
+## Exit diagnostics
+
+X11 managed-window exits now record the application ID, window ID and a route
+label for keyboard close, window-manager close, application response/wake or
+DestroyNotify. Typed text and window titles are excluded. Existing backend
+errors use the fatal error log; normal Settings backend return is logged too.
+An external signal can bypass these records, so the next live Settings launch
+will also use a parent wait-status log. These diagnostics do not establish the
+cause of the historical disappearance.

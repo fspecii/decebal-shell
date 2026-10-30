@@ -302,6 +302,14 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
 
         let mut next = Some(conn.wait_for_event().map_err(err)?);
         while let Some(ev) = next.take() {
+            // Record only the route, never typed text or application titles. This
+            // distinguishes an intentional close from a backend error or signal.
+            let close_source = match &ev {
+                Event::KeyPress(_) => "keyboard",
+                Event::ClientMessage(m) if m.type_ == at.wm_protocols && m.data.as_data32()[0] == at.wm_delete => "window-manager request",
+                Event::ClientMessage(m) if m.type_ == at.wake => "application wake",
+                _ => "application response",
+            };
             let mut resp = Response::NONE;
             match ev {
                 Event::Expose(e) if e.count == 0 => dirty = true,
@@ -380,7 +388,10 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 }
                 Event::MapNotify(m) if m.window == win => app.set_visible(true),
                 Event::UnmapNotify(m) if m.window == win => app.set_visible(false),
-                Event::DestroyNotify(_) => return Ok(()),
+                Event::DestroyNotify(event) => {
+                    crate::log_info!("X11 window exit: app={}, window={}, destroyed={}, popup={}, reason=DestroyNotify", app.app_id(), win, event.window, popup);
+                    return Ok(());
+                }
                 Event::Error(e) => return Err(Error(format!("server error: {e:?}"))),
                 _ => {}
             }
@@ -402,7 +413,10 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 }
             }
             match resp.action {
-                Some(Action::Close) => return Ok(()),
+                Some(Action::Close) => {
+                    crate::log_info!("X11 window exit: app={}, window={}, popup={}, reason={close_source}", app.app_id(), win, popup);
+                    return Ok(());
+                }
                 // Explicit user navigation uses the same reveal request as the launcher/dock.
                 Some(Action::Activate) => send_root(&conn, &at, screen.root, win, at.net_active, [2, 0, 0, 0, 0])?,
                 Some(Action::Minimize) => send_root(&conn, &at, screen.root, win, at.wm_change_state, [3, 0, 0, 0, 0])?,

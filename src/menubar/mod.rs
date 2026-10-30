@@ -1657,23 +1657,28 @@ impl App for DecBar {
         if self.open != Open::Control {
             return false;
         }
-        self.cc_viewport.focus = None;
-        self.cc_hover = None;
+        let (ox, oy) = self.panel_origin();
+        if !(x >= ox && x < ox + self.cc_width() && y >= oy && y < oy + self.cc_visible_height()) {
+            return false;
+        }
         let Some((px, py)) = self.cc_point(x, y) else {
             return false;
         };
+        let cleared_focus = self.cc_viewport.focus.take().is_some();
+        let cleared_hover = self.cc_hover.take().is_some();
+        let cleared_highlight = cleared_focus || cleared_hover;
         let hit = controlcenter::hit(&self.cc_items, px, py);
         if self.cc_clipped() && !matches!(hit, Some((Target::Brightness | Target::Volume, _))) {
             if self.cc_drag.is_some() {
-                return false;
+                return cleared_highlight;
             }
             let old = self.cc_viewport.scroll;
             self.cc_viewport.focus = None;
             self.cc_viewport.scroll += dy * ccviewport::SCROLL_STEP;
             self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
-            return old != self.cc_viewport.scroll;
+            return old != self.cc_viewport.scroll || cleared_highlight;
         }
-        let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return false };
+        let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return cleared_highlight };
         let snap = self.snapshot();
         let cur = match t {
             Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
@@ -2276,6 +2281,20 @@ mod tests {
         assert!((bar.snapshot().volume.unwrap().level - 0.50).abs() < 0.01);
         assert!(!bar.scroll(2.0, 200.0, 1.0), "not over a slider");
         sys::set_dry_run(false);
+    }
+
+    #[test]
+    fn control_center_wheel_keeps_highlight_and_repaint_consistent() {
+        let mut bar = control_bar();
+        let (x, y, _) = centre_of(&bar, Target::DarkMode);
+        bar.cc_viewport.focus = Some(Target::DarkMode);
+        bar.cc_hover = Some(Target::DarkMode);
+        assert!(!bar.scroll(-100.0, -100.0, 1.0));
+        assert_eq!(bar.cc_viewport.focus, Some(Target::DarkMode), "unhandled wheel must not change the painted state");
+        assert_eq!(bar.cc_hover, Some(Target::DarkMode));
+        assert!(bar.scroll(x, y, 1.0), "clearing a visible highlight must request a repaint even without scrolling");
+        assert_eq!(bar.cc_viewport.focus, None);
+        assert_eq!(bar.cc_hover, None);
     }
 
     #[test]
