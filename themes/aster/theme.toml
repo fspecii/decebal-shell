@@ -1,0 +1,132 @@
+format = 1
+id = "aster"
+name = "Aster"
+version = "1.0.0"
+author = "Decebal Theme Specialist"
+license = "MIT"
+description = "A quiet coastal workspace: precise Breeze captions, a slim information panel, a compact launch dock and two optional native cards. Wallhaven selections are documented separately."
+min_shell_version = "0.1.0"
+tags = ["premium", "coastal", "breeze", "restrained-glass", "dark-light"]
+
+[colors.dark]
+background = "#171e25"
+sidebar = "#1c252e"
+surface = "#26313b"
+bar = "#1b242d"
+bar_text = "#edf3f7"
+popup = "#222d37"
+dock = "#26323d"
+overlay = "#222d37"
+titlebar = "#28343e"
+titlebar_inactive = "#1e2831"
+border = "#526473"
+text = "#edf3f7"
+text_secondary = "#bdcbd4"
+text_faint = "#94a9b8"
+accent = "#8ec9dc"
+accent_text = "#102c37"
+danger = "#f3999a"
+ok = "#9bcdb6"
+warn = "#e4c48e"
+
+[colors.light]
+background = "#edf1f3"
+sidebar = "#e4ebef"
+surface = "#ffffff"
+bar = "#f4f7f8"
+bar_text = "#243640"
+popup = "#f9fbfc"
+dock = "#f0f5f7"
+overlay = "#f9fbfc"
+titlebar = "#e4edf1"
+titlebar_inactive = "#f1f5f7"
+border = "#9cafb9"
+text = "#243640"
+text_secondary = "#4b626f"
+text_faint = "#607783"
+accent = "#276a83"
+accent_text = "#ffffff"
+danger = "#b13f4d"
+ok = "#35745c"
+warn = "#84602c"
+
+[metrics]
+radius = 10
+bar_alpha = 0.94
+dock_alpha = 0.88
+popup_alpha = 0.98
+panel_alpha = 0.97
+dock_roundness = 0.55
+dock_padding = 8
+outline = 0.14
+blur = 0.25
+glass_refraction = 0
+glass_edge = 2
+glass_highlight = 0.08
+glass_grain = 0
+glass_blur = 3
+shadow = 0.65
+
+[font]
+ui = ["Inter", "Adwaita Sans", "Noto Sans"]
+title = ["Inter", "Adwaita Sans", "Noto Sans"]
+mono = ["Adwaita Mono", "JetBrains Mono", "monospace"]
+display = ["Inter", "Adwaita Sans", "Noto Sans"]
+scale = 1.0
+
+[decoration]
+style = "breeze"
+buttons = "right"
+height = 30
+radius = 5
+title_align = "center"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 18
+border_px = 1
+smart_gaps = false
+mfact = 0.56
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "flat"
+position = "top"
+height = 28
+
+[dock]
+enabled = true
+style = "mac"
+position = "bottom"
+size = 44
+align = "center"
+roundness = 0.55
+magnification = 1.15
+
+[icons]
+theme = "Adwaita"
+fallback = "hicolor"
+monochrome_tint = false
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-right"
+x = -32
+y = 64
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "top-right"
+x = -32
+y = 224

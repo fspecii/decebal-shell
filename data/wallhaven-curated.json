@@ -1,0 +1,4460 @@
+{
+  "format": 1,
+  "curated_on": "2026-10-30",
+  "scope": {
+    "parent_commit": "f68d4604152c929ca1f294429bee0eb204e55cfb",
+    "coverage": "all shipped theme package directories except legacy palette-only aliases, plus Aster",
+    "exclude_legacy_via": "theme::palette::legacy_theme",
+    "uncovered_theme_ids": []
+  },
+  "policy": {
+    "provider": "https://wallhaven.cc",
+    "purity": "sfw",
+    "query_filters": {
+      "categories": "100",
+      "purity": "100",
+      "q": "subject +photography -ai_art",
+      "ai_art_filter": "0 (sent as advisory; not documented in current API help; not relied on)"
+    },
+    "detail_filter": "Reject AI-art tag 133451 and AI generator/tag names; also reject selected candidates tagged digital art/illustration/space art. Never equate absence of a tag with certified non-AI provenance.",
+    "copyright": "All images remain property of original owners. Catalogue stores links/metadata only; full artworks and provider thumbnails are not redistributed.",
+    "runtime": "Advisory catalogue only. Parent owns network/cache/selection and replacing old generated defaults. Do not override a separate custom Wallpaper selection. No generated wallpaper fallback.",
+    "search_urls": [
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmountains+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bforest+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bsea+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Barchitecture+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bnight+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bspace+%2Bphotography+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bminimalism+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bdesert+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmonochrome+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0"
+    ]
+  },
+  "images": {
+    "21ooly": {
+      "id": "21ooly",
+      "subject": "Soft distant ridges at sunrise",
+      "page_url": "https://wallhaven.cc/w/21ooly",
+      "api_url": "https://wallhaven.cc/api/v1/w/21ooly",
+      "full_url": "https://w.wallhaven.cc/full/21/wallhaven-21ooly.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/21/21ooly.jpg",
+      "resolution": [
+        4800,
+        2700
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2026-07-07 23:29:40",
+      "uploader": {
+        "username": "joshman1979",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 2428,
+          "name": "mist"
+        },
+        {
+          "id": 464,
+          "name": "fog"
+        },
+        {
+          "id": 47948,
+          "name": "sunrise"
+        },
+        {
+          "id": 8873,
+          "name": "atmosphere"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 37549,
+          "name": "ultrawide"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 64,
+          "name": "sunset"
+        },
+        {
+          "id": 120922,
+          "name": "sunset glow"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "c4b172124513c8c44866404f44ffb108c601a2a3a4d45bea5d58406ab9c9d86c",
+        "thumbnail_sha256": "b5e2d083536251292f8e3be2bbe665011dc79efc6789bf872e5606cef5acafe7"
+      }
+    },
+    "21y32m": {
+      "id": "21y32m",
+      "subject": "Pastel illuminated cloud tops",
+      "page_url": "https://wallhaven.cc/w/21y32m",
+      "api_url": "https://wallhaven.cc/api/v1/w/21y32m",
+      "full_url": "https://w.wallhaven.cc/full/21/wallhaven-21y32m.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/21/21y32m.jpg",
+      "resolution": [
+        5960,
+        2803
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-10-07 02:45:44",
+      "uploader": {
+        "username": "Jcurry",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Jonathan Curry",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 147722,
+          "name": "Jonathan Curry"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 64,
+          "name": "sunset"
+        },
+        {
+          "id": 3019,
+          "name": "muted"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 23047,
+          "name": "outdoors"
+        },
+        {
+          "id": 794,
+          "name": "storm"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 22078,
+          "name": "watermarked"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "66f44540820bf786aa4a24cbb33c1b0cbbc6fec1dd392dbaae4fcf0661cd14c6",
+        "thumbnail_sha256": "dda3a6bd5bf738896386316147369ec54b668ca3b4856996292b3e17e23c89b3"
+      }
+    },
+    "39zjq6": {
+      "id": "39zjq6",
+      "subject": "Torii silhouette at purple sunset",
+      "page_url": "https://wallhaven.cc/w/39zjq6",
+      "api_url": "https://wallhaven.cc/api/v1/w/39zjq6",
+      "full_url": "https://w.wallhaven.cc/full/39/wallhaven-39zjq6.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/39/39zjq6.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-11-18 20:47:45",
+      "uploader": {
+        "username": "NovaFlux",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 64,
+          "name": "sunset"
+        },
+        {
+          "id": 241,
+          "name": "Sun"
+        },
+        {
+          "id": 6245,
+          "name": "evening"
+        },
+        {
+          "id": 283,
+          "name": "purple"
+        },
+        {
+          "id": 4511,
+          "name": "torii"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 7,
+          "name": "Japan"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 37251,
+          "name": "Miyajima"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "13aa1c29aef423bf20e4a6da2dd0bded9571e2f0a91bce29b5694144d8da6cd6",
+        "thumbnail_sha256": "207070333812213d487b7f0150896120a5e2d90c1cf564dbda3f4c6a777f2658"
+      }
+    },
+    "3l6jj9": {
+      "id": "3l6jj9",
+      "subject": "Warm cloud against dark sky",
+      "page_url": "https://wallhaven.cc/w/3l6jj9",
+      "api_url": "https://wallhaven.cc/api/v1/w/3l6jj9",
+      "full_url": "https://w.wallhaven.cc/full/3l/wallhaven-3l6jj9.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/3l/3l6jj9.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-08-17 03:35:26",
+      "uploader": {
+        "username": "Jcurry",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Jonathan Curry",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 23047,
+          "name": "outdoors"
+        },
+        {
+          "id": 121127,
+          "name": "thunder storm"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 119778,
+          "name": "50mm"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 147722,
+          "name": "Jonathan Curry"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "ef3d11f6d61f73118300bb489700d46111e45754eaf02e356ec7de57dff05dd7",
+        "thumbnail_sha256": "12b2266544c637ee3e164135bce9db676172403dde915263d55039f0e1ba7d11"
+      }
+    },
+    "3qq8jd": {
+      "id": "3qq8jd",
+      "subject": "Japanese neon-sign building at night",
+      "page_url": "https://wallhaven.cc/w/3qq8jd",
+      "api_url": "https://wallhaven.cc/api/v1/w/3qq8jd",
+      "full_url": "https://w.wallhaven.cc/full/3q/wallhaven-3qq8jd.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/3q/3qq8jd.jpg",
+      "resolution": [
+        5120,
+        2880
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-12-04 16:38:01",
+      "uploader": {
+        "username": "mxdp1",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://maps.app.goo.gl/YZwxfAL6cmnutQje7",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 7,
+          "name": "Japan"
+        },
+        {
+          "id": 8871,
+          "name": "street light"
+        },
+        {
+          "id": 713,
+          "name": "neon"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 988,
+          "name": "urban"
+        },
+        {
+          "id": 774,
+          "name": "street"
+        },
+        {
+          "id": 622,
+          "name": "Japanese"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 87179,
+          "name": "wide screen"
+        },
+        {
+          "id": 8781,
+          "name": "glowing"
+        },
+        {
+          "id": 2563,
+          "name": "kanji"
+        },
+        {
+          "id": 4347,
+          "name": "signs"
+        },
+        {
+          "id": 989,
+          "name": "architecture"
+        },
+        {
+          "id": 10685,
+          "name": "light bulb"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "bb6c87f61328755fffc2e9a5861920d18604849c975ecfd4d1bcf6082620f354",
+        "thumbnail_sha256": "4ab6f192dc328c36b5ecfea18c56483ca05858b9eefa2d92634d02cee1ecd2f0"
+      }
+    },
+    "3qqd26": {
+      "id": "3qqd26",
+      "subject": "Wave over chequered surface",
+      "page_url": "https://wallhaven.cc/w/3qqd26",
+      "api_url": "https://wallhaven.cc/api/v1/w/3qqd26",
+      "full_url": "https://w.wallhaven.cc/full/3q/wallhaven-3qqd26.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/3q/3qqd26.jpg",
+      "resolution": [
+        5472,
+        3648
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-12-18 10:38:51",
+      "uploader": {
+        "username": "goordoon",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Aleksandr Isaev",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 98785,
+          "name": "chess floor"
+        },
+        {
+          "id": 1028,
+          "name": "waves"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 61278,
+          "name": "floor"
+        },
+        {
+          "id": 173837,
+          "name": "Aleksandr Isaev"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "0d57a5b1b279ebf03683d1b3256dcefd323bd85dcb39d5f27b1d55c9d7c16ae6",
+        "thumbnail_sha256": "3d6b549008abd8d003243a8e0ae67218f3d4452b5cfb1be5ed1b62eb3356d697"
+      }
+    },
+    "57o619": {
+      "id": "57o619",
+      "subject": "Maligne Lake at dawn/dusk",
+      "page_url": "https://wallhaven.cc/w/57o619",
+      "api_url": "https://wallhaven.cc/api/v1/w/57o619",
+      "full_url": "https://w.wallhaven.cc/full/57/wallhaven-57o619.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/57/57o619.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-05-02 16:24:30",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Cath Simard",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 119039,
+          "name": "Cath Simard"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 903,
+          "name": "boat"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 55519,
+          "name": "Maligne Lake"
+        },
+        {
+          "id": 18351,
+          "name": "Jasper National Park"
+        },
+        {
+          "id": 23020,
+          "name": "Alberta"
+        },
+        {
+          "id": 5259,
+          "name": "Canada"
+        },
+        {
+          "id": 1713,
+          "name": "environment"
+        },
+        {
+          "id": 21108,
+          "name": "daylight"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "5b1be6396eb23a1cdc5ce61a3dfa03991a8de2c5a60f6a8ce35c966cb7ba7a22",
+        "thumbnail_sha256": "8b4ae9c18300dbb46f13a9c1d2453c9acd78372d90a1cf341dd1002d5a10a12e"
+      }
+    },
+    "5y3q31": {
+      "id": "5y3q31",
+      "subject": "Milky Way above Amden valley",
+      "page_url": "https://wallhaven.cc/w/5y3q31",
+      "api_url": "https://wallhaven.cc/api/v1/w/5y3q31",
+      "full_url": "https://w.wallhaven.cc/full/5y/wallhaven-5y3q31.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/5y/5y3q31.jpg",
+      "resolution": [
+        6144,
+        3456
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2026-08-23 16:00:08",
+      "uploader": {
+        "username": "Pc7",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Philipp Düsel",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://unsplash.com/photos/a-view-of-the-night-sky-over-a-mountain-range-n8SykHXHgtc",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 181768,
+          "name": "Philipp Düsel"
+        },
+        {
+          "id": 1594,
+          "name": "Switzerland"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 20,
+          "name": "river"
+        },
+        {
+          "id": 118,
+          "name": "lights"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 245,
+          "name": "stars"
+        },
+        {
+          "id": 141655,
+          "name": "stargazing"
+        },
+        {
+          "id": 4732,
+          "name": "Milky Way"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 144088,
+          "name": "viewpoint"
+        },
+        {
+          "id": 629,
+          "name": "universe"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 45110,
+          "name": "far view"
+        },
+        {
+          "id": 51,
+          "name": "galaxy"
+        },
+        {
+          "id": 181774,
+          "name": "Amden"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 33462,
+          "name": "city lights"
+        },
+        {
+          "id": 1466,
+          "name": "long exposure"
+        },
+        {
+          "id": 37549,
+          "name": "ultrawide"
+        },
+        {
+          "id": 23047,
+          "name": "outdoors"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "578c4820d7eb06c814a7258eb0f13773eb790b6a8258c1dbde5f9cdee9e99636",
+        "thumbnail_sha256": "5bc8df7575fae67c6c6eb50e84fcf458b8841e7236cedc64527987b955652f9c"
+      }
+    },
+    "6de6wl": {
+      "id": "6de6wl",
+      "subject": "Soft snow peaks and blue sky",
+      "page_url": "https://wallhaven.cc/w/6de6wl",
+      "api_url": "https://wallhaven.cc/api/v1/w/6de6wl",
+      "full_url": "https://w.wallhaven.cc/full/6d/wallhaven-6de6wl.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/6d/6de6wl.jpg",
+      "resolution": [
+        4096,
+        1714
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-11-09 14:40:05",
+      "uploader": {
+        "username": "HaarDsTyLee",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37549,
+          "name": "ultrawide"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 1906,
+          "name": "macro"
+        },
+        {
+          "id": 65348,
+          "name": "4K"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 40932,
+          "name": "peak"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 40759,
+          "name": "snowy mountain"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "e25f728dfaff497247db9904cbf382c6ecbd0e72b137fd9a813e33a550fffc82",
+        "thumbnail_sha256": "fd4002be9b168ad8d2e608d08c52d37b5a0334c5d2e92cb034ab060a4501dc1a"
+      }
+    },
+    "768yeo": {
+      "id": "768yeo",
+      "subject": "Overhead conifer canopy",
+      "page_url": "https://wallhaven.cc/w/768yeo",
+      "api_url": "https://wallhaven.cc/api/v1/w/768yeo",
+      "full_url": "https://w.wallhaven.cc/full/76/wallhaven-768yeo.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/76/768yeo.jpg",
+      "resolution": [
+        2560,
+        1600
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-03-17 11:43:37",
+      "uploader": {
+        "username": "deleted",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 226,
+          "name": "green"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 1663,
+          "name": "shadow"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "0c0a95ab4b293ca1b2bee5d1245543a4a2950cf23e2319ec922e504cd0ce955f",
+        "thumbnail_sha256": "e698485048136587265a2bb45f2a3404997078de00cd47d9eee25fb697f0369f"
+      }
+    },
+    "7j6wpy": {
+      "id": "7j6wpy",
+      "subject": "White cumulus against blue sky",
+      "page_url": "https://wallhaven.cc/w/7j6wpy",
+      "api_url": "https://wallhaven.cc/api/v1/w/7j6wpy",
+      "full_url": "https://w.wallhaven.cc/full/7j/wallhaven-7j6wpy.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/7j/7j6wpy.jpg",
+      "resolution": [
+        6016,
+        3384
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-05-30 03:29:46",
+      "uploader": {
+        "username": "Jcurry",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Jonathan Curry",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 147722,
+          "name": "Jonathan Curry"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 121127,
+          "name": "thunder storm"
+        },
+        {
+          "id": 23047,
+          "name": "outdoors"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 22078,
+          "name": "watermarked"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "eb89d5e7f1fcbd5e255b91588255da05cdf5dbeee80677f02b1670291d20f75c",
+        "thumbnail_sha256": "8bf85b0ae268866000804a99461dbed02c9ac855b5e619bc2e7ad263cb2f34b3"
+      }
+    },
+    "7p186o": {
+      "id": "7p186o",
+      "subject": "Black-and-white mountain lake",
+      "page_url": "https://wallhaven.cc/w/7p186o",
+      "api_url": "https://wallhaven.cc/api/v1/w/7p186o",
+      "full_url": "https://w.wallhaven.cc/full/7p/wallhaven-7p186o.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/7p/7p186o.jpg",
+      "resolution": [
+        2800,
+        1868
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-05-05 13:23:50",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "4cdcf3ec08f8f6e77887f221c5ad9b4dc12d377f6809d647ca56a5c7c391d919",
+        "thumbnail_sha256": "aad1733a2d3d4f16dbf2362071feddcaeca74b1eba166e4971bc686db33b2e57"
+      }
+    },
+    "7p6wke": {
+      "id": "7p6wke",
+      "subject": "Cloudy Norwegian fjord",
+      "page_url": "https://wallhaven.cc/w/7p6wke",
+      "api_url": "https://wallhaven.cc/api/v1/w/7p6wke",
+      "full_url": "https://w.wallhaven.cc/full/7p/wallhaven-7p6wke.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/7p/7p6wke.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-10-21 08:51:23",
+      "uploader": {
+        "username": "rootkit",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://jantomaszewicz.myportfolio.com/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 1524,
+          "name": "Norway"
+        },
+        {
+          "id": 27014,
+          "name": "Preikestolen"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 20,
+          "name": "river"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "6cb74808eb04b12c2bbdce8fd687e6ba9dfaef7a8bafcf857000590ab6971f09",
+        "thumbnail_sha256": "63b57b681e07367f3efa0260a1ed04e826f8aeda3050dc5e3957eaf4d333b189"
+      }
+    },
+    "85xg5k": {
+      "id": "85xg5k",
+      "subject": "Rain and light over Death Valley dunes",
+      "page_url": "https://wallhaven.cc/w/85xg5k",
+      "api_url": "https://wallhaven.cc/api/v1/w/85xg5k",
+      "full_url": "https://w.wallhaven.cc/full/85/wallhaven-85xg5k.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/85/85xg5k.jpg",
+      "resolution": [
+        6603,
+        4399
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-10-17 11:50:57",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 401,
+          "name": "desert"
+        },
+        {
+          "id": 12710,
+          "name": "Death Valley"
+        },
+        {
+          "id": 11212,
+          "name": "California"
+        },
+        {
+          "id": 22056,
+          "name": "North America"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 61728,
+          "name": "dunes"
+        },
+        {
+          "id": 336,
+          "name": "rain"
+        },
+        {
+          "id": 655,
+          "name": "sand"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "221d04fe06dd64efded3a6840ef1f3d030919262fcc40c8935493cb1f643d5dc",
+        "thumbnail_sha256": "c0e373df772396b724b6b5dcefe715ffb2fa8c6104c2db72dedba15f7b4bcd1f"
+      }
+    },
+    "9dpejk": {
+      "id": "9dpejk",
+      "subject": "Dark forest with copper larches",
+      "page_url": "https://wallhaven.cc/w/9dpejk",
+      "api_url": "https://wallhaven.cc/api/v1/w/9dpejk",
+      "full_url": "https://w.wallhaven.cc/full/9d/wallhaven-9dpejk.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/9d/9dpejk.jpg",
+      "resolution": [
+        5760,
+        3840
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2024-06-21 05:30:46",
+      "uploader": {
+        "username": "Pc7",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 1463,
+          "name": "fall"
+        },
+        {
+          "id": 111694,
+          "name": "high contrast"
+        },
+        {
+          "id": 156292,
+          "name": "Larch"
+        },
+        {
+          "id": 69246,
+          "name": "drone photo"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "3a641e3206384b83694ace81718f4be82e7f611deedf8d2b28d03ee9d4c3beca",
+        "thumbnail_sha256": "fe7154d36f6fa26889d3d2132b5b6bde3391c9dac5e422ff68d1b7b7fd9fe754"
+      }
+    },
+    "9mqvz1": {
+      "id": "9mqvz1",
+      "subject": "Blue wave beneath a mountain coast",
+      "page_url": "https://wallhaven.cc/w/9mqvz1",
+      "api_url": "https://wallhaven.cc/api/v1/w/9mqvz1",
+      "full_url": "https://w.wallhaven.cc/full/9m/wallhaven-9mqvz1.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/9m/9mqvz1.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-08-02 13:31:25",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 307,
+          "name": "sea"
+        },
+        {
+          "id": 1028,
+          "name": "waves"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 45706,
+          "name": "nightscape"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 1656,
+          "name": "France"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "d2e45e35516122b32c52dad5639f112fbaca32cb04e88fd3d7b9e157f0c9a298",
+        "thumbnail_sha256": "23d45b5ccfc6f09f2ca696f029ae8f8c4a6547680019bb89a20444ba2291af82"
+      }
+    },
+    "d6o77l": {
+      "id": "d6o77l",
+      "subject": "Monochrome cumulus cloud study",
+      "page_url": "https://wallhaven.cc/w/d6o77l",
+      "api_url": "https://wallhaven.cc/api/v1/w/d6o77l",
+      "full_url": "https://w.wallhaven.cc/full/d6/wallhaven-d6o77l.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/d6/d6o77l.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-08-20 05:51:53",
+      "uploader": {
+        "username": "Jcurry",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Jonathan Curry",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://wallhaven.cc/user/Jcurry",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 41309,
+          "name": "film grain"
+        },
+        {
+          "id": 23047,
+          "name": "outdoors"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 121127,
+          "name": "thunder storm"
+        },
+        {
+          "id": 119778,
+          "name": "50mm"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 2102,
+          "name": "gradient"
+        },
+        {
+          "id": 15625,
+          "name": "overcast"
+        },
+        {
+          "id": 147722,
+          "name": "Jonathan Curry"
+        },
+        {
+          "id": 22078,
+          "name": "watermarked"
+        },
+        {
+          "id": 78048,
+          "name": "skyscape"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "6839308a048793f5bf88dc970ce5836bead8a8076cf0bd68197492a4e402801b",
+        "thumbnail_sha256": "cc956d1453fb274fb905c348746f4db54eda342f956aab8fc826769ff6430f3b"
+      }
+    },
+    "dpr913": {
+      "id": "dpr913",
+      "subject": "Monochrome aerial city texture",
+      "page_url": "https://wallhaven.cc/w/dpr913",
+      "api_url": "https://wallhaven.cc/api/v1/w/dpr913",
+      "full_url": "https://w.wallhaven.cc/full/dp/wallhaven-dpr913.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/dp/dpr913.jpg",
+      "resolution": [
+        3936,
+        2624
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-07-18 17:24:27",
+      "uploader": {
+        "username": "ngysjeremy",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Andre Benz",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 70984,
+          "name": "Andre Benz"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 795,
+          "name": "New York City"
+        },
+        {
+          "id": 17,
+          "name": "city"
+        },
+        {
+          "id": 13,
+          "name": "cityscape"
+        },
+        {
+          "id": 69246,
+          "name": "drone photo"
+        },
+        {
+          "id": 4679,
+          "name": "USA"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 8644,
+          "name": "rooftops"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "7c3c43d85593f930c10f347b4481db27d6a340812f174f56df90aec1ebc54532",
+        "thumbnail_sha256": "cb12507f11b68c2e464c81c18f34eee949582ac14dba5415b35512167c298aa0"
+      }
+    },
+    "ey7prw": {
+      "id": "ey7prw",
+      "subject": "Teal night sky and snowy peaks",
+      "page_url": "https://wallhaven.cc/w/ey7prw",
+      "api_url": "https://wallhaven.cc/api/v1/w/ey7prw",
+      "full_url": "https://w.wallhaven.cc/full/ey/wallhaven-ey7prw.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/ey/ey7prw.jpg",
+      "resolution": [
+        4717,
+        2984
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-11-13 12:35:58",
+      "uploader": {
+        "username": "deleted",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Daniel Leone",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://unsplash.com/photos/v7daTKlZzaw",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 26468,
+          "name": "snowy peak"
+        },
+        {
+          "id": 245,
+          "name": "stars"
+        },
+        {
+          "id": 40759,
+          "name": "snowy mountain"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 168801,
+          "name": "Daniel Leone"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37549,
+          "name": "ultrawide"
+        },
+        {
+          "id": 19948,
+          "name": "night sky"
+        },
+        {
+          "id": 116659,
+          "name": "mountain view"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "f1c4a6294d95ca627f38d3448d3c1ba0195a7ae758c7dfb04ce672cd3614529a",
+        "thumbnail_sha256": "5a9f3461a1ae7c13377345d3dae02b2fbc52e6692c89f8c6b827b4d0179fc2da"
+      }
+    },
+    "eyv7xl": {
+      "id": "eyv7xl",
+      "subject": "Black coffee cup and shadow",
+      "page_url": "https://wallhaven.cc/w/eyv7xl",
+      "api_url": "https://wallhaven.cc/api/v1/w/eyv7xl",
+      "full_url": "https://w.wallhaven.cc/full/ey/wallhaven-eyv7xl.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/ey/eyv7xl.jpg",
+      "resolution": [
+        3000,
+        2000
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2019-10-14 06:21:36",
+      "uploader": {
+        "username": "Dreadnaught",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 206,
+          "name": "coffee"
+        },
+        {
+          "id": 71723,
+          "name": "coffee cup"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 312,
+          "name": "black"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 1340,
+          "name": "closeup"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "672cea8587c779fef1aad699d169500a99979afe2867c218c4bbe44392bdc0d3",
+        "thumbnail_sha256": "343edebe84138a96d0ea1e04f43eefdc35c9a4fcb9bc8c6e8ded5744973f683b"
+      }
+    },
+    "jxyowm": {
+      "id": "jxyowm",
+      "subject": "Rose-lit mountain and pale moon",
+      "page_url": "https://wallhaven.cc/w/jxyowm",
+      "api_url": "https://wallhaven.cc/api/v1/w/jxyowm",
+      "full_url": "https://w.wallhaven.cc/full/jx/wallhaven-jxyowm.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/jx/jxyowm.jpg",
+      "resolution": [
+        3000,
+        2003
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-08-13 09:17:04",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://www.jamesandrewphotography.com/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 740,
+          "name": "Moon"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "59c0356d67a4e0896cb31f6a207071eb82d6ce9d543586a562bcac859bedc9d5",
+        "thumbnail_sha256": "0d310010656240a929c9360a0c45466bc06ac264123e386d636f151c6ce2a196"
+      }
+    },
+    "kxygyd": {
+      "id": "kxygyd",
+      "subject": "Lone tree in white snow",
+      "page_url": "https://wallhaven.cc/w/kxygyd",
+      "api_url": "https://wallhaven.cc/api/v1/w/kxygyd",
+      "full_url": "https://w.wallhaven.cc/full/kx/wallhaven-kxygyd.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/kx/kxygyd.jpg",
+      "resolution": [
+        6000,
+        3375
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2024-12-31 15:32:19",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Mikko Lagerstedt",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://x.com/MikkoLagerstedt",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 160303,
+          "name": "Mikko Lagerstedt"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 240,
+          "name": "white"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 327,
+          "name": "winter"
+        },
+        {
+          "id": 760,
+          "name": "white background"
+        },
+        {
+          "id": 2781,
+          "name": "branch"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "92e387c847d6199c98f0ec070c8ceab3b571652b563a41166b4a5b4dfeb9de1d",
+        "thumbnail_sha256": "d2aede6c40beee7d929da845612dc2bdfe45632b30cedd59ff040f6e091bfa7c"
+      }
+    },
+    "l3edjp": {
+      "id": "l3edjp",
+      "subject": "Moon over Mount Cook reflection",
+      "page_url": "https://wallhaven.cc/w/l3edjp",
+      "api_url": "https://wallhaven.cc/api/v1/w/l3edjp",
+      "full_url": "https://w.wallhaven.cc/full/l3/wallhaven-l3edjp.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/l3/l3edjp.jpg",
+      "resolution": [
+        6000,
+        4000
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-09-08 09:53:41",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 45706,
+          "name": "nightscape"
+        },
+        {
+          "id": 7080,
+          "name": "New Zealand"
+        },
+        {
+          "id": 36510,
+          "name": "Mount Cook"
+        },
+        {
+          "id": 740,
+          "name": "Moon"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 40932,
+          "name": "peak"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "63e641c30bc1672c5333cee9390fa2d0dac506dc001fe797ce6cd70522b6ed80",
+        "thumbnail_sha256": "417f8748339e7620ac6898c5d27cd36514d5c69cdd6083dab3ea980f18a9184a"
+      }
+    },
+    "lygg6r": {
+      "id": "lygg6r",
+      "subject": "Earth through ISS cupola",
+      "page_url": "https://wallhaven.cc/w/lygg6r",
+      "api_url": "https://wallhaven.cc/api/v1/w/lygg6r",
+      "full_url": "https://w.wallhaven.cc/full/ly/wallhaven-lygg6r.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/ly/lygg6r.jpg",
+      "resolution": [
+        4928,
+        3280
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2026-10-02 13:39:14",
+      "uploader": {
+        "username": "Tempest06123",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Scott Kelly",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 18596,
+          "name": "International Space Station"
+        },
+        {
+          "id": 32,
+          "name": "space"
+        },
+        {
+          "id": 41566,
+          "name": "mountain chain"
+        },
+        {
+          "id": 6784,
+          "name": "orbits"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 87384,
+          "name": "centered"
+        },
+        {
+          "id": 1240,
+          "name": "technology"
+        },
+        {
+          "id": 26468,
+          "name": "snowy peak"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 182891,
+          "name": "Scott Kelly"
+        },
+        {
+          "id": 6333,
+          "name": "NASA"
+        },
+        {
+          "id": 4679,
+          "name": "USA"
+        },
+        {
+          "id": 2277,
+          "name": "window"
+        },
+        {
+          "id": 2101,
+          "name": "hexagon"
+        },
+        {
+          "id": 45110,
+          "name": "far view"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 17019,
+          "name": "interior"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "09b1fa81e645d3a018db847051a40ba3a89fabbc1473b0c5681be4e62390006c",
+        "thumbnail_sha256": "819d7e3e627d954d3e32afcfadfdd7dc7a38bbf5302f45662fc51023eaadc96a"
+      }
+    },
+    "m9wr19": {
+      "id": "m9wr19",
+      "subject": "Teal fern macro",
+      "page_url": "https://wallhaven.cc/w/m9wr19",
+      "api_url": "https://wallhaven.cc/api/v1/w/m9wr19",
+      "full_url": "https://w.wallhaven.cc/full/m9/wallhaven-m9wr19.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/m9/m9wr19.jpg",
+      "resolution": [
+        6000,
+        4000
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2021-08-09 22:09:01",
+      "uploader": {
+        "username": "Javadkh83",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 74,
+          "name": "abstract"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 15618,
+          "name": "ferns"
+        },
+        {
+          "id": 108,
+          "name": "leaves"
+        },
+        {
+          "id": 1722,
+          "name": "plants"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 8404,
+          "name": "foliage"
+        },
+        {
+          "id": 1906,
+          "name": "macro"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 1340,
+          "name": "closeup"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 1474,
+          "name": "texture"
+        },
+        {
+          "id": 869,
+          "name": "pattern"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "c6de5cb90d1cf1fe3e315740c7fc2585f346a9ca049a99ea0a92075c629fb6f3",
+        "thumbnail_sha256": "00364055af5268232dd7ecdd022e00ec35cb227037cca9839f5a8af4f4dd1f0a"
+      }
+    },
+    "nr7zq0": {
+      "id": "nr7zq0",
+      "subject": "Swiss alpine snowfield",
+      "page_url": "https://wallhaven.cc/w/nr7zq0",
+      "api_url": "https://wallhaven.cc/api/v1/w/nr7zq0",
+      "full_url": "https://w.wallhaven.cc/full/nr/wallhaven-nr7zq0.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/nr/nr7zq0.jpg",
+      "resolution": [
+        2560,
+        1440
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2014-02-22 18:30:26",
+      "uploader": {
+        "username": "Skiboosh",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 327,
+          "name": "winter"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 6248,
+          "name": "cold"
+        },
+        {
+          "id": 1594,
+          "name": "Switzerland"
+        },
+        {
+          "id": 40759,
+          "name": "snowy mountain"
+        },
+        {
+          "id": 114713,
+          "name": "Titlis Engelberg"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "8303222fdd429cee3d1a8c411c5b8515a90bbaed9c78ac5b4451b7c7acf6265f",
+        "thumbnail_sha256": "2ae1e24a7b75e1a973e5ecce5d9807ff58d6923fa8753350a9ab88dc7b71de5a"
+      }
+    },
+    "o571qp": {
+      "id": "o571qp",
+      "subject": "Thin sunset above dark hill silhouette",
+      "page_url": "https://wallhaven.cc/w/o571qp",
+      "api_url": "https://wallhaven.cc/api/v1/w/o571qp",
+      "full_url": "https://w.wallhaven.cc/full/o5/wallhaven-o571qp.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/o5/o571qp.jpg",
+      "resolution": [
+        4000,
+        2660
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-10-16 11:49:52",
+      "uploader": {
+        "username": "MyHdWallpapers",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://t.me/phone_4k_mobile_wallpaper_hd",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 72852,
+          "name": "mountain top"
+        },
+        {
+          "id": 116659,
+          "name": "mountain view"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 2797,
+          "name": "silhouette"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "8adadd8be858ef810c0174198a0a13f157aca96f164e66bbf1ee35d3894598ab",
+        "thumbnail_sha256": "43f22394528a79291f7d481df26dede528c69c3f1a7e22f51851d1cc6c877e2a"
+      }
+    },
+    "p82qrj": {
+      "id": "p82qrj",
+      "subject": "Green aurora over a snow road",
+      "page_url": "https://wallhaven.cc/w/p82qrj",
+      "api_url": "https://wallhaven.cc/api/v1/w/p82qrj",
+      "full_url": "https://w.wallhaven.cc/full/p8/wallhaven-p82qrj.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/p8/p82qrj.jpg",
+      "resolution": [
+        7952,
+        5304
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-08-31 17:33:48",
+      "uploader": {
+        "username": "deleted",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Kristopher Roller",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://unsplash.com/photos/3SFgixAUnAU",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 2628,
+          "name": "aurorae"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 11401,
+          "name": "vehicle"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 32,
+          "name": "space"
+        },
+        {
+          "id": 245,
+          "name": "stars"
+        },
+        {
+          "id": 5207,
+          "name": "highway"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 316,
+          "name": "alone"
+        },
+        {
+          "id": 401,
+          "name": "desert"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 1713,
+          "name": "environment"
+        },
+        {
+          "id": 226,
+          "name": "green"
+        },
+        {
+          "id": 314,
+          "name": "car"
+        },
+        {
+          "id": 2362,
+          "name": "Jeep"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 349,
+          "name": "road"
+        },
+        {
+          "id": 78217,
+          "name": "Kristopher Roller"
+        },
+        {
+          "id": 317,
+          "name": "men"
+        },
+        {
+          "id": 23930,
+          "name": "solitude"
+        },
+        {
+          "id": 90724,
+          "name": "Unsplash"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "e1b25cc04a0665e657fe24ae0f1556f3d117417dcf117e15b35765ccb97d118b",
+        "thumbnail_sha256": "65ee3556939f723d133d0a875b93ed382cc9f7382a422f5297dad80b25b8d012"
+      }
+    },
+    "p9qovj": {
+      "id": "p9qovj",
+      "subject": "Streetlights in monochrome fog",
+      "page_url": "https://wallhaven.cc/w/p9qovj",
+      "api_url": "https://wallhaven.cc/api/v1/w/p9qovj",
+      "full_url": "https://w.wallhaven.cc/full/p9/wallhaven-p9qovj.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/p9/p9qovj.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-01-23 21:50:22",
+      "uploader": {
+        "username": "Cyb3rCr0w",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 8871,
+          "name": "street light"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 14189,
+          "name": "dark background"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "962b85443356255c614c028af017ae182d0421b0777f02841a469bf197cc55e8",
+        "thumbnail_sha256": "1f60ba3b27d602aa4fda536b498e2862b928c80f0b354087548fe49547729aa0"
+      }
+    },
+    "po73qj": {
+      "id": "po73qj",
+      "subject": "Monument Valley sandstone",
+      "page_url": "https://wallhaven.cc/w/po73qj",
+      "api_url": "https://wallhaven.cc/api/v1/w/po73qj",
+      "full_url": "https://w.wallhaven.cc/full/po/wallhaven-po73qj.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/po/po73qj.jpg",
+      "resolution": [
+        9078,
+        6052
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2026-06-18 20:26:49",
+      "uploader": {
+        "username": "Starkw17",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Peter Thomas",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://unsplash.com/es/fotos/formaciones-rocosas-del-valle-del-monumento-al-atardecer-CHXBk2102ac",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 42908,
+          "name": "rocks"
+        },
+        {
+          "id": 401,
+          "name": "desert"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 157021,
+          "name": "Peter Thomas"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "98e0aeea4a9791af584feeef75dfc89a887fb1666681a8b2f3f9df95393ac8e4",
+        "thumbnail_sha256": "0672295ecb75ca357eace068b18f6d59302916a25783d570e5a88af7e40b19fa"
+      }
+    },
+    "qzgymr": {
+      "id": "qzgymr",
+      "subject": "Canadian alpine lake and bright clouds",
+      "page_url": "https://wallhaven.cc/w/qzgymr",
+      "api_url": "https://wallhaven.cc/api/v1/w/qzgymr",
+      "full_url": "https://w.wallhaven.cc/full/qz/wallhaven-qzgymr.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/qz/qzgymr.jpg",
+      "resolution": [
+        7140,
+        4402
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-06-09 11:30:04",
+      "uploader": {
+        "username": "Petunai42",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://www.reddit.com/r/EarthPorn/comments/1420dtc/tent_ridge_kananaskis_canada_7140_4402_pixelsoc/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 5259,
+          "name": "Canada"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "be1687d82188bdfa6f04314c5262f5627cea82c5ed92994901b1a20da5ef5e66",
+        "thumbnail_sha256": "f3c79569bec2520791b062e1774c35f821f8aba0e9f29ad75edfcc04520a25f9"
+      }
+    },
+    "vmxq3m": {
+      "id": "vmxq3m",
+      "subject": "Daylit forest and mountain lake",
+      "page_url": "https://wallhaven.cc/w/vmxq3m",
+      "api_url": "https://wallhaven.cc/api/v1/w/vmxq3m",
+      "full_url": "https://w.wallhaven.cc/full/vm/wallhaven-vmxq3m.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/vm/vmxq3m.jpg",
+      "resolution": [
+        8192,
+        4064
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2016-02-14 16:55:23",
+      "uploader": {
+        "username": "BurnyAlt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://unsplash.com/photos/Nte-4RiRfwU",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 20,
+          "name": "river"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 4942,
+          "name": "bay"
+        },
+        {
+          "id": 465,
+          "name": "hills"
+        },
+        {
+          "id": 349,
+          "name": "road"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 90724,
+          "name": "Unsplash"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "0522a54795804bf8d3ecb3437676a348a62070d3e7cd2ed2454c04487965e2a6",
+        "thumbnail_sha256": "fc5a43a78a0a94560294dde97e2cbfb5f78c669542250a9b06d04571e56bb3b7"
+      }
+    },
+    "vqxkr5": {
+      "id": "vqxkr5",
+      "subject": "Fog in Appalachian forest",
+      "page_url": "https://wallhaven.cc/w/vqxkr5",
+      "api_url": "https://wallhaven.cc/api/v1/w/vqxkr5",
+      "full_url": "https://w.wallhaven.cc/full/vq/wallhaven-vqxkr5.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/vq/vqxkr5.jpg",
+      "resolution": [
+        6000,
+        3376
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-10-07 13:02:34",
+      "uploader": {
+        "username": "Petunai42",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://www.reddit.com/r/EarthPorn/comments/xxm1wf/just_before_dawn_appalachian_mountains_tn_us/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 62937,
+          "name": "dawn"
+        },
+        {
+          "id": 4679,
+          "name": "USA"
+        },
+        {
+          "id": 34093,
+          "name": "Tennessee"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 2428,
+          "name": "mist"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "0a5d564494e10b3184d7b87a7571500fe4cf231b4134d4d7ce034f9ce662aaf9",
+        "thumbnail_sha256": "f6870bfef47fc875e368db8137e208e58a6c116b6cf5eb77aa125eb4be716a8b"
+      }
+    },
+    "w5eqmp": {
+      "id": "w5eqmp",
+      "subject": "Sepia pyramids and windblown sand",
+      "page_url": "https://wallhaven.cc/w/w5eqmp",
+      "api_url": "https://wallhaven.cc/api/v1/w/w5eqmp",
+      "full_url": "https://w.wallhaven.cc/full/w5/wallhaven-w5eqmp.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/w5/w5eqmp.jpg",
+      "resolution": [
+        4296,
+        2417
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-09-22 23:07:53",
+      "uploader": {
+        "username": "joshman1979",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 2325,
+          "name": "pyramid"
+        },
+        {
+          "id": 2391,
+          "name": "Egypt"
+        },
+        {
+          "id": 34865,
+          "name": "ruins"
+        },
+        {
+          "id": 401,
+          "name": "desert"
+        },
+        {
+          "id": 655,
+          "name": "sand"
+        },
+        {
+          "id": 107096,
+          "name": "Ancient Egypt"
+        },
+        {
+          "id": 14289,
+          "name": "history"
+        },
+        {
+          "id": 16484,
+          "name": "Pyramids of Giza"
+        },
+        {
+          "id": 5727,
+          "name": "dust"
+        },
+        {
+          "id": 236,
+          "name": "brown"
+        },
+        {
+          "id": 23384,
+          "name": "culture"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 989,
+          "name": "architecture"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 837,
+          "name": "sepia"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "a49514349e61ff36fbb2f5cafb81242ec484f98c9843cb70fbf9ce94c841894f",
+        "thumbnail_sha256": "719ea07fbf3efbe2687f0642cf249a3e901068aea38f13563002785aa684be97"
+      }
+    },
+    "wex83x": {
+      "id": "wex83x",
+      "subject": "Still lake, sunset and reflected mountain",
+      "page_url": "https://wallhaven.cc/w/wex83x",
+      "api_url": "https://wallhaven.cc/api/v1/w/wex83x",
+      "full_url": "https://w.wallhaven.cc/full/we/wallhaven-wex83x.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/we/wex83x.jpg",
+      "resolution": [
+        6144,
+        4096
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-08-27 10:10:26",
+      "uploader": {
+        "username": "Mobi",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": "https://www.flickr.com/photos/rumattso/51950539275/in/dateposted/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 64,
+          "name": "sunset"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 120922,
+          "name": "sunset glow"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "728cd978e04af525980810765dcfb313d83e42348c049da2dc3d3f427209aac0",
+        "thumbnail_sha256": "ff75aa0198baac67ff5ffba008628fbd7f9187e9cac2f17c6010c3ce16ffc22f"
+      }
+    },
+    "x83e2z": {
+      "id": "x83e2z",
+      "subject": "Monochrome snow peaks above fog",
+      "page_url": "https://wallhaven.cc/w/x83e2z",
+      "api_url": "https://wallhaven.cc/api/v1/w/x83e2z",
+      "full_url": "https://w.wallhaven.cc/full/x8/wallhaven-x83e2z.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/x8/x83e2z.jpg",
+      "resolution": [
+        5472,
+        3648
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-02-07 12:54:41",
+      "uploader": {
+        "username": "rootkit",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 18344,
+          "name": "summit"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "9fe091303e42ee57f4b93e2d76094fc6e64643d024948be3ad5127aa062fb917",
+        "thumbnail_sha256": "2e265c8662ce5dcc293a8d9aead5a81c0e5c0a3c287069f6f20070a5aec8f4be"
+      }
+    },
+    "xl19lv": {
+      "id": "xl19lv",
+      "subject": "Storm spiral photographed from orbit",
+      "page_url": "https://wallhaven.cc/w/xl19lv",
+      "api_url": "https://wallhaven.cc/api/v1/w/xl19lv",
+      "full_url": "https://w.wallhaven.cc/full/xl/wallhaven-xl19lv.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/xl/xl19lv.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-08-10 09:01:30",
+      "uploader": {
+        "username": "Cytorl",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 32,
+          "name": "space"
+        },
+        {
+          "id": 3264,
+          "name": "space station"
+        },
+        {
+          "id": 6333,
+          "name": "NASA"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 14042,
+          "name": "hurricane"
+        },
+        {
+          "id": 22965,
+          "name": "spiral"
+        },
+        {
+          "id": 1170,
+          "name": "satellite"
+        },
+        {
+          "id": 794,
+          "name": "storm"
+        },
+        {
+          "id": 307,
+          "name": "sea"
+        },
+        {
+          "id": 18596,
+          "name": "International Space Station"
+        },
+        {
+          "id": 47,
+          "name": "Earth"
+        },
+        {
+          "id": 18095,
+          "name": "Orbital Stations"
+        },
+        {
+          "id": 47182,
+          "name": "cyclone"
+        },
+        {
+          "id": 282,
+          "name": "blue"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 1240,
+          "name": "technology"
+        },
+        {
+          "id": 1004,
+          "name": "science"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 14,
+          "name": "science fiction"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "d42d49c96e2ad66effb4ab35d94afe1db08949cb7398854782693576039411e7",
+        "thumbnail_sha256": "7b2fac9e8da1fd2bb976a4004c8fa81f73c722924e21fdcee05b77d64efe85b4"
+      }
+    },
+    "ymm56g": {
+      "id": "ymm56g",
+      "subject": "Hurricane eye photographed from orbit",
+      "page_url": "https://wallhaven.cc/w/ymm56g",
+      "api_url": "https://wallhaven.cc/api/v1/w/ymm56g",
+      "full_url": "https://w.wallhaven.cc/full/ym/wallhaven-ymm56g.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/ym/ymm56g.jpg",
+      "resolution": [
+        5322,
+        3558
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2018-09-13 22:29:58",
+      "uploader": {
+        "username": "FabianoOliver",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Alexander Gerst",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://www.flickr.com/photos/astro_alex/albums/72157701251056435",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 14042,
+          "name": "hurricane"
+        },
+        {
+          "id": 18095,
+          "name": "Orbital Stations"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 22965,
+          "name": "spiral"
+        },
+        {
+          "id": 47182,
+          "name": "cyclone"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 32111,
+          "name": "Alexander Gerst"
+        },
+        {
+          "id": 6333,
+          "name": "NASA"
+        },
+        {
+          "id": 1004,
+          "name": "science"
+        },
+        {
+          "id": 3264,
+          "name": "space station"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 794,
+          "name": "storm"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 18596,
+          "name": "International Space Station"
+        },
+        {
+          "id": 6553,
+          "name": "top view"
+        },
+        {
+          "id": 240,
+          "name": "white"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "77831410f434d21684f7d7601219efb0db7147355f9b83a0470f37336a2bc527",
+        "thumbnail_sha256": "6fa812ff22c2e5807faf7c1e14f40aea584907c3fae05bcdec7210b2e398a1ec"
+      }
+    },
+    "yq8x8d": {
+      "id": "yq8x8d",
+      "subject": "Boat beneath Caribbean storm clouds",
+      "page_url": "https://wallhaven.cc/w/yq8x8d",
+      "api_url": "https://wallhaven.cc/api/v1/w/yq8x8d",
+      "full_url": "https://w.wallhaven.cc/full/yq/wallhaven-yq8x8d.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/yq/yq8x8d.jpg",
+      "resolution": [
+        5340,
+        3558
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-08-05 11:36:08",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 307,
+          "name": "sea"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 794,
+          "name": "storm"
+        },
+        {
+          "id": 1983,
+          "name": "ship"
+        },
+        {
+          "id": 139415,
+          "name": "Antigua and Barbuda"
+        },
+        {
+          "id": 15951,
+          "name": "Caribbean"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 903,
+          "name": "boat"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 282,
+          "name": "blue"
+        },
+        {
+          "id": 15625,
+          "name": "overcast"
+        },
+        {
+          "id": 336,
+          "name": "rain"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "926719328dc40ea9c6f0cecfcc39306a274328857c441a077a5955c24c9100dd",
+        "thumbnail_sha256": "89cae81d1c565fb71a65f342fe5e8cc9ffc32e8f63c01112d4ee0f13d2f13f68"
+      }
+    },
+    "yqxzqx": {
+      "id": "yqxzqx",
+      "subject": "Brule Lake with a distant freight train",
+      "page_url": "https://wallhaven.cc/w/yqxzqx",
+      "api_url": "https://wallhaven.cc/api/v1/w/yqxzqx",
+      "full_url": "https://w.wallhaven.cc/full/yq/wallhaven-yqxzqx.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/yq/yqxzqx.jpg",
+      "resolution": [
+        5120,
+        2880
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-10-30 15:34:57",
+      "uploader": {
+        "username": "Pc7",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Afayer9",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://www.flickr.com/photos/120261497@N08/54821530384/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 1265,
+          "name": "forest"
+        },
+        {
+          "id": 45110,
+          "name": "far view"
+        },
+        {
+          "id": 4041,
+          "name": "freight train"
+        },
+        {
+          "id": 24496,
+          "name": "diesel locomotive"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 23020,
+          "name": "Alberta"
+        },
+        {
+          "id": 5259,
+          "name": "Canada"
+        },
+        {
+          "id": 172057,
+          "name": "Afayer9"
+        },
+        {
+          "id": 29727,
+          "name": "rocky mountains"
+        },
+        {
+          "id": 172062,
+          "name": "Brule Lake (Alberta)"
+        },
+        {
+          "id": 94539,
+          "name": "Athabasca Glacier"
+        },
+        {
+          "id": 118669,
+          "name": "Canadian National"
+        },
+        {
+          "id": 2054,
+          "name": "train"
+        },
+        {
+          "id": 144088,
+          "name": "viewpoint"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "b2fbd0ff8d54e59a4eebbb4f46e537cf1f2c92e28e9b72912ae3247af9f1ab76",
+        "thumbnail_sha256": "a8285af4301f2eaa74e3319878a68fb2c258d1b98a1bba64ec456a9eaae85a48"
+      }
+    },
+    "yxvodx": {
+      "id": "yxvodx",
+      "subject": "Sparse blue long-exposure star field",
+      "page_url": "https://wallhaven.cc/w/yxvodx",
+      "api_url": "https://wallhaven.cc/api/v1/w/yxvodx",
+      "full_url": "https://w.wallhaven.cc/full/yx/wallhaven-yxvodx.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/yx/yxvodx.jpg",
+      "resolution": [
+        4276,
+        2836
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-07-11 21:10:47",
+      "uploader": {
+        "username": "yλman",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 245,
+          "name": "stars"
+        },
+        {
+          "id": 21711,
+          "name": "star trails"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 1466,
+          "name": "long exposure"
+        },
+        {
+          "id": 7936,
+          "name": "clear sky"
+        },
+        {
+          "id": 24614,
+          "name": "light trails"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 2102,
+          "name": "gradient"
+        },
+        {
+          "id": 198,
+          "name": "simple background"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "97f306e1dfd1f137003cd3ff232ea791251e2c5405a397c105853c6e508b9ee3",
+        "thumbnail_sha256": "deb48edd80f6ff67974588f7491ce1ff6b6c59fa9fb5368577312c89b426122b"
+      }
+    },
+    "zx9z8j": {
+      "id": "zx9z8j",
+      "subject": "Skyscrapers viewed upwards",
+      "page_url": "https://wallhaven.cc/w/zx9z8j",
+      "api_url": "https://wallhaven.cc/api/v1/w/zx9z8j",
+      "full_url": "https://w.wallhaven.cc/full/zx/wallhaven-zx9z8j.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/zx/zx9z8j.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2017-02-19 23:23:19",
+      "uploader": {
+        "username": "lintroller",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 350,
+          "name": "modern"
+        },
+        {
+          "id": 1362,
+          "name": "building"
+        },
+        {
+          "id": 3153,
+          "name": "skyscraper"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 13,
+          "name": "cityscape"
+        },
+        {
+          "id": 13701,
+          "name": "palace"
+        },
+        {
+          "id": 989,
+          "name": "architecture"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 7177,
+          "name": "Toronto"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "large provider thumbnail"
+      },
+      "evidence": {
+        "detail_sha256": "cc87a481d896320712f75e33767c102fc0bd1c32abf8e4c3d5209720ebd53863",
+        "thumbnail_sha256": "c4c7296fbd7b49139cbb6adcd39de26112473c4f3e79ad159829dd8bc57b5e06"
+      }
+    }
+  },
+  "themes": {
+    "aster": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Quiet coastal photography complements slate/porcelain surfaces and small Breeze captions.",
+      "dark": {
+        "image_id": "9mqvz1",
+        "rationale": "A single breaking wave low on dark blue water; generous untextured sky for the two upper-right cards."
+      },
+      "light": {
+        "image_id": "wex83x",
+        "rationale": "Still-water reflection and pale peach sky; upper-right sky stays quiet behind opaque cards."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; keep the shoreline in the lower half. Top information strip and small bottom dock leave the horizon open.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "brutalist": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Strong photographic diagonals match hard edges; no decorative vector geometry is needed.",
+      "dark": {
+        "image_id": "zx9z8j",
+        "rationale": "Upward-looking monochrome skyscrapers echo square caption geometry."
+      },
+      "light": {
+        "image_id": "d6o77l",
+        "rationale": "A high-contrast cumulus study balances black edges against the yellow-paper mode."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Busy architecture/cloud edges require the theme's opaque black/yellow UI surfaces; not a transparent-text backdrop.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "caelestia": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Photographic green and rose tones give Material You a natural source when explicitly enabled.",
+      "dark": {
+        "image_id": "p82qrj",
+        "rationale": "Green aurora over a snowy road supports a dark left pill rail."
+      },
+      "light": {
+        "image_id": "jxyowm",
+        "rationale": "Rose-lit mountains and a pale moon give light tonal surfaces a restrained warm source."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Rail stays backed. These are recommendations, not a request to force wallpaper-derived colours over a chosen palette.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "frutiger-aero": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Photographic water and clouds retain optimistic aqua without generated bubbles or hills.",
+      "dark": {
+        "image_id": "yq8x8d",
+        "rationale": "A small boat in a deep turquoise bay under a storm keeps the ocean-blue dark variant."
+      },
+      "light": {
+        "image_id": "7j6wpy",
+        "rationale": "White cumulus against a clear blue sky supplies the fresh-air light variant."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Use the taskbar's glass backing over waves/clouds; preserve any photographer watermark.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "glyph-rice": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Low-key city texture / white winter negative space keep the dot typography dominant.",
+      "dark": {
+        "image_id": "dpr913",
+        "rationale": "A monochrome aerial city forms a dark fine-grained texture behind white dots."
+      },
+      "light": {
+        "image_id": "kxygyd",
+        "rationale": "A lone tree in a white snow field leaves negative space for black dot type."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Test the giant upper-left clock against the skyline/tree; right circular cards remain opaque. Image itself contains no UI.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "gnome-adwaita-like": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Cloud and mountain photography gives clean Adwaita-like surfaces breathing room.",
+      "dark": {
+        "image_id": "3l6jj9",
+        "rationale": "A warmly lit isolated cloud on dark sky supports a restrained top panel."
+      },
+      "light": {
+        "image_id": "qzgymr",
+        "rationale": "Canadian alpine lake and bright cloud banks complement light blue/gray headerbars."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Keep the cloud/shoreline central; native opaque popup surfaces protect text contrast.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "gruvbox-dark": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Copper foliage and orange sandstone complement warm cream/charcoal rather than drawing contour lines.",
+      "dark": {
+        "image_id": "9dpejk",
+        "rationale": "Larch treetops make burnt-orange marks on a near-black forest."
+      },
+      "light": {
+        "image_id": "po73qj",
+        "rationale": "Sunlit Monument Valley sandstone brings a natural ochre paper counterpart."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Tiny flat top bar needs its opaque backing over foliage; keep the sandstone subject central above the small dock.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "kiln-court": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Earth pigment comes from real sand and architecture rather than rendered vaults.",
+      "dark": {
+        "image_id": "w5eqmp",
+        "rationale": "Sepia pyramids and windblown sand echo the clay palette with a quiet sky."
+      },
+      "light": {
+        "image_id": "85xg5k",
+        "rationale": "Sunlit Death Valley dunes carry warm sand highlights and sculptural natural folds."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; keep the pyramid/dune crest away from the left widget column. Preserve the bottom pill-panel clearance.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "macos": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Natural alpine photography replaces synthetic curves without imitating an Apple asset.",
+      "dark": {
+        "image_id": "l3edjp",
+        "rationale": "Moon over blue Mount Cook reflection keeps white top-panel text calm."
+      },
+      "light": {
+        "image_id": "6de6wl",
+        "rationale": "Soft snowy peaks and pale sky balance neutral light chrome."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; keep peaks below the slim top panel. No desktop widget placement is required.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "moss-atlas": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Actual woodland depth suits the organic right-hand instrument rail.",
+      "dark": {
+        "image_id": "vqxkr5",
+        "rationale": "Appalachian fog layers and evergreen silhouettes support the low-light green palette."
+      },
+      "light": {
+        "image_id": "768yeo",
+        "rationale": "An overhead conifer canopy makes a structural green texture without drawn contour lines."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; center the fog or tree pattern. The right rail must remain backed over foliage.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "mountain-neon-dot": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Faithful snow-mountain photography with the reference's teal night atmosphere; no AI mountain illustration.",
+      "dark": {
+        "image_id": "ey7prw",
+        "rationale": "Dark teal snowy peaks beneath a star field closely match the screenshot's mountain/sky proportions."
+      },
+      "light": {
+        "image_id": "nr7zq0",
+        "rationale": "Snowfield and pale Swiss alpine sky provide a true light counterpart."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Upper-left dot clock sits in sky; homelab panel keeps its backing over mountain contrast. No dock; top islands stay separate.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "nextkde": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Soft blue reflections fit the broad glass surfaces and top-panel / launch-dock composition.",
+      "dark": {
+        "image_id": "57o619",
+        "rationale": "Maligne Lake reflection and dusk-blue cliffs support the cool glass palette."
+      },
+      "light": {
+        "image_id": "vmxq3m",
+        "rationale": "Sunlit forested lake and pale sky give the light mode a fresh natural counterpoint."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; preserve the waterline. Native cards need opaque backing over the detailed tree banks.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "nothing-dot": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Real monochrome lighting and landscape complement the single red interface accent.",
+      "dark": {
+        "image_id": "p9qovj",
+        "rationale": "Streetlights in fog produce small white dots in a near-black field."
+      },
+      "light": {
+        "image_id": "7p186o",
+        "rationale": "A snowy mountain reflection supplies controlled monochrome tones for off-white surfaces."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Keep bright lamps away from the ring clock; use its actual backing. Top strip and small dock remain readable.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "orbit-glass": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Use real astronomy/space photography rather than a synthetic eclipse. Right rail only.",
+      "dark": {
+        "image_id": "5y3q31",
+        "rationale": "Milky Way above a Swiss valley supplies a real orbital context and dark edge for the right rail."
+      },
+      "light": {
+        "image_id": "lygg6r",
+        "rationale": "ISS cupola photograph frames Earth with dark structural edges; the right frame supports light rail contrast."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; cupola geometry is part of the photograph, not UI. Inspect ultrawide crop before selecting. No dock.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "paper-signal": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Monochrome still life and snow keep the editorial palette in charge.",
+      "dark": {
+        "image_id": "eyv7xl",
+        "rationale": "A black coffee cup and long shadow bring tactile paper-like quiet to dark mode."
+      },
+      "light": {
+        "image_id": "x83e2z",
+        "rationale": "Snow peaks floating in white fog leave broad low-detail paper-white space."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill. Keep the cup/peaks visible; the existing widgets use backed cards, not text directly on the subject.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "signal-deck": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Real orbital weather observations suit the scientific instrument layout without invented survey artwork.",
+      "dark": {
+        "image_id": "xl19lv",
+        "rationale": "An ISS view of a spiral storm includes real station hardware and sea-blue cloud structure."
+      },
+      "light": {
+        "image_id": "ymm56g",
+        "rationale": "A brighter hurricane-eye photograph gives the light mode a precise observational subject."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; retain the eye of the storm. Split instrument bars require their native surfaces over cloud texture.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "sweeteh": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Real sky photography suits raised Material tiles and explicit native island surfaces.",
+      "dark": {
+        "image_id": "yxvodx",
+        "rationale": "A sparse long-exposure star field gives dark tiles an unobtrusive field."
+      },
+      "light": {
+        "image_id": "21y32m",
+        "rationale": "Pastel illuminated cloud tops echo the rounded light tiles."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; keep the cloud ridge below the right-side clock/weather/calendar stack. Preserve any photographer watermark; never crop specifically to remove it.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "synthwave": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Actual night lights and sunset colour replace the procedural sun/grid; no uncredited cyberpunk illustration.",
+      "dark": {
+        "image_id": "3qq8jd",
+        "rationale": "A photographed Japanese neon-sign building supplies cyan against black."
+      },
+      "light": {
+        "image_id": "39zjq6",
+        "rationale": "Purple sunset at a Japanese torii retains the neon hues in natural light."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; left rail stays backed over signs. Torii is photographed scenery, not a launch control.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "terminal-minimal": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Large quiet tonal fields respect a tiny bar and bare desktop clock.",
+      "dark": {
+        "image_id": "o571qp",
+        "rationale": "A nearly black hill under a thin warm horizon preserves the terminal focus."
+      },
+      "light": {
+        "image_id": "21ooly",
+        "rationale": "Soft layers of misted ridges replace the black field without sharp detail."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; clock should stay in a quiet part of the sky. No dock. The light photograph is intentionally muted, not bright white.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "tidal-loom": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Natural repeated forms replace procedural weaving while keeping the cool material rhythm.",
+      "dark": {
+        "image_id": "m9wr19",
+        "rationale": "Close-up fern leaflets have a tactile teal repetition."
+      },
+      "light": {
+        "image_id": "3qqd26",
+        "rationale": "A photographed wave washing over a chequered surface gives the light mode a real woven-looking rhythm."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; left rail and upper-right cards need their existing solid/translucent backing over repeating detail. Parent has disabled the duplicate taskbar.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "windows11": {
+      "status": "curated_pending_runtime_wiring",
+      "rationale": "Wide natural horizons feel familiar behind a single centred taskbar.",
+      "dark": {
+        "image_id": "7p6wke",
+        "rationale": "A dark Norwegian fjord creates a calm cool field around the centre work area."
+      },
+      "light": {
+        "image_id": "yqxzqx",
+        "rationale": "Daylit Brule Lake with a distant train offers an open bright sky."
+      },
+      "same_image_both_modes": false,
+      "placement": "Center-fill; keep the river/lake horizon and leave the bottom taskbar on its native backing. No additional rail.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    }
+  }
+}

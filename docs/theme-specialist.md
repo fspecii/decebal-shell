@@ -92,3 +92,30 @@ private fontconfig cache and direct uniform contain drawing. No Settings sizing 
 widget renderer edits. See `theme-previews.md` for measurements and edge-marker QA.
 Rejected: per-job cold font caches, synchronous per-card asset hashing, cover/rounded
 crop for evidence. Viewport priority remains deferred; FIFO queue is bounded to32.
+
+## Curated photography + Aster — 2026-10-30
+
+User rejects procedural/AI wallpaper defaults. `data/wallhaven-curated.json` now
+maps all 20 existing visible shipped package IDs + Aster: 21 IDs / 42 distinct SFW choices.
+Actual API detail/tag metadata and large thumbnails inspected; AI-art tag 133451 /
+AI generator tags rejected, plus provisional digital-art picks replaced. Uploaders
+are never promoted to authors; tagged photographer names remain unverified
+candidates and all 42 per-image licenses unknown. No linked art/thumb/derivative
+committed; private contact sheets/full-resolution Aster photo QA in
+`/tmp/decebal-wallhaven-curation`. See `wallhaven-curated.md` for exact IDs/limits.
+
+Aster is an original slate/porcelain coastal design: existing Breeze captions,
+28 px top panel + 44 px Mac launch dock (no rail/taskbar duplication), modest native
+surface alpha, two existing safe builtin time/media cards. No image inheritance,
+remote manifest field, font asset or generated wallpaper fallback. Existing
+Wallpaper choices and custom-layout confirmation are tested. Actual native modes
+and absent-source widgets in `theme-ports/aster`; photo derivatives remain private.
+Native caption helper needs two bounded cleared paint frames for settled glyphs
+because rdwm budgets first-frame loading; preserved the existing renderer/hit tests.
+
+Parent f68d460, saved-preview index 837799f and widget creator/Icons integrations
+inspected read-only. No engine/Settings/widget source replaced. Parent owns runtime
+catalogue wiring/data installation, old generated-default removal and compositor
+shadow profile. Final contrast/crop QA for other 40 choices and ultrawide remains.
+Do not assume undocumented `ai_art_filter=0` is enforced: use detail tags + explicit
+visual review; parent provider has no AI filter preference yet. No competing agent.

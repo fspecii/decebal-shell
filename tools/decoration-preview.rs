@@ -11,8 +11,13 @@ fn render(cfg: &DecorationConfig, path: &Path, scale: f32, hovers: bool) {
     let mut deco = Deco::new(&cfg);
     for (i, (focused, hover)) in states.iter().enumerate() {
         let offset = i * (h + gap) as usize * w as usize * 4;
-        let mut surface = Surface::new(&mut bytes[offset..], w, h, w as usize * 4).unwrap();
-        deco.draw_titlebar(&TitlebarState { title: if *focused { "Focused sample window" } else { "Unfocused sample window" }, focused: *focused, hover: *hover }, &mut surface);
+        // rdwm deliberately defers uncached glyphs after its per-frame time budget.
+        // A bounded second native frame captures settled text, not first-frame boxes.
+        for _ in 0..2 {
+            bytes[offset..offset + (w * h * 4) as usize].fill(0);
+            let mut surface = Surface::new(&mut bytes[offset..], w, h, w as usize * 4).unwrap();
+            deco.draw_titlebar(&TitlebarState { title: if *focused { "Focused sample window" } else { "Unfocused sample window" }, focused: *focused, hover: *hover }, &mut surface);
+        }
     }
     for (part, (x, y, bw, bh)) in titlebar_buttons(&cfg, w as i32) {
         assert!(bw > 0 && bh > 0 && x >= 0 && x + bw <= w as i32 && y >= 0 && y + bh <= h as i32);
