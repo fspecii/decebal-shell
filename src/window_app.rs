@@ -216,6 +216,10 @@ pub trait WindowApp {
     }
     /// The window was mapped (true) or unmapped (false), e.g. moved to a hidden tag. Apps that poll stop while hidden.
     fn set_visible(&mut self, _visible: bool) {}
+    /// A normal window-manager close request. Editors may retain a failed draft.
+    fn close_requested(&mut self) -> Response {
+        Response::act(Action::Close)
+    }
     /// Called after the waker fired: drain results from worker threads here.
     fn tick(&mut self) -> Response;
 }

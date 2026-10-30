@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Timer
+Comment=A countdown that continues after closing the window
+Exec=dectimer
+Icon=alarm-clock
+Terminal=false
+Categories=Utility;
+StartupWMClass=dectimer

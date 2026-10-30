@@ -2,7 +2,7 @@
 
 A small, KDE-like, rice-friendly desktop environment for [rdwm](https://github.com/fspecii/rdwm), written in Rust:
 **dock**, **menu bar with Control Center**, Spotlight-style launcher, notifications, System Settings, theme
-packages, desktop widgets and a **Wallhaven wallpaper browser**. Everything is customisable (themes, styles, layouts,
+packages, desktop widgets, linked **Notes and Timer apps**, and a **Wallhaven wallpaper browser**. Everything is customisable (themes, styles, layouts,
 fonts, icons, presets); the shipped styles are macOS, Windows 11 and Caelestia, but Decebal is not a macOS clone.
 One codebase, two display backends:
 
@@ -23,6 +23,8 @@ window controls, customization and recovery.
 
 | Program | What | Idle memory (release) |
 |---|---|---|
+| `decnotes` | private autosaving Notes app and linked Quick note widget; [guide](docs/notes-timer.md) | not yet measured |
+| `dectimer` | persistent countdown with completion after window close and linked widget; [guide](docs/notes-timer.md) | not yet measured |
 | `decdock` | floating dock: hover magnification, running dots, click to launch | ~6 MB RSS |
 | `decbar` | menu bar with dropdown menus, tray, clock and the Control Center (Wi-Fi, Bluetooth, Focus, Night Shift, dark mode, display and sound sliders, Now Playing); under the Caelestia style a pill bar on the left, right, top or bottom edge, or split into a top and a bottom bar (workspace pills, window, status icons, clock, power), see [docs/caelestia.md](docs/caelestia.md) | ~7 MB RSS |
 | `dechaven` | Wallhaven wallpaper browser (search, tabs, endless grid, set / download); the same browser lives in System Settings > Wallpaper > Wallhaven, see [docs/wallpapers.md](docs/wallpapers.md) | ~33 MB RSS with a page of thumbnails |

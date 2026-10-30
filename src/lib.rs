@@ -53,3 +53,6 @@ pub mod wallhaven;
 pub mod widgets;
 pub mod window_app;
 pub mod wm;
+
+pub mod notes;
+pub mod timer;

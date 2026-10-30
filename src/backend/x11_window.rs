@@ -358,7 +358,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                 }
                 Event::ClientMessage(m) => {
                     if m.type_ == at.wm_protocols && m.data.as_data32()[0] == at.wm_delete {
-                        return Ok(());
+                        resp = app.close_requested();
                     }
                     if m.type_ == at.wake {
                         resp = app.tick();

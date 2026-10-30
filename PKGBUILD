@@ -51,7 +51,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
+  for bin in decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets decnotes dectimer; do
     install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
   done
   # DEPRECATED compatibility names (macbar -> decbar, ...), kept for one release so existing keybinds keep working
@@ -81,6 +81,8 @@ package() {
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 contrib/dechaven.desktop "$pkgdir/usr/share/applications/dechaven.desktop"
   install -Dm644 contrib/decsettings.desktop "$pkgdir/usr/share/applications/decsettings.desktop"
+  install -Dm644 contrib/decnotes.desktop "$pkgdir/usr/share/applications/decnotes.desktop"
+  install -Dm644 contrib/dectimer.desktop "$pkgdir/usr/share/applications/dectimer.desktop"
   install -Dm644 contrib/decmon.desktop "$pkgdir/usr/share/applications/decmon.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

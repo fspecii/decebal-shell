@@ -2,8 +2,8 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
 # Programs that did not exist under the old macshell name get no mac* compatibility wrapper.
-NO_COMPAT = declock decmon decwall
-BINS = decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets
+NO_COMPAT = declock decmon decwall decnotes dectimer
+BINS = decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets decnotes dectimer
 UNITS = decebal-live-wallpaper.service decebal-widgets.service decebal-dock.service decebal-bar.service decebal-notify.service decebal-clip.service decebal-hot.service decebal-wallpaper-colors.service
 # Themes that ship assets (wallpaper, widgets, screenshot): installed as system packages, found next to the compiled-in manifest.
 ASSET_THEMES = nothing-dot nothing-light brutalist terminal-minimal terminal-amber orbit-glass paper-signal moss-atlas signal-deck nextkde
@@ -20,6 +20,8 @@ install: all
 	for d in $(AUTOSTART); do install -Dm644 contrib/$$d $(DESTDIR)/etc/xdg/autostart/$$d; done
 	install -Dm644 contrib/dechaven.desktop $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	install -Dm644 contrib/decsettings.desktop $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
+	install -Dm644 contrib/decnotes.desktop $(DESTDIR)$(PREFIX)/share/applications/decnotes.desktop
+	install -Dm644 contrib/dectimer.desktop $(DESTDIR)$(PREFIX)/share/applications/dectimer.desktop
 	install -Dm644 contrib/decmon.desktop $(DESTDIR)$(PREFIX)/share/applications/decmon.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
 	# every theme package (manifest, wallpapers, widgets, screenshots): /usr/share/decebal/themes/<id>/
@@ -34,6 +36,7 @@ uninstall:
 	for d in $(AUTOSTART); do rm -f $(DESTDIR)/etc/xdg/autostart/$$d; done
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/dechaven.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decsettings.desktop
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/decnotes.desktop $(DESTDIR)$(PREFIX)/share/applications/dectimer.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/decmon.desktop
 	rm -rf $(DESTDIR)$(PREFIX)/share/decebal/dbus $(DESTDIR)$(PREFIX)/share/decebal/themes $(DESTDIR)$(PREFIX)/share/doc/decebal
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/decebal
@@ -130,3 +133,9 @@ e2e-preview-cache: all
 
 e2e-widget-creator-icons: all
 	tests/e2e/widget-creator-icons.sh
+
+# Private native Notes/Timer integration, no user session or notification bus.
+e2e-notes-timer: all
+	tests/e2e/notes-timer.sh
+
+.PHONY: e2e-notes-timer

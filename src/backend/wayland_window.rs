@@ -362,7 +362,8 @@ impl<A: WindowApp + 'static> OutputHandler for State<A> {
 
 impl<A: WindowApp + 'static> WindowHandler for State<A> {
     fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &Window) {
-        self.exit = true;
+        let response = self.app.close_requested();
+        self.apply(response);
     }
 
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &Window, configure: WindowConfigure, _: u32) {

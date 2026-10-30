@@ -1,0 +1,37 @@
+format = 1
+id = "timer-card"
+name = "Timer"
+description = "A shared countdown that continues when its app is closed."
+size = [320, 220]
+refresh = 1000
+[root]
+type = "col"
+align = "stretch"
+padding = 18
+gap = 12
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open timer"
+[[root.children]]
+type = "text"
+text = "{timer.title}"
+size = 15
+color = "text_secondary"
+[[root.children]]
+type = "text"
+text = "{timer.remaining}"
+size = 36
+weight = "bold"
+color = "text"
+[[root.children]]
+type = "bar"
+value = "timer.progress"
+height = 5
+color = "accent"
+track = "border"
+[[root.children]]
+type = "text"
+text = "{timer.status} · Click to open Timer"
+size = 12
+color = "text_secondary"

@@ -742,7 +742,7 @@ pub fn poll(m: &mut Model) -> bool {
 
 // ---------------------------------------------------------------- keyboard and pointer for the editor
 
-fn system_clipboard() -> Option<String> {
+pub(crate) fn system_clipboard() -> Option<String> {
     use std::process::{Command, Stdio};
     let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("x11");
     let mut tries: Vec<(&str, Vec<&str>)> = Vec::new();

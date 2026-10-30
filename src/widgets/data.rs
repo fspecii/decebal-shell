@@ -119,6 +119,14 @@ macro_rules! src {
 }
 
 pub const SOURCES: &[Source] = src! {
+    "notes.count" "number" "number of saved notes";
+    "notes.title" "text" "latest private note title (only when a notes widget is enabled)";
+    "notes.excerpt" "text" "bounded latest note excerpt; literal text";
+    "notes.status" "text" "notes storage status";
+    "timer.remaining" "text" "shared countdown HH:MM:SS";
+    "timer.title" "text" "shared countdown label";
+    "timer.status" "text" "Ready, Running, Paused, Complete or unavailable";
+    "timer.progress" "fraction" "elapsed fraction 0..1";
     "fetch.logo" "text" "actual Fastfetch built-in distro ASCII logo";
     "fetch.present" "bool" "Fastfetch returned supported data";
     "fetch.status" "text" "Fastfetch backend status";
@@ -265,6 +273,14 @@ pub fn sample() -> Data {
     ] {
         d.set(k, Val::Text(v.into()));
     }
+    d.set("notes.count", Val::Num(2.0));
+    d.set("notes.title", Val::Text("A thought for tomorrow".into()));
+    d.set("notes.excerpt", Val::Text("Make a little room for something new. (Sample note)".into()));
+    d.set("notes.status", Val::Text("Sample notes".into()));
+    d.set("timer.remaining", Val::Text("00:24:38".into()));
+    d.set("timer.title", Val::Text("Focus (sample)".into()));
+    d.set("timer.status", Val::Text("Running".into()));
+    d.set("timer.progress", Val::Num(0.015));
     d.set("fetch.logo", Val::Text(include_str!("../../tests/fixtures/widgets/fastfetch-omarchy-logo.txt").trim_end_matches('\n').into()));
     d.set("fetch.present", Val::Bool(true));
     d.set("fetch.status", Val::Text("Fastfetch sample data".into()));
@@ -357,6 +373,12 @@ impl Live {
         use std::time::{Duration, Instant};
         let now = Instant::now();
         d.time = Time::now();
+        if self.groups.contains("notes") {
+            update_notes(d, crate::notes::Store::discover().and_then(|s| s.snapshot()));
+        }
+        if self.groups.contains("timer") {
+            update_timer(d, crate::timer::Store::discover().and_then(|s| s.snapshot()));
+        }
         if let Some(fetch) = self.fetch.as_mut() {
             fetch.update(d);
         }
@@ -521,6 +543,43 @@ fn spawn_command(c: CommandDef, out: Arc<Mutex<HashMap<String, String>>>, waker:
         }
         std::thread::sleep(std::time::Duration::from_secs(u64::from(c.interval.max(1))));
     });
+}
+
+/// Bound text before painting; values remain literal, never widget DSL or actions.
+fn note_line(s: &str, max: usize) -> String {
+    let mut text: String = s.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect();
+    if s.chars().count() > max {
+        text.push('…');
+    }
+    text
+}
+fn update_notes(d: &mut Data, result: Result<crate::notes::Snapshot, crate::notes::Error>) {
+    // Clear old contents on errors so a deleted or inaccessible note cannot linger.
+    d.set("notes.count", Val::Num(0.0));
+    d.set("notes.title", Val::Text("Capture a thought".into()));
+    d.set("notes.excerpt", Val::Text("Click New note to start writing".into()));
+    d.set("notes.status", Val::Text("Notes unavailable".into()));
+    if let Ok(s) = result {
+        d.set("notes.count", Val::Num(s.count() as f64));
+        d.set("notes.status", Val::Text(if s.corrupt_count > 0 { "Some unreadable notes preserved" } else { "Saved on this device" }.into()));
+        if let Some(n) = s.latest() {
+            let title = if n.title.trim().is_empty() { "Untitled note".into() } else { note_line(&n.title, 38) };
+            d.set("notes.title", Val::Text(title));
+            d.set("notes.excerpt", Val::Text(note_line(&n.body, 110)));
+        }
+    }
+}
+fn update_timer(d: &mut Data, result: Result<crate::timer::Snapshot, String>) {
+    d.set("timer.remaining", Val::Text("--:--".into()));
+    d.set("timer.title", Val::Text("Timer".into()));
+    d.set("timer.status", Val::Text("Timer unavailable".into()));
+    d.set("timer.progress", Val::Num(0.0));
+    if let Ok(s) = result {
+        d.set("timer.remaining", Val::Text(crate::timer::format_remaining(s.remaining)));
+        d.set("timer.title", Val::Text(s.title));
+        d.set("timer.status", Val::Text(format!("{:?}", s.status)));
+        d.set("timer.progress", Val::Num(1.0 - s.remaining as f64 / s.duration.max(1) as f64));
+    }
 }
 
 #[cfg(test)]

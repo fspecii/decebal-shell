@@ -157,6 +157,15 @@ fn commands() -> &'static [(Item, &'static str)] {
             (cmd("Wallpapers", "Browse Wallhaven", "picture", BLUE, Act::Exec(launch::sibling_or_path("dechaven")), false), "wallhaven background wallpaper"),
             (cmd("Launchpad", "All applications", "grid", BLUE, Act::Exec(launch::sibling_or_path("declaunch")), false), "apps applications"),
         ];
+        for (title, detail, name, extra, args) in [
+            ("Notes", "Your private notes", "decnotes", "memo writing", vec![]),
+            ("Quick Note", "Capture a thought", "decnotes", "new memo", vec!["--new"]),
+            ("Timer", "A countdown for your next task", "dectimer", "countdown focus alarm", vec![]),
+        ] {
+            let mut a = vec![launch::sibling_or_path(name)];
+            a.extend(args.into_iter().map(String::from));
+            v.push((cmd(title, detail, "clock", BLUE, Act::Argv(a), false), extra));
+        }
         if let Some(a) = shot {
             v.push((cmd("Screenshot", "Capture the screen", "screenshot", GRAY, a, false), "capture screen"));
         }

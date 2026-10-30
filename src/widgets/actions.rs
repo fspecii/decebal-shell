@@ -55,16 +55,22 @@ pub enum Open {
     Session,
     Notifications,
     Overview,
+    Notes,
+    QuickNote,
+    Timer,
 }
 
 impl Open {
-    pub const ALL: [(Open, &'static str); 6] = [
+    pub const ALL: [(Open, &'static str); 9] = [
         (Open::Dashboard, "dashboard"),
         (Open::Launcher, "launcher"),
         (Open::Spotlight, "spotlight"),
         (Open::Session, "session"),
         (Open::Notifications, "notifications"),
         (Open::Overview, "overview"),
+        (Open::Notes, "notes"),
+        (Open::QuickNote, "quick-note"),
+        (Open::Timer, "timer"),
     ];
 
     /// The program (and its argument) that shows it.
@@ -76,6 +82,9 @@ impl Open {
             Open::Session => &["decsession"],
             Open::Notifications => &["decnotify", "history"],
             Open::Overview => &["decexpose"],
+            Open::Notes => &["decnotes"],
+            Open::QuickNote => &["decnotes", "--new"],
+            Open::Timer => &["dectimer"],
         }
     }
 }
@@ -202,6 +211,13 @@ impl Action {
 pub fn run(a: &Action) {
     use crate::controlcenter::sys;
     match a {
+        Action::Open(o) => {
+            let mut argv: Vec<String> = o.argv().iter().map(|s| (*s).into()).collect();
+            argv[0] = crate::launch::sibling_or_path(&argv[0]);
+            if !crate::launch::spawn_argv(&argv) {
+                crate::launch::notify_error("Widget", "Could not open the app");
+            }
+        }
         Action::Exec(cmd) => {
             let cmd = cmd.clone();
             std::thread::spawn(move || {

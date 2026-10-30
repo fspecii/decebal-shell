@@ -1,0 +1,42 @@
+format = 1
+id = "quick-note"
+name = "Quick note"
+description = "Your latest private note, linked to the Notes app."
+size = [320, 220]
+refresh = 1000
+[root]
+type = "col"
+align = "stretch"
+padding = 18
+gap = 12
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open notes"
+[[root.children]]
+type = "text"
+text = "{notes.title}"
+size = 20
+weight = "bold"
+color = "text"
+[[root.children]]
+type = "text"
+text = "{notes.excerpt}"
+size = 14
+color = "text_secondary"
+[[root.children]]
+type = "text"
+text = "{notes.status}"
+size = 11
+color = "text_secondary"
+[[root.children]]
+type = "button"
+on_click = "open quick-note"
+height = 34
+background = "surface"
+radius = 8
+[[root.children.children]]
+type = "text"
+text = "New note"
+size = 14
+color = "accent"

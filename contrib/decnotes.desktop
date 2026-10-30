@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Notes
+Comment=Capture and organise private notes
+Exec=decnotes
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;
+StartupWMClass=decnotes

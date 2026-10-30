@@ -1,0 +1,6 @@
+col [0.0 0.0 320.0 220.0] bg r=10 click
+  text [18.0 18.0 284.0 25.0] text="A thought for tomorrow" size=20 bold
+  text [18.0 55.0 284.0 18.0] text="Make a little room for something ne…" size=14
+  text [18.0 85.0 284.0 14.0] text="Sample notes" size=11
+  button [18.0 111.0 284.0 34.0] bg r=8 click
+    text [129.2 119.0 61.6 18.0] text="New note" size=14

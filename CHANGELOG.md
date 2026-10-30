@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Native Notes and Timer apps, linked Quick note/Timer widgets, launcher entries, private local persistence, conflict recovery and countdown notification after closing the window (docs/notes-timer.md).
+- Independent Explorer/Finder inspired visual profiles for modern GNOME Files, selected in All apps and kept across theme changes (docs/file-manager-profiles.md).
+
 - System Settings > Widgets can **create** a widget without writing code: pick a digital clock, analog clock, system metrics (CPU, memory, disk, network) or a note, name it, choose Small/Medium/Large and a screen position, check the live preview (the desktop's own painter with labelled sample data) and press Create. It saves a safe user widget file in your widgets folder, never overwriting an existing one, and adds it to the desktop. No commands are involved (docs/widgets-settings.md).
 - The bar's weather widget is clickable in every theme: macOS, Windows 11 taskbar and Caelestia pill bars open a weather popup (conditions, feels-like, humidity, wind, location, today's high/low, 2-day forecast, Refresh row, offline / no-data states). It reads the same wttr.in answer as before, nothing new is fetched. The pill bars and the taskbar gained the weather icon, which they never showed.
 - Activity Monitor (`decmon`): a process manager and performance monitor, opened by the bar's agents icon (popup) or as a window; End task / Force quit with guards (docs/procmon.md).
