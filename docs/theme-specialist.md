@@ -211,3 +211,12 @@ clock/date andmedia truncates: geometrypasses !=readabilitypasses. Parent shared
 clock/media reflow follow-up; no inventedresponsivepackagefeature. Existing42SHA
 reviewedphotographs supportDuxdarkl3edjp/light39zjq6 andFollowtheme; no hardcoded
 wallpaperdefault/runtimechange/newsearch. Evidence undercombined-*plusJSONbounds.
+
+
+Four-corner follow-up: media bottom-right(-32,-32), focus bottom-left, resource
+upper-right, clock upper-left. Package-only checkpoint, pending exact shared
+clock/media text_scale_width fix from native agent. Do not duplicate DSL source;
+regenerate combined proof only after actual commit/dimensions available. Old
+screenshots show prior layout/readability gaps and are historical. Parent1af0592
+resolved oldNextKDEaudit mismatch; parent312de68 inspected read-only. No live edit,
+install/restart/push/newrootcherry-pick/all-binary build.

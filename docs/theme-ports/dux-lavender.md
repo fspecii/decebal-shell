@@ -80,7 +80,8 @@ pack bytes checked. One expected schema warning remains: decoration.buttons side
 hint has no separate rdwm side key. The boolean is applied and tested; Materia
 chooses side/order. No unsupported side/order behaviour is claimed.
 
-Full Python artwork audit retains a pre-existing parentNextKDE hash mismatch:
+**Historical validation (resolved by parent `1af0592`):** the earlier full Python
+artwork audit reported a NextKDE hash mismatch:
 current`f27882467c6fa346d1d2e91877be66ede14d08671b0910f732dc5903f2061234`
 versus older audit`eedb3bf63306a97771ada102140a6fbad5da6a1e6f80a289b80b1d2daa904520`.
 No old audit record or NextKDE manifest was weakened/edited to hide it.
@@ -135,3 +136,22 @@ Follow-up validation:4Dux+4curatedintegrationtests pass, targeted strictClippy a
 format/diff checks clean. Actual combined profile evidence and known clipped200%
 clock were viewed. No release/all-target build or install was requested/run.
 Dependencies remain originalde48c1c+37c115f, package006f0c5 then this follow-up.
+
+
+## Four-corner layout for shared readable sizing — pending native handoff
+
+Media moved from upper-left(32,224) to bottom-right(-32,-32). Clock stays upper-left,
+resources upper-right, focus lower-left. This package-only change anticipates the
+separate shared WidgetDef.text_scale_width/auto_height implementation; it neither
+copies that implementation nor changes100% widget fonts/sizes.
+
+Previously committed combined/automatic screenshots are **historical**, predating
+this move and the new shared clock/media sizing. Do not use them as acceptance of
+the new readability fix. Regenerate with the exact handed-off shared commit and
+actual measured dimensions, including full time/date/media text and action bounds
+at1280×720 in both modes and100/200%text. Reported clock472×~231/media620×~91
+are preliminary, not substituted for actual renderer measurements.
+
+Parent source312de68 inspected read-only. NextKDE audit mismatch was resolved in
+parent1af0592; earlier failure text above is historical, not an outstanding failure
+of current root. No new root cherry-pick or runtime edits in this layout checkpoint.

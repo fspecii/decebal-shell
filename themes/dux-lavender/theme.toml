@@ -124,9 +124,9 @@ y = 72
 [[widgets]]
 use = "builtin:now-playing-mini"
 place = "desktop"
-anchor = "top-left"
-x = 32
-y = 224
+anchor = "bottom-right"
+x = -32
+y = -32
 
 [[widgets]]
 use = "builtin:resource-overview"

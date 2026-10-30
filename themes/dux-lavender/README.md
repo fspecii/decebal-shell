@@ -8,7 +8,7 @@ and **no bottom dock**. Four optional cards leave the central desktop open:
 | Shared widget | Logical size | Placement |
 | --- | --- | --- |
 | `builtin:clock-card` | 236×136 | upper-left,32/72 |
-| `builtin:now-playing-mini` | 310×76 | upper-left,32/224 |
+| `builtin:now-playing-mini` | 310×76 at 100% | lower-right,-32/-32 |
 | `builtin:resource-overview` | 320×248 | upper-right,-32/72 |
 | `builtin:focus-hub` | 320×292 | lower-left,32/-32 |
 
@@ -54,3 +54,11 @@ belongs to the independent native thread, not this package.
 Primary references, exact commits and MIT notice: [ATTRIBUTION.md](ATTRIBUTION.md)
 and [LICENSE.md](LICENSE.md). Regeneration/tests and inspected evidence:
 [../../docs/theme-ports/dux-lavender.md](../../docs/theme-ports/dux-lavender.md).
+
+
+Layout follow-up: media now anchors lower-right, opposite lower-left focus. Shared
+clock/media accessible sizing is being implemented separately. Existing committed
+combined screenshots predate this move and are historical until regenerated with
+the exact shared fix; their 200% clipping is not a current acceptance claim. The
+reported larger dimensions are provisional until the native agent hands off its
+commit and measured bounds. No widget DSL implementation is duplicated here.
