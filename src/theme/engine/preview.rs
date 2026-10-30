@@ -25,7 +25,7 @@ use std::{
 };
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-pub const VERSION: &str = "native-theme-preview-2";
+pub const VERSION: &str = "native-theme-preview-3";
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -91,6 +91,8 @@ struct Job {
     work: PathBuf,
     deco: Option<PathBuf>,
     font_dirs: Vec<PathBuf>,
+    #[serde(default)]
+    wallpaper: Option<PathBuf>,
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -172,6 +174,26 @@ fn hash_assets(root: &Path, dir: &Path, depth: usize, count: &mut usize, total: 
     Ok(())
 }
 
+// Candidate backgrounds are an explicitly separate visual sample, never part of theme apply.
+fn preview_wallpaper(src: &Source, selection: &Selection) -> Option<PathBuf> {
+    let id = src.find(&selection.name).map(|v| v.0).unwrap_or_else(|| selection.name.clone());
+    let dark = selection.mode != Mode::Light;
+    let picks = crate::settings::wallhaven::curated::choices(&id).ok()?;
+    if !picks.is_empty() {
+        return crate::settings::wallhaven::curated::cached(&id, dark, &src.shell_json.parent()?.join("backgrounds"));
+    }
+    // Old built-in palette aliases must not reintroduce generated shipped artwork.
+    if builtin::source(&id).is_some() {
+        return None;
+    }
+    let def = src.load_def(&id).ok()?;
+    let wp = def.extra.get("wallpaper")?;
+    let path = wp.get(if dark { "dark" } else { "light" }).or_else(|| wp.get("image")).and_then(serde_json::Value::as_str)?;
+    super::archive::safe_rel_path(path).ok()?;
+    let path = config::package_dir(&src.themes_dir, &id)?.join(path);
+    fs::symlink_metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= crate::settings::wallhaven::client::MAX_IMAGE_BYTES).then_some(path)
+}
+
 /// Raw manifests, inherited assets, builtin references, effective palette and native renderer identity.
 /// Screenshots/docs are deliberately excluded: generated evidence must not invalidate itself.
 pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String> {
@@ -207,6 +229,15 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
                 hash.update(text.as_bytes());
             }
         }
+    }
+    if let Ok(picks) = crate::settings::wallhaven::curated::choices(&src.find(&selection.name).map(|v| v.0).unwrap_or_else(|| selection.name.clone())) {
+        for pick in picks {
+            hash.update(pick.wall.id.as_bytes());
+        }
+    }
+    if let Some(path) = preview_wallpaper(src, selection) {
+        hash.update(path.as_os_str().as_encoded_bytes());
+        hash.update(&asset_digest(&path)?);
     }
     let fonts = crate::theme::fontdb::get();
     let plan = def.resolve(&selection.name, selection.mode != Mode::Light, selection).fonts;
@@ -244,6 +275,7 @@ fn job(src: &Source, selection: &Selection, output: PathBuf) -> Job {
         output,
         work,
         deco: deco_renderer(),
+        wallpaper: preview_wallpaper(src, selection),
         font_dirs: std::env::var_os("HOME").map(PathBuf::from).into_iter().flat_map(|p| [p.join(".local/share/fonts"), p.join(".fonts")]).collect(),
     }
 }
@@ -426,6 +458,17 @@ pub fn worker(file: &Path) -> Result<(), String> {
         }
         fs::write(&write.path, &write.new).map_err(|e| e.to_string())?;
     }
+    if let Some(wallpaper) = &j.wallpaper {
+        let mut config = crate::settings::tomlcfg::Cfg::parse(&fs::read_to_string(&paths.rdwm_config).unwrap_or_default())?;
+        config.set("wallpaper", "image", &crate::settings::tomlcfg::Val::Str(wallpaper.display().to_string()))?;
+        let mode = if crate::settings::wallhaven::curated::choices(&sel.name).is_ok_and(|p| !p.is_empty()) {
+            "fill".to_string()
+        } else {
+            src.load_def(&sel.name)?.extra.get("wallpaper").and_then(|w| w.get("mode")).and_then(|s| s.as_str()).unwrap_or("fill").to_string()
+        };
+        config.set("wallpaper", "mode", &crate::settings::tomlcfg::Val::Str(mode))?;
+        fs::write(&paths.rdwm_config, config.text()).map_err(|e| e.to_string())?;
+    }
     // A requested independent palette is part of the effective preview, not lost by complete-theme reset.
     if sel.palette.is_some() || sel.accent.is_some() || sel.dynamic.is_some() {
         let mut effective = plan.selection.clone();
@@ -446,7 +489,7 @@ pub fn worker(file: &Path) -> Result<(), String> {
     let rdwm = crate::settings::tomlcfg::Cfg::parse(&fs::read_to_string(&paths.rdwm_config).unwrap_or_default())?;
     if let Some(crate::settings::tomlcfg::Val::Str(path)) = rdwm.get("wallpaper", "image") {
         let source = image(Path::new(&path))?;
-        let mode = src.load_def(&sel.name)?.extra.get("wallpaper").and_then(|w| w.get("mode")).and_then(|s| s.as_str()).unwrap_or("fill").to_string();
+        let mode = rdwm.get("wallpaper", "mode").and_then(|v| if let crate::settings::tomlcfg::Val::Str(s) = v { Some(s) } else { None }).unwrap_or_else(|| "fill".into());
         // The image crate's RGBA is converted through PNG so premultiplication is correct.
         let wall = match mode.as_str() {
             "stretch" => source.resize_exact(WIDTH, HEIGHT, image::imageops::FilterType::Lanczos3),
@@ -467,7 +510,7 @@ pub fn worker(file: &Path) -> Result<(), String> {
             composite(&mut canvas, &wall, (WIDTH as i32 - wall.width() as i32) / 2, (HEIGHT as i32 - wall.height() as i32) / 2);
         }
     } else {
-        notes.push("Wallpaper asset unavailable".to_string());
+        notes.push("Wallpaper chosen separately; browse Wallpaper → For this theme for suggested photos".to_string());
     }
     let mut fonts = crate::text::Fonts::load().ok_or("preview font unavailable")?;
     let widgets = WidgetsConfig::load(&src.shell_json);
@@ -557,6 +600,27 @@ pub fn worker(file: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod performance_tests {
     use super::*;
+    #[test]
+    fn official_preview_only_uses_downloaded_recommendations_and_tracks_their_content() {
+        let dir = std::env::temp_dir().join(format!("curated-preview-{}", std::process::id()));
+        fs::create_dir_all(dir.join("backgrounds")).unwrap();
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: dir.join("themes") };
+        let sel = Selection { name: "aster".into(), mode: Mode::Dark, ..Default::default() };
+        let uncached = fingerprint(&src, &sel).unwrap();
+        assert!(preview_wallpaper(&src, &sel).is_none());
+        let choice = crate::settings::wallhaven::curated::choices("aster").unwrap().remove(0);
+        let photo = dir.join(format!("backgrounds/wallhaven-{}.png", choice.wall.id));
+        fs::write(&photo, b"cached photography test bytes").unwrap();
+        assert_eq!(preview_wallpaper(&src, &sel), Some(photo.clone()));
+        let cached = fingerprint(&src, &sel).unwrap();
+        assert_ne!(cached, uncached);
+        fs::write(&photo, b"changed photography test bytes").unwrap();
+        assert_ne!(fingerprint(&src, &sel).unwrap(), cached);
+        assert!(preview_wallpaper(&src, &Selection { mode: Mode::Light, ..sel }).is_none());
+        assert!(!src.shell_json.exists(), "preview lookup never applies configuration");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn asset_digest_reuses_unchanged_content_and_tracks_same_size_rewrites() {
         let dir = std::env::temp_dir().join(format!("preview-digest-{}", std::process::id()));

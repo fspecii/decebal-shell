@@ -54,7 +54,8 @@ fn selections() -> Vec<Selection> {
 
 #[test]
 fn every_builtin_resolves_to_the_same_theme_as_before() {
-    assert_eq!(BUILTIN.len(), LEGACY.len() + NEW.len());
+    assert_eq!(BUILTIN.len(), LEGACY.len() + NEW.len() + 1);
+    assert!(builtin::source("aster").is_some(), "Aster is the asset-independent package");
     for (id, text) in BUILTIN.iter().filter(|(id, _)| LEGACY.contains(id)) {
         assert!(crate::theme::engine::manifest::is_v1(text), "{id} is a format-1 package");
         // the new one goes through the production loader (chain included), the old one through the frozen files
@@ -149,14 +150,38 @@ fn new_themes_are_valid_packages_and_apply() {
         assert!(entries.iter().any(|e| e.path.starts_with("screenshots/")), "{id}: no screenshot");
         let def = builtin::def(id).unwrap();
         assert!(def.has_dark() || def.has_light(), "{id}");
-        // installed as a user package, so the wallpaper and widgets resolve
+        // Installed package assets remain available for previews; application preserves Wallpaper.
         let (d, src, paths) = sandbox(&format!("new-{id}"));
         package::install_entries(&entries, &src.themes_dir, true, &Limits::default()).unwrap_or_else(|e| panic!("{id}: install: {e}"));
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         let out = apply::apply(&src, &paths, id, &Selection::default()).unwrap_or_else(|e| panic!("{id}: {e}"));
         assert!(!out.notes.iter().any(|n| n.contains("missing") || n.contains("cannot bundle")), "{id}: {:?}", out.notes);
         let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
-        assert!(cfg.contains(&format!("{id}/wallpapers/")), "{id}: wallpaper not applied: {cfg}");
+        assert!(crate::settings::tomlcfg::Cfg::parse(&cfg).unwrap().get("wallpaper", "image").is_none(), "{id}: package wallpaper must remain independent: {cfg}");
         let _ = std::fs::remove_dir_all(d);
     }
+}
+
+/// Aster intentionally uses separately selected wallpaper and needs no bundled bitmap assets.
+#[test]
+fn aster_is_a_valid_asset_independent_package() {
+    use crate::theme::engine::apply::{self, tests::sandbox};
+    use crate::theme::engine::{archive::Limits, package};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("themes/aster");
+    let entries = package::read_dir(&root, &Limits::default()).unwrap();
+    let report = package::check(&entries, &Limits::default());
+    assert!(report.ok(), "{:?}", report.errors());
+    assert_eq!(report.id.as_deref(), Some("aster"));
+    assert_eq!(std::fs::read_to_string(root.join("theme.toml")).unwrap(), builtin::source("aster").unwrap());
+    let (dir, src, paths) = sandbox("golden-aster");
+    package::install_entries(&entries, &src.themes_dir, true, &Limits::default()).unwrap();
+    std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+    for mode in [Mode::Dark, Mode::Light] {
+        let applied = apply::apply(&src, &paths, "aster", &Selection { mode, ..Selection::default() }).unwrap();
+        assert_eq!(applied.theme_id, "aster");
+        assert_eq!(applied.dark, mode == Mode::Dark);
+        let cfg = crate::settings::tomlcfg::Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
+        assert_eq!(cfg.get("wallpaper", "image"), None);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }

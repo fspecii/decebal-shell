@@ -84,19 +84,22 @@ fn src_def(id: &str) -> crate::theme::model::Def {
     crate::theme::model::Def::parse(&text).unwrap_or_else(|e| panic!("{id}: {e}"))
 }
 
-/// Install each showcase package like a user would, apply it in a sandbox, and see its wallpaper and style land in rdwm's config.
+/// Install each showcase package like a user would, apply it in a sandbox, and verify its style applies while the chosen wallpaper stays independent.
 #[test]
 fn every_showcase_theme_installs_and_applies() {
     for id in SHOWCASE {
         let (d, src, paths) = sandbox(&format!("ship-{id}"));
-        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        std::fs::write(&paths.rdwm_config, "[general]\n[wallpaper]\nimage = \"/my/background.png\"\nmode = \"center\"\ncolor = \"#123456\"\n").unwrap();
         let entries = package::read_dir(&themes_root().join(id), &Limits::default()).unwrap();
         package::install_entries(&entries, &src.themes_dir, false, &Limits::default()).unwrap();
         for sel in [Selection::default(), Selection { mode: crate::theme::model::Mode::Light, ..Selection::default() }] {
             let a = apply::apply(&src, &paths, id, &sel).unwrap_or_else(|e| panic!("{id}: {e}"));
             assert_eq!(a.theme_id, *id);
             let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
-            assert!(cfg.contains("wallpapers/"), "{id}: wallpaper in\n{cfg}");
+            let parsed = crate::settings::tomlcfg::Cfg::parse(&cfg).unwrap();
+            for (key, expected) in [("image", "/my/background.png"), ("mode", "center"), ("color", "#123456")] {
+                assert_eq!(parsed.get("wallpaper", key), Some(crate::settings::tomlcfg::Val::Str(expected.into())), "{id}: independent wallpaper {key}");
+            }
             assert!(cfg.contains("[decoration]") && cfg.contains("style = "), "{id}: decoration\n{cfg}");
         }
         let _ = std::fs::remove_dir_all(d);

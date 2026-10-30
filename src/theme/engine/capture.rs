@@ -371,6 +371,9 @@ mod tests {
         assert!(c.notes.iter().any(|n| n.contains("custom command")), "{:?}", c.notes);
         let text = std::fs::read_to_string(c.dir.join("theme.toml")).unwrap();
         assert!(!text.contains("rm -rf"), "{text}");
+        let captured = crate::theme::model::Def::parse(&text).unwrap();
+        assert_eq!(captured.extra["wallpaper"]["image"], "wallpapers/wallpaper.png");
+        assert_eq!(captured.extra["wallpaper"]["mode"], "center");
         let report = package::check(&package::read_dir(&c.dir, &Limits::default()).unwrap(), &Limits::default());
         assert!(report.ok(), "{:?}", report.errors());
 
@@ -381,7 +384,8 @@ mod tests {
         assert_eq!((snap.accent, snap.background, snap.popup, snap.radius, snap.dock_alpha), (live.accent, live.background, live.popup, live.radius, live.dock_alpha));
         assert!((snap.font_scale - live.font_scale).abs() < 1e-3);
 
-        // apply on a fresh desktop: dock, gaps, wallpaper, hot corners and the widget come along
+        // Apply on a fresh desktop: dock, gaps, hot corners and widgets come along;
+        // captured artwork remains bundled for preview without replacing Wallpaper.
         let (d2, src2, paths2) = sandbox("capture2");
         std::fs::create_dir_all(&src2.themes_dir).unwrap();
         let (entries, _) = (package::read_dir(&c.dir, &Limits::default()).unwrap(), 0);
@@ -389,8 +393,12 @@ mod tests {
         std::fs::write(&paths2.rdwm_config, "[general]\n").unwrap();
         apply::apply(&src2, &paths2, "snap", &Selection::default()).unwrap();
         let cfg = std::fs::read_to_string(&paths2.rdwm_config).unwrap();
-        for n in ["gap_inner = 11", "mode = \"center\"", "radius = 4", "wallpapers/wallpaper.png"] {
+        for n in ["gap_inner = 11", "radius = 4"] {
             assert!(cfg.contains(n), "{n} in\n{cfg}");
+        }
+        let parsed = Cfg::parse(&cfg).unwrap();
+        for key in ["image", "mode", "color"] {
+            assert_eq!(parsed.get("wallpaper", key), None, "captured wallpaper {key} must remain independent");
         }
         let shell = io::json_load(&paths2.shell_json());
         assert_eq!(shell["hot_corners"]["top_left"], "lock");

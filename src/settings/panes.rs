@@ -710,6 +710,9 @@ impl Model {
             return super::wallhaven::items(self);
         }
         let mut items = vec![super::wallhaven::tab_card(&self.wh), Item::Space(6.0)];
+        items.push(Item::Card(vec![Row::new("For this theme")
+            .detail("Individually chosen Wallhaven photographs; changing themes keeps your wallpaper")
+            .ctl(Ctl::new("wh:curated", Kind::Button { label: "Browse choices".into(), danger: false }))]));
         items.extend(self.pane_backgrounds());
         items
     }

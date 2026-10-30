@@ -13,6 +13,7 @@
 
 pub mod cli;
 pub mod client;
+pub mod curated;
 pub mod parse;
 pub mod query;
 pub mod store;
@@ -59,6 +60,7 @@ pub enum View {
     #[default]
     Browse,
     Favourites,
+    Curated,
 }
 
 // ---------------------------------------------------------------- worker plumbing
@@ -306,6 +308,11 @@ pub struct Wh {
     detail_due: Option<(Instant, String)>,
     detail_asked: HashSet<String>,
     favs: Vec<Wall>,
+    curated_theme: String,
+    curated_label: String,
+    curated: Vec<curated::Choice>,
+    curated_problem: Option<String>,
+    curated_checks: HashMap<String, Result<(), String>>,
     dl: Option<Dl>,
     busy: Option<String>,
     search_due: Option<Instant>,
@@ -339,6 +346,11 @@ impl Wh {
             detail_due: None,
             detail_asked: HashSet::new(),
             favs: Vec::new(),
+            curated_theme: String::new(),
+            curated_label: String::new(),
+            curated: vec![],
+            curated_problem: None,
+            curated_checks: HashMap::new(),
             dl: None,
             busy: None,
             search_due: None,
@@ -377,14 +389,18 @@ impl Wh {
 
     /// The wallpaper with `id` among everything the pane knows.
     fn find_wall(&self, id: &str) -> Option<&Wall> {
-        self.res.walls.iter().chain(self.favs.iter()).chain(self.sel.iter()).find(|w| w.id == id)
+        self.res.walls.iter().chain(self.favs.iter()).chain(self.curated.iter().map(|c| &c.wall)).chain(self.sel.iter()).find(|w| w.id == id)
     }
 
     /// Items currently listed (browse results or favourites), purity-checked once more.
     fn listed(&self) -> Vec<&Wall> {
         let bits = self.purity();
-        let src = if self.view == View::Favourites { &self.favs } else { &self.res.walls };
-        src.iter().filter(|w| purity_allowed(&w.purity, bits)).collect()
+        let src: Vec<&Wall> = match self.view {
+            View::Favourites => self.favs.iter().collect(),
+            View::Browse => self.res.walls.iter().collect(),
+            View::Curated => self.curated.iter().map(|c| &c.wall).collect(),
+        };
+        src.into_iter().filter(|w| purity_allowed(&w.purity, bits)).collect()
     }
 
     pub fn is_favourite(&self, id: &str) -> bool {
@@ -500,6 +516,27 @@ pub fn prepare(m: &mut Model) {
         return;
     }
     m.wh.load();
+    let source = super::themepane::source(m);
+    let selection = source.selection();
+    let id = source.find(&selection.name).map(|v| v.0).unwrap_or(selection.name);
+    if m.wh.curated_theme != id {
+        m.wh.curated_label = source.load_def(&id).map(|d| d.name).ok().filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
+        m.wh.curated_theme = id.clone();
+        match curated::choices(&id) {
+            Ok(picks) => {
+                m.wh.curated = picks;
+                m.wh.curated_problem = None;
+            }
+            Err(error) => {
+                m.wh.curated.clear();
+                m.wh.curated_problem = Some(error);
+            }
+        }
+        if m.wh.view == View::Curated && m.wh.sel.as_ref().is_some_and(|w| !m.wh.curated.iter().any(|c| c.wall.id == w.id)) {
+            m.wh.sel = None;
+            m.wh.detail_due = None;
+        }
+    }
     if m.wh.engine.is_none() {
         let wake = m.wake.clone();
         m.wh.engine = Some(Engine::start(m.wh.dirs.clone(), m.wh.key.clone(), wake));
@@ -541,7 +578,18 @@ pub fn pump(m: &mut Model) -> bool {
                 }
             }
             Msg::Detail { id, result } => {
-                if let Ok((_, d)) = result {
+                if curated::known(&id) {
+                    let checked = match &result {
+                        Ok((wall, detail)) if wall.id == id => curated::validate_live(wall, detail),
+                        Ok(_) => Err("Photo metadata did not match the selected image".into()),
+                        Err(e) => Err(format!("Could not verify this recommendation: {}. Saved pictures remain available under Backgrounds.", e.friendly())),
+                    };
+                    m.wh.curated_checks.insert(id.clone(), checked);
+                }
+                if let Ok((wall, d)) = result {
+                    if m.wh.sel.as_ref().is_some_and(|s| s.id == id) && wall.id == id {
+                        m.wh.sel = Some(wall);
+                    }
                     if m.wh.details.len() > 64 {
                         m.wh.details.clear();
                     }
@@ -587,7 +635,7 @@ pub fn pump(m: &mut Model) -> bool {
         }
     }
     let now = Instant::now();
-    if m.wh.search_due.is_some_and(|d| now >= d) && m.wh.tab == Tab::Wallhaven {
+    if m.wh.search_due.is_some_and(|d| now >= d) && m.wh.tab == Tab::Wallhaven && m.wh.view == View::Browse {
         m.wh.start_search();
         changed = true;
     }
@@ -631,7 +679,19 @@ fn start_download(m: &mut Model, apply: bool) {
     std::thread::Builder::new()
         .name("wallhaven-download".into())
         .spawn(move || {
-            let result = shared.client().download(&wall, &dir, bits, &progress);
+            let result = (|| {
+                let current = if curated::known(&wall.id) {
+                    let (live, detail) = shared.client().detail(&wall.id)?;
+                    if live.id != wall.id {
+                        return Err(NetError::Refused("Photo metadata did not match the selection".into()));
+                    }
+                    curated::validate_live(&live, &detail).map_err(NetError::Refused)?;
+                    live
+                } else {
+                    wall.clone()
+                };
+                shared.client().download(&current, &dir, bits, &progress)
+            })();
             let _ = out.send(Msg::Downloaded { id: wall.id.clone(), apply, result });
             (shared.wake)();
         })
@@ -719,11 +779,22 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
     let mut rows = vec![
         Row::new("Search").ctl(Ctl::new("wh:q", Kind::Text { val: p.query.clone(), hint: "tags, e.g. mountains lake".into() })).ctl(button(
             "wh:filters",
-            if wh.filters_open { "Hide filters" } else { "Filters" },
+            if wh.filters_open && wh.view != View::Curated { "Hide filters" } else { "Filters" },
             true,
         )),
-        Row::new("Show").ctl(seg("wh:view", &[("Browse", "browse"), (&format!("Favourites ({faves})"), "favourites")], if wh.view == View::Favourites { "favourites" } else { "browse" })),
+        Row::new("Show").ctl(seg(
+            "wh:view",
+            &[("Browse", "browse"), (&format!("Favourites ({faves})"), "favourites"), ("For this theme", "curated")],
+            match wh.view {
+                View::Favourites => "favourites",
+                View::Curated => "curated",
+                View::Browse => "browse",
+            },
+        )),
     ];
+    if wh.view == View::Curated {
+        rows.remove(0);
+    }
     if wh.view == View::Browse {
         let sorts: Vec<(&str, &str)> = Sort::ALL.iter().map(|s| (s.label(), s.api())).collect();
         rows.push(Row::new("Sort by").ctl(seg("wh:sort", &sorts, p.sort.api())));
@@ -731,9 +802,18 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
             rows.push(Row::new("Top of the last").ctl(seg("wh:range", &query::TOP_RANGES, &p.top_range)));
         }
     }
-    rows.push(Row::new("Random wallpaper").detail("Pick one at random from the current search and set it").ctl(button("wh:random", "Set a random one", wh.dl.is_none() && wh.busy.is_none())));
+    if wh.view != View::Curated {
+        rows.push(Row::new("Random wallpaper").detail("Pick one at random from the current search and set it").ctl(button("wh:random", "Set a random one", wh.dl.is_none() && wh.busy.is_none())));
+    }
     out.push(Item::Card(rows));
 
+    if wh.view == View::Curated {
+        out.push(Item::Header(format!("Photographs for {}", wh.curated_label)));
+        out.push(Item::Note {text:"Two individually chosen Wallhaven photographs, one for each colour mode. Select a picture to preview and download it. Changing a theme keeps your wallpaper; nothing is downloaded until you browse or choose it.".into(),warn:false});
+        if let Some(error) = &wh.curated_problem {
+            out.push(Item::Note { text: error.clone(), warn: true });
+        }
+    }
     // status
     if let Some(b) = &wh.busy {
         out.push(Item::Note { text: b.clone(), warn: false });
@@ -749,7 +829,7 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
     }
 
     // filters
-    if wh.filters_open {
+    if wh.filters_open && wh.view != View::Curated {
         out.push(Item::Header("Filters".into()));
         let mut cat = Row::new("Categories");
         for (i, (_, label)) in query::CATEGORIES.iter().enumerate() {
@@ -798,7 +878,18 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
         let d = wh.details.get(&w.id);
         out.push(Item::Header(format!("Selected · {}", w.id)));
         let allowed = purity_allowed(&w.purity, wh.purity());
-        let idle = wh.dl.is_none() && allowed;
+        let checked = wh.curated_checks.get(&w.id);
+        let verified = !curated::known(&w.id) || checked.is_some_and(Result::is_ok);
+        let idle = wh.dl.is_none() && allowed && verified;
+        if let Some(pick) = wh.curated.iter().find(|c| c.wall.id == w.id) {
+            out.push(Item::Note { text: format!("{} choice · {}. {}\n{}", pick.mode, pick.subject, pick.rationale, pick.provenance), warn: false });
+        }
+        if !verified {
+            out.push(Item::Note { text: checked.and_then(|r| r.as_ref().err()).cloned().unwrap_or_else(|| "Checking the current photo details before download…".into()), warn: checked.is_some() });
+            if checked.is_some() {
+                out.push(Item::Card(vec![Row::new("Check recommendation again").ctl(button("wh:verify", "Retry", wh.dl.is_none()))]));
+            }
+        }
         let is_fav = wh.is_favourite(&w.id);
         let (info, stats) = sel_info(w, d);
         let act = vec![
@@ -834,6 +925,7 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
     // the grid
     let listed = wh.listed();
     let head = match wh.view {
+        View::Curated => format!("Dark and light choices ({})", listed.len()),
         View::Favourites => format!("Favourites ({})", listed.len()),
         View::Browse if wh.res.total > 0 && !wh.res.stale => format!("Results ({} of {})", listed.len(), wh.res.total),
         View::Browse => format!("Results ({})", listed.len()),
@@ -841,6 +933,7 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
     out.push(Item::Header(head));
     if listed.is_empty() {
         let msg = match wh.view {
+            View::Curated => "No curated photographs for this custom or legacy theme. Use Browse to choose your own; your wallpaper stays unchanged.",
             View::Favourites => "No favourites yet. Select a wallpaper and choose Add to favourites.",
             View::Browse if wh.res.loading => "Loading…",
             View::Browse if wh.res.error.is_some() => "Nothing to show.",
@@ -848,8 +941,20 @@ pub fn build(wh: &Wh, backgrounds: &std::path::Path) -> Vec<Item> {
         };
         out.push(Item::Note { text: msg.into(), warn: false });
     } else {
-        let thumbs: Vec<Thumb> =
-            listed.iter().map(|w| Thumb { id: format!("wh:{}", w.id), caption: w.resolution.replace('x', "×"), selected: wh.sel.as_ref().is_some_and(|s| s.id == w.id) }).collect();
+        let thumbs: Vec<Thumb> = listed
+            .iter()
+            .map(|w| Thumb {
+                id: format!("wh:{}", w.id),
+                caption: wh
+                    .curated
+                    .iter()
+                    .find(|c| c.wall.id == w.id)
+                    .filter(|_| wh.view == View::Curated)
+                    .map(|c| format!("{} · {}", if c.mode == "dark" { "Dark" } else { "Light" }, c.subject))
+                    .unwrap_or_else(|| w.resolution.replace('x', "×")),
+                selected: wh.sel.as_ref().is_some_and(|s| s.id == w.id),
+            })
+            .collect();
         out.push(Item::Thumbs(thumbs));
         if wh.view == View::Browse {
             if wh.res.loading {
@@ -880,6 +985,23 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     let mut changed_filters = false;
     let mut delay = SEARCH_DEBOUNCE;
     match (parts, v) {
+        (["wh", "curated"], CtlVal::Click) => {
+            m.wh.tab = Tab::Wallhaven;
+            m.wh.view = View::Curated;
+            m.wh.search_due = None;
+            m.sel.reset_scroll = true;
+            return;
+        }
+        (["wh", "verify"], CtlVal::Click) => {
+            if let Some(w) = &m.wh.sel {
+                let id = w.id.clone();
+                m.wh.detail_asked.remove(&id);
+                m.wh.curated_checks.remove(&id);
+                m.wh.detail_due = Some((Instant::now(), id));
+                m.wh.wake_later(Duration::ZERO);
+            }
+            return;
+        }
         (["wh", "tab"], CtlVal::Str(s)) => {
             m.wh.tab = match s.as_str() {
                 "wallhaven" => Tab::Wallhaven,
@@ -890,7 +1012,14 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             return;
         }
         (["wh", "view"], CtlVal::Str(s)) => {
-            m.wh.view = if s == "favourites" { View::Favourites } else { View::Browse };
+            m.wh.view = match s.as_str() {
+                "favourites" => View::Favourites,
+                "curated" => View::Curated,
+                _ => View::Browse,
+            };
+            if m.wh.view == View::Curated {
+                m.wh.search_due = None;
+            }
             if m.wh.view == View::Browse && m.wh.res.query.is_none() {
                 m.wh.start_search();
             }
@@ -902,7 +1031,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         (["wh", "q"], CtlVal::Str(s)) => {
             m.wh.prefs.query = query::clean_query(&s);
-            if m.wh.view == View::Favourites {
+            if m.wh.view != View::Browse {
                 m.wh.view = View::Browse;
             }
             changed_filters = true;

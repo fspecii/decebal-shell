@@ -176,3 +176,40 @@ fn session_accessibility_does_not_pollute_cached_theme_samples() {
     assert_eq!(run(true), regular, "cold previews must not cache session-dependent dock opacity or motion");
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn official_preview_samples_cached_photography_without_changing_live_wallpaper() {
+    let (dir, src) = fixture();
+    let before = fs::read(&src.shell_json).unwrap();
+    let render_aster = || {
+        let out = Command::new(env!("CARGO_BIN_EXE_decthemectl"))
+            .args(["theme", "render", "aster", "--mode", "dark", "--png"])
+            .arg(dir.join("aster.png"))
+            .env("DECEBAL_CONFIG", &dir)
+            .env("DECEBAL_THEMES", &src.themes_dir)
+            .env("DECEBAL_SYSTEM_THEMES", dir.join("no-system"))
+            .env("XDG_CACHE_HOME", dir.join("cache"))
+            .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
+            .env("RDWMCTL", "/nonexistent/rdwmctl")
+            .env("DISPLAY", "")
+            .env("WAYLAND_DISPLAY", "")
+            .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        image::open(dir.join("aster.png")).unwrap().to_rgb8()
+    };
+    let plain = render_aster();
+    fs::create_dir_all(dir.join("backgrounds")).unwrap();
+    let id = decebal::settings::wallhaven::curated::choices("aster").unwrap().remove(0).wall.id;
+    // A non-square test fixture catches wrong stretch/crop handling without provider network.
+    let sample = image::RgbImage::from_pixel(800, 200, image::Rgb([191, 55, 87]));
+    sample.save(dir.join(format!("backgrounds/wallhaven-{id}.png"))).unwrap();
+    let photo = render_aster();
+    assert_ne!(plain, photo);
+    assert_eq!(photo.get_pixel(10, 540).0, [191, 55, 87]);
+    assert_eq!(render_aster(), photo, "the independent sample is persistently cached");
+    assert_eq!(fs::read(&src.shell_json).unwrap(), before);
+    assert!(!dir.join("decebal.json").exists());
+    fs::remove_dir_all(dir).unwrap();
+}

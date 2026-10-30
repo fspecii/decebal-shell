@@ -29,6 +29,8 @@ pub struct Wall {
 /// Extra data from `/w/<id>`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Detail {
+    pub flagged_ai: bool,
+    pub photography_excluded: bool,
     pub tags: Vec<String>,
     pub views: Option<u64>,
     pub favorites: Option<u64>,
@@ -72,6 +74,8 @@ struct RawThumbs {
 
 #[derive(Deserialize)]
 struct RawWall {
+    #[serde(default, alias = "ai")]
+    ai_art: Option<bool>,
     id: String,
     #[serde(default)]
     url: String,
@@ -106,6 +110,8 @@ struct RawWall {
 
 #[derive(Deserialize)]
 struct RawTag {
+    #[serde(default)]
+    id: u64,
     #[serde(default)]
     name: String,
 }
@@ -182,10 +188,13 @@ pub fn parse_search(json: &str, requested: u32) -> Result<Page, String> {
 /// Parses a `/w/<id>` response into the wallpaper and its tags. The uploader is never read.
 pub fn parse_detail(json: &str) -> Result<(Wall, Detail), String> {
     let r: RawDetail = serde_json::from_str(json).map_err(|e| format!("unexpected answer from wallhaven: {e}"))?;
+    let flagged_ai = r.data.ai_art.unwrap_or(false) || r.data.tags.iter().any(|t| t.id == 133451);
+    // Policy checks use every raw tag, not the bounded subset displayed in the UI.
+    let photography_excluded = super::curated::rejected_tags(r.data.tags.iter().map(|t| t.name.as_str()));
     let tags: Vec<String> = r.data.tags.iter().map(|t| short(&t.name, 40)).filter(|t| !t.is_empty()).take(30).collect();
     let (views, favorites, created) = (r.data.views, r.data.favorites, short(&r.data.created_at, 24));
     let wall = clean_wall(r.data).ok_or("wallhaven sent an incomplete wallpaper")?;
-    Ok((wall, Detail { tags, views: Some(views), favorites: Some(favorites), created }))
+    Ok((wall, Detail { flagged_ai, photography_excluded, tags, views: Some(views), favorites: Some(favorites), created }))
 }
 
 /// Human size: `6.7 MB`.
@@ -219,6 +228,19 @@ pub mod tests {
     pub const SEARCH: &str = include_str!("../../../tests/fixtures/wallhaven/search.json");
     pub const QUERY: &str = include_str!("../../../tests/fixtures/wallhaven/search_query.json");
     pub const DETAIL: &str = include_str!("../../../tests/fixtures/wallhaven/detail.json");
+
+    #[test]
+    fn photography_policy_checks_tags_beyond_the_display_limit() {
+        let mut value: serde_json::Value = serde_json::from_str(DETAIL).unwrap();
+        value["data"]["tags"] = serde_json::json!((0..35).map(|i| serde_json::json!({"id":i,"name":"landscape"})).collect::<Vec<_>>());
+        value["data"]["tags"].as_array_mut().unwrap().push(serde_json::json!({"id":133451,"name":"AI art"}));
+        let (_, detail) = parse_detail(&value.to_string()).unwrap();
+        assert_eq!(detail.tags.len(), 30);
+        assert!(detail.flagged_ai && detail.photography_excluded);
+        value["data"]["tags"] = serde_json::json!([]);
+        value["data"]["ai_art"] = serde_json::json!(true);
+        assert!(parse_detail(&value.to_string()).unwrap().1.flagged_ai);
+    }
 
     #[test]
     fn parses_a_recorded_toplist_page() {
