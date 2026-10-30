@@ -810,9 +810,14 @@ y = -30
 "##;
 
     pub fn install_sunset(src: &Source) {
+        install_sunset_with_font(src, "Inter");
+    }
+
+    fn install_sunset_with_font(src: &Source, family: &str) {
         let widget = "format = 1\n[root]\ntype = \"text\"\ntext = \"{clock:%H:%M}\"\n";
+        let manifest = SUNSET.replacen("ui = \"Inter\"", &format!("ui = {}", toml_edit::Value::from(family)), 1);
         let entries = vec![
-            Entry { path: "theme.toml".into(), data: SUNSET.as_bytes().to_vec() },
+            Entry { path: "theme.toml".into(), data: manifest.into_bytes() },
             Entry { path: "wallpapers/sunset.png".into(), data: png(32, 18, [200, 80, 40]) },
             Entry { path: "widgets/clock-card.toml".into(), data: widget.as_bytes().to_vec() },
         ];
@@ -932,16 +937,22 @@ y = -30
         std::fs::write(&paths.rdwm_config, "# mine\n[general]\ntags = [\"a\"]\n").unwrap();
         std::fs::write(paths.shell_json(), r#"{"workspaces": "off", "bar": {"x": 1}, "hot_corners": {"top_right": "lock", "dwell_ms": 300}}"#).unwrap();
         std::fs::write(paths.dock_settings(), r#"{"magnification": 1.8, "roundness": 0.2}"#).unwrap();
-        install_sunset(&src);
+        // Exercise ownership with an installed face, rather than depending on
+        // one user's optional Inter installation. Unavailable faces are correctly
+        // omitted by the production renderer and have separate fallback tests.
+        let family = crate::theme::fontdb::get().picker_families().into_iter().next().expect("theme font integration requires an installed font");
+        install_sunset_with_font(&src, &family);
         let a = apply(&src, &paths, "sunset", &Selection::default()).unwrap();
         assert_eq!((a.theme_id.as_str(), a.dark), ("sunset", true));
         assert!(!a.undo_id.is_empty());
 
         let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
         assert!(cfg.starts_with("# mine\n"), "comments survive:\n{cfg}");
-        for needle in ["style = \"classic\"", "height = 36", "gap_inner = 9", "border_px = 3", "layouts = [\"tile\", \"monocle\"]", "font = \"Inter\"", "focused = \"#ff7849\"", "buttons = true"] {
+        for needle in ["style = \"classic\"", "height = 36", "gap_inner = 9", "border_px = 3", "layouts = [\"tile\", \"monocle\"]", "focused = \"#ff7849\"", "buttons = true"] {
             assert!(cfg.contains(needle), "{needle} in\n{cfg}");
         }
+        let font = format!("font = {}", toml_edit::Value::from(family));
+        assert!(cfg.contains(&font), "{font} in\n{cfg}");
         let shell = io::json_load(&paths.shell_json());
         assert_eq!(shell["theme"]["name"], "sunset");
         assert_eq!(shell["workspaces"], "off");
