@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import time
 import unittest
@@ -62,6 +63,33 @@ class Recovery(unittest.TestCase):
                 return
             time.sleep(.02)
         self.fail('private timer condition timed out')
+
+    def test_xdg_login_entry_recovers_and_honours_user_disable(self):
+        runner = os.environ.get('RDWM_AUTOSTART_BIN')
+        if not runner:
+            sibling = Path(__file__).resolve().parents[2] / 'rdwm/contrib/rdwm-autostart'
+            runner = str(sibling) if sibling.is_file() else shutil.which('rdwm-autostart')
+        if not runner:
+            self.skipTest('rdwm-autostart is needed for the session integration check')
+        tools = self.root / 'bin'
+        (tools / 'dectimer').symlink_to(BIN)
+        entry = self.root / 'config/autostart/decebal-timer.desktop'
+        entry.parent.mkdir(parents=True)
+        source = Path(__file__).resolve().parents[1] / 'contrib/decebal-timer.desktop'
+        entry.write_bytes(source.read_bytes())
+        env = dict(self.env, PATH=str(tools)+':/usr/bin:/bin',
+                   XDG_CONFIG_DIRS=str(self.root/'no-system-config'), XDG_CURRENT_DESKTOP='rdwm')
+        self.seed(deadline=int(time.time())+1)
+        result = subprocess.run(['/bin/sh', runner], env=env, capture_output=True, timeout=8)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.log.read_text().splitlines()), 1)
+        self.assertTrue(json.loads(self.file.read_text())['claimed'])
+        entry.write_text(entry.read_text()+'Hidden=true\n')
+        self.seed(status='Complete', claimed=False)
+        result = subprocess.run(['/bin/sh', runner], env=env, capture_output=True, timeout=8)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(json.loads(self.file.read_text())['claimed'])
+        self.assertEqual(len(self.log.read_text().splitlines()), 1)
 
     def test_missing_state_exits_without_creating_state_or_window(self):
         result = self.run_cli('autostart')

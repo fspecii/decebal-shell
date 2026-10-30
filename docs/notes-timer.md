@@ -28,7 +28,8 @@ opening a window, including after switching desktop sessions.
 It resumes future deadlines or delivers an elapsed, unclaimed timer after login.
 Missing, idle, paused and already delivered state exits immediately without a
 resident helper. Duplicate login/service/UI starts share the same worker lock.
-Corrupt state is left intact and reported to the session log. An optional
+Corrupt state is left intact and returns a nonzero exit with a stderr diagnostic.
+Terminal/service launches retain that diagnostic; an XDG launcher may discard it. An optional
 `decebal-timer.service` provides the same recovery under `graphical-session.target`;
 it is not enabled by installation and does not restart an idle timer. Install the
 login entry (or enable that service) for reboot recovery; a binary-only update does
