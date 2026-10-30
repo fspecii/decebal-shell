@@ -69,3 +69,33 @@ highlight edge was reported to root: scrolling outside the panel cleared state
 without requesting repaint. Root subsequently corrected it and added the focused
 regression named above. No live input/configuration, installation, restart or
 release build was performed by the independent reviewer.
+
+## Real-X full-row slider interactions
+
+```sh
+BAR_BINARY=/absolute/candidate/decbar /usr/bin/python3 tests/e2e/dux-cc-sliders-native.py /tmp/dux-accept-sliders
+```
+
+This bounded two-case harness uses 100% text on a 960×720 private Xvfb and 200%
+text on a deliberately short 960×240 Xvfb. Only the sound/display groups are
+selected. Source-derived row coordinates cover the top and bottom of each full
+48/68px target, outside the slim painted track. Real X pointer press/release
+must set volume and brightness to 25%/75%; wheel input at the same edges must
+set 30%/80%. Exact emitted setter arguments, coordinates, viewport scroll,
+binary hash and screenshots are saved. The short case scrolls over a label to
+reveal the clipped brightness row. Return after pointer/wheel input must remain
+inert. This covers the standalone Control Center host; the embedded bar host's
+viewport still needs its own interaction gate.
+
+All audio/brightness tools are private fixture scripts. Probes return fixed
+50% values and setters only append fixture logs; actual backend setters never
+run. The test owns its Xvfb and removes its processes/private configuration.
+It does not perform a real-system volume/brightness or hardware animation test.
+
+Harness debugging passed against the explicitly older debug bar SHA
+`6d5d059a0a38b72f628ec3c693f45fd7fb913180c170d38dec188881a709411a`:
+`/tmp/dux-slider-harness-smoke-final/result.json`. Both cases, eight pointer
+edge commits, eight wheel commits and inert stale Return passed. The 200%
+short screenshot was visually inspected: the brightness row is fully visible
+after scrolling. This smoke result verifies the harness and is **not acceptance
+of the subsequent combined optimized candidate**. Re-run with that pinned binary.
