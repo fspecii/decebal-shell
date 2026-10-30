@@ -518,7 +518,7 @@ fn stamp_id() -> String {
 }
 
 /// Writes the plan: undo record first, then each file atomically; any failure restores what was already written.
-pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
+pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, String> {
     // An older photo must not commit while this transaction changes theme files.
     if plan.follow_wallpaper && plan.selection.sync_rdwm && crate::theme::wallpaper_follow::enabled(paths) {
         crate::theme::wallpaper_follow::cancel(paths)?;
@@ -530,6 +530,7 @@ pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Stri
         }
         crate::theme::system::request(&paths.shell_json());
         follow_wallpaper(paths, &plan, &mut applied);
+        crate::theme::frame::publish_committed(src, plan.dark);
         return Ok(applied);
     }
     let uid = stamp_id();
@@ -575,6 +576,7 @@ pub fn execute(_src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Stri
         }
     }
     follow_wallpaper(paths, &plan, &mut applied);
+    crate::theme::frame::publish_committed(src, plan.dark);
     Ok(applied)
 }
 
@@ -670,7 +672,7 @@ fn restore_theme(w: &Write, paths: &Paths) -> Result<(), String> {
 }
 
 /// Restores the files of the latest apply (or of `only`, when it is still the latest) and removes the record.
-pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
+pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, String> {
     crate::log_info!("theme undo");
     let ids = undo_ids(paths);
     let Some(last) = ids.last() else { return Err("nothing to undo".into()) };
@@ -698,6 +700,7 @@ pub fn undo(_src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, 
         crate::log_warn!("dock: {e}");
     }
     crate::theme::system::request(&paths.shell_json());
+    crate::theme::frame::publish_committed(src, system_dark());
     Ok(theme)
 }
 

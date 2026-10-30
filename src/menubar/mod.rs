@@ -339,6 +339,7 @@ pub struct DecBar {
     dux_refresh: Instant,
     dux_hover: Option<segmented::Kind>,
     dux_material_generation: u64,
+    frame_theme_generation: Option<u64>,
     dux_effect: Option<(segmented::Kind, Instant, bool)>,
     dux_reduce_motion: bool,
 }
@@ -427,6 +428,7 @@ impl DecBar {
             dux_refresh: Instant::now() - Duration::from_secs(5),
             dux_hover: None,
             dux_material_generation: 0,
+            frame_theme_generation: None,
             dux_effect: None,
             dux_reduce_motion: crate::accessibility::Preferences::from_env().reduce_motion,
         };
@@ -440,6 +442,13 @@ impl DecBar {
         }
         bar.refresh_app_name();
         bar
+    }
+
+    /// Opt-in for a real bar, never offscreen PNG/preview construction.
+    pub fn with_frame_publisher(mut self) -> Self {
+        self.frame_theme_generation = Some(crate::theme::generation());
+        crate::theme::frame::publish(&crate::theme::th());
+        self
     }
 
     /// Which half of a split layout this process draws (`decbar --role bottom`); the default is the main bar.
@@ -1853,6 +1862,11 @@ impl App for DecBar {
 
 impl DecBar {
     fn tick_inner(&mut self) -> Tick {
+        let generation = crate::theme::generation();
+        if self.frame_theme_generation.is_some_and(|previous| previous != generation) {
+            self.frame_theme_generation = Some(generation);
+            crate::theme::frame::publish(&crate::theme::th());
+        }
         let mut redraw = self.dux_tick();
         redraw |= self.shared.changed.swap(false, Ordering::SeqCst);
         redraw |= self.dux_animating();
@@ -1943,6 +1957,14 @@ mod tests {
 
     fn menus() -> Vec<Menu> {
         menus::build("Foot", false)
+    }
+
+    #[test]
+    fn frame_theme_publication_requires_runtime_opt_in() {
+        let bar = DecBar::new(Box::new(active::NoActiveWindow));
+        assert!(bar.frame_theme_generation.is_none(), "PNG/native preview construction must not publish");
+        let bar = bar.with_frame_publisher();
+        assert!(bar.frame_theme_generation.is_some());
     }
 
     #[test]

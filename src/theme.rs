@@ -71,6 +71,7 @@ pub mod engine;
 pub mod extract;
 pub mod fontdb;
 pub mod fonts;
+pub mod frame;
 pub mod live;
 pub mod material;
 pub mod model;

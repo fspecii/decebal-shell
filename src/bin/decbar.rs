@@ -121,6 +121,11 @@ fn main() {
         None
     };
 
+    // Runs after offscreen/Control Center exits, including when a hidden bar
+    // waits without creating a surface. Bounded acknowledgement also covers a
+    // bottom-role invocation that immediately has nothing to display.
+    decebal::theme::frame::publish_startup(&decebal::theme::th());
+
     #[cfg(feature = "x11")]
     if gated && role == Process::Main {
         let cfg = decebal::widgets::config::WidgetsConfig::load(&decebal::theme::live::Source::discover().shell_json);
@@ -146,7 +151,11 @@ fn main() {
             }
         }
         let closed = Arc::new(AtomicBool::new(false));
-        let mut bar = DecBar::new(make_active(app_id.clone())).with_workspaces(decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm())).with_process(role).with_position(position);
+        let mut bar = DecBar::new(make_active(app_id.clone()))
+            .with_frame_publisher()
+            .with_workspaces(decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm()))
+            .with_process(role)
+            .with_position(position);
         if gated {
             bar = bar.with_gate(closed.clone());
             if role == Process::Main {
