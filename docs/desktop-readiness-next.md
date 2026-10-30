@@ -12,8 +12,9 @@ Current priorities after the Settings structural redesign and native gesture bat
 - Hardware-test the new configurable three/four-finger swipes after next login.
   XI2.4 delivery is best-effort; private backend tests do not prove touchpad support.
   X11 and Smithay routing, cancellation and end-once recognition are implemented.
-- Settings navigation with long runtime paths is under release validation;
-  normal endpoint names and config-mismatch rejection remain compatible.
+- Settings navigation now works with long runtime paths, with native release
+  navigation/draft/keyboard checks passed and Settings installed. Normal endpoint
+  names and config-mismatch rejection remain compatible; no process restarted.
 
 Checkpoint 2026-10-30 after Settings output-management source `b29e632` and the
 reviewed Settings-only rollout. Latest library gate: **1,617 passed, zero failed,
