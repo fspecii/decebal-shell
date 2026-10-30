@@ -1,5 +1,20 @@
 # Next desktop-readiness work
 
+Current priorities after the Settings structural redesign and native gesture batch:
+
+- Reproduce Dux section by section from local pinned upstream sources; the existing
+  lavender package is an approximation and the user rejected its fidelity. Bar,
+  dashboard/control centre, widgets and remaining shell surfaces need native
+  implementation and matched visual evidence. Keep the improved Settings layout.
+- Fix the live widget host's verified high CPU usage (397.9% in a one-second
+  process-tick sample). Claude owns host/capture/glass scheduling; the Dux owner
+  avoids those files until integration. No performance fix is deployed yet.
+- Hardware-test the new configurable three/four-finger swipes after next login.
+  XI2.4 delivery is best-effort; private backend tests do not prove touchpad support.
+  X11 and Smithay routing, cancellation and end-once recognition are implemented.
+- Settings navigation with long runtime paths is under release validation;
+  normal endpoint names and config-mismatch rejection remain compatible.
+
 Checkpoint 2026-10-30 after Settings output-management source `b29e632` and the
 reviewed Settings-only rollout. Latest library gate: **1,617 passed, zero failed,
 ten ignored**; formatting and strict all-target Clippy passed. Exact release
@@ -83,8 +98,8 @@ and mixed-DPI multi-output hardware checks. Nested mode/power are host-owned and
 correctly disabled; nested pixel evidence cannot establish physical driver safety.
 Other compositors require explicit adapters rather than protocol assumptions.
 
-Claude's structural Settings UI redesign is a separate ACTIVE thread; keep it
-independent from this functional output-management source and rollout.
+Claude's structural Settings UI redesign is integrated, release-tested and installed;
+its Dux theme fidelity follow-up is separate from functional output management.
 
 ## Other explicit requirements remain open
 
