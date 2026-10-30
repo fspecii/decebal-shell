@@ -9,7 +9,8 @@ Dux integration:
   checks; source integration is not a live deployment. Package folder/archive
   validation passes. A full panel matrix had one startup-probe timeout near its
   last mainbar case; isolated mainbar and dedicated Control Center/launcher gates
-  pass. Bounded diagnostic full rerun is pending; retain that observation.
+  pass. The bounded diagnostic full rerun passed all36captures; retain the earlier
+  intermittent observation and startup diagnostics rather than inventing a cause.
 - Continue the actual source-backed replica section by section: the native owner
   now has the original variable-clock typography task; the sole theme specialist
   owns its future licensed asset and selector update. Expressive artwork/motion,
