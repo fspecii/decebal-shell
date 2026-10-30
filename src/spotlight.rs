@@ -419,12 +419,11 @@ fn file_item(path: &str, home: &str) -> Item {
         Some(r) => format!("~{r}"),
         None => dir.to_string(),
     };
-    let folder = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
     Item {
-        alt: Some(Act::Reveal(if is_dir { path.to_string() } else { folder })),
+        alt: Some(Act::Reveal(path.to_string())),
         ..Item::new(
             name.to_string(),
-            format!("{dir}  ·  Ctrl+Enter shows the folder"),
+            format!("{dir}  ·  Ctrl+Enter shows in file manager"),
             if is_dir { "Folder" } else { "File" },
             Icon::Badge(if is_dir { "folder" } else { "doc" }, BLUE),
             Act::Open(path.to_string()),
@@ -491,8 +490,12 @@ fn run(act: &Act) {
             crate::clipboard::copy(t);
         }
         Act::Url(u) => detached("xdg-open", std::slice::from_ref(u)),
-        Act::Open(p) => detached("xdg-open", std::slice::from_ref(p)),
-        Act::Reveal(p) => detached("xdg-open", std::slice::from_ref(p)),
+        Act::Open(p) => {
+            launch::spawn_argv(&launch::open_argv(p));
+        }
+        Act::Reveal(p) => {
+            launch::spawn_argv(&[launch::sibling_or_path("decutil"), "reveal".into(), "--".into(), p.clone()]);
+        }
         Act::DarkMode => crate::controlcenter::sys::toggle_appearance(),
         Act::SetQuery(_) => {}
     }
@@ -1233,6 +1236,7 @@ mod tests {
         s.compose();
         assert_eq!(s.items[s.sel].kind, "Web");
         assert_eq!(file_item("/home/u/d/x.txt", "/home/u").subtitle.split("  ").next(), Some("~/d"));
+        assert_eq!(file_item("/home/u/d/a #%.txt", "/home/u").alt, Some(Act::Reveal("/home/u/d/a #%.txt".into())));
     }
 
     #[test]

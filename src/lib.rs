@@ -38,6 +38,7 @@ pub mod menubar;
 pub mod notify;
 pub mod preset;
 pub mod procmon;
+pub mod reveal;
 pub mod session;
 pub mod settings;
 pub mod single;

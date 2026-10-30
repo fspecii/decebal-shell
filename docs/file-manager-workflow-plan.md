@@ -17,9 +17,9 @@ Inspected on 2026-10-30:
 - `src/settings/system/defaults.rs` already selects the `inode/directory` handler.
   A new application must remain opt-in rather than changing that handler when a
   user applies a colour theme.
-- `src/spotlight.rs::file_item` stores a file's parent in `Act::Reveal`, losing
-  the exact item. `run` opens that folder with `xdg-open`; it does not select the
-  result. Its normal Open action also bypasses `launch::open_argv`.
+- The initial audit found `src/spotlight.rs::file_item` losing the exact item in
+  `Act::Reveal` and opening only its parent. Phase 1 now preserves that path and
+  requests selection. Ordinary Open also uses `launch::open_argv`.
 - `src/launch.rs::open_argv` supports the configured `DECEBAL_OPEN` override;
   `spawn_argv` supplies the existing detached launch path.
 - Installed executable discovery found Nautilus, `gio`, `xdg-open`, `gdbus` and
@@ -43,6 +43,12 @@ Local protocol evidence, read without activating the live file manager:
 
 ## Phase 1: reliable reveal from desktop search
 
+Implementation checkpoint: `src/reveal.rs` and `decutil reveal -- PATH` now
+provide this operation; Spotlight preserves the item path and launches the
+detached utility. Private typed-service and real Nautilus selection tests cover
+the implemented scope; see [run instructions and limits](file-manager-profiles.md).
+The native browser in later phases remains unimplemented.
+
 Preserve the exact selected path in `Act::Reveal`. Add one reusable reveal
 operation under `launch` (or a focused module called by it), and route ordinary
 Open through the existing opener helper. Label the alternative action **Show in
@@ -53,9 +59,8 @@ The reveal request must outlive Spotlight, which closes immediately after an
 activation. A worker thread owned by Spotlight is insufficient. Use a detached
 helper process, for example a narrow `decutil reveal -- <path>` command, started
 through `launch::spawn_argv`. The helper sends the typed FileManager1 request and
-owns its reply/fallback. `src/bin/decutil.rs` already dispatches focused utility
-commands before the general parser; this is an extension point, not an existing
-reveal command.
+owns its reply/fallback. `src/bin/decutil.rs` dispatches this focused utility
+command before the general parser.
 
 Use correctly encoded local file URIs, no shell interpolation. Retain the
 selected symlink identity rather than silently canonicalising to another folder.

@@ -5,7 +5,7 @@ use decebal::util::{self, Cmd, Ctx, RealSys};
 const HELP: &str = "decutil - utilities behind the Control Center's quick toggles
 
 Usage:
-  decutil screenshot [--fullscreen]\n                     select a region, save to Pictures, copy it and open the annotation editor (X11/Wayland)\n  decutil record start|stop|toggle|status [--region]
+  decutil reveal -- PATH\n                     select a file or folder in its file manager; falls back to opening its parent\n  decutil screenshot [--fullscreen]\n                     select a region, save to Pictures, copy it and open the annotation editor (X11/Wayland)\n  decutil record start|stop|toggle|status [--region]
                      screen recording to ~/Videos/Recordings/recording-DATE.mp4 (ffmpeg x11grab on X11, wf-recorder on
                      Wayland); --region asks for an area with slop (slurp on Wayland); a notification says where it was saved
   decutil idle-inhibit on|off|toggle|status
@@ -26,7 +26,39 @@ suppresses the toasts. State lives in $XDG_RUNTIME_DIR/decutil; recordings go to
 fn main() {
     decebal::compat::init();
     decebal::mem::limit_arenas();
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let raw: Vec<_> = std::env::args_os().skip(1).collect();
+    if raw.first().is_some_and(|a| a == "reveal") {
+        if raw.len() != 3 || raw[1] != "--" {
+            eprintln!("decutil reveal -- PATH");
+            std::process::exit(2);
+        }
+        match decebal::reveal::reveal(std::path::Path::new(&raw[2])) {
+            Ok(decebal::reveal::Outcome::Selected) => println!("selected"),
+            Ok(decebal::reveal::Outcome::OpenedParent) => println!("folder"),
+            Err(e) => {
+                eprintln!("decutil reveal: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    if raw.first().is_some_and(|a| a == decebal::reveal::WORKER_ARG) {
+        let result = if raw.len() == 2 { raw[1].to_str().ok_or_else(|| "Invalid URI".to_string()).and_then(decebal::reveal::show_items) } else { Err("Expected one file URI".into()) };
+        if let Err(e) = result {
+            eprintln!("decutil reveal: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    let args: Vec<String> = raw
+        .into_iter()
+        .map(|a| {
+            a.into_string().unwrap_or_else(|_| {
+                eprintln!("decutil: arguments must be UTF-8");
+                std::process::exit(2)
+            })
+        })
+        .collect();
     if args.first().is_some_and(|a| a == "screenshot") {
         if args.iter().skip(1).any(|a| a != "--fullscreen") {
             eprintln!("decutil screenshot [--fullscreen]");

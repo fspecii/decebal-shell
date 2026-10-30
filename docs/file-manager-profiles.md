@@ -43,6 +43,16 @@ There is no Windows ribbon, Finder column view, or replacement address bar.
 The profiles shape Files' existing widgets. They preserve native file selection,
 context menus, drag and drop, breadcrumb navigation and keyboard handling.
 
+In Spotlight, **Ctrl/Alt+Enter** on a file result asks the file manager to select
+that exact item. This also works for directories: Reveal selects the directory
+in its parent, while ordinary Enter opens it. `decutil reveal -- PATH` exposes
+the same operation. It runs outside Spotlight so closing search does not cancel
+the request. A custom `DECEBAL_OPEN` opens the parent directly; missing services,
+vanished items or a three-second request timeout fall back to the parent once.
+The CLI prints `selected` for an acknowledged selection request or `folder` for
+a launched fallback. A timeout is ambiguous: a file manager may have handled
+the selection before replying, so fallback can produce an additional window.
+
 Selectors follow upstream Nautilus's `.nautilus-window`, `placessidebar`,
 `.nautilus-list-view` and `.nautilus-grid-view` nodes. References:
 - https://gitlab.gnome.org/GNOME/nautilus/-/blob/master/src/nautilus-window.c
@@ -74,3 +84,18 @@ native process starts, and uses private session buses. It removes its temporary
 state on exit and keeps screenshots/logs in the evidence directory (a printed
 temporary directory by default). Exit 77 means a required tool or private display
 is unavailable; no release build or installation is performed.
+
+Reveal validation is separate from profile styling:
+
+```sh
+DECUTIL_BIN="$PWD/target/release/decutil" python3 tests/file-reveal.py
+DECUTIL_BIN="$PWD/target/release/decutil" \
+  RDWM_BIN="$HOME/Projects/rdwm/target/release/rdwm" \
+  python3 tests/e2e/file-reveal-native.py
+```
+
+The first uses a private typed D-Bus fixture and fake folder openers, including
+owner death and timeout. The second starts its own Xvfb and bus, checks real
+Nautilus selection through copied file URIs, and never moves the live pointer.
+It covers special filenames, a symlink and a directory; it does not establish
+compatibility with every file manager or actual Wayland activation.

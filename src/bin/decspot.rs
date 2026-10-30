@@ -23,7 +23,7 @@ Type to search:
 
 Keys:
   Enter            open the selected result
-  Ctrl/Alt+Enter   alternative: apps in a terminal, files reveal the folder, calculator copies `expr = result`
+  Ctrl/Alt+Enter   alternative: apps in a terminal, files show in file manager, calculator copies `expr = result`
   Up/Down, Tab, Ctrl+N/P   choose        Esc, click outside, or the hotkey again   close
   Ctrl+U clear line, Ctrl+A/E start/end
 
