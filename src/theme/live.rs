@@ -40,6 +40,8 @@ impl Source {
         let themes_dir = std::env::var_os("DECEBAL_THEMES")
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
+            // Like config_dir(), unit tests must not discover the developer's installed overrides.
+            .or_else(|| cfg!(test).then(|| crate::config::config_dir().join("themes")))
             .or_else(|| std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(|x| PathBuf::from(x).join("decebal/themes")))
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/decebal/themes")))
             .unwrap_or_else(|| PathBuf::from("themes"));

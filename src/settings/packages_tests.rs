@@ -7,9 +7,18 @@ use crate::theme::live::Source;
 #[test]
 fn the_section_lists_a_card_per_theme_and_the_stub_rows() {
     let (m, _) = model_with("[general]\n");
-    let its = items(&m);
+    let expected = crate::theme::builtin::BUILTIN.iter().filter(|(id, _)| !crate::theme::palette::legacy_theme(id)).count();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let its = loop {
+        let its = items(&m);
+        if its.iter().any(|item| matches!(item, Item::ThemeCards(cards) if cards.len() >= expected)) {
+            break its;
+        }
+        assert!(std::time::Instant::now() < deadline, "asynchronous theme discovery did not finish");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
     let Some(Item::ThemeCards(cards)) = its.iter().find(|i| matches!(i, Item::ThemeCards(_))) else { panic!("no cards") };
-    assert!(cards.len() >= crate::theme::builtin::BUILTIN.iter().filter(|(id, _)| !crate::theme::palette::legacy_theme(id)).count());
+    assert!(cards.len() >= expected);
     assert_eq!(cards.iter().filter(|c| c.current).count(), 1);
     let nord = cards.iter().find(|c| c.id == "macos").unwrap();
     assert!(nord.meta.contains("1.0.0") && nord.meta.contains("built-in") && !nord.deletable, "{}", nord.meta);
