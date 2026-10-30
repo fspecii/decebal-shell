@@ -140,6 +140,11 @@ e2e-notes-timer: all
 
 .PHONY: e2e-notes-timer
 
+# Optional native Nautilus check; no full shell rebuild is needed.
+.PHONY: e2e-file-manager-profiles
+e2e-file-manager-profiles:
+	bash tests/e2e/file-manager-profiles.sh
+
 e2e-welcome-accessibility: all
 	tests/e2e/welcome-accessibility.sh
 
