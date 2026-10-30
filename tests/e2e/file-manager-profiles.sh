@@ -17,8 +17,27 @@ if [ "${1:-}" = --private-run ]; then
   "$RDWM_BIN_DIR/rdwm" --backend x11 --config "$XDG_CONFIG_HOME/rdwm/config.toml" >"$FILE_MANAGER_EVIDENCE_DIR/rdwm.log" 2>&1 & pids+=($!)
   sleep .5
   kill -0 "${pids[1]}"
-  for profile in explorer finder; do
-    cp "$FILE_MANAGER_PRIVATE_DIR/$profile.css" "$XDG_CONFIG_HOME/gtk-4.0/gtk.css"
+  read -r -a selected_profiles <<< "${FILE_MANAGER_PROFILES:-explorer finder explorer-dark}"
+  for profile in "${selected_profiles[@]}"; do
+    case "$profile" in explorer|finder|explorer-dark) ;; *) exit 2 ;; esac
+    if [[ $profile == explorer-dark ]]; then
+      # Start the managed pipeline from a clean private baseline; previous standalone
+      # profiles intentionally have no managed marker and must not leak Finder rules.
+      : > "$XDG_CONFIG_HOME/gtk-4.0/gtk.css"
+      printf '%s\n' '{"theme":{"name":"windows11","mode":"dark","palette":"nord"},"system":{"enabled":true,"fileManagerStyle":"theme"}}' > "$DECEBAL_CONFIG/decebal.json"
+      "$DECTHEMECTL_BIN" apply-system --only gtk --json > "$FILE_MANAGER_EVIDENCE_DIR/explorer-dark-apply.json"
+      rg 'Files visual profile: explorer' "$XDG_CONFIG_HOME/gtk-4.0/gtk.css" >/dev/null
+      python3 - <<'CHECK'
+import json,os,pathlib
+config=json.loads((pathlib.Path(os.environ['DECEBAL_CONFIG'])/'decebal.json').read_text())
+assert config['theme']=={'name':'windows11','mode':'dark','palette':'nord'}
+assert config['system']['fileManagerStyle']=='theme'
+css=(pathlib.Path(os.environ['XDG_CONFIG_HOME'])/'gtk-4.0/gtk.css').read_text()
+assert ': dark */' in css and 'Files visual profile: explorer' in css
+CHECK
+    else
+      cp "$FILE_MANAGER_PRIVATE_DIR/$profile.css" "$XDG_CONFIG_HOME/gtk-4.0/gtk.css"
+    fi
     # A fresh bus prevents native services from retaining the previous app's CSS.
     PROFILE="$profile" env -u DBUS_SESSION_BUS_ADDRESS dbus-run-session -- timeout -k 2 45 python3 "$HERE/tests/e2e/file-manager-profiles.py" >"$FILE_MANAGER_EVIDENCE_DIR/$profile.log" 2>&1
     if rg -i 'theme parsing error|css.*(error|warning)' "$FILE_MANAGER_EVIDENCE_DIR/$profile.log"; then exit 1; fi
@@ -32,6 +51,8 @@ N=":$((10#${BASH_REMATCH[1]}))"
 [ "${N#:}" -ge 2 ] || exit 2
 [ ! -e "/tmp/.X11-unix/X${N#:}" ] && [ ! -e "/tmp/.X${N#:}-lock" ] || exit 77
 for command in rustc python3 dbus-run-session Xvfb xdotool nautilus import rg timeout; do command -v "$command" >/dev/null || exit 77; done
+export DECTHEMECTL_BIN=${DECTHEMECTL_BIN:-$HERE/target/release/decthemectl}
+[ -x "$DECTHEMECTL_BIN" ] || exit 77
 export RDWM_BIN_DIR=${RDWM_BIN_DIR:-$HOME/Projects/rdwm/target/release}
 [ -x "$RDWM_BIN_DIR/rdwm" ] || exit 77
 export FILE_MANAGER_PRIVATE_DIR
@@ -60,7 +81,7 @@ python3 - "$HERE" "$FILE_MANAGER_PRIVATE_DIR" <<'PY'
 import json,pathlib,sys
 root,temp=map(pathlib.Path,sys.argv[1:])
 source='#[path='+json.dumps(str(root/'src/theme/system/file_manager.rs'))+'] mod file_manager;\n'
-source+='fn main() { let dir=std::env::args().nth(1).unwrap(); for style in [file_manager::Style::Explorer,file_manager::Style::Finder] { std::fs::write(format!("{}/{}.css",dir,style.id()),file_manager::css(style)).unwrap(); } }\n'
+source+='fn main() { let dir=std::env::args().nth(1).unwrap(); for (theme,want) in [("windows11","explorer"),("macos","finder")] { let style=file_manager::Style::FollowTheme.resolve(theme); assert_eq!(style.id(),want); std::fs::write(format!("{}/{}.css",dir,style.id()),file_manager::css(style)).unwrap(); } }\n'
 (temp/'generate.rs').write_text(source)
 PY
 rustc --edition=2021 -A dead_code "$FILE_MANAGER_PRIVATE_DIR/generate.rs" -o "$FILE_MANAGER_PRIVATE_DIR/generate"

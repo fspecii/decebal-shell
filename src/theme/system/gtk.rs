@@ -159,7 +159,7 @@ pub fn css(p: &Palette, gtk4: bool) -> String {
 pub fn css_with_profile(p: &Palette, cfg: &Config, gtk4: bool) -> String {
     let mut s = css(p, gtk4);
     if gtk4 {
-        s.push_str(&super::file_manager::css(cfg.file_manager_style));
+        s.push_str(&super::file_manager::css(cfg.file_manager_style.resolve(&p.id)));
     }
     s
 }
@@ -295,6 +295,62 @@ mod tests {
         let g = css(&palette(true), true);
         let head: Vec<&str> = g.lines().take(4).collect();
         assert_eq!(head, ["/* macOS: dark */", "@define-color accent_bg_color #0a84ff;", "@define-color accent_fg_color #ffffff;", "@define-color accent_color #0a84ff;"]);
+    }
+
+    #[test]
+    fn gtk4_profile_follows_theme_identity_and_explicit_preferences_win() {
+        let cfg = Config::default();
+        let mut p = palette(true);
+        for (id, profile) in [("windows11", Some("explorer")), ("frutiger-aero", Some("explorer")), ("macos", Some("finder")), ("graphite", Some("finder")), ("nord", None)] {
+            p.id = id.into();
+            let sheet = css_with_profile(&p, &cfg, true);
+            if let Some(profile) = profile {
+                assert!(sheet.contains(&format!("Files visual profile: {profile}")));
+            } else {
+                assert!(!sheet.contains("Files visual profile:"));
+            }
+            assert!(!css_with_profile(&p, &cfg, false).contains("Files visual profile:"), "GTK3 layout remains native");
+            for fixed in [super::super::file_manager::Style::Native, super::super::file_manager::Style::Explorer, super::super::file_manager::Style::Finder] {
+                let explicit = Config { file_manager_style: fixed, ..Config::default() };
+                let sheet = css_with_profile(&p, &explicit, true);
+                if fixed == super::super::file_manager::Style::Native {
+                    assert!(!sheet.contains("Files visual profile:"));
+                } else {
+                    assert!(sheet.contains(&format!("Files visual profile: {}", fixed.id())));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn separate_palettes_and_dynamic_colours_preserve_windows_file_profile() {
+        struct Sandbox(std::path::PathBuf);
+        impl Drop for Sandbox {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let directory = std::env::temp_dir().join(format!("decebal-follow-files-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&directory).unwrap();
+        let sandbox = Sandbox(directory);
+        let src = crate::theme::live::Source { shell_json: sandbox.0.join("decebal.json"), themes_dir: sandbox.0.join("themes") };
+        for palette in ["catppuccin", "nord"] {
+            let selection = crate::theme::Selection { name: "windows11".into(), palette: Some(palette.into()), mode: crate::theme::Mode::Dark, ..Default::default() };
+            let theme = src.theme_for("windows11", &selection, true).unwrap();
+            let p = Palette::from_theme(&theme);
+            assert_eq!(p.id, "windows11");
+            assert!(css_with_profile(&p, &Config::default(), true).contains("Files visual profile: explorer"));
+        }
+        let dynamic = crate::theme::Dynamic {
+            enabled: true,
+            source: crate::theme::model::Origin::Color(crate::theme::Rgb(90, 120, 200)),
+            colors: crate::theme::extract::Extracted::from_color(crate::theme::Rgb(90, 120, 200)),
+            ..Default::default()
+        };
+        let selection = crate::theme::Selection { name: "windows11".into(), dynamic: Some(dynamic), mode: crate::theme::Mode::Dark, ..Default::default() };
+        let theme = src.theme_for("windows11", &selection, true).unwrap();
+        assert_eq!(theme.id, "windows11");
+        assert!(css_with_profile(&Palette::from_theme(&theme), &Config::default(), true).contains("Files visual profile: explorer"));
     }
 
     #[test]

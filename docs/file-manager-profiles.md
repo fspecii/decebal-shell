@@ -1,8 +1,11 @@
 # Familiar Files appearance
 
 Settings → Appearance → All apps has **File manager appearance** outside the
-Advanced section: Native Files, Windows Explorer inspired, and macOS Finder
-inspired. GTK app integration must be enabled. Reopen GNOME Files to load a change.
+Advanced section: **Follow theme**, Native Files, Windows Explorer inspired, and
+macOS Finder inspired. Follow theme is the default when no preference has been
+saved. Windows 11 and Frutiger Aero select Explorer; macOS and Graphite select
+Finder; other themes select Native. The row shows the currently resolved profile.
+GTK app integration must be enabled. Reopen GNOME Files to load a change.
 
 Explorer uses compact sidebar/list rows, an 8px grid inset and squarer selections.
 Its address breadcrumbs sit in a framed view-colour surface; the column header
@@ -16,8 +19,12 @@ All surface colours and separators derive from the selected theme's GTK palette;
 there are no embedded light/dark colours or icon substitutions. Breadcrumb button
 sizes and overflow stay native. Column widths, horizontal row/cell padding and
 rubberband-selection margins are unchanged to preserve Nautilus hit testing.
-The profile is an independent preference: changing a theme keeps it. Native Files
-removes the additional geometry rules. Disabling app integration restores the
+An explicit Native, Explorer or Finder choice stays fixed when a theme changes.
+Previously saved explicit choices are preserved. Follow theme resolves against the
+desktop theme identity, so changing a colour palette or using macOS window buttons
+on an unrelated rice theme does not change the Files profile. Native Files removes
+the additional geometry rules. The preference is `system.fileManagerStyle` in
+`decebal.json`: `theme` (also accepts `follow-theme`), `native`, `explorer` or `finder`. Disabling app integration restores the
 managed GTK files through the existing backup system.
 
 These are visual profiles for modern GTK4 Nautilus, not replacements for its
@@ -44,7 +51,9 @@ Selectors follow upstream Nautilus's `.nautilus-window`, `placessidebar`,
 
 Validation covers GTK 4.24 CSS parsing and GNOME Files 51.1 in a private Xvfb
 session with an isolated D-Bus, HOME and XDG directories. The native check opens
-fixture folders in list/grid views and exercises address navigation, back/parent,
+fixture folders in list/grid views using the automatically resolved Windows 11 and
+macOS profiles, plus a dark Windows 11 run using a separate Nord palette through
+the compiled app-integration pipeline, and exercises address navigation, back/parent,
 and creating a folder. This does not change the live desktop or user preferences.
 Other Nautilus versions may vary in their widget structure; these profiles are
 not a promise of pixel-identical Explorer or Finder layouts.
@@ -57,7 +66,9 @@ E2E_DISPLAY=:339 FILE_MANAGER_EVIDENCE_DIR=/tmp/files-profile-evidence \
 ```
 
 Choose an unused display number of at least 2. `RDWM_BIN_DIR` can override the
-window-manager binary directory. The harness compiles only a tiny standalone CSS
+window-manager binary directory. `DECTHEMECTL_BIN` selects the compiled CLI (by
+default `target/release/decthemectl`, rebuilt with Follow theme support). The
+harness compiles only a tiny standalone CSS
 generator from the current source, establishes private HOME/XDG paths before any
 native process starts, and uses private session buses. It removes its temporary
 state on exit and keeps screenshots/logs in the evidence directory (a printed

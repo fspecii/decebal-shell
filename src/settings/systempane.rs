@@ -37,11 +37,15 @@ pub fn items(m: &Model) -> Vec<Item> {
     for warning in completion.warnings {
         out.push(Item::Note { text: warning, warn: true });
     }
-    let styles = [("Native Files", "native"), ("Windows Explorer inspired", "explorer"), ("macOS Finder inspired", "finder")];
-    let selected = styles.iter().position(|(_, id)| *id == cfg.file_manager_style.id());
+    use system::file_manager::Style;
+    let styles = [Style::FollowTheme, Style::Native, Style::Explorer, Style::Finder];
+    let selected = styles.iter().position(|style| *style == cfg.file_manager_style);
+    let source = super::themepane::source(m);
+    let theme_id = source.find(&source.selection().name).map(|(id, _)| id).unwrap_or_else(|| "macos".into());
+    let resolved = cfg.file_manager_style.resolve(&theme_id);
     out.push(Item::Card(vec![Row::new("File manager appearance")
-        .detail("Visual familiarity in GNOME Files: spacing and selection shapes. File operations and navigation stay native. Requires Apply to all apps and GTK apps; reopen Files to load changes.")
-        .ctl(Ctl::new("sy:files", Kind::Popup(styles.iter().map(|(label, id)| ((*label).into(), (*id).into())).collect(), selected)))]));
+        .detail(format!("Currently: {}. Follow theme uses Explorer for Windows themes, Finder for macOS themes and Native for others. Explicit choices stay fixed. Requires app and GTK integration; reopen Files to load changes.",resolved.title()))
+        .ctl(Ctl::new("sy:files", Kind::Popup(styles.iter().map(|style| (style.title().into(), style.id().into())).collect(), selected)))]));
     let adv = m.sel.adv;
     out.push(Item::Header("Advanced".into()));
     out.push(Item::Card(vec![Row::new("Choose what is themed")
@@ -217,7 +221,7 @@ mod tests {
         m.sel.adv = false;
         assert!(items(&m)
             .iter()
-            .any(|item| matches!(item, Item::Card(rows) if rows.iter().flat_map(|r| &r.ctls).any(|c| c.id == "sy:files" && matches!(&c.kind, Kind::Popup(opts, Some(0)) if opts.len() == 3)))));
+            .any(|item| matches!(item, Item::Card(rows) if rows.iter().flat_map(|r| &r.ctls).any(|c| c.id == "sy:files" && matches!(&c.kind, Kind::Popup(opts, Some(0)) if opts.len() == 4)))));
         // Disable propagation to keep this a settings-only routing test.
         let cfg = Config { enabled: false, ..Config::default() };
         cfg.save(&m.paths.shell_json()).unwrap();
@@ -225,6 +229,21 @@ mod tests {
         assert_eq!(Config::load(&m.paths.shell_json()).file_manager_style.id(), "finder");
         m.apply("sy:files", CtlVal::Str("invalid".into()));
         assert_eq!(Config::load(&m.paths.shell_json()).file_manager_style.id(), "finder");
+        m.apply("sy:files", CtlVal::Str("theme".into()));
+        assert_eq!(Config::load(&m.paths.shell_json()).file_manager_style.id(), "theme");
+    }
+
+    #[test]
+    fn file_manager_row_shows_the_resolved_profile_and_preserves_fixed_choice() {
+        let (m, _) = model_with("");
+        for (theme, style, expected) in
+            [("windows11", "theme", "Windows Explorer inspired"), ("graphite", "theme", "macOS Finder inspired"), ("nord", "theme", "Native Files"), ("windows11", "native", "Native Files")]
+        {
+            std::fs::write(m.paths.shell_json(), serde_json::json!({"theme":{"name":theme},"system":{"enabled":false,"fileManagerStyle":style}}).to_string()).unwrap();
+            let rows = items(&m);
+            let row = rows.iter().find_map(|i| if let Item::Card(rows) = i { rows.iter().find(|row| row.ctls.iter().any(|ctl| ctl.id == "sy:files")) } else { None }).unwrap();
+            assert!(row.detail.contains(&format!("Currently: {expected}.")), "{}", row.detail);
+        }
     }
 
     #[test]

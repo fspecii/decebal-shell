@@ -156,7 +156,7 @@ pub struct Config {
     pub cursor_theme: Option<String>,
     /// Also send the reload signals Omarchy uses for kitty (SIGUSR1), ghostty/btop (SIGUSR2) and helix (SIGUSR1).
     pub signals: bool,
-    /// Independent visual profile for Files; theme changes preserve this choice.
+    /// Files follows the desktop family by default; explicit visual profiles survive theme changes.
     pub file_manager_style: file_manager::Style,
     /// Per-target options that differ from their default (see [`OPTIONS`]), `"options"` in the JSON.
     pub options: BTreeMap<String, bool>,
@@ -168,7 +168,7 @@ pub const OPTIONS: &[(&str, bool, &str, &str)] =
 
 impl Default for Config {
     fn default() -> Self {
-        Self { enabled: true, targets: BTreeMap::new(), icon_theme: None, cursor_theme: None, signals: false, file_manager_style: file_manager::Style::Native, options: BTreeMap::new() }
+        Self { enabled: true, targets: BTreeMap::new(), icon_theme: None, cursor_theme: None, signals: false, file_manager_style: file_manager::Style::FollowTheme, options: BTreeMap::new() }
     }
 }
 
@@ -914,13 +914,24 @@ mod tests {
 
     #[test]
     fn file_manager_profile_round_trip_and_invalid_fallback() {
-        for style in ["native", "explorer", "finder"] {
+        for style in ["theme", "native", "explorer", "finder"] {
             let c = Config::from_json(&json!({"fileManagerStyle": style}));
             assert_eq!(c.file_manager_style.id(), style);
             assert_eq!(Config::from_json(&c.to_json()), c);
         }
         for value in [json!(null), json!(42), json!("unknown"), json!("Finder")] {
-            assert_eq!(Config::from_json(&json!({"fileManagerStyle": value})).file_manager_style, file_manager::Style::Native);
+            assert_eq!(Config::from_json(&json!({"fileManagerStyle": value})).file_manager_style, file_manager::Style::FollowTheme);
+        }
+    }
+
+    #[test]
+    fn absent_file_manager_preference_follows_theme_without_rewriting_explicit_profiles() {
+        assert_eq!(Config::default().file_manager_style, file_manager::Style::FollowTheme);
+        assert_eq!(Config::from_json(&json!({})).file_manager_style, file_manager::Style::FollowTheme);
+        assert_eq!(Config::from_json(&json!({"fileManagerStyle":"follow-theme"})).to_json()["fileManagerStyle"], "theme");
+        for style in ["native", "explorer", "finder"] {
+            let cfg = Config::from_json(&json!({"fileManagerStyle":style}));
+            assert_eq!(cfg.to_json()["fileManagerStyle"], style);
         }
     }
 
