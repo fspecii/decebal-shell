@@ -1,22 +1,22 @@
 format = 1
 id = "dux-lavender"
 name = "Dux Lavender"
-version = "1.0.0"
+version = "1.1.0"
 author = "Decebal Theme Specialist; palette adapted from Dux Labs"
 license = "MIT"
-description = "Dux-inspired lavender tonal surfaces, a floating top panel and four optional native time, media, resource and focus cards. No bottom dock; wallpaper stays independent."
+description = "Dux replica port, sections 1–2: stock Purple native bar, historical README dashboard profile and tonal Control Center. Remaining visual parity is tracked explicitly. Wallpaper stays independent."
 min_shell_version = "0.1.0"
 tags = ["dux-inspired", "material", "lavender", "native-widgets", "dark-light"]
 
 [colors.dark]
 background = "#141218"
-sidebar = "#1d1b20"
+sidebar = "#211f24"
 surface = "#211f24"
-bar = "#1d1b20"
+bar = "#211f24"
 bar_text = "#e6e0e9"
-popup = "#2b292f"
+popup = "#211f24"
 dock = "#211f24"
-overlay = "#2b292f"
+overlay = "#141218"
 titlebar = "#211f24"
 titlebar_inactive = "#1d1b20"
 border = "#948f99"
@@ -31,13 +31,13 @@ warn = "#e9c47a"
 
 [colors.light]
 background = "#fef7ff"
-sidebar = "#f4eef6"
+sidebar = "#f2ecf4"
 surface = "#f2ecf4"
-bar = "#f4eef6"
+bar = "#f2ecf4"
 bar_text = "#1d1b20"
-popup = "#ece6ee"
+popup = "#f2ecf4"
 dock = "#f2ecf4"
-overlay = "#ece6ee"
+overlay = "#fef7ff"
 titlebar = "#f2ecf4"
 titlebar_inactive = "#f4eef6"
 border = "#7a757f"
@@ -51,14 +51,14 @@ ok = "#45663a"
 warn = "#795900"
 
 [metrics]
-radius = 20
-bar_alpha = 0.96
+radius = 12
+bar_alpha = 1.0
 dock_alpha = 0.96
 popup_alpha = 1.0
 panel_alpha = 1.0
 dock_roundness = 0.55
 dock_padding = 8
-outline = 0.10
+outline = 0
 blur = 0.15
 glass_refraction = 0
 glass_edge = 2
@@ -68,10 +68,11 @@ glass_blur = 3
 shadow = 0.45
 
 [font]
-ui = ["Inter", "Adwaita Sans", "Noto Sans"]
-title = ["Inter", "Adwaita Sans", "Noto Sans"]
+files = ["fonts/GoogleSansFlex-400.ttf", "fonts/GoogleSansFlex-500.ttf", "fonts/GoogleSansFlex-700.ttf", "fonts/MaterialSymbolsRounded.ttf"]
+ui = ["Google Sans Flex", "Noto Sans"]
+title = ["Google Sans Flex", "Noto Sans"]
 mono = ["Adwaita Mono", "JetBrains Mono", "monospace"]
-display = ["Inter", "Adwaita Sans", "Noto Sans"]
+display = ["Google Sans Flex", "Noto Sans"]
 scale = 1.0
 
 [decoration]
@@ -92,9 +93,17 @@ layouts = ["tile", "monocle", "floating"]
 
 [bar]
 enabled = true
-style = "floating"
+style = "dux"
 position = "top"
-height = 26
+height = 38
+background = "band"
+margin = 4
+spacing = 4
+band_radius = 16
+radius = 14
+left = ["launcherButton", "workspaceSwitcher", "focusedWindow"]
+center = ["music", "clock", "weather"]
+right = ["systemTray", "clipboard", "cpuUsage", "memUsage", "notificationButton", "battery", "controlCenterButton"]
 
 [dock]
 enabled = false
@@ -108,36 +117,17 @@ monochrome_tint = false
 [control_center]
 enabled = true
 position = "top-right"
-style = "card"
+style = "dux"
+
+[dashboard]
+style = "dux"
+profile = "readme"
+
+[desktop]
+widgets = "none"
 
 [hot_corners]
 top_right = "control-center"
 
-# Native optional dashboard profile. Builtin implementation is shared, never vendored here.
-[[widgets]]
-use = "builtin:clock-card"
-place = "desktop"
-anchor = "top-left"
-x = 32
-y = 72
-
-[[widgets]]
-use = "builtin:now-playing-mini"
-place = "desktop"
-anchor = "bottom-right"
-x = -32
-y = -32
-
-[[widgets]]
-use = "builtin:resource-overview"
-place = "desktop"
-anchor = "top-right"
-x = -32
-y = 72
-
-[[widgets]]
-use = "builtin:focus-hub"
-place = "desktop"
-anchor = "bottom-left"
-x = 32
-y = -32
+[launcher]
+style = "dux"
