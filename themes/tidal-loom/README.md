@@ -4,6 +4,9 @@ Original Decebal design and procedural artwork, copyright 2026 Decebal contribut
 licensed under the repository MIT license. No downloaded imagery, logos, third-party
 theme files or bundled fonts. Fonts are named only and fall back to Inter/Noto Sans.
 
+The desktop uses the left vertical rail only. The bottom dock is explicitly disabled,
+so it retains no dock process.
+
 Apply with `decthemectl theme apply tidal-loom`. The package supplies dark and light
 semantic colors. Both artworks are bundled with `wallpaper.dark/light`; mode changes follow
 engine-owned artwork while preserving a custom wallpaper. Independent palettes recolor shell and

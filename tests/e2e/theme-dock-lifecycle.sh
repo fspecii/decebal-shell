@@ -44,6 +44,11 @@ decthemectl theme apply caelestia
 check_count 0 'auto dock is absent for vertical Caelestia rail'
 decthemectl theme apply windows11
 check_count 1 'Windows taskbar starts one dock'
+decthemectl theme install "$HERE/themes/tidal-loom" --force
+decthemectl theme apply tidal-loom
+check_count 0 'Tidal Loom keeps only its left rail, with no dock process'
+jq -e '.bar.enabled==true and .bar.position=="left" and .dock.enabled==false' "$DECEBAL_CONFIG/decebal.json" >/dev/null
+
 decthemectl theme apply macos
-check_count 1 'Windows to macOS retains a single dock'
+check_count 1 'Tidal Loom to macOS restores a single dock'
 echo "passed $PASS, failed 0"

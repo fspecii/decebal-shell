@@ -94,7 +94,7 @@ style = "vertical"
 position = "left"
 
 [dock]
-enabled = true
+enabled = false
 style = "windows"
 size = 40
 roundness = 0.25
