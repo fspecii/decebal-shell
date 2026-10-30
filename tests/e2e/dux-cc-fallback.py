@@ -3,7 +3,7 @@
 BAR_BINARY=/absolute/decbar python3 ... /tmp/evidence. Private Xvfb and fake tools.
 """
 from pathlib import Path
-import os,json,subprocess,tempfile,time,sys,hashlib
+import os,json,subprocess,tempfile,time,sys,hashlib,shutil
 from PIL import ImageGrab
 out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True);binary=Path(os.environ['BAR_BINARY']).resolve()
 def wait(fn,label):
@@ -22,6 +22,9 @@ with tempfile.TemporaryDirectory(prefix='dux-cc-fallback-') as tmp:
   p=r/k;p.mkdir(mode=0o700);env[k]=str(p)
  (Path(env['DECEBAL_CONFIG'])/'decebal.json').write_text(json.dumps({'theme':{'name':'macos','mode':'dark'},'control_center':{'style':'dux'}}))
  (r/'bin').mkdir()
+ # Keep sibling_or_path inside the fixture too; symlinks resolve to the real package.
+ isolated_binary=r/'bin/decbar';shutil.copy2(binary,isolated_binary)
+ assert hashlib.sha256(isolated_binary.read_bytes()).digest()==hashlib.sha256(binary.read_bytes()).digest()
  settings=r/'bin/decsettings';settings.write_text('#!/bin/sh\necho settings >> \"$DUX_FALLBACK_CALLS\"\n');settings.chmod(0o755)
  for name in ('curl','nmcli','pactl','wpctl','playerctl','bluetoothctl','brightnessctl','decutil','rdwmctl'):
   p=r/'bin'/name;p.write_text('#!/bin/sh\nexit 1\n');p.chmod(0o755)
@@ -31,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='dux-cc-fallback-') as tmp:
   server=subprocess.Popen(['Xvfb',display,'-screen','0','960x720x24','-nolisten','tcp','-noreset'],env=env,stdout=log,stderr=log);app=None
   try:
    wait(lambda:server.poll() is None and Path(f'/tmp/.X{display[1:]}-lock').exists() and int(Path(f'/tmp/.X{display[1:]}-lock').read_text().strip())==server.pid,'owned Xvfb')
-   app=subprocess.Popen([str(binary),'--control-center','open'],env=env,stdout=log,stderr=log)
+   app=subprocess.Popen([str(isolated_binary),'--control-center','open'],env=env,stdout=log,stderr=log)
    wait(lambda:(r/'panel.txt').exists() and (r/'panel.txt').read_text().startswith('panel '),'panel painted')
    rect=list(map(int,(r/'panel.txt').read_text().splitlines()[0].split()[1:]));x,y,w,h=rect
    def painted():

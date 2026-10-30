@@ -107,3 +107,38 @@ additional blue perimeter pixels away from the painted track, saves
 `volume-keyboard-focus.png` at both scales, and asserts navigation and Enter on
 the focused slider emit no setters. Harness-only smoke against the older hash
 above passed: 388/322 focus-ring pixels at 100/200%, with no baseline ring.
+
+## Optimized candidate acceptance, source 55c90da
+
+Root supplied `/tmp/decebal-review2-release-artifacts/bin` with source/build
+provenance. The four harnesses above were executed sequentially against its
+exact optimized `decbar` SHA-256
+`a3c2ee808e48cbdedc4eef1303d68f56e993f2c59fc524e027ac8f0db2b4ba75`.
+
+- `/tmp/decebal-review2-native/placement/result.json`: pass. Logical bar bottom
+  46px, actual painted bottom 42px, banner y54, process monitor y50. Companion
+  `decnotify` SHA `7748ff81a8def9818beceb43a5fd3ec92980709089bf08a4b65e8fb91376cfcc`;
+  `decmon` SHA `b653462b0fc0a3b7050cab10dc0e88da574bcd8b8886849d23176aa44f1b8a3e`.
+- `/tmp/decebal-review2-native/title/result.json`: same-app title-only repaint
+  passed in 0.056s.
+- `/tmp/decebal-review2-native/fallback-isolated/`: all three no-font semantic
+  icon crops passed; unfocused Enter inert and explicitly focused Settings
+  reached only the private fixture.
+- `/tmp/decebal-review2-native/sliders/result.json`: both scales passed all
+  eight pointer commits and eight wheel commits with exact expected setter
+  values. Stale Enter remained inert. Keyboard navigation revealed the full
+  Volume target, including the 200% short viewport at scroll44; 388/322 blue
+  perimeter pixels were measured against zero baseline ring pixels. Navigation
+  and focused-slider Enter emitted no setters. Focused 100/200% screenshots were
+  visually inspected via panel crops, confirming a clear full-row focus ring.
+
+The first optimized fallback attempt in `/tmp/decebal-review2-native/fallback`
+failed its Settings fixture check because the candidate contains a real sibling
+`decsettings`; production correctly prefers that sibling over PATH. The harness
+now copies the exact-hash bar into its private fixture directory beside the fake
+Settings executable, preventing real sibling execution. The isolated rerun
+supersedes that harness failure. No production code changed for this correction.
+
+This acceptance covers the named X11 regressions and standalone slider host;
+all earlier limits regarding other hosts, Wayland, hardware and accessibility
+remain. No live display input, actual setters, installation or restart occurred.
