@@ -52,14 +52,15 @@ into a shared buffer, redraw only when something changes, and sit at 0 % CPU whe
 ## Appearance: themes and palettes
 
 System Settings > Appearance separates **Themes** (desktop design: macOS, Windows, Caelestia and other layouts)
-from **Palettes** (Nord, Dracula, Catppuccin and other colour sets). Every palette works with every theme and remains
-selected when you change the design. Choosing a palette replaces wallpaper-derived colours and clears the custom accent;
-turn on Match wallpaper colours in Palettes to use generated colours instead. Fonts, icons and other details live in Customise.
+from **Palettes** (Nord, Dracula, Catppuccin and other colour sets). Every palette works with every theme. Choosing a palette recolours the current design and clears the custom accent;
+applying a complete theme restores its supplied colours. Match wallpaper colours is an explicit option.
+Fonts and details live in Customise; Wallpaper and Icons have separate Settings sections.
 
 ## Theme packages and widgets
 
 Themes are data packages (`format = 1`): a folder, or a single `.dtheme` file, with a `theme.toml` (colours for dark and light, metrics, fonts,
-wallpaper, titlebar style, bar, dock, icons, hot corners, safe rdwm keys, widgets) plus its wallpapers, screenshots and widget files. Every
+titlebar style, bar, dock, icons, hot corners, safe rdwm keys, widgets) and optional local assets. Shipped themes
+leave Wallpaper independent and offer reviewed dark/light photographs through **Wallpaper → For this theme**. Every
 built-in theme (macOS, Windows 11, Caelestia, Nord, Dracula...) is such a package in `themes/`, so there is one engine and your own themes use the same
 keys. Packages cannot carry scripts, commands or files outside themselves; widgets from a theme can only use a fixed list of click actions.
 
@@ -67,7 +68,7 @@ keys. Packages cannot carry scripts, commands or files outside themselves; widge
 decthemectl theme new mine --from nord       # ~/.config/decebal/themes/mine/theme.toml
 decthemectl theme validate ~/.config/decebal/themes/mine
 decthemectl theme apply mine --preview 10    # try it for 10 s, then everything is put back
-decthemectl theme apply mine                 # colours, fonts, titlebars, bar, dock, wallpaper, widgets in one undoable step
+decthemectl theme apply mine                 # colours, fonts, titlebars, bar, dock and widgets; wallpaper stays independent
 decthemectl theme undo
 decthemectl theme pack ~/.config/decebal/themes/mine -o mine.dtheme   # share it
 decthemectl theme install mine.dtheme
@@ -556,6 +557,10 @@ Desktop widget hosting currently supports X11. Isolated regression checks: `test
 
 ## Live wallpapers
 
-Settings → Wallpaper → **Live wallpapers** supports local videos and an online Wikimedia Commons video picker with previews, creator/licence information and downloads. Playback is muted and capped at 24 fps by default; fullscreen apps pause only the wallpaper on their monitor, keeping a still frame and resuming afterwards. A static fallback image remains configured in rdwm. The optional `decwall` host needs `ffmpeg` plus `mpv` on X11, or `mpvpaper` on Wayland. See [live wallpapers](docs/live-wallpapers.md) for setup, CLI commands and verification status.
+Settings → Wallpaper → **Live wallpapers** supports local videos, DesktopHut browsing with video previews, and a Wikimedia Commons picker with creator/licence information and downloads. Playback is muted and capped at 24 fps by default; fullscreen apps pause only the wallpaper on their monitor, keeping a still frame and resuming afterwards. A static fallback image remains configured in rdwm. The optional `decwall` host needs `ffmpeg` plus `mpv` on X11, or `mpvpaper` on Wayland. See [live wallpapers](docs/live-wallpapers.md) for setup, CLI commands and verification status.
 
-The X11 production-hardening branch adds native glass refraction with independent foreground rendering, automatic application colour propagation, rendered widget-host readiness and visible-pixel/click regression tests. Orbit Glass now uses a compact dock and a separate right navigation rail. Theme light/dark variants select matching artwork while mode/palette changes retain package structure and custom wallpaper choices. See [native glass](docs/native-glass.md), [application propagation](docs/systemtheming/app-propagation.md) and [Widgets settings](docs/widgets-settings.md).
+The X11 production-hardening branch adds native glass refraction with independent foreground rendering, automatic application colour propagation, rendered widget-host readiness and visible-pixel/click regression tests. Orbit Glass uses its right navigation rail and disables the dock process. Theme application, mode changes and undo retain the independently selected wallpaper. See [native glass](docs/native-glass.md), [application propagation](docs/systemtheming/app-propagation.md) and [Widgets settings](docs/widgets-settings.md).
+
+Window shadows have native controls under **Appearance → Customise → Window style** in supporting rdwm X11 sessions.
+An older running WM shows an explanation instead of writable unsupported fields.
+Timer login recovery runs headlessly only for an active or elapsed unclaimed countdown; see [Notes and Timer](docs/notes-timer.md).

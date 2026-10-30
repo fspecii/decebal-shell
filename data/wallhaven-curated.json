@@ -4496,7 +4496,7 @@
   },
   "themes": {
     "aster": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Quiet coastal photography complements slate/porcelain surfaces and small Breeze captions.",
       "dark": {
         "image_id": "9mqvz1",
@@ -4512,7 +4512,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "brutalist": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Strong photographic diagonals match hard edges; no decorative vector geometry is needed.",
       "dark": {
         "image_id": "zx9z8j",
@@ -4528,7 +4528,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "caelestia": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Photographic green and rose tones give Material You a natural source when explicitly enabled.",
       "dark": {
         "image_id": "p82qrj",
@@ -4544,7 +4544,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "frutiger-aero": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Photographic water and clouds retain optimistic aqua without generated bubbles or hills.",
       "dark": {
         "image_id": "yq8x8d",
@@ -4560,7 +4560,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "glyph-rice": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Low-key photographic woodland / white winter negative space keep the dot typography dominant.",
       "dark": {
         "image_id": "zpzqeg",
@@ -4576,7 +4576,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "gnome-adwaita-like": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Cloud and mountain photography gives clean Adwaita-like surfaces breathing room.",
       "dark": {
         "image_id": "3l6jj9",
@@ -4592,7 +4592,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "gruvbox-dark": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Copper foliage and orange sandstone complement warm cream/charcoal rather than drawing contour lines.",
       "dark": {
         "image_id": "9dpejk",
@@ -4608,7 +4608,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "kiln-court": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Earth pigment comes from real sand and architecture rather than rendered vaults.",
       "dark": {
         "image_id": "w5eqmp",
@@ -4624,7 +4624,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "macos": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Natural alpine photography replaces synthetic curves without imitating an Apple asset.",
       "dark": {
         "image_id": "l3edjp",
@@ -4640,7 +4640,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "moss-atlas": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Actual woodland depth suits the organic right-hand instrument rail.",
       "dark": {
         "image_id": "vqxkr5",
@@ -4656,7 +4656,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "mountain-neon-dot": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Faithful snow-mountain photography with the reference's teal night atmosphere; no AI mountain illustration.",
       "dark": {
         "image_id": "ey7prw",
@@ -4672,7 +4672,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "nextkde": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Soft blue reflections fit the broad glass surfaces and top-panel / launch-dock composition.",
       "dark": {
         "image_id": "57o619",
@@ -4688,7 +4688,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "nothing-dot": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Real monochrome lighting and landscape complement the single red interface accent.",
       "dark": {
         "image_id": "p9qovj",
@@ -4704,7 +4704,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "orbit-glass": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Use real astronomy/space photography rather than a synthetic eclipse. Right rail only.",
       "dark": {
         "image_id": "5y3q31",
@@ -4720,7 +4720,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "paper-signal": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Monochrome still life and snow keep the editorial palette in charge.",
       "dark": {
         "image_id": "eyv7xl",
@@ -4736,7 +4736,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "signal-deck": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Real orbital weather observations suit the scientific instrument layout without invented survey artwork.",
       "dark": {
         "image_id": "xl19lv",
@@ -4752,7 +4752,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "sweeteh": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Real sky photography suits raised Material tiles and explicit native island surfaces.",
       "dark": {
         "image_id": "yxvodx",
@@ -4768,7 +4768,7 @@
       "crop_policy": "Prefer fit to retain the full wide cloud frame and any watermark; keep the existing independent Wallpaper scaling preference unless explicitly changed by the user."
     },
     "synthwave": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Actual night lights and sunset colour replace the procedural sun/grid; no uncredited cyberpunk illustration.",
       "dark": {
         "image_id": "3qq8jd",
@@ -4784,7 +4784,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "terminal-minimal": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Large quiet tonal fields respect a tiny bar and bare desktop clock.",
       "dark": {
         "image_id": "o571qp",
@@ -4800,7 +4800,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "tidal-loom": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Natural repeated forms replace procedural weaving while keeping the cool material rhythm.",
       "dark": {
         "image_id": "m9wr19",
@@ -4816,7 +4816,7 @@
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
     "windows11": {
-      "status": "curated_pending_runtime_wiring",
+      "status": "curated_live_checked_on_download",
       "rationale": "Wide natural horizons feel familiar behind a single centred taskbar.",
       "dark": {
         "image_id": "7p6wke",

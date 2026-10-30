@@ -1,14 +1,11 @@
 # Curated Wallhaven recommendations — 2026-10-30
 
-This is an advisory catalogue for the parent's download/cache/selection work, not
-a live configuration change. [`../data/wallhaven-curated.json`](../data/wallhaven-curated.json)
+This catalogue supplies **Settings → Wallpaper → For this theme**. It does not
+change live configuration by itself. [`../data/wallhaven-curated.json`](../data/wallhaven-curated.json)
 contains **21 theme IDs / 42 distinct images / 42 dark-light choices**. Every
 non-legacy package installed by `make install` is covered (including the five
 showcase folders; `everforest` is a palette alias and excluded). Aster is the one
-new package. No uncovered IDs at this checkpoint. Generated artwork/defaults are now removed from the 16 visible packages that
-contained it; all 21 packages omit wallpaper metadata, including Sweeteh whose
-attributed upstream photos remain optional assets. Parent owns separate picker/
-cache wiring; the catalogue never triggers downloads from theme apply.
+new package. No uncovered IDs at this checkpoint. Generated artwork/defaults are removed from visible and hidden packages; all 34 shipped manifests omit wallpaper metadata. Sweeteh’s attributed upstream photos remain optional assets. Separate picker/cache integration is implemented and tested; the catalogue never triggers downloads from theme apply.
 
 ## Selection and provenance
 
@@ -24,8 +21,7 @@ an advisory parameter, never treated as an enforced filter. The authoritative
 curation post-filter checks each actual detail response: SFW, no AI-art tag
 133451 or named AI-generator tags. Selected candidates tagged digital art,
 illustration or space art were also rejected. Current Decebal provider query
-code has no AI-exclusion preference yet; the parent must enforce the detail
-filter again when downloading, since classification can change.
+Browse query has no general AI-exclusion preference. Curated downloads enforce fresh detail checks across every returned tag before accepting the image, since classification can change.
 
 All chosen large thumbnails were visually inspected in subject contact sheets;
 all 42 original full-resolution recommendations were subsequently downloaded,
@@ -124,9 +120,7 @@ that state must be labelled rather than sold as an installed photo default.
   results were not selected. No guessed upstream artist identity.
 - Parent `f68d460` and persistent-index `837799f` were read **read-only**. No engine,
   Settings, widget creator, Icons or rdwm source was copied over or changed.
-- Catalogue installation path, runtime selection/download/cache and compositor
-  shadow profile remain parent's work. Generated-default retirement is implemented
-  in this batch; see `generated-wallpaper-removal.md`.
+- Runtime selection/download/cache and native X11 shadow integration are implemented. Generated-default retirement covers all 34 shipped manifests; see `generated-wallpaper-removal.md`, `hidden-wallpaper-removal.md` and `window-shadow-design.md`. Hardware gates remain separate.
 - All42 current choices have full-resolution crop review. Native composition QA
   covers Aster, Glyph and Mountain, not all 21 live desktops. Physical scaling,
   ultrawide/portrait and arbitrary user widget positions remain unverified.
