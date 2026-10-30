@@ -1,27 +1,47 @@
-# Sources and licence
+# Dux replica source attribution
 
-Inspected 2026-10-30; no upstream install scripts executed.
+Authoritative local references inspected read-only,2026-10-30:
 
-| Primary source | Pinned commit | Use |
-| --- | --- | --- |
-| [dux-shell](https://github.com/duxlabs-dev/dux-shell/tree/46a12d915203a6bf296f26cab251c55efa6499ab) | `46a12d915203a6bf296f26cab251c55efa6499ab` | `quickshell/Common/StockThemes.js` Purple dark/light palette, `Theme.qml`, README desktop/dashboard screenshots and bar/dashboard visual study |
-| [dux-plugins](https://github.com/duxlabs-dev/dux-plugins/tree/a55bb40da2f70640600a520ea05eac9c3540f1af) | `a55bb40da2f70640600a520ea05eac9c3540f1af` | README first-party Pomodoro/notepad/actions context; no plugin code copied |
-| [dux-plugin-registry](https://github.com/duxlabs-dev/dux-plugin-registry/tree/f3079becbf35f4f48d46879fa46cb867f15771f9) | `f3079becbf35f4f48d46879fa46cb867f15771f9` | README registry/third-party boundary; no registry/plugin assets copied |
+- [dux-shell87312075dd414a6f60691464bcd6c6a9bb242a7e](https://github.com/duxlabs-dev/dux-shell/tree/87312075dd414a6f60691464bcd6c6a9bb242a7e).
+  StockThemes Purple dark/light tokens, Theme/SettingsSpec geometry and DBar/DDash/
+  ControlCenter source are the replica contracts. Earlier46a12d9 inspection remains
+  historical; its Purple tokens match the current source.
+- [dux-qml-common43e05926fcdacc53675623169bcef686faa95301](https://github.com/duxlabs-dev/dux-qml-common/tree/43e05926fcdacc53675623169bcef686faa95301),
+  pinned by the shell clone: shape/type/icon source and included font assets.
+- [dux-pluginsa55bb40da2f70640600a520ea05eac9c3540f1af](https://github.com/duxlabs-dev/dux-plugins/tree/a55bb40da2f70640600a520ea05eac9c3540f1af):
+  first-party Pomodoro/notepad/actions references, no arbitrary script/plugin runtime copied.
+- Registryf3079becbf35f4f48d46879fa46cb867f15771f9 was inspected previously;
+  no root licence. Third-party entries do not inherit shell licence and are not copied.
 
-Shell and first-party plugins carry **MIT**, Copyright(c)2025 Avenge Media LLC;
-full shell notice retained in LICENSE.md because stock colours are adapted here.
-Registry has no root licence in the inspected snapshot; individual third-party
-entries do not inherit the shell licence. This port includes none of their code,
-logos, fonts, screenshots or wallpapers. Dux is credited as upstream inspiration,
-not an endorsement or an official Dux distribution.
+Shell/common/plugins software: **MIT**,Copyright(c)2025 Avenge Media LLC. Full shell
+notice in LICENSE.md. Dux is credited as upstream, not endorsement or an official
+Dux distribution. Native implementation is independently coordinated; package assets
+are not permission to run upstream installers or replace accepted Settings.
 
-Inspected original README references:
+## Included typography/icon assets
 
-- Desktop: https://github.com/user-attachments/assets/203a9678-c3b7-4720-bb97-853a511ac5c8
-- Dashboard: https://github.com/user-attachments/assets/a937cf35-a43b-4558-8c39-5694ff5fcac4
+Google Sans Flex: SIL OFL1.1, fullfonts/OFL.txt. Static500/700 copied unchanged from
+pinned common. Regular400 is an explicitly documented STATIC instance of upstream
+variable regular at all source default axes. Embedded source copyright/name metadata
+preserved; not a substitute typeface. The unsupported variable regular is not bundled.
 
-Those screenshot pixels are not bundled; their illustrated wallpaper has no
-verified separate licence/author in this inspection. Wallhaven photo recommendations
-retain their existing independent metadata/provenance in data/wallhaven-curated.json,
-with unknown image licences/authors honestly recorded. Software MIT terms do not
-grant rights to unrelated screenshot artwork or catalogue photos.
+Material Symbols Rounded variable font: exact upstream bytes, Apache2.0, full
+fonts/MaterialSymbolsRounded-LICENSE.txt. Native owner registers package fonts only
+inside the process and renders actual PUA glyphs; no global font install/fc-cache.
+Source icon axes: FILL0,GRAD-25dark/0light,opsz24,wght400unfilled/500filled.
+Detailed source paths, build tool/version, source/output hashes and licenses are in
+[fonts/BUILD.md](fonts/BUILD.md). SoftwareMIT does not relicense the fonts.
+
+## Artwork and reference images
+
+Original README references actually inspected:
+
+- Desktop:https://github.com/user-attachments/assets/203a9678-c3b7-4720-bb97-853a511ac5c8
+- Dashboard:https://github.com/user-attachments/assets/a937cf35-a43b-4558-8c39-5694ff5fcac4
+
+Those image pixels are reference only, not bundled/live UI. The illustrated mountain
+wallpaper and album artwork have no separately verified redistribution rights here;
+softwareMIT alone is insufficient. No generated wallpaper is substituted for the
+upstream design. Wallhaven l3edjp/39zjq6 remain independent reviewed recommendations,
+not theme defaults; image authors/licences remain unknown in the catalogue. Existing
+Follow theme preference and custom-widget confirmation are preserved.

@@ -1,5 +1,136 @@
 # Dux Lavender — native package evidence
 
+## Replica acceptance reset — authoritative current scope
+
+The earlier lavender/four-corner implementation is **not a Dux replica**. Its
+readability/geometry checks remain useful engineering evidence, not visual parity.
+All earlier “acceptance” labels below refer only to that superseded approximation.
+The user requires source-by-source replica sections; the accepted second-pass
+Settings is preserved separately. No screenshot or painted mock is live native UI.
+
+Authoritative READ-ONLY clones:
+
+- `/home/ambsd/Projects/dux-shell-reference` at
+  `87312075dd414a6f60691464bcd6c6a9bb242a7e`.
+- Its pinned `dux-qml-common` at`43e05926fcdacc53675623169bcef686faa95301`.
+- `/home/ambsd/Projects/dux-plugins-reference` at
+  `a55bb40da2f70640600a520ea05eac9c3540f1af`.
+
+Earlier shell46a12d9 was inspected too; stockPurple pairs are unchanged. Do not mix
+README's historic compact26px screenshot geometry with current comfortable source
+38px band defaults and claim an exact same-preset comparison. Source correctness
+and screenshot-profile overrides must be recorded separately.
+
+### Ordered parity ledger
+
+| Order/section | Exact source target | Current native/package state | Remaining contract / owner |
+| --- | --- | --- | --- |
+|1.Bar islands/items|Three independent section groups; launcher/workspaces/focus left, media/clock/weather centre, SNI/clipboard/CPU/RAM/notifications/battery/control centre right|**Implemented difference:** existing application-menu pill/Apple/Finder is rejected; not parity|Native owner implements opt-in Dux composition, hit maps, overflow, source icons and isolated captures; package activates only after validated schema|
+|2.Dashboard/control centre|One anchored tabbed surface; actual overview grid, clock/weather/calendar/user/system/media; source tonal controls|**Remaining:** four desktop cards are not a substitute|Native owner supplies dashboard.style/control_center.style Dux, real routes/data/actions; specialist maps tokens/layout/preset|
+|3.Clock/weather/media/system widgets|Actual DDash card topology, artwork/transport, vertical clock where configured, calendar dates and honest missing states|**Implemented difference:** current generic shared cards only prove accessibility bounds|Native owner supplies definitions/renderers; specialist selects profile and verifies exact appearance, no duplicate widget code|
+|4.Launcher/notifications/rest|Pinned source lists, spacing, typography, actions and mode states|**Remaining:** no replica claim|Native owner follows earlier sections; preserve accepted Settings and independent notification functionality|
+|Typography/assets prerequisite|Google Sans Flex400/500/700; Material Symbols Rounded; actual source family/axes|**Exact assets prepared:** static400 derived at source defaults, static500/700 and Material variable copied; private native400/500/700 glyph test passes|Native owner process-private FontDb/PUA cache; font.files activation pending validated handoff, no system font install|
+|Stock colour pairs|Full Purple material roles, not simply accent substitution|**Partial exact:** background/foreground/accent match; old popup/card role mapping and20px generic radius differ|Package owner corrects role mapping and radius with staged native section; missing extra roles must be typed, not invented manifest fields|
+
+### Section1 — source geometry and behaviour contract
+
+Source paths are relative to dux-shell-reference. `quickshell/Common/settings/SettingsSpec.js`
+barConfigs defaults: spacing4,innerPadding2,widgetPadding8,borderEnabledfalse,
+widgetOutlineEnabledfalse,widgetStylepills,maximizeWidgetIconsfalse,
+maximizeWidgetTextfalse,fontScale1.0,transparency1.0,widgetTransparency1.0.
+Exact order:
+
+- Left:`launcherButton`,`workspaceSwitcher`,`focusedWindow`.
+- Centre:`music`,`clock`,`weather`.
+- Right:`systemTray`,`clipboard`,`cpuUsage`,`memUsage`,`notificationButton`,
+  `battery`,`controlCenterButton`.
+
+`Common/Theme.qml`:barHeight48 is a **base**, not final band size.
+`barWidgetThickness(2,1)=snapEven(max(20,26+2*.6))=28`;
+`barThickness(2,1)=snapEven(max(28+2+4,48-4-(8-2)))=38`.
+At38/48=.792,barTextSize takes its middle branch:12px normal or16px maximized;
+it does not multiply text size by.792. Default icon size is
+`2*round((38/48)*(24-6)/2)=14px`.
+`SurfaceWidgets/BarPill.qml`:horizontal padding`snap(8*(28/30),DPR)`=7px atDPR1;
+background comes fromBarMetrics.widgetFill→Theme.widgetBaseBackgroundColor→cardSurface.
+Source exact snap implementation uses rounding toDPR pixels. Pill face outer radius
+is14 at28px face with expressive pill controls; joined inner corners8,pressed4,
+ordinary pill gaps4 and grouped segment gaps2. No arbitrary1px outline by default.
+Preserve native mouse/key/scroll actions and accessibility hit targets, not just paint.
+No player: no phantom song or transport; no battery: no fake percentage; unavailable
+weather/system metrics remain explicit or source-appropriate hidden state.
+
+**Schema coordination:** native owner agreed`bar.style="dux"`,
+`dashboard.style="dux"`,`control_center.style="dux"`; these are contracts, not
+validated support at this checkpoint. Proposed staged bar knobs: height38(default)
+or26(explicit compact screenshot preset),margin8,spacing4,radius14. Item identifiers
+must be the canonical names above; no silently ignored arbitrary list keys.
+Package must not write new selectors until native tests confirm wiring. General
+Settings, bar/controls/widget engine and schema are native-thread ownership.
+
+### Source tokens, typography and later-section geometry
+
+`Common/Theme.qml`:spacingXXS/XS/S/M/L/XL=2/4/8/12/16/24;
+fontSmall/Medium/Large/XLarge/XXLarge/Display/DisplayLarge=12/14/16/20/28/36/57;
+weights400/500/700; iconSmall/Medium/default/Large=16/20/24/32;
+minimumTouchTarget48,iconButton40. `DCommon/Common/Shape.js`:corners
+2/4/8/12/16/20/28/32/48; radiusStrength50=>scale1,cardM12,popupXL28.
+Default densitycomfortable and interfaceexpressive; density steps are separate from
+saved grid cell sizes and must not be approximated by globally enlarging all gaps.
+
+| StockPurple role | Dark | Light |
+| --- | --- | --- |
+|primary/onPrimary|D0BCFF /381E72|6750A4 /FFFFFF|
+|primaryContainer|4F378B|EADDFF|
+|secondary|CCC2DC|625B71|
+|surface/background|141218|FEF7FF|
+|surfaceText/backgroundText|E6E0E9|1D1B20|
+|surfaceVariant/onVariant|49454E /CAC4CF|E7E0EB /49454E|
+|outline|948F99|7A757F|
+|surfaceContainerLowest|100E14|FFF9FF|
+|surfaceContainerLow|1D1B20|F4EEF6|
+|surfaceContainer|211F24|F2ECF4|
+|surfaceContainerHigh|2B292F|ECE6EE|
+|surfaceContainerHighest|36343A|E6E0E9|
+
+Default cardSurface=surfaceContainer,chipSurface=surfaceContainerHigh,nested chip=
+surfaceContainerHighest. Existing package popup=high is a role difference, not exact.
+`Common/PopoutMetrics.qml`:contentPadding16,contentGap12,chromeButton32,
+chromeIcon16,panelChromeInset8 at comfortable density.
+`Modules/DDash/DashMetrics.qml`:default6columns,preferredColumn128,minimumPopout700,
+contentPadding12,contentGap12,gridRowUnit96,gap8,cardRadius12,surfaceRadius28.
+Derived default width`6*128+5*8+24=832px`; source caps to screen width minus32.
+`ControlCenter/CcMetrics.qml`:default8columns,min6,baseTile64 (48+2*8),gap8,
+sheetPadding16; default width`2*16+8*64+7*8=600px`. Source viewport caps/density and
+actual availability determine any smaller layout; do not fake missing components.
+
+`DCommon/Common/Fonts.qml` loads actualGoogleSansFlex, FiraCode and displayDMSerif;
+`DIcon.qml` pins unfilledFILL0,wght400,GRAD-25dark/0light,**opsz24**, not currentpx.
+Filled state useswght500. Native owner's actualpx optical axis is an explicitly
+tracked difference unless corrected. Full MIT shell/common, OFL font andApache2icon
+notices must remain distinct. No screenshot wallpaper or album art is licensed by
+softwareMIT alone. Existing reviewed photographic choices and Follow theme stay
+independent; no generated wallpaper substitution.
+
+### Comparison evidence acceptance
+
+For each section, capture actual upstream module/native surface at the **same**
+viewport1920×1080 (and compact1280×720), stockPurple mode and100/200%text/DPR1,
+same configured38px default or explicit26px compact, and labelled sample/missing
+data. Capture live runtime only on private displays/processes with private HOME/XDG/
+bus. Root's:0 and:430 desktops are forbidden. Do not replace source UI with a hand
+painted mock to manufacture similarity. README screenshot pixels are reference,
+not proof of current source settings/DPI and not shipped as a live wallpaper/UI.
+
+Actual native bar handoff and matched upstream captures are pending section1.
+Existing generic package/native screenshots below are **baseline differences**,
+not replica proof. Until measured native section capture exists, status remains
+remaining even if schema compiles. No changes to accepted Settings, gestures or
+live configuration. Only this package and this report are specialist-owned now.
+
+---
+
+
 **Current acceptance:** the four-corner layout and shared companion fix now pass
 combined100/200% text QA at1280×720. See the final section below. Earlier clipping
 and pending-handoff notes are historical and superseded; regenerated images are
