@@ -5,12 +5,35 @@
 //! parsing is pure and unit-tested against captured samples. A missing tool simply yields `None`.
 
 use std::io::Read;
-use std::process::{Command, Stdio};
+use std::os::fd::AsRawFd;
+use std::os::unix::process::CommandExt;
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(2500);
+const MAX_PROBE_OUTPUT: usize = 1 << 20;
+
+/// Own only the subprocess group we created. A failed/expired probe cannot leave
+/// a helper holding stdout open, or a reader thread waiting for that helper.
+struct ProbeChild {
+    child: Child,
+    complete: bool,
+}
+impl Drop for ProbeChild {
+    fn drop(&mut self) {
+        if !self.complete {
+            // SAFETY: process_group(0) created this child's private group with
+            // its PID as group ID. Never signal the caller's group or a name.
+            unsafe {
+                libc::kill(-(self.child.id() as i32), libc::SIGKILL);
+            }
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
 
 /// Makes the child die with the thread that spawned it (Linux `PR_SET_PDEATHSIG`), so a bar that is killed
 /// mid-probe, or restarted, never leaves a hung `bluetoothctl` or a `pactl subscribe` behind. Only for children
@@ -33,35 +56,71 @@ pub fn die_with_parent(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
-/// Runs `argv`, returning stdout if it exits successfully within `timeout`. The child is killed on timeout.
+/// Returns complete UTF-8 stdout (at most 1 MiB) after a successful exit and EOF.
+/// The deadline covers both: descendants cannot extend it by retaining stdout.
+/// Timed-out/read-failed probes have their owned group killed and child reaped.
 pub fn run(argv: &[&str], timeout: Duration) -> Option<String> {
     let (prog, args) = argv.split_first()?;
-    let mut child = die_with_parent(Command::new(prog).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())).spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let reader = std::thread::spawn(move || {
-        let mut buf = String::new();
-        let _ = stdout.read_to_string(&mut buf);
-        buf
-    });
+    let child = die_with_parent(Command::new(prog).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).process_group(0)).spawn().ok()?;
+    let mut process = ProbeChild { child, complete: false };
+    let mut stdout = process.child.stdout.take()?;
+    let fd = stdout.as_raw_fd();
+    // SAFETY: fd belongs to stdout for this function's lifetime. Only this pipe
+    // is switched to nonblocking reads, so deadline enforcement never needs an
+    // abandoned blocking reader thread.
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 || libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
+            return None;
+        }
+    }
     let start = Instant::now();
-    // Poll quickly at first (these tools usually answer within a few ms), then settle at 15 ms.
-    let mut nap = 1;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break Some(s),
-            Ok(None) if start.elapsed() < timeout => {
-                std::thread::sleep(Duration::from_millis(nap));
-                nap = (nap * 2).min(15);
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break None;
+    let mut bytes = Vec::new();
+    let mut status = None;
+    let mut eof = false;
+    loop {
+        // Bound each drain too: a helper writing continuously must not starve
+        // the deadline/status check or grow memory without a cap.
+        for _ in 0..16 {
+            let mut buf = [0; 4096];
+            match stdout.read(&mut buf) {
+                Ok(0) => {
+                    eof = true;
+                    break;
+                }
+                Ok(n) => {
+                    if bytes.len() + n > MAX_PROBE_OUTPUT {
+                        return None;
+                    }
+                    bytes.extend_from_slice(&buf[..n]);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return None,
             }
         }
-    };
-    let text = reader.join().ok()?;
-    status.filter(|s| s.success()).map(|_| text)
+        if status.is_none() {
+            status = process.child.try_wait().ok()?;
+        }
+        if status.is_some_and(|s| !s.success()) {
+            return None;
+        }
+        if status.is_some() && eof {
+            let text = String::from_utf8(bytes).ok()?;
+            process.complete = true;
+            return Some(text);
+        }
+        let remaining = timeout.checked_sub(start.elapsed())?;
+        let ms = remaining.as_millis().clamp(1, 15) as i32;
+        // A pipe at EOF is perpetually readable. Wait on no descriptors while
+        // the direct child is still running, rather than spinning on its EOF.
+        let mut descriptor = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+        let count = if eof { 0 } else { 1 };
+        // SAFETY: one owned stdout descriptor, or an empty poll slice; bounded wait.
+        if unsafe { libc::poll(&mut descriptor, count, ms) } < 0 && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return None;
+        }
+    }
 }
 
 static DRY_RUN: AtomicBool = AtomicBool::new(false);
@@ -804,6 +863,95 @@ mod tests {
         let start = Instant::now();
         assert_eq!(run(&["sleep", "5"], Duration::from_millis(150)), None);
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_grandchild_cannot_hold_a_probe_stdout_past_its_deadline() {
+        let root = std::env::temp_dir().join(format!("decebal-probe-descendants-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        for (case, script) in [
+            ("waiting", "printf '%s' \"$$\" > \"$1\"; /usr/bin/sleep 20 & printf '%s' \"$!\" > \"$2\"; wait"),
+            ("early-success", "printf '%s' \"$$\" > \"$1\"; /usr/bin/sleep 20 & printf '%s' \"$!\" > \"$2\"; exit 0"),
+            ("failed", "printf '%s' \"$$\" > \"$1\"; /usr/bin/sleep 20 >/dev/null & printf '%s' \"$!\" > \"$2\"; exit 3"),
+        ] {
+            let leader = root.join(format!("leader-{case}.pid"));
+            let descendant = root.join(format!("descendant-{case}.pid"));
+            let start = Instant::now();
+            assert_eq!(run(&["/bin/sh", "-c", script, "probe", leader.to_str().unwrap(), descendant.to_str().unwrap()], Duration::from_millis(150)), None);
+            assert!(start.elapsed() < Duration::from_secs(2), "a reader must not outlive the configured timeout");
+            let pid: u32 = std::fs::read_to_string(&leader).unwrap().parse().unwrap();
+            assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists(), "direct child is reaped");
+            let pid: u32 = std::fs::read_to_string(&descendant).unwrap().parse().unwrap();
+            let terminated = (0..100).any(|_| {
+                let state = std::fs::read_to_string(format!("/proc/{pid}/stat"));
+                let gone = state.map(|s| s.rsplit(") ").next().unwrap_or("").starts_with('Z')).unwrap_or(true);
+                if !gone {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                gone
+            });
+            assert!(terminated, "owned descendant must be killed too (its new parent reaps an orphan)");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn probe_stdout_is_complete_bounded_and_valid_utf8() {
+        assert_eq!(run(&["/bin/sh", "-c", "printf 'héllo\\n'"], Duration::from_secs(2)).as_deref(), Some("héllo\n"));
+        assert_eq!(run(&["/usr/bin/head", "-c", &MAX_PROBE_OUTPUT.to_string(), "/dev/zero"], Duration::from_secs(2)).map(|s| s.len()), Some(MAX_PROBE_OUTPUT));
+        assert_eq!(run(&["/bin/sh", "-c", "printf partial; exit 3"], Duration::from_secs(2)), None);
+        assert_eq!(run(&["/bin/sh", "-c", "printf '\\377'"], Duration::from_secs(2)), None);
+        assert_eq!(run(&["/usr/bin/yes", "too much output"], Duration::from_secs(2)), None, "never return misleading truncated probe data");
+        let start = Instant::now();
+        assert_eq!(run(&["/bin/sh", "-c", "exec 1>&-; exec /usr/bin/sleep 20"], Duration::from_millis(100)), None);
+        assert!(start.elapsed() < Duration::from_secs(2), "EOF alone does not mean the child exited");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failed_volume_commands_release_the_worker_for_later_requests() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("decebal-volume-failure-{}", std::process::id()));
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let fake = bin.join("wpctl");
+        std::fs::write(&fake, "#!/bin/sh\nprintf '%s %s\\n' \"$$\" \"$*\" >> \"$0.calls\"\nexit 1\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Only this dedicated child sees the fake PATH; no process-wide test
+        // environment or live volume service is changed.
+        let result = Command::new(std::env::current_exe().unwrap())
+            .args(["controlcenter::sys::tests::volume_failure_probe_child", "--exact", "--ignored", "--nocapture"])
+            .env("PATH", &bin)
+            .env("DECEBAL_VOLUME_FAILURE_PROBE", &root)
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "private child of failed_volume_commands_release_the_worker_for_later_requests"]
+    fn volume_failure_probe_child() {
+        let root = std::path::PathBuf::from(std::env::var_os("DECEBAL_VOLUME_FAILURE_PROBE").expect("test driver supplies private probe path"));
+        let threads = || std::fs::read_dir("/proc/self/task").unwrap().count();
+        let baseline = threads();
+        for level in [0.25, 0.50] {
+            set_volume(level);
+            let until = Instant::now() + Duration::from_secs(2);
+            while (VOL_WORKER.load(Ordering::SeqCst) || threads() != baseline) && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(!VOL_WORKER.load(Ordering::SeqCst), "failed commands must not strand the coalescer");
+            assert_eq!(threads(), baseline, "no reader/worker is retained after completion");
+        }
+        let calls = std::fs::read_to_string(root.join("bin/wpctl.calls")).unwrap();
+        assert!(calls.contains("0.25") && calls.contains("0.50"), "both requests reached the private helper: {calls}");
+        for line in calls.lines() {
+            let pid: u32 = line.split_whitespace().next().unwrap().parse().unwrap();
+            assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists(), "failed helper is reaped");
+        }
     }
 
     #[cfg(target_os = "linux")]

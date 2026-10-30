@@ -134,19 +134,14 @@ pub fn desktop_files() -> Vec<PathBuf> {
 
 /// Asks `gsettings`, at most 1.5 s (it may sit on a missing D-Bus); `None` when it is not installed or says nothing.
 fn gsettings() -> Option<String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let out = std::process::Command::new("gsettings")
-            .args(["get", "org.gnome.desktop.interface", "icon-theme"])
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .and_then(|o| String::from_utf8(o.stdout).ok());
-        let _ = tx.send(out);
-    });
-    rx.recv_timeout(std::time::Duration::from_millis(1500)).ok().flatten().and_then(|o| parse_gsettings(&o))
+    gsettings_program("gsettings", std::time::Duration::from_millis(1500))
+}
+
+fn gsettings_program(program: &str, timeout: std::time::Duration) -> Option<String> {
+    // The existing cached icon-state call sites remain unchanged. Bound the
+    // actual subprocess lifetime, not just how long a receiver waits for an
+    // otherwise unbounded worker.
+    crate::controlcenter::sys::run(&[program, "get", "org.gnome.desktop.interface", "icon-theme"], timeout).and_then(|o| parse_gsettings(&o))
 }
 
 /// What the desktop says the icon theme is: GSettings first, then GTK 3 / 4 `settings.ini`.
@@ -169,6 +164,28 @@ mod tests {
         assert_eq!(parse_gsettings("''\n"), None, "unset");
         assert_eq!(parse_gsettings(""), None);
         assert_eq!(parse_gsettings("No such schema"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn timed_out_icon_probes_are_reaped_before_the_next_call() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("decebal-gsettings-lifetime-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let script = root.join("gsettings");
+        let pid_file = root.join("gsettings.pid");
+        std::fs::write(&script, "#!/bin/sh\nprintf '%s' \"$$\" > \"$0.pid\"\nexec /usr/bin/sleep 20\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let start = std::time::Instant::now();
+        for _ in 0..3 {
+            assert_eq!(gsettings_program(script.to_str().unwrap(), std::time::Duration::from_millis(80)), None);
+            let pid: u32 = std::fs::read_to_string(&pid_file).unwrap().parse().unwrap();
+            assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists(), "no abandoned child after the receiver would have timed out");
+        }
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+        std::fs::write(&script, "#!/bin/sh\nprintf \"'Tela-dark'\\n\"\n").unwrap();
+        assert_eq!(gsettings_program(script.to_str().unwrap(), std::time::Duration::from_secs(1)).as_deref(), Some("Tela-dark"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
