@@ -202,6 +202,13 @@ fn fmt_pt(pt: f32) -> String {
     }
 }
 
+// Older Decebal desktop styles linked an entire hardcoded GTK theme here.
+// Appending palette variables cannot override its literal widget colours.
+fn legacy_stylesheet(path: &std::path::Path, env: &Env) -> bool {
+    path.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink())
+        && path.canonicalize().ok().zip(env.config_home.join("omarchy/desktop-styles").canonicalize().ok()).is_some_and(|(target, root)| target.starts_with(root))
+}
+
 impl Target for Gtk {
     fn id(&self) -> &'static str {
         "gtk"
@@ -220,7 +227,13 @@ impl Target for Gtk {
         let mut plan = Plan::default();
         let font = if cfg.option("gtk.font") && p.font.is_some() { font_name(p, cfg, &fontdb::get()) } else { None };
         for (dir, gtk4) in [("gtk-3.0", false), ("gtk-4.0", true)] {
-            plan.edits.push(Edit::Block { path: env.config_home.join(dir).join("gtk.css"), comment: Comment::Css, text: css(p, gtk4) });
+            let path = env.config_home.join(dir).join("gtk.css");
+            if legacy_stylesheet(&path, env) {
+                // Whole-file edits participate in the same original-byte backup/undo transaction.
+                plan.edits.push(Edit::Whole { path, text: css(p, gtk4) });
+            } else {
+                plan.edits.push(Edit::Block { path, comment: Comment::Css, text: css(p, gtk4) });
+            }
             plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings(p, cfg, font.as_deref()) });
         }
         let g = |k: &str, v: String| ("org.gnome.desktop.interface".to_string(), k.to_string(), v);
@@ -322,6 +335,27 @@ mod tests {
         cfg.set_option("gtk.font", true);
         assert!(cfg.options.is_empty(), "the default is not stored");
         assert_eq!(font_name(&p, &cfg, &db).as_deref(), Some("Inter 11"));
+    }
+
+    #[test]
+    fn legacy_linked_full_theme_is_replaced_and_undo_restores_it() {
+        let d = tmp("gtk-legacy");
+        let (env, _) = env(&d, &[]);
+        let target = env.config_home.join("omarchy/desktop-styles/gtk4-mac-dark/gtk.css");
+        let linked = env.config_home.join("gtk-4.0/gtk.css");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(linked.parent().unwrap()).unwrap();
+        let original = "window { background-color: #123456; }\n";
+        std::fs::write(&target, original).unwrap();
+        std::os::unix::fs::symlink(&target, &linked).unwrap();
+        let cfg = Config::default();
+        let opts = super::super::Opts { only: Some(vec!["gtk".into()]), ..Default::default() };
+        super::super::apply(&env, &cfg, &palette(true), &opts).unwrap();
+        assert!(!std::fs::read_to_string(&linked).unwrap().contains("#123456"));
+        assert!(linked.symlink_metadata().unwrap().file_type().is_symlink());
+        super::super::off(&env, &cfg, &palette(true)).unwrap();
+        assert_eq!(std::fs::read_to_string(&linked).unwrap(), original);
+        std::fs::remove_dir_all(d).unwrap();
     }
 
     #[test]

@@ -39,3 +39,11 @@ Run `DECTHEMECTL=/path/to/decthemectl python3 tests/systemtheming/apps-runtime.p
 Verified artifacts: `/tmp/decebal-system-apps-final-qa/run-itxqenxx/terminal-after.png`, `terminal-next-launch.png`, `files-after.png`, `files-next-launch.png`, and `apply.json`. Nautilus 1.10 rendered 402,821 exact Nord background pixels in the new-process capture; the running st background changed to `#2e3440`. The machine has no Qt demo application installed, so Qt runtime rendering was not exercised; its existing palette/adapter unit checks remain the available validation.
 
 `DECTHEMECTL=/path/to/decthemectl python3 tests/systemtheming/automatic-guard.py` checks the actual binary with a fake inherited bus and logging gsettings: disabled synchronous/asynchronous automatic requests produce no system files or helper calls, explicit dry-run still works, and removing the override retains default automatic behaviour. The fake helper prevents any real session access even if the guard regresses.
+
+Legacy GTK styles linked from `~/.config/omarchy/desktop-styles` contain literal
+widget colours that override a palette appended later. For those known legacy
+links only, the GTK adapter replaces the linked stylesheet through the normal
+backup/undo transaction. Ordinary user CSS elsewhere retains managed-block
+semantics. Explicit system icon overrides win; otherwise application GTK icons
+follow the theme's `icons.theme` setting. Already-open GTK apps need reopening
+to load a full custom palette; no automatic process termination is performed.

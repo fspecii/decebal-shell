@@ -648,7 +648,11 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
 
 /// `decthemectl apply-system`.
 pub fn apply_now(src: &Source, opts: &Opts) -> Result<Report, String> {
-    let cfg = Config::load(&src.shell_json);
+    let mut cfg = Config::load(&src.shell_json);
+    // Explicit system override wins; otherwise carry the theme's shell icon pack to apps too.
+    if cfg.icon_theme.is_none() {
+        cfg.icon_theme = crate::settings::io::json_load(&src.shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
+    }
     let env = Env::discover();
     let result = current_palette(src).and_then(|(p, _)| apply(&env, &cfg, &p, opts));
     if !opts.dry_run {
