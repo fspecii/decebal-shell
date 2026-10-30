@@ -156,3 +156,11 @@ path = "src/bin/decmon.rs"
 [[bin]]
 name = "decwall"
 path = "src/bin/decwall.rs"
+
+[[bin]]
+name = "decnotes"
+path = "src/bin/decnotes.rs"
+
+[[bin]]
+name = "dectimer"
+path = "src/bin/dectimer.rs"

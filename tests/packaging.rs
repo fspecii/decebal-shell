@@ -160,7 +160,7 @@ fn decwidgets_and_the_theme_engine_are_registered_everywhere() {
 fn the_old_mac_names_are_installed_as_deprecated_wrappers() {
     // Programs added after the rename have no old name and get no wrapper.
     let mut bins = cargo_bins();
-    for new in ["declock", "decmon", "decwall"] {
+    for new in ["declock", "decmon", "decwall", "decnotes", "dectimer"] {
         bins.remove(new);
     }
     assert!(read("Makefile").contains("contrib/compat/mac-compat"), "Makefile does not install the compatibility wrappers");
