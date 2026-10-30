@@ -752,6 +752,7 @@ pub mod tests {
         let (dir, src, paths) = sandbox("palette-design-switch");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         let mut base = crate::theme::palette::select(&Selection::default(), Some("nord"));
+        std::fs::write(paths.dock_settings(), r#"{"magnification":1.0}"#).unwrap();
         for id in ["windows11", "caelestia", "macos"] {
             apply(&src, &paths, id, &base).unwrap();
             base = src.selection();
@@ -763,6 +764,9 @@ pub mod tests {
             let shell = io::json_load(&paths.shell_json());
             let dock = io::json_load(&paths.dock_settings());
             assert_eq!(dock["style"], if id == "windows11" { "windows" } else { "mac" });
+            if id == "macos" {
+                assert_eq!(dock["magnification"], 1.6, "macOS must restore hover growth after a flat dock theme");
+            }
             let shell: crate::config::ShellSettings = serde_json::from_value(shell).unwrap();
             let dock_style = crate::theme::style::dock_style(&dock);
             assert_eq!(shell.bar_visible(dock_style), id != "windows11");

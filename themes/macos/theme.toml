@@ -21,6 +21,7 @@ outline = 0.14
 preset = "inter"
 
 [dock]
+magnification = 1.6
 enabled = true
 style = "mac"
 
