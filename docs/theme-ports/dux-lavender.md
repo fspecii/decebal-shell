@@ -53,7 +53,7 @@ all theme package files; source/discovery tests explicitly find`dux-lavender`.
 
 100% text:resource320×248,focus320×292.200% text after follow-up widget fix:
 resource320×324,focus320×363. Normal profile uses left clock/media, right-top
-resource and right-bottom focus. Native dimensions show no overlap/edge escape
+resource and left-bottom focus. Native dimensions show no overlap/edge escape
 at1280×720/1920×1080 normal text; the two new cards also fit together at1920×1080
 with200% text. Clock/media are existing fixed-size widgets, **not certified for
 200% reflow**. Smaller/scaled desktops can require reducing/repositioning cards.
@@ -104,3 +104,34 @@ Catalogue now covers22visibleIDs/44modechoices/42distinctreviewedphotos: intenti
 two-photo reuse avoids invented IDs/new searches. Theme apply preserves independent
 Wallpaper preferences; custom widget Keep/Replace/Cancel remains intact.
 No install, live config mutation, restart, push or rdwm edit. Parent owns rollout.
+
+
+## Short-output acceptance follow-up (parent fca4442)
+
+Focus now anchors bottom-left(32,-32), opposite top-right resources. The earlier
+both-right arrangement needs807px at enlarged text and is retired. Combined native
+**all-four-card** renders and JSON bounds in `dux-lavender/widgets/combined-*` cover
+1280×720/1920×1080, dark/light,100/200%text. At720/200%: clock(32,72,268,208),
+media(32,224,342,300),focus(32,325,352,688),resources(928,72,1248,396).
+No overlap or output-edge escape. Canvas contains actual widget painters over theme
+background, fixed labelled sample data described by JSON/filename, no live host.
+
+**Readability limitation:** 200% fixed clock clips time/date and media truncates text.
+The new resource/focus cards remain readable. Geometry passing is not full200%
+visual acceptance. Parent can own shared clock/media accessible reflow; general
+host responsive packing is not required for this measured1280×720 arrangement.
+Narrower/shorter outputs remain unverified. No responsive-profile feature invented.
+
+Follow theme acceptance: `dux-lavender` already has real dark/light catalogue entries,
+no wallpaper section/default. Dark l3edjp reviewedSHA256
+`931e8e461a521afe0eb53438358a487b7dd6b40f62adc2ad83df32d6571e7237`;
+light39zjq6 reviewedSHA256
+`b6a4fbaaaf5719f87b69d9911b0192ad8b6b493e9f1de77475c00815fba77b0c`.
+Both were previously reviewed, purple-suited photographs; metadata remains22IDs,
+44mode recommendations,42uniquephotos. Parent fca4442 curated lookup inspected
+read-only; no runtime/fetch changes. No new photo searches/downloads or defaults.
+
+Follow-up validation:4Dux+4curatedintegrationtests pass, targeted strictClippy and
+format/diff checks clean. Actual combined profile evidence and known clipped200%
+clock were viewed. No release/all-target build or install was requested/run.
+Dependencies remain originalde48c1c+37c115f, package006f0c5 then this follow-up.

@@ -5,7 +5,8 @@
     "parent_commit": "0ba18b0248c605049a219c5950655e93ce347f35",
     "coverage": "22 visible shipped nonlegacy packages; 42 distinct reviewed photographs, 44 mode recommendations. Dux Lavender deliberately reuses two visually re-reviewed existing choices.",
     "exclude_legacy_via": "theme::palette::legacy_theme",
-    "uncovered_theme_ids": []
+    "uncovered_theme_ids": [],
+    "dux_acceptance_parent": "fca4442"
   },
   "policy": {
     "provider": "https://wallhaven.cc",
@@ -4840,7 +4841,7 @@
         "image_id": "39zjq6",
         "rationale": "Re-reviewed photographic torii at a lavender sunset gives a soft violet/rose counterpart to Purple Light. Reuses the reviewed Synthwave light choice intentionally; keep the central gate visible between the side cards."
       },
-      "placement": "Independent user choice only. Four opaque tonal cards at upper-left/upper-right; central landscape remains open. 16:9 fill crops the 3:2 dark image vertically; ultrawide crops may trim reflections/foreground. No wallpaper downloads or writes during theme application."
+      "placement": "Independent user choice / optional Follow theme recommendation only. Clock/media upper-left, focus lower-left, resources upper-right: opposite columns avoid stacking the enlarged resource/focus cards on 720px outputs. Central landscape remains open. 16:9 fill crops the 3:2 dark image vertically; ultrawide crops may trim reflections/foreground. No wallpaper defaults/downloads/writes during theme application; parent owns Follow theme runtime."
     }
   },
   "full_resolution_audit": {

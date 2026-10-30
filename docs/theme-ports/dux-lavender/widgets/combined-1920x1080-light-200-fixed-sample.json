@@ -1,0 +1,42 @@
+{
+  "data": "fixed samples; native widgets only, no live host/compositor",
+  "text_scale": 2.0,
+  "rectangles": [
+    {
+      "widget": "builtin:clock-card",
+      "rect": [
+        32,
+        72,
+        268,
+        208
+      ]
+    },
+    {
+      "widget": "builtin:now-playing-mini",
+      "rect": [
+        32,
+        224,
+        342,
+        300
+      ]
+    },
+    {
+      "widget": "builtin:resource-overview",
+      "rect": [
+        1568,
+        72,
+        1888,
+        396
+      ]
+    },
+    {
+      "widget": "builtin:focus-hub",
+      "rect": [
+        32,
+        685,
+        352,
+        1048
+      ]
+    }
+  ]
+}

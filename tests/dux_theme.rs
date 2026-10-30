@@ -120,11 +120,6 @@ fn dux_placement_uses_native_card_bounds_and_allows_accessible_new_cards() {
             let mut cards = Vec::new();
             for spec in def.extra["widgets"].as_array().unwrap() {
                 let id = spec["use"].as_str().unwrap().strip_prefix("builtin:").unwrap();
-                // Existing clock/media cards have fixed geometry. Do not certify their
-                // unimplemented 200% reflow; the newly shared cards explicitly support it.
-                if scale > 1.0 && !["resource-overview", "focus-hub"].contains(&id) {
-                    continue;
-                }
                 let widget = samples::get(id).unwrap();
                 let card = paint::render(&widget, &data::sample(), &th, &mut fonts, &root().join("widgets"), 0).unwrap();
                 if scale > 1.0 {
@@ -132,21 +127,28 @@ fn dux_placement_uses_native_card_bounds_and_allows_accessible_new_cards() {
                         card.save_png(PathBuf::from(out).join(format!("{id}-{}-200-sample.png", if dark { "dark" } else { "light" }))).unwrap();
                     }
                 }
-                cards.push((spec, card.width() as i32, card.height() as i32));
+                cards.push((spec, card.width() as i32, card.height() as i32, card));
             }
             for (width, height) in [(1920, 1080), (1280, 720)] {
-                if scale > 1.0 && height < 1080 {
-                    continue;
-                }
                 let rects: Vec<_> = cards
                     .iter()
-                    .map(|(spec, w, h)| {
+                    .map(|(spec, w, h, _)| {
                         let (x, y) =
                             place_clear(spec["anchor"].as_str().unwrap(), spec["x"].as_i64().unwrap() as i32, spec["y"].as_i64().unwrap() as i32, (0, 0, width, height), *w, *h, th.bar_insets());
                         assert!(x >= 0 && y >= th.bar_insets().top && x + w <= width && y + h <= height);
                         (x, y, x + w, y + h)
                     })
                     .collect();
+                if let Ok(out) = std::env::var("DECEBAL_DUX_EVIDENCE") {
+                    let mut canvas = decebal::gfx::pixmap(width as u32, height as u32).unwrap();
+                    canvas.fill(th.background.color(1.0));
+                    for ((_, _, _, card), r) in cards.iter().zip(&rects) {
+                        canvas.draw_pixmap(r.0, r.1, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+                    }
+                    let stem = format!("combined-{width}x{height}-{}-{}-fixed-sample", if dark { "dark" } else { "light" }, (scale * 100.0) as u32);
+                    canvas.save_png(PathBuf::from(&out).join(format!("{stem}.png"))).unwrap();
+                    fs::write(PathBuf::from(out).join(format!("{stem}.json")),serde_json::to_string_pretty(&json!({"data":"fixed samples; native widgets only, no live host/compositor","text_scale":scale,"rectangles":cards.iter().zip(&rects).map(|((spec,_,_,_),r)|json!({"widget":spec["use"],"rect":r})).collect::<Vec<_>>()})).unwrap()).unwrap();
+                }
                 for (i, a) in rects.iter().enumerate() {
                     for b in rects.iter().skip(i + 1) {
                         assert!(a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1, "card overlap at {width}x{height},scale{scale}: {a:?}/{b:?}");
@@ -156,4 +158,17 @@ fn dux_placement_uses_native_card_bounds_and_allows_accessible_new_cards() {
         }
     }
     decebal::theme::live::publish_theme(def.resolve("dux-lavender", true, &Selection::default()));
+}
+
+#[test]
+fn dux_follow_theme_choices_resolve_to_reviewed_originals() {
+    use decebal::settings::wallhaven::curated;
+    let choices = curated::choices("dux-lavender").unwrap();
+    assert_eq!(choices.len(), 2);
+    for (mode, id, sha) in
+        [("dark", "l3edjp", "931e8e461a521afe0eb53438358a487b7dd6b40f62adc2ad83df32d6571e7237"), ("light", "39zjq6", "b6a4fbaaaf5719f87b69d9911b0192ad8b6b493e9f1de77475c00815fba77b0c")]
+    {
+        assert!(choices.iter().any(|c| c.mode == mode && c.wall.id == id));
+        assert_eq!(curated::reviewed_digest(id), Some(sha));
+    }
 }

@@ -202,3 +202,12 @@ and shared widgets remain separate thread ownership. Full artworkaudit retains
 pre-existing NextKDE accepted-parenthash drift (f2788246 versus oldeedb3); no change
 here to oldauditrecord. See theme-ports/dux-lavender.md for exact focused checks,
 renderer limits and follow-ups. No live apply/install/restart/push/rdwm edit.
+
+
+Dux short-output follow-up:fca4442 parent acceptance. Move focus to bottom-left,
+resources top-right. Native combined4card bounds now proven1280x720 and1920x1080,
+100/200%bothmodes; no skipped720/200case. IMPORTANT200%clockfixedheightclips
+clock/date andmedia truncates: geometrypasses !=readabilitypasses. Parent shared
+clock/media reflow follow-up; no inventedresponsivepackagefeature. Existing42SHA
+reviewedphotographs supportDuxdarkl3edjp/light39zjq6 andFollowtheme; no hardcoded
+wallpaperdefault/runtimechange/newsearch. Evidence undercombined-*plusJSONbounds.

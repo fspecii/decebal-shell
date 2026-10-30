@@ -138,6 +138,6 @@ y = 72
 [[widgets]]
 use = "builtin:focus-hub"
 place = "desktop"
-anchor = "bottom-right"
-x = -32
+anchor = "bottom-left"
+x = 32
 y = -32

@@ -10,7 +10,7 @@ and **no bottom dock**. Four optional cards leave the central desktop open:
 | `builtin:clock-card` | 236×136 | upper-left,32/72 |
 | `builtin:now-playing-mini` | 310×76 | upper-left,32/224 |
 | `builtin:resource-overview` | 320×248 | upper-right,-32/72 |
-| `builtin:focus-hub` | 320×292 | lower-right,-32/-32 |
+| `builtin:focus-hub` | 320×292 | lower-left,32/-32 |
 
 Resources and focus cards are shared native definitions from the separate Dux
 Settings/widgets work, not private copies or QML plugins. They use existing local
@@ -43,9 +43,11 @@ not a tabbed popover with a calendar, avatar, per-core/temperature bars or art p
 Materia is an existing rdwm structural design, not a Dux-owned compositor decoration.
 Blur/shadows depend on compositor support; evidence uses actual native foreground
 renderers and labelled fixed samples, not live telemetry or compositor shadows.
-At 100% text the four-card layout is checked at 1280×720 and 1920×1080. The new
-resource/focus cards also fit together at 200% text on 1920×1080. Existing clock/media
-cards have fixed geometry and do not claim 200% reflow. Very short/narrow displays
+At 100% text the four-card layout is checked at 1280×720 and 1920×1080.
+All four card bounds also fit at 200% text on 1280×720 and 1920×1080, proven by
+combined native renders. Existing clock/media cards have fixed geometry: the clock
+clips time/date at 200% and media text truncates. This is a known readability gap,
+not a fully accessible 200% profile; shared-card reflow is a parent follow-up. Very short/narrow displays
 or larger desktop scaling may need the user to reposition/reduce cards. Settings/accessibility work
 belongs to the independent native thread, not this package.
 

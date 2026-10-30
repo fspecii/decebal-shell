@@ -159,3 +159,9 @@ opaque tonal cards protect text from photographic highlights. The 3:2 dark image
 loses vertical reflection/sky under 16:9 fill; ultrawide fitting needs user review.
 No upstream screenshot wallpaper is copied. Same unknown-author/licence caveats
 apply. Count is now22IDs/44recommendations/42distinctphotographs, all covered.
+
+Dux short-output follow-up: resource upper-right, focus lower-left, clock/media
+upper-left. Both modes have native combined720px geometry evidence at100/200%
+text; fixed clock/media200%readability remains a separate shared-widget gap.
+Follow theme may use the existing exact-SHA reviewed l3edjp/39zjq6 choices; no new
+photo acquisition or hardcoded package wallpaper was added.

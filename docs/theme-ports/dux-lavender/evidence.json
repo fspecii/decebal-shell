@@ -179,14 +179,100 @@
         1920,
         1200
       ],
-      "sha256": "88bd03b665a5bccfea97f09545a59da3a4bfc161087f7dc7073818f19d06eb55"
+      "sha256": "ce379971643661a074eb0547c095054c722266670d1a076af4ddf0021c4172bd"
     },
     "docs/theme-ports/automatic/dux-lavender-light.png": {
       "size": [
         1920,
         1200
       ],
-      "sha256": "7a5544880692f27fe6ca5345d4d28c9dfbbdcf1e159fbd81f230c74ccc909269"
+      "sha256": "cc9838dfe10a734910a88e1b507013fe76d5af7440dd7c32241588a2794a2514"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-200-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "46572ce28175d9e97f4d5179335e46e83918615f357c048c7e66cf2b021ffadf"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-200-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "57e1d9a7bb691281a1347edc12eafb29ef828c6e50d78c77a4abeb028e620a01"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-100-fixed-sample.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "b7236166e61d673e40657809002efe108f1b8695c42ae9b90916faa6948678ae"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-dark-200-fixed-sample.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "7003768cab29a5a10805299540057af4f2b7cd710d5c1e25cca70a64b8632cc0"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-100-fixed-sample.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "296366a3f22f12189862441387de48df23df0eb91c6a23adb30a89c80c4df681"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1280x720-light-200-fixed-sample.png": {
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "114f6965d512af03d6a748d0c136adc2f726291f7f6e73d3a4825bb6b935a149"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-100-fixed-sample.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "989b2cf1f2a9978bfa70f99385f7fea5fcd5acdf0fac9e07ca349b7e27cd732c"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-dark-200-fixed-sample.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "4c56c121a5b17ba6b181709cc1da23fb634309ca1ca90852c1f298d57a584fc2"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-100-fixed-sample.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "0fab8a2d34164f2e24d0191c6b59441dc79c466c1e488b561449d012c4ff094d"
+    },
+    "docs/theme-ports/dux-lavender/widgets/combined-1920x1080-light-200-fixed-sample.png": {
+      "size": [
+        1920,
+        1080
+      ],
+      "sha256": "5fc9381bf50cff7e20770f6900b1168664fa34bc6d0da8a968788d27f63851c3"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-200-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "3ade946cc379c7e1f38a6b280e12efaad3140e649dcbfa5b9e6c30615316013a"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-200-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "82ae9c3913243a8f4b38e67a48a15017d31cffeef5333809804e9c5b45a6ca2b"
     }
-  }
+  },
+  "short_output_parent": "fca4442",
+  "scope": "All-four native card bounds at1280x720/1920x1080,100/200text. Fixed clock clips at200; geometry is not readability acceptance."
 }
