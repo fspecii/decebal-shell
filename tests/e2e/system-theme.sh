@@ -101,7 +101,7 @@ if [ -n "$OMARCHY" ]; then
   has "alacritty background is the theme's" $T/alacritty.toml 'background = "#2e3440"'
   has "foot background" $T/foot.ini 'background=2e3440'
   has "kitty accent" $T/kitty.conf 'active_border_color #88c0d0'
-  hasnt "browser helper remains opt-in" $HOME/shim.log 'browser:'
+  has "available browser helper runs by default" $HOME/shim.log 'browser:'
   has "btop reload helper ran" $HOME/shim.log 'omarchy-restart-btop'
   has "foot OSC helper ran" $HOME/shim.log 'omarchy-theme-set-foot'
   [ -e $XDG_CONFIG_HOME/omarchy/themes/decebal/colors.toml ] && pass "theme dir written" || fail "theme dir"
