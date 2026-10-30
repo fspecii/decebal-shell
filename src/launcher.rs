@@ -10,6 +10,8 @@ use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use tiny_skia::{Color, Pixmap};
 
+mod dux;
+
 const PAD: f32 = 28.0;
 const SEARCH_Y: f32 = 22.0;
 const SEARCH_H: f32 = 36.0;
@@ -43,6 +45,7 @@ pub struct Launcher {
     rounded: bool,
     fonts: Option<Fonts>,
     icons: IconCache,
+    dux: Option<dux::State>,
 }
 
 impl Launcher {
@@ -52,14 +55,38 @@ impl Launcher {
 
     pub fn with_apps(apps: Vec<AppEntry>) -> Self {
         let shown = apps::filter(&apps, "");
-        Self { apps, shown, field: TextField::default(), sel: 0, scroll: 0, size: (1000, 680), origin: (0.0, 0.0), overlay: false, rounded: true, fonts: Fonts::load(), icons: IconCache::default() }
+        let mut out = Self {
+            apps,
+            shown,
+            field: TextField::default(),
+            sel: 0,
+            scroll: 0,
+            size: (1000, 680),
+            origin: (0.0, 0.0),
+            overlay: false,
+            rounded: true,
+            fonts: Fonts::load(),
+            icons: IconCache::default(),
+            dux: None,
+        };
+        if out.is_dux() {
+            out.size = (620, 620);
+            out.prepare_dux();
+        }
+        out
     }
 
     fn cols(&self) -> usize {
+        if self.is_dux() {
+            return 1;
+        }
         (((self.size.0 as f32 - 2.0 * PAD) / CELL_W).floor() as usize).max(1)
     }
 
     fn visible_rows(&self) -> usize {
+        if self.is_dux() {
+            return self.dux.as_ref().map_or(1, |state| state.layout.rows);
+        }
         (((self.size.1 as f32 - GRID_Y - PAD) / CELL_H).floor() as usize).max(1)
     }
 
@@ -74,11 +101,17 @@ impl Launcher {
     }
 
     fn cell_rect(&self, i: usize) -> (f32, f32, f32, f32) {
+        if self.is_dux() {
+            return self.dux.as_ref().map_or((0.0, 0.0, 0.0, 0.0), |state| state.layout.cell(i, self.scroll));
+        }
         let (c, r) = (i % self.cols(), i / self.cols());
         (self.grid_x() + c as f32 * CELL_W, GRID_Y + (r as f32 - self.scroll as f32) * CELL_H, CELL_W, CELL_H)
     }
 
     fn hit(&self, x: f32, y: f32) -> Option<usize> {
+        if self.is_dux() {
+            return self.dux.as_ref().and_then(|state| state.layout.hit(x, y, self.scroll, self.shown.len()));
+        }
         if y < GRID_Y {
             return None;
         }
@@ -104,12 +137,14 @@ impl Launcher {
             self.scroll = row + 1 - self.visible_rows();
         }
         self.clamp_scroll();
+        self.prepare_dux();
     }
 
     fn refilter(&mut self) {
         self.shown = apps::filter(&self.apps, self.field.text());
         self.sel = 0;
         self.scroll = 0;
+        self.prepare_dux();
     }
 
     fn launch_selected(&mut self) -> Response {
@@ -154,6 +189,10 @@ impl Launcher {
 
 impl Launcher {
     fn draw_panel(&mut self, pm: &mut Pixmap) {
+        if self.is_dux() {
+            self.draw_dux(pm);
+            return;
+        }
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         pm.fill(Color::TRANSPARENT);
         let radius = if self.rounded || self.overlay { RADIUS * crate::theme::th().radius / 10.0 } else { 0.0 };
@@ -210,6 +249,11 @@ impl Launcher {
     }
 
     fn click(&mut self, x: f32, y: f32) -> Response {
+        if self.is_dux() && (12.0..60.0).contains(&y) && x >= self.size.0 as f32 - 52.0 && x < self.size.0 as f32 - 12.0 && !self.field.text().is_empty() {
+            self.field.clear();
+            self.refilter();
+            return Response::REDRAW;
+        }
         match self.hit(x, y) {
             Some(i) => {
                 self.sel = i;
@@ -228,7 +272,11 @@ impl Default for Launcher {
 
 impl WindowApp for Launcher {
     fn title(&self) -> String {
-        "Launchpad".into()
+        if self.is_dux() {
+            "Launcher".into()
+        } else {
+            "Launchpad".into()
+        }
     }
 
     fn initial_size(&self) -> (u32, u32) {
@@ -251,16 +299,28 @@ impl WindowApp for Launcher {
         crate::theme::live::start_watcher(move || waker());
     }
 
-    fn set_screen(&mut self, _: u32, _: u32) {}
+    fn popup_centered(&self) -> bool {
+        self.is_dux()
+    }
+
+    fn set_screen(&mut self, w: u32, h: u32) {
+        if self.is_dux() {
+            self.size = (w.saturating_sub(100).clamp(1, 620), h.saturating_sub(100).clamp(1, 620));
+        }
+    }
 
     fn resize(&mut self, w: u32, h: u32) {
-        if self.overlay {
+        if self.is_dux() && self.overlay {
+            self.size = (w.saturating_sub(100).clamp(1, 620), h.saturating_sub(100).clamp(1, 620));
+            self.origin = ((w as f32 - self.size.0 as f32) / 2.0, (h as f32 - self.size.1 as f32) / 2.0);
+        } else if self.overlay {
             self.size = ((w.saturating_sub(80)).clamp(300, PANEL_MAX_W), (h.saturating_sub(120)).clamp(300, PANEL_MAX_H));
             self.origin = ((w as f32 - self.size.0 as f32) / 2.0, (h as f32 - self.size.1 as f32) / 2.0);
         } else {
             self.size = (w, h);
             self.origin = (0.0, 0.0);
         }
+        self.prepare_dux();
         self.clamp_scroll();
         self.reveal_selection();
     }
@@ -276,6 +336,18 @@ impl WindowApp for Launcher {
         }
         // Dim everything behind (the compositor blurs it when a layer rule asks for it), card in the middle.
         pm.fill(color(0, 0, 0, 0.35));
+        if self.is_dux() {
+            let buffer = self.dux.as_mut().and_then(|state| state.buffer.take());
+            let buffer = buffer.filter(|card| card.width() == self.size.0 && card.height() == self.size.1);
+            if let Some(mut card) = buffer.or_else(|| Pixmap::new(self.size.0, self.size.1)) {
+                self.draw_dux(&mut card);
+                pm.draw_pixmap(self.origin.0 as i32, self.origin.1 as i32, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+                if let Some(state) = self.dux.as_mut() {
+                    state.buffer = Some(card);
+                }
+            }
+            return;
+        }
         if let Some(mut card) = Pixmap::new(self.size.0, self.size.1) {
             self.draw_panel(&mut card);
             pm.draw_pixmap(self.origin.0 as i32, self.origin.1 as i32, card.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
@@ -302,7 +374,13 @@ impl WindowApp for Launcher {
         self.click(px, py)
     }
 
-    fn scroll(&mut self, _: f32, _: f32, dy: f32) -> Response {
+    fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response {
+        if self.is_dux() {
+            let (x, y) = (x - self.origin.0, y - self.origin.1);
+            if x < 12.0 || x >= self.size.0 as f32 - 12.0 || y < 100.0 || y >= self.size.1 as f32 - 32.0 {
+                return Response::NONE;
+            }
+        }
         let before = self.scroll;
         if dy > 0.0 {
             self.scroll += 1;
@@ -310,6 +388,7 @@ impl WindowApp for Launcher {
             self.scroll = self.scroll.saturating_sub(1);
         }
         self.clamp_scroll();
+        self.prepare_dux();
         if self.scroll != before {
             Response::REDRAW
         } else {
@@ -322,6 +401,15 @@ impl WindowApp for Launcher {
         match ev.key {
             Key::Escape => Response::act(Action::Close),
             Key::Enter => self.launch_selected(),
+            Key::Left if self.is_dux() => {
+                self.field.left();
+                Response::REDRAW
+            }
+            Key::Right if self.is_dux() => {
+                self.field.right();
+                Response::REDRAW
+            }
+            Key::Tab if self.is_dux() => Response::NONE,
             Key::Left => self.move_sel(-1),
             Key::Right | Key::Tab => self.move_sel(1),
             Key::Up => self.move_sel(-cols),
@@ -356,7 +444,10 @@ impl WindowApp for Launcher {
     }
 
     fn tick(&mut self) -> Response {
-        if crate::theme::take_changed() {
+        if crate::theme::take_changed() || (self.is_dux() && self.dux.as_ref().is_some_and(dux::State::stale)) {
+            self.prepare_dux();
+            self.clamp_scroll();
+            self.reveal_selection();
             Response::REDRAW
         } else {
             Response::NONE

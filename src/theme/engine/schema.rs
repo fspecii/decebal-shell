@@ -166,6 +166,7 @@ pub const FIELDS: &[Field] = &[
     Field { path: "bar.band_radius", ty: Ty::Int(0, 48), desc: "Dux background band radius (source windowRadius L16); independent of widget pill radius", status: Wired },
     Field { path: "bar.radius", ty: Ty::Int(0, 48), desc: "Dux island corner radius in logical pixels", status: Wired },
     Field { path: "desktop.widgets", ty: Ty::Choice(&["none"]), desc: "explicit empty desktop profile; custom layouts require Ask/Keep/Replace confirmation", status: Wired },
+    Field { path: "launcher.style", ty: Ty::Choice(&["default", "dux"]), desc: "native launcher composition; Dux full compact applications-list profile", status: Wired },
     Field { path: "dashboard.profile", ty: Ty::Choice(&["readme"]), desc: "configured README-era clock/calendar/user/resource/media profile, not current upstream dashboard defaults", status: Wired },
     Field { path: "dashboard.style", ty: Ty::Choice(&["default", "dux"]), desc: "native dashboard composition; default preserves the existing dashboard", status: Wired },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },
@@ -264,7 +265,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

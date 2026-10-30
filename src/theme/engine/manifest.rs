@@ -230,7 +230,7 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "rdwm"];
+const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),
@@ -405,6 +405,7 @@ fn lift_tokens(extra: &Map<String, Value>, common: &mut Tokens) {
     text("bar", "style", "bar_style", common);
     text("dashboard", "style", "dashboard_style", common);
     text("dashboard", "profile", "dashboard_profile", common);
+    text("launcher", "style", "launcher_style", common);
     num("bar", "height", "bar_height", common);
     num("dock", "size", "dock_icon_size", common);
     num("dock", "roundness", "dock_roundness", common);

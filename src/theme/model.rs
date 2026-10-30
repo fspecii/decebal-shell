@@ -143,6 +143,7 @@ pub struct Theme {
     pub bar_layout: crate::config::BarLayout,
     pub dashboard_style: String,
     pub dashboard_profile: String,
+    pub launcher_style: String,
     /// The interface font as written (`fonts.primary_ui()`; empty = automatic), kept for older readers.
     /// Where the Caelestia pill bar sits (`decebal.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
     /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
@@ -303,6 +304,7 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
         "menu bar shape: a full-width strip, a floating pill, or the Caelestia pill bar on a screen edge (left by default, see `bar.position`; the dock hides with it)",
     ),
     ("dashboard_style", Kind::Choice(&["default", "dux"]), "native dashboard composition"),
+    ("launcher_style", Kind::Choice(&["default", "dux"]), "native application launcher composition"),
     ("dashboard_profile", Kind::Choice(&["readme"]), "configured Dux README dashboard profile; not current upstream defaults"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),
@@ -568,6 +570,7 @@ impl Def {
             bar_layout: crate::config::BarLayout::default(),
             dashboard_style: text_of("dashboard_style").unwrap_or_else(|| "default".into()),
             dashboard_profile: text_of("dashboard_profile").unwrap_or_else(|| "readme".into()),
+            launcher_style: text_of("launcher_style").unwrap_or_else(|| "default".into()),
             bar_position: crate::config::BarPosition::default(),
             control_center: Default::default(),
             window_buttons_right: self
