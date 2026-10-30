@@ -405,7 +405,7 @@ impl Frame {
 
 pub const ROW_H: f32 = 48.0;
 pub const ROW_H_DETAIL: f32 = 60.0;
-pub const CARD_R: f32 = 12.0;
+pub const CARD_R: f32 = 10.0;
 pub const CARD_PAD: f32 = 14.0;
 pub const TH_W: f32 = 132.0;
 pub const TH_H: f32 = 84.0;
@@ -739,7 +739,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
             Item::ThemeCards(cards) => y = super::themecards::draw(pm, p, cards, x0, y, cw, it, &mut fr),
             Item::Header(t) => {
                 y += u(6.0);
-                p.text(pm, t, x0 + u(14.0), y + u(8.0 + metrics.extra(7.0)), u(12.0), Weight::SemiBold, pal::sub());
+                p.text(pm, t, x0, y + u(8.0 + metrics.extra(7.0)), u(12.0), Weight::SemiBold, pal::text());
                 y += u(22.0 + metrics.extra(16.0));
             }
             Item::Note { text, warn } => {
@@ -769,6 +769,9 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let height = |r: &Row| u(metrics.row(r) + if stacked && !r.label.is_empty() { (32.0 + metrics.extra(20.0)) * r.ctls.len() as f32 } else { 0.0 });
                 let h: f32 = rows.iter().map(height).sum();
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
+                if cw > u(1.0) && h > u(1.0) {
+                    stroke_rounded(pm, x0 + u(0.5), y + u(0.5), cw - u(1.0), h - u(1.0), u(CARD_R), pal::sep(), u(1.0));
+                }
                 let mut ry = y;
                 for (i, r) in rows.iter().enumerate() {
                     let rh = height(r);
@@ -779,7 +782,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, crate::theme::th().accent.color(0.22));
                     }
                     if i > 0 {
-                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(2.0 * CARD_PAD), u(1.0).max(1.0), pal::sep());
                     }
                     let mut lx = x0 + u(CARD_PAD);
                     if let Some((cr, cg, cb)) = r.chip {
@@ -928,10 +931,13 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let lh = u(46.0 + metrics.extra(36.0));
                 let h = lines.len() as f32 * lh;
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
+                if cw > u(1.0) && h > u(1.0) {
+                    stroke_rounded(pm, x0 + u(0.5), y + u(0.5), cw - u(1.0), h - u(1.0), u(CARD_R), pal::sep(), u(1.0));
+                }
                 for (i, l) in lines.iter().enumerate() {
                     let ry = y + i as f32 * lh;
                     if i > 0 {
-                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
+                        fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(2.0 * CARD_PAD), u(1.0).max(1.0), pal::sep());
                     }
                     p.text(pm, &l.label, x0 + u(CARD_PAD), ry + u(13.0 + metrics.extra(6.0)), u(11.0), Weight::Regular, pal::faint());
                     // the sample is cut at the card's right edge instead of wrapping

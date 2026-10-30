@@ -171,61 +171,70 @@ fn line(pm: &mut Pixmap, pts: &[(f32, f32)], w: f32, c: Color) {
 
 /// A coloured rounded square with a white glyph, `size` px wide.
 pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, size: f32) {
+    pane_icon_tonal(pm, g, color(bg.0, bg.1, bg.2, 1.0), color(255, 255, 255, 0.96), x, y, size);
+}
+
+/// Native vector glyph with theme-derived badge and ink; no per-frame raster allocation.
+#[allow(clippy::too_many_arguments)]
+pub fn pane_icon_tonal(pm: &mut Pixmap, g: Glyph, bg: tiny_skia::Color, fg: tiny_skia::Color, x: f32, y: f32, size: f32) {
     let r = size * 0.24;
-    fill_rounded(pm, x, y, size, size, r, color(bg.0, bg.1, bg.2, 1.0));
-    let white = color(255, 255, 255, 0.96);
+    fill_rounded(pm, x, y, size, size, r, bg);
     let (cx, cy, u) = (x + size / 2.0, y + size / 2.0, size / 24.0);
+    let mut muted = fg;
+    muted.set_alpha(fg.alpha() * 0.75 / 0.96);
+    let mut faint = fg;
+    faint.set_alpha(fg.alpha() * 0.70 / 0.96);
     match g {
         Glyph::Gear => {
             for i in 0..8 {
                 let a = i as f32 * std::f32::consts::FRAC_PI_4;
                 let (dx, dy) = (a.cos(), a.sin());
-                line(pm, &[(cx + dx * 6.0 * u, cy + dy * 6.0 * u), (cx + dx * 9.0 * u, cy + dy * 9.0 * u)], 3.2 * u, white);
+                line(pm, &[(cx + dx * 6.0 * u, cy + dy * 6.0 * u), (cx + dx * 9.0 * u, cy + dy * 9.0 * u)], 3.2 * u, fg);
             }
-            fill_circle(pm, cx, cy, 7.0 * u, white);
-            fill_circle(pm, cx, cy, 3.0 * u, color(bg.0, bg.1, bg.2, 1.0));
+            fill_circle(pm, cx, cy, 7.0 * u, fg);
+            fill_circle(pm, cx, cy, 3.0 * u, bg);
         }
         Glyph::Brush => {
-            fill_circle(pm, cx, cy, 8.5 * u, white);
-            fill_circle(pm, cx + 3.5 * u, cy - 2.5 * u, 5.0 * u, color(bg.0, bg.1, bg.2, 1.0));
-            fill_circle(pm, cx - 2.0 * u, cy + 3.0 * u, 2.2 * u, color(bg.0, bg.1, bg.2, 1.0));
+            fill_circle(pm, cx, cy, 8.5 * u, fg);
+            fill_circle(pm, cx + 3.5 * u, cy - 2.5 * u, 5.0 * u, bg);
+            fill_circle(pm, cx - 2.0 * u, cy + 3.0 * u, 2.2 * u, bg);
         }
         Glyph::Dock => {
-            fill_rounded(pm, cx - 9.5 * u, cy + 2.0 * u, 19.0 * u, 7.0 * u, 3.0 * u, white);
+            fill_rounded(pm, cx - 9.5 * u, cy + 2.0 * u, 19.0 * u, 7.0 * u, 3.0 * u, fg);
             for i in 0..3 {
-                fill_rounded(pm, cx - 7.0 * u + i as f32 * 5.6 * u, cy - 7.0 * u, 4.2 * u, 4.2 * u, 1.2 * u, color(255, 255, 255, 0.75));
+                fill_rounded(pm, cx - 7.0 * u + i as f32 * 5.6 * u, cy - 7.0 * u, 4.2 * u, 4.2 * u, 1.2 * u, muted);
             }
         }
         Glyph::Photo => {
-            stroke_rounded(pm, cx - 9.0 * u, cy - 7.5 * u, 18.0 * u, 15.0 * u, 3.0 * u, white, 2.0 * u);
-            fill_circle(pm, cx + 3.5 * u, cy - 2.5 * u, 2.0 * u, white);
-            line(pm, &[(cx - 8.0 * u, cy + 6.0 * u), (cx - 2.0 * u, cy), (cx + 2.0 * u, cy + 4.0 * u), (cx + 5.0 * u, cy + 1.5 * u), (cx + 8.0 * u, cy + 5.0 * u)], 2.0 * u, white);
+            stroke_rounded(pm, cx - 9.0 * u, cy - 7.5 * u, 18.0 * u, 15.0 * u, 3.0 * u, fg, 2.0 * u);
+            fill_circle(pm, cx + 3.5 * u, cy - 2.5 * u, 2.0 * u, fg);
+            line(pm, &[(cx - 8.0 * u, cy + 6.0 * u), (cx - 2.0 * u, cy), (cx + 2.0 * u, cy + 4.0 * u), (cx + 5.0 * u, cy + 1.5 * u), (cx + 8.0 * u, cy + 5.0 * u)], 2.0 * u, fg);
         }
         Glyph::Tiles => {
             for (dx, dy, w, h) in [(-9.0, -8.0, 10.0, 16.0), (2.0, -8.0, 7.0, 7.0), (2.0, 1.0, 7.0, 7.0)] {
-                fill_rounded(pm, cx + dx * u, cy + dy * u, w * u, h * u, 2.0 * u, white);
+                fill_rounded(pm, cx + dx * u, cy + dy * u, w * u, h * u, 2.0 * u, fg);
             }
         }
         Glyph::Windows => {
-            stroke_rounded(pm, cx - 9.0 * u, cy - 7.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, color(255, 255, 255, 0.7), 1.8 * u);
-            fill_rounded(pm, cx - 3.0 * u, cy - 3.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, white);
-            fill_px(pm, cx - 3.0 * u, cy - 0.5 * u, 12.0 * u, 1.6 * u, color(bg.0, bg.1, bg.2, 1.0));
+            stroke_rounded(pm, cx - 9.0 * u, cy - 7.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, faint, 1.8 * u);
+            fill_rounded(pm, cx - 3.0 * u, cy - 3.0 * u, 12.0 * u, 11.0 * u, 2.5 * u, fg);
+            fill_px(pm, cx - 3.0 * u, cy - 0.5 * u, 12.0 * u, 1.6 * u, bg);
         }
         Glyph::Rules => {
             for i in 0..3 {
                 let yy = cy - 6.0 * u + i as f32 * 6.0 * u;
-                fill_circle(pm, cx - 7.0 * u, yy, 1.5 * u, white);
-                line(pm, &[(cx - 3.0 * u, yy), (cx + 8.5 * u, yy)], 2.0 * u, white);
+                fill_circle(pm, cx - 7.0 * u, yy, 1.5 * u, fg);
+                line(pm, &[(cx - 3.0 * u, yy), (cx + 8.5 * u, yy)], 2.0 * u, fg);
             }
         }
         Glyph::Keyboard => {
-            stroke_rounded(pm, cx - 10.0 * u, cy - 6.5 * u, 20.0 * u, 13.0 * u, 3.0 * u, white, 1.8 * u);
+            stroke_rounded(pm, cx - 10.0 * u, cy - 6.5 * u, 20.0 * u, 13.0 * u, 3.0 * u, fg, 1.8 * u);
             for row in 0..2 {
                 for i in 0..4 {
-                    fill_px(pm, cx - 6.5 * u + i as f32 * 3.6 * u, cy - 3.0 * u + row as f32 * 3.6 * u, 2.2 * u, 2.0 * u, white);
+                    fill_px(pm, cx - 6.5 * u + i as f32 * 3.6 * u, cy - 3.0 * u + row as f32 * 3.6 * u, 2.2 * u, 2.0 * u, fg);
                 }
             }
-            fill_px(pm, cx - 4.0 * u, cy + 3.6 * u, 8.0 * u, 1.8 * u, white);
+            fill_px(pm, cx - 4.0 * u, cy + 3.6 * u, 8.0 * u, 1.8 * u, fg);
         }
         Glyph::Rocket => {
             let mut pb = PathBuilder::new();
@@ -236,25 +245,25 @@ pub fn pane_icon(pm: &mut Pixmap, g: Glyph, bg: (u8, u8, u8), x: f32, y: f32, si
             pb.close();
             if let Some(path) = pb.finish() {
                 let mut paint = Paint::default();
-                paint.set_color(white);
+                paint.set_color(fg);
                 paint.anti_alias = true;
                 pm.fill_path(&path, &paint, tiny_skia::FillRule::Winding, Transform::identity(), None);
             }
-            fill_circle(pm, cx, cy - 2.5 * u, 2.2 * u, color(bg.0, bg.1, bg.2, 1.0));
-            line(pm, &[(cx - 3.0 * u, cy + 10.0 * u), (cx + 3.0 * u, cy + 10.0 * u)], 2.0 * u, color(255, 255, 255, 0.7));
+            fill_circle(pm, cx, cy - 2.5 * u, 2.2 * u, bg);
+            line(pm, &[(cx - 3.0 * u, cy + 10.0 * u), (cx + 3.0 * u, cy + 10.0 * u)], 2.0 * u, faint);
         }
         Glyph::Icons => {
             for (dx, dy, s) in [(-8.5, -8.5, 7.5), (1.0, -8.5, 7.5), (-8.5, 1.0, 7.5), (1.0, 1.0, 7.5)] {
-                fill_rounded(pm, cx + dx * u, cy + dy * u, s * u, s * u, 2.0 * u, white);
+                fill_rounded(pm, cx + dx * u, cy + dy * u, s * u, s * u, 2.0 * u, fg);
             }
-            fill_rounded(pm, cx - 3.2 * u, cy - 3.2 * u, 6.4 * u, 6.4 * u, 1.6 * u, color(bg.0, bg.1, bg.2, 1.0));
-            fill_rounded(pm, cx - 1.6 * u, cy - 1.6 * u, 3.2 * u, 3.2 * u, 0.8 * u, white);
+            fill_rounded(pm, cx - 3.2 * u, cy - 3.2 * u, 6.4 * u, 6.4 * u, 1.6 * u, bg);
+            fill_rounded(pm, cx - 1.6 * u, cy - 1.6 * u, 3.2 * u, 3.2 * u, 0.8 * u, fg);
         }
-        Glyph::Sys(k) => super::system::glyphs::draw(pm, k, bg, cx, cy, u),
+        Glyph::Sys(k) => super::system::glyphs::draw_tonal(pm, k, bg, fg, cx, cy, u),
         Glyph::Monitor => {
-            fill_rounded(pm, cx - 10.0 * u, cy - 8.0 * u, 20.0 * u, 13.5 * u, 2.5 * u, white);
-            line(pm, &[(cx, cy + 5.5 * u), (cx, cy + 8.5 * u)], 2.0 * u, white);
-            line(pm, &[(cx - 4.5 * u, cy + 9.0 * u), (cx + 4.5 * u, cy + 9.0 * u)], 2.2 * u, white);
+            fill_rounded(pm, cx - 10.0 * u, cy - 8.0 * u, 20.0 * u, 13.5 * u, 2.5 * u, fg);
+            line(pm, &[(cx, cy + 5.5 * u), (cx, cy + 8.5 * u)], 2.0 * u, fg);
+            line(pm, &[(cx - 4.5 * u, cy + 9.0 * u), (cx + 4.5 * u, cy + 9.0 * u)], 2.2 * u, fg);
         }
     }
 }
@@ -302,6 +311,20 @@ mod tests {
         ("tabbed", ""),
         ("stacked", ""),
     ];
+
+    #[test]
+    fn tonal_navigation_glyphs_use_supplied_ink() {
+        let bg = color(8, 12, 16, 1.0);
+        let fg = color(80, 100, 90, 1.0);
+        let mut glyphs = vec![Glyph::Gear, Glyph::Brush, Glyph::Dock, Glyph::Photo, Glyph::Tiles, Glyph::Windows, Glyph::Rules, Glyph::Keyboard, Glyph::Rocket, Glyph::Icons, Glyph::Monitor];
+        glyphs.extend((0..super::super::system::glyphs::COUNT).map(Glyph::Sys));
+        for glyph in glyphs {
+            let mut pm = Pixmap::new(56, 56).unwrap();
+            pane_icon_tonal(&mut pm, glyph, bg, fg, 4.0, 4.0, 48.0);
+            assert!(pm.data().chunks_exact(4).any(|p| p[1] > 50), "missing foreground: {glyph:?}");
+            assert!(pm.data().chunks_exact(4).all(|p| p[0] <= 80 && p[1] <= 100 && p[2] <= 90), "hardcoded ink: {glyph:?}");
+        }
+    }
 
     #[test]
     fn icons_draw() {

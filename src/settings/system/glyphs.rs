@@ -60,8 +60,11 @@ fn arc(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, a0: f32, a1: f32, w: f32, c: C
 }
 
 pub fn draw(pm: &mut Pixmap, k: u8, bg: (u8, u8, u8), cx: f32, cy: f32, u: f32) {
-    let white = color(255, 255, 255, 0.96);
-    let bgc = color(bg.0, bg.1, bg.2, 1.0);
+    draw_tonal(pm, k, color(bg.0, bg.1, bg.2, 1.0), color(255, 255, 255, 0.96), cx, cy, u);
+}
+
+/// Theme-derived foreground and badge, shared with the Settings navigation painter.
+pub fn draw_tonal(pm: &mut Pixmap, k: u8, bgc: Color, white: Color, cx: f32, cy: f32, u: f32) {
     let pi = std::f32::consts::PI;
     match k {
         SPEAKER => {

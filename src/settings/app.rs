@@ -1,7 +1,7 @@
 //! The settings window: sidebar, content pane, popups, keyboard navigation and the glue between
 //! pointer/keyboard events and the [`Model`].
 
-use super::icons::pane_icon;
+use super::icons::pane_icon_tonal;
 use super::io::{self, Ev, Paths};
 use super::model::{CtlVal, Model};
 use super::panes::PANES;
@@ -420,23 +420,8 @@ impl SettingsApp {
         let mut p = Painter { fonts: self.fonts.as_mut(), s };
         self.sidebar_hits.clear();
         self.sidebar_labels.clear();
-        // Navigation groups share one rounded surface, mirroring the reference's inset lists.
-        let mut gy = top - self.sb_scroll;
-        let mut group: Option<(f32, f32)> = None;
-        for (r, hh) in rows.iter().zip(&heights) {
-            if matches!(r, SbRow::Header(_)) {
-                if let Some((start, height)) = group.take() {
-                    fill_rounded(pm, u(8.0), start, sbw - u(16.0), height, u(16.0), pal::card());
-                }
-            } else {
-                let g = group.get_or_insert((gy, 0.0));
-                g.1 += hh;
-            }
-            gy += hh;
-        }
-        if let Some((start, height)) = group {
-            fill_rounded(pm, u(8.0), start, sbw - u(16.0), height, u(16.0), pal::card());
-        }
+        // One navigation plane: the selected route owns the accent, rather than every
+        // category competing with a separate card and a fixed-colour application badge.
         let mut y = top - self.sb_scroll;
         for (r, hh) in rows.iter().zip(&heights) {
             let ry = y;
@@ -444,7 +429,7 @@ impl SettingsApp {
             match r {
                 SbRow::Header(t) => {
                     if ry + hh > top && ry < h {
-                        let label = p.fit(&t.to_uppercase(), sbw - u(32.0), u(10.5), Weight::SemiBold);
+                        let label = p.fit(t, sbw - u(32.0), u(10.5), Weight::SemiBold);
                         p.text(pm, &label, u(20.0), ry + hh - u(10.0), u(10.5), Weight::SemiBold, pal::sub());
                     }
                 }
@@ -455,11 +440,17 @@ impl SettingsApp {
                     let hover = self.it.hover.as_deref() == Some(&format!("pane:{i}"));
                     if ry + hh > top && ry < h {
                         if selected {
-                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().accent.color(if self.zone == Zone::Sidebar { 0.20 } else { 0.12 }));
+                            fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().accent.color(0.16));
+                            fill_rounded(pm, rect.0, rect.1 + u(7.0), u(3.0), rect.3 - u(14.0), u(1.5), pal::accent());
+                            if self.zone == Zone::Sidebar {
+                                stroke_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), pal::accent(), u(1.0));
+                            }
                         } else if hover {
                             fill_rounded(pm, rect.0, rect.1, rect.2, rect.3, u(8.0), crate::theme::th().ink(0.06));
                         }
-                        pane_icon(pm, def.glyph, def.color, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
+                        let theme = crate::theme::th();
+                        let badge = theme.accent.over(theme.sidebar, if selected { 0.16 } else { 0.06 }).color(1.0);
+                        pane_icon_tonal(pm, def.glyph, badge, if selected { pal::accent() } else { pal::sub() }, rect.0 + u(8.0), rect.1 + (rect.3 - u(24.0)) / 2.0, u(24.0));
                         let label = p.fit(def.title, rect.2 - u(50.0), u(13.0), Weight::Regular);
                         p.text(pm, &label, rect.0 + u(42.0), rect.1 + rect.3 / 2.0, u(13.0), if selected { Weight::Medium } else { Weight::Regular }, pal::text());
                     }
