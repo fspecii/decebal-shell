@@ -29,7 +29,7 @@ pub const PANES: &[PaneDef] = &[
         // the words of every tab (Theme, Customise, Wallpaper, All apps); the individual settings are indexed in `appearance::INDEX`
         keywords: "theme style dark light auto mode accent colour color customise customize fonts window style buttons titlebar border shadow shadows dock bar menu bar hot corners pinned apps icons icon theme cursor control center wallpaper background wallhaven live animated video commons match wallpaper colours apply to all apps gtk qt terminal chrome system theming",
     },
-    PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "background pictures wallhaven live animated video commons wallpaper scaling" },
+    PaneDef { id: "wallpaper", title: "Wallpaper", glyph: Glyph::Monitor, color: (100, 210, 255), keywords: "background pictures wallhaven live animated video commons wallpaper scaling rounded desktop frame curvature screen corner radius thickness" },
     PaneDef {
         id: "icons",
         title: "Icons",
@@ -777,6 +777,18 @@ impl Model {
             Item::Space(6.0),
             Item::Card(rows),
         ];
+        // An upgraded offline CLI can precede its running WM. The live state
+        // advertises frame support even while disabled; do not offer old sessions
+        // configuration they cannot reload.
+        if self.schema.has("wallpaper.frame", "enabled") && (!self.rt.running || self.rt.state["wallpaper"]["frame"].is_object()) {
+            let mut frame = Vec::new();
+            frame.extend(self.r_toggle("wallpaper.frame", "enabled", "Rounded desktop frame", "A rounded border around the wallpaper, behind apps; works with every theme"));
+            frame.extend(self.r_slider("wallpaper.frame", "radius", "Corner radius", "Logical pixels; scales with each output", 1.0, " px", Some(128.0)));
+            frame.extend(self.r_slider("wallpaper.frame", "thickness", "Frame thickness", "Does not move or resize your apps", 1.0, " px", Some(64.0)));
+            frame.extend(self.r_color("wallpaper.frame", "color", "Frame colour", "Blank or reset follows the wallpaper background colour"));
+            items.push(Item::Header("Desktop frame".into()));
+            items.push(Item::Card(frame));
+        }
         items.extend(super::wallpapercolors::wallpaper_pane_note(self));
         // changed through `rdwmctl wallpaper` since the last reload
         let live = self.rt.state["wallpaper"]["image"].as_str().map(expand_tilde);
@@ -1871,6 +1883,52 @@ mod tests {
         crate::settings::appearance::show(&mut m, crate::settings::appearance::resolve("wallpaper").unwrap());
         let items = m.items(pane_of("appearance"));
         assert!(items.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("/b.png"))));
+    }
+
+    #[test]
+    fn desktop_frame_controls_follow_capability_and_preserve_wallpaper() {
+        let (mut m, path) = model_with("# retain\n[wallpaper]\nimage='/tmp/keep.png'\nmode='fit'\nfuture_key=7\n");
+        let ids = |m: &Model| -> Vec<String> {
+            m.pane_backgrounds()
+                .into_iter()
+                .filter_map(|item| match item {
+                    Item::Card(rows) => Some(rows),
+                    _ => None,
+                })
+                .flatten()
+                .flat_map(|row| row.ctls.into_iter().map(|ctl| ctl.id))
+                .filter(|id| id.starts_with("r:wallpaper.frame:"))
+                .collect()
+        };
+        m.schema.keys.retain(|key| key.section != "wallpaper.frame");
+        assert!(ids(&m).is_empty(), "older window managers must not show unsupported controls");
+        for (key, ty, default, min, max) in [
+            ("enabled", "bool", json!(false), None, None),
+            ("radius", "int", json!(25), Some(0.0), Some(512.0)),
+            ("thickness", "int", json!(10), Some(0.0), Some(256.0)),
+            ("color", "color", json!(null), None, None),
+        ] {
+            m.schema.keys.push(super::super::schema::KeyMeta { section: "wallpaper.frame".into(), key: key.into(), ty: ty.into(), default, min, max, choices: vec![], desc: String::new() });
+        }
+        assert_eq!(ids(&m).len(), 4);
+        m.rt.running = true;
+        m.rt.state = json!({"wallpaper": {"image": "/tmp/keep.png"}});
+        assert!(ids(&m).is_empty(), "new CLI must not expose frame controls to an older live WM");
+        m.rt.state["wallpaper"]["frame"] = json!({"enabled": false});
+        assert_eq!(ids(&m).len(), 4);
+        m.rt.running = false; // Persistence below uses the private offline store fixture.
+        m.apply("r:wallpaper.frame:enabled", CtlVal::Bool(true));
+        m.apply("r:wallpaper.frame:radius", CtlVal::Num(32.0));
+        m.apply("r:wallpaper.frame:color", CtlVal::Str("#123456".into()));
+        let cfg = super::super::tomlcfg::Cfg::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(cfg.get("wallpaper.frame", "enabled").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(cfg.get("wallpaper", "image").and_then(|v| v.as_str().map(str::to_owned)), Some("/tmp/keep.png".into()));
+        m.apply("r:wallpaper.frame:color", CtlVal::Reset);
+        m.apply("r:wallpaper.frame:enabled", CtlVal::Bool(false));
+        let text = std::fs::read_to_string(path).unwrap();
+        assert!(text.contains("future_key=7") && text.contains("mode='fit'"));
+        assert!(!text.contains("#123456"), "reset colour must follow wallpaper background again");
+        assert!(!m.flag("wallpaper.frame", "enabled"));
     }
 
     #[test]

@@ -191,3 +191,10 @@ requires administrator access; an older installed wrapper still drops the export
 When a theme asks whether to replace a custom widget layout, Escape cancels that
 pending choice and keeps Settings open without saving changes. Outside an edit,
 popup or pending choice, the documented sidebar Escape close shortcut remains.
+
+
+Wallpaper also exposes an optional rounded desktop frame on supporting rdwm
+sessions: enable/disable, corner radius, thickness and colour. Resetting colour
+uses the wallpaper background. It sits behind applications and works independently
+of theme selection. An older live WM hides these controls even when a newer
+offline control tool is installed. The frame does not move or resize windows.
