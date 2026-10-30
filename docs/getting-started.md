@@ -70,3 +70,10 @@ For a failed app start, check `~/.local/state/decebal/launch.log`. For other
 problems use `decthemectl log tail 50`; see [debugging](debugging.md). Include what
 you clicked, the selected theme, X11/Wayland, and a relevant log excerpt. Review
 logs and screenshots for private information before sharing them.
+
+Open this guide inside the desktop: search **Getting Started** in Super+Space,
+select **Getting Started** in the Settings sidebar, or run `decsettings welcome`.
+Explicit destinations such as `decsettings icons` navigate the existing Settings
+model and retain unsaved editor drafts. X11 reveals the window across workspaces;
+Wayland keeps the compositor's focus policy. Launching Settings with no destination
+retains its existing toggle behavior.

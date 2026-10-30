@@ -82,6 +82,15 @@ pub const PANES: &[PaneDef] = &[
         keywords: "advanced config configuration edit text file json toml raw presets profiles export import share backup restore revert save as preset decebal.json dock-settings config.toml",
     },
     PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
+    // Getting Started: an overview pane that only navigates to the panes above (buttons set `sel.goto`).
+    // Kept last so existing pane indexes (and the default start-up pane, 0 = General) stay unchanged.
+    PaneDef {
+        id: "welcome",
+        title: "Getting Started",
+        glyph: Glyph::Sys(glyphs::INFO),
+        color: (94, 92, 230),
+        keywords: "getting started welcome first session tour onboarding help guide spotlight app search theme palette wallpaper icons widgets snapping shift gtk all apps shortcuts undo logs recovery",
+    },
 ];
 
 pub fn pane_matches(p: &PaneDef, q: &str) -> bool {
@@ -407,9 +416,79 @@ impl Model {
                 v.extend(self.pane_displays());
                 v
             }
+            "welcome" => self.pane_welcome(),
             _ => self.pane_displays(),
         });
         items
+    }
+
+    // ---------------------------------------------------------------- Getting Started
+
+    /// The Getting Started pane: a short tour of the desktop with buttons that only navigate to
+    /// the panes that hold the real settings (no resets, no installs, nothing is launched).
+    fn pane_welcome(&self) -> Vec<Item> {
+        let btn = |id: &str, label: &str| Ctl::new(format!("w:go:{id}"), Kind::Button { label: label.into(), danger: false });
+        let items = vec![
+            Item::Header("Welcome to Decebal".into()),
+            Item::Note {
+                text: "Decebal supplies the desktop shell: this Settings app, app search, panels, notifications, wallpapers and widgets. A window manager still handles application windows; the integrated rdwm session is the main path for the shortcuts below.".into(),
+                warn: false,
+            },
+            Item::Card(vec![
+                Row::new("Search everything")
+                    .detail("Spotlight (rdwm sample default: Super+Space) finds apps and system commands; declaunch lists every installed app. Bindings are editable in Shortcuts.")
+                    .ctl(btn("keyboard", "Shortcuts")),
+                Row::new("Pick a theme, then change its parts")
+                    .detail("Appearance → Themes chooses a look; Palettes controls colours and Customise holds fonts, window decorations and panel controls — no TOML editing needed.")
+                    .ctl(btn("appearance", "Appearance")),
+            ]),
+            Item::Card(vec![
+                Row::new("Wallpaper").detail("A separate section: pick a local picture or browse the configured wallpaper sources.").ctl(btn("wallpaper", "Wallpaper")),
+                Row::new("Icons").detail("Choose the icon theme and cursor separately from colours.").ctl(btn("icons", "Icons")),
+                Row::new("Desktop widgets")
+                    .detail("Create a widget without code, or add Quick note and Timer to share data with their apps. Adjust each widget's anchor and offsets. A theme with widgets asks whether to keep or replace a customised layout; a theme without widgets hides the collection without deleting it.")
+                    .ctl(btn("widgets", "Widgets")),
+            ]),
+            Item::Header("Move windows comfortably".into()),
+            Item::Card(vec![Row::new("Fullscreen and snapping")
+                .detail("In the current rdwm sample profile, Super+F enters fullscreen; press it again to return to a centered, freely movable window. Hold Shift while dragging for a snap zone; ordinary dragging stays free.")
+                .ctl(btn("windows", "Windows & Snapping"))]),
+            Item::Header("Good to know".into()),
+            Item::Note {
+                text: "Appearance → All apps carries the palette to supported GTK apps, terminals, browsers and editors. Already-open GTK apps need reopening for a full custom palette change; websites keep their own styling.".into(),
+                warn: false,
+            },
+            Item::Header("Recover a change or report a problem".into()),
+            Item::Card(vec![
+                Row::new("Undo a theme change")
+                    .detail("Theme CLI changes record an undo point: run `decthemectl theme undo`. `decthemectl system off` disables app integration and restores its managed originals.")
+                    .ctl(btn("config", "Config & Presets")),
+                Row::new("Logs and debugging")
+                    .detail("A failed app start writes ~/.local/state/decebal/launch.log; for other problems use `decthemectl log tail 50`. Keep a working preset before a large customisation session.")
+                    .ctl(btn("general", "About & recovery")),
+            ]),
+            Item::Note {
+                text: "Keys marked as rdwm sample defaults come from the sample profile; see Shortcuts for the bindings this machine actually uses.".into(),
+                warn: false,
+            },
+        ];
+        // Guide instructions must remain readable, including with larger text: row
+        // details are a single-line summary, while Notes wrap to the available width.
+        let mut readable = Vec::new();
+        for item in items {
+            if let Item::Card(rows) = item {
+                for mut row in rows {
+                    let text = std::mem::take(&mut row.detail);
+                    readable.push(Item::Card(vec![row]));
+                    if !text.is_empty() {
+                        readable.push(Item::Note { text, warn: false });
+                    }
+                }
+            } else {
+                readable.push(item);
+            }
+        }
+        readable
     }
 
     fn pane_general(&self) -> Vec<Item> {
@@ -1106,6 +1185,22 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     if matches!(parts.as_slice(), ["ic", ..] | ["l", "icons", ..]) {
         return super::iconspane::apply(m, &parts, v);
     }
+    // Getting Started navigation: `w:go:<id>` opens pane `<id>`; appearance tab names (theme,
+    // palettes, wallpaper, icons, apps, ...) open the pane / tab / section that holds them.
+    if matches!(parts.as_slice(), ["w", "go", _]) {
+        if let CtlVal::Click = v {
+            if let Some(i) = super::system::registry::pane_index(parts[2]) {
+                m.sel.goto = Some(i);
+                m.sel.reset_scroll = true;
+                m.dirty = true;
+                return;
+            }
+            if let Some(view) = super::appearance::resolve(parts[2]) {
+                super::appearance::open(m, view);
+            }
+        }
+        return;
+    }
     match parts.as_slice() {
         ["a", "reload"] => {
             m.on_files_changed();
@@ -1424,6 +1519,48 @@ mod tests {
     }
 
     #[test]
+    fn welcome_pane_navigates_and_default_startup_is_unchanged() {
+        // The pane exists, is last in PANES (so pane 0 / default start-up stays General) and builds.
+        let (m, _) = model_with(BIG);
+        let welcome = pane_of("welcome");
+        assert_eq!(welcome, PANES.len() - 1);
+        assert_eq!(PANES[0].id, "general");
+        let items = m.items(welcome);
+        assert!(items.iter().any(|it| matches!(it, Item::Card(_))), "welcome pane has cards");
+        // Every button targets an existing pane id or an appearance tab name.
+        let targets: Vec<&str> =
+            items.iter().flat_map(|it| if let Item::Card(r) = it { r.iter().collect() } else { vec![] }).flat_map(|r| r.ctls.iter()).filter_map(|c| c.id.strip_prefix("w:go:")).collect();
+        assert!(targets.len() >= 8, "expected the tour buttons, got {targets:?}");
+        for t in targets {
+            assert!(PANES.iter().any(|p| p.id == t) || crate::settings::appearance::resolve(t).is_some(), "bad welcome target {t}");
+        }
+        // Clicking a pane button only asks the window to go there (no file writes, no side effects).
+        let (mut m, _dir) = model_with(BIG);
+        apply_special(&mut m, "w:go:wallpaper", CtlVal::Click);
+        assert_eq!(m.sel.goto, Some(pane_of("wallpaper")));
+        assert!(m.sel.reset_scroll);
+        // Appearance tab names route through the existing appearance::open logic.
+        let (mut m, _dir) = model_with(BIG);
+        apply_special(&mut m, "w:go:theme", CtlVal::Click);
+        assert_eq!(m.sel.goto, Some(pane_of("appearance")));
+        assert_eq!(m.sel.tab, crate::settings::appearance::Tab::Theme);
+        // Unknown targets and non-click values are ignored.
+        let (mut m, _dir) = model_with(BIG);
+        apply_special(&mut m, "w:go:nosuchpane", CtlVal::Click);
+        assert!(m.sel.goto.is_none());
+        apply_special(&mut m, "w:go:wallpaper", CtlVal::Num(1.0));
+        assert!(m.sel.goto.is_none());
+    }
+
+    #[test]
+    fn welcome_is_reachable_by_sidebar_search() {
+        let w = PANES.iter().find(|p| p.id == "welcome").expect("welcome pane");
+        assert!(pane_matches(w, "getting started"));
+        assert!(pane_matches(w, "onboarding"));
+        assert!(!pane_matches(w, "bluetooth"));
+    }
+
+    #[test]
     fn every_key_the_panes_use_exists_in_rdwms_key_table() {
         let (mut m, _) = model_with(BIG);
         for i in 0..PANES.len() {
@@ -1470,7 +1607,7 @@ mod tests {
     #[test]
     fn search_finds_panes_by_title_and_keyword() {
         let find = |q: &str| PANES.iter().filter(|p| pane_matches(p, q)).map(|p| p.id).collect::<Vec<_>>();
-        assert_eq!(find("wallp"), ["appearance", "wallpaper", "displays"]);
+        assert_eq!(find("wallp"), ["appearance", "wallpaper", "displays", "welcome"]);
         assert_eq!(find("gap"), ["tiling"]);
         assert!(find("snap").contains(&"windows"));
         assert_eq!(find("").len(), PANES.len());

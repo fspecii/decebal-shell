@@ -56,3 +56,5 @@ pub mod wm;
 
 pub mod notes;
 pub mod timer;
+
+pub mod accessibility;

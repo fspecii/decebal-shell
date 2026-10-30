@@ -286,15 +286,21 @@ pub struct Live {
     pub theme: Arc<Theme>,
     /// Why the selected theme could not be used (shown by `decthemectl get` and the settings pane).
     pub problem: Option<String>,
+    accessibility: crate::accessibility::Preferences,
 }
 
 impl Live {
     pub fn new(src: Source) -> Live {
+        Self::with_preferences(src, crate::accessibility::Preferences::from_env())
+    }
+
+    pub fn with_preferences(src: Source, accessibility: crate::accessibility::Preferences) -> Live {
         let sel = src.selection();
         let sys_dark = system_dark();
         let (theme, problem) = src.build(&sel, sys_dark);
+        let theme = accessibility.apply(theme);
         let stamps = src.stamps(&sel);
-        Live { src, sel, stamps, sys_dark, theme: Arc::new(theme), problem }
+        Live { src, sel, stamps, sys_dark, theme: Arc::new(theme), problem, accessibility }
     }
 
     /// Re-reads everything when a watched file changed; true when the resolved theme is different now.
@@ -306,6 +312,7 @@ impl Live {
             return false;
         }
         let (theme, problem) = self.src.build(&sel, sys);
+        let theme = self.accessibility.apply(theme);
         self.sel = sel;
         self.stamps = stamps;
         self.sys_dark = sys;
@@ -417,6 +424,24 @@ mod tests {
         std::fs::create_dir_all(d.join("themes")).unwrap();
         let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
+    }
+
+    #[test]
+    fn accessibility_is_effective_without_rewriting_theme_or_selection() {
+        let (dir, src) = sandbox("accessibility-effective");
+        let sel = Selection { name: "nord".into(), font_scale: Some(1.3), ..Selection::default() };
+        src.write_selection(&sel).unwrap();
+        let saved = std::fs::read(&src.shell_json).unwrap();
+        for scale in [0.8, 2.0] {
+            let prefs = crate::accessibility::Preferences { font_scale: Some(scale), high_contrast: true, ..Default::default() };
+            let live = Live::with_preferences(src.clone(), prefs);
+            assert_eq!(live.theme.font_scale, scale);
+            assert_eq!(live.theme.id, "nord");
+            assert!(super::super::model::contrast(live.theme.text, live.theme.background) >= 7.0);
+            assert_eq!(src.build(&sel, true).0.font_scale, 1.3);
+            assert_eq!(std::fs::read(&src.shell_json).unwrap(), saved);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

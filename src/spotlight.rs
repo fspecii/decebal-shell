@@ -154,6 +154,10 @@ fn commands() -> &'static [(Item, &'static str)] {
             (cmd("Shut Down", "Press Enter again to confirm", "power", RED, argv(&["systemctl", "poweroff"]), true), "poweroff turn off"),
             (cmd("Log Out", "Press Enter again to confirm", "logout", ORANGE, argv(&["loginctl", "terminate-user", &user]), true), "sign out exit"),
             (cmd("Toggle Dark Mode", "Switch between light and dark", "dark-mode", GRAY, Act::DarkMode, false), "appearance theme light"),
+            (
+                cmd("Getting Started", "Your first session with Decebal", "info", BLUE, Act::Argv(vec![launch::sibling_or_path("decsettings"), "welcome".into()]), false),
+                "help onboarding first session tour guide settings decsettings welcome",
+            ),
             (cmd("Wallpapers", "Browse Wallhaven", "picture", BLUE, Act::Exec(launch::sibling_or_path("dechaven")), false), "wallhaven background wallpaper"),
             (cmd("Launchpad", "All applications", "grid", BLUE, Act::Exec(launch::sibling_or_path("declaunch")), false), "apps applications"),
         ];

@@ -40,6 +40,7 @@ struct Atoms {
     net_wm_name: Atom,
     utf8: Atom,
     net_wm_state: Atom,
+    net_active: Atom,
     max_vert: Atom,
     max_horz: Atom,
     moveresize: Atom,
@@ -58,6 +59,7 @@ fn atoms<C: Connection>(c: &C) -> Result<Atoms, Error> {
         net_wm_name: intern(c, "_NET_WM_NAME")?,
         utf8: intern(c, "UTF8_STRING")?,
         net_wm_state: intern(c, "_NET_WM_STATE")?,
+        net_active: intern(c, "_NET_ACTIVE_WINDOW")?,
         max_vert: intern(c, "_NET_WM_STATE_MAXIMIZED_VERT")?,
         max_horz: intern(c, "_NET_WM_STATE_MAXIMIZED_HORZ")?,
         moveresize: intern(c, "_NET_WM_MOVERESIZE")?,
@@ -389,6 +391,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             }
             match resp.action {
                 Some(Action::Close) => return Ok(()),
+                // Explicit user navigation uses the same reveal request as the launcher/dock.
+                Some(Action::Activate) => send_root(&conn, &at, screen.root, win, at.net_active, [2, 0, 0, 0, 0])?,
                 Some(Action::Minimize) => send_root(&conn, &at, screen.root, win, at.wm_change_state, [3, 0, 0, 0, 0])?,
                 Some(Action::ToggleMaximize) => send_root(&conn, &at, screen.root, win, at.net_wm_state, [2, at.max_vert, at.max_horz, 1, 0])?,
                 Some(Action::Move) | None => {}

@@ -105,6 +105,8 @@ impl PopupAnchor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Close,
+    /// Ask the window manager to reveal/focus this window (subject to compositor policy).
+    Activate,
     /// Start an interactive window move (title-bar drag).
     Move,
     Minimize,

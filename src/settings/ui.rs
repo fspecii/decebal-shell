@@ -288,7 +288,7 @@ impl Painter<'_> {
     pub fn text_as(&mut self, role: Role, pm: &mut Pixmap, t: &str, x: f32, cy: f32, px: f32, w: Weight, c: Color) -> f32 {
         match &mut self.fonts {
             Some(f) => {
-                let top = cy + 0.36 * px - f.ascent_as(role, px, w);
+                let top = cy + 0.36 * px * crate::theme::live::font_scale() - f.ascent_as(role, px, w);
                 f.draw_as(role, pm, t, x, top, px, w, c)
             }
             None => 0.0,
@@ -418,13 +418,41 @@ pub fn row_h(r: &Row) -> f32 {
     }
 }
 
+/// Geometry scales independently of glyph sizes: Fonts already applies the live font scale.
+#[derive(Clone, Copy)]
+struct TextLayout(f32);
+
+impl TextLayout {
+    fn live() -> Self {
+        Self(crate::theme::live::font_scale().max(1.0))
+    }
+    fn extra(self, px: f32) -> f32 {
+        px * (self.0 - 1.0)
+    }
+    fn field(self) -> f32 {
+        26.0 + self.extra(20.0)
+    }
+    fn row(self, r: &Row) -> f32 {
+        row_h(r) + self.extra(if r.detail.is_empty() { 20.0 } else { 36.0 })
+    }
+    fn label_offsets(self, detail: bool) -> (f32, f32) {
+        if detail {
+            (-4.0 - self.extra(8.0), 12.0 + self.extra(8.0))
+        } else {
+            (0.0, 0.0)
+        }
+    }
+}
+
 /// Width in px a control wants (before scaling by `s`, measured with the painter).
 fn ctl_width(p: &Painter, c: &Ctl) -> f32 {
     let u = |v| p.u(v);
     match &c.kind {
         Kind::Toggle(_) => u(40.0),
         Kind::Slider { .. } => u(230.0),
-        Kind::Stepper { .. } => u(120.0),
+        Kind::Stepper { v, step, unit, .. } => {
+            u(120.0).max(p.measure(&format!("{}{}", format_num(*v, *step), unit), u(13.0), Weight::Regular) + 2.0 * u(26.0).max(p.measure("−", u(15.0), Weight::Medium) + u(8.0)) + u(14.0))
+        }
         Kind::Seg(o, _) => o.iter().map(|(l, _)| p.measure(l, u(12.0), Weight::Regular) + u(22.0)).sum::<f32>() + u(4.0),
         Kind::Popup(o, _) => o.iter().map(|(l, _)| p.measure(l, u(13.0), Weight::Regular)).fold(0.0, f32::max).max(u(60.0)) + u(40.0),
         Kind::Color(_) => u(96.0),
@@ -469,7 +497,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
     let focus = it.focus.as_deref() == Some(c.id.as_str());
     let dim = if c.enabled { 1.0 } else { 0.4 };
     let mut parts = Vec::new();
-    let h_field = u(26.0);
+    let h_field = u(TextLayout::live().field());
     let mut rect: Rect = (x, cy - h_field / 2.0, w, h_field);
     let a = |col: Color| {
         let mut col = col;
@@ -488,7 +516,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Slider { v, min, max, unit, step } => {
             let shown = it.drag.as_ref().filter(|(id, _)| id == &c.id).map_or(*v, |(_, d)| *d);
             let label = format!("{}{}", format_num(shown, *step), unit);
-            let lw = u(58.0);
+            let lw = u(58.0).max(p.measure(&label, u(12.5), Weight::Regular));
             p.text_right(pm, &label, x + lw, cy, u(12.5), Weight::Regular, a(pal::sub()));
             let tx = x + lw + u(12.0);
             let tw = (right - tx).max(u(20.0));
@@ -502,7 +530,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
             parts.push((tx, cy - u(12.0), tw, u(24.0)));
         }
         Kind::Stepper { v, step, unit, .. } => {
-            let bw = u(26.0);
+            let bw = u(26.0).max(p.measure("−", u(15.0), Weight::Medium) + u(8.0));
             let label = format!("{}{}", format_num(*v, *step), unit);
             let minus = (right - 2.0 * bw - u(4.0), cy - h_field / 2.0, bw, h_field);
             let plus = (right - bw, cy - h_field / 2.0, bw, h_field);
@@ -619,7 +647,7 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         }
         Kind::Button { label, danger } => {
             fill_rounded(pm, x, rect.1, w, h_field, u(6.0), a(if hover { pal::field_hover() } else { pal::field() }));
-            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), Weight::Regular, a(if *danger { pal::red() } else { pal::text() }));
+            p.text_center(pm, &p.fit(label, w - u(12.0), u(12.5), Weight::Regular), x + w / 2.0, cy, u(12.5), Weight::Regular, a(if *danger { pal::red() } else { pal::text() }));
         }
         Kind::Chip { label, on } => {
             fill_rounded(
@@ -637,7 +665,15 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                     pal::field()
                 }),
             );
-            p.text_center(pm, label, x + w / 2.0, cy, u(12.5), if *on { Weight::Medium } else { Weight::Regular }, a(if *on { pal::accent_text() } else { pal::text() }));
+            p.text_center(
+                pm,
+                &p.fit(label, w - u(12.0), u(12.5), Weight::Regular),
+                x + w / 2.0,
+                cy,
+                u(12.5),
+                if *on { Weight::Medium } else { Weight::Regular },
+                a(if *on { pal::accent_text() } else { pal::text() }),
+            );
         }
         Kind::Label(t) => {
             p.text_right(pm, t, right, cy, u(13.0), Weight::Regular, pal::sub());
@@ -678,9 +714,10 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     let side = u(if width < u(400.0) { 16.0 } else { 32.0 });
     let cw = (width - 2.0 * side).min(u(700.0));
     let x0 = ox + ((width - cw) / 2.0).max(side.min(width / 2.0));
+    let metrics = TextLayout::live();
     let mut y = u(28.0) - scroll;
-    p.text_as(Role::Title, pm, title, x0, y + u(18.0), u(25.0), Weight::SemiBold, pal::text());
-    y += u(62.0);
+    p.text_as(Role::Title, pm, title, x0, y + u(18.0 + metrics.extra(14.0)), u(25.0), Weight::SemiBold, pal::text());
+    y += u(62.0 + metrics.extra(30.0));
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
@@ -702,12 +739,12 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
             Item::ThemeCards(cards) => y = super::themecards::draw(pm, p, cards, x0, y, cw, it, &mut fr),
             Item::Header(t) => {
                 y += u(6.0);
-                p.text(pm, t, x0 + u(14.0), y + u(8.0), u(12.0), Weight::SemiBold, pal::sub());
-                y += u(22.0);
+                p.text(pm, t, x0 + u(14.0), y + u(8.0 + metrics.extra(7.0)), u(12.0), Weight::SemiBold, pal::sub());
+                y += u(22.0 + metrics.extra(16.0));
             }
             Item::Note { text, warn } => {
                 let lines = p.wrap(text, cw - u(28.0), u(12.0), Weight::Regular);
-                let lh = u(16.0);
+                let lh = u(16.0 * metrics.0);
                 if *warn {
                     let h = lines.len() as f32 * lh + u(16.0);
                     fill_rounded(pm, x0, y, cw, h, u(8.0), crate::theme::th().danger.color(0.16));
@@ -723,15 +760,20 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 }
             }
             Item::Card(rows) => {
-                let stacked = cw < u(380.0);
-                let height = |r: &Row| u(row_h(r) + if stacked && !r.label.is_empty() { 32.0 * r.ctls.len() as f32 } else { 0.0 });
+                let stacked = cw < u(380.0)
+                    || (metrics.0 > 1.0
+                        && rows.iter().any(|r| {
+                            let controls: f32 = r.ctls.iter().map(|c| ctl_width(p, c) + u(10.0)).sum();
+                            controls + p.measure(&r.label, u(13.0), Weight::Regular) + u(2.0 * CARD_PAD) > cw
+                        }));
+                let height = |r: &Row| u(metrics.row(r) + if stacked && !r.label.is_empty() { (32.0 + metrics.extra(20.0)) * r.ctls.len() as f32 } else { 0.0 });
                 let h: f32 = rows.iter().map(height).sum();
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
                 let mut ry = y;
                 for (i, r) in rows.iter().enumerate() {
                     let rh = height(r);
                     let stacked = stacked && !r.label.is_empty();
-                    let cy = if stacked && !r.ctls.is_empty() { ry + rh - u(22.0) } else { ry + rh / 2.0 };
+                    let cy = if stacked && !r.ctls.is_empty() { ry + rh - u(22.0 + metrics.extra(10.0)) } else { ry + rh / 2.0 };
                     let row_rect = (x0, ry, cw, rh);
                     if r.selected {
                         fill_px(pm, x0 + u(2.0), ry, cw - u(4.0), rh, crate::theme::th().accent.color(0.22));
@@ -752,7 +794,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         let mut placed = draw_ctl(pm, p, c, right, control_cy, it, row_rect, (right - x0 - u(CARD_PAD)).max(u(24.0)));
                         placed.label = r.label.clone();
                         if stacked {
-                            control_cy -= u(32.0);
+                            control_cy -= u(32.0 + metrics.extra(20.0));
                         } else {
                             right = placed.rect.0 - u(10.0);
                         }
@@ -769,13 +811,14 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         fr.rows.push((row_rect, id));
                     }
                     let avail = (if stacked { x0 + cw - u(CARD_PAD) - lx } else { right - lx }).max(u(40.0));
-                    let label_cy = if stacked && !r.ctls.is_empty() { ry + u(20.0) } else { cy };
-                    let ly = if r.detail.is_empty() { label_cy } else { label_cy - u(4.0) };
+                    let label_cy = if stacked && !r.ctls.is_empty() { ry + u(20.0 + metrics.extra(if r.detail.is_empty() { 10.0 } else { 18.0 })) } else { cy };
+                    let (label_offset, detail_offset) = metrics.label_offsets(!r.detail.is_empty());
+                    let ly = label_cy + u(label_offset);
                     let label = p.fit(&r.label, avail, u(13.0), Weight::Regular);
                     p.text(pm, &label, lx, ly, u(13.0), Weight::Regular, pal::text());
                     if !r.detail.is_empty() {
                         let d = p.fit(&r.detail, avail, u(11.0), Weight::Regular);
-                        p.text(pm, &d, lx, label_cy + u(12.0), u(11.0), Weight::Regular, pal::sub());
+                        p.text(pm, &d, lx, label_cy + u(detail_offset), u(11.0), Weight::Regular, pal::sub());
                     }
                     ry += rh;
                 }
@@ -793,23 +836,23 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         p.text_center(pm, if id.is_empty() { "No wallpaper image" } else { "Loading…" }, px0 + pw / 2.0, y + ph / 2.0, u(12.0), Weight::Regular, pal::faint());
                     }
                 }
-                y += ph + u(14.0);
+                y += ph + u(14.0 + metrics.extra(8.0));
                 p.text_center(pm, caption, x0 + cw / 2.0, y + u(2.0), u(12.0), Weight::Regular, pal::sub());
-                y += u(30.0);
+                y += u(30.0 + metrics.extra(16.0));
             }
             Item::Palette(list) => {
                 let gap = u(8.0);
                 let cols = list.len().clamp(1, (((cw + gap) / (u(60.0) + gap)).floor() as usize).max(1));
                 let w = (cw - gap * (cols as f32 - 1.0)) / cols as f32;
-                let (h, row_h) = (u(40.0), u(70.0));
+                let (h, row_h) = (u(40.0), u(70.0 + metrics.extra(28.0)));
                 for (i, chip) in list.iter().enumerate() {
                     let r = (x0 + (i % cols) as f32 * (w + gap), y + (i / cols) as f32 * row_h, w, h);
                     let (cr, cg, cb) = chip.color;
                     fill_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), color(cr, cg, cb, 1.0));
                     stroke_rounded(pm, r.0, r.1, r.2, r.3, u(8.0), crate::theme::th().ink(0.22), u(1.0));
                     let name = p.fit(&chip.name, w + gap, u(10.5), Weight::Regular);
-                    p.text_center(pm, &name, r.0 + w / 2.0, r.1 + h + u(11.0), u(10.5), Weight::Regular, pal::sub());
-                    p.text_center(pm, &format!("#{cr:02x}{cg:02x}{cb:02x}"), r.0 + w / 2.0, r.1 + h + u(24.0), u(9.5), Weight::Regular, pal::faint());
+                    p.text_center(pm, &name, r.0 + w / 2.0, r.1 + h + u(11.0 + metrics.extra(6.0)), u(10.5), Weight::Regular, pal::sub());
+                    p.text_center(pm, &format!("#{cr:02x}{cg:02x}{cb:02x}"), r.0 + w / 2.0, r.1 + h + u(24.0 + metrics.extra(19.0)), u(9.5), Weight::Regular, pal::faint());
                 }
                 y += list.len().div_ceil(cols) as f32 * row_h + u(4.0);
             }
@@ -821,7 +864,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let th = tw * TH_H / TH_W;
                 for (i, t) in list.iter().enumerate() {
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
-                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0 + metrics.extra(16.0))), tw, th);
                     let cid = format!("w:{}", t.id);
                     let hover = it.hover.as_deref() == Some(cid.as_str());
                     if t.selected {
@@ -837,7 +880,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         stroke_rounded(pm, r.0 - u(4.0), r.1 - u(4.0), r.2 + u(8.0), r.3 + u(8.0), u(11.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
                     let cap = p.fit(&t.caption, tw, u(11.0), Weight::Regular);
-                    p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0), u(11.0), Weight::Regular, pal::sub());
+                    p.text_center(pm, &cap, r.0 + tw / 2.0, r.1 + th + u(14.0 + metrics.extra(7.0)), u(11.0), Weight::Regular, pal::sub());
                     fr.thumbs.push((r, t.id.clone()));
                     fr.placed.push(Placed {
                         rect: r,
@@ -848,7 +891,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     });
                 }
                 let rows = list.len().div_ceil(cols);
-                y += rows as f32 * (th + u(34.0)) + u(8.0);
+                y += rows as f32 * (th + u(34.0 + metrics.extra(16.0))) + u(8.0);
             }
             Item::Layouts(list) => {
                 let gap = u(12.0);
@@ -858,7 +901,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let th = tw * 0.78;
                 for (i, t) in list.iter().enumerate() {
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
-                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0)), tw, th);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(34.0 + metrics.extra(16.0))), tw, th);
                     let hover = it.hover.as_deref() == Some(t.id.as_str());
                     fill_rounded(pm, r.0, r.1, r.2, r.3, u(9.0), if hover { crate::theme::th().ink(0.14) } else { pal::card() });
                     if t.selected {
@@ -868,7 +911,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     if it.focus.as_deref() == Some(t.id.as_str()) && it.ring {
                         stroke_rounded(pm, r.0 - u(2.0), r.1 - u(2.0), r.2 + u(4.0), r.3 + u(4.0), u(10.0), crate::theme::th().accent.color(0.85), u(2.0));
                     }
-                    p.text_center(pm, &t.name, r.0 + tw / 2.0, r.1 + th + u(13.0), u(11.0), Weight::Regular, if t.selected { pal::text() } else { pal::sub() });
+                    p.text_center(pm, &t.name, r.0 + tw / 2.0, r.1 + th + u(13.0 + metrics.extra(7.0)), u(11.0), Weight::Regular, if t.selected { pal::text() } else { pal::sub() });
                     fr.layouts.push((r, t.id.clone()));
                     fr.placed.push(Placed {
                         rect: r,
@@ -879,10 +922,10 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     });
                 }
                 let rows = list.len().div_ceil(cols);
-                y += rows as f32 * (th + u(34.0)) + u(8.0);
+                y += rows as f32 * (th + u(34.0 + metrics.extra(16.0))) + u(8.0);
             }
             Item::FontSamples(lines) => {
-                let lh = u(46.0);
+                let lh = u(46.0 + metrics.extra(36.0));
                 let h = lines.len() as f32 * lh;
                 fill_rounded(pm, x0, y, cw, h, u(CARD_R), pal::card());
                 for (i, l) in lines.iter().enumerate() {
@@ -890,14 +933,14 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     if i > 0 {
                         fill_px(pm, x0 + u(CARD_PAD), ry, cw - u(CARD_PAD), u(1.0).max(1.0), pal::sep());
                     }
-                    p.text(pm, &l.label, x0 + u(CARD_PAD), ry + u(13.0), u(11.0), Weight::Regular, pal::faint());
+                    p.text(pm, &l.label, x0 + u(CARD_PAD), ry + u(13.0 + metrics.extra(6.0)), u(11.0), Weight::Regular, pal::faint());
                     // the sample is cut at the card's right edge instead of wrapping
                     let avail = cw - 2.0 * u(CARD_PAD);
                     let mut shown = l.text.clone();
                     while shown.chars().count() > 1 && p.measure_as(l.role, &shown, u(l.px), l.weight) > avail {
                         shown.pop();
                     }
-                    p.text_as(l.role, pm, &shown, x0 + u(CARD_PAD), ry + u(31.0), u(l.px), l.weight, pal::text());
+                    p.text_as(l.role, pm, &shown, x0 + u(CARD_PAD), ry + u(31.0 + metrics.extra(24.0)), u(l.px), l.weight, pal::text());
                 }
                 y += h + u(18.0);
             }
@@ -909,7 +952,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                 let th = tw * 0.66;
                 for (i, t) in list.iter().enumerate() {
                     let (cx, cyy) = ((i % cols) as f32, (i / cols) as f32);
-                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(36.0)), tw, th);
+                    let r = (x0 + cx * (tw + gap), y + cyy * (th + u(36.0 + metrics.extra(16.0))), tw, th);
                     let hover = it.hover.as_deref() == Some(t.id.as_str());
                     let on = r.1 + r.3 + u(36.0) >= 0.0 && r.1 <= pm.height() as f32; // off-screen tiles are laid out, not painted
                     if on {
@@ -928,7 +971,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                         pm,
                         &name,
                         r.0 + tw / 2.0,
-                        r.1 + th + u(15.0),
+                        r.1 + th + u(15.0 + metrics.extra(7.0)),
                         u(12.0),
                         if t.selected { Weight::Medium } else { Weight::Regular },
                         if t.error {
@@ -949,7 +992,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
                     });
                 }
                 let rows = list.len().div_ceil(cols);
-                y += rows as f32 * (th + u(36.0)) + u(6.0);
+                y += rows as f32 * (th + u(36.0 + metrics.extra(16.0))) + u(6.0);
             }
             Item::Swatches(list) => {
                 let d = u(26.0);
@@ -1044,6 +1087,45 @@ pub fn part_at(parts: &[Rect], x: f32, y: f32) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Use isolated processes because live font preferences are process-wide atomics.
+    #[test]
+    fn accessible_text_geometry() {
+        if std::env::var_os("DECEBAL_UI_GEOMETRY_CHILD").is_none() {
+            for scale in ["1", "2"] {
+                let status = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "settings::ui::tests::accessible_text_geometry", "--nocapture"])
+                    .env("DECEBAL_UI_GEOMETRY_CHILD", "1")
+                    .env("DECEBAL_FONT_SCALE", scale)
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+            }
+            return;
+        }
+        let Some(mut fonts) = Fonts::load() else { return };
+        let m = TextLayout::live();
+        assert_eq!(m.0, std::env::var("DECEBAL_FONT_SCALE").unwrap().parse::<f32>().unwrap());
+        let row = Row::new("Readable setting").detail("Explanation with descenders");
+        let (label, detail) = m.label_offsets(true);
+        // Render each line independently, then compare actual painted ink bounds.
+        let mut bounds = |text: &str, px: f32, cy: f32| {
+            let mut pm = Pixmap::new(600, 200).unwrap();
+            let mut p = Painter { fonts: Some(&mut fonts), s: 1.0 };
+            p.text(&mut pm, text, 10.0, cy, px, Weight::Regular, Color::WHITE);
+            let ys: Vec<usize> = pm.data().chunks_exact(4).enumerate().filter(|(_, p)| p[3] > 0).map(|(i, _)| i / 600).collect();
+            (*ys.iter().min().unwrap() as f32, *ys.iter().max().unwrap() as f32)
+        };
+        let center = m.row(&row) / 2.0;
+        let a = bounds(&row.label, 13.0, center + label);
+        let b = bounds(&row.detail, 11.0, center + detail);
+        assert!(a.1 < b.0, "label and detail ink overlap: {a:?} {b:?}");
+        assert!(a.0 >= 0.0 && b.1 < m.row(&row));
+        for (text, px) in [("Apply changes", 12.5), ("− +", 15.0), ("Choose setting", 13.0)] {
+            let ink = bounds(text, px, 80.0);
+            assert!(ink.0 >= 80.0 - m.field() / 2.0 && ink.1 < 80.0 + m.field() / 2.0, "control clips {text}: {ink:?}");
+        }
+    }
 
     #[test]
     fn slider_maps_and_snaps() {

@@ -21,3 +21,7 @@
 - Caelestia layouts (left, right, top, bottom, split), workspace-switch overlay, 15 window decoration styles (rdwm).
 - Control Center in every theme: a quick-settings button in the Windows taskbar tray, `decutil control-center toggle` (works in any theme, with no bar), the `control-center` hot-corner action, and a theme / `decebal.json` `control_center` section (`enabled`, `position`, `style`, `tiles`) with a pane in Settings (Desktop & Dock).
 - decnotify idle memory cut from 11 MB to about 6 MB.
+- Native Getting Started page in Settings and Spotlight, with wrapped instructions and links to the real controls.
+- Explicit Settings destinations navigate the existing model without closing it or losing drafts; X11 reveals the window across workspaces.
+- Next-login accessibility exports now drive effective text size/high contrast and reduced dock motion; Settings layouts accommodate 200% text.
+- Dock reconciliation retries contention and surfaces a timeout; an absent btop process no longer produces a theme reload warning.

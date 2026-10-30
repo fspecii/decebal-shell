@@ -143,3 +143,36 @@ fn fresh_process_and_reinstalled_renderer_reuse_stored_png_without_rewriting_it(
     assert_eq!(fs::read_dir(dir.join("cache/decebal/theme-previews/saved")).unwrap().count(), 1, "persistent gallery reference is reused");
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn session_accessibility_does_not_pollute_cached_theme_samples() {
+    let (dir, src) = fixture();
+    let manifest = dir.join("themes/probe/theme.toml");
+    let text = fs::read_to_string(&manifest).unwrap().replace("[dock]\nenabled=false", "[dock]\nenabled=true");
+    fs::write(manifest, text).unwrap();
+    let run = |enabled: bool| {
+        let out = Command::new(env!("CARGO_BIN_EXE_decthemectl"))
+            .args(["theme", "render", "probe", "--mode", "dark", "--png"])
+            .arg(dir.join("sample.png"))
+            .env("DECEBAL_CONFIG", &dir)
+            .env("DECEBAL_THEMES", &src.themes_dir)
+            .env("DECEBAL_SYSTEM_THEMES", dir.join("no-system"))
+            .env("XDG_CACHE_HOME", dir.join("cache"))
+            .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
+            .env("RDWMCTL", "/nonexistent/rdwmctl")
+            .env("DISPLAY", "")
+            .env("WAYLAND_DISPLAY", "")
+            .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+            .env("DECEBAL_FONT_SCALE", if enabled { "2" } else { "1" })
+            .env("DECEBAL_HIGH_CONTRAST", if enabled { "1" } else { "0" })
+            .env("DECEBAL_REDUCE_MOTION", if enabled { "1" } else { "0" })
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        fs::read(dir.join("sample.png")).unwrap()
+    };
+    let regular = run(false);
+    fs::remove_dir_all(dir.join("cache/decebal/theme-previews")).unwrap();
+    assert_eq!(run(true), regular, "cold previews must not cache session-dependent dock opacity or motion");
+    fs::remove_dir_all(dir).unwrap();
+}

@@ -99,12 +99,8 @@ impl Session {
         if let Some(c) = self.cursor_size {
             s += &format!("export XCURSOR_SIZE={c}\n");
         }
-        if self.reduce_motion {
-            s += "export DECEBAL_REDUCE_MOTION=1\n";
-        }
-        if self.high_contrast {
-            s += "export DECEBAL_HIGH_CONTRAST=1\n";
-        }
+        s += &format!("export DECEBAL_REDUCE_MOTION={}\n", u8::from(self.reduce_motion));
+        s += &format!("export DECEBAL_HIGH_CONTRAST={}\n", u8::from(self.high_contrast));
         if let Some(c) = &self.lock_cmd {
             s += &format!("export DECEBAL_LOCK_CMD={}\n", q(c));
         }
@@ -116,6 +112,8 @@ impl Session {
         }
         if let Some(f) = self.font_scale {
             s += &format!("export DECEBAL_FONT_SCALE={f:.2}\n");
+        } else {
+            s += "export DECEBAL_FONT_SCALE=''\n";
         }
         s += "if [ -n \"$DISPLAY\" ]; then\n";
         if !self.xrandr.is_empty() {
@@ -191,6 +189,18 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn disabling_accessibility_explicitly_replaces_inherited_exports() {
+        let enabled = super::Session { reduce_motion: true, high_contrast: true, font_scale: Some(2.0), ..Default::default() }.to_sh();
+        let disabled = super::Session::default().to_sh();
+        for line in ["export DECEBAL_REDUCE_MOTION=1\n", "export DECEBAL_HIGH_CONTRAST=1\n", "export DECEBAL_FONT_SCALE=2.00\n"] {
+            assert!(enabled.contains(line));
+        }
+        for line in ["export DECEBAL_REDUCE_MOTION=0\n", "export DECEBAL_HIGH_CONTRAST=0\n", "export DECEBAL_FONT_SCALE=''\n"] {
+            assert!(disabled.contains(line));
+        }
+    }
+
     use super::*;
 
     #[test]

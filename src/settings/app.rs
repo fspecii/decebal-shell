@@ -16,7 +16,7 @@ use crate::wallhaven::cache::Lru;
 use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -64,12 +64,14 @@ pub struct SettingsApp {
     zone: Zone,
     search: TextField,
     edit: Option<(String, TextField)>,
+    suspended_edits: HashMap<String, (String, TextField, f32)>,
     popup: Option<Popup>,
     colorpop: Option<ColorPop>,
     thumbs: RefCell<Lru<String, Rc<Pixmap>>>,
     thumb_req: HashSet<String>,
     thumb_tx: Option<Sender<String>>,
     thumb_rx: Option<Receiver<(String, Option<Pixmap>)>>,
+    navigation: Option<super::navigation::Requests>,
     waker: Option<Waker>,
     wake_slot: Arc<Mutex<Option<Waker>>>,
     sidebar_hits: Vec<(Rect, usize)>,
@@ -120,18 +122,8 @@ impl SettingsApp {
             }
         });
         let mut m = Model::new(paths, schema, queue, wake);
-        if let Some(p) = start_pane {
-            // the old names of the panes that became Appearance tabs (theme, icons, wallpaper, desktop) open where they live now
-            match super::appearance::resolve(p) {
-                Some(v) => {
-                    m.sel.pane = pane_index(v.pane().unwrap_or("appearance"));
-                    if v.pane().is_none() {
-                        super::appearance::show(&mut m, v);
-                    }
-                    m.sel.reset_scroll = false;
-                }
-                None => m.sel.pane = pane_index(p),
-            }
+        if let Some(p) = start_pane.and_then(super::navigation::resolve) {
+            Self::set_destination(&mut m, &p);
         }
         let s = std::env::var("DECSETTINGS_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.5..=4.0).contains(v)).unwrap_or(1.0);
         SettingsApp {
@@ -145,12 +137,14 @@ impl SettingsApp {
             zone: Zone::Sidebar,
             search: TextField::default(),
             edit: None,
+            suspended_edits: HashMap::new(),
             popup: None,
             colorpop: None,
             thumbs: RefCell::new(Lru::new(MAX_THUMBS)),
             thumb_req: HashSet::new(),
             thumb_tx: None,
             thumb_rx: None,
+            navigation: None,
             waker: None,
             wake_slot,
             sidebar_hits: Vec::new(),
@@ -171,12 +165,77 @@ impl SettingsApp {
         }
     }
 
+    pub fn listen_for_navigation(&mut self, listener: super::navigation::Listener) {
+        let slot = self.wake_slot.clone();
+        self.navigation = Some(listener.start(Arc::new(move || {
+            if let Some(wake) = slot.lock().unwrap().as_ref() {
+                wake();
+            }
+        })));
+    }
+
+    fn set_destination(m: &mut Model, pane: &str) {
+        match super::appearance::resolve(pane) {
+            Some(view) => {
+                m.sel.pane = pane_index(view.pane().unwrap_or("appearance"));
+                if view.pane().is_none() {
+                    super::appearance::show(m, view);
+                }
+                m.sel.reset_scroll = false;
+            }
+            None => m.sel.pane = pane_index(pane),
+        }
+    }
+
+    fn edit_location(&self) -> String {
+        let pane = PANES[self.m.sel.pane].id;
+        if pane == "appearance" {
+            format!("{pane}:{:?}:{:?}", self.m.sel.tab, self.m.sel.section)
+        } else {
+            pane.to_owned()
+        }
+    }
+    fn resume_suspended_edit(&mut self) {
+        let saved = self.suspended_edits.remove(&self.edit_location());
+        self.edit = None;
+        self.it.focus = None;
+        self.zone = Zone::Sidebar;
+        if let Some((id, field, scroll)) = saved {
+            self.it.focus = Some(id.clone());
+            self.edit = Some((id, field));
+            self.scroll = scroll;
+            self.zone = Zone::Content;
+        }
+    }
+
+    fn drain_navigation(&mut self) -> bool {
+        let mut changed = false;
+        while let Some(pane) = self.navigation.as_ref().and_then(|n| n.rx.try_recv().ok()) {
+            // Retain drafts, but never let an invisible field capture keys on another page.
+            if let Some((id, field)) = self.edit.take() {
+                self.suspended_edits.insert(self.edit_location(), (id, field, self.scroll));
+            }
+            Self::set_destination(&mut self.m, &pane);
+            self.scroll = 0.0;
+            self.sb_follow = true;
+            self.search.clear();
+            self.popup = None;
+            self.colorpop = None;
+            self.m.sel.recording = None;
+            self.resume_suspended_edit();
+            self.items_cache = None;
+            self.reuse_items = false;
+            changed = true;
+        }
+        changed
+    }
+
     pub fn model(&self) -> &Model {
         &self.m
     }
 
     fn sb(&self) -> f32 {
-        (self.size.0 as f32 * 0.34).clamp(156.0 * self.s, SIDEBAR_W * self.s)
+        (self.size.0 as f32 * 0.34).clamp(156.0 * self.s * crate::theme::live::font_scale().max(1.0), SIDEBAR_W * self.s * crate::theme::live::font_scale().max(1.0))
     }
 
     /// Search hits for the current query (recomputed only when the query changes).
@@ -251,6 +310,7 @@ impl SettingsApp {
             self.colorpop = None;
             self.m.sel.recording = None;
             self.m.cfg.leave();
+            self.resume_suspended_edit();
             if self.m.notice.as_ref().is_some_and(|n| n.error) {
                 self.m.notice = None;
             }
@@ -325,13 +385,14 @@ impl SettingsApp {
         let rows = self.sidebar_rows();
         let top = u(100.0);
         // layout pass: y of every row relative to the list top
+        let text_growth = crate::theme::live::font_scale().max(1.0) - 1.0;
         let heights: Vec<f32> = rows
             .iter()
             .enumerate()
             .map(|(n, r)| match r {
-                SbRow::Header(_) => u(if n == 0 { 22.0 } else { 30.0 }),
-                SbRow::Pane(_) => u(34.0),
-                SbRow::Hit(..) => u(28.0),
+                SbRow::Header(_) => u(if n == 0 { 22.0 } else { 30.0 } + 10.0 * text_growth),
+                SbRow::Pane(_) => u(34.0 + 13.0 * text_growth),
+                SbRow::Hit(..) => u(28.0 + 12.0 * text_growth),
             })
             .collect();
         let total: f32 = heights.iter().sum::<f32>() + u(10.0);
@@ -1141,6 +1202,7 @@ impl WindowApp for SettingsApp {
     fn set_waker(&mut self, waker: Waker) {
         *self.wake_slot.lock().unwrap() = Some(waker.clone());
         self.waker = Some(waker.clone());
+        waker(); // Drain navigation accepted while the native backend was starting.
         self.start_thumb_worker();
         let tw = waker.clone();
         crate::theme::live::start_watcher(move || tw());
@@ -1446,7 +1508,9 @@ impl WindowApp for SettingsApp {
     }
 
     fn tick(&mut self) -> Response {
-        let mut redraw = self.drain_thumbs();
+        let navigate = self.drain_navigation();
+        let mut redraw = navigate;
+        redraw |= self.drain_thumbs();
         loop {
             let ev = self.m.queue.lock().unwrap().pop_front();
             match ev {
@@ -1475,7 +1539,7 @@ impl WindowApp for SettingsApp {
         if redraw {
             self.reuse_items = false; // something other than the pointer or the wheel changed: rebuild the page
         }
-        Response { redraw, action: None }
+        Response { redraw, action: navigate.then_some(Action::Activate) }
     }
 }
 
@@ -1629,6 +1693,35 @@ mod key_tests {
             std::fs::create_dir_all(&dir).unwrap();
             pixels.save_png(dir.join(if crate::theme::th().dark { "picker-dark.png" } else { "picker-light.png" })).unwrap();
         }
+    }
+
+    #[test]
+    fn navigation_event_retains_model_and_unsaved_editor() {
+        let mut a = app();
+        a.edit = Some(("unsaved-inline".into(), TextField::new("draft not saved")));
+        a.m.cfg.form.name = "unsaved preset name".into();
+        let original_model = &a.m as *const Model;
+        let dir = std::env::temp_dir().join(format!("settings-ui-navigation-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("request.sock");
+        a.listen_for_navigation(super::super::navigation::Listener::bind(path.clone()).unwrap());
+        for (name, pane) in [("welcome", "welcome"), ("icons", "icons"), ("appearance/fonts", "appearance")] {
+            super::super::navigation::send(&path, name).unwrap();
+            assert!(a.tick().redraw);
+            assert_eq!(PANES[a.m.sel.pane].id, pane);
+            assert_eq!(&a.m as *const Model, original_model);
+            assert!(a.edit.is_none(), "a hidden field must not capture keys on the destination page");
+            assert_eq!(a.suspended_edits.get("general").unwrap().1.text(), "draft not saved");
+            assert_eq!(a.m.cfg.form.name, "unsaved preset name");
+        }
+        assert_eq!(a.m.sel.section, super::super::appearance::Section::Fonts);
+        super::super::navigation::send(&path, "general").unwrap();
+        a.tick();
+        assert_eq!(a.edit.as_ref().unwrap().1.text(), "draft not saved");
+        assert_eq!(a.zone, Zone::Content);
+        drop(a);
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

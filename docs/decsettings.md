@@ -130,7 +130,7 @@ shell snippet. It exports `RDWM_TERMINAL`, `XCURSOR_SIZE`, `DECEBAL_REDUCE_MOTIO
 ```sh
 f="${XDG_CONFIG_HOME:-$HOME/.config}/decebal/session-settings.sh"; [ -r "$f" ] && . "$f"
 ```
-(`rdwm-decebal-session` should do this after the X server and rdwm are up and before autostart.) Both files are written atomically; the `.sh` always
+(The updated `rdwm-decebal-session` transfers known exports from a bounded child after the display starts and before rdwm/autostart.) Both files are written atomically; the `.sh` always
 reflects the latest in-memory settings even when several changes happen quickly.
 
 Terminal choice: `rdwm-terminal` honours `RDWM_TERMINAL` (a command name); the pane exports it from the session file, so it applies from the next login.
@@ -158,3 +158,27 @@ and the live row labels of the older panes ("volume" -> Sound > Volume, "gap" ->
 `cargo test --lib` has parser tests for pactl/wpctl/nmcli/bluetoothctl/xrandr/xinput/xset/timedatectl/powerprofilesctl/lspci/passwd fixtures, command-line tests with a recording
 `FakeRunner`, the confirm state machine, the search index and the session file generator. `tests/e2e/decsettings_system.sh [display]` drives every new pane on a
 private Xvfb with rdwm and the fake tools in `tests/e2e/fakes/` (screenshots in `$SHOTS`); `tests/e2e/decsettings.sh` still covers the original panes.
+
+## Accessibility and targeted navigation
+
+`decsettings welcome` (also `help` or `getting-started`) opens the native first-session
+guide. A specific destination navigates an existing Settings instance without
+closing it or discarding drafts. Requests use a private per-display local socket,
+with bounded data-only messages. An explicit conflicting `--config` is refused.
+X11 requests reveal/focus through the WM; Wayland retains compositor focus policy.
+The legacy singleton lock is still shared across displays, so a request to a
+Settings instance on another display fails rather than closing it.
+
+Accessibility exports are consumed by newly started Decebal processes. Text size
+80–200% overrides the theme's text scale in memory; high contrast supplies opaque,
+readable shell colors; reduced motion disables dock magnification and launch bounce.
+Stored theme, palette and widget layout are retained. Settings rows, controls and
+wrapped notes adapt to large text. This is not screen-reader integration or a
+claim that every external application supports these preferences. Complex custom
+widget/editor layouts still need their own large-text checks.
+
+The session generator writes explicit zero/empty values when preferences are
+turned off, so activation environments do not retain stale overrides. The updated
+rdwm wrapper transfers known exports from a bounded child before launching the WM
+and imports even an explicit empty font override. Installing that system wrapper
+requires administrator access; an older installed wrapper still drops the exports.

@@ -133,3 +133,9 @@ renderer binaries while palette, wallpaper, widget and layout changes invalidate
 `tests/e2e/theme-preview-cache.sh` opens the actual Settings gallery on private
 Xvfb, waits for its visible previews to settle, restarts Settings and verifies
 PNG/reference inode, size and mtime are unchanged with no render job running.
+
+Preview workers clear session accessibility environment overrides. They render the
+candidate theme's sample pixels, so enabling high contrast/reduced motion/large
+text cannot seed a different image under the same persistent cache key. A cold
+worker regression compares dock-enabled previews with these session overrides on
+and off; GUI text remains accessible independently of the stored theme image.

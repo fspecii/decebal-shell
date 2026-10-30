@@ -151,6 +151,8 @@ impl<A: WindowApp + 'static> State<A> {
         self.dirty |= resp.redraw;
         match resp.action {
             Some(Action::Close) => self.exit = true,
+            // Targeted navigation still updates the window; Wayland focus requires a compositor activation token.
+            Some(Action::Activate) => {}
             Some(Action::Minimize) => {
                 if let Surf::Window(w) = &self.surf {
                     w.set_minimized();

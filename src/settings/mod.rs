@@ -13,6 +13,7 @@ pub mod iconspane;
 pub mod io;
 pub mod keys;
 pub mod model;
+pub mod navigation;
 pub mod packages;
 #[cfg(test)]
 mod packages_tests;

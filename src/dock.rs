@@ -60,6 +60,8 @@ pub struct Dock {
     /// Smoothed per-item scales; empty until the first animation step.
     eased: Vec<f32>,
     icons: IconCache,
+    reduce_motion: bool,
+    high_contrast: bool,
     #[cfg(test)]
     dimensions_override: Option<(f32, f32)>,
 }
@@ -78,7 +80,13 @@ const BOUNCE_MAX: Duration = Duration::from_secs(8);
 
 impl Dock {
     pub fn new(items: Vec<DockItem>, settings: DockSettings) -> Self {
+        Self::with_preferences(items, settings, crate::accessibility::Preferences::from_env())
+    }
+
+    pub fn with_preferences(items: Vec<DockItem>, settings: DockSettings, preferences: crate::accessibility::Preferences) -> Self {
         Self {
+            reduce_motion: preferences.reduce_motion,
+            high_contrast: preferences.high_contrast,
             items,
             settings,
             hover_x: None,
@@ -134,6 +142,9 @@ impl Dock {
 
     /// Starts the launch bounce for `id`.
     pub fn start_bounce(&mut self, id: &str) {
+        if self.reduce_motion {
+            return;
+        }
         self.bounce.retain(|(b, _)| b != id);
         self.bounce.push((id.to_string(), Instant::now()));
     }
@@ -164,7 +175,7 @@ impl Dock {
     fn target_scales(&self, rest_x: f32, n: usize) -> Vec<f32> {
         let base = self.base_cell_w();
         let sp = self.settings.app_spacing;
-        let mag = (self.settings.magnification - 1.0).max(0.0);
+        let mag = if self.reduce_motion { 0.0 } else { (self.settings.magnification - 1.0).max(0.0) };
         (0..n)
             .map(|i| match self.hover_x {
                 Some(hx) => {
@@ -187,6 +198,11 @@ impl Dock {
     /// Moves the displayed scales toward the pointer's target (about 110 ms to settle, like the
     /// original). Returns true while still animating so the caller keeps ticking.
     pub fn step(&mut self, canvas_w: f32) -> bool {
+        if self.reduce_motion {
+            self.bounce.clear();
+            self.eased = vec![1.0; self.items.len()];
+            return false;
+        }
         let bouncing = self.bouncing();
         let n = self.items.len();
         let rest_x = (canvas_w - self.rest_width()) / 2.0;
@@ -264,7 +280,7 @@ impl Dock {
         let radius = layout_radius(layout.panel_w, self.panel_height(), self.settings.roundness);
         // Theme colours: panel colour, opacity (`dock_alpha` 0.6 = the original look at default settings) and outline.
         let th = crate::theme::th();
-        let alpha = ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0);
+        let alpha = if self.high_contrast { 1.0 } else { ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0) };
         fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, self.panel_height(), radius, th.dock.color(alpha));
         stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, self.panel_height() - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
 
@@ -307,6 +323,25 @@ pub fn layout_radius(w: f32, h: f32, roundness: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reduced_motion_has_static_layout_and_never_starts_bounce() {
+        let mut d = Dock::with_preferences(
+            vec![DockItem::pinned("one", false), DockItem::pinned("two", false)],
+            DockSettings { magnification: 2.0, ..DockSettings::default() },
+            crate::accessibility::Preferences { reduce_motion: true, ..Default::default() },
+        );
+        d.dimensions_override = Some((48.0, 12.0));
+        let (w, _) = d.canvas_size();
+        let rest = d.layout(w as f32);
+        d.hover_x = Some(rest.cells[0].x + rest.cells[0].w / 2.0);
+        d.start_bounce("one");
+        assert!(!d.bouncing());
+        assert!(!d.step(w as f32));
+        assert_eq!(d.layout(w as f32), rest);
+        assert_eq!(d.bounce_offset("one"), 0.0);
+        assert!(rest.cells.iter().all(|cell| cell.scale == 1.0));
+    }
 
     fn dock(n: usize) -> Dock {
         let items = (0..n).map(|i| DockItem::pinned(&format!("app{i}"), i == 0)).collect();

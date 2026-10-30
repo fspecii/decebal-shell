@@ -284,6 +284,10 @@ fn run(j: &Job) -> Result<(), String> {
             .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
             .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
             .env("DECEBAL_SCALE", "1")
+            // Candidate previews are deterministic theme samples, not session overrides.
+            .env_remove("DECEBAL_FONT_SCALE")
+            .env_remove("DECEBAL_HIGH_CONTRAST")
+            .env_remove("DECEBAL_REDUCE_MOTION")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::from(fs::File::create(j.work.join("error.log")).map_err(|e| e.to_string())?));

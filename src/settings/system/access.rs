@@ -67,7 +67,7 @@ pub fn privacy_items(h: &Hub) -> Vec<Item> {
     }
     rows.push(Row::new("Other command").detail("Any program that locks the screen").ctl(Ctl::new("s:prv:custom:", Kind::Text { val: h.ui_access.custom.clone(), hint: "my-locker --flag".into() })));
     let o = lock_timeouts();
-    let tsel = s.lock_secs.and_then(|n| o.iter().position(|(_, v)| v.parse::<u32>().ok() == Some(n))).or(Some(0));
+    let tsel = o.iter().position(|(_, v)| v.parse::<u32>().ok() == Some(s.lock_secs.unwrap_or(600)));
     rows.push(Row::new("Lock after").detail("Idle time before the screen locks").ctl(Ctl::new("s:prv:secs:", Kind::Popup(o, tsel))));
     rows.push(Row::new("Lock when suspending").ctl(Ctl::new("s:prv:suspend:", Kind::Toggle(s.lock_on_suspend))));
     v.push(Item::Card(rows));
@@ -149,14 +149,14 @@ pub fn access_items(h: &Hub) -> Vec<Item> {
         Item::Card(vec![Row::new("Cursor size").detail("Larger pointer; apps pick it up when they start").ctl(Ctl::new("s:acc:cursor:", Kind::Popup(o, sel)))]),
         Item::Header("Motion and text".into()),
         Item::Card(vec![
-            Row::new("Reduce motion").detail("Fewer animations in decebal apps (DECEBAL_REDUCE_MOTION)").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
+            Row::new("Reduce motion").detail("Disables dock magnification and launch bounce").ctl(Ctl::new("s:acc:motion:", Kind::Toggle(s.reduce_motion))),
             Row::new("Text size")
-                .detail("Scales text in decebal apps (DECEBAL_FONT_SCALE)")
+                .detail("Overrides Decebal theme text size (80–200%)")
                 .ctl(Ctl::new("s:acc:font:", Kind::Slider { v: (s.font_scale.unwrap_or(1.0) * 100.0).round() as f64, min: 80.0, max: 200.0, step: 5.0, unit: " %".into() })),
-            Row::new("High contrast").detail("Asks the theme for its high-contrast variant (DECEBAL_HIGH_CONTRAST)").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
+            Row::new("High contrast").detail("Uses opaque, high-contrast Decebal surfaces and text").ctl(Ctl::new("s:acc:contrast:", Kind::Toggle(s.high_contrast))),
         ]),
         Item::Note {
-            text: "These are saved in ~/.config/decebal/session-settings.sh and take effect for programs started after your next login. The theme and appearance settings read the same switches."
+            text: "These are saved in ~/.config/decebal/session-settings.sh and take effect for programs started after your next login. Text size and contrast affect Decebal theme consumers; reduce motion affects the dock."
                 .into(),
             warn: false,
         },

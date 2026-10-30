@@ -12,6 +12,7 @@ pub struct Section {
 }
 
 pub const SECTIONS: &[Section] = &[
+    Section { title: "Start Here", panes: &["welcome"] },
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
     Section { title: "Appearance", panes: &["appearance", "wallpaper", "icons", "widgets", "config"] },
     Section { title: "Displays", panes: &["displays"] },
@@ -31,6 +32,11 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
     ("widgets", "Position", "desktop widget anchor corner edge centre center placement"),
     ("widgets", "Horizontal offset", "widget left right x pixels"),
     ("widgets", "Vertical offset", "widget top bottom y pixels"),
+    (
+        "welcome",
+        "Getting Started",
+        "first session tour onboarding help guide app search spotlight theme palette wallpaper icons widgets create no-code shift snapping gtk all apps reopen shortcuts undo logs recovery launch.log",
+    ),
     ("sound", "Output device", "speakers headphones default sink"),
     ("sound", "Input device", "microphone mic default source"),
     ("sound", "Volume", "loudness level slider"),
