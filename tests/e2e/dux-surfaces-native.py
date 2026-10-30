@@ -179,7 +179,12 @@ def main():
                             env["DECBAR_DEBUG_TRAY"]=str(tray)
                             bar=subprocess.Popen([str(root/"bin/decbar"),"--app","Native fixture"],env=env,stdout=log,stderr=log)
                             processes.append(bar)
-                            wait(lambda:tray.exists() and "Control " in tray.read_text(),"native mainbar tray painted")
+                            try:
+                                wait(lambda:tray.exists() and "Control " in tray.read_text(),"native mainbar tray painted")
+                            except AssertionError:
+                                (evidence / "failed-mainbar-state.json").write_text(json.dumps({"returncode": bar.poll(), "scale": scale, "mode": mode, "tray": tray.read_text() if tray.exists() else None, "config": config}, indent=2))
+                                capture("root", "failed-mainbar-root")
+                                raise
                             bar_window=wait(lambda:run("xdotool","search","--name","^decebal-bar$",check=False),"native bar window").splitlines()[0]
                             control=float(dict(line.split(" ",1) for line in tray.read_text().splitlines())["Control"])
                             run("xdotool","mousemove","--window",bar_window,str(round(control)),"23","click","1")

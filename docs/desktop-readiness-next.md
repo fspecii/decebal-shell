@@ -1,29 +1,38 @@
 # Next desktop-readiness work
 
-Current priorities after the Settings structural redesign and native gesture batch:
+Current priorities after the accepted tracker/sound/popup batch and pending native
+Dux integration:
 
-- Reproduce Dux section by section from local pinned upstream sources; the existing
-  lavender package is an approximation and the user rejected its fidelity. Bar,
-  dashboard/control centre, widgets and remaining shell surfaces need native
-  implementation and matched visual evidence. Keep the improved Settings layout.
-- Fix the live widget host's verified high CPU usage (397.9% in a one-second
-  process-tick sample). Claude owns host/capture/glass scheduling; the Dux owner
-  avoids those files until integration. No performance fix is deployed yet.
-- Hardware-test the new configurable three/four-finger swipes after next login.
-  XI2.4 delivery is best-effort; private backend tests do not prove touchpad support.
-  X11 and Smithay routing, cancellation and end-once recognition are implemented.
-- Settings navigation now works with long runtime paths, with native release
-  navigation/draft/keyboard checks passed and Settings installed. Normal endpoint
-  names and config-mismatch rejection remain compatible; no process restarted.
+- Finish independent review and exact optimized native acceptance for the Dux
+  bar, README-profile dashboard, Control Center and Applications launcher. Root
+  source through `b6b49ef` passes 1,662 library tests and 80 actual-font painter
+  checks; source integration is not a live deployment. Package folder/archive
+  validation passes. A full panel matrix had one startup-probe timeout near its
+  last mainbar case; isolated mainbar and dedicated Control Center/launcher gates
+  pass. Bounded diagnostic full rerun is pending; retain that observation.
+- Continue the actual source-backed replica section by section: the native owner
+  now has the original variable-clock typography task; the sole theme specialist
+  owns its future licensed asset and selector update. Expressive artwork/motion,
+  richer sheets and remaining launcher providers are still missing. Preserve the
+  accepted Settings structure; do not label the complete replica finished.
+- CPU worker defects are repaired and deployed: MPRIS EOF spin and window-group
+  Tracker lifetime. Exact optimized private media/glass and window-group lifecycle
+  checks pass; the observed old ~400% daemon was replaced. This does not establish
+  universal power/FPS/hardware performance. See [current evidence](desktop-readiness-audit.md).
+- Hardware-test configurable three/four-finger gestures on a supported touchpad.
+  The new WM is already running after guarded X11 reload; next login is no longer
+  the activation blocker. XI2.4 best-effort delivery and private injected tests do
+  not prove physical device support.
+- Finish delivery of the source-integrated newcomer improvements: Getting Started
+  consumes cached actual effective shortcuts, with unknown/custom/disconnected
+  states; notification sounds now have accurate search/help/DND wording. Native
+  Welcome fixtures cover 100/200% normal/short and disconnected states, with the
+  documented one-button root correction still needing final production checks.
 
-Checkpoint 2026-10-30 after Settings output-management source `b29e632` and the
-reviewed Settings-only rollout. Latest library gate: **1,617 passed, zero failed,
-ten ignored**; formatting and strict all-target Clippy passed. Exact release
-Wayland, X11 and forced-X11-in-Wayland native checks passed; see the
-[current evidence matrix](desktop-readiness-audit.md).
-
-Remaining product gaps also include actual bar-item editing lists, full Files
-layouts and screen-reader accessibility; theme/profile labels alone do not satisfy them.
+Remaining product gaps include true Explorer/Finder file-manager workflows,
+AT-SPI/screen-reader operation, portals/capture and full Wayland widgets/shadows,
+physical output/audio/network/input acceptance, and a complete new-user/upgrade
+release matrix. Theme/profile labels alone do not satisfy those requirements.
 
 ## 1. Third-party application indicators
 
