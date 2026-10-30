@@ -57,12 +57,26 @@ def main():
                    DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0")
         for k in ("WAYLAND_DISPLAY", "RDWM_SOCK", "DECSETTINGS_CONFIG", "HYPRLAND_INSTANCE_SIGNATURE"):
             env.pop(k, None)
+        # Inherited overrides must not route this capture into the user's assets or IPC.
+        for k in ("XAUTHORITY", "SESSION_MANAGER", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE", "AT_SPI_BUS_ADDRESS"):
+            env.pop(k, None)
+        for k, d in {"XDG_CONFIG_DIRS": "no-config", "XDG_DATA_DIRS": "no-data", "DECEBAL_THEMES": "themes",
+                     "DECEBAL_SYSTEM_THEMES": "system-themes", "DECEBAL_PALETTES": "palettes", "DECEBAL_WIDGETS": "widgets"}.items():
+            path = root / d
+            path.mkdir(exist_ok=True)
+            env[k] = str(path)
+        env.update(XDG_SESSION_TYPE="x11", RDWMCTL="/nonexistent/rdwmctl", RDWM_SOCK=str(root / "no-wm.sock"))
         cfg = root / "config.toml"
         cfg.write_text("[general]\nborder_px = 2\ngap_inner = 6\n")
         with (root / "xvfb.log").open("w") as log:
             xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", "2600x1700x24", "-nolisten", "tcp"], env=env, stdout=log, stderr=log)
         try:
-            wait_for(lambda: Path(f"/tmp/.X11-unix/X{display[1:]}").exists())
+            def owned_display():
+                if xvfb.poll() is not None:
+                    raise RuntimeError("Private Xvfb exited before becoming ready")
+                lock = Path(f"/tmp/.X{display[1:]}-lock")
+                return lock.exists() and int(lock.read_text().strip()) == xvfb.pid and Path(f"/tmp/.X11-unix/X{display[1:]}").exists()
+            wait_for(owned_display)
             for c in cases:
                 e = dict(env)
                 mode = c.get("mode", "dark")
