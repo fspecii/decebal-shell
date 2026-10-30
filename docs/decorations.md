@@ -7,7 +7,7 @@ actual offline `rdwmctl schema --offline` output. No rdwm renderer was duplicate
 or edited. This first delivery exposes existing implementations, not new ports.
 
 Appearance → Customise → Window style now has a **Button and titlebar design**
-picker for 14 real supported IDs. An older live rdwm only sees its supported
+picker for 17 real supported IDs (14 original plus the three XFCE-inspired styles below). An older live rdwm only sees its supported
 subset. The refreshed offline schema exposes the modern set too. Border-only is
 excluded because it cannot meet the close/minimise/maximise requirement; existing
 hand-authored border-only configurations remain loadable.
@@ -43,6 +43,9 @@ snapshot should move with its corresponding native renderer version.
 | `gruvbox` | Right / Square / Lights | 28 / 4 px | Exposed: [dark](decorations/native/gruvbox-dark-1x.png), [light](decorations/native/gruvbox-light-1x.png) |
 | `dracula` | Left / Circle / Lights | 28 / 8 px | Exposed: [dark](decorations/native/dracula-dark-1x.png), [light](decorations/native/dracula-light-1x.png) |
 | `minimal` | Right / Circle / Lights | 20 / 0 px | Exposed: [dark](decorations/native/minimal-dark-1x.png), [light](decorations/native/minimal-light-1x.png) |
+| `xfce-default` | Right / Square / Bevel | 29 / 3 px | Exposed: [dark](decorations/native/xfce-default-dark-1x.png), [light](decorations/native/xfce-default-light-1x.png) |
+| `xfce-daloa` | Right / Cell / Bevel | 24 / 0 px | Exposed: [dark](decorations/native/xfce-daloa-dark-1x.png), [light](decorations/native/xfce-daloa-light-1x.png) |
+| `xfce-kokodi` | Right / Circle / Ghost | 30 / 8 px | Exposed: [dark](decorations/native/xfce-kokodi-dark-1x.png), [light](decorations/native/xfce-kokodi-light-1x.png) |
 | `borderonly` | Right / Circle / Ghost | 8 / 0 px | Diagnostic only; no buttons: [dark](decorations/native/borderonly-dark-1x.png), [light](decorations/native/borderonly-light-1x.png) |
 
 The named GNOME/Adwaita, KDE/Breeze, Arc and Material designs already exist in
@@ -60,6 +63,24 @@ This delivery redistributes no artwork, GTK/Qt theme files or proprietary button
 assets from them. The existing native code and generated previews use rdwm's MIT
 implementation; the source family names remain attribution/reference labels.
 
+## XFCE-inspired styles (rdwm `cd2f42b`)
+
+`xfce-default`, `xfce-daloa` and `xfce-kokodi` are rdwm's own native interpretations of the xfwm4 themes of the same
+names: **inspired approximations, not exact ports** (see rdwm's `docs/XFCE-DECORATIONS.md`: no upstream artwork, SVG,
+pixmap or code is vendored; xfwm4's themes are GPL-2.0, so only names and the general look are referenced). They appear in
+the same picker as "Xfce Default · raised controls", "Xfce Daloa · blue caption cells" and "Xfce Kokodi · rounded blue",
+and the Appearance search finds them by `xfce`, `xfwm4`, `daloa`, `kokodi`, `raised` or `bevel`. Their heights, radii,
+button sizes, gaps, margins and title alignment come from the renderer through the same metadata export as the other
+styles; nothing is guessed. Choosing one applies the same transaction as every other design.
+
+An older live rdwm that predates these IDs reports a shorter `decoration.style` choice list and is only offered what it
+reports (`choices()` filters by the live schema); the bundled schema is the offline fallback.
+
+The bundled `rdwm-schema.json` was regenerated from a `rdwmctl` built at `cd2f42b` (`rdwmctl schema --offline`): its
+`decoration_styles` table and the `decoration.style` choices carry the new IDs. The four window-shadow keys that the same
+output also lists were deliberately **not** copied: the installed rdwmctl does not know them yet and
+`snapshot_matches_installed_rdwmctl_if_any` forbids keys a deployed rdwm lacks. Take them with the next rdwm refresh.
+
 ## Reproduction and QA
 
 ```
@@ -70,7 +91,7 @@ helper=target/decoration-preview-helper/target/debug/decebal-deco-preview
 ```
 
 The optional helper compiles against read-only rdwm-deco; all build files stay
-in this checkout's ignored target/. It generated 60 native sheets: 15 IDs ×
+in this checkout's ignored target/. It generated 72 native sheets: 18 IDs ×
 dark/light neutral application palettes × 1×/2×. Each sheet contains focused,
 unfocused, close-hover, minimise-hover and maximise-hover rows. The exact drawn
 button-center hit areas are tested through rdwm-deco's real hit-test function at
@@ -84,7 +105,7 @@ render scales. Artifacts were built under `target/rdwm-decoration-audit`; no
 rdwm source, runtime binary or live WM/session changed. GUI clicks on live
 application windows were deliberately not used as a test.
 
-Decebal's tests cover the supported-set filter, all 14 design transactions,
+Decebal's tests cover the supported-set filter, all 17 design transactions,
 native defaults, enabled controls, color/font/DPI preservation, explicit zoom
 choice retention and search indexing. Native picker UI evidence is generated
 headlessly by the ignored `native_decoration_picker_evidence` test using private

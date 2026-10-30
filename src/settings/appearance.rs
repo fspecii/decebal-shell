@@ -443,7 +443,7 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
         Tab::Customise,
         Section::WindowStyle,
         "Button and titlebar design",
-        "macos classic windows gnome adwaita kde breeze arc material materia nord gruvbox dracula minimal titlebar decoration button look",
+        "macos classic windows gnome adwaita kde breeze arc material materia nord gruvbox dracula minimal xfce xfwm xfwm4 default daloa kokodi raised bevel titlebar decoration button look",
     ),
     (Tab::Customise, Section::WindowStyle, "Title bar height", "titlebar size thick"),
     (Tab::Customise, Section::WindowStyle, "Window corner radius", "rounded titlebar radius"),
@@ -671,6 +671,29 @@ mod tests {
         }
         let h = crate::settings::system::registry::search("accent", &[]);
         assert!(h.iter().any(|x| x.label.as_deref() == Some("Accent colour")), "{h:?}");
+    }
+
+    #[test]
+    fn xfce_styles_are_found_by_search_and_offered_in_the_window_style_picker() {
+        for q in ["xfce", "daloa", "kokodi", "xfwm4"] {
+            let h = crate::settings::system::registry::search(q, &[]);
+            assert!(h.iter().any(|x| x.label.as_deref() == Some("Button and titlebar design")), "{q}: {h:?}");
+        }
+        let (mut m, _) = model_with("[decoration]\nenabled = true\n");
+        m.sel.tab = Tab::Customise;
+        m.sel.section = Section::WindowStyle;
+        let values: Vec<String> = items(&m)
+            .into_iter()
+            .filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None })
+            .flatten()
+            .flat_map(|r| r.ctls)
+            .filter(|c| c.id == "r:decoration:style")
+            .flat_map(|c| if let Kind::Popup(o, _) = c.kind { o.into_iter().map(|(_, v)| v).collect() } else { Vec::new() })
+            .collect();
+        for id in ["xfce-default", "xfce-daloa", "xfce-kokodi", "adwaita"] {
+            assert!(values.iter().any(|v| v == id), "{id} not offered: {values:?}");
+        }
+        assert!(!values.iter().any(|v| v == "borderonly"));
     }
 
     #[test]

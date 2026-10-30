@@ -479,6 +479,87 @@
         "#bbbbbb",
         "#333333"
       ]
+    },
+    {
+      "border": 1,
+      "button_gap": 2,
+      "button_margin": 5,
+      "button_size": 19,
+      "buttons": true,
+      "desc": "XFCE Default inspired: neutral grey, compact raised controls (native approximation)",
+      "focused": [
+        "#c7c7c7",
+        "#202020",
+        "#777777"
+      ],
+      "glyphs": "classic",
+      "height": 29,
+      "look": "bevel",
+      "name": "xfce-default",
+      "radius": 3,
+      "shape": "square",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#dedede",
+        "#858585",
+        "#999999"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 24,
+      "buttons": true,
+      "desc": "XFCE Daloa inspired: blue strip, adjoining caption cells (native approximation)",
+      "focused": [
+        "#527ba5",
+        "#ffffff",
+        "#284c71"
+      ],
+      "glyphs": "classic",
+      "height": 24,
+      "look": "bevel",
+      "name": "xfce-daloa",
+      "radius": 0,
+      "shape": "cell",
+      "side": "right",
+      "title": true,
+      "title_align": "left",
+      "unfocused": [
+        "#c4c4c4",
+        "#777777",
+        "#999999"
+      ]
+    },
+    {
+      "border": 1,
+      "button_gap": 3,
+      "button_margin": 6,
+      "button_size": 20,
+      "buttons": true,
+      "desc": "XFCE Kokodi inspired: rounded blue header, separated round controls (native approximation)",
+      "focused": [
+        "#5385b3",
+        "#ffffff",
+        "#355b7e"
+      ],
+      "glyphs": "classic",
+      "height": 30,
+      "look": "ghost",
+      "name": "xfce-kokodi",
+      "radius": 8,
+      "shape": "circle",
+      "side": "right",
+      "title": true,
+      "title_align": "center",
+      "unfocused": [
+        "#d1d5d9",
+        "#7a8188",
+        "#999999"
+      ]
     }
   ],
   "keys": [
@@ -847,7 +928,10 @@
         "gruvbox",
         "dracula",
         "minimal",
-        "borderonly"
+        "borderonly",
+        "xfce-default",
+        "xfce-daloa",
+        "xfce-kokodi"
       ],
       "default": "macos",
       "desc": "Titlebar style (see decoration_styles)",

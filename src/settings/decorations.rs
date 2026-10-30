@@ -1,4 +1,5 @@
 //! Audited structural titlebar designs implemented by rdwm-deco. Not desktop palettes.
+//! The three Xfce entries are rdwm's native approximations inspired by xfwm4 themes, not exact ports (docs/decorations.md).
 use super::{
     schema::Schema,
     tomlcfg::{Cfg, Val},
@@ -19,6 +20,9 @@ pub const DESIGNS: &[(&str, &str)] = &[
     ("Dracula · traffic lights left", "dracula"),
     ("Minimal · small dots", "minimal"),
     ("Classic · flat strip", "classic"),
+    ("Xfce Default · raised controls", "xfce-default"),
+    ("Xfce Daloa · blue caption cells", "xfce-daloa"),
+    ("Xfce Kokodi · rounded blue", "xfce-kokodi"),
 ];
 
 /// Respect an older live rdwm's actual supported set. The updated frozen schema is the offline fallback.
@@ -64,18 +68,58 @@ mod tests {
     fn catalogue_matches_supported_schema_and_never_offers_no_buttons() {
         let schema = Schema::snapshot();
         let options = choices(&schema);
-        assert_eq!(options.len(), 14);
+        assert_eq!(options.len(), 17);
         for (_, id) in &options {
             assert!(default_value(id, "height").is_some());
         }
         assert!(!options.iter().any(|(_, s)| *s == "borderonly"));
-        for id in ["adwaita", "breeze", "arc", "materia"] {
+        for id in ["adwaita", "breeze", "arc", "materia", "xfce-default", "xfce-daloa", "xfce-kokodi"] {
             assert!(options.iter().any(|(_, s)| *s == id));
         }
+        // A live rdwm from before the Xfce styles (the previous frozen set) must not be offered IDs it cannot parse.
+        let mut previous = schema.clone();
+        previous.keys.iter_mut().find(|m| m.section == "decoration" && m.key == "style").unwrap().choices =
+            ["macos", "macos-light", "classic", "windows", "windows-light", "adwaita", "adwaita-light", "breeze", "arc", "materia", "nord", "gruvbox", "dracula", "minimal", "borderonly"]
+                .map(String::from)
+                .to_vec();
+        let offered = choices(&previous);
+        assert_eq!(offered.len(), 14);
+        assert!(!offered.iter().any(|(_, s)| s.starts_with("xfce-")), "unsupported IDs are never offered to an older rdwm");
         let mut older = schema;
         older.keys.iter_mut().find(|m| m.section == "decoration" && m.key == "style").unwrap().choices = vec!["macos".into(), "classic".into()];
         assert_eq!(choices(&older), vec![("macOS · traffic lights left", "macos"), ("Classic · flat strip", "classic")]);
     }
+    #[test]
+    fn xfce_designs_use_the_native_renderers_own_metrics() {
+        // Values exported by the actual rdwm-deco renderer (tools/build-decoration-preview.py metadata), not guessed defaults.
+        let expected = [("xfce-default", 29, 3, 19, 2, 5, "center"), ("xfce-daloa", 24, 0, 24, 0, 0, "left"), ("xfce-kokodi", 30, 8, 20, 3, 6, "center")];
+        for (id, height, radius, size, gap, margin, align) in expected {
+            assert_eq!(default_value(id, "height"), Some(Val::Int(height)), "{id}");
+            assert_eq!(default_value(id, "radius"), Some(Val::Int(radius)), "{id}");
+            assert_eq!(default_value(id, "button_size"), Some(Val::Int(size)), "{id}");
+            assert_eq!(default_value(id, "button_gap"), Some(Val::Int(gap)), "{id}");
+            assert_eq!(default_value(id, "button_margin"), Some(Val::Int(margin)), "{id}");
+            assert_eq!(default_value(id, "title_align"), Some(Val::Str(align.into())), "{id}");
+            assert!(DESIGNS.iter().any(|(label, s)| *s == id && label.starts_with("Xfce")));
+        }
+    }
+
+    #[test]
+    fn every_design_has_a_complete_catalogue_row_and_a_schema_choice() {
+        let schema = Schema::snapshot();
+        let supported = &schema.get("decoration", "style").unwrap().choices;
+        for (label, id) in DESIGNS {
+            assert!(supported.iter().any(|c| c == id), "{label} missing from the frozen schema");
+            for key in ["height", "radius", "button_size", "button_gap", "button_margin", "border_px", "title_align"] {
+                assert!(default_value(id, key).is_some(), "{id} lacks native default {key}");
+            }
+        }
+        let mut ids: Vec<_> = DESIGNS.iter().map(|(_, s)| *s).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), DESIGNS.len(), "duplicate design id");
+    }
+
     #[test]
     fn every_design_restores_geometry_and_all_controls_without_recoloring() {
         for (_, id) in DESIGNS {

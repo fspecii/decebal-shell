@@ -238,5 +238,53 @@
     "look": "Ghost",
     "shape": "Circle",
     "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 2,
+      "button_margin": 5,
+      "button_size": 19,
+      "height": 29,
+      "radius": 3,
+      "title_align": "center"
+    },
+    "description": "XFCE Default inspired: neutral grey, compact raised controls (native approximation)",
+    "id": "xfce-default",
+    "look": "Bevel",
+    "shape": "Square",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 24,
+      "height": 24,
+      "radius": 0,
+      "title_align": "left"
+    },
+    "description": "XFCE Daloa inspired: blue strip, adjoining caption cells (native approximation)",
+    "id": "xfce-daloa",
+    "look": "Bevel",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 3,
+      "button_margin": 6,
+      "button_size": 20,
+      "height": 30,
+      "radius": 8,
+      "title_align": "center"
+    },
+    "description": "XFCE Kokodi inspired: rounded blue header, separated round controls (native approximation)",
+    "id": "xfce-kokodi",
+    "look": "Ghost",
+    "shape": "Circle",
+    "side": "Right"
   }
 ]

@@ -1812,7 +1812,12 @@ mod key_tests {
         a.draw(&mut pixels);
         let control = a.frame.placed.iter().find(|p| p.ctl.id == "r:decoration:style").expect("design picker present").clone();
         a.open_popup(&control);
-        assert_eq!(a.popup.as_ref().unwrap().opts.len(), 14);
+        assert_eq!(a.popup.as_ref().unwrap().opts.len(), 17);
+        // The list scrolls: End (the real key path) reaches the last entry so the Xfce designs are in the evidence.
+        a.key(&ev(Key::End, None));
+        let popup = a.popup.as_ref().unwrap();
+        assert_eq!((popup.hover, popup.opts[16].1.as_str()), (Some(16), "xfce-kokodi"));
+        assert!(popup.top + popup.visible >= 17);
         a.draw(&mut pixels);
         if let Some(dir) = std::env::var_os("DECEBAL_DECORATION_EVIDENCE") {
             let dir = std::path::PathBuf::from(dir);

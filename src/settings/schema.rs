@@ -96,8 +96,10 @@ mod tests {
         assert!(s.keys.len() > 60 && s.layouts.len() >= 20 && s.actions.contains(&"spawn".to_string()));
         let m = s.get("general", "mfact").unwrap();
         assert_eq!((m.min, m.max), (Some(0.05), Some(0.95)));
-        assert_eq!(s.get("decoration", "style").unwrap().choices.len(), 15);
-        assert!(s.get("decoration", "style").unwrap().choices.contains(&"adwaita".to_string()));
+        assert_eq!(s.get("decoration", "style").unwrap().choices.len(), 18);
+        for id in ["adwaita", "xfce-default", "xfce-daloa", "xfce-kokodi"] {
+            assert!(s.get("decoration", "style").unwrap().choices.contains(&id.to_string()), "{id}");
+        }
     }
 
     /// When an rdwmctl is reachable (RDWMCTL env, PATH or the sibling rdwm worktree) the bundled
