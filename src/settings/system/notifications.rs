@@ -3,7 +3,8 @@
 //! Stored in `~/.config/decebal/notifications.toml` (read by the notification daemon, decnotify):
 //!
 //! ```toml
-//! dnd = false                 # do not disturb: no banners (notifications are still kept in the history)
+//! dnd = false                 # silent; critical banners may still appear; history is kept
+//! sounds = false              # optional event sounds
 //! banner_seconds = 5          # how long a banner stays: 1..=60, 0 = until clicked
 //! muted_apps = ["Slack"]      # app names (the notification's app_name, matched case-insensitively): no banner, no sound
 //! ```
@@ -105,20 +106,20 @@ pub struct Ui {
 pub fn items(h: &Hub) -> Vec<Item> {
     let c = &h.notif;
     let mut v = vec![Item::Header("Do Not Disturb".into())];
-    v.push(Item::Card(vec![Row::new("Do Not Disturb").detail("Silence banners and sounds; notifications are still kept").ctl(Ctl::new("s:not:dnd:", Kind::Toggle(c.dnd)))]));
+    v.push(Item::Card(vec![Row::new("Do Not Disturb").detail("Silence sounds and quiet banners; critical alerts can still appear").ctl(Ctl::new("s:not:dnd:", Kind::Toggle(c.dnd)))]));
     v.push(Item::Header("Banners".into()));
     v.push(Item::Card(vec![
         Row::new("Banner duration")
             .detail(if c.banner_seconds == 0 { "Banners stay until you click them".to_string() } else { "How long a banner stays on screen".to_string() })
             .ctl(Ctl::new("s:not:secs:", Kind::Stepper { v: c.banner_seconds as f64, min: 0.0, max: 60.0, step: 1.0, unit: " s".into() })),
-        Row::new("Notification sounds").detail("Play event sounds with canberra-gtk-play; silent during Do Not Disturb").ctl(Ctl::new("s:not:sounds:", Kind::Toggle(c.sounds))),
+        Row::new("Notification sounds").detail("Play event sounds; silent during Do Not Disturb").ctl(Ctl::new("s:not:sounds:", Kind::Toggle(c.sounds))),
         Row::new("Send a test notification").detail("Needs notify-send and a running notification daemon").ctl(Ctl::new("s:not:test:", Kind::Button { label: "Send test".into(), danger: false })),
     ]));
     v.push(Item::Header("Muted apps".into()));
     let mut rows: Vec<Row> =
         c.muted_apps.iter().enumerate().map(|(i, a)| Row::new(a.clone()).ctl(Ctl::new(format!("s:not:unmute:{i}"), Kind::Button { label: "Unmute".into(), danger: false }))).collect();
     if rows.is_empty() {
-        rows.push(Row::new("No muted apps").detail("Muted apps never show banners"));
+        rows.push(Row::new("No muted apps").detail("Muted apps never show banners or play sounds"));
     }
     rows.push(
         Row::new("Mute an app")
@@ -175,6 +176,10 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
         n.save(&h.sh.dir)?;
         h.notif = n;
         h.dirty = true;
+        // Check only on the explicit enable action, never while building/painting rows.
+        if act == "sounds" && h.notif.sounds && !h.sh.runner.exists("canberra-gtk-play") {
+            h.say("Sounds are enabled, but canberra-gtk-play is not installed. Install it and restart notifications to hear sounds.", true);
+        }
         Ok(())
     })();
     if let Err(e) = r {
@@ -191,7 +196,7 @@ mod tests {
     fn hub(n: &str) -> (Hub, std::path::PathBuf, Arc<FakeRunner>) {
         let d = std::env::temp_dir().join(format!("ms-not-{n}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
-        let fr = Arc::new(FakeRunner::lenient().have("notify-send"));
+        let fr = Arc::new(FakeRunner::lenient().have("notify-send").have("canberra-gtk-play"));
         (Hub::with(fr.clone(), d.clone(), Arc::new(|| {})), d, fr)
     }
 
@@ -239,6 +244,20 @@ mod tests {
         apply(&mut h, "mute", "", CtlVal::Click);
         assert!(h.msgs.last().unwrap().0.contains("name"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn missing_sound_player_explains_the_saved_preference() {
+        let (mut h, d, _) = hub("no-sound-player");
+        h.sh = Hub::with(Arc::new(FakeRunner::new()), d.clone(), Arc::new(|| {})).sh;
+        apply(&mut h, "sounds", "", CtlVal::Bool(true));
+        assert!(NotifCfg::load(&d).sounds, "the requested preference is kept");
+        assert!(h.msgs.iter().any(|m| m.1 && m.0.contains("canberra-gtk-play is not installed")));
+        h.msgs.clear();
+        apply(&mut h, "sounds", "", CtlVal::Bool(false));
+        assert!(h.msgs.is_empty(), "disabling never requires a player");
+        assert!(!NotifCfg::load(&d).sounds);
+        let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]

@@ -18,9 +18,10 @@ Usage:
   decnotify -h | -V
 
 Settings: ~/.config/decebal/notifications.toml
-  dnd = false            # do not disturb: banners are hidden, history still records (critical still shows)
+  dnd = false            # silence sounds and quiet banners; critical banners may still appear; history is kept
+  sounds = false         # optional event sounds; needs canberra-gtk-play and a sound theme
   banner_seconds = 5     # how long a banner stays
-  muted_apps = []        # app names / desktop-entry ids that never show";
+  muted_apps = []        # app names / desktop-entry ids that never show banners or play sounds";
 
 fn die(msg: &str) -> ! {
     eprintln!("decnotify: {msg}");
@@ -135,6 +136,13 @@ fn daemon() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn help_documents_silent_defaults_and_critical_banner_exception() {
+        assert!(HELP.contains("sounds = false"));
+        assert!(HELP.contains("critical banners may still appear"));
+        assert!(HELP.contains("never show banners or play sounds"));
+    }
+
     #[test]
     fn history_status_decodes_typed_persistence_state() {
         let call = decebal::dbus::Message::call("org.test", "/Test", "org.test", "Test", "", vec![]);

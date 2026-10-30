@@ -68,6 +68,7 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
     ("inputdev", "Tap to click", "touchpad tapping"),
     ("notifications", "Do Not Disturb", "dnd focus silence"),
     ("notifications", "Banner duration", "timeout seconds"),
+    ("notifications", "Notification sounds", "alert audio event sound silence"),
     ("notifications", "Muted apps", "per app mute"),
     ("power", "Power profile", "performance balanced power saver"),
     ("power", "Turn screen off", "blank dpms idle timeout display sleep"),
@@ -218,6 +219,15 @@ mod tests {
     fn every_indexed_setting_points_at_a_real_pane() {
         for (pid, label, _) in SETTINGS {
             assert!(pane_index(pid).is_some(), "{pid}: {label}");
+        }
+    }
+
+    #[test]
+    fn notification_sound_queries_find_the_actual_control() {
+        let notifications = pane_index("notifications").unwrap();
+        for q in ["notification sound", "alert audio", "event sound"] {
+            let h = search(q, &[]);
+            assert!(h.iter().any(|x| x.pane == notifications && x.label.as_deref() == Some("Notification sounds")), "{q}: {h:?}");
         }
     }
 
