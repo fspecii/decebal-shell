@@ -1,0 +1,36 @@
+{
+  "inspected_on": "2026-10-30",
+  "shell_commit": "46a12d915203a6bf296f26cab251c55efa6499ab",
+  "plugins_commit": "a55bb40da2f70640600a520ea05eac9c3540f1af",
+  "registry_commit": "f3079becbf35f4f48d46879fa46cb867f15771f9",
+  "sources": {
+    "LICENSE": {
+      "sha256": "4cee96286c5b7da9763a4694868bb1853b33bb1558821e0c609ad2eabd426bfa",
+      "url": "https://github.com/duxlabs-dev/dux-shell/blob/46a12d915203a6bf296f26cab251c55efa6499ab/LICENSE"
+    },
+    "quickshell/Common/StockThemes.js": {
+      "sha256": "bdc1a39b4139fb8a918d407e78d1cdd4617f68bdc1319e3f9220fcdcf173dd4d",
+      "url": "https://github.com/duxlabs-dev/dux-shell/blob/46a12d915203a6bf296f26cab251c55efa6499ab/quickshell/Common/StockThemes.js"
+    },
+    "quickshell/Common/Theme.qml": {
+      "sha256": "0611ef109619bc5f6cdb5449ce3e4259a144ee1f78caa9565dc6cabaa7fc05ae",
+      "url": "https://github.com/duxlabs-dev/dux-shell/blob/46a12d915203a6bf296f26cab251c55efa6499ab/quickshell/Common/Theme.qml"
+    },
+    "quickshell/Modules/DDash/OverviewTab.qml": {
+      "sha256": "5750bea63cbb630af2978a9d4733e9d1ed8eed58808ecfeba71df353f9fa5a49",
+      "url": "https://github.com/duxlabs-dev/dux-shell/blob/46a12d915203a6bf296f26cab251c55efa6499ab/quickshell/Modules/DDash/OverviewTab.qml"
+    },
+    "quickshell/Modules/DDash/Overview/WellbeingOverviewCard.qml": {
+      "sha256": "9cbebd75833992d757525e45ccb23330e7310dd21e179b9ec01bb0b090123859",
+      "url": "https://github.com/duxlabs-dev/dux-shell/blob/46a12d915203a6bf296f26cab251c55efa6499ab/quickshell/Modules/DDash/Overview/WellbeingOverviewCard.qml"
+    },
+    "desktop_screenshot": {
+      "sha256": "1efbf84551d41bd7fa084b867116743dee272133d40e0e4f83f705572fc076f5",
+      "redistributed": false
+    },
+    "dashboard_screenshot": {
+      "sha256": "c987eaa5545ddb0ac0946ca7653b552b7abbf78c8c988b635610aa297b5f4996",
+      "redistributed": false
+    }
+  }
+}

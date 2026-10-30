@@ -40,14 +40,17 @@ fn catalogue_covers_shipped_designs_with_reviewed_sfw_provenance() {
         })
         .collect();
     assert_eq!(themes.keys().cloned().collect::<BTreeSet<_>>(), shipped);
-    assert_eq!(themes.len(), 21);
+    assert_eq!(themes.len(), 22);
     assert!(catalogue["scope"]["uncovered_theme_ids"].as_array().unwrap().is_empty());
     let mut used = BTreeSet::new();
     for (theme, record) in themes {
         assert!(!record["placement"].as_str().unwrap().is_empty(), "{theme}");
         for mode in ["dark", "light"] {
             let id = record[mode]["image_id"].as_str().unwrap();
-            assert!(used.insert(id), "each choice in this batch is individually distinct: {id}");
+            // Dux intentionally reuses two inspected photos; provenance remains per-image.
+            if theme != "dux-lavender" {
+                assert!(used.insert(id), "original curation choices stay individually distinct: {id}");
+            }
             let image = &images[id];
             assert_eq!(image["id"], id);
             assert_eq!(image["page_url"], format!("https://wallhaven.cc/w/{id}"));

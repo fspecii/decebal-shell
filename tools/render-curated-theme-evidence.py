@@ -2,8 +2,9 @@
 """Native, isolated package evidence. No network or live apply.
 
 By default render the actual package (no photograph if it has none). Optional
---dark-photo / --light-photo build a TEMPORARY QA package with those already
-cached images. The real package remains untouched; photo output stays in /tmp.
+--dark-photo / --light-photo stage those already
+cached images in the private independent-wallpaper cache. The real package
+remains untouched; photo output stays in /tmp.
 """
 import argparse
 import hashlib
@@ -34,22 +35,28 @@ with tempfile.TemporaryDirectory(prefix='decebal-curated-qa-') as tmp:
     private = Path(tmp)
     package = private / 'themes' / a.theme
     shutil.copytree(source, package)
-    manifest = package / 'theme.toml'
     if photos:
-        # Aster deliberately omits wallpaper. Avoid duplicate sections/ambiguous inheritance.
-        text = manifest.read_text()
-        if '[wallpaper]' in text or '\ninherit' in text:
-            p.error('photo QA requires an explicit package without wallpaper/inheritance')
-        (package / 'wallpapers').mkdir()
+        # Current previews resolve curated choices from independent backgrounds,
+        # not package wallpaper metadata. No manifest mutation or live selection.
+        catalogue = json.loads((root/'data/wallhaven-curated.json').read_text())
+        choices = catalogue['themes'].get(a.theme)
+        if not choices:
+            p.error('photo evidence requires a reviewed catalogue profile')
+        backgrounds = private/'config/backgrounds'
+        backgrounds.mkdir(parents=True)
         metadata = {}
         for mode in ('dark', 'light'):
             photo = getattr(a, mode + '_photo').resolve()
-            shutil.copyfile(photo, package / 'wallpapers' / (mode + photo.suffix))
-            metadata[mode] = {'source': str(photo), 'sha256': hashlib.sha256(photo.read_bytes()).hexdigest()}
-        text += '\n[wallpaper]\nmode = "fill"\n' + ''.join(f'{m} = "wallpapers/{m}{getattr(a,m+"_photo").suffix}"\n' for m in ('dark','light'))
-        manifest.write_text(text)
+            ident = choices[mode]['image_id']
+            digest = hashlib.sha256(photo.read_bytes()).hexdigest()
+            if digest != catalogue['images'][ident]['full_resolution_review']['sha256']:
+                p.error(f'{mode} must be the exact reviewed {ident} original')
+            shutil.copyfile(photo, backgrounds/f'wallhaven-{ident}{photo.suffix}')
+            metadata[mode] = {'image_id': ident, 'source': str(photo), 'sha256': digest}
         (a.out / 'private-photo-inputs.json').write_text(json.dumps(metadata, indent=2) + '\n')
-    env = dict(os.environ, DECEBAL_CONFIG=str(private/'config'), DECEBAL_THEMES=str(private/'themes'),
+    env = dict(os.environ, HOME=str(private), XDG_CONFIG_HOME=str(private/'xdg-config'),
+               XDG_DATA_HOME=str(private/'data'), XDG_STATE_HOME=str(private/'state'),
+               XDG_RUNTIME_DIR=str(private/'runtime'), DECEBAL_CONFIG=str(private/'config'), DECEBAL_THEMES=str(private/'themes'),
                DECEBAL_SYSTEM_THEMES=str(private/'no-system'), DECEBAL_PALETTES=str(root/'palettes'),
                XDG_CACHE_HOME=str(private/'cache'), DECEBAL_SYSTEM_AUTOMATIC='0', DISPLAY='',
                WAYLAND_DISPLAY='', DBUS_SESSION_BUS_ADDRESS='unix:path=/nonexistent')

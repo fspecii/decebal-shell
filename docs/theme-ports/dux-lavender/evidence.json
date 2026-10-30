@@ -1,0 +1,192 @@
+{
+  "data": "Fixed labelled sample/unavailable states; no live providers",
+  "base": "08c07a2",
+  "shared_widgets": [
+    "de48c1c",
+    "37c115f"
+  ],
+  "files": {
+    "docs/theme-ports/dux-lavender/captions/materia-dark-1x.png": {
+      "size": [
+        680,
+        200
+      ],
+      "sha256": "27a191f230fa99e67c6f78fb2a7315fb03e4d3b1e83345e12f0dc8e92011c9e9"
+    },
+    "docs/theme-ports/dux-lavender/captions/materia-dark-2x.png": {
+      "size": [
+        1360,
+        400
+      ],
+      "sha256": "3e8bc875be68d4a5ff59f9b0091a3f5824296792eb7d2b15a14843e4eee14b82"
+    },
+    "docs/theme-ports/dux-lavender/captions/materia-light-1x.png": {
+      "size": [
+        680,
+        200
+      ],
+      "sha256": "8a27f3120d216fad45c9e956af8aaffa5d12ea68803dc92242420b00b09dd17c"
+    },
+    "docs/theme-ports/dux-lavender/captions/materia-light-2x.png": {
+      "size": [
+        1360,
+        400
+      ],
+      "sha256": "a855dbdf56b4ab395a2326a96fac4f49d454a79f881220ec678699cfb60b4828"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-missing.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "29612a157aac05d9a3ee9b56bb7afb7aac9de1795f9297f0d1636731cf2fafc8"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-dark-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "94b5ba06fb6ed3683a3c189925eda2408ffb6c37ee1e28d43774d79db9a3d509"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-missing.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "d294e803f5aff3eb252b4a3c8e958dbf8ed57c6528919f24a4ed91c1399dac5c"
+    },
+    "docs/theme-ports/dux-lavender/widgets/clock-card-light-sample.png": {
+      "size": [
+        236,
+        136
+      ],
+      "sha256": "acd63e0d3c40778bf653f9ac7e2275e3c4f48472f71a18da604e877a8e3ed6f9"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-200-sample.png": {
+      "size": [
+        320,
+        363
+      ],
+      "sha256": "d8f3bb7c6836b4691c942c2a041610d5aa29759a0d54b59dd8bafb676a106463"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-missing.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "0dcd76c8ab1dfeb450095e9f1b5f8db796d687d08e13bfc5da46e481aec28863"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-dark-sample.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "af7d672f10436af1b9fd56ff1de08ba7dd0ce4ea2574fd68d30e9b7059414bc9"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-200-sample.png": {
+      "size": [
+        320,
+        363
+      ],
+      "sha256": "b3a6d36d1a50b8dfbefbc54823253f3926786e12e9ad2a4e04c85e630c88b788"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-missing.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "c23db28ce0ad4111860532600feeca2c6b4bc3d70280cc2b7d069914c082487d"
+    },
+    "docs/theme-ports/dux-lavender/widgets/focus-hub-light-sample.png": {
+      "size": [
+        320,
+        292
+      ],
+      "sha256": "0637e419cf5704b96cb670502ad8cc101c6d7e90d1b4d823f2dfaa363cf17b08"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-missing.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "458db76cd5cb8da2b24a5b0668d6d3b2937b27ec94b9fb1660b46f35280eb4e0"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-dark-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "c8fb034f95f71acaffb78bcb15690168fe2857a1ff222fe7daf3adf4a3fa0196"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-missing.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "c0006b66568e5576d5bf039c6b46bf07e93f8c1c5028ca6eb41a660e3c9d2961"
+    },
+    "docs/theme-ports/dux-lavender/widgets/now-playing-mini-light-sample.png": {
+      "size": [
+        310,
+        76
+      ],
+      "sha256": "679c57f634c0b53e72acaabbe9617b2618991b77441c0dfd8dbbe7ae3c080520"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-200-sample.png": {
+      "size": [
+        320,
+        324
+      ],
+      "sha256": "841e336113fe3d3393852fee10715b2da9c296ff6983d8600ba7fba96e41ac2f"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-missing.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "b94d35cd289c67a3c56ef535bdc78460d72ffd9b479c8df9a0ca32b92f53ad16"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-dark-sample.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "cd5ccb57c4dac9be032611bac67ef6858c5d64a792c2feba1dbca15ae063944b"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-200-sample.png": {
+      "size": [
+        320,
+        324
+      ],
+      "sha256": "af65faab92369ce7dd433aced1625d6bd169782c91c6cb30b2c0d907c500d027"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-missing.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "653280757da9e64980ab7f58e078078d23fe0d16e554531b591c3a4cc4fe0d73"
+    },
+    "docs/theme-ports/dux-lavender/widgets/resource-overview-light-sample.png": {
+      "size": [
+        320,
+        248
+      ],
+      "sha256": "97749791fdc8cde19bc15eaf34d77c7a143e68e84311354dc9ef3d34f10c6fa6"
+    },
+    "docs/theme-ports/automatic/dux-lavender-dark.png": {
+      "size": [
+        1920,
+        1200
+      ],
+      "sha256": "88bd03b665a5bccfea97f09545a59da3a4bfc161087f7dc7073818f19d06eb55"
+    },
+    "docs/theme-ports/automatic/dux-lavender-light.png": {
+      "size": [
+        1920,
+        1200
+      ],
+      "sha256": "7a5544880692f27fe6ca5345d4d28c9dfbbdcf1e159fbd81f230c74ccc909269"
+    }
+  }
+}

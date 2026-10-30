@@ -164,3 +164,41 @@ Match wallpaper is separate. No catalogue searches/new IDs, runtime/src/helper
 changes, native controls, installs/live deletion/restarts/push or new agents.
 Parent owns legacy canonical-output snapshot expectations; do not change core
 golden tests here. Follow-up audit: hidden-wallpaper-removal.md + existing JSON.
+
+
+## Dux Lavender — 2026-10-30
+
+New Dux adaptation inspected actual upstream README desktop/dashboard pictures,
+StockThemes Purple pairs and current DDash QML; shell46a12d9/pluginsa55bb40 MIT,
+registryf3079be has no root licence. Full pins/notices/source hashes in package
+ATTRIBUTION.md,LICENSE.md and docs/theme-ports/dux-lavender/sources.json. Stock
+Purple light is#fef7ff (not early proposed#fffbfe). One floating26px native bar,
+Materia captions/buttons, dock disabled, installed Adwaita icons and ordinary font
+fallbacks. No copied screenshot artwork/logo/QML/plugin scripts/generated default.
+
+Synced own checkout to accepted parent08c07a2 via merge3e79026 with exact parent
+TREE, preserving all earlier branch history. Reused separate native-thread widget
+commits de48c1c/37c115f as isolated fb3cc1d/842c8a7 dependencies; parent integrate
+originals once, then package commit only. No competing widget implementation or
+Settings edit. IDs resource-overview320x248,focus-hub320x292; enlarged-text native
+sizes324/363high. Top-right resource plus bottom-right focus avoids enlarged overlap.
+Existing clock/media upper-left have fixed geometry; no200%reflowclaim for those.
+
+Actual automatic dark/light package previews and20native widget renders/layouts,
+Materia dark/light1x2x sheets; all labelled fixtures, no compositor shadow claim.
+Private reviewed-photograph previews at/tmp/decebal-dux-photo-evidence-final.
+Catalogue now22IDs/44choices/42photos; re-reviewed moonl3edjp and sunset39zjq6
+intentionally reused. No photo redistribution or theme-apply wallpaper change.
+Helper now stages exact SHA-checked private independent backgrounds because new
+parent previews correctly ignore package wallpaper metadata for curated IDs.
+
+Rejected bare LICENSE/JSON inside package due existing archive data-only rules;
+use LICENSE.md and docs source hash JSON. Source/store already discovers installed
+packages, so no additional builtin registration. Unknown photographer/licence
+remains unknown; no rights inferred from upstream screenshots/softwareMIT.
+
+Dux source palette/layout and docs are sole specialist ownership; native Settings
+and shared widgets remain separate thread ownership. Full artworkaudit retains
+pre-existing NextKDE accepted-parenthash drift (f2788246 versus oldeedb3); no change
+here to oldauditrecord. See theme-ports/dux-lavender.md for exact focused checks,
+renderer limits and follow-ups. No live apply/install/restart/push/rdwm edit.

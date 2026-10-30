@@ -29,7 +29,7 @@ class PackageArtPolicy(unittest.TestCase):
 
     def test_all_visible_packages_have_independent_wallpaper_choices(self):
         catalogue = json.loads((ROOT/'data/wallhaven-curated.json').read_text())
-        self.assertEqual(len(catalogue['themes']), 21)
+        self.assertEqual(len(catalogue['themes']), 22)
         for ident in catalogue['themes']:
             with self.subTest(theme=ident):
                 package = ROOT/'themes'/ident
@@ -43,7 +43,7 @@ class PackageArtPolicy(unittest.TestCase):
 
     def test_every_shipped_package_is_art_free_except_attributed_upstream_photos(self):
         packages = sorted((ROOT/'themes').glob('*/theme.toml'))
-        self.assertEqual(len(packages), 34)
+        self.assertEqual(len(packages), 35)
         for path in packages:
             with self.subTest(package=path.parent.name):
                 manifest = tomllib.loads(path.read_text())

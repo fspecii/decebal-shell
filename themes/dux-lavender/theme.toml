@@ -1,0 +1,143 @@
+format = 1
+id = "dux-lavender"
+name = "Dux Lavender"
+version = "1.0.0"
+author = "Decebal Theme Specialist; palette adapted from Dux Labs"
+license = "MIT"
+description = "Dux-inspired lavender tonal surfaces, a floating top panel and four optional native time, media, resource and focus cards. No bottom dock; wallpaper stays independent."
+min_shell_version = "0.1.0"
+tags = ["dux-inspired", "material", "lavender", "native-widgets", "dark-light"]
+
+[colors.dark]
+background = "#141218"
+sidebar = "#1d1b20"
+surface = "#211f24"
+bar = "#1d1b20"
+bar_text = "#e6e0e9"
+popup = "#2b292f"
+dock = "#211f24"
+overlay = "#2b292f"
+titlebar = "#211f24"
+titlebar_inactive = "#1d1b20"
+border = "#948f99"
+text = "#e6e0e9"
+text_secondary = "#cac4cf"
+text_faint = "#aaa4b0"
+accent = "#D0BCFF"
+accent_text = "#381E72"
+danger = "#ffb4ab"
+ok = "#b5cea8"
+warn = "#e9c47a"
+
+[colors.light]
+background = "#fef7ff"
+sidebar = "#f4eef6"
+surface = "#f2ecf4"
+bar = "#f4eef6"
+bar_text = "#1d1b20"
+popup = "#ece6ee"
+dock = "#f2ecf4"
+overlay = "#ece6ee"
+titlebar = "#f2ecf4"
+titlebar_inactive = "#f4eef6"
+border = "#7a757f"
+text = "#1d1b20"
+text_secondary = "#49454e"
+text_faint = "#625d68"
+accent = "#6750A4"
+accent_text = "#ffffff"
+danger = "#ba1a1a"
+ok = "#45663a"
+warn = "#795900"
+
+[metrics]
+radius = 20
+bar_alpha = 0.96
+dock_alpha = 0.96
+popup_alpha = 1.0
+panel_alpha = 1.0
+dock_roundness = 0.55
+dock_padding = 8
+outline = 0.10
+blur = 0.15
+glass_refraction = 0
+glass_edge = 2
+glass_highlight = 0.08
+glass_grain = 0
+glass_blur = 3
+shadow = 0.45
+
+[font]
+ui = ["Inter", "Adwaita Sans", "Noto Sans"]
+title = ["Inter", "Adwaita Sans", "Noto Sans"]
+mono = ["Adwaita Mono", "JetBrains Mono", "monospace"]
+display = ["Inter", "Adwaita Sans", "Noto Sans"]
+scale = 1.0
+
+[decoration]
+style = "materia"
+# The side is decided by Materia; this hint also explicitly enables all buttons.
+buttons = "right"
+height = 32
+radius = 12
+title_align = "left"
+
+[rdwm]
+gap_inner = 10
+gap_outer = 16
+border_px = 1
+smart_gaps = false
+mfact = 0.56
+layouts = ["tile", "monocle", "floating"]
+
+[bar]
+enabled = true
+style = "floating"
+position = "top"
+height = 26
+
+[dock]
+enabled = false
+style = "mac"
+
+[icons]
+theme = "Adwaita"
+fallback = "hicolor"
+monochrome_tint = false
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+[hot_corners]
+top_right = "control-center"
+
+# Native optional dashboard profile. Builtin implementation is shared, never vendored here.
+[[widgets]]
+use = "builtin:clock-card"
+place = "desktop"
+anchor = "top-left"
+x = 32
+y = 72
+
+[[widgets]]
+use = "builtin:now-playing-mini"
+place = "desktop"
+anchor = "top-left"
+x = 32
+y = 224
+
+[[widgets]]
+use = "builtin:resource-overview"
+place = "desktop"
+anchor = "top-right"
+x = -32
+y = 72
+
+[[widgets]]
+use = "builtin:focus-hub"
+place = "desktop"
+anchor = "bottom-right"
+x = -32
+y = -32

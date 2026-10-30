@@ -2,10 +2,9 @@
 
 This catalogue supplies **Settings → Wallpaper → For this theme**. It does not
 change live configuration by itself. [`../data/wallhaven-curated.json`](../data/wallhaven-curated.json)
-contains **21 theme IDs / 42 distinct images / 42 dark-light choices**. Every
+contains **22 theme IDs / 42 distinct images / 44 dark-light choices**. Every
 non-legacy package installed by `make install` is covered (including the five
-showcase folders; `everforest` is a palette alias and excluded). Aster is the one
-new package. No uncovered IDs at this checkpoint. Generated artwork/defaults are removed from visible and hidden packages; all 34 shipped manifests omit wallpaper metadata. Sweeteh’s attributed upstream photos remain optional assets. Separate picker/cache integration is implemented and tested; the catalogue never triggers downloads from theme apply.
+showcase folders; `everforest` is a palette alias and excluded). Aster and Dux Lavender are the new packages. No uncovered IDs at this checkpoint. Generated artwork/defaults are removed from visible and hidden packages; all 35 shipped manifests omit wallpaper metadata. Sweeteh’s attributed upstream photos remain optional assets. Separate picker/cache integration is implemented and tested; the catalogue never triggers downloads from theme apply.
 
 ## Selection and provenance
 
@@ -120,9 +119,9 @@ that state must be labelled rather than sold as an installed photo default.
   results were not selected. No guessed upstream artist identity.
 - Parent `f68d460` and persistent-index `837799f` were read **read-only**. No engine,
   Settings, widget creator, Icons or rdwm source was copied over or changed.
-- Runtime selection/download/cache and native X11 shadow integration are implemented. Generated-default retirement covers all 34 shipped manifests; see `generated-wallpaper-removal.md`, `hidden-wallpaper-removal.md` and `window-shadow-design.md`. Hardware gates remain separate.
+- Runtime selection/download/cache and native X11 shadow integration are implemented. Generated-default retirement covers all 35 shipped manifests; see `generated-wallpaper-removal.md`, `hidden-wallpaper-removal.md` and `window-shadow-design.md`. Hardware gates remain separate.
 - All42 current choices have full-resolution crop review. Native composition QA
-  covers Aster, Glyph and Mountain, not all 21 live desktops. Physical scaling,
+  covers Aster, Glyph, Mountain and Dux Lavender, not all 22 live desktops. Physical scaling,
   ultrawide/portrait and arbitrary user widget positions remain unverified.
 - No new font/cursor/icon assets, live installation, application restarts or
   theme application. Existing Keep / Replace / Cancel remains tested.
@@ -147,3 +146,16 @@ Full original hashes and individual caveats are in `images.*.full_resolution_rev
 the rejected alpine photo is in `rejected_recommendations`. Raw photographs,
 seven contact sheets and native photographic evidence remain only under
 `/tmp/decebal-wallhaven-curation`, outside git.
+
+
+## Dux Lavender extension
+
+The Dux-inspired package adds one visible ID, `dux-lavender`. Its dark `l3edjp`
+(moon/Mount Cook) and light `39zjq6` (lavender torii sunset) are deliberate reuses
+of already reviewed photographic entries, independently viewed again at full
+resolution for this layout. No new API search/download or artwork redistribution.
+The soft sky and central mountain/gate remain visible between the side cards;
+opaque tonal cards protect text from photographic highlights. The 3:2 dark image
+loses vertical reflection/sky under 16:9 fill; ultrawide fitting needs user review.
+No upstream screenshot wallpaper is copied. Same unknown-author/licence caveats
+apply. Count is now22IDs/44recommendations/42distinctphotographs, all covered.

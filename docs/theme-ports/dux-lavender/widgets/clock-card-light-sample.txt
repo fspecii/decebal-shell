@@ -1,0 +1,6 @@
+col [0.0 0.0 236.0 136.0] bg r=20 click
+  text [20.0 15.5 145.7 68.0] text="14:07" size=54 bold
+  text [20.0 84.5 124.0 18.0] text="Friday, 23 October" size=14
+  row [20.0 103.5 50.7 17.0]
+    icon [20.0 104.0 16.0 16.0] icon="weather-partly" size=16
+    text [42.0 103.5 28.7 17.0] text="18°C" size=13

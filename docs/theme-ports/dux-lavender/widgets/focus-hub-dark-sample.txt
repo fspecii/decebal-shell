@@ -1,0 +1,13 @@
+col [0.0 0.0 320.0 292.0] bg r=20
+  text [18.0 18.0 284.0 14.0] text="FOCUS / Running" size=11 bold
+  text [18.0 42.0 284.0 35.0] text="00:24:38" size=28 bold
+  text [18.0 87.0 284.0 17.0] text="Focus (sample)" size=13
+  bar [18.0 114.0 284.0 4.0] frac=0.01 thick=4
+  col [18.0 128.0 284.0 63.0] bg r=8 click
+    text [30.0 140.0 260.0 13.0] text="LATEST NOTE" size=10 bold
+    text [30.0 161.0 260.0 18.0] text="A thought for tomorrow" size=14
+  row [18.0 201.0 284.0 35.0]
+    button [18.0 201.0 127.9 35.0] bg r=8 click
+      text [64.8 211.0 34.2 15.0] text="Timer" size=12 bold
+    button [153.9 201.0 148.1 35.0] bg r=8 click
+      text [200.7 211.0 54.4 15.0] text="New note" size=12

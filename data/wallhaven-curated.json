@@ -3,7 +3,7 @@
   "curated_on": "2026-10-30",
   "scope": {
     "parent_commit": "0ba18b0248c605049a219c5950655e93ce347f35",
-    "coverage": "21 visible shipped nonlegacy packages including Aster; all42 current recommendations reviewed from full-resolution originals",
+    "coverage": "22 visible shipped nonlegacy packages; 42 distinct reviewed photographs, 44 mode recommendations. Dux Lavender deliberately reuses two visually re-reviewed existing choices.",
     "exclude_legacy_via": "theme::palette::legacy_theme",
     "uncovered_theme_ids": []
   },
@@ -4830,6 +4830,17 @@
       "placement": "Center-fill; keep the river/lake horizon and leave the bottom taskbar on its native backing. No additional rail.",
       "recommended_mode": "fill",
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+    },
+    "dux-lavender": {
+      "dark": {
+        "image_id": "l3edjp",
+        "rationale": "Re-reviewed photographic moon and blue mountain reflection: the muted violet-blue field supports the stock Dux Purple palette. Reuses the reviewed macOS choice intentionally; opaque cards keep the crescent from competing with resource labels."
+      },
+      "light": {
+        "image_id": "39zjq6",
+        "rationale": "Re-reviewed photographic torii at a lavender sunset gives a soft violet/rose counterpart to Purple Light. Reuses the reviewed Synthwave light choice intentionally; keep the central gate visible between the side cards."
+      },
+      "placement": "Independent user choice only. Four opaque tonal cards at upper-left/upper-right; central landscape remains open. 16:9 fill crops the 3:2 dark image vertically; ultrawide crops may trim reflections/foreground. No wallpaper downloads or writes during theme application."
     }
   },
   "full_resolution_audit": {
