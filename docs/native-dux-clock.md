@@ -150,3 +150,15 @@ Cached paint including whole-target clear
 was0.10–3.0ms locally, with at most133702 coverage bytes in these cases. These
 are debug-profile observations, not portable latency guarantees. No screenshot
 is used as application pixels.
+
+
+## Production clock activation (Decebal 0.2.1 / Dux Lavender 1.3)
+
+The original registered variable font now requires Decebal 0.2.1. Earlier
+four-font Dux 1.2 packages keep their existing clock path. The production
+renderer is integrated from 3f87285, preserving the six-column 128/8/96 grid;
+its 96×168 content cell is the current reference. Earlier 102×184 and 408×400
+clock captures remain historical component evidence, not proof of the current
+whole Dashboard. See docs/native-dux-clock.md for current geometry and source
+comparison limits. Hot text-size changes invalidate supporting-text coverage
+even below 100%, when the panel grid geometry remains clamped.

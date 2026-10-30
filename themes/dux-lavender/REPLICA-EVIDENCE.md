@@ -91,9 +91,9 @@ Raw metrics and limitations are in the port ledger. font.files stays unchanged.
 |`replica-upstream-clock-102x184-light-200.png`|`36fae9e0068d1d5b6813b4901fce5edcd9944e982bf6661ce8cdc12c6b6cd933`|
 |`replica-upstream-clock-408x400-light-200.png`|`6e459e8901c6b9a6bb9507695d2898b82dcf7aa1075656847ef2f25cec6f8d90`|
 
-## Section3 native acceptance — a8068ec
+## Historical Section 3 component evidence — a8068ec (superseded)
 
-Supersedes the pending source-only checkpoint above. Same-size actual native
+This historical component probe preceded the production-grid 3f87285 port. Same-size actual native
 clock crops,102×184/408×400,dark/light100/200,09/08/date fixed samples; no live
 telemetry claim. Eight source/native digit boxes within2px; source and native
 rasterizers differ. Native date elision intentionally preserves bounds at minimum
@@ -115,3 +115,15 @@ Native Wayland host/seconds/analog/animation are not accepted by these gates.
 |`replica-native-clock-408x400-dark-200.png`|`4d0f841c9d290d97f956536063544cc8934b57415bab5ef4aa6fc5500fe4918a`|
 |`replica-native-clock-408x400-light-100.png`|`31626764276eabd7b04c000be219a6d33b294f3b2d43c867793890dcb46b4398`|
 |`replica-native-clock-408x400-light-200.png`|`31626764276eabd7b04c000be219a6d33b294f3b2d43c867793890dcb46b4398`|
+
+
+## Production clock activation (Decebal 0.2.1 / Dux Lavender 1.3)
+
+The original registered variable font now requires Decebal 0.2.1. Earlier
+four-font Dux 1.2 packages keep their existing clock path. The production
+renderer is integrated from 3f87285, preserving the six-column 128/8/96 grid;
+its 96×168 content cell is the current reference. Earlier 102×184 and 408×400
+clock captures remain historical component evidence, not proof of the current
+whole Dashboard. See ../../docs/native-dux-clock.md for current geometry and source
+comparison limits. Hot text-size changes invalidate supporting-text coverage
+even below 100%, when the panel grid geometry remains clamped.

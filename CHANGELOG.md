@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 — Native Dux clock
+
+- Dux Lavender 1.3 registers the original licensed Google Sans Flex variable
+  font and renders its clock with source-derived axes and production grid sizing.
+- Shared immutable font snapshots and a coalescing worker keep preparation off
+  the event thread; four-font packages retain their previous rendering.
+- Hot text-size changes below 100% invalidate cached date coverage correctly.
+- The new package requires 0.2.1; older shells reject it rather than silently
+  loading an unsupported profile. Full Dux replica parity remains incomplete.
+
+
 ## Unreleased
 
 - Native Notes and Timer apps, linked Quick note/Timer widgets, launcher entries, private local persistence, conflict recovery and countdown notification after closing the window (docs/notes-timer.md).

@@ -14,27 +14,21 @@ The source bar is a rounded band containing individual widget pills and three
 separate profile, not stock parity. Requires native renderer/schema/font-registration commit `8addeef` (or its integrated equivalent).
 The band starts at4,4; first face8,9. Text scale200% enlarges text only, not band geometry.
 
-## Version1.2.0 compatibility and scope
+## Version 1.3 compatibility and scope
 
-Requires Decebal0.2.0. This metadata checkpoint targets parent candidate`0c01f41`:
-stock Purple bar, historical README dashboard, Control Center and section4
-Applications-only list launcher. It does not claim a complete Dux replica.
-Native source/integrated dependencies are explicit:
+Requires Decebal 0.2.1. Includes the stock Purple bar, historical README
+Dashboard, Control Center, Applications-only launcher and native variable clock.
+The original variable font is registered alongside the unchanged static
+UI400/500/700 and Material faces. Earlier four-font 1.2 packages keep their
+legacy clock with no preparation worker.
 
-| Capability | Original native commit | Parent integrated commit |
-| --- | --- | --- |
-|Bar/private font registration|`8addeef`|`4c20ef5`|
-|Dashboard/Control Center/explicit empty desktop|`1b45fdf`|`eff0175`|
-|Applications-provider launcher|`8eedcc0`|`b56ca4b`|
-
-This metadata-only delta adds no selectors, layouts, assets or font registrations.
-The parent checkpoint retains its four font.files entries (static400/500/700 and
-Material). Original variable-clock preparation/registration is separate future
-integration work and is not a dependency of this checkpoint. Applications excludes
-source All/Files/Plugins/history/richer actions/fuzzy/motion. Dashboard profile
-`readme` is historical, not current upstream defaults; expressive shapes/controls
-and other parity gaps remain. Accepted Settings and independent wallpaper choice
-are preserved. Parent owns integration, minimum-version enforcement and activation.
+The native clock is integrated from 3f87285 (root 688128c), using shared font
+snapshots and background preparation. Original bar/dashboard/launcher provenance
+is retained in REPLICA-EVIDENCE.md. Applications excludes source
+All/Files/Plugins/history/richer actions/fuzzy/motion. Dashboard profile `readme`
+is historical rather than current upstream defaults. Accepted Settings and
+independent wallpaper selection are preserved; full Dux replica parity is not
+claimed.
 
 ## Native typography and icons
 
@@ -103,13 +97,20 @@ This is Apps-only: source All/Files/Plugins, history, richer actions, fuzzy rank
 and expressive motion are not implemented. No painted inert provider tabs imply
 those capabilities. Notification visuals remain separate. No full replica claim.
 
-## Section3 variable clock
+## Section 3 variable clock
 
-Requires native`a8068ec`. The fifth font.files entry registers exact original Google
-Sans Flex variable bytes under the same OFL; static UI400/500/700 remain selected
-for ordinary text. The README clock requests wght750/ROND100/opszheight/2 and fits
-actual ink metrics. Eight fixed-size actual source/native comparisons pass within
-2px; antialiasing/advance differences remain. Supporting dates deliberately fit
-and elide at the12×text-scale minimum rather than reproduce Qt's cramped clip.
-Missing font shows Clock font unavailable, never generic replacement digits.
-No seconds, analog mode, animated digits or native Wayland-host acceptance claimed.
+Requires Decebal 0.2.1. The fifth font entry registers the exact original Google
+Sans Flex variable bytes under OFL. Static UI faces remain selected for ordinary
+text. The source-derived clock requests wght750/ROND100 and optical size based
+on its content height, fitting actual ink metrics to the production 128/8/96
+grid. The normal clock content is 96×168. Twenty source comparisons on the
+reviewed port place digit bounds within 1px; this is not pixel identity.
+
+Dates fit and elide at the accessibility minimum instead of reproducing Qt's
+cramped clipping. Hot changes below 100% invalidate cached text despite unchanged
+grid geometry. Missing fonts show an explicit unavailable state. No seconds,
+analog mode, animated digits or native Wayland-host acceptance is claimed.
+
+[Clock contract and source-comparison limits](../../docs/native-dux-clock.md).
+Earlier 102×184/408×400 captures in REPLICA-EVIDENCE.md are historical component
+evidence, not proof of the current whole Dashboard.

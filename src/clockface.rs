@@ -61,6 +61,7 @@ struct ClockFace {
     face: Option<Face>,
     frame: Option<Arc<Frame>>,
     shown: Option<Input>,
+    text_scale: f32,
     fallback: Option<(f32, f32, f32, Arc<Glyph>)>,
     /// Diagnostic counter: steady paints never parse or rasterize fonts.
     preparations: u64,
@@ -101,6 +102,15 @@ impl ClockFace {
     /// layout. Date fits down to the accessibility minimum and elides if necessary;
     /// unlike Qt HorizontalFit it is never silently shrunk below that minimum.
     fn prepare(&mut self, input: Input, fonts: &mut Fonts) -> bool {
+        // Grid geometry clamps at 100%, but supporting text also follows smaller
+        // accessibility sizes. Its actual scale is part of the raster cache key.
+        let text_scale = crate::theme::live::font_scale();
+        if self.text_scale != text_scale {
+            self.text_scale = text_scale;
+            self.frame = None;
+            self.shown = None;
+            self.fallback = None;
+        }
         if self.shown.as_ref() == Some(&input) {
             return false;
         }
@@ -401,6 +411,43 @@ mod tests {
                 let registered = crate::theme::fontdb::package_font_bytes(variable, *version).unwrap();
                 assert!(Arc::ptr_eq(&registered, &clock.face.as_ref().unwrap().bytes));
                 worker::assert_async_pipeline(&theme.fonts, Input { width: 96.0, height: 168.0, hours: "09".into(), minutes: "08".into(), date: "Friday, 30 October".into(), scale });
+
+                // Exercise hot scale changes with identical clamped grid Input.
+                // Both the same minute and a minute transition must match a new
+                // clock prepared under the current actual supporting-text scale.
+                let mut hot = AsyncClock::load(&theme.fonts);
+                hot.set_waker(Arc::new(|| {}));
+                let mut first_scale_pixels = None;
+                for actual_scale in [1.0, 0.8, 0.9, 1.0] {
+                    let mut scaled = theme.clone();
+                    scaled.font_scale = actual_scale;
+                    crate::theme::live::publish_theme(scaled);
+                    for minute in ["08", "09"] {
+                        let input = Input { width: 256.0, height: 168.0, hours: "09".into(), minutes: minute.into(), date: "Friday, 30 October".into(), scale: 1.0 };
+                        hot.request(input.clone());
+                        hot.wait_prepared();
+                        let mut fresh = ClockFace::load(&theme.fonts);
+                        assert!(fresh.prepare(input, &mut Fonts::load().unwrap()));
+                        let mut actual = Pixmap::new(256, 168).unwrap();
+                        let mut expected = Pixmap::new(256, 168).unwrap();
+                        assert!(hot.paint(&mut actual, (0.0, 0.0), Color::WHITE, Color::WHITE));
+                        assert!(fresh.paint(&mut expected, (0.0, 0.0), Color::WHITE, Color::WHITE));
+                        assert_eq!(actual.data(), expected.data(), "hot scale {actual_scale}, minute {minute} must match fresh rasterization");
+                        if minute == "08" {
+                            if actual_scale == 1.0 {
+                                if let Some(first) = &first_scale_pixels {
+                                    assert_eq!(actual.data(), first, "returning to 100% restores the original pixels");
+                                } else {
+                                    first_scale_pixels = Some(actual.data().to_vec());
+                                }
+                            } else {
+                                assert_ne!(actual.data(), first_scale_pixels.as_ref().unwrap(), "smaller text scale must rerasterize the date");
+                            }
+                        }
+                    }
+                }
+                drop(hot);
+                crate::theme::live::publish_theme(theme.clone());
 
                 // Regression: this font has >32 gvar tuples; without gvar-alloc
                 // even ordinary A/0 outlines fail, despite a valid cmap entry.
