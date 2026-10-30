@@ -1,7 +1,6 @@
 format = 1
 id = "nextkde"
 name = "NextKDE"
-screenshots = ["screenshots/main.png"]
 version = "1.1.0"
 author = "decebal"
 license = "MIT"
@@ -36,13 +35,6 @@ style = "mac"
 enabled = true
 style = "flat"
 height = 26
-
-[wallpaper]
-dark = "wallpapers/glass-dark.png"
-light = "wallpapers/glass-light.png"
-image = "wallpapers/glass-dark.png"
-mode = "fill"
-match_colors = false
 
 [decoration]
 style = "macos"

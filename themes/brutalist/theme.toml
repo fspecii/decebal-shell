@@ -4,10 +4,9 @@ name = "Brutalist"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Hard edges and no apologies: zero radius, thick black borders, pure black and signal yellow at maximum contrast, monospace type everywhere, square titlebars with glyph buttons, a flat black bar (yellow ink) and an unrounded dock. The light variant is yellow paper with black ink."
+description = "Hard edges, black and signal yellow, square captions and a flat taskbar. Separate curated photography leaves the interface geometry in charge."
 min_shell_version = "0.1.0"
 tags = ["dark", "light", "brutalist", "yellow", "black", "square", "high-contrast"]
-screenshots = ["screenshots/main.png"]
 
 [metrics]
 radius = 0
@@ -68,11 +67,6 @@ accent_text = "#ffe600"
 danger = "#c40000"
 ok = "#006b2d"
 warn = "#7a4a00"
-
-[wallpaper]
-image = "wallpapers/slab.png"
-mode = "fill"
-color = "#ffe600"
 
 [decoration]
 style = "classic"

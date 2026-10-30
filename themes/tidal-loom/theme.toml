@@ -1,11 +1,10 @@
 format = 1
 id = "tidal-loom"
 name = "Tidal Loom"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "A cool textile desktop: flowing woven bands, a left navigation rail, compact taskbar and an upper-right widget pair."
+description = "A cool textile desktop: left navigation rail, Breeze captions and an upper-right widget pair. Wallpaper is chosen separately."
 min_shell_version = "0.1.0"
 tags = ["original", "dark", "light", "textile"]
 
@@ -68,11 +67,6 @@ title = ["IBM Plex Sans", "Inter", "Noto Sans"]
 mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
 display = ["IBM Plex Sans", "Inter", "Noto Sans"]
 scale = 1.0
-
-[wallpaper]
-dark = "wallpapers/dark.png"
-light = "wallpapers/light.png"
-mode = "fill"
 
 [decoration]
 style = "breeze"

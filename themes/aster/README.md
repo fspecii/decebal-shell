@@ -31,8 +31,8 @@ under `themes.aster`: dark `9mqvz1` (quiet blue breaking wave), light `wex83x`
 are unknown and these full artworks are not redistributed. See the catalogue for
 exact pages, image/thumbnail URLs and crop/readability notes.
 
-Until the parent adds the catalogue download/cache/selection wiring, select the
-chosen photograph in the separate Wallpaper preferences yourself. Applying Aster
+Select the chosen photograph through **Wallpaper → For this theme** after the
+parent integrates its separate catalogue picker/cache. No theme-apply download. Applying Aster
 has no wallpaper section and preserves an existing wallpaper path, scaling mode
 and background colour. Headless package-only previews therefore label the missing
 wallpaper and show the theme's plain background colour; this is not a promised

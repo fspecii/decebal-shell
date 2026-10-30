@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # This desktop test must not retint apps through an inherited session bus.
 export DECEBAL_SYSTEM_AUTOMATIC=0
-# The showcase themes (themes/<id>/ with wallpapers) end to end, on a private Xvfb with a private rdwm, HOME and runtime dir:
+# The showcase themes (themes/<id>/ with optional assets) end to end, on a private Xvfb with a private rdwm, HOME and runtime dir:
 # validate, install, apply (dark and light), check rdwm's config (style, wallpaper, borders), that the bar and dock survive, and take
 # one screenshot per theme (two fake windows, decsettings, bar, dock) into $SHOTS.
 #   tests/e2e/showcase-themes.sh     (SHOTS=dir keeps the PNGs; E2E_DISPLAY=:173 by default; PROFILE=release by default)
@@ -66,11 +66,16 @@ for id in $THEME_IDS; do
   PKG=$HERE/themes/$id
   has "validates" "$(decthemectl theme validate "$PKG" 2>&1)" "^ok:"
   has "installs" "$(decthemectl theme install "$PKG" 2>&1)" "installed $id"
+  before_wallpaper=$(awk '/^\[wallpaper\]/{f=1;next}/^\[/{f=0}f' "$CFG")
   has "applies" "$(decthemectl theme apply "$id" 2>&1)" "applied $id"
   sleep 2
   tget() { awk -v sec="[$1]" -v key="$2" '$0==sec{f=1;next}/^\[/{f=0}f&&$1==key{gsub(/"/,"",$3);print $3;exit}' "$3"; }
   eq "rdwm titlebar style" "$(tget decoration style "$CFG")" "$(tget decoration style "$PKG/theme.toml")"
-  has "rdwm wallpaper is this theme's" "$(grep -A4 '^\[wallpaper' "$CFG")" "wallpapers/"
+  if grep -q '^\[wallpaper\]' "$PKG/theme.toml"; then
+    has "legacy package wallpaper applies" "$(grep -A4 '^\[wallpaper' "$CFG")" "wallpapers/"
+  else
+    eq "independent wallpaper preferences preserved" "$(awk '/^\[wallpaper\]/{f=1;next}/^\[/{f=0}f' "$CFG")" "$before_wallpaper"
+  fi
   eq "rdwm focused border" "$(tget colors focused "$CFG" | tr 'A-F' 'a-f')" "$(tget rdwm focused_border "$PKG/theme.toml")"
   alive $BAR && pass "decbar is alive" || fail "decbar died"
   alive $DOCK && pass "decdock is alive" || fail "decdock died"

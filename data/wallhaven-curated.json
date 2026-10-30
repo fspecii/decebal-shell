@@ -2,8 +2,8 @@
   "format": 1,
   "curated_on": "2026-10-30",
   "scope": {
-    "parent_commit": "f68d4604152c929ca1f294429bee0eb204e55cfb",
-    "coverage": "all shipped theme package directories except legacy palette-only aliases, plus Aster",
+    "parent_commit": "0ba18b0248c605049a219c5950655e93ce347f35",
+    "coverage": "21 visible shipped nonlegacy packages including Aster; all42 current recommendations reviewed from full-resolution originals",
     "exclude_legacy_via": "theme::palette::legacy_theme",
     "uncovered_theme_ids": []
   },
@@ -18,7 +18,7 @@
     },
     "detail_filter": "Reject AI-art tag 133451 and AI generator/tag names; also reject selected candidates tagged digital art/illustration/space art. Never equate absence of a tag with certified non-AI provenance.",
     "copyright": "All images remain property of original owners. Catalogue stores links/metadata only; full artworks and provider thumbnails are not redistributed.",
-    "runtime": "Advisory catalogue only. Parent owns network/cache/selection and replacing old generated defaults. Do not override a separate custom Wallpaper selection. No generated wallpaper fallback.",
+    "runtime": "Recommendations belong to separate Wallpaper → For this theme selection. Theme packages set no wallpaper image/mode/colour and trigger no downloads. Parent owns explicit picker/cache runtime; no generated fallback.",
     "search_urls": [
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmountains+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bforest+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
@@ -28,7 +28,8 @@
       "https://wallhaven.cc/api/v1/search?q=%2Bspace+%2Bphotography+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bminimalism+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bdesert+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
-      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmonochrome+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0"
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmonochrome+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bsnow+%2Bminimalism+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0"
     ]
   },
   "images": {
@@ -132,11 +133,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "c4b172124513c8c44866404f44ffb108c601a2a3a4d45bea5d58406ab9c9d86c",
         "thumbnail_sha256": "b5e2d083536251292f8e3be2bbe665011dc79efc6789bf872e5606cef5acafe7"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "6fded3fde9a9b46af1e0521ead2b1b9558d2fb55aa578cd9dbe5b6da03514a29",
+        "bytes": 696345,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Muted ridges retain the horizon; bare terminal-clock contrast still depends on chosen text colour/position.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "21y32m": {
@@ -223,11 +233,108 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "66f44540820bf786aa4a24cbb33c1b0cbbc6fec1dd392dbaae4fcf0661cd14c6",
         "thumbnail_sha256": "dda3a6bd5bf738896386316147369ec54b668ca3b4856996292b3e17e23c89b3"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "fc04427f3bdefd1f88bcddfc5be636e34753ade84df373de2ff205353bd419ee",
+        "bytes": 4924815,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Wide cloud photo; fit is recommended to preserve the entire frame and any edge watermark.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
+      }
+    },
+    "2kqkmy": {
+      "id": "2kqkmy",
+      "subject": "Vehicle and curved tracks on a white snowfield",
+      "page_url": "https://wallhaven.cc/w/2kqkmy",
+      "api_url": "https://wallhaven.cc/api/v1/w/2kqkmy",
+      "full_url": "https://w.wallhaven.cc/full/2k/wallhaven-2kqkmy.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/2k/2kqkmy.jpg",
+      "resolution": [
+        2560,
+        1600
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2017-12-03 04:32:55",
+      "uploader": {
+        "username": "memories",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 2362,
+          "name": "Jeep"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 69503,
+          "name": "treads"
+        },
+        {
+          "id": 314,
+          "name": "car"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 240,
+          "name": "white"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 6553,
+          "name": "top view"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
+      },
+      "evidence": {
+        "detail_sha256": "2cc74fe3e04d734bbf0ca6433a21a8ab3ed23be1dfd521b7bc887b281f90ece6",
+        "thumbnail_sha256": "bd2c43253db9152ecda8914f3e75561863501719363f31681a9cde3d2b74a792"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "c8de5c3f88e493f21c028c7b419b24ae36600d1a9e6c48f705329bf31b6092dd",
+        "bytes": 462003,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Modest vertical crop retains vehicle/tracks and open snow at both widget zones. Native Mountain light test fixes low-contrast homelab text without moving widgets.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "39zjq6": {
@@ -322,11 +429,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "13aa1c29aef423bf20e4a6da2dd0bded9571e2f0a91bce29b5694144d8da6cd6",
         "thumbnail_sha256": "207070333812213d487b7f0150896120a5e2d90c1cf564dbda3f4c6a777f2658"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "b6a4fbaaaf5719f87b69d9911b0192ad8b6b493e9f1de77475c00815fba77b0c",
+        "bytes": 6507774,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Torii and sun remain central; keep the left rail backed against saturated horizon colour.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "3l6jj9": {
@@ -413,11 +529,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "ef3d11f6d61f73118300bb489700d46111e45754eaf02e356ec7de57dff05dd7",
         "thumbnail_sha256": "12b2266544c637ee3e164135bce9db676172403dde915263d55039f0e1ba7d11"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "9b897cdde365055c25a70c332db178c6b47f715ba379beee0a3cf5896170fd69",
+        "bytes": 1919563,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Warm cloud remains clear; retain any photographer watermark.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "3qq8jd": {
@@ -516,11 +641,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "bb6c87f61328755fffc2e9a5861920d18604849c975ecfd4d1bcf6082620f354",
         "thumbnail_sha256": "4ab6f192dc328c36b5ecfea18c56483ca05858b9eefa2d92634d02cee1ecd2f0"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "ad46c1aec582dd1df261ddd782b948630a958c697ab1a34040244226957093ea",
+        "bytes": 5068603,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Wide photo loses small outer side areas at 16:9; central building/signs remain legible scenery.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "3qqd26": {
@@ -591,11 +725,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "0d57a5b1b279ebf03683d1b3256dcefd323bd85dcb39d5f27b1d55c9d7c16ae6",
         "thumbnail_sha256": "3d6b549008abd8d003243a8e0ae67218f3d4452b5cfb1be5ed1b62eb3356d697"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "44430a60634bba4a3ef7827f218c8953357c4596bc8cf18954242fd4213391ce",
+        "bytes": 13306976,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Wave texture is intentionally busy; upper-right widget cards must retain their native backing.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "57o619": {
@@ -710,11 +853,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "5b1be6396eb23a1cdc5ce61a3dfa03991a8de2c5a60f6a8ce35c966cb7ba7a22",
         "thumbnail_sha256": "8b4ae9c18300dbb46f13a9c1d2453c9acd78372d90a1cf341dd1002d5a10a12e"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "6a2a70846fc1a3467b65fab580cb9546bba13f1bcef3612a54dd6ba2a1592b63",
+        "bytes": 13396599,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Boat and reflected peaks retained; photographic appearance includes pronounced colour grading.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "5y3q31": {
@@ -861,11 +1013,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "578c4820d7eb06c814a7258eb0f13773eb790b6a8258c1dbde5f9cdee9e99636",
         "thumbnail_sha256": "5bc8df7575fae67c6c6eb50e84fcf458b8841e7236cedc64527987b955652f9c"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "e63565bdbb1d90f3139e51d9f678aa2a4965da3bd68826417d33c42615fb2d77",
+        "bytes": 14260055,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Milky Way and valley retained. Long exposure/processing is not proof of single-exposure capture.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "6de6wl": {
@@ -952,11 +1113,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "e25f728dfaff497247db9904cbf382c6ecbd0e72b137fd9a813e33a550fffc82",
         "thumbnail_sha256": "fd4002be9b168ad8d2e608d08c52d37b5a0334c5d2e92cb034ab060a4501dc1a"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "a9a0eef7e3d11c65bebcdab6e4302d1e835625cb227cb4bcb13cb0b5f919d2e3",
+        "bytes": 3237667,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Ultrawide source loses outer ridge ends at 16:9; main foreground peaks remain. Use fit to retain the complete panorama.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "768yeo": {
@@ -1023,11 +1193,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "0c0a95ab4b293ca1b2bee5d1245543a4a2950cf23e2319ec922e504cd0ce955f",
         "thumbnail_sha256": "e698485048136587265a2bb45f2a3404997078de00cd47d9eee25fb697f0369f"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "b507004351bd72579b65351e43ffd49c0fdad02e382d959c218aa63c82100e5c",
+        "bytes": 1999402,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Small vertical crop at 16:9; tree canopy detail requires backed rail/cards.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "7j6wpy": {
@@ -1110,11 +1289,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "eb89d5e7f1fcbd5e255b91588255da05cdf5dbeee80677f02b1670291d20f75c",
         "thumbnail_sha256": "8bf85b0ae268866000804a99461dbed02c9ac855b5e619bc2e7ad263cb2f34b3"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "c6cb8261cd2608392b259f8152610472501f175ee0d67dfd2477ae6ed6473fbf",
+        "bytes": 6449677,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Open blue left sky and white cloud remain; preserve any photographer watermark.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "7p186o": {
@@ -1201,11 +1389,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "4cdcf3ec08f8f6e77887f221c5ad9b4dc12d377f6809d647ca56a5c7c391d919",
         "thumbnail_sha256": "aad1733a2d3d4f16dbf2362071feddcaeca74b1eba166e4971bc686db33b2e57"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "672311065e506767006fc806c0b77afedc3fe089861f3fac8c63e3295e6ed0b9",
+        "bytes": 814339,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop trims some sky/water; all principal mountain peaks and reflection remain.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "7p6wke": {
@@ -1288,11 +1485,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "6cb74808eb04b12c2bbdce8fd687e6ba9dfaef7a8bafcf857000590ab6971f09",
         "thumbnail_sha256": "63b57b681e07367f3efa0260a1ed04e826f8aeda3050dc5e3957eaf4d333b189"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "788e80857bbac143341066b8f8f8df981299b9cba7670e248fc88e0a986ed7c5",
+        "bytes": 13026649,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Fjord retained; visible JT watermark must be preserved.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "85xg5k": {
@@ -1383,11 +1589,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "221d04fe06dd64efded3a6840ef1f3d030919262fcc40c8935493cb1f643d5dc",
         "thumbnail_sha256": "c0e373df772396b724b6b5dcefe715ffb2fa8c6104c2db72dedba15f7b4bcd1f"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "aa54d476836bfd93d345bf2ea65c499968c97020163359660086f5d01eef3bfa",
+        "bytes": 3858126,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains dune crest and rainfall. Lower-left dune detail needs opaque left cards.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "9dpejk": {
@@ -1470,11 +1685,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "3a641e3206384b83694ace81718f4be82e7f611deedf8d2b28d03ee9d4c3beca",
         "thumbnail_sha256": "fe7154d36f6fa26889d3d2132b5b6bde3391c9dac5e422ff68d1b7b7fd9fe754"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "123013ab150b7904fdd8c410021bcfd62bc22b0f660c7f66083c3f3ed6cbea31",
+        "bytes": 3187887,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains copper larches; dense detail requires native card backing.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "9mqvz1": {
@@ -1557,11 +1781,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "d2e45e35516122b32c52dad5639f112fbaca32cb04e88fd3d7b9e157f0c9a298",
         "thumbnail_sha256": "23d45b5ccfc6f09f2ca696f029ae8f8c4a6547680019bb89a20444ba2291af82"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "f258a72682b84a1f861456d338d8bad80f07fc42b53d7ac4eef8670d5b50057c",
+        "bytes": 10661773,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Breaking wave below upper-right cards verified in native Aster photo QA.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "d6o77l": {
@@ -1660,98 +1893,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "6839308a048793f5bf88dc970ce5836bead8a8076cf0bd68197492a4e402801b",
         "thumbnail_sha256": "cc956d1453fb274fb905c348746f4db54eda342f956aab8fc826769ff6430f3b"
-      }
-    },
-    "dpr913": {
-      "id": "dpr913",
-      "subject": "Monochrome aerial city texture",
-      "page_url": "https://wallhaven.cc/w/dpr913",
-      "api_url": "https://wallhaven.cc/api/v1/w/dpr913",
-      "full_url": "https://w.wallhaven.cc/full/dp/wallhaven-dpr913.jpg",
-      "thumbnail_url": "https://th.wallhaven.cc/lg/dp/dpr913.jpg",
-      "resolution": [
-        3936,
-        2624
-      ],
-      "purity": "sfw",
-      "category": "general",
-      "uploaded_at": "2022-07-18 17:24:27",
-      "uploader": {
-        "username": "ngysjeremy",
-        "is_author": null
       },
-      "author": {
-        "name": null,
-        "verification": "not independently verified",
-        "reported_candidate": "Andre Benz",
-        "candidate_basis": "Wallhaven detail tags only"
-      },
-      "source_url": null,
-      "source_verification": "source not provided by Wallhaven",
-      "license": {
-        "identifier": null,
-        "url": null,
-        "status": "unknown; no redistribution permission established"
-      },
-      "tags": [
-        {
-          "id": 70984,
-          "name": "Andre Benz"
-        },
-        {
-          "id": 1379,
-          "name": "monochrome"
-        },
-        {
-          "id": 795,
-          "name": "New York City"
-        },
-        {
-          "id": 17,
-          "name": "city"
-        },
-        {
-          "id": 13,
-          "name": "cityscape"
-        },
-        {
-          "id": 69246,
-          "name": "drone photo"
-        },
-        {
-          "id": 4679,
-          "name": "USA"
-        },
-        {
-          "id": 10630,
-          "name": "aerial view"
-        },
-        {
-          "id": 369,
-          "name": "dark"
-        },
-        {
-          "id": 8644,
-          "name": "rooftops"
-        }
-      ],
-      "ai_review": {
-        "flagged_ai": false,
-        "rejected_tag_ids": [
-          133451
-        ],
-        "returned_ai_boolean": null,
-        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
-      },
-      "evidence": {
-        "detail_sha256": "7c3c43d85593f930c10f347b4481db27d6a340812f174f56df90aec1ebc54532",
-        "thumbnail_sha256": "cb12507f11b68c2e464c81c18f34eee949582ac14dba5415b35512167c298aa0"
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "3c53cefed34ecde69193f8180d3df49f525b2376a4b64caf0b6a9d935c52fa00",
+        "bytes": 3361019,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Cumulus retained; keep photographer watermark and opaque brutalist surfaces.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "ey7prw": {
@@ -1854,11 +2009,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "f1c4a6294d95ca627f38d3448d3c1ba0195a7ae758c7dfb04ce672cd3614529a",
         "thumbnail_sha256": "5a9f3461a1ae7c13377345d3dae02b2fbc52e6692c89f8c6b827b4d0179fc2da"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "17b7860011a670eb31f62f690275f66a4a06fed8040ab09ff5829912c5ac0118",
+        "bytes": 1194261,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains snowy peaks. Native Mountain clock remains readable in night sky.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "eyv7xl": {
@@ -1937,11 +2101,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "672cea8587c779fef1aad699d169500a99979afe2867c218c4bbe44392bdc0d3",
         "thumbnail_sha256": "343edebe84138a96d0ea1e04f43eefdc35c9a4fcb9bc8c6e8ded5744973f683b"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "2e52eaa3c88bb45d370a3faffdc6dd3ebcd59ea81f3e0416df7fc378e70964ea",
+        "bytes": 282935,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains cup and shadow; low-key photo needs backed paper widgets.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "jxyowm": {
@@ -2016,11 +2189,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "59c0356d67a4e0896cb31f6a207071eb82d6ce9d543586a562bcac859bedc9d5",
         "thumbnail_sha256": "0d310010656240a929c9360a0c45466bc06ac264123e386d636f151c6ce2a196"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "a4bfd65a94275d120444e2546e8d37d631efde39789bb748a4381860b2b6cd16",
+        "bytes": 4130127,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains moon and both peaks; left Material rail must stay backed.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "kxygyd": {
@@ -2107,11 +2289,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "92e387c847d6199c98f0ec070c8ceab3b571652b563a41166b4a5b4dfeb9de1d",
         "thumbnail_sha256": "d2aede6c40beee7d929da845612dc2bdfe45632b30cedd59ff040f6e091bfa7c"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "b6a123823c0fd5a1d99521cdc6aeb701fb1d4ad1d28f1ed446449117b6d1f6f8",
+        "bytes": 17652296,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Native Glyph layout keeps clock in quiet sky; central tree partly behind right media card, acceptable scenic occlusion.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "l3edjp": {
@@ -2202,11 +2393,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "63e641c30bc1672c5333cee9390fa2d0dac506dc001fe797ce6cd70522b6ed80",
         "thumbnail_sha256": "417f8748339e7620ac6898c5d27cd36514d5c69cdd6083dab3ea980f18a9184a"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "931e8e461a521afe0eb53438358a487b7dd6b40f62adc2ad83df32d6571e7237",
+        "bytes": 1954788,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains moon, peak and reflection; sky remains a quiet top-panel field.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "lygg6r": {
@@ -2317,11 +2517,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "09b1fa81e645d3a018db847051a40ba3a89fabbc1473b0c5681be4e62390006c",
         "thumbnail_sha256": "819d7e3e627d954d3e32afcfadfdd7dc7a38bbf5302f45662fc51023eaadc96a"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "702dec98800a0053059e6841491adddd315b48df834f985faef7a66c0f3526d1",
+        "bytes": 1854551,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop trims cupola frame top/bottom; Earth centre and right dark structural frame retained.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "m9wr19": {
@@ -2416,106 +2625,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "c6de5cb90d1cf1fe3e315740c7fc2585f346a9ca049a99ea0a92075c629fb6f3",
         "thumbnail_sha256": "00364055af5268232dd7ecdd022e00ec35cb227037cca9839f5a8af4f4dd1f0a"
-      }
-    },
-    "nr7zq0": {
-      "id": "nr7zq0",
-      "subject": "Swiss alpine snowfield",
-      "page_url": "https://wallhaven.cc/w/nr7zq0",
-      "api_url": "https://wallhaven.cc/api/v1/w/nr7zq0",
-      "full_url": "https://w.wallhaven.cc/full/nr/wallhaven-nr7zq0.jpg",
-      "thumbnail_url": "https://th.wallhaven.cc/lg/nr/nr7zq0.jpg",
-      "resolution": [
-        2560,
-        1440
-      ],
-      "purity": "sfw",
-      "category": "general",
-      "uploaded_at": "2014-02-22 18:30:26",
-      "uploader": {
-        "username": "Skiboosh",
-        "is_author": null
       },
-      "author": {
-        "name": null,
-        "verification": "not independently verified",
-        "reported_candidate": null,
-        "candidate_basis": null
-      },
-      "source_url": null,
-      "source_verification": "source not provided by Wallhaven",
-      "license": {
-        "identifier": null,
-        "url": null,
-        "status": "unknown; no redistribution permission established"
-      },
-      "tags": [
-        {
-          "id": 84,
-          "name": "snow"
-        },
-        {
-          "id": 327,
-          "name": "winter"
-        },
-        {
-          "id": 328,
-          "name": "mountains"
-        },
-        {
-          "id": 37,
-          "name": "nature"
-        },
-        {
-          "id": 711,
-          "name": "landscape"
-        },
-        {
-          "id": 109,
-          "name": "photography"
-        },
-        {
-          "id": 190,
-          "name": "clouds"
-        },
-        {
-          "id": 2729,
-          "name": "sky"
-        },
-        {
-          "id": 6248,
-          "name": "cold"
-        },
-        {
-          "id": 1594,
-          "name": "Switzerland"
-        },
-        {
-          "id": 40759,
-          "name": "snowy mountain"
-        },
-        {
-          "id": 114713,
-          "name": "Titlis Engelberg"
-        }
-      ],
-      "ai_review": {
-        "flagged_ai": false,
-        "rejected_tag_ids": [
-          133451
-        ],
-        "returned_ai_boolean": null,
-        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
-      },
-      "evidence": {
-        "detail_sha256": "8303222fdd429cee3d1a8c411c5b8515a90bbaed9c78ac5b4451b7c7acf6265f",
-        "thumbnail_sha256": "2ae1e24a7b75e1a973e5ecce5d9807ff58d6923fa8753350a9ab88dc7b71de5a"
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "805e29ce9afaf8c68e0a76c071a4241cbb00bd220f98557bd943c8a3c4ac65b7",
+        "bytes": 3627211,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains fern repetition; cards/rail must stay backed over macro texture.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "o571qp": {
@@ -2598,11 +2721,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "8adadd8be858ef810c0174198a0a13f157aca96f164e66bbf1ee35d3894598ab",
         "thumbnail_sha256": "43f22394528a79291f7d481df26dede528c69c3f1a7e22f51851d1cc6c877e2a"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "d6812e49b9a6293141ecab5ff5062203c469482d28390ae569f64d7e7aaeab4a",
+        "bytes": 292176,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains low sunset/hill silhouette; bare clock still needs a quiet sky location.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "p82qrj": {
@@ -2737,11 +2869,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "e1b25cc04a0665e657fe24ae0f1556f3d117417dcf117e15b35765ccb97d118b",
         "thumbnail_sha256": "65ee3556939f723d133d0a875b93ed382cc9f7382a422f5297dad80b25b8d012"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "7e1cc12219c6a2655899b00e7bd36abc715c2f22750d6e03390d69de0db04d93",
+        "bytes": 11945505,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains aurora/person/car; no licence or artist verification inferred from source link.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "p9qovj": {
@@ -2812,11 +2953,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "962b85443356255c614c028af017ae182d0421b0777f02841a469bf197cc55e8",
         "thumbnail_sha256": "1f60ba3b27d602aa4fda536b498e2862b928c80f0b354087548fe49547729aa0"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "a7edd76b064ca6ae5e3cc249457109a57aa679cb26951615c05e60c7209f9424",
+        "bytes": 2148486,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Four lamp heads retained; avoid placing transparent clock directly on lamps.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "po73qj": {
@@ -2895,11 +3045,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "98e0aeea4a9791af584feeef75dfc89a887fb1666681a8b2f3f9df95393ac8e4",
         "thumbnail_sha256": "0672295ecb75ca357eace068b18f6d59302916a25783d570e5a88af7e40b19fa"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "efbc5c2251fd1fcb419d2e11071cb390a182e343eee73b5b9fdf200eecf44cbd",
+        "bytes": 5801942,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop keeps major sandstone butte; keep dock below subject.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "qzgymr": {
@@ -2986,11 +3145,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "be1687d82188bdfa6f04314c5262f5627cea82c5ed92994901b1a20da5ef5e66",
         "thumbnail_sha256": "f3c79569bec2520791b062e1774c35f821f8aba0e9f29ad75edfcc04520a25f9"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "c1e5784e1b5c8ed51aadd9f9b85e9563642f822f6e3e0fe957cb6a7219bd9a12",
+        "bytes": 1802777,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Small vertical crop; lake and mountain ridge retained, white clouds need opaque panel text backing.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "vmxq3m": {
@@ -3077,11 +3245,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "0522a54795804bf8d3ecb3437676a348a62070d3e7cd2ed2454c04487965e2a6",
         "thumbnail_sha256": "fc5a43a78a0a94560294dde97e2cbfb5f78c669542250a9b06d04571e56bb3b7"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "6c7dd966e952051b2536c8b6364de7082ecac1305165abf8b8c316c5236b2fa6",
+        "bytes": 7493811,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Wide source crops outer hills at 16:9; main lake/road remain. Transparent Next widgets may need user positioning over darker foliage.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "vqxkr5": {
@@ -3168,11 +3345,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "0a5d564494e10b3184d7b87a7571500fe4cf231b4134d4d7ce034f9ce662aaf9",
         "thumbnail_sha256": "f6870bfef47fc875e368db8137e208e58a6c116b6cf5eb77aa125eb4be716a8b"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "4abd957632ead08e8ad8592da22b59e4db96022867aaef5906d7abad38a07bd3",
+        "bytes": 969967,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Near 16:9, very small side crop; fog layers and wooded ridge remain.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "w5eqmp": {
@@ -3283,11 +3469,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "a49514349e61ff36fbb2f5cafb81242ec484f98c9843cb70fbf9ce94c841894f",
         "thumbnail_sha256": "719ea07fbf3efbe2687f0642cf249a3e901068aea38f13563002785aa684be97"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "d9d703c47957027a5951695220ccaa9fcfab5d205a74cbea29a0982e31784c15",
+        "bytes": 4408926,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Near exact 16:9. Three pyramids retained; left sky supports backed clock card.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "wex83x": {
@@ -3378,11 +3573,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "728cd978e04af525980810765dcfb313d83e42348c049da2dc3d3f427209aac0",
         "thumbnail_sha256": "ff75aa0198baac67ff5ffba008628fbd7f9187e9cac2f17c6010c3ce16ffc22f"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "6774b1c1f0624d41e9b2fdeefb0b6f8a9ab90843bec7cc934105412dce44a642",
+        "bytes": 2107145,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains mountain/reflection; native Aster light cards readable on upper-right sky.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "x83e2z": {
@@ -3453,11 +3657,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "9fe091303e42ee57f4b93e2d76094fc6e64643d024948be3ad5127aa062fb917",
         "thumbnail_sha256": "2e265c8662ce5dcc293a8d9aead5a81c0e5c0a3c287069f6f20070a5aec8f4be"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "29add16b17eb9b2a2629a4d8c119c1a114ecca5cd709d8c3e8961e5d6f5a7c27",
+        "bytes": 3231736,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains fog and main peaks; blank fog supports backed editorial widgets.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "xl19lv": {
@@ -3584,11 +3797,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "d42d49c96e2ad66effb4ab35d94afe1db08949cb7398854782693576039411e7",
         "thumbnail_sha256": "7b2fac9e8da1fd2bb976a4004c8fa81f73c722924e21fdcee05b77d64efe85b4"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "92defe31ea1740fa8f41e2bd5287639deed763421d51c68e41d1d48848ffa798",
+        "bytes": 4783148,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Cyclone and solar panel retained; split bars must be backed over cloud detail.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "ymm56g": {
@@ -3695,11 +3917,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "77831410f434d21684f7d7601219efb0db7147355f9b83a0470f37336a2bc527",
         "thumbnail_sha256": "6fa812ff22c2e5807faf7c1e14f40aea584907c3fae05bcdec7210b2e398a1ec"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "513bcbcf15874cc86a1683684c8128b4776a8615a93ddf85f8a3ed6c3507c639",
+        "bytes": 4816847,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains complete hurricane eye; light cards require backing over cloud detail.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "yq8x8d": {
@@ -3798,11 +4029,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "926719328dc40ea9c6f0cecfcc39306a274328857c441a077a5955c24c9100dd",
         "thumbnail_sha256": "89cae81d1c565fb71a65f342fe5e8cc9ffc32e8f63c01112d4ee0f13d2f13f68"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "be7fd728395b35ccde0bc458fd7f0c474217b36a63969edf46c8b9b5be4d7ac3",
+        "bytes": 3119125,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop keeps boat and storm; no content added or repositioned.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "yqxzqx": {
@@ -3937,11 +4177,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "b2fbd0ff8d54e59a4eebbb4f46e537cf1f2c92e28e9b72912ae3247af9f1ab76",
         "thumbnail_sha256": "a8285af4301f2eaa74e3319878a68fb2c258d1b98a1bba64ec456a9eaae85a48"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "2933060c776e133f30ebffa397047d3ef44771ba450f17a55e3759bfcb6cd285",
+        "bytes": 9472248,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Train/shoreline retained; bottom taskbar overlays near-water field.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "yxvodx": {
@@ -4024,11 +4273,128 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "97f306e1dfd1f137003cd3ff232ea791251e2c5405a397c105853c6e508b9ee3",
         "thumbnail_sha256": "deb48edd80f6ff67974588f7491ce1ff6b6c59fa9fb5368577312c89b426122b"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "693aafbe8fdd93d0cfbac5a473bead71a9fd3c80a7a3d058cddaa603faf702c3",
+        "bytes": 3188544,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Vertical crop retains sparse star trails; quiet sky supports Sweeteh tiles.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
+      }
+    },
+    "zpzqeg": {
+      "id": "zpzqeg",
+      "subject": "Low-key monochrome Swiss valley and woodland",
+      "page_url": "https://wallhaven.cc/w/zpzqeg",
+      "api_url": "https://wallhaven.cc/api/v1/w/zpzqeg",
+      "full_url": "https://w.wallhaven.cc/full/zp/wallhaven-zpzqeg.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/zp/zpzqeg.jpg",
+      "resolution": [
+        6144,
+        3457
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2026-01-09 14:22:38",
+      "uploader": {
+        "username": "Pc7",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": "Marcel Bisig",
+        "candidate_basis": "Wallhaven detail tags only"
+      },
+      "source_url": "https://www.flickr.com/photos/mbgraphx/52479313444/",
+      "source_verification": "reported by Wallhaven; destination not independently verified",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 162748,
+          "name": "Marcel Bisig"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 3017,
+          "name": "power lines"
+        },
+        {
+          "id": 115,
+          "name": "trees"
+        },
+        {
+          "id": 870,
+          "name": "grass"
+        },
+        {
+          "id": 3393,
+          "name": "house"
+        },
+        {
+          "id": 7563,
+          "name": "village"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        },
+        {
+          "id": 144088,
+          "name": "viewpoint"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 1594,
+          "name": "Switzerland"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
+      },
+      "evidence": {
+        "detail_sha256": "1b0c5c4754de58f04ca2df6d6abdd0f2b41478dcc7eb244caa1aefaa9db62154",
+        "thumbnail_sha256": "1f3032517e80d57e3d6dea03cd1efcc8bef9689498fd1cc30ea5638965795a15"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "d4c46373b19ed707afef9db23bba27de1a51f709953536bd1d836a67f87065aa",
+        "bytes": 5847478,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "16:9 vertical crop preserves the diagonal valley; native Glyph review improves fine-text legibility by removing bright rooftop edges. User-scaled fine grey labels still need display-specific checks.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     },
     "zx9z8j": {
@@ -4111,11 +4477,20 @@
         ],
         "returned_ai_boolean": null,
         "visual_assessment": "photographic appearance; provenance is not proof of capture method",
-        "inspected": "large provider thumbnail"
+        "inspected": "full-resolution original, 16:9 center-fill view and native-pixel detail strip; see full_resolution_review"
       },
       "evidence": {
         "detail_sha256": "cc87a481d896320712f75e33767c102fc0bd1c32abf8e4c3d5209720ebd53863",
         "thumbnail_sha256": "c4c7296fbd7b49139cbb6adcd39de26112473c4f3e79ad159829dd8bc57b5e06"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-30",
+        "sha256": "593c376ef8a58e15d9671bb1bbfa403375023373886513e366f611650a0d7cf6",
+        "bytes": 2050264,
+        "dimensions_verified": true,
+        "assessment": "usable with stated crop/readability cautions",
+        "notes": "Exact 16:9. Architectural convergence retained; hard-edged UI must remain opaque.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
     }
   },
@@ -4186,17 +4561,17 @@
     },
     "glyph-rice": {
       "status": "curated_pending_runtime_wiring",
-      "rationale": "Low-key city texture / white winter negative space keep the dot typography dominant.",
+      "rationale": "Low-key photographic woodland / white winter negative space keep the dot typography dominant.",
       "dark": {
-        "image_id": "dpr913",
-        "rationale": "A monochrome aerial city forms a dark fine-grained texture behind white dots."
+        "image_id": "zpzqeg",
+        "rationale": "A quiet low-key monochrome valley gives white dot type and fine grey labels a calmer field than bright rooftop edges."
       },
       "light": {
         "image_id": "kxygyd",
         "rationale": "A lone tree in a white snow field leaves negative space for black dot type."
       },
       "same_image_both_modes": false,
-      "placement": "Center-fill. Test the giant upper-left clock against the skyline/tree; right circular cards remain opaque. Image itself contains no UI.",
+      "placement": "Center-fill keeps the diagonal valley and central winter tree; native Glyph clock/greeting remain readable. Right circular/media/system cards retain actual opaque backing. Fine grey metadata still needs display-specific checks.",
       "recommended_mode": "fill",
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
@@ -4288,11 +4663,11 @@
         "rationale": "Dark teal snowy peaks beneath a star field closely match the screenshot's mountain/sky proportions."
       },
       "light": {
-        "image_id": "nr7zq0",
-        "rationale": "Snowfield and pale Swiss alpine sky provide a true light counterpart."
+        "image_id": "2kqkmy",
+        "rationale": "A photographic white snowfield and curved vehicle tracks leave both transparent clock and homelab text readable; replaces the low-contrast cloudy alpine choice."
       },
       "same_image_both_modes": false,
-      "placement": "Center-fill. Upper-left dot clock sits in sky; homelab panel keeps its backing over mountain contrast. No dock; top islands stay separate.",
+      "placement": "Center-fill keeps the vehicle/tracks central and white negative space under both transparent instruments. Dark mode retains the alpine reference; light mode deliberately prioritizes legibility over a second mountain panorama. No dock or widget movement.",
       "recommended_mode": "fill",
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     },
@@ -4389,8 +4764,8 @@
       },
       "same_image_both_modes": false,
       "placement": "Center-fill; keep the cloud ridge below the right-side clock/weather/calendar stack. Preserve any photographer watermark; never crop specifically to remove it.",
-      "recommended_mode": "fill",
-      "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+      "recommended_mode": "fit",
+      "crop_policy": "Prefer fit to retain the full wide cloud frame and any watermark; keep the existing independent Wallpaper scaling preference unless explicitly changed by the user."
     },
     "synthwave": {
       "status": "curated_pending_runtime_wiring",
@@ -4456,5 +4831,40 @@
       "recommended_mode": "fill",
       "crop_policy": "keep original aspect; center-fill crops on aspect mismatch; verify ultrawide/portrait separately"
     }
-  }
+  },
+  "full_resolution_audit": {
+    "reviewed_on": "2026-10-30",
+    "initial_choices_reviewed": 42,
+    "current_choices_reviewed": 42,
+    "replacement_count": 2,
+    "download_limits": {
+      "max_files_initial": 42,
+      "max_additional_full_candidates": 3,
+      "max_bytes_per_file": 33554432,
+      "timeout_seconds_per_file": 30,
+      "concurrent_downloads": 3
+    },
+    "private_evidence": "/tmp/decebal-wallhaven-curation/full-review-{1..7}.jpg; mountain-review, mountain-snow-review, glyph-review; glyph-quiet-review",
+    "unverified": "No licence/copyright/capture-method guarantee; no full photo or derivative committed"
+  },
+  "rejected_recommendations": [
+    {
+      "theme_id": "mountain-neon-dot",
+      "mode": "light",
+      "id": "nr7zq0",
+      "page_url": "https://wallhaven.cc/w/nr7zq0",
+      "sha256": "c981bb50b0c853020205ae8bd84775e5cbf390381f881e2047ea07cbc0024159",
+      "reason": "Actual native 1920x1080 render: dark cloud at upper right obscures transparent homelab text; clock date also crosses rock detail. Replaced by inspected 2kqkmy, preserving widget definitions/layout.",
+      "replacement_id": "2kqkmy"
+    },
+    {
+      "theme_id": "glyph-rice",
+      "mode": "dark",
+      "id": "dpr913",
+      "page_url": "https://wallhaven.cc/w/dpr913",
+      "sha256": "3e13febbee73b06e0c773ed6d745b5ebc71b6e4a076575fcf3c21d51a8a19c2c",
+      "reason": "Native Glyph review: bright rooftop edges compete with the fine grey greeting/host labels. Replaced by quieter inspected zpzqeg; widget definitions and placement unchanged.",
+      "replacement_id": "zpzqeg"
+    }
+  ]
 }

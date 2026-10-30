@@ -5,9 +5,8 @@ version = "1.1.0"
 author = "Nebelung-cloud; Decebal port contributors"
 license = "GPL-3.0-only"
 homepage = "https://github.com/Nebelung-cloud/glyph-rice"
-description = "Glyph's black dot texture, giant dot clock, left rail and six-card monochrome dashboard with honest weather, media and system data."
+description = "Glyph's giant dot clock, left rail and six-card monochrome dashboard with honest weather, media and system data."
 tags = ["dark", "light", "monochrome", "dot-matrix", "glyph"]
-screenshots = ["screenshots/main.png"]
 
 [metrics]
 radius = 20
@@ -67,12 +66,6 @@ accent_text = "#ffffff"
 danger = "#d71921"
 ok = "#0b0b0b"
 warn = "#6e6e6e"
-
-[wallpaper]
-dark = "wallpapers/dark.png"
-light = "wallpapers/light.png"
-mode = "fill"
-match_colors = false
 
 [decoration]
 style = "minimal"

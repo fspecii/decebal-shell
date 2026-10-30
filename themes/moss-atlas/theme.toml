@@ -1,11 +1,10 @@
 format = 1
 id = "moss-atlas"
 name = "Moss Atlas"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "An organic workspace with a right-hand instrument rail, generous rounded surfaces and original layered terrain. Design stays constant when the palette changes."
+description = "An organic workspace with a right-hand instrument rail and generous rounded surfaces. Design stays constant when the palette changes."
 min_shell_version = "0.1.0"
 tags = ["original", "dark", "light", "palette-independent", "organic"]
 
@@ -69,11 +68,6 @@ ui = ["Noto Sans", "Cantarell", "sans-serif"]
 title = ["Noto Sans", "sans-serif"]
 mono = ["IBM Plex Mono", "monospace"]
 display = ["Noto Sans", "sans-serif"]
-
-[wallpaper]
-image = "wallpapers/moss-atlas-dark.png"
-mode = "fill"
-color = "#19251f"
 
 [decoration]
 style = "adwaita"

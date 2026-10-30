@@ -4,9 +4,8 @@ name = "Frutiger Aero"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Early-2010s optimism: glossy light-aqua and sky-blue surfaces, big rounded glassy cards, a bubbles-and-hills sky wallpaper, a Windows 7 style taskbar with glass caption buttons on the right, and fresh green accents. Mostly a light theme; the dark variant is a deep-ocean version of the same look."
+description = "Glossy light-aqua and sky-blue surfaces, rounded glassy cards, a Windows-style taskbar and fresh green accents. Deep-ocean dark and airy light variants."
 min_shell_version = "0.1.0"
-screenshots = ["screenshots/main.jpg"]
 tags = ["frutiger-aero", "aqua", "glass", "light", "dark", "skeuomorphic", "windows7"]
 
 [colors.light]
@@ -67,11 +66,6 @@ ui = ["Segoe UI", "Noto Sans", "DejaVu Sans"]
 title = ["Segoe UI", "Noto Sans"]
 mono = ["DejaVu Sans Mono"]
 scale = 1.0
-
-[wallpaper]
-image = "wallpapers/aqua-bubbles.jpg"
-mode = "fill"
-color = "#2f9fe8"
 
 [decoration]
 style = "windows-light"

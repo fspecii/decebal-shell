@@ -1,0 +1,446 @@
+{
+  "format": 1,
+  "date": "2026-10-30",
+  "baseline_commit": "d8f9f61750f996862b18fd25ebb937074aa5a0b6",
+  "themes": [
+    {
+      "theme_id": "brutalist",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/brutalist/wallpapers/slab.png",
+          "sha256": "cc18144022b2acbcb9e146b9c4d345c08b157a710120f4b4d1e4d39a920c5586",
+          "bytes": 2075
+        },
+        {
+          "path": "themes/brutalist/screenshots/main.png",
+          "sha256": "4bb2bb316728d9d0d588b44d74eac2afb5694421cbb460e95cfc83829b81d6e3",
+          "bytes": 31866
+        }
+      ],
+      "preserved_manifest_sha256": "f29d3f0b3e989c8b482651954d4756d07ff7cd7ac4babc6070f1796f8482520f",
+      "preserved_widget_files": {
+        "themes/brutalist/widgets/slab-clock.toml": "c97741907881234717c98349ecaacb68c52aa987e3f59605adfcfb0a68e9f5a3"
+      }
+    },
+    {
+      "theme_id": "frutiger-aero",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/frutiger-aero/wallpapers/aqua-bubbles.jpg",
+          "sha256": "fac2d01025fc7b70bb2f75488e43714a5314f6ed53ede04253842b22fddb91cb",
+          "bytes": 78393
+        },
+        {
+          "path": "themes/frutiger-aero/screenshots/main.jpg",
+          "sha256": "9b784b1e6a1cda6e7bdf161cacd1bacb94653b612a5ed5ab3de6e35d2277dae3",
+          "bytes": 38183
+        }
+      ],
+      "preserved_manifest_sha256": "e34cb867ff29f23c320fd71ff76c3b85c1b949233dcc519db537c5e849d612be",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "glyph-rice",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/glyph-rice/wallpapers/dark.png",
+          "sha256": "105733e8481930a1e4cf9612866c8b78cf68a4004528af08428f1778686b22a3",
+          "bytes": 34188
+        },
+        {
+          "path": "themes/glyph-rice/wallpapers/light.png",
+          "sha256": "e7098e898d9fa7b72ca905559914b69216b3cda8ac548ee7988577307041d854",
+          "bytes": 35865
+        },
+        {
+          "path": "themes/glyph-rice/screenshots/dark.png",
+          "sha256": "3ff02ed9d8a55b071b631406e5cf2f4b9ccd820d856490c289594b714326086f",
+          "bytes": 121565
+        },
+        {
+          "path": "themes/glyph-rice/screenshots/light.png",
+          "sha256": "1b49a5a7d42610769c1435ecb43f91c4fc403b71cf51abdb7a77f8e710daa50e",
+          "bytes": 130239
+        },
+        {
+          "path": "themes/glyph-rice/screenshots/main.png",
+          "sha256": "3ff02ed9d8a55b071b631406e5cf2f4b9ccd820d856490c289594b714326086f",
+          "bytes": 121565
+        }
+      ],
+      "preserved_manifest_sha256": "1e9e1c4aa1cfeb55e68d123a29e08157ebcbad18675e1b5baee86dd6183f38d6",
+      "preserved_widget_files": {
+        "themes/glyph-rice/widgets/glyph-calendar.toml": "2c2879485bf69eec364147342a21681deedbee54aaeb96508707e5549448e76b",
+        "themes/glyph-rice/widgets/glyph-day.toml": "d27a1a17925d69ce823326ad54a2bdca23d0e58abd0c381f8ca4c84d13cf4185",
+        "themes/glyph-rice/widgets/glyph-home.toml": "347d74def4edec99c06cec14e863a969fc4e7a7a27b98c46102582806460667e",
+        "themes/glyph-rice/widgets/glyph-player.toml": "d712c30d7a73dc2ad80639c1cef164c9e84e8f80b8f8c07897a01768c5d68911",
+        "themes/glyph-rice/widgets/glyph-system.toml": "2737bc8b44f10e109f7dea9119ee80f50d6056668cf55e94aa0ce8bb25bacc44",
+        "themes/glyph-rice/widgets/glyph-weather.toml": "c56d98a31d8e30042a71e1a980fca93903371ab7b1fc65b8f9ce7de19ea42896"
+      }
+    },
+    {
+      "theme_id": "gnome-adwaita-like",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/gnome-adwaita-like/wallpapers/soft-dark.jpg",
+          "sha256": "747b82ef7b14bc5b831d739ea97e6dceec4397c1aafd24e1eaf8d64d4cbf5806",
+          "bytes": 27231
+        },
+        {
+          "path": "themes/gnome-adwaita-like/wallpapers/soft-light.jpg",
+          "sha256": "fe54e1071dfddf6402193e3ca9b25f1594d269c90e756d08ce81ddf05040ff42",
+          "bytes": 31408
+        },
+        {
+          "path": "themes/gnome-adwaita-like/screenshots/main.jpg",
+          "sha256": "c96fae5a4eefff73ecb714a70eae7c10448f7be0c172bdb1f97a64b571281a72",
+          "bytes": 34113
+        }
+      ],
+      "preserved_manifest_sha256": "9ade6332757b49ec57ea74d9a350c7c7a4f2275454d83f9b5ba1f2cbaae4da8f",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "gruvbox-dark",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/gruvbox-dark/wallpapers/contours.png",
+          "sha256": "e133a5eec320357d26414e5ed3a2d770490aa294002dd7d26f8a4496005bb29f",
+          "bytes": 57814
+        },
+        {
+          "path": "themes/gruvbox-dark/screenshots/main.jpg",
+          "sha256": "54cf9b43a9e8c5d26c94761455efcf5a06bbd5b2c2c5dac65b729420cb327650",
+          "bytes": 37106
+        }
+      ],
+      "preserved_manifest_sha256": "9f7be0677ccc42a92eaf3808a9bb817f385614845dc4ea8c7d40d7326e85df81",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "kiln-court",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/kiln-court/wallpapers/dark.png",
+          "sha256": "898cb5ea249ae6c38db0db838736cdea4f24e28e1e755d7828ff87a4607bcad2",
+          "bytes": 57190
+        },
+        {
+          "path": "themes/kiln-court/wallpapers/light.png",
+          "sha256": "af50a24e621b82d7bc3e3a2f1af82d5036f2285d7f79e296f0aad26da84a14fb",
+          "bytes": 57157
+        },
+        {
+          "path": "themes/kiln-court/screenshots/light.png",
+          "sha256": "e49ad2195eb4ef7b2fd286731834257f6dbdc4fb770faee01d11f9e8ec51866b",
+          "bytes": 72996
+        },
+        {
+          "path": "themes/kiln-court/screenshots/main.png",
+          "sha256": "9fd78c5665eff7abe89bc48307ff815887948e85aeca45d5097062155ab23bf7",
+          "bytes": 63167
+        }
+      ],
+      "preserved_manifest_sha256": "361b2922342b04abcee259ff120d7ec6447c248c2eca0223c02ab383befe5e05",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "moss-atlas",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/moss-atlas/wallpapers/moss-atlas-dark.png",
+          "sha256": "c94b7725cae7f40720bbd611a4901442f6033516620122abff24fdaa5c8724a8",
+          "bytes": 337399
+        },
+        {
+          "path": "themes/moss-atlas/wallpapers/moss-atlas-light.png",
+          "sha256": "77ee0d52fb103a8ab7527d219377ea1cb25de23482f51df50121f907c217c5d1",
+          "bytes": 352455
+        },
+        {
+          "path": "themes/moss-atlas/screenshots/main.png",
+          "sha256": "51558e8171e553a6bcb8f1a021ed569e4dec28312b8a94553bd5d2099394279c",
+          "bytes": 188816
+        },
+        {
+          "path": "themes/moss-atlas/ARTWORK.md",
+          "sha256": "379918b1446899576c5639d4495832abbb1811957c179b21cd2dd42d1544ea39",
+          "bytes": 6149
+        }
+      ],
+      "preserved_manifest_sha256": "64cb79878b19d8f75d228e5fc7f626d7014da29c0ea515f101aa512e7529de1f",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "mountain-neon-dot",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/mountain-neon-dot/wallpapers/dark.png",
+          "sha256": "5c236eea8414340c1c59f60f551dd833bf6b5303ce6990e9f0bc1e516e74e579",
+          "bytes": 2473545
+        },
+        {
+          "path": "themes/mountain-neon-dot/wallpapers/light.png",
+          "sha256": "88918fd9e43df330f8e8e58c6b20df6d242dab723d266e8bb41091e68d1d1113",
+          "bytes": 2721970
+        },
+        {
+          "path": "themes/mountain-neon-dot/screenshots/dark.png",
+          "sha256": "206ebeb5efbb6c83934485fc79389523001c1020c14c456ae81def36f4eebacb",
+          "bytes": 777717
+        },
+        {
+          "path": "themes/mountain-neon-dot/screenshots/light.png",
+          "sha256": "497e49f8c9df9eba44754dd61fd95d3933ce735e3eed91704ae8dba68bd5d1ad",
+          "bytes": 874569
+        },
+        {
+          "path": "themes/mountain-neon-dot/screenshots/main.png",
+          "sha256": "206ebeb5efbb6c83934485fc79389523001c1020c14c456ae81def36f4eebacb",
+          "bytes": 777717
+        }
+      ],
+      "preserved_manifest_sha256": "a2e8d78b3189e8f55b8b341bf6341e4e47f4b438e089e2e8d0762b1edad0ecd9",
+      "preserved_widget_files": {
+        "themes/mountain-neon-dot/widgets/summit-clock.toml": "2840a6bbf95dc0ef601290ee6bec5a4f71b626fd27d0a168fc8a44c2073fc508",
+        "themes/mountain-neon-dot/widgets/summit-lab.toml": "a2cb8880bcac8af0662805f3fc744ef5f6438bc9def35e32e16ef108e53515b8",
+        "themes/mountain-neon-dot/widgets/summit-menu.toml": "f5a5d76561cd1f13b63ccb592015cc0b1642a022792ef0b844203ec5976a28fa",
+        "themes/mountain-neon-dot/widgets/summit-status.toml": "d55b876a71a935dadca267ed90cf86421670aff026885a7cd4790b25c13ea946",
+        "themes/mountain-neon-dot/widgets/summit-system.toml": "e68eb77c146919f229b66ac633ae75fd640087fc53b3b0728ab87f6490e3fb05",
+        "themes/mountain-neon-dot/widgets/summit-time.toml": "5ef19dca843e74c0ea0e8ee0407ffeba1c77741236939562ac8f56fe649902c3"
+      }
+    },
+    {
+      "theme_id": "nextkde",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/nextkde/wallpapers/glass-dark.png",
+          "sha256": "d6285ab6d5ebd4b85c4e421e79482464a3821b9782a57b6cd32df61da1d06ac3",
+          "bytes": 170051
+        },
+        {
+          "path": "themes/nextkde/wallpapers/glass-light.png",
+          "sha256": "8ec6bae39b6dbad11af44ddc10a4e25754e973e60f2b107849a06c171ea8bfdd",
+          "bytes": 174183
+        },
+        {
+          "path": "themes/nextkde/screenshots/main.png",
+          "sha256": "ce552e1b88b870308092fdd3253d9b52ad0faacb89c015f6c8b78c7d63c8fa6e",
+          "bytes": 314074
+        },
+        {
+          "path": "themes/nextkde/ARTWORK.md",
+          "sha256": "2579cb0922a7c3269f2b679f4ea45e90eabbc772c95e3e0c517d610c1c1859d3",
+          "bytes": 1584
+        }
+      ],
+      "preserved_manifest_sha256": "eedb3bf63306a97771ada102140a6fbad5da6a1e6f80a289b80b1d2daa904520",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "nothing-dot",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/nothing-dot/wallpapers/dots-dark.png",
+          "sha256": "2892e6b576af77bdfd79a06787bcf0d335af4b43c481de889ded42ff1a2e3a0b",
+          "bytes": 22531
+        },
+        {
+          "path": "themes/nothing-dot/screenshots/main.png",
+          "sha256": "f257e6094c98d8c99071439235467ea2a0f4da855ca6681e7a901972d58c0c3c",
+          "bytes": 61239
+        }
+      ],
+      "preserved_manifest_sha256": "9637b0608c9e205d986ad7ddaaf11bcdf46d9c0b71645d1c122412765aab19e0",
+      "preserved_widget_files": {
+        "themes/nothing-dot/widgets/dot-battery.toml": "aa4fac8afde891d6c0c0dc39612de68b999cb6790e17b202416dc54f81fa91b3",
+        "themes/nothing-dot/widgets/dot-clock.toml": "9964c169a331172709bbaa502cc74a2f0c56218d489769b9b601989bfa64cc62"
+      }
+    },
+    {
+      "theme_id": "orbit-glass",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/orbit-glass/wallpapers/dark.png",
+          "sha256": "6269cc451fde10b303d660d9a69acd632c94fd3984df9f3e730e00caac7bf9af",
+          "bytes": 723047
+        },
+        {
+          "path": "themes/orbit-glass/wallpapers/light.png",
+          "sha256": "b7a6feefaf5f6ffe22546992fae34871a0d35a350b4b520dc678de04ceda6d0c",
+          "bytes": 1093220
+        },
+        {
+          "path": "themes/orbit-glass/screenshots/main.png",
+          "sha256": "e7ea10d1402e34e1985da2f8eb82115f89c41d975436a230ac1f1761f639c30c",
+          "bytes": 399646
+        },
+        {
+          "path": "themes/orbit-glass/ARTWORK.md",
+          "sha256": "fc1ad17eedf7da9f0eff09d0b4d7f2bc4b25f55f5a9539b1e41bf63bd7ae1e7b",
+          "bytes": 5191
+        }
+      ],
+      "preserved_manifest_sha256": "b80edfc48c0290660d7894879770dc8c6a7f1d6304e249d8ee0b6d1e3fc1d375",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "paper-signal",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/paper-signal/wallpapers/dark.png",
+          "sha256": "355d8f7ab9e67779c15e47d3b3946ad31b67a41288ba6b71fb2debcc1863b7f8",
+          "bytes": 271622
+        },
+        {
+          "path": "themes/paper-signal/wallpapers/light.png",
+          "sha256": "14a282590239bad9abbc39a93b524d780ed606bf2a59e6efcf3045e24378ad6a",
+          "bytes": 279995
+        },
+        {
+          "path": "themes/paper-signal/screenshots/main.png",
+          "sha256": "769b16fd8e1a833c611377a7381212770d1253d7b6607053df9ee016a41926f9",
+          "bytes": 193124
+        },
+        {
+          "path": "themes/paper-signal/ARTWORK.md",
+          "sha256": "8d323f2e154c589e74a917c6129722c1a492b3d10dffa19e3f6a31b62619d158",
+          "bytes": 4803
+        }
+      ],
+      "preserved_manifest_sha256": "25bd4eb838fb814ae8dc37b6fd2c5797c7b8aaf408ca0f6647980d751ddcadf7",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "signal-deck",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/signal-deck/wallpapers/signal-deck-dark.png",
+          "sha256": "b67efb0b242d8df9b9fc9853bd2dd4a3ebe8803aa19b1ec8de185508e23c2a11",
+          "bytes": 629894
+        },
+        {
+          "path": "themes/signal-deck/wallpapers/signal-deck-light.png",
+          "sha256": "aceac20cba6e83f134bab3064b6bd94e393f6fa54e2b601583c78c83eede9d07",
+          "bytes": 1306906
+        },
+        {
+          "path": "themes/signal-deck/screenshots/main.png",
+          "sha256": "93cbdb86497ba7331b6bdc844c94919617f492f0650853bde4a52f721b5ccc7c",
+          "bytes": 150906
+        },
+        {
+          "path": "themes/signal-deck/ARTWORK.md",
+          "sha256": "9080845a25f114573caf6b507fce2f74e8c3c6a277d8e07d713c6b1ab90f17a8",
+          "bytes": 12797
+        }
+      ],
+      "preserved_manifest_sha256": "d2fe83723bfe96715b4cb5c43d0807f609ba97e9ddb08be11bff98c7474a3fe3",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "sweeteh",
+      "retained_upstream_photos": true,
+      "removed": [],
+      "preserved_manifest_sha256": "c4053b0ccc78716d0363899659e6ca86af6c6db7f360f8098c9460fbce9915cf",
+      "preserved_widget_files": {
+        "themes/sweeteh/widgets/sweet-calendar.toml": "13be9d38a447d0b8fe5220f2571027202a59b9a7e1187a5714a9da42a2c3da4f",
+        "themes/sweeteh/widgets/sweet-clock.toml": "f99137ebb75fbc7ab23432395d8241d5fe0ef5bbb0bbe809c3a6da929d731a7d",
+        "themes/sweeteh/widgets/sweet-island.toml": "25250e82910eae4f4031eb0c4697442aff9d05dad65c29e55240a6d6dc49a3fe",
+        "themes/sweeteh/widgets/sweet-media.toml": "e17d290c16eda9f7766ef5c417c87f50513c7cb2d7f25317d7ac49f413c67776",
+        "themes/sweeteh/widgets/sweet-status.toml": "ebb91af1efdee9ae350475a882209c17beb34e595949b2f0dbbf062a1a34c810",
+        "themes/sweeteh/widgets/sweet-system.toml": "4a23f2c370747dec09dc1240fb51da853ceb4e0ad30d1b0bf277836188e80199",
+        "themes/sweeteh/widgets/sweet-weather.toml": "9e4fa73b67783b871cfb7e9f21533e45df6d668873f38bb7bf73d1b4fa2ab91c",
+        "themes/sweeteh/widgets/sweet-workspaces.toml": "d81efa3f7397ebeb1c8762521dc2f77d4d7d113bce00c28e6267b59eb0c33238"
+      }
+    },
+    {
+      "theme_id": "synthwave",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/synthwave/wallpapers/sun-grid.png",
+          "sha256": "bf82da84ea53ec8f4f5e56dda4ea1ac0258f7f7a1852680cf644d226514bca40",
+          "bytes": 170809
+        },
+        {
+          "path": "themes/synthwave/screenshots/main.jpg",
+          "sha256": "16a9e16dfe5a8ac1769d655e9cb46ff7369e91e34aba0bf250b5348a7de9dc07",
+          "bytes": 39564
+        }
+      ],
+      "preserved_manifest_sha256": "126bb9b42cc35caa3a45bb5a113ad7c0b7c53a50cf3b63362152099d7bb1c172",
+      "preserved_widget_files": {}
+    },
+    {
+      "theme_id": "terminal-minimal",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/terminal-minimal/wallpapers/phosphor.png",
+          "sha256": "1ae6bc305e8282c01bca04a7c98ec0074296f92f6f977b5b8715a776d9f873e1",
+          "bytes": 3267
+        },
+        {
+          "path": "themes/terminal-minimal/screenshots/main.png",
+          "sha256": "607f8a79a5495592a691744b41165457492fc82e2f3e7db9a61ddcba5b605f71",
+          "bytes": 24876
+        }
+      ],
+      "preserved_manifest_sha256": "b405e4e6c10d46003d02d3fd9b084940da4719061bd6d38cbc8cfeb09941e0f6",
+      "preserved_widget_files": {
+        "themes/terminal-minimal/widgets/tty-clock.toml": "d8a90de7a8de50ff26e8d98af0b773f44ec6e373e223934c65d970386dcf2a9b"
+      }
+    },
+    {
+      "theme_id": "tidal-loom",
+      "retained_upstream_photos": false,
+      "removed": [
+        {
+          "path": "themes/tidal-loom/wallpapers/dark.png",
+          "sha256": "6ef47f84889e5459625b11055190e51b09c1b708c47b19eb495e217e551188b8",
+          "bytes": 89112
+        },
+        {
+          "path": "themes/tidal-loom/wallpapers/light.png",
+          "sha256": "45a0f755fa00659435f652d3364cc0d92643aa35570f91d5e3acde972d01bf41",
+          "bytes": 91391
+        },
+        {
+          "path": "themes/tidal-loom/screenshots/light.png",
+          "sha256": "3f5e0167c9eafda427b3cefaffc27eb42c86a68bb3c13b42d8572005ff6ba077",
+          "bytes": 80517
+        },
+        {
+          "path": "themes/tidal-loom/screenshots/main.png",
+          "sha256": "e809bef14ccf3340b2c0ede83df948acedb8409a2de0ac035dc47622fb2a727c",
+          "bytes": 81422
+        }
+      ],
+      "preserved_manifest_sha256": "305d4fa414ed5974dd11cbc909e3ccea2df15df4734dc4e10dc4e78cb0ecf6ca",
+      "preserved_widget_files": {},
+      "accepted_parent_manifest_sha256": "b565be4d8b920cd2cdf54641937c8ad1c4338f3b426cd78d8b8c34a1dd6c44e6",
+      "parent_baseline_note": "Parent already disabled the duplicate dock (8f0d079). Cleanup patch leaves dock keys untouched; allow the accepted parent baseline during integration as well as this checkout baseline."
+    }
+  ],
+  "removed_tools": [
+    {
+      "path": "tools/rice-batch-art.py",
+      "sha256": "a053bc2eee5f0bba23cf97dd3ceb05999bbc058ab438a5510c3448d4f80fc12b",
+      "bytes": 2554
+    }
+  ]
+}

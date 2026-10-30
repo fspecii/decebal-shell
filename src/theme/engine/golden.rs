@@ -132,7 +132,7 @@ fn the_example_package_is_valid_and_packs_reproducibly() {
     assert!(back.iter().any(|e| e.path == "widgets/sunset-clock.toml"));
 }
 
-/// Every theme added after the engine is a complete package in `themes/<id>/` (manifest, wallpaper, widgets, screenshot) that
+/// Every theme added after the engine is a complete package in `themes/<id>/` (manifest plus optional assets) that
 /// validates like a market upload, matches the compiled-in manifest, has distinct dark/light tokens where it claims both, and applies.
 #[test]
 fn new_themes_are_valid_packages_and_apply() {
@@ -146,18 +146,18 @@ fn new_themes_are_valid_packages_and_apply() {
         assert!(r.ok(), "{id}: {:?}", r.errors());
         assert_eq!(r.id.as_deref(), Some(id));
         assert_eq!(std::fs::read_to_string(dir.join("theme.toml")).unwrap(), builtin::source(id).unwrap(), "{id}: compiled-in manifest differs");
-        assert!(entries.iter().any(|e| e.path.starts_with("wallpapers/")), "{id}: no wallpaper");
-        assert!(entries.iter().any(|e| e.path.starts_with("screenshots/")), "{id}: no screenshot");
         let def = builtin::def(id).unwrap();
         assert!(def.has_dark() || def.has_light(), "{id}");
-        // Installed package assets remain available for previews; application preserves Wallpaper.
+        // Installed privately; packages without wallpaper metadata must preserve the user selection.
         let (d, src, paths) = sandbox(&format!("new-{id}"));
         package::install_entries(&entries, &src.themes_dir, true, &Limits::default()).unwrap_or_else(|e| panic!("{id}: install: {e}"));
-        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        std::fs::write(&paths.rdwm_config, "[general]\n[wallpaper]\nimage = \"/private/selected-photo.jpg\"\nmode = \"fit\"\n").unwrap();
         let out = apply::apply(&src, &paths, id, &Selection::default()).unwrap_or_else(|e| panic!("{id}: {e}"));
         assert!(!out.notes.iter().any(|n| n.contains("missing") || n.contains("cannot bundle")), "{id}: {:?}", out.notes);
         let cfg = std::fs::read_to_string(&paths.rdwm_config).unwrap();
-        assert!(crate::settings::tomlcfg::Cfg::parse(&cfg).unwrap().get("wallpaper", "image").is_none(), "{id}: package wallpaper must remain independent: {cfg}");
+        let parsed = crate::settings::tomlcfg::Cfg::parse(&cfg).unwrap();
+        assert_eq!(parsed.get("wallpaper", "image"), Some(crate::settings::tomlcfg::Val::Str("/private/selected-photo.jpg".into())), "{id}: theme changed the independent wallpaper");
+        assert_eq!(parsed.get("wallpaper", "mode"), Some(crate::settings::tomlcfg::Val::Str("fit".into())));
         let _ = std::fs::remove_dir_all(d);
     }
 }

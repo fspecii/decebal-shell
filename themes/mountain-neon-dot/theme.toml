@@ -1,7 +1,6 @@
 format = 1
 id = "mountain-neon-dot"
 name = "Mountain Neon Dot"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
@@ -69,12 +68,6 @@ ui = ["JetBrains Mono", "DejaVu Sans Mono", "Noto Sans"]
 title = ["JetBrains Mono", "monospace"]
 mono = ["JetBrains Mono", "monospace"]
 display = ["JetBrains Mono", "monospace"]
-
-[wallpaper]
-dark = "wallpapers/dark.png"
-light = "wallpapers/light.png"
-mode = "fill"
-color = "#142527"
 
 [decoration]
 style = "breeze"

@@ -4,9 +4,8 @@ name = "Gruvbox Dark"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Warm retro tiling rice: a thin flat bar on top, square corners everywhere, tight gaps and Gruvbox's earthy palette (cream text on charcoal, orange accent), with flat GTK-style titlebars and topographic contour lines on the wallpaper. A light 'paper' variant is included."
+description = "Warm retro tiling rice: thin top bar, square corners, tight gaps, cream on charcoal and earthy orange accents. Includes a light paper variant."
 min_shell_version = "0.1.0"
-screenshots = ["screenshots/main.jpg"]
 tags = ["gruvbox", "retro", "warm", "tiling", "square", "dark", "light"]
 
 [colors.dark]
@@ -67,11 +66,6 @@ ui = ["JetBrains Mono", "Noto Sans Mono", "DejaVu Sans Mono"]
 title = ["JetBrains Mono", "DejaVu Sans Mono"]
 mono = ["JetBrains Mono", "DejaVu Sans Mono"]
 scale = 0.95
-
-[wallpaper]
-image = "wallpapers/contours.png"
-mode = "fill"
-color = "#282828"
 
 [decoration]
 style = "gruvbox"

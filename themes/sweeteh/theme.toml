@@ -68,12 +68,6 @@ mono = ["JetBrains Mono", "DejaVu Sans Mono"]
 display = ["Google Sans Flex", "Inter", "Noto Sans"]
 scale = 1.0
 
-[wallpaper]
-dark = "wallpapers/julia-ly-pD0yNIuaLho-unsplash.jpg"
-light = "wallpapers/jack-b-JUvlf3OT6kc-unsplash.jpg"
-mode = "fill"
-match_colors = false
-
 [decoration]
 style = "adwaita"
 height = 32

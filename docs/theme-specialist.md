@@ -119,3 +119,31 @@ catalogue wiring/data installation, old generated-default removal and compositor
 shadow profile. Final contrast/crop QA for other 40 choices and ultrawide remains.
 Do not assume undocumented `ai_art_filter=0` is enforced: use detail tags + explicit
 visual review; parent provider has no AI filter preference yet. No competing agent.
+
+## Generated-default retirement — 2026-10-30
+
+All 21 visible package manifests now have no wallpaper section. Removed 26 known
+generated images, 22 package shots, five SVG-source docs and the art-only rice
+generator across 16 packages; 17th manifest is Sweeteh, retaining its two attributed
+upstream photos unchanged as optional assets. No layout/palette/widget/font fields
+changed. Parent Tidal dock-disable and macOS magnification baselines are preserved
+on integration; no whole-file copy from this older checkout. Hidden legacy aliases,
+examples, unrelated test solids and native dot widgets stay untouched.
+
+All 42 original Wallhaven files reviewed from full resolution (bounded ~199 MiB).
+Mountain light nr7zq0 failed transparent homelab/date contrast; replaced with actual
+2017 snowfield photo 2kqkmy after native QA. Glyph dark dpr913 also replaced by inspected zpzqeg to avoid bright rooftop edges
+under fine grey labels. Two replacements total; no more searches in this batch.
+Current 42 images / 21 IDs each have
+full-file hashes and crop/provenance caveats. No verified author/license invention.
+Private full files/contact sheets/photo UI evidence: /tmp/decebal-wallhaven-curation.
+No photos/derivatives committed. 34 package-only native mode previews refreshed;
+plain labelled UI canvases are evidence, never generated wallpapers.
+
+See generated-wallpaper-removal.md + JSON audit; tests verify both-mode independent
+wallpaper image/mode/background + custom-widget preservation for every design and
+retained photo hashes. A core golden **test-only** expectation now permits art-free
+packages. No runtime renderer/helper, parent picker/cache/Settings/accessibility,
+rdwm, live config/install/process or push changes. Parent owns managed-install stale
+asset cleanup and explicit runtime photo selection. Physical multi-display crop,
+watermarks and marginal fine Glyph text remain caveats.

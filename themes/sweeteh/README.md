@@ -42,11 +42,12 @@ The seed targets 1920 × 1080; smaller/scaled screens require layout adjustment.
 
 See ATTRIBUTION.md for exact hashes, primary URLs and license separation. Both
 unaltered photographs actually ship in the pinned upstream assets directory.
-Dark uses Julia Ly's rain texture; light uses Jack B's night-sky landscape. These
-are two existing wallpaper alternatives, not a claim that the latter is daylight.
+Julia Ly's rain texture and Jack B's night-sky landscape remain as attributed
+optional upstream assets, not automatic dark/light defaults.
 The red flower image and animated abyss seen in the demo are **not copied**:
 the former is not a checked-in asset and the latter lacks per-asset provenance.
-Theme-owned artwork follows mode changes; a user's custom wallpaper is retained.
+The wallpaper manifest section is removed: theme apply and mode changes leave
+the user's separate wallpaper image/mode/background preferences intact.
 
 Upstream recolors installed Adwaita folders into a generated Sweeteh icon theme.
 This package selects installed **Adwaita**, with hicolor fallback and symbolic
@@ -103,3 +104,19 @@ Reproduce from the repository with private config and
 pack tests do not install/apply anything to the desktop. Follow-up shared engine
 work: real reserved island bar, generated folder recoloring, registered package
 fonts, true week grid and wallpaper-hue/terminal harmonization.
+
+## Wallpaper choices
+
+Open **Wallpaper → For this theme** and select the separately curated Wallhaven
+photograph: dark [yxvodx](https://wallhaven.cc/w/yxvodx), light
+[21y32m](https://wallhaven.cc/w/21y32m). The source catalogue at
+`data/wallhaven-curated.json` records uploader versus unverified author, unknown
+license, source links and crop/readability notes. These links are recommendations,
+not package-owned remote fields or a redistribution license.
+
+This package sets no wallpaper image, scaling mode, background colour, slideshow
+or download action. Theme apply and mode changes preserve the independent
+Wallpaper selection; no automatic downloads or generated artwork fallback.
+Sweeteh's retained photos and their photo-based evidence are legitimate pinned upstream
+assets; see ATTRIBUTION.md. They are not generated art and are not auto-applied.
+The palette, layout, captions and native widget definitions remain unchanged.

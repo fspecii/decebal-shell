@@ -1,5 +1,12 @@
 # Moss Atlas and Signal Deck: research and design
 
+> Wallpaper policy update (2026-10-30): the generated wallpaper/SVG/package-shot
+> experiments described below are historical and have been removed from visible
+> packages. Use **Wallpaper → For this theme** and `data/wallhaven-curated.json`.
+> Theme apply does not own wallpaper. Layout, palette and native widget references
+> remain useful; old art paths/commands below are not current reproduction steps.
+
+
 Research checked 29 October 2026. Votes below are indexed Reddit snapshots returned during research, not a claim about current live totals or an all-time ranking. These highly voted posts provide concrete community references; the resulting themes are original designs.
 
 | Reference | Posted | Indexed votes | Useful idea |

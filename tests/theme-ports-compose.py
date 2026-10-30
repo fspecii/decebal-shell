@@ -6,7 +6,7 @@ Usage: python tests/theme-ports-compose.py [mountain-neon-dot|glyph-rice ...]
 from pathlib import Path
 import sys
 import tomllib
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 for ident in sys.argv[1:] or ['mountain-neon-dot', 'glyph-rice', 'sweeteh']:
@@ -16,8 +16,8 @@ for ident in sys.argv[1:] or ['mountain-neon-dot', 'glyph-rice', 'sweeteh']:
     out = ROOT / 'docs/theme-ports' / ident
     for mode in ('dark', 'light'):
         for state in ('sample', 'empty'):
-            canvas = ImageOps.fit(Image.open(package / manifest['wallpaper'][mode]).convert('RGBA'),
-                                  (width, height), method=Image.Resampling.LANCZOS)
+            # Neutral UI evidence, not a replacement/generated wallpaper asset.
+            canvas = Image.new('RGBA', (width, height), manifest['colors'][mode]['background'])
             boxes = []
             for spec in manifest['widgets']:
                 card = Image.open(out / f'{spec["use"]}-{mode}-{state}.png').convert('RGBA')
@@ -34,13 +34,7 @@ for ident in sys.argv[1:] or ['mountain-neon-dot', 'glyph-rice', 'sweeteh']:
                 assert all(box[2] <= b[0] or b[2] <= box[0] or box[3] <= b[1] or b[3] <= box[1] for b in boxes), (spec, boxes)
                 boxes.append(box)
                 canvas.alpha_composite(card, (x, y))
-            label = f'{manifest["name"]} / {mode.upper()} / NATIVE WIDGETS / {state.upper()} DATA / NOT A DESKTOP CAPTURE'
+            label = f'{manifest["name"]} / {mode.upper()} / NATIVE WIDGETS / {state.upper()} DATA / NO PACKAGED WALLPAPER / NOT A DESKTOP CAPTURE'
             ImageDraw.Draw(canvas).text((65, height-24), label, fill=manifest['colors'][mode]['text'])
             canvas.convert('RGB').save(out / f'{mode}-{state}.png', optimize=True)
-            if state == 'sample':
-                target = package / 'screenshots'
-                target.mkdir(exist_ok=True)
-                canvas.convert('RGB').resize((960, height//2), Image.Resampling.LANCZOS).save(target / f'{mode}.png', optimize=True)
-                if mode == 'dark':
-                    canvas.convert('RGB').resize((960, height//2), Image.Resampling.LANCZOS).save(target / 'main.png', optimize=True)
     print(out)

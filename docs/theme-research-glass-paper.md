@@ -1,5 +1,12 @@
 # Orbit Glass and Paper Signal
 
+> Wallpaper policy update (2026-10-30): the generated wallpaper/SVG/package-shot
+> experiments described below are historical and have been removed from visible
+> packages. Use **Wallpaper → For this theme** and `data/wallhaven-curated.json`.
+> Theme apply does not own wallpaper. Layout, palette and native widget references
+> remain useful; old art paths/commands below are not current reproduction steps.
+
+
 Research checked 2026-10-29. Reddit vote counts below are indexed snapshots, not fixed ratings. These are original desktop designs inspired by the compositional choices in popular posts, with original wallpaper artwork. No Reddit image, logo, dotfile, or application screenshot is included in either package.
 
 ## References inspected

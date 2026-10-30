@@ -1,11 +1,10 @@
 format = 1
 id = "orbit-glass"
 name = "Orbit Glass"
-screenshots = ["screenshots/main.png"]
 version = "2.0.0"
 author = "decebal"
 license = "MIT"
-description = "An orbital command deck: right glass navigation rail, precise window chrome and an original eclipse field, with no bottom dock."
+description = "An orbital command deck: right glass navigation rail and precise window chrome, with no bottom dock."
 min_shell_version = "0.1.0"
 tags = ["glass", "orbital", "right-rail", "command-deck"]
 
@@ -74,12 +73,6 @@ title = ["JetBrainsMono Nerd Font", "Adwaita Mono", "monospace"]
 mono = ["JetBrainsMono Nerd Font", "Adwaita Mono", "monospace"]
 display = ["Adwaita Sans", "Inter"]
 scale = 1.0
-
-[wallpaper]
-dark = "wallpapers/dark.png"
-light = "wallpapers/light.png"
-images = ["wallpapers/dark.png", "wallpapers/light.png"]
-mode = "fill"
 
 [decoration]
 style = "minimal"

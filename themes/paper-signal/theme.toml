@@ -1,11 +1,10 @@
 format = 1
 id = "paper-signal"
 name = "Paper Signal"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "An editorial desktop with a slim flat panel, precise rectangular windows, quiet typography and original paper geometry. Desktop structure remains independent of the selected color palette."
+description = "An editorial desktop with a slim flat panel, precise rectangular windows and quiet typography. Structure remains independent of the selected palette."
 min_shell_version = "0.1.0"
 tags = ["editorial", "paper", "flat", "minimal"]
 
@@ -68,10 +67,6 @@ title = ["IBM Plex Sans", "Inter", "Noto Sans"]
 mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
 display = ["IBM Plex Sans", "Inter", "Noto Sans"]
 scale = 1.0
-
-[wallpaper]
-images = ["wallpapers/light.png", "wallpapers/dark.png"]
-mode = "fill"
 
 [decoration]
 style = "minimal"

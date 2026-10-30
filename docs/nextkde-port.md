@@ -1,12 +1,19 @@
 # NextKDE reference adaptation
 
+> Wallpaper policy update (2026-10-30): the generated wallpaper/SVG/package-shot
+> experiments described below are historical and have been removed from visible
+> packages. Use **Wallpaper → For this theme** and `data/wallhaven-curated.json`.
+> Theme apply does not own wallpaper. Layout, palette and native widget references
+> remain useful; old art paths/commands below are not current reproduction steps.
+
+
 Reference: [NextKde/NextKde](https://github.com/NextKde/NextKde), commit `3fa1d7006869bbd3404a05d362c6e6028e0fe3da`, inspected on 2026-10-29. The upstream root `LICENSE` is GNU GPL version 3. Reference files inspected include `docs/images/desktop.png`, the Theme Settings page and Settings Card, `WidgetAppearanceSection.qml`, `AppearanceTokens.qml`, `DeskWidgetCard.qml`, `DeskClockFace.qml`, `DockWeatherWidget.qml`, `DockTemperatureWidget.qml` and the shared glass README.
 
-This is an original Decebal adaptation of the reference, not an exact port of its compositor implementation. No upstream QML, JavaScript, fonts, icons, wallpapers or other assets are distributed here. The manifest, shared widget definitions and gradient artwork are original MIT-licensed Decebal content. `themes/nextkde/LICENSE.md` contains the license; `ARTWORK.md` contains both wallpaper SVG sources. NextKDE is the independent upstream project's name; this theme does not imply endorsement.
+This is an original Decebal adaptation of the reference, not an exact port of its compositor implementation. No upstream QML, JavaScript, fonts, icons, wallpapers or other assets are distributed here. The manifest, shared widget definitions are original MIT-licensed Decebal content. `themes/nextkde/LICENSE.md` contains the license. The former gradient masters and PNGs are removed. NextKDE is the independent upstream project's name; this theme does not imply endorsement.
 
 ## Appearance
 
-The actual reference screenshot combines a quiet slate-to-aqua gradient, a nearly invisible top bar, centered floating glass dock, white monochrome widget ink and pale hairline card contours. Version 1.1 follows those features with original 4K gradient wallpaper, an explicit low top-bar alpha, translucent dock, 22-pixel rounded surfaces and glass widget cards. It avoids opaque popup-colored widget plates and unrelated decorative wallpaper shapes.
+The actual reference screenshot combines a quiet slate-to-aqua gradient, a nearly invisible top bar, centered floating glass dock, white monochrome widget ink and pale hairline card contours. Version 1.1 follows those features with an explicit low top-bar alpha, translucent dock, 22-pixel rounded surfaces and glass widget cards. It avoids opaque popup-colored widget plates and unrelated decorative wallpaper shapes.
 
 Upstream `AppearanceTokens.qml` declares zero painted bar/widget opacity for glass forms and white widget ink at 78% opacity. `DeskWidgetCard.qml` delegates its glass surface to KWin with a subtle scrim. Decebal adapts that appearance using supported alpha/scrim controls: the theme's bar alpha is 6%, dock alpha 18%; widget fill is a 14% dock-token scrim with a 32% foreground hairline. Popups/settings retain more opaque surfaces for reading controls. These are material defaults, not a claim of KWin shader equivalence.
 
@@ -41,7 +48,7 @@ A 1920×1080 private Xvfb + actual rdwm desktop displayed the running analog/wea
 
 Private matrix scripts and evidence were retained under `/tmp/nextkde-matrix-*`; the accepted Gaussian screenshot is `/tmp/nextkde-matrix-floating-xrender-gaussian.zHn1m4/root.png`. The private Picom config used `backend="xrender"`, `use-damage=false`, Gaussian size 12/deviation 5 and the same `_DECEBAL_BLUR` scoped rule as the repository configuration. Only the screenshot test configuration changed; live Picom configuration was untouched. Parent integration owns final live compositor verification.
 
-A private render configuration uses a temporary folder containing `decebal.json` with `{"theme":{"name":"nextkde","mode":"dark"}}`, plus `DECEBAL_CONFIG=<temporary-folder>` and `DECEBAL_THEMES=<checkout>/themes`. Render with `decwidgets render widgets/next-clock.toml --png <output> --bg themes/nextkde/wallpapers/glass-dark.png`. This does not apply a live theme.
+A private render configuration uses a temporary folder containing `decebal.json` with `{"theme":{"name":"nextkde","mode":"dark"}}`, plus `DECEBAL_CONFIG=<temporary-folder>` and `DECEBAL_THEMES=<checkout>/themes`. Render with `decwidgets render widgets/next-clock.toml --png <output>`; select a photograph separately for photographic QA. This does not apply a live theme.
 
 The X11 glass path now tags translucent shell surfaces with `_DECEBAL_BLUR = 1` when `metrics.blur` is nonzero. `contrib/picom/decebal-glass.conf` enables background blur only for these tagged windows. Bounding shapes exclude the bar's unused transparent popup canvas, so it cannot blur desktop widgets behind that canvas. This implements transparent tint and frosted backgrounds; upstream KWin's refractive/distortion shader remains a separate effect and is not reproduced.
 

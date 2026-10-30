@@ -5,9 +5,10 @@ a live configuration change. [`../data/wallhaven-curated.json`](../data/wallhave
 contains **21 theme IDs / 42 distinct images / 42 dark-light choices**. Every
 non-legacy package installed by `make install` is covered (including the five
 showcase folders; `everforest` is a palette alias and excluded). Aster is the one
-new package. No uncovered IDs at this checkpoint. Existing generated-art packages
-are deliberately unchanged here; the parent owns removing their defaults and
-wiring these selections into runtime. This catalogue alone does not remove them.
+new package. No uncovered IDs at this checkpoint. Generated artwork/defaults are now removed from the 16 visible packages that
+contained it; all 21 packages omit wallpaper metadata, including Sweeteh whose
+attributed upstream photos remain optional assets. Parent owns separate picker/
+cache wiring; the catalogue never triggers downloads from theme apply.
 
 ## Selection and provenance
 
@@ -27,6 +28,8 @@ code has no AI-exclusion preference yet; the parent must enforce the detail
 filter again when downloading, since classification can change.
 
 All chosen large thumbnails were visually inspected in subject contact sheets;
+all 42 original full-resolution recommendations were subsequently downloaded,
+decoded and reviewed at 16:9 with native-pixel detail strips.
 each choice has an individual rationale and placement/crop note. They have
 photographic appearance. Missing tags and visual inspection cannot certify the
 capture method, and this is not a claim of verified non-AI authorship. Do not
@@ -66,13 +69,13 @@ More detailed sky/subject/edge notes are in each JSON record.
 | `brutalist` | [zx9z8j](https://wallhaven.cc/w/zx9z8j) | [d6o77l](https://wallhaven.cc/w/d6o77l) | Strong photographic diagonals match hard edges; no decorative vector geometry is needed. |
 | `caelestia` | [p82qrj](https://wallhaven.cc/w/p82qrj) | [jxyowm](https://wallhaven.cc/w/jxyowm) | Photographic green and rose tones give Material You a natural source when explicitly enabled. |
 | `frutiger-aero` | [yq8x8d](https://wallhaven.cc/w/yq8x8d) | [7j6wpy](https://wallhaven.cc/w/7j6wpy) | Photographic water and clouds retain optimistic aqua without generated bubbles or hills. |
-| `glyph-rice` | [dpr913](https://wallhaven.cc/w/dpr913) | [kxygyd](https://wallhaven.cc/w/kxygyd) | Low-key city texture / white winter negative space keep the dot typography dominant. |
+| `glyph-rice` | [zpzqeg](https://wallhaven.cc/w/zpzqeg) | [kxygyd](https://wallhaven.cc/w/kxygyd) | Low-key photographic woodland / white winter negative space keep the dot typography dominant. |
 | `gnome-adwaita-like` | [3l6jj9](https://wallhaven.cc/w/3l6jj9) | [qzgymr](https://wallhaven.cc/w/qzgymr) | Cloud and mountain photography gives clean Adwaita-like surfaces breathing room. |
 | `gruvbox-dark` | [9dpejk](https://wallhaven.cc/w/9dpejk) | [po73qj](https://wallhaven.cc/w/po73qj) | Copper foliage and orange sandstone complement warm cream/charcoal rather than drawing contour lines. |
 | `kiln-court` | [w5eqmp](https://wallhaven.cc/w/w5eqmp) | [85xg5k](https://wallhaven.cc/w/85xg5k) | Earth pigment comes from real sand and architecture rather than rendered vaults. |
 | `macos` | [l3edjp](https://wallhaven.cc/w/l3edjp) | [6de6wl](https://wallhaven.cc/w/6de6wl) | Natural alpine photography replaces synthetic curves without imitating an Apple asset. |
 | `moss-atlas` | [vqxkr5](https://wallhaven.cc/w/vqxkr5) | [768yeo](https://wallhaven.cc/w/768yeo) | Actual woodland depth suits the organic right-hand instrument rail. |
-| `mountain-neon-dot` | [ey7prw](https://wallhaven.cc/w/ey7prw) | [nr7zq0](https://wallhaven.cc/w/nr7zq0) | Faithful snow-mountain photography with the reference's teal night atmosphere; no AI mountain illustration. |
+| `mountain-neon-dot` | [ey7prw](https://wallhaven.cc/w/ey7prw) | [2kqkmy](https://wallhaven.cc/w/2kqkmy) | Alpine night photography plus a legible white-snow light companion; no AI mountain illustration. |
 | `nextkde` | [57o619](https://wallhaven.cc/w/57o619) | [vmxq3m](https://wallhaven.cc/w/vmxq3m) | Soft blue reflections fit the broad glass surfaces and top-panel / launch-dock composition. |
 | `nothing-dot` | [p9qovj](https://wallhaven.cc/w/p9qovj) | [7p186o](https://wallhaven.cc/w/7p186o) | Real monochrome lighting and landscape complement the single red interface accent. |
 | `orbit-glass` | [5y3q31](https://wallhaven.cc/w/5y3q31) | [lygg6r](https://wallhaven.cc/w/lygg6r) | Use real astronomy/space photography rather than a synthetic eclipse. Right rail only. |
@@ -87,12 +90,18 @@ More detailed sky/subject/edge notes are in each JSON record.
 ## Readability and runtime handoff
 
 Center-fill keeps image aspect; it necessarily crops a different monitor aspect.
-The choices were assessed at landscape desktop aspect from actual thumbnails.
+The choices were assessed from the actual full-resolution files at 16:9, not
+just thumbnails. Each JSON image record now includes full-file SHA256 and crop/
+readability cautions.
 Ultrawide/portrait and multiple monitors remain unverified; keep the subject and
 retarget cropping per display. Neither this catalogue nor Aster paints UI into
-photography. In particular, Glyph's dot clock, Mountain's transparent clock and
-the bare terminal clock need a final full-resolution contrast check; other
-instrument cards retain their own backing. Do not add opaque fake widgets to
+photography. Native fixed-data QA also checked Aster, Glyph and Mountain using cached originals.
+Mountain light `nr7zq0` failed because dark clouds obscured transparent homelab
+text; it was replaced by the actual 2017 snowfield photo `2kqkmy`. The clock and
+homelab are readable without moving or editing widgets. Glyph's busy dark-city pick was also replaced by `zpzqeg` after bright rooftop
+edges competed with fine grey labels. The calmer native composition improves
+legibility; fine text still needs display-specific checks.
+Bare terminal clocks and user-moved widgets still need display-specific checks. Do not add opaque fake widgets to
 wallpaper files to solve contrast.
 
 Parent integration should recheck purity/AI tags on the detail response, honour
@@ -106,7 +115,8 @@ that state must be labelled rather than sold as an installed photo default.
 ## Rejected approaches / remaining gaps
 
 - `54l6l4` macro: looked photographic but also tagged digital art; replaced for
-  Glyph with the inspected monochrome aerial-city photo `dpr913`.
+  Glyph with the initially inspected aerial-city photo `dpr913`; full-resolution native
+  follow-up subsequently preferred the calmer Swiss valley `zpzqeg`.
 - `lmzpzp` Moon: tagged space art/digital art; replaced for Orbit with a sourced
   Milky Way photograph `5y3q31`.
 - `j59zrp` neon street: tagged concept/digital art; replaced for Synthwave with
@@ -114,9 +124,32 @@ that state must be labelled rather than sold as an installed photo default.
   results were not selected. No guessed upstream artist identity.
 - Parent `f68d460` and persistent-index `837799f` were read **read-only**. No engine,
   Settings, widget creator, Icons or rdwm source was copied over or changed.
-- Catalogue installation path, runtime selection/download/cache, old generated
-  default removal and compositor shadow profile remain parent's work.
-- Full-resolution contrast/crop proof is limited to Aster's two private QA photos;
-  the other 40 are thumbnail-curated recommendations awaiting runtime QA.
+- Catalogue installation path, runtime selection/download/cache and compositor
+  shadow profile remain parent's work. Generated-default retirement is implemented
+  in this batch; see `generated-wallpaper-removal.md`.
+- All42 current choices have full-resolution crop review. Native composition QA
+  covers Aster, Glyph and Mountain, not all 21 live desktops. Physical scaling,
+  ultrawide/portrait and arbitrary user widget positions remain unverified.
 - No new font/cursor/icon assets, live installation, application restarts or
   theme application. Existing Keep / Replace / Cancel remains tested.
+
+## Full-resolution follow-up and replacement
+
+42 initial full files decoded successfully (about 199 MiB cached, at most 3 concurrent
+downloads, 30 s/file, 32 MiB/file cap). No mirror, installer, live apply or download
+loop. One bounded additional snow search returned 5 results; three detail responses
+were inspected and two full candidates were fetched. `2kqkmy` replaced Mountain light. One additional detail/full candidate already
+seen on the monochrome search page, `zpzqeg`, replaced Glyph dark `dpr913`.
+No further replacement search or fetch is scheduled.
+The other candidate `gw5mol` was not selected: its edge signature would require
+more careful fit-mode handling, whereas the snowfield is clear under the unchanged
+transparent widgets. No invented image ID or source attribution.
+
+The current 42 images retain null verified author/license values. Photo appearance,
+old upload dates and absent AI tags do not prove capture method or grant reuse
+rights. Keep watermarks. In particular `7p6wke` has a visible JT mark; prefer fit
+for Sweeteh's wide `21y32m` if necessary to retain its full frame/watermark.
+Full original hashes and individual caveats are in `images.*.full_resolution_review`;
+the rejected alpine photo is in `rejected_recommendations`. Raw photographs,
+seven contact sheets and native photographic evidence remain only under
+`/tmp/decebal-wallhaven-curation`, outside git.

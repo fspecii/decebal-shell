@@ -65,6 +65,11 @@ fn catalogue_covers_shipped_designs_with_reviewed_sfw_provenance() {
             assert!(image["author"]["name"].is_null(), "unverified candidates must not become credited authors");
             assert!(image["license"]["identifier"].is_null());
             assert!(image["source_url"].is_null() || image["source_url"].as_str().unwrap().starts_with("https://"));
+            let full = &image["full_resolution_review"];
+            assert_eq!(full["dimensions_verified"], true);
+            assert!(full["bytes"].as_u64().unwrap() <= 32 << 20);
+            assert_eq!(full["sha256"].as_str().unwrap().len(), 64);
+            assert!(!full["notes"].as_str().unwrap().is_empty());
             for key in ["detail_sha256", "thumbnail_sha256"] {
                 let digest = image["evidence"][key].as_str().unwrap();
                 assert!(digest.len() == 64 && digest.bytes().all(|c| c.is_ascii_hexdigit()));
@@ -154,4 +159,39 @@ fn aster_native_widgets_render_sample_and_absent_sources_in_both_modes() {
             }
         }
     }
+}
+
+#[test]
+fn every_visible_package_preserves_wallpaper_preferences_in_both_mode_plans() {
+    let catalogue: Value = serde_json::from_str(include_str!("../data/wallhaven-curated.json")).unwrap();
+    let dir = std::env::temp_dir().join(format!("visible-wallpaper-contract-{}", std::process::id()));
+    fs::create_dir_all(dir.join("shell")).unwrap();
+    let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("rdwm.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("none.sock") };
+    let src = Source { shell_json: paths.shell_json(), themes_dir: root().join("themes") };
+    let original_config = "[general]\n[wallpaper]\nimage = \"/private/independent-photo.jpg\"\nmode = \"fit\"\ncolor = \"#123456\"\n";
+    fs::write(&paths.rdwm_config, original_config).unwrap();
+    let custom = json!({"enabled":true,"items":[{"use":"builtin:clock-card","x":213,"options":{"retain":true}}]});
+    fs::write(paths.shell_json(), json!({"theme":{"name":"macos"},"widgets":custom,"wallhaven":{"selection":"keep-me"}}).to_string()).unwrap();
+    let before = fs::read(paths.shell_json()).unwrap();
+    for (id, _) in catalogue["themes"].as_object().unwrap() {
+        let package_path = root().join("themes").join(id);
+        let entries = package::read_dir(&package_path, &Limits::default()).unwrap();
+        let report = package::check(&entries, &Limits::default());
+        assert!(report.ok(), "{id}: {:?}", report.errors());
+        assert!(!src.load_def(id).unwrap().extra.contains_key("wallpaper"));
+        for mode in [Mode::Dark, Mode::Light] {
+            let plan = apply::plan_with_widgets(&src, &paths, id, &Selection { mode, ..Default::default() }, apply::WidgetChoice::Keep).unwrap();
+            let config = Cfg::parse(&plan.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new).unwrap();
+            for (key, want) in [("image", "/private/independent-photo.jpg"), ("mode", "fit"), ("color", "#123456")] {
+                assert_eq!(config.get("wallpaper", key), Some(Val::Str(want.into())), "{id}: {key}");
+            }
+            assert!(!plan.notes.iter().any(|n| n.contains("wallpaper") && (n.contains("missing") || n.contains("download"))), "{id}: {:?}", plan.notes);
+            let shell: Value = serde_json::from_str(&plan.writes.iter().find(|w| w.path == paths.shell_json()).unwrap().new).unwrap();
+            assert_eq!(shell["widgets"]["items"], custom["items"], "{id}: Keep custom layout");
+            assert_eq!(shell["wallhaven"]["selection"], "keep-me");
+        }
+    }
+    assert_eq!(fs::read(paths.shell_json()).unwrap(), before);
+    assert_eq!(fs::read_to_string(paths.rdwm_config).unwrap(), original_config);
+    fs::remove_dir_all(dir).unwrap();
 }

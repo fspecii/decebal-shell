@@ -4,9 +4,8 @@ name = "Adwaita-like"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "A clean libadwaita-inspired look in light and dark: rounded headerbar-style titlebars with a centred title and round flat buttons, the familiar blue/grey Adwaita palette, a slim top panel with a centred-feeling clock, soft blurred-colour wallpapers (one per variant) and Cantarell/Inter type. Not affiliated with or endorsing any GNOME project; no logos used."
+description = "A libadwaita-inspired dark/light design: rounded headerbar-style captions, blue/grey surfaces, slim top panel and installed-font fallbacks. Unaffiliated with GNOME."
 min_shell_version = "0.1.0"
-screenshots = ["screenshots/main.jpg"]
 tags = ["adwaita", "libadwaita", "clean", "light", "dark", "rounded"]
 
 [colors.light]
@@ -66,11 +65,6 @@ ui = ["Cantarell", "Inter", "Noto Sans"]
 title = ["Cantarell", "Inter", "Noto Sans"]
 mono = ["JetBrains Mono", "DejaVu Sans Mono"]
 scale = 1.0
-
-[wallpaper]
-images = ["wallpapers/soft-dark.jpg", "wallpapers/soft-light.jpg"]
-mode = "fill"
-color = "#242424"
 
 [decoration]
 style = "adwaita"

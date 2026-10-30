@@ -1,11 +1,10 @@
 format = 1
 id = "kiln-court"
 name = "Kiln Court"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "A warm architectural court: nested clay vaults, a bottom pill panel, quiet rounded windows and a left-hand widget column."
+description = "A warm architectural court: clay tones, a bottom pill panel, quiet rounded windows and a left-hand widget column."
 min_shell_version = "0.1.0"
 tags = ["original", "dark", "light", "architecture"]
 
@@ -68,11 +67,6 @@ title = ["IBM Plex Sans", "Inter", "Noto Sans"]
 mono = ["IBM Plex Mono", "DejaVu Sans Mono"]
 display = ["IBM Plex Sans", "Inter", "Noto Sans"]
 scale = 1.0
-
-[wallpaper]
-dark = "wallpapers/dark.png"
-light = "wallpapers/light.png"
-mode = "fill"
 
 [decoration]
 style = "adwaita"

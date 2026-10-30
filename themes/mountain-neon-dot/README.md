@@ -12,8 +12,7 @@ hours/minutes and a small dot date at left, homelab at upper right, native syste
 readings below on a restrained translucent backing for daylight readability. No dock. Six theme widgets use the safe DSL, theme semantic
 colors and existing data sources. Original `dot-text` uses a seven-row alphabet,
 so it works without installing a dot font. Desktop applications retain Breeze
-window buttons. Both mode-specific wallpapers are selected by the package
-engine when it owns the artwork; custom wallpapers are preserved by mode edits.
+window buttons. Photographic wallpaper is selected separately from the theme.
 
 The three top islands are **widgets**, not a real bar or system tray. The left
 opens the launcher; the right opens the dashboard. Center time/date/weather and
@@ -31,32 +30,19 @@ percentages. Configure monitoring only after a shared opt-in provider exists.
 The system panel uses actual shared username/hostname, uptime, CPU, memory,
 disk and network-rate sources with explicit unavailable fallbacks.
 
-## Artwork provenance
+## Retired artwork
 
-Both original wallpaper PNGs are imagegen outputs recovered byte-for-byte from
-the stopped Mountain worker, as requested by the user. They match preserved
-imagegen output files in generation directory
-`01a18988-d709-7d83-8aa4-512433de6834`. The exact generation prompt was not retained
-with the worker's package; do not claim a real photograph, location or artist.
-No third-party mountain photo was downloaded. The light asset is a separately
-generated daylight companion, not a recolored copy of the reference screenshot.
-
-- `wallpapers/dark.png`, 1672 × 941, SHA256
-  `5c236eea8414340c1c59f60f551dd833bf6b5303ce6990e9f0bc1e516e74e579`
-- `wallpapers/light.png`, 1672 × 941, SHA256
-  `88918fd9e43df330f8e8e58c6b20df6d242dab723d266e8bb41091e68d1d1113`
-
-Manifest/widgets are MIT, copyright 2026 Decebal contributors. Generated art is
-supplied with this package for reuse under the same terms; no external image or
-font licenses are claimed. No fonts are bundled or installed. The generated
-mountain differs from the reference; a screenshot-faithful photographic match
-would require the original photograph and its reuse permission.
+The earlier imagegen mountain assets have been removed from the package and its
+apply metadata at the user's request. No generated image or photographic fallback
+is bundled. The user screenshot remains a composition reference only. Manifest
+and widgets retain their original MIT attribution; no third-party photo license
+is inferred. Existing native `dot-text` is interface rendering, not wallpaper art.
 
 ## Validation and limits
 
 See `docs/theme-ports/mountain-neon-dot/` in the repository for actual native
 sample/empty widget renders and four labelled compositions. These are headless
-widget pixels over wallpaper, **not full desktop captures**. Worker screenshots
+widget pixels on the theme background colour, **not full desktop captures**. Worker screenshots
 that baked in live host metrics were replaced. Reproduce with private config:
 
 ```
@@ -65,7 +51,7 @@ DECEBAL_CONFIG=/tmp/private-theme-config DECEBAL_SYSTEM_AUTOMATIC=0 \
 python tests/theme-ports-compose.py mountain-neon-dot
 ```
 
-The test validates safe packages, reproducible packing, dark/light artwork,
+The test validates safe packages, reproducible packing, preserved independent wallpaper choices,
 custom-layout Ask/Keep/Replace plans without writing, and visible unavailable
 states. Native text bounds and non-overlap are checked at 1920 × 1080. Pixel
 layout seeds are not responsive: smaller/scaled screens need placement editing.
@@ -80,3 +66,22 @@ compositions passed position/non-overlap checks and were visually reviewed.
 CLI package validation reported no errors or warnings. The light system card
 received a translucent backing after QA found text over bright rock unreadable;
 the homelab moved right into clear sky. No live provider was polled for evidence.
+
+## Wallpaper choices
+
+Open **Wallpaper → For this theme** and select the separately curated Wallhaven
+photograph: dark [ey7prw](https://wallhaven.cc/w/ey7prw), light
+[2kqkmy](https://wallhaven.cc/w/2kqkmy). The source catalogue at
+`data/wallhaven-curated.json` records uploader versus unverified author, unknown
+license, source links and crop/readability notes. These links are recommendations,
+not package-owned remote fields or a redistribution license.
+
+This package sets no wallpaper image, scaling mode, background colour, slideshow
+or download action. Theme apply and mode changes preserve the independent
+Wallpaper selection; no automatic downloads or generated artwork fallback.
+Former generated artwork and packaged screenshots containing it were removed.
+The palette, layout, captions and native widget definitions remain unchanged.
+
+Full-resolution native QA replaced the original cloudy light recommendation with
+a sparse photographic snowfield: black homelab text was lost over dark clouds.
+The dark choice remains alpine; light favours legibility. No widget was moved.

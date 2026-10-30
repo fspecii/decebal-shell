@@ -7,7 +7,6 @@ license = "MIT"
 description = "Ultra-light and terminal-flavoured: green phosphor on black, a tiny 20 px bar, no dock at all, a thin borderless-looking titlebar strip, square corners and monospace type. A plain monospace clock sits straight on the desktop. The light variant is dark green ink on paper. For amber phosphor see terminal-amber."
 min_shell_version = "0.1.0"
 tags = ["dark", "light", "terminal", "minimal", "green", "phosphor", "monospace"]
-screenshots = ["screenshots/main.png"]
 
 [metrics]
 radius = 0
@@ -69,11 +68,6 @@ accent_text = "#ffffff"
 danger = "#b3120f"
 ok = "#0a6b2a"
 warn = "#7a5a00"
-
-[wallpaper]
-image = "wallpapers/phosphor.png"
-mode = "fill"
-color = "#030603"
 
 [decoration]
 style = "minimal"

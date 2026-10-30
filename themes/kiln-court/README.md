@@ -1,21 +1,30 @@
 # Kiln Court
 
-Original Decebal design and procedural artwork, copyright 2026 Decebal contributors,
-licensed under the repository MIT license. No downloaded imagery, logos, third-party
-theme files or bundled fonts. Fonts are named only and fall back to Inter/Noto Sans.
+Warm architectural tones, a bottom pill panel and left-hand clock/resource cards. Original Decebal package configuration, copyright 2026 Decebal
+contributors, MIT. Existing semantic dark/light palettes, gaps, fonts, caption
+style and widget layout are retained. No font installation is required.
 
-Apply with `decthemectl theme apply kiln-court`. The package supplies dark and light
-semantic colors. Both artworks are bundled with `wallpaper.dark/light`; mode changes follow
-engine-owned artwork while preserving a custom wallpaper. Independent palettes recolor shell and
-widgets, not wallpaper pixels.
+The two desktop cards use existing safe builtin widgets. They are optional:
+untouched theme layouts follow theme switches, while customized layouts use the
+existing Keep / Replace / Cancel choice. Mode and palette edits retain placement.
+No custom commands, scripts or network providers are introduced.
 
-The two desktop widgets are optional layout seeds using existing safe builtin
-widgets. Untouched theme layouts follow theme switches; customized layouts use the
-shell's Keep / Replace / Cancel choice. Disable them in Settings → Widgets for a
-clear desktop. No custom commands, scripts or network providers are introduced.
+The former procedural artwork, packaged compositions and art-only generator are
+retired. Actual native widget evidence can be reproduced with
+`python tests/rice-batch-render.py`; it now uses only a labelled UI test canvas
+in `docs/rice-batch/`, never creates wallpaper files or package screenshots.
 
-`screenshots/main.png` and `screenshots/light.png` are labelled compositions of
-actual native headless widget pixels with sample data over the original wallpaper,
-not full desktop captures. Reproduce from the repository with
-`python tools/rice-batch-art.py`, build `decwidgets` and `decthemectl`, then run
-`python tests/rice-batch-render.py`. The scripts live outside the runtime package.
+## Wallpaper choices
+
+Open **Wallpaper → For this theme** and select the separately curated Wallhaven
+photograph: dark [w5eqmp](https://wallhaven.cc/w/w5eqmp), light
+[85xg5k](https://wallhaven.cc/w/85xg5k). The source catalogue at
+`data/wallhaven-curated.json` records uploader versus unverified author, unknown
+license, source links and crop/readability notes. These links are recommendations,
+not package-owned remote fields or a redistribution license.
+
+This package sets no wallpaper image, scaling mode, background colour, slideshow
+or download action. Theme apply and mode changes preserve the independent
+Wallpaper selection; no automatic downloads or generated artwork fallback.
+Former generated artwork and packaged screenshots containing it were removed.
+The palette, layout, captions and native widget definitions remain unchanged.

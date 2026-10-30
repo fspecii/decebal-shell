@@ -4,9 +4,8 @@ name = "Synthwave"
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "Neon magenta and cyan on deep purple night: hot-pink accents, cyan borders on focused windows, a vertical pill bar on the left, dark glassy rounded surfaces and a generated retro sun-and-grid wallpaper with stars. The engine has no real glow, so the neon comes from saturated borders and bright accents; a light 'daybreak' variant keeps the same hues."
+description = "Neon magenta and cyan on deep purple: hot-pink accents, focused cyan borders, left pill bar and rounded dark surfaces. A light daybreak variant retains the hues; native borders provide colour, not compositor glow."
 min_shell_version = "0.1.0"
-screenshots = ["screenshots/main.jpg"]
 tags = ["synthwave", "neon", "cyberpunk", "purple", "dark", "light", "retro"]
 
 [colors.dark]
@@ -67,11 +66,6 @@ title = ["Rubik", "Inter"]
 mono = ["JetBrains Mono", "DejaVu Sans Mono"]
 display = ["Rubik", "Inter"]
 scale = 1.0
-
-[wallpaper]
-image = "wallpapers/sun-grid.png"
-mode = "fill"
-color = "#120226"
 
 [decoration]
 style = "dracula"

@@ -7,7 +7,6 @@ license = "MIT"
 description = "Dot-matrix monochrome in the spirit of Nothing OS: pure black or off-white, a single red accent, square flat windows and a dot-grid wallpaper, with a Glyph-style ring clock and battery on the desktop. Dot fonts (Doto, DotGothic16) are used for titles and big numbers when installed, JetBrains Mono for everything else."
 min_shell_version = "0.1.0"
 tags = ["dark", "light", "monochrome", "dot-matrix", "flat", "red-accent"]
-screenshots = ["screenshots/main.png"]
 
 [metrics]
 radius = 2
@@ -68,11 +67,6 @@ accent_text = "#ffffff"
 danger = "#b3120f"
 ok = "#2a2a2a"
 warn = "#6e6e68"
-
-[wallpaper]
-image = "wallpapers/dots-dark.png"
-mode = "fill"
-color = "#000000"
 
 [decoration]
 style = "classic"

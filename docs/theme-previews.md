@@ -15,6 +15,13 @@ system theming disabled. It never starts the widget host, WM or desktop event lo
 Theme actions/commands are never executed. Original installed user font directories
 can be read through private fontconfig; they are not changed or registered.
 
+Current wallpaper policy: all visible shipped packages omit wallpaper metadata.
+The gallery therefore renders their actual plain theme background and labels the
+missing wallpaper; it does not silently download a recommended photo. Explicit
+photo selection belongs to separate **Wallpaper → For this theme** settings and
+`data/wallhaven-curated.json`. Optional upstream Sweeteh photos remain attributed
+assets, not automatic defaults. See `generated-wallpaper-removal.md`.
+
 ## What is rendered
 
 - Actual resolved dark/light tokens, selected independent palette and font chains.

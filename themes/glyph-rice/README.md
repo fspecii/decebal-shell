@@ -10,8 +10,8 @@ The stopped monochrome worker's definitions were adapted read-only, not discarde
 
 ## Mapping
 
-The original palette, GPL license and original static dot-grid/halftone wallpapers
-are preserved. Black background, rounded monochrome cards and red transport
+The original palette and GPL license are preserved. Static dot-grid/halftone
+wallpaper assets are removed; dot typography remains actual native widget pixels. Black background, rounded monochrome cards and red transport
 control retain the package's visual identity. A giant dot clock/date and greeting
 occupy the left; three 220 px weather/calendar/day cards sit above MPRIS and
 system cards at right. Clock and numeric metrics use Decebal's original safe
@@ -33,12 +33,12 @@ Minimal captions retain real window buttons on the right; the previous
 border-only/`buttons = "none"` package combination was deliberately removed.
 All six cards are optional through Settings → Widgets. Existing customized
 layouts still require Keep / Replace / Cancel, and mode/palette changes preserve
-placement. `wallpaper.dark/light` follows engine-owned mode changes.
+placement. Wallpaper selection is independent of mode/theme changes.
 
 ## Attribution and limits
 
 Upstream Glyph is GPL-3.0; its full license remains in LICENSE.txt. Manifest,
-widgets and original wallpaper interpretation retain GPL-3.0-only distribution.
+widgets retain GPL-3.0-only distribution.
 The shared original Decebal dot primitive is MIT. No upstream font, reference
 screenshot, third-party album art or new external imagery is redistributed.
 Nothing/Glyph names remain trademarks of their owners; this port is unaffiliated.
@@ -69,7 +69,7 @@ python tests/theme-ports-compose.py glyph-rice
 
 `tests/glyph-rice-render.py` is now a wrapper for this six-card renderer. The
 package test verifies reproducible safe packing; isolated apply plans check
-both artwork modes, palette reset, Ask/Keep/Replace and cancellation without
+wallpaper preservation in both modes, palette reset, Ask/Keep/Replace and cancellation without
 writes. Native render tests check content bounds, honest empty states and all
 six widgets. Composition assertions check 1920 × 1200 anchor bounds/non-overlap.
 
@@ -78,3 +78,22 @@ left/right is only a side hint. The application engine still writes
 `buttons = true`, which is tested starting from the old port's `buttons = false`;
 `minimal` determines the actual right-hand position. This diagnostic does not
 mean the controls remain disabled. No unsupported side/order override is claimed.
+
+## Wallpaper choices
+
+Open **Wallpaper → For this theme** and select the separately curated Wallhaven
+photograph: dark [zpzqeg](https://wallhaven.cc/w/zpzqeg), light
+[kxygyd](https://wallhaven.cc/w/kxygyd). The source catalogue at
+`data/wallhaven-curated.json` records uploader versus unverified author, unknown
+license, source links and crop/readability notes. These links are recommendations,
+not package-owned remote fields or a redistribution license.
+
+This package sets no wallpaper image, scaling mode, background colour, slideshow
+or download action. Theme apply and mode changes preserve the independent
+Wallpaper selection; no automatic downloads or generated artwork fallback.
+Former generated artwork and packaged screenshots containing it were removed.
+The palette, layout, captions and native widget definitions remain unchanged.
+
+Native full-resolution QA replaced the dark aerial-city recommendation with a
+quieter photographic Swiss valley: bright rooftop edges competed with fine grey
+greeting/host labels. The dot clock and widget layout are unchanged.

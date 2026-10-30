@@ -1,11 +1,10 @@
 format = 1
 id = "signal-deck"
 name = "Signal Deck"
-screenshots = ["screenshots/main.png"]
 version = "1.0.0"
 author = "decebal"
 license = "MIT"
-description = "A restrained orbital control room: split instrument bars, precise square geometry, technical typography and original survey artwork. Every surface follows the selected palette."
+description = "A restrained control room: split instrument bars, precise square geometry and technical typography. Every surface follows the selected palette."
 min_shell_version = "0.1.0"
 tags = ["original", "dark", "light", "palette-independent", "technical"]
 
@@ -69,11 +68,6 @@ ui = ["IBM Plex Sans", "Noto Sans", "sans-serif"]
 title = ["IBM Plex Mono", "monospace"]
 mono = ["IBM Plex Mono", "monospace"]
 display = ["IBM Plex Mono", "monospace"]
-
-[wallpaper]
-image = "wallpapers/signal-deck-dark.png"
-mode = "fill"
-color = "#111e29"
 
 [decoration]
 style = "breeze"

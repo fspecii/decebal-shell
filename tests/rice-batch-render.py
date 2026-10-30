@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Native headless widget evidence; sample data, no desktop/session access.
 Run after cargo build --bin decwidgets --bin decthemectl.
-Pillow only places native PNGs on artwork; it does not simulate shell chrome.
+Pillow places native PNGs on a labelled solid UI test canvas; never creates wallpaper assets.
 """
 import json
 import os
@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='decebal-rice-render-') as tmp:
         manifest = tomllib.loads((package / 'theme.toml').read_text())
         for mode in ('dark', 'light'):
             (p / 'decebal.json').write_text(json.dumps({'theme': {'name': theme, 'mode': mode}}))
-            canvas = Image.open(package / 'wallpapers' / f'{mode}.png').convert('RGBA').resize((1920, 1080), Image.Resampling.LANCZOS)
+            canvas = Image.new('RGBA', (1920, 1080), manifest['colors'][mode]['background'])
             boxes = []
             for spec in manifest['widgets']:
                 widget = spec['use'].removeprefix('builtin:')
@@ -44,12 +44,8 @@ with tempfile.TemporaryDirectory(prefix='decebal-rice-render-') as tmp:
                 assert all(box[2] <= b[0] or b[2] <= box[0] or box[3] <= b[1] or b[3] <= box[1] for b in boxes)
                 boxes.append(box)
                 canvas.alpha_composite(card, (x, y))
-            ImageDraw.Draw(canvas).text((64, 1028), f'{manifest["name"]} / {mode.upper()} / NATIVE WIDGET RENDER / SAMPLE DATA / NOT A DESKTOP SCREENSHOT',
+            ImageDraw.Draw(canvas).text((64, 1028), f'{manifest["name"]} / {mode.upper()} / NATIVE WIDGET RENDER / SAMPLE DATA / NO PACKAGED WALLPAPER',
                                        fill=manifest['colors'][mode]['text_secondary'])
             canvas.convert('RGB').save(OUT / f'{theme}-{mode}.png', optimize=True)
-            # The package gallery uses an honestly labelled native-widget composition.
-            shots = package / 'screenshots'
-            shots.mkdir(exist_ok=True)
-            canvas.convert('RGB').resize((960, 540), Image.Resampling.LANCZOS).save(shots / ('main.png' if mode == 'dark' else 'light.png'), optimize=True)
         subprocess.run([str(ROOT / 'target/debug/decthemectl'), 'theme', 'validate', str(package)], env=env, check=True)
 print(f'Evidence: {OUT}')

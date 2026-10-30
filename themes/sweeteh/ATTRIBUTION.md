@@ -32,3 +32,9 @@ demo-frame wallpaper, logo or third-party video is included.
 Screenshots are generated from this package's artwork and native widget renders
 using labelled sample/empty data. Adwaita icons are selected from the user's
 installed theme, not redistributed. No cursor assets are imported.
+
+2026-10-30 wallpaper policy: these two unchanged upstream photographs remain
+optional package assets with the same source hashes and license attribution.
+They are no longer referenced by an apply-time wallpaper section. Choose a photo
+explicitly in separate Wallpaper settings; Wallhaven recommendations are separate
+links with their own unknown-license records, not relicensed Sweeteh assets.
