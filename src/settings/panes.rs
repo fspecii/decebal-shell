@@ -437,8 +437,7 @@ impl Model {
             },
             Item::Card(vec![
                 Row::new("Search everything")
-                    .detail("Spotlight finds apps and system commands; Applications lists installed apps. Your actual bindings are shown above and are editable in Shortcuts.")
-                    .ctl(btn("keyboard", "Shortcuts")),
+                    .detail("Spotlight finds apps and system commands; Applications lists installed apps. Your actual bindings are shown above and are editable in Shortcuts."),
                 Row::new("Pick a theme, then change its parts")
                     .detail("Appearance → Themes chooses a look; Palettes controls colours and Customise holds fonts, window decorations and panel controls — no TOML editing needed.")
                     .ctl(btn("appearance", "Appearance")),
