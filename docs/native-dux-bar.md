@@ -40,7 +40,7 @@ leaves those gaps transparent and click-through. The band uses background
 SNI icons share one widget face, rather than each icon becoming a separate pill.
 Missing weather follows the actual source clear-day icon plus `--°C`.
 
-Clock opens the anchored native Dashboard; launcher opens the native app grid,
+Clock opens the anchored native Dashboard; launcher opens the native Applications list,
 not Spotlight search. Notifications open native history; clipboard opens the
 native picker. Existing sound wheel/middle-click and SNI actions use the shared
 handlers. While the Dux control panel owns keyboard focus, Up/Down select a

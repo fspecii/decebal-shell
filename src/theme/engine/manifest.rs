@@ -505,7 +505,7 @@ pub fn analyze(text: &str) -> Analysis {
         let cur = schema::parse_version(env!("CARGO_PKG_VERSION")).unwrap_or((0, 0, 0));
         if min > cur {
             cx.diags.push(Diag {
-                level: Level::Warning,
+                level: Level::Error,
                 line: 0,
                 key: "min_shell_version".into(),
                 msg: format!("needs decebal {}.{}.{} or newer (this is {})", min.0, min.1, min.2, env!("CARGO_PKG_VERSION")),
@@ -611,6 +611,16 @@ pub fn merge_extra(base: &Map<String, Value>, child: &Map<String, Value>) -> Map
 mod tests {
     use super::*;
     use crate::theme::model::Selection;
+
+    #[test]
+    fn minimum_shell_version_is_an_enforced_compatibility_requirement() {
+        let future = GOOD.replacen("format = 1", "format = 1\nmin_shell_version = \"999.0.0\"", 1);
+        let checked = analyze(&future);
+        assert!(checked.def.is_none());
+        assert!(checked.diags.iter().any(|d| d.key == "min_shell_version" && d.level == Level::Error));
+        let compatible = GOOD.replacen("format = 1", "format = 1\nmin_shell_version = \"0.1.0\"", 1);
+        assert!(analyze(&compatible).def.is_some());
+    }
 
     pub const GOOD: &str = r##"
 format = 1

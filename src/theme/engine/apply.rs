@@ -286,6 +286,14 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     // ---- decebal.json
     let mut shell = io::json_load(&paths.shell_json());
     shell.as_object_mut().expect("object").insert("theme".into(), sel.to_json());
+    // A complete theme application owns the declarative layout. Omitted keys
+    // select that theme's defaults, not the previous theme's band/island profile.
+    // Independent/unknown bar preferences stay intact.
+    if let Some(Value::Object(bar)) = shell.get_mut("bar") {
+        for key in ["left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
+            bar.remove(key);
+        }
+    }
     if let Some(Value::Object(bar)) = extra.get("bar") {
         let o = obj_mut(&mut shell, "bar");
         for k in ["enabled", "position", "left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
@@ -950,6 +958,29 @@ y = -30
         let cc = io::json_load(&paths.shell_json())["control_center"].clone();
         assert_eq!((cc["enabled"].clone(), cc["style"].clone(), cc["tiles"].clone(), cc["position"].clone()), (json!(true), json!("fluent"), json!(["sound"]), json!("top-left")));
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn switching_to_a_minimal_bar_drops_the_previous_theme_layout() {
+        let (dir, src, paths) = sandbox("bar-layout-switch");
+        let manifest = SUNSET.replace("id = \"sunset\"", "id = \"sunset-minimal\"").replace("left = [\"workspaces\"]", "style = \"dux\"");
+        install_sunset_manifest(&src, &manifest);
+        let previous = json!({"theme":{"name":"dux-lavender"},"bar":{
+            "enabled":true,"position":"top","left":["launcherButton"],"center":["clock"],"right":["systemTray"],
+            "background":"islands","margin":7,"spacing":11,"radius":13,"band_radius":17,"custom_value":"keep"
+        }});
+        std::fs::write(paths.shell_json(), previous.to_string()).unwrap();
+        let selection = Selection { sync_rdwm: false, ..Selection::default() };
+        let planned = plan(&src, &paths, "sunset-minimal", &selection).unwrap();
+        let write = planned.writes.iter().find(|w| w.path == paths.shell_json()).unwrap();
+        let after: Value = serde_json::from_str(&write.new).unwrap();
+        assert_eq!(after["bar"]["custom_value"], "keep");
+        assert_eq!(after["bar"]["position"], "top");
+        for key in ["left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
+            assert!(after["bar"].get(key).is_none(), "previous layout leaked: {key}");
+        }
+        assert_eq!(io::json_load(&paths.shell_json()), previous, "planning never applies changes");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

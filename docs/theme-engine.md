@@ -51,7 +51,7 @@ name = "Sunset Grid"                # required
 version = "1.0.0"                   # required in a package (MAJOR.MINOR.PATCH)
 author = "Ada"   license = "MIT"    # the market will require both
 description = "..."  homepage = "https://..."
-min_shell_version = "0.1.0"         # a warning when this shell is older
+min_shell_version = "0.1.0"         # rejected by Decebal 0.2+ when this shell is older
 screenshots = ["screenshots/main.jpg"]   # at most 8, inside the package
 tags = ["dark", "minimal"]               # at most 12
 extends = "caelestia"               # inherit; see below
@@ -356,3 +356,8 @@ limit the string to 400 characters. It is intended for short clocks, dates and
 metrics, not full multilingual prose. Ordinary `text` remains preferable for
 names and unavailable explanations. Existing safe actions and visibility rules
 apply; this primitive adds no data sources or execution capability.
+
+New package-font/Dux/explicit-empty-desktop exports require Decebal 0.2.0.
+Version 0.2 enforces `min_shell_version`; older 0.1 validators only warned, so
+use an updated validator before installing packages that use the new selectors.
+Classic-only exports retain the 0.1.0 compatibility floor.

@@ -108,6 +108,21 @@ const LIFTED: &[(&str, &str, &str)] = &[
     ("titlebar_height", "decoration", "height"),
 ];
 
+fn minimum_shell_version(def: &Def) -> &'static str {
+    let modern_style = std::iter::once(&def.common)
+        .chain(def.dark.iter())
+        .chain(def.light.iter())
+        .any(|tokens| ["bar_style", "dashboard_style", "launcher_style"].iter().any(|key| matches!(tokens.get(*key), Some(V::S(value)) if value == "dux")));
+    let modern_extra = ["bar", "dashboard", "launcher", "control_center"].iter().any(|section| def.extra.get(*section).and_then(|v| v.get("style")).and_then(Value::as_str) == Some("dux"))
+        || def.extra.get("font").and_then(|v| v.get("files")).and_then(Value::as_array).is_some_and(|a| !a.is_empty())
+        || def.extra.get("desktop").and_then(|v| v.get("widgets")).and_then(Value::as_str) == Some("none");
+    if modern_style || modern_extra {
+        "0.2.0"
+    } else {
+        "0.1.0"
+    }
+}
+
 pub fn def_to_manifest(def: &Def, h: &Header) -> String {
     let mut doc = DocumentMut::new();
     let r = doc.as_table_mut();
@@ -123,7 +138,7 @@ pub fn def_to_manifest(def: &Def, h: &Header) -> String {
     if !desc.is_empty() {
         r.insert("description", value(desc));
     }
-    r.insert("min_shell_version", value("0.1.0"));
+    r.insert("min_shell_version", value(minimum_shell_version(def)));
     if !h.tags.is_empty() {
         r.insert("tags", value(array(&h.tags.iter().map(|t| Value::from(t.as_str())).collect::<Vec<_>>())));
     }
@@ -235,6 +250,17 @@ mod tests {
     fn round(def: &Def) -> Def {
         let text = def_to_manifest(def, &Header { id: "x".into(), name: def.name.clone(), ..Header::default() });
         manifest::analyze(&text).def.unwrap_or_else(|| panic!("re-parse failed:\n{}\n{:?}", text, manifest::analyze(&text).diags))
+    }
+
+    #[test]
+    fn modern_theme_exports_require_the_capable_shell() {
+        let mut classic = crate::theme::builtin::def("macos").unwrap();
+        let header = Header { id: "example".into(), name: "Example".into(), ..Header::default() };
+        assert!(def_to_manifest(&classic, &header).contains("min_shell_version = \"0.1.0\""));
+        classic.extra.insert("control_center".into(), serde_json::json!({"style":"dux"}));
+        let output = def_to_manifest(&classic, &header);
+        assert!(output.contains("min_shell_version = \"0.2.0\""));
+        assert!(manifest::analyze(&output).def.is_some());
     }
 
     #[test]
