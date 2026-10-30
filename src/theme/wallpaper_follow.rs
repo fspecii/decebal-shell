@@ -13,6 +13,7 @@ use crate::settings::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    cell::Cell,
     fs::{self, File, OpenOptions},
     io::Read,
     os::{
@@ -27,6 +28,22 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+thread_local! {
+    // Refresh can apply a newly resolved light/dark variant. That nested colour
+    // transaction must not cancel this worker or enqueue another photograph.
+    static REFRESHING_COLORS: Cell<bool> = const { Cell::new(false) };
+}
+struct ColorRefreshScope(bool);
+impl ColorRefreshScope {
+    fn enter() -> Self {
+        Self(REFRESHING_COLORS.with(|flag| flag.replace(true)))
+    }
+}
+impl Drop for ColorRefreshScope {
+    fn drop(&mut self) {
+        REFRESHING_COLORS.with(|flag| flag.set(self.0));
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Job {
     generation: String,
@@ -146,6 +163,9 @@ fn stop_previous(paths: &Paths) {
 /// Invalidates a pending photo before a manual wallpaper choice. No preferences
 /// are changed; the next full theme change follows again while the switch is on.
 pub fn cancel(paths: &Paths) -> Result<(), String> {
+    if REFRESHING_COLORS.with(Cell::get) {
+        return Ok(());
+    }
     if !enabled(paths) && !status(paths).pending {
         return Ok(());
     }
@@ -236,6 +256,9 @@ fn prepare(paths: &Paths, theme: &str, dark: bool) -> Result<Option<(Job, PathBu
     prepare_expected(paths, theme, dark, None)
 }
 fn prepare_expected(paths: &Paths, theme: &str, dark: bool, expected: Option<&str>) -> Result<Option<(Job, PathBuf)>, String> {
+    if REFRESHING_COLORS.with(Cell::get) {
+        return Ok(None);
+    }
     if !enabled(paths) || expected.is_some_and(|token| status(paths).generation != token) {
         return Ok(None);
     }
@@ -457,6 +480,39 @@ fn apply_photo(job: &Job, file: &Path) -> Result<(), String> {
         }
     }
 }
+
+fn color_refresh_allowed(job: &Job, paths: &Paths, source: &Source) -> bool {
+    enabled(paths) && status(paths).generation == job.generation && selection(paths) == job.selection && source.find(&source.selection().name).is_some_and(|(id, _)| id == job.theme)
+}
+
+/// Runs after apply_photo has returned and released its flock. Warm the current
+/// source first, then reload the selection so palette/radius/source changes made
+/// while decoding are preserved by the existing refresh transaction.
+fn refresh_photo_colors(job: &Job) -> Result<(), String> {
+    let paths = paths(job);
+    let source = Source { shell_json: paths.shell_json(), themes_dir: job.themes.clone() };
+    for _ in 0..3 {
+        if !color_refresh_allowed(job, &paths, &source) {
+            return Ok(());
+        }
+        let current = source.selection();
+        let Some(dynamic) = current.dynamic.as_ref().filter(|d| d.enabled) else { return Ok(()) };
+        let input = super::dynamic::input_of(dynamic, &paths, None)?;
+        super::dynamic::read(&input)?;
+        if !color_refresh_allowed(job, &paths, &source) {
+            return Ok(());
+        }
+        let latest = source.selection();
+        let Some(dynamic) = latest.dynamic.as_ref().filter(|d| d.enabled) else { return Ok(()) };
+        if super::dynamic::input_of(dynamic, &paths, None)? != input {
+            continue;
+        }
+        let _scope = ColorRefreshScope::enter();
+        super::dynamic::refresh(&source, &paths, None)?;
+        return Ok(());
+    }
+    Err("Wallpaper colour source changed repeatedly; refresh colours again when it settles".into())
+}
 pub fn worker(path: &Path) -> Result<(), String> {
     worker_with(path, None)
 }
@@ -478,13 +534,25 @@ fn worker_with(path: &Path, override_client: Option<&Client>) -> Result<(), Stri
         let _ = fs::remove_file(path);
         return Ok(());
     }
-    let result = obtain(&job, override_client).and_then(|(file, provenance)| apply_photo(&job, &file).map(|()| provenance));
-    match &result {
-        Ok(provenance) => finish(&job, &format!("Matching Wallhaven photo applied ({provenance})"), false),
-        Err(e) => finish(&job, &format!("Theme applied; wallpaper unchanged: {e}"), true),
-    }
+    let result = match obtain(&job, override_client).and_then(|(file, provenance)| apply_photo(&job, &file).map(|()| provenance)) {
+        Ok(provenance) => match refresh_photo_colors(&job) {
+            Ok(()) => {
+                finish(&job, &format!("Matching Wallhaven photo applied ({provenance})"), false);
+                Ok(())
+            }
+            Err(error) => {
+                let message = format!("Wallpaper applied; colour refresh failed: {error}");
+                finish(&job, &message, true);
+                Err(message)
+            }
+        },
+        Err(error) => {
+            finish(&job, &format!("Theme applied; wallpaper unchanged: {error}"), true);
+            Err(error)
+        }
+    };
     let _ = fs::remove_file(path);
-    result.map(|_| ())
+    result
 }
 
 /// Public CLI and the Settings switch use the same opt-in path.
@@ -576,7 +644,7 @@ mod tests {
     };
     static NEXT: AtomicU64 = AtomicU64::new(0);
     pub(super) struct Temp {
-        root: PathBuf,
+        pub(super) root: PathBuf,
         pub(super) paths: Paths,
         pub(super) state: Arc<Mutex<Value>>,
         stop: Arc<AtomicBool>,
@@ -659,7 +727,7 @@ mod tests {
     pub(super) fn client(base: String) -> Client {
         Client::new(base, None, Arc::new(Mutex::new(Throttle::default())))
     }
-    fn server(code: u16, ai: bool) -> (String, client::tests::Log) {
+    pub(super) fn server(code: u16, ai: bool) -> (String, client::tests::Log) {
         let own = Arc::new(Mutex::new(String::new()));
         let url = own.clone();
         let png = client::tests::png_bytes(8, 6);
@@ -835,5 +903,156 @@ mod late_response_tests {
         assert_eq!(status(&t.paths).generation, new.generation);
         assert_ne!(old.generation, new.generation);
         assert_eq!(t.state.lock().unwrap()["image"], "/old.jpg");
+    }
+}
+
+#[cfg(test)]
+mod color_refresh_tests {
+    use super::super::model::{Mode, Origin, Rgb, Selection, Surfaces};
+    use super::*;
+    fn picture(dir: &Path, name: &str, rgb: [u8; 3]) -> PathBuf {
+        let path = dir.join(name);
+        image::RgbImage::from_pixel(24, 16, image::Rgb(rgb)).save(&path).unwrap();
+        path
+    }
+    fn setup(t: &super::tests::Temp, origin: Origin, follow_mode: bool) -> (Source, Selection) {
+        let old = picture(&t.root, "old-poster.png", [10, 20, 35]);
+        t.state.lock().unwrap()["image"] = json!(old);
+        let src = Source { shell_json: t.paths.shell_json(), themes_dir: t.root.join("no-themes") };
+        let mut sel = src.selection();
+        if follow_mode {
+            sel.mode = Mode::Auto;
+        }
+        let mut sel = super::super::dynamic::update_with(&sel, &t.paths, Some(&old), |d| {
+            d.enabled = true;
+            d.source = origin;
+            d.surfaces = Surfaces::Full;
+            d.strength = 0.73;
+            d.contrast = 0.2;
+            d.follow_mode = follow_mode;
+        })
+        .unwrap();
+        sel.palette = Some("nord".into());
+        sel.radius = Some(24.);
+        sel.opacity = Some(0.82);
+        src.write_selection(&sel).unwrap();
+        (src, sel)
+    }
+    fn assert_only_cache_changed(before: &Selection, after: &Selection) {
+        let mut expected = before.clone();
+        expected.dynamic = after.dynamic.clone();
+        assert_eq!(*after, expected);
+        let b = before.dynamic.as_ref().unwrap();
+        let a = after.dynamic.as_ref().unwrap();
+        assert_eq!(
+            (a.enabled, a.scheme, a.source.clone(), a.surfaces, a.strength, a.contrast, a.follow_mode),
+            (b.enabled, b.scheme, b.source.clone(), b.surfaces, b.strength, b.contrast, b.follow_mode)
+        );
+    }
+    #[test]
+    fn worker_refreshes_wallpaper_color_cache_and_preserves_all_matching_preferences() {
+        let t = super::tests::Temp::new();
+        let (src, before) = setup(&t, Origin::Wallpaper, false);
+        let (job, path) = t.job();
+        let (base, log) = super::tests::server(200, false);
+        worker_with(&path, Some(&super::tests::client(base))).unwrap();
+        let after = src.selection();
+        assert_only_cache_changed(&before, &after);
+        let image = t.state.lock().unwrap()["image"].as_str().unwrap().to_string();
+        assert_eq!(after.dynamic.as_ref().unwrap().image.as_deref(), Some(image.as_str()));
+        assert_ne!(after.dynamic.as_ref().unwrap().colors.seed, before.dynamic.as_ref().unwrap().colors.seed);
+        assert_eq!(status(&t.paths).generation, job.generation);
+        assert!(!status(&t.paths).error);
+        assert_eq!(log.lock().unwrap().len(), 2);
+        let stored = io::json_load(&t.paths.shell_json());
+        assert_eq!(stored["theme"]["dynamic"]["image"], image);
+    }
+    #[test]
+    fn brightness_mode_flip_keeps_the_worker_generation_and_does_not_queue_another_photo() {
+        let t = super::tests::Temp::new();
+        let (src, before) = setup(&t, Origin::Wallpaper, true);
+        assert!(src.build(&before, true).0.dark);
+        let (job, _) = t.job();
+        let bright = picture(&t.root, "bright-followed.png", [245, 248, 255]);
+        apply_photo(&job, &bright).unwrap();
+        let mut state = status(&t.paths);
+        state.pid = Some(std::process::id());
+        save(&status_path(&t.paths), &state).unwrap();
+        refresh_photo_colors(&job).unwrap();
+        let after = src.selection();
+        assert!(!src.build(&after, true).0.dark, "the extracted brightness must really cross into light mode");
+        assert_only_cache_changed(&before, &after);
+        let state_after = status(&t.paths);
+        assert_eq!(state_after.generation, job.generation);
+        assert_eq!(state_after.pid, Some(std::process::id()), "the nested colour transaction must not cancel its own worker");
+        let jobs: Vec<_> = fs::read_dir(directory(&t.paths)).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|e| e == "json") && e.file_name() != "status.json").collect();
+        assert_eq!(jobs.len(), 1, "no second wallpaper job should be queued by the mode flip");
+    }
+    #[test]
+    fn fixed_image_color_and_disabled_matching_are_not_retargeted_by_a_photo() {
+        for kind in 0..3 {
+            let t = super::tests::Temp::new();
+            let fixed = picture(&t.root, "fixed.png", [20, 200, 60]);
+            let origin = if kind == 0 {
+                Origin::File(fixed.to_string_lossy().into_owned())
+            } else if kind == 1 {
+                Origin::Color(Rgb(180, 30, 70))
+            } else {
+                Origin::Wallpaper
+            };
+            let (src, mut before) = setup(&t, origin, false);
+            if kind == 2 {
+                before.dynamic.as_mut().unwrap().enabled = false;
+                src.write_selection(&before).unwrap();
+            }
+            let (_, path) = t.job();
+            let (base, _) = super::tests::server(200, false);
+            worker_with(&path, Some(&super::tests::client(base))).unwrap();
+            assert_eq!(src.selection(), before);
+            assert!(!status(&t.paths).error);
+        }
+    }
+    #[test]
+    fn manual_current_wallpaper_and_newer_palette_are_used_instead_of_the_job_photo() {
+        let t = super::tests::Temp::new();
+        let (src, _) = setup(&t, Origin::Wallpaper, false);
+        let (job, _) = t.job();
+        let followed = picture(&t.root, "followed.png", [10, 120, 200]);
+        apply_photo(&job, &followed).unwrap();
+        let manual = picture(&t.root, "newer-manual.png", [20, 210, 60]);
+        t.state.lock().unwrap()["image"] = json!(manual);
+        let mut latest = src.selection();
+        latest.palette = Some("rose-pine".into());
+        latest.radius = Some(12.);
+        src.write_selection(&latest).unwrap();
+        refresh_photo_colors(&job).unwrap();
+        let after = src.selection();
+        assert_only_cache_changed(&latest, &after);
+        assert_eq!(after.dynamic.as_ref().unwrap().image.as_deref(), manual.to_str());
+        let mut newer = after;
+        newer.name = "windows11".into();
+        src.write_selection(&newer).unwrap();
+        let unchanged = fs::read(t.paths.shell_json()).unwrap();
+        refresh_photo_colors(&job).unwrap();
+        assert_eq!(fs::read(t.paths.shell_json()).unwrap(), unchanged);
+    }
+    #[test]
+    fn color_refresh_failure_reports_photo_applied_without_rolling_it_back() {
+        let t = super::tests::Temp::new();
+        let fixed = picture(&t.root, "missing-later.png", [220, 40, 20]);
+        let (src, _) = setup(&t, Origin::File(fixed.to_string_lossy().into_owned()), false);
+        let (_, path) = t.job();
+        fs::remove_file(fixed).unwrap();
+        let (base, _) = super::tests::server(200, false);
+        let error = worker_with(&path, Some(&super::tests::client(base))).unwrap_err();
+        let state = status(&t.paths);
+        assert!(error.starts_with("Wallpaper applied; colour refresh failed:"));
+        assert_eq!(state.message, error);
+        assert!(state.error && !state.pending);
+        assert!(!state.message.contains("wallpaper unchanged"));
+        let image = t.state.lock().unwrap()["image"].as_str().unwrap().to_string();
+        assert!(image.ends_with("wallhaven-m9wr19.png"));
+        assert!(fs::read_to_string(&t.paths.rdwm_config).unwrap().contains(&image));
+        assert!(src.selection().dynamic.unwrap().enabled);
     }
 }

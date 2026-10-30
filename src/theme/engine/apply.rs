@@ -726,6 +726,32 @@ pub mod tests {
     }
 
     #[test]
+    fn nextkde_restores_hover_after_flat_themes_and_reapply() {
+        let (dir, src, paths) = sandbox("nextkde-hover-switch");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        std::fs::write(paths.dock_settings(), r#"{"magnification":1.0,"appSpacing":9,"custom":"keep"}"#).unwrap();
+        for id in ["nextkde", "tidal-loom", "nextkde", "nextkde"] {
+            apply(&src, &paths, id, &src.selection()).unwrap();
+            let value = io::json_load(&paths.dock_settings());
+            assert_eq!(value["magnification"], if id == "nextkde" { 1.4 } else { 1.0 });
+            assert_eq!(value["appSpacing"], 9);
+            assert_eq!(value["custom"], "keep");
+            if id == "nextkde" {
+                let settings: crate::config::DockSettings = serde_json::from_value(value).unwrap();
+                assert_eq!(settings.style, crate::config::DockStyle::Mac);
+                let mut dock = crate::dock::Dock::with_preferences(
+                    vec![crate::dock::DockItem::pinned("launchpad", false)],
+                    settings,
+                    crate::accessibility::Preferences { reduce_motion: true, ..Default::default() },
+                );
+                dock.start_bounce("launchpad");
+                assert!(!dock.bouncing(), "accessibility still suppresses animation");
+            }
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn applying_a_dynamic_theme_resets_palette_without_enabling_wallpaper_colors() {
         let (dir, src, paths) = sandbox("palette-dynamic-priority");
         let base = crate::theme::palette::select(&Selection::default(), Some("nord"));

@@ -30,6 +30,7 @@ preset = "inter"
 [dock]
 enabled = true
 style = "mac"
+magnification = 1.4
 
 [bar]
 enabled = true

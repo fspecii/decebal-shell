@@ -7,6 +7,15 @@ mode currently selected. Changing light/dark mode in Settings picks its matching
 variant. Choosing a separate palette keeps that palette; it does not cancel a
 photo already being prepared for the same desktop design.
 
+When **Match wallpaper colours** is enabled, a completed photo also refreshes its
+stored colour cache from the current source. A fixed image or colour source stays
+fixed; turning colour matching off leaves it untouched. The refresh preserves
+palette, radius and other matching preferences, and does not request another
+photo when the extracted brightness changes the light/dark variant. If the photo
+was applied but colour refresh fails, Settings reports **Wallpaper applied;
+colour refresh failed**. The photo stays applied; fix the colour source or use
+`decthemectl dynamic refresh` to retry the colour update.
+
 Photos are prepared in the background. A previously reviewed original can be
 reused offline only if its bytes match the catalogue's SHA-256 and image bounds.
 Other cached downloads need the worker's previous successful validation receipt.
