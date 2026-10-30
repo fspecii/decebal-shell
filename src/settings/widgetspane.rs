@@ -8,9 +8,9 @@ use crate::widgets::config::{self, Instance, Place, WidgetsConfig};
 use serde_json::{json, Value};
 use std::path::Path;
 
-const LIMIT: usize = 32;
+pub(super) const LIMIT: usize = 32;
 
-fn read_widgets(path: &Path) -> Result<Value, String> {
+pub(super) fn read_widgets(path: &Path) -> Result<Value, String> {
     let doc: Value = match std::fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text).map_err(|e| format!("The desktop settings file is not valid JSON: {e}"))?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
@@ -80,10 +80,11 @@ pub fn items(m: &Model) -> Vec<Item> {
         Item::Header("Desktop widgets".into()),
         Item::Note { text: "Small, useful cards for your desktop. Themes choose their own widgets. If you customise this layout, applying a theme with widgets asks before replacing it. Themes without widgets hide the collection without deleting your saved layout.".into(), warn: false },
         Item::Card(vec![Row::new("Show widgets").detail("Hide every desktop widget without losing your choices or positions").ctl(Ctl::new("wg:enabled", Kind::Toggle(enabled)))]),
-        Item::Header("Your widgets".into()),
     ];
+    out.extend(super::widgetbuilder::items(m));
+    out.push(Item::Header("Your widgets".into()));
     if raw_items(&widgets).is_empty() {
-        out.push(Item::Note { text: "No widgets added yet. Choose a widget from the collection below.".into(), warn: false });
+        out.push(Item::Note { text: "No widgets added yet. Create one above or choose a widget from the collection below.".into(), warn: false });
     }
     let allow_exec = widgets.get("allow_exec").and_then(Value::as_bool).unwrap_or(false);
     let themes = crate::theme::live::Source::discover().themes_dir;
@@ -198,6 +199,9 @@ fn change(widgets: &mut Value, parts: &[&str], value: CtlVal) -> Result<(), Stri
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
+    if let ["wg", "new", action] = parts {
+        return super::widgetbuilder::apply(m, action, value);
+    }
     let mut widgets = match read_widgets(&m.paths.shell_json()) {
         Ok(w) => w,
         Err(e) => {
@@ -209,28 +213,35 @@ pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
         m.say(e, true);
         return;
     }
+    save(m, widgets, "Widget choices saved and applied");
+}
+
+/// Writes the `widgets` object, starts the desktop host when something should show, and reports with `saved`. Returns whether the
+/// settings file now holds `widgets`.
+pub(super) fn save(m: &mut Model, mut widgets: Value, saved: &str) -> bool {
     widgets.as_object_mut().unwrap().entry("enabled").or_insert(json!(true));
     if widgets["enabled"] == json!(true) {
         widgets.as_object_mut().unwrap().remove("theme_widgets_absent");
     }
     m.edit_json("shell", "widgets", Some(widgets.clone()));
     if m.notice.as_ref().is_some_and(|n| n.error) || m.shell.get("widgets") != Some(&widgets) {
-        return;
+        return false;
     }
     let cfg = WidgetsConfig::from_json(&json!({"widgets": widgets}));
     if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == Place::Desktop) {
         #[cfg(feature = "x11")]
         if let Err(e) = crate::widgets::host::ensure_running() {
             m.say(format!("Widget choices saved, but the desktop could not display them: {e}"), true);
-            return;
+            return true;
         }
         #[cfg(not(feature = "x11"))]
         {
             m.say("Widget choices saved. Desktop widgets require an X11 session in this build.", true);
-            return;
+            return true;
         }
     }
-    m.say(if cfg.enabled { "Widget choices saved and applied" } else { "Widgets hidden; your choices and positions are saved" }, false);
+    m.say(if cfg.enabled { saved } else { "Widgets hidden; your choices and positions are saved" }, false);
+    true
 }
 
 #[cfg(test)]

@@ -1548,6 +1548,64 @@ mod key_tests {
         assert_eq!(shell["theme"]["name"], "glyph-rice");
     }
 
+    /// Drives the Widgets page like a user: open the form, edit the name, create, and check the saved widget and layout.
+    #[test]
+    fn create_widget_form_works_through_real_controls() {
+        let initial = app();
+        let sandbox = super::super::widgetbuilder::test_support::sandbox(&initial.m.paths.shell_dir);
+        let mut a = SettingsApp::new(initial.m.paths.clone(), Some("widgets"));
+        let existing = serde_json::json!({"use":"builtin:clock-card","x":-12,"future":true});
+        super::super::io::json_set(&a.m.paths.shell_json(), "widgets", Some(serde_json::json!({"enabled":true,"future":1,"items":[existing.clone()]}))).unwrap();
+        a.resize(1100, 1000);
+        let mut pixels = Pixmap::new(1100, 1000).unwrap();
+        let draw = |a: &mut SettingsApp, pixels: &mut Pixmap| {
+            a.reuse_items = false;
+            a.draw(pixels);
+        };
+        let center = |a: &mut SettingsApp, pixels: &mut Pixmap, id: &str| {
+            draw(a, pixels);
+            let mut r = a.frame.find(id).unwrap_or_else(|| panic!("{id} is on the page")).rect;
+            if r.1 < 0.0 || r.1 + r.3 > 1000.0 {
+                a.scroll = (a.scroll + r.1 - 300.0).max(0.0);
+                draw(a, pixels);
+                r = a.frame.find(id).unwrap().rect;
+            }
+            assert!(r.1 >= 0.0 && r.1 + r.3 <= 1000.0, "{id} must be reachable: {r:?}");
+            (r.0 + r.2 / 2.0, r.1 + r.3 / 2.0)
+        };
+        let (x, y) = center(&mut a, &mut pixels, "wg:new:open");
+        a.pointer_button(x, y, Button::Left, true);
+        let (x, y) = center(&mut a, &mut pixels, "wg:new:name");
+        a.pointer_button(x, y, Button::Left, true);
+        assert!(a.edit.is_some(), "the name field starts editing");
+        a.key(&ev(Key::Char, Some('!')));
+        a.key(&ev(Key::Enter, None));
+        assert_eq!(a.m.widget_builder.as_ref().map(|d| d.name.as_str()), Some("My clock!"));
+        draw(&mut a, &mut pixels);
+        assert!(a.items_cache.as_ref().is_some_and(|(_, items)| items.iter().any(|i| matches!(i, Item::WidgetPreview { .. }))), "the preview is part of the page");
+        if let Some(dir) = std::env::var_os("WIDGET_EVIDENCE_DIR") {
+            // Set WIDGET_EVIDENCE_DIR to keep a picture of the form for visual review.
+            std::fs::create_dir_all(&dir).unwrap();
+            a.scroll = 0.0;
+            draw(&mut a, &mut pixels);
+            pixels.save_png(std::path::Path::new(&dir).join("create-widget-form.png")).unwrap();
+        }
+        for id in ["wg:new:template", "wg:new:size", "wg:new:anchor", "wg:new:x", "wg:new:y", "wg:new:cancel"] {
+            assert!(a.frame.find(id).is_some() || center(&mut a, &mut pixels, id).0 > 0.0, "{id}");
+        }
+        let (x, y) = center(&mut a, &mut pixels, "wg:new:create");
+        a.pointer_button(x, y, Button::Left, true);
+        draw(&mut a, &mut pixels);
+        assert!(a.m.widget_builder.is_none(), "{:?}", a.m.notice.as_ref().map(|n| &n.text));
+        let file = sandbox.dir.join("my-clock.toml");
+        assert!(crate::widgets::dsl::parse(&std::fs::read_to_string(&file).unwrap(), crate::widgets::Trust::User).is_ok());
+        let widgets = super::super::io::json_load(&a.m.paths.shell_json())["widgets"].clone();
+        assert_eq!(widgets["future"], 1);
+        assert_eq!(widgets["items"][0], existing);
+        assert_eq!((widgets["items"][1]["use"].as_str(), widgets["items"][1]["enabled"].as_bool().unwrap_or(true)), (Some("my-clock"), true));
+        assert!(a.frame.find("wg:new:open").is_some(), "the form is closed again");
+    }
+
     fn ev(key: Key, ch: Option<char>) -> KeyEvent {
         KeyEvent { key, text: ch.map(String::from).unwrap_or_default(), ch, ctrl: false, shift: false, alt: false }
     }

@@ -12,12 +12,41 @@ The page edits `decebal.json`'s `widgets` object, preserves unknown keys and per
 
 Definition errors appear beside the affected widget. Invalid JSON is left intact; repair it through Config & Presets. Removing a saved instance is explicit; the normal way to try hiding a widget is its enable switch.
 
+## Creating your own widget
+
+**Create a widget** (second card of the page) is the no-code way to make a card. **Create widget…** opens a form with a live preview on top:
+
+| Type | What it shows | Options |
+| --- | --- | --- |
+| Digital clock | Large time and optional date | 24-hour or 12-hour time, show the date |
+| Analog clock | A round clock face | Seconds hand |
+| System metrics | Titled card with bars and live values | Processor, memory, root disk, network speed (at least one) |
+| Note | A title and your text, wrapped onto up to six lines | The note itself (up to 200 characters) |
+
+Every type also has a **Name** (1 to 40 characters; the title of metrics and note cards), a **Size** (Small, Medium or Large scales the whole card), and a **Position** (screen anchor plus horizontal and vertical offsets, like any other card). The suggested position sits clear of the cards already on the desktop until you type an offset yourself.
+
+The preview is the shipped widget painter drawing the exact widget file that Create would save, with the theme currently in use and fixed, labelled sample data (Friday 23 October, 14:07, CPU 37%, memory 62%). It never reads live data, and it never starts the widget host. **Create widget** stays disabled, with the reason shown, until the name, note text and chosen metrics are valid.
+
+Create does the following, and nothing else:
+
+1. Writes `<name>.toml` into the user widget folder (`$DECEBAL_WIDGETS`, else `~/.config/decebal/widgets`). The file name is the name lower-cased to ASCII letters, digits and dashes (`Desk Clock!` becomes `desk-clock`). A name already used by a file, a symlink (even a dangling one), a shipped widget or a saved card gets `-2`, `-3`, ... instead. The file is created exclusively, so an existing widget file is never replaced, and an unsaved settings file never leaves a stray widget behind.
+2. Adds an enabled desktop card for it to `decebal.json` through the same save path as the catalog and turns **Show widgets** on. Other cards, per-card options, unknown keys, `allow_exec` and the theme are preserved. Because the layout now differs from the theme's, applying a theme with widgets asks **Keep my layout / Use theme widgets / Cancel** first, as for any customised layout.
+3. Starts the widget host if it is not running (X11 only), exactly like **Add**.
+
+Templates only produce data-only widgets: no `exec`, no `[commands]`, no click actions other than the allowlisted **open dashboard** on the metrics card, so they work with `allow_exec` off. Text you type is stored literally (braces and quotes cannot start a data reference or break the file), and invalid or oversized input is refused rather than truncated.
+
+The result is a normal user widget. It appears under **Your widgets** and **Available widgets**, can be disabled, moved or removed there, and its first lines say so. To change the content later, edit the file with any text editor (the format is in docs/theme-engine.md); to delete it, remove the card and then the file. Settings does not rewrite or delete widget files on its own, so hand edits are never lost; creating a similar widget with the form is the way to start over.
+
 Model regression checks:
 
 ```sh
 cargo test --lib settings::widgetspane
 cargo test --lib settings::widgetchoice
+cargo test --lib settings::widgetbuilder
+cargo test --lib settings::app::key_tests::create_widget_form_works_through_real_controls
 ```
+
+The creator tests run entirely in temporary directories (a private `decebal.json` and `DECEBAL_WIDGETS`), draw to in-memory pixmaps and never start the widget host or touch D-Bus. `WIDGET_EVIDENCE_DIR=/some/dir` keeps PNGs of the form and of every template at every size.
 
 The isolated desktop lifecycle regression starts its own Xvfb and rdwm with temporary HOME, configuration, data and runtime directories:
 

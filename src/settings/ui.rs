@@ -198,6 +198,11 @@ pub enum Item {
     /// Preview grid of sample icons of one theme (src/settings/iconspane.rs).
     IconGrid(super::iconspane::Grid),
     Space(f32),
+    /// A widget definition (TOML) drawn by the desktop widget painter with sample data, and a caption (see `widgetbuilder.rs`).
+    WidgetPreview {
+        toml: String,
+        caption: String,
+    },
     /// The multi-line text editor of the Configuration pane (see `editor.rs`).
     Editor(super::editor::View),
 }
@@ -679,6 +684,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, title: &str, items: &[Item],
     for item in items {
         match item {
             Item::Space(h) => y += u(*h),
+            Item::WidgetPreview { toml, caption } => y = super::widgetbuilder::draw_preview(pm, p, toml, caption, x0, y, cw),
             Item::Editor(v) => {
                 let r = (x0, y, cw, u(v.height));
                 let hover = it.hover.as_deref() == Some(v.id.as_str());

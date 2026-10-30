@@ -82,6 +82,8 @@ pub struct Model {
     pub lw: crate::livewall::pane::State,
     pub wallpaper_palette_name: String,
     pub widget_choice: Option<super::widgetchoice::Pending>,
+    /// The open "Create widget" form of the Widgets pane (nothing is saved until Create).
+    pub widget_builder: Option<super::widgetbuilder::Draft>,
     /// Keys the builders asked for / found missing in the schema (consistency test).
     pub used: RefCell<Vec<(String, String)>>,
     pub missing: RefCell<Vec<(String, String)>>,
@@ -123,6 +125,7 @@ impl Model {
             lw: crate::livewall::pane::State::default(),
             wallpaper_palette_name: "Wallpaper colours".into(),
             widget_choice: None,
+            widget_builder: None,
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,
