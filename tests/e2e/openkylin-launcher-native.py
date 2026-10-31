@@ -294,7 +294,13 @@ def one_run(gate, private, calls, theme, shots, screen, scale, mode, edge, keep,
         focused = shot(gate, shots / f"{tag}-focus.png")
         assert ImageChops.difference(normal, focused).getbbox(), f"{tag}: Shift+Tab changed no pixel (no focus ring on the expand button)"
         gate.x("xdotool", "key", "Return")
-        expanded_box = wait_for(lambda: (lambda b: b if b and abs(b[0] - fx0) <= 2 and abs(b[1] - fy0) <= 2 and abs(b[2] - fx1) <= 2 and abs(b[3] - fy1) <= 2 else None)(bbox(base, shot(gate, shots / f"{tag}-expanded.png"))), f"{tag}: the card did not grow to the free area {free}")
+        want_flat = tuple(int(theme["colors"][mode]["overlay"][1 + 2 * i:3 + 2 * i], 16) for i in range(3))
+        def expanded_ready():
+            # Configure can expose a black buffer before the first paint; geometry alone is not presentation.
+            frame = shot(gate, shots / f"{tag}-expanded.png")
+            b = bbox(base, frame)
+            return b if b and near(b, (fx0, fy0, fx1, fy1), 2) and near(frame.getpixel((fx0 + 3, fy0 + 3)), want_flat, 3) else None
+        expanded_box = wait_for(expanded_ready, f"{tag}: the painted card did not grow to the free area {free}")
         expanded = Image.open(shots / f"{tag}-expanded.png").convert("RGB")
         assert ImageChops.difference(normal, expanded).getbbox(), f"{tag}: expanded render equals the normal one"
         assert window_of(gate, proc.pid) == win and proc.poll() is None, f"{tag}: the launcher window or process changed on expand"
