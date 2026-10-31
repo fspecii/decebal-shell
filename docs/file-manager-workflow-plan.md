@@ -150,3 +150,29 @@ The staged plan can land useful increments before the complete browser, but the
 full request remains open until its advertised navigation, layouts and operations
 are implemented and verified. GTK availability, passing CSS tests or a polished
 mockup are not substitutes for these gates.
+
+
+## Accessibility prerequisite: protocol viability checked
+
+The private `/var/tmp/decebal-atspi-probe/result.json` proves a custom D-Bus
+provider can register with the installed AT-SPI registry/libatspi and expose
+roles, names, states, component bounds, actions, a numeric value and events.
+Actions reached a bounded fake-UI dispatcher and shutdown removed the objects.
+This was a synthetic provider, not real Decebal Settings accessibility. Orca
+and pyatspi are absent from the host; actual screen-reader acceptance remains
+open. GI Atspi sufficed for the protocol test.
+
+The next implementation is typed WindowApp snapshots/actions, an asynchronous
+stoppable bridge using the existing D-Bus wire code, then a complete Settings
+adapter. Node ids/revisions must reject stale actions, and real model handlers
+must apply actions rather than synthesized pointer coordinates. Include text,
+selection, caret, masked/password fields, navigation, modal state and focus.
+Bus discovery/registration must stay off the UI thread; published snapshots and
+pending requests must be bounded. X11 root bounds require actual configure
+updates; Wayland global coordinates and focus must not be invented. Bars/docks
+use a separate App interface and need their own later adapter.
+
+The protocol references are the primary GNOME AT-SPI2 XML and
+[Accessible interface documentation](https://gnome.pages.gitlab.gnome.org/at-spi2-core/devel-docs/doc-org.a11y.atspi.Accessible.html).
+The pending bridge must pin its implemented protocol version and prove real
+Settings roles/actions privately before it becomes a browser dependency.

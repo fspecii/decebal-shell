@@ -67,3 +67,23 @@ decthemectl --import-reviewed-wallpapers /path/to/reviewed/originals
 # Inspect the JSON manifest before copying exact reviewed bytes:
 decthemectl --import-reviewed-wallpapers /path/to/reviewed/originals --apply
 ```
+
+
+## Pending GNOME port candidates
+
+Independent 2026-10-31 review re-downloaded the four candidates from the GNOME
+worker's unmerged fragment. API paths, full-resolution hashes, byte sizes and
+dimensions match; fresh metadata is SFW without the AI-art tag. This is not a
+guarantee about capture method, authorship or redistribution rights.
+
+`yx3w57`, `v9kw2m` and `d8prrm` passed centre-fill review at 16:9, 3440×1440 and
+portrait. `833qd2` clips its tallest towers on ultrawide and must not become the
+universal Catppuccin-dark default unchanged. The existing loader does not consume
+aspect-specific routing or `recommended_mode` metadata, so documentation alone
+cannot fix that crop. A replacement is being researched.
+
+The Tasman source listing credits Paul Wilson and describes sunrise, not dusk.
+The Picos OC post is by `u/Pchabs`; its original matches the candidate bytes.
+Licences remain unknown. No originals are redistributed in these packages.
+Receipts and crops: `/var/tmp/gnome-wallpaper-acceptance/acceptance.json`. These
+new theme ids and photos are not yet merged into the shipped catalogue.

@@ -43,3 +43,19 @@ exec disposition, and continued reporting of a genuine SIGTERM failure.
 exact binary hashes. Initial baseline produced sixteen false monitored errors
 and mapped exit status -15; fixed dev produced zero false errors and status 0.
 No live desktop processes are changed by the fixture.
+
+
+## Concurrent request ordering
+
+A separate `<name>.request.lock` now serializes launcher invocations; it is
+released before entering the UI. A closing request retains it until the old
+singleton lock is released (bounded at two seconds). This prevents ordinary
+SIGUSR1 close signals from coalescing and losing toggle parity under load.
+Other singleton applications and genuine SIGTERM reporting are unchanged.
+
+`tests/e2e/launcher-concurrent-toggle.py` uses only owned processes and Xvfb.
+An intentionally paused holder makes the old bug deterministic: two overlapping
+close requests return before the holder exits, so three toggles leave no window.
+With serialization, three leave one holder and a fourth closes it. Concurrent
+seven/eight-request bursts also preserve parity. Existing mapped-window and
+launch-monitor tests retain their independent failure-reporting coverage.

@@ -43,6 +43,9 @@ pub fn acquire(name: &str) -> Option<File> {
 /// applications inherit neither a blocked signal nor our close handler.
 /// This does not replace [`acquire`] for applications with a different lifecycle.
 pub fn acquire_clean_toggle(name: &str) -> Option<File> {
+    // Serialize requests, not the lifetime of the popup. Standard signals may
+    // coalesce while a holder exits; another toggle must wait for that exit.
+    let _request = launcher_request_guard(name)?;
     extern "C" fn close_launcher(_: libc::c_int) {
         // SAFETY: _exit is async-signal-safe. These ephemeral launchers have no
         // editor draft to flush; the OS releases their windows, grabs and locks.
@@ -66,7 +69,46 @@ pub fn acquire_clean_toggle(name: &str) -> Option<File> {
             return None;
         }
     }
-    acquire_signalling(name, libc::SIGUSR1)
+    let guard = acquire_signalling(name, libc::SIGUSR1);
+    if guard.is_none() {
+        wait_launcher_release(name);
+    }
+    guard
+}
+
+/// A separate CLOEXEC lock orders short-lived launcher requests. Never retain
+/// this guard in the UI or share it with the long-lived singleton lock.
+fn launcher_request_guard(name: &str) -> Option<File> {
+    let path = runtime_file(&format!("{name}.request.lock"));
+    let file = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path).ok()?;
+    loop {
+        // SAFETY: flock only locks our own open descriptor. Interrupted waits
+        // retry; an unavailable runtime directory keeps the existing no-op path.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            return Some(file);
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return None;
+        }
+    }
+}
+
+/// Keep the request lock until the old holder has actually released its lock.
+/// The bounded wait never turns a failed close into a second open instance.
+fn wait_launcher_release(name: &str) {
+    let mut paths = vec![lock_path(name)];
+    if let Some(legacy) = crate::compat::legacy_lock_name(name) {
+        paths.push(lock_path(&legacy));
+    }
+    let files: Vec<_> = paths.iter().filter_map(|path| OpenOptions::new().read(true).open(path).ok()).collect();
+    for _ in 0..400 {
+        // SAFETY: descriptors belong to us. Successful temporary locks release
+        // when the guard goes out of scope, before a later request can proceed.
+        if files.iter().all(|file| unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
 }
 
 /// `Some(guard)` when no other instance holds the lock `name`; otherwise `None` and the running instance is left alone.
