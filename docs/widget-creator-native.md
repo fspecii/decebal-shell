@@ -59,3 +59,18 @@ The supervisor's group interruption left its separately grouped Xvfb alive; root
 verified its exact start time, executable and private configuration environment
 and stopped that owned orphan using a pidfd. Native fixture completion and its
 preview band still need validation during a quiet test window.
+
+### Native fixture bring-up follow-up
+
+Private optimized runs exposed startup sidebar scrolling: General is initially
+kept in view, so Widgets may be above the visible list. Navigation now chooses
+its wheel direction from the current rectangle. The preview helper imports its
+own image API and excludes the Create heading and sample-caption ink; a new
+heading-only regression must fail content detection. All 17 helper tests pass.
+
+The `/tmp/wcn-9d-4` attempt created the clock, reached host readiness, completed
+the injected note-save rollback checks, and began the same-name retry. The I/O
+guard then interrupted it. Its result reports SIGTERM and no cleanup problems;
+this is partial evidence, **not a passing end-to-end creator gate**. The tighter
+final preview crop still needs a complete native run. Frozen production source
+remained unchanged.

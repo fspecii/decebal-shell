@@ -266,6 +266,25 @@ class ReviewedRegressions(unittest.TestCase):
         b.paste("white", (10, 10, 30, 30))
         self.assertEqual(gate.changed_area(a, b), 400)
 
+    def test_preview_crop_excludes_page_and_creator_headings(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'shot.png'
+            image = Image.new('RGB', (940, 680), 'black')
+            for y in range(275, 286):
+                image.paste((y - 250, y - 200, y - 150), (270, y, 420, y + 1))
+            image.save(path)
+            g = object.__new__(gate.Gate)
+            g.layout = lambda: {'panes': [{'rect': [12, 64, 212, 32]}]}
+            g.ctl = lambda cid: {'rect': [850, 207, 40, 22] if cid == 'wg:enabled' else [694, 498, 200, 26]}
+            g.window_width, g.window_height = lambda: 940, lambda: 680
+            g.shot = lambda name: path
+            self.assertFalse(gate.region_has_content(g.preview_shot('header-only')))
+            for y in range(345, 365):
+                image.paste((y - 300, y - 250, y - 200), (520, y, 650, y + 1))
+            image.save(path)
+            self.assertTrue(gate.region_has_content(g.preview_shot('real-preview-ink')))
+
     def test_cleanup_skips_server_and_continues_after_host_verification_error(self):
         from unittest.mock import Mock, patch
         g = object.__new__(gate.Gate)

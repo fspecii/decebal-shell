@@ -438,16 +438,18 @@ class Gate:
         return path
 
     def preview_shot(self, name):
+        from PIL import Image
         # At the pinned 1x UI scale, the enabled toggle is followed by the rest
         # of its row, the card gap and the 28px Create header. The Type row is
-        # below the preview and its caption. Recompute after every template
+        # below the preview and its caption. Insets exclude header/caption ink.
+        # Recompute after every template
         # change: clocks and notes have different preview heights.
         layout = self.layout()
         sidebar_right = max(p["rect"][0] + p["rect"][2] for p in layout["panes"])
         _, enabled_y, _, enabled_h = self.ctl("wg:enabled")["rect"]
         template_y = self.ctl("wg:new:template")["rect"][1]
-        box = (int(sidebar_right) + 8, int(enabled_y + enabled_h + 52),
-               self.window_width() - 8, int(template_y - 40))
+        box = (int(sidebar_right) + 8, int(enabled_y + enabled_h + 68),
+               self.window_width() - 8, int(template_y - 56))
         assert box[3] - box[1] >= 40, f"preview band is too short: {box}"
         assert 0 <= box[1] < box[3] <= self.window_height(), f"preview is clipped: {box}"
         return Image.open(self.shot(name)).convert("RGB").crop(box)
@@ -612,7 +614,11 @@ def run_flow(gate, hashes):
         entry = next(p for p in gate.layout()["panes"] if p["id"] == "widgets")
         if entry["visible"]:
             break
-        gate.mouse(entry["rect"][2] / 2, gate.window_height() / 2, 5)
+        # Startup follows the selected General row, so Widgets can start
+        # above the viewport. Never assume the sidebar begins at its top.
+        search = gate.layout()["search"]
+        above = entry["rect"][1] < search[1] + search[3] + 16
+        gate.mouse(entry["rect"][2] / 2, gate.window_height() / 2, 4 if above else 5)
     else:
         fail("the Widgets sidebar entry could not be revealed")
     x, y, w, h = entry["rect"]
