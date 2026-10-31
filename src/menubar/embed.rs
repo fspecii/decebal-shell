@@ -144,7 +144,8 @@ impl DecBar {
             let w = if self.cc_w > 0.0 { self.cc_w } else { controlcenter::panel_width(self.cc_style()) };
             // the look's widest layout (GNOME's two columns), so a narrow first fit never shrinks the request
             let w = w.max(controlcenter::panel_width(self.cc_style()));
-            return Some((w * k, self.cc_height * k));
+            // plus the margins the room leaves beside the panel (see embed_room_w / embed_room), at this host's scale
+            return Some(((w + GAP + 4.0) * k, (self.cc_height + GAP + 4.0) * k));
         }
         self.status_size()
     }
