@@ -16,6 +16,8 @@ import sys
 import tempfile
 import time
 
+from PIL import Image
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from private_x11 import start_private_xvfb, listeners_owned
 
@@ -124,6 +126,7 @@ def main():
             start = time.monotonic()
             cache = root / 'cache/decebal/theme-previews'
             corrupted = False
+            corrupt_path = None
             deadline = start + float(os.environ.get('SETTINGS_WAIT_SECONDS', '45'))
             while time.monotonic() < deadline:
                 assert app.poll() is None, f'Settings exited unexpectedly: status {app.returncode}'
@@ -142,7 +145,9 @@ def main():
                 run('xdotool', 'mousemove', '--window', window, '850', '600',
                     'click', '--repeat', '3', '--delay', '35', direction)
                 if os.environ.get('SETTINGS_CORRUPT_CACHE') == '1' and pngs and not corrupted:
-                    pngs[0].write_bytes(b'not a PNG: private diagnostic fixture')
+                    corrupt_path = pngs[0]
+                    corrupt_path.write_bytes(b'not a PNG: private diagnostic fixture')
+                    result['corrupted_cache_name'] = corrupt_path.name
                     corrupted = True
                 time.sleep(.25)
             assert any(s['pngs'] for s in result['samples']), 'No native previews generated; not a valid preview stress run'
@@ -212,6 +217,21 @@ def main():
                 assert warm.poll() is None, f'Warm Settings exited unexpectedly: status {warm.returncode}'
                 run('xdotool', 'mousemove', '--window', window, '700', '500', 'click', '5')
                 time.sleep(.2)
+            if corrupt_path is not None:
+                def repaired():
+                    assert warm.poll() is None, 'Warm Settings exited while repairing the preview'
+                    try:
+                        with Image.open(corrupt_path) as image:
+                            image.load()
+                        return True
+                    except (OSError, ValueError):
+                        # Visit the full gallery: generation intentionally schedules only visible cards.
+                        direction = '4' if int(time.monotonic()) % 12 < 6 else '5'
+                        run('xdotool', 'mousemove', '--window', window, '700', '500',
+                            'click', '--repeat', '3', '--delay', '20', direction)
+                        return False
+                wait(repaired, timeout=60)
+                result['corrupted_cache_repaired'] = True
             result['warm_unexpected_exit'] = warm.poll()
             result['warm_frames'] = doc()['frames']
             capture('after-warm-cache', doc())

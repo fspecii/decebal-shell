@@ -453,11 +453,36 @@ fn run(j: &Job) -> Result<(), String> {
     result
 }
 
+// Validation is background-only and reused while the file content digest is unchanged.
+// A PNG with a valid header but truncated pixel data must be regenerated too.
+type ValidPngCache = HashMap<PathBuf, ([u8; 32], bool)>;
+static VALID_PNGS: Mutex<Option<ValidPngCache>> = Mutex::new(None);
+fn valid_cached_png(path: &Path) -> bool {
+    let Ok(digest) = asset_digest(path) else { return false };
+    let mut g = VALID_PNGS.lock().unwrap_or_else(|e| e.into_inner());
+    let cache = g.get_or_insert_with(HashMap::new);
+    if let Some((old, valid)) = cache.get(path) {
+        if old == &digest {
+            return *valid;
+        }
+    }
+    let valid = image::image_dimensions(path).is_ok_and(|(w, h)| w > 0 && h > 0 && w <= WIDTH && h <= HEIGHT + 120) && Pixmap::load_png(path).is_ok();
+    if cache.len() >= 256 {
+        cache.clear();
+    }
+    cache.insert(path.to_owned(), (digest, valid));
+    valid
+}
+
 pub fn generate(src: &Source, selection: &Selection) -> Result<PathBuf, String> {
     let key = fingerprint(src, selection)?;
     let dir = cache_dir();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let output = dir.join(format!("{key}.png"));
+    if output.is_file() && !valid_cached_png(&output) {
+        fs::remove_file(&output).map_err(|e| format!("remove corrupt preview: {e}"))?;
+        let _ = fs::remove_file(output.with_extension("error"));
+    }
     if !output.is_file() {
         if output.with_extension("error").is_file() {
             return Err("Native preview unavailable".into());
@@ -798,6 +823,20 @@ mod performance_tests {
         fs::write(user.join("kid.toml"), manifest("dracula")).unwrap();
         assert_ne!(fingerprint(&src, &sel).unwrap(), first);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn cached_png_validation_tracks_corruption_and_repair_including_truncated_payloads() {
+        let tmp = crate::theme::system::testutil::tmp("preview-png-validation");
+        let path = tmp.join("preview.png");
+        let image = Pixmap::new(12, 8).unwrap();
+        image.save_png(&path).unwrap();
+        assert!(valid_cached_png(&path));
+        let bytes = fs::read(&path).unwrap();
+        fs::write(&path, &bytes[..bytes.len() - 20]).unwrap();
+        assert!(!valid_cached_png(&path));
+        image.save_png(&path).unwrap();
+        assert!(valid_cached_png(&path));
     }
 
     #[test]
