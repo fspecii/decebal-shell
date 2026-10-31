@@ -6,7 +6,6 @@ use decebal::config::BarPosition;
 use decebal::menubar::active::{ActiveWindow, StaticApp, WmActive};
 use decebal::menubar::vbar::{self, Process};
 use decebal::menubar::DecBar;
-use decebal::theme::BAR_HEIGHT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -174,7 +173,7 @@ fn main() {
                 bar = bar.with_companion();
             }
         }
-        let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" };
+        let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: decebal::theme::th().flat_bar_height().ceil() as i32, stretch: true, namespace: "decebal-bar" };
         let spec = App::surface_spec(&bar).unwrap_or(fallback);
         if let Err(e) = backend::run_scaled(bar, spec, backend::ui_scale()) {
             decebal::log_error!("fatal: {e}");

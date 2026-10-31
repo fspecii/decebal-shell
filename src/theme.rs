@@ -55,8 +55,15 @@ pub fn bar_bottom_for(theme: &model::Theme, visible: bool) -> f32 {
     } else if theme.bar_style == "dux" {
         theme.bar_height + 2.0 * theme.bar_layout.margin
     } else {
-        BAR_HEIGHT
+        theme.flat_bar_height()
     }
+}
+
+/// The least height a declared classic or floating bar can have at this text scale: the bar's 12 px text, scaled, plus 10 px of room
+/// around it (22 px at scale 1). A declared height below it grows to it, so scaled text and the controls never clip; an undeclared bar keeps
+/// its default 26 px.
+pub fn flat_bar_floor(font_scale: f32) -> f32 {
+    (12.0 * font_scale.clamp(0.5, 3.0) + 10.0).ceil()
 }
 
 /// Current top-edge bar extent for popup placement (outside the paint path).

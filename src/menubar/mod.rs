@@ -75,10 +75,15 @@ fn inset() -> f32 {
     }
 }
 
+/// Height of the classic or floating strip along a top or bottom edge: what the theme declares (`[bar] height`), else [`BAR_HEIGHT`].
+fn bar_h() -> f32 {
+    crate::theme::th().flat_bar_height()
+}
+
 /// Corner radius of the hover and open-menu highlights: slightly rounded on the strip, a pill on the floating bar.
 fn item_radius() -> f32 {
     if floating() {
-        (BAR_HEIGHT - 6.0) / 2.0
+        (bar_h() - 6.0) / 2.0
     } else {
         5.0
     }
@@ -425,7 +430,7 @@ impl DecBar {
             hover_row: None,
             confirm: None,
             width: 0,
-            height: BAR_HEIGHT as u32,
+            height: bar_h().ceil() as u32,
             clock_text: String::new(),
             last_minute: None,
             shared,
@@ -1332,14 +1337,71 @@ impl DecBar {
             self.dux_draw(pm);
             return;
         }
+        let h = bar_h();
+        if (h - BAR_HEIGHT).abs() < 0.01 {
+            // the classic strip: drawn exactly as it always was
+            self.draw_strip(pm, true);
+            return;
+        }
+        // A declared height. The background and the hover / open plates take the whole strip; the content, laid out for the design's 26 px, goes in
+        // its own layer and is centred, so text, icons and glyphs keep their exact metrics and nothing clips.
+        let k = crate::gfx::render_scale();
+        self.draw_strip_background(pm, h);
+        for (x, w, alpha) in self.plates() {
+            fill_rounded(pm, x, 3.0, w, h - 6.0, item_radius(), crate::theme::th().ink(alpha));
+        }
+        if let Some(mut layer) = Pixmap::new(pm.width(), (BAR_HEIGHT * k).ceil().max(1.0) as u32) {
+            self.draw_strip(&mut layer, false);
+            let dy = ((h - BAR_HEIGHT) / 2.0 * k).round() as i32;
+            pm.draw_pixmap(0, dy, layer.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+        }
+    }
+
+    /// The strip's own fill (and the floating bar's pill), `h` logical px tall.
+    fn draw_strip_background(&self, pm: &mut Pixmap, h: f32) {
         let w = self.width as f32;
         if floating() {
             let th = crate::theme::th();
-            let (x, y, pw, ph) = (PILL_MARGIN_X, PILL_MARGIN_Y, w - 2.0 * PILL_MARGIN_X, BAR_HEIGHT - 2.0 * PILL_MARGIN_Y);
+            let (x, y, pw, ph) = (PILL_MARGIN_X, PILL_MARGIN_Y, w - 2.0 * PILL_MARGIN_X, h - 2.0 * PILL_MARGIN_Y);
             fill_rounded(pm, x, y, pw, ph, ph / 2.0, th.bar_c());
             stroke_rounded(pm, x + 0.5, y + 0.5, pw - 1.0, ph - 1.0, ph / 2.0 - 0.5, th.outline_c(), 1.0);
         } else {
-            crate::gfx::fill_rect(pm, 0.0, 0.0, w, BAR_HEIGHT, crate::theme::th().bar_c());
+            crate::gfx::fill_rect(pm, 0.0, 0.0, w, h, crate::theme::th().bar_c());
+        }
+    }
+
+    /// The hover and open highlights of the strip: (x, width, ink alpha). The same states the content pass would highlight inline.
+    fn plates(&self) -> Vec<(f32, f32, f32)> {
+        let mut plates = Vec::new();
+        let (spans, limit) = (self.spans(), self.right_start());
+        for (i, s) in spans.iter().enumerate().take(self.menus.len()) {
+            if s.x + s.w > limit {
+                continue;
+            }
+            let alpha = if self.open == Open::Menu(i) {
+                0.18
+            } else if self.hover_title == Some(i) {
+                0.08
+            } else {
+                0.0
+            };
+            if alpha > 0.0 {
+                plates.push((s.x, s.w, alpha));
+            }
+        }
+        for (kind, s) in self.tray() {
+            if self.open == Open::Popup(kind) || (kind == Tray::Control && self.open == Open::Control) {
+                plates.push((s.x, s.w, 0.18));
+            }
+        }
+        plates
+    }
+
+    /// The strip's content laid out for [`BAR_HEIGHT`]. `inline` also draws the background and the plates (the classic strip); without it the
+    /// caller drew them at the full declared height.
+    fn draw_strip(&mut self, pm: &mut Pixmap, inline: bool) {
+        if inline {
+            self.draw_strip_background(pm, BAR_HEIGHT);
         }
 
         // Left: titles.
@@ -1359,7 +1421,7 @@ impl DecBar {
             } else {
                 0.0
             };
-            if alpha > 0.0 {
+            if inline && alpha > 0.0 {
                 fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(alpha));
             }
             if m.icon {
@@ -1377,7 +1439,7 @@ impl DecBar {
         let weather = self.shared.weather.lock().ok().and_then(|w| w.clone());
         for (kind, s) in self.tray() {
             let cx = s.x + s.w / 2.0;
-            if self.open == Open::Popup(kind) {
+            if inline && self.open == Open::Popup(kind) {
                 fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(0.18));
             }
             match kind {
@@ -1510,7 +1572,7 @@ impl DecBar {
                 Tray::Dash => self.symbol(pm, "chart", ICON_PX, cx, 12.5),
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
-                    if self.open == Open::Control {
+                    if inline && self.open == Open::Control {
                         fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(0.18));
                     }
                     self.symbol(pm, "switches", ICON_PX, cx, 12.5);
@@ -1684,7 +1746,7 @@ impl App for DecBar {
         let indicator_rects = if self.dux() {
             self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, (i.x, i.y + top, i.w, i.h))) } else { None }).collect::<Vec<_>>()
         } else {
-            self.tray().into_iter().map(|(k, s)| (k, (s.x, top, s.w, BAR_HEIGHT))).collect::<Vec<_>>()
+            self.tray().into_iter().map(|(k, s)| (k, (s.x, top, s.w, self.bar_bottom()))).collect::<Vec<_>>()
         };
         self.indicator_debug(&indicator_rects);
         if self.debug_tray.is_some() {
@@ -1756,10 +1818,10 @@ impl App for DecBar {
                 let top = self.strip_top();
                 regions.extend(self.dux_regions().into_iter().map(|r| crate::glass::Region { y: r.y + top, ..r }));
             } else if floating() {
-                let height = BAR_HEIGHT - 2.0 * PILL_MARGIN_Y;
+                let height = self.bar_bottom() - 2.0 * PILL_MARGIN_Y;
                 regions.push(crate::glass::Region { x: PILL_MARGIN_X, y: self.strip_top() + PILL_MARGIN_Y, w: self.width as f32 - 2.0 * PILL_MARGIN_X, h: height, radius: height / 2.0 });
             } else {
-                regions.push(crate::glass::Region { x: 0.0, y: self.strip_top(), w: self.width as f32, h: BAR_HEIGHT, radius: 0.0 });
+                regions.push(crate::glass::Region { x: 0.0, y: self.strip_top(), w: self.width as f32, h: self.bar_bottom(), radius: 0.0 });
             }
         }
         match self.open {
@@ -2345,6 +2407,8 @@ impl DecBar {
     }
 }
 
+#[cfg(test)]
+mod bar_height_tests;
 #[cfg(test)]
 mod cc_fit_tests;
 #[cfg(test)]

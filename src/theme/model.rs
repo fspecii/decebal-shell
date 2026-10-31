@@ -134,6 +134,8 @@ pub struct Theme {
     pub dock_icon_size: f32,
     pub dock_padding: f32,
     pub bar_height: f32,
+    /// The theme itself declared `[bar] height` (`bar_height`); without it a classic or floating bar keeps its default thickness.
+    pub bar_height_declared: bool,
     pub titlebar_style: String,
     pub window_buttons_right: bool,
     pub titlebar_height: i64,
@@ -286,14 +288,33 @@ impl Theme {
         let p = self.bar_panel();
         Some(if p.split { crate::config::BarPosition::Split } else { p.edge.position() })
     }
-    /// Thickness of decbar's strip on `edge` (what it reserves).
+    /// Thickness of decbar's strip on `edge` (what it reserves). The surface, its strut, the applet positions, the hit targets, popup placement,
+    /// `bar_bottom` (notifications, dashboards) and the native preview all read this one number.
     pub fn bar_thickness(&self, edge: crate::panel::Edge) -> f32 {
         use crate::panel::Renderer as R;
         match self.bar_renderer() {
             R::Pill => crate::theme::pill_bar_thickness(edge.position()),
             R::Dux => self.bar_height + 2.0 * self.bar_layout.margin,
-            _ if edge.is_vertical() => crate::theme::CLASSIC_RAIL_THICKNESS,
-            _ => crate::theme::BAR_HEIGHT,
+            _ if edge.is_vertical() => self.rail_thickness(),
+            _ => self.flat_bar_height(),
+        }
+    }
+    /// Height of a classic or floating bar along a top or bottom edge: the theme's declared `[bar] height` (never below what its scaled text needs),
+    /// else the classic default. A theme without a declaration is unchanged, whatever the text scale.
+    pub fn flat_bar_height(&self) -> f32 {
+        if self.bar_height_declared {
+            self.bar_height.max(crate::theme::flat_bar_floor(self.font_scale))
+        } else {
+            crate::theme::BAR_HEIGHT
+        }
+    }
+    /// Width of a classic or floating bar down a side edge: a rail must fit its stacked clock and icon cells, so a declared height can make it
+    /// thicker than the default but never thinner.
+    pub fn rail_thickness(&self) -> f32 {
+        if self.bar_height_declared {
+            self.bar_height.max(crate::theme::CLASSIC_RAIL_THICKNESS)
+        } else {
+            crate::theme::CLASSIC_RAIL_THICKNESS
         }
     }
     /// Pixels decbar takes from each screen edge: where other programs must keep clear of it. A classic or Dux bar on the
@@ -301,7 +322,7 @@ impl Theme {
     pub fn bar_insets(&self) -> Insets {
         use crate::panel::Edge as E;
         let p = self.bar_panel();
-        let t = self.bar_thickness(p.edge) as i32;
+        let t = self.bar_thickness(p.edge).ceil() as i32;
         if self.bar_vertical() {
             if p.split {
                 return Insets { top: t, bottom: t, ..Insets::default() };
@@ -656,6 +677,7 @@ impl Def {
             dock_icon_size: clampf(num("dock_icon_size", 47.0), 24.0, 128.0),
             dock_padding: clampf(num("dock_padding", 16.0), 4.0, 40.0),
             bar_height: clampf(num("bar_height", if text_of("bar_style").as_deref() == Some("dux") { 38.0 } else { 26.0 }), 20.0, 80.0),
+            bar_height_declared: matches!(get("bar_height"), Some(V::N(_))),
             bar_style: text_of("bar_style").unwrap_or_else(|| "flat".into()),
             bar_layout: crate::config::BarLayout::default(),
             dashboard_style: text_of("dashboard_style").unwrap_or_else(|| "default".into()),

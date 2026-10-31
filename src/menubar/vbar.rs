@@ -169,7 +169,7 @@ impl Skin {
                     HORIZONTAL_THICK
                 }
             }
-            Skin::Classic | Skin::Floating => crate::theme::CLASSIC_RAIL_THICKNESS,
+            Skin::Classic | Skin::Floating => crate::theme::th().rail_thickness(),
             Skin::Dux => {
                 let th = crate::theme::th();
                 th.bar_height + 2.0 * th.bar_layout.margin
