@@ -25,6 +25,8 @@ pub struct Spec {
     pub display_name: String,
     /// Source-relative licence files (at least one).
     pub license_files: Vec<String>,
+    /// Source files concatenated into `index.theme` when the theme folder has none, with their pinned blob ids.
+    pub index_files: Vec<(String, Option<String>)>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -173,6 +175,7 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
             Node::Dir => {}
             Node::Link(_) => links.push((p.clone(), rel.to_string())),
             Node::File { staged: false, .. } => skip(&mut b, rel, None),
+            Node::File { .. } if !keep(rel) => skip(&mut b, rel, Some("only read".into())),
             Node::File { size, .. } => {
                 let src = st.file_path(p);
                 let h = head(&src).map_err(|e| e.to_string())?;
@@ -263,11 +266,49 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
     if b.dropped_links > 20 {
         b.warnings.push(format!("{} links dropped in all", b.dropped_links));
     }
+    index_from_files(st, spec, out, lim, &mut b)?;
     validate(out, spec, &mut b)?;
     licences(st, spec, out, &kept, lim, &mut b)?;
     let (hash, _, _) = content_hash(out)?;
     b.content_hash = hash;
     Ok(b)
+}
+
+/// Writes `index.theme` from the declared source files (each checked against its git blob id).
+fn index_from_files(st: &Staged, spec: &Spec, out: &Path, lim: &Limits, b: &mut Built) -> Result<(), String> {
+    if spec.index_files.is_empty() {
+        return Ok(());
+    }
+    let dst = out.join("index.theme");
+    if std::fs::symlink_metadata(&dst).is_ok() {
+        b.warnings.push("the theme folder has its own index.theme; `index` is not used".into());
+        return Ok(());
+    }
+    let mut text = Vec::new();
+    for (p, pin) in &spec.index_files {
+        let Some(Node::File { staged: true, oid, size, .. }) = st.nodes.get(p) else { return Err(format!("index file `{p}` is missing from the source")) };
+        if let Some(want) = pin {
+            let got = super::gitoid::hex(oid);
+            if *want != got {
+                return Err(format!("index file `{p}`: pinned blob {want}, read {got}"));
+            }
+        }
+        if *size > lim.max_text {
+            return Err(format!("index file `{p}` is larger than {} KiB", lim.max_text >> 10));
+        }
+        let d = std::fs::read(st.file_path(p)).map_err(|e| format!("index file `{p}`: {e}"))?;
+        if std::str::from_utf8(&d).is_err() {
+            return Err(format!("index file `{p}` is not UTF-8 text"));
+        }
+        if !text.is_empty() && !text.ends_with(b"\n") {
+            text.push(b'\n');
+        }
+        text.extend_from_slice(&d);
+    }
+    std::fs::write(&dst, &text).map_err(|e| e.to_string())?;
+    std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o644)).map_err(|e| e.to_string())?;
+    b.files += 1;
+    Ok(())
 }
 
 fn validate(out: &Path, spec: &Spec, b: &mut Built) -> Result<(), String> {
@@ -410,6 +451,7 @@ mod tests {
             install_name: path.rsplit('/').next().unwrap().into(),
             display_name: "Fixture".into(),
             license_files: lic.iter().map(|s| s.to_string()).collect(),
+            index_files: vec![],
         }
     }
 
@@ -418,7 +460,8 @@ mod tests {
         std::fs::create_dir_all(s.path().join("src")).unwrap();
         std::fs::create_dir_all(s.path().join("out")).unwrap();
         let tgz = targz(entries, None);
-        let f = Filter { strip: 1, path: sp.path.clone(), files: sp.license_files.clone(), link_sources: link_sources.iter().map(|x| x.to_string()).collect() };
+        let files = sp.license_files.iter().chain(sp.index_files.iter().map(|(p, _)| p)).cloned().collect();
+        let f = Filter { strip: 1, path: sp.path.clone(), files, link_sources: link_sources.iter().map(|x| x.to_string()).collect() };
         let st = match from_tar(&tgz[..], Format::TarGz, s.path().join("src"), f, &Limits::default(), &keep) {
             Ok(st) => st,
             Err(e) => return (Err(e), s),
@@ -508,6 +551,41 @@ mod tests {
         let (r, s) = run(&src, &spec("dark", &[Provides::Icons], &["COPYING"]), &[]);
         r.unwrap();
         assert!(!s.path().join("out/apps/48/shared.svg").exists(), "without link_sources: dropped");
+    }
+
+    #[test]
+    fn index_files_outside_or_inside_the_theme_are_pinned_and_concatenated() {
+        use super::super::gitoid::{blob_oid, hex};
+        let head = b"[Icon Theme]\nName=Breeze\nInherits=hicolor\n";
+        let common = b"Directories=apps/48\n\n[apps/48]\nSize=48\nType=Fixed\n";
+        let src = vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"LGPL\n"),
+            E::file("top/index.theme", head),
+            E::file("top/icons/breeze.theme.in", head),
+            E::file("top/icons/commonthemeinfo.theme.in", common),
+            E::file("top/icons/apps/48/a.svg", SVG),
+        ];
+        // Adwaita: one file in the repository root; it lists no directories, so add the common part too
+        let mut sp = spec("icons", &[Provides::Icons], &["COPYING"]);
+        sp.index_files = vec![("index.theme".into(), Some(hex(&blob_oid(head)))), ("icons/commonthemeinfo.theme.in".into(), Some(hex(&blob_oid(common))))];
+        let (r, s) = run(&src, &sp, &[]);
+        let b = r.unwrap();
+        let ix = std::fs::read_to_string(s.path().join("out/index.theme")).unwrap();
+        assert!(ix.starts_with("[Icon Theme]\nName=Breeze") && ix.contains("[apps/48]"), "{ix}");
+        assert_eq!(b.icon_dirs, 1);
+        assert!(!s.path().join("out/breeze.theme.in").exists() && !s.path().join("out/commonthemeinfo.theme.in").exists(), "templates are read, not installed");
+        // Breeze: two files inside the theme folder
+        sp.index_files = vec![("icons/breeze.theme.in".into(), None), ("icons/commonthemeinfo.theme.in".into(), None)];
+        let (r, _s) = run(&src, &sp, &[]);
+        r.unwrap();
+        // a pin that does not match refuses the pack
+        sp.index_files = vec![("index.theme".into(), Some("0".repeat(40)))];
+        let (r, _s) = run(&src, &sp, &[]);
+        assert!(r.unwrap_err().contains("pinned blob"));
+        sp.index_files = vec![("missing.theme".into(), None)];
+        let (r, _s) = run(&src, &sp, &[]);
+        assert!(r.unwrap_err().contains("missing"));
     }
 
     #[test]

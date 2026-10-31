@@ -131,7 +131,14 @@ impl Request {
             name: e.pack.name.clone(),
             family: e.catalog.family.clone(),
             origin: "catalog".into(),
-            spec: Spec { provides: e.pack.provides.clone(), path: e.pack.path.clone(), install_name: e.pack.install_name.clone(), display_name: e.pack.name.clone(), license_files: e.license_files() },
+            spec: Spec {
+                provides: e.pack.provides.clone(),
+                path: e.pack.path.clone(),
+                install_name: e.pack.install_name.clone(),
+                display_name: e.pack.name.clone(),
+                license_files: e.license_files(),
+                index_files: e.pack.index.iter().cloned().zip(e.pack.index_oids.iter().cloned().map(Some)).collect(),
+            },
             strip: if archive { e.source.strip } else { 0 },
             link_sources: e.pack.link_sources.clone(),
             pins: Pins { tree: Some(e.pack.tree.clone()), archive_sha256: if archive { e.source.archive_sha256.clone() } else { None }, commit: Some(e.source.commit.clone()) },
@@ -363,7 +370,8 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     let _lock = lock(&staging)?;
     let job = new_job(&staging, name)?;
     let (src_dir, out) = (job.dir.join("src"), job.dir.join("out"));
-    let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files: req.spec.license_files.clone(), link_sources: req.link_sources.clone() };
+    let files = req.spec.license_files.iter().chain(req.spec.index_files.iter().map(|(p, _)| p)).cloned().collect();
+    let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files, link_sources: req.link_sources.clone() };
     let mut rec = req.source.clone();
     let (staged, archive_sha) = match &req.input {
         Input::Dir(d) => {
@@ -447,6 +455,9 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         let on_disk = assemble::content_hash(&target).map(|h| h.0).unwrap_or_default();
         if p.pack == req.pack && on_disk == prov.content_hash && !req.force {
             return Ok(report(Action::Unchanged));
+        }
+        if !req.force && !req.dry_run && p.pack == req.pack && p.content_hash == prov.content_hash {
+            return Err(format!("{} was modified since it was installed (decthemectl assets verify): --force restores it", target.display()));
         }
         if !req.force && !req.dry_run {
             return Err(format!(
@@ -539,7 +550,14 @@ pub(crate) mod tests {
             name: "Bloom".into(),
             family: "fixture".into(),
             origin: "catalog".into(),
-            spec: Spec { provides: vec![Provides::Icons, Provides::Cursors], path: "bloom".into(), install_name: "bloom".into(), display_name: "Bloom".into(), license_files: vec!["COPYING".into()] },
+            spec: Spec {
+                provides: vec![Provides::Icons, Provides::Cursors],
+                path: "bloom".into(),
+                install_name: "bloom".into(),
+                display_name: "Bloom".into(),
+                license_files: vec!["COPYING".into()],
+                index_files: vec![],
+            },
             strip: 1,
             link_sources: vec![],
             input: Input::Archive(archive.to_path_buf()),
@@ -580,7 +598,7 @@ pub(crate) mod tests {
         std::fs::write(t.join("apps/48/utilities-terminal.svg"), "<svg>tampered</svg>").unwrap();
         assert!(matches!(verify(&t).unwrap().1, Integrity::Modified { .. }));
         let e = install(&request(&root, &a, &entries), &Limits::default()).unwrap_err();
-        assert!(e.contains("--force"), "{e}");
+        assert!(e.contains("was modified since it was installed") && e.contains("--force restores it"), "{e}");
         let mut req = request(&root, &a, &entries);
         req.force = true;
         assert_eq!(install(&req, &Limits::default()).unwrap().action, Action::Replaced);

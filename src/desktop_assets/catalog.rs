@@ -32,6 +32,10 @@ pub struct Pack {
     pub license: Option<String>,
     pub license_files: Vec<String>,
     pub link_sources: Vec<String>,
+    /// Source files that, concatenated, become the theme's `index.theme` when its folder has none (Adwaita keeps it
+    /// in the repository root, Breeze in two `.theme.in` files), each pinned by its git blob id in `index_oids`.
+    pub index: Vec<String>,
+    pub index_oids: Vec<String>,
     pub description: String,
 }
 
@@ -255,8 +259,9 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         if archive_sha256.as_deref().is_some_and(|h| !is_hex(h, 64)) {
             cx.errors.push(format!("`{sc}archive_sha256` must be 64 lower-case hex digits"));
         }
-        if archive_url.is_some() != archive_sha256.is_some() {
-            cx.errors.push(format!("`{sc}archive_url` and `{sc}archive_sha256` go together"));
+        // forge-generated archives (GitHub, Gitee) are not byte-stable: the tree id pins the content, a sha256 is optional
+        if archive_sha256.is_some() && archive_url.is_none() {
+            cx.errors.push(format!("`{sc}archive_sha256` needs an `archive_url`"));
         }
         let strip = match t.get("strip_components") {
             None => 0,
@@ -274,7 +279,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
     let mut packs = Vec::new();
     for (i, t) in cx.tables(root, "pack") {
         let sc = format!("pack[{i}].");
-        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "description"]);
+        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "index", "index_oids", "description"]);
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
             cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
@@ -318,8 +323,22 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         for f in &link_sources {
             cx.rel(t, &sc, "link_sources", f, false);
         }
+        let index = match t.get("index").map(|i| (i, i.as_str())) {
+            Some((_, Some(s))) => vec![s.to_string()],
+            _ => cx.list(t, &sc, "index"),
+        };
+        for f in &index {
+            cx.rel(t, &sc, "index", f, false);
+        }
+        let index_oids = cx.list(t, &sc, "index_oids");
+        if index.len() != index_oids.len() {
+            cx.errors.push(format!("`{sc}index_oids` must pin every `index` file (git rev-parse <commit>:<file>), in the same order"));
+        }
+        if index_oids.iter().any(|o| !is_hex(o, 40)) {
+            cx.errors.push(format!("`{sc}index_oids` are 40 lower-case hex digits"));
+        }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
-        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, description });
+        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, index, index_oids, description });
     }
 
     let mut recommends = Vec::new();
@@ -535,7 +554,7 @@ cursors = "deepin-bloom"
             ("license = \"GPL-3.0-or-later\"", "license = \"\"", "must not be empty"),
             ("icons = \"deepin-bloom\"", "icons = \"nope\"", "no pack `nope`"),
             ("source = \"deepin-icon-theme\"", "source = \"other\"", "not a [[source]]"),
-            ("archive_sha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n", "", "go together"),
+            ("archive_url = \"https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz\"\n", "", "needs an `archive_url`"),
             ("tree = \"0000000000000000000000000000000000000000\"", "tree = \"abc\"", "git rev-parse"),
         ] {
             assert!(GOOD.contains(from), "{from}");
@@ -545,6 +564,38 @@ cursors = "deepin-bloom"
         let e = parse(&GOOD.replace("provides = [\"icons\", \"cursors\"]", "provides = [\"cursors\"]"), "t").unwrap_err();
         assert!(e.iter().any(|x| x.contains("does not provide icons")), "{e:?}");
         assert!(parse("not toml = = =", "t").unwrap_err()[0].contains("line 1"));
+    }
+
+    #[test]
+    fn the_documented_example_catalogues_stay_valid() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/desktop-asset-packs/examples");
+        let mut set = Set::default();
+        let mut n = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let t = std::fs::read_to_string(e.path()).unwrap();
+            let c = parse(&t, &e.path().display().to_string()).unwrap_or_else(|e| panic!("{}", e.join("\n")));
+            assert!(!c.packs.is_empty() && !c.recommends.is_empty(), "{}", e.path().display());
+            set.push(c);
+            n += 1;
+        }
+        assert_eq!(n, 5, "deepin, openkylin, lingmo, kde, gnome");
+        assert!(set.problems.is_empty(), "{:?}", set.problems);
+    }
+
+    #[test]
+    fn index_files_need_one_pin_each() {
+        let with = |extra: &str| GOOD.replace("tree = \"0000000000000000000000000000000000000000\"", &format!("tree = \"0000000000000000000000000000000000000000\"\n{extra}"));
+        let c = parse(&with("index = \"index.theme\"\nindex_oids = [\"9e21cb977f3c28f5440234d2bc4618d22c14d32d\"]"), "t").unwrap();
+        assert_eq!((c.packs[0].index.as_slice(), c.packs[0].index_oids.len()), (&["index.theme".to_string()][..], 1));
+        let c = parse(
+            &with("index = [\"icons/breeze.theme.in\", \"icons/commonthemeinfo.theme.in\"]\nindex_oids = [\"1ca7213bfb3c4655f42877764e42da3a2af5f0e6\", \"1ca7213bfb3c4655f42877764e42da3a2af5f0e6\"]"),
+            "t",
+        )
+        .unwrap();
+        assert_eq!(c.packs[0].index.len(), 2);
+        assert!(parse(&with("index = \"index.theme\""), "t").unwrap_err().iter().any(|e| e.contains("must pin every")));
+        assert!(parse(&with("index = \"../index.theme\"\nindex_oids = [\"9e21cb977f3c28f5440234d2bc4618d22c14d32d\"]"), "t").is_err());
+        assert!(parse(&with("index = \"index.theme\"\nindex_oids = [\"xyz\"]"), "t").unwrap_err().iter().any(|e| e.contains("hex")));
     }
 
     #[test]

@@ -34,8 +34,10 @@ license = "GPL-3.0-or-later"    # required: SPDX expression as the upstream stat
 license_files = ["LICENSES/GPL-3.0-or-later.txt", "LICENSES/CC-BY-4.0.txt"]  # required, >= 1: paths in the source root
 # optional: lets `decthemectl assets install ID` download the source itself
 archive_url = "https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz"
-archive_sha256 = "<64 hex of the archive file>"   # required when archive_url is set
-strip_components = 1            # leading path parts of the archive to drop (GitHub/Gitee archives: 1); default 0
+archive_sha256 = "<64 hex>"     # optional: only for byte-stable files (release assets); forge-generated archives
+                                #   change bytes without changing content, the tree ids pin the content
+strip_components = 1            # leading path parts of archives to drop: 1 for GitHub/Gitee/`git archive --prefix`
+                                #   tarballs (set it even without archive_url: `--archive` uses it); default 0
 
 [[pack]]
 id = "deepin-bloom"             # required, unique across ALL catalogues: prefix it with the family
@@ -50,6 +52,9 @@ license = "GPL-3.0-or-later"    # optional: overrides the source's licence for t
 license_files = ["bloom/COPYING"]   # optional: more files (source-root relative) copied with this pack
 link_sources = []               # optional: other source folders whose files symlinks of `path` may point into
                                 #   (e.g. ["ocean"] for ocean-dark); such links become plain copies
+index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]   # optional: source files concatenated into
+                                #   index.theme when the theme folder has none (Adwaita: "index.theme" in the repo root)
+index_oids = ["<40 hex>", "<40 hex>"]   # required with index: `git rev-parse <commit>:<file>` of each, same order
 description = "..."             # optional
 
 [[recommend]]                   # optional: which packs a theme of the port suggests
@@ -64,7 +69,8 @@ the repository):
 * unknown keys are errors ("did you mean ...?"); ids are unique; `source` / `recommend.*` refer to existing ids;
   a recommended pack provides the kind it is recommended for;
 * every path is relative, `/`-separated, without `..`, `.` parts, backslashes or control characters;
-* `commit` and `tree` are 40 lowercase hex digits, `archive_sha256` 64; URLs are `https://`;
+* `commit`, `tree` and `index_oids` are 40 lowercase hex digits, `archive_sha256` 64 (and needs `archive_url`);
+  URLs are `https://`;
 * `license` is non-empty and `license_files` lists at least one file per pack (source + pack lists combined).
 
 Catalogues compiled into decebal are listed in `src/desktop_assets/builtin.rs` (one `include_str!` line per family,
@@ -77,8 +83,30 @@ How a port owner gets the pins from a local clone (read-only git queries, nothin
 ```sh
 git -C deepin-icon-theme rev-parse HEAD            # commit
 git -C deepin-icon-theme rev-parse HEAD:bloom      # tree of the pack's path
-curl -L -o a.tgz "$archive_url" && sha256sum a.tgz # archive_sha256 (optional)
+git -C adwaita-icon-theme rev-parse HEAD:index.theme   # index_oids
+sha256sum release-asset.tar.gz                     # archive_sha256, only for byte-stable files
 ```
+
+### Example catalogues
+
+`docs/desktop-asset-packs/examples/` holds one catalogue per desktop family with real pins (taken on 2026-10-31) that
+a port can copy or point to: `deepin.toml` (bloom, bloom-dark: icons + cursors), `openkylin.toml` (UKUI default and
+classical icons, DMZ white / black cursors), `lingmo.toml` (ocean, ocean-dark), `kde.toml` (Breeze icons through the
+two-file `index`, Breeze cursors as `breeze_cursors`) and `gnome.toml` (Adwaita through the root `index.theme`).
+They recommend packs for the theme ids `deepin`, `deepin-dark`, `openkylin`, `lingmo`, `lingmo-dark`, `nextkde` and
+`gnome-adwaita-like`. A test keeps them valid. They are not compiled in: a port adds its own
+`assets/desktop-ports/<family>/asset-packs.toml` (the root lists it in `src/desktop_assets/builtin.rs`); until then
+`DECEBAL_ASSET_CATALOGS=docs/desktop-asset-packs/examples` makes them available.
+
+What did not fit the format, found while pinning them (the port owners decide):
+
+* openKylin's own cursors (`icons/cursors/dark-sense`, `blue-crystal`) are PNGs whose hotspots live in a shell script
+  (`cursors.sh` runs `xcursorgen`); they are not importable until the hotspots exist as data. DMZ (also shipped by
+  openKylin) is used instead.
+* `lingmo-cursor-themes` states no licence (its `debian/copyright` is the unfilled template), so it is left out;
+  Lingmo's `ocean` folder carries its own cursors.
+* Breeze Dark icons are generated at build time (no `icons-dark/` in the repository).
+* Current Adwaita ships no cursors in its repository.
 
 ## Commands
 
@@ -89,8 +117,8 @@ curl -L -o a.tgz "$archive_url" && sha256sum a.tgz # archive_sha256 (optional)
 |---|---|
 | `list` | every catalogue pack (installed / not installed / modified / name taken by a foreign theme) and every installed decebal pack |
 | `info ID\|NAME` | metadata, pins, licence, installed state and recommendations of one pack |
-| `install ID [--archive FILE \| --source-dir DIR] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https, `archive_sha256` checked), or a pre-downloaded archive (sha256 checked), or a local clone of the source (checked by the `tree` OID only) |
-| `import PATH --provides icons,cursors --license SPDX [--license-file REL]... [--name NAME] [--path REL] [--strip N] [--tree OID] [--sha256 HEX] [--force] [--dry-run]` | install an archive or folder that is not in a catalogue (recorded as `local`; the licence is still required) |
+| `install ID [--archive FILE [--strip N] \| --source-dir DIR] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https), or use a downloaded archive, or a local clone of the source; the `tree` id (and `archive_sha256`, the archive's commit, `index_oids`) are checked |
+| `import PATH --provides icons,cursors --license SPDX --license-file REL... [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]` | install an archive or folder that is not in a catalogue (recorded as `local`; a licence file is still required). `REL` paths are relative to the source root |
 | `verify [NAME...]` | re-hash installed packs against their provenance record |
 | `remove NAME [--force]` | delete a pack decebal installed (never a theme it did not install; `--force` to remove one in use) |
 | `use icons\|cursors NAME\|auto` | select a theme explicitly (survives theme changes) |
@@ -107,13 +135,15 @@ curl -L -o a.tgz "$archive_url" && sha256sum a.tgz # archive_sha256 (optional)
    folder (walked without following links). Only `path`, the licence files and `link_sources` are extracted;
    everything else is skipped unread. A git archive's pax comment is compared with `commit`.
 3. **Verify**: the git tree OID of `path` (blob/tree objects computed from the exact bytes and modes read) must equal
-   `tree`; for downloads and `--archive` the SHA-256 of the archive must equal `archive_sha256`. Any mismatch stops here.
+   `tree`; a git archive's commit must equal `commit`; when pinned, the SHA-256 of the archive must equal
+   `archive_sha256` (checked before the archive is read). Any mismatch stops here.
 4. **Build** the theme folder: icon files (`.svg`, `.png`, `.xpm`), `index.theme` / `cursor.theme`, Xcursor files under
    `cursors/` (magic `Xcur` checked), and text (`README*`, `COPYING*`, `LICENSE*`, `AUTHORS*`, `*.md`, `*.txt`).
    Everything else (build files, scripts, `Makefile`, `CMakeLists.txt`, `icon-theme.cache`, ...) is left out and counted.
    Files are written 0644, folders 0755: executable bits never survive. Internal symlinks are kept (relative);
    links into `link_sources` become copies; links to nothing are dropped with a warning.
-5. **Validate**: icons need an `index.theme` with `[Icon Theme]` and existing `Directories`; cursors need `cursors/`
+5. **Validate**: a theme folder without `index.theme` gets the concatenated `index` files (each checked against its
+   `index_oids` blob id; they are read, not installed). Icons need an `index.theme` with `[Icon Theme]` and existing `Directories`; cursors need `cursors/`
    with a core pointer (`left_ptr` or `default`). `Inherits=` names must be plain names; a theme inheriting itself (DMZ's
    `cursor.theme`) is fine, missing parents are warnings. A cursor-only pack without `index.theme` gets a two-line one.
 6. **Licence**: every licence file is copied to `<theme>/LICENSES/`; a missing one stops the install.
@@ -185,6 +215,25 @@ curl -L -o a.tgz "$archive_url" && sha256sum a.tgz # archive_sha256 (optional)
 `content_hash` is `sha256` over the sorted entries (`path NUL F NUL size NUL sha256(file) LF` for files,
 `path NUL L NUL target LF` for links), without the provenance file itself; `verify` recomputes it.
 
+## Evidence (2026-10-31)
+
+Private smoke runs (own HOME / XDG / config / icon root, no display or bus, desktop tools recorded instead of run) of
+the real `decthemectl` against `git archive` tarballs and a clone of the pinned upstream commits:
+
+* installed and verified (`tree yes`, `commit yes` for archives): Deepin `bloom` (6359 files, 7501 links, 176 cursors),
+  openKylin `ukui-icon-theme-default`, DMZ-White, Lingmo `ocean` (from a clone), KDE `breeze` (two-file index) and
+  `breeze_cursors`, GNOME `Adwaita` (root index); `preview` resolved 13-16 of 16 sample icons and 10 of 10 cursors
+  from the packs themselves and drew them from the installed files;
+* refused through the binary: `..` and absolute entries, absolute / escaping links, a write below a link, a device,
+  a duplicate, a 64 MiB entry, a missing licence, a wrong `--sha256`, a wrong `--tree`, the wrong archive for a pack;
+  nothing was written outside the icon root; a foreign theme folder survived `--force` and `remove`;
+* a tampered install is reported by `verify` and repaired only with `--force`;
+* explicit icon and cursor choices survived applying `deepin`, `nextkde` and `gnome-adwaita-like`; theme-owned slots
+  followed and went back to their baseline.
+
+Upstream symlinks that dangle in the pinned commit itself (e.g. Lingmo `ocean-dark/apps/scalable ->
+../../Crule/apps/scalable`, Deepin `uos-activator.svg -> deepin-license-activator.svg`) are dropped with a warning.
+
 ## Limits and known gaps
 
 * Formats: `.tar`, `.tar.gz`, folders. `.tar.xz`, `.zip` and `.7z` are refused with a message (no decoder in the
@@ -194,4 +243,7 @@ curl -L -o a.tgz "$archive_url" && sha256sum a.tgz # archive_sha256 (optional)
 * `git archive` honours `export-ignore` / `export-subst`; an upstream using them gives a different tree OID for the
   archive than for the clone. Pin what you verify.
 * decebal's own surfaces do not load Xcursor themes themselves; the cursor theme reaches applications through
-  "Apply to all apps" (GTK, gsettings, X resources) and a new session.
+  "Apply to all apps" (GTK, gsettings, X resources) and a new session. When a theme-owned cursor goes back to "not
+  set", "Apply to all apps" leaves the last written GTK / X value in place (it only writes a set value).
+* Licence files and `link_sources` outside the pack's `path` are covered by `archive_sha256` when that is pinned, not
+  by the tree id; `index` files are pinned by `index_oids`.

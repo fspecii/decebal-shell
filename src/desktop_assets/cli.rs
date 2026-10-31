@@ -8,11 +8,12 @@ use std::path::{Path, PathBuf};
 
 pub const HELP: &str = "decthemectl assets list [--json]                 catalogue packs and installed decebal packs
 decthemectl assets info ID|NAME [--json]         pins, licence, installed state of one pack
-decthemectl assets install ID [--archive FILE | --source-dir DIR] [--force] [--dry-run]
+decthemectl assets install ID [--archive FILE [--strip N] | --source-dir DIR] [--force] [--dry-run]
                                                  install a catalogue pack: download its pinned https archive (sha256 checked),
                                                  or a downloaded archive (sha256 checked), or a local clone (git tree id checked)
 decthemectl assets import PATH --provides icons[,cursors] --license SPDX --license-file REL [--license-file REL]...
-                          [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]
+                          (REL paths are relative to the source root, after --strip)
+                          [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]
                                                  install an archive (.tar, .tar.gz) or folder that is not in a catalogue
 decthemectl assets verify [NAME...] [--json]     re-hash installed packs against their provenance
 decthemectl assets remove NAME [--force]         delete a pack decebal installed (--force: also when it is in use)
@@ -48,7 +49,7 @@ struct Args {
     opts: Vec<(String, String)>,
 }
 
-const VALUED: &[&str] = &["--root", "--archive", "--source-dir", "--provides", "--license", "--license-file", "--name", "--path", "--strip", "--tree", "--sha256", "--png", "--link-source"];
+const VALUED: &[&str] = &["--index", "--root", "--archive", "--source-dir", "--provides", "--license", "--license-file", "--name", "--path", "--strip", "--tree", "--sha256", "--png", "--link-source"];
 
 fn parse(args: &[String]) -> Result<Args, String> {
     let mut a = Args { pos: vec![], flags: vec![], opts: vec![] };
@@ -105,6 +106,12 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
                 (None, None) => None,
             };
             let mut req = Request::from_catalog(e, input, ctx.root.clone())?;
+            if let Some(s) = a.opt("--strip") {
+                if matches!(req.input, Input::Dir(_)) {
+                    return Err("--strip applies to archives, not to --source-dir".into());
+                }
+                req.strip = s.parse().ok().filter(|n| *n <= 4).ok_or("--strip takes 0..4")?;
+            }
             req.force = a.flag("--force");
             req.dry_run = a.flag("--dry-run");
             report(&install::install(&req, &ctx.limits)?, json)
@@ -351,7 +358,7 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
         return Err("import needs --license-file REL (the licence text in the source, e.g. COPYING): packs are only installed with their licence".into());
     }
     let theme_path = a.opt("--path").unwrap_or(".").trim_end_matches('/').to_string();
-    for p in license_files.iter().chain(a.all("--link-source").iter()).chain(std::iter::once(&theme_path).filter(|p| *p != ".")) {
+    for p in license_files.iter().chain(a.all("--link-source").iter()).chain(a.all("--index").iter()).chain(std::iter::once(&theme_path).filter(|p| *p != ".")) {
         super::safe_rel(p)?;
     }
     let base = || {
@@ -384,7 +391,14 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
         name: name.clone(),
         family: String::new(),
         origin: "local".into(),
-        spec: assemble::Spec { provides, path: theme_path.clone(), install_name: name.clone(), display_name: name.clone(), license_files },
+        spec: assemble::Spec {
+            provides,
+            path: theme_path.clone(),
+            install_name: name.clone(),
+            display_name: name.clone(),
+            license_files,
+            index_files: a.all("--index").into_iter().map(|p| (p, None)).collect(),
+        },
         strip: if is_dir { 0 } else { strip },
         link_sources: a.all("--link-source"),
         input: if is_dir { Input::Dir(src.clone()) } else { Input::Archive(src.clone()) },

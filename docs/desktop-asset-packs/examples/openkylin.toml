@@ -1,0 +1,60 @@
+# Example companion catalogue for an openKylin (UKUI) port. Pins from `git rev-parse` on 2026-10-31.
+# openKylin's own dark-sense / blue-crystal cursors are PNGs built by a shell script (icons/cursors/*/cursors.sh);
+# they are not importable until the port transcribes their hotspots as data, so DMZ (what openKylin ships) is used.
+format = 1
+family = "openkylin"
+
+[[source]]
+id = "openkylin-theme"
+repo = "https://gitee.com/openkylin/openkylin-theme"
+revision = "openkylin/nile"
+commit = "3c78d714aa8fac723c9a5360bd54484789a647ab"
+license = "GPL-3.0-only"                      # debian/copyright: "either version 3 of the License."
+license_files = ["debian/copyright"]
+strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
+
+[[source]]
+id = "dmz-cursor-theme"
+repo = "https://gitee.com/openkylin/dmz-cursor-theme"
+revision = "openkylin/yangtze"
+commit = "54eb2bd971b033af69f1cea9881bc2a676aee943"
+license = "CC-BY-SA-3.0"                      # debian/copyright: "License for the theme itself"
+license_files = ["debian/copyright"]
+strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
+
+[[pack]]
+id = "openkylin-ukui-default"
+name = "UKUI Default"
+provides = ["icons"]
+source = "openkylin-theme"
+path = "icons/ukui-icon-theme-default"
+tree = "7e3d3ab0f27ed72665119ef56c296fdf177c23a2"
+
+[[pack]]
+id = "openkylin-ukui-classical"
+name = "UKUI Classical"
+provides = ["icons"]
+source = "openkylin-theme"
+path = "icons/ukui-icon-theme-classical"
+tree = "7960b5318b46f6e167c7c7bec432b627d3998483"
+
+[[pack]]
+id = "openkylin-dmz-white"
+name = "DMZ White"
+provides = ["cursors"]
+source = "dmz-cursor-theme"
+path = "DMZ-White"
+tree = "d34002d297472690a5adb753d4b0160d5744d9cc"
+
+[[pack]]
+id = "openkylin-dmz-black"
+name = "DMZ Black"
+provides = ["cursors"]
+source = "dmz-cursor-theme"
+path = "DMZ-Black"
+tree = "d4dc970813dc6060b2553cd172d76ceef57221d8"
+
+[[recommend]]
+theme = "openkylin"
+icons = "openkylin-ukui-default"
+cursors = "openkylin-dmz-white"

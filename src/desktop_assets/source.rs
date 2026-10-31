@@ -242,7 +242,8 @@ impl<'a> Builder<'a> {
         }
         self.check_place(p, false)?;
         let (rel, stage, cap) = match &want {
-            Want::Theme(rel) => (Some(rel.clone()), (self.keep)(rel), self.lim.max_file),
+            // a licence or index file inside the theme folder is staged even when the theme does not install it
+            Want::Theme(rel) => (Some(rel.clone()), (self.keep)(rel) || self.st.filter.files.iter().any(|f| f == p), self.lim.max_file),
             _ if self.st.filter.files.iter().any(|f| f == p) => (None, true, self.lim.max_text),
             _ => (None, true, self.lim.max_file),
         };

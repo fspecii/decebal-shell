@@ -99,6 +99,9 @@ pub fn set_current(doc: &mut Value, k: Provides, v: Option<&str>) {
             None => {
                 if let Some(s) = doc.get_mut("system").and_then(Value::as_object_mut) {
                     s.remove("cursorTheme");
+                    if s.is_empty() {
+                        doc.as_object_mut().expect("object").remove("system");
+                    }
                 }
             }
         },

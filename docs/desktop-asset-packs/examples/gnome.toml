@@ -1,0 +1,28 @@
+# Example companion catalogue for GNOME looks (the gnome-adwaita-like theme). Pins from `git rev-parse` on 2026-10-31.
+# Current Adwaita has no cursors in the repository; DMZ-White (openkylin.toml) or Breeze cursors (kde.toml) pair with it.
+format = 1
+family = "gnome"
+
+[[source]]
+id = "adwaita-icon-theme"
+repo = "https://gitlab.gnome.org/GNOME/adwaita-icon-theme"
+revision = "master"
+commit = "75a7cc2fbfc43226f82bbca6edf74ba5ebba211f"
+license = "LGPL-3.0-only OR CC-BY-SA-3.0"     # COPYING: "either the GNU LGPL v3 or Creative Commons BY-SA 3.0 United States"
+license_files = ["COPYING", "COPYING_LGPL", "COPYING_CCBYSA3"]
+strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
+
+[[pack]]
+id = "gnome-adwaita"
+name = "Adwaita"
+provides = ["icons"]
+source = "adwaita-icon-theme"
+path = "Adwaita"
+tree = "d872c164385fc81bec9e533b0cc74cb8f599d235"
+# meson installs the repository-root index.theme into Adwaita/
+index = "index.theme"
+index_oids = ["9e21cb977f3c28f5440234d2bc4618d22c14d32d"]
+
+[[recommend]]
+theme = "gnome-adwaita-like"
+icons = "gnome-adwaita"

@@ -1,0 +1,41 @@
+# Example companion catalogue for a Deepin port (assets/desktop-ports/deepin/asset-packs.toml is the port owner's).
+# Pins read from a clone with `git rev-parse` on 2026-10-31; licences from the repository's .reuse/dep5.
+format = 1
+family = "deepin"
+
+[[source]]
+id = "deepin-icon-theme"
+repo = "https://github.com/linuxdeepin/deepin-icon-theme"
+revision = "master"
+commit = "5d11ba4e4013a4d1e1c601265d55c66b95184922"
+license = "GPL-3.0-or-later"                 # .reuse/dep5: bloom/* bloom-dark/* ...
+license_files = ["LICENSE", "LICENSES/GPL-3.0-or-later.txt", ".reuse/dep5"]
+# GitHub archives are not byte-stable: no archive_sha256, the tree ids below pin the content
+archive_url = "https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz"
+strip_components = 1
+
+[[pack]]
+id = "deepin-bloom"
+name = "Bloom"
+provides = ["icons", "cursors"]               # bloom/ has both an icon tree and prebuilt Xcursor files
+source = "deepin-icon-theme"
+path = "bloom"
+tree = "9baca758b5bb6a8b8423d32ce3f83da07b95af6e"
+
+[[pack]]
+id = "deepin-bloom-dark"
+name = "Bloom Dark"
+provides = ["icons", "cursors"]
+source = "deepin-icon-theme"
+path = "bloom-dark"
+tree = "738f4c4a37c4b183ce9e573267b1b0d1b4dddb9e"   # Inherits=bloom,bloom-classic: install deepin-bloom too
+
+[[recommend]]
+theme = "deepin"
+icons = "deepin-bloom"
+cursors = "deepin-bloom"
+
+[[recommend]]
+theme = "deepin-dark"
+icons = "deepin-bloom-dark"
+cursors = "deepin-bloom-dark"
