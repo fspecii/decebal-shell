@@ -19,11 +19,15 @@ Right-click a control to reset it to the default (removes the key from the file)
 ## Source of truth and safety
 * The TOML file is the only state. Every change is a `toml_edit` edit of the parsed document: comments, key order,
   trailing comments of replaced values and unknown keys survive (`src/settings/tomlcfg.rs`, round-trip tests).
-* Write path (`io::Store::commit`): refuse if the file changed on disk since it was read (then reload it) ->
-  validate the new text with `rdwmctl check-config` on a scratch copy (same code as `rdwm --check-config`; syntax only when
-  rdwmctl is missing) -> write temp file next to the target, fsync, rename (symlinked configs are written through, mode kept)
-  -> one-time `config.toml.bak-decsettings` of the original -> `reload` over IPC on a thread. Invalid values are shown inline
-  (red banner) and nothing is written. rdwm not running: the file is still edited.
+* Write path: the window never writes. A control change becomes an immutable job for the one persistence worker
+  (`src/settings/persist.rs`, thread `decset-persist`, details in [settings-persistence.md](settings-persistence.md)); the
+  change is shown at once with a "Saving…" toast (AT-SPI: busy) and only the committed result says "Saved". In the worker:
+  refuse if the file changed on disk since this process read or wrote it (the window then reloads it) -> apply the edit's
+  keys to the file as it is -> validate with `rdwmctl check-config` on a scratch copy (same code as `rdwm --check-config`;
+  syntax only when rdwmctl is missing) -> write temp file next to the target, fsync, rename (symlinked configs are written
+  through, mode kept) -> one-time `config.toml.bak-decsettings` of the original -> `reload` over IPC. A rejected or failed
+  write is shown inline (red banner) and only that change is taken back; nothing is written. rdwm not running: the file is
+  still edited.
 * "Restore original" (General) puts the backup back.
 * dock/menu-bar settings are the few keys decdock/decbar really read (`dock-settings.json`: appSpacing, magnification,
   transparency, roundness; `decebal.json`: workspaces; `dock-pinned-macos.json`: pinned/order). Other keys in those files are kept.
