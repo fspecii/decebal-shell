@@ -11,15 +11,19 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb, listeners_owned
 
 
 def main():
     binary = Path(os.environ['SETTINGS_BIN'])
     assert binary.is_absolute() and binary.is_file(), 'SETTINGS_BIN must be an absolute binary path'
     out = Path(os.environ['SETTINGS_EVIDENCE_DIR']).resolve()
-    out.mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=False)
     expected = os.environ.get('SETTINGS_EXPECT_FAILURE') == '1'
     installed = Path('/home/ambsd/.local/share/rdwm-decebal/bin')
     result = {'binary': str(binary), 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -33,8 +37,7 @@ def main():
         env = {k: v for k, v in os.environ.items() if not k.startswith(('DECEBAL_', 'DECSETTINGS_', 'RDWM', 'DBUS_', 'XDG_'))}
         for key in ('WAYLAND_DISPLAY', 'XAUTHORITY', 'SESSION_MANAGER', 'AT_SPI_BUS_ADDRESS', 'HYPRLAND_INSTANCE_SIGNATURE'):
             env.pop(key, None)
-        display = next(f':{n}' for n in range(460, 560)
-                       if not Path(f'/tmp/.X11-unix/X{n}').exists() and not Path(f'/tmp/.X{n}-lock').exists())
+        display = ''  # Set only after an owned private X server is proved ready.
         env.update(HOME=str(root / 'home'), DISPLAY=display, XDG_CONFIG_HOME=str(root / 'config'),
                    XDG_CACHE_HOME=str(root / 'cache'), XDG_DATA_HOME=str(root / 'data'), XDG_STATE_HOME=str(root / 'state'),
                    XDG_RUNTIME_DIR=str(root / 'run'), XDG_CONFIG_DIRS=str(root / 'empty'), XDG_DATA_DIRS=str(root / 'empty'),
@@ -43,7 +46,7 @@ def main():
                    DBUS_SYSTEM_BUS_ADDRESS=f'unix:path={tmp}/no-system-bus', RDWM_SOCK=str(root / 'no-wm'),
                    RDWMCTL='/nonexistent/rdwmctl', DECSETTINGS_DEBUG_LAYOUT=str(root / 'layout.json'),
                    DECEBAL_THEME_PREVIEW_BIN=os.environ.get('SETTINGS_RENDERER_BIN', str(installed / 'decthemectl')),
-                   DECEBAL_DECO_RENDERER=str(installed / 'decebal-deco-preview'))
+                   DECEBAL_DECO_RENDERER=os.environ.get('SETTINGS_DECO_RENDERER', str(installed / 'decebal-deco-preview')))
         if os.environ.get('SETTINGS_THEMES_DIR'):
             theme_source = Path(os.environ['SETTINGS_THEMES_DIR']).resolve()
             shutil.copytree(theme_source, root / 'themes', symlinks=False)
@@ -53,7 +56,8 @@ def main():
         result['renderer_sha256'] = hashlib.sha256(Path(env['DECEBAL_THEME_PREVIEW_BIN']).read_bytes()).hexdigest()
         result.update(display=display, renderer=env['DECEBAL_THEME_PREVIEW_BIN'], deco_renderer=env['DECEBAL_DECO_RENDERER'])
         def run(*args):
-            return subprocess.check_output(args, env=env, text=True, stderr=subprocess.DEVNULL).strip()
+            assert listeners_owned(xvfb, int(display[1:])), "private X server ownership lost"
+            return subprocess.check_output(args, env=env, text=True, stderr=subprocess.DEVNULL, timeout=8).strip()
         def wait(fn, timeout=15):
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
@@ -72,7 +76,9 @@ def main():
             run('import', '-window', window, str(out / f'{name}.png'))
         try:
             with (out / 'xvfb.log').open('w') as log:
-                xvfb = subprocess.Popen(['Xvfb', display, '-screen', '0', '1400x1800x24', '-nolisten', 'tcp'], env=env, stdout=log, stderr=log)
+                xvfb, display = start_private_xvfb(env=env, log=log, screen='1400x1800x24')
+                env['DISPLAY'] = display
+                result['display'] = display
             processes.append(xvfb)
             def owned():
                 assert xvfb.poll() is None, 'private Xvfb exited (possible display collision)'
