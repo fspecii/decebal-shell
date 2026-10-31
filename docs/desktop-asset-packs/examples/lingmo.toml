@@ -1,0 +1,43 @@
+# Example companion catalogue for a Lingmo port. Pins from `git rev-parse` on 2026-10-31.
+# lingmo-cursor-themes is left out: its debian/copyright is an unfilled template (no licence stated).
+format = 1
+family = "lingmo"
+
+[[source]]
+id = "lingmo-icons"
+repo = "https://github.com/LingmoOS/lingmo-icons"
+revision = "main"
+commit = "c1728a213a2e75c06bc664c9098288efb881b82a"
+license = "GPL-3.0-only"                      # ocean/COPYING is the GPL v3 text; no "or later" grant found
+license_files = ["ocean/COPYING"]
+license_oids = ["94a9ed024d3859793618152ea559a168bbcbb5e2"]   # git rev-parse <commit>:<file>, same order
+archive_url = "https://github.com/LingmoOS/lingmo-icons/archive/c1728a213a2e75c06bc664c9098288efb881b82a.tar.gz"
+strip_components = 1
+
+[[pack]]
+id = "lingmo-ocean"
+name = "Ocean"
+provides = ["icons", "cursors"]               # ocean/ also carries prebuilt cursors
+source = "lingmo-icons"
+path = "ocean"
+tree = "9e6cef436819f91394eff447e866953b8be90309"
+
+[[pack]]
+id = "lingmo-ocean-dark"
+name = "Ocean Dark"
+provides = ["icons"]
+source = "lingmo-icons"
+path = "ocean-dark"
+tree = "17a35532a3ba0e6125e3b5720c8857d112010e33"
+link_sources = ["ocean"]                      # 9 links point into ocean/: installed as copies
+link_source_trees = ["9e6cef436819f91394eff447e866953b8be90309"]   # git rev-parse <commit>:ocean
+
+[[recommend]]
+theme = "lingmo"
+icons = "lingmo-ocean"
+cursors = "lingmo-ocean"
+
+[[recommend]]
+theme = "lingmo-dark"
+icons = "lingmo-ocean-dark"
+cursors = "lingmo-ocean"
