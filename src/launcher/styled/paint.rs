@@ -21,6 +21,11 @@ pub enum Glyph {
     Apps,
     Close,
     Lines,
+    /// A monitor on a stand (UKUI's `computer-symbolic`).
+    Computer,
+    /// Four corner brackets pointing out (view-fullscreen) / in (view-restore).
+    Expand,
+    Restore,
 }
 
 pub struct Painter<'a> {
@@ -65,6 +70,8 @@ impl Painter<'_> {
     pub fn shadow(&mut self, r: Rect, radius: f32, strength: f32) {
         if self.alpha && strength > 0.0 {
             crate::gfx::soft_shadow(self.pm, r.x, r.y, r.w, r.h, radius, self.u(18.0), 0.28 * strength);
+            // the shadow stands outside the card: a translucent card must not be darkened by it (the compositor shows the backdrop through the card)
+            crate::gfx::clear_rounded(self.pm, r.x, r.y, r.w, r.h, radius);
         }
     }
 
@@ -231,6 +238,25 @@ impl Painter<'_> {
                 for k in [-0.5f32, 0.0, 0.5] {
                     pb.move_to(cx - h * 0.7, cy + k * h);
                     pb.line_to(cx + h * 0.7, cy + k * h);
+                }
+            }
+            Glyph::Computer => {
+                if let Some(r) = tiny_skia::Rect::from_xywh(cx - h * 0.8, cy - h * 0.7, h * 1.6, h * 1.1) {
+                    pb.push_rect(r);
+                }
+                pb.move_to(cx, cy + h * 0.4);
+                pb.line_to(cx, cy + h * 0.75);
+                pb.move_to(cx - h * 0.45, cy + h * 0.78);
+                pb.line_to(cx + h * 0.45, cy + h * 0.78);
+            }
+            Glyph::Expand | Glyph::Restore => {
+                // an L at each corner: out at the corners of the full square (expand), in at the corners of a smaller one, opening outward (restore)
+                let (corner, arm, sign) = if g == Glyph::Expand { (h * 0.75, h * 0.4, 1.0) } else { (h * 0.28, h * 0.4, -1.0) };
+                for (sx, sy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    let (px, py) = (cx + sx * corner, cy + sy * corner);
+                    pb.move_to(px - sx * sign * arm, py);
+                    pb.line_to(px, py);
+                    pb.line_to(px, py - sy * sign * arm);
                 }
             }
             Glyph::Clock => {

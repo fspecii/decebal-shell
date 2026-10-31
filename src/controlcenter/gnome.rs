@@ -829,6 +829,8 @@ pub fn draw_with(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut 
                 };
                 fonts.draw(pm, &shown, tx, y, *size, *weight, color(rgb.0, rgb.1, rgb.2, 1.0));
             }
+            // UKUI's icon-less track is never part of the GNOME layout
+            Draw::Track { .. } => {}
             Draw::Slider { value, .. } => {
                 // `-barlevel-height: 4px`, trough = 10 % foreground, fill = accent, handle radius 8 px (scalable)
                 let handle = icon_px(k) / 2.0;

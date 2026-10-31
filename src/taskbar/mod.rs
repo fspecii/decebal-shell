@@ -69,6 +69,7 @@ pub struct Metrics {
     pub indicator: crate::panel::plasma_style::Indicator,
     pub desktop_form: crate::panel::plasma_style::DesktopForm,
     pub workspace_form: crate::panel::plasma_style::WorkspaceForm,
+    pub search_form: crate::panel::plasma_style::SearchForm,
 }
 
 impl Metrics {
@@ -102,6 +103,7 @@ impl Metrics {
             indicator: Default::default(),
             desktop_form: Default::default(),
             workspace_form: Default::default(),
+            search_form: Default::default(),
         }
     }
 
@@ -144,6 +146,7 @@ impl Metrics {
         self.indicator = st.indicator;
         self.desktop_form = st.desktop;
         self.workspace_form = st.workspaces;
+        self.search_form = st.search;
         self
     }
 }

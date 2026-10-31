@@ -14,19 +14,19 @@ tokens = root / "assets/desktop-ports/openkylin/derived"
 CLASSIC_APPLETS = ["launcher", "search", "tasks", "tray", "volume", "network", "bluetooth", "battery", "control_center", "clock", "show_desktop"]
 ISLAND_APPLETS = ["launcher", "tasks", "search", "tray", "volume", "network", "bluetooth", "battery", "control_center", "clock"]
 PKGS = [
- dict(id="openkylin", name="openKylin (UKUI v11)", theme="v11", radius=12, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin", logo="default", name="openKylin (UKUI v11)", theme="v11", radius=12, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "taskbar", "blue"],
       desc="openKylin's UKUI v11 global theme: daybreak-blue light/dark palettes, the classic UKUI taskbar and 12 px window corners."),
- dict(id="openkylin-islands", name="openKylin (UKUI islands)", theme="v11", radius=12, blur_alpha=0.65, mode="islands",
+ dict(id="openkylin-islands", logo="default", name="openKylin (UKUI islands)", theme="v11", radius=12, blur_alpha=0.65, mode="islands",
       tags=["openkylin", "ukui", "islands", "floating"],
       desc="The v11 palettes with UKUI's three-island floating taskbar: data, application and settings islands along the bottom edge."),
- dict(id="openkylin-light-seeking", name="openKylin (Light-Seeking 寻光)", theme="Light-Seeking", radius=12, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin-light-seeking", logo="default", name="openKylin (Light-Seeking 寻光)", theme="Light-Seeking", radius=12, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "azure", "light-seeking"],
       desc="UKUI's Light-Seeking (寻光) global theme: the azure #3790FA brand, opaque grey menus and the default icon pack as its suggestion."),
- dict(id="openkylin-heyin", name="openKylin (HeYin)", theme="HeYin", radius=12, blur_alpha=0.75, mode="classic",
+ dict(id="openkylin-heyin", logo="fashion", name="openKylin (HeYin)", theme="HeYin", radius=12, blur_alpha=0.75, mode="classic",
       tags=["openkylin", "ukui", "purple", "fashion"],
       desc="UKUI's HeYin (和印) global theme: jam-purple accent, fashion widget style and the fashion icon pack as its suggestion."),
- dict(id="openkylin-classic", name="openKylin (Classic)", theme="Classic", radius=0, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin-classic", logo="classical", name="openKylin (Classic)", theme="Classic", radius=0, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "square", "classic"],
       desc="UKUI's Classic (启典) global theme: zero radii everywhere, flat solid accents and the classical icon pack as its suggestion."),
 ]
@@ -48,7 +48,7 @@ id = "{p['id']}"
 name = "{p['name']}"
 version = "1.0.0"
 author = "decebal"
-license = "MIT"
+license = "MIT AND GPL-3.0-only"
 description = "{p['desc']}"
 homepage = "https://github.com/openkylin"
 min_shell_version = "0.3.0"
@@ -63,7 +63,7 @@ dock_roundness = {0.0 if p['mode'] == 'classic' else 0.4}
 dock_alpha = {p['blur_alpha']}
 bar_alpha = {p['blur_alpha']}
 popup_alpha = {popup_alpha}
-panel_alpha = 0.9
+panel_alpha = {p['blur_alpha']}
 blur = 0.6
 shadow = {1.0 if r else 0.5}
 outline = {0.25 if p['mode'] == 'islands' else 0.1}
@@ -83,12 +83,15 @@ fallback_style_light = "adwaita-light"
 fallback_style_dark = "adwaita"{rad}
 
 [branding]
-logo = "icon:kylin-startmenu"
+logo = "icons/kylin-startmenu.png"
 logo_tint = false
 
-# ukui-sidebar: a 400 px side panel of 6-8 px-radius shortcut tiles (not the big rounded macOS-style cards): the theme-radius flyout is closest
+# ukui-sidebar's shortcut panel (396 wide, 4-column icon shortcuts, progress rows) and ukui-menu's start menu (766 x 688, three columns), as native styles
 [control_center]
-style = "fluent"
+style = "ukui"
+
+[launcher]
+style = "ukui"
 '''
     if p["mode"] == "classic":
         out += f'''
@@ -101,13 +104,15 @@ size = 32
 roundness = 0.0
 
 # ukui-panel classic taskbar (panel.cpp, AppIcon.qml): a 48 px strip (size policy Small), square 48 px cells, a task plate inset 4 px (radius kRadiusNormal 6 =
-# theme radius / 2), and a 32 px icon (another 4 px inset). Generic typed `[taskbar]` keys; no theme id is involved.
+# theme radius / 2), and a 32 px icon (another 4 px inset). The search applet (ukui-panel-search main.qml) is a square `kylin-search` icon button, not a Windows box.
+# Generic typed `[taskbar]` keys; no theme id is involved.
 [taskbar]
 thickness = 48
 icon_size = 32
 cell_width = 48
 gap = 0
 inset = 4
+search = "button"
 
 [bar]
 enabled = "auto"
@@ -165,7 +170,8 @@ composited over the role's own backdrop (`window-active`). Rules, in the order t
 | `titlebar_inactive` | `window-inactive` | as is |
 | `surface` | `base-active` | content/base area |
 | `sidebar` | light `kgray-3`; dark `kcontain-secondary-normal` over window | |
-| `popup`, `overlay` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `popup` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `overlay` | `window-active` | the start menu and the sidebar are windows: the window colour, drawn at `panel_alpha` = `transparencyBlur` of `theme.conf` (65 %, HeYin 75 %) when the compositor blurs, `transparencyNoBlur` 90 % otherwise (a constant of the UKUI styles) |
 | `border` | `kdivider` over window | |
 | `text`, `bar_text` | `kfont-primary` over window | |
 | `text_secondary` | `kfont-secondary` over window | nudged towards `text` only as far as needed to reach 4.5:1 |
@@ -197,6 +203,12 @@ bad = 0
 for p in PKGS:
     d = root / "themes" / p["id"]; d.mkdir(parents=True, exist_ok=True)
     text = build(p); f = d / "theme.toml"
+    # the start button's artwork: the pinned `kylin-startmenu` of the pack the package suggests (see ATTRIBUTION.md)
+    src_logo = root / f"assets/desktop-ports/openkylin/logo/kylin-startmenu-{p['logo']}.png"; t = d / "icons/kylin-startmenu.png"
+    if check:
+        if not t.exists() or t.read_bytes() != src_logo.read_bytes(): print("DRIFT", t); bad += 1
+    else:
+        t.parent.mkdir(exist_ok=True); t.write_bytes(src_logo.read_bytes())
     for w in sorted((root / "assets/desktop-ports/openkylin/widgets").glob("*.toml")):
         t = d / "widgets" / w.name
         if check:

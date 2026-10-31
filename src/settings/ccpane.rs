@@ -21,6 +21,9 @@ fn title(word: &str) -> String {
     if word == "gnome" {
         return "GNOME".into();
     }
+    if word == "ukui" {
+        return "UKUI".into();
+    }
     let mut c = word.split('-').map(|w| {
         let mut ch = w.chars();
         ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()
@@ -138,7 +141,8 @@ mod tests {
         assert_eq!(title("top-right"), "Top Right");
         assert_eq!(title("auto"), "Auto");
         assert_eq!(title("gnome"), "GNOME");
-        assert_eq!(choices(&crate::controlcenter::settings::STYLE_NAMES).last().unwrap().0, "GNOME");
+        assert_eq!(choices(&crate::controlcenter::settings::STYLE_NAMES).last().unwrap().0, "UKUI");
+        assert!(choices(&crate::controlcenter::settings::STYLE_NAMES).iter().any(|c| c.0 == "GNOME"));
         assert_eq!(choices(&["fluent"]), vec![("Fluent".to_string(), "fluent".to_string())]);
     }
 

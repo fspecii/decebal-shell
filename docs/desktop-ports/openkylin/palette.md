@@ -10,7 +10,8 @@ composited over the role's own backdrop (`window-active`). Rules, in the order t
 | `titlebar_inactive` | `window-inactive` | as is |
 | `surface` | `base-active` | content/base area |
 | `sidebar` | light `kgray-3`; dark `kcontain-secondary-normal` over window | |
-| `popup`, `overlay` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `popup` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `overlay` | `window-active` | the start menu and the sidebar are windows: the window colour, drawn at `panel_alpha` = `transparencyBlur` of `theme.conf` (65 %, HeYin 75 %) when the compositor blurs, `transparencyNoBlur` 90 % otherwise (a constant of the UKUI styles) |
 | `border` | `kdivider` over window | |
 | `text`, `bar_text` | `kfont-primary` over window | |
 | `text_secondary` | `kfont-secondary` over window | nudged towards `text` only as far as needed to reach 4.5:1 |

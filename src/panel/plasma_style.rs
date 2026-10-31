@@ -43,6 +43,16 @@ pub enum WorkspaceForm {
     Cells,
 }
 
+/// What the search applet looks like on a horizontal strip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SearchForm {
+    /// The dock setting decides (the Windows search box by default).
+    #[default]
+    Auto,
+    /// A square icon button, whatever the dock setting's default box says (UKUI's `ukui-panel-search` is a 32 px `kylin-search` button).
+    Button,
+}
+
 /// The `[taskbar]` section. Sizes are pixels at scale 1.0; `None` keeps the renderer's own value.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TaskbarStyle {
@@ -61,6 +71,7 @@ pub struct TaskbarStyle {
     pub indicator: Indicator,
     pub desktop: DesktopForm,
     pub workspaces: WorkspaceForm,
+    pub search: SearchForm,
 }
 
 fn num(t: &Value, key: &str, lo: f64, hi: f64) -> Option<f32> {
@@ -82,6 +93,7 @@ impl TaskbarStyle {
             indicator: if choice("indicator") == Some("frame") { Indicator::Frame } else { Indicator::Auto },
             desktop: if choice("desktop") == Some("icon") { DesktopForm::Icon } else { DesktopForm::Auto },
             workspaces: if choice("workspaces") == Some("cells") { WorkspaceForm::Cells } else { WorkspaceForm::Auto },
+            search: if choice("search") == Some("button") { SearchForm::Button } else { SearchForm::Auto },
         }
     }
 
@@ -258,6 +270,14 @@ mod tests {
 
     fn extra(v: Value) -> serde_json::Map<String, Value> {
         serde_json::from_value(json!({ "taskbar": v })).unwrap()
+    }
+
+    #[test]
+    fn search_form_is_a_generic_choice_and_defaults_to_the_dock_setting() {
+        assert_eq!(TaskbarStyle::from_extra(&serde_json::Map::new()).search, SearchForm::Auto);
+        assert_eq!(TaskbarStyle::from_extra(&extra(json!({"search": "button"}))).search, SearchForm::Button);
+        assert_eq!(TaskbarStyle::from_extra(&extra(json!({"search": "box"}))).search, SearchForm::Auto);
+        assert_eq!(TaskbarStyle::from_extra(&extra(json!({"search": 3}))).search, SearchForm::Auto);
     }
 
     #[test]

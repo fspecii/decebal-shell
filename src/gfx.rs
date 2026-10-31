@@ -90,6 +90,14 @@ pub fn stroke_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32, c
     }
 }
 
+/// Makes a rounded rectangle fully transparent (a drop shadow stands outside its card: under a translucent card it would darken the material).
+pub fn clear_rounded(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, r: f32) {
+    if let Some(path) = rounded_rect(x, y, w, h, r) {
+        let p = tiny_skia::Paint { blend_mode: tiny_skia::BlendMode::Clear, ..Default::default() };
+        pm.fill_path(&path, &p, FillRule::Winding, transform(), None);
+    }
+}
+
 /// Axis-aligned filled rectangle.
 pub fn fill_rect(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Color) {
     if let Some(r) = Rect::from_xywh(x, y, w, h) {

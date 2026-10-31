@@ -1,0 +1,20 @@
+startmenu-input-search-light-100.png {'calls': [], 'launcher_open': True}
+startmenu-input-account-light-100.png {'calls': ['decsettings users'], 'launcher_open': False}
+startmenu-input-computer-light-100.png {'calls': ['peony computer:///'], 'launcher_open': False}
+startmenu-input-settings-light-100.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-power-light-100.png {'calls': ['decsession'], 'launcher_open': False}
+startmenu-input-escape-light-100.png {'calls': [], 'launcher_open': False}
+startmenu-input-search-dark-200.png {'calls': [], 'launcher_open': True}
+startmenu-input-account-dark-200.png {'calls': ['decsettings users'], 'launcher_open': False}
+startmenu-input-computer-dark-200.png {'calls': ['peony computer:///'], 'launcher_open': False}
+startmenu-input-settings-dark-200.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-power-dark-200.png {'calls': ['decsession'], 'launcher_open': False}
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 302, in main
+    assert not got["launcher_open"], f"{name}: Escape did not close the launcher"
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: startmenu-input-escape-dark-200.png: Escape did not close the launcher
+done:1

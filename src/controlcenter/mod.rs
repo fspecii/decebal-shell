@@ -7,6 +7,7 @@ mod dux;
 pub(crate) mod gnome;
 pub mod settings;
 pub mod sys;
+mod ukui;
 
 use self::settings::{Style, Tiles};
 use crate::gfx::{color, fill_circle, fill_rounded, stroke_rounded};
@@ -21,6 +22,7 @@ pub const PANEL_W: f32 = 340.0;
 pub fn panel_width(style: Style) -> f32 {
     match style {
         Style::Dux => 600.0,
+        Style::Ukui => ukui::PANEL_W,
         Style::Gnome => gnome::panel_width(),
         _ => PANEL_W,
     }
@@ -64,6 +66,7 @@ pub fn layout_fitted(s: &Snapshot, tiles: &Tiles, style: Style, room: f32) -> Fi
 pub fn layout_styled(s: &Snapshot, tiles: &Tiles, style: Style) -> (Vec<Item>, f32) {
     match style {
         Style::Dux => dux::layout(s, tiles),
+        Style::Ukui => ukui::layout(s, tiles),
         Style::Gnome => gnome::layout(s, tiles),
         _ => layout_with(s, tiles),
     }
@@ -226,6 +229,10 @@ pub enum Draw {
     Slider {
         value: f32,
         icon: &'static str,
+    },
+    /// A slider track with no icon inside (UKUI's `TouchSlider`: a pill, the filled part in the accent colour); the icon button beside it is a separate item.
+    Track {
+        value: f32,
     },
     /// Square action tile background (accent when `on`).
     SmallTile {
@@ -539,7 +546,15 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
     let (panel_r, tile_r, fluent) = look(view.style);
     let dux = view.style == Style::Dux;
-    fill_rounded(pm, ox, oy, panel_width(view.style), height, panel_r, crate::theme::th().overlay.color(crate::theme::th().panel_alpha * if dux { 1.0 } else { 0.9 }));
+    fill_rounded(
+        pm,
+        ox,
+        oy,
+        panel_width(view.style),
+        height,
+        panel_r,
+        crate::theme::th().overlay.color(ukui::panel_alpha(&crate::theme::th(), view.style).unwrap_or(crate::theme::th().panel_alpha * if dux { 1.0 } else { 0.9 })),
+    );
     if !dux || crate::theme::th().outline > 0.0 {
         stroke_rounded(pm, ox + 0.5, oy + 0.5, panel_width(view.style) - 1.0, height - 1.0, (panel_r - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
     }
@@ -611,6 +626,12 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 };
                 fonts.draw(pm, &shown, tx, y, *size, *weight, color(r, g, b, a));
             }
+            Draw::Track { value } => {
+                let th = crate::theme::th();
+                fill_rounded(pm, x, y, w, h, h / 2.0, th.ink(0.14));
+                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (h / 2.0 - 0.5).max(0.0), th.ink(0.07), 1.0);
+                fill_rounded(pm, x, y, (w * value.clamp(0.0, 1.0)).max(h), h, h / 2.0, th.accent_c());
+            }
             Draw::Slider { value, icon } => {
                 // The item keeps the source's full-row pointer/wheel target;
                 // only the visible track is thin.
@@ -652,6 +673,8 @@ pub fn look(style: Style) -> (f32, f32, bool) {
     match style {
         Style::Dux => (28.0, 12.0, true),
         Style::Gnome => (gnome::PANEL_RADIUS, 16.0, false),
+        // UKUI: panel `kRadiusWindow` (the global theme's window radius: 12, Classic 0), shortcut buttons and progress bars `kRadiusMax` 8 (Classic: square, every kradius is 0px)
+        Style::Ukui => (th.radius, if th.radius > 0.0 { 8.0 } else { 0.0 }, false),
         Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
         _ => (th.r(2.0), 16.0, false),
     }
@@ -777,7 +800,7 @@ mod tests {
     #[test]
     fn disabled_groups_never_reappear_in_any_style_or_narrow_layout() {
         let none = Tiles::from_names(std::iter::empty());
-        for style in [Style::Card, Style::Fluent, Style::Gnome, Style::Dux] {
+        for style in [Style::Card, Style::Fluent, Style::Gnome, Style::Dux, Style::Ukui] {
             for (snapshot, tiles) in [(full(), none), (Snapshot::default(), Tiles::from_names(["media"]))] {
                 for room in [240.0, 1000.0] {
                     let panel = layout_fitted(&snapshot, &tiles, style, room);

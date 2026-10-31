@@ -93,7 +93,7 @@ mod tests {
     fn the_selector_shows_the_saved_choice_never_the_themes() {
         let (mut m, _) = model_with("");
         let (opts, sel) = popup(&items(&m));
-        assert_eq!(opts.len(), 8);
+        assert_eq!(opts.len(), 9);
         assert_eq!(opts[0].1, "theme");
         assert_eq!(sel, Some(0), "nothing saved: Use theme default, whatever the theme's own style is");
         m.apply("ln:style", CtlVal::Str("xfce".into()));

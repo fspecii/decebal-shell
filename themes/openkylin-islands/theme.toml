@@ -3,7 +3,7 @@ id = "openkylin-islands"
 name = "openKylin (UKUI islands)"
 version = "1.0.0"
 author = "decebal"
-license = "MIT"
+license = "MIT AND GPL-3.0-only"
 description = "The v11 palettes with UKUI's three-island floating taskbar: data, application and settings islands along the bottom edge."
 homepage = "https://github.com/openkylin"
 min_shell_version = "0.3.0"
@@ -18,7 +18,7 @@ dock_roundness = 0.4
 dock_alpha = 0.65
 bar_alpha = 0.65
 popup_alpha = 0.82
-panel_alpha = 0.9
+panel_alpha = 0.65
 blur = 0.6
 shadow = 1.0
 outline = 0.25
@@ -38,12 +38,15 @@ fallback_style_light = "adwaita-light"
 fallback_style_dark = "adwaita"
 
 [branding]
-logo = "icon:kylin-startmenu"
+logo = "icons/kylin-startmenu.png"
 logo_tint = false
 
-# ukui-sidebar: a 400 px side panel of 6-8 px-radius shortcut tiles (not the big rounded macOS-style cards): the theme-radius flyout is closest
+# ukui-sidebar's shortcut panel (396 wide, 4-column icon shortcuts, progress rows) and ukui-menu's start menu (766 x 688, three columns), as native styles
 [control_center]
-style = "fluent"
+style = "ukui"
+
+[launcher]
+style = "ukui"
 
 [dock]
 enabled = false
@@ -86,7 +89,7 @@ surface = "#1a1a1a"
 bar = "#2e2e2e"
 popup = "#272727"
 dock = "#2e2e2e"
-overlay = "#272727"
+overlay = "#2e2e2e"
 titlebar = "#2e2e2e"
 titlebar_inactive = "#333333"
 border = "#494949"

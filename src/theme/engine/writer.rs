@@ -102,6 +102,7 @@ const LIFTED: &[(&str, &str, &str)] = &[
     ("font_display", "font", "display"),
     ("font_scale", "font", "scale"),
     ("bar_style", "bar", "style"),
+    ("launcher_style", "launcher", "style"),
     ("bar_height", "bar", "height"),
     ("dock_icon_size", "dock", "size"),
     ("titlebar_style", "decoration", "style"),

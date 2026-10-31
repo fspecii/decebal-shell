@@ -1,0 +1,16 @@
+startmenu-input-search-light-100.png {'calls': [], 'launcher_open': True}
+startmenu-input-account-light-100.png {'calls': ['decsettings users'], 'launcher_open': False}
+startmenu-input-computer-light-100.png {'calls': ['peony computer:///'], 'launcher_open': False}
+startmenu-input-settings-light-100.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-power-light-100.png {'calls': ['decsession'], 'launcher_open': False}
+startmenu-input-escape-light-100.png {'calls': [], 'launcher_open': False}
+startmenu-input-search-dark-200.png {'calls': [], 'launcher_open': True}
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 345, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 296, in main
+    assert any(c == want[what] or c.startswith(want[what] + " ") and want[what].count(" ") == c.count(" ") for c in got["calls"]), f"{name}: {what} ran {got['calls']}, want {want[what]}"
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: startmenu-input-account-dark-200.png: account ran [], want decsettings users
+done:1

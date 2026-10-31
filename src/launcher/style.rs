@@ -46,13 +46,16 @@ pub enum LauncherStyle {
     Xfce,
     /// A BlackBerry 10-inspired hub and app grid.
     BlackBerry,
+    /// openKylin's UKUI start menu: all applications, favourites and recent beside a sidebar.
+    Ukui,
 }
 
 /// Every style in the order Settings lists them.
-pub const ALL: [LauncherStyle; 7] = [LauncherStyle::Default, LauncherStyle::Dux, LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry];
+pub const ALL: [LauncherStyle; 8] =
+    [LauncherStyle::Default, LauncherStyle::Dux, LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry, LauncherStyle::Ukui];
 
 /// The stable keys, for the theme token / manifest choice lists (old manifests use the first two only).
-pub const KEYS: &[&str] = &["default", "dux", "windows", "gnome", "kde", "xfce", "blackberry"];
+pub const KEYS: &[&str] = &["default", "dux", "windows", "gnome", "kde", "xfce", "blackberry", "ukui"];
 
 /// The `decebal.json` value that defers to the theme.
 pub const THEME: &str = "theme";
@@ -67,6 +70,7 @@ impl LauncherStyle {
             LauncherStyle::Kde => "kde",
             LauncherStyle::Xfce => "xfce",
             LauncherStyle::BlackBerry => "blackberry",
+            LauncherStyle::Ukui => "ukui",
         }
     }
 
@@ -83,6 +87,7 @@ impl LauncherStyle {
             LauncherStyle::Kde => "KDE Kickoff",
             LauncherStyle::Xfce => "Xfce Whisker",
             LauncherStyle::BlackBerry => "BlackBerry 10",
+            LauncherStyle::Ukui => "UKUI Menu",
         }
     }
 
@@ -95,6 +100,7 @@ impl LauncherStyle {
             LauncherStyle::Kde => "Categories on the left, apps on the right, favourites first, power actions in the footer.",
             LauncherStyle::Xfce => "A compact menu: apps on the left, categories on the right, search and session buttons.",
             LauncherStyle::BlackBerry => "A full-screen hub of categories beside a paged grid of large app tiles.",
+            LauncherStyle::Ukui => "All applications with a search pill on the left, favourites and recent in the middle, a sidebar with settings and power.",
         }
     }
 
@@ -108,6 +114,7 @@ impl LauncherStyle {
             LauncherStyle::Kde => c(Placement::Anchored, true, true, true, false, true),
             LauncherStyle::Xfce => c(Placement::Anchored, true, true, true, false, true),
             LauncherStyle::BlackBerry => c(Placement::FullScreen, true, true, true, true, false),
+            LauncherStyle::Ukui => c(Placement::Anchored, false, true, true, false, true),
         }
     }
 

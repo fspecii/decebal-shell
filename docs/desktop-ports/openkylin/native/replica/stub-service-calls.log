@@ -1,0 +1,3 @@
+brightnessctl -m -c backlight
+brightnessctl -m -c backlight
+decnotify dnd status

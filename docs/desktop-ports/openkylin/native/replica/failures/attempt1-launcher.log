@@ -1,0 +1,34 @@
+startmenu-openkylin-light-100.png {'x': 0, 'y': 322, 'w': 790, 'h': 710, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-125.png {'x': 0, 'y': 132, 'w': 986, 'h': 888, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-200.png {'x': 0, 'y': 0, 'w': 1578, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-dark-100.png {'x': 0, 'y': 326, 'w': 786, 'h': 706, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-dark-125.png {'x': 0, 'y': 138, 'w': 982, 'h': 882, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-dark-200.png {'x': 0, 'y': 0, 'w': 1570, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-light-100.png {'x': 0, 'y': 322, 'w': 790, 'h': 710, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-light-125.png {'x': 0, 'y': 132, 'w': 986, 'h': 888, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-light-200.png {'x': 0, 'y': 0, 'w': 1578, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-dark-100.png {'x': 0, 'y': 326, 'w': 786, 'h': 706, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-dark-125.png {'x': 0, 'y': 138, 'w': 982, 'h': 882, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-light-seeking-dark-200.png {'x': 0, 'y': 0, 'w': 1570, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-light-100.png {'x': 0, 'y': 322, 'w': 790, 'h': 710, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-light-125.png {'x': 0, 'y': 132, 'w': 986, 'h': 888, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-light-200.png {'x': 0, 'y': 0, 'w': 1578, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-dark-100.png {'x': 0, 'y': 326, 'w': 786, 'h': 706, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-dark-125.png {'x': 0, 'y': 138, 'w': 982, 'h': 882, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-heyin-dark-200.png {'x': 0, 'y': 0, 'w': 1570, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-light-100.png {'x': 0, 'y': 322, 'w': 790, 'h': 710, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-light-125.png {'x': 0, 'y': 132, 'w': 986, 'h': 888, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-light-200.png {'x': 0, 'y': 0, 'w': 1578, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-dark-100.png {'x': 0, 'y': 326, 'w': 786, 'h': 706, 'card_w': 766, 'card_h': 688, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-dark-125.png {'x': 0, 'y': 138, 'w': 982, 'h': 882, 'card_w': 957.5, 'card_h': 860.0, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-openkylin-classic-dark-200.png {'x': 0, 'y': 0, 'w': 1570, 'h': 984, 'card_w': 1532, 'card_h': 968, 'note': 'bbox of non-backdrop pixels = card + shadow'}
+startmenu-edge-bottom-openkylin-light-100.png {'x0': 2, 'y0': 330, 'x1': 782, 'y1': 1032, 'strip': 48, 'edge': 'bottom'}
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 424, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 276, in main
+    assert ok and (x1 - x0) <= 766 * sc + 40 * sc and (y1 - y0) <= 688 * sc + 40 * sc, f"{name}: the card changes {x0},{y0}..{x1},{y1}, covering the {edge} panel strip of {thick}"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: startmenu-edge-top-openkylin-light-100.png: the card changes 2,12..1902,752, covering the top panel strip of 48
+done:1

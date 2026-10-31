@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 424, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 306, in main
+    box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: no card"
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 82, in diff_bbox
+    if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > threshold: xs.append(x); ys.append(y)
+       ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 82, in <genexpr>
+    if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > threshold: xs.append(x); ys.append(y)
+                             ~~^^^^^^
+IndexError: image index out of range
+done:1

@@ -30,7 +30,7 @@ licences each repository declares in `debian/copyright`, and git tree OIDs of th
 | Window decoration | `kwin` @ `openkylin/nile` 01bf914 (`src/plugins/kdecorations/ukui`); `ukui-control-center` 6e59d9d (an app's own header, for comparison) | the real UKUI decoration plugin: 38 px header, 30 px buttons, radius 12; see "Window decoration" |
 | Session UI | `ukui-sidebar`, `ukui-notification-daemon`, `ukui-search`, `ukui-session-manager`, `ukui-screensaver`, `ukui-window-switch`, `ukui-power-manager`, `ukui-system-monitor`, `kylin-nm`, `peony`, `ukui-clock` | reference for which Decebal surface plays each role |
 | Wallpapers | `openkylin-wallpapers` (CC-BY-SA-3.0), `ukui-wallpapers` | inspected only; **not shipped** (policy: Wallhaven candidates) |
-| Empty on GitHub | `ukui-menu`, `ukui-greeter`, `openkylin-desktop` | no branches/content; start menu and greeter cannot be sourced from this mirror |
+| Empty on GitHub | `ukui-menu`, `ukui-greeter`, `openkylin-desktop` | no branches/content on the GitHub mirror: the **official active Gitee repositories** (`gitee.com/openkylin/*`, branch `openkylin/huanghe`) are the source for the start menu, shortcut panel, panel widgets and global themes; exact commits, trees and declared licences: `sources.json` → `gitee_huanghe`, measurements and gaps: [replica-gaps.md](replica-gaps.md) |
 
 ## Global themes (real, from `ukui-globaltheme`)
 
@@ -154,19 +154,19 @@ at build time, so treat the binaries as "0.3.0 panel framework, hashes as record
 | classic taskbar geometry | **declared from source** with the generic `[taskbar]` keys (48 px strip, 32 px icons, 4 px plate inset, 48 px cells); measured natively: strip **48 / 60 / 96 px** at 100 / 125 / 200 % on every edge (84 asserted cases); icon size declared, not pixel-measured |
 | window decoration | the **measured native `openkylin` / `openkylin-dark` pair** through the mode-aware contract, proven against a real new and a real old rdwm; a pixel capture of the frame on a mapped window is the decorations owner's |
 | island taskbar | **approximation**: Dux islands at the bottom edge; UKUI's single centred, content-sized three-island cluster needs an engine option (not claimed) |
-| launcher (start menu), Control Center / sidebar look | **not a replica**: `ukui-menu` is empty on the mirror and the sidebar (400 px full-height panel) is approximated by the theme-radius flyout; a proper look needs real geometry and interaction work in a later phase |
+| launcher (start menu), Control Center / sidebar look | **native UKUI styles** (`launcher.style = "ukui"`, `control_center.style = "ukui"`): the start menu's 766 × 688 three-column card and the sidebar's shortcut panel (396 wide, 4 × 80 × 72 icon grid, 356 × 56 progress rows) are measured from `ukui-menu` / `ukui-sidebar` on Gitee and pinned by unit tests and native captures; **not yet a complete replica**, the exact gap list is [replica-gaps.md](replica-gaps.md) |
 | desktop widget | the one real UKUI widget (time), off by default; no other UKUI desktop widget exists upstream |
 | icons / cursors | installed by the shared installer from the pinned trees; independent selection |
 
 ## Honest remaining gaps
 
 * **Island panel:** Dux spreads groups to the edges instead of one centred, content-sized cluster, and the list validator rejects registry keys (contract §5, §5b).
-* **Launcher and Control Center/sidebar:** no replica (no `ukui-menu` source; the sidebar is a 400 px full-height panel approximated by the theme-radius flyout); later phase.
-* **Taskbar:** Classic's plate corner clamps at 2 px (UKUI: 0); the 32 px icon size is declared but not pixel-measured; the search control is a box, not UKUI's button.
+* **Launcher and Control Center/sidebar:** native geometry from the Gitee sources, with the gaps listed in [replica-gaps.md](replica-gaps.md) (no full-screen mode, user/computer/expand actions, notification column, blur material, animations).
+* **Taskbar:** Classic's plate corner clamps at 2 px (UKUI: 0); the 32 px icon size is declared but not pixel-measured; the search control is UKUI's square icon button (generic `[taskbar] search = "button"`); the task-view, separator and AI-assistant widgets have no applet, and the search icon is the shell's magnifier, not the pack's `kylin-search`.
 * **Window decoration:** the native frame on a mapped client window is the decorations owner's to capture; engines without the window-style contract reject these packages (needs the lingmo lane's commits).
-* No UKUI start menu / greeter source on the mirror (`ukui-menu`, `ukui-greeter` empty); no task-view or IDM applet.
+* The greeter is not replicated (out of scope); no task-view or IDM applet.
 * Classic's 70 %-wash highlight is replaced by the solid brand colour for accents (documented in palette.md).
-* `kylin-startmenu` is drawn from the user's icon pack; without a UKUI pack the neutral grid shows.
+* `kylin-startmenu` is bundled (one 128 px PNG per package, the pack the package suggests; pinned blob ids in each ATTRIBUTION.md, verified by the test), so the start button is the real mark with or without an icon pack; the user's icon pack still decides every other icon.
 * Cursors: DMZ-White has no CSS-name aliases (the catalogue format has no alias hook for prebuilt packs); the icon packs' `from moka` provenance is **unresolved** (not researched, not assumed); the licence blobs (`debian/copyright`) are pinned with `license_oids`, so the install reports them verified (a GitHub archive itself is not byte-stable, so no `archive_sha256`).
 * No broad green claim: two unit tests failed in an earlier private scratch merge with and without these packages (historical, see `registration-notes.md`).
 * X11 only; Wayland not exercised. The wallpaper candidates' authorship and licence are unverified; nothing is bundled.

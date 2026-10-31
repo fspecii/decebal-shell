@@ -9,6 +9,9 @@ import hashlib, importlib.util, json, os, pathlib, re, struct, subprocess, sys, 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 A = ROOT / "assets/desktop-ports/openkylin"
 IDS = ["openkylin", "openkylin-islands", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"]
+# git blob ids of icons/ukui-icon-theme-{default,fashion,classical}/128x128/apps/kylin-startmenu.png at openkylin-theme 3c78d71
+_D, _F, _C = "adbe8bd46bcb314dd8eaff1e1ec198409b27b856", "4dfa94880821aa60e3ecd9860eb9a6dbeda431cd", "379a20c9cd81c6e5ff929b6523401e1986c80cb8"
+LOGO_BLOBS = {"openkylin": _D, "openkylin-islands": _D, "openkylin-light-seeking": _D, "openkylin-heyin": _F, "openkylin-classic": _C}
 
 
 def load(name, path):
@@ -42,20 +45,25 @@ class Packages(unittest.TestCase):
             t = self.theme(i)
             self.assertEqual(t["id"], i); self.assertEqual(t["format"], 1)
             self.assertEqual(t["min_shell_version"], "0.3.0", "new panel keys need the framework release")
-            self.assertEqual(t["license"], "MIT")
+            self.assertEqual(t["license"], "MIT AND GPL-3.0-only")
+            self.assertEqual((ROOT / "themes" / i / "LICENSE-GPL-3.0-only.txt").read_bytes(), (A / "LICENSES/GPL-3.0-only.txt").read_bytes())
+            self.assertIn("Separate bundled artwork", (ROOT / "themes" / i / "LICENSE.md").read_text())
             for k in ("wallpaper", "icons", "cursor", "desktop"):
                 self.assertNotIn(k, t, f"{i}: {k} must stay a separate user choice")
             self.assertTrue({"layouts", "mfact", "nmaster", "smart_gaps"}.isdisjoint(t.get("rdwm", {})), f"{i}: global tiling settings are not the theme's")
             self.assertTrue(t["bar"].get("applets"), f"{i}: explicit default applets")
-            self.assertEqual(t["branding"]["logo"], "icon:kylin-startmenu")
+            self.assertEqual(t["branding"]["logo"], "icons/kylin-startmenu.png", "the real UKUI start button, never the neutral grid")
             d = t["decoration"]
             self.assertEqual((d["style_light"], d["style_dark"]), ("openkylin", "openkylin-dark"), "the measured pair, in both modes, not a Windows style")
             self.assertEqual((d["fallback_style_light"], d["fallback_style_dark"], d["style"]), ("adwaita-light", "adwaita", "adwaita"))
             self.assertNotIn("height", d, "UKUI's native 38 px header comes from the style")
             self.assertEqual(d.get("radius"), 0 if i == "openkylin-classic" else None, "only Classic (window-radius 0) overrides the native 12 px")
-            self.assertEqual(t["control_center"]["style"], "fluent")
+            self.assertEqual((t["control_center"]["style"], t["launcher"]["style"]), ("ukui", "ukui"))
             d = ROOT / "themes" / i
-            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "README.md", "theme.toml", "widgets"], f"{i}: no bundled upstream asset")
+            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE-GPL-3.0-only.txt", "LICENSE.md", "README.md", "icons", "theme.toml", "widgets"], f"{i}: only the pinned start-button logo is bundled")
+            self.assertEqual([p.name for p in (d / "icons").iterdir()], ["kylin-startmenu.png"])
+            data = (d / "icons/kylin-startmenu.png").read_bytes()
+            self.assertEqual(hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(), LOGO_BLOBS[i], f"{i}: the logo is the pinned openkylin-theme 3c78d71 blob")
             self.assertEqual(sorted(p.name for p in (d / "widgets").iterdir()), ["ukui-time-12.toml", "ukui-time-24.toml"])
             # the only widget placement is the saved-but-off UKUI time widget: a theme apply must not switch user widgets on or replace them
             self.assertEqual([(w["use"], w["enabled"]) for w in t["widgets"]], [("ukui-time-24", False)], i)
@@ -68,12 +76,25 @@ class Packages(unittest.TestCase):
             if docs:
                 for k in self.theme(i)["bar"]["applets"]: self.assertIn(f"`{k}`", docs)
 
+    def test_window_material_is_the_window_colour_at_the_global_themes_blur_transparency(self):
+        # ukui-globaltheme (gitee, 5274c41) theme.conf: transparencyBlur 65 (HeYin 75), transparencyNoBlur 90; the start menu / sidebar are windows: window colour, not the menu colour
+        want = {"openkylin": 0.65, "openkylin-islands": 0.65, "openkylin-light-seeking": 0.65, "openkylin-heyin": 0.75, "openkylin-classic": 0.65}
+        for i, a in want.items():
+            t = self.theme(i)
+            self.assertEqual((t["metrics"]["panel_alpha"], t["metrics"]["dock_alpha"], t["metrics"]["bar_alpha"]), (a, a, a), i)
+            for mode in ("light", "dark"):
+                self.assertEqual(t["colors"][mode]["overlay"], t["colors"][mode]["background"], f"{i} {mode}: overlay = window-active")
+                self.assertEqual(t["colors"][mode]["titlebar"], t["colors"][mode]["background"], f"{i} {mode}: the active title bar is the window colour")
+                # window-inactive equals window-active in the source tables of Light-Seeking and HeYin (both modes): their inactive state is not a colour change
+                same = t["colors"][mode]["titlebar_inactive"] == t["colors"][mode]["titlebar"]
+                self.assertEqual(same, i in ("openkylin-light-seeking", "openkylin-heyin"), f"{i} {mode}")
+
     def test_panel_modes_follow_upstream(self):
         for i in ("openkylin", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"):
             t = self.theme(i)
             self.assertEqual((t["dock"]["style"], t["dock"]["position"], t["dock"]["align"], t["dock"]["size"]), ("windows", "bottom", "left", 32), i)  # 48 px panel, 4+4 px insets -> 32 px icon
             self.assertEqual(t["bar"]["enabled"], "auto")
-            self.assertEqual(t["taskbar"], {"thickness": 48, "icon_size": 32, "cell_width": 48, "gap": 0, "inset": 4}, f"{i}: UKUI classic panel geometry (48 px strip, 32 px icons)")
+            self.assertEqual(t["taskbar"], {"thickness": 48, "icon_size": 32, "cell_width": 48, "gap": 0, "inset": 4, "search": "button"}, f"{i}: UKUI classic panel geometry (48 px strip, 32 px icons, a search button not the Windows box)")
         t = self.theme("openkylin-islands")
         self.assertEqual((t["bar"]["style"], t["bar"]["background"], t["bar"]["position"], t["bar"]["height"], t["bar"]["margin"], t["bar"]["spacing"], t["bar"]["radius"]), ("dux", "islands", "bottom", 58, 7, 4, 12))
         # one content-sized centred run (generic bar.cluster): faces 48 px = height - 10, standing 12 px above the edge = margin + 5; 8 px between islands, 12 px padding
@@ -250,7 +271,7 @@ class Provenance(unittest.TestCase):
             self.assertIsNone(v["license"]["identifier"]); self.assertIsNone(v["uploader"]["is_author"]); self.assertIsNone(v["author"]["name"])
             self.assertTrue(v["full_url"].startswith("https://w.wallhaven.cc/full/"))
         self.check_catalogue_state(w, ROOT / "data/wallhaven-curated.json")
-        self.assertFalse([p for p in (ROOT / "themes").glob("openkylin*/**/*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")], "no image in packages")
+        self.assertFalse([p for p in (ROOT / "themes").glob("openkylin*/**/*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and p.name != "kylin-startmenu.png"], "no image in packages but the start-button logo")
 
 
 class CursorData(unittest.TestCase):

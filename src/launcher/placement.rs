@@ -135,10 +135,13 @@ pub fn resolve_anchor(inv: &Invocation, origin: (f32, f32), screen: (f32, f32)) 
             }
         })
     });
-    let limit = match edge {
-        Edge::Top | Edge::Bottom => screen.1 / 3.0,
-        Edge::Left | Edge::Right => screen.0 / 3.0,
+    let extent = match edge {
+        Edge::Top | Edge::Bottom => screen.1,
+        Edge::Left | Edge::Right => screen.0,
     };
+    // Explicit panel geometry is authoritative, including thick HiDPI panels on small screens.
+    // Only a reservation inferred from a pointer position needs the conservative one-third limit.
+    let limit = if inv.thickness.is_some() { (extent - 1.0).max(0.0) } else { extent / 3.0 };
     Some(Anchor { edge, point, thickness: thickness.clamp(0.0, limit) })
 }
 
@@ -158,6 +161,8 @@ fn natural(style: LauncherStyle) -> Natural {
         LauncherStyle::Kde => Natural { size: (655.0, 516.0), gap: 4.0, fallback: Some((Edge::Bottom, 44.0)) },
         // Xfce: Whisker Menu's default menu-width 450 x menu-height 500, under the top panel's Applications button.
         LauncherStyle::Xfce => Natural { size: (450.0, 500.0), gap: 2.0, fallback: Some((Edge::Top, 28.0)) },
+        // UKUI: ukui-menu's 766 x 688 window (settings.cpp MENU_WIDTH/HEIGHT) 8 px from the panel (MENU_MARGIN), above a 48 px classic panel.
+        LauncherStyle::Ukui => Natural { size: (766.0, 688.0), gap: 8.0, fallback: Some((Edge::Bottom, 48.0)) },
         LauncherStyle::Dux => Natural { size: (620.0, 620.0), gap: 0.0, fallback: None },
         LauncherStyle::Default | LauncherStyle::Gnome | LauncherStyle::BlackBerry => Natural { size: (1100.0, 720.0), gap: 0.0, fallback: None },
     }
@@ -276,7 +281,23 @@ mod tests {
         assert_eq!((a.edge, a.point, a.thickness), (Edge::Right, None, 36.0));
         assert_eq!(resolve_anchor(&run("--thickness 30"), (0.0, 0.0), screen), None);
         let a = resolve_anchor(&run("--edge top --thickness 5000"), (0.0, 0.0), screen).unwrap();
-        assert_eq!(a.thickness, 360.0, "an absurd thickness cannot swallow the screen");
+        assert_eq!(a.thickness, 1079.0, "an absurd explicit thickness still leaves one pixel");
+        let a = resolve_anchor(&run("--edge top --anchor 960,540"), (0.0, 0.0), screen).unwrap();
+        assert_eq!(a.thickness, 360.0, "inferred thickness stays conservative");
+    }
+
+    #[test]
+    fn explicit_hidpi_panel_reservation_is_preserved_on_small_outputs() {
+        for edge in ["top", "bottom", "left", "right"] {
+            let screen = (320.0, 240.0);
+            let a = resolve_anchor(&run(&format!("--edge {edge} --thickness 96")), (0.0, 0.0), screen).unwrap();
+            assert_eq!(a.thickness, 96.0, "{edge}");
+            let free = free_area(Some(&a), screen);
+            match a.edge {
+                Edge::Top | Edge::Bottom => assert_eq!(free.h, 144.0),
+                Edge::Left | Edge::Right => assert_eq!(free.w, 224.0),
+            }
+        }
     }
 
     const SCREENS: [(f32, f32); 5] = [(1024.0, 600.0), (800.0, 480.0), (1366.0, 768.0), (1920.0, 1080.0), (3840.0, 2160.0)];

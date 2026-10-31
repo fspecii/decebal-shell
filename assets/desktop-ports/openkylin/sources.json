@@ -596,5 +596,90 @@
    "files": 26,
    "bytes": 5387729
   }
+ },
+ "gitee_huanghe": {
+  "note": "Active upstream development (the GitHub org is a read-only April 2025 mirror). Sparse checkouts of QML/resources/settings only; nothing is copied into the packages except the start-button PNG recorded in each ATTRIBUTION.md. Measured, not copied (GPL sources, MIT port).",
+  "repos": [
+   {
+    "name": "ukui-menu",
+    "url": "https://gitee.com/openkylin/ukui-menu",
+    "branch": "openkylin/huanghe",
+    "commit": "6330250eb56bf218a0e7a6c369b2f95d3033d8b8",
+    "commit_date": "2026-10-26",
+    "tree": "7c37f194208afa96fa4b0e40883af56a5786e3a4",
+    "licence_declared": "GPL-3.0+ (debian/copyright; Expat for some files)",
+    "used_for": "qml/AppUI/*.qml, qml/Plugins, src/windows/menu-main-window.cpp, src/settings/settings.cpp: start menu geometry (766x688, 312|1|396|1|56, 40 px rows, 36 px sidebar buttons)"
+   },
+   {
+    "name": "ukui-sidebar",
+    "url": "https://gitee.com/openkylin/ukui-sidebar",
+    "branch": "openkylin/huanghe",
+    "commit": "59abed06255feed545c5c941f1596f2e83f4c19c",
+    "commit_date": "2026-10-29",
+    "tree": "aecc83376c5f39b5260e37e7c27ac40f6c234096",
+    "licence_declared": "GPL-3+ (debian/copyright; BSD-3-clause for some files)",
+    "used_for": "qml/Shortcuts.qml, qml/org/ukui/sidebar/ui/*.qml, src/model/shortcut-config.cpp: shortcut panel (396 wide, 4x 80x72 icon grid, 356x56 progress rows)"
+   },
+   {
+    "name": "ukui-panel",
+    "url": "https://gitee.com/openkylin/ukui-panel",
+    "branch": "openkylin/huanghe",
+    "commit": "7d8829d462e63683401ddd13bab5382297def134",
+    "commit_date": "2026-10-26",
+    "tree": "3e9895de15e942e4692f7527f4f6d1b71a9ddd4c",
+    "licence_declared": "GPL-3.0+ (debian/copyright; Expat for some files)",
+    "used_for": "panel/src/view/panel.cpp (classic default widget order), panel/src/view/panel-next.cpp (island contents), widgets/ukui-menu-starter, widgets/ukui-panel-search (square icon button), panel/qml/org.ukui.*Island"
+   },
+   {
+    "name": "ukui-quick",
+    "url": "https://gitee.com/openkylin/ukui-quick",
+    "branch": "openkylin/huanghe",
+    "commit": "8e43500e9c7b57c8c88e1021c11c429e9ca3c54b",
+    "commit_date": "2026-10-26",
+    "tree": "21ad576d46503429a1dd4484fd64d2ede97af8fb",
+    "licence_declared": "GPL-3+ (debian/copyright)",
+    "used_for": "pinned only; not read yet (platform/GlobalTheme tokens)"
+   },
+   {
+    "name": "ukui-globaltheme",
+    "url": "https://gitee.com/openkylin/ukui-globaltheme",
+    "branch": "openkylin/huanghe",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073",
+    "commit_date": "2026-09-18",
+    "tree": "57f1835c73e96d75706909f1a00aaac7fe4b79a1",
+    "licence_declared": "GPL-3.0+ (debian/copyright)",
+    "used_for": "globaltheme/{Light-Seeking,Classic,HeYin,DawnLight}/theme.conf and preview.png (the theme previews are mock-ups, not captures)"
+   },
+   {
+    "name": "ukui-search",
+    "url": "https://gitee.com/openkylin/ukui-search",
+    "branch": "openkylin/huanghe",
+    "commit": "3caaa4eb9d061207181c8c3ba829fabd91eab768",
+    "commit_date": "2026-10-25",
+    "tree": "30e480228daaf19065ef058266474de533426ffd",
+    "licence_declared": "GPL-3+ (debian/copyright; NTP for some files)",
+    "used_for": "pinned only"
+   },
+   {
+    "name": "ukui-greeter",
+    "url": "https://gitee.com/openkylin/ukui-greeter",
+    "branch": "openkylin/huanghe",
+    "commit": "7439facf3719b98c0e1a76c0b509fe9d36022fe0",
+    "commit_date": "2026-10-27",
+    "tree": "9b87c6de9db1f91d4d793d53ea100b3492161cfb",
+    "licence_declared": "GPL-2+ (debian/copyright)",
+    "used_for": "pinned only"
+   },
+   {
+    "name": "ukui-control-center",
+    "url": "https://gitee.com/openkylin/ukui-control-center",
+    "branch": "openkylin/huanghe",
+    "commit": "a26492374fbd1535779abe1ded250767c96cb95b",
+    "commit_date": "2026-10-26",
+    "tree": "45adb1676bb09eb27e2ae6f31f5f14d3234c3584",
+    "licence_declared": "GPL-2+ (debian/copyright)",
+    "used_for": "shell/res/plugins/about/logoukui.svg (UKUI wordmark, not used)"
+   }
+  ]
  }
 }
