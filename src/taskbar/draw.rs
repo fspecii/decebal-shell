@@ -195,7 +195,7 @@ pub struct PagerWindow {
     pub active: bool,
 }
 
-/// The pager's windows per workspace. A window counts when it is mapped (not minimised), its geometry and the desktop size are
+/// The pager's windows per workspace. A window counts when it is not minimised, its geometry and the desktop size are
 /// known, and some of it lies on the desktop; a window on every workspace (`desktop: None`) is drawn on each. Without a
 /// desktop size nothing can be placed, so nothing is drawn.
 pub fn pager_windows(windows: &[crate::wm::Window], desktop: Option<(u32, u32)>, workspaces: usize) -> Vec<Vec<PagerWindow>> {

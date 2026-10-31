@@ -1632,6 +1632,48 @@ mod tests {
     }
 
     #[test]
+    fn a_window_that_only_moves_or_the_desktop_that_only_resizes_repaints_the_pager() {
+        use crate::panel::{plasma_style::WorkspaceForm, Edge};
+        use crate::wm::{Geometry, Workspace};
+        let mut r = edge_rig("pager-geometry", Edge::Bottom, Some(crate::panel::AppletSet::all()));
+        r.app.win.as_mut().unwrap().m.workspace_form = WorkspaceForm::Cells;
+        let tracker = r.app.tracker.clone().expect("the rig's tracker");
+        let spaces: Vec<Workspace> = (0..2).map(|i| Workspace { name: (i + 1).to_string(), active: i == 0, ..Default::default() }).collect();
+        let windows = |x: i32, minimized: bool| {
+            vec![
+                Window { id: 1, app_id: "foot".into(), title: "shell".into(), active: true, desktop: Some(0), geometry: Some(Geometry { x, y: 0, w: 400, h: 300 }), ..Default::default() },
+                Window {
+                    id: 2,
+                    app_id: "mpv".into(),
+                    title: "movie".into(),
+                    desktop: Some(0),
+                    minimized,
+                    geometry: (!minimized).then_some(Geometry { x: 600, y: 100, w: 300, h: 200 }),
+                    ..Default::default()
+                },
+            ]
+        };
+        tracker.replace_all(windows(0, false), spaces.clone(), Some((1280, 900)));
+        r.app.tick();
+        assert!(!r.app.tick().redraw, "a tick with nothing new does not repaint");
+        // the buttons, the workspaces and the focused app are all unchanged: only a window's rectangle moved
+        tracker.replace_all(windows(120, false), spaces.clone(), Some((1280, 900)));
+        assert!(r.app.tick().redraw, "a moved window must repaint the pager");
+        assert!(!r.app.tick().redraw, "and only once");
+        // only the desktop's size changed (a root-window resize with no _NET_DESKTOP_GEOMETRY)
+        tracker.replace_all(windows(120, false), spaces.clone(), Some((1920, 1080)));
+        assert!(r.app.tick().redraw, "a resized desktop reshapes the pager cells");
+        assert!(!r.app.tick().redraw);
+        // minimising drops the window's outline
+        tracker.replace_all(windows(120, true), spaces.clone(), Some((1920, 1080)));
+        assert!(r.app.tick().redraw);
+        // a theme without pager cells never looks at the geometry, so a moved window costs no repaint there
+        r.app.win.as_mut().unwrap().m.workspace_form = WorkspaceForm::Auto;
+        tracker.replace_all(windows(300, true), spaces, Some((1920, 1080)));
+        assert!(!r.app.tick().redraw, "no pager, no geometry repaint");
+    }
+
+    #[test]
     fn keyboard_pager_opens_the_list_instead_of_choosing_its_middle_workspace() {
         use crate::menubar::Tray;
         use crate::panel::{plasma_style::WorkspaceForm, Edge};

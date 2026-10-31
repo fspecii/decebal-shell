@@ -43,6 +43,9 @@ pub struct Place {
     pub(super) room: (f32, f32),
 }
 
+/// See [`DecBar::status_pager_signature`].
+pub type PagerSignature = (Option<(u32, u32)>, Vec<(Option<u32>, bool, bool, Option<crate::wm::Geometry>)>);
+
 impl DecBar {
     /// A bar that only serves as a status engine: no menus, no focused-window tracking.
     pub fn status_engine() -> DecBar {
@@ -372,6 +375,12 @@ impl DecBar {
             caps: self.locks.caps(),
             num: self.locks.num(),
         }
+    }
+
+    /// What the pager draws, as plain data: the desktop size and each window's desktop, focus, minimised flag and geometry. A change of
+    /// it (a window moved or resized, the desktop resized) is a reason to repaint even when nothing else moved.
+    pub fn status_pager_signature(&self) -> PagerSignature {
+        (self.active.desktop_size(), self.active.windows().iter().map(|w| (w.desktop, w.active, w.minimized, w.geometry)).collect())
     }
 
     /// The desktop size the window geometry is relative to (None: the window manager does not report it).

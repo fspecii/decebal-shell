@@ -51,8 +51,10 @@ pub struct Window {
     /// The window asks for attention (EWMH `_NET_WM_STATE_DEMANDS_ATTENTION` or the ICCCM urgency hint). Wayland's
     /// foreign-toplevel protocol has no such state, so it stays false there (never invented).
     pub attention: bool,
-    /// Where it is on the desktop, in root coordinates. `None` when the backend does not know (Wayland) or the window is not
-    /// mapped; never a guess.
+    /// The window's client rectangle translated to root coordinates (it excludes any frame or decoration the window manager adds).
+    /// `None` when the backend does not know it (Wayland), when the window is minimised (X11 `_NET_WM_STATE_HIDDEN`: a hidden
+    /// window is not asked), or when the position requests failed. The map state is never queried, so an X11 window that is unmapped
+    /// without the hidden state still reports its configured geometry. Never a guess.
     pub geometry: Option<Geometry>,
 }
 

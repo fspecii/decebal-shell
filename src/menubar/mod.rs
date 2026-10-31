@@ -13,6 +13,7 @@ mod indicators;
 pub mod lock;
 pub use applets::{classic_symbol, theme_logo, FocusSignal};
 pub use embed::GAP as STATUS_GAP;
+pub use embed::PagerSignature;
 pub mod menus;
 pub mod overlay;
 pub mod popup;

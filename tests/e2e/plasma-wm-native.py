@@ -310,6 +310,25 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             assert apart(mean(back, cell_box(0)), mean(back, cell_box(5))) > 10, f"{tag}: the pager cell of the busy workspace looks like an empty one"
             step("pager_windows", busy_vs_empty=apart(mean(back, cell_box(0)), mean(back, cell_box(5))))
 
+            # ---- geometry only: a layout change re-tiles every window (ConfigureNotify, no property change, no focus change, no pointer move);
+            # the pager must follow it without any other event to piggy-back on
+            pitch = abs(float(layout()["pagercell"][1][1]) - float(layout()["pagercell"][0][1]))
+            region = lambda i: (lambda x, y: (round(x - ((pitch - 1) / 2 if horizontal else ICON * scale / 2)), round(y - (ICON * scale / 2 if horizontal else (pitch - 1) / 2)), round(x + ((pitch - 1) / 2 if horizontal else ICON * scale / 2)), round(y + (ICON * scale / 2 if horizontal else (pitch - 1) / 2))))(*cell_xy(i))
+            ink_distance = lambda a, b: sum(max(abs(p - q) for p, q in zip(pa, pb)) for pa, pb in zip(a.get_flattened_data(), b.get_flattened_data()))
+            geometry_of = lambda win: run("xdotool", "getwindowgeometry", "--shell", win.id)
+            park()
+            time.sleep(0.6)
+            before_layout = shot("pager-layout-a").crop(region(0))
+            rects_before = [geometry_of(w) for w in wins]
+            ctl("action", "cyclelayout")
+            wait(lambda: [geometry_of(w) for w in wins] != rects_before, f"{tag}: rdwm re-tiled the windows")
+            wait(lambda: ink_distance(shot("pager-layout-b").crop(region(0)), before_layout) > 300 * scale, f"{tag}: the pager did not follow a geometry-only change")
+            moved = ink_distance(shot("pager-layout-b").crop(region(0)), before_layout)
+            ctl("action", "cyclelayout_back")
+            wait(lambda: [geometry_of(w) for w in wins] == rects_before, f"{tag}: rdwm restored the layout")
+            wait(lambda: ink_distance(shot("pager-layout-c").crop(region(0)), before_layout) < 0.1 * moved, f"{tag}: the pager did not follow the layout back")
+            step("pager_geometry_only", changed_ink=moved, restored=True)
+
             # ---- a popup stays on the output and closes on Escape
             clock = layout()["clock"][0]
             s = surface()

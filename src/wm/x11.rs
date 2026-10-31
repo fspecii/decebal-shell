@@ -83,7 +83,56 @@ pub fn event_refreshes(event: &Event, watched: &[Atom]) -> bool {
     }
 }
 
-/// The window's origin and size in root coordinates (two pipelined requests; None for an unmapped or vanished window).
+/// Size of the whole desktop: `_NET_DESKTOP_GEOMETRY` when the window manager sets it, else the root window's own size (`root`, asked
+/// only when needed). The root window is selected for structure events, so a resize of it refreshes the snapshot.
+pub fn desktop_extent(property: &[u32], root: impl FnOnce() -> Option<(u32, u32)>) -> Option<(u32, u32)> {
+    desktop_size(property).or_else(root)
+}
+
+/// Most events one pass reads before it hands the thread back to its stop check and a rebuild.
+pub const BURST_EVENTS: usize = 64;
+/// Longest one pass reads for.
+pub const BURST_TIME: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// What a pass over the queued events decided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pass {
+    /// Something relevant was seen: rebuild the snapshot.
+    Refresh,
+    /// Nothing relevant was seen (or the budget ran out first): wait on the sockets again.
+    Idle,
+    /// The last owner went away: end the thread.
+    Stop,
+    /// The connection failed: end the thread.
+    Closed,
+}
+
+/// Reads the events already queued without blocking. It checks `stopped` before every event and gives up after `max` events or
+/// `budget`, so a producer that never lets the queue run dry (a window drag, a client rewriting a property in a loop) can neither
+/// delay a rebuild nor keep the thread alive after its last owner left.
+pub fn scan_events<E>(next: &mut impl FnMut() -> Result<Option<Event>, E>, stopped: &mut impl FnMut() -> bool, relevant: &impl Fn(&Event) -> bool, max: usize, budget: std::time::Duration) -> Pass {
+    let start = std::time::Instant::now();
+    let (mut seen, mut refresh) = (0usize, false);
+    loop {
+        if stopped() {
+            return Pass::Stop;
+        }
+        if seen >= max || start.elapsed() >= budget {
+            return if refresh { Pass::Refresh } else { Pass::Idle };
+        }
+        match next() {
+            Err(_) => return Pass::Closed,
+            Ok(None) => return if refresh { Pass::Refresh } else { Pass::Idle },
+            Ok(Some(event)) => {
+                seen += 1;
+                refresh |= relevant(&event);
+            }
+        }
+    }
+}
+
+/// The window's client origin and size in root coordinates (two pipelined requests; `None` when either fails, e.g. the window vanished). The
+/// map state is not checked: a minimised window is skipped by the caller, any other gets its configured rectangle.
 fn window_geometry(conn: &impl Connection, root: u32, win: u32) -> Option<Geometry> {
     let size = conn.get_geometry(win).ok()?;
     let origin = conn.translate_coordinates(win, root, 0, 0).ok()?;
@@ -184,7 +233,7 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     else {
         return false;
     };
-    if conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE)).is_err() {
+    if conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE | EventMask::STRUCTURE_NOTIFY)).is_err() {
         return false;
     }
     let _ = conn.flush();
@@ -197,8 +246,10 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     let Ok((tracker, stop)) = tracker.worker() else { return false };
     std::thread::spawn(move || {
         let conn = &conn.conn;
+        // the last public owner closes `stop`
+        let mut stopped = || !matches!(crate::backend::poll_readable(&[stop.as_raw_fd()], Some(std::time::Duration::ZERO)), Ok(ready) if !ready[0]);
         loop {
-            if !matches!(crate::backend::poll_readable(&[stop.as_raw_fd()], Some(std::time::Duration::ZERO)), Ok(ready) if !ready[0]) {
+            if stopped() {
                 return;
             }
             let (windows, workspaces, screen) = {
@@ -241,12 +292,17 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                 }
                 mark_occupied(&mut workspaces, &windows);
                 mark_urgent(&mut workspaces, &windows);
-                let screen = desktop_geometry.and_then(|a| desktop_size(&prop32(conn, root, a, AtomEnum::CARDINAL))).or_else(|| {
+                let property = desktop_geometry.map(|a| prop32(conn, root, a, AtomEnum::CARDINAL)).unwrap_or_default();
+                let screen = desktop_extent(&property, || {
                     let g = conn.get_geometry(root).ok()?.reply().ok()?;
                     Some((g.width as u32, g.height as u32))
                 });
                 (windows, workspaces, screen)
             };
+            // the build above takes round trips: never publish for an owner that has already gone
+            if stopped() {
+                return;
+            }
             if tracker.replace_all(windows, workspaces, screen) {
                 notify();
             }
@@ -258,21 +314,12 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                 .chain(desktop_geometry)
                 .collect();
             loop {
-                match conn.poll_for_event() {
-                    Ok(Some(event)) if event_refreshes(&event, &watched) => {
-                        // one rebuild covers a whole burst (a window drag sends a configure per motion)
-                        loop {
-                            match conn.poll_for_event() {
-                                Ok(Some(_)) => {}
-                                Ok(None) => break,
-                                Err(_) => return,
-                            }
-                        }
-                        break;
-                    }
-                    Ok(Some(_)) => continue,
-                    Err(_) => return,
-                    Ok(None) => {}
+                let mut next = || conn.poll_for_event();
+                let relevant = |event: &Event| event_refreshes(event, &watched);
+                match scan_events(&mut next, &mut stopped, &relevant, BURST_EVENTS, BURST_TIME) {
+                    Pass::Refresh => break,
+                    Pass::Stop | Pass::Closed => return,
+                    Pass::Idle => {}
                 }
                 match crate::backend::poll_readable(&[conn.stream().as_raw_fd(), stop.as_raw_fd()], None) {
                     Ok(ready) if !ready[1] => {}
@@ -338,6 +385,156 @@ mod tests {
         let map = Event::MapNotify(MapNotifyEvent { response_type: 19, sequence: 0, event: 1, window: 1, override_redirect: false });
         assert!(event_refreshes(&map, &[]));
         assert!(!event_refreshes(&Event::Unknown(vec![0u8; 32]), &[]));
+    }
+
+    fn motion() -> Event {
+        use x11rb::protocol::xproto::ConfigureNotifyEvent;
+        Event::ConfigureNotify(ConfigureNotifyEvent {
+            response_type: 22,
+            sequence: 0,
+            event: 1,
+            window: 1,
+            above_sibling: 0,
+            x: 3,
+            y: 4,
+            width: 5,
+            height: 6,
+            border_width: 0,
+            override_redirect: false,
+        })
+    }
+
+    fn noise() -> Event {
+        Event::Unknown(vec![0u8; 32])
+    }
+
+    #[test]
+    fn a_producer_that_never_runs_dry_cannot_hold_the_scan_open() {
+        use std::time::Duration;
+        let always = |e: fn() -> Event| {
+            let mut counted = 0usize;
+            let verdict = scan_events::<()>(
+                &mut || {
+                    counted += 1;
+                    Ok(Some(e()))
+                },
+                &mut || false,
+                &|ev| event_refreshes(ev, &[]),
+                BURST_EVENTS,
+                Duration::from_secs(60),
+            );
+            (verdict, counted)
+        };
+        // relevant events forever: a refresh after exactly the cap, not an endless drain
+        assert_eq!(always(motion), (Pass::Refresh, BURST_EVENTS));
+        // irrelevant events forever: back to the sockets after exactly the cap
+        assert_eq!(always(noise), (Pass::Idle, BURST_EVENTS));
+    }
+
+    #[test]
+    fn the_scan_ends_on_time_even_when_every_event_is_slow() {
+        use std::time::Duration;
+        let mut counted = 0usize;
+        let verdict = scan_events::<()>(
+            &mut || {
+                counted += 1;
+                std::thread::sleep(Duration::from_millis(2));
+                Ok(Some(motion()))
+            },
+            &mut || false,
+            &|ev| event_refreshes(ev, &[]),
+            usize::MAX,
+            Duration::from_millis(20),
+        );
+        assert_eq!(verdict, Pass::Refresh);
+        assert!((1..200).contains(&counted), "a 20 ms budget read {counted} events");
+    }
+
+    #[test]
+    fn the_scan_notices_the_last_owner_leaving_between_events() {
+        use std::cell::Cell;
+        use std::time::Duration;
+        let pulls = Cell::new(0usize);
+        let verdict = scan_events::<()>(
+            &mut || {
+                pulls.set(pulls.get() + 1);
+                Ok(Some(motion()))
+            },
+            // the owner leaves after the fifth event
+            &mut || pulls.get() >= 5,
+            &|ev| event_refreshes(ev, &[]),
+            usize::MAX,
+            Duration::from_secs(60),
+        );
+        assert_eq!((verdict, pulls.get()), (Pass::Stop, 5), "no event is read once the owner is gone");
+        // a stop that is already set reads nothing at all
+        let read = Cell::new(0usize);
+        let verdict = scan_events::<()>(
+            &mut || {
+                read.set(read.get() + 1);
+                Ok(None)
+            },
+            &mut || true,
+            &|_| true,
+            BURST_EVENTS,
+            BURST_TIME,
+        );
+        assert_eq!((verdict, read.get()), (Pass::Stop, 0));
+    }
+
+    #[test]
+    fn a_quiet_queue_and_a_broken_connection_are_told_apart() {
+        let mut queue = vec![Ok(Some(noise())), Ok(None)].into_iter();
+        let verdict = scan_events::<()>(&mut || queue.next().unwrap(), &mut || false, &|ev| event_refreshes(ev, &[]), BURST_EVENTS, BURST_TIME);
+        assert_eq!(verdict, Pass::Idle);
+        let mut queue = vec![Ok(Some(motion())), Err(())].into_iter();
+        let verdict = scan_events(&mut || queue.next().unwrap(), &mut || false, &|ev| event_refreshes(ev, &[]), BURST_EVENTS, BURST_TIME);
+        assert_eq!(verdict, Pass::Closed);
+        let mut queue = vec![Ok(Some(motion())), Ok(None)].into_iter();
+        let verdict = scan_events::<()>(&mut || queue.next().unwrap(), &mut || false, &|ev| event_refreshes(ev, &[]), BURST_EVENTS, BURST_TIME);
+        assert_eq!(verdict, Pass::Refresh, "a short burst is read to its end");
+    }
+
+    #[test]
+    fn the_desktop_size_falls_back_to_the_root_window_and_follows_its_resizes() {
+        use std::cell::Cell;
+        let asked = Cell::new(0);
+        let root = Cell::new(Some((1600u32, 900u32)));
+        let ask = || {
+            asked.set(asked.get() + 1);
+            root.get()
+        };
+        // a window manager that publishes the size is believed and the root window is not even asked
+        assert_eq!(desktop_extent(&[2560, 1440], ask), Some((2560, 1440)));
+        assert_eq!(asked.get(), 0);
+        // one that does not (rdwm sets no _NET_DESKTOP_GEOMETRY): the root window's size, and a resize of the root changes it
+        assert_eq!(desktop_extent(&[], ask), Some((1600, 900)));
+        root.set(Some((1280, 720)));
+        assert_eq!(desktop_extent(&[], ask), Some((1280, 720)));
+        // an empty property is no answer, and a root that cannot be read leaves the size unknown
+        assert_eq!(desktop_extent(&[0, 0], ask), Some((1280, 720)));
+        root.set(None);
+        assert_eq!(desktop_extent(&[], ask), None);
+    }
+
+    #[test]
+    fn a_structure_event_of_the_root_window_refreshes_like_any_other() {
+        use x11rb::protocol::xproto::ConfigureNotifyEvent;
+        // a resize of the root arrives as a ConfigureNotify whose window is the root itself
+        let resized = Event::ConfigureNotify(ConfigureNotifyEvent {
+            response_type: 22,
+            sequence: 0,
+            event: 0x2a,
+            window: 0x2a,
+            above_sibling: 0,
+            x: 0,
+            y: 0,
+            width: 1280,
+            height: 720,
+            border_width: 0,
+            override_redirect: false,
+        });
+        assert!(event_refreshes(&resized, &[]));
     }
 
     #[test]

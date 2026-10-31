@@ -36,6 +36,8 @@ pub(super) struct WinState {
     pub last_minute: Option<(u32, u32)>,
     /// Windows hidden by "show desktop", restored by the next click on the sliver.
     pub hidden: Vec<u64>,
+    /// What the pager last drew (desktop size, windows' geometry and state): a geometry-only change of the tracker repaints through it.
+    pub pager_seen: crate::menubar::PagerSignature,
     /// Keyboard mode (`decdock --focus`): the focused zone, an index into [`DockApp::win_focus_items`].
     pub kb: Option<usize>,
     /// Test hook (`DECDOCK_DEBUG_LAYOUT=file`): zone centres in surface coordinates after each draw.
@@ -66,6 +68,7 @@ impl WinState {
             last_minute: None,
             hidden: Vec::new(),
             kb: None,
+            pager_seen: Default::default(),
             debug: std::env::var_os("DECDOCK_DEBUG_LAYOUT").map(|p| (PathBuf::from(p), String::new())),
         }
     }
@@ -605,6 +608,16 @@ impl DockApp {
         changed |= self.win_sync_buttons();
         let Some(w) = self.win.as_mut() else { return Tick::default() };
         changed |= w.status.status_tick();
+        // The pager draws windows from tracker geometry, which `win_sync_buttons` (buttons) and `status_tick` (workspaces, focused app) do
+        // not compare: a window that only moved or resized wakes this tick, so look at exactly what the pager draws. It is the
+        // tracker's snapshot, never a query of the display.
+        if w.m.workspace_form == crate::panel::plasma_style::WorkspaceForm::Cells && w.status.status_shows(crate::panel::AppletId::Workspaces) {
+            let seen = w.status.status_pager_signature();
+            if seen != w.pager_seen {
+                w.pager_seen = seen;
+                changed = true;
+            }
+        }
         let mut next = Duration::from_secs(60);
         if let Some(tm) = clock::now() {
             if w.last_minute != Some((tm.hour, tm.min)) {
