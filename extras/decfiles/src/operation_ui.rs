@@ -176,6 +176,8 @@ impl Ui {
                 ui.close_operation_dialog();
                 return glib::Propagation::Stop;
             }
+            // Closing cancels a pending open; a launch that already started cannot be recalled.
+            ui.cancel_open("The window closed, so nothing was opened.");
             let dialog = ui.ops.dialog.borrow_mut().take();
             if let Some(dialog) = dialog {
                 dialog.destroy();
@@ -268,6 +270,7 @@ impl Ui {
         self.up.set_sensitive(running.is_none() && model.current().and_then(Path::parent).is_some());
         self.address.set_sensitive(running.is_none());
         self.layout.set_sensitive(running.is_none());
+        self.update_open_controls();
     }
 
     pub fn reconcile_operation_selection(&self) {

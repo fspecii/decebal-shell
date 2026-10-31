@@ -14,7 +14,8 @@ fixture-delay = []
 
 [dependencies]
 gtk = { package = "gtk4", version = "=0.10.3", features = ["v4_10"] }
-gio = "=0.21.5"
+# v2_74 enables g_app_info_get_default_for_type_async (default-handler lookup off the UI thread).
+gio = { version = "=0.21.5", features = ["v2_74"] }
 glib = "=0.21.5"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.150"

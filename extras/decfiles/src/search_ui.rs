@@ -1,6 +1,7 @@
 //! Search in the current folder: a native search entry starts a bounded worker; results
 //! stream into a persistent list incrementally. A newer query, navigation, a tab switch
-//! or Escape cancels the search; stale results are ignored by search id.
+//! or Escape cancels the search; stale results are ignored by search id. Enter on a result
+//! reveals it; opening a result is a separate explicit action (Open, Open With, context menu).
 use super::Ui;
 use decfiles::{
     model::{Entry, Intent},
@@ -124,8 +125,11 @@ impl Ui {
 
     /// Cancel the running search (if any) without touching the entry.
     pub fn end_search(&self) {
-        if let Some(run) = self.search.borrow_mut().take() {
+        let run = self.search.borrow_mut().take();
+        if let Some(run) = run {
             run.search.cancel();
+            // Its results are gone: nothing selected there can still be opened.
+            self.search_selection_changed(None);
         }
     }
 
@@ -145,10 +149,21 @@ impl Ui {
         let selection = gtk::SingleSelection::new(Some(store));
         selection.set_autoselect(false);
         selection.set_can_unselect(true);
+        // A rebuilt view starts without a selection, so a pending explicit Open is dropped.
+        self.search_selection_changed(None);
+        let weak = Rc::downgrade(self);
+        selection.connect_selected_notify(move |selection| {
+            if let Some(ui) = weak.upgrade().filter(|ui| ui.render_generation.get() == generation) {
+                ui.search_selection_changed(selection.selected_item().and_downcast::<glib::BoxedAnyObject>().map(|object| object.borrow::<Entry>().clone()));
+            }
+        });
+        let slot: super::open_ui::SelectionSlot = Rc::new(std::cell::RefCell::new(Some(selection.clone())));
+        let row_menu = self.row_menu(slot, generation);
         let view = gtk::ColumnView::new(Some(selection.clone()));
         view.update_property(&[gtk::accessible::Property::Label("Search results")]);
+        self.attach_open_keys(&view, generation);
         for (title, kind) in [("Name", 0u8), ("Folder", 4), ("Type", 1)] {
-            let column = gtk::ColumnViewColumn::new(Some(title), Some(super::factory(kind)));
+            let column = gtk::ColumnViewColumn::new(Some(title), Some(super::factory(kind, Some(row_menu.clone()))));
             column.set_expand(kind != 1);
             column.set_resizable(true);
             view.append_column(&column);

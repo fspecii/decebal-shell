@@ -1,6 +1,6 @@
 # Decebal Files — optional preview
 
-This is a functional browser prototype with create, rename, Trash, copy and move, **not a complete Explorer/Finder port**
+This is a functional browser prototype with open/Open With, create, rename, Trash, copy and move, **not a complete Explorer/Finder port**
 and not a production file manager. It uses one navigation model with two views:
 Windows-inspired details and macOS-inspired hierarchical columns. It does not
 copy either product's artwork or claim matching appearance. Nothing installs a
@@ -118,7 +118,8 @@ does not save preferences or read/write Decebal configuration.
 - Folder results start folders-first, then by case-insensitive name; ties in any
   header sort fall back to that name and then the exact path bytes.
   File selection keeps the actual Unix path even for non-UTF8 filenames; GIO
-  provides a readable display name. Files are **not opened or executed**.
+  provides a readable display name. Files open only through the explicit
+  Open / Open With workflow below, and are never executed.
 - Missing, unreadable or oversized folders show an error and preserve the prior
   committed location and history. Stale results cannot replace a newer request.
 - One path-resolution thread has one replaceable pending request and one result
@@ -133,6 +134,64 @@ does not save preferences or read/write Decebal configuration.
   success. There are at most 8,192 entries per folder, 16 retained columns and
   64 history paths; larger folders report the limit rather than display partial
   results as a complete folder. There is no global file index.
+
+## Opening files and Open With
+
+**Source-complete but not yet built, tested or run** (see the status at the end of this section).
+
+- Enter or double click on a **folder** navigates as before. On a **file** it opens that exact
+  item with its registered default application. In the columns layout a lone single click
+  only selects (that list activates on a single click for folders); Enter or a double click opens.
+- **Open** and **Open With…** buttons sit after Paste in the footer, with the same two items in a
+  row context menu (secondary click on a row, or Menu / Shift+F10 on the list) and Ctrl+O /
+  Ctrl+Shift+O (when the file list has focus). Buttons, menu items and the actions are enabled
+  only for a validated selection while no operation, dialog, clipboard read or navigation is
+  active. Open With is for files.
+- **Open With** shows GTK's native application chooser (`GtkAppChooserWidget` in a modal
+  dialog titled "Open With") for the file's content type, with Default, Recommended, Related
+  and Other applications. Cancel, Escape and closing are inert (nothing opens, no error). Files
+  launches the choice itself and **never records a default or "last used" handler**; there is
+  no "set as default" option. The widget's own context menu can still *forget* an association
+  if the user explicitly picks it.
+- Typed GIO only: `g_file_query_info_async` (type and mode), `g_app_info_get_default_for_type_async`
+  and `g_app_info_launch_uris_async` with a `GdkAppLaunchContext`. The target is a `GFile` made from
+  the exact Unix path; GIO substitutes its URI/path into the application's Exec line as one argument.
+  No shell string is built, file contents are never executed and permissions are never changed.
+  Non-UTF8 names survive as percent-encoded bytes.
+- **Executables and launchers are never run.** Enter/double click/Open on a file with any execute
+  bit (also through a symlink), a program content type (ELF, PIE, shared object, AppImage) or a
+  `.desktop` file does not launch anything and explains why. Open With remains available there as
+  an explicit choice of a viewing application. Folders, devices, pipes and sockets are never
+  launched.
+- Nothing blocks the UI thread in Files' own code: the probe, default lookup and launch are
+  asynchronous and cancellable. (GTK's chooser widget itself populates its list synchronously.)
+- Each request has an id. A newer request, a changed selection, navigation, ending a search,
+  a dialog/operation/clipboard read starting, or closing makes it stale; the completion is
+  ignored and nothing launches. A completion also launches only if the folder, tab, search and
+  the *exact selected path* are still the ones the request started with and the item is still
+  listed. Cancelling cannot recall an application that has already started.
+- Failures (missing file, no default application, program that cannot start) show in the error
+  line and status; a refusal or cancel shows an explanation. None are silent.
+- **Search:** Enter/double click on a result still reveals it (folder opened, file selected).
+  Opening a result is a separate explicit action: select it, then Open, Open With, the context
+  menu or Ctrl+O.
+- Limits: local files only; one selected item; no multi-open, no "Open in terminal", no sandbox
+  or portal claim, no drag-out, no default-handler management, no installed `.desktop` file and
+  no change to the main shell. `gio` now enables its `v2_74` feature (same pinned crate version,
+  Cargo.lock unchanged) for the asynchronous default-handler lookup.
+- Evidence: the opt-in state snapshot gains an `open` object (pending/last request with exact
+  path bytes, control enabled flags, selected search result).
+
+Status of this change: **no cargo build, Rust tests, clippy, native fixture or GIO launch was run.**
+New Rust tests are in `src/opening.rs` (judge matrix, request identity and stale guards, exact path
+bytes, probe of files/folders/links/FIFO/missing/cancelled, an exact-argument launch test through a
+private `.desktop` recorder with spaced, metacharacter, newline and non-UTF8 names, and a missing
+program). Drafts: `tests/open-native.py` (default binary) and `tests/open-races-native.py`
+(`fixture-delay` binary, `DECFILES_FIXTURE_OPEN_DELAY_MS`, capped at 10 s) use `tests/openfix.py`: a private
+MIME database and fake registered openers A (default), B (associated) and C (missing program) under
+the session's own XDG directories, `tests/fake-opener.py` recording exact argv bytes, and a hash of the
+private registry before/after. Both are wired into `tests/gates.py` but have never been executed; the
+type-ahead selection in the chooser and the exact GLib error texts are assumptions.
 
 ## Create, rename and Trash
 
@@ -596,10 +655,10 @@ exit status 0.
 Copy/move/paste work on one selected item at a time (pasted clipboards may hold
 many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move to
 picker, permanent delete, restore, undo, drag/drop, icon view, Finder gallery, Explorer
-command bar, bookmarks, mounts, remote backends, content search/indexing, opening or
-open-with exists yet. There are no decorative buttons pretending to do these.
+command bar, bookmarks, mounts, remote backends, content search/indexing, multi-file or
+folder-in-application opening, or default-handler management yet. There are no decorative buttons pretending to do these.
 Window background palette colours (GTK's built-in theme ignores them),
-live icon-theme reload, notifications, default-handler opt-in and shell
+live icon-theme reload, notifications, an explicit default-handler opt-in and shell
 launch/reveal integration are
 also pending. The address entry cannot type arbitrary non-UTF8 bytes; pointer
 navigation/selection preserves them losslessly.

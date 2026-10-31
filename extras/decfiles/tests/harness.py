@@ -91,6 +91,11 @@ class Session:
     def finish(self,extra):
         (self.out/'state-final.json').write_text(json.dumps(self.state(),indent=2)+'\n')
         self.focus(self.window);self.key('ctrl+w');self.app.wait(timeout=8);assert self.app.returncode==0
+        self.result(extra)
+
+    def result(self,extra):
+        """Write result.json for a run whose app has already exited normally (status 0)."""
+        assert self.app.returncode==0
         source_root=Path(__file__).resolve().parents[1]
         sources={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_root.rglob('*')) if p.is_file() and 'target' not in p.parts and (p.suffix=='.rs' or p.name in ('Cargo.toml','Cargo.lock'))}
         result={'passed':True,'cases':self.cases,'display':self.env.get('DISPLAY'),'binary':str(self.binary),'sha256':hashlib.sha256(self.binary.read_bytes()).hexdigest(),'source_hashes':sources,'private_root':str(self.root),**extra}

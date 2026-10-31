@@ -1,3 +1,4 @@
+mod open_ui;
 mod operation_ui;
 mod profile_ui;
 mod search_ui;
@@ -7,6 +8,7 @@ use decfiles::{
     loader,
     model::{self, Entry, Intent, Model},
     monitor::Monitor,
+    opening::Purpose,
     resolver::Resolver,
 };
 use gio::prelude::*;
@@ -62,6 +64,7 @@ struct Ui {
     layout_programmatic: Cell<bool>,
     theme: profile_ui::Theme,
     ops: operation_ui::Controls,
+    opener: open_ui::Controls,
 }
 
 impl Ui {
@@ -70,6 +73,7 @@ impl Ui {
             return;
         }
         self.leave_search();
+        self.cancel_open("Navigation superseded the open request, so nothing was opened.");
         if let Some(old) = self.cancel.borrow_mut().take() {
             old.cancel();
         }
@@ -233,6 +237,7 @@ impl Ui {
         // Operations act only on a selection the committed model has validated.
         let path = self.model.borrow().columns.get(column).and_then(|column| column.selected.clone());
         self.ops.active.replace(path.clone());
+        self.open_selection_changed(path.as_deref());
         if !self.ops.is_busy() {
             self.ops.clear_notice();
             if let Some(path) = path {
@@ -243,19 +248,32 @@ impl Ui {
         self.dump();
     }
 
-    fn activate(self: &Rc<Self>, selection: &gtk::SingleSelection, position: u32) {
-        let Some(object) = selection.item(position).and_downcast::<glib::BoxedAnyObject>() else {
+    /// Enter or double click on a row of the committed folder model. Folders navigate; a file
+    /// is selected through the view's own selection and opened with its default application.
+    /// `single_click` is a lone pointer click in the columns list, which only selects.
+    fn activate(self: &Rc<Self>, selection: &gtk::SingleSelection, position: u32, index: usize, generation: u64, single_click: bool) {
+        if self.render_generation.get() != generation {
+            return;
+        }
+        let Some(entry) = entry_at(selection, position) else {
             return;
         };
-        let entry = object.borrow::<Entry>();
         if entry.directory {
-            self.navigate(entry.path.clone(), Intent::Visit);
-        } else {
-            self.status.set_text("File selected. Opening files is not implemented in this prototype.");
+            self.navigate(entry.path, Intent::Visit);
+            return;
         }
+        let known = self.model.borrow().columns.get(index).is_some_and(|column| column.entries.iter().any(|candidate| candidate.path == entry.path));
+        if single_click || !known {
+            return;
+        }
+        if selection.selected() != position {
+            selection.set_selected(position);
+        }
+        self.open_entry(entry, Purpose::Default);
     }
 
     fn render(self: &Rc<Self>) {
+        self.close_open_menu();
         self.reconcile_operation_selection();
         // Keep keyboard focus in the file list across re-renders (refreshes, sorting, monitoring).
         let had_focus = gtk::prelude::RootExt::focus(&self.window).is_some_and(|focus| focus.is_ancestor(&self.content));
@@ -293,7 +311,9 @@ impl Ui {
                 store.append(&glib::BoxedAnyObject::new(entry.clone()));
             }
             let scroll = gtk::ScrolledWindow::builder().vexpand(true).hexpand(!self.columns.get()).min_content_width(if self.columns.get() { 250 } else { 400 }).build();
-            let details = (!self.columns.get()).then(|| self.details_view());
+            let slot: open_ui::SelectionSlot = Rc::new(RefCell::new(None));
+            let row_menu = self.row_menu(slot.clone(), generation);
+            let details = (!self.columns.get()).then(|| self.details_view(row_menu.clone()));
             // Details sort natively; folders always stay first, as in the model order.
             let items: gio::ListModel = match &details {
                 Some(view) => {
@@ -311,6 +331,7 @@ impl Ui {
             selection.set_can_unselect(true);
             let position = column.selected.as_ref().and_then(|path| (0..selection.n_items()).find(|&i| entry_at(&selection, i).is_some_and(|entry| &entry.path == path)));
             selection.set_selected(position.unwrap_or(gtk::INVALID_LIST_POSITION));
+            slot.replace(Some(selection.clone()));
             let weak = Rc::downgrade(self);
             selection.connect_selected_notify(move |selection| {
                 // A disposed view can still notify (its sorter re-sorts while torn down).
@@ -320,14 +341,32 @@ impl Ui {
             });
             match details {
                 None => {
-                    let list = gtk::ListView::new(Some(selection.clone()), Some(factory(0)));
+                    let list = gtk::ListView::new(Some(selection.clone()), Some(factory(0, Some(row_menu))));
                     list.set_single_click_activate(true);
                     list.update_property(&[gtk::accessible::Property::Label(&format!("Folder column {}", column.path.display()))]);
+                    // Single-click activation must not open files: only Enter or a double click does.
+                    // `presses` is the click count of the latest primary press; a key press resets it.
+                    let presses = Rc::new(Cell::new(0i32));
+                    let click = gtk::GestureClick::new();
+                    click.set_button(gtk::gdk::BUTTON_PRIMARY);
+                    click.set_propagation_phase(gtk::PropagationPhase::Capture);
+                    let seen = presses.clone();
+                    click.connect_pressed(move |_, count, _, _| seen.set(count));
+                    list.add_controller(click);
+                    let keys = gtk::EventControllerKey::new();
+                    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+                    let seen = presses.clone();
+                    keys.connect_key_pressed(move |_, _, _, _| {
+                        seen.set(0);
+                        glib::Propagation::Proceed
+                    });
+                    list.add_controller(keys);
+                    self.attach_open_keys(&list, generation);
                     let selected = selection.clone();
                     let weak = Rc::downgrade(self);
                     list.connect_activate(move |_, position| {
                         if let Some(ui) = weak.upgrade() {
-                            ui.activate(&selected, position);
+                            ui.activate(&selected, position, index, generation, presses.replace(0) == 1);
                         }
                     });
                     scroll.set_child(Some(&list));
@@ -347,9 +386,10 @@ impl Ui {
                     let weak = Rc::downgrade(self);
                     view.connect_activate(move |_, position| {
                         if let Some(ui) = weak.upgrade() {
-                            ui.activate(&selected, position);
+                            ui.activate(&selected, position, index, generation, false);
                         }
                     });
+                    self.attach_open_keys(&view, generation);
                     self.view_model.replace(Some(selection.clone()));
                     scroll.set_child(Some(&view));
                     last_view = Some(view.clone().upcast());
@@ -371,13 +411,13 @@ impl Ui {
 
     /// Name, Type, Size and Modified with native header sorting. The saved choice is
     /// re-applied on every render and updated when the user clicks a header.
-    fn details_view(self: &Rc<Self>) -> gtk::ColumnView {
+    fn details_view(self: &Rc<Self>, row_menu: open_ui::RowMenu) -> gtk::ColumnView {
         let view = gtk::ColumnView::new(None::<gtk::SingleSelection>);
         view.update_property(&[gtk::accessible::Property::Label("Folder details")]);
         let (sorted_by, descending) = self.sort.borrow().clone();
         let titles = self.profile.get().titles();
         for ((id, kind), title) in [("name", 0u8), ("type", 1), ("size", 2), ("modified", 3)].into_iter().zip(titles) {
-            let column = gtk::ColumnViewColumn::new(Some(title), Some(factory(kind)));
+            let column = gtk::ColumnViewColumn::new(Some(title), Some(factory(kind, Some(row_menu.clone()))));
             column.set_id(Some(id));
             column.set_expand(kind == 0);
             column.set_resizable(true);
@@ -427,7 +467,7 @@ impl Ui {
                 .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
             let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
                 "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order,
-                "tabs":self.tabs_evidence(), "profile":self.profile_evidence(), "search":self.search_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
+                "open":self.open_evidence(), "tabs":self.tabs_evidence(), "profile":self.profile_evidence(), "search":self.search_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -488,7 +528,8 @@ fn entry_icon(entry: &Entry) -> gio::Icon {
     }
 }
 
-fn factory(kind: u8) -> gtk::SignalListItemFactory {
+/// `menu` (a secondary click on a cell) is given the cell's position in the displayed model.
+fn factory(kind: u8, menu: Option<open_ui::RowMenu>) -> gtk::SignalListItemFactory {
     let factory = gtk::SignalListItemFactory::new();
     factory.connect_setup(move |_, object| {
         let item = object.downcast_ref::<gtk::ListItem>().unwrap();
@@ -509,6 +550,19 @@ fn factory(kind: u8) -> gtk::SignalListItemFactory {
         label.set_hexpand(true);
         label.set_ellipsize(gtk::pango::EllipsizeMode::End);
         cell.append(&label);
+        if let Some(menu) = menu.clone() {
+            let click = gtk::GestureClick::new();
+            click.set_button(gtk::gdk::BUTTON_SECONDARY);
+            let weak_item = item.downgrade();
+            click.connect_pressed(move |gesture, _, x, y| {
+                let (Some(item), Some(widget)) = (weak_item.upgrade(), gesture.widget()) else {
+                    return;
+                };
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+                menu(item.position(), &widget, x, y);
+            });
+            cell.add_controller(click);
+        }
         item.set_child(Some(&cell));
     });
     factory.connect_bind(move |_, object| {
@@ -602,6 +656,8 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
     let ops = operation_ui::Controls::new();
     root.append(&ops.progress_row());
     let command_bar = ops.bar();
+    let opener = open_ui::Controls::new();
+    opener.append_to(&command_bar);
     command_bar.add_css_class("decfiles-commandbar");
     root.append(&command_bar);
     let status = gtk::Label::new(Some("Files preview"));
@@ -654,6 +710,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
         layout_programmatic: Cell::new(false),
         theme,
         ops,
+        opener,
     });
     let weak = Rc::downgrade(&ui);
     let source = glib::source::unix_fd_add_local(resolver_reader.as_raw_fd(), glib::IOCondition::IN | glib::IOCondition::HUP, move |_, condition| {
@@ -743,6 +800,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
         }
     });
     ui.connect_operations();
+    ui.connect_open();
     ui.connect_transfers();
     ui.connect_search();
     ui.start_theme(theme_reader);
@@ -788,6 +846,9 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
                 gtk::gdk::Key::x => ui.clipboard_put(decfiles::transfer::Mode::Move),
                 _ => ui.paste(),
             }
+        } else if ctrl && !alt && (key == gtk::gdk::Key::o || key == gtk::gdk::Key::O) && gtk::prelude::RootExt::focus(&ui.window).is_some_and(|focus| focus.is_ancestor(&ui.content)) {
+            // Open / Open With on the validated selection (Shift = choose an application).
+            ui.open_selected(if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) { Purpose::Chooser } else { Purpose::Default });
         } else if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
             ui.close_tab(ui.active_tab.get());
         } else if ctrl && (key == gtk::gdk::Key::f || key == gtk::gdk::Key::F) {
@@ -819,6 +880,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
     // The window owns one UI reference until destroy; all child signal handlers are weak.
     let retained = ui.clone();
     ui.window.connect_destroy(move |_| {
+        retained.cancel_open("The window closed, so nothing was opened.");
         retained.resolver.stop();
         retained.monitor.stop();
         retained.close_theme();
