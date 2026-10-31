@@ -473,7 +473,28 @@ fn detached(prog: &str, args: &[String]) {
     let _ = Command::new("setsid").arg(prog).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map(reap);
 }
 
+/// What Enter does for a result. In unit tests it only RECORDS the action (see [`take_recorded`]): a test that presses Enter must never
+/// start the clipboard helper, a shell, a URL opener or an application on the machine that runs the tests.
 fn run(act: &Act) {
+    #[cfg(test)]
+    RECORDED.with(|recorded| recorded.borrow_mut().push(act.clone()));
+    #[cfg(not(test))]
+    run_real(act);
+}
+
+#[cfg(test)]
+thread_local! {
+    static RECORDED: std::cell::RefCell<Vec<Act>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The actions [`run`] recorded on this test thread since the last call.
+#[cfg(test)]
+fn take_recorded() -> Vec<Act> {
+    RECORDED.with(|recorded| std::mem::take(&mut *recorded.borrow_mut()))
+}
+
+#[cfg_attr(test, allow(dead_code))]
+fn run_real(act: &Act) {
     match act {
         Act::Exec(e) => {
             launch::spawn_exec(e);
@@ -1248,7 +1269,25 @@ mod tests {
         assert!(s.items[0].alt.is_some());
         let mut ev = key(Key::Enter, "");
         ev.ctrl = true;
+        let _ = take_recorded();
         assert_eq!(s.key(&ev).action, Some(Action::Close));
+        // Ctrl+Enter runs the ALTERNATIVE action (the full expression) and nothing else; the test never touches the clipboard
+        assert_eq!(take_recorded(), vec![Act::Copy("2+2 = 4".into())]);
+    }
+
+    /// Regression for a test that put "2+2 = 4" on the developer's live X11 clipboard: Enter in a unit test records, it never executes.
+    #[test]
+    fn enter_in_unit_tests_records_actions_and_starts_nothing() {
+        let _ = take_recorded();
+        for act in [Act::Copy("secret".into()), Act::Shell("touch /nonexistent/never".into()), Act::Url("https://example.invalid/".into()), Act::Exec("false".into())] {
+            run(&act);
+        }
+        assert_eq!(take_recorded().len(), 4);
+        let mut s = spot();
+        type_text(&mut s, "2+2");
+        let _ = take_recorded();
+        s.key(&key(Key::Enter, ""));
+        assert_eq!(take_recorded(), vec![Act::Copy("4".into())], "plain Enter copies the result: recorded, not executed");
     }
 
     #[test]
