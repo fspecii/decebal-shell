@@ -21,7 +21,7 @@ Logical size 655 x 516 px at 100 % (the card in the original: 8, 504 to 663, 102
 the user, three favourites, an icon theme of Breeze (`breeze-dark` for the dark card, as Plasma picks), the colours of `themes/plasma-breeze` resolved
 by the same engine that paints the real launcher. Native captures: `native/kickoff/native-{dark,light}-{applications,places}.png`, written by
 `cargo test --lib kickoff_capture_dark -- --ignored` (and `_light`). They render the engine's own card at the original size; the real `declaunch`
-window currently opens at the placement size (620 x 560, `src/launcher/placement.rs`), which is one of the open differences below. The renderer used
+window opens at the placement size, which is now the same 655 x 516 (before this section it was 620 x 560, narrow enough that Kickoff's own collapse rule folded every power button into the Session menu). The renderer used
 its own UI font (the original uses Noto Sans 10 pt); that is not matched and is listed as a difference.
 
 ## Section 1: footer and Places (done)
@@ -57,9 +57,11 @@ orders applications and recent documents by time, Frequently Used by launch coun
 - The History list has no timestamps for applications launched outside Decebal (KActivitiesStats is not available); only launches from this launcher and Spotlight count.
 - Fonts, text rendering (no subpixel/hinting match), and the exact icon rasterisation differ from Qt's.
 
+**Real window, real window manager** (`tests/e2e/plasma-packages-native.py --cases kickoff`; `native/kickoff/real-window-matrix-report.json`, `.log`, `real-bottom-100-kickoff-*.png`): the real `declaunch` (kde style) opened from the taskbar's Start under the pinned rdwm `ab1b588` on an owned private Xvfb, with root's immutable `decdock` `ec0106d5…` (Start-anchor fix `fbddaf8`); `systemctl`, `loginctl`, `rdwm-lock`, `poweroff` and `reboot` are recording stand-ins first on `PATH`, so nothing reaches the host. Per case: Places tab click moves the accent line to the Places tab and changes the page, Applications brings it back; Sleep runs `systemctl suspend` and closes Kickoff; Restart's first press runs nothing, Escape keeps Kickoff open and takes the arming back, two presses run `systemctl reboot` and close; Shut Down two presses run `systemctl poweroff`; the Session button opens a menu, Escape closes the menu and not Kickoff, Lock runs (`rdwm-lock`). **24 / 24 pass** (4 edges x 100 / 125 / 200 % x dark / light). An earlier run of the same gate had 8 failures at 200 % (a fixed delay shorter than the debug build's repaint of the larger card); the harness now polls, and that run's log is kept (`real-window-matrix-run1-8-timing-failures.log`). Log Out and Hibernate were not exercised natively (Log Out runs `rdwmctl action quit`, Hibernate depends on the host's `/sys/power/state`); both are covered by the unit tests.
+
 ## Full port gap list (still open; the packages stay NOT READY)
 
-1. **Card size and placement.** Original 655 x 516; the native card is 620 x 560 (`placement.rs`, shared) and sizes follow Kickoff's implicit-size rules (grid units) in the original.
+1. **Card size.** The native card now opens at the original's 655 x 516 (`placement.rs`, one shared line, the natural size of the Kde style); in the original the size comes from Kickoff's implicit-size rules (grid units, scrollbar presence), which are not reproduced, so a different font size or panel would size it differently there.
 2. **Header.** Avatar image (the user's face, `~/.face`) instead of an initial; the search field's geometry; the configure (sliders) and pin buttons (pin keeps the popup open when another window activates; the gear here opens Decebal Settings).
 3. **Sidebar.** Row style (the current row has Breeze's accent-outlined frame; the original hover/focus frames), Breeze category icons (`applications-development`... not the freedesktop menu icons), the category list and order (the original shows Development, Education, Games, Graphics, Help, Internet, Multimedia, Office, System, Utilities; native adds Settings, Science, Other), the thin scrollbar, hover-to-switch-category (off by default).
 4. **Content.** Grid cell size and label wrapping (favourites at 64 px icons with centred two-line labels), the list delegate (name / description layout, compact mode), All Applications with section headers and the separator rows, drag and drop to reorder favourites, the per-application context menu (add/remove favourite, "Add to Panel", "Show in menu editor"), alphabetical sort setting.
@@ -70,6 +72,6 @@ orders applications and recent documents by time, Frequently Used by launch coun
 
 ## Evidence and verification
 
-`cargo test --lib launcher::` 55 passed; `cargo test --test plasma_theme_ports` 13 passed (including the `[launcher] style = "kde"` assertion that had been
+`cargo test --lib launcher::` 55 passed (placement tests for every style, edge and scale included); `cargo test --test plasma_theme_ports` 13 passed (including the `[launcher] style = "kde"` assertion that had been
 waiting for a build slot); `cargo clippy --lib --tests -- -D warnings` clean. Debug build of this branch's commit on root `7272017` plus the changes
 described in `kickoff-contract.md`.

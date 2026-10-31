@@ -99,6 +99,11 @@ class Case:
         for app in ("curl", "nmcli", "pactl", "wpctl", "playerctl", "bluetoothctl", "brightnessctl"):
             (r / "bin" / app).write_text("#!/bin/sh\nexit 1\n")
             (r / "bin" / app).chmod(0o755)
+        # Kickoff's power buttons must never reach the host: these recording stand-ins come first on PATH (`rdwm-lock` is installed on this machine too)
+        self.power_log = r / "power.log"
+        for tool in ("systemctl", "loginctl", "rdwm-lock", "poweroff", "reboot"):
+            (r / "bin" / tool).write_text(f'#!/bin/sh\necho "{tool} $*" >> "{self.power_log}"\nexit 0\n')
+            (r / "bin" / tool).chmod(0o755)
         self.debug = r / "layout.txt"
         (r / "rdwm.toml").write_text("[general]\nborder_px = 0\n[bar]\nshow = false\n[decoration]\nenabled = false\n")
         self.env = dict(
@@ -619,7 +624,135 @@ def case_keyboard_bar(c):
     c.step("keyboard", ring=ink_distance(ringed, base), moved=ink_distance(moved, ringed))
 
 
-CASES = {"glyph": case_glyph, "applets": case_applets, "launcher": case_launcher, "popup": case_popup, "keyboard": case_keyboard,
+# --------------------------------------------------------------------------------------------------------------------- Kickoff, end to end
+KICKOFF = (655, 516)  # the card's natural size, logical px (src/launcher/placement.rs); the footer is laid out from its left and right edges
+
+
+def accent_run(c, shot, region):
+    """The Breeze accent line of the active tab: (x0, y_top, x1) of the first row in `region` with a long run of accent-coloured pixels."""
+    acc = (61, 174, 233)
+    px = shot.load()
+    x0, y0, x1, y1 = region
+    for y in range(y0, y1):
+        run, start = 0, 0
+        for x in range(x0, x1):
+            p = px[x, y]
+            if max(abs(p[i] - acc[i]) for i in range(3)) <= 36:
+                if run == 0:
+                    start = x
+                run += 1
+                if run >= round(80 * c.scale):
+                    end = x
+                    while end + 1 < x1 and max(abs(px[end + 1, y][i] - acc[i]) for i in range(3)) <= 36:
+                        end += 1
+                    return start, y, end
+            else:
+                run = 0
+    return None
+
+
+def case_kickoff(c):
+    """The real Kickoff (`declaunch`, kde style) under the real window manager: the tabs, the power buttons with their confirmation, the Session menu.
+    systemctl / loginctl / rdwm-lock are recording stand-ins (see Case.power_log); nothing reaches the host."""
+    s = c.scale
+    hib = "disk" in Path("/sys/power/state").read_text()
+    c.power_log.write_text("")
+    log = lambda: c.power_log.read_text().splitlines()
+
+    def open_card():
+        c.park()
+        time.sleep(0.6)
+        base = c.shot("k-before")
+        before = c.windows()
+        c.click(*c.at("start"))
+        new = wait(lambda: c.windows() - before, f"{c.tag}: Kickoff did not open", tries=100)
+        box, shot = await_card(c, base, "k-open")
+        assert box, f"{c.tag}: Kickoff drew no card"
+        # the accent line sits on the footer's top edge: the footer and the card's left edge follow from it
+        region = (box[0] - 4, box[1] + round(KICKOFF[1] * s * 0.6), box[2] + 4, box[3] + 6)
+        found = wait(lambda: accent_run(c, c.shot("k-accent"), region), f"{c.tag}: no active-tab accent line in the card", tries=20)
+        x0, ytop, x1 = found
+        card_x = x0 - 7 * s
+        foot_y = ytop + 1 * s
+        return base, new, box, {"card_x": card_x, "right": card_x + KICKOFF[0] * s, "foot_y": foot_y, "cy": foot_y + 22.5 * s, "tab_x0": x0}
+
+    def places(g):
+        r = g["right"] - 4 * s
+        session = (r - 15 * s, g["foot_y"] + 6.5 * s, 30 * s, 32 * s)
+        r = r - 30 * s - 8 * s
+        out = {"session": (session[0], g["cy"])}
+        widths = [("shutdown", 103), ("reboot", 83)] + ([("hibernate", 98)] if hib else []) + [("suspend", 73)]
+        for name, w in widths:
+            out[name] = (r - w * s / 2, g["cy"])
+            r -= w * s
+        out["tab0"] = (g["card_x"] + (7 + 53.5) * s, g["cy"])
+        out["tab1"] = (g["card_x"] + (7 + 113 + 53.5) * s, g["cy"])
+        out["menu_row0"] = (g["right"] - 4 * s - 84 * s, g["foot_y"] + 6.5 * s - 2 * s - 64 * s + 4 * s + 14 * s)
+        return {k: (round(x), round(y)) for k, (x, y) in out.items()}
+
+    def closed(new):
+        wait(lambda: not (c.windows() & new), f"{c.tag}: Kickoff stayed open", tries=60)
+
+    # tabs
+    base, new, box, g = open_card()
+    pos = places(g)
+    assert abs(g["tab_x0"] - (g["card_x"] + 7 * s)) < 2, "the Applications tab is the active one when Kickoff opens"
+    before_tab = c.shot("k-apps")
+    strip_rows = (box[0] - 4, round(g["foot_y"] - 3 * s), box[2] + 4, round(g["foot_y"] + 3 * s))
+    c.click(*pos["tab1"])
+    # a repaint of the big card takes longer at a high scale in a debug build: poll for the accent line instead of one fixed delay
+    found = wait(lambda: (lambda r: r if r and abs(r[0] - (g["card_x"] + (7 + 113) * s)) <= 3 else None)(accent_run(c, c.shot("k-places"), strip_rows)), f"{c.tag}: the accent line did not move to the Places tab", tries=50)
+    after = c.shot("k-places")
+    assert ink_distance(before_tab.crop(box), after.crop(box)) > 3000 * s, f"{c.tag}: the page did not change"
+    c.click(*pos["tab0"])
+    back = wait(lambda: (lambda r: r if r and abs(r[0] - g["tab_x0"]) <= 3 else None)(accent_run(c, c.shot("k-apps-again"), strip_rows)), f"{c.tag}: the Applications tab did not come back", tries=50)
+    c.step("kickoff_tabs", accent_x_applications=g["tab_x0"], accent_x_places=found[0])
+    # Sleep acts at once and closes
+    c.click(*pos["suspend"])
+    wait(lambda: any(l == "systemctl suspend" for l in log()), f"{c.tag}: Sleep did not run systemctl suspend (log {log()})", tries=40)
+    closed(new)
+    # Restart arms first, Escape takes it back, two presses act
+    base, new, box, g = open_card()
+    pos = places(g)
+    c.click(*pos["reboot"])
+    time.sleep(0.6)
+    assert not any("reboot" in l for l in log()), f"{c.tag}: the first press already restarted ({log()})"
+    armed = c.shot("k-armed")
+    c.run("xdotool", "key", "Escape")
+    time.sleep(0.6)
+    assert c.windows() & new, f"{c.tag}: Escape closed Kickoff instead of taking the arming back"
+    c.click(*pos["reboot"])
+    time.sleep(0.4)
+    c.click(*pos["reboot"])
+    wait(lambda: any(l == "systemctl reboot" for l in log()), f"{c.tag}: the second press did not run systemctl reboot (log {log()})", tries=40)
+    closed(new)
+    # Shut Down: two presses
+    base, new, box, g = open_card()
+    pos = places(g)
+    c.click(*pos["shutdown"])
+    time.sleep(0.4)
+    assert not any("poweroff" in l for l in log())
+    c.click(*pos["shutdown"])
+    wait(lambda: any(l == "systemctl poweroff" for l in log()), f"{c.tag}: Shut Down did not run systemctl poweroff (log {log()})", tries=40)
+    closed(new)
+    # the Session menu: opens above its button, Escape closes it before Kickoff, Lock runs
+    base, new, box, g = open_card()
+    pos = places(g)
+    plain = c.shot("k-footer-plain")
+    c.click(*pos["session"])
+    wait(lambda: ink_distance(plain.crop(box), c.shot("k-session-menu").crop(box)) > 2000 * s, f"{c.tag}: the Session menu did not open", tries=50)
+    c.run("xdotool", "key", "Escape")
+    time.sleep(0.6)
+    assert c.windows() & new, f"{c.tag}: Escape closed Kickoff instead of the menu"
+    c.click(*pos["session"])
+    time.sleep(0.6)
+    c.click(*pos["menu_row0"])
+    wait(lambda: any(l.startswith(("loginctl lock-session", "rdwm-lock")) for l in log()), f"{c.tag}: Lock did not run (log {log()})", tries=40)
+    closed(new)
+    c.step("kickoff_power", log=log(), hibernate_offered=hib)
+
+
+CASES = {"glyph": case_glyph, "applets": case_applets, "launcher": case_launcher, "popup": case_popup, "keyboard": case_keyboard, "kickoff": case_kickoff,
          "bar": case_bar, "bar_launcher": case_bar_launcher, "appmenu": case_bar_appmenu, "keyboard_bar": case_keyboard_bar}
 
 
@@ -752,7 +885,7 @@ def main():
     args.worlds = Path(tempfile.mkdtemp(prefix="plpk-", dir="/var/tmp"))  # short, private, kept (nothing is deleted by path)
     report, failures = [], 0
     for package in args.packages.split(","):
-        cases = args.cases.split(",") if args.cases else (["bar", "bar_launcher", "appmenu", "keyboard_bar"] if package == "plasma-layan" else ["glyph", "applets", "launcher", "popup", "keyboard"])
+        cases = args.cases.split(",") if args.cases else (["bar", "bar_launcher", "appmenu", "keyboard_bar"] if package == "plasma-layan" else ["glyph", "applets", "launcher", "popup", "keyboard", "kickoff"])
         for mode in args.modes.split(","):
             for edge in args.edges.split(","):
                 for scale in (float(v) for v in args.scales.split(",")):

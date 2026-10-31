@@ -1,0 +1,949 @@
+{
+  "binary_note": "decdock: root immutable /var/tmp/decebal-anchor-fbddaf8/bin/decdock (fbddaf87); declaunch built from the kickoff branch (placement 655x516)",
+  "source_head": "e7ccfa930636757722a975ad2f77f901216908bc",
+  "binaries": {
+    "decbar": "1ec0d007af131ddc2e1deff1f7bb8548f50dbdab525048fd3ad5c1f6c48c284a",
+    "decdock": "ec0106d5ecc5cf1e17f7ac1ef5030873165fa843989fef6c81fe3ebe0a557dd3",
+    "declaunch": "992203648351609f5d75ad142ae8199abfc1270a362b31a3904ee8b622b2951f",
+    "decspot": "5f7540f85a137b36771c268cd857caa9e74a691c69aab64bdd4fe6d0ef61c71c",
+    "decthemectl": "ed4a53a6b9833c14483a6ff98cf47ea0d4f6a71129fa180fb11d69b8c7a927b4"
+  },
+  "rdwm": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/ab1b588/rdwm",
+    "sha256": "468de6120c7af168e847b154e254ef60a04634df82a49381c7d30aa604d48ab5"
+  },
+  "rdwmctl": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/8db572d-ctl/rdwmctl",
+    "sha256": "2d3b846fff4e179e0fc169ced0cd94c49211f835aad4948769564f51af136db8"
+  },
+  "qt_fixture": {
+    "path": "/home/ambsd/.cache/decebal-appmenu-target/appmenu-fixtures/qt-fixture",
+    "sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+  },
+  "harness": {
+    "plasma-packages-native.py": "585d215e951271359a6b2cfa85619b85a3b390349b767b13416893c289d6bf91",
+    "private_x11.py": "a82511d842161db16933086b690cb9a5e2d36318d53436426e8a533e4c389d9c"
+  },
+  "themes": {
+    "plasma-breeze": "5a9619ccc0b0a98d069e5827d62f9adbe52c9a622bb182ad7da40d3f420dc3dd"
+  },
+  "entries": [
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 15,
+          "accent_x_places": 128
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 19,
+          "accent_x_places": 160
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 30,
+          "accent_x_places": 256
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "work_area": [
+        0,
+        52,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 15,
+          "accent_x_places": 128
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "work_area": [
+        0,
+        65,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 19,
+          "accent_x_places": 160
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "work_area": [
+        0,
+        104,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 30,
+          "accent_x_places": 256
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        52,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 55,
+          "accent_x_places": 168
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        65,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 69,
+          "accent_x_places": 210
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        104,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 110,
+          "accent_x_places": 336
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 1224,
+          "accent_x_places": 1337
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 1050,
+          "accent_x_places": 1191
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 528,
+          "accent_x_places": 754
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 15,
+          "accent_x_places": 128
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 19,
+          "accent_x_places": 160
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 30,
+          "accent_x_places": 256
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "work_area": [
+        0,
+        52,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 15,
+          "accent_x_places": 128
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "work_area": [
+        0,
+        65,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 19,
+          "accent_x_places": 160
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "work_area": [
+        0,
+        104,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 30,
+          "accent_x_places": 256
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        52,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 55,
+          "accent_x_places": 168
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        65,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 69,
+          "accent_x_places": 210
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        104,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 110,
+          "accent_x_places": 336
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 1224,
+          "accent_x_places": 1337
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 1050,
+          "accent_x_places": 1191
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "kickoff": "ok"
+      },
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "kickoff_tabs",
+          "accent_x_applications": 528,
+          "accent_x_places": 754
+        },
+        {
+          "step": "kickoff_power",
+          "log": [
+            "systemctl suspend",
+            "systemctl reboot",
+            "systemctl poweroff",
+            "rdwm-lock "
+          ],
+          "hibernate_offered": true
+        }
+      ]
+    }
+  ],
+  "failures": 0,
+  "limits": [
+    "X11 only; no Wayland",
+    "network/audio/battery/bluetooth zones need system data this private world does not have, so they are checked as effective settings only"
+  ]
+}

@@ -18,5 +18,5 @@ and small; the Kickoff code lives in `src/launcher/styled/kde.rs` and `src/launc
 A Deepin or UKUI style adds its own `LauncherStyle::X => x::activate(...)` arm in the same two places (`activate` dispatch, and `escape` / `press` if it has
 transient menus), its own kind constants, and keeps its state in `Model.ui` / `Model.entries`. Nothing needs another `Target` variant.
 
-Not done in the shared files and wanted for the next Kickoff section (to be agreed first): the Kickoff card size in `placement.rs` (655 x 516 at 100 %).
+One more shared line, already in this change and flagged for review: the natural size of the Kde style in `placement.rs` is now 655 x 516 (it was 620 x 560); the placement test that asserted exact centring now allows the half pixel an odd width rounds to.
 Root's `docs/launcher-styles.md` "KDE Kickoff" fidelity gap (only the Applications tab, Leave opens decsession) is superseded by `kickoff-fidelity.md`.
