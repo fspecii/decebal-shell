@@ -138,6 +138,52 @@ run, and nothing undeclared is guessed:
 Real result (private root, a clean clone at `0b6a4bab`): 14 137 aliases (15 replacing `src/` files), 16 folder aliases,
 96 of 96 icon directories (was 32), 33 aliases that dangle upstream dropped, 0 links leaving the pack, `complete: yes`.
 
+### DSG icon containers (`[pack.dci_convert]`)
+
+Deepin 25's default icon theme, nirvana, is stored as DCI containers (the DSG icon file specification: `DCI\0`, version 1,
+a 3-byte little-endian root count; entries of a 1-byte type (1 file, 2 folder, 3 link), a 63-byte NUL-terminated UTF-8
+name, an 8-byte little-endian size and the content; images at `<size>/<state>.<tone>/<scale>/<layer>`). A pack opts in
+with one typed table; nothing else in the format changes:
+
+```toml
+[[pack]]
+id = "deepin-nirvana"
+name = "nirvana"
+provides = ["icons"]                       # icons only
+source = "deepin-desktop-theme"
+path = "nirvana/dsg-icons/nirvana"         # holds the *.dci files (and links between them), no index.theme
+tree = "fb56b39daf1364bc2c62baa13a5b672292845725"   # verified, with the licence blob ids, BEFORE any container is parsed
+install_name = "nirvana"
+
+[pack.dci_convert]
+size = 128                                 # output pixels: 64 | 96 | 128 | 192 | 256; images are only ever shrunk
+inherits = ["bloom"]                       # Inherits= of the generated index.theme (theme names)
+```
+
+What the installer does, natively (no subprocess, no new dependency: `image` already decodes WebP):
+
+* every `<name>.dci` directly in `path`, `name` matching `[A-Za-z0-9][A-Za-z0-9._+-]{0,127}`, is parsed as hostile input:
+  at most 8 MiB, nesting 6, 256 entries a folder, names UTF-8 without `/` or control characters, every declared
+  length checked against its container before use, the root count must match, unknown entry types refused;
+* the image used is the single layer of `normal.light` at the largest size and scale (sizes 1..1024, scales 1..4, plain
+  decimals). It is converted only when it is a *plain* layer `<priority>.webp` with a consistent RIFF size, a
+  still (not animated) WebP of at most 4 MiB and 1536 x 1536 pixels (read from its header before decoding). Palette,
+  padding, colour-adjust, `.alpha8` and multi-layer images need Deepin's palette engine and are **refused for that
+  icon**, as is any malformed container: the icon is listed with its reason, never partly converted;
+* a link `a.dci -> b.dci` (to a sibling inside `path`) becomes `<size>/a.png -> b.png` when `b` converted, else it is
+  refused with `b`'s reason; links anywhere else are refused;
+* budgets over the whole pack: 20 000 containers, the source bytes of the install, 2^31 decoded pixels and 256 MiB of
+  PNG output; exceeding one refuses the install;
+* the output is `<size>/<name>.png`, a generated `index.theme`, the licence files (copied, never invented), a
+  `NOTICE.txt` saying the images were decoded and shrunk to at most `size` pixels, and `CONVERSION.json` listing for
+  every icon the source git blob, its sha256, the layer used, its pixels and the PNG's sha256, every refused icon with
+  its reason, and every link. The install report and the provenance record the converted / refused counts: an install
+  with refused icons is reported as such, not as complete.
+
+Real pinned input (deepin-desktop-theme a0c79e3, tree fb56b39d: 668 containers and 771 links): the maintainer recipe
+`assets/desktop-ports/deepin/tools/build_nirvana.py` converts 1 435 and refuses 4; the native conversion must reproduce
+the same 1 435 source pins and the same 4 refusals (three palette layers `1.0.webp`, one truncated container).
+
 ### Example catalogues
 
 `docs/desktop-asset-packs/examples/` holds one catalogue per desktop family with real pins (taken on 2026-10-31) that
