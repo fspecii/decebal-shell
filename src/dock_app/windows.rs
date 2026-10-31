@@ -303,7 +303,11 @@ impl DockApp {
     fn win_search_form(&self) -> config::WinSearch {
         let form = self.dock.settings.windows_search;
         let themed = self.win.as_ref().is_some_and(|w| w.m.search_form == crate::panel::plasma_style::SearchForm::Button);
-        if themed && form == config::WinSearch::Box { config::WinSearch::Button } else { form }
+        if themed && form == config::WinSearch::Box {
+            config::WinSearch::Button
+        } else {
+            form
+        }
     }
 
     pub(super) fn win_layout(&self) -> Option<Layout> {

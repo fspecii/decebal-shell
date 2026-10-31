@@ -19,8 +19,8 @@ use tiny_skia::Pixmap;
 mod blackberry;
 mod gnome;
 mod kde;
-mod ukui;
 pub(super) mod paint;
+mod ukui;
 mod windows;
 mod xfce;
 

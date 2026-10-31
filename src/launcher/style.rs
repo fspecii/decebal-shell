@@ -51,7 +51,8 @@ pub enum LauncherStyle {
 }
 
 /// Every style in the order Settings lists them.
-pub const ALL: [LauncherStyle; 8] = [LauncherStyle::Default, LauncherStyle::Dux, LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry, LauncherStyle::Ukui];
+pub const ALL: [LauncherStyle; 8] =
+    [LauncherStyle::Default, LauncherStyle::Dux, LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry, LauncherStyle::Ukui];
 
 /// The stable keys, for the theme token / manifest choice lists (old manifests use the first two only).
 pub const KEYS: &[&str] = &["default", "dux", "windows", "gnome", "kde", "xfce", "blackberry", "ukui"];
