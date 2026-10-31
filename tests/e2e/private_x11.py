@@ -71,7 +71,11 @@ def listeners_owned(process, number):
             fields = line.split()
             if len(fields) == 8 and fields[7] in names:
                 # SO_ACCEPTCON flag, SOCK_STREAM, listening state.
-                if fields[3:6] != ['00010000', '0001', '01'] or fields[6] not in inodes:
+                # Accepted client sockets can carry the same pathname. They do not
+                # replace the listening endpoints and must not invalidate ownership.
+                if fields[3:6] != ['00010000', '0001', '01']:
+                    continue
+                if fields[6] not in inodes:
                     return False
                 found.add(fields[7])
         return found == names and process.poll() is None

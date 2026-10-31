@@ -72,6 +72,17 @@ class PrivateX11(unittest.TestCase):
         self.assertEqual(result.returncode, 128+signal.SIGTERM)
         self.assertTrue(fixture.available(self.number))
 
+    def test_ownership_recheck_accepts_connected_clients(self):
+        from Xlib.display import Display
+        child, display = fixture.start_private_xvfb(env=self.env, log=self.log, candidates=[self.number])
+        client = Display(display)
+        try:
+            client.sync()
+            self.assertTrue(fixture.listeners_owned(child, self.number), 'connected transport entries are not foreign listeners')
+        finally:
+            client.close()
+            fixture.close(child)
+
     def test_real_smoke(self):
         child, display = fixture.start_private_xvfb(env=self.env, log=self.log, candidates=[self.number])
         self.assertEqual(display, ':'+str(self.number))
