@@ -495,6 +495,8 @@ impl<A: App + 'static> KeyboardHandler for State<A> {
             self.dirty |= self.app.nav_key(NavKey::Left);
         } else if event.keysym == Keysym::Right {
             self.dirty |= self.app.nav_key(NavKey::Right);
+        } else if event.keysym == Keysym::Home || event.keysym == Keysym::End {
+            self.dirty |= self.app.home_end(event.keysym == Keysym::End);
         }
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, _: KeyEvent) {}

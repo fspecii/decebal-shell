@@ -533,6 +533,29 @@ published validator lists (hex lengths, https, unique ids, references, the famil
 So the rice gets a verified icon recommendation but no cursor recommendation until either the contract accepts `.zip`/`.xz` or an upstream publishes a prebuilt tree.
 No cursor or icon file is copied into this repository.
 
+## Keyboard on the macOS-style dock (`decdock --focus`)
+
+The Dash-to-Dock-like renderer the `gnome-catppuccin-dock` rice uses is the macOS-style dock, which had no keyboard mode while the Windows taskbar did.
+It has one now, for every theme that uses the mac renderer, on all four edges and at any display scale. The key table and the exit rules are in
+[`docs/universal-panels.md`](universal-panels.md#the-macos-dock-decdock---focus); in short: arrows along the axis (wrapping), Home/End, the arrow towards the desktop opens
+the item's existing context menu, Enter/Space does what a click does (Launchpad and Trash included), Escape closes the menu, then leaves and restores the previous window
+focus if the window manager moved it, a pointer press leaves. No application menu is faked, the pointer is never moved, the keyboard is only held between `--focus` and an exit, and no second
+daemon exists (`DockApp` gained a `kb` field, `src/dock_app/keyboard.rs` holds the logic, `Dock::draw` the ring, `App::home_end` the Home/End hook, default off, wired in the X11/Wayland/scaled backends).
+
+* **Unit tests** (`cargo test --lib dock_app`: 9 new in `dock_app::keyboard`, 46 in `dock_app`, all passing): axis arrows/wrap/Home/End on every edge; the ring drawn on the focused item and gone after Escape on every edge with no pointer-hover side effect;
+  Enter/Space activation (focus running, start closed, Launchpad, Trash); the menu a keyboard opens equals the right-click menu's rows, menu rows/Home/End/Enter run the typed action (Quit closes every window) and end the mode; Escape order and the conditional restore of the previous
+  window (nothing activated when it still has the focus, nothing when it closed, only the activated app after an activation); a pointer press ends the mode and still clicks; empty/single/60-item/shrinking lists; reduced motion; a style switch to the taskbar and back.
+* **Native acceptance** (`tests/e2e/dock-mac-keyboard.py BIN_DIR NEW_EVIDENCE_DIR`): real `decdock`, real `rdwm` window manager, fake apps (`examples/fakewin`, which logs every key it receives), real XTEST input, on a private Xvfb on an explicitly reserved high display. Before any
+  client or input the display's ownership is proved (`tests/e2e/gnome_xvfb.py`: the lock file holds the server's pid and both the filesystem and the abstract socket belong to that pid's descriptors; the inodes are in `report.json`).
+  4 edges × 100/125/200 % × dark/light = **24 scenarios, 672 checks, all passed**, including: ring appears and moves along the axis (measured from screenshots against a no-focus baseline), Home/End/wrap, the pointer never moves, letter keys do not reach the focused app while the mode is on and do afterwards
+  (no stale grab) after each of Escape, Enter, a menu row and a pointer press, the menu opens towards the desktop and Escape closes it first, a menu row focuses a window that was behind, Enter focuses a running app, Space starts a closed one, Enter on Launchpad and Trash run the stand-in launcher/opener, and Escape restores the focus
+  the window manager moved (the harness first asserts that the focus really moved). Evidence: `report.json` sha256 `a2f4af6ec8f7ac1a…`, screenshots per step under the (private) evidence directory.
+* **Full library run** (sandbox only, single thread; the 600 s cap of the sandbox ended the first pass inside `settings::themepane`, so it ran in two parts that together cover every module): 1208 + 948 passed; the only failures are not in this change:
+  `livewall::preview::…decoder_is_reaped` (needs a real `ffmpeg`, the sandbox has a recording stand-in), `theme::engine::cli::…the_whole_workflow…` (a "no author" warning precedes `ok: Mine`), and
+  `theme::engine::golden::every_builtin_resolves_to_the_same_theme_as_before` (31 builtin packages vs 29 expected by the golden lists, which the merged root `d8d03e1` leaves in this state: `src/theme` and `themes/` are identical to it on this branch). The spawn log held only probes and queries, no setter.
+* **Limits.** Wayland (layer-shell on-demand keyboard focus) is wired but was not run natively here; the X11 path is what was exercised. The pointer grab that lets a press anywhere end the mode is the same one the taskbar and menus use (the press that ends it is not delivered to the window under it). Home/End hooks are new surface in the shared backends (`app.rs`, `scaled.rs`, `x11.rs`, `wayland.rs`, four additive hunks).
+  The harness's rdwm is the installed `rdwm 0.1.0`; other window managers were not tried.
+
 ## Wallpaper candidates (independently accepted, not merged)
 
 Wallpaper selection belongs to the separate Wallpaper settings and the central curated mapping (`data/wallhaven-curated.json`), which this

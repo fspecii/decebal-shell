@@ -95,6 +95,10 @@ impl<A: App> App for Scaled<A> {
         let s = self.scale;
         crate::gfx::with_render_scale(s, || self.app.nav_key(key))
     }
+    fn home_end(&mut self, end: bool) -> bool {
+        let s = self.scale;
+        crate::gfx::with_render_scale(s, || self.app.home_end(end))
+    }
     fn wants_pointer_grab(&self) -> bool {
         self.app.wants_pointer_grab()
     }

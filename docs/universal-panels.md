@@ -16,7 +16,7 @@ applet; the macOS dock on all four edges; `[branding]`; Settings → Panels; `de
 
 Known limits:
 
-- The macOS dock has no keyboard mode (its menus take Up/Down/Enter/Escape); the taskbar's is `decdock --focus`.
+- The macOS dock's keyboard mode is `decdock --focus` too, see [below](#the-macos-dock-decdock---focus); it has no fixed binding and never takes the keyboard by itself.
 - On a side taskbar, a StatusNotifierItem's Activate gets the item's along/across position as its x/y hint.
 - `decbar --control-center` summoned by a key or hot corner follows the resolved edge of the bar or taskbar
   (`Host::Panel` for a bottom or side bar and a side taskbar; `auto` opens at the tray end, clear of the strip at the
@@ -152,6 +152,28 @@ task button (a button scrolled out of the row scrolls into view), the tray cells
 tray cell or the clock opens its popup with the first row focused and the popup's keys apply (the quick settings keep
 the Control Center's routing); Enter on Start, search, a task or show desktop does the click and leaves keyboard mode,
 since the launcher or window takes the focus. Escape closes an open popup or menu, then leaves; a pointer press leaves.
+
+### The macOS dock (`decdock --focus`)
+
+The same request starts keyboard mode on the macOS-style dock (also the one the GNOME Catppuccin rice uses), on all four edges and at any display
+scale. Nothing else starts it, and until then the dock asks for no keyboard.
+
+| key | does |
+|---|---|
+| arrows along the dock (Left/Right on a bottom or top dock, Up/Down on a side one) | move the focus ring, wrapping at the ends; the pointer is not moved and the magnification (which follows the pointer) does not change |
+| Home / End | first / last item |
+| the arrow towards the desktop (Up on a bottom dock, Down on top, Right on a left dock, Left on a right dock) | open the item's context menu, the same typed actions a right click opens (windows, New Window, Keep/Remove, Show in Finder, Hide, Quit, Dock Style, Empty Trash) |
+| Up / Down / Home / End in the menu | move the highlight (disabled rows and separators are skipped) |
+| Enter or Space on an item | what a click does: focus the running app's window, else start it (Launchpad and Trash included); the app takes the keyboard, nothing is restored |
+| Enter or Space on a menu row | run it and leave the mode |
+| Escape | close an open menu (the ring stays), then leave and give the window focus back to the window that had it when the mode began, if the window manager moved it meanwhile and that window still exists |
+| a pointer press | leaves the mode and does its own job (a click on an icon still activates it; a press elsewhere closes the menu) |
+
+While the mode is on the backend holds the keyboard (X11 grab, Wayland on-demand interactivity) and the pointer is grabbed so that a press anywhere ends it;
+every exit above releases both, so no key is swallowed afterwards. The ring follows its item by id when apps start or stop, an emptied dock leaves the mode,
+reduced motion keeps everything static, and the Windows taskbar's own keyboard mode is unchanged. The dock never synthesises application menus or input.
+Implementation: `src/dock_app/keyboard.rs`, the ring in `Dock::draw`, and one new `App::home_end` hook (default off) that the X11 and Wayland backends call for Home / End.
+Native acceptance: `tests/e2e/dock-mac-keyboard.py` (real `decdock`, real window manager, XTEST input; see `docs/gnome-theme-ports.md`).
 
 ### Workers
 

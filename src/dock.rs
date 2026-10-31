@@ -55,6 +55,8 @@ pub struct Dock {
     pub hover_x: Option<f32>,
     /// Icon currently being dragged to a new place.
     pub drag: Option<Drag>,
+    /// Item the keyboard is on (`decdock --focus`): drawn with a focus ring; never moves the pointer or the magnification.
+    pub focus: Option<usize>,
     /// Items that were just launched and bounce until their window appears (or a timeout).
     bounce: Vec<(String, Instant)>,
     /// Smoothed per-item scales; empty until the first animation step.
@@ -91,6 +93,7 @@ impl Dock {
             settings,
             hover_x: None,
             drag: None,
+            focus: None,
             bounce: Vec::new(),
             eased: Vec::new(),
             icons: IconCache::default(),
@@ -363,6 +366,15 @@ impl Dock {
             let px = (w.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
             let icon = self.icons.get_for_surface(&id, px, th.dock_foreground().t());
             blit_scaled(pm, icon, x, y, w, h, alpha);
+        }
+        if let Some(cell) = self.focus.and_then(|i| layout.cells.get(i)) {
+            // a 2 px accent ring (3 px in high contrast) round the icon box, on whichever edge the dock sits
+            let s = self.icon_scale();
+            let size = icon_size * cell.scale;
+            let pad = 4.0 * s;
+            let (x, y, w, h) = self.map(cw, ch, cell.x + (cell.w - size) / 2.0 - pad, base - pad, size + 2.0 * pad, size + 2.0 * pad);
+            let width = if self.high_contrast { 3.0 } else { 2.0 };
+            stroke_rounded(pm, x + width / 2.0, y + width / 2.0, (w - width).max(1.0), (h - width).max(1.0), (8.0 * s).min(w.min(h) / 2.0), th.accent.color(1.0), width);
         }
     }
 }

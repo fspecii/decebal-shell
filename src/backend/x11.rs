@@ -27,6 +27,8 @@ const KEYCODE_DOWN: u8 = 116;
 const KEYCODE_LEFT: u8 = 113;
 const KEYCODE_RIGHT: u8 = 114;
 const KEYCODE_SPACE: u8 = 65;
+const KEYCODE_HOME: u8 = 110;
+const KEYCODE_END: u8 = 115;
 
 #[derive(Debug)]
 pub struct Error(String);
@@ -487,6 +489,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 Event::KeyPress(k) if k.detail == KEYCODE_LEFT => dirty |= app.nav_key(NavKey::Left),
                 Event::KeyPress(k) if k.detail == KEYCODE_RIGHT => dirty |= app.nav_key(NavKey::Right),
                 Event::KeyPress(k) if k.detail == KEYCODE_SPACE && app.wants_keyboard() => dirty |= app.nav_key(NavKey::Enter),
+                Event::KeyPress(k) if (k.detail == KEYCODE_HOME || k.detail == KEYCODE_END) && app.wants_keyboard() => dirty |= app.home_end(k.detail == KEYCODE_END),
                 Event::RandrScreenChangeNotify(_) => {
                     // Re-read the screen and monitor; the placement check at the top of the loop moves
                     // the window and republishes the strut.

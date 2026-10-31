@@ -94,6 +94,10 @@ pub trait App {
     fn nav_key(&mut self, _key: NavKey) -> bool {
         false
     }
+    /// Home (`end` false) or End (`end` true) while [`App::wants_keyboard`] is true; apps without a use for them ignore them.
+    fn home_end(&mut self, _end: bool) -> bool {
+        false
+    }
     /// True while a popup is open that must see clicks anywhere on screen (to close on an outside click).
     /// X11 grabs the pointer for it; Wayland cannot, so the UI closes when the pointer leaves instead.
     fn wants_pointer_grab(&self) -> bool {

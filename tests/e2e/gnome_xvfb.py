@@ -48,7 +48,8 @@ def _number(display):
 
 
 def verify_owned(server, display):
-    """Raise unless `server` (the Popen this script started) really owns `display` in both socket namespaces. Call before any client or input."""
+    """Raise unless `server` (the Popen this script started) really owns `display` in both socket namespaces. Call before any client or input.
+    Returns the proof: {display, pid, lock_pid, fs_inode, abstract_inode} (the inodes are the kernel's, held by the server's own descriptors)."""
     n = _number(display)
     deadline = time.time() + 20
     problems = []
@@ -79,7 +80,7 @@ def verify_owned(server, display):
         if socks.get(abstract) not in owned:
             problems.append("abstract socket missing or not held by the server")
         if not problems:
-            return
+            return {"display": display, "pid": server.pid, "lock_pid": lock_pid, "fs_inode": socks[fs], "abstract_inode": socks[abstract]}
         time.sleep(0.2)
     raise RuntimeError(f"Xvfb {display} is not a verified private fixture: {'; '.join(problems)}")
 

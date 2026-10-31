@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tiny_skia::Pixmap;
 
+mod keyboard;
 mod windows;
 
 /// Side effects of the dock (starting programs), replaceable in tests.
@@ -98,6 +99,8 @@ pub struct DockApp {
     gate: std::cell::RefCell<Option<crate::menubar::gate::Gate>>,
     /// `decdock --focus` (SIGUSR2): the request flag and the slot for the waker; see [`DockApp::with_focus_signal`].
     focus_signal: Option<&'static crate::menubar::FocusSignal>,
+    /// Keyboard mode of the macOS dock (`decdock --focus`); the taskbar keeps its own in [`windows::WinState`].
+    kb: Option<keyboard::Kb>,
 }
 
 impl DockApp {
@@ -123,6 +126,7 @@ impl DockApp {
             scale: None,
             gate: std::cell::RefCell::new(None),
             focus_signal: None,
+            kb: None,
         }
     }
 
@@ -592,6 +596,7 @@ impl App for DockApp {
         if self.is_windows() && self.win.is_some() {
             return self.win_draw(pm);
         }
+        self.dock.focus = self.kb.as_ref().map(|k| k.index);
         self.dock.draw(pm);
         let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
         if let (Some(m), Some(d)) = (&mut self.menu, placed) {
@@ -733,11 +738,13 @@ impl App for DockApp {
         }
         let focus = self.focus_signal.is_some_and(|(flag, _)| flag.swap(false, std::sync::atomic::Ordering::SeqCst));
         if self.is_windows() {
+            self.kb = None;
             let mut tick = self.win_tick();
             tick.redraw |= changed || focus && self.win_focus_start();
             return tick;
         }
         changed |= self.sync_items();
+        changed |= self.kb_sync(focus);
         let moving = self.dock.step(self.dock_len());
         let redraw = changed || moving || self.animating;
         self.animating = moving;
@@ -753,6 +760,8 @@ impl App for DockApp {
         if self.is_windows() {
             return self.win_button(x, y, button);
         }
+        // the pointer ends keyboard mode
+        self.kb = None;
         let (w, h) = self.surface;
         let along = self.along(x, y);
         let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
@@ -841,13 +850,20 @@ impl App for DockApp {
             return matches!(key, Key::Escape) && (self.win_escape() || self.win_focus_end());
         }
         match key {
-            Key::Escape => self.close_menu(),
+            Key::Escape => self.kb_escape(),
         }
+    }
+
+    fn home_end(&mut self, end: bool) -> bool {
+        !self.is_windows() && self.kb_home_end(end)
     }
 
     fn nav_key(&mut self, key: NavKey) -> bool {
         if self.menu.is_none() && self.is_windows() {
             return self.win_nav_key(key);
+        }
+        if self.menu.is_none() && self.kb.is_some() {
+            return self.kb_nav_key(key);
         }
         let out = match (&mut self.menu, key) {
             (Some(m), NavKey::Up) => return m.menu.step(-1),
@@ -855,21 +871,21 @@ impl App for DockApp {
             (Some(m), NavKey::Enter) => m.menu.activate_hovered(),
             (Some(_), NavKey::Left | NavKey::Right) | (None, _) => return false,
         };
-        self.finish_menu(out)
+        self.kb_menu_enter(out)
     }
 
     fn wants_keyboard(&self) -> bool {
         if self.is_windows() {
             return self.win_wants_keyboard();
         }
-        self.menu.is_some()
+        self.menu.is_some() || self.kb.is_some()
     }
 
     fn wants_pointer_grab(&self) -> bool {
         if self.is_windows() {
             return self.win_wants_keyboard();
         }
-        self.menu.is_some()
+        self.menu.is_some() || self.kb.is_some()
     }
 
     fn input_rect(&self) -> Option<InputRect> {
