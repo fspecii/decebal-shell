@@ -7,7 +7,7 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/fspecii/decebal'
 license=('MIT')
 depends=('fontconfig' 'libxcb' 'pam')
-makedepends=('cargo')
+makedepends=('cargo' 'python')
 provides=('macshell')
 conflicts=('macshell')
 replaces=('macshell')
@@ -40,8 +40,9 @@ prepare() {
 build() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
-  # not --all-features: the test-only `test-auth` feature compiles a password bypass into declock
-  cargo build --frozen --release --features wayland,x11
+  # not --all-features: the test-only `test-auth` feature compiles a password bypass into declock.
+  # stage.py records the exact executables cargo reports for this build (and their sha256) for package().
+  python3 packaging/stage.py build --manifest "$srcdir/decebal-build-manifest.json" -- --frozen --features wayland,x11
 }
 
 check() {
@@ -51,40 +52,9 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  for bin in decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets decnotes dectimer; do
-    install -Dm755 "target/release/$bin" "$pkgdir/usr/bin/$bin"
-  done
-  # DEPRECATED compatibility names (macbar -> decbar, ...), kept for one release so existing keybinds keep working
-  for b in decdock decbar dechaven declaunch decspot decswitch decexpose dechud decdash decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets; do
-    install -Dm755 contrib/compat/mac-compat "$pkgdir/usr/bin/mac${b#dec}"
-  done
-  install -Dm644 contrib/decebal-dock.service "$pkgdir/usr/lib/systemd/user/decebal-dock.service"
-  install -Dm644 contrib/decebal-bar.service "$pkgdir/usr/lib/systemd/user/decebal-bar.service"
-  install -Dm644 contrib/decebal-notify.service "$pkgdir/usr/lib/systemd/user/decebal-notify.service"
-  install -Dm644 contrib/decebal-dock.desktop "$pkgdir/etc/xdg/autostart/decebal-dock.desktop"
-  install -Dm644 contrib/decebal-clip.service "$pkgdir/usr/lib/systemd/user/decebal-clip.service"
-  install -Dm644 contrib/decebal-clip.desktop "$pkgdir/etc/xdg/autostart/decebal-clip.desktop"
-  install -Dm644 contrib/decebal-timer.service "$pkgdir/usr/lib/systemd/user/decebal-timer.service"
-  install -Dm644 contrib/decebal-timer.desktop "$pkgdir/etc/xdg/autostart/decebal-timer.desktop"
-  install -Dm644 contrib/decebal-live-wallpaper.service "$pkgdir/usr/lib/systemd/user/decebal-live-wallpaper.service"
-  install -Dm644 contrib/decebal-live-wallpaper.desktop "$pkgdir/etc/xdg/autostart/decebal-live-wallpaper.desktop"
-  install -Dm644 contrib/decebal-widgets.service "$pkgdir/usr/lib/systemd/user/decebal-widgets.service"
-  install -Dm644 contrib/decebal-widgets.desktop "$pkgdir/etc/xdg/autostart/decebal-widgets.desktop"
-  install -Dm644 contrib/decebal-hot.service "$pkgdir/usr/lib/systemd/user/decebal-hot.service"
-  install -Dm644 contrib/decebal-hot.desktop "$pkgdir/etc/xdg/autostart/decebal-hot.desktop"
-  install -Dm644 contrib/decebal-wallpaper-colors.service "$pkgdir/usr/lib/systemd/user/decebal-wallpaper-colors.service"
-  install -Dm644 contrib/decebal-wallpaper-colors.desktop "$pkgdir/etc/xdg/autostart/decebal-wallpaper-colors.desktop"
-  install -Dm644 contrib/decebal-bar.desktop "$pkgdir/etc/xdg/autostart/decebal-bar.desktop"
-  install -Dm644 contrib/decebal-notify.desktop "$pkgdir/etc/xdg/autostart/decebal-notify.desktop"
-  install -Dm644 contrib/dbus/org.freedesktop.Notifications.service "$pkgdir/usr/share/decebal/dbus/org.freedesktop.Notifications.service"
-  for f in $(cd themes && find . -type f); do
-    install -Dm644 "themes/$f" "$pkgdir/usr/share/decebal/themes/${f#./}"
-  done
-  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-  install -Dm644 contrib/dechaven.desktop "$pkgdir/usr/share/applications/dechaven.desktop"
-  install -Dm644 contrib/decsettings.desktop "$pkgdir/usr/share/applications/decsettings.desktop"
-  install -Dm644 contrib/decnotes.desktop "$pkgdir/usr/share/applications/decnotes.desktop"
-  install -Dm644 contrib/dectimer.desktop "$pkgdir/usr/share/applications/dectimer.desktop"
-  install -Dm644 contrib/decmon.desktop "$pkgdir/usr/share/applications/decmon.desktop"
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # Same file list as `make install` (binaries re-checked against the build manifest, compatibility wrappers, user units,
+  # autostart and desktop entries, D-Bus service file, every theme package with its fonts and licences, docs).
+  # No inventory file: pacman owns the file list.
+  python3 packaging/stage.py install --prefix /usr --destdir "$pkgdir" \
+    --manifest "$srcdir/decebal-build-manifest.json" --no-inventory
 }

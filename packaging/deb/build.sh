@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build decebal_<version>_<arch>.deb from an already-built tree.
-# Usage: packaging/deb/build.sh [outdir]      (run `cargo build --release --locked` first)
+# Usage: packaging/deb/build.sh [outdir]      (run `make` first: it records the exact binaries to package)
 set -eu
 cd "$(dirname "$0")/../.."
 out=${1:-dist}
@@ -8,7 +8,8 @@ ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 arch=$(dpkg --print-architecture)
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-make -o all install DESTDIR="$stage" PREFIX=/usr >/dev/null
+# Same file list as `make install`; no install inventory, dpkg owns the file list.
+python3 packaging/stage.py install --prefix /usr --destdir "$stage" --no-inventory >/dev/null
 mkdir -p "$stage/DEBIAN" "$out"
 size=$(du -sk "$stage" | cut -f1)
 cat > "$stage/DEBIAN/control" <<CTL
