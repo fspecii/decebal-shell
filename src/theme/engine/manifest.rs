@@ -530,7 +530,7 @@ pub fn analyze(text: &str) -> Analysis {
                 if let Some(list) = bar.get(slot).and_then(Item::as_array) {
                     for value in list.iter() {
                         if let Some(id) = value.as_str() {
-                            if !crate::config::DUX_BAR_ITEMS.contains(&id) {
+                            if !crate::config::DUX_BAR_ITEMS.contains(&id) && crate::panel::AppletId::parse(id).is_none() {
                                 if let Some(item) = bar.get(slot) {
                                     cx.err(item, &format!("bar.{slot}"), format!("unknown native Dux item `{id}`; no arbitrary widgets or commands"));
                                 }

@@ -31,7 +31,7 @@ pub fn needs_framework(extra: &serde_json::Map<String, Value>) -> bool {
     let dock = extra.get("dock").and_then(|d| d.get("position")).and_then(Value::as_str).and_then(Edge::parse);
     extra.contains_key("branding")
         || extra.contains_key("taskbar")
-        || bar.is_some_and(|b| b.get("applets").is_some())
+        || bar.is_some_and(|b| b.get("applets").is_some() || b.get("cluster").is_some() || b.get("group_gap").is_some() || b.get("group_padding").is_some())
         || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top))
         || dock.is_some_and(Edge::is_vertical)
 }

@@ -314,14 +314,14 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     let apply_bar_layout = reset_colors || !same_theme;
     if apply_bar_layout {
         if let Some(Value::Object(bar)) = shell.get_mut("bar") {
-            for key in ["left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
+            for key in ["left", "center", "right", "margin", "spacing", "radius", "background", "band_radius", "cluster", "group_gap", "group_padding"] {
                 bar.remove(key);
             }
         }
     }
     if let Some(Value::Object(bar)) = extra.get("bar") {
         let o = obj_mut(&mut shell, "bar");
-        for k in ["enabled", "position", "left", "center", "right", "margin", "spacing", "radius", "background", "band_radius"] {
+        for k in ["enabled", "position", "left", "center", "right", "margin", "spacing", "radius", "background", "band_radius", "cluster", "group_gap", "group_padding"] {
             if !apply_bar_layout && !matches!(k, "enabled" | "position") {
                 continue;
             }

@@ -41,9 +41,14 @@ pub(super) struct Layout {
     pub groups: Vec<Group>,
     /// What did not fit (the overflow cell lists it).
     pub hidden: Vec<Kind>,
+    /// A cluster (`bar.cluster`): one face per group, the groups adjacent and centred as one run.
+    pub cluster: bool,
 }
 impl Layout {
     pub fn faces(&self) -> Vec<Group> {
+        if self.cluster {
+            return self.groups.clone();
+        }
         let category = |kind| match kind {
             Kind::Previous | Kind::Toggle | Kind::Next | Kind::Media => 1,
             Kind::Tray(Tray::Indicator(_) | Tray::Indicators) => 2,
@@ -71,10 +76,15 @@ impl Layout {
 
 /// Place center on the monitor's center, never the free space's center. On crowded
 /// monitors remove optional wide content first, retaining both left and right controls.
-fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, mut groups: [Vec<(Kind, f32)>; 3]) -> Layout {
-    let pad = 0.0;
+/// `cluster` = Some((gap between group faces, padding inside a face)): the groups are placed adjacent, in order, as ONE run centred on the bar and sized by
+/// its content (the three-island taskbar of UKUI's panel); `None` keeps the stock start / centre / end placement.
+fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, mut groups: [Vec<(Kind, f32)>; 3], cluster: Option<(f32, f32)>) -> Layout {
+    let pad = cluster.map_or(0.0, |c| c.1);
+    let gg = cluster.map_or(gap, |c| c.0);
     let size = |v: &Vec<(Kind, f32)>| if v.is_empty() { 0.0 } else { v.iter().map(|(_, w)| w).sum::<f32>() + gap * v.len().saturating_sub(1) as f32 + 2.0 * pad };
     let available = (width - margin * 2.0).max(0.0);
+    // the space the faces' own gaps take: the stock layout counts two gaps; a cluster counts one between each pair of faces that exist
+    let between = |groups: &[Vec<(Kind, f32)>; 3]| if cluster.is_some() { gg * groups.iter().filter(|g| !g.is_empty()).count().saturating_sub(1) as f32 } else { 2.0 * gap };
     let mut hidden: Vec<Kind> = Vec::new();
     // Remove detail before interaction. Never paint/hit overlapping groups.
     for optional in [
@@ -96,9 +106,9 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
         Kind::Tray(Tray::Lock),
         Kind::Tray(Tray::AppMenu),
     ] {
-        let total = groups.iter().map(size).sum::<f32>() + 2.0 * gap;
+        let total = groups.iter().map(size).sum::<f32>() + between(&groups);
         let side = size(&groups[0]).max(size(&groups[2]));
-        if total <= available && side * 2.0 + size(&groups[1]) + 2.0 * gap <= available {
+        if total <= available && (cluster.is_some() || side * 2.0 + size(&groups[1]) + 2.0 * gap <= available) {
             break;
         }
         for group in &mut groups {
@@ -121,6 +131,17 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
         });
     };
     // At extreme widths an omitted group is preferable to inaccessible painted overlap.
+    if cluster.is_some() {
+        // a cluster that still does not fit gives up whole groups, the middle one (the applications) first, never painting overlapping faces
+        for index in [1usize, 0] {
+            if groups.iter().map(size).sum::<f32>() + between(&groups) > available {
+                drop_where(&mut groups[index], &|_| false, &mut hidden);
+            }
+        }
+        if size(&groups[2]) > available {
+            drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
+        }
+    } else {
     if groups.iter().map(size).sum::<f32>() + 2.0 * gap > available {
         drop_where(&mut groups[1], &|_| false, &mut hidden);
     }
@@ -135,6 +156,7 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
     if size(&groups[2]) > available {
         drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
     }
+    }
     let sizes = groups.each_ref().map(size);
     // Upstream CenterLayout's default index centering keeps the configured
     // middle clock on the output centre, even when the preceding music is absent.
@@ -146,15 +168,29 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
         }
     };
     let cx = centered_start(&groups[1]);
-    let center_fits = cx >= margin + sizes[0] + gap && cx + sizes[1] <= width - margin - sizes[2] - gap;
+    let center_fits = cluster.is_some() || (cx >= margin + sizes[0] + gap && cx + sizes[1] <= width - margin - sizes[2] - gap);
     if !center_fits {
         hidden.extend(groups[1].drain(..).map(|(kind, _)| kind));
     }
     let sizes = groups.each_ref().map(size);
-    let starts = [margin, centered_start(&groups[1]), width - margin - sizes[2]];
+    let starts = if cluster.is_some() {
+        // one content-sized run, centred on the bar: each existing face follows the previous one by `gg`
+        let run = sizes.iter().sum::<f32>() + between(&groups);
+        let mut x = (width - run) / 2.0;
+        let mut out = [0.0f32; 3];
+        for (index, group) in groups.iter().enumerate() {
+            out[index] = x;
+            if !group.is_empty() {
+                x += sizes[index] + gg;
+            }
+        }
+        out
+    } else {
+        [margin, centered_start(&groups[1]), width - margin - sizes[2]]
+    };
     // the transport buttons are part of the media item, not applets of their own
     hidden.retain(|kind| !matches!(kind, Kind::Previous | Kind::Toggle | Kind::Next));
-    let mut result = Layout { hidden, ..Layout::default() };
+    let mut result = Layout { hidden, cluster: cluster.is_some(), ..Layout::default() };
     for (index, contents) in groups.into_iter().enumerate() {
         if contents.is_empty() || starts[index] < 0.0 || sizes[index] > available {
             continue;
@@ -363,6 +399,7 @@ impl DecBar {
                 (settings.margin + 5.0) * scale,
                 settings.radius * scale,
                 groups,
+                settings.cluster.then_some((settings.group_gap * scale, settings.group_padding * scale)),
             )
         };
         let first = fit(groups.clone());
@@ -424,6 +461,10 @@ impl DecBar {
         }
         for face in lay.faces() {
             fill_rounded(pm, face.x, face.y, face.w, face.h, face.radius, th.bar_c());
+            if lay.cluster {
+                // the island's own 1 px outline (the theme's `outline` strength)
+                stroke_rounded(pm, face.x + 0.5, face.y + 0.5, face.w - 1.0, face.h - 1.0, (face.radius - 0.5).max(0.0), th.outline_c(), 1.0);
+            }
         }
         for item in lay.items {
             let hover_opacity = self.dux_hover_opacity(item.kind);
@@ -668,6 +709,9 @@ impl DecBar {
 }
 
 #[cfg(test)]
+mod cluster_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     /// Process-global theme/font publication: run alone with private config and package fonts.
@@ -739,7 +783,7 @@ mod tests {
 
     #[test]
     fn default_index_centering_keeps_clock_centred_when_music_is_missing() {
-        let layout = place(1920.0, 8.0, 4.0, 28.0, 9.0, 14.0, [vec![], vec![(Kind::Tray(Tray::Clock), 100.0), (Kind::Tray(Tray::Weather), 60.0)], vec![]]);
+        let layout = place(1920.0, 8.0, 4.0, 28.0, 9.0, 14.0, [vec![], vec![(Kind::Tray(Tray::Clock), 100.0), (Kind::Tray(Tray::Weather), 60.0)], vec![]], None);
         let clock = layout.items.iter().find(|i| i.kind == Kind::Tray(Tray::Clock)).unwrap();
         assert_eq!(clock.x + clock.w / 2.0, 960.0);
     }
@@ -753,7 +797,7 @@ mod tests {
                     vec![(Kind::Media, 114.0 * scale), (Kind::Tray(Tray::Clock), 100.0 * scale)],
                     vec![(Kind::Notifications, 28.0 * scale), (Kind::Tray(Tray::Control), 28.0 * scale)],
                 ];
-                let layout = place(width, 8.0 * scale, 4.0 * scale, 28.0 * scale, 5.0 * scale, 14.0 * scale, groups);
+                let layout = place(width, 8.0 * scale, 4.0 * scale, 28.0 * scale, 5.0 * scale, 14.0 * scale, groups, None);
                 for (index, g) in layout.groups.iter().enumerate() {
                     assert!(g.x >= 0.0 && g.x + g.w <= width);
                     for other in layout.groups.iter().skip(index + 1) {

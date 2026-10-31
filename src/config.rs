@@ -349,6 +349,13 @@ pub struct BarLayout {
     pub radius: f32,
     pub background: String,
     pub band_radius: f32,
+    /// Horizontal Dux bars: lay the left / centre / right groups out as ONE content-sized run centred on the bar (a face per group, `group_gap` between faces)
+    /// instead of spreading them to the start, middle and end. Side edges keep the turned band.
+    pub cluster: bool,
+    /// Space between the faces of the groups of a cluster, in logical pixels.
+    pub group_gap: f32,
+    /// Space between a cluster face's edge and its first / last item, in logical pixels.
+    pub group_padding: f32,
 }
 impl Default for BarLayout {
     fn default() -> Self {
@@ -362,6 +369,9 @@ impl Default for BarLayout {
             radius: 14.0,
             background: "band".into(),
             band_radius: 16.0,
+            cluster: false,
+            group_gap: 8.0,
+            group_padding: 0.0,
         }
     }
 }
@@ -370,13 +380,16 @@ impl BarLayout {
         let mut out: Self = serde_json::from_value(v.clone()).unwrap_or_default();
         let mut seen = std::collections::BTreeSet::new();
         for group in [&mut out.left, &mut out.center, &mut out.right] {
-            group.retain(|id| DUX_BAR_ITEMS.contains(&id.as_str()) && seen.insert(id.clone()));
+            // the Dux ids of the first batch, or any applet key of the registry (`tasks`, `search`, `volume`...); the same set the manifest validator accepts
+            group.retain(|id| (DUX_BAR_ITEMS.contains(&id.as_str()) || crate::panel::AppletId::parse(id).is_some()) && seen.insert(id.clone()));
             group.truncate(24);
         }
         out.margin = out.margin.clamp(0.0, 48.0);
         out.spacing = out.spacing.clamp(0.0, 24.0);
         out.radius = out.radius.clamp(0.0, 48.0);
         out.band_radius = out.band_radius.clamp(0.0, 48.0);
+        out.group_gap = out.group_gap.clamp(0.0, 48.0);
+        out.group_padding = out.group_padding.clamp(0.0, 32.0);
         if !matches!(out.background.as_str(), "band" | "islands") {
             out.background = "band".into();
         }
