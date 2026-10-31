@@ -40,6 +40,32 @@ pub enum Target {
     /// Clears the search.
     Clear,
     Close,
+    /// A tab, button or menu row that belongs to one style (kind, index): only that style knows what it is and what it does.
+    /// `Styled::activate` hands it to the style's own `activate` (see docs/plasma-theme-ports/kickoff-contract.md).
+    Style(u8, u16),
+}
+
+/// What a style's own action did, for the shared engine to turn into a `Response`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    Nothing,
+    /// Only the picture changed.
+    Redraw,
+    /// The zones change (a tab, a page, a menu opened or closed).
+    Relayout,
+    Close,
+}
+
+/// One row of a list a style fills itself (Kickoff's Places: computer, history), opened with a command.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Entry {
+    pub name: String,
+    pub detail: String,
+    pub icon: String,
+    /// The command that opens it (`xdg-open PATH`, `decspot`).
+    pub open: Vec<String>,
+    /// Unix time it was last used (0: unknown), to order a history.
+    pub at: u64,
 }
 
 impl Target {
@@ -197,7 +223,8 @@ impl Zone {
     /// Lays a grid out horizontally (a dash or a row of buttons) instead of vertically for arrow keys.
     fn horizontal(&self) -> bool {
         match &self.shape {
-            Shape::Fixed(r) => r.len() > 1 && r.iter().all(|x| (x.y - r[0].y).abs() < 1.0),
+            // a row: the items share a vertical centre (Kickoff's full-height tabs sit beside shorter buttons)
+            Shape::Fixed(r) => r.len() > 1 && r.iter().all(|x| ((x.y + x.h / 2.0) - (r[0].y + r[0].h / 2.0)).abs() < 1.0),
             Shape::Grid { .. } => false,
         }
     }
@@ -218,6 +245,8 @@ pub struct Model {
     pub user: String,
     /// The categories whose freedesktop menu icon the icon theme has.
     pub themed: std::collections::HashSet<Category>,
+    /// State a style keeps for itself (its current tab, an open menu): zone-like names, small integers.
+    pub ui: HashMap<&'static str, usize>,
 }
 
 impl Model {
@@ -233,7 +262,12 @@ impl Model {
             keyboard: false,
             user: String::new(),
             themed: Default::default(),
+            ui: HashMap::new(),
         }
+    }
+
+    pub fn ui(&self, key: &str) -> usize {
+        self.ui.get(key).copied().unwrap_or(0)
     }
 
     pub fn query(&self) -> &str {
@@ -333,6 +367,9 @@ impl Styled {
         let mut m = Model::new(cat);
         m.user = Catalog::user_name();
         m.themed = Category::ALL.into_iter().filter(|c| crate::icons::find_svg(c.icon()).or_else(|| crate::icons::find_png(c.icon())).is_some()).collect();
+        if style == LauncherStyle::Kde {
+            kde::prepare(&mut m);
+        }
         Styled {
             style,
             m,
@@ -347,6 +384,21 @@ impl Styled {
             zones: Vec::new(),
             wheel: 0.0,
         }
+    }
+
+    /// Forward the host's wake-up callback to styles that load data in the background.
+    pub fn set_waker(&mut self, waker: crate::window_app::Waker) {
+        if self.style == LauncherStyle::Kde {
+            kde::set_waker(waker);
+        }
+    }
+
+    pub fn tick(&mut self) -> Response {
+        if self.style == LauncherStyle::Kde && kde::tick() {
+            self.relayout();
+            return Response::REDRAW;
+        }
+        Response::NONE
     }
 
     /// The window size wanted when the launcher is a plain window (no layer shell): the card alone.
@@ -605,6 +657,21 @@ impl Styled {
                 Response::REDRAW
             }
             Target::Close => Response::act(Action::Close),
+            Target::Style(kind, i) => {
+                let outcome = match self.style {
+                    LauncherStyle::Kde => kde::activate(&mut self.m, kind, i),
+                    _ => Outcome::Nothing,
+                };
+                match outcome {
+                    Outcome::Nothing => Response::NONE,
+                    Outcome::Redraw => Response::REDRAW,
+                    Outcome::Relayout => {
+                        self.relayout();
+                        Response::REDRAW
+                    }
+                    Outcome::Close => Response::act(Action::Close),
+                }
+            }
         }
     }
 
@@ -635,7 +702,14 @@ impl Styled {
         }
         self.m.keyboard = true;
         let moved = match ev.key {
-            Key::Escape => return Response::act(Action::Close),
+            Key::Escape => {
+                // a style's open menu or pending confirmation takes the key first
+                if self.style == LauncherStyle::Kde && kde::escape(&mut self.m) {
+                    self.relayout();
+                    return Response::REDRAW;
+                }
+                return Response::act(Action::Close);
+            }
             Key::Enter => {
                 let from = self.m.zone;
                 return match self.current() {
@@ -734,7 +808,13 @@ impl Styled {
         if self.full && !self.card.contains(x, y) {
             return Response::act(Action::Close);
         }
-        let Some((zone, i, t)) = self.hit(x, y) else { return Response::NONE };
+        let hit = self.hit(x, y);
+        // a style's open menu or pending confirmation consumes the press that is not on it
+        if self.style == LauncherStyle::Kde && kde::press(&mut self.m, hit.map(|h| h.0)) {
+            self.relayout();
+            return Response::REDRAW;
+        }
+        let Some((zone, i, t)) = hit else { return Response::NONE };
         match button {
             Button::Left => {
                 self.m.keyboard = false;

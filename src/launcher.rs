@@ -420,6 +420,9 @@ impl WindowApp for Launcher {
     }
 
     fn set_waker(&mut self, waker: Waker) {
+        if let Some(st) = self.styled.as_mut() {
+            st.set_waker(waker.clone());
+        }
         crate::theme::live::start_watcher(move || waker());
     }
 
@@ -598,11 +601,12 @@ impl WindowApp for Launcher {
 
     fn tick(&mut self) -> Response {
         if let Some(st) = self.styled.as_mut() {
+            let answer = st.tick();
             if crate::theme::take_changed() {
                 st.relayout();
                 return Response::REDRAW;
             }
-            return Response::NONE;
+            return answer;
         }
         if crate::theme::take_changed() || (self.is_dux() && self.dux.as_ref().is_some_and(dux::State::stale)) {
             self.prepare_dux();
