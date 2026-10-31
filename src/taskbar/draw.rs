@@ -108,6 +108,22 @@ impl Colors {
     }
 }
 
+/// The state a task is drawn in, in the order taskmanager's Task.qml prefers them: the focus, the pointer, a demand for attention,
+/// a minimised window.
+fn task_state(b: &TaskButton, dragging: bool, hovered: bool) -> TaskState {
+    if dragging || b.active {
+        TaskState::Active
+    } else if hovered {
+        TaskState::Hover
+    } else if b.attention {
+        TaskState::Attention
+    } else if b.minimized && b.running {
+        TaskState::Minimized
+    } else {
+        TaskState::Normal
+    }
+}
+
 /// Owns the font and the icon caches so they survive between frames.
 pub struct Painter {
     pub fonts: Option<Fonts>,
@@ -408,13 +424,7 @@ impl Painter {
         let framed = m.indicator == Indicator::Frame;
         if framed {
             // the theme's own marking: a tinted cell with a strong line towards the desktop (see `plasma_style::task_indicator`)
-            let state = if dragging || b.active {
-                TaskState::Active
-            } else if f.hover == Some(hit) || pressed {
-                TaskState::Hover
-            } else {
-                TaskState::Normal
-            };
+            let state = task_state(b, dragging, f.hover == Some(hit) || pressed);
             self.draw_frame_cell(tp, f, (px, py, pw, ph, rad), state);
         } else {
             let a = if dragging {
@@ -749,6 +759,7 @@ mod tests {
                 running: i % 2 == 0,
                 active: i == 2,
                 windows: 1 + i % 3,
+                ..TaskButton::default()
             })
             .collect();
         let c = if light { Colors::light() } else { Colors::dark() };
@@ -783,7 +794,7 @@ mod tests {
         let c = Colors::dark();
         let snap = Snapshot::default();
         let extras = Extras::default();
-        let buttons: Vec<_> = (0..20).map(|i| TaskButton { app_id: format!("clip-{i}"), window: Some(i), title: "Task".into(), pinned: true, running: true, active: true, windows: 1 }).collect();
+        let buttons: Vec<_> = (0..20).map(|i| TaskButton { app_id: format!("clip-{i}"), window: Some(i), title: "Task".into(), pinned: true, running: true, active: true, windows: 1, ..TaskButton::default() }).collect();
         let mut p = Painter::default();
         let l = layout(
             &m,
@@ -857,6 +868,10 @@ mod tests {
 
     /// One frame-style strip on `edge` with an active task in the middle.
     fn styled_strip(edge: Edge, light: bool) -> (Pixmap, Layout, Metrics) {
+        styled_strip_with(edge, light, |_| {})
+    }
+
+    fn styled_strip_with(edge: Edge, light: bool, tweak: impl FnOnce(&mut Vec<TaskButton>)) -> (Pixmap, Layout, Metrics) {
         let vertical = edge.is_vertical();
         let m = Metrics::new(1.0, WinAlign::Left).styled(&plasma_style());
         let mut p = Painter::default();
@@ -880,8 +895,9 @@ mod tests {
             },
         );
         let painted = if vertical { l.transposed() } else { l.clone() };
-        let buttons: Vec<TaskButton> =
-            (0..3).map(|i| TaskButton { app_id: format!("app{i}"), window: Some(i as u64), title: String::new(), pinned: true, running: true, active: i == 1, windows: 1 }).collect();
+        let mut buttons: Vec<TaskButton> =
+            (0..3).map(|i| TaskButton { app_id: format!("app{i}"), window: Some(i as u64), title: String::new(), pinned: true, running: true, active: i == 1, windows: 1, ..TaskButton::default() }).collect();
+        tweak(&mut buttons);
         let c = if light { Colors::light() } else { Colors::dark() };
         let snap = Snapshot::default();
         let extras = Extras::default();
@@ -911,6 +927,48 @@ mod tests {
 
     fn luma(p: tiny_skia::PremultipliedColorU8) -> i32 {
         (p.red() as i32 * 3 + p.green() as i32 * 6 + p.blue() as i32) / 10
+    }
+
+    #[test]
+    fn a_task_is_drawn_in_the_state_its_windows_are_in() {
+        let b = |active, minimized, attention| TaskButton { running: true, active, minimized, attention, ..TaskButton::default() };
+        assert_eq!(task_state(&b(false, false, false), false, false), TaskState::Normal);
+        assert_eq!(task_state(&b(false, true, false), false, false), TaskState::Minimized);
+        assert_eq!(task_state(&b(false, true, true), false, false), TaskState::Attention, "attention outranks minimised");
+        assert_eq!(task_state(&b(false, false, true), false, true), TaskState::Hover, "the pointer outranks attention");
+        assert_eq!(task_state(&b(true, false, true), false, false), TaskState::Active, "the focus outranks attention");
+        assert_eq!(task_state(&b(false, true, false), true, false), TaskState::Active, "a dragged task is lifted");
+        let not_running = TaskButton { minimized: true, ..TaskButton::default() };
+        assert_eq!(task_state(&not_running, false, false), TaskState::Normal, "a launcher cannot be minimised");
+    }
+
+    #[test]
+    fn minimized_and_attention_tasks_are_marked_on_every_edge() {
+        for light in [false, true] {
+            for edge in [Edge::Bottom, Edge::Top, Edge::Left, Edge::Right] {
+                let (pm, l, _) = styled_strip_with(edge, light, |b| {
+                    b[0].minimized = true;
+                    b[2].attention = true;
+                });
+                // the cell fill, sampled away from the icon, against the plain strip behind the cells
+                let probe = |i: usize| {
+                    let r = l.tasks[i];
+                    let (x, y) = if edge.is_vertical() { (r.x as u32 + 5, r.cy() as u32) } else { (r.x as u32 + 5, r.cy() as u32) };
+                    pm.pixel(x, y).unwrap()
+                };
+                let (min, att) = (probe(0), probe(2));
+                let (plain, _, _) = (styled_strip(edge, light).0, 0, 0);
+                let plain_of = |i: usize| {
+                    let r = l.tasks[i];
+                    plain.pixel(r.x as u32 + 5, r.cy() as u32).unwrap()
+                };
+                assert_ne!((min.red(), min.green(), min.blue()), (plain_of(0).red(), plain_of(0).green(), plain_of(0).blue()), "edge {edge:?} light {light}: minimised looks like idle");
+                assert_ne!((att.red(), att.green(), att.blue()), (plain_of(2).red(), plain_of(2).green(), plain_of(2).blue()), "edge {edge:?} light {light}: attention looks like idle");
+                // attention (warning at .35) moves the pixel much further than minimised (text at .08)
+                let dist = |a: tiny_skia::PremultipliedColorU8, b: tiny_skia::PremultipliedColorU8| (a.red() as i32 - b.red() as i32).abs() + (a.green() as i32 - b.green() as i32).abs() + (a.blue() as i32 - b.blue() as i32).abs();
+                assert!(dist(att, plain_of(2)) > dist(min, plain_of(0)), "edge {edge:?} light {light}");
+            }
+        }
     }
 
     #[test]

@@ -151,7 +151,7 @@ impl Metrics {
 // ------------------------------------------------------------------ buttons
 
 /// One task button: a pinned launcher, a running app, or (with titles) one window.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct TaskButton {
     /// Desktop id: names the icon and the pinned entry.
     pub app_id: String,
@@ -164,6 +164,10 @@ pub struct TaskButton {
     pub active: bool,
     /// Windows of the app (combined mode) or 1.
     pub windows: usize,
+    /// Every window it stands for is minimised (a frame-style taskbar dims such a task).
+    pub minimized: bool,
+    /// One of its windows asks for attention.
+    pub attention: bool,
 }
 
 /// Builds the buttons: pinned apps in their order (Launchpad and Trash are the dock's, not the taskbar's),
@@ -194,14 +198,14 @@ pub fn build_buttons(pinned: &[String], windows: &[Window], labels: WinLabels, r
     let mut out = Vec::new();
     for (id, pin, ws) in groups {
         if ws.is_empty() {
-            out.push(TaskButton { app_id: id, window: None, title: String::new(), pinned: pin, running: false, active: false, windows: 0 });
+            out.push(TaskButton { app_id: id, window: None, title: String::new(), pinned: pin, running: false, active: false, windows: 0, minimized: false, attention: false });
         } else if labels == WinLabels::Always {
             for (i, w) in ws.iter().enumerate() {
-                out.push(TaskButton { app_id: id.clone(), window: Some(w.id), title: w.title.clone(), pinned: pin && i == 0, running: true, active: w.active, windows: 1 });
+                out.push(TaskButton { app_id: id.clone(), window: Some(w.id), title: w.title.clone(), pinned: pin && i == 0, running: true, active: w.active, windows: 1, minimized: w.minimized, attention: w.attention });
             }
         } else {
             let lead = ws.iter().find(|w| w.active).unwrap_or(&ws[0]);
-            out.push(TaskButton { app_id: id, window: Some(lead.id), title: lead.title.clone(), pinned: pin, running: true, active: ws.iter().any(|w| w.active), windows: ws.len() });
+            out.push(TaskButton { app_id: id, window: Some(lead.id), title: lead.title.clone(), pinned: pin, running: true, active: ws.iter().any(|w| w.active), windows: ws.len(), minimized: ws.iter().all(|w| w.minimized), attention: ws.iter().any(|w| w.attention) });
         }
     }
     out
@@ -509,7 +513,7 @@ mod tests {
     }
 
     fn win(id: u64, app: &str, title: &str, active: bool) -> Window {
-        Window { id, app_id: app.into(), title: title.into(), active, desktop: None }
+        Window { id, app_id: app.into(), title: title.into(), active, desktop: None, ..Default::default() }
     }
 
     #[test]

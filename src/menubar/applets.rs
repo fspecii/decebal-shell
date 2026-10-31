@@ -832,8 +832,8 @@ impl DecBar {
         self.v_win = Some(("org.gnome.Nautilus".into(), "Files".into()));
         self.v_win_len = self.fonts.as_ref().map_or(40.0, |f| f.measure("Files", TEXT_PX, Weight::Medium));
         self.tasks = group_tasks(&[
-            crate::wm::Window { id: 1, app_id: "org.gnome.Nautilus".into(), title: "Files".into(), active: true, desktop: Some(0) },
-            crate::wm::Window { id: 2, app_id: "firefox".into(), title: "Web".into(), active: false, desktop: Some(0) },
+            crate::wm::Window { id: 1, app_id: "org.gnome.Nautilus".into(), title: "Files".into(), active: true, desktop: Some(0), ..Default::default() },
+            crate::wm::Window { id: 2, app_id: "firefox".into(), title: "Web".into(), active: false, desktop: Some(0), ..Default::default() },
         ]);
     }
 }
@@ -1263,8 +1263,8 @@ pub(super) mod tests {
         }
         fn windows(&self) -> Vec<crate::wm::Window> {
             vec![
-                crate::wm::Window { id: 11, app_id: "foot".into(), title: "~/src".into(), active: true, desktop: Some(0) },
-                crate::wm::Window { id: 12, app_id: "firefox".into(), title: "Docs".into(), active: false, desktop: Some(0) },
+                crate::wm::Window { id: 11, app_id: "foot".into(), title: "~/src".into(), active: true, desktop: Some(0), ..Default::default() },
+                crate::wm::Window { id: 12, app_id: "firefox".into(), title: "Docs".into(), active: false, desktop: Some(0), ..Default::default() },
             ]
         }
     }

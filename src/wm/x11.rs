@@ -1,6 +1,6 @@
 //! EWMH tracker (_NET_CLIENT_LIST / _NET_ACTIVE_WINDOW), used on dwm, i3, openbox, bspwm, ...
 
-use super::{mark_occupied, Control, Notify, Tracker, Window, Workspace};
+use super::{mark_occupied, mark_urgent, Control, Geometry, Notify, Tracker, Window, Workspace};
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use x11rb::connection::Connection;
@@ -45,6 +45,50 @@ pub fn desktop_names(raw: &[u8], count: usize) -> Vec<String> {
         }
     }
     names
+}
+
+/// `WM_HINTS` flag word bit for the ICCCM urgency hint (`UrgencyHint`, 1 << 8).
+const URGENCY_HINT: u32 = 1 << 8;
+
+/// ICCCM urgency: the first word of `WM_HINTS` carries the flags.
+pub fn hints_urgent(wm_hints: &[u32]) -> bool {
+    wm_hints.first().is_some_and(|flags| flags & URGENCY_HINT != 0)
+}
+
+/// (minimised, demands attention) from a `_NET_WM_STATE` atom list; either atom may be unknown to the server.
+pub fn net_state_flags(states: &[u32], hidden: Option<Atom>, demands: Option<Atom>) -> (bool, bool) {
+    (hidden.is_some_and(|a| states.contains(&a)), demands.is_some_and(|a| states.contains(&a)))
+}
+
+/// A window's rectangle in root coordinates from the root-relative position of its origin and its own size.
+pub fn root_geometry(origin: (i16, i16), size: (u16, u16)) -> Geometry {
+    Geometry { x: origin.0 as i32, y: origin.1 as i32, w: size.0 as u32, h: size.1 as u32 }
+}
+
+/// Size of the whole desktop from `_NET_DESKTOP_GEOMETRY` (`width height`); empty or zero sizes are no answer.
+pub fn desktop_size(raw: &[u32]) -> Option<(u32, u32)> {
+    match raw {
+        [w, h, ..] if *w > 0 && *h > 0 => Some((*w, *h)),
+        _ => None,
+    }
+}
+
+/// Whether an event means the window list or something a task or the pager shows may have changed. Only managed clients get
+/// structure events (the root selects properties only), so any configure / map / unmap is one of them.
+pub fn event_refreshes(event: &Event, watched: &[Atom]) -> bool {
+    match event {
+        Event::PropertyNotify(e) => watched.contains(&e.atom),
+        Event::ConfigureNotify(_) | Event::MapNotify(_) | Event::UnmapNotify(_) => true,
+        _ => false,
+    }
+}
+
+/// The window's origin and size in root coordinates (two pipelined requests; None for an unmapped or vanished window).
+fn window_geometry(conn: &impl Connection, root: u32, win: u32) -> Option<Geometry> {
+    let size = conn.get_geometry(win).ok()?;
+    let origin = conn.translate_coordinates(win, root, 0, 0).ok()?;
+    let (size, origin) = (size.reply().ok()?, origin.reply().ok()?);
+    origin.same_screen.then(|| root_geometry((origin.dst_x, origin.dst_y), (size.width, size.height)))
 }
 
 const SOURCE_PAGER: u32 = 2;
@@ -147,7 +191,8 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
     // One connection for both directions: this thread reads, the UI thread sends client messages.
     let conn = Arc::new(Ewmh { close_atom: atom(&conn, "_NET_CLOSE_WINDOW"), change_state_atom: atom(&conn, "WM_CHANGE_STATE"), conn, root, active_atom: active, desktop_atom: current });
     tracker.set_control(conn.clone());
-    let (wm_state, demands) = (atom(&conn.conn, "_NET_WM_STATE"), atom(&conn.conn, "_NET_WM_STATE_DEMANDS_ATTENTION"));
+    let (wm_state, demands, hidden) = (atom(&conn.conn, "_NET_WM_STATE"), atom(&conn.conn, "_NET_WM_STATE_DEMANDS_ATTENTION"), atom(&conn.conn, "_NET_WM_STATE_HIDDEN"));
+    let desktop_geometry = atom(&conn.conn, "_NET_DESKTOP_GEOMETRY");
 
     let Ok((tracker, stop)) = tracker.worker() else { return false };
     std::thread::spawn(move || {
@@ -156,20 +201,18 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
             if !matches!(crate::backend::poll_readable(&[stop.as_raw_fd()], Some(std::time::Duration::ZERO)), Ok(ready) if !ready[0]) {
                 return;
             }
-            let (windows, workspaces) = {
+            let (windows, workspaces, screen) = {
                 let active_win = prop32(conn, root, active, AtomEnum::WINDOW).first().copied().unwrap_or(0);
-                let mut urgent_desktops: Vec<u32> = Vec::new();
                 let windows = prop32(conn, root, client_list, AtomEnum::WINDOW)
                     .into_iter()
                     .map(|w| {
-                        // Tag moves of a window arrive as property changes on the window itself.
-                        let _ = conn.change_window_attributes(w, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE));
+                        // Tag moves, state and urgency arrive as property changes on the window itself, moves and resizes as
+                        // structure events.
+                        let _ = conn.change_window_attributes(w, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE | EventMask::STRUCTURE_NOTIFY));
                         let desktop = prop32(conn, w, wm_desktop, AtomEnum::CARDINAL).first().copied().filter(|d| *d != u32::MAX);
-                        if let (Some(ws), Some(dm), Some(d)) = (wm_state, demands, desktop) {
-                            if prop32(conn, w, ws, AtomEnum::ATOM).contains(&dm) {
-                                urgent_desktops.push(d);
-                            }
-                        }
+                        let states = wm_state.map(|ws| prop32(conn, w, ws, AtomEnum::ATOM)).unwrap_or_default();
+                        let (minimized, demanded) = net_state_flags(&states, hidden, demands);
+                        let attention = demanded || hints_urgent(&prop32(conn, w, AtomEnum::WM_HINTS.into(), AtomEnum::WM_HINTS));
                         let mut title = text_prop(conn, w, net_name, utf8);
                         if title.is_empty() {
                             title = text_prop(conn, w, AtomEnum::WM_NAME.into(), AtomEnum::STRING);
@@ -180,6 +223,9 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                             title: String::from_utf8_lossy(&title).into_owned(),
                             active: w == active_win,
                             desktop,
+                            minimized,
+                            attention,
+                            geometry: if minimized { None } else { window_geometry(conn, root, w) },
                         }
                     })
                     .collect::<Vec<_>>();
@@ -194,22 +240,35 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                     ws.active = true;
                 }
                 mark_occupied(&mut workspaces, &windows);
-                for (i, ws) in workspaces.iter_mut().enumerate() {
-                    ws.urgent = !ws.active && urgent_desktops.contains(&(i as u32));
-                }
-                (windows, workspaces)
+                mark_urgent(&mut workspaces, &windows);
+                let screen = desktop_geometry.and_then(|a| desktop_size(&prop32(conn, root, a, AtomEnum::CARDINAL))).or_else(|| {
+                    let g = conn.get_geometry(root).ok()?.reply().ok()?;
+                    Some((g.width as u32, g.height as u32))
+                });
+                (windows, workspaces, screen)
             };
-            if tracker.replace(windows, workspaces) {
+            if tracker.replace_all(windows, workspaces, screen) {
                 notify();
             }
             // Drain x11rb's queued events before polling its socket. Last-owner drop
             // closes `stop`, waking this wait even when the X server has no events.
+            let watched: Vec<Atom> = [client_list, active, current, names, number, wm_desktop, net_name, AtomEnum::WM_CLASS.into(), AtomEnum::WM_NAME.into(), AtomEnum::WM_HINTS.into()]
+                .into_iter()
+                .chain(wm_state)
+                .chain(desktop_geometry)
+                .collect();
             loop {
                 match conn.poll_for_event() {
-                    Ok(Some(Event::PropertyNotify(e)))
-                        if [client_list, active, current, names, number, wm_desktop, net_name, AtomEnum::WM_CLASS.into(), AtomEnum::WM_NAME.into()].contains(&e.atom) || Some(e.atom) == wm_state =>
-                    {
-                        break
+                    Ok(Some(event)) if event_refreshes(&event, &watched) => {
+                        // one rebuild covers a whole burst (a window drag sends a configure per motion)
+                        loop {
+                            match conn.poll_for_event() {
+                                Ok(Some(_)) => {}
+                                Ok(None) => break,
+                                Err(_) => return,
+                            }
+                        }
+                        break;
                     }
                     Ok(Some(_)) => continue,
                     Err(_) => return,
@@ -244,6 +303,41 @@ mod tests {
         assert_eq!(desktop_names(b"", 2), vec!["1", "2"]);
         assert_eq!(desktop_names(b"a\0\0c\0", 3), vec!["a", "2", "c"]);
         assert_eq!(desktop_names(b"a\0b\0c\0", 2), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn net_wm_state_and_urgency_hint_become_flags() {
+        assert_eq!(net_state_flags(&[7, 9], Some(7), Some(8)), (true, false));
+        assert_eq!(net_state_flags(&[8], Some(7), Some(8)), (false, true));
+        assert_eq!(net_state_flags(&[], Some(7), Some(8)), (false, false));
+        // an atom the server does not know can never match
+        assert_eq!(net_state_flags(&[7, 8], None, None), (false, false));
+        assert!(hints_urgent(&[URGENCY_HINT | 1, 0]));
+        assert!(!hints_urgent(&[1 | (1 << 6), 0]));
+        assert!(!hints_urgent(&[]));
+    }
+
+    #[test]
+    fn geometry_is_the_root_origin_plus_the_window_size() {
+        assert_eq!(root_geometry((-12, 40), (300, 200)), Geometry { x: -12, y: 40, w: 300, h: 200 });
+        assert_eq!(desktop_size(&[1920, 1080]), Some((1920, 1080)));
+        assert_eq!(desktop_size(&[1920, 1080, 5]), Some((1920, 1080)));
+        assert_eq!(desktop_size(&[1920]), None);
+        assert_eq!(desktop_size(&[0, 1080]), None);
+        assert_eq!(desktop_size(&[]), None);
+    }
+
+    #[test]
+    fn only_relevant_events_refresh_the_snapshot() {
+        use x11rb::protocol::xproto::{ConfigureNotifyEvent, MapNotifyEvent, PropertyNotifyEvent};
+        let prop = |atom| Event::PropertyNotify(PropertyNotifyEvent { response_type: 28, sequence: 0, window: 1, atom, time: 0, state: Property::NEW_VALUE });
+        assert!(event_refreshes(&prop(40), &[10, 40]));
+        assert!(!event_refreshes(&prop(41), &[10, 40]));
+        let configure = Event::ConfigureNotify(ConfigureNotifyEvent { response_type: 22, sequence: 0, event: 1, window: 1, above_sibling: 0, x: 3, y: 4, width: 5, height: 6, border_width: 0, override_redirect: false });
+        assert!(event_refreshes(&configure, &[]));
+        let map = Event::MapNotify(MapNotifyEvent { response_type: 19, sequence: 0, event: 1, window: 1, override_redirect: false });
+        assert!(event_refreshes(&map, &[]));
+        assert!(!event_refreshes(&Event::Unknown(vec![0u8; 32]), &[]));
     }
 
     #[test]

@@ -26,6 +26,7 @@ struct Pending {
     app_id: String,
     title: String,
     active: bool,
+    minimized: bool,
 }
 
 #[derive(Default, Clone)]
@@ -105,6 +106,19 @@ fn visible_workspaces(all: &HashMap<u32, WsPending>) -> Vec<(u32, Workspace)> {
     ids.into_iter().filter(|id| all[id].group == group).map(|id| (id, Workspace { name: all[&id].name.clone(), active: all[&id].active, ..Default::default() })).collect()
 }
 
+/// One toplevel as the tracker shows it. The foreign-toplevel protocol reports minimised, but no urgency and no geometry, so
+/// those stay `false` / `None` rather than guessed.
+fn window_of(id: u32, p: &Pending) -> Window {
+    Window { id: id as u64, app_id: p.app_id.clone(), title: p.title.clone(), active: p.active, desktop: None, minimized: p.minimized, attention: false, geometry: None }
+}
+
+/// (activated, minimised) from the raw `state` array of a toplevel.
+fn toplevel_flags(raw: &[u8]) -> (bool, bool) {
+    use zwlr_foreign_toplevel_handle_v1::State;
+    let states = raw.chunks_exact(4).map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]));
+    states.fold((false, false), |(a, m), v| (a || v == State::Activated as u32, m || v == State::Minimized as u32))
+}
+
 impl Wm {
     fn publish(&self) {
         let mut ids: Vec<_> = self.toplevels.keys().copied().collect();
@@ -113,7 +127,7 @@ impl Wm {
             .iter()
             .map(|id| {
                 let p = &self.toplevels[id];
-                Window { id: *id as u64, app_id: p.app_id.clone(), title: p.title.clone(), active: p.active, desktop: None }
+                window_of(*id, p)
             })
             .collect();
         let visible = visible_workspaces(&self.workspaces);
@@ -280,8 +294,10 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for Wm {
                 state.toplevels.entry(id).or_default().title = title;
             }
             Event::State { state: raw } => {
-                let active = raw.chunks_exact(4).map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]])).any(|v| v == zwlr_foreign_toplevel_handle_v1::State::Activated as u32);
-                state.toplevels.entry(id).or_default().active = active;
+                let (active, minimized) = toplevel_flags(&raw);
+                let p = state.toplevels.entry(id).or_default();
+                p.active = active;
+                p.minimized = minimized;
             }
             Event::Done => state.publish(),
             Event::Closed => {
@@ -303,6 +319,30 @@ mod tests {
 
     fn ws(name: &str, active: bool, group: Option<u32>) -> WsPending {
         WsPending { name: name.into(), active, group }
+    }
+
+    fn raw(states: &[u32]) -> Vec<u8> {
+        states.iter().flat_map(|s| s.to_ne_bytes()).collect()
+    }
+
+    #[test]
+    fn toplevel_state_arrays_become_minimized_and_active_flags() {
+        use zwlr_foreign_toplevel_handle_v1::State;
+        assert_eq!(toplevel_flags(&raw(&[])), (false, false));
+        assert_eq!(toplevel_flags(&raw(&[State::Minimized as u32])), (false, true));
+        assert_eq!(toplevel_flags(&raw(&[State::Maximized as u32, State::Activated as u32])), (true, false));
+        // a trailing partial word is ignored
+        let mut partial = raw(&[State::Minimized as u32]);
+        partial.extend([1, 2]);
+        assert_eq!(toplevel_flags(&partial), (false, true));
+    }
+
+    #[test]
+    fn wayland_windows_never_invent_urgency_or_geometry() {
+        let p = Pending { app_id: "foot".into(), title: "t".into(), active: false, minimized: true };
+        let w = window_of(7, &p);
+        assert!(w.minimized && !w.attention && w.geometry.is_none() && w.desktop.is_none());
+        assert_eq!(w.id, 7);
     }
 
     #[test]

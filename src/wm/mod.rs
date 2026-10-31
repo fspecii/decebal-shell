@@ -11,6 +11,32 @@ pub mod x11;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// A window's rectangle in root (desktop) coordinates.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Geometry {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Geometry {
+    /// The part of this rectangle that lies on a `screen`-sized desktop, as fractions of it (x, y, w, h in 0..=1). `None` when
+    /// nothing of it is on the desktop (or either size is empty): a pager draws nothing for such a window.
+    pub fn fractions(&self, screen: (u32, u32)) -> Option<(f32, f32, f32, f32)> {
+        if self.w == 0 || self.h == 0 || screen.0 == 0 || screen.1 == 0 {
+            return None;
+        }
+        let (sw, sh) = (screen.0 as i64, screen.1 as i64);
+        let (x0, y0) = ((self.x as i64).clamp(0, sw), (self.y as i64).clamp(0, sh));
+        let (x1, y1) = ((self.x as i64 + self.w as i64).clamp(0, sw), (self.y as i64 + self.h as i64).clamp(0, sh));
+        if x1 <= x0 || y1 <= y0 {
+            return None;
+        }
+        Some((x0 as f32 / sw as f32, y0 as f32 / sh as f32, (x1 - x0) as f32 / sw as f32, (y1 - y0) as f32 / sh as f32))
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     /// Backend handle used to activate the window (X11 window id, Wayland protocol id).
@@ -20,6 +46,14 @@ pub struct Window {
     pub active: bool,
     /// Desktop / tag the window lives on (EWMH `_NET_WM_DESKTOP`); `None` = unknown or on all.
     pub desktop: Option<u32>,
+    /// The window is hidden by minimising (EWMH `_NET_WM_STATE_HIDDEN`; Wayland foreign-toplevel `minimized`).
+    pub minimized: bool,
+    /// The window asks for attention (EWMH `_NET_WM_STATE_DEMANDS_ATTENTION` or the ICCCM urgency hint). Wayland's
+    /// foreign-toplevel protocol has no such state, so it stays false there (never invented).
+    pub attention: bool,
+    /// Where it is on the desktop, in root coordinates. `None` when the backend does not know (Wayland) or the window is not
+    /// mapped; never a guess.
+    pub geometry: Option<Geometry>,
 }
 
 /// One workspace (EWMH desktop, rdwm tag, ext-workspace group member).
@@ -37,6 +71,9 @@ pub struct Workspace {
 pub struct WmState {
     pub windows: Vec<Window>,
     pub workspaces: Vec<Workspace>,
+    /// Size of the whole desktop the windows' geometry is relative to (EWMH `_NET_DESKTOP_GEOMETRY`, else the root window);
+    /// `None` when the backend does not know it (Wayland).
+    pub screen: Option<(u32, u32)>,
 }
 
 /// Things a UI can ask the window manager to do.
@@ -66,6 +103,13 @@ pub fn is_rdwm() -> bool {
 pub fn mark_occupied(workspaces: &mut [Workspace], windows: &[Window]) {
     for (i, ws) in workspaces.iter_mut().enumerate() {
         ws.occupied = windows.iter().any(|w| w.desktop == Some(i as u32));
+    }
+}
+
+/// Flags the workspaces that hold a window asking for attention (never the one being shown).
+pub fn mark_urgent(workspaces: &mut [Workspace], windows: &[Window]) {
+    for (i, ws) in workspaces.iter_mut().enumerate() {
+        ws.urgent = !ws.active && windows.iter().any(|w| w.attention && w.desktop == Some(i as u32));
     }
 }
 
@@ -142,12 +186,19 @@ impl Tracker {
     }
 
     pub(crate) fn replace(&self, windows: Vec<Window>, workspaces: Vec<Workspace>) -> bool {
+        let screen = self.lock().screen;
+        self.replace_all(windows, workspaces, screen)
+    }
+
+    /// Publishes a complete snapshot; true when anything differs from the previous one.
+    pub(crate) fn replace_all(&self, windows: Vec<Window>, workspaces: Vec<Workspace>, screen: Option<(u32, u32)>) -> bool {
         let mut s = self.lock();
-        if s.windows == windows && s.workspaces == workspaces {
+        if s.windows == windows && s.workspaces == workspaces && s.screen == screen {
             return false;
         }
         s.windows = windows;
         s.workspaces = workspaces;
+        s.screen = screen;
         true
     }
 
@@ -280,7 +331,7 @@ mod tests {
     #[test]
     fn tracker_reports_changes_once() {
         let t = Tracker::default();
-        let w = vec![Window { id: 1, app_id: "foot".into(), title: "x".into(), active: true, desktop: None }];
+        let w = vec![Window { id: 1, app_id: "foot".into(), title: "x".into(), active: true, ..Default::default() }];
         assert!(t.replace(w.clone(), vec![]));
         assert!(!t.replace(w, vec![]));
         assert_eq!(t.active_app_name().as_deref(), Some("Foot"));
@@ -299,7 +350,7 @@ mod tests {
     #[test]
     fn occupied_follows_window_desktops() {
         let mut ws: Vec<Workspace> = (1..=3).map(|n| Workspace { name: n.to_string(), ..Default::default() }).collect();
-        let win = |id, d| Window { id, app_id: "a".into(), title: String::new(), active: false, desktop: d };
+        let win = |id, d| Window { id, app_id: "a".into(), desktop: d, ..Default::default() };
         mark_occupied(&mut ws, &[win(1, Some(2)), win(2, None), win(3, Some(9))]);
         assert_eq!(ws.iter().map(|w| w.occupied).collect::<Vec<_>>(), vec![false, false, true]);
     }
@@ -307,12 +358,72 @@ mod tests {
     #[test]
     fn window_for_prefers_the_active_one() {
         let t = Tracker::default();
-        let w = |id, active| Window { id, app_id: "org.gnome.Nautilus".into(), title: String::new(), active, desktop: None };
+        let w = |id, active| Window { id, app_id: "org.gnome.Nautilus".into(), active, ..Default::default() };
         t.replace(vec![w(1, false), w(2, true), w(3, false)], vec![]);
         assert_eq!(t.window_for("nautilus").map(|w| w.id), Some(2));
         assert_eq!(t.window_for("foot"), None);
         t.replace(vec![w(5, false), w(6, false)], vec![]);
         assert_eq!(t.window_for("Nautilus").map(|w| w.id), Some(5));
+    }
+
+    #[test]
+    fn window_state_and_geometry_changes_count_as_changes() {
+        let t = Tracker::default();
+        let base = Window { id: 1, app_id: "foot".into(), desktop: Some(0), ..Default::default() };
+        assert!(t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))));
+        assert!(!t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))));
+        for changed in [
+            Window { minimized: true, ..base.clone() },
+            Window { attention: true, ..base.clone() },
+            Window { geometry: Some(Geometry { x: 5, y: 6, w: 7, h: 8 }), ..base.clone() },
+        ] {
+            assert!(t.replace_all(vec![changed.clone()], vec![], Some((1920, 1080))));
+            assert!(t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))), "back to the plain window");
+        }
+        assert!(t.replace_all(vec![base.clone()], vec![], Some((2560, 1440))), "a resized desktop is a change");
+        // `replace` (the Wayland collector) keeps the desktop size it was given
+        assert!(!t.replace(vec![base], vec![]));
+        assert_eq!(t.snapshot().screen, Some((2560, 1440)));
+    }
+
+    #[test]
+    fn closed_windows_leave_no_state_behind() {
+        let t = Tracker::default();
+        let hot = Window { id: 9, app_id: "a".into(), minimized: true, attention: true, geometry: Some(Geometry { x: 0, y: 0, w: 10, h: 10 }), ..Default::default() };
+        t.replace(vec![hot], vec![]);
+        assert!(t.replace(vec![], vec![]));
+        assert!(t.snapshot().windows.is_empty() && t.window_for("a").is_none());
+        // the same id coming back starts clean
+        t.replace(vec![Window { id: 9, app_id: "a".into(), ..Default::default() }], vec![]);
+        let w = t.window_for("a").unwrap();
+        assert!(!w.minimized && !w.attention && w.geometry.is_none());
+    }
+
+    #[test]
+    fn geometry_fractions_stay_inside_the_desktop() {
+        let g = |x, y, w, h| Geometry { x, y, w, h };
+        let screen = (1000, 500);
+        assert_eq!(g(0, 0, 500, 250).fractions(screen), Some((0.0, 0.0, 0.5, 0.5)));
+        // hanging off the left / top: only the visible part counts
+        assert_eq!(g(-100, -50, 200, 100).fractions(screen), Some((0.0, 0.0, 0.1, 0.1)));
+        // hanging off the right / bottom
+        assert_eq!(g(900, 450, 400, 400).fractions(screen), Some((0.9, 0.9, 0.1, 0.1)));
+        // entirely outside, empty, or no desktop size: nothing to draw
+        assert_eq!(g(1000, 0, 10, 10).fractions(screen), None);
+        assert_eq!(g(-20, 0, 10, 10).fractions(screen), None);
+        assert_eq!(g(0, 0, 0, 10).fractions(screen), None);
+        assert_eq!(g(0, 0, 10, 10).fractions((0, 500)), None);
+        // extreme values do not overflow
+        assert!(g(i32::MIN, i32::MIN, u32::MAX, u32::MAX).fractions(screen).is_some());
+        assert_eq!(g(i32::MAX, i32::MAX, u32::MAX, u32::MAX).fractions(screen), None);
+    }
+
+    #[test]
+    fn urgent_workspaces_follow_window_attention_but_never_the_shown_one() {
+        let mut ws: Vec<Workspace> = (0..3).map(|n| Workspace { name: n.to_string(), active: n == 1, ..Default::default() }).collect();
+        let w = |id, d, attention| Window { id, app_id: "a".into(), desktop: d, attention, ..Default::default() };
+        mark_urgent(&mut ws, &[w(1, Some(0), true), w(2, Some(1), true), w(3, Some(2), false), w(4, None, true)]);
+        assert_eq!(ws.iter().map(|w| w.urgent).collect::<Vec<_>>(), vec![true, false, false]);
     }
 
     #[test]

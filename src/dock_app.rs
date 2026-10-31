@@ -192,6 +192,7 @@ impl DockApp {
                     running: i > 0,
                     active,
                     windows: (i > 0) as usize,
+                    ..Default::default()
                 })
                 .collect();
             let bar = (win.m.bar_h + win.m.float_gap).ceil() as u32;
@@ -1013,7 +1014,7 @@ mod tests {
     }
 
     fn win(id: u64, app: &str, title: &str) -> Window {
-        Window { id, app_id: app.into(), title: title.into(), active: false, desktop: None }
+        Window { id, app_id: app.into(), title: title.into(), active: false, desktop: None, ..Default::default() }
     }
 
     fn tmp_dir(name: &str) -> PathBuf {
