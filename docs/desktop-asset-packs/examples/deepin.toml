@@ -10,6 +10,7 @@ revision = "master"
 commit = "5d11ba4e4013a4d1e1c601265d55c66b95184922"
 license = "GPL-3.0-or-later"                 # .reuse/dep5: bloom/* bloom-dark/* ...
 license_files = ["LICENSE", "LICENSES/GPL-3.0-or-later.txt", ".reuse/dep5"]
+license_oids = ["94a9ed024d3859793618152ea559a168bbcbb5e2", "d41c0bd98feb776ef7d81efbc1b5447e0284a187", "acc35823e0f2b0632abd5ed4aa2b046833cf1a52"]   # git rev-parse <commit>:<file>, same order
 # GitHub archives are not byte-stable: no archive_sha256, the tree ids below pin the content
 archive_url = "https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz"
 strip_components = 1

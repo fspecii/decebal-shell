@@ -13,6 +13,7 @@ revision = "openkylin/nile"
 commit = "3c78d714aa8fac723c9a5360bd54484789a647ab"
 license = "GPL-3.0-only"                      # debian/copyright: "either version 3 of the License."
 license_files = ["debian/copyright"]
+license_oids = ["0558d3ef9a8e18f6d442f58751d0c8b7902a0796"]   # git rev-parse <commit>:<file>, same order
 strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
 
 [[source]]
@@ -22,6 +23,7 @@ revision = "openkylin/yangtze"
 commit = "54eb2bd971b033af69f1cea9881bc2a676aee943"
 license = "CC-BY-SA-3.0"                      # debian/copyright: "License for the theme itself"
 license_files = ["debian/copyright"]
+license_oids = ["84660fb0874b89bd5fe1429b3b19e7f1e6f9bf8a"]   # git rev-parse <commit>:<file>, same order
 strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
 
 [[pack]]

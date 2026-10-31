@@ -10,6 +10,7 @@ revision = "master"
 commit = "e3c7154b4f243413b0cb9028484977f3c37de15c"
 license = "LGPL-3.0-or-later"                 # COPYING-ICONS: "The Breeze Icon Theme in icons/"
 license_files = ["COPYING-ICONS"]
+license_oids = ["63d73657ce416e625bbaedf549fb2d9981616640"]   # git rev-parse <commit>:<file>, same order
 strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
 
 [[source]]
@@ -19,6 +20,7 @@ revision = "master"
 commit = "75561b7f32f3121603a0f2c8ea929b20a0d6c311"
 license = "LGPL-3.0-or-later"                 # cursors/Breeze/COPYING-ICONS
 license_files = ["cursors/Breeze/COPYING-ICONS"]
+license_oids = ["9b426e7643491fb934e6309d6dc9efdeb7715a95"]   # git rev-parse <commit>:<file>, same order
 strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
 
 [[pack]]

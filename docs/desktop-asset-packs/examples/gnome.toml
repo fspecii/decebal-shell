@@ -10,6 +10,7 @@ revision = "master"
 commit = "75a7cc2fbfc43226f82bbca6edf74ba5ebba211f"
 license = "LGPL-3.0-only OR CC-BY-SA-3.0"     # COPYING: "either the GNU LGPL v3 or Creative Commons BY-SA 3.0 United States"
 license_files = ["COPYING", "COPYING_LGPL", "COPYING_CCBYSA3"]
+license_oids = ["c2e01685a8c0cdf01f0e7577115691e0dbfabc48", "65c5ca88a67c30becee01c5a8816d964b03862f9", "fc45d7818de3fa905de9636154d6413ad61d84f2"]   # git rev-parse <commit>:<file>, same order
 strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
 
 [[pack]]

@@ -10,6 +10,7 @@ revision = "main"
 commit = "c1728a213a2e75c06bc664c9098288efb881b82a"
 license = "GPL-3.0-only"                      # ocean/COPYING is the GPL v3 text; no "or later" grant found
 license_files = ["ocean/COPYING"]
+license_oids = ["94a9ed024d3859793618152ea559a168bbcbb5e2"]   # git rev-parse <commit>:<file>, same order
 archive_url = "https://github.com/LingmoOS/lingmo-icons/archive/c1728a213a2e75c06bc664c9098288efb881b82a.tar.gz"
 strip_components = 1
 
