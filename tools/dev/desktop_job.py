@@ -6,6 +6,7 @@ import hashlib
 import math
 import os
 from pathlib import Path
+import pwd
 import shutil
 import signal
 import stat
@@ -16,6 +17,12 @@ import time
 
 class Refused(Exception):
     pass
+
+
+def default_slots():
+    # Fixtures deliberately replace HOME/XDG_CACHE_HOME. That must not create an independent workload budget.
+    account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    return Path(os.environ.get('DECEBAL_BUILD_SLOTS', str(account_home / '.cache/decebal-build-slots')))
 
 
 def directory(path):
@@ -139,9 +146,8 @@ def run(command, slots, timeout):
 
 
 def main():
-    cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache')))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--slots-dir', type=Path, default=cache / 'decebal-build-slots')
+    parser.add_argument('--slots-dir', type=Path, default=default_slots())
     parser.add_argument('--queue-timeout', type=float, default=60)
     parser.add_argument('--timeout', type=float, default=1800)
     modes = parser.add_mutually_exclusive_group()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Lightweight resource-runner regressions. No Cargo invocation or desktop access."""
 import fcntl
+import importlib.util
 import json
 import os
 import signal
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 RUNNER = Path(__file__).resolve().parents[1] / 'tools/dev/desktop_job.py'
 
@@ -32,6 +34,17 @@ class DesktopJobTests(unittest.TestCase):
         while not path.exists() and time.monotonic() < deadline:
             time.sleep(.01)
         self.assertTrue(path.exists(), f'{path} was not written')
+
+    def test_private_fixture_home_does_not_split_the_machine_budget(self):
+        spec = importlib.util.spec_from_file_location('desktop_job', RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.dict(os.environ, {}, clear=True):
+            expected = module.default_slots()
+            os.environ.update(HOME=str(self.root), XDG_CACHE_HOME=str(self.root / 'cache'))
+            self.assertEqual(module.default_slots(), expected)
+            os.environ['DECEBAL_BUILD_SLOTS'] = str(self.slots)
+            self.assertEqual(module.default_slots(), self.slots)
 
     def test_low_priorities_jobs_and_lean_defaults_reach_child(self):
         code = 'import os,json;print(json.dumps({"nice":os.getpriority(os.PRIO_PROCESS,0),"jobs":os.environ["CARGO_BUILD_JOBS"],"threads":os.environ["RUST_TEST_THREADS"],"debug":os.environ["CARGO_PROFILE_DEV_DEBUG"],"target":os.environ["CARGO_TARGET_DIR"]}))'

@@ -16,7 +16,8 @@ this wrapper to launch the user's normal desktop applications or persistent serv
 
 The runner takes **both** existing `~/.cache/decebal-build-slots/slot{1,2}.lock` files, so it serializes against
 older callers too. It never holds one while waiting for the other. Locks stay with the supervisor, not the child.
-`XDG_CACHE_HOME` selects the cache root; `--slots-dir` is for isolated tests or another explicitly shared budget.
+The default uses the OS account's home, so a private fixture's `HOME` or `XDG_CACHE_HOME` cannot split the budget.
+`DECEBAL_BUILD_SLOTS` or `--slots-dir` can select an explicitly shared alternative; isolated unit tests use the latter.
 Every checkout must use the same slots directory. This is cooperative coordination, not a cgroup limit or a
 security boundary: direct commands that bypass the runner can still consume resources.
 

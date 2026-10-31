@@ -13,7 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libpam0g-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libpam0g-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk python3 util-linux
+      - name: Developer workload guard regressions
+        run: python3 tests/desktop-job.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
