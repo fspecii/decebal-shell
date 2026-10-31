@@ -398,20 +398,29 @@ or *Retry* in the pane, `follow::request` starts at most one job per configurati
 detached from the caller, output to its own fresh 0600 log `job-<token>.log` (the newest five are kept). Its state is in
 `$XDG_STATE_HOME/decebal/assets/<first 16 hex of sha256(canonical decebal.json path)>/` (0700):
 
-* **Claim**: under that folder's `lock` (flock), `request` reuses a live job of the same generation (or one whose claim is
-  younger than 30 s and has no worker recorded yet), otherwise stops the older job, writes a claim with a new unique
-  token, starts the worker and records its PID and start time before releasing the lock. A concurrent caller waits and
-  then sees the claim. A claim whose requester died before recording a worker expires after the 30 s.
+* **Claim**: under that folder's `lock` (flock), `request` reads the configuration **as it is now** (not as it was when
+  the caller started: a caller delayed behind a later theme's claim acts for that later generation), reuses a live job
+  of that generation (or one whose claim is younger than 30 s and has no worker recorded yet), otherwise stops the job of
+  the generation the configuration has left, writes a claim with a new unique token, starts the worker and records its
+  PID and start time before releasing the lock. A concurrent caller waits and then sees the claim; a stale caller can
+  never stop the current job. A claim whose requester died before recording a worker expires after the 30 s.
 * **Compare-and-set**: every progress, terminal, stop and watchdog write changes `follow.json` only while it still
   carries the writer's token; a worker whose token is no longer current stops working and writes nothing. An old job,
   its watchdog or an old stop therefore never overwrites the current job's status. A non-terminal job whose worker is
   gone is shown as `interrupted`.
-* **Stop** (pane *Stop*, `assets follow-theme --stop`, and a newer claim) targets only the current job: its process is
+* **Stop** (pane *Stop*, `assets follow-theme --stop`, and a newer claim) targets only the current job: `stopping` is
+  recorded first (under the job lock, so the worker's commit sees it whatever the signal does), then its process is
   pinned with a pidfd, the pinned process's start time checked, and SIGTERM sent through the pidfd to the worker itself
   (never a bare PID or process group; no pidfd support means no signal). The worker cancels its install cooperatively
   (the install takes its normal error path and removes its staging folder) and records `stopped`.
 * **Apply**: the job installs each missing pack once (the verified installer: pins, licences, nothing from the pack run,
-  atomic publication), then applies in **one** `json_update_doc` transaction only if `generation` is still `G`, the
+  atomic publication). Its **final commit is one linearization point**: under the job lock it checks that its token is
+  still current, that no stop was recorded and that it was not cancelled, then runs the settings transaction and writes
+  its terminal status, all in that one critical section. A stop or a replacing claim (both take the job lock) is
+  therefore entirely before it (nothing applied) or after it (the job is already terminal); the token check also makes a
+  generation that wrapped round (ABA) harmless. **Lock order**: the job lock, then the configuration's file lock inside
+  `json_update_doc`; never the other way round (`request` is only called after a configuration transaction has
+  committed, never inside one). The settings transaction applies only if `generation` is still `G`, the
   recommendation is still that theme's, the **selected theme** (`theme.name`, the exact theme id) is still that theme, and
   the slot still follows it with the value it had; otherwise it records `superseded` and changes nothing, so a completion
   can never override a later theme, a direct edit of the theme or a manual choice. `generation` is external input: a

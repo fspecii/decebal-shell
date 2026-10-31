@@ -16,9 +16,16 @@
 //! * **Compare-and-set**: every progress, terminal, watchdog and stop write goes through [`update`], which changes the
 //!   status only while it still carries the writer's token. A stale worker, its watchdog or an old stop can never
 //!   overwrite the status of the current job. Each job has its own log, `job-<token>.log`.
-//! * **Stop** targets only the current job: its process is pinned with a pidfd, its start time checked against the
-//!   pinned process, and SIGTERM sent through the pidfd to the worker itself (the installer runs in the worker and stops
-//!   cooperatively, `super::cancel_on_sigterm`). Nothing is ever signalled by a bare PID or process group from a status.
+//! * **Stop** targets only the current job: `stopping` is recorded first, then its process is pinned with a pidfd, its
+//!   start time checked against the pinned process, and SIGTERM sent through the pidfd to the worker itself (the
+//!   installer runs in the worker and stops cooperatively, `super::cancel_on_sigterm`). Nothing is ever signalled by a
+//!   bare PID or process group from a status.
+//! * **Revalidation**: [`request`] reads the configuration only under the claim lock, so a delayed caller acts for the
+//!   current generation and never stops the current job as "older".
+//! * **Commit**: the worker's final settings transaction runs under the job lock, after checking its token is current,
+//!   no stop is recorded and it is not cancelled; its terminal status is written in the same critical section.
+//! * **Lock order**: the job lock, then the configuration's file lock (`json_update_doc`); never the reverse. `request`
+//!   is called only after a configuration transaction committed, never inside one.
 
 use super::policy::{self, Recommendation};
 use super::{catalog, install, Limits, Provides};
@@ -283,6 +290,14 @@ pub fn request(shell_json: &Path) -> Option<String> {
 
 pub fn request_in(shell_json: &Path, dir: &Path, spawner: &dyn Spawner) -> Option<String> {
     use std::os::unix::fs::OpenOptionsExt;
+    hooks::before_lock();
+    let l = match lock(dir) {
+        Ok(l) => l,
+        Err(e) => return Some(format!("The matching packs were not downloaded: {e}")),
+    };
+    // the configuration is read only now, under the claim lock: a caller delayed behind a later theme's claim acts for
+    // the configuration as it is (that later generation), never for the one it was called for, so it can never take
+    // the current job for an older one and stop it
     let doc = crate::settings::io::json_load(shell_json);
     let want = wanted(&doc);
     if want.is_empty() || !policy::downloads_auto(&doc) {
@@ -291,15 +306,11 @@ pub fn request_in(shell_json: &Path, dir: &Path, spawner: &dyn Spawner) -> Optio
     let g = policy::generation(&doc);
     let theme = Recommendation::from_doc(&doc).map(|r| r.theme).unwrap_or_default();
     let packs = want.iter().map(|(_, p)| p.clone()).collect::<Vec<_>>();
-    let l = match lock(dir) {
-        Ok(l) => l,
-        Err(e) => return Some(format!("The matching packs were not downloaded: {e}")),
-    };
     if let Some(cur) = status_at(dir).filter(Status::running) {
         if cur.generation == g {
             return Some(format!("Downloading the matching packs for {} (already running)", cur.theme));
         }
-        // an older job: its completion would be refused anyway, its download is wasted
+        // a job for a generation the configuration has left: its completion would be refused anyway
         let _ = stop_locked(dir, &cur);
     }
     let token = new_token(g);
@@ -376,12 +387,18 @@ pub fn signal_pinned(pid: u32, start: u64) -> Result<Signalled, String> {
 
 /// Stops the job `st` (the caller holds the lock and read `st` under it); writes `stopping` / `stopped` for its token.
 fn stop_locked(dir: &Path, st: &Status) -> Result<String, String> {
-    let (phase, detail) = match signal_pinned(st.pid, st.start)? {
-        Signalled::Sent => ("stopping", "stop requested; nothing is applied (an unfinished install removes its staging folder)".to_string()),
-        Signalled::Gone => ("stopped", "stopped: the job had already ended; nothing was applied".to_string()),
-    };
-    write_locked(dir, &Status { phase: phase.into(), detail, ..st.clone() })?;
-    Ok(format!("stopped the download for {}", st.theme))
+    // recorded first, under the lock the worker's final commit takes: from here on the job applies nothing, whether the
+    // signal reaches it now or not
+    let stopping = Status { phase: "stopping".into(), detail: "stop requested; nothing is applied (an unfinished install removes its staging folder)".into(), ..st.clone() };
+    write_locked(dir, &stopping)?;
+    match signal_pinned(st.pid, st.start) {
+        Ok(Signalled::Sent) => Ok(format!("stopping the download for {}", st.theme)),
+        Ok(Signalled::Gone) => {
+            write_locked(dir, &Status { phase: "stopped".into(), detail: "stopped: the job had already ended; nothing was applied".into(), ..stopping })?;
+            Ok(format!("stopped the download for {}", st.theme))
+        }
+        Err(e) => Ok(format!("stop recorded for {}: the job applies nothing ({e})", st.theme)),
+    }
 }
 
 /// `decthemectl assets follow-theme --stop`: stops the configuration's current job, and only that one.
@@ -482,10 +499,29 @@ pub fn run(shell_json: &Path, set: &catalog::Set, dir: &Path, token: &str, g: u6
             return finish("stopped", format!("stopped during {p}; nothing was applied"));
         }
     }
+    // Linearization point. Under the job lock: still the current job (the token), not stopping, not cancelled; then the
+    // settings transaction and the terminal status, in that one critical section. A stop or a replacing claim (both take
+    // the job lock) is therefore either before it (nothing applied, the stop or the new job stays) or after it (the job
+    // is already terminal). Lock order: the job lock, then the configuration's file lock inside `json_update_doc`;
+    // nothing takes them the other way round (`request` is only called after a configuration transaction committed,
+    // never inside one).
+    hooks::before_commit();
+    let guard = lock(dir)?;
+    let Some(cur) = status_at(dir).filter(|s| s.token == token) else {
+        return Ok(format!("superseded before the commit: another job is current; nothing was applied (installed {})", installed.len()));
+    };
+    let terminal = |phase: &str, detail: String| -> Result<String, String> {
+        write_locked(dir, &Status { phase: phase.into(), detail: detail.clone(), ..cur.clone() })?;
+        Ok(detail)
+    };
+    if cur.phase == "stopping" || super::cancelled() {
+        return terminal("stopped", "stopped before the commit; nothing was applied".into());
+    }
     let mut applied = Vec::new();
     let mut published_note: Option<String> = None;
     if !installed.is_empty() {
-        // the transaction may run again on top of a save made meanwhile: its last outcome is the one committed
+        // the transaction may run again on top of a save made meanwhile: its last outcome is the one committed, and every
+        // key it does not change (also one written concurrently) is kept
         let outcome = std::cell::RefCell::new(Ok(Vec::new()));
         crate::settings::io::json_update_doc(shell_json, |doc| {
             *outcome.borrow_mut() = policy::complete(doc, g, &theme, &installed);
@@ -493,7 +529,7 @@ pub fn run(shell_json: &Path, set: &catalog::Set, dir: &Path, token: &str, g: u6
         })?;
         match outcome.into_inner() {
             Ok(d) => applied = d,
-            Err(w) => return finish("superseded", format!("installed {}, not applied: {w}", installed.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", "))),
+            Err(w) => return terminal("superseded", format!("installed {}, not applied: {w}", installed.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", "))),
         }
         if !applied.is_empty() && !super::publish::selection_changed(shell_json) {
             // honest: the shell uses the new icons at once; GTK / Qt apps only once app integration publishes them
@@ -501,17 +537,19 @@ pub fn run(shell_json: &Path, set: &catalog::Set, dir: &Path, token: &str, g: u6
         }
     }
     let done: Vec<String> = applied.iter().map(|(k, n)| format!("{} {n}", if *k == Provides::Icons { "icons" } else { "cursors" })).collect();
-    if failures.is_empty() {
-        finish("applied", if done.is_empty() { "nothing left to apply".into() } else { format!("applied {}{}", done.join(" and "), published_note.unwrap_or_default()) })
+    let result = if failures.is_empty() {
+        terminal("applied", if done.is_empty() { "nothing left to apply".into() } else { format!("applied {}{}", done.join(" and "), published_note.unwrap_or_default()) })
     } else {
         let msg = format!(
             "{}{} (the current icons stay; Settings > Icons can retry, or decthemectl assets install ID --archive FILE / --source-dir DIR)",
             if done.is_empty() { String::new() } else { format!("applied {}; ", done.join(" and ")) },
             failures.join("; ")
         );
-        finish("failed", msg.clone())?;
+        terminal("failed", msg.clone())?;
         Err(msg)
-    }
+    };
+    drop(guard);
+    result
 }
 
 /// Test injection points (no-ops in normal builds).
@@ -520,6 +558,27 @@ mod hooks {
     thread_local! {
         pub static BEFORE_SPAWN: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
         pub static AFTER_PIN: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
+        pub static BEFORE_LOCK: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
+        pub static BEFORE_COMMIT: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    #[cfg(test)]
+    fn call(h: &'static std::thread::LocalKey<std::cell::RefCell<Option<Box<dyn Fn()>>>>) {
+        h.with(|h| {
+            if let Some(f) = h.borrow().as_ref() {
+                f()
+            }
+        });
+    }
+
+    pub fn before_lock() {
+        #[cfg(test)]
+        call(&BEFORE_LOCK);
+    }
+
+    pub fn before_commit() {
+        #[cfg(test)]
+        call(&BEFORE_COMMIT);
     }
 
     pub fn before_spawn() {
@@ -610,6 +669,12 @@ mod tests {
         let calls = std::cell::RefCell::new(Vec::new());
         let inst = |e: &catalog::Entry| {
             calls.borrow_mut().push(e.pack.id.clone());
+            // another writer changes an unrelated key while the pack installs: the final transaction keeps it
+            crate::settings::io::json_update_doc(&f, |d| {
+                d["wallpaper"] = serde_json::json!({"x": 1});
+                Ok(())
+            })
+            .unwrap();
             Ok(e.pack.install_name.clone())
         };
         let out = run(&f, &set(), &dir, &t, g, &inst).unwrap();
@@ -618,6 +683,7 @@ mod tests {
         assert_eq!((policy::current(&d, Provides::Icons).as_deref(), policy::current(&d, Provides::Cursors).as_deref()), (Some("bloom"), Some("bloom")));
         assert_eq!(policy::owner(&d, Provides::Icons), policy::Owner::Theme("deepin".into()));
         assert!(wanted(&d).is_empty(), "nothing left to install");
+        assert_eq!(d["wallpaper"]["x"], 1, "a concurrent unrelated key is kept by the commit");
         assert_eq!(status_at(&dir).unwrap().phase, "applied");
         assert_eq!(calls.borrow().len(), 1, "one install for both slots (bloom provides icons and cursors)");
         // a later theme while the download runs: the completion of the older one changes nothing
@@ -790,6 +856,114 @@ mod tests {
     }
 
     #[test]
+    fn a_delayed_older_producer_never_stops_the_newer_current_job() {
+        let s = Scratch::new("follow-late-producer");
+        let f = s.path().join("decebal.json");
+        let dir = s.path().join("state");
+        std::fs::write(&f, r#"{"icons": {"theme": "Adwaita"}}"#).unwrap();
+        applied(&f, "deepin");
+        let g7 = policy::generation(&crate::settings::io::json_load(&f));
+        let fake = Arc::new(Fake::default());
+        // the g7 caller is delayed before it takes the claim lock
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel::<()>();
+        let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+        let (f7, d7, k7) = (f.clone(), dir.clone(), fake.clone());
+        let late = std::thread::spawn(move || {
+            hooks::BEFORE_LOCK.with(|h| {
+                *h.borrow_mut() = Some(Box::new(move || {
+                    entered_tx.send(()).unwrap();
+                    go_rx.recv().unwrap();
+                }))
+            });
+            request_in(&f7, &d7, &*k7)
+        });
+        entered_rx.recv().unwrap();
+        // meanwhile a later theme: its configuration and its claim complete
+        applied(&f, "lingmo-like");
+        applied(&f, "deepin");
+        let g8 = policy::generation(&crate::settings::io::json_load(&f));
+        assert_ne!(g7, g8);
+        assert!(request_in(&f, &dir, &*fake).unwrap().contains("in the background"));
+        let st8 = status_at(&dir).unwrap();
+        assert_eq!((st8.generation, fake.spawns.lock().unwrap().len()), (g8, 1));
+        // the g7 caller resumes: it reads the configuration under the lock (now g8) and finds g8's job running
+        go_tx.send(()).unwrap();
+        assert!(late.join().unwrap().unwrap().contains("already running"));
+        let st = status_at(&dir).unwrap();
+        assert_eq!((st.token.as_str(), st.generation, st.phase.as_str(), (st.pid, st.start)), (st8.token.as_str(), g8, "starting", me()), "g8's identity remains");
+        assert_eq!(fake.spawns.lock().unwrap().len(), 1, "no second worker");
+    }
+
+    /// Runs job `t` in a thread that stops right before its final commit; `between` runs there, then the job finishes.
+    fn held_before_commit(f: &Path, dir: &Path, t: &str, g: u64, between: impl FnOnce()) -> String {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
+        let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+        let (f2, d2, t2) = (f.to_path_buf(), dir.to_path_buf(), t.to_string());
+        let worker = std::thread::spawn(move || {
+            hooks::BEFORE_COMMIT.with(|h| {
+                *h.borrow_mut() = Some(Box::new(move || {
+                    ready_tx.send(()).unwrap();
+                    go_rx.recv().unwrap();
+                }))
+            });
+            run(&f2, &set(), &d2, &t2, g, &|e: &catalog::Entry| Ok(e.pack.install_name.clone()))
+        });
+        ready_rx.recv().unwrap();
+        between();
+        go_tx.send(()).unwrap();
+        worker.join().unwrap().unwrap()
+    }
+
+    #[test]
+    fn a_stop_recorded_before_the_final_commit_applies_nothing() {
+        let s = Scratch::new("follow-stop-commit");
+        let f = s.path().join("decebal.json");
+        let dir = s.path().join("state");
+        std::fs::write(&f, r#"{"icons": {"theme": "Adwaita"}}"#).unwrap();
+        applied(&f, "deepin");
+        let g = policy::generation(&crate::settings::io::json_load(&f));
+        let t = claimed(&f, &dir);
+        let out = held_before_commit(&f, &dir, &t, g, || {
+            crate::settings::io::json_update_doc(&f, |d| {
+                d["wallpaper"] = serde_json::json!({"x": 1});
+                Ok(())
+            })
+            .unwrap();
+            // the job's "worker" is this test process: the stop is recorded, the signal refused (never ourselves)
+            assert!(stop_at(&dir).unwrap().contains("stop recorded"));
+            assert_eq!(status_at(&dir).unwrap().phase, "stopping");
+        });
+        assert!(out.contains("stopped before the commit"), "{out}");
+        let d = crate::settings::io::json_load(&f);
+        assert_eq!((policy::current(&d, Provides::Icons).as_deref(), policy::current(&d, Provides::Cursors)), (Some("Adwaita"), None), "no settings change");
+        assert_eq!(d["wallpaper"]["x"], 1, "the unrelated key written meanwhile is untouched");
+        assert_eq!(status_at(&dir).map(|s| (s.token, s.phase)), Some((t, "stopped".into())), "stopped, never applied");
+    }
+
+    #[test]
+    fn a_replacing_claim_before_the_final_commit_wins_even_for_the_same_generation() {
+        let s = Scratch::new("follow-replace-commit");
+        let f = s.path().join("decebal.json");
+        let dir = s.path().join("state");
+        std::fs::write(&f, r#"{"icons": {"theme": "Adwaita"}}"#).unwrap();
+        applied(&f, "deepin");
+        let g = policy::generation(&crate::settings::io::json_load(&f));
+        let t = claimed(&f, &dir);
+        let mut t2 = String::new();
+        let out = held_before_commit(&f, &dir, &t, g, || {
+            // the first job looks gone (start time changed), so a request for the same generation claims a new job
+            update(&dir, &t, |s| s.start = 1).unwrap();
+            t2 = claimed(&f, &dir);
+        });
+        assert!(out.contains("superseded before the commit"), "{out}");
+        assert_ne!(t, t2);
+        let d = crate::settings::io::json_load(&f);
+        assert_eq!(policy::current(&d, Provides::Icons).as_deref(), Some("Adwaita"), "the replaced job applied nothing");
+        let st = status_at(&dir).unwrap();
+        assert_eq!((st.token, st.generation, st.phase.as_str()), (t2, g, "starting"), "the replacing job's status is untouched");
+    }
+
+    #[test]
     fn stop_reaches_only_the_pinned_current_worker() {
         let s = Scratch::new("follow-stop");
         let dir = s.path().join("state");
@@ -809,7 +983,7 @@ mod tests {
             let _l = lock(&dir).unwrap();
             write_locked(&dir, &Status { pid, start, ..ours.clone() }).unwrap();
         }
-        assert!(stop_at(&dir).unwrap().contains("stopped the download"));
+        assert!(stop_at(&dir).unwrap().contains("stopping the download for deepin"));
         assert_eq!(status_at(&dir).unwrap().phase, "stopping");
         let code = child.wait().unwrap();
         assert_eq!(std::os::unix::process::ExitStatusExt::signal(&code), Some(libc::SIGTERM), "the worker itself got SIGTERM");
