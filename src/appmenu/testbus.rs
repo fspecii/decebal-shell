@@ -194,7 +194,7 @@ pub const MENU_PATH: &str = "/MenuBar/1";
 
 impl Fake {
     pub fn connect(address: &str, layout: N) -> Fake {
-        let bus = Bus::connect(address, Duration::from_secs(2), 64 << 20).unwrap();
+        let bus = Bus::connect(address, Instant::now() + Duration::from_secs(2), bus::Cancel::never(), 64 << 20, Duration::from_secs(2)).unwrap();
         let unique = bus.unique.clone();
         let (tx, rx) = mpsc::channel();
         let log = Arc::new(Mutex::new(Vec::new()));

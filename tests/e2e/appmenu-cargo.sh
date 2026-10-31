@@ -25,7 +25,7 @@ env -i \
   PATH="$ROOT/recorder:$(dirname "$CARGO_BIN"):/usr/local/bin:/usr/bin:/bin" \
   HOME="$ROOT/home" XDG_CONFIG_HOME="$ROOT/config" XDG_CACHE_HOME="$ROOT/cache" XDG_STATE_HOME="$ROOT/state" \
   XDG_DATA_HOME="$ROOT/data" XDG_RUNTIME_DIR="$ROOT/runtime" DECEBAL_CONFIG="$ROOT/config/omarchy" \
-  DBUS_SESSION_BUS_ADDRESS="unix:path=$ROOT/runtime/no-such-bus" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=$ROOT/runtime/no-such-bus" USER=decebal-test LOGNAME=decebal-test \
   CARGO_HOME="$CARGO_HOME" RUSTUP_HOME="$RUSTUP_HOME" CARGO_TARGET_DIR="$TARGET" TMPDIR=/var/tmp LANG=C.UTF-8 \
   ${DECEBAL_APPMENU_EXTRA_ENV:-} \
   flock --close "$LOCK" nice -n10 "$CARGO_BIN" "$@" || STATUS=$?

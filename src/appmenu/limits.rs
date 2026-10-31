@@ -36,8 +36,11 @@ pub struct Limits {
     pub call_timeout: Duration,
     /// Coalescing window for `LayoutUpdated` storms.
     pub layout_debounce: Duration,
-    /// Blocking budget for connecting, authenticating and `Hello` (on the worker thread only).
+    /// One absolute budget for connecting (every address candidate), authenticating and `Hello`.
+    /// A stop cuts it short.
     pub connect_timeout: Duration,
+    /// One absolute budget per outgoing message while the bus is not draining our socket.
+    pub write_timeout: Duration,
     /// Longest wait between reconnection attempts.
     pub max_backoff: Duration,
 }
@@ -62,6 +65,7 @@ impl Default for Limits {
             call_timeout: Duration::from_secs(3),
             layout_debounce: Duration::from_millis(25),
             connect_timeout: Duration::from_secs(2),
+            write_timeout: Duration::from_secs(2),
             max_backoff: Duration::from_secs(30),
         }
     }

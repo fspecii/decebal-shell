@@ -493,4 +493,37 @@ mod tests {
             reset();
         }
     }
+
+    #[test]
+    fn application_requests_keep_opening_menus_after_a_reconnect() {
+        let mut bus = PrivateBus::start();
+        let mut bar = DecBar::new(Box::new(Focused));
+        bar.width = 1920;
+        let address = bus.address.clone();
+        let mut cfg = Config::with_address(address);
+        cfg.limits.max_backoff = Duration::from_millis(300);
+        bar.app_menu.set_enabled(true, || cfg, || Arc::new(|| {}));
+        settle(&mut bar, "registrar", |b| b.app_menu.handle().is_some_and(|h| h.snapshot().registrar == RegistrarRole::Owned));
+        let ask = |app: &Fake| {
+            let mut w = crate::dbus::Writer::default();
+            w.u32(20);
+            w.u32(0);
+            app.send(crate::dbus::Message::signal(MENU_PATH, crate::appmenu::DBUSMENU, "ItemActivationRequested", "iu", w.buf));
+        };
+        for round in 0..2 {
+            let app = Fake::connect(&bus.address, layout());
+            app.register(WINDOW, MENU_PATH);
+            settle(&mut bar, "exported titles", |b| keys(b) == ["apple", "app", KEY, KEY, "window", "help"]);
+            ask(&app);
+            settle(&mut bar, "requested menu opened", |b| b.open == Open::Menu(3));
+            bar.close();
+            if round == 0 {
+                app.quit();
+                bus.child_kill_for_restart().unwrap();
+                settle(&mut bar, "menus gone with the bus", |b| keys(b) == ["apple", "app", "window", "help"]);
+                bus.restart();
+                settle(&mut bar, "registrar again", |b| b.app_menu.handle().is_some_and(|h| h.snapshot().registrar == RegistrarRole::Owned));
+            }
+        }
+    }
 }

@@ -337,3 +337,80 @@ fn focus_from_tracker_windows() {
     let huge = crate::wm::Window { id: u64::from(u32::MAX) + 1, ..Default::default() };
     assert_eq!(Focus::from_window(Some(&huge), Protocol::X11), Focus::None, "not an X11 id");
 }
+
+fn request(app: &Fake, id: i32) {
+    let mut w = Writer::default();
+    w.u32(id as u32);
+    w.u32(0);
+    app.send(crate::dbus::Message::signal(MENU_PATH, DBUSMENU, "ItemActivationRequested", "iu", w.buf));
+}
+
+#[test]
+fn tokens_and_requests_stay_unique_across_a_real_reconnect() {
+    let mut bus = PrivateBus::start();
+    let mut cfg = Config::with_address(bus.address.clone());
+    cfg.limits.call_timeout = Duration::from_millis(600);
+    cfg.limits.max_backoff = Duration::from_millis(300);
+    let mut menus = AppMenus::start(cfg, Arc::new(|| {})).unwrap();
+    wait(&menus, "owned", |s| s.registrar == RegistrarRole::Owned);
+    let app = Fake::connect(&bus.address, layout());
+    app.register(70, MENU_PATH);
+    menus.set_focus(Focus::X11 { window: 70, app_id: String::new() });
+    let before = ready(&menus);
+    request(&app, 20);
+    let r1 = wait(&menus, "first request", |s| s.activation_request.is_some()).activation_request.unwrap();
+    assert!(menus.activate(before.token, 10, 1));
+    app.wait_records("Event", 1);
+    wait(&menus, "first click acknowledged", |s| s.events_delivered == 1);
+
+    app.quit();
+    bus.child_kill_for_restart().unwrap();
+    wait(&menus, "connection lost", |s| matches!(s.state, State::Unavailable(Unavailable::NoBus(_))));
+    bus.restart();
+    wait(&menus, "owned again", |s| s.registrar == RegistrarRole::Owned);
+    let app = Fake::connect(&bus.address, layout());
+    app.register(70, MENU_PATH);
+    let after = wait(&menus, "menu after reconnect", |s| s.state.exported().is_some_and(|e| e.window == 70)).state.exported().unwrap().clone();
+    assert!(after.token.0 > before.token.0, "epochs keep increasing across connections: {:?} then {:?}", before.token, after.token);
+    assert_eq!(menus.snapshot().events_delivered, 1, "the delivered count is not reset by a reconnect");
+
+    // The same request again after the reconnect is a new request, not a replay of the first.
+    request(&app, 20);
+    let r2 = wait(&menus, "second request", |s| s.activation_request.is_some_and(|r| r.seq > r1.seq)).activation_request.unwrap();
+    assert_eq!((r2.token, r2.id), (after.token, 20));
+
+    // A click carrying the pre-reconnect token is stale even though the ids match again.
+    assert!(menus.activate(before.token, 10, 2));
+    assert!(menus.activate(after.token, 14, 3));
+    app.wait_records("Event", 1);
+    std::thread::sleep(Duration::from_millis(150));
+    let clicks: Vec<(i32, u32)> = app.records("Event").iter().filter(|r| r.event == "clicked").map(|r| (r.id, r.timestamp)).collect();
+    assert_eq!(clicks, [(14, 3)], "the stale-token click must not reach the new connection");
+    wait(&menus, "second click acknowledged", |s| s.events_delivered == 2);
+    assert!(menus.stop(Duration::from_secs(2)));
+}
+
+#[test]
+fn stop_is_bounded_while_connecting_to_a_stalled_or_saturated_bus() {
+    let dir = std::env::temp_dir().join(format!("decebal-appmenu-stall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // Accepted by the kernel, never answered: the EXTERNAL exchange stalls.
+    let silent = dir.join("silent");
+    let _listener = std::os::unix::net::UnixListener::bind(&silent).unwrap();
+    // A listener whose backlog is full: connect itself would wait.
+    let saturated = dir.join("saturated");
+    let _held = super::bus::tests::full_backlog(&saturated);
+    for path in [&silent, &saturated] {
+        let mut cfg = Config::with_address(format!("unix:path={}", path.display()));
+        cfg.limits.connect_timeout = Duration::from_secs(60);
+        let mut menus = AppMenus::start(cfg, Arc::new(|| {})).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(menus.snapshot().state, State::Starting, "{}: still connecting", path.display());
+        let t = Instant::now();
+        assert!(menus.stop(Duration::from_millis(800)), "{}: stop waited on the connect", path.display());
+        assert!(t.elapsed() < Duration::from_millis(500), "{}: {:?}", path.display(), t.elapsed());
+        assert_eq!(menus.snapshot().state, State::Stopped);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

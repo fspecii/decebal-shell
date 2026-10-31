@@ -11,12 +11,26 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const DBUS_ERR: &str = "org.freedesktop.DBus.Error";
+
+/// Focus epochs (the `MenuToken`s) and activation-request numbers come from process-wide counters,
+/// so they keep increasing across bus reconnects and worker restarts: a token or request from an
+/// earlier connection can never equal a current one.
+static EPOCHS: AtomicU64 = AtomicU64::new(0);
+static REQUESTS: AtomicU64 = AtomicU64::new(0);
+
+fn next_epoch() -> u64 {
+    EPOCHS.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+fn next_request() -> u64 {
+    REQUESTS.fetch_add(1, Ordering::Relaxed) + 1
+}
 /// `DBUS_NAME_FLAG_ALLOW_REPLACEMENT | DBUS_NAME_FLAG_DO_NOT_QUEUE`; never `REPLACE_EXISTING`.
 const REQUEST_FLAGS: u32 = 0x1 | 0x4;
 
@@ -74,7 +88,6 @@ struct Worker<'a> {
     state: State,
     notice: Option<String>,
     activation: Option<ActivationRequest>,
-    activation_seq: u64,
     delivered: u64,
     dirty: bool,
 }
@@ -82,6 +95,8 @@ struct Worker<'a> {
 pub(super) fn run(cfg: Config, shared: Arc<Shared>, rx: Receiver<Command>, mut wake: UnixStream, notify: Notify) {
     let mut backoff = Duration::from_millis(250);
     let mut focus = Focus::None;
+    // Survives reconnects (the snapshot's counter never goes backwards).
+    let mut delivered = 0;
     loop {
         if shared.stop.load(Ordering::SeqCst) {
             break;
@@ -94,7 +109,9 @@ pub(super) fn run(cfg: Config, shared: Arc<Shared>, rx: Receiver<Command>, mut w
             }
             continue;
         };
-        match Bus::connect(&address, cfg.limits.connect_timeout, cfg.limits.max_buffered) {
+        let cancel = bus::Cancel::new(wake.try_clone().ok(), shared.stop.clone());
+        match Bus::connect(&address, Instant::now() + cfg.limits.connect_timeout, cancel, cfg.limits.max_buffered, cfg.limits.write_timeout) {
+            Err(e) if bus::is_cancelled(&e) => break,
             Err(e) => {
                 publish(&shared, &notify, State::Unavailable(Unavailable::NoBus(e.to_string())), RegistrarRole::Unknown, None);
                 if wait_stop(&shared, &mut wake, &rx, Some(backoff)) {
@@ -121,12 +138,12 @@ pub(super) fn run(cfg: Config, shared: Arc<Shared>, rx: Receiver<Command>, mut w
                     state: State::Starting,
                     notice: None,
                     activation: None,
-                    activation_seq: 0,
-                    delivered: 0,
+                    delivered,
                     dirty: true,
                 };
                 let exit = w.run();
                 focus = w.focus.clone();
+                delivered = w.delivered;
                 drop(w);
                 match exit {
                     Exit::Stop => break,
@@ -278,7 +295,8 @@ impl Worker<'_> {
         if self.role == RegistrarRole::Owned {
             let mut m = bus::call(BUS, BUS_PATH, BUS, "ReleaseName", "s", s_args(&[registrar::NAME]));
             m.flags |= FLAG_NO_REPLY_EXPECTED;
-            let _ = self.bus.send(&m);
+            // Closing the socket releases the name anyway; this only says so first, briefly.
+            let _ = self.bus.send_final(&m, Duration::from_millis(100));
         }
     }
 
@@ -393,7 +411,7 @@ impl Worker<'_> {
                             w.string(&path);
                             self.signal("WindowRegistered", "uso", w.buf);
                             if self.focused_window() == Some(win) {
-                                self.epoch += 1;
+                                self.epoch = next_epoch();
                                 self.set_source(win, m.sender.clone(), path);
                             }
                         }
@@ -446,7 +464,7 @@ impl Worker<'_> {
         w.u32(win);
         self.signal("WindowUnregistered", "u", w.buf);
         if self.source.as_ref().is_some_and(|s| s.window == win) {
-            self.epoch += 1;
+            self.epoch = next_epoch();
             self.source = None;
             self.set_state(State::NotExported { window: win });
         }
@@ -469,7 +487,7 @@ impl Worker<'_> {
     }
 
     fn apply_focus(&mut self) {
-        self.epoch += 1;
+        self.epoch = next_epoch();
         self.source = None;
         self.activation = None;
         match &self.focus {
@@ -790,7 +808,7 @@ impl Worker<'_> {
                     if let (Some(Value::U32(w)), Some(s), Some(p)) = (a.first(), a.get(1).and_then(Value::as_str), a.get(2).and_then(Value::as_str)) {
                         if Some(*w) == focused {
                             let (w, s, p) = (*w, s.to_string(), p.to_string());
-                            self.epoch += 1;
+                            self.epoch = next_epoch();
                             self.set_source(w, s, p);
                         }
                     }
@@ -799,7 +817,7 @@ impl Worker<'_> {
                     if let Some(Value::U32(w)) = a.first() {
                         if Some(*w) == focused && self.source.as_ref().is_some_and(|s| s.window == *w) {
                             let w = *w;
-                            self.epoch += 1;
+                            self.epoch = next_epoch();
                             self.source = None;
                             self.set_state(State::NotExported { window: w });
                         }
@@ -834,8 +852,7 @@ impl Worker<'_> {
                     let a = args();
                     if let (Some(Value::I32(id)), Some(Value::U32(ts))) = (a.first(), a.get(1)) {
                         if src.tree.as_ref().is_some_and(|t| t.find(*id).is_some()) {
-                            self.activation_seq += 1;
-                            self.activation = Some(ActivationRequest { token: MenuToken(self.epoch), id: *id, timestamp: *ts, seq: self.activation_seq });
+                            self.activation = Some(ActivationRequest { token: MenuToken(self.epoch), id: *id, timestamp: *ts, seq: next_request() });
                             self.dirty = true;
                         }
                     }
@@ -861,7 +878,7 @@ impl Worker<'_> {
             if let Some(src) = &self.source {
                 if src.owner == name {
                     let window = src.window;
-                    self.epoch += 1;
+                    self.epoch = next_epoch();
                     self.source = None;
                     self.set_state(State::NotExported { window });
                 }
@@ -872,7 +889,7 @@ impl Worker<'_> {
         if let Some(src) = &self.source {
             if src.service == name && !src.service.starts_with(':') && src.owner != new {
                 let (w, s, p) = (src.window, src.service.clone(), src.path.clone());
-                self.epoch += 1;
+                self.epoch = next_epoch();
                 self.set_source(w, s, p);
             }
         }

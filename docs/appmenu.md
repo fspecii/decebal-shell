@@ -61,6 +61,18 @@ a menu." for them rather than a fake menu.
   3 s call timeout, 2 s connect budget, reconnect backoff up to 30 s. Malformed nodes,
   negative and duplicate ids are dropped and counted; wrong-typed properties keep defaults;
   control characters are stripped from labels.
+* **Connecting and writing are bounded and stoppable.** The socket connect is non-blocking (a
+  full listen backlog is retried, never waited on), and every address candidate, the EXTERNAL
+  exchange and `Hello` share **one absolute deadline** (`connect_timeout`, 2 s); trickled bytes
+  cannot extend it. Each outgoing message gets one absolute `write_timeout` (2 s), not a fresh
+  wait per `WouldBlock`. A stop (the handle's flag, noticed through the wake socket) cuts any of
+  these short; a write cut half-way marks the connection broken so the worker reconnects instead
+  of writing into a mis-framed stream. Only the goodbye `ReleaseName` has its own 100 ms budget
+  that a stop does not cut.
+* **Identity counters are monotonic.** Focus epochs (`MenuToken`) and activation-request numbers
+  come from process-wide counters, so they keep increasing across reconnects and worker
+  restarts; a token or request from before a reconnect never equals a current one, and
+  `events_delivered` carries over.
 * **Threads/fds.** One `appmenu` thread per `AppMenus`, holding one bus socket and one wake
   socket pair. `stop(timeout)` joins it; dropping the handle stops it without blocking. Both
   release every fd (`tests/appmenu_lifecycle.rs`).
@@ -134,7 +146,15 @@ owner, path, tree: Arc<MenuTree> }`.
   `GetLayout`: own/observe/replace/take-over of the registrar, real item ids and timestamps on
   clicks, refused separators/disabled/hidden/submenu/unknown ids, property and layout updates,
   storm coalescing, stale replies and tokens across windows, malformed/oversized/silent
-  exporters, hijack refusal, re-entrant calls during a click, no bus, Wayland, reconnect.
+  exporters, hijack refusal, re-entrant calls during a click, no bus, Wayland, reconnect;
+  tokens and activation requests staying unique across a real bus restart, with a stale-token
+  click refused afterwards; `stop()` bounded while connecting to a stalled peer and to a
+  listener with a full backlog (60 s connect budget, stop within 0.5 s).
+* `appmenu::bus` tests (private sockets, scripted peers): one deadline across two silent
+  candidates, a trickled auth reply and a trickled `Hello` reply cannot extend it, a full listen
+  backlog times out without blocking, a stop cuts every connect step short, a send against a slow
+  reader ends at its absolute budget and leaves the connection broken, a stop cuts a send, and
+  the goodbye send keeps its own small budget.
 * `tests/e2e/appmenu-cargo.sh test -j2 --offline --test appmenu_lifecycle`: no thread, fd or
   bus name left after `stop()` or drop, three rounds.
 * `src/menubar/exported.rs` tests: the folded app_menu popup (reason row disabled, exported rows
@@ -158,7 +178,7 @@ owner, path, tree: Arc<MenuTree> }`.
   Display rule: reserved numbers 700-899 only, never `-displayfd`; the lock file, the socket path
   and the abstract socket must all belong to the started Xvfb before any client connects, with a
   private Xauthority cookie. Nothing foreign is ever unlinked.
-* The wrapper runs cargo with a private HOME/XDG tree, no host DISPLAY/WAYLAND/XAUTHORITY/
+* The wrapper runs cargo with a private HOME/XDG tree, a fixed fake `USER`/`LOGNAME`, no host DISPLAY/WAYLAND/XAUTHORITY/
   rdwm/session variables, an invalid session bus address and a recorder PATH, under
   `flock --close` on the build slot.
 

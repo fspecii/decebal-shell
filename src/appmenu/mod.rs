@@ -249,7 +249,7 @@ pub(crate) enum Command {
 pub(crate) struct Shared {
     snap: Mutex<Snapshot>,
     focus: Mutex<Option<Focus>>,
-    stop: AtomicBool,
+    stop: Arc<AtomicBool>,
 }
 
 impl Shared {
@@ -277,7 +277,7 @@ impl AppMenus {
         wake.set_nonblocking(true)?;
         wake_rx.set_nonblocking(true)?;
         let (tx, rx) = mpsc::sync_channel(config.limits.command_queue.max(1));
-        let shared = Arc::new(Shared { snap: Mutex::new(Snapshot::default()), focus: Mutex::new(None), stop: AtomicBool::new(false) });
+        let shared = Arc::new(Shared { snap: Mutex::new(Snapshot::default()), focus: Mutex::new(None), stop: Arc::new(AtomicBool::new(false)) });
         let s = shared.clone();
         let thread = std::thread::Builder::new().name("appmenu".into()).spawn(move || worker::run(config, s, rx, wake_rx, notify))?;
         Ok(AppMenus { shared, tx, wake, thread: Some(thread), last_focus: Focus::None })
