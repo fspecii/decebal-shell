@@ -242,7 +242,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     }
     app.set_rounded(popup);
     app.resize(w, h);
-    app.set_waker(waker);
+    app.set_waker(waker.clone());
+    // Semantic accessibility (AT-SPI2): inert unless the app has an adapter; connects on its own thread.
+    let mut a11y = crate::a11y::host::Host::start(&app, waker);
 
     let max_bytes = conn.maximum_request_bytes().saturating_sub(64);
     let mut size = (w, h);
@@ -276,6 +278,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             }
             app.draw(&mut pm);
             present(&conn, win, gc, &pm, depth, argb.is_some(), max_bytes)?;
+            a11y.after_draw(&mut app);
             // Unpainted areas (a resize in flight, a window being dragged) show the window background:
             // follow the app's own backdrop instead of black.
             if let Some(px) = backdrop(&pm).filter(|_| argb.is_none()) {
@@ -321,6 +324,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         app.resize(ns.0, ns.1);
                         dirty = true;
                     }
+                    if a11y.active() {
+                        a11y.set_window(root_origin(&conn, win, screen.root), None);
+                    }
                 }
                 Event::MotionNotify(m) => resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y)),
                 Event::EnterNotify(m) => resp = app.pointer_motion(f32::from(m.event_x), f32::from(m.event_y)),
@@ -362,6 +368,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                         return Ok(());
                     }
                 }
+                Event::FocusIn(f) if f.event == win && f.detail != NotifyDetail::POINTER => a11y.set_window(None, Some(true)),
+                Event::FocusOut(f) if f.event == win && f.detail != NotifyDetail::INFERIOR && f.detail != NotifyDetail::POINTER => a11y.set_window(None, Some(false)),
                 Event::KeyRelease(k) => resp = app.key_release(keymap.lookup(k.detail, 0)),
                 Event::KeyPress(k) => {
                     let state: u16 = k.state.into();
@@ -385,9 +393,20 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
                     }
                     if m.type_ == at.wake {
                         resp = app.tick();
+                        if a11y.active() && !a11y.knows_origin() {
+                            a11y.set_window(root_origin(&conn, win, screen.root), None);
+                        }
+                        let r = a11y.service(&mut app);
+                        resp.redraw |= r.redraw;
+                        resp.action = resp.action.or(r.action);
                     }
                 }
-                Event::MapNotify(m) if m.window == win => app.set_visible(true),
+                Event::MapNotify(m) if m.window == win => {
+                    app.set_visible(true);
+                    if a11y.active() {
+                        a11y.set_window(root_origin(&conn, win, screen.root), None);
+                    }
+                }
                 Event::UnmapNotify(m) if m.window == win => app.set_visible(false),
                 Event::DestroyNotify(event) => {
                     crate::log_info!("X11 window exit: app={}, window={}, destroyed={}, popup={}, reason=DestroyNotify", app.app_id(), win, event.window, popup);
@@ -427,6 +446,12 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             next = conn.poll_for_event().map_err(err)?;
         }
     }
+}
+
+/// The window's top-left corner in root coordinates (accessibility bounds are reported in screen coordinates).
+fn root_origin(conn: &RustConnection, win: Window, root: Window) -> Option<(i32, i32)> {
+    let r = conn.translate_coordinates(win, root, 0, 0).ok()?.reply().ok()?;
+    Some((i32::from(r.dst_x), i32::from(r.dst_y)))
 }
 
 /// Takes the keyboard and pointer so typing and clicking outside work whatever the WM thinks has focus.

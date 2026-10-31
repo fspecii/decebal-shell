@@ -144,6 +144,8 @@ struct State<A: WindowApp + 'static> {
     exit: bool,
     error: Option<Error>,
     pm: Pixmap,
+    /// AT-SPI2 bridge. Wayland clients cannot learn their global position, so bounds stay window-relative.
+    a11y: crate::a11y::host::Host,
 }
 
 impl<A: WindowApp + 'static> State<A> {
@@ -185,6 +187,7 @@ impl<A: WindowApp + 'static> State<A> {
             }
         }
         self.app.draw(&mut self.pm);
+        self.a11y.after_draw(&mut self.app);
 
         let stride = w as i32 * 4;
         let (buffer, canvas) = match self.pool.create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888) {
@@ -213,6 +216,8 @@ impl<A: WindowApp + 'static> State<A> {
 
     fn on_wake(&mut self) {
         let resp = self.app.tick();
+        self.apply(resp);
+        let resp = self.a11y.service(&mut self.app);
         self.apply(resp);
     }
 
@@ -296,6 +301,7 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
         exit: false,
         error: None,
         pm: Pixmap::new(w.max(1), h.max(1)).ok_or_else(|| Error::Buffer("pixmap".into()))?,
+        a11y: crate::a11y::host::Host::inert(),
     };
 
     // Learn the output size (for "fits my screen") before the app starts searching.
@@ -317,7 +323,8 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
     if !state.configured {
         state.app.resize(w, h);
     }
-    state.app.set_waker(waker);
+    state.app.set_waker(waker.clone());
+    state.a11y = crate::a11y::host::Host::start(&state.app, waker);
 
     WaylandSource::new(conn.clone(), queue).insert(loop_handle).map_err(|e| Error::Loop(e.to_string()))?;
 
@@ -439,8 +446,12 @@ impl<A: WindowApp + 'static> SeatHandler for State<A> {
 }
 
 impl<A: WindowApp + 'static> KeyboardHandler for State<A> {
-    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {}
-    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32) {}
+    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {
+        self.a11y.set_window(None, Some(true));
+    }
+    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32) {
+        self.a11y.set_window(None, Some(false));
+    }
 
     fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, event: SctkKey) {
         self.on_key(&event);
