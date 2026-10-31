@@ -40,6 +40,29 @@ def set_root(display, image):  # `display` is the private Xvfb this case owns
     root.change_attributes(background_pixmap=pm); root.clear_area(0, 0, w, h); d.sync(); d.close()
 
 
+def measure_cluster(im, backdrop, bottom_edge=True, scale=1.0):
+    """Face runs of a horizontal Dux cluster in a screenshot: x-runs of non-backdrop pixels on the row through the middle of the faces, separated by backdrop
+    gaps, plus the vertical extent of the first face. Returns (runs [(x0, x1)], gaps, face_height, distance_from_screen_edge)."""
+    W, H = im.size; px = im.load(); far = lambda v: max(abs(v[i] - backdrop[i]) for i in range(3)) > 6
+    # the faces stand 12 px above the bottom edge and are 48 px high: probe the row 36 px above the edge (middle of a 48 px face), top edge mirrored
+    y = H - round(36 * scale) if bottom_edge else round(36 * scale)
+    runs, start = [], None
+    for x in range(W):
+        if far(px[x, y]) and start is None: start = x
+        if not far(px[x, y]) and start is not None:
+            runs.append([start, x]); start = None
+    if start is not None: runs.append([start, W])
+    merged = []
+    for r in runs:   # tiny backdrop specks inside a face (antialiased rounded ends) do not split a face: gaps narrower than 3 px merge
+        if merged and r[0] - merged[-1][1] < 3: merged[-1][1] = r[1]
+        else: merged.append(r)
+    gaps = [b[0] - a[1] for a, b in zip(merged, merged[1:])]
+    cx = (merged[0][0] + merged[0][1]) // 2
+    col = [yy for yy in range(H) if far(px[cx, yy])]
+    top, bottom = (min(col), max(col) + 1) if col else (0, 0)
+    return merged, gaps, bottom - top, (H - bottom) if bottom_edge else top
+
+
 def sha(p): return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
 
 
@@ -142,6 +165,16 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 want = tuple(round(int(pc[1 + 2 * i:3 + 2 * i], 16) * al + BACKDROP[mode][i] * (1 - al)) for i in range(3))
                 if c: res.update(panel_pixel=list(c[0][0]), panel_expected=list(want), panel_delta=max(abs(c[0][0][i] - want[i]) for i in range(3)), panel_sample="island face (most common non-backdrop colour)")
                 else: res.update(panel_delta=None, panel_sample="no island pixels found")
+                if t["bar"].get("cluster") and edge in (None, "top") and "decebal-bar" in wins:
+                    runs, gaps, fh, off = measure_cluster(im, BACKDROP[mode], bottom_edge=edge is None, scale=scale)
+                    W = im.width; mid = (runs[0][0] + runs[-1][1]) / 2 if runs else None
+                    res.update(cluster_faces=len(runs), cluster_runs=runs, cluster_gaps=gaps, cluster_face_height=fh, cluster_edge_distance=off, cluster_centre=mid)
+                    # the decbar surface is drawn at the display scale, so every logical number is multiplied by it (anti-aliased edges cost up to 2 px)
+                    gg = t["bar"]["group_gap"] * scale; fhx = (t["bar"]["height"] - 10) * scale; offx = (t["bar"]["margin"] + 5) * scale
+                    assert len(runs) >= 2 and all(abs(g - gg) <= 2 for g in gaps), f"{shot}: faces {runs} gaps {gaps} != {gg}"
+                    assert abs(mid - W / 2) <= 2, f"{shot}: the cluster is not centred ({mid} vs {W / 2})"
+                    assert abs(fh - fhx) <= 2 and abs(off - offx) <= 2, f"{shot}: face height {fh} (want {fhx}) / edge distance {off} (want {offx})"
+                    res.update(cluster_expected=dict(gap=gg, face_height=fhx, edge_distance=offx))
             elif panel and not wallpaper:
                 pc = t["colors"][mode]["bar"]; al = t["metrics"]["bar_alpha"] if "decebal-bar" in wins and "decebal-dock" not in wins else t["metrics"]["dock_alpha"]
                 want = tuple(round(int(pc[1 + 2 * i:3 + 2 * i], 16) * al + BACKDROP[mode][i] * (1 - al)) for i in range(3))
@@ -202,7 +235,12 @@ def main():
         cases += [(t, m, s, FULL, e) for t in classic for m in ("light", "dark") for s in (1, 1.25, 2) for e in ("top", "left", "right")]          # every other edge, full size
         cases += [("openkylin", m, s, SHORT, e) for m in ("light", "dark") for s in (1, 1.25, 2) for e in (None, "top", "left", "right")]          # short windows, all four edges
         cases += [("openkylin-islands", m, s, FULL, e) for m in ("light", "dark") for s in (1, 1.25, 2) for e in ("top", "left", "right")]         # island bar on every other edge
-        cases += [("openkylin-islands", m, s, SHORT, e) for m in ("light", "dark") for s in (1, 2) for e in (None, "left")]
+        cases += [("openkylin-islands", m, s, SHORT, e) for m in ("light", "dark") for s in (1, 1.25, 2) for e in (None, "top", "left", "right")]
+    only = os.environ.get("OPENKYLIN_THEME_FILTER", "")
+    if only:
+        cases = [case for case in cases if case[0] == only]
+        if not cases:
+            raise ValueError(f"no native cases for theme {only!r}")
     results = []
     for t, m, s, g, e in cases:
         name = f"{t}-{m}-{int(s * 100)}-{g}" + (f"-{e}" if e else "") + ".png"
