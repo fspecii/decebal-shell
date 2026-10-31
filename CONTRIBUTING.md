@@ -15,6 +15,11 @@ packaging/      .deb builder; PKGBUILD in the root
 
 ## Build and test
 
+On a desktop in active use, including agent worktrees, run background builds and native test matrices through
+[`tools/dev/desktop_job.py`](tools/dev/README.md). It serializes against both existing build slots and gives the
+desktop priority. Honour a user-requested agent pause; the runner's resume command does not authorize restarting
+agents. CI and dedicated build machines can use the direct commands below.
+
 ```sh
 cargo build --release --locked
 cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
