@@ -78,14 +78,27 @@ impl Source {
     /// The file a theme id is read from: `<id>/theme.toml` of a package (the user's folder, then each installed root in priority order),
     /// else the flat `<id>.toml`. Nothing installed ever outranks the user's package or flat file of the same id.
     pub(super) fn user_file(&self, id: &str) -> PathBuf {
+        self.locate(id, |_| {})
+    }
+
+    /// [`Self::user_file`] with every location examined on the way, highest priority first and ending at the one chosen: the user's package,
+    /// the user's flat file, then the installed roots in order. The live watcher stamps exactly these, so a package appearing above the
+    /// chosen one is noticed while a change below it (shadowed) is not.
+    fn locate(&self, id: &str, mut examined: impl FnMut(&std::path::Path)) -> PathBuf {
         let pkg = self.themes_dir.join(id).join("theme.toml");
+        examined(&pkg);
         if pkg.is_file() {
             return pkg;
         }
         let flat = self.themes_dir.join(format!("{id}.toml"));
-        if !flat.exists() {
-            if let Some(dir) = engine::store::installed_package(id) {
-                return dir.join("theme.toml");
+        examined(&flat);
+        if !flat.exists() && engine::schema::valid_ident(id) {
+            for root in engine::store::installed_roots() {
+                let installed = root.join(id).join("theme.toml");
+                examined(&installed);
+                if installed.is_file() {
+                    return installed;
+                }
             }
         }
         flat
@@ -305,14 +318,22 @@ impl Source {
         }
     }
 
-    /// Everything whose change must trigger a rebuild.
+    /// Everything whose change must trigger a rebuild: the selection file, the user's folder, and for the selected theme and each parent
+    /// it `extends` (read from that package's own manifest; the merged theme has already consumed it) every location that could supply
+    /// it, down to the one in use. Only `stat`s and the small manifests of the chain are read; assets are not hashed or watched.
     pub fn stamps(&self, sel: &Selection) -> Vec<Stamp> {
         let (id, _) = self.find(&sel.name).unwrap_or_else(|| (sel.name.clone(), None));
-        let mut v = vec![Stamp::of(&self.shell_json), Stamp::of(&self.themes_dir), Stamp::of(&self.user_file(&id))];
-        if let Ok(d) = self.load_def(&id) {
-            if let Some(p) = d.inherit {
-                v.push(Stamp::of(&self.user_file(&p)));
+        let mut v = vec![Stamp::of(&self.shell_json), Stamp::of(&self.themes_dir)];
+        let (mut seen, mut cur) = (Vec::<String>::new(), Some(id));
+        while let Some(id) = cur.take() {
+            if seen.len() > 8 || seen.contains(&id) {
+                break;
             }
+            let chosen = self.locate(&id, |p| v.push(Stamp::of(p)));
+            let own = std::fs::read_to_string(&chosen).ok().and_then(|s| Def::parse(&s).ok()).or_else(|| builtin::def(&id));
+            // a theme named like its parent extends the built-in one, which has no file to watch
+            cur = own.and_then(|d| d.inherit).filter(|parent| *parent != id);
+            seen.push(id);
         }
         if sel.mode == Mode::Auto {
             v.extend(system_scheme_files().iter().map(|p| Stamp::of(p)));
@@ -698,6 +719,87 @@ files = ["oversized.ttf"]
         let before = src.stamps(&sel);
         std::fs::write(child.join("theme.toml"), std::fs::read_to_string(child.join("theme.toml")).unwrap() + "# edit\n").unwrap();
         assert_ne!(src.stamps(&sel), before);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Replaces a manifest the way an installer does (new file, rename), so the old and new inodes differ.
+    fn replace(path: &std::path::Path, text: &str) {
+        let tmp = path.with_extension("new");
+        std::fs::write(&tmp, text).unwrap();
+        std::fs::rename(tmp, path).unwrap();
+    }
+
+    #[test]
+    fn live_stamps_follow_the_extends_chain_and_installed_priority_but_not_shadowed_changes() {
+        let (dir, src) = sandbox("watch-chain");
+        let roots: Vec<PathBuf> = ["high", "mid", "low"].iter().map(|r| dir.join(r).join("decebal/themes")).collect();
+        let _roots = engine::store::test_roots(roots.clone());
+        let sel = Selection { name: "kid".into(), ..Selection::default() };
+        src.write_selection(&sel).unwrap();
+        let accent = |a: &str| format!("[colors.dark]\naccent = \"{a}\"\n");
+        installed(&roots[2], "base", None, &accent("#112233"), None, None);
+        installed(&roots[1], "kid", Some("base"), "", None, None);
+        let mut live = Live::new(src.clone());
+        assert_eq!(live.theme.accent, Rgb(0x11, 0x22, 0x33), "the parent from the lowest root, the child from the middle one");
+        let warm = src.stamps(&sel);
+        assert_eq!(src.stamps(&sel), warm, "nothing changed: equal stamps");
+        assert!(!live.poll());
+        // the parent's manifest is replaced: the merged theme no longer names it, yet the live theme follows
+        replace(
+            &roots[2].join("base/theme.toml"),
+            &std::fs::read_to_string(roots[2].join("base/theme.toml")).unwrap().replace("#112233", "#445566").replace("name = \"base\"", "name = \"base renamed\""),
+        );
+        assert_ne!(src.stamps(&sel), warm);
+        assert!(live.poll());
+        assert_eq!(live.theme.accent, Rgb(0x44, 0x55, 0x66));
+        let warm = src.stamps(&sel);
+        // a same-id package appearing in a higher root displaces the middle one; removing it brings the middle one back
+        installed(&roots[0], "kid", Some("base"), &accent("#778899"), None, None);
+        assert_ne!(src.stamps(&sel), warm);
+        assert!(live.poll());
+        assert_eq!(live.theme.accent, Rgb(0x77, 0x88, 0x99));
+        let displaced = src.stamps(&sel);
+        std::fs::remove_dir_all(roots[0].join("kid")).unwrap();
+        assert_ne!(src.stamps(&sel), displaced);
+        assert!(live.poll());
+        assert_eq!(live.theme.accent, Rgb(0x44, 0x55, 0x66));
+        // below the chosen package nothing matters: a lower root gaining or editing the same id is ignored
+        let warm = src.stamps(&sel);
+        let low_kid = installed(&roots[2], "kid", None, &accent("#abcdef"), None, None);
+        replace(&low_kid.join("theme.toml"), &(std::fs::read_to_string(low_kid.join("theme.toml")).unwrap() + "# edited\n"));
+        assert_eq!(src.stamps(&sel), warm, "a shadowed lower-priority package is not watched");
+        assert!(!live.poll());
+        // the user's flat file shadows every installed package of its id and its own parent chain
+        std::fs::write(src.themes_dir.join("kid.toml"), "name = \"Mine\"\ninherit = \"nord\"\n[dark]\naccent = \"#aabbcc\"\n").unwrap();
+        assert_ne!(src.stamps(&sel), warm);
+        assert!(live.poll());
+        assert_eq!(live.theme.accent, Rgb(0xaa, 0xbb, 0xcc));
+        let shadowed = src.stamps(&sel);
+        installed(&roots[0], "kid", Some("base"), &accent("#000001"), None, None);
+        replace(&roots[1].join("kid/theme.toml"), &(std::fs::read_to_string(roots[1].join("kid/theme.toml")).unwrap() + "# edited\n"));
+        replace(&roots[2].join("base/theme.toml"), &(std::fs::read_to_string(roots[2].join("base/theme.toml")).unwrap() + "# edited\n"));
+        assert_eq!(src.stamps(&sel), shadowed, "installed changes under a user flat file are ignored");
+        assert!(!live.poll());
+        std::fs::remove_file(src.themes_dir.join("kid.toml")).unwrap();
+        assert_ne!(src.stamps(&sel), shadowed);
+        assert!(live.poll());
+        assert_eq!(live.theme.accent, Rgb(0, 0, 1), "without the flat file the highest installed package is back");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn live_stamps_stop_at_loops_and_long_chains() {
+        let (dir, src) = sandbox("watch-bounds");
+        let _roots = engine::store::test_roots(Vec::new());
+        std::fs::write(src.themes_dir.join("a.toml"), "name = \"A\"\ninherit = \"b\"\n").unwrap();
+        std::fs::write(src.themes_dir.join("b.toml"), "name = \"B\"\ninherit = \"a\"\n").unwrap();
+        let looped = src.stamps(&Selection { name: "a".into(), ..Selection::default() });
+        assert_eq!(looped.len(), 2 + 2 * 2, "shell file, folder, then the package and flat candidate of each of the two themes");
+        for n in 0..14 {
+            std::fs::write(src.themes_dir.join(format!("c{n}.toml")), format!("name = \"C{n}\"\ninherit = \"c{}\"\n", n + 1)).unwrap();
+        }
+        let long = src.stamps(&Selection { name: "c0".into(), ..Selection::default() });
+        assert!(long.len() <= 2 + 2 * 10, "the walk is bounded: {}", long.len());
         let _ = std::fs::remove_dir_all(dir);
     }
 
