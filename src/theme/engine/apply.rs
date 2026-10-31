@@ -1392,12 +1392,20 @@ y = -30
     fn preview_reverts_by_itself() {
         let (d, src, paths) = sandbox("preview");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let expected = plan(&src, &paths, "nord", &src.selection()).unwrap();
         let cancel = std::sync::atomic::AtomicBool::new(false);
         let handle = std::thread::scope(|s| {
-            let h = s.spawn(|| preview(&src, &paths, "nord", 1, &cancel));
+            let h = s.spawn(|| preview(&src, &paths, "nord", 30, &cancel));
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-            while src.selection().name != "nord" && std::time::Instant::now() < deadline {
+            // Selection is the first file committed, not a transaction-ready signal.
+            // Editing rdwm before the remaining files commit correctly trips the concurrent-write fence.
+            let committed = || expected.writes.iter().all(|w| std::fs::read_to_string(&w.path).ok().as_deref() == Some(w.new.as_str()));
+            while !committed() && std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !committed() {
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                panic!("preview never committed its files: {:?}", h.join().unwrap().err());
             }
             assert_eq!(src.selection().name, "nord", "applied during the preview");
             let mut cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
@@ -1407,7 +1415,7 @@ y = -30
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
             h.join().unwrap()
         });
-        assert!(handle.is_ok());
+        handle.expect("preview applies and reverts after the wallpaper edit");
         assert_eq!(src.selection().name, "macos", "reverted after the preview");
         let cfg = Cfg::parse(&std::fs::read_to_string(&paths.rdwm_config).unwrap()).unwrap();
         assert_eq!(cfg.get("wallpaper", "image"), Some(Val::Str("/my/during-preview.png".into())));
