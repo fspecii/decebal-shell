@@ -430,3 +430,35 @@ Evidence: `/var/tmp/decebal-cc-empty-native-control/result.json` and
 `/var/tmp/decebal-cc-empty-negative-evidence/result.json`.
 These are private X11 fresh-process checks; same-process reload, native Settings
 interaction, hardware and optimized artifact acceptance remain separate gates.
+
+
+### Optimized shell704 applet rollout
+
+Release `704c6570ebf9cba7843edcf11e4553e5ab42443b` built all 23 runtime binaries
+and the launch-monitor example in 1123 seconds. Standard manifest
+`f169943d362450b221c1f17b75a32bb471d2c9635a5730456df5f42f0dfe5e6d`
+passed provenance/integrity verification. Eight serialized native gates passed:
+12 fresh Control Center cases, 16 same-process/window applet reload states,
+32 manual icon checks, preview corruption/recovery and browsing/reopen, GTK
+palette/live/ownership regressions, KDE launcher layout/actions, rapid launcher
+toggling, and dock lifecycle. The Dux empty reload capture was visually reviewed.
+Evidence: `/var/tmp/decebal-shell704-acceptance/result.json`.
+
+A summary-path mistake initially stopped aggregation after the GTK gate had
+passed. The original summary is retained; its correction references the actual
+GTK report, without rerunning or relabelling a failed product test. The first
+sealing invocation used the pair-only helper, which correctly refused the full
+bundle; the standard helper then sealed and verified all 24 executables.
+
+Managed publication verified all 46 installed paths in the two runtime folders
+and unchanged watched configuration. The four stateless rendering components
+were handed over using receipt-checked process identities and pidfds. Their new
+locks and widget-host readiness were verified. Open Settings processes/drafts,
+applications and the existing WM were preserved. Journal:
+`/home/ambsd/.local/state/decebal/deployments/shell704-20261031-203517`.
+The two additional exact test drafts are preserved in its `fixtures/` directory.
+A five-second post-handoff sample measured about 2.8% of one core for those four
+shell components, 1.41ms median WM queries and no query errors. This is short
+private-X11 acceptance plus live process/readiness sampling, not animation,
+physical frame-time, hardware or Wayland proof. New Settings windows include the
+final-group-off controls; existing Settings windows retain their loaded code.
