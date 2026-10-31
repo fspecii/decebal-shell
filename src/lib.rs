@@ -6,6 +6,7 @@
 
 pub mod app;
 pub mod apps;
+pub mod appmenu;
 pub mod backend;
 pub mod calc;
 pub mod capture;
