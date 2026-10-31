@@ -1330,8 +1330,8 @@ pub(super) mod tests {
         bar.v_refresh_window();
         bar.refresh_tasks();
         let (w, h) = match bar.place() {
-            Some(p) if p.edge.is_side() => (p.surface_size().0, len),
-            Some(p) => (len, p.surface_size().1),
+            Some(p) if p.edge.is_side() => (bar.v_surface_size(p).0, len),
+            Some(p) => (len, bar.v_surface_size(p).1),
             None => (len, bar.size().1),
         };
         (bar.width, bar.height) = (w, h);
@@ -1656,6 +1656,139 @@ pub(super) mod tests {
         bar.nav_key(NavKey::Down);
         assert!(bar.hover_row.is_some());
         reset();
+    }
+
+    /// A theme with the GNOME quick-settings look (it scrolls) at text scale `scale`, for this test thread only.
+    fn gnome_cc(scale: f32) -> crate::theme::live::ThreadTheme {
+        use crate::controlcenter::settings::{Settings, Style, Tiles};
+        let mut t = crate::theme::builtin::def("nord").unwrap().resolve("nord", true, &crate::theme::model::Selection::default());
+        t.control_center = Settings { style: Style::Gnome, tiles: Tiles::ALL, ..Settings::default() };
+        t.font_scale = scale;
+        t.popup_alpha = 1.0;
+        crate::theme::live::thread_theme(t)
+    }
+
+    /// The panel's walk of a short host: every control reached by the keyboard lies inside the visible part, the wheel
+    /// scrolls and clamps at both ends, and the pointer reaches the control drawn under it (not the one at the same
+    /// place before the scroll).
+    fn walk_clipped_panel(bar: &mut DecBar, what: &str) {
+        use crate::app::{App, NavKey};
+        let visible = bar.cc_visible_height();
+        assert!(bar.cc_clipped() && visible < bar.cc_height, "{what}: a short host clips the panel ({visible} of {})", bar.cc_height);
+        let order = controlcenter::targets_in_order(&bar.cc_items);
+        assert!(order.len() > 10, "{what}");
+        for target in &order {
+            assert!(bar.nav_key(NavKey::Down), "{what}: Down moves the focus");
+            assert_eq!(bar.cc_viewport.focus, Some(*target), "{what}");
+            let r = bar.cc_items.iter().find(|i| i.target == Some(*target)).unwrap().r;
+            let scroll = bar.cc_viewport.scroll;
+            assert!(r.y - scroll >= -0.5 && r.y + r.h - scroll <= visible + 0.5, "{what}: {target:?} revealed (y {} scroll {scroll} of {visible})", r.y);
+        }
+        assert!(bar.cc_viewport.scroll > 0.0, "{what}: the last control scrolled the panel");
+        let last = *order.last().unwrap();
+        // the pointer over the last control, now on screen, hovers it
+        let (ox, oy) = bar.panel_origin();
+        let r = bar.cc_items.iter().find(|i| i.target == Some(last)).unwrap().r;
+        let (px, py) = (ox + r.x + r.w / 2.0, oy + r.y - bar.cc_viewport.scroll + r.h / 2.0);
+        assert!(py < oy + visible, "{what}");
+        if bar.embedded {
+            bar.status_motion(px, py);
+        } else {
+            bar.pointer_motion(px, py);
+        }
+        assert_eq!(bar.cc_hover, Some(last), "{what}: the pointer reaches the scrolled control");
+        // the wheel over a non-slider part scrolls back and clamps at the top, then down and clamps at the end
+        let (wx, wy) = (ox + 6.0, oy + 6.0);
+        for _ in 0..80 {
+            bar.cc_scroll(wx, wy, -1.0);
+        }
+        assert_eq!(bar.cc_viewport.scroll, 0.0, "{what}");
+        for _ in 0..80 {
+            bar.cc_scroll(wx, wy, 1.0);
+        }
+        assert!((bar.cc_viewport.scroll - (bar.cc_height - visible)).abs() < 0.5, "{what}: clamped at the end ({})", bar.cc_viewport.scroll);
+    }
+
+    #[test]
+    fn the_rail_clips_and_scrolls_a_tall_control_center_at_200_percent() {
+        let _theme = gnome_cc(2.0);
+        for (edge, len) in [(Edge::Left, 520), (Edge::Right, 480), (Edge::Bottom, 1280)] {
+            let mut bar = fixture(Renderer::Pill, edge, AppletSet::all(), len);
+            bar.relayout_control();
+            bar.open = Open::Control;
+            assert_eq!(bar.cc_width(), controlcenter::panel_width(bar.cc_style()), "the GNOME panel keeps its own width beside a rail");
+            let room = bar.v_cc_room();
+            let (ox, oy) = bar.panel_origin();
+            let visible = bar.cc_visible_height();
+            assert!(visible <= room + 0.5 && oy >= 0.0 && oy + visible <= bar.height as f32 + 0.5, "{edge:?}: panel {oy}+{visible} in a {} surface", bar.height);
+            assert!(ox >= 0.0 && ox + bar.cc_width() <= bar.width as f32 + 0.5, "{edge:?}: panel x {ox}");
+            // the input region is the visible panel (and, for a bottom rail, the way down to the strip), not the clipped rest
+            let rects = bar.v_input_rects();
+            let fits = |r: &crate::app::InputRect| match edge {
+                Edge::Bottom => (r.y as f32 - oy.floor()).abs() <= 1.0,
+                _ => ((r.y + r.h) as f32 - (oy + visible)).abs() <= 1.0,
+            };
+            assert!(rects.iter().skip(1).any(fits), "{edge:?}: {rects:?}");
+            if bar.cc_height > room {
+                walk_clipped_panel(&mut bar, &format!("rail {edge:?}"));
+                // nothing is drawn past the visible panel
+                let mut pm = Pixmap::new(bar.width, bar.height).unwrap();
+                crate::app::App::draw(&mut bar, &mut pm);
+                let below = (oy + visible + 2.0) as u32;
+                if below < bar.height {
+                    assert_eq!(pm.pixel((ox + 30.0) as u32, below).unwrap().alpha(), 0, "{edge:?}: clipped below the panel");
+                }
+            }
+        }
+        reset();
+    }
+
+    #[test]
+    fn the_taskbar_engine_clips_and_scrolls_a_tall_control_center_at_200_percent() {
+        let _theme = gnome_cc(2.0);
+        // a bottom taskbar on a 480 px tall surface, and a left one 460 px long
+        for vertical in [false, true] {
+            let mut bar = DecBar::status_engine();
+            bar.update_snapshot(|s| {
+                *s = Snapshot {
+                    net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: "Wired".into() }),
+                    bluetooth: Some(sys::Bluetooth { powered: true, connected: 1 }),
+                    volume: Some(sys::Volume { level: 0.5, muted: false }),
+                    sink: "Headset".into(),
+                    brightness: Some(40),
+                    night_shift: Some(false),
+                    dnd: Some(false),
+                    media: Some(sys::Media { playing: true, title: "Song".into(), artist: "Artist".into() }),
+                    battery: Some(sys::Battery { percent: 82, charging: false, status: "Discharging".into() }),
+                    util: Some(sys::Utils::default()),
+                    lock: true,
+                    power: true,
+                    ..Snapshot::default()
+                }
+            });
+            bar.status_set_surface_height(480.0);
+            assert!(bar.status_toggle(Tray::Control, if vertical { 400.0 } else { 1500.0 }));
+            if vertical {
+                bar.status_place_side(48.0, false, 460.0);
+            } else {
+                bar.status_place(480.0 - 48.0, true, 1600.0);
+            }
+            let what = if vertical { "left taskbar" } else { "bottom taskbar" };
+            let (ox, oy) = bar.panel_origin();
+            let visible = bar.cc_visible_height();
+            let r = bar.status_rect().unwrap();
+            assert!(oy >= 0.0 && (r.h as f32 - visible).abs() <= 1.0, "{what}: input region {r:?} is the visible panel {visible}");
+            if vertical {
+                assert!(oy + visible <= 460.0 && ox >= 48.0, "{what}");
+            } else {
+                assert!(oy + visible <= 480.0 - 48.0, "{what}: clear of the strip");
+            }
+            walk_clipped_panel(&mut bar, what);
+            // the host's keyboard reaches the panel through the engine
+            assert!(bar.status_nav_key(crate::app::NavKey::Up));
+            let mut pm = Pixmap::new(1600, 480).unwrap();
+            bar.status_draw(&mut pm);
+        }
     }
 
     #[test]

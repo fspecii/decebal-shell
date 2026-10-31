@@ -356,8 +356,9 @@ substitution: that tree predates the GNOME look, so `style = "gnome"` was swappe
   (`decsession`) rather than the Shell's inline power submenu (Suspend, Restart…, Power Off…, Log Out…, Switch User…).
 * **Not in the common model:** Power Mode, Airplane Mode, the microphone slider, remote access and the other conditional Shell toggles have no controller state to drive.
 * **Slider keyboard adjustment.** Up/Down/Enter focus and activate; there is no Left/Right in the shared `NavKey`, so a slider is changed by pointer or wheel only and Enter on it does nothing (verified).
-* **Pill-bar and embedded hosts.** The menu bar and the overlay scroll and navigate; the Caelestia pill rail and the Windows-taskbar embed paint the panel (with the ring) but their popups
-  are not clipped, so at 200 % on a short screen they cannot scroll. That is the edge engine's popup placement (universal owner).
+* **Pill-bar and embedded hosts.** Since the universal-panel integration every host clips and scrolls the panel (looks that scroll: Dux, GNOME): the menu bar, the overlay,
+  the rail styles on any edge (`v_cc_room`; a side rail's surface also grows to the panel's width, 752 px at 200 %) and the Windows-taskbar engine (`embed_room`, the host passes
+  its surface height). Wheel, keyboard reveal and pointer mapping go through the same `cc_visible_height` / `cc_point` / `cc_scroll`.
 * **Panel wider than the screen.** The panel is `352·k + 48` px wide: below 400 px at 100 % (or 752 px at 200 %) the surface is narrower than the panel; it is placed inside the screen
   but its right part cannot be reached. Not exercised by a scenario (no such supported display).
 * **Look only.** No drop shadow, pointer-arrow box, transitions or translucency; the panel is a rounded rectangle with the 1 px border.

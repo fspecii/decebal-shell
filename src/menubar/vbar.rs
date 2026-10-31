@@ -980,7 +980,28 @@ impl DecBar {
     pub(super) fn v_panel_origin(&self) -> (f32, f32) {
         let geo = self.v_geo();
         let tile = self.v_layout().item(Tray::Control).unwrap_or(VRect { x: geo.w / 2.0, y: geo.h / 2.0, w: 0.0, h: 0.0 });
-        geo.popout_origin(tile, controlcenter::PANEL_W, self.cc_height)
+        geo.popout_origin(tile, self.cc_width(), self.cc_visible_height())
+    }
+
+    /// The surface of the rail at `p`: [`Place::surface_size`], wide enough beside a side strip for the Control Center,
+    /// whose width follows its look and the text scale (GNOME's at 200 % is wider than the usual popout room).
+    pub(super) fn v_surface_size(&self, p: Place) -> (u32, u32) {
+        let (w, h) = p.surface_size();
+        if !p.edge.is_side() {
+            return (w, h);
+        }
+        let need = (p.thickness() + POP_GAP + self.cc_width() + POP_MARGIN).ceil() as u32;
+        (w.max(need), h)
+    }
+
+    /// Height the Control Center can have beside the rail: the surface's length less the margins (a side rail), or the
+    /// room the surface keeps for popouts (a top or bottom rail). A taller panel is clipped and scrolls.
+    pub(super) fn v_cc_room(&self) -> f32 {
+        let geo = self.v_geo();
+        match geo.edge {
+            Anchor::Left | Anchor::Right => geo.h - 2.0 * POP_MARGIN,
+            Anchor::Top | Anchor::Bottom => geo.h - geo.thickness() - POP_GAP - POP_MARGIN,
+        }
     }
 
     pub(super) fn v_input_rects(&self) -> Vec<InputRect> {
@@ -990,7 +1011,7 @@ impl DecBar {
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
-                rects.push(geo.reach(ox, oy, controlcenter::PANEL_W, self.cc_height));
+                rects.push(geo.reach(ox, oy, self.cc_width(), self.cc_visible_height()));
             }
             Open::Popup(_) => {
                 if let Some(p) = &self.popup {
@@ -1046,7 +1067,7 @@ impl DecBar {
     /// side bar, at `width` for a top / bottom one. `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`,
     /// `battery`, `window`, `layout`, `weather`).
     pub(super) fn v_render_png(&mut self, path: &str, width: u32, open: Option<&str>) -> Result<(), String> {
-        let (sw, sh) = self.place().map_or((SURFACE_W, SURFACE_H), |p| p.surface_size());
+        let (sw, sh) = self.place().map_or((SURFACE_W, SURFACE_H), |p| self.v_surface_size(p));
         if self.v_geo().horizontal() {
             self.width = width.max(1);
             self.height = sh;
@@ -1144,8 +1165,7 @@ impl DecBar {
         }
         match self.open {
             Open::Control => {
-                let (ox, oy) = self.v_panel_origin();
-                let hover = controlcenter::hit(&self.cc_items, x - ox, y - oy).map(|h| h.0);
+                let hover = self.cc_point(x, y).and_then(|(px, py)| controlcenter::hit(&self.cc_items, px, py)).map(|h| h.0);
                 if hover != self.cc_hover {
                     self.cc_hover = hover;
                     redraw = true;
@@ -1267,10 +1287,12 @@ impl DecBar {
         }
         match self.open {
             Open::Control => {
-                let (ox, oy) = self.v_panel_origin();
-                if let Some((t, r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) {
-                    self.activate(t, r.x, r.w, x - ox);
-                    return true;
+                if let Some((px, py)) = self.cc_point(x, y) {
+                    if let Some((t, r)) = controlcenter::hit(&self.cc_items, px, py) {
+                        self.cc_viewport.focus = None;
+                        self.activate(t, r.x, r.w, px);
+                        return true;
+                    }
                 }
                 false
             }
@@ -1595,9 +1617,14 @@ impl DecBar {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
                 let style = self.cc_style();
+                let (clipped, width, height) = (self.cc_clipped(), self.cc_width(), self.cc_visible_height());
                 if let Some(f) = self.fonts.as_mut() {
-                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
-                    controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
+                    if clipped {
+                        self.cc_viewport.draw(pm, (ox, oy), width, height, &self.cc_items, self.cc_hover, style, f, &mut self.symbols);
+                    } else {
+                        let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
+                        controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
+                    }
                 }
             }
             Open::Popup(_) => {

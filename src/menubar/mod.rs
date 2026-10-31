@@ -1022,10 +1022,18 @@ impl DecBar {
         }
     }
 
+    /// Whether the open panel is clipped to the room it has and scrolls (the looks that scroll), in every host: the
+    /// menu bar, the overlay, the rail styles and the taskbar's engine.
     fn cc_clipped(&self) -> bool {
-        !self.embedded && self.cc_style().scrolls() && !self.pill_bar()
+        self.cc_style().scrolls()
     }
     fn cc_visible_height(&self) -> f32 {
+        if self.cc_clipped() && self.embedded {
+            return self.cc_height.min(self.embed_room(self.embed.edge, self.embed.up, self.embed.screen_w).max(0.0));
+        }
+        if self.cc_clipped() && self.pill_bar() {
+            return self.cc_height.min(self.v_cc_room().max(0.0));
+        }
         if self.cc_clipped() && self.bottom() {
             return self.cc_height.min((self.strip_top() - PANEL_GAP - BOTTOM_MARGIN).max(0.0));
         }
@@ -1557,7 +1565,7 @@ impl App for DecBar {
     fn size(&self) -> (u32, u32) {
         if let Some(p) = self.place() {
             // a side bar is as tall as the monitor (0), a top / bottom bar as wide as it; the rest is room for popouts
-            return p.surface_size();
+            return self.v_surface_size(p);
         }
         (0, surface_height(self.open_bottom()))
     }
@@ -1965,41 +1973,8 @@ impl App for DecBar {
         if !self.pill_bar() && self.in_strip(y) && self.tray_scroll(x, dy) {
             return true;
         }
-        if self.open != Open::Control {
-            return false;
-        }
-        let (ox, oy) = self.panel_origin();
-        if !(x >= ox && x < ox + self.cc_width() && y >= oy && y < oy + self.cc_visible_height()) {
-            return false;
-        }
-        let Some((px, py)) = self.cc_point(x, y) else {
-            return false;
-        };
-        let cleared_focus = self.cc_viewport.focus.take().is_some();
-        let cleared_hover = self.cc_hover.take().is_some();
-        let cleared_highlight = cleared_focus || cleared_hover;
-        let hit = controlcenter::hit(&self.cc_items, px, py);
-        if self.cc_clipped() && !matches!(hit, Some((Target::Brightness | Target::Volume, _))) {
-            if self.cc_drag.is_some() {
-                return cleared_highlight;
-            }
-            let old = self.cc_viewport.scroll;
-            self.cc_viewport.focus = None;
-            self.cc_viewport.scroll += dy * ccviewport::SCROLL_STEP;
-            self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
-            return old != self.cc_viewport.scroll || cleared_highlight;
-        }
-        let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return cleared_highlight };
-        let snap = self.snapshot();
-        let cur = match t {
-            Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
-            _ => snap.volume.map(|v| v.level).unwrap_or(0.0),
-        };
-        let next = (cur - dy.signum() * 0.05).clamp(0.0, 1.0);
-        self.slide(t, r.x, r.w, r.x + next * r.w, true);
-        true
+        self.cc_scroll(x, y, dy)
     }
-
     fn key(&mut self, key: Key) -> bool {
         match key {
             Key::Escape => self.close() || self.kb_focus.take().is_some(),
@@ -2170,6 +2145,46 @@ impl App for DecBar {
             t.next = Some(t.next.map_or(vbar::COMPANION_POLL, |n| n.min(vbar::COMPANION_POLL)));
         }
         t
+    }
+}
+
+impl DecBar {
+    /// The wheel over the open Control Center (any host): a slider under the pointer steps, elsewhere a clipped panel
+    /// scrolls.
+    pub(super) fn cc_scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        if self.open != Open::Control {
+            return false;
+        }
+        let (ox, oy) = self.panel_origin();
+        if !(x >= ox && x < ox + self.cc_width() && y >= oy && y < oy + self.cc_visible_height()) {
+            return false;
+        }
+        let Some((px, py)) = self.cc_point(x, y) else {
+            return false;
+        };
+        let cleared_focus = self.cc_viewport.focus.take().is_some();
+        let cleared_hover = self.cc_hover.take().is_some();
+        let cleared_highlight = cleared_focus || cleared_hover;
+        let hit = controlcenter::hit(&self.cc_items, px, py);
+        if self.cc_clipped() && !matches!(hit, Some((Target::Brightness | Target::Volume, _))) {
+            if self.cc_drag.is_some() {
+                return cleared_highlight;
+            }
+            let old = self.cc_viewport.scroll;
+            self.cc_viewport.focus = None;
+            self.cc_viewport.scroll += dy * ccviewport::SCROLL_STEP;
+            self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
+            return old != self.cc_viewport.scroll || cleared_highlight;
+        }
+        let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return cleared_highlight };
+        let snap = self.snapshot();
+        let cur = match t {
+            Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
+            _ => snap.volume.map(|v| v.level).unwrap_or(0.0),
+        };
+        let next = (cur - dy.signum() * 0.05).clamp(0.0, 1.0);
+        self.slide(t, r.x, r.w, r.x + next * r.w, true);
+        true
     }
 }
 

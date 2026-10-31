@@ -22,9 +22,16 @@ Known limits:
   (`Host::Panel` for a bottom or side bar and a side taskbar; `auto` opens at the tray end, clear of the strip at the
   display scale). On X11 it shares the panels' monitor (RandR primary); under Wayland the compositor picks the output
   of each layer surface, so with several outputs it can open on another output than the bar.
+- The Control Center clips and scrolls (wheel, keyboard reveal, pointer through the scroll) in every host for the looks that
+  scroll (Dux, GNOME); `card` and `fluent` are drawn whole as before, so on a very short screen at 200 % they can reach past it.
 - Applet order inside a renderer is fixed (the renderer's own reading order).
 - Native evidence is X11 (private Xvfb without a window manager: strut hints are checked as values, not as a work area
-  a WM honoured). Wayland layer-shell anchoring is unit-tested only.
+  a WM honoured). Wayland layer-shell anchoring is unit-tested only. Latest runs (source 9336240, debug binaries decbar
+  `64cb3037…`, decdock `88eba4f7…`): `/var/tmp/decebal-panel-evidence/9336240-matrix` (105 cases: four bar styles × four
+  edges × light/dark × all/default/none applets, bars at 1/1.25/2× with summoned Control Center clearance, taskbar and dock
+  on four edges, taskbar `--focus`; 105 of 105 after the two checker corrections stated in its SUMMARY.md) and
+  `/var/tmp/decebal-panel-evidence/9336240-probes` (recorded probe calls: none with only the clock, none after switching
+  all applets off live).
 
 ## Surfaces and processes
 

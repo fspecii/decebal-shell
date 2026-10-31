@@ -35,6 +35,8 @@ pub struct Place {
     pub(super) taskbar: bool,
     /// The host's scale (see [`DecBar::status_set_scale`]); 0 = 1.
     pub(super) scale: f32,
+    /// Height of the host's surface (logical; 0 = unknown), what a panel opening downwards from a top strip may use.
+    pub(super) surface_h: f32,
 }
 
 impl DecBar {
@@ -133,6 +135,12 @@ impl DecBar {
     pub fn status_size(&self) -> Option<(f32, f32)> {
         let k = self.ek();
         self.status_size_l().map(|(w, h)| (w * k, h * k))
+    }
+
+    /// The host surface's height (surface pixels): bounds a Control Center that opens downwards, which is clipped and
+    /// scrolls when taller (the looks that scroll).
+    pub fn status_set_surface_height(&mut self, h: f32) {
+        self.embed.surface_h = h / self.ek();
     }
 
     pub fn status_place(&mut self, edge: f32, up: bool, screen_w: f32) {
@@ -414,6 +422,7 @@ impl DecBar {
         self.embed.screen_w = screen_w;
         let Some((x, y, _, _)) = self.popup_geometry(edge, up, screen_w) else { return };
         self.embed.origin = (x, y);
+        self.cc_sync_viewport();
         if let Some(p) = self.popup.as_mut() {
             p.x = x;
             p.y = y;
@@ -425,8 +434,24 @@ impl DecBar {
     }
 
     /// (x, y, w, h) the open popup gets for these placement parameters.
+    /// Height a Control Center opened against `edge` can have: the strip's length less margins beside a side strip,
+    /// the room above a bottom strip, the rest of the surface below a top one.
+    pub(super) fn embed_room(&self, edge: f32, up: bool, screen_w: f32) -> f32 {
+        if self.embed.vertical {
+            screen_w - 8.0
+        } else if up {
+            edge - GAP - 4.0
+        } else if self.embed.surface_h > 0.0 {
+            self.embed.surface_h - edge - GAP - 4.0
+        } else {
+            f32::INFINITY
+        }
+    }
+
     fn popup_geometry(&self, edge: f32, up: bool, screen_w: f32) -> Option<(f32, f32, f32, f32)> {
         let (w, h) = self.status_size_l()?;
+        // a panel that scrolls takes only the room it has
+        let h = if self.open == Open::Control && self.cc_clipped() { h.min(self.embed_room(edge, up, screen_w).max(0.0)) } else { h };
         if self.open == Open::Control {
             if let Some((x, y)) = self.embed.pinned {
                 return Some((x, y, w, h));
@@ -481,7 +506,7 @@ impl DecBar {
     fn status_rect_l(&self) -> Option<InputRect> {
         if self.open == Open::Control {
             let (x, y) = self.embed.origin;
-            return Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: self.cc_width().ceil() as i32, h: self.cc_height.ceil() as i32 });
+            return Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: self.cc_width().ceil() as i32, h: self.cc_visible_height().ceil() as i32 });
         }
         let (x, y) = self.popup.as_ref().map(|p| (p.x, p.y)).or(self.calendar.as_ref().map(|c| (c.x, c.y)))?;
         let (w, h) = self.status_size_l()?;
@@ -491,9 +516,14 @@ impl DecBar {
     fn status_draw_l(&mut self, pm: &mut Pixmap) {
         if self.open == Open::Control {
             let style = self.cc_style();
-            let view = controlcenter::View { origin: self.embed.origin, items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
+            let (origin, clipped, width, height) = (self.embed.origin, self.cc_clipped(), self.cc_width(), self.cc_visible_height());
             if let Some(f) = self.fonts.as_mut() {
-                controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
+                if clipped {
+                    self.cc_viewport.draw(pm, origin, width, height, &self.cc_items, self.cc_hover, style, f, &mut self.symbols);
+                } else {
+                    let view = controlcenter::View { origin, items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
+                    controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
+                }
                 f.trim();
             }
             return;
@@ -511,7 +541,7 @@ impl DecBar {
     /// Pointer moved over the surface; true when the popup needs a redraw.
     fn status_motion_l(&mut self, x: f32, y: f32) -> bool {
         if self.open == Open::Control {
-            let (ox, oy) = self.embed.origin;
+            let ox = self.embed.origin.0;
             if let Some(t) = self.cc_drag {
                 if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                     let (rx, rw) = (it.r.x, it.r.w);
@@ -519,7 +549,10 @@ impl DecBar {
                     return true;
                 }
             }
-            let hover = controlcenter::hit(&self.cc_items, x - ox, y - oy).map(|h| h.0);
+            let hover = self.cc_point(x, y).and_then(|(px, py)| controlcenter::hit(&self.cc_items, px, py)).map(|h| h.0);
+            if hover.is_some() {
+                self.cc_viewport.focus = None;
+            }
             let changed = hover != self.cc_hover;
             self.cc_hover = hover;
             return changed;
@@ -541,9 +574,11 @@ impl DecBar {
             return false;
         }
         if self.open == Open::Control {
-            let (ox, oy) = self.embed.origin;
-            if let Some((t, r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) {
-                self.activate(t, r.x, r.w, x - ox);
+            if let Some((px, py)) = self.cc_point(x, y) {
+                if let Some((t, r)) = controlcenter::hit(&self.cc_items, px, py) {
+                    self.cc_viewport.focus = None;
+                    self.activate(t, r.x, r.w, px);
+                }
             }
             return true;
         }
@@ -582,18 +617,8 @@ impl DecBar {
             self.status_replace();
             return true;
         }
-        if self.open != Open::Control {
-            return false;
-        }
-        let (ox, oy) = self.embed.origin;
-        let Some((t @ (Target::Brightness | Target::Volume), r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) else { return false };
-        let snap = self.snapshot();
-        let cur = match t {
-            Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
-            _ => snap.volume.map(|v| v.level).unwrap_or(0.0),
-        };
-        self.slide(t, r.x, r.w, r.x + (cur - dy.signum() * 0.05).clamp(0.0, 1.0) * r.w, true);
-        true
+        // the bar's own wheel over the panel: a slider steps, elsewhere a clipped panel scrolls
+        self.cc_scroll(x, y, dy)
     }
 
     /// Wheel over the status item `kind`: volume steps of 5%, layout cycling.
