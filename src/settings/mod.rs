@@ -28,6 +28,7 @@ pub mod systempane;
 pub mod themecards;
 pub mod themepane;
 pub mod tomlcfg;
+pub mod touchpad;
 pub mod ui;
 pub mod wallhaven;
 pub mod wallpapercolors;
