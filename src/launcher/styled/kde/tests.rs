@@ -18,6 +18,7 @@ fn kde(n: usize) -> super::super::Styled {
     st.resize(655, 516);
     RAN.with(|r| r.borrow_mut().clear());
     OPENED.with(|o| o.borrow_mut().clear());
+    disarm();
     st
 }
 
@@ -464,4 +465,92 @@ fn a_menu_row_that_scrolled_into_view_runs_its_action() {
     assert!(ran().is_empty() && armed(&st.m) == Some(Sys::Shutdown));
     let r = st.key(&key(Key::Enter));
     assert!(closes(&r) && ran() == [Sys::Shutdown]);
+}
+
+// ---------------------------------------------------------------------------------------------------------- the confirmation ends with the focus
+
+fn focus_footer(st: &mut super::super::Styled, target: Target) {
+    let i = zone(st, "footer").items.iter().position(|t| *t == target).unwrap();
+    st.m.zone = "footer";
+    st.m.sel.insert("footer", i);
+    st.relayout();
+}
+
+#[test]
+fn an_armed_action_is_disarmed_when_the_keyboard_focus_leaves_it_and_comes_back() {
+    let mut st = kde(30);
+    let restart = Target::Style(SYS, sys_index(Sys::Reboot));
+    focus_footer(&mut st, restart);
+    st.key(&key(Key::Enter));
+    assert_eq!(armed(&st.m), Some(Sys::Reboot));
+    // away and back: not armed any more, Enter arms again instead of running
+    st.key(&key(Key::Left));
+    assert!(armed(&st.m).is_none(), "moving the focus disarms");
+    st.key(&key(Key::Right));
+    assert_eq!(st.current(), Some(restart));
+    let r = st.key(&key(Key::Enter));
+    assert!(!closes(&r) && ran().is_empty(), "Enter after leaving and returning must not run it: {:?}", ran());
+    assert_eq!(armed(&st.m), Some(Sys::Reboot), "it armed again");
+    // only now does a second Enter on the same control run it
+    let r = st.key(&key(Key::Enter));
+    assert!(closes(&r) && ran() == [Sys::Reboot]);
+}
+
+#[test]
+fn pointer_motion_to_another_control_and_back_disarms_too() {
+    let mut st = kde(30);
+    let (restart, shut) = (Target::Style(SYS, sys_index(Sys::Reboot)), Target::Style(SYS, sys_index(Sys::Shutdown)));
+    click(&mut st, "footer", restart);
+    assert_eq!(armed(&st.m), Some(Sys::Reboot));
+    // the pointer moves within the same button: still armed
+    let (x, y) = centre(&st, "footer", restart);
+    st.motion(x + 2.0, y);
+    assert_eq!(armed(&st.m), Some(Sys::Reboot));
+    // over Shut Down and back
+    let (sx, sy) = centre(&st, "footer", shut);
+    st.motion(sx, sy);
+    assert!(armed(&st.m).is_none());
+    st.motion(x, y);
+    let r = click(&mut st, "footer", restart);
+    assert!(!closes(&r) && ran().is_empty(), "the click after returning only arms again");
+    assert!(closes(&click(&mut st, "footer", restart)));
+    assert_eq!(ran(), [Sys::Reboot]);
+}
+
+#[test]
+fn typing_a_search_or_tabbing_away_disarms() {
+    let mut st = kde(30);
+    let shut = Target::Style(SYS, sys_index(Sys::Shutdown));
+    focus_footer(&mut st, shut);
+    st.key(&key(Key::Enter));
+    assert_eq!(armed(&st.m), Some(Sys::Shutdown));
+    st.key(&KeyEvent { key: Key::Char, text: "f".into(), ch: Some('f'), ctrl: false, shift: false, alt: false });
+    assert!(armed(&st.m).is_none(), "typing moves the focus to the results");
+    st.key(&key(Key::Escape));
+    // Tab around the whole ring and back to the same control: not armed
+    let mut st = kde(30);
+    focus_footer(&mut st, shut);
+    st.key(&key(Key::Enter));
+    assert_eq!(armed(&st.m), Some(Sys::Shutdown));
+    let zones = st.zones.iter().filter(|z| z.items.iter().any(|t| t.focusable())).count();
+    for _ in 0..zones {
+        st.key(&key(Key::Tab));
+    }
+    assert!(armed(&st.m).is_none() && ran().is_empty());
+}
+
+#[test]
+fn log_out_in_the_menu_is_disarmed_by_moving_the_selection() {
+    let mut st = kde(30);
+    click(&mut st, "footer", Target::Style(SESSION, 0));
+    st.key(&key(Key::Down));
+    assert_eq!(st.current(), Some(Target::Style(MENU, sys_index(Sys::Logout))));
+    st.key(&key(Key::Enter));
+    assert_eq!(armed(&st.m), Some(Sys::Logout));
+    st.key(&key(Key::Up));
+    st.key(&key(Key::Down));
+    assert!(armed(&st.m).is_none());
+    let r = st.key(&key(Key::Enter));
+    assert!(!closes(&r) && ran().is_empty(), "armed again, not run");
+    assert!(closes(&st.key(&key(Key::Enter))) && ran() == [Sys::Logout]);
 }

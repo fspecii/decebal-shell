@@ -113,8 +113,31 @@ fn place(m: &Model) -> usize {
     m.ui("kde.place").min(places::SIDEBAR.len() - 1)
 }
 
+/// A leaving action waiting for its second press, and the control that has the focus: like `decsession`'s picker, the arming ends the moment the
+/// focus is anywhere else (an arrow key, Tab, the pointer moving over another control, typing a search), so coming back to the control never
+/// finds it armed. The engine runs `layout` after every such change, which is where this is checked; the unit tests and the dialog never share it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Arm {
+    sys: Sys,
+    zone: &'static str,
+    sel: usize,
+}
+
+thread_local! {
+    static ARM: std::cell::Cell<Option<Arm>> = const { std::cell::Cell::new(None) };
+}
+
+fn arm(m: &Model, sys: Sys) {
+    ARM.with(|a| a.set(Some(Arm { sys, zone: m.zone, sel: m.sel(m.zone) })));
+}
+
+fn disarm() {
+    ARM.with(|a| a.set(None));
+}
+
+/// The pending action, only while the focus is still on the control it was armed on.
 fn armed(m: &Model) -> Option<Sys> {
-    m.ui("kde.confirm").checked_sub(1).and_then(|i| system::ALL.get(i).copied())
+    ARM.with(|a| a.get()).filter(|a| a.zone == m.zone && a.sel == m.sel(a.zone)).map(|a| a.sys)
 }
 
 fn menu_open(m: &Model) -> bool {
@@ -248,6 +271,10 @@ fn places_targets(m: &Model) -> Vec<Target> {
 // ---------------------------------------------------------------------------------------------------------------- layout
 
 pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
+    // every focus change is followed by a layout: an arming made elsewhere ends here
+    if ARM.with(|a| a.get()).is_some() && armed(m).is_none() {
+        disarm();
+    }
     let f = frame(r, s);
     let places = tab(m) == 1;
     let cats = if places {
@@ -313,10 +340,10 @@ fn run_system(m: &mut Model, sys: Sys) -> Outcome {
     }
     // Restart, Shut Down and Log Out ask once more: the first press arms the button, the second acts
     if sys.confirms() && armed(m) != Some(sys) {
-        m.ui.insert("kde.confirm", 1 + sys_index(sys) as usize);
+        arm(m, sys);
         return Outcome::Redraw;
     }
-    m.ui.insert("kde.confirm", 0);
+    disarm();
     system::run(sys);
     Outcome::Close
 }
@@ -326,7 +353,7 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
     match kind {
         TAB => {
             m.ui.insert("kde.tab", (i as usize).min(1));
-            m.ui.insert("kde.confirm", 0);
+            disarm();
             m.ui.insert("kde.menu", 0);
             reset_lists(m);
             Outcome::Relayout
@@ -338,7 +365,7 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
         SESSION => {
             let open = !menu_open(m);
             m.ui.insert("kde.menu", open as usize);
-            m.ui.insert("kde.confirm", 0);
+            disarm();
             m.offset.insert("menu", 0);
             if open {
                 m.zone = "menu";
@@ -379,7 +406,7 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
 /// Escape first closes the open Session menu, or takes back a pending confirmation, before it closes the launcher.
 pub fn escape(m: &mut Model) -> bool {
     if armed(m).is_some() {
-        m.ui.insert("kde.confirm", 0);
+        disarm();
         return true;
     }
     if menu_open(m) {
@@ -394,11 +421,11 @@ pub fn escape(m: &mut Model) -> bool {
 pub fn press(m: &mut Model, zone: Option<&'static str>) -> bool {
     if menu_open(m) && zone != Some("menu") && zone != Some("footer") {
         m.ui.insert("kde.menu", 0);
-        m.ui.insert("kde.confirm", 0);
+        disarm();
         return true;
     }
     if armed(m).is_some() && zone != Some("footer") && zone != Some("menu") {
-        m.ui.insert("kde.confirm", 0);
+        disarm();
     }
     false
 }
