@@ -148,7 +148,7 @@ def main():
             assert first_png, 'native renderer never completed a PNG'
             assert post_png, 'native preview completion did not cause a further frame with painted theme previews'
             if os.environ.get('SETTINGS_IDLE_REPAIR') == '1':
-                damaged = list(cache.glob('*.png'))
+                damaged = list((root / 'cache/decebal/theme-previews').glob('*.png'))
                 assert damaged, 'idle recovery needs an existing rendered preview'
                 app.terminate()
                 app.wait(timeout=5)
