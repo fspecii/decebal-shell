@@ -1,4 +1,5 @@
 mod operation_ui;
+mod profile_ui;
 mod search_ui;
 mod tabs_ui;
 mod transfer_ui;
@@ -55,6 +56,11 @@ struct Ui {
     search: RefCell<Option<search_ui::SearchRun>>,
     search_seq: Cell<u64>,
     search_clearing: Cell<bool>,
+    profile: Cell<decfiles::profile::Profile>,
+    /// Set by the user's layout choice (or --columns); profiles never override it.
+    layout_explicit: Cell<bool>,
+    layout_programmatic: Cell<bool>,
+    theme: profile_ui::Theme,
     ops: operation_ui::Controls,
 }
 
@@ -157,6 +163,13 @@ impl Ui {
             glib::ControlFlow::Break
         });
         self.refresh_timer.replace(Some(timer));
+    }
+
+    /// True while the only pending load is a background (quiet) refresh, which every user
+    /// action supersedes; such a load must not disable controls.
+    pub(crate) fn pending_is_quiet(&self) -> bool {
+        let pending = self.model.borrow().pending.as_ref().map(|request| request.revision);
+        pending.is_some() && pending == self.quiet_revision.get()
     }
 
     /// A user action must not be refused because a background refresh is loading:
@@ -362,7 +375,8 @@ impl Ui {
         let view = gtk::ColumnView::new(None::<gtk::SingleSelection>);
         view.update_property(&[gtk::accessible::Property::Label("Folder details")]);
         let (sorted_by, descending) = self.sort.borrow().clone();
-        for (id, title, kind) in [("name", "Name", 0u8), ("type", "Type", 1), ("size", "Size", 2), ("modified", "Date modified", 3)] {
+        let titles = self.profile.get().titles();
+        for ((id, kind), title) in [("name", 0u8), ("type", 1), ("size", 2), ("modified", 3)].into_iter().zip(titles) {
             let column = gtk::ColumnViewColumn::new(Some(title), Some(factory(kind)));
             column.set_id(Some(id));
             column.set_expand(kind == 0);
@@ -394,7 +408,9 @@ impl Ui {
     fn set_columns(self: &Rc<Self>, columns: bool) {
         self.columns.set(columns);
         if self.layout.selected() != u32::from(columns) {
+            self.layout_programmatic.set(true);
             self.layout.set_selected(u32::from(columns));
+            self.layout_programmatic.set(false);
         }
     }
 
@@ -411,7 +427,7 @@ impl Ui {
                 .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
             let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
                 "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order,
-                "tabs":self.tabs_evidence(), "search":self.search_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
+                "tabs":self.tabs_evidence(), "profile":self.profile_evidence(), "search":self.search_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -519,7 +535,9 @@ fn factory(kind: u8) -> gtk::SignalListItemFactory {
     factory
 }
 
-fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
+fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Option<decfiles::profile::Profile>) {
+    let (theme, theme_reader) = profile_ui::Theme::new(profile.is_some());
+    let columns = columns || profile.is_some_and(|profile| profile.prefers_columns());
     let window = gtk::ApplicationWindow::builder().application(app).title("Decebal Files — Preview").default_width(1080).default_height(700).build();
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -553,6 +571,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     tab_bar.set_margin_end(12);
     tab_bar.set_margin_bottom(6);
     tab_bar.set_visible(false);
+    tab_bar.add_css_class("decfiles-tabbar");
     tab_bar.update_property(&[gtk::accessible::Property::Label("Tabs")]);
     root.append(&tab_bar);
     let error = gtk::Label::new(None);
@@ -566,6 +585,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     body.set_vexpand(true);
     let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 4);
     sidebar.set_width_request(170);
+    sidebar.add_css_class("decfiles-sidebar");
     sidebar.set_margin_start(8);
     sidebar.set_margin_end(8);
     sidebar.set_margin_top(8);
@@ -581,7 +601,9 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     root.append(&body);
     let ops = operation_ui::Controls::new();
     root.append(&ops.progress_row());
-    root.append(&ops.bar());
+    let command_bar = ops.bar();
+    command_bar.add_css_class("decfiles-commandbar");
+    root.append(&command_bar);
     let status = gtk::Label::new(Some("Files preview"));
     status.set_xalign(0.0);
     // Long transfer summaries must not widen the window; failures also use the wrapping error label.
@@ -627,6 +649,10 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         search: RefCell::new(None),
         search_seq: Cell::new(0),
         search_clearing: Cell::new(false),
+        profile: Cell::new(profile.unwrap_or_default()),
+        layout_explicit: Cell::new(columns),
+        layout_programmatic: Cell::new(false),
+        theme,
         ops,
     });
     let weak = Rc::downgrade(&ui);
@@ -710,12 +736,16 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     ui.layout.connect_selected_notify(move |layout| {
         if let Some(ui) = weak.upgrade() {
             ui.columns.set(layout.selected() == 1);
+            if !ui.layout_programmatic.get() {
+                ui.layout_explicit.set(true);
+            }
             ui.render();
         }
     });
     ui.connect_operations();
     ui.connect_transfers();
     ui.connect_search();
+    ui.start_theme(theme_reader);
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let weak = Rc::downgrade(&ui);
@@ -780,6 +810,12 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     ui.window.connect_destroy(move |_| {
         retained.resolver.stop();
         retained.monitor.stop();
+        if let Some(monitor) = &retained.theme.monitor {
+            monitor.stop();
+        }
+        for source in [retained.theme.source.borrow_mut().take(), retained.theme.timer.borrow_mut().take()].into_iter().flatten() {
+            source.remove();
+        }
         for source in [retained.monitor_source.borrow_mut().take(), retained.refresh_timer.borrow_mut().take()].into_iter().flatten() {
             source.remove();
         }
@@ -797,9 +833,17 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
 fn main() {
     let mut initial = None;
     let mut columns = false;
+    let mut profile = None;
     for arg in std::env::args().skip(1) {
         if arg == "--columns" {
             columns = true;
+        } else if let Some(id) = arg.strip_prefix("--profile=") {
+            // Explicit Explorer/Finder/Native profile; otherwise follow the generated gtk.css.
+            profile = decfiles::profile::Profile::parse(id);
+            if profile.is_none() {
+                eprintln!("Unknown profile {id:?}; expected explorer, finder or native.");
+                std::process::exit(2);
+            }
         } else if !arg.starts_with('-') {
             initial = Some(PathBuf::from(arg));
         }
@@ -807,6 +851,6 @@ fn main() {
     let initial = initial.or_else(|| std::env::var_os("HOME").map(PathBuf::from)).unwrap_or_else(|| PathBuf::from("/"));
     let initial = if initial.is_absolute() { initial } else { std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")).join(initial) };
     let app = gtk::Application::builder().application_id("org.decebal.Files.Preview").flags(gio::ApplicationFlags::NON_UNIQUE).build();
-    app.connect_activate(move |app| build(app, initial.clone(), columns));
+    app.connect_activate(move |app| build(app, initial.clone(), columns, profile));
     app.run_with_args::<&str>(&[]);
 }

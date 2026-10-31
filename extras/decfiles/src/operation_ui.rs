@@ -253,7 +253,8 @@ impl Ui {
             self.ops.active.borrow().as_ref().is_some_and(|path| model.columns.iter().any(|column| column.selected.as_ref() == Some(path) && column.entries.iter().any(|entry| &entry.path == path)));
         let running = self.ops.running.borrow();
         // Search results are not the folder model: file operations wait for a revealed result.
-        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && model.pending.is_none() && !self.is_searching();
+        // A quiet background refresh is superseded by any action, so it must not disable them.
+        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && (model.pending.is_none() || self.pending_is_quiet()) && !self.is_searching();
         self.ops.create.set_sensitive(idle && model.current().is_some());
         self.ops.rename.set_sensitive(idle && selected);
         self.ops.trash.set_sensitive(idle && selected);

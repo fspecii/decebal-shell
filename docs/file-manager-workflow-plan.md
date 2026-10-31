@@ -203,6 +203,19 @@ inode; otherwise it is restored and kept. Pasting blocks navigation during a
 Deterministic test-only race hooks and fixture-only native races cover these
 paths. The component README states the exact concurrency contract. Multi-selection, drag/drop and restore remain open.
 
+Later checkpoints in the component README add sortable columns, folder monitoring,
+tabs, cancellable search, and live palette/profile following.
+
+- **Palette and profile:** they come from the shell's generated
+  `gtk-4.0/gtk.css` marker. The default layout follows the profile, but an
+  explicit layout always survives. A unit test pins the shell's marker contract.
+- **Evidence:** every checkpoint ran all native suites on reserved high private
+  displays against separately pinned default and fixture binaries.
+- **Not yet done, so this is not yet Explorer/Finder:** multi-selection,
+  Replace/Merge, drag/drop, undo/restore, icon/gallery views, mounts/remote
+  locations, opening/open-with, Orca and Wayland acceptance, and
+  default-handler opt-in.
+
 Trash must never fall back to permanent deletion. A no-overwrite check must remain true when a
 destination appears concurrently, not only when it exists before clicking.
 The installed [GLib 2.90.1 local backend](https://github.com/GNOME/glib/blob/2.90.1/gio/glocalfile.c)

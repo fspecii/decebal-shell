@@ -42,6 +42,27 @@ does not save preferences or read/write Decebal configuration.
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
   column keeps that parent and replaces the columns to its right.
+- Palette and profile follow the shell's existing GTK integration, without reading
+  Decebal configuration. GTK reads the user's `gtk-4.0/gtk.css` once at startup.
+  A second bounded monitor watches that folder (or its parent until it exists),
+  reads the file asynchronously through GIO, and reapplies it at USER+1 priority,
+  so palette changes apply live.
+  The shell's `/* Files visual profile: explorer|finder (native file operations) */`
+  marker, or an explicit `--profile=explorer|finder|native`, selects:
+  - window-scoped `decfiles-explorer` / `decfiles-finder` surfaces, using only the
+    palette's CSS variables (`--sidebar-bg-color`, `--sidebar-fg-color`) with
+    neutral fallbacks and no geometry changes;
+  - each platform's column vocabulary (Kind/Date Modified vs Type/Date modified);
+  - the default layout (Finder: columns, Explorer: details).
+
+  An explicit layout (the selector or `--columns`) is never changed by palette or
+  profile updates; programmatic selector changes do not count as explicit. No
+  marker, or no file, means Native. A unit test reads the shell's own
+  `src/theme/system/file_manager.rs` and fails if its marker format or profile ids
+  change. GTK's built-in theme does not read `--window-bg-color`, so only
+  decfiles-owned surfaces take palette colours; the window background stays
+  GTK's. Icons follow the GTK icon theme in effect at startup (`settings.ini`,
+  also written by the shell); the icon theme is not live-reloaded.
 - Search: the toolbar's native search entry (Ctrl+F) searches the current folder
   recursively for names containing the text (case-insensitive; non-UTF8 bytes match
   as U+FFFD while results keep the exact path). One `decfiles-search` worker per
@@ -290,6 +311,35 @@ Copy/move evidence (default binary
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
 
+Profile checkpoint: 25 Rust tests (two new, including the shell-marker contract).
+
+The first full gate run (default `2885674298f9…`, `/var/tmp/decfiles-profile-gate-*`) failed
+in transfers. A Paste click landed while the monitor's quiet refresh was loading,
+and `update_operation_controls` had disabled the button for any pending load.
+Earlier gates had passed only by timing. A quiet refresh now never disables
+controls: every action already supersedes it, as tab controls did.
+
+The fixed tree passes with default
+`4239bfcd75a041b844acbf4cf515ca4134dd7df4b1a10b25f65d99acd305ce2d` and fixture
+`757cb39de940487f233237fb85e55b71291d1fbdd6d97008e8e68a23191d388c`
+(`/var/tmp/decfiles-profile2-artifacts/`), with every gate in
+`/var/tmp/decfiles-profile2-gate-*-evidence/`: navigation 8, operations 13,
+transfers 10, views 12, tabs 6, search 7, close 4, transfers-cancel 4,
+paste-races 2+1, search-races 2, and the new `profile-native.py` 4+1.
+
+The profile cases rewrite a private `XDG_CONFIG_HOME/gtk-4.0/gtk.css` in the
+shell's forms while the app runs. Checks are on rendered sidebar pixels:
+
+- the Finder marker selects Finder surfaces and default columns, with the
+  sidebar rendered in the palette colour (#2a5a8a);
+- a live rewrite switches to Explorer, details and the new palette (#c86432)
+  without restart;
+- an explicitly chosen layout survives palette and profile rewrites (#3c8c50);
+- no marker or no file means Native;
+- `--profile=finder` overrides the file's marker (`…-profile-evidence-cli/`).
+
+Captures: `finder-start.png`, `explorer-live.png`.
+
 Search checkpoint: 23 Rust tests (two new: nested/raw/link-free/bounded results,
 and cancellation plus the live-worker bound). Default
 `8b450524f150597dbc370b10d554d856014c495da0f7011936d27e93819abf3e` and fixture
@@ -450,8 +500,9 @@ many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move 
 picker, permanent delete, restore, undo, drag/drop, icon view, Finder gallery, Explorer
 command bar, bookmarks, mounts, remote backends, content search/indexing, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
-Profile styling, palette following,
-notifications, default-handler opt-in and shell launch/reveal integration are
+Window background palette colours (GTK's built-in theme ignores them),
+live icon-theme reload, notifications, default-handler opt-in and shell
+launch/reveal integration are
 also pending. The address entry cannot type arbitrary non-UTF8 bytes; pointer
 navigation/selection preserves them losslessly.
 
