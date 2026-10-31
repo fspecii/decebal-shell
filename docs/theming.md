@@ -416,3 +416,17 @@ looks at wide/narrow sizes. The first run retained an old GNOME height assertion
 for the removed fallback; it failed and was corrected to require visible inert
 content. Evidence: `/var/tmp/decebal-control-center-groups-source-gate-v2/result.json`.
 This is source/dev acceptance; native desktop and optimized rollout remain pending.
+
+
+Native applet-selection acceptance (`d54bd27` dev bar; fixture `3d6c185`):
+`tests/e2e/control-center-empty-native.py` passed 12 fresh overlay cases across
+Card, Fluent, GNOME and Dux. Explicit empty and unavailable-media selections had
+visible content, zero action targets and no keyboard focus after Down; actions-only
+positive controls exposed Screenshot, Settings and Stay Awake. The Card empty
+capture was visually reviewed. The sealed old a82 release failed the same fixture
+at Card/empty, exposing unrelated actions. Both runs cleaned up without leftovers
+or outer rescue, and the positive gate had no resource abort.
+Evidence: `/var/tmp/decebal-cc-empty-native-control/result.json` and
+`/var/tmp/decebal-cc-empty-negative-evidence/result.json`.
+These are private X11 fresh-process checks; same-process reload, native Settings
+interaction, hardware and optimized artifact acceptance remain separate gates.
