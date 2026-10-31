@@ -118,8 +118,10 @@ pub const CACHE_BYTES: usize = 10 << 20;
 /// Caches rasterised icons by (id, size), least recently used out first. A missing icon yields the theme's
 /// generic application icon, then a neutral placeholder. The cache empties itself when the icon settings or the
 /// shell theme change (the tint follows the theme's text colour).
+type IconKey = (String, u32, Option<(u8, u8, u8)>);
+
 pub struct IconCache {
-    lru: cache::Lru<(String, u32, Option<(u8, u8, u8)>), Pixmap>,
+    lru: cache::Lru<IconKey, Pixmap>,
     gen: (u64, u64),
 }
 

@@ -1629,7 +1629,7 @@ mod tests {
                 };
                 assert!(shown, "{edge:?}: {} alone", id.key());
                 let others = (l.start.w > 0.0) as usize + l.search.is_some() as usize + (!l.tasks.is_empty()) as usize + (l.clock.w > 0.0) as usize + (l.desktop.w > 0.0) as usize + l.tray.len();
-                assert_eq!(others, if matches!(id, A::Tasks) { 1 } else { 1 }, "{edge:?}: {} alone shows only itself", id.key());
+                assert_eq!(others, 1, "{edge:?}: {} alone shows only itself", id.key());
             }
         }
         crate::menubar::DecBar::status_test_applets(None);

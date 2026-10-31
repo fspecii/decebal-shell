@@ -174,21 +174,21 @@ mod tests {
     fn sizes_struts_input_and_pointer_cross_the_scale_and_drawing_happens_at_it() {
         for s in [1.0, 1.25, 2.0] {
             let mut a = Scaled::new(Probe { size: (0, 420), resized: (0, 0), last: (0.0, 0.0), drawn_at: 0.0 }, s);
-            assert_eq!(a.size(), (0, (420.0 * s as f32).ceil() as u32), "0 stays 'as long as the output'");
+            assert_eq!(a.size(), (0, (420.0 * s).ceil() as u32), "0 stays 'as long as the output'");
             let spec = a.surface_spec().unwrap();
-            assert_eq!((spec.reserve, spec.margin), ((26.0 * s as f32).ceil() as i32, (13.0 * s as f32).round() as i32));
-            assert_eq!(a.input_rects()[0], InputRect { x: 0, y: 0, w: (100.0 * s as f32).ceil() as i32, h: (26.0 * s as f32).ceil() as i32 });
-            a.resized((1600.0 * s as f32) as u32, (420.0 * s as f32) as u32);
+            assert_eq!((spec.reserve, spec.margin), ((26.0 * s).ceil() as i32, (13.0 * s).round() as i32));
+            assert_eq!(a.input_rects()[0], InputRect { x: 0, y: 0, w: (100.0 * s).ceil() as i32, h: (26.0 * s).ceil() as i32 });
+            a.resized((1600.0 * s) as u32, (420.0 * s) as u32);
             assert_eq!(a.inner().resized, (1600, 420));
-            a.pointer_motion(50.0 * s as f32, 20.0 * s as f32);
+            a.pointer_motion(50.0 * s, 20.0 * s);
             assert_eq!(a.inner().last, (50.0, 20.0));
-            let mut pm = Pixmap::new((40.0 * s as f32) as u32, (40.0 * s as f32) as u32).unwrap();
+            let mut pm = Pixmap::new((40.0 * s) as u32, (40.0 * s) as u32).unwrap();
             a.draw(&mut pm);
-            assert_eq!(a.inner().drawn_at, s as f32);
+            assert_eq!(a.inner().drawn_at, s);
             // the 10..20 logical square covers 10s..20s surface pixels
             let at = |x: u32, y: u32| pm.pixel(x, y).unwrap().alpha();
-            assert_eq!(at((15.0 * s as f32) as u32, (15.0 * s as f32) as u32), 255);
-            assert_eq!(at((22.0 * s as f32) as u32, (15.0 * s as f32) as u32), 0);
+            assert_eq!(at((15.0 * s) as u32, (15.0 * s) as u32), 255);
+            assert_eq!(at((22.0 * s) as u32, (15.0 * s) as u32), 0);
             assert_eq!(crate::gfx::render_scale(), 1.0, "the scale ends with the call");
         }
     }

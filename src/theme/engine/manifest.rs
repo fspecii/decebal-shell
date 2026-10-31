@@ -140,9 +140,8 @@ fn check(ty: &Ty, item: &Item) -> Result<Value, String> {
         }
         Ty::Logo => {
             let s = v.as_str().ok_or("must be a string")?;
-            match crate::panel::branding::parse_logo(s)? {
-                crate::panel::branding::Logo::File(_) => check_asset(s, AssetKind::Image)?,
-                _ => {}
+            if let crate::panel::branding::Logo::File(_) = crate::panel::branding::parse_logo(s)? {
+                check_asset(s, AssetKind::Image)?;
             }
             Ok(json!(s))
         }
@@ -732,7 +731,7 @@ format = "%H:%M"
     #[test]
     fn panel_and_branding_keys_validate() {
         let ok = format!("{GOOD}\n[branding]\nlogo = \"icons/kde.png\"\nlogo_tint = true\nlauncher_label = \"Activities\"\ndesktop_label = \"Desktop\"\n");
-        let a = analyze(&ok.replacen("[metrics]", "[metrics]", 1));
+        let a = analyze(&ok);
         assert!(!a.diags.iter().any(|d| d.level == Level::Error && d.key.starts_with("branding")), "{:?}", a.diags);
         for (bad, why) in [("logo = \"builtin:tux\"", "built-in"), ("logo = \"icon:../x\"", "icon name"), ("logo = \"../escape.png\"", ""), ("logo = \"run.sh\"", "png")] {
             let a = analyze(&format!("{GOOD}\n[branding]\n{bad}\n"));

@@ -555,7 +555,7 @@ mod tests {
         // split is the rail's alone
         let split = UserPanel { split: Some(true), ..Default::default() };
         assert_eq!(resolve_edge(&inputs(Renderer::Pill, &split, &t)), (Edge::Top, true, Origin::User));
-        assert_eq!(resolve_edge(&inputs(Renderer::MenuBar, &split, &t)).1, false);
+        assert!(!resolve_edge(&inputs(Renderer::MenuBar, &split, &t)).1);
     }
 
     #[test]
