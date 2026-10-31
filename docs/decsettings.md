@@ -232,6 +232,9 @@ coalesced, ordered runtime observations prevent a late reload worker from
 restoring support after a newer disconnect. Identical idle observations do not
 request another repaint.
 
+## Touchpad, mouse & keyboard on Wayland (Keyboard & Input)
+The `xinput` and `xset` rows above only reach X11 apps. In a Wayland session (`src/settings/touchpad.rs`) the pane adds a section for the compositor itself: natural scrolling, tap to click, left-handed buttons, pointer speed and key repeat. They are the `[input]` keys of rdwm's `config.toml`, offered only when the loaded rdwm schema lists them, edited in place like every other setting, and applied by rdwm to all libinput devices on reload (the real session started from the login screen; a nested rdwm window ignores `[input]`). On Wayland the X tools' "not installed" rows and the "No X server" error are hidden.
+
 ## Trackpad swipes (Keyboard & Input)
 rdwm recognises native three- and four-finger swipes (`[gestures]`, rdwm `docs/gestures.md`). The section at the
 end of Keyboard & Input (`src/settings/gestures.rs`) offers a control for each `[gestures]` key the loaded schema lists

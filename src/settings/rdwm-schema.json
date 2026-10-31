@@ -855,6 +855,129 @@
   "keys": [
     {
       "choices": [],
+      "default": true,
+      "desc": "Tap the touchpad to click (Wayland tty session, libinput)",
+      "key": "tap_to_click",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Natural scrolling: content follows the fingers (Wayland tty session, libinput)",
+      "key": "natural_scroll",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Swap the left and right buttons (Wayland tty session, libinput)",
+      "key": "left_handed",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 0.0,
+      "desc": "Pointer speed, -1.0 slowest to 1.0 fastest (Wayland tty session, libinput)",
+      "key": "pointer_accel",
+      "max": 1.0,
+      "min": -1.0,
+      "section": "input",
+      "type": "float"
+    },
+    {
+      "choices": [
+        "flat",
+        "adaptive"
+      ],
+      "default": null,
+      "desc": "Pointer acceleration curve; unset keeps the device default",
+      "key": "accel_profile",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "enum"
+    },
+    {
+      "choices": [],
+      "default": 25,
+      "desc": "Key repeat, characters per second (0 disables repeat)",
+      "key": "repeat_rate",
+      "max": 1000.0,
+      "min": 0.0,
+      "section": "input",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": 200,
+      "desc": "Delay before key repeat starts, in ms",
+      "key": "repeat_delay",
+      "max": 10000.0,
+      "min": 0.0,
+      "section": "input",
+      "type": "int"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "XKB rules",
+      "key": "xkb_rules",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "XKB model",
+      "key": "xkb_model",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "XKB layout, for example \"us\" or \"us,de\"",
+      "key": "xkb_layout",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "XKB variant",
+      "key": "xkb_variant",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": null,
+      "desc": "XKB options, for example \"caps:escape\"",
+      "key": "xkb_options",
+      "max": null,
+      "min": null,
+      "section": "input",
+      "type": "string"
+    },
+    {
+      "choices": [],
       "default": 1,
       "desc": "Window border width",
       "key": "border_px",
