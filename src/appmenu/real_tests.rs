@@ -161,6 +161,16 @@ fn real_qt_and_libdbusmenu_exporters() {
     wait_for("late trigger", || lines(&qt_record).contains(&"triggered late 0".to_string()).then_some(()));
     assert!(!lines(&qt_record).iter().any(|l| l.contains("undo")), "disabled item must not trigger");
 
+    // Alt+F inside the Qt window (XTEST on the verified private display): Qt asks the global menu to
+    // open File (`ItemActivationRequested`), the same request the bar turns into an open dropdown.
+    let before = menus.snapshot().activation_request.map_or(0, |r| r.seq);
+    let st = Command::new("xdotool").args(["windowfocus", "--sync", &win.to_string(), "key", "--clearmodifiers", "alt+f"]).status().unwrap();
+    assert!(st.success());
+    let req = wait_for("ItemActivationRequested", || menus.snapshot().activation_request.filter(|r| r.seq > before));
+    let e3 = menus.snapshot().state.exported().unwrap().clone();
+    assert_eq!(req.token, e3.token);
+    assert_eq!(e3.tree.top_level_of(req.id), Some(file), "Qt asked for File (id {})", req.id);
+
     // The app exits: its registration and menu go with it.
     let _ = qt.0.kill();
     let _ = qt.0.wait();

@@ -317,6 +317,11 @@ impl MenuTree {
         self.root.find(id)
     }
 
+    /// The top-level item (a child of the root) whose subtree holds `id`.
+    pub fn top_level_of(&self, id: i32) -> Option<i32> {
+        self.root.children.iter().find(|c| c.find(id).is_some()).map(|c| c.id)
+    }
+
     pub fn len(&self) -> usize {
         self.root.count()
     }
@@ -589,6 +594,7 @@ mod tests {
         assert!(!t.activatable(0), "root");
         assert!(!t.activatable(999), "unknown id");
         assert!(t.openable(0) && t.openable(1) && t.openable(14));
+        assert_eq!((t.top_level_of(140), t.top_level_of(2), t.top_level_of(0), t.top_level_of(999)), (Some(1), Some(2), None, None));
         assert!(!t.openable(10) && !t.openable(2), "plain item / disabled menu");
     }
 

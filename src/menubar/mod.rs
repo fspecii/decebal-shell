@@ -663,6 +663,11 @@ impl DecBar {
             self.hover_row = None;
             return true;
         }
+        if let Some(i) = self.app_menu.take_request() {
+            self.close();
+            self.open_menu(i);
+            return true;
+        }
         false
     }
 

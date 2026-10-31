@@ -41,6 +41,8 @@ pub struct Exported {
     /// Drill-down path inside the open exported menu: (bar menu index, submenu ids below the title).
     path: Option<(usize, Vec<i32>)>,
     open: Option<usize>,
+    /// Last `ItemActivationRequested` acted on.
+    request_seq: u64,
 }
 
 impl Exported {
@@ -206,6 +208,22 @@ impl Exported {
         })
     }
 
+    /// The bar menu to open because the application asked (`ItemActivationRequested`, e.g. Alt+F
+    /// inside a Qt window), once per request.
+    pub fn take_request(&mut self) -> Option<usize> {
+        let r = self.snap.activation_request?;
+        if r.seq <= self.request_seq {
+            return None;
+        }
+        self.request_seq = r.seq;
+        let e = self.snap.state.exported()?;
+        if e.token != r.token {
+            return None;
+        }
+        let title = e.tree.top_level_of(r.id)?;
+        self.slots.iter().position(|s| s.as_ref().is_some_and(|s| s.token == r.token && s.title == title))
+    }
+
     /// Identity of bar menu `menu` when it is exported: the same app menu keeps it across rebuilds.
     pub fn identity(&self, menu: usize) -> Option<(MenuToken, i32)> {
         self.slots.get(menu)?.as_ref().map(|s| (s.token, s.title))
@@ -369,6 +387,17 @@ mod tests {
         }
         let mut pm = tiny_skia::Pixmap::new(1920, 400).unwrap();
         bar.draw_dropdown(&mut pm, 3);
+
+        // The application asks for its Edit menu (as Qt does for Alt+E): the bar opens it.
+        bar.close();
+        let mut w = crate::dbus::Writer::default();
+        w.u32(20);
+        w.u32(0);
+        app.send(crate::dbus::Message::signal(MENU_PATH, crate::appmenu::DBUSMENU, "ItemActivationRequested", "iu", w.buf));
+        settle(&mut bar, "requested menu opened", |b| b.open == Open::Menu(3));
+        bar.close();
+        bar.refresh_app_name();
+        assert_eq!(bar.open, Open::None, "a request opens the menu once");
 
         // The application leaving takes its menus with it.
         app.quit();

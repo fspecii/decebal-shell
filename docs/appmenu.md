@@ -145,7 +145,9 @@ Kept narrow so it can be rebased around the panel owner's scaling work:
   exactly the intended `QAction`s (recorded by the app), Qt's toggled state comes back as a
   property update, Qt's `aboutToShow` adds an item that arrives through `LayoutUpdated` and can be
   clicked, disabled Undo never triggers, Qt exiting drops its menu; libdbusmenu delivers
-  `item-activated` for the clicked ids with the click timestamp.
+  `item-activated` for the clicked ids with the click timestamp. Alt+F typed into the Qt window
+  (XTEST on the verified private display) makes Qt send `ItemActivationRequested` for File; the
+  bar opens the requested menu once per request (covered by the native bar test).
   Display rule: reserved numbers 700-899 only, never `-displayfd`; the lock file, the socket path
   and the abstract socket must all belong to the started Xvfb before any client connects, with a
   private Xauthority cookie. Nothing foreign is ever unlinked.
@@ -155,8 +157,7 @@ Kept narrow so it can be rebased around the panel owner's scaling work:
 
 ## Gaps
 * Keyboard navigation and mnemonics of exported menus are not wired (pointer only); icons
-  (`icon-name`/`icon-data`) are parsed but not drawn; `ItemActivationRequested` is published in
-  the snapshot but the bar does not yet open the requested menu.
+  (`icon-name`/`icon-data`) are parsed but not drawn.
 * Clicks carry timestamp 0 (the bar's pointer events have no X server time).
 * Dropdown width is measured from labels only; long exported shortcuts may crowd labels.
 
