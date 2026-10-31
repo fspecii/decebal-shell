@@ -24,6 +24,7 @@ pub mod omarchy;
 pub mod qt;
 pub mod terminals;
 pub mod x11;
+pub mod xsettings;
 
 use super::live::{system_dark, Source};
 use super::model::{contrast, Rgb, Selection, Theme};
@@ -216,6 +217,12 @@ pub const OPTIONS: &[(&str, bool, &str, &str)] = &[
         true,
         "Theme GTK 3 and GTK 4 controls",
         "Select a generated Decebal GTK theme so plain GTK 3 / GTK 4 apps get the theme's buttons, fields, header bars and states (libadwaita apps are coloured either way); off keeps your own GTK theme",
+    ),
+    (
+        "gtk.xsettings",
+        true,
+        "Live GTK settings on X11",
+        "On X11 without a settings daemon, run Decebal's small XSETTINGS manager so open GTK 3 / GTK 4 apps follow theme, icon, cursor and font changes; another daemon is never replaced. libadwaita apps still need reopening for a new palette",
     ),
 ];
 
@@ -857,7 +864,7 @@ impl Worker {
     }
 }
 
-fn proc_start(pid: u32) -> Option<u64> {
+pub(crate) fn proc_start(pid: u32) -> Option<u64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     // the command name may contain spaces and parentheses: fields start after the last ')'
     stat[stat.rfind(')')? + 1..].split_whitespace().nth(19)?.parse().ok()

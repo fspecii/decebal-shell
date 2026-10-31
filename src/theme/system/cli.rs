@@ -9,6 +9,8 @@ pub const HELP: &str = "decthemectl apply-system [--dry-run] [--only gtk,qt,...]
 decthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
                                  off puts every changed file and setting back (originals are saved by the first apply)
 decthemectl system status [--json]
+decthemectl system xsettings serve --display D --ini PATH | status [--display D] | stop [--display D]
+                                 the X11 XSETTINGS manager the GTK target starts (never replaces another one)
 decthemectl system palette --json  the resolved colour roles the app targets render from
 decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11 terminals
 decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font gtk-theme  (VALUE none = unset; signals, gtk-font and gtk-theme take on|off:
@@ -119,6 +121,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             }
             Ok(())
         }
+        Some("xsettings") => xsettings(&args[1..]),
         Some("palette") => {
             // The resolved roles every target renders from (the native GTK harness compares pixels against these).
             let (p, _) = current_palette(src)?;
@@ -195,5 +198,40 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             Ok(())
         }
         Some(other) => Err(format!("unknown system command `{other}`\n{HELP}")),
+    }
+}
+
+/// `decthemectl system xsettings serve|status|stop`.
+fn xsettings(args: &[String]) -> Result<(), String> {
+    let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let display = opt("--display").or_else(|| std::env::var("DISPLAY").ok()).filter(|d| !d.is_empty()).ok_or("no X display (--display or DISPLAY)")?;
+    #[cfg(feature = "x11")]
+    {
+        use super::xsettings::{probe, serve, stop, Owner};
+        match args.first().map(String::as_str) {
+            Some("serve") => {
+                let ini = opt("--ini").map(std::path::PathBuf::from).ok_or("serve needs --ini PATH")?;
+                println!("{}", serve(&display, &ini)?);
+                Ok(())
+            }
+            Some("status") | None => {
+                match probe(&display)? {
+                    Owner::None => println!("no XSETTINGS manager on {display}"),
+                    Owner::Ours { pid, window, .. } => println!("Decebal's XSETTINGS manager on {display}: pid {pid}, window {window:#x}"),
+                    Owner::Foreign { window } => println!("another XSETTINGS manager owns {display} (window {window:#x})"),
+                }
+                Ok(())
+            }
+            Some("stop") => {
+                println!("{}", if stop(&display)? { "stopped" } else { "no Decebal XSETTINGS manager was running" });
+                Ok(())
+            }
+            Some(other) => Err(format!("unknown xsettings command `{other}`")),
+        }
+    }
+    #[cfg(not(feature = "x11"))]
+    {
+        let _ = display;
+        Err("this build has no X11 support".into())
     }
 }

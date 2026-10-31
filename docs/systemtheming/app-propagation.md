@@ -74,6 +74,69 @@ Boundaries:
   compositors signal activation
   through xdg-shell.
 
+## Live GTK settings on X11 (XSETTINGS manager)
+
+GTK on X11 reads `settings.ini` only at startup. Afterwards, running GTK 3 / GTK 4 apps change their theme, icon theme, cursor,
+font or button layout only through an XSETTINGS manager (freedesktop XSETTINGS 0.5; GDK `gdk/x11/gdksettings.c`). This machine
+has none installed (no xsettingsd, xfsettingsd or gsd-xsettings).
+
+After a successful GTK publication, the GTK target makes sure Decebal's own small manager runs, unless any of these holds:
+
+* there is no `DISPLAY`;
+* the session is Wayland;
+* this is a unit test;
+* `DECEBAL_XSETTINGS=0` is set;
+* the option "Live GTK settings on X11" (`gtk.xsettings`) is off.
+
+The manager is `decthemectl system xsettings serve --display D --ini PATH`, so there is no new binary or packaging change.
+
+* **Values:** read from the generated `gtk-3.0/settings.ini`.
+
+  | settings.ini key | XSETTINGS name |
+  | --- | --- |
+  | `gtk-theme-name` | `Net/ThemeName` |
+  | `gtk-icon-theme-name` | `Net/IconThemeName` |
+  | `gtk-cursor-theme-name` | `Gtk/CursorThemeName` |
+  | `gtk-cursor-theme-size` | `Gtk/CursorThemeSize` |
+  | `gtk-font-name` | `Gtk/FontName` |
+  | `gtk-decoration-layout` | `Gtk/DecorationLayout` |
+
+  GDK has no XSETTINGS name for the dark preference. Dark or light reaches plain GTK through the theme name, because the generated
+  `Decebal` / `Decebal-Alt` slot itself imports the dark or light sheet, and the slots alternate on every colour change.
+* **Updates:** inotify on the `gtk-3.0` directory, so the transaction's atomic rename is seen. The serial advances once per
+  change, and only changed settings carry the new last-change serial.
+* **Ownership:** the `_XSETTINGS_S<screen>` selection is the singleton.
+  - An existing owner is never replaced, whether another daemon or Decebal's own.
+  - The selection is claimed with a server timestamp, verified after claiming, and announced with `MANAGER`.
+  - On SelectionClear the manager ends quietly.
+* **Lifetime:** the start is observed. The new process must be seen owning the selection, with its marker
+  `_DECEBAL_XSETTINGS_OWNER` = "pid start-time", within 2 s; otherwise the apply reports a warning.
+  - `decthemectl system xsettings status|stop`, and turning GTK integration off, send `_DECEBAL_XSETTINGS_QUIT` with that pid and
+    start time to the owner window.
+  - The manager checks the pid and start time, releases the selection and exits. No process is signalled.
+* **Limits:**
+  - libadwaita apps (Files, ...) ignore GTK themes and read the user `gtk.css` palette only at startup, so a new palette still
+    needs reopening there. Dark/light follows `color-scheme`.
+  - Wayland GTK apps use the settings portal, not this manager.
+
+**Native gates (UNRUN):**
+
+```sh
+# 1. unit: protocol layout, serials, ownership classification
+cargo test --lib theme::system::xsettings
+# 2. private X11 live acceptance (owned Xvfb, private HOME/XDG; no other manager on that display): with the build's decthemectl
+#    and DECEBAL_XSETTINGS unset, run the native harness strict for plain GTK:
+DECTHEMECTL=target/debug/decthemectl python3 tests/systemtheming/gtk-native.py OUT --themes nord,macos --modes dark --kits gtk3,gtk4,adw --strict-live gtk3,gtk4
+#    expected: gtk3/gtk4 live, adw stale (palette) - recorded, not counted as live.
+# 3. ownership: start a foreign owner of _XSETTINGS_S0 first (any test client holding the selection) -> apply reports "another
+#    XSETTINGS manager", the foreign owner keeps it; then `decthemectl system off` -> Decebal's manager (if any) releases, the
+#    foreign one is untouched; `system xsettings status` before/after.
+```
+
+Native gate 2 needs one harness change before it can pass: its private `apply()` passes `DECEBAL_SYSTEM_AUTOMATIC=0`, which does
+not suppress the manager. It must also run without a pre-existing XSETTINGS owner on its own Xvfb. The current root harness is
+not edited here.
+
 ## Icon and cursor publication (contract with the asset workflow)
 
 `theme::system::publish_assets(shell_json) -> Publication` (`Requested` | `Off(reason)`) is the entry point for an accepted icon /

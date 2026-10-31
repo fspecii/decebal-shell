@@ -729,12 +729,43 @@ impl Target for Gtk {
 
     fn after(&self, cx: &mut super::Ctx) {
         cx.report.warnings.extend(missing_themes(cx.cfg, cx.env));
+        // Only after the GTK files were committed: the manager publishes what was just written.
+        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
+        let suppressed = std::env::var("DECEBAL_XSETTINGS").is_ok_and(|v| v == "0");
+        if let Some(display) = cx.env.display.as_deref().filter(|d| super::xsettings::wanted(Some(d), wayland, suppressed, cx.cfg.option("gtk.xsettings"))) {
+            ensure_xsettings(cx, display);
+        }
     }
 
     fn undo(&self, cx: &mut super::Ctx) {
+        #[cfg(feature = "x11")]
+        {
+            if let Some(display) = cx.env.display.as_deref().filter(|_| !cfg!(test)) {
+                match super::xsettings::stop(display) {
+                    Ok(true) => cx.report.notes.push("GTK: Decebal's XSETTINGS manager stopped".into()),
+                    Ok(false) => {}
+                    Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}")),
+                }
+            }
+        }
         super::gsettings_restore(cx, "gtk");
     }
 }
+
+#[cfg(feature = "x11")]
+fn ensure_xsettings(cx: &mut super::Ctx, display: &str) {
+    use super::xsettings::Status;
+    let ini = cx.env.config_home.join("gtk-3.0/settings.ini");
+    match super::xsettings::ensure(display, &ini) {
+        Ok(Status::Started { pid }) => cx.report.notes.push(format!("GTK: started Decebal's XSETTINGS manager (pid {pid}); open GTK 3 / GTK 4 apps follow theme changes")),
+        Ok(Status::Running { .. }) => {}
+        Ok(Status::Foreign) => cx.report.notes.push("GTK: another XSETTINGS manager runs on this display; open GTK apps follow it, Decebal leaves it alone".into()),
+        Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}; open GTK apps keep their theme until reopened")),
+    }
+}
+
+#[cfg(not(feature = "x11"))]
+fn ensure_xsettings(_cx: &mut super::Ctx, _display: &str) {}
 
 /// The icon / cursor publication ([`super::publish_assets`]): `gtk-icon-theme-name` / `gtk-cursor-theme-name` in both `settings.ini`
 /// files and gsettings `icon-theme` / `cursor-theme`, for installed themes only. No CSS, colour, font, theme-name or layout key.
