@@ -568,6 +568,8 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     let verified = verify_pins(req, &staged, archive_sha.as_deref())?;
     // declared aliases become link nodes only now, after their folders' tree ids were verified
     let aliases = super::aliases::apply(&mut staged, &req.spec.path, &req.spec.text_links, &req.spec.dir_aliases)?;
+    // and no folder links of the pack (declared or ordinary) may form a cycle with its real folders
+    super::aliases::check_dir_graph(&staged, &req.spec.path)?;
     rec.tree = staged.tree.clone();
     rec.archive_sha256 = archive_sha;
     if rec.commit.is_none() || verified.commit {

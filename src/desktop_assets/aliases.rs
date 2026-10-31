@@ -167,6 +167,95 @@ pub fn apply(st: &mut Staged, pack: &str, text: &[TextLinks], dirs: &[DirAlias])
     Ok(r)
 }
 
+/// Refuses a pack whose folders, as they would be published, form a cycle: the graph is every real folder of the pack
+/// (implicit parents included) with its containment edges (parent -> child) plus, for every link inside the pack that
+/// resolves to a folder inside the pack (declared `dir_alias`, a text alias naming a folder, or an ordinary symlink of
+/// the source), an edge from the link's folder to that folder. A cycle there means a walker following folder links
+/// recurses forever (`a/to-b -> b`, `b/to-a -> a`, or longer through nested folders), although each link resolves to a
+/// real folder. Links the build drops anyway (to the pack root, to themselves or to a folder enclosing them) are not
+/// edges. Links into `link_sources` are expanded into copies by the build, with their own guard, and are not covered.
+/// Iterative depth-first search: linear in folders and links, no recursion. Returns the number of folder links seen.
+pub fn check_dir_graph(st: &Staged, pack: &str) -> Result<usize, String> {
+    use std::collections::HashMap;
+    let parent = |p: &str| -> String { p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string()) };
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut names: Vec<String> = Vec::new();
+    let id = |p: &str, index: &mut HashMap<String, usize>, names: &mut Vec<String>| -> usize {
+        if let Some(&i) = index.get(p) {
+            return i;
+        }
+        index.insert(p.to_string(), names.len());
+        names.push(p.to_string());
+        names.len() - 1
+    };
+    id("", &mut index, &mut names);
+    let mut edges: Vec<(usize, usize)> = Vec::new();
+    let mut links = 0;
+    // every folder: the Dir nodes and the parents of every node, with their containment edges
+    for (k, node) in st.nodes.iter() {
+        let Some(rel) = under(k, pack).filter(|r| !r.is_empty()) else { continue };
+        let mut d = if matches!(node, Node::Dir) { rel.to_string() } else { parent(rel) };
+        while !d.is_empty() && !index.contains_key(&d) {
+            let (child, up) = (id(&d, &mut index, &mut names), parent(&d));
+            let p = id(&up, &mut index, &mut names);
+            edges.push((p, child));
+            d = up;
+        }
+    }
+    for (k, node) in st.nodes.iter() {
+        let (Node::Link(_), Some(lrel)) = (node, under(k, pack)) else { continue };
+        let Resolved::Dir(t) = st.resolve(k) else { continue };
+        let Some(trel) = under(&t, pack) else { continue };
+        if trel.is_empty() || lrel == trel || lrel.starts_with(&format!("{trel}/")) {
+            continue; // dropped by the build, never published
+        }
+        let (from, to) = (id(&parent(lrel), &mut index, &mut names), id(trel, &mut index, &mut names));
+        edges.push((from, to));
+        links += 1;
+    }
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); names.len()];
+    for (a, b) in edges {
+        adj[a].push(b);
+    }
+    // 0 = not seen, 1 = on the current path, 2 = done
+    let mut colour = vec![0u8; names.len()];
+    for start in 0..names.len() {
+        if colour[start] != 0 {
+            continue;
+        }
+        let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
+        colour[start] = 1;
+        while let Some(&mut (n, ref mut next)) = stack.last_mut() {
+            if let Some(&m) = adj[n].get(*next) {
+                *next += 1;
+                match colour[m] {
+                    0 => {
+                        colour[m] = 1;
+                        stack.push((m, 0));
+                    }
+                    1 => {
+                        let from = stack.iter().position(|(x, _)| *x == m).unwrap_or(0);
+                        let mut path: Vec<&str> = stack[from..].iter().map(|(x, _)| if names[*x].is_empty() { "." } else { names[*x].as_str() }).collect();
+                        let more = path.len().saturating_sub(8);
+                        path.truncate(8);
+                        return Err(format!(
+                            "folder links form a cycle: {} -> {}{}",
+                            path.join(" -> "),
+                            if names[m].is_empty() { "." } else { &names[m] },
+                            if more > 0 { format!(" ({more} more folders on the way)") } else { String::new() }
+                        ));
+                    }
+                    _ => {}
+                }
+            } else {
+                colour[n] = 2;
+                stack.pop();
+            }
+        }
+    }
+    Ok(links)
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::assemble::{build, keep, Spec};
@@ -226,6 +315,7 @@ mod tests {
         let r = (|| {
             let mut st = from_tar(&targz(entries, None)[..], Format::TarGz, s.path().join("src"), f, lim, &keep)?;
             let rep = apply(&mut st, &sp.path, &sp.text_links, &sp.dir_aliases)?;
+            check_dir_graph(&st, &sp.path)?;
             Ok((rep, build(&st, sp, &s.path().join("out"), lim)?))
         })();
         (r, s)
@@ -336,5 +426,106 @@ mod tests {
         let many: Vec<E> = (0..50).map(|i| E::file(&format!("top/links/apps/48/m{i}.svg"), b"real.svg")).collect();
         let (r, _s) = run(&source(many), &spec(true, vec![]), &Limits { max_entries: 40, ..Limits::default() });
         assert!(r.map(|_| ()).unwrap_err().contains("more than 40 entries"));
+    }
+
+    fn real(dirs: &[&str]) -> Vec<E> {
+        let mut v = vec![E::dir("top/"), E::file("top/LICENSE", b"GPL\n"), E::file("top/src/index.theme", INDEX), E::file("top/src/apps/48/real.svg", SVG)];
+        for d in dirs {
+            v.push(E::file(&format!("top/src/{d}/f.svg"), SVG));
+        }
+        v
+    }
+
+    fn aliases(pairs: &[(&str, &str)]) -> Vec<DirAlias> {
+        pairs.iter().map(|(n, t)| DirAlias { name: n.to_string(), target: t.to_string() }).collect()
+    }
+
+    fn no_text(dirs: Vec<DirAlias>) -> Spec {
+        let mut sp = spec(true, dirs);
+        sp.text_links.clear();
+        sp
+    }
+
+    #[test]
+    fn folder_alias_cycles_through_real_folders_are_refused() {
+        // the two-folder cycle each of whose links resolves to a real folder
+        let (r, s) = run(&real(&["a", "b"]), &no_text(aliases(&[("a/to-b", "b"), ("b/to-a", "a")])), &Limits::default());
+        let e = r.map(|_| ()).unwrap_err();
+        assert!(e.contains("folder links form a cycle") && e.contains("a") && e.contains("b"), "{e}");
+        assert_eq!(std::fs::read_dir(s.path().join("out")).unwrap().count(), 0, "refused before anything was built");
+        // longer, through nested real folders: a/x -> c, c/y -> b, b/z -> a
+        let (r, _s) = run(&real(&["a/x", "b/z", "c/y"]), &no_text(aliases(&[("a/x/to-c", "c"), ("c/y/to-b", "b"), ("b/z/to-a", "a")])), &Limits::default());
+        assert!(r.map(|_| ()).unwrap_err().contains("folder links form a cycle"));
+        // a text alias that names a folder takes part too
+        let mut sp = spec(true, aliases(&[("b/to-a", "a")]));
+        sp.text_links[0].replace = true;
+        let src = {
+            let mut v = real(&["a", "b"]);
+            v.push(E::file("top/links/a/to-b", b"../b"));
+            v
+        };
+        let (r, _s) = run(&src, &sp, &Limits::default());
+        assert!(r.map(|_| ()).unwrap_err().contains("folder links form a cycle"));
+    }
+
+    #[test]
+    fn ordinary_folder_symlinks_of_the_pack_are_covered_too() {
+        let mut v = real(&["a", "b"]);
+        v.push(E::link("top/src/a/to-b", "../b"));
+        v.push(E::link("top/src/b/to-a", "../a"));
+        let (r, _s) = run(&v, &no_text(vec![]), &Limits::default());
+        assert!(r.map(|_| ()).unwrap_err().contains("folder links form a cycle"), "no declared alias needed");
+        // a link to an enclosing folder is still just dropped by the build, as before (it is never published)
+        let mut v = real(&["a/b"]);
+        v.push(E::link("top/src/a/b/up", "../.."));
+        v.push(E::link("top/src/a/self", "."));
+        let (r, s) = run(&v, &no_text(vec![]), &Limits::default());
+        r.unwrap();
+        assert!(std::fs::symlink_metadata(s.path().join("out/a/b/up")).is_err() && std::fs::symlink_metadata(s.path().join("out/a/self")).is_err());
+    }
+
+    #[test]
+    fn acyclic_folder_aliases_install_including_the_lingmo_scale_set() {
+        let ctx = ["actions", "apps", "categories", "devices", "emblems", "mimetypes", "places", "status"];
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        for c in ctx {
+            for x in ["@2x", "@3x"] {
+                pairs.push((format!("{c}{x}"), c.to_string()));
+            }
+        }
+        let dirs: Vec<DirAlias> = pairs.iter().map(|(n, t)| DirAlias { name: n.clone(), target: t.clone() }).collect();
+        let reals: Vec<String> = ctx.iter().map(|c| format!("{c}/16")).collect();
+        let (r, s) = run(&real(&reals.iter().map(String::as_str).collect::<Vec<_>>()), &no_text(dirs), &Limits::default());
+        let (rep, _) = r.unwrap();
+        assert_eq!(rep.dir_aliases, 16);
+        assert_eq!(std::fs::read_link(s.path().join("out/places@3x")).unwrap().display().to_string(), "places");
+        // two links to one folder (a diamond) and a link across siblings are not cycles
+        let (r, _s) = run(&real(&["a", "b/c"]), &no_text(aliases(&[("a/to-c", "b/c"), ("x", "a"), ("y", "a")])), &Limits::default());
+        r.unwrap();
+    }
+
+    #[test]
+    fn the_graph_check_is_linear_and_iterative_on_long_link_chains() {
+        // 3000 folders d0..d2999, each with an ordinary link to the next: a long acyclic chain of link edges
+        let n = 3000;
+        let mut v = real(&[]);
+        for i in 0..n {
+            v.push(E::file(&format!("top/src/d{i}/f.svg"), SVG));
+            if i + 1 < n {
+                v.push(E::link(&format!("top/src/d{i}/next"), &format!("../d{}", i + 1)));
+            }
+        }
+        let s = Scratch::new("graph-long");
+        let f = Filter { strip: 1, path: "src".into(), ..Filter::default() };
+        let st = from_tar(&targz(&v, None)[..], Format::TarGz, s.path().to_path_buf(), f.clone(), &Limits::default(), &keep).unwrap();
+        let t = std::time::Instant::now();
+        assert_eq!(check_dir_graph(&st, "src").unwrap(), n - 1);
+        assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
+        // closing the chain makes one 3000-folder cycle: found without recursion, reported briefly
+        v.push(E::link(&format!("top/src/d{}/next", n - 1), "../d0"));
+        let s2 = Scratch::new("graph-long2");
+        let st = from_tar(&targz(&v, None)[..], Format::TarGz, s2.path().to_path_buf(), f, &Limits::default(), &keep).unwrap();
+        let e = check_dir_graph(&st, "src").unwrap_err();
+        assert!(e.contains("folder links form a cycle") && e.contains("more folders on the way") && e.len() < 400, "{e}");
     }
 }
