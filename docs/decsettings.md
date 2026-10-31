@@ -252,8 +252,9 @@ other control (schema range check, `rdwmctl check-config`, the persistence worke
 ## Small windows and large text: wrapping long words
 Explanations, row details, page context and titles wrap greedily at spaces (`Painter::wrap`, `wrap_title`). A
 word wider than the column on its own (`window-manager` at 640x540 with 200 % interface and 200 % text) is split
-instead of running past its card (`ui::long_cut`): the widest prefix of whole characters that fits, found by binary
-search (a few measurements per line, also for very long input), moved back to just after a `-`, `/`, `.`, `_`, `?`,
+instead of running past its card (`ui::long_cut`): cluster boundaries are computed once per word, then each line
+searches exponentially from short prefixes before a binary search in that bracket. This avoids repeatedly scanning
+and measuring the whole remaining suffix of a long URL. The fitting prefix is moved back to just after a `-`, `/`, `.`, `_`, `?`,
 `&`, `=` or `:` when the fitting part has one (`four-` / `finger`, URLs at their separators). Combining marks,
 variation selectors, emoji modifiers and zero-width-joiner sequences stay with their base character; CJK text
 breaks between characters. No character is dropped or elided and the text size is never reduced.
@@ -262,4 +263,5 @@ breaks between characters. No character is dropped or elided and the text size i
   exists to draw); runs of spaces inside a line collapse to one, as before. Wrapping does not hyphenate words.
 * Keyboard focus: while focus was last moved with the keyboard, a layout that moves the focused control out of view
   (rows above it loading later, as the Keyboard & Input data does) scrolls it back in the same frame; scrolling with
-  the wheel or clicking hands the view back to the user.
+  the wheel, Page Up/Down, Home/End or clicking hands the view back to the user. If an explanatory row exceeds the
+  viewport, focus follows its actual control; an oversized control keeps a stable top alignment instead of oscillating.

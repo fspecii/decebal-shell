@@ -1008,9 +1008,13 @@ impl SettingsApp {
     fn ensure_visible(&mut self, id: &str) {
         if let Some(p) = self.frame.find(id) {
             let h = self.content_h();
-            let (top, bot) = (p.row_rect.1, p.row_rect.1 + p.row_rect.3);
-            let margin = 16.0 * self.s;
-            if top < margin {
+            let margin = (16.0 * self.s).min(h / 4.0);
+            let available = h - margin * 2.0;
+            // Oversized explanatory rows cannot fit. Follow the actual interactive control
+            // instead; otherwise successive draws alternate between the row's top and bottom.
+            let r = if p.row_rect.3 <= available { p.row_rect } else { p.rect };
+            let (top, bot) = (r.1, r.1 + r.3);
+            if r.3 > available || top < margin {
                 self.scroll = (self.scroll + top - margin).max(0.0);
             } else if bot > h - margin {
                 self.scroll += bot - (h - margin);
@@ -1069,18 +1073,22 @@ impl SettingsApp {
                 return ret;
             }
             Key::PageDown => {
+                self.follow_focus = false;
                 self.scroll += self.content_h() * 0.8;
                 return ret;
             }
             Key::PageUp => {
+                self.follow_focus = false;
                 self.scroll = (self.scroll - self.content_h() * 0.8).max(0.0);
                 return ret;
             }
             Key::Home => {
+                self.follow_focus = false;
                 self.scroll = 0.0;
                 return ret;
             }
             Key::End => {
+                self.follow_focus = false;
                 self.scroll = f32::MAX / 4.0;
                 return ret;
             }
@@ -1939,6 +1947,52 @@ mod key_tests {
         assert!(!a.follow_focus && a.scroll < at, "{} -> {}", at, a.scroll);
     }
 
+    #[test]
+    fn explicit_keyboard_scrolling_releases_focus_following() {
+        for key in [Key::PageDown, Key::PageUp, Key::Home, Key::End] {
+            let mut a = app();
+            a.zone = Zone::Content;
+            a.follow_focus = true;
+            a.scroll = 100.0;
+            a.key_content(&ev(key, None));
+            assert!(!a.follow_focus, "{key:?} must retain the user's requested scroll");
+            assert!(!a.reveal_focus());
+        }
+    }
+
+    #[test]
+    fn oversized_rows_follow_the_control_without_scroll_oscillation() {
+        for control_height in [30.0, 900.0] {
+            let mut a = app();
+            a.resize(640, 540);
+            a.zone = Zone::Content;
+            a.follow_focus = true;
+            a.it.focus = Some("test:oversized".into());
+            a.frame.placed.push(ui::Placed {
+                rect: (200.0, 1000.0, 120.0, control_height),
+                row_rect: (180.0, 100.0, 300.0, 1400.0),
+                ctl: ui::Ctl::new("test:oversized", ui::Kind::Button { label: "Control".into(), danger: false }),
+                parts: vec![],
+                label: "Long explanatory text".into(),
+            });
+            assert!(a.reveal_focus());
+            let settled = a.scroll;
+            // Model subsequent layout passes, which translate both rectangles by scroll.
+            for p in &mut a.frame.placed {
+                p.rect.1 -= settled;
+                p.row_rect.1 -= settled;
+            }
+            for _ in 0..5 {
+                assert!(!a.reveal_focus(), "repeated layouts must settle");
+                assert_eq!(a.scroll, settled);
+            }
+            let p = &a.frame.placed[0];
+            assert!(p.rect.1 >= 16.0);
+            if control_height == 30.0 {
+                assert!(p.rect.1 + p.rect.3 <= a.content_h() - 16.0);
+            }
+        }
+    }
 
     #[test]
     fn the_page_keeps_room_in_tiny_windows_at_large_scales() {

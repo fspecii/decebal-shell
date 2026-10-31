@@ -1181,13 +1181,21 @@ pub(crate) fn wrap_with(t: &str, fits: &dyn Fn(&str) -> bool) -> Vec<String> {
             if !cur.is_empty() {
                 lines.push(std::mem::take(&mut cur));
             }
-            let mut rest = word;
-            while !rest.is_empty() && !fits(rest) {
-                let cut = long_cut(rest, fits);
-                lines.push(rest[..cut].to_string());
-                rest = &rest[cut..];
+            // Build cluster boundaries once. Measuring every remaining suffix (or rebuilding its
+            // boundaries) on every line makes long URLs quadratic in their length.
+            let ends = cluster_ends(word);
+            let mut first = 0;
+            while first < ends.len() {
+                let start = if first == 0 { 0 } else { ends[first - 1] };
+                let next = long_cut(word, &ends, first, fits);
+                let end = ends[next - 1];
+                if next == ends.len() {
+                    cur = word[start..end].to_string();
+                } else {
+                    lines.push(word[start..end].to_string());
+                }
+                first = next;
             }
-            cur = rest.to_string();
         }
         // an empty paragraph is an empty line; a split that used up the last word adds none
         if !cur.is_empty() || lines.len() == start {
@@ -1208,11 +1216,8 @@ fn joins_previous(c: char, prev: Option<char>) -> bool {
             | 0xFE00..=0xFE0F | 0xFE20..=0xFE2F | 0x1F3FB..=0x1F3FF | 0xE0100..=0xE01EF)
 }
 
-/// Byte offset at which to cut `t`, a word that does not fit a line: the longest prefix of whole clusters that fits
-/// (binary search: O(log n) measurements), moved back to just after the last `-`, `/`, `.`, `_`, `?`, `&`, `=` or `:`
-/// in it, if any (compound words and URLs break there: "four-" / "finger", not "four-finge" / "r"). At least one cluster: a single glyph wider than
-/// the column is put on a line of its own (it overflows; nothing narrower exists to draw) rather than dropped.
-fn long_cut(t: &str, fits: &dyn Fn(&str) -> bool) -> usize {
+/// Common cluster boundaries, computed once for each oversized word.
+fn cluster_ends(t: &str) -> Vec<usize> {
     let mut ends: Vec<usize> = Vec::new();
     let mut prev = None;
     for (i, c) in t.char_indices() {
@@ -1223,26 +1228,43 @@ fn long_cut(t: &str, fits: &dyn Fn(&str) -> bool) -> usize {
         }
         prev = Some(c);
     }
-    let (mut lo, mut hi) = (0usize, ends.len());
+    ends
+}
+
+/// Exclusive cluster index of the next piece. Gallop from a short prefix before binary
+/// searching the bracket: measurement work depends on the column width, not the remaining
+/// suffix length. Prefer punctuation within the fitting prefix. An overwide cluster remains
+/// intact on its own line rather than being dropped.
+fn long_cut(t: &str, ends: &[usize], first: usize, fits: &dyn Fn(&str) -> bool) -> usize {
+    let start = if first == 0 { 0 } else { ends[first - 1] };
+    let remaining = ends.len() - first;
+    let prefix_fits = |n: usize| fits(&t[start..ends[first + n - 1]]);
+    let mut lo = 0;
+    let mut probe = 1;
+    while prefix_fits(probe) {
+        lo = probe;
+        if probe == remaining {
+            return ends.len();
+        }
+        probe = probe.saturating_mul(2).min(remaining);
+    }
+    let mut hi = probe - 1;
     while lo < hi {
         let mid = (lo + hi).div_ceil(2);
-        if fits(&t[..ends[mid - 1]]) {
+        if prefix_fits(mid) {
             lo = mid;
         } else {
             hi = mid - 1;
         }
     }
-    let end = ends[lo.max(1) - 1];
-    if end == t.len() {
-        return end;
-    }
-    t[..end]
+    let next = first + lo.max(1);
+    let end = ends[next - 1];
+    t[start..end]
         .char_indices()
         .rev()
-        .find(|(_, c)| matches!(c, '-' | '/' | '.' | '_' | '?' | '&' | '=' | ':'))
-        .map(|(i, c)| i + c.len_utf8())
-        .filter(|&b| b > 0 && b < end && ends.contains(&b))
-        .unwrap_or(end)
+        .filter(|(_, c)| matches!(c, '-' | '/' | '.' | '_' | '?' | '&' | '=' | ':'))
+        .find_map(|(i, c)| ends[first..next].binary_search(&(start + i + c.len_utf8())).ok().map(|j| first + j + 1))
+        .unwrap_or(next)
 }
 
 /// Flat page navigation (see [`Item::Nav`]): underlined tabs or chips, wrapped onto as many lines as the width needs so every
@@ -1435,17 +1457,23 @@ mod tests {
     }
 
     #[test]
-    fn a_huge_token_costs_logarithmic_measurements_per_line() {
-        let calls = std::cell::Cell::new(0usize);
-        let token = "x".repeat(20_000);
-        let fits = |t: &str| {
-            calls.set(calls.get() + 1);
-            t.chars().count() <= 50
+    fn long_token_measurement_work_scales_with_input_bytes() {
+        let measured = |n| {
+            let bytes = std::cell::Cell::new(0usize);
+            let token = "x".repeat(n);
+            let lines = wrap_with(&token, &|t| {
+                bytes.set(bytes.get() + t.len());
+                t.chars().count() <= 50
+            });
+            assert_eq!(lines.len(), n / 50);
+            assert_eq!(lines.concat(), token);
+            assert!(bytes.get() < n * 20, "{} bytes measured for {n} input bytes", bytes.get());
+            bytes.get()
         };
-        let lines = wrap_with(&token, &fits);
-        assert_eq!(lines.len(), 400);
-        assert_eq!(lines.concat(), token);
-        assert!(calls.get() <= 400 * 18, "{} measurements", calls.get());
+        let small = measured(20_000);
+        let large = measured(40_000);
+        // The final short piece changes the bracketing work by a bounded column-sized tail.
+        assert!(large <= small * 2 + 1024, "doubling input: {small} -> {large}");
     }
 
     #[test]
