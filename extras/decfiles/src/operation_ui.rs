@@ -36,12 +36,16 @@ pub struct Controls {
     pub(crate) transfer_state: RefCell<Option<serde_json::Value>>,
     pub(crate) clipboard_state: RefCell<Option<serde_json::Value>>,
     pub(crate) paste_reading: Cell<bool>,
+    /// The provider we published; ownership is compared by object identity.
+    pub(crate) clipboard_provider: RefCell<Option<gtk::gdk::ContentProvider>>,
     allow_close: Cell<bool>,
 }
 pub(crate) struct Running {
     pub id: u64,
     pub cancel: gio::Cancellable,
     pub transfer: Option<std::rc::Rc<decfiles::transfer::Transfer>>,
+    /// Our own cut provider read by this paste; cleared on success only if still the owner.
+    pub consumed_cut: Option<gtk::gdk::ContentProvider>,
 }
 
 impl Controls {
@@ -68,6 +72,7 @@ impl Controls {
             transfer_state: RefCell::new(None),
             clipboard_state: RefCell::new(None),
             paste_reading: Cell::new(false),
+            clipboard_provider: RefCell::new(None),
             allow_close: Cell::new(false),
         }
     }
@@ -234,6 +239,10 @@ impl Ui {
         if self.ops.dialog.borrow().is_some() {
             return false;
         }
+        if self.ops.paste_reading.get() {
+            self.status.set_text("Reading the clipboard… Navigation resumes when the paste starts or fails.");
+            return false;
+        }
         self.ops.notice.borrow_mut().take();
         true
     }
@@ -287,7 +296,7 @@ impl Ui {
     }
 
     pub(crate) fn can_start_dialog(&self) -> bool {
-        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none()
+        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none() && !self.ops.paste_reading.get()
     }
 
     pub fn name_dialog(self: &Rc<Self>, rename: bool) {
@@ -437,7 +446,7 @@ impl Ui {
         let id = self.ops.next_id.get().wrapping_add(1);
         self.ops.next_id.set(id);
         let cancel = gio::Cancellable::new();
-        self.ops.running.replace(Some(Running { id, cancel: cancel.clone(), transfer: None }));
+        self.ops.running.replace(Some(Running { id, cancel: cancel.clone(), transfer: None, consumed_cut: None }));
         self.ops.notice.borrow_mut().take();
         self.model.borrow_mut().error = None;
         self.error.set_visible(false);

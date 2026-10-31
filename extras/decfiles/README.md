@@ -113,8 +113,15 @@ The clipboard uses GNOME Files' `x-special/gnome-copied-files` (`copy`/`cut`, th
 one file URI per line) plus RFC 2483 `text/uri-list` and plain text. Paste reads
 those formats asynchronously from any owner (at most 1 MiB, 4,096 local `file://`
 items; remote hosts and other schemes are refused). A plain URI list always means
-Copy. A completed cut is consumed, as in GNOME Files; a partial one stays. Names
-are encoded as URI bytes, so non-UTF8 names survive the round trip.
+Copy. Names are encoded as URI bytes, so non-UTF8 names survive the round trip.
+
+While the clipboard is read, navigation and other operations are refused, and the
+whole read is limited to 5 seconds. When the data arrives, the paste also checks
+that the folder and its location generation are unchanged, otherwise nothing is
+pasted. A completed cut is consumed, as in GNOME Files, only when the content
+read was our own provider object **and** that provider still owns the clipboard.
+Newer content from any other owner is never cleared; ownership is checked by
+provider identity, and our local cut state is dropped when another owner takes over.
 
 Paste copies or moves into the current folder on one `decfiles-transfer` worker
 thread per operation (one operation at a time). The UI thread never touches the
@@ -122,43 +129,73 @@ filesystem: it polls a latest-only snapshot every 50 ms for the progress row
 (current item, bytes and items) and answers conflict prompts. Copies are counted
 first and refused before any change above 100,000 items or 64 nested levels.
 
-All work is relative to owned directory FDs and never follows the selected leaf:
+All work is relative to owned directory FDs and never follows the selected leaf.
+Each selected item is **staged privately, then published atomically**:
 
-- Files are written to an anonymous `O_TMPFILE`, checked, given the source
-  permission bits (set-user/group-ID dropped) and access/modification times, then
-  published with `linkat`, which fails rather than replace an existing name. A
-  cancelled, failed or source-changed copy publishes nothing. Without `O_TMPFILE`
-  the fallback is `O_CREAT|O_EXCL`, removing only its own inode-confirmed partial.
-- The source is opened `O_NOFOLLOW|O_NONBLOCK` and must remain the same regular
-  inode; size and modification time are compared after copying. Changes are
-  reported as failures, never published as a complete copy.
-- Folders use `mkdirat` (no merge), are populated, then receive their mode/times
-  last so read-only folders copy correctly. Symlinks are recreated with
-  `symlinkat`, keeping their exact target, including dangling links. Devices,
-  sockets and pipes are reported and never opened. Ownership, ACLs and extended
-  attributes are not copied. Hard links are copied as separate files.
-- Move uses `renameat2(RENAME_NOREPLACE)`, atomically, on one filesystem. On
-  `EXDEV` it copies as above, then removes each original only if it is still the
-  same unchanged item, and removes folders only when empty. Originals that cannot
-  be removed (for example inside a read-only folder) are kept and reported. There
-  is no Trash or permanent-delete fallback for failures. Moving into the same
-  folder is skipped; moving or copying a folder into itself is refused.
+- Files are written to an anonymous `O_TMPFILE` (or, where unsupported, an
+  `O_CREAT|O_EXCL` file with a hidden, unpredictable `.decfiles-copy-…` name). The
+  source is opened `O_NOFOLLOW|O_NONBLOCK` and must stay the same regular inode with
+  the same size and modification time. The copy gets the permission bits
+  (set-user/group-ID dropped) and access/modification times.
+- Folders are populated inside a new hidden `0700` folder with an unpredictable
+  `.decfiles-folder-…` name, verified as ours (our uid, fresh and empty), and
+  written only through its FD. Children are staged and published inside it.
+  Restrictive modes/times are applied last.
+- Symlinks are recreated with their exact target. The source link must be the
+  same inode, with the same length, before and after `readlinkat`; it is re-read
+  up to three times, then refused as "kept changing".
+- Publication is `linkat`, `renameat2(RENAME_NOREPLACE)` or `symlinkat`, all of
+  which fail rather than replace an existing name. Afterwards, the published name
+  must resolve to the staged inode, otherwise success is never claimed. A conflict
+  at publication reuses the complete staging for Keep Both, without copying again.
+  Skip, Stop, cancellation and failures publish nothing and remove only our own
+  staging, through its FD.
+- Devices, sockets and pipes are reported and never opened. Ownership, ACLs and
+  extended attributes are not copied. Hard links are copied as separate files.
+
+Move uses `renameat2(RENAME_NOREPLACE)`, atomically, on one filesystem. On `EXDEV`
+the item is staged and published as above. Only then, in a separate pass, is
+each original removed, and only if all of the following hold:
+
+1. Its copy is still the recorded inode at the destination.
+2. It was atomically claimed by a rename to a private `.decfiles-claim-…` name.
+3. The claimed item is the same unchanged inode (size and modification time)
+   that was copied.
+
+Folders are removed last, only when empty. Anything that fails a check is
+restored to its own name (never replacing anything) and kept, and the message
+says why. An original that changed or was replaced, a copy that changed or
+disappeared, or a read-only source folder therefore keeps the original. Children
+of a partly copied folder that were copied are moved; the folder and the rest
+stay. There is no Trash or permanent-delete fallback. Moving into the same folder
+is skipped; moving or copying a folder into itself is refused.
+
+**Concurrency contract.** Publication never overwrites. Our private staging and
+claim names are unpredictable and hidden, but other processes of the same user
+can still interfere with them deliberately. That cannot be prevented without
+kernel support, so it is outside the contract; such interference is detected
+where it would cause false success or removal of the wrong item. After
+publication, other processes may change or delete the copy; the move re-checks
+the copy immediately before claiming each original, but this is not a global
+compare-and-swap across both filesystems. A crash between claim and removal can
+leave an original under its `.decfiles-claim-…` name, and a crash during staging
+can leave a hidden `.decfiles-…` folder; nothing is lost in either case.
 
 A name conflict opens **Item already exists** with Stop, Skip (default) and Keep
 Both, plus "Apply to all remaining conflicts". Escape or closing it means Stop.
-Keep Both picks `name (copy).ext`, then `name (copy 2).ext`, each attempt still an
-atomic no-replace create. Pasting into the source folder duplicates that way
-without asking. There is **no Replace or Merge** choice yet. The early existence
-check only decides when to ask; the atomic create is the guarantee, so a
-destination created by another process during a copy is never overwritten.
+Keep Both picks `name (copy).ext`, then `name (copy 2).ext`. Pasting into the
+source folder duplicates that way without asking. There is **no Replace or
+Merge** choice yet. The early existence check only decides when to ask; atomic
+publication is the guarantee, so a destination created during a copy is never
+overwritten.
 
 Errors are per item: the rest continues, and the result names the first failure
 and the count (at most 50 are retained). Cancellation stops between 256 KiB
-chunks; items already finished remain and the message says so, including a
-partially populated new folder. Cancel operation and the close confirmation work
-as for the other operations; cancel-and-close does not wait for the worker. An
-`O_TMPFILE` in progress then vanishes with the process. There is no undo, and no
-power-loss durability guarantee (no `fsync`).
+chunks. Completed items remain, and the message says so; the item in progress,
+including a partly copied folder, is not published. Cancel operation and the
+close confirmation work as for the other operations; cancel-and-close does not
+wait for the worker. There is no undo, and no power-loss durability guarantee
+(no `fsync`).
 
 ## Validation and evidence
 
@@ -220,6 +257,35 @@ Copy/move evidence (default binary
   `duplicate-selected.png`.
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
+
+Safety checkpoint (staged publication, claimed cross-device removal, guarded paste
+and owned clipboard clearing): there are 20 Rust tests. The new
+`deterministic_races_never_remove_or_publish_the_wrong_item` drives test-only hooks
+(compiled only under `cfg(test)`):
+
+- an original replaced just before its claim is kept, with no claim name left;
+- a published copy replaced or deleted before the original's removal keeps the original;
+- a link swapped once while it is read is re-read, and one that keeps changing is refused;
+- a private staging folder swapped before publication is never published, and the
+  impostor is left alone;
+- a destination created at publication reuses the staging for Keep Both (staged
+  once), and Skip discards it;
+- the `O_EXCL` fallback publishes, loses to a contender without leaving anything,
+  and cancels cleanly.
+
+Pinned default `3a6b6227ffdff087ab2b3d5b240535a8ece50d7e5179a557c36867c88765eac5`
+and fixture `d046a9ef138a9b133a2ac400866bfdb160f99621f5112616d39db84516579472`
+(`/var/tmp/decfiles-safety-artifacts/`) pass all gates in
+`/var/tmp/decfiles-safety-gate-*-evidence/`: navigation 8, operations 13,
+transfers 10 and views 6 on the default binary; close 4, transfers-cancel 4 and
+the new `paste-races-native.py` 3 on the fixture binary. The paste races are:
+navigation (Up, Back, sidebar) refused during a held clipboard read, with the
+paste landing in the original folder; a cut moved across filesystems to a private
+`/dev/shm` folder while another X owner takes the clipboard (that newer content
+survives; verified bytes, original removed); and a 7 s read timing out at 5 s,
+pasting nothing and releasing navigation (`…-paste-races-evidence-timeout/`).
+The fixture-only `DECFILES_FIXTURE_CLIPBOARD_DELAY_MS` (capped at 30 s) holds the
+read open.
 
 Sorting checkpoint: `tests/gates.py ARTIFACTS PREFIX` runs every native suite
 against binaries pinned by `tests/pin.py` and checks every result's binary and

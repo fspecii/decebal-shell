@@ -77,6 +77,22 @@ class Session:
         self.focus(self.window);self.click(980,26);self.key('End' if columns else 'Home');self.key('Return')
         self.wait(lambda:self.state().get('layout')==('columns' if columns else 'details'),'layout selector did not switch')
 
+    def clipboard(self,target):
+        """Read the private X server's clipboard; None when no owner offers that target."""
+        p=self.run(['xclip','-selection','clipboard','-o','-t',target],check=False);return p.stdout if p.returncode==0 else None
+    def offer(self,target,text):
+        """Become the private X clipboard owner (an owned, terminated-at-exit xclip)."""
+        p=subprocess.Popen(['xclip','-quiet','-selection','clipboard','-t',target,'-i'],env=self.env,stdin=subprocess.PIPE,stdout=self.log('xclip'),stderr=subprocess.STDOUT);self.owned.append(p)
+        p.stdin.write(text.encode());p.stdin.close();self.wait(lambda:self.clipboard(target)==text.encode(),'external clipboard owner not ready');return p
+    def last_id(self):return (self.op().get('last_result') or {}).get('id',0)
+    def finished(self,previous,status,seconds=20):
+        def ready():
+            s=self.state();o=s.get('operation',{});r=o.get('last_result') or {}
+            return r if not o.get('busy') and not o.get('dialog') and not s.get('model',{}).get('pending') and r.get('id',0)>previous else None
+        result=self.wait(ready,'operation did not finish',seconds);assert result['status']==status,result;return result
+    def button(self,label):
+        self.focus(self.window);self.click({'Cut':413,'Copy':484,'Paste':562}[label],self.geometry()['HEIGHT']-52)
+
     def finish(self,extra):
         (self.out/'state-final.json').write_text(json.dumps(self.state(),indent=2)+'\n')
         self.focus(self.window);self.key('ctrl+w');self.app.wait(timeout=8);assert self.app.returncode==0

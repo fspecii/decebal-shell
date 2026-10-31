@@ -193,7 +193,15 @@ cancel-and-close. The same binary still passes the 13 operation and eight
 navigation cases; the fixture binary passes the four close cases. See the
 [component README](../extras/decfiles/README.md#copy-move-and-the-clipboard).
 Clipboard interoperability was proven with private X clipboard owners, not yet
-with a running Nautilus process. Multi-selection, drag/drop and restore remain open.
+with a running Nautilus process. After review, every item is now staged privately
+(`O_TMPFILE` or a verified hidden `0700` folder) and published with atomic
+no-replace calls whose result is re-verified by inode. Cross-filesystem moves
+remove an original only after verifying the published copy, atomically claiming
+the original under a private name and checking that it is the same unchanged
+inode; otherwise it is restored and kept. Pasting blocks navigation during a
+5-second-bounded clipboard read, and only our own still-owned cut is cleared.
+Deterministic test-only race hooks and fixture-only native races cover these
+paths. The component README states the exact concurrency contract. Multi-selection, drag/drop and restore remain open.
 
 Trash must never fall back to permanent deletion. A no-overwrite check must remain true when a
 destination appears concurrently, not only when it exists before clicking.

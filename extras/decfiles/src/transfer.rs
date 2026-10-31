@@ -127,12 +127,28 @@ struct State {
     report: Option<Report>,
 }
 
+#[cfg(test)]
+type Hook = Arc<dyn Fn(&str, &Path) + Send + Sync>;
+
+/// Fixture and test controls. Normal builds compile none of them.
+#[derive(Default)]
+struct Options {
+    #[cfg(any(test, feature = "fixture-delay"))]
+    chunk_delay: Duration,
+    /// Deterministic race points: before-publish, published, before-claim, read-link, staged-folder.
+    #[cfg(test)]
+    hook: Option<Hook>,
+    /// Force the private `O_EXCL` staging file instead of `O_TMPFILE`.
+    #[cfg(test)]
+    named_files: bool,
+}
+
 struct Shared {
     state: Mutex<State>,
     wake: Condvar,
     cancel: AtomicBool,
-    #[cfg(any(test, feature = "fixture-delay"))]
-    chunk_delay: Duration,
+    #[cfg_attr(not(any(test, feature = "fixture-delay")), allow(dead_code))]
+    options: Options,
 }
 
 /// Latest-only snapshot. `report` is delivered exactly once.
@@ -148,27 +164,23 @@ pub struct Transfer {
 
 impl Transfer {
     pub fn start(request: Request) -> io::Result<Self> {
-        Self::spawn(
-            request,
-            #[cfg(any(test, feature = "fixture-delay"))]
-            Duration::ZERO,
-        )
+        Self::spawn(request, Options::default())
     }
 
     /// Controlled per-chunk delay for cancellation fixtures. Never compiled into normal builds.
     #[cfg(any(test, feature = "fixture-delay"))]
+    #[allow(clippy::needless_update)] // test builds add fields to Options
     pub fn start_throttled(request: Request, chunk_delay: Duration) -> io::Result<Self> {
-        Self::spawn(request, chunk_delay.min(Duration::from_secs(5)))
+        Self::spawn(request, Options { chunk_delay: chunk_delay.min(Duration::from_secs(5)), ..Options::default() })
     }
 
-    fn spawn(request: Request, #[cfg(any(test, feature = "fixture-delay"))] chunk_delay: Duration) -> io::Result<Self> {
-        let shared = Arc::new(Shared {
-            state: Mutex::new(State::default()),
-            wake: Condvar::new(),
-            cancel: AtomicBool::new(false),
-            #[cfg(any(test, feature = "fixture-delay"))]
-            chunk_delay,
-        });
+    #[cfg(test)]
+    fn start_with(request: Request, options: Options) -> io::Result<Self> {
+        Self::spawn(request, options)
+    }
+
+    fn spawn(request: Request, options: Options) -> io::Result<Self> {
+        let shared = Arc::new(Shared { state: Mutex::new(State::default()), wake: Condvar::new(), cancel: AtomicBool::new(false), options });
         let worker = shared.clone();
         std::thread::Builder::new().name("decfiles-transfer".into()).spawn(move || {
             let report = Worker::new(&worker, request).run();
@@ -349,6 +361,8 @@ fn list_dir(fd: RawFd, limit: u64) -> io::Result<Vec<CString>> {
         unsafe { libc::close(duplicate) };
         return Err(error);
     }
+    // Duplicates share one directory offset; an earlier listing must not hide entries.
+    unsafe { libc::rewinddir(stream) };
     let mut names = Vec::new();
     let result = loop {
         unsafe { *libc::__errno_location() = 0 };
@@ -405,6 +419,73 @@ pub fn validate(request: &Request) -> Result<(), String> {
     Ok(())
 }
 
+/// A copy that exists only under a private name (or none) until it is published.
+enum Staged {
+    /// `O_TMPFILE`: invisible until `linkat` publishes it.
+    Anonymous(OwnedFd),
+    /// A private hidden file or folder in the destination, held open by FD.
+    Named { name: CString, fd: OwnedFd, directory: bool },
+    /// Symbolic link contents; `symlinkat` publishes it atomically.
+    Link { target: CString, times: [libc::timespec; 2] },
+}
+
+/// What was copied, recorded so a cross-device original is removed only after its copy
+/// is published and verified. Children are recorded only when copied completely.
+struct Copied {
+    name: CString,
+    source: libc::stat,
+    dest: (libc::dev_t, libc::ino_t),
+    children: Option<Vec<Copied>>,
+    complete: bool,
+}
+
+fn identity(stat: &libc::stat) -> (libc::dev_t, libc::ino_t) {
+    (stat.st_dev, stat.st_ino)
+}
+
+/// Unpredictable hidden name for staging or claiming. Other processes of the same user
+/// could still interfere deliberately; that is outside the stated contract.
+fn private_name(purpose: &str) -> CString {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let mut random = [0u8; 8];
+    // SAFETY: getrandom writes at most the buffer length.
+    unsafe { libc::getrandom(random.as_mut_ptr().cast(), random.len(), 0) };
+    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
+    CString::new(format!(".decfiles-{purpose}-{}-{counter}-{:016x}", std::process::id(), u64::from_ne_bytes(random))).unwrap()
+}
+
+fn rename_noreplace(from_dir: RawFd, from: &CStr, to_dir: RawFd, to: &CStr) -> io::Result<()> {
+    // SAFETY: valid directory FDs and NUL-terminated leaves; never replaces, never follows leaves.
+    if unsafe { libc::renameat2(from_dir, from.as_ptr(), to_dir, to.as_ptr(), libc::RENAME_NOREPLACE) } != 0 {
+        return Err(last_error());
+    }
+    Ok(())
+}
+
+/// Empty a private folder we created, through FDs only, never following symlinks.
+fn clear_owned_dir(fd: RawFd, depth: usize) -> io::Result<()> {
+    if depth > MAX_DEPTH + 1 {
+        return Err(io::Error::other("staging folder is nested too deeply"));
+    }
+    // Copied read-only folders must become writable again to be emptied.
+    unsafe { libc::fchmod(fd, 0o700) };
+    for name in list_dir(fd, MAX_ITEMS)? {
+        let stat = stat_at(fd, &name)?;
+        let flags = if kind(&stat) == libc::S_IFDIR {
+            let child = open_child_dir(fd, &name)?;
+            clear_owned_dir(child.as_raw_fd(), depth + 1)?;
+            libc::AT_REMOVEDIR
+        } else {
+            0
+        };
+        // SAFETY: owned FD and NUL-terminated leaf inside our private folder.
+        if unsafe { libc::unlinkat(fd, name.as_ptr(), flags) } != 0 {
+            return Err(last_error());
+        }
+    }
+    Ok(())
+}
+
 struct Worker<'a> {
     shared: &'a Shared,
     mode: Mode,
@@ -451,6 +532,12 @@ impl<'a> Worker<'a> {
         }
     }
 
+    fn note(&mut self, note: String) {
+        if self.notes.len() < MAX_FAILURES {
+            self.notes.push(note);
+        }
+    }
+
     fn progress(&self, update: impl FnOnce(&mut Progress)) {
         let mut state = self.shared.lock();
         update(&mut state.progress);
@@ -474,7 +561,6 @@ impl<'a> Worker<'a> {
         }
     }
 
-    /// Count without following symlinks. Refuses oversized requests before changing anything.
     /// Returns (items, bytes). Unreadable entries are reported precisely when transferred.
     fn scan(&self, path: &Path, depth: usize, budget: &mut u64) -> Result<(u64, u64), ScanError> {
         if self.shared.cancelled() {
@@ -607,18 +693,18 @@ impl<'a> Worker<'a> {
             }
         }
         report.cancelled = cancelled;
-        report.failures = std::mem::take(&mut self.failures);
-        report.failure_count = self.failure_count;
         if self.kept_originals > 1 {
             self.notes.push(format!("{} originals were kept in total.", self.kept_originals));
         }
+        report.failures = std::mem::take(&mut self.failures);
+        report.failure_count = self.failure_count;
         report.notes = std::mem::take(&mut self.notes);
         report.changed = self.changed;
         report.message = summary(&report, &destination);
         report
     }
 
-    /// Transfer one selected item. Returns the created destination path, or None if skipped.
+    /// Transfer one selected item. Returns the published destination path, or None if skipped.
     fn top_level(&mut self, source: &Path, destination: &Path, destination_fd: &OwnedFd, destination_real: &Path) -> Result<Option<PathBuf>, ItemError> {
         self.check_cancel()?;
         let parent = source.parent().unwrap();
@@ -629,7 +715,7 @@ impl<'a> Worker<'a> {
         let directory = kind(&stat) == libc::S_IFDIR;
         let same_folder = same_inode(&stat_fd(parent_fd.as_raw_fd())?, &stat_fd(destination_fd.as_raw_fd())?);
         if same_folder && self.mode == Mode::Move {
-            self.notes.push(format!("“{}” is already in this folder.", name.to_string_lossy()));
+            self.note(format!("“{}” is already in this folder.", name.to_string_lossy()));
             return Ok(None);
         }
         if directory {
@@ -641,60 +727,67 @@ impl<'a> Worker<'a> {
             }
         }
         self.progress(|progress| progress.current = Some(name.to_string_lossy().into_owned()));
+        let mut staged: Option<(Staged, Copied)> = None;
         let mut target = name.to_os_string();
         let mut attempt = 0;
         // Copying into the source folder is a familiar duplicate: always keep both.
         let mut keep_both = same_folder;
         let mut asked = false;
-        loop {
+        let result = loop {
             if keep_both {
                 attempt += 1;
                 if attempt > 1000 {
-                    return Err(ItemError::Failed("no free “copy” name was found".into()));
+                    break Err(ItemError::Failed("no free “copy” name was found".into()));
                 }
                 target = keep_both_name(name, attempt);
             }
             let target_c = c_name(&target)?;
-            // Advisory early prompt so a large copy is not wasted. The atomic create/link
+            // Advisory early prompt so a large copy is not wasted. The atomic publication
             // below remains the actual no-overwrite guarantee.
-            let exists = stat_at(destination_fd.as_raw_fd(), &target_c).is_ok();
-            let result = if exists { Err(ItemError::Exists) } else { self.transfer(&parent_fd, &name_c, source, destination_fd, &target_c, &destination.join(&target), 0) };
-            match result {
+            let outcome = if stat_at(destination_fd.as_raw_fd(), &target_c).is_ok() {
+                Err(ItemError::Exists)
+            } else {
+                self.place(&mut staged, &parent_fd, &name_c, source, destination_fd, &target_c, &destination.join(&target))
+            };
+            match outcome {
+                Ok(()) => break Ok(Some(destination.join(&target))),
                 Err(ItemError::Exists) if keep_both => continue,
                 Err(ItemError::Exists) if !asked => {
                     asked = true;
                     match self.ask(source, &destination.join(&target), directory) {
-                        Choice::Skip => return Ok(None),
+                        Choice::Skip => break Ok(None),
                         Choice::KeepBoth => keep_both = true,
-                        Choice::Stop => return Err(ItemError::Cancelled),
+                        Choice::Stop => break Err(ItemError::Cancelled),
                     }
                 }
-                Err(ItemError::Exists) => return Err(ItemError::Exists),
-                Err(error) => return Err(error),
-                Ok(()) => return Ok(Some(destination.join(target))),
+                Err(error) => break Err(error),
             }
+        };
+        // Anything still staged was never published: remove only our own private copy.
+        if let Some((staged, _)) = staged {
+            self.discard(staged, destination_fd);
         }
+        result
     }
 
+    /// Move by atomic rename, or stage once (reused across conflict retries) and publish.
     #[allow(clippy::too_many_arguments)]
-    fn transfer(&mut self, parent: &OwnedFd, name: &CStr, source: &Path, destination_dir: &OwnedFd, target: &CStr, destination: &Path, depth: usize) -> Result<(), ItemError> {
-        if self.mode == Mode::Move {
-            // SAFETY: owned directory FDs and NUL-terminated leaves. NOREPLACE is atomic
-            // and does not follow the source leaf symlink.
-            let result = unsafe { libc::renameat2(parent.as_raw_fd(), name.as_ptr(), destination_dir.as_raw_fd(), target.as_ptr(), libc::RENAME_NOREPLACE) };
-            if result == 0 {
-                self.changed = true;
-                self.advance(1, 0);
-                return Ok(());
+    fn place(&mut self, staged: &mut Option<(Staged, Copied)>, parent: &OwnedFd, name: &CStr, source: &Path, destination_dir: &OwnedFd, target: &CStr, destination: &Path) -> Result<(), ItemError> {
+        if self.mode == Mode::Move && staged.is_none() {
+            match rename_noreplace(parent.as_raw_fd(), name, destination_dir.as_raw_fd(), target) {
+                Ok(()) => {
+                    self.changed = true;
+                    self.advance(1, 0);
+                    return Ok(());
+                }
+                Err(error) => match error.raw_os_error() {
+                    Some(libc::EXDEV) => {}
+                    Some(libc::EINVAL) => return Err(ItemError::Failed("a folder cannot be placed inside itself, or safe moving is unsupported here".into())),
+                    Some(libc::ENOSYS | libc::EOPNOTSUPP) => return Err(ItemError::Failed("safe no-overwrite moving is not supported here".into())),
+                    _ => return Err(error.into()),
+                },
             }
-            let error = last_error();
-            match error.raw_os_error() {
-                Some(libc::EXDEV) => {}
-                Some(libc::EINVAL) => return Err(ItemError::Failed("a folder cannot be placed inside itself, or safe moving is unsupported here".into())),
-                Some(libc::ENOSYS | libc::EOPNOTSUPP) => return Err(ItemError::Failed("safe no-overwrite moving is not supported here".into())),
-                _ => return Err(error.into()),
-            }
-            // Different filesystem: verified copy, then remove only unchanged originals.
+            // Different filesystem: verified copy, then remove only claimed, unchanged originals.
             let mut budget = MAX_ITEMS;
             match self.scan(source, 0, &mut budget) {
                 Ok((items, bytes)) => self.progress(|progress| {
@@ -706,125 +799,67 @@ impl<'a> Worker<'a> {
                 Err(ScanError::Unreadable) => {}
             }
         }
-        self.copy(parent, name, source, destination_dir, target, destination, depth)
+        if staged.is_none() {
+            *staged = Some(self.stage(parent, name, source, destination_dir, 0)?);
+        }
+        self.hook("before-publish", destination);
+        let published = self.publish(&staged.as_ref().unwrap().0, destination_dir, target)?;
+        let (_, mut copied) = staged.take().unwrap();
+        copied.dest = published;
+        self.changed = true;
+        self.hook("published", destination);
+        if self.mode == Mode::Move {
+            self.remove_original(parent, destination_dir, target, &copied, source);
+        }
+        Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn copy(&mut self, parent: &OwnedFd, name: &CStr, source: &Path, destination_dir: &OwnedFd, target: &CStr, destination: &Path, depth: usize) -> Result<(), ItemError> {
+    /// Copy into a private, unpublished form. Cancellation removes our own staging.
+    fn stage(&mut self, parent: &OwnedFd, name: &CStr, source: &Path, destination_dir: &OwnedFd, depth: usize) -> Result<(Staged, Copied), ItemError> {
         self.check_cancel()?;
         if depth > MAX_DEPTH {
             return Err(ItemError::Failed(format!("nested deeper than {MAX_DEPTH} levels")));
         }
-        let remove_source = self.mode == Mode::Move;
         let stat = stat_at(parent.as_raw_fd(), name)?;
+        let copied = |stat: libc::stat| Copied { name: name.to_owned(), source: stat, dest: (0, 0), children: None, complete: true };
         match kind(&stat) {
             libc::S_IFLNK => {
-                let mut buffer = vec![0u8; libc::PATH_MAX as usize + 1];
-                // SAFETY: buffer bounds are passed; readlinkat does not NUL-terminate.
-                let length = unsafe { libc::readlinkat(parent.as_raw_fd(), name.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len()) };
-                if length < 0 {
-                    return Err(last_error().into());
-                }
-                buffer.truncate(length as usize);
-                let link_target = CString::new(buffer).map_err(|_| ItemError::Failed("invalid symbolic link".into()))?;
-                // SAFETY: NUL-terminated strings; symlinkat fails with EEXIST and never replaces.
-                if unsafe { libc::symlinkat(link_target.as_ptr(), destination_dir.as_raw_fd(), target.as_ptr()) } != 0 {
-                    return Err(last_error().into());
-                }
-                self.changed = true;
-                let times = times(&stat);
-                // Best effort: some filesystems do not store symlink timestamps.
-                unsafe { libc::utimensat(destination_dir.as_raw_fd(), target.as_ptr(), times.as_ptr(), libc::AT_SYMLINK_NOFOLLOW) };
+                let (target, stat) = self.read_link(parent, name, source)?;
                 self.advance(1, 0);
-                if remove_source {
-                    self.remove_original(parent, name, &stat, source, false);
-                }
-                Ok(())
+                Ok((Staged::Link { target, times: times(&stat) }, copied(stat)))
             }
-            libc::S_IFREG => {
-                self.copy_file(parent, name, &stat, destination_dir, target, destination)?;
-                if remove_source {
-                    self.remove_original(parent, name, &stat, source, false);
-                }
-                Ok(())
-            }
-            libc::S_IFDIR => {
-                let source_dir = open_child_dir(parent.as_raw_fd(), name)?;
-                if !same_inode(&stat_fd(source_dir.as_raw_fd())?, &stat) {
-                    return Err(ItemError::Failed("the folder changed while it was being opened".into()));
-                }
-                let children = list_dir(source_dir.as_raw_fd(), MAX_ITEMS).map_err(|error| ItemError::Failed(describe(&error)))?;
-                // SAFETY: NUL-terminated leaf; mkdirat fails with EEXIST and never merges.
-                if unsafe { libc::mkdirat(destination_dir.as_raw_fd(), target.as_ptr(), 0o700) } != 0 {
-                    return Err(last_error().into());
-                }
-                self.changed = true;
-                let created = open_child_dir(destination_dir.as_raw_fd(), target)?;
-                self.advance(1, 0);
-                let mut incomplete = false;
-                let kept_before = self.kept_originals;
-                for child in children {
-                    let child_os = OsStr::from_bytes(child.to_bytes());
-                    let child_source = source.join(child_os);
-                    match self.copy(&source_dir, &child, &child_source, &created, &child, &destination.join(child_os), depth + 1) {
-                        Ok(()) => {}
-                        Err(ItemError::Cancelled) => {
-                            if depth == 0 && self.notes.len() < MAX_FAILURES {
-                                self.notes.push(format!("A partially transferred folder remains at “{}”.", destination.display()));
-                            }
-                            return Err(ItemError::Cancelled);
-                        }
-                        Err(ItemError::Exists) => {
-                            incomplete = true;
-                            self.fail(&child_source, "an item with that name appeared in the new folder");
-                        }
-                        Err(ItemError::Failed(message)) => {
-                            incomplete = true;
-                            self.fail(&child_source, message);
-                        }
-                    }
-                }
-                // Apply restrictive modes last so read-only folders can be populated.
-                let times = times(&stat);
-                unsafe {
-                    libc::fchmod(created.as_raw_fd(), copied_mode(&stat));
-                    libc::futimens(created.as_raw_fd(), times.as_ptr());
-                }
-                if remove_source {
-                    if incomplete {
-                        self.notes.push(format!("The original folder “{}” was kept because not every item in it was moved.", source.display()));
-                    } else if self.kept_originals == kept_before {
-                        self.remove_original(parent, name, &stat, source, true);
-                    }
-                }
-                Ok(())
-            }
+            libc::S_IFREG => Ok((self.stage_file(parent, name, &stat, destination_dir)?, copied(stat))),
+            libc::S_IFDIR => self.stage_dir(parent, name, &stat, source, destination_dir, depth),
             _ => Err(ItemError::Failed("special files such as devices, sockets and pipes are not copied".into())),
         }
     }
 
-    /// Cross-device move only: remove an original that was fully copied, only if it
-    /// is still the same unchanged item. Folders are removed only when empty.
-    fn remove_original(&mut self, parent: &OwnedFd, name: &CStr, before: &libc::stat, source: &Path, directory: bool) {
-        let still_same = stat_at(parent.as_raw_fd(), name).is_ok_and(|now| if directory { same_inode(before, &now) } else { unchanged(before, &now) });
-        let reason = if !still_same {
-            "it changed during the move".to_string()
-        } else {
-            let flags = if directory { libc::AT_REMOVEDIR } else { 0 };
-            // SAFETY: owned parent FD and NUL-terminated leaf; unlinkat never follows the leaf.
-            if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), flags) } == 0 {
-                return;
+    /// Bounded identity check: the link must be the same inode, of the same length,
+    /// before and after reading it.
+    fn read_link(&mut self, parent: &OwnedFd, name: &CStr, source: &Path) -> Result<(CString, libc::stat), ItemError> {
+        for _ in 0..3 {
+            let before = stat_at(parent.as_raw_fd(), name)?;
+            if kind(&before) != libc::S_IFLNK {
+                return Err(ItemError::Failed("the item changed while it was being read".into()));
             }
-            describe(&last_error())
-        };
-        // Enclosing folders of a kept original are kept silently; report the first cause once.
-        self.kept_originals += 1;
-        if self.kept_originals == 1 {
-            self.notes.push(format!("The copy is complete, but the original “{}” was kept: {reason}.", source.display()));
+            let mut buffer = vec![0u8; libc::PATH_MAX as usize + 1];
+            // SAFETY: buffer bounds are passed; readlinkat does not NUL-terminate.
+            let length = unsafe { libc::readlinkat(parent.as_raw_fd(), name.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len()) };
+            if length < 0 {
+                return Err(last_error().into());
+            }
+            buffer.truncate(length as usize);
+            self.hook("read-link", source);
+            let after = stat_at(parent.as_raw_fd(), name)?;
+            if same_inode(&before, &after) && kind(&after) == libc::S_IFLNK && after.st_size as usize == buffer.len() && buffer.len() <= libc::PATH_MAX as usize {
+                let target = CString::new(buffer).map_err(|_| ItemError::Failed("invalid symbolic link".into()))?;
+                return Ok((target, after));
+            }
         }
+        Err(ItemError::Failed("the link kept changing while it was being read".into()))
     }
 
-    fn copy_file(&mut self, parent: &OwnedFd, name: &CStr, before: &libc::stat, destination_dir: &OwnedFd, target: &CStr, destination: &Path) -> Result<(), ItemError> {
+    fn stage_file(&mut self, parent: &OwnedFd, name: &CStr, before: &libc::stat, destination_dir: &OwnedFd) -> Result<Staged, ItemError> {
         // O_NONBLOCK and O_NOFOLLOW: a leaf swapped for a FIFO or symlink cannot block or redirect us.
         // SAFETY: owned FDs; results owned exactly once.
         let raw = retry(|| unsafe { libc::openat(parent.as_raw_fd(), name.as_ptr(), libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY | libc::O_CLOEXEC) });
@@ -836,68 +871,257 @@ impl<'a> Worker<'a> {
         if kind(&opened) != libc::S_IFREG || !same_inode(&opened, before) {
             return Err(ItemError::Failed("the item changed while it was being opened".into()));
         }
-        // Prefer an anonymous file that becomes visible atomically only when complete.
-        let anonymous = retry(|| unsafe { libc::openat(destination_dir.as_raw_fd(), c".".as_ptr(), libc::O_TMPFILE | libc::O_WRONLY | libc::O_CLOEXEC, 0o600) });
-        let (output, visible) = if anonymous >= 0 {
-            (unsafe { OwnedFd::from_raw_fd(anonymous) }, false)
-        } else {
-            match last_error().raw_os_error() {
-                Some(libc::EOPNOTSUPP | libc::EISDIR | libc::EINVAL) => {
-                    let raw =
-                        retry(|| unsafe { libc::openat(destination_dir.as_raw_fd(), target.as_ptr(), libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600) });
-                    if raw < 0 {
-                        return Err(last_error().into());
-                    }
-                    self.changed = true;
-                    (unsafe { OwnedFd::from_raw_fd(raw) }, true)
-                }
-                _ => return Err(last_error().into()),
-            }
+        let staged = self.create_staging_file(destination_dir)?;
+        let output = match &staged {
+            Staged::Anonymous(fd) | Staged::Named { fd, .. } => fd.as_raw_fd(),
+            Staged::Link { .. } => unreachable!(),
         };
-        let result = self.copy_bytes(&input, &output, before).and_then(|copied| {
+        let result = self.copy_bytes(&input, output, before).and_then(|copied| {
             let after = stat_fd(input.as_raw_fd())?;
             if copied != after.st_size as u64 || !unchanged(before, &after) {
                 return Err(ItemError::Failed("the file changed while it was being copied; no copy was kept".into()));
             }
             let times = times(before);
             // SAFETY: owned output FD.
-            if unsafe { libc::fchmod(output.as_raw_fd(), copied_mode(before)) } != 0 || unsafe { libc::futimens(output.as_raw_fd(), times.as_ptr()) } != 0 {
+            if unsafe { libc::fchmod(output, copied_mode(before)) } != 0 || unsafe { libc::futimens(output, times.as_ptr()) } != 0 {
                 return Err(last_error().into());
-            }
-            if !visible {
-                let proc_path = CString::new(format!("/proc/self/fd/{}", output.as_raw_fd())).unwrap();
-                // SAFETY: linkat with EEXIST is the atomic no-overwrite commit.
-                if unsafe { libc::linkat(libc::AT_FDCWD, proc_path.as_ptr(), destination_dir.as_raw_fd(), target.as_ptr(), libc::AT_SYMLINK_FOLLOW) } != 0 {
-                    return Err(last_error().into());
-                }
-                self.changed = true;
             }
             Ok(())
         });
-        if result.is_err() && visible {
-            // Remove only our own visible partial file, confirmed by inode identity.
-            if let (Ok(ours), Ok(now)) = (stat_fd(output.as_raw_fd()), stat_at(destination_dir.as_raw_fd(), target)) {
-                if same_inode(&ours, &now) {
-                    unsafe { libc::unlinkat(destination_dir.as_raw_fd(), target.as_ptr(), 0) };
-                }
+        match result {
+            Ok(()) => {
+                self.advance(1, 0);
+                Ok(staged)
             }
-            if matches!(result, Err(ItemError::Cancelled)) {
-                self.notes.push(format!("The partial copy “{}” was removed.", destination.display()));
+            Err(error) => {
+                self.discard(staged, destination_dir);
+                Err(error)
             }
         }
-        result?;
-        self.advance(1, 0);
-        Ok(())
     }
 
-    fn copy_bytes(&mut self, input: &OwnedFd, output: &OwnedFd, before: &libc::stat) -> Result<u64, ItemError> {
+    /// An anonymous file when the filesystem supports it, else a private `O_EXCL` file.
+    fn create_staging_file(&mut self, destination_dir: &OwnedFd) -> Result<Staged, ItemError> {
+        #[cfg(test)]
+        let anonymous_allowed = !self.shared.options.named_files;
+        #[cfg(not(test))]
+        let anonymous_allowed = true;
+        if anonymous_allowed {
+            // SAFETY: owned FD; result owned exactly once.
+            let fd = retry(|| unsafe { libc::openat(destination_dir.as_raw_fd(), c".".as_ptr(), libc::O_TMPFILE | libc::O_WRONLY | libc::O_CLOEXEC, 0o600) });
+            if fd >= 0 {
+                return Ok(Staged::Anonymous(unsafe { OwnedFd::from_raw_fd(fd) }));
+            }
+            if !matches!(last_error().raw_os_error(), Some(libc::EOPNOTSUPP | libc::EISDIR | libc::EINVAL)) {
+                return Err(last_error().into());
+            }
+        }
+        let name = private_name("copy");
+        // SAFETY: O_EXCL|O_NOFOLLOW creates a new file we own or fails.
+        let fd = retry(|| unsafe { libc::openat(destination_dir.as_raw_fd(), name.as_ptr(), libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600) });
+        if fd < 0 {
+            return Err(last_error().into());
+        }
+        Ok(Staged::Named { name, fd: unsafe { OwnedFd::from_raw_fd(fd) }, directory: false })
+    }
+
+    /// Populate a private folder through its FD; children are published inside it.
+    fn stage_dir(&mut self, parent: &OwnedFd, name: &CStr, stat: &libc::stat, source: &Path, destination_dir: &OwnedFd, depth: usize) -> Result<(Staged, Copied), ItemError> {
+        let source_dir = open_child_dir(parent.as_raw_fd(), name)?;
+        if !same_inode(&stat_fd(source_dir.as_raw_fd())?, stat) {
+            return Err(ItemError::Failed("the folder changed while it was being opened".into()));
+        }
+        let children = list_dir(source_dir.as_raw_fd(), MAX_ITEMS).map_err(|error| ItemError::Failed(describe(&error)))?;
+        let private = private_name("folder");
+        // SAFETY: NUL-terminated leaf; mkdirat fails with EEXIST and never merges.
+        if unsafe { libc::mkdirat(destination_dir.as_raw_fd(), private.as_ptr(), 0o700) } != 0 {
+            return Err(last_error().into());
+        }
+        let created = open_child_dir(destination_dir.as_raw_fd(), &private)?;
+        let work = created.try_clone()?;
+        let owned = stat_fd(created.as_raw_fd())?;
+        // SAFETY: geteuid has no preconditions.
+        let ours = owned.st_uid == unsafe { libc::geteuid() } && owned.st_mode & 0o077 == 0 && list_dir(created.as_raw_fd(), 1).is_ok_and(|names| names.is_empty());
+        let staged = Staged::Named { name: private, fd: created, directory: true };
+        if !ours {
+            // Not demonstrably our fresh private folder: leave it alone, publish nothing.
+            drop(staged);
+            return Err(ItemError::Failed("the private staging folder could not be verified".into()));
+        }
+        #[cfg(test)]
+        self.hook("staged-folder", &destination_dir_path(destination_dir, &staged));
+        self.advance(1, 0);
+        let created = work;
+        let mut copied_children = Vec::new();
+        let mut complete = true;
+        for child in children {
+            let child_source = source.join(OsStr::from_bytes(child.to_bytes()));
+            let outcome = self.stage(&source_dir, &child, &child_source, &created, depth + 1).and_then(|(child_staged, mut record)| match self.publish(&child_staged, &created, &child) {
+                Ok(published) => {
+                    record.dest = published;
+                    Ok(record)
+                }
+                Err(error) => {
+                    self.discard(child_staged, &created);
+                    Err(error)
+                }
+            });
+            match outcome {
+                Ok(record) => copied_children.push(record),
+                Err(ItemError::Cancelled) => {
+                    self.discard(staged, destination_dir);
+                    return Err(ItemError::Cancelled);
+                }
+                Err(ItemError::Exists) => {
+                    complete = false;
+                    self.fail(&child_source, "an item with that name appeared in the private copy");
+                }
+                Err(ItemError::Failed(message)) => {
+                    complete = false;
+                    self.fail(&child_source, message);
+                }
+            }
+        }
+        // Apply restrictive modes last so read-only folders can be populated.
+        let times = times(stat);
+        unsafe {
+            libc::fchmod(created.as_raw_fd(), copied_mode(stat));
+            libc::futimens(created.as_raw_fd(), times.as_ptr());
+        }
+        Ok((staged, Copied { name: name.to_owned(), source: *stat, dest: (0, 0), children: Some(copied_children), complete }))
+    }
+
+    /// Atomically publish under `target`; never replaces. Exists keeps the staging for a retry.
+    /// The published name must then resolve to the staged inode.
+    fn publish(&mut self, staged: &Staged, destination_dir: &OwnedFd, target: &CStr) -> Result<(libc::dev_t, libc::ino_t), ItemError> {
+        let dir = destination_dir.as_raw_fd();
+        let expected = match staged {
+            Staged::Anonymous(fd) => {
+                let proc_path = CString::new(format!("/proc/self/fd/{}", fd.as_raw_fd())).unwrap();
+                // SAFETY: linkat with EEXIST is the atomic no-overwrite commit.
+                if unsafe { libc::linkat(libc::AT_FDCWD, proc_path.as_ptr(), dir, target.as_ptr(), libc::AT_SYMLINK_FOLLOW) } != 0 {
+                    return Err(last_error().into());
+                }
+                identity(&stat_fd(fd.as_raw_fd())?)
+            }
+            Staged::Named { name, fd, .. } => {
+                rename_noreplace(dir, name, dir, target)?;
+                identity(&stat_fd(fd.as_raw_fd())?)
+            }
+            Staged::Link { target: link, times } => {
+                // SAFETY: NUL-terminated strings; symlinkat fails with EEXIST and never replaces.
+                if unsafe { libc::symlinkat(link.as_ptr(), dir, target.as_ptr()) } != 0 {
+                    return Err(last_error().into());
+                }
+                // Best effort: some filesystems do not store symlink timestamps.
+                unsafe { libc::utimensat(dir, target.as_ptr(), times.as_ptr(), libc::AT_SYMLINK_NOFOLLOW) };
+                let created = stat_at(dir, target)?;
+                if kind(&created) != libc::S_IFLNK {
+                    return Err(ItemError::Failed("the new link was replaced immediately after creation".into()));
+                }
+                identity(&created)
+            }
+        };
+        match stat_at(dir, target) {
+            Ok(now) if identity(&now) == expected => Ok(expected),
+            _ => {
+                if let Staged::Named { name, .. } = staged {
+                    // Our private name was swapped before publication. Put what we published
+                    // back under the private name; never claim success.
+                    let _ = rename_noreplace(dir, target, dir, name);
+                }
+                Err(ItemError::Failed("the private copy was replaced before it could be published; nothing was published".into()))
+            }
+        }
+    }
+
+    /// Remove only our own unpublished staging, identified by FD.
+    fn discard(&mut self, staged: Staged, destination_dir: &OwnedFd) {
+        let Staged::Named { name, fd, directory } = staged else {
+            return; // anonymous files vanish with their FD; links were never created
+        };
+        if directory && clear_owned_dir(fd.as_raw_fd(), 0).is_err() {
+            self.note(format!("An incomplete private copy could not be fully removed: “{}”.", OsStr::from_bytes(name.to_bytes()).to_string_lossy()));
+            return;
+        }
+        let ours = matches!((stat_at(destination_dir.as_raw_fd(), &name), stat_fd(fd.as_raw_fd())), (Ok(now), Ok(own)) if same_inode(&now, &own));
+        let flags = if directory { libc::AT_REMOVEDIR } else { 0 };
+        // SAFETY: the private name still resolves to our own staged inode.
+        if !ours || unsafe { libc::unlinkat(destination_dir.as_raw_fd(), name.as_ptr(), flags) } != 0 {
+            self.note(format!("An incomplete private copy could not be removed: “{}”.", OsStr::from_bytes(name.to_bytes()).to_string_lossy()));
+        }
+    }
+
+    fn keep(&mut self, source: &Path, reason: &str) -> bool {
+        self.kept_originals += 1;
+        if self.kept_originals == 1 {
+            self.notes.push(format!("The copy is complete, but the original “{}” was kept: {reason}.", source.display()));
+        }
+        false
+    }
+
+    /// Cross-device move only. Remove an original after its copy is published and still
+    /// verified at the destination: claim it atomically under a private name, check it is
+    /// the same unchanged inode that was copied, then remove the claimed item. Folders are
+    /// removed only when every child was removed and they are empty. Returns true if removed.
+    fn remove_original(&mut self, parent: &OwnedFd, destination_dir: &OwnedFd, destination_name: &CStr, item: &Copied, source: &Path) -> bool {
+        match stat_at(destination_dir.as_raw_fd(), destination_name) {
+            Ok(now) if identity(&now) == item.dest => {}
+            _ => return self.keep(source, "its copy at the destination changed or disappeared"),
+        }
+        let directory = item.children.is_some();
+        if let Some(children) = &item.children {
+            let (Ok(source_dir), Ok(destination_child)) = (open_child_dir(parent.as_raw_fd(), &item.name), open_child_dir(destination_dir.as_raw_fd(), destination_name)) else {
+                return self.keep(source, "it could not be opened again");
+            };
+            if !stat_fd(source_dir.as_raw_fd()).is_ok_and(|now| same_inode(&now, &item.source)) || !stat_fd(destination_child.as_raw_fd()).is_ok_and(|now| identity(&now) == item.dest) {
+                return self.keep(source, "it changed during the move");
+            }
+            let mut all = true;
+            for child in children {
+                let child_source = source.join(OsStr::from_bytes(child.name.to_bytes()));
+                all &= self.remove_original(&source_dir, &destination_child, &child.name, child, &child_source);
+            }
+            if !item.complete {
+                // Children that were copied have been moved; the folder keeps the rest.
+                self.note(format!("The original folder “{}” was kept because not every item in it was moved.", source.display()));
+                return false;
+            }
+            if !all {
+                return false; // the first kept child was already reported
+            }
+        }
+        self.hook("before-claim", source);
+        let claim = private_name("claim");
+        if let Err(error) = rename_noreplace(parent.as_raw_fd(), &item.name, parent.as_raw_fd(), &claim) {
+            return self.keep(source, &describe(&error));
+        }
+        let claimed = stat_at(parent.as_raw_fd(), &claim);
+        let same = claimed.as_ref().is_ok_and(|now| if directory { same_inode(&item.source, now) } else { unchanged(&item.source, now) });
+        let removed = same && {
+            let flags = if directory { libc::AT_REMOVEDIR } else { 0 };
+            // SAFETY: the private claim name holds the verified original.
+            unsafe { libc::unlinkat(parent.as_raw_fd(), claim.as_ptr(), flags) == 0 }
+        };
+        if removed {
+            return true;
+        }
+        let reason = if same { describe(&last_error()) } else { "it changed during the move".to_string() };
+        // Restore whatever we claimed to its own name, never replacing anything.
+        if rename_noreplace(parent.as_raw_fd(), &claim, parent.as_raw_fd(), &item.name).is_err() {
+            self.note(format!("“{}” could not be restored and was left as “{}” in the same folder.", source.display(), OsStr::from_bytes(claim.to_bytes()).to_string_lossy()));
+        }
+        self.keep(source, &reason)
+    }
+
+    fn copy_bytes(&mut self, input: &OwnedFd, output: RawFd, before: &libc::stat) -> Result<u64, ItemError> {
         let mut buffer = vec![0u8; CHUNK];
         let mut copied = 0u64;
         loop {
             self.check_cancel()?;
             #[cfg(any(test, feature = "fixture-delay"))]
-            if !self.shared.chunk_delay.is_zero() {
-                std::thread::sleep(self.shared.chunk_delay);
+            if !self.shared.options.chunk_delay.is_zero() {
+                std::thread::sleep(self.shared.options.chunk_delay);
                 self.check_cancel()?;
             }
             // SAFETY: buffer bounds are passed to read/write.
@@ -910,7 +1134,7 @@ impl<'a> Worker<'a> {
             }
             let mut written = 0;
             while written < read as usize {
-                let count = retry(|| unsafe { libc::write(output.as_raw_fd(), buffer[written..].as_ptr().cast(), read as usize - written) });
+                let count = retry(|| unsafe { libc::write(output, buffer[written..].as_ptr().cast(), read as usize - written) });
                 if count < 0 {
                     return Err(last_error().into());
                 }
@@ -923,6 +1147,25 @@ impl<'a> Worker<'a> {
             self.advance(0, read as u64);
         }
     }
+
+    #[cfg(test)]
+    fn hook(&self, point: &str, path: &Path) {
+        if let Some(hook) = &self.shared.options.hook {
+            hook(point, path);
+        }
+    }
+
+    #[cfg(not(test))]
+    fn hook(&self, _: &str, _: &Path) {}
+}
+
+/// Test hooks see the private staging folder's current path.
+#[cfg(test)]
+fn destination_dir_path(destination_dir: &OwnedFd, staged: &Staged) -> PathBuf {
+    let Staged::Named { name, .. } = staged else {
+        return PathBuf::new();
+    };
+    std::fs::read_link(format!("/proc/self/fd/{}", destination_dir.as_raw_fd())).unwrap_or_default().join(OsStr::from_bytes(name.to_bytes()))
 }
 
 fn summary(report: &Report, destination: &Path) -> String {
@@ -1026,6 +1269,7 @@ mod tests {
             ffi::OsStringExt,
             fs::{symlink, MetadataExt, PermissionsExt},
         },
+        sync::Arc,
         time::{Instant, SystemTime},
     };
 
@@ -1388,10 +1632,179 @@ mod tests {
         }
         transfer.cancel();
         let report = wait(&transfer, |_, _, _| {});
-        assert!(report.cancelled && report.changed && report.completed == 0);
-        assert!(report.message.contains("partially transferred folder"), "{}", report.message);
-        assert_eq!(std::fs::read_dir(destination.join("folder")).unwrap().count(), 1);
+        // The folder was staged privately: cancelling publishes nothing and removes the staging.
+        assert!(report.cancelled && !report.changed && report.completed == 0, "{report:?}");
+        assert_eq!(report.message, "Cancelled. Nothing was changed.");
+        assert!(!destination.join("folder").exists());
+        let leftovers: Vec<_> = std::fs::read_dir(&destination).unwrap().map(|entry| entry.unwrap().file_name()).filter(|name| name.to_string_lossy().starts_with(".decfiles-")).collect();
+        assert!(leftovers.is_empty(), "{leftovers:?} {:?}", std::fs::read_dir(destination.join(&leftovers[0])).map(|d| d.map(|e| e.unwrap().file_name()).collect::<Vec<_>>()));
         assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2);
+        cleanup(&root);
+    }
+
+    fn hooked(request: Request, named_files: bool, hook: impl Fn(&str, &Path) + Send + Sync + 'static) -> Report {
+        let transfer = Transfer::start_with(request, Options { hook: Some(Arc::new(hook)), named_files, ..Options::default() }).unwrap();
+        wait(&transfer, |_, conflict, _| panic!("unexpected conflict {conflict:?}"))
+    }
+
+    fn private_leftovers(folder: &Path) -> Vec<OsString> {
+        std::fs::read_dir(folder).unwrap().map(|entry| entry.unwrap().file_name()).filter(|name| name.to_string_lossy().starts_with(".decfiles-")).collect()
+    }
+
+    #[test]
+    fn deterministic_races_never_remove_or_publish_the_wrong_item() {
+        use std::sync::atomic::AtomicUsize;
+        let root = fixture("hooks");
+        let other = PathBuf::from("/dev/shm").join(format!("decfiles-transfer-hooks-{}", std::process::id()));
+        if other.exists() {
+            cleanup(&other);
+        }
+        std::fs::create_dir(&other).unwrap();
+        let cross_device = std::fs::metadata(&other).unwrap().dev() != std::fs::metadata(&root).unwrap().dev();
+        let source = root.join("source");
+        let destination = root.join("destination");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::create_dir(&destination).unwrap();
+
+        if cross_device {
+            // An original replaced after copying but before its claim is never removed.
+            let original = source.join("claimed.txt");
+            write(&original, b"original bytes", 0o600);
+            let (watched, moved_away) = (original.clone(), source.join("moved-away.txt"));
+            let report = hooked(request(Mode::Move, std::slice::from_ref(&original), &other, None), false, move |point, path| {
+                if point == "before-claim" && path == watched {
+                    std::fs::rename(&watched, &moved_away).unwrap();
+                    std::fs::write(&watched, b"replacement").unwrap();
+                }
+            });
+            assert_eq!(report.completed, 1, "{report:?}");
+            assert!(report.message.contains("claimed.txt” was kept: it changed during the move"), "{}", report.message);
+            assert_eq!(std::fs::read(&original).unwrap(), b"replacement");
+            assert_eq!(std::fs::read(source.join("moved-away.txt")).unwrap(), b"original bytes");
+            assert_eq!(std::fs::read(other.join("claimed.txt")).unwrap(), b"original bytes");
+            assert!(private_leftovers(&source).is_empty());
+
+            // A published copy replaced or deleted before the original is removed keeps the original.
+            for (index, replace) in [true, false].into_iter().enumerate() {
+                let original = source.join(format!("published-{index}.txt"));
+                write(&original, b"keep me", 0o600);
+                let target = other.join(format!("published-{index}.txt"));
+                let watched = target.clone();
+                let report = hooked(request(Mode::Move, std::slice::from_ref(&original), &other, None), false, move |point, path| {
+                    if point == "published" && path == watched {
+                        std::fs::remove_file(&watched).unwrap();
+                        if replace {
+                            std::fs::write(&watched, b"someone else").unwrap();
+                        }
+                    }
+                });
+                assert!(report.message.contains("was kept: its copy at the destination changed or disappeared"), "{}", report.message);
+                assert_eq!(std::fs::read(&original).unwrap(), b"keep me");
+                assert_eq!(std::fs::read(&target).ok(), replace.then(|| b"someone else".to_vec()));
+            }
+        } else {
+            eprintln!("skipping cross-device claim races: /dev/shm shares the fixture filesystem");
+        }
+
+        // A link replaced while it is read is re-read; one that keeps changing is refused.
+        let link = source.join("racing-link");
+        symlink("first", &link).unwrap();
+        let (watched, swaps) = (link.clone(), Arc::new(AtomicUsize::new(0)));
+        let counter = swaps.clone();
+        let report = hooked(request(Mode::Copy, std::slice::from_ref(&link), &destination, None), false, move |point, path| {
+            if point == "read-link" && path == watched && counter.fetch_add(1, Ordering::SeqCst) == 0 {
+                std::fs::remove_file(&watched).unwrap();
+                symlink("second-longer", &watched).unwrap();
+            }
+        });
+        assert_eq!(report.completed, 1, "{report:?}");
+        assert_eq!(std::fs::read_link(destination.join("racing-link")).unwrap(), Path::new("second-longer"));
+        assert_eq!(swaps.load(Ordering::SeqCst), 2);
+        let watched = link.clone();
+        let report = hooked(request(Mode::Copy, std::slice::from_ref(&link), &destination, Some(Choice::KeepBoth)), false, move |point, path| {
+            if point == "read-link" && path == watched {
+                let next = if std::fs::read_link(&watched).unwrap() == Path::new("a") { "bb" } else { "a" };
+                std::fs::remove_file(&watched).unwrap();
+                symlink(next, &watched).unwrap();
+            }
+        });
+        assert_eq!((report.completed, report.failure_count), (0, 1));
+        assert!(report.failures[0].message.contains("kept changing"));
+        assert!(!destination.join("racing-link (copy)").exists());
+
+        // A private staging folder swapped before publication is never published as ours.
+        let tree = source.join("tree");
+        std::fs::create_dir(&tree).unwrap();
+        write(&tree.join("inside.txt"), b"inside", 0o600);
+        let stolen = root.join("stolen");
+        let thief = stolen.clone();
+        let report = hooked(request(Mode::Copy, std::slice::from_ref(&tree), &destination, None), false, move |point, path| {
+            if point == "staged-folder" && path.parent().is_some_and(|parent| parent.ends_with("destination")) {
+                std::fs::rename(path, &thief).unwrap();
+                std::fs::create_dir(path).unwrap();
+            }
+        });
+        assert_eq!((report.completed, report.failure_count), (0, 1), "{report:?}");
+        assert!(report.failures[0].message.contains("replaced before it could be published"));
+        assert!(!destination.join("tree").exists(), "the impostor folder must not be published");
+        let impostors = private_leftovers(&destination);
+        assert_eq!(impostors.len(), 1, "the impostor is left alone under the private name");
+        assert_eq!(std::fs::read_dir(destination.join(&impostors[0])).unwrap().count(), 0);
+        std::fs::remove_dir(destination.join(&impostors[0])).unwrap();
+        assert_eq!(std::fs::read(tree.join("inside.txt")).unwrap(), b"inside");
+        std::fs::remove_dir_all(&stolen).unwrap();
+
+        // A conflict at publication reuses the complete staging for Keep Both; Skip discards it.
+        for choice in [Choice::KeepBoth, Choice::Skip] {
+            let (watched, stages, created) = (destination.join("tree"), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+            let (stage_count, create_count) = (stages.clone(), created.clone());
+            let report = hooked(request(Mode::Copy, std::slice::from_ref(&tree), &destination, Some(choice)), false, move |point, path| {
+                if point == "staged-folder" {
+                    stage_count.fetch_add(1, Ordering::SeqCst);
+                }
+                if point == "before-publish" && path == watched && create_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    std::fs::create_dir(&watched).unwrap();
+                    std::fs::write(watched.join("marker"), b"external").unwrap();
+                }
+            });
+            assert_eq!(stages.load(Ordering::SeqCst), 1, "staged once for {choice:?}");
+            assert_eq!(std::fs::read(destination.join("tree/marker")).unwrap(), b"external");
+            match choice {
+                Choice::KeepBoth => {
+                    assert_eq!(report.created, [destination.join("tree (copy)")]);
+                    assert_eq!(std::fs::read(destination.join("tree (copy)/inside.txt")).unwrap(), b"inside");
+                }
+                _ => assert_eq!((report.completed, report.skipped), (0, 1)),
+            }
+            assert!(private_leftovers(&destination).is_empty());
+            std::fs::remove_dir_all(destination.join("tree")).unwrap();
+        }
+
+        // The private O_EXCL fallback publishes atomically and leaves nothing when it loses.
+        let file = source.join("named.txt");
+        write(&file, &pattern(CHUNK * 3), 0o640);
+        let report = hooked(request(Mode::Copy, std::slice::from_ref(&file), &destination, None), true, |_, _| {});
+        assert_eq!(report.completed, 1);
+        assert_eq!(std::fs::read(destination.join("named.txt")).unwrap(), pattern(CHUNK * 3));
+        assert_eq!(mode(&destination.join("named.txt")), 0o640);
+        let watched = destination.join("named (copy).txt");
+        let report = hooked(request(Mode::Copy, std::slice::from_ref(&file), &destination, Some(Choice::KeepBoth)), true, move |point, path| {
+            if point == "before-publish" && path == watched && !watched.exists() {
+                std::fs::write(&watched, b"contender").unwrap();
+            }
+        });
+        assert_eq!(report.created, [destination.join("named (copy 2).txt")]);
+        assert_eq!(std::fs::read(destination.join("named (copy).txt")).unwrap(), b"contender");
+        let transfer =
+            Transfer::start_with(request(Mode::Copy, std::slice::from_ref(&file), &other, None), Options { named_files: true, chunk_delay: Duration::from_millis(40), ..Options::default() }).unwrap();
+        while transfer.poll().progress.bytes_done == 0 {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        transfer.cancel();
+        let report = wait(&transfer, |_, _, _| {});
+        assert!(report.cancelled && !report.changed, "{report:?}");
+        assert!(private_leftovers(&destination).is_empty() && private_leftovers(&other).is_empty() && !other.join("named.txt").exists());
+        cleanup(&other);
         cleanup(&root);
     }
 

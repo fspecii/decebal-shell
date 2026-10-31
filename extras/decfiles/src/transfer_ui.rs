@@ -10,6 +10,24 @@ use gtk::prelude::*;
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
 const POLL: Duration = Duration::from_millis(50);
+const PASTE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Resolve to None if `future` does not finish within `limit`; dropping a GIO future cancels it.
+async fn within<T>(limit: Duration, future: impl std::future::Future<Output = T>) -> Option<T> {
+    use std::task::Poll;
+    let mut future = std::pin::pin!(future);
+    let mut timer = glib::timeout_future(limit);
+    std::future::poll_fn(|context| {
+        if let Poll::Ready(value) = future.as_mut().poll(context) {
+            return Poll::Ready(Some(value));
+        }
+        if timer.as_mut().poll(context).is_ready() {
+            return Poll::Ready(None);
+        }
+        Poll::Pending
+    })
+    .await
+}
 
 fn leaf(path: &std::path::Path) -> String {
     path.file_name().map_or_else(|| path.display().to_string(), |name| name.to_string_lossy().into_owned())
@@ -31,6 +49,16 @@ impl Ui {
                 ui.paste();
             }
         });
+        // Another owner replaced our cut/copy: forget it locally, never clear theirs.
+        let weak = Rc::downgrade(self);
+        self.window.clipboard().connect_changed(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                if ui.owned_clipboard().is_none() && ui.ops.clipboard_provider.borrow_mut().take().is_some() {
+                    ui.ops.clipboard_state.replace(None);
+                    ui.dump();
+                }
+            }
+        });
     }
 
     /// Publish the selected item. Nothing on disk changes until Paste.
@@ -49,7 +77,10 @@ impl Ui {
             gtk::gdk::ContentProvider::for_bytes(clipboard::URI_LIST, &bytes(clipboard::encode_uri_list(&paths))),
             gtk::gdk::ContentProvider::for_bytes("text/plain;charset=utf-8", &bytes(plain)),
         ]);
+        // Record ownership first: setting content emits "changed".
+        self.ops.clipboard_provider.replace(Some(provider.clone()));
         if self.window.clipboard().set_content(Some(&provider)).is_err() {
+            self.ops.clipboard_provider.replace(None);
             self.status.set_text("Could not place the item on the clipboard.");
             return;
         }
@@ -63,6 +94,8 @@ impl Ui {
     }
 
     /// Read files from the clipboard asynchronously, then copy or move them here.
+    /// Navigation is blocked while reading; the destination generation is checked again
+    /// when the data arrives, and the whole read is bounded by a timeout.
     pub fn paste(self: &Rc<Self>) {
         if !self.can_start_dialog() || self.ops.paste_reading.get() {
             return;
@@ -70,20 +103,22 @@ impl Ui {
         let Some(destination) = self.model.borrow().current().map(std::path::Path::to_path_buf) else {
             return;
         };
+        let generation = self.model.borrow().revision;
         self.ops.paste_reading.set(true);
+        self.status.set_text("Reading the clipboard…");
         self.update_operation_controls();
+        self.dump();
+        let clipboard = self.window.clipboard();
+        // Only a cut read from our own provider may later be consumed (cleared).
+        let own_cut = self.owned_clipboard().filter(|_| self.ops.clipboard_state.borrow().as_ref().is_some_and(|state| state["mode"] == "Move"));
         let weak = Rc::downgrade(self);
-        self.window.clipboard().read_async(&[clipboard::GNOME, clipboard::URI_LIST], glib::Priority::DEFAULT, gio::Cancellable::NONE, move |result| {
-            let Some(ui) = weak.upgrade() else {
-                return;
-            };
-            let Ok((stream, mime)) = result else {
-                ui.paste_failed("The clipboard does not contain files.");
-                return;
-            };
-            let weak = Rc::downgrade(&ui);
-            drop(ui);
-            glib::MainContext::default().spawn_local(async move {
+        glib::MainContext::default().spawn_local(async move {
+            let read = within(PASTE_TIMEOUT, async {
+                #[cfg(feature = "fixture-delay")]
+                if let Some(delay) = std::env::var("DECFILES_FIXTURE_CLIPBOARD_DELAY_MS").ok().and_then(|value| value.parse::<u64>().ok()).filter(|delay| *delay > 0) {
+                    glib::timeout_future(Duration::from_millis(delay.min(30_000))).await;
+                }
+                let (stream, mime) = clipboard.read_future(&[clipboard::GNOME, clipboard::URI_LIST], glib::Priority::DEFAULT).await.ok()?;
                 let mut data = Vec::new();
                 let complete = loop {
                     match stream.read_bytes_future(64 * 1024, glib::Priority::DEFAULT).await {
@@ -93,20 +128,30 @@ impl Ui {
                     }
                 };
                 let _ = stream.close_future(glib::Priority::DEFAULT).await;
-                let Some(ui) = weak.upgrade() else {
-                    return;
-                };
-                let text = String::from_utf8_lossy(&data);
-                let decoded = if complete { clipboard::decode(&mime, &text) } else { None };
-                match decoded {
-                    Some((mode, sources)) => {
-                        ui.ops.paste_reading.set(false);
-                        ui.start_transfer(Request { mode, sources, destination, policy: None });
-                    }
-                    None => ui.paste_failed("The clipboard does not contain local files that can be pasted."),
+                complete.then(|| clipboard::decode(&mime, &String::from_utf8_lossy(&data))).flatten()
+            })
+            .await;
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let moved = ui.model.borrow().revision != generation || ui.model.borrow().current() != Some(destination.as_path());
+            match read {
+                None => ui.paste_failed("The clipboard did not respond in time. Nothing was pasted."),
+                Some(None) => ui.paste_failed("The clipboard does not contain local files that can be pasted."),
+                Some(Some(_)) if moved => ui.paste_failed("The folder changed while the clipboard was read. Nothing was pasted."),
+                Some(Some((mode, sources))) => {
+                    ui.ops.paste_reading.set(false);
+                    let consumed = own_cut.filter(|_| mode == Mode::Move);
+                    ui.start_transfer(Request { mode, sources, destination, policy: None }, consumed);
                 }
-            });
+            }
         });
+    }
+
+    /// Our own provider, only while it still owns the clipboard.
+    fn owned_clipboard(&self) -> Option<gtk::gdk::ContentProvider> {
+        let ours = self.ops.clipboard_provider.borrow().clone()?;
+        (self.window.clipboard().content().as_ref() == Some(&ours)).then_some(ours)
     }
 
     fn paste_failed(&self, message: &str) {
@@ -116,7 +161,7 @@ impl Ui {
         self.dump();
     }
 
-    fn start_transfer(self: &Rc<Self>, request: Request) {
+    fn start_transfer(self: &Rc<Self>, request: Request, consumed_cut: Option<gtk::gdk::ContentProvider>) {
         if !self.can_start_dialog() {
             return;
         }
@@ -141,7 +186,7 @@ impl Ui {
         // The existing Cancel operation and close confirmation cancel this GCancellable.
         let cancel_transfer = transfer.canceller();
         let _ = cancel.connect_cancelled(move |_| cancel_transfer());
-        self.ops.running.replace(Some(super::operation_ui::Running { id, cancel, transfer: Some(transfer) }));
+        self.ops.running.replace(Some(super::operation_ui::Running { id, cancel, transfer: Some(transfer), consumed_cut }));
         self.ops.notice.borrow_mut().take();
         self.model.borrow_mut().error = None;
         self.error.set_visible(false);
@@ -253,7 +298,7 @@ impl Ui {
     }
 
     fn transfer_finished(self: &Rc<Self>, id: u64, report: Report) {
-        self.ops.running.borrow_mut().take();
+        let consumed_cut = self.ops.running.borrow_mut().take().and_then(|run| run.consumed_cut);
         let dialog = self.ops.dialog.borrow_mut().take();
         if let Some(dialog) = dialog {
             dialog.destroy();
@@ -269,10 +314,12 @@ impl Ui {
             "success"
         };
         self.ops.last_result.replace(Some(serde_json::json!({"id":id, "status":status, "kind":"Transfer", "message":report.message, "report":report})));
-        // A completed cut is consumed, like GNOME Files; a partial one stays for retry.
-        if report.mode == Mode::Move && status == "success" && self.ops.clipboard_state.borrow().as_ref().is_some_and(|state| state["mode"] == "Move") {
-            let _ = self.window.clipboard().set_content(None::<&gtk::gdk::ContentProvider>);
+        // A completed cut is consumed, like GNOME Files, but only if the provider that was
+        // read is ours and still owns the clipboard; newer content from anyone is preserved.
+        if status == "success" && consumed_cut.is_some() && self.owned_clipboard() == consumed_cut {
+            self.ops.clipboard_provider.replace(None);
             self.ops.clipboard_state.replace(None);
+            let _ = self.window.clipboard().set_content(None::<&gtk::gdk::ContentProvider>);
         }
         let Some(destination) = self.model.borrow().current().map(std::path::Path::to_path_buf) else {
             self.render();
