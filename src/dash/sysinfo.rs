@@ -284,8 +284,37 @@ pub struct Paths {
 
 impl Default for Paths {
     fn default() -> Self {
-        Paths { proc: "/proc".into(), hwmon: "/sys/class/hwmon".into(), disk: "/".into() }
+        Paths { proc: "/proc".into(), hwmon: "/sys/class/hwmon".into(), disk: data_disk_path() }
     }
+}
+
+/// Which path's filesystem "the disk" means. That is `/`, except on an immutable system (OSTree, bootc, composefs):
+/// there `/` is a small read-only image that is always 100 % full, and the user's data lives on another filesystem
+/// that holds `$HOME`, so that one is meant.
+pub fn data_disk_path() -> PathBuf {
+    use std::os::unix::fs::MetadataExt;
+    let root = Path::new("/");
+    let home = std::env::var_os("HOME").map(PathBuf::from).filter(|h| h.is_dir());
+    let dev = |p: &Path| std::fs::metadata(p).ok().map(|m| m.dev());
+    pick_disk(root, home.as_deref(), read_only(root), dev(root), home.as_deref().and_then(dev))
+}
+
+/// The decision of [`data_disk_path`] from the facts it gathers (kept apart so it can be tested).
+fn pick_disk(root: &Path, home: Option<&Path>, root_read_only: bool, root_dev: Option<u64>, home_dev: Option<u64>) -> PathBuf {
+    match home {
+        Some(h) if root_read_only && home_dev.is_some() && home_dev != root_dev => h.to_path_buf(),
+        _ => root.to_path_buf(),
+    }
+}
+
+/// True when the filesystem holding `path` is mounted read-only.
+fn read_only(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
+    // SAFETY: `st` is plain-old-data that statvfs fully initialises on success; `c` is a valid NUL-terminated path.
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: both pointers are valid for the duration of the call.
+    unsafe { libc::statvfs(c.as_ptr(), &mut st) == 0 && (st.f_flag & libc::ST_RDONLY) != 0 }
 }
 
 /// One reading, with the sparkline histories (oldest first, at most [`HISTORY`] long).
@@ -388,6 +417,22 @@ pub fn probe_gpu() -> Option<Gpu> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_immutable_systems_read_only_root_is_not_the_disk() {
+        let (root, home) = (Path::new("/"), Path::new("/var/home/l1"));
+        assert_eq!(pick_disk(root, Some(home), true, Some(1), Some(2)), home, "a read-only / and a separate data disk: the data disk");
+        assert_eq!(pick_disk(root, Some(home), false, Some(1), Some(2)), root, "a writable / is the disk even when $HOME is elsewhere");
+        assert_eq!(pick_disk(root, Some(home), true, Some(1), Some(1)), root, "$HOME on the same filesystem as /");
+        assert_eq!(pick_disk(root, None, true, Some(1), None), root, "no $HOME to look at");
+        assert_eq!(pick_disk(root, Some(home), true, Some(1), None), root, "an unreadable $HOME falls back to /");
+    }
+
+    #[test]
+    fn the_default_path_is_a_real_filesystem() {
+        let d = Paths::default().disk;
+        assert!(disk_usage(&d).is_some_and(|d| d.total > 0), "{d:?}");
+    }
 
     const STAT: &str = "cpu  4705 150 1120 16250 520 30 40 0 0 0\ncpu0 2400 70 560 8100 260 15 20 0 0 0\ncpu1 2305 80 560 8150 260 15 20 0 0 0\nintr 12345 1 2\nctxt 99\n";
 
