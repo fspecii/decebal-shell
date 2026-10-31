@@ -15,6 +15,16 @@ fn appmenu_threads() -> usize {
     std::fs::read_dir("/proc/self/task").unwrap().filter_map(|t| std::fs::read_to_string(t.ok()?.path().join("comm")).ok()).filter(|c| c.trim() == "appmenu").count()
 }
 
+/// Kills the private daemon and removes its directory even when an assertion panics.
+struct Daemon(std::process::Child, std::path::PathBuf);
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+        let _ = std::fs::remove_dir_all(&self.1);
+    }
+}
+
 fn wait(what: &str, f: impl Fn() -> bool) {
     let end = Instant::now() + Duration::from_secs(5);
     while !f() {
@@ -37,7 +47,7 @@ fn stopping_or_dropping_the_worker_releases_threads_fds_and_the_registrar_name()
         ),
     )
     .unwrap();
-    let mut daemon = Command::new("dbus-daemon")
+    let daemon = Command::new("dbus-daemon")
         .arg(format!("--config-file={}", dir.join("bus.conf").display()))
         .args(["--nofork", "--nopidfile"])
         .env_clear()
@@ -48,6 +58,7 @@ fn stopping_or_dropping_the_worker_releases_threads_fds_and_the_registrar_name()
         .stderr(Stdio::null())
         .spawn()
         .expect("dbus-daemon is required");
+    let _daemon = Daemon(daemon, dir.clone());
     wait("bus socket", || sock.exists());
     let address = format!("unix:path={}", sock.display());
 
@@ -73,8 +84,4 @@ fn stopping_or_dropping_the_worker_releases_threads_fds_and_the_registrar_name()
     let mut again = AppMenus::start(Config::with_address(address), Arc::new(|| {})).unwrap();
     wait("owned again", || again.snapshot().registrar == RegistrarRole::Owned);
     assert!(again.stop(Duration::from_secs(3)));
-
-    let _ = daemon.kill();
-    let _ = daemon.wait();
-    let _ = std::fs::remove_dir_all(&dir);
 }

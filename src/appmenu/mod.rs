@@ -353,6 +353,8 @@ impl Drop for AppMenus {
 }
 
 #[cfg(test)]
-mod testbus;
+mod real_tests;
+#[cfg(test)]
+pub(crate) mod testbus;
 #[cfg(test)]
 mod tests;

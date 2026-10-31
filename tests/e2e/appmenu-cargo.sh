@@ -6,8 +6,9 @@
 #   tests/e2e/appmenu-cargo.sh test --lib appmenu
 set -euo pipefail
 REPO=$(cd -- "$(dirname -- "$0")/../.." && pwd)
-ROOT=$(mktemp -d "${TMPDIR:-/var/tmp}/decebal-appmenu-env.XXXXXX")
-trap 'rm -rf "$ROOT"' EXIT
+ROOT=$(mktemp -d /var/tmp/decebal-appmenu-env.XXXXXX)
+# Only ever delete the directory mktemp just made for this run.
+trap 'case $ROOT in /var/tmp/decebal-appmenu-env.??????|/tmp/decebal-appmenu-env.??????) rm -rf -- "$ROOT" ;; esac' EXIT
 mkdir -p "$ROOT/home" "$ROOT/config" "$ROOT/cache" "$ROOT/state" "$ROOT/data" "$ROOT/runtime" "$ROOT/recorder"
 chmod 700 "$ROOT/runtime"
 for tool in xdg-open notify-send systemctl loginctl hyprctl omarchy decsettings decsession mac-menu-action nmcli wpctl pactl brightnessctl; do
