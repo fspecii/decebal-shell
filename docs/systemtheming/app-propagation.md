@@ -93,32 +93,41 @@ transaction, so `off` restores the original keys.
 and writes nothing. An explicit `system.iconTheme` wins over `icons.theme`. Per-slot user and custom ownership is decided by the
 asset policy before calling.
 
-**Request ownership protocol (shared by every producer).** One queue, `requests.json` (`pending` and `running` tickets), changes
-only by a read-modify-write under `requests.lock`. That lock is held for a few file operations and never during an apply.
+**Request ownership protocol (shared by every producer).**
 
-* `request()` (theme change) enqueues `Full`; `publish_assets()` enqueues `Assets`. A new ticket replaces the pending one and
-  keeps the wider intent (`Full` outranks `Assets`), so a pending theme apply is never narrowed, in any producer order.
-* The worker sleeps for the debounce, takes the system apply lock, then claims its ticket only if it is still the pending one,
-  moving it to `running` with its pid. It reads the configuration and palette only after claiming, so any later change has
-  queued a newer ticket.
-* When done, the worker clears `running` only if it is still its own ticket. A failed spawn drops only its own pending ticket.
-  `off` drops the pending ticket.
-* `completion()` reports busy while a ticket is pending or a live worker runs. A crashed worker's ticket stops counting.
+* **Queues:** one per configuration file, `requests-<hash of the shell_json path>.json` with `pending`, `running` and `retry`, plus
+  the literal path. Each changes only by a read-modify-write under `requests-<hash>.lock`, never held during an apply.
+  - `flock` failures are checked: `EINTR` is retried, and any other error is reported with nothing read or written.
+  - A queue file naming another configuration is never adopted.
+* **Producers:** `request()` asks for `Full` and `publish_assets()` for `Assets`. Neither does queue I/O on the caller's thread.
+  - Both merge into an in-process outbox, one slot per configuration with the wider intent, so it stays bounded and coalescing
+    never loses `Full`.
+  - A single dispatcher thread drains the outbox. A short-lived process drains it at exit, waiting at most 3 s.
+* **Enqueue:** the new ticket keeps the widest intent still owed: the pending ticket, a failed spawn (`retry`), and a running
+  ticket whose worker is gone. A worker is identified by pid plus `/proc` start time, so a reused pid is not "alive".
+* **Worker start:** the worker is started with `--shell-json PATH`, the literal producer path, never rediscovered.
+* **Worker run:** after the debounce it takes the system apply lock and claims its ticket only if it is still that configuration's
+  pending one. It reads configuration and palette only after claiming, and `finish` clears `running` only for its own ticket.
+* **Failures and off:** a failed spawn moves its ticket's intent to `retry`. Settings then shows the error rather than endless
+  pending work, and the next request inherits the intent. `off` drops pending and retry tickets.
 
-Deterministic tests cover:
+Deterministic tests (UNRUN, build pause) cover:
 
 * every producer order;
 * root's race (a full request between an asset read and its write);
-* claim, finish and abandon ownership;
-* eight producer threads through the real file lock;
+* claim and finish ownership;
+* a failed spawn keeping an inherited `Full`;
+* a dead or pid-reused worker handing back its intent;
+* a refused lock never entering the read-modify-write;
+* per-configuration isolation and the collision guard;
+* eight producer threads through the real lock;
+* outbox coalescing;
 * opt-outs;
-* key-exact assets output with user CSS, a custom GTK theme, a custom font and a custom Qt palette present.
-
-These tests are currently UNRUN (build pause).
+* key-exact assets output.
 
 **Remaining native gates (not yet run for this protocol):**
 
-1. A real `decthemectl` producer burst: `request` and `publish_assets` interleaved from two processes. Assert one worker runs the
+1. A real `decthemectl` producer burst (two configurations included, to prove the `--shell-json` hand-off): `request` and `publish_assets` interleaved from two processes. Assert one worker runs the
    full apply and the others exit superseded.
 2. An Assets-only run against real GTK 3 / GTK 4 / libadwaita / Qt clients. Icons change in new processes; a running GTK app
    follows the gsettings `icon-theme` change only through the settings portal or an XSETTINGS daemon.

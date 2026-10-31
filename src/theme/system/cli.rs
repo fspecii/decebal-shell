@@ -45,6 +45,7 @@ pub fn run(args: &[String], src: &Source) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("apply-system") => {
             let mut opts = Opts::default();
+            let (mut debounced, mut shell_json) = (None, None);
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -56,14 +57,23 @@ pub fn run(args: &[String], src: &Source) -> Result<(), String> {
                     }
                     "--debounced" => {
                         i += 1;
-                        let nonce = args.get(i).ok_or("--debounced needs a token")?;
-                        run_debounced(src, nonce)?;
-                        return Ok(());
+                        debounced = Some(args.get(i).ok_or("--debounced needs a token")?.clone());
+                    }
+                    // the configuration a queued request belongs to, passed literally by its producer (never rediscovered)
+                    "--shell-json" => {
+                        i += 1;
+                        shell_json = Some(std::path::PathBuf::from(args.get(i).ok_or("--shell-json needs a path")?));
                     }
                     other => return Err(format!("unknown option {other}")),
                 }
                 i += 1;
             }
+            if let Some(nonce) = debounced {
+                let src = Source { shell_json: shell_json.unwrap_or_else(|| src.shell_json.clone()), themes_dir: src.themes_dir.clone() };
+                run_debounced(&src, &nonce)?;
+                return Ok(());
+            }
+            let src = &Source { shell_json: shell_json.unwrap_or_else(|| src.shell_json.clone()), themes_dir: src.themes_dir.clone() };
             let r = apply_now(src, &opts)?;
             if json {
                 println!(

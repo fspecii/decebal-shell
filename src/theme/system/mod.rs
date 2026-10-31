@@ -549,7 +549,7 @@ fn lock(dir: &Path) -> Result<std::fs::File, String> {
     use std::os::fd::AsRawFd;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(dir.join("lock")).map_err(|e| e.to_string())?;
-    unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) };
+    flock_exclusive(f.as_raw_fd()).map_err(|e| format!("cannot lock {}: {e}", dir.join("lock").display()))?;
     Ok(f)
 }
 
@@ -671,7 +671,18 @@ pub fn off(env: &Env, cfg: &Config, p: &Palette) -> Result<Report, String> {
     st.extra.clear();
     let _ = std::fs::remove_file(env.state_dir.join("last-result.json"));
     // An explicit "off" drops queued requests: a worker that wakes later finds no ticket and writes nothing.
-    let _ = with_queue(env, |q| q.pending = None);
+    for e in std::fs::read_dir(&env.state_dir).into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.starts_with("requests-") && name.ends_with(".json") {
+            let config: Option<String> = std::fs::read_to_string(e.path()).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|v| v["config"].as_str().map(String::from));
+            if let Some(c) = config {
+                let _ = with_queue(env, Path::new(&c), |q| {
+                    q.pending = None;
+                    q.retry = None;
+                });
+            }
+        }
+    }
     if st.is_empty() && st.dirs.is_empty() {
         let _ = std::fs::remove_file(env.state_dir.join("manifest.json"));
         let _ = std::fs::remove_dir(env.state_dir.join("backups"));
@@ -762,7 +773,14 @@ pub struct Completion {
 /// Honest asynchronous status for Settings: queued or running work is not a completed apply.
 pub fn completion(env: &Env) -> Completion {
     let value: Value = std::fs::read_to_string(env.state_dir.join("last-result.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-    let busy = Queue::load(env).busy();
+    // Settings shows one status for the desktop: busy while any configuration's queue has work.
+    let busy = std::fs::read_dir(&env.state_dir).into_iter().flatten().flatten().any(|e| {
+        let name = e.file_name().to_string_lossy().into_owned();
+        name.starts_with("requests-") && name.ends_with(".json") && {
+            let v: Value = std::fs::read_to_string(e.path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+            v["config"].as_str().is_some_and(|c| Queue::load_file(&e.path(), Path::new(c)).busy())
+        }
+    });
     Completion {
         pending: busy,
         error: if busy { None } else { value["error"].as_str().map(String::from) },
@@ -781,15 +799,20 @@ fn automatic_enabled(value: Option<&str>) -> bool {
 // ---------------------------------------------------------------- request ownership
 //
 // Producers (a theme change: [`request`]; an accepted icon / cursor selection: [`publish_assets`]) and the debounced worker
-// ([`run_debounced`]) share one queue, `requests.json` in the state directory, changed only by a read-modify-write under its own
-// lock (`requests.lock`). That lock is held for a few file operations and never during an apply, so a producer on a UI thread never
-// waits for one.
+// ([`run_debounced`]) share one queue *per configuration file*: `requests-<hash of the shell_json path>.json` in the state directory,
+// changed only by a read-modify-write under its own lock (`requests-<hash>.lock`, never held during an apply). A ticket records the
+// literal configuration path; its worker is started with that path (`--shell-json`) and claims only a ticket for it, so one
+// configuration never replaces or runs another's request.
 //
-// * Enqueue: a new ticket replaces the pending one and inherits its intent when wider: `Full` (every enabled target) outranks
-//   `Assets` (icon / cursor keys only), so an outstanding theme apply is never narrowed, whatever the order of producers.
-// * Claim: a worker takes the pending ticket only if it is still its own, moving it to `running`, and only while holding the apply
-//   lock; it reads the selection after claiming, so any later change has queued a newer ticket that will run after it.
-// * Finish / abandon: a worker clears `running` only when it is still its own ticket; a failed spawn drops only its own pending one.
+// * Producers never touch the queue on the caller's thread: they merge into an in-process outbox (one slot per configuration,
+//   intents merged upward) that a single dispatcher thread drains; a process that exits flushes it, bounded, at exit.
+// * Enqueue: a new ticket replaces the pending one and keeps the widest intent of the pending ticket, of a failed spawn (`retry`) and
+//   of a running ticket whose worker died. `Full` outranks `Assets`, so a theme apply is never narrowed or lost.
+// * Claim: a worker takes its ticket only if it is still the pending one, while holding the apply lock; it reads the configuration
+//   after claiming, so any later change has queued a newer ticket.
+// * Finish clears `running` only when it is still the worker's ticket. A failed spawn moves its ticket's intent to `retry` (not
+//   pending: Settings shows the failure, not endless pending work); the next request inherits it.
+// * A worker is identified by pid and process start time, so a reused pid is not mistaken for a live worker.
 
 /// What a request asks for. Ordered: merging keeps the wider one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -807,54 +830,112 @@ impl Intent {
             Intent::Full => "full",
         }
     }
+    fn parse(s: &str) -> Option<Intent> {
+        match s {
+            "assets" => Some(Intent::Assets),
+            "full" => Some(Intent::Full),
+            _ => None,
+        }
+    }
+}
+
+/// The identity of a worker process: pid and kernel start time (`/proc/PID/stat` field 22).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Worker {
+    pub pid: u32,
+    pub start: u64,
+}
+
+impl Worker {
+    pub fn current() -> Worker {
+        let pid = std::process::id();
+        Worker { pid, start: proc_start(pid).unwrap_or(0) }
+    }
+    /// Still the same live process.
+    pub fn alive(&self) -> bool {
+        self.start != 0 && proc_start(self.pid) == Some(self.start)
+    }
+}
+
+fn proc_start(pid: u32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // the command name may contain spaces and parentheses: fields start after the last ')'
+    stat[stat.rfind(')')? + 1..].split_whitespace().nth(19)?.parse().ok()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ticket {
     pub nonce: String,
     pub intent: Intent,
-    /// The worker running it (0 while pending); a running ticket whose process is gone no longer counts as busy.
-    pub pid: u32,
+    /// The worker running it (`None` while pending).
+    pub worker: Option<Worker>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Queue {
+    /// The literal configuration file this queue belongs to.
+    pub config: String,
     pub pending: Option<Ticket>,
     pub running: Option<Ticket>,
+    /// The intent of a request whose worker could not be started; the next request inherits it.
+    pub retry: Option<Intent>,
 }
 
 impl Queue {
-    fn path(env: &Env) -> PathBuf {
-        env.state_dir.join("requests.json")
+    fn stem(shell_json: &Path) -> String {
+        format!("requests-{:016x}", files::fnv(shell_json.as_os_str().as_encoded_bytes()))
     }
 
-    fn load(env: &Env) -> Queue {
-        let v: Value = std::fs::read_to_string(Self::path(env)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    fn path(env: &Env, shell_json: &Path) -> PathBuf {
+        env.state_dir.join(format!("{}.json", Self::stem(shell_json)))
+    }
+
+    fn load_file(path: &Path, shell_json: &Path) -> Queue {
+        let v: Value = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         let ticket = |v: &Value| {
             Some(Ticket {
                 nonce: v.get("nonce")?.as_str()?.to_string(),
-                intent: if v.get("intent")?.as_str()? == "assets" { Intent::Assets } else { Intent::Full },
-                pid: v.get("pid").and_then(Value::as_u64).unwrap_or(0) as u32,
+                intent: Intent::parse(v.get("intent")?.as_str()?)?,
+                worker: v.get("pid").and_then(Value::as_u64).map(|pid| Worker { pid: pid as u32, start: v.get("start").and_then(Value::as_u64).unwrap_or(0) }),
             })
         };
-        Queue { pending: ticket(&v["pending"]), running: ticket(&v["running"]) }
+        let config = shell_json.to_string_lossy().into_owned();
+        // A file naming another configuration (a hash collision) is never adopted.
+        if v.get("config").and_then(Value::as_str).is_some_and(|c| c != config) {
+            return Queue { config, ..Queue::default() };
+        }
+        Queue { config, pending: ticket(&v["pending"]), running: ticket(&v["running"]), retry: v["retry"].as_str().and_then(Intent::parse) }
     }
 
-    fn save(&self, env: &Env) -> Result<(), String> {
-        if self.pending.is_none() && self.running.is_none() {
-            return match std::fs::remove_file(Self::path(env)) {
+    pub fn load(env: &Env, shell_json: &Path) -> Queue {
+        Self::load_file(&Self::path(env, shell_json), shell_json)
+    }
+
+    fn save(&self, env: &Env, shell_json: &Path) -> Result<(), String> {
+        let path = Self::path(env, shell_json);
+        if self.pending.is_none() && self.running.is_none() && self.retry.is_none() {
+            return match std::fs::remove_file(&path) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
                 _ => Ok(()),
             };
         }
-        let t = |t: &Option<Ticket>| t.as_ref().map(|t| json!({"nonce": t.nonce, "intent": t.intent.id(), "pid": t.pid}));
-        files::write_atomic(&Self::path(env), &json!({"pending": t(&self.pending), "running": t(&self.running)}).to_string())
+        let t = |t: &Option<Ticket>| t.as_ref().map(|t| json!({"nonce": t.nonce, "intent": t.intent.id(), "pid": t.worker.map(|w| w.pid), "start": t.worker.map(|w| w.start)}));
+        files::write_atomic(&path, &json!({"config": self.config, "pending": t(&self.pending), "running": t(&self.running), "retry": self.retry.map(Intent::id)}).to_string())
     }
 
-    /// A producer's request: replaces the pending ticket, never narrowing its intent.
+    /// A producer's request: replaces the pending ticket with the widest intent still owed (pending, failed spawn, dead worker).
     pub fn enqueue(&mut self, nonce: &str, intent: Intent) {
-        let intent = self.pending.as_ref().map_or(intent, |p| p.intent.max(intent));
-        self.pending = Some(Ticket { nonce: nonce.to_string(), intent, pid: 0 });
+        let mut owed = intent;
+        if let Some(p) = &self.pending {
+            owed = owed.max(p.intent);
+        }
+        if let Some(r) = self.retry.take() {
+            owed = owed.max(r);
+        }
+        if self.running.as_ref().is_some_and(|r| !r.worker.is_some_and(|w| w.alive())) {
+            owed = owed.max(self.running.take().map(|r| r.intent).unwrap_or(Intent::Assets));
+        }
+        self.pending = Some(Ticket { nonce: nonce.to_string(), intent: owed, worker: None });
     }
 
     /// Is `nonce` still the newest request?
@@ -863,12 +944,12 @@ impl Queue {
     }
 
     /// The worker for `nonce` takes its ticket (only if it is still the newest); `None` means superseded.
-    pub fn claim(&mut self, nonce: &str, pid: u32) -> Option<Intent> {
+    pub fn claim(&mut self, nonce: &str, worker: Worker) -> Option<Intent> {
         if !self.is_pending(nonce) {
             return None;
         }
         let mut t = self.pending.take()?;
-        t.pid = pid;
+        t.worker = Some(worker);
         let intent = t.intent;
         self.running = Some(t);
         Some(intent)
@@ -881,28 +962,48 @@ impl Queue {
         }
     }
 
-    /// The worker for `nonce` could not be started: drop its ticket if nothing newer replaced it.
-    pub fn abandon(&mut self, nonce: &str) {
+    /// The worker for `nonce` could not be started: if its ticket is still the newest, keep its intent for the next request instead
+    /// of leaving it pending (nobody would claim it) or dropping it (an inherited theme apply would be lost).
+    pub fn spawn_failed(&mut self, nonce: &str) {
         if self.is_pending(nonce) {
-            self.pending = None;
+            let t = self.pending.take().expect("pending");
+            self.retry = Some(self.retry.map_or(t.intent, |r| r.max(t.intent)));
         }
     }
 
-    /// Work is queued or a live worker is running.
+    /// Work is queued or a live worker is running (a failed spawn is not pending: its error is shown).
     pub fn busy(&self) -> bool {
-        self.pending.is_some() || self.running.as_ref().is_some_and(|r| r.pid == 0 || unsafe { libc::kill(r.pid as i32, 0) } == 0)
+        self.pending.is_some() || self.running.as_ref().is_some_and(|r| r.worker.is_some_and(|w| w.alive()))
     }
 }
 
-/// One read-modify-write of the request queue under its own short lock.
-fn with_queue<R>(env: &Env, f: impl FnOnce(&mut Queue) -> R) -> Result<R, String> {
+/// `flock(LOCK_EX)` that retries an interrupted wait and reports any other failure (then nothing is read or written).
+fn flock_exclusive(fd: std::os::fd::RawFd) -> std::io::Result<()> {
+    loop {
+        if unsafe { libc::flock(fd, libc::LOCK_EX) } == 0 {
+            return Ok(());
+        }
+        let e = std::io::Error::last_os_error();
+        if e.kind() != std::io::ErrorKind::Interrupted {
+            return Err(e);
+        }
+    }
+}
+
+/// One read-modify-write of `shell_json`'s request queue under its own short lock.
+fn with_queue<R>(env: &Env, shell_json: &Path, f: impl FnOnce(&mut Queue) -> R) -> Result<R, String> {
+    with_queue_locked_by(env, shell_json, flock_exclusive, f)
+}
+
+fn with_queue_locked_by<R>(env: &Env, shell_json: &Path, lock: impl Fn(std::os::fd::RawFd) -> std::io::Result<()>, f: impl FnOnce(&mut Queue) -> R) -> Result<R, String> {
     use std::os::fd::AsRawFd;
     std::fs::create_dir_all(&env.state_dir).map_err(|e| format!("{}: {e}", env.state_dir.display()))?;
-    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(env.state_dir.join("requests.lock")).map_err(|e| e.to_string())?;
-    unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) };
-    let mut q = Queue::load(env);
+    let path = env.state_dir.join(format!("{}.lock", Queue::stem(shell_json)));
+    let file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    lock(file.as_raw_fd()).map_err(|e| format!("cannot lock {}: {e}", path.display()))?;
+    let mut q = Queue::load(env, shell_json);
     let r = f(&mut q);
-    q.save(env)?;
+    q.save(env, shell_json)?;
     Ok(r)
 }
 
@@ -916,16 +1017,99 @@ fn new_nonce() -> String {
     )
 }
 
-/// Queues `intent` and starts its worker. Never blocks beyond the queue's few file operations.
-fn queue_request(env: &Env, intent: Intent) -> Result<(), String> {
+/// Queues `intent` for `shell_json` and starts its worker with that literal path. Runs on the dispatcher thread (or at exit).
+fn queue_request(env: &Env, shell_json: &Path, intent: Intent) -> Result<(), String> {
     let nonce = new_nonce();
-    with_queue(env, |q| q.enqueue(&nonce, intent))?;
-    spawn_ctl(&["apply-system", "--debounced", &nonce]);
+    with_queue(env, shell_json, |q| q.enqueue(&nonce, intent))?;
+    let path = shell_json.to_string_lossy();
+    if let Err(error) = spawn_ctl_checked(&["apply-system", "--debounced", &nonce, "--shell-json", &path]) {
+        record_failure(env, &format!("Could not start app theme integration: {error}"));
+        with_queue(env, shell_json, |q| q.spawn_failed(&nonce))?;
+    }
     Ok(())
 }
 
+// ---------------------------------------------------------------- the producer outbox
+
+/// Requests not yet queued, one slot per configuration with the widest intent asked for: bounded by the number of configuration
+/// files, coalesced without losing a `Full`.
+#[derive(Debug, Default)]
+pub struct Outbox {
+    pub slots: BTreeMap<PathBuf, Intent>,
+    /// The dispatcher is writing a batch it took.
+    pub busy: bool,
+}
+
+impl Outbox {
+    pub fn post(&mut self, shell_json: &Path, intent: Intent) {
+        let slot = self.slots.entry(shell_json.to_path_buf()).or_insert(intent);
+        *slot = (*slot).max(intent);
+    }
+}
+
+static OUTBOX: std::sync::Mutex<Outbox> = std::sync::Mutex::new(Outbox { slots: BTreeMap::new(), busy: false });
+static OUTBOX_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+
+fn drain(batch: BTreeMap<PathBuf, Intent>) {
+    let env = Env::discover();
+    for (shell_json, intent) in batch {
+        if let Err(e) = queue_request(&env, &shell_json, intent) {
+            record_failure(&env, &format!("Could not queue app theme integration: {e}"));
+        }
+    }
+}
+
+/// Hands a request to the single dispatcher thread: no file I/O, lock wait or process start on the caller's thread.
+fn post(shell_json: &Path, intent: Intent) {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        let _ = std::thread::Builder::new().name("decebal-app-requests".into()).spawn(|| loop {
+            let batch = {
+                let mut o = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
+                while o.slots.is_empty() {
+                    o = OUTBOX_CHANGED.wait(o).unwrap_or_else(|e| e.into_inner());
+                }
+                o.busy = true;
+                std::mem::take(&mut o.slots)
+            };
+            drain(batch);
+            OUTBOX.lock().unwrap_or_else(|e| e.into_inner()).busy = false;
+            OUTBOX_CHANGED.notify_all();
+        });
+        extern "C" fn flush_at_exit() {
+            flush_outbox(Duration::from_secs(3));
+        }
+        unsafe { libc::atexit(flush_at_exit) };
+    });
+    OUTBOX.lock().unwrap_or_else(|e| e.into_inner()).post(shell_json, intent);
+    OUTBOX_CHANGED.notify_all();
+}
+
+/// A short-lived process (a CLI theme change) must not exit with requests still in its outbox: drain them here, waiting at most
+/// `limit` for a batch the dispatcher is writing.
+pub fn flush_outbox(limit: Duration) {
+    let deadline = std::time::Instant::now() + limit;
+    let mut o = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
+    loop {
+        if o.busy {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return;
+            }
+            o = OUTBOX_CHANGED.wait_timeout(o, left).unwrap_or_else(|e| e.into_inner()).0;
+        } else if !o.slots.is_empty() {
+            let batch = std::mem::take(&mut o.slots);
+            drop(o);
+            drain(batch);
+            o = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
+        } else {
+            return;
+        }
+    }
+}
+
 /// Called after any theme / style / font / wallpaper-colour change: unless app integration is explicitly off, asks for one apply
-/// shortly (several changes in a row make one run). Never blocks and never fails the caller.
+/// shortly (several changes in a row make one run). Never blocks on queue I/O and never fails the caller.
 /// `DECEBAL_SYSTEM_SYNC=1` runs it inline instead (scripts and tests).
 /// `DECEBAL_SYSTEM_AUTOMATIC=0` suppresses automatic requests before any I/O; explicit apply-system still works.
 pub fn request(shell_json: &Path) {
@@ -942,7 +1126,7 @@ pub fn request(shell_json: &Path) {
         let _ = apply_now(&src, &Opts::default());
         return;
     }
-    let _ = queue_request(&Env::discover(), Intent::Full);
+    post(shell_json, Intent::Full);
 }
 
 /// The targets an icon / cursor publication may touch: never Omarchy, browser, editors, hooks, terminals, Kvantum or X11.
@@ -958,25 +1142,23 @@ pub enum Publication {
 }
 
 /// The accepted icon / cursor selection in `shell_json` changed (`icons.theme`, `system.iconTheme`, `system.cursorTheme`): publish it to
-/// GTK and Qt without running the rest of the pipeline. Never blocks. Writes exactly: GTK `settings.ini` `gtk-icon-theme-name` /
-/// `gtk-cursor-theme-name` (gtk-3.0 and gtk-4.0), gsettings `icon-theme` / `cursor-theme`, qt5ct / qt6ct `[Appearance] icon_theme`.
+/// GTK and Qt without running the rest of the pipeline. Never blocks on queue I/O. Writes exactly: GTK `settings.ini`
+/// `gtk-icon-theme-name` / `gtk-cursor-theme-name` (gtk-3.0 and gtk-4.0), gsettings `icon-theme` / `cursor-theme`, qt5ct / qt6ct
+/// `[Appearance] icon_theme`.
 ///
 /// * Explicit opt-outs win: `system.enabled = false` (unset means on), or the `gtk` and `qt` targets switched off, publish nothing.
 ///   An explicit `system.iconTheme` keeps winning over the theme's `icons.theme`. A theme that is not installed is not published.
 /// * Ordering: see the request ownership protocol above. A pending theme apply keeps its full intent; the worker publishes the
-///   selection current when it claims its ticket.
+///   selection of exactly `shell_json` current when it claims its ticket.
 pub fn publish_assets(shell_json: &Path) -> Publication {
     if cfg!(test) || !automatic_enabled(std::env::var("DECEBAL_SYSTEM_AUTOMATIC").ok().as_deref()) {
         return Publication::Off("automatic app integration is suppressed in this process".into());
     }
-    let env = Env::discover();
-    if let Err(why) = asset_gate(&Config::load(shell_json), &env) {
+    if let Err(why) = asset_gate(&Config::load(shell_json), &Env::discover()) {
         return Publication::Off(why);
     }
-    match queue_request(&env, Intent::Assets) {
-        Ok(()) => Publication::Requested,
-        Err(e) => Publication::Off(format!("cannot queue the request: {e}")),
-    }
+    post(shell_json, Intent::Assets);
+    Publication::Requested
 }
 
 /// Why an icon / cursor publication must not write anything, if it must not.
@@ -1031,36 +1213,36 @@ fn publish_assets_locked(env: &Env, cfg: &Config) -> Result<Report, String> {
 
 /// Starts `decthemectl ARGS` detached (it lives next to the running program, else on PATH). Does nothing in unit tests.
 pub fn spawn_ctl(args: &[&str]) {
-    if cfg!(test) {
-        return;
-    }
-    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("decthemectl"));
-    if let Err(error) = std::process::Command::new(exe).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
-        if args.first() == Some(&"apply-system") {
-            let env = Env::discover();
-            record_failure(&env, &format!("Could not start app theme integration: {error}"));
-            if let Some(nonce) = args.get(2) {
-                let _ = with_queue(&env, |q| q.abandon(nonce));
-            }
-        }
+    if let Err(error) = spawn_ctl_checked(args) {
+        crate::log_warn!("decthemectl {}: {error}", args.join(" "));
     }
 }
 
-/// The child started by a producer: waits a moment, then runs its ticket only if it is still the newest (see the protocol above).
+fn spawn_ctl_checked(args: &[&str]) -> Result<(), String> {
+    if cfg!(test) {
+        return Ok(());
+    }
+    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("decthemectl"));
+    std::process::Command::new(exe).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// The child started for a ticket of `src.shell_json` (passed literally, never rediscovered): waits a moment, then runs the ticket
+/// only if it is still the newest for that configuration (see the protocol above).
 pub fn run_debounced(src: &Source, nonce: &str) -> Result<Option<Report>, String> {
     let env = Env::discover();
+    let shell_json = src.shell_json.as_path();
     std::thread::sleep(Duration::from_millis(700));
-    if !with_queue(&env, |q| q.is_pending(nonce))? {
+    if !with_queue(&env, shell_json, |q| q.is_pending(nonce))? {
         return Ok(None);
     }
     let _apply = lock(&env.state_dir)?;
-    let Some(intent) = with_queue(&env, |q| q.claim(nonce, std::process::id()))? else { return Ok(None) };
+    let Some(intent) = with_queue(&env, shell_json, |q| q.claim(nonce, Worker::current()))? else { return Ok(None) };
     // Everything is read from here on: a change made after this point has queued a newer ticket.
     let result = match intent {
         Intent::Full => apply_now_inner(src, &Opts::default(), true),
-        Intent::Assets => publish_assets_locked(&env, &effective_config(&src.shell_json)).inspect_err(|e| record_failure(&env, e)),
+        Intent::Assets => publish_assets_locked(&env, &effective_config(shell_json)).inspect_err(|e| record_failure(&env, e)),
     };
-    let _ = with_queue(&env, |q| q.finish(nonce));
+    let _ = with_queue(&env, shell_json, |q| q.finish(nonce));
     result.map(Some)
 }
 
@@ -1189,23 +1371,28 @@ mod tests {
     fn completion_distinguishes_pending_failure_and_success() {
         let d = tmp("completion");
         let (env, _) = env(&d, &[]);
-        with_queue(&env, |q| q.enqueue("nonce", Intent::Full)).unwrap();
+        let cfg = d.join("decebal.json");
+        with_queue(&env, &cfg, |q| q.enqueue("nonce", Intent::Full)).unwrap();
         record_failure(&env, "write failed");
         let result = completion(&env);
         assert!(result.pending);
         assert!(result.error.is_none(), "a retry hides stale errors while pending");
-        with_queue(&env, |q| assert_eq!(q.claim("nonce", std::process::id()), Some(Intent::Full))).unwrap();
+        with_queue(&env, &cfg, |q| assert_eq!(q.claim("nonce", Worker::current()), Some(Intent::Full))).unwrap();
         assert!(completion(&env).pending, "a live running worker is still pending work");
-        with_queue(&env, |q| q.finish("nonce")).unwrap();
-        assert!(!Queue::path(&env).exists(), "an empty queue leaves no file");
+        with_queue(&env, &cfg, |q| q.finish("nonce")).unwrap();
+        assert!(!Queue::path(&env, &cfg).exists(), "an empty queue leaves no file");
         assert_eq!(completion(&env).error.as_deref(), Some("write failed"));
-        with_queue(&env, |q| {
+        with_queue(&env, &cfg, |q| {
             q.enqueue("crashed", Intent::Full);
-            q.claim("crashed", u32::MAX - 1);
+            q.claim("crashed", Worker { pid: std::process::id(), start: 1 });
         })
         .unwrap();
-        assert!(!completion(&env).pending, "a running ticket whose worker died is not shown as pending forever");
-        with_queue(&env, |q| q.finish("crashed")).unwrap();
+        assert!(!completion(&env).pending, "a running ticket whose worker is gone (or whose pid was reused) is not pending forever");
+        with_queue(&env, &cfg, |q| {
+            q.finish("crashed");
+            q.retry = None;
+        })
+        .unwrap();
         files::write_atomic(&env.state_dir.join("last-result.json"), "{\"warnings\":[\"reopen GTK apps\"]}").unwrap();
         assert!(!completion(&env).pending);
         assert!(completion(&env).error.is_none());
@@ -1357,50 +1544,129 @@ mod tests {
         let mut q = Queue::default();
         q.enqueue("full-1", Intent::Full); // theme change
         q.enqueue("assets-2", Intent::Assets); // asset follow completes right after
-        assert_eq!(q.claim("full-1", 10), None, "the older worker is superseded");
-        assert_eq!(q.claim("assets-2", 11), Some(Intent::Full), "the surviving worker inherits the full intent");
+        assert_eq!(q.claim("full-1", Worker::current()), None, "the older worker is superseded");
+        assert_eq!(q.claim("assets-2", Worker::current()), Some(Intent::Full), "the surviving worker inherits the full intent");
         // and the other order
         let mut q = Queue::default();
         q.enqueue("assets-1", Intent::Assets);
         q.enqueue("full-2", Intent::Full);
-        assert_eq!(q.claim("assets-1", 10), None);
-        assert_eq!(q.claim("full-2", 11), Some(Intent::Full));
+        assert_eq!(q.claim("assets-1", Worker::current()), None);
+        assert_eq!(q.claim("full-2", Worker::current()), Some(Intent::Full));
     }
 
     /// A request arriving while a worker runs is kept for the next worker; finishing never clears someone else's ticket.
     #[test]
-    fn claim_finish_and_abandon_only_touch_their_own_ticket() {
+    fn claim_and_finish_only_touch_their_own_ticket() {
+        let me = Worker::current();
+        assert!(me.alive());
         let mut q = Queue::default();
         q.enqueue("a", Intent::Full);
-        assert_eq!(q.claim("a", 1), Some(Intent::Full));
-        assert_eq!(q.claim("a", 1), None, "a ticket is claimed once");
+        assert_eq!(q.claim("a", me), Some(Intent::Full));
+        assert_eq!(q.claim("a", me), None, "a ticket is claimed once");
         q.enqueue("b", Intent::Assets);
-        assert_eq!(q.pending.as_ref().unwrap().intent, Intent::Assets, "the running full apply read the selection before b: an icon-only follow-up is enough");
+        assert_eq!(q.pending.as_ref().unwrap().intent, Intent::Assets, "a live full apply read the selection before b: an icon-only follow-up is enough");
         q.finish("b");
         assert!(q.running.is_some(), "b is not running: a's ticket stays");
         q.finish("a");
         assert!(q.running.is_none() && q.is_pending("b"), "a's end leaves b queued");
-        q.enqueue("c", Intent::Assets);
-        q.abandon("b");
-        assert!(q.is_pending("c"), "a stale spawn failure never drops a newer request");
-        q.abandon("c");
-        assert!(q.pending.is_none());
+    }
+
+    /// Root's finding: Full A, then Assets B inheriting Full, then B's worker cannot be started. The full intent must survive for the
+    /// next request, and Settings must show the failure instead of endless pending work.
+    #[test]
+    fn a_failed_spawn_keeps_the_inherited_full_intent_for_the_next_request() {
+        let mut q = Queue::default();
+        q.enqueue("A", Intent::Full);
+        q.enqueue("B", Intent::Assets);
+        q.spawn_failed("B");
+        assert!(q.pending.is_none() && q.retry == Some(Intent::Full) && !q.busy(), "failed, not pending");
+        assert_eq!(q.claim("A", Worker::current()), None, "A stays superseded");
+        q.spawn_failed("A");
+        assert_eq!(q.retry, Some(Intent::Full), "a stale failure changes nothing");
+        q.enqueue("C", Intent::Assets);
+        assert_eq!((q.pending.as_ref().map(|t| t.intent), q.retry), (Some(Intent::Full), None), "the next request inherits the owed full apply");
+        assert_eq!(q.claim("C", Worker::current()), Some(Intent::Full));
+    }
+
+    /// A running full apply whose worker died (or whose pid now belongs to another process) is owed to the next request.
+    #[test]
+    fn a_dead_running_worker_hands_its_intent_to_the_next_request() {
+        let mut q = Queue::default();
+        q.enqueue("A", Intent::Full);
+        q.claim("A", Worker { pid: std::process::id(), start: 1 }); // same pid, different start time: not this process
+        assert!(!q.busy());
+        q.enqueue("B", Intent::Assets);
+        assert!(q.running.is_none());
+        assert_eq!(q.pending.as_ref().map(|t| t.intent), Some(Intent::Full));
+        // a live one is not taken over
+        let mut q = Queue::default();
+        q.enqueue("A", Intent::Full);
+        q.claim("A", Worker::current());
+        q.enqueue("B", Intent::Assets);
+        assert!(q.running.is_some() && q.pending.as_ref().map(|t| t.intent) == Some(Intent::Assets));
+    }
+
+    /// A lock that fails (not EINTR) is reported and the queue is neither read nor written.
+    #[test]
+    fn a_failed_queue_lock_never_enters_the_read_modify_write() {
+        let d = tmp("queue-lock-fail");
+        let (env, _) = env(&d, &[]);
+        let cfg = d.join("decebal.json");
+        let entered = std::cell::Cell::new(false);
+        let r = with_queue_locked_by(
+            &env,
+            &cfg,
+            |_| Err(std::io::Error::from_raw_os_error(libc::ENOLCK)),
+            |q| {
+                entered.set(true);
+                q.enqueue("x", Intent::Full);
+            },
+        );
+        assert!(r.is_err() && !entered.get() && !Queue::path(&env, &cfg).exists());
+        let tries = std::cell::Cell::new(0);
+        let r = with_queue_locked_by(
+            &env,
+            &cfg,
+            |fd| {
+                tries.set(tries.get() + 1);
+                flock_exclusive(fd)
+            },
+            |q| q.enqueue("y", Intent::Assets),
+        );
+        assert!(r.is_ok() && tries.get() == 1 && Queue::load(&env, &cfg).is_pending("y"));
+    }
+
+    /// Each configuration file has its own queue: one never replaces, claims or clears another's request.
+    #[test]
+    fn queues_are_isolated_per_configuration_file() {
+        let d = tmp("queue-configs");
+        let (env, _) = env(&d, &[]);
+        let (a, b) = (d.join("a/decebal.json"), d.join("b/decebal.json"));
+        with_queue(&env, &a, |q| q.enqueue("na", Intent::Full)).unwrap();
+        with_queue(&env, &b, |q| q.enqueue("nb", Intent::Assets)).unwrap();
+        assert_ne!(Queue::path(&env, &a), Queue::path(&env, &b));
+        assert!(Queue::load(&env, &a).is_pending("na") && Queue::load(&env, &b).is_pending("nb"), "b did not replace a");
+        assert_eq!(with_queue(&env, &a, |q| q.claim("nb", Worker::current())).unwrap(), None, "a's worker cannot take b's ticket");
+        assert_eq!(Queue::load(&env, &b).pending.map(|t| t.intent), Some(Intent::Assets), "and b is not widened by a's full request");
+        assert_eq!(Queue::load(&env, &a).config, a.to_string_lossy());
+        // a file that names another configuration (a hash collision) is never adopted
+        std::fs::write(Queue::path(&env, &a), json!({"config": "/elsewhere/decebal.json", "pending": {"nonce": "zz", "intent": "full"}}).to_string()).unwrap();
+        assert!(Queue::load(&env, &a).pending.is_none());
     }
 
     /// Many producers on threads through the real lock and file: the queue stays valid and the full intent survives.
     #[test]
     fn concurrent_producers_through_the_file_lock_keep_one_widest_ticket() {
         let d = tmp("queue-threads");
-        let (env, _) = env(&d, &[]);
-        let env = std::sync::Arc::new(env.state_dir.clone());
+        let root = std::sync::Arc::new(d.to_path_buf());
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
         let handles: Vec<_> = (0..8)
             .map(|i| {
-                let (dir, barrier) = (env.clone(), barrier.clone());
+                let (root, barrier) = (root.clone(), barrier.clone());
                 std::thread::spawn(move || {
-                    let (e, _) = super::testutil::env(dir.parent().unwrap(), &[]);
+                    let (e, _) = super::testutil::env(&root, &[]);
                     barrier.wait();
-                    with_queue(&e, |q| q.enqueue(&format!("t{i}"), if i == 3 { Intent::Full } else { Intent::Assets })).unwrap();
+                    with_queue(&e, &root.join("decebal.json"), |q| q.enqueue(&format!("t{i}"), if i == 3 { Intent::Full } else { Intent::Assets })).unwrap();
                 })
             })
             .collect();
@@ -1408,8 +1674,22 @@ mod tests {
             h.join().unwrap();
         }
         let (e, _) = super::testutil::env(&d, &[]);
-        let q = Queue::load(&e);
-        assert_eq!(q.pending.map(|t| t.intent), Some(Intent::Full), "one full producer among eight: the queue keeps full");
+        assert_eq!(Queue::load(&e, &d.join("decebal.json")).pending.map(|t| t.intent), Some(Intent::Full), "one full producer among eight: the queue keeps full");
+    }
+
+    /// The outbox coalesces per configuration and never loses a full request, whatever the posting order.
+    #[test]
+    fn the_outbox_coalesces_per_configuration_without_losing_full() {
+        let mut o = Outbox::default();
+        let (a, b) = (Path::new("/a/decebal.json"), Path::new("/b/decebal.json"));
+        o.post(a, Intent::Full);
+        o.post(a, Intent::Assets);
+        o.post(b, Intent::Assets);
+        for _ in 0..1000 {
+            o.post(b, Intent::Assets);
+        }
+        assert_eq!(o.slots.len(), 2, "bounded by configurations, not by requests");
+        assert_eq!((o.slots[a], o.slots[b]), (Intent::Full, Intent::Assets));
     }
 
     #[test]
