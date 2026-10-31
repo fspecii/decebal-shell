@@ -115,6 +115,11 @@ class Scenario:
         print(("  ok   " if ok else "  FAIL ") + f"{self.name}: {name}" + (f"  ({detail})" if detail and not ok else ""))
         return ok
 
+    def park(self):
+        """A pointer position clear of the dock AND of its context menu on every edge at every display scale: the far side of the screen."""
+        sw, sh = SCREEN
+        return (str(sw - 30), str(sh // 2)) if self.edge in ("bottom", "top") else (str(sw // 2), "10")
+
     def close_files(self):
         self.log.close()
         self.tmp.cleanup()
@@ -171,7 +176,7 @@ class Scenario:
 
     # ------------------------------------------------------------- the run
     def start(self):
-        self.x("xdotool", "mousemove", "1000", "700")
+        self.x("xdotool", "mousemove", *self.park())
         self.spawn("rdwm", "--backend", "x11")
         wait(lambda: "window" in self.x("xprop", "-root", "_NET_SUPPORTING_WM_CHECK", check=False), "window manager")
         self.spawn(str(self.bin / "examples/fakewin"), "alpha", "Alpha Window", "cc3333")
@@ -182,7 +187,7 @@ class Scenario:
         self.dock = int(wait(lambda: self.x("xdotool", "search", "--name", "^decebal-dock$", check=False).split("\n")[0], "dock window"))
         time.sleep(1.0)
         self.x("xdotool", "windowactivate", "--sync", str(self.win("Beta Window")))
-        self.x("xdotool", "mousemove", "1000", "700")
+        self.x("xdotool", "mousemove", *self.park())
         time.sleep(0.5)
 
     def run(self):
@@ -300,7 +305,7 @@ class Scenario:
         self.x("xdotool", "windowactivate", "--sync", str(beta))
         self.focus_request()
         self.check("--focus works again", self.ring(base, "ring-again") is not None)
-        self.x("xdotool", "mousemove", "1000", "700")
+        self.x("xdotool", "mousemove", *self.park())
         self.x("xdotool", "click", "1")
         time.sleep(0.5)
         self.check("a pointer press leaves the mode", self.ring(base, "ring-after-press") is None)

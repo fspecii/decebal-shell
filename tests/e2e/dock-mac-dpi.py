@@ -178,9 +178,22 @@ class Dpi(kb.Scenario):
             return None
         px = img.load()
         pts = [(x, y) for y in range(img.size[1]) for x in range(img.size[0]) if sum(abs(a - b) for a, b in zip(px[x, y], self.accent)) <= 24]
-        if len(pts) < 40:
+        # the ring is the biggest connected group of that colour (icons may hold a few pixels of a similar one)
+        todo, best = set(pts), []
+        while todo:
+            stack, group = [todo.pop()], []
+            while stack:
+                x, y = stack.pop()
+                group.append((x, y))
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), (x + 1, y + 1), (x - 1, y - 1), (x + 1, y - 1), (x - 1, y + 1)):
+                    if n in todo:
+                        todo.discard(n)
+                        stack.append(n)
+            if len(group) > len(best):
+                best = group
+        if len(best) < 40:
             return None
-        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        xs, ys = [p[0] for p in best], [p[1] for p in best]
         return (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
 
     def ends_reachable(self, base):
