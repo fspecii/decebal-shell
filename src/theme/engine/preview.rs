@@ -80,7 +80,7 @@ pub fn subscribe_updates(wake: CompletionWake) -> PreviewUpdates {
 }
 
 fn request_id(src: &Source, selection: &Selection) -> String {
-    format!("{:?}:{}", src.themes_dir, selection.to_json())
+    format!("{:?}:{:?}:{}", src.themes_dir, super::store::installed_roots(), selection.to_json())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -129,7 +129,9 @@ pub fn cached(src: &Source, selection: &Selection) -> Result<Option<PathBuf>, St
 #[derive(Clone, Serialize, Deserialize)]
 struct Job {
     themes: PathBuf,
-    system: PathBuf,
+    /// The installed theme roots the parent resolved, in priority order. The worker's own `HOME`/`XDG_*` are private, so it is handed
+    /// exactly these (see [`super::store::ROOTS_ENV`]) and refuses to run if it does not see the same list.
+    system_roots: Vec<PathBuf>,
     palettes: PathBuf,
     selection: serde_json::Value,
     output: PathBuf,
@@ -292,15 +294,28 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
         if !seen.insert(id.clone()) || seen.len() > 9 {
             return Err("preview inheritance loop".into());
         }
-        if let Some(dir) = config::package_dir(&src.themes_dir, &id) {
+        // `load_def` returns the merged theme, whose `inherit` is already consumed: the parent comes from this package's own manifest.
+        let own = if let Some(dir) = config::package_dir(&src.themes_dir, &id) {
             hash_assets(&dir, &dir, 0, &mut 0, &mut 0, &mut hash)?;
+            fs::read_to_string(dir.join("theme.toml")).ok()
         } else if let Ok(text) = fs::read(src.themes_dir.join(format!("{id}.toml"))) {
             hash.update(&text);
+            Some(String::from_utf8_lossy(&text).into_owned())
         } else if let Some(text) = builtin::source(&id) {
             hash.update(text.as_bytes());
+            Some(text.to_string())
+        } else {
+            None
+        };
+        src.load_def(&id)?;
+        current = own.and_then(|text| crate::theme::model::Def::parse(&text).ok()).and_then(|d| d.inherit);
+        // a user theme named like its built-in parent extends that built-in one
+        if current.as_deref() == Some(id.as_str()) {
+            current = None;
+            if let Some(text) = builtin::source(&id) {
+                hash.update(text.as_bytes());
+            }
         }
-        let own = src.load_def(&id)?;
-        current = own.inherit.clone();
     }
     let def = src.load_def(&selection.name)?;
     hash.update(writer::def_to_manifest(&def, &writer::Header { id: selection.name.clone(), name: def.name.clone(), ..Default::default() }).as_bytes());
@@ -356,7 +371,7 @@ fn job(src: &Source, selection: &Selection, output: PathBuf) -> Job {
     let work = output.parent().unwrap_or(Path::new(".")).join(format!(".preview-{}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed)));
     Job {
         themes: src.themes_dir.clone(),
-        system: super::store::system_dir(),
+        system_roots: super::store::installed_roots(),
         palettes: crate::theme::palette::user_dir(),
         selection: selection.to_json(),
         output,
@@ -384,6 +399,11 @@ fn run(j: &Job) -> Result<(), String> {
         fs::write(j.work.join("fonts.conf"), config).map_err(|e| e.to_string())?;
         let mut cmd = Command::new(renderer());
         cmd.env("FONTCONFIG_FILE", j.work.join("fonts.conf"));
+        // An explicit DECEBAL_SYSTEM_THEMES stays the exclusive root as before; otherwise the resolved list travels as is.
+        match std::env::var_os("DECEBAL_SYSTEM_THEMES").filter(|v| !v.is_empty()) {
+            Some(explicit) => cmd.env("DECEBAL_SYSTEM_THEMES", explicit).env_remove(super::store::ROOTS_ENV),
+            None => cmd.env_remove("DECEBAL_SYSTEM_THEMES").env(super::store::ROOTS_ENV, super::store::encode_roots(&j.system_roots)?),
+        };
         cmd.args(["--theme-preview-worker"])
             .arg(&file)
             .env("HOME", &j.work)
@@ -397,7 +417,6 @@ fn run(j: &Job) -> Result<(), String> {
             .env("RDWMCTL", "/nonexistent/preview-rdwmctl")
             .env_remove("RDWM_SOCK")
             .env("DECEBAL_THEMES", &j.themes)
-            .env("DECEBAL_SYSTEM_THEMES", &j.system)
             .env("DECEBAL_PALETTES", &j.palettes)
             .env("DISPLAY", "")
             .env("WAYLAND_DISPLAY", "")
@@ -539,6 +558,9 @@ pub fn worker(file: &Path) -> Result<(), String> {
     let j: Job = serde_json::from_slice(&fs::read(file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     if std::env::var_os("DECEBAL_CONFIG").as_deref() != Some(j.work.as_os_str()) || std::env::var("DECEBAL_SYSTEM_AUTOMATIC").as_deref() != Ok("0") {
         return Err("preview isolation missing".into());
+    }
+    if super::store::installed_roots() != j.system_roots {
+        return Err("preview theme roots missing".into());
     }
     let sel = Selection::from_json(&j.selection);
     let src = Source { shell_json: j.work.join("decebal.json"), themes_dir: j.themes.clone() };
@@ -751,6 +773,30 @@ mod performance_tests {
         assert!(no_tasks != base && no_desktop != base && no_start != base && no_tasks != no_desktop, "taskbar-only applet choices regenerate it");
         // an override equal to the default changes nothing visible, but it is the user's choice: it is part of the key too
         assert_eq!(key(json!({"bar": {"edge": "left"}}), json!({})), moved, "stable for the same inputs");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_cache_key_covers_the_files_of_every_parent_in_the_extends_chain() {
+        let dir = std::env::temp_dir().join(format!("preview-parent-key-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let (user, installed) = (dir.join("themes"), dir.join("installed"));
+        let _roots = super::super::store::test_roots(vec![installed.clone()]);
+        for (root, id, extends) in [(&user, "kid", "mid"), (&installed, "mid", "root"), (&installed, "root", "")] {
+            fs::create_dir_all(root.join(id).join("icons")).unwrap();
+            let extends = if extends.is_empty() { String::new() } else { format!("extends = \"{extends}\"\n") };
+            fs::write(root.join(id).join("theme.toml"), format!("format = 1\nid = \"{id}\"\nname = \"{id}\"\nversion = \"1.0.0\"\nauthor = \"t\"\nlicense = \"MIT\"\n{extends}")).unwrap();
+            fs::write(root.join(id).join("icons/logo.png"), id).unwrap();
+        }
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: user };
+        let sel = Selection { name: "kid".into(), mode: Mode::Dark, ..Default::default() };
+        let base = fingerprint(&src, &sel).unwrap();
+        assert_eq!(fingerprint(&src, &sel).unwrap(), base);
+        for (id, bytes) in [("mid", "changed mid"), ("root", "changed root")] {
+            fs::write(installed.join(id).join("icons/logo.png"), bytes).unwrap();
+            assert_ne!(fingerprint(&src, &sel).unwrap(), base, "{id}");
+            fs::write(installed.join(id).join("icons/logo.png"), id).unwrap();
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 

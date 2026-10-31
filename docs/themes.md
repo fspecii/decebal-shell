@@ -25,7 +25,8 @@ The old `material-you-dynamic` wallpaper-owned extraction defaults are retired. 
 ## Showcase packages (gruvbox, everforest, synthwave, frutiger aero, adwaita-like)
 
 Five data-only theme packages beyond the built-ins. They live in `themes/<id>/` (manifest and optional widget assets), are installed to
-`/usr/share/decebal/themes/<id>/` by `make install`, and are used like any theme:
+`<prefix>/share/decebal/themes/<id>/` by `make install` (`/usr/local` by default, `/usr` for packages, `~/.local` for `PREFIX=$HOME/.local`;
+see [theme-engine.md](theme-engine.md) for how they are found) and are used like any theme:
 
 ```
 decthemectl theme apply <id>                 # dark or light follows the system; add --mode light|dark on `decthemectl apply`
@@ -105,7 +106,7 @@ decthemectl theme undo                    # step back
 ```
 
 or with **System Settings -> Theme -> Theme packages**. Package assets are installed
-under `/usr/share/decebal/themes/<id>/`. Themes set no wallpaper image/mode/colour
+under `<prefix>/share/decebal/themes/<id>/`. Themes set no wallpaper image/mode/colour
 and trigger no photo downloads. Explicit Wallpaper selection remains independent;
 unknown-license Wallhaven photos are recommendations rather than bundled assets.
 

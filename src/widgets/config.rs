@@ -153,10 +153,10 @@ pub(crate) fn read_regular(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// The folder of an installed theme package: the user's, then the system's.
+/// The folder of an installed theme package: the user's, then the installed roots in priority order.
 pub fn package_dir(themes_dir: &Path, id: &str) -> Option<PathBuf> {
     crate::theme::engine::schema::valid_ident(id).then_some(())?;
-    [themes_dir.to_path_buf(), crate::theme::engine::store::system_dir()].into_iter().map(|d| d.join(id)).find(|d| d.join("theme.toml").is_file())
+    Some(themes_dir.join(id)).filter(|d| d.join("theme.toml").is_file()).or_else(|| crate::theme::engine::store::installed_package(id))
 }
 
 /// Finds and parses the widget an instance uses. Theme and sample widgets are parsed as [`Trust::Theme`]; the user's own as

@@ -1,5 +1,6 @@
-//! The theme folders and what is in them: the user's (`~/.config/decebal/themes/<id>/`), the system's
-//! (`/usr/share/decebal/themes/<id>/`) and the built-ins compiled into the programs.
+//! The theme folders and what is in them: the user's (`~/.config/decebal/themes/<id>/`), the installed ones
+//! (`<data dir>/decebal/themes/<id>/` for the user's data home, then each `XDG_DATA_DIRS` entry; see [`roots_from`]) and the built-ins
+//! compiled into the programs. Reading searches all of them in that order; writing (install, new, duplicate) only ever targets the user's.
 //!
 //! A user folder entry is either a package directory (`<id>/theme.toml` plus assets) or, as before, a single `<id>.toml`.
 
@@ -10,11 +11,119 @@ use crate::theme::builtin;
 use crate::theme::live::Source;
 use crate::theme::model::{Def, Selection};
 use serde_json::Value;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// `$DECEBAL_SYSTEM_THEMES`, else `/usr/share/decebal/themes`.
+/// Legacy single-root accessor: `$DECEBAL_SYSTEM_THEMES`, else `/usr/share/decebal/themes`. Kept for callers that only need one
+/// directory; lookups use [`installed_roots`] and [`installed_package`], which also see `/usr/local` and the user's data home.
 pub fn system_dir() -> PathBuf {
     std::env::var_os("DECEBAL_SYSTEM_THEMES").filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/usr/share/decebal/themes"))
+}
+
+/// Internal transport for the native preview worker: the parent's already-resolved roots, newline separated and absolute (set but empty
+/// means no roots at all). The worker runs with a private `HOME`/`XDG_*`, so it cannot re-derive them; it must see the same ones the parent did.
+pub const ROOTS_ENV: &str = "DECEBAL_INSTALLED_THEME_ROOTS";
+
+/// [`ROOTS_ENV`]'s value for `roots`; a path that a newline-separated list cannot carry is an error rather than a silently different search.
+pub fn encode_roots(roots: &[PathBuf]) -> Result<OsString, String> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let mut out = Vec::new();
+    for (i, root) in roots.iter().enumerate() {
+        if root.as_os_str().as_bytes().contains(&b'\n') {
+            return Err(format!("{}: an installed theme folder with a newline in its name cannot be passed to the preview", root.display()));
+        }
+        if i > 0 {
+            out.push(b'\n');
+        }
+        out.extend_from_slice(root.as_os_str().as_bytes());
+    }
+    Ok(OsString::from_vec(out))
+}
+
+fn decode_roots(value: &OsString) -> Vec<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    value.as_bytes().split(|b| *b == b'\n').filter(|l| !l.is_empty()).map(|l| PathBuf::from(std::ffi::OsStr::from_bytes(l))).filter(|p| p.is_absolute()).collect()
+}
+
+const DATA_SUBDIR: &str = "decebal/themes";
+
+fn absolute(value: Option<OsString>) -> Option<PathBuf> {
+    value.map(PathBuf::from).filter(|p| p.is_absolute())
+}
+
+/// The read-only search order for installed theme packages, highest priority first, from an environment lookup.
+///
+/// * `DECEBAL_SYSTEM_THEMES` (non-empty) is exclusive: that one directory and nothing else.
+/// * [`ROOTS_ENV`] (preview worker transport) is taken as given.
+/// * Otherwise the XDG Base Directory contract: `$XDG_DATA_HOME` (default `$HOME/.local/share`), then each entry of `$XDG_DATA_DIRS`
+///   (default `/usr/local/share:/usr/share`), each plus `decebal/themes`. Unset or empty values use the default and relative
+///   entries are invalid and skipped, as the specification requires. Duplicates keep their first (highest) position.
+///
+/// The user's own `~/.config/decebal/themes` always ranks above every root returned here (see [`Source`](crate::theme::live::Source)).
+pub fn roots_from(get: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+    let nonempty = |k: &str| get(k).filter(|v| !v.is_empty());
+    if let Some(explicit) = nonempty("DECEBAL_SYSTEM_THEMES") {
+        return vec![PathBuf::from(explicit)];
+    }
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut push = |p: PathBuf| {
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    };
+    if let Some(transport) = get(ROOTS_ENV) {
+        decode_roots(&transport).into_iter().for_each(push);
+        return out;
+    }
+    if let Some(home) = absolute(nonempty("XDG_DATA_HOME")).or_else(|| absolute(nonempty("HOME")).map(|h| h.join(".local/share"))) {
+        push(home.join(DATA_SUBDIR));
+    }
+    let dirs = nonempty("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    for dir in std::env::split_paths(&dirs).filter(|d| d.is_absolute()) {
+        push(dir.join(DATA_SUBDIR));
+    }
+    out
+}
+
+/// [`roots_from`] for the process environment. Unit tests see no installed roots (never the developer's own) unless they ask for some
+/// with [`test_roots`] or set `DECEBAL_SYSTEM_THEMES`.
+pub fn installed_roots() -> Vec<PathBuf> {
+    #[cfg(test)]
+    if let Some(roots) = TEST_ROOTS.with(|r| r.borrow().clone()) {
+        return roots;
+    }
+    if cfg!(test) && std::env::var_os("DECEBAL_SYSTEM_THEMES").is_none_or(|v| v.is_empty()) {
+        return Vec::new();
+    }
+    roots_from(|k| std::env::var_os(k))
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_ROOTS: std::cell::RefCell<Option<Vec<PathBuf>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Test only: the calling thread alone sees `roots` as the installed roots until the guard drops; no process-wide state changes.
+#[cfg(test)]
+pub fn test_roots(roots: Vec<PathBuf>) -> TestRoots {
+    TEST_ROOTS.with(|r| *r.borrow_mut() = Some(roots));
+    TestRoots
+}
+
+#[cfg(test)]
+pub struct TestRoots;
+
+#[cfg(test)]
+impl Drop for TestRoots {
+    fn drop(&mut self) {
+        TEST_ROOTS.with(|r| *r.borrow_mut() = None);
+    }
+}
+
+/// The package folder of installed theme `id` in the highest-priority root that has a `theme.toml` for it.
+pub fn installed_package(id: &str) -> Option<PathBuf> {
+    crate::theme::engine::schema::valid_ident(id).then_some(())?;
+    installed_roots().into_iter().map(|root| root.join(id)).find(|dir| dir.join("theme.toml").is_file())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,12 +200,10 @@ fn hash_state(dir: &Path, def: &Def) -> HashState {
 
 pub fn info_for(src: &Source, id: &str) -> Info {
     let sel = Selection::default();
-    let dir = user_package(src, id).or_else(|| {
-        let s = system_dir().join(id);
-        s.join("theme.toml").is_file().then_some(s)
-    });
-    let is_user_dir = dir.as_ref().is_some_and(|d| d.starts_with(&src.themes_dir));
     let flat = src.themes_dir.join(format!("{id}.toml")).is_file();
+    // the user's flat file shadows an installed package of the same id, exactly as `Source::user_file` reads it
+    let dir = user_package(src, id).or_else(|| installed_package(id).filter(|_| !flat));
+    let is_user_dir = dir.as_ref().is_some_and(|d| d.starts_with(&src.themes_dir));
     let origin = if dir.is_some() && !is_user_dir {
         Origin::System
     } else if dir.is_some() || flat {
@@ -216,7 +323,7 @@ pub fn gallery_list(src: &Source) -> Vec<Info> {
         std::thread::spawn(move || {
             let mut previous: Option<(PathBuf, String, Vec<Info>)> = None;
             for src in rx {
-                let stamp = gallery_stamp(&[src.themes_dir.clone(), system_dir()]);
+                let stamp = gallery_stamp(&[vec![src.themes_dir.clone()], installed_roots()].concat());
                 let infos = match (&previous, &stamp) {
                     (Some((path, old, infos)), Ok(stamp)) if path == &src.themes_dir && old == stamp => infos.clone(),
                     _ => list(&src),
@@ -272,8 +379,8 @@ pub fn uninstall(src: &Source, id: &str) -> Result<PathBuf, String> {
     if builtin::source(id).is_some() {
         return Err(format!("`{id}` is built into decebal and cannot be uninstalled"));
     }
-    if system_dir().join(id).is_dir() {
-        return Err(format!("`{id}` is installed system-wide ({}); remove it with your package manager", system_dir().join(id).display()));
+    if let Some(dir) = installed_roots().into_iter().map(|root| root.join(id)).find(|dir| dir.is_dir()) {
+        return Err(format!("`{id}` is installed system-wide ({}); remove it with your package manager", dir.display()));
     }
     Err(format!("no installed theme `{id}`"))
 }
@@ -434,6 +541,108 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
     use crate::theme::engine::package::tests::{good, png};
+
+    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
+        move |k| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| OsString::from(*v))
+    }
+    fn paths(roots: &[&str]) -> Vec<PathBuf> {
+        roots.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn installed_roots_follow_the_xdg_base_directory_contract_in_order() {
+        // nothing set: no data home without HOME, the specification's default data dirs
+        assert_eq!(roots_from(env(&[])), paths(&["/usr/local/share/decebal/themes", "/usr/share/decebal/themes"]));
+        // data home defaults to $HOME/.local/share and ranks first (the `PREFIX=$HOME/.local` install)
+        assert_eq!(roots_from(env(&[("HOME", "/home/u")])), paths(&["/home/u/.local/share/decebal/themes", "/usr/local/share/decebal/themes", "/usr/share/decebal/themes"]));
+        // explicit values: data home first, then the dirs in their written order
+        assert_eq!(
+            roots_from(env(&[("HOME", "/home/u"), ("XDG_DATA_HOME", "/data"), ("XDG_DATA_DIRS", "/opt/a/share:/usr/share:/opt/b")])),
+            paths(&["/data/decebal/themes", "/opt/a/share/decebal/themes", "/usr/share/decebal/themes", "/opt/b/decebal/themes"])
+        );
+        // empty values count as unset
+        assert_eq!(
+            roots_from(env(&[("HOME", "/home/u"), ("XDG_DATA_HOME", ""), ("XDG_DATA_DIRS", "")])),
+            paths(&["/home/u/.local/share/decebal/themes", "/usr/local/share/decebal/themes", "/usr/share/decebal/themes"])
+        );
+        // relative entries are invalid and ignored, everywhere; a relative HOME gives no data home
+        assert_eq!(
+            roots_from(env(&[("HOME", "home/u"), ("XDG_DATA_HOME", "rel/data"), ("XDG_DATA_DIRS", "rel:/opt/x::./y:/usr/share")])),
+            paths(&["/opt/x/decebal/themes", "/usr/share/decebal/themes"])
+        );
+        // only invalid dirs left: no roots (not a fallback to the default), the user's own folder still works
+        assert_eq!(roots_from(env(&[("XDG_DATA_DIRS", "rel:another")])), Vec::<PathBuf>::new());
+        // duplicates, including a data home that is also a data dir and trailing slashes, keep their first position
+        assert_eq!(
+            roots_from(env(&[("XDG_DATA_HOME", "/usr/share/"), ("XDG_DATA_DIRS", "/usr/local/share:/usr/share:/usr/local/share/")])),
+            paths(&["/usr/share/decebal/themes", "/usr/local/share/decebal/themes"])
+        );
+    }
+
+    #[test]
+    fn explicit_system_themes_is_exclusive_and_the_preview_transport_is_exact() {
+        let xdg = [("HOME", "/home/u"), ("XDG_DATA_HOME", "/data"), ("XDG_DATA_DIRS", "/opt/a")];
+        let with = |extra: &[(&str, &str)]| roots_from(env(&[&xdg[..], extra].concat()));
+        assert_eq!(with(&[("DECEBAL_SYSTEM_THEMES", "/private/themes")]), paths(&["/private/themes"]), "one directory, no XDG roots");
+        assert_eq!(with(&[("DECEBAL_SYSTEM_THEMES", "relative/themes")]), paths(&["relative/themes"]), "as before: taken as written");
+        assert_eq!(with(&[("DECEBAL_SYSTEM_THEMES", "")]), paths(&["/data/decebal/themes", "/opt/a/decebal/themes"]), "empty is unset");
+        assert_eq!(with(&[("DECEBAL_SYSTEM_THEMES", "/p"), (ROOTS_ENV, "/q")]), paths(&["/p"]), "the explicit override outranks the transport");
+        // the worker is given the parent's list, whatever its own (private) XDG variables say, even when it is empty
+        let sent = [PathBuf::from("/a b/themes"), PathBuf::from("/c:d/themes"), PathBuf::from("/e/themes")];
+        let wire = encode_roots(&sent).unwrap();
+        assert_eq!(roots_from(env(&[("HOME", "/work"), ("XDG_DATA_HOME", "/work"), (ROOTS_ENV, wire.to_str().unwrap())])), sent.to_vec());
+        assert_eq!(roots_from(env(&[("HOME", "/work"), (ROOTS_ENV, "")])), Vec::<PathBuf>::new(), "no roots stays no roots; the default dirs do not come back");
+        assert!(encode_roots(&paths(&["/bad\nroot"])).is_err());
+    }
+
+    fn package(root: &Path, id: &str, extra: &str) -> PathBuf {
+        let dir = root.join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("theme.toml"), format!("format = 1\nid = \"{id}\"\nname = \"{id}\"\nversion = \"1.0.0\"\nauthor = \"t\"\nlicense = \"MIT\"\n{extra}")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn installed_packages_are_found_across_roots_in_priority_order_and_stay_read_only() {
+        let (d, src) = sandbox("roots");
+        let (usr_local, usr) = (d.join("usr-local/decebal/themes"), d.join("usr/decebal/themes"));
+        let _roots = test_roots(vec![usr_local.clone(), usr.clone()]);
+        package(&usr, "only-usr", "");
+        package(&usr_local, "only-local", "");
+        package(&usr, "both", "description = \"low\"\n");
+        package(&usr_local, "both", "description = \"high\"\n");
+        std::fs::create_dir_all(usr_local.join("broken")).unwrap(); // a folder without theme.toml does not shadow the next root
+        package(&usr, "broken", "");
+        assert_eq!(installed_package("only-usr"), Some(usr.join("only-usr")));
+        assert_eq!(installed_package("only-local"), Some(usr_local.join("only-local")));
+        assert_eq!(installed_package("both"), Some(usr_local.join("both")));
+        assert_eq!(installed_package("broken"), Some(usr.join("broken")));
+        assert_eq!(installed_package("../x"), None);
+        assert_eq!(installed_package("missing"), None);
+        // listing, resolution and origin see every root
+        let all = list(&src);
+        let origin = |id: &str| all.iter().find(|i| i.id == id).map(|i| (i.origin, i.dir.clone()));
+        assert_eq!(origin("only-usr"), Some((Origin::System, Some(usr.join("only-usr")))));
+        assert_eq!(origin("only-local"), Some((Origin::System, Some(usr_local.join("only-local")))));
+        assert_eq!(info_for(&src, "both").description, "high");
+        assert_eq!(all.iter().filter(|i| i.id == "both").count(), 1, "one entry per id");
+        // a user package or flat file of the same id outranks every installed root; the installed one is untouched
+        package(&src.themes_dir, "both", "description = \"mine\"\n");
+        assert_eq!((info_for(&src, "both").description.as_str(), info_for(&src, "both").origin), ("mine", Origin::User));
+        uninstall(&src, "both").unwrap();
+        assert_eq!(info_for(&src, "both").description, "high", "removing the user copy reveals the installed one again");
+        std::fs::write(src.themes_dir.join("only-usr.toml"), "name = \"Flat\"\n").unwrap();
+        assert_eq!(info_for(&src, "only-usr").name, "Flat");
+        // removal never reaches an installed root and says where it lives
+        let err = uninstall(&src, "only-local").unwrap_err();
+        assert!(err.contains("system-wide") && err.contains(&usr_local.join("only-local").display().to_string()), "{err}");
+        assert!(usr_local.join("only-local/theme.toml").is_file());
+        // the install destination is still the user's folder
+        let (inst, _) = install_dir(&src, &good());
+        assert!(src.themes_dir.join(&inst.id).join("theme.toml").is_file());
+        assert!(!usr_local.join(&inst.id).exists() && !usr.join(&inst.id).exists());
+        let _ = std::fs::remove_dir_all(d);
+    }
 
     fn sandbox(name: &str) -> (PathBuf, Source) {
         let d = std::env::temp_dir().join(format!("decebal-store-{name}-{}", std::process::id()));

@@ -24,7 +24,8 @@ install: all
 	install -Dm644 contrib/dectimer.desktop $(DESTDIR)$(PREFIX)/share/applications/dectimer.desktop
 	install -Dm644 contrib/decmon.desktop $(DESTDIR)$(PREFIX)/share/applications/decmon.desktop
 	install -Dm644 contrib/dbus/org.freedesktop.Notifications.service $(DESTDIR)$(PREFIX)/share/decebal/dbus/org.freedesktop.Notifications.service
-	# every theme package (manifest, wallpapers, widgets, screenshots): /usr/share/decebal/themes/<id>/
+	# every theme package (manifest, wallpapers, widgets, screenshots): $(PREFIX)/share/decebal/themes/<id>/
+	# (found at run time through XDG_DATA_HOME / XDG_DATA_DIRS: /usr/local and ~/.local by default, other prefixes need XDG_DATA_DIRS)
 	for f in $$(cd themes && find . -type f); do install -Dm644 themes/$$f $(DESTDIR)$(PREFIX)/share/decebal/themes/$${f#./}; done
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/decebal/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/decebal/LICENSE
