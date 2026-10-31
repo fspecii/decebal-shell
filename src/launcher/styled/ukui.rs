@@ -198,7 +198,8 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     } else {
         p.shadow(r, radius, 1.0);
         p.fill(r, radius, p.base(th.popup, th.popup_alpha.max(0.78)));
-        p.stroke(r, radius, th.ink(0.10), 1.0);
+        // `backgroundMask`: a 1 px border of `textActive` at alpha 0.15 (none in full-screen mode)
+        p.stroke(r, radius, th.ink(0.15), 1.0);
         // the 1 px dividers between the three columns (`kDivider`)
         let div = th.ink(0.10);
         p.fill(Rect { x: f.page.right(), w: DIVIDER * s, ..f.page }, 0.0, div);

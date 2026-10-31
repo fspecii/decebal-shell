@@ -1,0 +1,15 @@
+startmenu-input-search-light-100.png {'calls': [], 'launcher_open': True}
+startmenu-input-account-light-100.png {'calls': ['decsettings users'], 'launcher_open': False}
+startmenu-input-computer-light-100.png {'calls': ['peony computer:///'], 'launcher_open': False}
+startmenu-input-settings-light-100.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-power-light-100.png {'calls': ['decsession'], 'launcher_open': False}
+startmenu-input-keyboard-light-100.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-escape-light-100.png {'calls': [], 'launcher_open': False}
+startmenu-input-search-dark-200.png {'calls': [], 'launcher_open': True}
+startmenu-input-account-dark-200.png {'calls': ['decsettings users'], 'launcher_open': False}
+startmenu-input-computer-dark-200.png {'calls': ['peony computer:///'], 'launcher_open': False}
+startmenu-input-settings-dark-200.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-power-dark-200.png {'calls': ['decsession'], 'launcher_open': False}
+startmenu-input-keyboard-dark-200.png {'calls': ['decsettings'], 'launcher_open': False}
+startmenu-input-escape-dark-200.png {'calls': [], 'launcher_open': False}
+done:0

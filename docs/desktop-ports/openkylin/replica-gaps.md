@@ -22,38 +22,43 @@ pinned git blob, see each `ATTRIBUTION.md`; provenance of the Moka part of the i
 (a) the numbers in the QML, asserted by unit tests (`src/launcher/styled/ukui.rs`, `src/controlcenter/ukui.rs`), (b) the upstream theme `preview.png` mock-ups (not captures of a running desktop: material and mood cues only),
 (c) our native captures on a private owned Xvfb (`tests/e2e/openkylin-native.py --matrix launcher|cc`, evidence under `native/`).
 
-## 2. Matched (source number → native proof)
+## 2. Matched (source number or behaviour -> proof)
 
 | area | upstream | ours | proof |
 |---|---|---|---|
-| start menu size / columns | 766 × 688, 312 / 1 / 396 / 1 / 56 | `launcher.style = "ukui"` | unit test + native bbox at 100 / 125 / 200 %, light/dark, four packages |
-| sidebar | 36 px buttons, 4 px apart, 12 px margins; settings and power at the bottom | same, settings and power are real targets | unit test |
-| rows / favourites | 40 px rows, letter headers with a divider; 88 × 100 cells | same | unit test + capture |
-| card radius | `kRadiusWindow` (12; Classic 0) | `theme.radius` | capture (Classic is square) |
-| shortcut panel | 396 wide; 4 × (80 × 72) cells; 356 × 56 bars; header with settings button | `control_center.style = "ukui"` | unit test + native capture |
-| classic panel search | square icon button, not a box | generic `[taskbar] search = "button"` | unit test (key parse) + capture |
-| start button | `kylin-startmenu` mark of the pack | bundled per package (default / classical / fashion) | blob ids verified by `tests/openkylin_port.py` |
+| start menu size / columns / border | 766 x 688, 312 / 1 / 396 / 1 / 56, `kRadiusWindow` (Classic 0), 1 px `textActive` border at alpha 0.15 | `launcher.style = "ukui"` | unit tests; native bbox at 100 / 125 / 200 %, light/dark, four packages |
+| sidebar | 36 px buttons, 4 px apart: expand, user, computer, settings, power | **all five are targets**: expand / restore (full-screen menu), user -> Settings Accounts pane, computer -> `peony computer:///` (else `gio open`, else `xdg-open /`; not drawn when none exists), settings, power -> session menu | unit tests (hit == draw rect), native xdotool clicks with recording stubs: the exact program line is recorded and the menu closes |
+| full-screen menu | `FullScreenUI.qml` / `FullScreenAppList.qml`: search 372 x 36 centred, restore 36 at the top right, 112 px sidebar, grid `n = clamp(ceil(c / 188), 1, 9)` x 160 px cells, `c = (4 + 2560 / w) * w / 8`, vertical gap h / 27, radius 0 | same formulas, card = the area the panel leaves, the typed search survives | unit test of the formulas and of expand/restore on four edges, native: covers the whole free area, restore returns the start menu |
+| rows / favourites | 40 px rows, letter headers; 88 x 100 cells | same | unit test + capture |
+| keyboard | Tab between pages, arrows inside, Return activates | same zones; the sidebar buttons are in the focus order | native: Tab x3, Down x3, Return runs Settings |
+| narrow / short bounds | n/a (fixed size upstream) | a card too narrow for one favourite cell drops the widget page; short cards compress the search/header block; sidebar buttons shrink | unit test: 400 x 300 ... 800 x 480, scales 1 to 2, five anchors, every hit rectangle positive, inside, disjoint, clickable; Settings and Power always reachable |
+| shortcut panel | 396 wide; 4 x (80 x 72) cells; `ProgressBar.qml` row 356 x 56: 12 px margins, a 24 px icon button, 8 px, a 16 px slider | `control_center.style = "ukui"`: the icon button is drawn (volume: **Mute**), the track has no icon inside | unit tests; native capture |
+| tile groups | n/a | every group (`connectivity focus display sound media toggles actions`) is honoured; Settings only with `actions`; a selection with nothing to show falls back to all groups; no header-only panel | unit + bar-level tests |
+| WLAN | the Wi-Fi shortcut toggles the radio | `Target::Wifi` (`nmcli radio wifi on/off`); the wired Network editor is a separate shortcut | bar-level test through the dry-run hook against recording stubs (`tests/e2e/openkylin-cc-actions.py`) |
+| classic panel search | square icon button | generic `[taskbar] search = "button"` | unit test + capture |
+| start button | `kylin-startmenu` of the pack | bundled per package, blob ids pinned | `tests/openkylin_port.py` |
+| the real taskbar Start | the dock passes its edge and anchor | root's `fbddaf8` | native: a real click on the Start cell opens the card at the Start end, clear of the strip, on four edges, 100 / 200 %, light/dark, two packages (built with `fbddaf8` applied in the scratch tree only; qualify on the merged tree) |
 
 ## 3. Exact gap list (what is NOT yet a replica)
 
 | area | gap | kind |
 |---|---|---|
-| start menu | full-screen mode, tablet mode, drag and drop, labels / category pages ("All" is the only list), more than the Favorites and Recent plugin tabs | interaction |
-| start menu | user / computer / expand sidebar buttons are drawn but do nothing | interaction |
-| start menu | blur: UKUI blurs the card through KWin's blur region at the theme's 65 % alpha; here the card is the theme's popup colour at ≥ 78 % and relies on the compositor for blur (not proven on a photographic backdrop) | material |
-| start menu | typography is the system's `Noto Sans CJK SC` / `Noto Sans` at the sizes read from the QML (14 px), not rendered by Qt's text stack: hinting differs | typography |
-| start menu | UKUI's 150 ms hover/press fades, the list scroll bar (14 px) and the open/close animation are not implemented | animation |
-| start menu | app and favourite icons come from the user's icon theme: with another pack the grid differs from the pack's own look (intended: icon choice stays the user's) | icons |
-| shortcut panel | UKUI's panel is part of the sidebar (a 400 px full-height side panel with the notification column at 384 px); Decebal opens only the shortcut part as a flyout above the panel | geometry |
-| shortcut panel | edit mode, drag re-ordering, lottie icon animations, tablet mode | interaction / animation |
-| shortcut panel | the shortcut list is limited to what the shell can control; hardware rows (volume, brightness) read "Unavailable" on a machine without the device (as in the fixture) | content |
-| shortcut panel | Classic's tile radius is 0 (all `--kradius-*` are 0px); the ukui panel follows it, but the glyph set is the shell's symbolic icons, not UKUI's `ukui-*-symbolic` | icons |
-| classic taskbar | task-view, separator and AI-assistant widgets have no applet; the system tray is one applet group instead of `org.ukui.systemTray`; Classic's plate corner clamps at 2 px (UKUI 0); the search glyph is the shell's magnifier instead of the pack's `kylin-search` | content / icons |
-| classic taskbar | background and shadow of the strip: UKUI draws a `DtThemeBackground` with `WidgetContainer.radius` and margin; the Decebal strip is flush with a hairline (no UKUI shadow) | material |
-| island taskbar | contents and order follow `panel-next.cpp` (data: menu, IDM, task view; app: tasks, search; settings: tray, calendar) except IDM / task view (no applet); the original is **bottom-only**: top, left and right are a Decebal **extension** (kept for the four-edge ecosystem) and not part of the matched source | content / disclosure |
-| icons / cursors | UKUI default / classical / fashion icon packs and Dark Sense / Blue Crystal / DMZ-White cursors are installed through the shared catalogue (private-install proof in `icons-cursors.md`); the new native captures use the default icon pack prefix; cursors are not visible in screenshots | proof |
-| decorations | native frame on a mapped client window is the decorations owner's capture | proof |
+| original captures | no running UKUI desktop is available, so there are **no original-vs-native pixel comparisons**; `native/replica-compare-*.png` set the official `ukui-globaltheme` preview mock-ups (identified by commit and hash, in `replica-compare.json`) next to native captures of the same theme and mode: composition and mood only | evidence |
+| start menu | tablet mode, drag and drop, labels / category pages, the full-screen label list and list-mode buttons, plugins other than Favorites and Recent, the user menu's other accounts and Log Out (Power's session menu logs out) | interaction |
+| start menu | blur: UKUI blurs the card through KWin at the theme's 65 % alpha; the card is the theme's popup colour at >= 78 % (not proven on a photographic backdrop) | material |
+| start menu | typography is `Noto Sans CJK SC` / `Noto Sans` at the QML sizes (14 px), not Qt's text stack: hinting differs | typography |
+| start menu | 150 ms open / hover transitions, the animated move into full screen, the 14 px scroll bar | animation |
+| start menu | app and favourite icons come from the user's icon theme (intended: the choice stays the user's) | icons |
+| shortcut panel | UKUI's is the shortcut part of a 400 px full-height sidebar with a 384 px notification column; Decebal opens the shortcut part as a flyout | geometry |
+| shortcut panel | edit mode and drag re-ordering, lottie icon animations, the 24 px sub-page arrow of rows whose plugin has a page (needs plugin pages), tablet mode; the original's default list also has auto-rotation, clock, notebook, multi-screen, services and split-view shortcuts the shell has no control for; Quiet / Awake / Notices / the `decutil` toggles / Now Playing are **disclosed extensions** (not in the original's default list) | content / interaction |
+| shortcut panel | glyphs are the shell's symbolic set, not UKUI's `ukui-*-symbolic` | icons |
+| classic taskbar | task-view, separator and AI-assistant widgets have no applet; Classic's plate corner clamps at 2 px (UKUI 0); the search glyph is the shell's magnifier, not the pack's `kylin-search`; no UKUI panel shadow | content / icons / material |
+| island taskbar | contents and order follow `panel-next.cpp` except IDM / task view (no applet); the original is **bottom-only**: top, left and right are a Decebal **extension** | content / disclosure |
+| icons / cursors | installed through the shared catalogue (private-install proof in `icons-cursors.md`); cursors are not visible in screenshots | proof |
+| decorations | the frame on a mapped client window is the decorations owner's capture | proof |
+| licences | root owns the licence-text and generator clean-up of the bundled logos after handoff; this lane does not call licence handling complete | scope |
 | greeter, lock screen, IDM, task-view overview | not replicated | scope |
+| tests | six unrelated lib tests fail in the shared private environment (`settings::navigation` socket path length, `settings::wallhaven::store` equal XDG dirs, `settings::themepane` palette count, `dock_app` focus walk, `settings::schema` vs the host `rdwmctl`); five pass serially with a short private HOME, `settings::schema::snapshot_matches_installed_rdwmctl_if_any` fails against the installed `rdwmctl` (host state, unchanged) | preserved |
 
 ## 4. Extensions that are disclosed, not source-matched
 

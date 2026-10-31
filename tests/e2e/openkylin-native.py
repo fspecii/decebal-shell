@@ -74,11 +74,17 @@ FIRST_DISPLAY, abstract_sockets, free_display, verify_owned = fixture.FIRST_DISP
 USED_DISPLAYS = set()
 
 
-def diff_bbox(base, shot, threshold=24):
+def clock_mask(edge, sc, thick, W=1920, H=1080):
+    """The taskbar's clock/tray end of the strip, which changes between two screenshots (the minute ticks): ignored when looking for the opened card, which sits at the Start end."""
+    return [{"bottom": (W - 320 * sc, H - thick, W, H), "top": (W - 320 * sc, 0, W, thick), "left": (0, H - 160 * sc, thick, H), "right": (W - thick, H - 160 * sc, W, H)}[edge]]
+
+
+def diff_bbox(base, shot, threshold=24, ignore=()):
     """Bounding box (x0, y0, x1, y1) of what differs between two screenshots of the same private server (the opened card and its shadow), or None."""
     a, b = Image.open(base).convert("RGB"), Image.open(shot).convert("RGB"); W, H = a.size; pa, pb = a.load(), b.load(); xs, ys = [], []
     for y in range(0, H, 2):
         for x in range(0, W, 2):
+            if any(x0 <= x < x1 and y0 <= y < y1 for x0, y0, x1, y1 in ignore): continue
             if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > threshold: xs.append(x); ys.append(y)
     return (min(xs), min(ys), max(xs) + 2, max(ys) + 2) if xs else None
 
@@ -195,7 +201,8 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 want = tuple(round(int(pc[1 + 2 * i:3 + 2 * i], 16) * al + BACKDROP[mode][i] * (1 - al)) for i in range(3))
                 W, H = im.size
                 # sample an empty stretch of the panel: the middle of the long axis
-                px = im.getpixel((min(W - 1, panel["x"] + (panel["w"] * 17 // 20 if extra else panel["w"] // 2)), min(H - 1, panel["y"] + 4 if panel["h"] > 12 else panel["y"])))   # with an extra window open (start menu at the left) sample right of its shadow
+                late = bool(extra or post)   # a card is open at the Start end: sample the far end of the strip, away from it
+                px = im.getpixel((min(W - 1, panel["x"] + (panel["w"] * 17 // 20 if late and panel["w"] > panel["h"] else panel["w"] // 2)), min(H - 1, panel["y"] + (panel["h"] * 3 // 4 if late and panel["h"] > panel["w"] else 4 if panel["h"] > 12 else 0))))
                 res.update(panel_pixel=list(px), panel_expected=list(want), panel_delta=max(abs(px[i] - want[i]) for i in range(3)))
             tb = t.get("taskbar")
             if tb and "decebal-dock" in wins:   # the generic [taskbar] keys: the strip thickness is the declared one times the scale
@@ -204,7 +211,7 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 assert abs(thick - round(tb["thickness"] * scale)) <= 1, f"{shot}: taskbar thickness {thick} != declared {tb['thickness']} x {scale}"
             if not wallpaper:
                 assert res.get("panel_delta") is not None and res["panel_delta"] <= 4, f"{shot}: panel colour is not the package's ({res.get('panel_pixel')} vs {res.get('panel_expected')})"
-                if edge is None and geom == "1920x1080" and not widget and not extra:   # bottom-edge captures: keep the strip, not a screen of flat backdrop
+                if edge is None and geom == "1920x1080" and not widget and not extra and not pre and not post:   # bottom-edge captures: keep the strip, not a screen of flat backdrop
                     im.crop((0, im.height - int(190 * scale) if "decebal-bar" in wins and "decebal-dock" not in wins else im.height - int(150 * scale), im.width, im.height)).save(png)
                     res["cropped"] = "bottom strip"
             return res
@@ -229,11 +236,11 @@ def main():
                     im.crop((W - int(620 * sc), max(0, H - int(780 * sc)), W, H)).save(OUT / name); r["control_center_window"] = cc; results.append(r); print(name, cc)
         (OUT / "native-controlcenter.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decbar", "decdock")}, results=results), indent=1))
         return
-    if MATRIX == "launcher":
+    if MATRIX in ("launcher", "launcher-edges"):
         # the UKUI start menu (`launcher.style = "ukui"`, 766 x 688 at 1x) opened from the first taskbar cell on the private fixture: the card on the bottom edge (bbox of what
         # differs from the flat backdrop), then the card on every edge against a baseline of the panel alone, then real input
         results = []
-        for t in ("openkylin", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"):
+        for t in ("openkylin", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic") if MATRIX == "launcher" else ():
             for m in ("light", "dark"):
                 for sc in (1, 1.25, 2):
                     name = f"startmenu-{t}-{m}-{int(sc * 100)}.png"; thick = round(48 * sc)
@@ -263,13 +270,9 @@ def main():
                             run("import", "-window", "root", str(OUT / ("base-" + name))); return None
                         r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, extra=["declaunch", "open", "--edge", edge, "--anchor", f"{point[0]},{point[1]}", "--thickness", str(thick)])
                         assert r["other_windows"].get("UKUI Menu"), f"{name}: the launcher did not open ({r['other_windows']})"
-                        a, b = Image.open(OUT / ("base-" + name)).convert("RGB"), Image.open(OUT / name).convert("RGB"); W, H = a.size; pa, pb = a.load(), b.load()
-                        xs, ys = [], []
-                        for y in range(0, H, 2):
-                            for x in range(0, W, 2):
-                                if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > 24: xs.append(x); ys.append(y)
-                        assert xs, f"{name}: the card did not change the picture"
-                        x0, x1, y0, y1 = min(xs), max(xs) + 2, min(ys), max(ys) + 2
+                        box = diff_bbox(OUT / ("base-" + name), OUT / name, ignore=clock_mask(edge, sc, thick)); assert box, f"{name}: the card did not change the picture"
+                        W, H = 1920, 1080
+                        x0, y0, x1, y1 = box
                         # the strip along the edge stays clear (a few px of soft shadow may reach it); the card is never larger than 766 x 688 at this scale
                         slack = 12 * sc
                         ok = {"bottom": y1 <= H - thick + slack, "top": y0 >= thick - slack, "left": x0 >= thick - slack, "right": x1 <= W - thick + slack}[edge]
@@ -303,7 +306,7 @@ def main():
                             return dict(click=(cx, cy), dock=(x, y, w, h), opened=opened, calls=(r / "calls.log").read_text().strip().splitlines())
                         r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, post=click_start)
                         got = r["post"]; assert got["opened"], f"{name}: clicking Start did not open the launcher ({got})"
-                        box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: no card"
+                        box = diff_bbox(OUT / ("base-" + name), OUT / name, ignore=clock_mask(edge, sc, thick)); assert box, f"{name}: no card"
                         x0, y0, x1, y1 = box; slack = 12 * sc
                         clear = {"bottom": y1 <= 1080 - thick + slack, "top": y0 >= thick - slack, "left": x0 >= thick - slack, "right": x1 <= 1920 - thick + slack}[edge]
                         # opened from the Start corner: the card hugs the panel's start end (within its 8 px margin plus shadow), not the middle of the screen
@@ -325,14 +328,14 @@ def main():
                 name = f"startmenu-{what}-{m}-{int(sc * 100)}.png"
                 def baseline(run, r, env, name=name):
                     run("import", "-window", "root", str(OUT / ("base-" + name))); return None
-                def act(run, r, env, before, what=what, expand=expand, restore=restore):
-                    run("xdotool", "mousemove", "300", "300"); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "te"); time.sleep(0.5)
+                def act(run, r, env, before, what=what, expand=expand, restore=restore, card_bottom=card_bottom, card_h=card_h, sc=sc):
+                    run("xdotool", "mousemove", str(int(8 * sc + 160 * sc)), str(int(card_bottom - card_h + 32 * sc))); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "te"); time.sleep(0.5)
                     run("xdotool", "mousemove", str(int(expand[0])), str(int(expand[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
                     if what == "restored":
                         run("xdotool", "mousemove", str(int(restore[0])), str(int(restore[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
                     return dict(expand=expand, restore=restore)
                 r = case("openkylin", m, sc, "1920x1080", shot=name, pre=baseline, post=act, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
-                box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: nothing is shown"
+                box = diff_bbox(OUT / ("base-" + name), OUT / name, ignore=clock_mask("bottom", sc, thick)); assert box, f"{name}: nothing is shown"
                 x0, y0, x1, y1 = box; w, h = x1 - x0, y1 - y0
                 if what == "expanded":
                     assert x0 <= 4 and x1 >= 1916 and y0 <= 4 and abs(y1 - (H - thick)) <= 6 * sc, f"{name}: the full-screen menu covers {box}, not the whole free area (strip {thick})"
@@ -350,12 +353,19 @@ def main():
             return {"power": (cx, ys[0]), "settings": (cx, ys[1]), "computer": (cx, ys[2]), "account": (cx, ys[3])}, (8 * sc + 160 * sc, bottom - h + 32 * sc)
         want = {"account": "decsettings users", "computer": "peony computer:///", "settings": "decsettings", "power": "decsession"}
         for m, sc in (("light", 1), ("dark", 2)):
-            for what in ("search", "account", "computer", "settings", "power", "escape"):
+            for what in ("search", "account", "computer", "settings", "power", "keyboard", "escape"):
                 name = f"startmenu-input-{what}-{m}-{int(sc * 100)}.png"; thick = round(48 * sc)
                 def act(run, r, env, before, what=what, sc=sc):
                     btn, search = buttons(sc); out = {}
                     if what == "search":
                         run("xdotool", "mousemove", str(int(search[0])), str(int(search[1]))); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "fire"); time.sleep(0.8)
+                    elif what == "keyboard":
+                        # Tab walks list -> favourites -> tabs -> the sidebar; Down steps expand, account, computer, settings; Return activates the focused control
+                        for k in ("Tab", "Tab", "Tab", "Down", "Down", "Down", "Return"):
+                            run("xdotool", "key", k); time.sleep(0.25)
+                        for _ in range(60):
+                            time.sleep(0.1)
+                            if (r / "calls.log").read_text().strip(): break
                     elif what == "escape":
                         run("xdotool", "key", "Escape")
                         for _ in range(60):
@@ -374,6 +384,8 @@ def main():
                 if what in want:
                     assert any(c == want[what] or c.startswith(want[what] + " ") and want[what].count(" ") == c.count(" ") for c in got["calls"]), f"{name}: {what} ran {got['calls']}, want {want[what]}"
                     assert not got["launcher_open"], f"{name}: the launcher stays open after {what}"
+                elif what == "keyboard":
+                    assert got["calls"] == ["decsettings"] and not got["launcher_open"], f"{name}: the keyboard walk ended on {got}, want the Settings button"
                 elif what == "escape":
                     assert not got["launcher_open"], f"{name}: Escape did not close the launcher"
                 else:

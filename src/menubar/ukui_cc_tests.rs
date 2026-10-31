@@ -2,6 +2,7 @@
 //! Same isolation as `gnome_cc_tests`: setters only reach the dry-run hook, and the tests that click one run only when `GNOME_CC_PRIVATE_SERVICES` is set by
 //! `tests/e2e/openkylin-cc-actions.py` (private PATH of recording stubs, private HOME/XDG, no display, one test thread).
 use super::*;
+use crate::app::NavKey;
 use crate::controlcenter::settings::{Settings, Style, Tiles};
 
 fn private_services() -> bool {
@@ -202,4 +203,26 @@ fn shortcuts_reach_their_backends_through_the_dry_run_hook() {
     for want in ["idle-inhibit toggle", "gamemode toggle", "dnd toggle"] {
         assert!(log.iter().any(|l| l.contains("decutil") && l.ends_with(want)) || log.iter().any(|l| l.contains(want)), "{want} in {log:?}");
     }
+}
+
+#[test]
+fn the_keyboard_reaches_every_control_in_panel_order_even_on_a_short_surface() {
+    let _g = tests::LOG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+    let _theme = Ukui::new(Tiles::ALL);
+    let mut bar = control_bar();
+    bar.height = 300;
+    bar.relayout_control();
+    let order: Vec<Target> = controlcenter::targets_in_order(&bar.cc_items);
+    for t in EVERY_TARGET {
+        assert!(order.contains(&t), "{t:?} has a keyboard stop");
+    }
+    for (index, target) in order.iter().enumerate() {
+        assert!(bar.nav_key(NavKey::Down), "Down moves focus");
+        assert_eq!(bar.cc_viewport.focus, Some(*target), "stop {index}");
+        let r = bar.cc_items.iter().find(|i| i.target == Some(*target)).unwrap().r;
+        let scroll = bar.cc_viewport.scroll;
+        assert!(r.y - scroll >= -0.5 && r.y + r.h - scroll <= bar.cc_visible_height() + 0.5, "{target:?} is revealed: y {} scroll {scroll}", r.y);
+    }
+    assert!(bar.nav_key(NavKey::Down), "wraps");
+    assert_eq!(bar.cc_viewport.focus, Some(order[0]));
 }

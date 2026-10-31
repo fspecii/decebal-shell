@@ -1,0 +1,15 @@
+start-click-bottom-openkylin-light-100.png (24, 1056) {'x0': 2, 'y0': 330, 'x1': 782, 'y1': 1032, 'strip': 48, 'edge': 'bottom'}
+start-click-top-openkylin-light-100.png (24, 24) {'x0': 2, 'y0': 50, 'x1': 782, 'y1': 752, 'strip': 48, 'edge': 'top'}
+start-click-left-openkylin-light-100.png (24, 24) {'x0': 50, 'y0': 2, 'x1': 830, 'y1': 704, 'strip': 48, 'edge': 'left'}
+start-click-right-openkylin-light-100.png (1896, 24) {'x0': 1092, 'y0': 2, 'x1': 1872, 'y1': 704, 'strip': 48, 'edge': 'right'}
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 426, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 306, in main
+    r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, post=click_start)
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 212, in case
+    assert res.get("panel_delta") is not None and res["panel_delta"] <= 4, f"{shot}: panel colour is not the package's ({res.get('panel_pixel')} vs {res.get('panel_expected')})"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: start-click-bottom-openkylin-light-200.png: panel colour is not the package's ([199, 203, 208] vs [222, 226, 232])
+done:1

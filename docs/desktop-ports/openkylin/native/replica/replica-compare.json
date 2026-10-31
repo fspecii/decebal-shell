@@ -1,0 +1,65 @@
+{
+ "upstream": "https://gitee.com/openkylin/ukui-globaltheme.git",
+ "commit": "5274c41a196d2bc7141b5cfead69368add9fc073",
+ "sheets": [
+  {
+   "sheet": "replica-compare-openkylin-light-seeking-light.png",
+   "theme": "openkylin-light-seeking",
+   "mode": "light",
+   "scale": 1.0,
+   "inputs": {
+    "original": {
+     "path": "globaltheme/Light-Seeking/preview.png",
+     "sha256": "416f1dbe86f7f34cbd43273dfd5a34d0a572e879c2c23938d432a5bbeffa2bc6",
+     "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+    },
+    "start_menu": {
+     "file": "startmenu-openkylin-light-seeking-light-100.png",
+     "sha256": "bf4c5f90459784f93e18dc0e826a2c8e77f51cc185624517547c191e6293bdbd"
+    }
+   }
+  },
+  {
+   "sheet": "replica-compare-openkylin-heyin-dark.png",
+   "theme": "openkylin-heyin",
+   "mode": "dark",
+   "scale": 1.0,
+   "inputs": {
+    "original": {
+     "path": "globaltheme/HeYin/preview.png",
+     "sha256": "49227680ccb04330977e948515328cec096f97a10501834b8ffcad7e67ef1bde",
+     "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+    },
+    "start_menu": {
+     "file": "startmenu-openkylin-heyin-dark-100.png",
+     "sha256": "0a68f151c3ab3c8f7e4dc4e095214cf58d549b2e56e729d7ad0149ede7d068c2"
+    },
+    "shortcut_panel": {
+     "file": "controlcenter-openkylin-heyin-dark-100.png",
+     "sha256": "9e9b2b134b95a510f7288a7fcea3acd07490ef711b22de16ce72c2a925828929"
+    }
+   }
+  },
+  {
+   "sheet": "replica-compare-openkylin-classic-light.png",
+   "theme": "openkylin-classic",
+   "mode": "light",
+   "scale": 1.0,
+   "inputs": {
+    "original": {
+     "path": "globaltheme/Classic/preview.png",
+     "sha256": "894abe66c985a4936dd6001e92d3668a7234eb3945eb83058eafca5aad63b6fd",
+     "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+    },
+    "start_menu": {
+     "file": "startmenu-openkylin-classic-light-100.png",
+     "sha256": "04e7521749ce9bdea9df4bf41e21743b997d37c770c50901afa28c97971c7715"
+    },
+    "shortcut_panel": {
+     "file": "controlcenter-openkylin-classic-light-100.png",
+     "sha256": "d159d930a1abb7da62bd6030efd405b551fe7e8a96b626869fa9a9e2a89d6432"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 424, in <module>
+    main()
+    ~~~~^^
+  File "/home/ambsd/.t3/worktrees/decebal-theme-studio/feat-claude-openkylin-desktop-port/tests/e2e/openkylin-native.py", line 335, in main
+    box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: nothing is shown"
+                                                                ^^^
+AssertionError: startmenu-expanded-light-100.png: nothing is shown
+done:1
