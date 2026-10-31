@@ -604,7 +604,8 @@ fn overlays(c: &Ctx, b: &mut TreeBuilder, frame: NodeId) {
     if let Some(n) = app.m.notice.as_ref().filter(|n| !n.error) {
         let tw = app.fonts.as_ref().map_or(n.text.chars().count() as f32 * 7.0 * s, |f| f.measure(&n.text, 12.5 * s, Weight::Medium)) + 44.0 * s;
         let r = (c.sbw + (c.w - c.sbw - tw) / 2.0, c.h - 52.0 * s, tw, 32.0 * s);
-        b.add(frame, Spec::new("toast", Role::Notification, n.text.clone()).bounds(ir(r)).state(State::Showing, true));
+        // Busy while accepted changes are still on their way to the disk: the toast says so, and never "Saved".
+        b.add(frame, Spec::new("toast", Role::Notification, n.text.clone()).bounds(ir(r)).state(State::Showing, true).state(State::Busy, app.m.saving()));
     }
     if let Some(cp) = &app.colorpop {
         let r = cp.rect;
@@ -1184,6 +1185,51 @@ mod tests {
         // Reset (the right-click path) removes the key again.
         r.act("ctl:r:general:default_binds", Op::Action("reset")).unwrap();
         assert!(!file(&r).contains("default_binds"), "{}", file(&r));
+    }
+
+    #[test]
+    fn an_action_answers_while_the_disk_is_blocked_and_says_saved_only_after_the_commit() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::time::{Duration, Instant};
+        let mut r = Rig::new(Some("general"), 1100, 800);
+        let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
+        let (g, c) = (gate.clone(), calls.clone());
+        r.a.m.use_worker_with_sync_hook(Arc::new(move |_| {
+            // the second write fails once the disk is back
+            let n = c.fetch_add(1, Ordering::SeqCst);
+            let t0 = Instant::now();
+            while g.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            if n == 1 {
+                return Err(std::io::Error::from_raw_os_error(28));
+            }
+            Ok(())
+        }));
+        let was = r.node("ctl:r:general:default_binds").states.contains(State::Checked);
+        let t0 = Instant::now();
+        r.act("ctl:r:general:default_binds", Op::Action("toggle")).unwrap();
+        while calls.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let v = r.node("ctl:r:general:chord_timeout_ms").value.clone().unwrap();
+        let target = ui::snap(v.min + v.step * 2.0, v.min, v.max, v.step);
+        r.act("ctl:r:general:chord_timeout_ms", Op::SetValue(target)).unwrap();
+        assert!(t0.elapsed() < Duration::from_millis(500), "the AT waited {:?} for the disk", t0.elapsed());
+        assert_eq!(r.node("ctl:r:general:default_binds").states.contains(State::Checked), !was, "shown at once");
+        let toast = r.node("toast");
+        assert_eq!(toast.name, crate::settings::model::SAVING);
+        assert!(toast.states.contains(State::Busy), "pending, not saved");
+        assert!(!file(&r).contains("default_binds"), "nothing written yet");
+        gate.store(false, Ordering::SeqCst);
+        r.a.m.settle();
+        r.redraw();
+        assert!(file(&r).contains(&format!("default_binds = {}", !was)), "{}", file(&r));
+        assert!(!file(&r).contains("chord_timeout_ms"), "the failed write left the file alone");
+        assert_ne!(r.node("ctl:r:general:chord_timeout_ms").value.as_ref().unwrap().current, target, "and the control shows the saved value again");
+        let alert = r.tree.nodes().iter().find(|n| n.role == Role::Alert).map(|n| n.name.clone()).unwrap_or_default();
+        assert!(alert.contains("Not saved") && alert.contains("No space left"), "the failure is on the page: {alert:?}");
+        assert!(r.tree.by_key("toast").is_none_or(|t| !t.states.contains(State::Busy)));
     }
 
     #[test]

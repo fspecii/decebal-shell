@@ -113,6 +113,8 @@ fn nanos() -> u64 {
 fn set_headless(paths: &Paths, path: &str) -> Result<(), String> {
     let queue: io::Queue = Arc::new(Mutex::new(Default::default()));
     let mut m = Model::new(paths.clone(), Schema::load(&paths.rdwmctl), queue.clone(), Arc::new(|| {}));
+    // no event loop to deliver results: the writes run here, before the error check below
+    m.persist_inline();
     crate::settings::panes::set_wallpaper(&mut m, path);
     if let Some(n) = m.notice.as_ref().filter(|n| n.error) {
         return Err(n.text.clone());

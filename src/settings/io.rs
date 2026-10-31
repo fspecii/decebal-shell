@@ -109,17 +109,18 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
 pub mod fault {
     use std::path::Path;
 
+    /// Runs before an fsync; an error fails that write.
     #[cfg(test)]
-    type Hook = std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>;
+    pub type SyncHook = std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>;
 
     #[cfg(test)]
     thread_local! {
-        static HOOK: std::cell::RefCell<Option<Hook>> = const { std::cell::RefCell::new(None) };
+        static HOOK: std::cell::RefCell<Option<SyncHook>> = const { std::cell::RefCell::new(None) };
     }
 
     /// Unit tests: runs `hook` before every `fsync` that `write_atomic` makes on the current thread.
     #[cfg(test)]
-    pub fn set_thread_hook(hook: Option<Hook>) {
+    pub fn set_thread_hook(hook: Option<SyncHook>) {
         HOOK.with(|h| *h.borrow_mut() = hook);
     }
 

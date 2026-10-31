@@ -3,12 +3,13 @@
 //! Everything here is testable headless.
 
 use super::io::{self, Ev, External, Paths, Queue, Runtime, Store};
+use super::persist::{Done, Job, Outcome, Persister, Refused, Submitted, ThemeJob, ThemeRequest, TomlPatch};
 use super::schema::{KeyMeta, Schema};
 use super::tomlcfg::{Cfg, Val};
 use super::ui::{parse_hex, Ctl, Kind, Opt, Row};
 use serde_json::{json, Value};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,6 +22,28 @@ pub enum CtlVal {
     Click,
     /// Right click: back to the default (removes the key).
     Reset,
+}
+
+/// What the toast says while accepted changes wait for the disk.
+pub const SAVING: &str = "Saving…";
+
+/// An accepted change the persistence worker has not finished, keyed by its ticket in [`Model::pending`].
+#[derive(Debug, Clone)]
+pub enum Pending {
+    Toml(TomlPatch),
+    Json { file: &'static str, key: String, value: Option<Value> },
+    Theme { selection: Value, done: ThemeDone },
+}
+
+/// The message a finished theme transaction shows.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ThemeDone {
+    /// A Theme pane control: "Theme: <id>".
+    Selection,
+    /// A package card: "Applied <id>…".
+    Package,
+    /// After the widget-layout question.
+    Widgets { keep: bool, empty_desktop: bool },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,6 +117,12 @@ pub struct Model {
     pub sys: super::system::Hub,
     /// The Configuration pane (text editor + presets): see `configpane.rs`.
     pub cfg: super::configpane::State,
+    /// The one owner of durable writes (see `persist.rs`); dropping the model drains it.
+    pub persist: Persister,
+    /// Accepted changes not yet committed, by ticket (submission order). They are shown on top of the saved files.
+    pub pending: BTreeMap<u64, Pending>,
+    /// A file change arrived while our own writes were in flight: look again once they are done.
+    recheck_files: bool,
 }
 
 pub fn cap(s: &str) -> String {
@@ -104,6 +133,7 @@ pub fn cap(s: &str) -> String {
 impl Model {
     pub fn new(paths: Paths, schema: Schema, queue: Queue, wake: Arc<dyn Fn() + Send + Sync>) -> Model {
         let store = Store::load(&paths.rdwm_config, &paths.rdwmctl);
+        let (queue_for_worker, wake_for_worker) = (queue.clone(), wake.clone());
         let mut m = Model {
             dock: io::json_load(&paths.dock_settings()),
             pinned: io::json_load(&paths.dock_pinned()),
@@ -131,6 +161,10 @@ impl Model {
             used: RefCell::new(Vec::new()),
             missing: RefCell::new(Vec::new()),
             synced_at: None,
+            // Unit tests drive the model without a window or event loop: the same jobs run as they are submitted.
+            persist: if cfg!(test) { Persister::inline() } else { Persister::spawn(queue_for_worker, wake_for_worker) },
+            pending: BTreeMap::new(),
+            recheck_files: false,
         };
         m.rt = io::poll_runtime(&m.paths.socket);
         m.refresh_wallpaper_follow_notice();
@@ -176,6 +210,7 @@ impl Model {
     /// Drops an expired notice; true when the screen needs a repaint.
     pub fn expire_notice(&mut self) -> bool {
         match &self.notice {
+            Some(n) if n.text == SAVING && self.saving() => false,
             Some(n) if !n.error && n.at.elapsed() > Duration::from_secs(3) => {
                 self.notice = None;
                 true
@@ -189,9 +224,16 @@ impl Model {
     /// A watched file changed: re-read everything that changed. Never loses UI state: controls are
     /// rebuilt from the documents on the next paint, selections and edit buffers live elsewhere.
     pub fn on_files_changed(&mut self) {
+        if self.saving() {
+            // Our own writes are landing; what changed behind them is checked once they are done.
+            self.recheck_files = true;
+            return;
+        }
+        self.recheck_files = false;
         match self.store.check_external() {
             External::Reloaded => {
                 self.file_error = None;
+                self.rebuild_cfg();
                 self.say("Reloaded from disk", false);
             }
             External::Invalid(e) => self.file_error = Some(e),
@@ -240,8 +282,7 @@ impl Model {
                     super::wallpapercolors::follow(self, img);
                 }
             }
-            // Results of the persistence worker; edits are routed through it in the next step.
-            Ev::Persisted(_) => {}
+            Ev::Persisted(done) => self.on_persisted(*done),
             Ev::Reload(r) => {
                 match r {
                     Ok(()) => {}
@@ -270,59 +311,257 @@ impl Model {
 
     // ------------------------------------------------------------ editing
 
-    /// Applies `f` to a copy of the document, validates, writes atomically and reloads rdwm.
-    /// Returns whether the file changed. Errors are shown inline; nothing is written then.
+    /// Applies `f` to a copy of the shown document and hands the keys it changed to the persistence worker, which
+    /// validates them like rdwm, writes atomically and then rdwm reloads. True when the change was accepted (it is
+    /// shown at once, as pending); a refused or failed change is reported in the notice and taken back.
     pub fn edit(&mut self, f: impl FnOnce(&mut Cfg) -> Result<(), String>) -> bool {
         let mut cfg = self.store.cfg.clone();
         if let Err(e) = f(&mut cfg) {
             self.say(format!("Not saved: {e}"), true);
             return false;
         }
-        match self.store.commit(&cfg) {
-            Ok(true) => {
-                self.file_error = None;
-                self.say(if self.rt.running { "Saved and applied" } else { "Saved (rdwm is not running)" }, false);
-                self.reload_rdwm();
-                self.dirty = true;
-                true
-            }
-            Ok(false) => false,
+        let patch = match TomlPatch::between(&self.store.cfg.text(), &cfg.text()) {
+            Ok(p) if p.is_empty() => return false,
+            Ok(p) => p,
             Err(e) => {
-                if e.contains("changed on disk") {
-                    self.on_files_changed();
-                }
                 self.say(format!("Not saved: {e}"), true);
-                false
+                return false;
+            }
+        };
+        let job = Job::Toml { path: self.store.path.clone(), rdwmctl: self.store.rdwmctl.clone(), patch: patch.clone(), epoch: self.store.epoch, base: self.store.saved_stamp() };
+        let Some(seq) = self.submit(job, Pending::Toml(patch)) else { return false };
+        if self.pending.contains_key(&seq) {
+            self.store.cfg = cfg;
+        }
+        self.dirty = true;
+        true
+    }
+
+    pub fn edit_json(&mut self, file: &str, key: &str, v: Option<Value>) {
+        let (file, path) = match file {
+            "dock" => ("dock", self.paths.dock_settings()),
+            "pinned" => ("pinned", self.paths.dock_pinned()),
+            _ => ("shell", self.paths.shell_json()),
+        };
+        let job = Job::Json { path, key: key.to_string(), value: v.clone(), reconcile: Some(self.paths.shell_json()) };
+        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone() }).is_some_and(|seq| self.pending.contains_key(&seq)) {
+            set_key(self.json_mut(file), key, v);
+        }
+        self.dirty = true;
+    }
+
+    /// Runs a theme package transaction in the persistence worker (planned there, against the files as the earlier
+    /// jobs leave them). The new selection is shown at once; the theme's other files follow when it committed.
+    pub fn apply_theme(&mut self, src: crate::theme::live::Source, paths: Paths, request: ThemeRequest, style: Option<crate::theme::style::Style>, done: ThemeDone) -> bool {
+        let selection = match &request {
+            ThemeRequest::Selection(s) | ThemeRequest::Widgets { selection: s, .. } => s.clone(),
+            ThemeRequest::Package { name, base } => crate::theme::model::Selection { name: name.clone(), ..base.clone() },
+        };
+        let selection = selection.to_json();
+        let Some(seq) = self.submit(Job::Theme(Box::new(ThemeJob { src, paths, request, style })), Pending::Theme { selection: selection.clone(), done }) else { return false };
+        if self.pending.contains_key(&seq) {
+            set_key(&mut self.shell, "theme", Some(selection));
+        }
+        self.dirty = true;
+        true
+    }
+
+    /// The theme selection new Theme controls start from: the newest one accepted, else the saved one.
+    pub fn theme_selection(&self) -> crate::theme::model::Selection {
+        let shown = self.pending.values().rev().find_map(|p| match p {
+            Pending::Theme { selection, .. } => Some(selection),
+            Pending::Json { file: "shell", key, value: Some(v) } if key == "theme" => Some(v),
+            _ => None,
+        });
+        match shown {
+            Some(v) => crate::theme::model::Selection::from_json(v),
+            None => super::themepane::source(self).selection(),
+        }
+    }
+
+    /// Accepted changes are still on their way to the disk.
+    pub fn saving(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
+    /// Headless tools (no event loop): run the writes on the calling thread as they are submitted.
+    pub fn persist_inline(&mut self) {
+        debug_assert!(self.pending.is_empty());
+        self.persist = Persister::inline();
+    }
+
+    /// The ticket of an accepted job (its result may already have been handled in inline mode).
+    fn submit(&mut self, job: Job, pending: Pending) -> Option<u64> {
+        match self.persist.submit(job) {
+            Ok(s) => {
+                if let Submitted::Merged { replaced, .. } = s {
+                    self.pending.remove(&replaced);
+                }
+                self.pending.insert(s.seq(), pending);
+                self.notice = Some(Notice { text: SAVING.into(), error: false, at: Instant::now() });
+                self.dirty = true;
+                for d in self.persist.take_inline() {
+                    self.on_persisted(d);
+                }
+                Some(s.seq())
+            }
+            Err(Refused::Full) => {
+                self.say("Not saved: earlier changes are still being written to disk; try again in a moment", true);
+                None
+            }
+            Err(Refused::Closed) => {
+                self.say("Not saved: Settings is closing", true);
+                None
             }
         }
     }
 
-    pub fn edit_json(&mut self, file: &str, key: &str, v: Option<Value>) {
-        let (path, doc) = match file {
-            "dock" => (self.paths.dock_settings(), &mut self.dock),
-            "pinned" => (self.paths.dock_pinned(), &mut self.pinned),
-            _ => (self.paths.shell_json(), &mut self.shell),
+    fn json_mut(&mut self, file: &str) -> &mut Value {
+        match file {
+            "dock" => &mut self.dock,
+            "pinned" => &mut self.pinned,
+            _ => &mut self.shell,
+        }
+    }
+
+    /// The shown document of a JSON file: `saved` plus the accepted changes not committed yet.
+    fn json_shown(&self, file: &str, saved: Value) -> Value {
+        let mut doc = saved;
+        for p in self.pending.values() {
+            match p {
+                Pending::Json { file: f, key, value } if *f == file => set_key(&mut doc, key, value.clone()),
+                Pending::Theme { selection, .. } if file == "shell" => set_key(&mut doc, "theme", Some(selection.clone())),
+                _ => {}
+            }
+        }
+        doc
+    }
+
+    /// The shown rdwm document: the saved text plus the pending patches, in order.
+    fn rebuild_cfg(&mut self) {
+        let mut text = self.store.text.clone();
+        for p in self.pending.values() {
+            if let Pending::Toml(patch) = p {
+                match patch.apply_to(&text) {
+                    Ok(t) => text = t,
+                    Err(e) => crate::log_debug!("pending change not shown: {e}"),
+                }
+            }
+        }
+        if let Ok(cfg) = Cfg::parse(&text) {
+            self.store.cfg = cfg;
+        }
+    }
+
+    fn reload_json_shown(&mut self) {
+        self.shell = self.json_shown("shell", io::json_load(&self.paths.shell_json()));
+        self.dock = self.json_shown("dock", io::json_load(&self.paths.dock_settings()));
+        self.pinned = self.json_shown("pinned", io::json_load(&self.paths.dock_pinned()));
+    }
+
+    /// A persistence job finished (results arrive in submission order).
+    pub fn on_persisted(&mut self, d: Done) {
+        let Some(p) = self.pending.remove(&d.seq) else {
+            crate::log_warn!("persist: result for unknown change #{}", d.seq);
+            return;
         };
-        match io::json_set(&path, key, v.clone()) {
-            Ok(()) => {
-                match v {
-                    Some(v) => {
-                        doc[key] = v;
+        let idle = self.pending.is_empty();
+        let toml_left = self.pending.values().any(|p| matches!(p, Pending::Toml(_) | Pending::Theme { .. }));
+        self.dirty = true;
+        match (p, d.outcome) {
+            (_, Outcome::Toml(Ok(saved))) => {
+                self.store.adopt(saved.text, saved.stamp);
+                self.rebuild_cfg();
+                self.file_error = None;
+                if saved.changed && !toml_left {
+                    self.reload_rdwm();
+                }
+                if idle && self.notice.as_ref().is_none_or(|n| !n.error) {
+                    self.say(if self.rt.running { "Saved and applied" } else { "Saved (rdwm is not running)" }, false);
+                }
+            }
+            (_, Outcome::Toml(Err(f))) => {
+                self.rebuild_cfg();
+                if f.conflict {
+                    // pick up their version first, so the error stays the last word
+                    self.recheck_files = true;
+                    if idle {
+                        self.on_files_changed();
                     }
-                    None => {
-                        if let Some(o) = doc.as_object_mut() {
-                            o.shift_remove(key);
+                }
+                self.say(format!("Not saved: {}", f.message), true);
+            }
+            (Pending::Json { file, .. }, Outcome::Json(r)) => {
+                let saved = match &r {
+                    Ok(doc) => doc.clone(),
+                    Err(_) => io::json_load(&d.path),
+                };
+                *self.json_mut(file) = self.json_shown(file, saved);
+                match r {
+                    Ok(_) if idle && self.notice.as_ref().is_none_or(|n| !n.error) => self.say("Saved", false),
+                    Ok(_) => {}
+                    Err(e) => self.say(format!("Not saved: {e}"), true),
+                }
+            }
+            (Pending::Theme { done, .. }, Outcome::Theme(r)) => {
+                self.store = Store::load(&self.store.path, &self.store.rdwmctl.clone());
+                self.rebuild_cfg();
+                self.reload_json_shown();
+                match r {
+                    Ok(a) => {
+                        self.file_error = None;
+                        let text = match done {
+                            ThemeDone::Selection => format!("Theme: {}{}", a.theme_id, if a.notes.is_empty() { String::new() } else { format!(" ({})", a.notes.join("; ")) }),
+                            ThemeDone::Package => format!(
+                                "Applied {}{}. `decthemectl theme undo` goes back.",
+                                a.theme_id,
+                                if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) }
+                            ),
+                            ThemeDone::Widgets { keep, empty_desktop } => format!(
+                                "Applied {} with {}",
+                                a.theme_id,
+                                if keep {
+                                    "your widget layout"
+                                } else if empty_desktop {
+                                    "the empty desktop layout"
+                                } else {
+                                    "the theme's widgets"
+                                }
+                            ),
+                        };
+                        let text = match (d.style, done) {
+                            (Some(st), ThemeDone::Selection) => format!("Shell style: {}", st.title()),
+                            _ => text,
+                        };
+                        if idle || !self.notice.as_ref().is_some_and(|n| n.error) {
+                            self.say(text, false);
                         }
                     }
+                    Err(e) => self.say(format!("Not applied: {e}"), true),
                 }
-                if let Err(e) = crate::dock_lifecycle::reconcile(&self.paths.shell_json()) {
-                    crate::log_warn!("dock: {e}");
-                }
-                self.say("Saved", false);
             }
-            Err(e) => self.say(format!("Not saved: {e}"), true),
+            (p, o) => crate::log_warn!("persist: mismatched result {o:?} for {p:?}"),
         }
-        self.dirty = true;
+        if idle && self.recheck_files {
+            self.on_files_changed();
+        }
+    }
+
+    /// Tests: the real worker thread, with `hook` run before each of its fsyncs.
+    #[cfg(test)]
+    pub fn use_worker_with_sync_hook(&mut self, hook: io::fault::SyncHook) {
+        assert!(self.pending.is_empty());
+        self.persist = Persister::spawn_with_sync_hook(self.queue.clone(), self.wake.clone(), hook);
+    }
+
+    /// Tests: waits until the worker finished everything submitted and handles the results.
+    #[cfg(test)]
+    pub fn settle(&mut self) {
+        assert!(self.persist.wait_idle(Duration::from_secs(30)), "persistence worker did not finish");
+        let evs: Vec<Ev> = self.queue.lock().unwrap().drain(..).collect();
+        for ev in evs {
+            self.on_event(ev);
+        }
     }
 
     // ------------------------------------------------------------ value access
@@ -511,6 +750,23 @@ impl Model {
             _ => return,
         };
         self.edit_json(file, key, value);
+    }
+}
+
+/// Sets (or with `None` removes) a top-level key of a JSON object, keeping the other keys and their order.
+fn set_key(doc: &mut Value, key: &str, v: Option<Value>) {
+    match v {
+        Some(v) => {
+            if !doc.is_object() {
+                *doc = Value::Object(Default::default());
+            }
+            doc[key] = v;
+        }
+        None => {
+            if let Some(o) = doc.as_object_mut() {
+                o.shift_remove(key);
+            }
+        }
     }
 }
 

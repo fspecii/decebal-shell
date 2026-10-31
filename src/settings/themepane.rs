@@ -231,8 +231,13 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-/// Runs the transaction for a changed selection; true when it was written.
+/// Runs the transaction for a changed selection in the persistence worker; true when it was accepted.
 pub(super) fn commit(m: &mut Model, sel: Selection) -> bool {
+    commit_styled(m, sel, None)
+}
+
+/// `commit`, then the shell style's dock and bar keys from the files the transaction wrote (one ordered job).
+fn commit_styled(m: &mut Model, sel: Selection, style: Option<Style>) -> bool {
     if super::widgetchoice::request(m, &sel, false) {
         return false;
     }
@@ -240,21 +245,7 @@ pub(super) fn commit(m: &mut Model, sel: Selection) -> bool {
     let mut paths = m.paths.clone();
     // Tests and explicit configuration may choose a stricter checker than discovery.
     paths.rdwmctl = m.store.rdwmctl.clone();
-    match crate::theme::engine::apply::apply_selection(&src, &paths, &sel) {
-        Ok(applied) => {
-            m.store = super::io::Store::load(&paths.rdwm_config, &paths.rdwmctl);
-            m.file_error = None;
-            m.shell = super::io::json_load(&paths.shell_json());
-            m.dock = super::io::json_load(&paths.dock_settings());
-            m.dirty = true;
-            m.say(format!("Theme: {}{}", applied.theme_id, if applied.notes.is_empty() { String::new() } else { format!(" ({})", applied.notes.join("; ")) }), false);
-            true
-        }
-        Err(e) => {
-            m.say(format!("Not applied: {e}"), true);
-            false
-        }
-    }
+    m.apply_theme(src, paths, crate::settings::persist::ThemeRequest::Selection(sel), style, super::model::ThemeDone::Selection)
 }
 
 /// A new wallpaper was chosen in the Wallpaper pane: the colours follow it when "Match wallpaper" is on.
@@ -262,23 +253,13 @@ pub fn follow_wallpaper(m: &mut Model, path: &str) {
     super::wallpapercolors::follow(m, path);
 }
 
-pub(super) fn apply_style(m: &mut Model, st: Style) {
-    for (key, val) in style::dock_edits(st) {
-        m.edit_json("dock", key, val);
-    }
-    let bar = style::bar_value(st, m.shell.get("bar"));
-    m.edit_json("shell", "bar", Some(bar));
-    let dock = style::dock_value(st, m.shell.get("dock"));
-    m.edit_json("shell", "dock", Some(dock));
-    m.say(format!("Shell style: {}", st.title()), false);
-}
-
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     if super::packages::apply(m, parts, &v) {
         return;
     }
     let src = source(m);
-    let mut sel = src.selection();
+    // the newest accepted selection, so a change made while an earlier one is still saving builds on it
+    let mut sel = m.theme_selection();
     if let Some(changed) = super::fontpane::apply(parts, &v, &mut sel) {
         if changed {
             commit(m, sel);
@@ -305,10 +286,10 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["th", "sync"], CtlVal::Bool(b)) => sel.sync_rdwm = b,
         (["th", "style"], CtlVal::Str(s)) => {
             let Some(st) = Style::parse(&s) else { return };
-            if commit(m, style::selection_for(st, &sel)) {
-                apply_style(m, st);
-            } else if let Some(p) = &mut m.widget_choice {
-                p.style = Some(st);
+            if !commit_styled(m, style::selection_for(st, &sel), Some(st)) {
+                if let Some(p) = &mut m.widget_choice {
+                    p.style = Some(st);
+                }
             }
             return;
         }

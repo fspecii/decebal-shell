@@ -129,15 +129,6 @@ fn free_id(src: &Source, base: &str) -> String {
     (2..100).map(|n| format!("{base}-{n}")).find(|id| !taken(id)).unwrap_or_else(|| format!("{base}-x"))
 }
 
-/// Re-reads the files the engine wrote so the pane's own copies are current.
-fn reload(m: &mut Model) {
-    m.store = super::io::Store::load(&m.paths.rdwm_config, &m.paths.rdwmctl);
-    m.dock = super::io::json_load(&m.paths.dock_settings());
-    m.shell = super::io::json_load(&m.paths.shell_json());
-    crate::theme::live::reload();
-    m.dirty = true;
-}
-
 fn downloads() -> std::path::PathBuf {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
     ["Downloads", "Documents"].iter().map(|d| home.join(d)).find(|d| d.is_dir()).unwrap_or(home)
@@ -158,19 +149,14 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             }
             match *act {
                 "apply" => {
-                    let mut sel = src.selection();
+                    let base = m.theme_selection();
+                    let mut sel = base.clone();
                     sel.name = id.to_string();
                     if super::widgetchoice::request(m, &sel, true) {
                         return true;
                     }
-                    match eapply::apply(&src, &m.paths, id, &src.selection()) {
-                        Ok(a) => {
-                            reload(m);
-                            let extra = if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) };
-                            m.say(format!("Applied {}{extra}. `decthemectl theme undo` goes back.", a.theme_id), false);
-                        }
-                        Err(e) => m.say(format!("Not applied: {e}"), true),
-                    }
+                    let request = crate::settings::persist::ThemeRequest::Package { name: id.to_string(), base };
+                    m.apply_theme(src.clone(), m.paths.clone(), request, None, super::model::ThemeDone::Package);
                 }
                 "preview" => {
                     let (s2, p2, id2, wake) = (src.clone(), m.paths.clone(), id.to_string(), m.wake.clone());

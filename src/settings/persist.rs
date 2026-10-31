@@ -414,6 +414,12 @@ fn apply_style(paths: &Paths, st: Style) -> Result<(), String> {
 
 // ---------------------------------------------------------------- the handle
 
+#[cfg(test)]
+type Hook = io::fault::SyncHook;
+/// Production workers take no fsync hook.
+#[cfg(not(test))]
+type Hook = ();
+
 #[derive(Default)]
 struct State {
     jobs: VecDeque<(u64, Job)>,
@@ -446,12 +452,11 @@ impl Persister {
     }
 
     #[cfg(test)]
-    pub fn spawn_with_sync_hook(queue: Queue, wake: Arc<dyn Fn() + Send + Sync>, hook: Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>) -> Persister {
+    pub fn spawn_with_sync_hook(queue: Queue, wake: Arc<dyn Fn() + Send + Sync>, hook: io::fault::SyncHook) -> Persister {
         Self::spawn_inner(queue, wake, Some(hook))
     }
 
-    #[allow(unused_variables)]
-    fn spawn_inner(queue: Queue, wake: Arc<dyn Fn() + Send + Sync>, hook: Option<Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>>) -> Persister {
+    fn spawn_inner(queue: Queue, wake: Arc<dyn Fn() + Send + Sync>, hook: Option<Hook>) -> Persister {
         let shared = Arc::new(Shared { state: Mutex::new(State { next: 1, ..State::default() }), cv: Condvar::new() });
         let s = shared.clone();
         let handle = std::thread::Builder::new()
@@ -459,6 +464,8 @@ impl Persister {
             .spawn(move || {
                 #[cfg(test)]
                 io::fault::set_thread_hook(hook);
+                #[cfg(not(test))]
+                let _ = hook;
                 let mut runner = Runner::default();
                 loop {
                     let (seq, job) = {
@@ -676,7 +683,7 @@ mod tests {
 
     type Recorded = Arc<Mutex<VecDeque<Ev>>>;
 
-    fn gated(gate: Arc<AtomicBool>, calls: Arc<AtomicUsize>, fail: Option<&'static str>) -> Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync> {
+    fn gated(gate: Arc<AtomicBool>, calls: Arc<AtomicUsize>, fail: Option<&'static str>) -> io::fault::SyncHook {
         Arc::new(move |p: &Path| {
             calls.fetch_add(1, Ordering::SeqCst);
             let t0 = Instant::now();
@@ -917,3 +924,203 @@ mod tests {
     }
 }
 
+/// The window's model on the real worker thread, with the disk held still by a gated fsync.
+#[cfg(test)]
+mod model_tests {
+    use super::*;
+    use crate::settings::model::{tests_support::model_with, CtlVal, Model, SAVING};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    struct Disk {
+        gate: Arc<AtomicBool>,
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl Disk {
+        /// `fail(n)`: the n-th fsync (from 1) fails with EIO.
+        fn attach(m: &mut Model, fail: Option<usize>) -> Disk {
+            let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
+            let (g, c) = (gate.clone(), calls.clone());
+            m.use_worker_with_sync_hook(Arc::new(move |_| {
+                let n = c.fetch_add(1, Ordering::SeqCst) + 1;
+                let t0 = Instant::now();
+                while g.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(20) {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                if fail == Some(n) {
+                    return Err(std::io::Error::from_raw_os_error(5));
+                }
+                Ok(())
+            }));
+            Disk { gate, calls }
+        }
+        fn blocked(&self) {
+            let t0 = Instant::now();
+            while self.calls.load(Ordering::SeqCst) == 0 {
+                assert!(t0.elapsed() < Duration::from_secs(10), "the worker never reached fsync");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        fn open(&self) {
+            self.gate.store(false, Ordering::SeqCst);
+        }
+    }
+
+    fn timed(m: &mut Model, id: &str, v: CtlVal) -> Duration {
+        let t0 = Instant::now();
+        m.apply(id, v);
+        t0.elapsed()
+    }
+
+    fn file(p: &Path) -> String {
+        std::fs::read_to_string(p).unwrap_or_default()
+    }
+
+    #[test]
+    fn edits_answer_at_once_while_fsync_is_blocked_and_the_newest_one_is_saved_exactly() {
+        let orig = "# mine\n[general]\nborder_px = 2   # thin\nfoo_future = 1\n";
+        let (mut m, cfg) = model_with(orig);
+        let disk = Disk::attach(&mut m, None);
+        let mut slowest = timed(&mut m, "r:general:smart_gaps", CtlVal::Bool(true));
+        disk.blocked();
+        for v in [3.0, 5.0, 7.0] {
+            slowest = slowest.max(timed(&mut m, "r:general:gap_inner", CtlVal::Num(v)));
+        }
+        slowest = slowest.max(timed(&mut m, "j:dock:appSpacing", CtlVal::Num(4.0)));
+        slowest = slowest.max(timed(&mut m, "j:dock:appSpacing", CtlVal::Num(6.0)));
+        slowest = slowest.max(timed(&mut m, "r:general:border_px", CtlVal::Reset));
+        assert!(slowest < Duration::from_millis(250), "an edit waited {slowest:?} for the disk");
+        // shown at once, as pending; nothing claims it is saved
+        assert!(m.saving());
+        assert_eq!(m.notice.as_ref().map(|n| n.text.as_str()), Some(SAVING));
+        assert!(m.flag("general", "smart_gaps"));
+        assert_eq!(m.num("general", "gap_inner"), 7.0);
+        assert!(!m.store.cfg.has("general", "border_px"));
+        assert_eq!(m.dock["appSpacing"], 6.0);
+        assert!(!m.expire_notice(), "the saving notice stays while saving");
+        assert_eq!(file(&cfg), orig, "the first write is still blocked");
+        disk.open();
+        m.settle();
+        assert!(!m.saving());
+        assert_eq!(file(&cfg), "# mine\n[general]\nfoo_future = 1\nsmart_gaps = true\ngap_inner = 7\n");
+        assert_eq!(io::json_load(&m.paths.dock_settings())["appSpacing"], 6.0);
+        let n = m.notice.as_ref().unwrap();
+        assert!(!n.error && n.text.starts_with("Saved"), "{n:?}");
+        assert_eq!(m.store.cfg.text(), file(&cfg), "the shown document is the saved one");
+    }
+
+    #[test]
+    fn a_failed_write_is_reported_and_rolled_back_without_losing_the_newer_edit() {
+        let orig = "[general]\nborder_px = 2\n";
+        let (mut m, cfg) = model_with(orig);
+        let disk = Disk::attach(&mut m, Some(1));
+        m.apply("r:general:gap_inner", CtlVal::Num(9.0));
+        disk.blocked();
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true));
+        assert_eq!(m.num("general", "gap_inner"), 9.0);
+        disk.open();
+        m.settle();
+        assert_eq!(file(&cfg), "[general]\nborder_px = 2\nsmart_gaps = true\n", "the failed key is not written, the newer one is");
+        assert!(!m.store.cfg.has("general", "gap_inner"), "the failed change is taken back on screen");
+        assert!(m.flag("general", "smart_gaps"));
+        let n = m.notice.as_ref().unwrap();
+        assert!(n.error && n.text.contains("Not saved") && n.text.contains("Input/output error"), "the error stays visible: {n:?}");
+        let left: Vec<_> = std::fs::read_dir(cfg.parent().unwrap()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tmp")).collect();
+        assert!(left.is_empty(), "{left:?}");
+    }
+
+    #[test]
+    fn theme_and_mode_picked_while_saving_build_on_each_other() {
+        let (mut m, cfg) = model_with("[general]\nborder_px = 2\nunknown_future = \"keep\"\n");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("l:theme:nord", CtlVal::Click);
+        disk.blocked();
+        let t0 = Instant::now();
+        m.apply("th:mode", CtlVal::Str("light".into()));
+        m.apply("r:general:gap_inner", CtlVal::Num(4.0));
+        assert!(t0.elapsed() < Duration::from_millis(500), "{:?}", t0.elapsed());
+        assert_eq!(m.theme_selection().name, "nord", "the mode change starts from the pending theme");
+        assert_eq!(m.shell["theme"]["name"], "nord");
+        disk.open();
+        m.settle();
+        let sel = crate::settings::themepane::source(&m).selection();
+        assert_eq!((sel.name.as_str(), sel.mode), ("nord", crate::theme::model::Mode::Light));
+        let text = file(&cfg);
+        assert!(text.contains("unknown_future = \"keep\"") && text.contains("gap_inner = 4"), "{text}");
+        assert!(!m.notice.as_ref().unwrap().error, "{:?}", m.notice);
+    }
+
+    #[test]
+    fn a_full_queue_refuses_visibly_and_shows_nothing_it_did_not_accept() {
+        let (mut m, cfg) = model_with("");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(1.0));
+        disk.blocked();
+        for i in 0..CAPACITY {
+            m.apply("r:general:border_px", CtlVal::Num((i % 9) as f64 + 1.0));
+            assert!(!m.notice.as_ref().unwrap().error, "#{i}");
+        }
+        let shown = m.num("general", "border_px");
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true));
+        let n = m.notice.clone().unwrap();
+        assert!(n.error && n.text.contains("still being written"), "{n:?}");
+        assert!(!m.flag("general", "smart_gaps"), "a refused change is not shown as made");
+        disk.open();
+        m.settle();
+        assert_eq!(m.num("general", "border_px"), shown);
+        assert!(file(&cfg).contains(&format!("border_px = {}", shown as i64)));
+        assert!(!file(&cfg).contains("smart_gaps"));
+    }
+
+    #[test]
+    fn closing_the_window_drains_the_newest_edit() {
+        let (mut m, cfg) = model_with("");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(1.0));
+        disk.blocked();
+        m.apply("r:general:gap_inner", CtlVal::Num(8.0));
+        m.apply("j:shell:workspaces", CtlVal::Str("off".into()));
+        let shell = m.paths.shell_json();
+        let gate = disk.gate.clone();
+        let opener = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            gate.store(false, Ordering::SeqCst);
+        });
+        drop(m);
+        opener.join().unwrap();
+        assert_eq!(file(&cfg), "[general]\ngap_inner = 8\n");
+        assert_eq!(io::json_load(&shell)["workspaces"], false);
+    }
+
+    #[test]
+    fn an_external_edit_while_saving_is_picked_up_not_overwritten() {
+        let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(3.0));
+        disk.blocked();
+        disk.open();
+        m.settle();
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(&cfg, "[general]\nborder_px = 6\ngap_inner = 3\n").unwrap();
+        // the change is made before the watcher noticed the edit
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true));
+        m.settle();
+        assert_eq!(file(&cfg), "[general]\nborder_px = 6\ngap_inner = 3\n", "their edit survives");
+        assert_eq!(m.num("general", "border_px"), 6.0, "and is shown");
+        let n = m.notice.as_ref().unwrap();
+        assert!(n.error && n.text.contains("changed on disk"), "{n:?}");
+        // repeating the change now works
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true));
+        m.settle();
+        assert_eq!(file(&cfg), "[general]\nborder_px = 6\ngap_inner = 3\nsmart_gaps = true\n");
+    }
+
+    #[test]
+    fn results_for_unknown_or_old_tickets_change_nothing() {
+        let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
+        let before = m.store.cfg.text();
+        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err("late".into())), took: Duration::ZERO });
+        assert_eq!(m.store.cfg.text(), before);
+        assert!(m.notice.is_none());
+    }
+}

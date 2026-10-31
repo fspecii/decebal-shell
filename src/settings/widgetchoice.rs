@@ -82,32 +82,9 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
         return;
     }
     let src = super::themepane::source(m);
-    let plan =
-        if p.reset_colors { apply::plan_with_widgets(&src, &m.paths, &p.selection.name, &p.selection, choice) } else { apply::plan_selection_with_widgets(&src, &m.paths, &p.selection, choice) };
-    match plan.and_then(|plan| apply::execute(&src, &m.paths, plan)) {
-        Ok(a) => {
-            crate::theme::live::reload();
-            m.on_files_changed();
-            if let Some(st) = p.style {
-                super::themepane::apply_style(m, st);
-            }
-            m.say(
-                format!(
-                    "Applied {} with {}",
-                    a.theme_id,
-                    if choice == WidgetChoice::Keep {
-                        "your widget layout"
-                    } else if p.empty_desktop {
-                        "the empty desktop layout"
-                    } else {
-                        "the theme's widgets"
-                    }
-                ),
-                false,
-            );
-        }
-        Err(e) => m.say(format!("Not applied: {e}"), true),
-    }
+    let paths = m.paths.clone();
+    let request = crate::settings::persist::ThemeRequest::Widgets { selection: p.selection, reset_colors: p.reset_colors, choice };
+    m.apply_theme(src, paths, request, p.style, super::model::ThemeDone::Widgets { keep: choice == WidgetChoice::Keep, empty_desktop: p.empty_desktop });
     m.dirty = true;
 }
 
