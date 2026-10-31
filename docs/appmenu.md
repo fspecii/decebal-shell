@@ -100,41 +100,26 @@ menus.stop(Duration::from_millis(200));          // or just drop(menus)
 Ready(Arc<Exported>), Failed{window, reason}, Stopped}`; `Exported { token, window, service,
 owner, path, tree: Arc<MenuTree> }`.
 
-## Root integration blocks
+## Bar integration (commit "Show the focused window's exported menus …")
 
-The bar files belong to the panel owner; these are the narrow hooks the integration needs.
+Kept narrow so it can be rebased around the panel owner's scaling work:
 
-1. `src/menubar/active.rs`: give `ActiveWindow` the native focus (default keeps every
-   existing implementation compiling):
-
-   ```rust
-   /// The focused window as the app-menu worker's input (X11 id or Wayland), if known.
-   fn active_focus(&self) -> crate::appmenu::Focus {
-       crate::appmenu::Focus::None
-   }
-   ```
-
-   and in `impl ActiveWindow for WmActive`:
-
-   ```rust
-   fn active_focus(&self) -> crate::appmenu::Focus {
-       let Some(t) = &self.tracker else { return crate::appmenu::Focus::None };
-       crate::appmenu::Focus::from_window(t.snapshot().active(), crate::appmenu::tracker_protocol())
-   }
-   ```
-
-   Better long term: `wm::Tracker` exposes the protocol it actually started
-   (`Tracker::protocol() -> Option<Protocol>`) so `tracker_protocol()`'s mirror of
-   `Tracker::start`'s choice can go.
-2. `src/menubar/menus.rs`: drop the static `file`/`edit`/`view` menus from `build()` (keep
-   `apple`, `app`, `window`, `help`, which run real shell/WM commands) and append one `Menu` per
-   `view::titles()` entry, carrying the dbusmenu id instead of a `&'static str` action.
-3. `src/menubar/mod.rs`: own an `Option<AppMenus>` started from `start_watchers` when the
-   applet is enabled; on each tick feed `active.active_focus()`; rebuild `self.menus` when
-   `snapshot().generation` changes; route row clicks on exported menus to
-   `AppMenus::activate(token, row.id, 0)` and open/close to `opened`/`closed`; draw nested
-   submenus (`Row::submenu`) as cascades or drill-down; show `State::reason()` as one disabled
-   row when the app exported nothing.
+* `src/menubar/active.rs`: `ActiveWindow::active_focus() -> appmenu::Focus` (default
+  `Focus::None`); `WmActive` derives it from its existing tracker with `Focus::from_window`.
+  Better long term: `wm::Tracker` exposes the protocol it actually started, replacing
+  `appmenu::tracker_protocol()`'s mirror of `Tracker::start`.
+* `src/menubar/menus.rs`: `build()` returns only `apple`, `app`, `window`, `help`; the static
+  File/Edit/View lists are gone.
+* `src/menubar/exported.rs` (new): `Exported` glue: `set_enabled`, `set_focus`, `poll`,
+  `compose` (splices exported titles after the app menu, or puts the honest reason as an inert
+  first row of the app menu), `click` (`Sent`/`Moved`/`Ignored`; submenus drill down in place
+  with a `‹ Parent` row), `opened`/`closed`, `available`/`shortcut` per row, `identity`.
+* `src/menubar/mod.rs`: one `app_menu` field; `refresh_app_name` starts/stops the worker
+  (live bar only: a waker exists, not embedded, classic horizontal layout, not Dux, and
+  `DECBAR_NO_APP_MENUS` unset), feeds focus, rebuilds menus on change and closes an open
+  exported menu whose identity changed; `open_menu`/`close` notify the app;
+  `run_menu_item` routes exported rows; `draw_dropdown` takes availability/shortcut from them.
+* Root may prefer a real applet/config switch instead of `DECBAR_NO_APP_MENUS`.
 
 ## Tests
 
@@ -147,11 +132,33 @@ The bar files belong to the panel owner; these are the narrow hooks the integrat
   exporters, hijack refusal, re-entrant calls during a click, no bus, Wayland, reconnect.
 * `tests/e2e/appmenu-cargo.sh test -j2 --offline --test appmenu_lifecycle`: no thread, fd or
   bus name left after `stop()` or drop, three rounds.
+* `src/menubar/exported.rs` test: a real `DecBar` with pointer clicks on titles and rows against the
+  private bus + recording exporter: honest reason row with no exporter, exported titles after the
+  app menu, AboutToShow on open, disabled rows inert, clicks delivered as ids 10 and 160 (nested
+  submenu through drill-down and back), sliding to another title closes the first on the app side,
+  menus disappear and the open one closes when the app leaves, disabling removes the reason row.
+* `tests/e2e/appmenu-real.sh`: real exporters. A Qt 6 `QMainWindow` (Qt's own `QDBusMenuBar`,
+  built from `tests/e2e/appmenu/qt-fixture.cpp` into the lane's target dir) on a private Xvfb,
+  focused through the real X11 `wm::Tracker` (EWMH properties set on the private root), and a
+  libdbusmenu-glib exporter (`tests/e2e/appmenu/dbusmenu-fixture.py`). Verified: Qt registers its
+  real X11 window id; mnemonics, `⌃O`, check/radio states, hidden item, submenu; clicks trigger
+  exactly the intended `QAction`s (recorded by the app), Qt's toggled state comes back as a
+  property update, Qt's `aboutToShow` adds an item that arrives through `LayoutUpdated` and can be
+  clicked, disabled Undo never triggers, Qt exiting drops its menu; libdbusmenu delivers
+  `item-activated` for the clicked ids with the click timestamp.
+  Display rule: reserved numbers 700-899 only, never `-displayfd`; the lock file, the socket path
+  and the abstract socket must all belong to the started Xvfb before any client connects, with a
+  private Xauthority cookie. Nothing foreign is ever unlinked.
 * The wrapper runs cargo with a private HOME/XDG tree, no host DISPLAY/WAYLAND/XAUTHORITY/
   rdwm/session variables, an invalid session bus address and a recorder PATH, under
   `flock --close` on the build slot.
 
 ## Gaps
+* Keyboard navigation and mnemonics of exported menus are not wired (pointer only); icons
+  (`icon-name`/`icon-data`) are parsed but not drawn; `ItemActivationRequested` is published in
+  the snapshot but the bar does not yet open the requested menu.
+* Clicks carry timestamp 0 (the bar's pointer events have no X server time).
+* Dropdown width is measured from labels only; long exported shortcuts may crowd labels.
 
 * `org.gtk.Menus` export (pure GTK3/4 `GApplication` menubars) is not read.
 * Wayland: no supported protocol; Qt's `org_kde_kwin_appmenu` would need compositor support.
