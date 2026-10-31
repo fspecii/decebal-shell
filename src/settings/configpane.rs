@@ -1573,6 +1573,74 @@ mod tests {
         assert!(ids.contains("cfg:apply:builtin/macos") && ids.contains("cfg:apply-sel") && ids.contains("cfg:dup") && !ids.contains("cfg:delete"), "built-ins are read only: {ids:?}");
     }
 
+    /// The real worker with every fsync held until `open` is set.
+    fn held_worker(m: &mut Model) -> (Arc<std::sync::atomic::AtomicBool>, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        let (open, calls) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let (o, c) = (open.clone(), calls.clone());
+        m.use_worker_with_sync_hook(Arc::new(move |_| {
+            c.fetch_add(1, Ordering::SeqCst);
+            let t0 = std::time::Instant::now();
+            while !o.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(20) {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Ok(())
+        }));
+        (open, calls)
+    }
+
+    #[test]
+    fn saving_runs_in_the_worker_and_typing_meanwhile_stays_unsaved() {
+        use std::sync::atomic::Ordering;
+        let mut m = model("save-held");
+        let shell = m.paths.shell_json();
+        std::fs::write(&shell, "{\n  \"workspaces\": \"auto\"\n}\n").unwrap();
+        m.cfg.tab = Tab::Shell;
+        prepare(&mut m);
+        m.cfg.active = true;
+        let (open, calls) = held_worker(&mut m);
+        editor_key(&mut m, &key(Key::Down, None, false));
+        editor_key(&mut m, &key(Key::End, None, false));
+        type_text(&mut m, ",\n  \"future\": 1");
+        let sent = buf_mut(&mut m).ed.text();
+        let t0 = std::time::Instant::now();
+        apply(&mut m, "cfg:save", CtlVal::Click);
+        while calls.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(t0.elapsed() < std::time::Duration::from_millis(500), "the click waited for the disk");
+        assert_eq!(m.notice.as_ref().map(|n| n.text.as_str()), Some(crate::settings::model::SAVING));
+        // typing goes on while the write is held
+        type_text(&mut m, ",\n  \"late\": 2");
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\n  \"workspaces\": \"auto\"\n}\n");
+        open.store(true, Ordering::SeqCst);
+        m.settle();
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), sent, "exactly what was saved");
+        assert!(buf_mut(&mut m).ed.is_modified(), "the late typing is not marked saved");
+        assert!(buf_mut(&mut m).ed.text().contains("\"late\""));
+        assert!(!m.notice.as_ref().unwrap().error);
+    }
+
+    #[test]
+    fn a_file_changed_on_disk_is_refused_once_then_saving_again_overwrites() {
+        let mut m = model("save-changed");
+        let shell = m.paths.shell_json();
+        std::fs::write(&shell, "{\"a\": 1}\n").unwrap();
+        m.cfg.tab = Tab::Shell;
+        prepare(&mut m);
+        m.cfg.active = true;
+        editor_key(&mut m, &key(Key::End, None, false));
+        type_text(&mut m, " ");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&shell, "{\"theirs\": true}\n").unwrap();
+        apply(&mut m, "cfg:save", CtlVal::Click);
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\"theirs\": true}\n", "their version is kept");
+        assert!(m.notice.as_ref().is_some_and(|n| n.error && n.text.contains("changed on disk")), "{:?}", m.notice);
+        assert!(buf_mut(&mut m).disk_changed);
+        apply(&mut m, "cfg:save", CtlVal::Click);
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\"a\": 1} \n", "the explicit second save overwrites");
+    }
+
     #[test]
     fn typing_saves_validates_and_reverts() {
         let mut m = model("save");

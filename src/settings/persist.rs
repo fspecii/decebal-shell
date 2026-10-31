@@ -1182,6 +1182,72 @@ mod tests {
     }
 
     #[test]
+    fn session_saves_from_runner_threads_are_ordered_and_the_newest_one_is_left() {
+        use crate::settings::system::session::Session;
+        let d = tmpdir("session-order");
+        let (release, entered) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let q: Recorded = Default::default();
+        let p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hold_first(release.clone(), entered.clone()));
+        let latest = Arc::new(Mutex::new(Session { cursor_size: Some(24), ..Session::default() }));
+        let h = p.handle();
+        let save = |h: Handle, latest: Arc<Mutex<Session>>, d: PathBuf| std::thread::spawn(move || crate::settings::system::save_session_ordered(&h, &d, &latest));
+        let a = save(h.clone(), latest.clone(), d.clone());
+        while entered.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // the user changes it again while the first save is held; a second runner thread saves
+        latest.lock().unwrap().cursor_size = Some(48);
+        let b = save(h.clone(), latest.clone(), d.clone());
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!b.is_finished() && !a.is_finished(), "runner threads wait for their turn (never the UI)");
+        release.store(true, Ordering::SeqCst);
+        a.join().unwrap().unwrap();
+        b.join().unwrap().unwrap();
+        assert_eq!(Session::load(&d).cursor_size, Some(48));
+        assert!(std::fs::read_to_string(Session::sh_path(&d)).unwrap().contains("48"));
+        assert!(done(&q).is_empty(), "handle results go to their owner, not the window");
+        let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains("tmp")).collect();
+        assert!(left.is_empty(), "{left:?}");
+        drop(p);
+        // no worker (headless): the handle runs it right here
+        latest.lock().unwrap().cursor_size = Some(32);
+        crate::settings::system::save_session_ordered(&Handle::default(), &d, &latest).unwrap();
+        assert_eq!(Session::load(&d).cursor_size, Some(32));
+    }
+
+    #[test]
+    fn the_wallhaven_key_is_private_from_creation_and_never_in_a_result_debug_or_log_line() {
+        use crate::settings::wallhaven::store::{self, Secret};
+        let d = tmpdir("wh-key");
+        let dirs = store::Dirs::under(&d);
+        let key = "AbCdEfGh12345678AbCdEfGh12345678";
+        let secret = Secret::new(key).unwrap();
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn(q.clone(), Arc::new(|| {}));
+        let (dd, k) = (dirs.clone(), secret.clone());
+        let job = Job::Task(Task { label: "wallhaven-key", writes: Vec::new(), run: Box::new(move || store::save_secret(&dd, &k).map(|()| Value::Null)), reply: None });
+        let shown = format!("{job:?}");
+        assert!(!shown.contains(key), "{shown}");
+        p.submit(job).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(10)));
+        let all = done(&q);
+        let shown = format!("{all:?}");
+        assert!(matches!(all[0].outcome, Outcome::Task(Ok(Value::Null))) && !shown.contains(key), "{shown}");
+        let f = dirs.key_file();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), format!("{key}\n"));
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&f).unwrap().permissions().mode() & 0o777, 0o600);
+        // a second save over it: still no backup copy of the secret anywhere
+        let (dd, k) = (dirs.clone(), Secret::new("ZyXwVuTs98765432").unwrap());
+        p.submit(Job::Task(Task { label: "wallhaven-key", writes: Vec::new(), run: Box::new(move || store::save_secret(&dd, &k).map(|()| Value::Null)), reply: None })).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(10)));
+        let names: Vec<String> = std::fs::read_dir(&dirs.config).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["wallhaven.key"], "no backup or temp copy");
+        assert_eq!(std::fs::metadata(&f).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(!format!("{secret:?}").contains(key));
+    }
+
+    #[test]
     fn a_theme_transaction_that_fails_midway_restores_every_byte() {
         let (d, src, mut paths) = crate::theme::engine::apply::tests::sandbox("persist-rollback");
         let rdwm = "# my config\n[general]\nborder_px = 2\nunknown_future = \"keep\"\n";
