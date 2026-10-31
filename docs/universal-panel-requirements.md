@@ -40,3 +40,23 @@ must coordinate engine needs with the universal-panel owner. Parent reviews,
 builds and deploys accepted results; worker threads do not change the live session.
 
 This document records the intended result, not a claim that it is implemented.
+
+## Integration version and package identity
+
+The coordinated panel/branding feature release is **0.3.0**. The currently
+installed 0.2.1 release does not implement this framework. New packages using
+`[bar] applets`, `[branding]`, side docks or newly supported panel edges must
+require 0.3.0. The panel branch owns the version change; this document does not
+change the installed version or establish acceptance of that branch.
+
+Theme identity is declarative: `[branding]` supplies `logo`, `logo_tint`,
+`launcher_label` and `desktop_label`. A Plasma or GNOME package must not silently
+inherit Windows squares or Apple/Finder identity merely because it uses an
+existing renderer. Package images stay within the package root; missing icon
+assets need a defined fallback. Launcher style overrides remain independent of
+theme selection, while an unset override follows the theme.
+
+Acceptance includes selecting a second search result with both keyboard and
+pointer, then using its detail Open/Pin actions: the action must refer to the
+visible selection. Launcher output/anchor options must place the actual window
+on the requested secondary output, rather than only storing those options.

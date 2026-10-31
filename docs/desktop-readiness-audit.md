@@ -16,7 +16,15 @@ physical hardware readiness.
   pixel-identical optimized whole-Dashboard captures. Hot text-size regression
   compares changed scales and minute transitions against fresh preparation.
 - Optimized launcher tests prove successful intentional toggles while genuine
-  SIGTERM failures remain reported. Notification icon-pack changes refresh
+  SIGTERM failures remain reported. Follow-up `58a21c6` serializes overlapping
+  requests: a privately stopped holder reproduces coalescing before the fix;
+  odd/even concurrent bursts preserve final open/closed state afterward. Both
+  launchers passed the optimized lifecycle and concurrency fixtures and were
+  installed in both user binary folders. Evidence:
+  `/var/tmp/launcher-concurrent-optimized/result.json` and
+  `/var/tmp/launcher-toggle-serial-optimized/result.json`; deployment backup:
+  `~/.local/state/decebal/deployments/launcher-serial-20261031-030027/`.
+  Notification icon-pack changes refresh
   banners/history while preserving image hints, deadlines and stored history.
 - Workspace HUD watcher is single across concurrent starts and WM reconnects.
   Native regression passes; four old live watchers were replaced by one.
