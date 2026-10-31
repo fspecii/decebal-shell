@@ -214,6 +214,13 @@ impl<A: WindowApp + 'static> State<A> {
         self.surf.commit();
     }
 
+    fn paint_pending(&mut self) {
+        if self.dirty && self.configured && !self.exit {
+            self.dirty = false;
+            self.draw();
+        }
+    }
+
     fn on_wake(&mut self) {
         let resp = self.app.tick();
         self.apply(resp);
@@ -328,18 +335,21 @@ pub fn run<A: WindowApp + 'static>(app: A) -> Result<(), Error> {
 
     WaylandSource::new(conn.clone(), queue).insert(loop_handle).map_err(|e| Error::Loop(e.to_string()))?;
 
-    let signal = event_loop.get_signal();
-    event_loop
-        .run(None, &mut state, |state| {
-            if state.dirty && state.configured && !state.exit {
-                state.dirty = false;
-                state.draw();
-            }
-            if state.exit {
-                signal.stop();
-            }
-        })
-        .map_err(|e| Error::Loop(e.to_string()))?;
+    // The roundtrips may already have delivered configure. Calloop dispatches before its
+    // callback, so a quiet compositor need not send another event to release that first
+    // dirty frame. Paint it now, after app/AT initialization and before blocking dispatch.
+    state.paint_pending();
+    if !state.exit {
+        let signal = event_loop.get_signal();
+        event_loop
+            .run(None, &mut state, |state| {
+                state.paint_pending();
+                if state.exit {
+                    signal.stop();
+                }
+            })
+            .map_err(|e| Error::Loop(e.to_string()))?;
+    }
     match state.error.take() {
         Some(e) => Err(e),
         None => Ok(()),
