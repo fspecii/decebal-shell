@@ -410,7 +410,6 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
 /// Every setting of the tabs, for the search box: (view, label, extra words). The pane test below checks that every row the
 /// tabs draw is covered, so a new setting cannot silently be unfindable.
 pub const INDEX: &[(Tab, Section, &str, &str)] = &[
-    (Tab::Customise, Section::Icons, "Download matching packs", "icons cursors theme packs download licence verified pinned sources background"),
     // Theme
     (Tab::Theme, Section::Colours, "Layout", "style macos windows caelestia shell layout bar dock look"),
     (Tab::Theme, Section::Colours, "Themes", "theme desktop design packages cards apply preview export duplicate delete install create macos windows 11 caelestia catalog"),

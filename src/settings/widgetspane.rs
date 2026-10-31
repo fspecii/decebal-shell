@@ -241,14 +241,8 @@ pub(super) fn save(m: &mut Model, mut widgets: Value, saved: &str) -> bool {
     }
     let cfg = WidgetsConfig::from_json(&json!({"widgets": widgets}));
     if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == Place::Desktop) {
-        #[cfg(feature = "x11")]
         if let Err(e) = crate::widgets::host::ensure_running() {
             m.say(format!("Widget choices saved, but the desktop could not display them: {e}"), true);
-            return true;
-        }
-        #[cfg(not(feature = "x11"))]
-        {
-            m.say("Widget choices saved. Desktop widgets require an X11 session in this build.", true);
             return true;
         }
     }

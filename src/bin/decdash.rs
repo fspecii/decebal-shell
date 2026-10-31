@@ -7,7 +7,7 @@ const HELP: &str = "decdash - dashboard popup (overview, media, performance)
 
 Usage: decdash [TAB] [--x PX] [--top PX] [--help | --version]
 
-Opens a card under the menu bar (an override-redirect popup on X11 that grabs the keyboard and pointer).
+Opens a card under the menu bar (an override-redirect popup on X11 that grabs the keyboard and pointer; a layer-shell card on Wayland, closed by Escape or a click outside).
 Running decdash again while it is open closes it, so one hotkey bound to `decdash` toggles it.
 
 TAB is overview (default), media or performance (also 1, 2, 3).
@@ -57,7 +57,7 @@ fn main() {
     let Some(_guard) = decebal::single::acquire("decdash") else {
         return;
     };
-    if let Err(e) = decebal::backend::x11_window::run(Dash::new(tab, x, top)) {
+    if let Err(e) = decebal::window_app::run_window(Dash::new(tab, x, top)) {
         decebal::log_error!("fatal: {e}");
         eprintln!("decdash: {e}");
         std::process::exit(1);
