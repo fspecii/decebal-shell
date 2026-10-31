@@ -686,7 +686,11 @@ pub(crate) fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, material: 
     }
     let fallback = match name {
         "contrast" => "dark-mode",
-        "gear" => "switches",
+        "gear" | "settings" => "switches",
+        "memory" | "developer_board" | "dashboard" => "chart",
+        "sun" => "sun-small",
+        "layout" => "grid",
+        "battery" => "power",
         "do_not_disturb_on" => "moon",
         _ => name,
     };

@@ -162,10 +162,12 @@ fn cluster_second_pass_keeps_a_real_overflow_target_when_padding_would_hide_it()
         assert!(lay.hit(more.x + more.w / 2.0, more.y + more.h / 2.0).is_some());
         assert!(lay.groups.iter().all(|g| g.x >= 11.0 - 0.01 && g.x + g.w <= 149.0 + 0.01));
         assert!(!bar.dux_hidden().is_empty(), "hidden controls remain in the overflow model");
-        let mut pm = Pixmap::new(28, 28).unwrap();
         bar.symbols = crate::menubar::symbols::SymbolCache::default();
-        bar.dux_symbol(&mut pm, "apps", Item { kind: Kind::Tray(Tray::More), x: 0.0, y: 0.0, w: 28.0, h: 28.0 }, false);
-        assert!(pm.data().chunks_exact(4).any(|p| p[3] != 0), "overflow is visible without package fonts");
+        for name in ["apps", "magnifyingglass", "memory", "developer_board", "dashboard", "sun", "layout", "battery", "settings"] {
+            let mut pm = Pixmap::new(28, 28).unwrap();
+            bar.dux_symbol(&mut pm, name, Item { kind: Kind::Tray(Tray::More), x: 0.0, y: 0.0, w: 28.0, h: 28.0 }, false);
+            assert!(pm.data().chunks_exact(4).any(|p| p[3] != 0), "{name} is visible without package fonts");
+        }
         reset();
     }
 }
