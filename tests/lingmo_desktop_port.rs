@@ -370,7 +370,8 @@ fn plan(tag: &str, user_rdwm: &str, user_shell: Option<&str>) -> (apply::Plan, P
 
 #[test]
 fn applying_keeps_tiling_proportions_wallpaper_and_the_users_panel_choices() {
-    let (plan, paths, dir) = plan("apply", &format!("{USER_RDWM}[wallpaper]\nimage = \"/private/photo.jpg\"\nmode = \"center\"\n"), Some("{\"bar\":{\"edge\":\"left\",\"applets\":{\"weather\":true}}}"));
+    let (plan, paths, dir) =
+        plan("apply", &format!("{USER_RDWM}[wallpaper]\nimage = \"/private/photo.jpg\"\nmode = \"center\"\n"), Some("{\"bar\":{\"edge\":\"left\",\"applets\":{\"weather\":true}}}"));
     let config = &plan.writes.iter().find(|w| w.path == paths.rdwm_config).unwrap().new;
     assert!(config.contains("/private/photo.jpg"), "wallpaper preserved");
     for kept in ["mfact = 0.73", "nmaster = 2", "smart_gaps = true", "layouts = [\"monocle\", \"tile\"]"] {
@@ -505,7 +506,10 @@ fn asset_pack_catalogue_follows_the_documented_contract_and_matches_the_pins() {
     // the remaining fallback is disclosed in the catalogue itself, and no link source is claimed for text aliases the installer cannot read
     let description = packs.iter().find(|p| p["id"] == "lingmo-icons").unwrap()["description"].as_str().unwrap();
     let raw_catalogue = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/desktop-ports/lingmo/asset-packs.toml")).unwrap();
-    assert!(raw_catalogue.contains("14137 REGULAR git blobs") && raw_catalogue.contains("0 symlinks") && raw_catalogue.contains("only 32 exist"), "the full disclosure sits in the catalogue's comments");
+    assert!(
+        raw_catalogue.contains("14137 REGULAR git blobs") && raw_catalogue.contains("0 symlinks") && raw_catalogue.contains("only 32 exist"),
+        "the full disclosure sits in the catalogue's comments"
+    );
     assert!(description.len() <= 400, "the shared validator limits descriptions to 400 characters");
     for must in ["DISCLOSED", "links/", "not git symlinks", "@2x/@3x", "DEGRADED", "fall back to breeze or hicolor"] {
         assert!(description.contains(must), "the description must say: {must}");
@@ -536,10 +540,51 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
 
-const OLD_STYLES: &[&str] = &["macos", "macos-light", "classic", "windows", "windows-light", "adwaita", "adwaita-light", "breeze", "arc", "materia", "nord", "gruvbox", "dracula", "minimal", "borderonly", "xfce-default", "xfce-daloa", "xfce-kokodi"];
+const OLD_STYLES: &[&str] = &[
+    "macos",
+    "macos-light",
+    "classic",
+    "windows",
+    "windows-light",
+    "adwaita",
+    "adwaita-light",
+    "breeze",
+    "arc",
+    "materia",
+    "nord",
+    "gruvbox",
+    "dracula",
+    "minimal",
+    "borderonly",
+    "xfce-default",
+    "xfce-daloa",
+    "xfce-kokodi",
+];
 const NEW_STYLES: &[&str] = &[
-    "macos", "macos-light", "classic", "windows", "windows-light", "adwaita", "adwaita-light", "breeze", "arc", "materia", "nord", "gruvbox", "dracula", "minimal", "borderonly", "xfce-default", "xfce-daloa", "xfce-kokodi",
-    "openkylin", "openkylin-dark", "deepin", "deepin-dark", "lingmo", "lingmo-dark",
+    "macos",
+    "macos-light",
+    "classic",
+    "windows",
+    "windows-light",
+    "adwaita",
+    "adwaita-light",
+    "breeze",
+    "arc",
+    "materia",
+    "nord",
+    "gruvbox",
+    "dracula",
+    "minimal",
+    "borderonly",
+    "xfce-default",
+    "xfce-daloa",
+    "xfce-kokodi",
+    "openkylin",
+    "openkylin-dark",
+    "deepin",
+    "deepin-dark",
+    "lingmo",
+    "lingmo-dark",
 ];
 
 fn schema_reply(styles: &[&str]) -> String {
