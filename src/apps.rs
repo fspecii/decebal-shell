@@ -138,7 +138,7 @@ pub fn save_cache(apps: &[AppEntry]) {
     let _ = publish_cache(&path, text.as_bytes());
 }
 
-// Each refresh owns its staging file: Launchpad and Spotlight can refresh together.
+// Each refresh owns its staging file, including concurrent callers of this shared API.
 // Readers see a whole old or new cache, never a file another writer is truncating.
 fn publish_cache(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
