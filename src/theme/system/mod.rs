@@ -432,6 +432,8 @@ pub struct Report {
     pub unchanged: usize,
     pub notes: Vec<String>,
     pub warnings: Vec<String>,
+    /// What the GTK publication decided for the X11 XSETTINGS manager (`None`: no GTK publication ran).
+    pub xsettings: Option<gtk::XsettingsAction>,
 }
 
 pub struct Ctx<'a> {
@@ -1208,6 +1210,10 @@ fn publish_assets_locked(env: &Env, cfg: &Config) -> Result<Report, String> {
         report.applied.push(id.to_string());
     }
     report.warnings.extend(gtk::missing_themes(cfg, env));
+    // Same post-commit step as a full GTK apply: a first icon-only publication must not leave running GTK apps without a
+    // manager. It only starts, keeps or stops Decebal's XSETTINGS manager; the asset writes above stay icon / cursor keys only.
+    let gtk_applied = report.applied.iter().any(|t| t == "gtk");
+    gtk::after_gtk_publication(env, cfg, gtk_applied, &mut report);
     st.save(&env.state_dir)?;
     files::write_atomic(&env.state_dir.join("last-result.json"), &json!({"error": null, "warnings": report.warnings, "applied": report.applied, "intent": "assets"}).to_string())?;
     Ok(report)

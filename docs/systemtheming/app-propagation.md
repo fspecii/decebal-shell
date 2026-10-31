@@ -138,6 +138,36 @@ The manager is `decthemectl system xsettings serve --display D --ini PATH`, so t
     needs reopening there. Dark/light follows `color-scheme`.
   - Wayland GTK apps use the settings portal, not this manager.
 
+**Icon-only publications run the same step.** The icon / cursor publication (`publish_assets`, Assets intent) runs the same
+post-commit decision as a full GTK apply (`gtk::after_gtk_publication`), after its icon / cursor writes and before
+`last-result.json`. A first icon-only selection therefore no longer leaves running GTK apps without a manager until a later
+theme apply.
+
+| Condition | Decision |
+| --- | --- |
+| GTK actually published, X11 display, not Wayland, no `DECEBAL_XSETTINGS=0`, `gtk.xsettings` on | Ensure Decebal's manager |
+| Same, but `gtk.xsettings` off | Stop Decebal's own manager |
+| GTK not published, or no display, Wayland, or suppressed | Skip: a running manager is left as it is |
+
+* A foreign manager is never touched.
+* The asset writes stay icon / cursor keys only.
+* The manager publishes the `settings.ini` values GTK already reads at startup, so apps see no theme, colour or font change from
+  it.
+* The decision is recorded in the report (`Report::xsettings`).
+
+Native scenario for this path (UNRUN):
+
+1. Use an owned private Xvfb with no XSETTINGS owner, a fresh private HOME (no prior full apply), the `gtk` target on and
+   `DECEBAL_XSETTINGS` unset.
+2. Start a GTK 3 and a GTK 4 probe.
+3. Publish an installed icon theme through the Assets intent: `decthemectl apply-system --debounced NONCE --shell-json PATH`, after
+   queueing an Assets ticket.
+4. Expect:
+   - `system xsettings status` shows Decebal's manager;
+   - both probes' `gtk-icon-theme-name` changes live (icon pixels change in place);
+   - no `gtk-theme-name`, colour or font keys were written by this step.
+5. Repeat with `gtk.xsettings` off: Decebal's manager stops and a foreign owner stays.
+
 **Acceptance commands (individual evidence below; ownership runtime checks remain outstanding):**
 
 ```sh

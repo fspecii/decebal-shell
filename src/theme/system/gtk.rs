@@ -748,54 +748,93 @@ impl Target for Gtk {
     fn after(&self, cx: &mut super::Ctx) {
         cx.report.warnings.extend(missing_themes(cx.cfg, cx.env));
         // Only after the GTK files were committed: the manager publishes what was just written.
-        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
-        let suppressed = std::env::var("DECEBAL_XSETTINGS").is_ok_and(|v| v == "0");
-        if let Some(display) = cx.env.display.clone().filter(|d| super::xsettings::wanted(Some(d), wayland, suppressed, true)) {
-            if cx.cfg.option("gtk.xsettings") {
-                ensure_xsettings(cx, &display);
-            } else {
-                // Switched off later: Decebal's own manager stops; another manager is never touched.
-                stop_xsettings(cx, &display);
-            }
-        }
+        after_gtk_publication(cx.env, cx.cfg, true, cx.report);
     }
 
     fn undo(&self, cx: &mut super::Ctx) {
         if let Some(display) = cx.env.display.clone().filter(|_| !cfg!(test)) {
-            stop_xsettings(cx, &display);
+            stop_xsettings(&display, cx.report);
         }
         super::gsettings_restore(cx, "gtk");
     }
 }
 
+/// What a committed GTK publication does about the X11 XSETTINGS manager.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XsettingsAction {
+    /// Nothing: no GTK publication, no X display, a Wayland session, or `DECEBAL_XSETTINGS=0`. A running manager is left as it is.
+    Skip,
+    /// Make sure Decebal's manager publishes the GTK settings on this display (unless another manager owns it).
+    Ensure(String),
+    /// The user switched "Live GTK settings on X11" off: stop Decebal's own manager (another manager is never touched).
+    Stop(String),
+}
+
+/// The decision, from facts only (unit tested): a GTK publication must have happened, on an X11 display that is not suppressed;
+/// then the `gtk.xsettings` option chooses between running and stopping Decebal's manager.
+pub fn xsettings_action(display: Option<&str>, wayland: bool, suppressed: bool, option_on: bool, gtk_applied: bool) -> XsettingsAction {
+    match display.filter(|d| !d.is_empty()) {
+        Some(d) if gtk_applied && !wayland && !suppressed => {
+            if option_on {
+                XsettingsAction::Ensure(d.to_string())
+            } else {
+                XsettingsAction::Stop(d.to_string())
+            }
+        }
+        _ => XsettingsAction::Skip,
+    }
+}
+
+/// The session facts [`xsettings_action`] needs: a Wayland session, and the `DECEBAL_XSETTINGS=0` suppression.
+fn session_gates() -> (bool, bool) {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
+    (wayland, std::env::var("DECEBAL_XSETTINGS").is_ok_and(|v| v == "0"))
+}
+
+/// The post-commit step shared by a full GTK apply ([`Target::after`]) and the icon / cursor publication: decide, record the decision
+/// in the report, and act on it (unit tests only decide). Notes and warnings land in `report` before the caller publishes its result.
+pub fn after_gtk_publication(env: &Env, cfg: &Config, gtk_applied: bool, report: &mut super::Report) {
+    let (wayland, suppressed) = session_gates();
+    let action = xsettings_action(env.display.as_deref(), wayland, suppressed, cfg.option("gtk.xsettings"), gtk_applied);
+    report.xsettings = Some(action.clone());
+    if cfg!(test) {
+        return;
+    }
+    match action {
+        XsettingsAction::Skip => {}
+        XsettingsAction::Ensure(display) => ensure_xsettings(env, &display, report),
+        XsettingsAction::Stop(display) => stop_xsettings(&display, report),
+    }
+}
+
 #[cfg(feature = "x11")]
-fn ensure_xsettings(cx: &mut super::Ctx, display: &str) {
+fn ensure_xsettings(env: &Env, display: &str, report: &mut super::Report) {
     use super::xsettings::Status;
-    let ini = cx.env.config_home.join("gtk-3.0/settings.ini");
+    let ini = env.config_home.join("gtk-3.0/settings.ini");
     match super::xsettings::ensure(display, &ini) {
-        Ok(Status::Started { pid }) => cx.report.notes.push(format!("GTK: started Decebal's XSETTINGS manager (pid {pid}); open GTK 3 / GTK 4 apps follow theme changes")),
+        Ok(Status::Started { pid }) => report.notes.push(format!("GTK: started Decebal's XSETTINGS manager (pid {pid}); open GTK 3 / GTK 4 apps follow theme changes")),
         Ok(Status::Running { .. }) => {}
-        Ok(Status::Foreign) => cx.report.notes.push("GTK: another XSETTINGS manager runs on this display; open GTK apps follow it, Decebal leaves it alone".into()),
-        Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}; open GTK apps keep their theme until reopened")),
+        Ok(Status::Foreign) => report.notes.push("GTK: another XSETTINGS manager runs on this display; open GTK apps follow it, Decebal leaves it alone".into()),
+        Err(e) => report.warnings.push(format!("GTK: XSETTINGS manager: {e}; open GTK apps keep their theme until reopened")),
     }
 }
 
 #[cfg(not(feature = "x11"))]
-fn ensure_xsettings(_cx: &mut super::Ctx, _display: &str) {}
+fn ensure_xsettings(_env: &Env, _display: &str, _report: &mut super::Report) {}
 
 /// Stops Decebal's XSETTINGS manager (proved by its marker); any other manager is left alone.
-fn stop_xsettings(cx: &mut super::Ctx, display: &str) {
+fn stop_xsettings(display: &str, report: &mut super::Report) {
     #[cfg(feature = "x11")]
     {
         match super::xsettings::stop(display) {
-            Ok(true) => cx.report.notes.push("GTK: Decebal's XSETTINGS manager stopped".into()),
+            Ok(true) => report.notes.push("GTK: Decebal's XSETTINGS manager stopped".into()),
             Ok(false) => {}
-            Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}")),
+            Err(e) => report.warnings.push(format!("GTK: XSETTINGS manager: {e}")),
         }
     }
     #[cfg(not(feature = "x11"))]
     {
-        let _ = (cx, display);
+        let _ = (display, report);
     }
 }
 
@@ -1197,6 +1236,50 @@ mod tests {
         let mut own = Config::default();
         own.set_option("gtk.theme", false);
         assert!(user_css(&a, &own, false, false).contains(&format!("@define-color theme_bg_color {};", a.bg.hex())));
+    }
+
+    #[test]
+    fn xsettings_follow_a_gtk_publication_only_on_unsuppressed_x11_and_honour_the_option() {
+        use XsettingsAction::*;
+        assert_eq!(xsettings_action(Some(":1"), false, false, true, true), Ensure(":1".into()));
+        assert_eq!(xsettings_action(Some(":1"), false, false, false, true), Stop(":1".into()), "option switched off: stop ours");
+        assert_eq!(xsettings_action(Some(":1"), false, false, true, false), Skip, "no GTK publication ran (target off or skipped)");
+        assert_eq!(xsettings_action(Some(":1"), false, false, false, false), Skip, "nor is a manager stopped without one");
+        assert_eq!(xsettings_action(None, false, false, true, true), Skip, "no X display");
+        assert_eq!(xsettings_action(Some(""), false, false, true, true), Skip);
+        assert_eq!(xsettings_action(Some(":1"), true, false, true, true), Skip, "Wayland: the portal, not XSETTINGS");
+        assert_eq!(xsettings_action(Some(":1"), false, true, false, true), Skip, "DECEBAL_XSETTINGS=0 leaves any manager as it is");
+    }
+
+    /// The icon-only publication runs the same post-commit step as a full apply, after its icon / cursor writes and only when GTK
+    /// actually published; it never writes theme, colour or font keys.
+    #[test]
+    fn an_icon_only_publication_decides_the_xsettings_manager_like_a_full_apply() {
+        let d = tmp("assets-xsettings");
+        let (mut env, _) = env(&d, &[]);
+        env.display = Some(":5".into());
+        let icons = env.data_home.join("icons/Papirus");
+        std::fs::create_dir_all(&icons).unwrap();
+        std::fs::write(icons.join("index.theme"), "[Icon Theme]\nName=Papirus\n").unwrap();
+        let mut cfg = Config { icon_theme: Some("Papirus".into()), ..Config::default() };
+        let r = super::super::publish_assets_locked(&env, &cfg).unwrap();
+        let expect = session_gates();
+        let want = xsettings_action(Some(":5"), expect.0, expect.1, true, true);
+        assert_eq!(r.xsettings, Some(want), "icons published through GTK: same decision as a full apply");
+        let ini = std::fs::read_to_string(env.config_home.join("gtk-3.0/settings.ini")).unwrap();
+        assert_eq!(ini, "[Settings]\ngtk-icon-theme-name=Papirus\n", "still icon keys only");
+        cfg.set_option("gtk.xsettings", false);
+        let r = super::super::publish_assets_locked(&env, &cfg).unwrap();
+        assert_eq!(r.xsettings, Some(xsettings_action(Some(":5"), expect.0, expect.1, false, true)), "the opt-out is honoured here too");
+        cfg.set_option("gtk.xsettings", true);
+        cfg.targets.insert("gtk".into(), false);
+        let (mut env2, _) = super::super::testutil::env(&d.join("qt-only"), &["qt6ct"]);
+        env2.display = Some(":5".into());
+        let r = super::super::publish_assets_locked(&env2, &cfg).unwrap();
+        assert!(!r.applied.contains(&"gtk".to_string()));
+        assert_eq!(r.xsettings, Some(XsettingsAction::Skip), "GTK target off: no manager started or stopped");
+        let full = super::super::apply(&env, &Config::default(), &palette(true), &super::super::Opts { only: Some(vec!["gtk".into()]), ..Default::default() }).unwrap();
+        assert_eq!(full.xsettings, Some(xsettings_action(Some(":5"), expect.0, expect.1, true, true)), "a full apply records the same decision");
     }
 
     #[test]
