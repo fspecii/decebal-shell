@@ -13,6 +13,9 @@ Usage:
   decwidgets status [--json]        host readiness, saved desktop widgets and definition errors
   decwidgets list                  shipped samples, your widgets, and what is placed
   decwidgets data                  the data sources a widget can read ({cpu.usage:pct}, {clock:%H:%M}...)
+  decwidgets data --json [--group notes|timer]...
+                                   one-shot snapshot of the resolved notes.*/timer.* values (schema decebal-widget-data/1;
+                                   read-only, not live; includes private note title/excerpt only when notes is requested)
   decwidgets validate FILE [--user] [--allow-exec]
                                    check a widget file (default: as a theme-supplied widget, the strictest rules)
   decwidgets render NAME|FILE --png OUT [--live] [--bg #rrggbb|IMAGE] [--margin PX] [--light]
@@ -30,8 +33,13 @@ fn die(msg: &str) -> ! {
 }
 
 fn main() {
-    decebal::compat::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "data") && args.iter().any(|a| a == "--json") {
+        // One-shot read-only snapshot: no log file, no old-name data migration, no state writes.
+        decebal::compat::apply_env_fallbacks();
+    } else {
+        decebal::compat::init();
+    }
     let src = Source::discover();
     match args.first().map(String::as_str) {
         None | Some("daemon") => daemon(&src),
@@ -46,6 +54,19 @@ fn main() {
         }
         Some("-h" | "--help" | "help") => println!("{HELP}"),
         Some("-V" | "--version") => println!("decwidgets {}", env!("CARGO_PKG_VERSION")),
+        Some("data") if args.iter().any(|a| a == "--json") => {
+            let mut groups = Vec::new();
+            let mut rest = args[1..].iter();
+            while let Some(arg) = rest.next() {
+                match arg.as_str() {
+                    "--json" => {}
+                    "--group" => groups.push(rest.next().cloned().unwrap_or_else(|| die("--group needs notes or timer"))),
+                    other => die(&format!("data --json: unexpected argument {other:?}")),
+                }
+            }
+            let groups = decebal::widgets::data_json::parse_groups(&groups).unwrap_or_else(|e| die(&e));
+            println!("{}", decebal::widgets::data_json::snapshot(&groups));
+        }
         Some("data") => {
             for s in data::SOURCES {
                 println!("{:<18} {:<9} {}", s.path, s.ty, s.desc);

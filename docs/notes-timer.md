@@ -55,3 +55,51 @@ sample data and never read private notes. Existing widget layouts remain intact.
 
 CLI: `decnotes [--new]`, `dectimer [--task TITLE]`, `dectimer autostart`, `decwidgets add builtin:quick-note`,
 `decwidgets add builtin:timer-card`. Both apps support `--help` and `--version`.
+
+## Widget data snapshot for automation
+
+`decwidgets data --json [--group notes|timer]...` prints the `notes.*` and `timer.*`
+values the Quick note and Timer widgets would show, resolved once through the same
+data path the widget painter uses. Without `--group`, both groups are included.
+
+- **Snapshot, not live.** It reads storage once and exits. It starts no widget host,
+  watcher, worker, sampler or command, and never claims, completes or notifies an
+  expired timer.
+- **Read-only.** Notes are listed and read, and the timer state file is read.
+  Nothing is created, locked, repaired or migrated, and nothing is written to the
+  log: this command skips the usual start/exit log line and the one-time
+  `macshell`→`decebal` data migration.
+- **Private content only on request.** `notes.title` and `notes.excerpt` come from
+  your latest note, so ask for `--group timer` alone if you do not want them. The
+  output goes only to stdout.
+- **Bounded.** Exactly the 8 fields below (fewer with `--group`). Text uses the
+  painter's own bounds (note title 38 and excerpt 110 characters, whitespace
+  collapsed), with a defensive 256-character cap per value. Values are literal text,
+  so `{cpu.usage}` in a note stays as written.
+- **Errors.** An unknown group or argument exits with status 1 and a message on
+  stderr. Unreadable or unsafe stores report the same fallback values the widgets
+  show, such as `Notes unavailable` or `Timer unavailable`, and exit 0.
+
+Schema `decebal-widget-data/1`:
+
+```json
+{"schema":"decebal-widget-data/1","snapshot":true,"live":false,"generated_unix":1793440619,
+ "groups":["notes","timer"],
+ "fields":{"notes.count":2,"notes.title":"A useful thought","notes.excerpt":"…","notes.status":"Saved on this device",
+           "timer.remaining":"00:04:59","timer.title":"Focus","timer.status":"Paused","timer.progress":0.003}}
+```
+
+| Field | Value |
+| --- | --- |
+| `notes.count` | Number of readable notes |
+| `notes.title`, `notes.excerpt` | The latest note (`Untitled note` when blank; placeholders when there is none) |
+| `notes.status` | `Saved on this device`, `Some unreadable notes preserved` or `Notes unavailable` |
+| `timer.remaining` | `HH:MM:SS` (`--:--` when unavailable) |
+| `timer.title` | The countdown label |
+| `timer.status` | `Ready`, `Running`, `Paused`, `Complete` or `Timer unavailable` |
+| `timer.progress` | Elapsed fraction, 0 to 1 |
+
+A field that cannot be represented is `null`. Other widget groups (system,
+media, weather and so on) are not supported by `--json`, because sampling them
+would need background workers. The private fixtures are in
+`tests/widget-data-json.py`.

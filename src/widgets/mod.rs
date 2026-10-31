@@ -14,6 +14,7 @@ pub mod actions;
 pub mod catalog;
 pub mod config;
 pub mod data;
+pub mod data_json;
 pub mod dsl;
 pub mod fetch;
 pub mod fmt;
