@@ -442,6 +442,17 @@ the real `decthemectl` against `git archive` tarballs and a clone of the pinned 
 * Papirus-Dark (folder links into `../Papirus`), from the GNOME owner's cached archive (sha256 = their pin) into a new
   private root: 210 of 210 directories (12 before link-source expansion), 0 links leaving the pack, `complete: yes`
   with `link_source_trees`, `verify` ok, 16 of 16 sample icons resolved.
+* Deepin nirvana fetched with `git_url` (no clone, no archive) from github.com at the pinned a0c79e3 / tree fb56b39d,
+  with the proposed catalogue data plus `git_url`, by the real `decthemectl` in a private HOME and root, three times
+  (2026-10-31): 3 requests each, 20.9 MB in all (capabilities 191 B, the commit's 131 trees ~435 KB, the pinned
+  objects ~20.47 MB: 862 objects, 1 tree, 859 blobs, 2 deltas); every pin found below the commit; `tree yes`,
+  `commit yes`, licences verified by blob, `complete: yes`; the same 1 435 of 1 439 icons and the same 4 refusals as
+  the clone; content hash `0714a442...` **identical to the `--source-dir` installs**; `verify` ok; no external tool run.
+  Pack bytes differ by a few hundred bytes between runs (the forge recompresses), the content does not. The fetch
+  takes about 2 s; the rest of the ~4 min (debug build) is the DCI conversion. Refused with nothing published and no
+  staging left: a tree pin the commit does not have (after 2 requests, no content fetched), an unknown commit
+  (`not our ref`), a missing repository (HTTP 401) and a host that is no git server (HTTP 404). The full repository
+  is ~976 MiB packed.
 
 Upstream symlinks that dangle in the pinned commit itself (e.g. Lingmo `ocean-dark/apps/scalable ->
 ../../Crule/apps/scalable`, Deepin `uos-activator.svg -> deepin-license-activator.svg`) are dropped with a warning.
