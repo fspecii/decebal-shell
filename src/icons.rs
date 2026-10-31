@@ -189,6 +189,7 @@ fn build_at_native_scale(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Pix
 fn control_fallback(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Option<Pixmap> {
     let name = match id {
         "applications-all-symbolic" => "apps",
+        "bookmarks" => "bookmarks",
         "compass" => "folder",
         "system-suspend" => "moon",
         "system-suspend-hibernate" => "snowflake",
@@ -220,6 +221,7 @@ mod tests {
         let mut shapes = std::collections::HashSet::new();
         for id in [
             "applications-all-symbolic",
+            "bookmarks",
             "compass",
             "system-suspend",
             "system-suspend-hibernate",
