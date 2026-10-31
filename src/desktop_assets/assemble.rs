@@ -19,6 +19,7 @@ pub const PROVENANCE: &str = ".decebal-asset.json";
 pub const MAX_METADATA: u64 = 64 << 10;
 /// Nested folder-link expansions followed through `link_sources`.
 pub const MAX_EXPANSION_DEPTH: usize = 8;
+const MAX_DROPPED_LINK_WARNINGS: usize = 20;
 
 #[derive(Debug, Clone)]
 pub struct Spec {
@@ -73,6 +74,13 @@ pub struct Built {
     pub missing_dirs_sample: Vec<String>,
     pub inherits: Vec<String>,
     pub content_hash: String,
+}
+
+fn record_dropped_link(b: &mut Built, why: impl FnOnce() -> String) {
+    b.dropped_links += 1;
+    if b.dropped_links <= MAX_DROPPED_LINK_WARNINGS {
+        b.warnings.push(why());
+    }
 }
 
 fn hidden(rel: &str) -> bool {
@@ -301,8 +309,7 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
                         b.links += 1;
                     }
                     Some(trel) => {
-                        b.dropped_links += 1;
-                        b.warnings.push(format!("link `{rel}` points at the left-out `{trel}`, dropped"));
+                        record_dropped_link(&mut b, || format!("link `{rel}` points at the left-out `{trel}`, dropped"));
                     }
                     None => match st.nodes.get(&t) {
                         Some(Node::File { staged: true, size, .. }) => {
@@ -319,22 +326,17 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
                             b.files += 1;
                         }
                         _ => {
-                            b.dropped_links += 1;
-                            b.warnings.push(format!("link `{rel}` points outside the theme at `{t}` (add its folder to link_sources), dropped"));
+                            record_dropped_link(&mut b, || format!("link `{rel}` points outside the theme at `{t}` (add its folder to link_sources), dropped"));
                         }
                     },
                 }
             }
             Resolved::Dir(t) => dir_links.push((rel, t)),
             Resolved::Missing(t) => {
-                b.dropped_links += 1;
-                if b.dropped_links <= 20 {
-                    b.warnings.push(format!("link `{rel}` points at nothing (`{t}`), dropped"));
-                }
+                record_dropped_link(&mut b, || format!("link `{rel}` points at nothing (`{t}`), dropped"));
             }
             Resolved::Loop => {
-                b.dropped_links += 1;
-                b.warnings.push(format!("link `{rel}` is a loop, dropped"));
+                record_dropped_link(&mut b, || format!("link `{rel}` is a loop, dropped"));
             }
             Resolved::Escapes => return Err(format!("link `{rel}` leaves the source")),
         }
@@ -358,12 +360,11 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
                 cx.dir(&t, &rel, 0, &mut b)?;
             }
             _ => {
-                b.dropped_links += 1;
-                b.warnings.push(format!("folder link `{rel}` -> `{t}` is outside the theme and its link_sources, empty or encloses itself, dropped"));
+                record_dropped_link(&mut b, || format!("folder link `{rel}` -> `{t}` is outside the theme and its link_sources, empty or encloses itself, dropped"));
             }
         }
     }
-    if b.dropped_links > 20 {
+    if b.dropped_links > MAX_DROPPED_LINK_WARNINGS {
         b.warnings.push(format!("{} links dropped in all", b.dropped_links));
     }
     index_from_files(st, spec, out, lim, &mut b)?;
@@ -446,8 +447,7 @@ impl Expand<'_> {
         }
         // a link to the folder being expanded or to one enclosing it would copy forever: cut
         if self.stack.iter().any(|s| s == src || s.starts_with(&format!("{src}/"))) {
-            b.dropped_links += 1;
-            b.warnings.push(format!("folder link `{dst}` -> `{src}` encloses itself, dropped"));
+            record_dropped_link(b, || format!("folder link `{dst}` -> `{src}` encloses itself, dropped"));
             return Ok(());
         }
         // a link to a folder inside a copy already made (Papirus' `categories -> apps`): link to that part of the copy
@@ -753,6 +753,22 @@ mod tests {
             Err(e) => return (Err(e), s),
         };
         (build(&st, sp, &s.path().join("out"), &Limits::default()), s)
+    }
+
+    #[test]
+    fn all_dropped_link_kinds_share_a_bounded_warning_budget() {
+        let mut extra = Vec::new();
+        for i in 0..100 {
+            extra.push(E::link(&format!("top/bloom/apps/48/loop-{i}.svg"), &format!("loop-{i}.svg")));
+            extra.push(E::link(&format!("top/bloom/apps/48/missing-{i}.svg"), &format!("absent-{i}.svg")));
+            extra.push(E::link(&format!("top/bloom/places/scalable/script-{i}.svg"), "render.sh"));
+            extra.push(E::link(&format!("top/bloom/enclosing-{i}"), "."));
+        }
+        let (result, _scratch) = run(&icon_source("bloom", extra), &spec("bloom", &[Provides::Icons], &["COPYING"]), &[]);
+        let built = result.unwrap();
+        assert_eq!(built.dropped_links, 400);
+        assert_eq!(built.warnings.len(), MAX_DROPPED_LINK_WARNINGS + 1, "bounded details plus one summary: {:?}", built.warnings);
+        assert!(built.warnings.last().unwrap().contains("400 links dropped in all"));
     }
 
     #[test]
