@@ -49,11 +49,19 @@ RUN_TOKEN_KEY = "DECEBAL_GTK_QA_RUN"
 
 def bounded_readline(proc, timeout):
     """One line from a child's stdout, or None after `timeout` seconds (a helper that never answers cannot hang the run)."""
-    ready, _, _ = select.select([proc.stdout], [], [], timeout)
-    if not ready:
-        return None
-    line = proc.stdout.readline()
-    return line if line else None
+    deadline = time.monotonic() + timeout
+    data = bytearray()
+    while len(data) < 4096:
+        left = deadline - time.monotonic()
+        if left <= 0 or not select.select([proc.stdout], [], [], left)[0]:
+            return None
+        byte = os.read(proc.stdout.fileno(), 1)
+        if not byte:
+            return None
+        data.extend(byte)
+        if byte == b"\n":
+            return data.decode("utf-8", errors="replace")
+    raise RuntimeError("helper reply exceeds 4096 bytes")
 
 
 def group_members(pgid, token):
@@ -98,7 +106,13 @@ class Session:
                 break
             for pid in members:
                 try:
-                    os.kill(pid, sig)
+                    fd = os.pidfd_open(pid)
+                    try:
+                        # Validate ownership after pinning; a reused numeric PID is never signalled.
+                        if pid in group_members(p.pid, self.token):
+                            signal.pidfd_send_signal(fd, sig)
+                    finally:
+                        os.close(fd)
                 except ProcessLookupError:
                     pass
             deadline = time.monotonic() + grace
@@ -108,7 +122,7 @@ class Session:
             p.wait(timeout=grace)
         except subprocess.TimeoutExpired:
             pass
-        if p in self.owned:
+        if p in self.owned and p.poll() is not None and not group_members(p.pid, self.token):
             self.owned.remove(p)
 
     def cleanup(self):
@@ -131,6 +145,10 @@ def self_test():
     t0 = time.monotonic()
     if bounded_readline(silent, 0.5) is not None or time.monotonic() - t0 > 3:
         problems.append("bounded_readline did not time out")
+    partial = s.spawn([sys.executable, "-I", "-c", "import sys,time;sys.stdout.write('partial');sys.stdout.flush();time.sleep(30)"], log, pipes=True)
+    t0 = time.monotonic()
+    if bounded_readline(partial, 0.5) is not None or time.monotonic() - t0 > 3:
+        problems.append("partial helper line bypassed the timeout")
     tree = s.spawn(["sh", "-c", "sleep 30 & sleep 30 & wait"], log)
     time.sleep(0.3)
     if len(group_members(tree.pid, s.token)) < 3:
@@ -675,6 +693,8 @@ try:
 finally:
     cleanup()
     leftovers = S.leftovers()
+    if leftovers:
+        failures.append({"case": "cleanup", "ok": False, "label": "owned processes survived cleanup", "detail": leftovers})
     (out / "results.json").write_text(json.dumps({"failures": failures, "results": results, "live": live, "strict_live": strict_live, "leftover_pids": leftovers}, indent=1))
     ok = sum(r["ok"] for r in results)
     counts = {o: sum(1 for r in live if r["outcome"] == o) for o in ("live", "stale", "other", "indistinguishable", "invalid")}
