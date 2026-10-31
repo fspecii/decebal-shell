@@ -3,6 +3,7 @@ mod transfer_ui;
 use decfiles::{
     loader,
     model::{self, Entry, Intent, Model},
+    monitor::Monitor,
     resolver::Resolver,
 };
 use gio::prelude::*;
@@ -31,10 +32,20 @@ struct Ui {
     /// Details sort (column id, descending). Survives re-render, view switches and navigation.
     sort: RefCell<(String, bool)>,
     view_model: RefCell<Option<gtk::SingleSelection>>,
+    /// Incremented per render; selection signals from older views are ignored.
+    render_generation: Cell<u64>,
     home: PathBuf,
     state_file: Option<PathBuf>,
     resolver: Resolver,
     resolver_source: RefCell<Option<glib::SourceId>>,
+    monitor: Monitor,
+    monitor_source: RefCell<Option<glib::SourceId>>,
+    /// Watched folder and its watch revision; changes for other revisions are ignored.
+    watched: RefCell<(u64, Option<PathBuf>)>,
+    refresh_timer: RefCell<Option<glib::SourceId>>,
+    quiet_revision: Cell<Option<u64>>,
+    /// (background refreshes, refreshes whose visible entries were unchanged).
+    monitor_stats: Cell<(u64, u64)>,
     ops: operation_ui::Controls,
 }
 
@@ -70,20 +81,85 @@ impl Ui {
         self.model.borrow_mut().pending = Some(resolved.request.clone());
         let cancel = gio::Cancellable::new();
         self.cancel.replace(Some(cancel.clone()));
-        self.status.set_text("Loading folder…");
+        let quiet = self.quiet_revision.get() == Some(resolved.request.revision);
+        if !quiet {
+            self.status.set_text("Loading folder…");
+        }
         self.dump();
         let weak = Rc::downgrade(self);
         loader::load(&path, &cancel, move |result| {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
+            let previous = quiet.then(|| ui.model.borrow().columns.last().map(|column| column.entries.clone())).flatten();
             let changed = ui.model.borrow_mut().complete(&resolved.request, result);
             if changed {
                 ui.cancel.borrow_mut().take();
+                ui.quiet_revision.set(None);
                 ui.operation_refreshed();
-                ui.render();
+                let model = ui.model.borrow();
+                let unchanged = model.error.is_none() && previous.is_some() && previous.as_ref() == model.columns.last().map(|column| &column.entries);
+                drop(model);
+                if unchanged {
+                    // A background refresh found nothing visible to change: keep widgets, focus and scroll.
+                    let (refreshes, same) = ui.monitor_stats.get();
+                    ui.monitor_stats.set((refreshes, same + 1));
+                    ui.update_operation_controls();
+                    ui.dump();
+                } else {
+                    ui.render();
+                }
+                ui.watch_current();
             }
         });
+    }
+
+    /// Watch the committed current folder; one watch per window, replaced on navigation.
+    fn watch_current(&self) {
+        let current = self.model.borrow().current().map(Path::to_path_buf);
+        let mut watched = self.watched.borrow_mut();
+        if current.is_none() || watched.1 == current {
+            return;
+        }
+        watched.0 += 1;
+        watched.1 = current.clone();
+        self.monitor.watch(watched.0, current.unwrap());
+        drop(watched);
+        self.dump();
+    }
+
+    fn folder_changed(self: &Rc<Self>) {
+        if self.refresh_timer.borrow().is_some() {
+            return;
+        }
+        // Debounce bursts; while busy (dialog, operation, navigation) wait and retry.
+        let weak = Rc::downgrade(self);
+        let timer = glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
+            let Some(ui) = weak.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            let idle = !ui.ops.is_busy() && ui.ops.dialog.borrow().is_none() && ui.model.borrow().pending.is_none() && !ui.ops.paste_reading.get();
+            if !idle {
+                return glib::ControlFlow::Continue;
+            }
+            ui.refresh_timer.borrow_mut().take();
+            ui.refresh_quietly();
+            glib::ControlFlow::Break
+        });
+        self.refresh_timer.replace(Some(timer));
+    }
+
+    fn refresh_quietly(self: &Rc<Self>) {
+        let Some(path) = self.model.borrow().current().map(Path::to_path_buf) else {
+            return;
+        };
+        let request = self.model.borrow_mut().request(path, Intent::Refresh);
+        self.quiet_revision.set(Some(request.revision));
+        let (refreshes, same) = self.monitor_stats.get();
+        self.monitor_stats.set((refreshes + 1, same));
+        self.resolver.request(request);
+        self.update_operation_controls();
+        self.dump();
     }
 
     fn history(self: &Rc<Self>, intent: Intent) {
@@ -115,7 +191,9 @@ impl Ui {
 
     fn selected(&self, column: usize, selection: &gtk::SingleSelection) {
         let path = selection.selected_item().and_downcast::<glib::BoxedAnyObject>().map(|object| object.borrow::<Entry>().path.clone());
-        self.model.borrow_mut().select(column, path.clone());
+        self.model.borrow_mut().select(column, path);
+        // Operations act only on a selection the committed model has validated.
+        let path = self.model.borrow().columns.get(column).and_then(|column| column.selected.clone());
         self.ops.active.replace(path.clone());
         if !self.ops.is_busy() {
             self.ops.clear_notice();
@@ -141,6 +219,9 @@ impl Ui {
 
     fn render(self: &Rc<Self>) {
         self.reconcile_operation_selection();
+        // Keep keyboard focus in the file list across re-renders (refreshes, sorting, monitoring).
+        let had_focus = gtk::prelude::RootExt::focus(&self.window).is_some_and(|focus| focus.is_ancestor(&self.content));
+        let mut last_view: Option<gtk::Widget> = None;
         while let Some(child) = self.content.first_child() {
             self.content.remove(&child);
         }
@@ -156,6 +237,8 @@ impl Ui {
         self.status.set_text(&format!("{} items", model.columns.last().map_or(0, |column| column.entries.len())));
         let shown: Vec<_> = if self.columns.get() { model.columns.iter().enumerate().collect() } else { model.columns.iter().enumerate().next_back().into_iter().collect() };
         self.view_model.replace(None);
+        let generation = self.render_generation.get().wrapping_add(1);
+        self.render_generation.set(generation);
         for (index, column) in shown {
             let store = gio::ListStore::new::<glib::BoxedAnyObject>();
             for entry in &column.entries {
@@ -182,7 +265,8 @@ impl Ui {
             selection.set_selected(position.unwrap_or(gtk::INVALID_LIST_POSITION));
             let weak = Rc::downgrade(self);
             selection.connect_selected_notify(move |selection| {
-                if let Some(ui) = weak.upgrade() {
+                // A disposed view can still notify (its sorter re-sorts while torn down).
+                if let Some(ui) = weak.upgrade().filter(|ui| ui.render_generation.get() == generation) {
                     ui.selected(index, selection);
                 }
             });
@@ -199,6 +283,7 @@ impl Ui {
                         }
                     });
                     scroll.set_child(Some(&list));
+                    last_view = Some(list.clone().upcast());
                     let box_ = gtk::Box::new(gtk::Orientation::Vertical, 0);
                     let title = gtk::Label::new(Some(&column.path.file_name().unwrap_or_else(|| column.path.as_os_str()).to_string_lossy()));
                     title.add_css_class("heading");
@@ -219,12 +304,15 @@ impl Ui {
                     });
                     self.view_model.replace(Some(selection.clone()));
                     scroll.set_child(Some(&view));
+                    last_view = Some(view.clone().upcast());
                     self.content.append(&scroll);
                 }
             }
         }
         drop(model);
-
+        if let Some(view) = last_view.filter(|_| had_focus) {
+            view.grab_focus();
+        }
         if let Some(notice) = self.ops.notice() {
             self.status.set_text(&notice);
         }
@@ -278,7 +366,8 @@ impl Ui {
                 .as_ref()
                 .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
             let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
-                "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order});
+                "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order,
+                "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -447,6 +536,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     window.set_child(Some(&root));
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"));
     let (resolver, mut resolver_reader) = Resolver::new().expect("Could not create Files path resolver");
+    let (monitor, mut monitor_reader) = Monitor::new().expect("Could not create Files folder monitor");
     let ui = Rc::new(Ui {
         window,
         model: RefCell::new(Model::default()),
@@ -462,10 +552,17 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         columns: Cell::new(columns),
         sort: RefCell::new(("name".into(), false)),
         view_model: RefCell::new(None),
+        render_generation: Cell::new(0),
         home: home.clone(),
         state_file: std::env::var_os("DECFILES_EVIDENCE_STATE").map(PathBuf::from),
         resolver,
         resolver_source: RefCell::new(None),
+        monitor,
+        monitor_source: RefCell::new(None),
+        watched: RefCell::new((0, None)),
+        refresh_timer: RefCell::new(None),
+        quiet_revision: Cell::new(None),
+        monitor_stats: Cell::new((0, 0)),
         ops,
     });
     let weak = Rc::downgrade(&ui);
@@ -485,6 +582,23 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         }
     });
     ui.resolver_source.replace(Some(source));
+    let weak = Rc::downgrade(&ui);
+    let source = glib::source::unix_fd_add_local(monitor_reader.as_raw_fd(), glib::IOCondition::IN | glib::IOCondition::HUP, move |_, condition| {
+        let Some(ui) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let mut bytes = [0; 128];
+        while matches!(monitor_reader.read(&mut bytes), Ok(n) if n > 0) {}
+        if ui.monitor.take_change().is_some_and(|revision| revision == ui.watched.borrow().0) {
+            ui.folder_changed();
+        }
+        if condition.contains(glib::IOCondition::HUP) {
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
+    ui.monitor_source.replace(Some(source));
     for (label, path) in [("Home", home.clone()), ("Documents", home.join("Documents")), ("Downloads", home.join("Downloads")), ("File system", PathBuf::from("/"))] {
         let button = gtk::Button::with_label(label);
         sidebar.append(&button);
@@ -594,6 +708,10 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     let retained = ui.clone();
     ui.window.connect_destroy(move |_| {
         retained.resolver.stop();
+        retained.monitor.stop();
+        for source in [retained.monitor_source.borrow_mut().take(), retained.refresh_timer.borrow_mut().take()].into_iter().flatten() {
+            source.remove();
+        }
         if let Some(source) = retained.resolver_source.borrow_mut().take() {
             source.remove();
         }

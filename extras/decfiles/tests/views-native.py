@@ -35,6 +35,34 @@ try:
     s.cases.append('sort choice survives switching to columns and back')
     s.address(base/'Alpha dir');s.key('alt+Left');s.wait(lambda:s.at(base),'Back failed');assert sort()=={'column':'modified','descending':False}
     s.cases.append('sort choice survives navigation and history')
-    s.finish({'features':[],'scope':'Private X11 actual GTK header controls; no Orca/Wayland acceptance'})
+    # Folder monitoring: external changes refresh the current folder without user action.
+    import time
+    mon=lambda:s.state().get('monitor',{})
+    s.wait(lambda:mon().get('watching')==str(base),'current folder not watched')
+    s.select_item(base/'b notes.txt');before=mon()['refreshes']
+    (base/'d external.txt').write_bytes(b'external')
+    s.wait(lambda:str(base/'d external.txt') in (s.state().get('view_order') or []),'external create not shown')
+    assert s.op()['selected']==str(base/'b notes.txt') and mon()['refreshes']>before
+    s.cases.append('external create appears without user action and keeps selection')
+    s.key('Down');s.wait(lambda:s.op().get('selected') not in (None,str(base/'b notes.txt')),'keyboard focus not kept in the list after refresh')
+    s.cases.append('keyboard focus stays in the file list across a background refresh')
+    unchanged=mon()['unchanged'];os.utime(base/'c readme.md',(1_500_000_000,1_500_000_000))
+    s.wait(lambda:mon()['unchanged']>unchanged,'attribute-only change was not recognised as unchanged')
+    s.cases.append('attribute-only change refreshes without re-rendering unchanged entries')
+    s.select_item(base/'d external.txt');(base/'d external.txt').rename(base/'e renamed.txt')
+    s.wait(lambda:str(base/'e renamed.txt') in s.state()['view_order'] and str(base/'d external.txt') not in s.state()['view_order'],'external rename not shown')
+    s.wait(lambda:s.op().get('selected') is None,'vanished selection kept')
+    (base/'e renamed.txt').unlink();s.wait(lambda:str(base/'e renamed.txt') not in s.state()['view_order'],'external delete not shown')
+    s.cases.append('external rename and delete update the view and clear a vanished selection')
+    s.focus(s.window);s.key('ctrl+shift+n');s.wait(lambda:s.op().get('dialog')=='Create folder','create dialog missing')
+    count=mon()['refreshes'];(base/'f during dialog.txt').write_bytes(b'x');time.sleep(1.2)
+    assert mon()['refreshes']==count and str(base/'f during dialog.txt') not in s.state()['view_order']
+    s.key('Escape');s.wait(lambda:str(base/'f during dialog.txt') in (s.state().get('view_order') or []),'deferred refresh did not run after dialog')
+    s.cases.append('refresh waits while a dialog is open, then runs')
+    s.address(base/'Alpha dir');s.wait(lambda:mon().get('watching')==str(base/'Alpha dir'),'watch did not follow navigation')
+    count=mon()['refreshes'];(base/'g old folder.txt').write_bytes(b'x');time.sleep(1.2);assert mon()['refreshes']==count
+    (base/'Alpha dir'/'inside.txt').write_bytes(b'x');s.wait(lambda:str(base/'Alpha dir'/'inside.txt') in (s.state().get('view_order') or []),'new watched folder change not shown')
+    s.cases.append('watch follows navigation; the previous folder no longer refreshes')
+    s.finish({'features':[],'scope':'Private X11 actual GTK header controls and inotify on private fixtures; no Orca/Wayland acceptance'})
 finally:
     s.close()

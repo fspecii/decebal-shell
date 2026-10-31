@@ -42,6 +42,17 @@ does not save preferences or read/write Decebal configuration.
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
   column keeps that parent and replaces the columns to its right.
+- The current folder is monitored: one `decfiles-monitor` inotify worker thread per
+  window watches only the committed current physical folder (the watch's path
+  lookup happens off the UI thread). Changes arrive latest-only over a wake
+  socket. After a 300 ms debounce, an idle window refreshes quietly; while a
+  dialog, operation, navigation or clipboard read is active, the refresh waits.
+  A refresh that changes nothing visible keeps the existing widgets. Otherwise the
+  selection survives if the item still exists, and keyboard focus stays in the
+  file list. Ancestor columns are not watched.
+- Selection signals from a view being torn down are ignored (per-render
+  generation), and operations only target a selection validated by the model,
+  so an earlier disposed view can never redirect Rename, Trash or Copy.
 - Folder results start folders-first, then by case-insensitive name; ties in any
   header sort fall back to that name and then the exact path bytes.
   File selection keeps the actual Unix path even for non-UTF8 filenames; GIO
@@ -258,6 +269,22 @@ Copy/move evidence (default binary
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
 
+Monitoring checkpoint: 21 Rust tests, including the monitor's revision-scoped
+create, rename and watch-replacement test. Default
+`9e588cf013bdfbc80658195b971edc50ffed1541cb61fecd4ad9531a94d63ac9` and fixture
+`a01698e6c8a80bc84920e6cca7b1d37acde2604da070623a3c6e55623573e771`
+(`/var/tmp/decfiles-monitor-artifacts/`) pass every gate in
+`/var/tmp/decfiles-monitor-gate-*-evidence/` on reserved high private displays
+(`tests/xserver.py`): navigation 8, operations 13, transfers 10, views 12, close 4,
+transfers-cancel 4, paste-races 2+1. The six new views cases cover:
+
+- an external create shown and the selection kept;
+- focus kept in the list (the Down key moves the selection);
+- an attribute-only change refreshed without re-rendering;
+- an external rename/delete clearing a vanished selection;
+- a refresh deferred while a dialog is open;
+- the watch following navigation.
+
 Safety checkpoint (staged publication, claimed cross-device removal, guarded paste
 and owned clipboard clearing): there are 20 Rust tests. The new
 `deterministic_races_never_remove_or_publish_the_wrong_item` drives test-only hooks
@@ -374,7 +401,7 @@ exit status 0.
 Copy/move/paste work on one selected item at a time (pasted clipboards may hold
 many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move to
 picker, permanent delete, restore, undo, drag/drop, tabs, icon view, Finder gallery, Explorer
-command bar, bookmarks, mounts, remote backends, monitoring, search, opening or
+command bar, bookmarks, mounts, remote backends, search, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
 Profile styling, palette following,
 notifications, default-handler opt-in and shell launch/reveal integration are
