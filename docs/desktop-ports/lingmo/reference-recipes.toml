@@ -1,0 +1,85 @@
+# Reference recipes for the Lingmo asset packs: install semantics read from upstream, link findings, licence evidence and the cursor pack that the
+# shared catalogue (assets/desktop-ports/lingmo/asset-packs.toml, contract docs/desktop-asset-packs.md) cannot carry. Data only: nothing here is executed.
+# Rules: HTTPS fetch by full commit into a new empty directory; verify every `tree` with `git rev-parse <commit>:<path>`
+# (git tree hashes cover content and file modes); never run upstream cmake/install scripts; install under the user's own
+# icon directory only after an explicit user action; icons and cursors are chosen separately in Settings and a theme only
+# suggests them. Pins and licence evidence: sources.json.
+format = 1
+family = "lingmo"
+inspected = "2026-10-31"
+
+[[pack]]
+id = "lingmo-icons"
+kind = "icons"
+upstream = "https://github.com/LingmoOS/lingmo_icon_theme"
+commit = "0b6a4bab253154b786c51c9978960471fd98c88b"
+license = "GPL-3.0-or-later"
+license_evidence = "LICENSE (GPL-3.0 text) and debian/copyright (GPL-3+, Lingmo OS contributors); README: derived from Colloid-icon-theme (GPL-3.0), window-control symbolics adapted from FishUI"
+redistribution = "allowed as a separate asset pack with notice; do not mix into MIT code or the theme package"
+size_bytes = 29512734          # src 29237423 + links 275311 (du -sb)
+requires = ["breeze"]          # src/index.theme says Inherits=hicolor,breeze
+notice_file = "LICENSE"        # copy next to the installed theme as COPYING
+
+  [pack.source_trees]
+  src = "19ae41643ae10b340a88c6530c58e9d74e440ac9"
+  dark = "527234a50063fee6610401a1729068084ca3efaa"
+  links = "09d28c3591d256643c992999dc742b60336e6fc6"
+
+  # Selection (verified in a private HOME): `decthemectl icons set Lingmo` after installing; the theme manifest has no [icons] section, so applying
+  # the Lingmo theme never changes the user's choice. With the pack selected, `[branding] logo = "icon:systemlogo"` resolves to the real mark.
+
+  # What upstream's cmake/install-theme.cmake.in does (read in full, not run). Only ONE theme is installed, named `Lingmo`:
+  #   1. index.theme = src/index.theme with `Name=Cutefish` replaced by `Name=Lingmo`;
+  #   2. copy src/{actions,apps,categories,devices,emblems,mimetypes,places,status};
+  #   3. copy links/<same eight directories> over it;
+  #   4. create symlinks <dir>@2x and <dir>@3x -> <dir> for each of the eight directories;
+  #   5. optionally run gtk-update-icon-cache (skip it: the installer must not execute system tools it does not need).
+  # `dark/` (network-server, user-trash, user-trash-full) is NOT installed by upstream's script; there is no dark variant.
+  [[pack.variant]]
+  name = "Lingmo"
+  index_name = "Lingmo"
+  copy = ["src/", "links/"]
+
+  # FINDING: links/ is 14137 regular files (git mode 100644), each holding only a relative target path (a symlink stored as text; upstream's
+  # cmake would therefore install invalid SVGs). Targets are bare sibling names or, in 183 cases, `./x.svg` / `../../places/16/x.svg`.
+  # Measured with docs/desktop-ports/lingmo/reference-tools/verify-icon-recipe.py at this commit, resolving against the finished theme: 14104 resolve, 33 dangle (e.g.
+  # actions/16/run-clean.svg -> run-build-clean.svg, whose target does not exist). The installer must turn each resolving entry into a symlink
+  # whose target is a relative path staying inside the theme directory, drop the dangling ones, refuse absolute or escaping targets, and never
+  # install the text files as icons.
+  [pack.links_text]
+  files = 14137
+  resolving = 14104
+  dangling = 33
+
+  # Icons the shell uses by name (verified present in src/): the Lingmo mark, and the launcher glyphs.
+  [pack.names_used]
+  logo = "systemlogo"           # src/apps/scalable/systemlogo.svg, multicolour gradient (do not tint)
+  launcher = "start-here"       # src/places/{16,22,24}/start-here.svg
+
+[[pack]]
+id = "lingmo-cursors"
+kind = "cursors"
+upstream = "https://github.com/LingmoOS/lingmo-cursor-themes"
+commit = "2d7dbb8e4828b28225b72a05732fb3e169548962"
+license = "UNDETERMINED"
+license_evidence = "no LICENSE file; debian/copyright is an unfilled template; generated README says 'License: not declared'; README.old.md says 'forked from ful1e5/Bibata_Cursor' and 'licensed by GPLv3' (Bibata Cursor is GPL-3.0)"
+redistribution = "not granted in the repository: never commit or bundle; offer only as a user-initiated download that states this"
+size_bytes = 85217117         # lingmo-light 38937048 + lingmo-dark 46280069 (du -sb of the checked-out trees)
+notice_file = ""              # upstream ships none
+
+  # Verified with docs/desktop-ports/lingmo/reference-tools/verify-cursor-recipe.py (needs the explicit licence flag): both themes are complete Xcursor sets with an index.theme,
+  # 57 Xcursor files and 87 symlinks that resolve inside cursors/ (0 invalid); `left_ptr` carries nominal sizes 22 24 28 32 40 48 56 64 72 80 88 96.
+  # Selection (verified in a private HOME): `decthemectl system set cursor-theme lingmo-dark` writes `Xcursor.theme` to the engine's Xresources and
+  # `gtk-cursor-theme-name` to GTK 3/4 settings.ini. A theme manifest has no cursor key, so applying a theme never changes the cursor.
+  [pack.source_trees]
+  lingmo-light = "d8bafbd1e3254695c74006ca1c9d54923738ef2f"
+  lingmo-dark = "1882f974c9d9e0bd14ab6e33c05efcf661f23445"
+
+  # Each directory is a complete X cursor theme (cursors/, cursor.theme, index.theme); copy as-is to
+  # ~/.local/share/icons/<name>/ . Symlinks inside cursors/ stay relative. Names are the directory names.
+  [[pack.variant]]
+  name = "lingmo-light"
+  copy = ["lingmo-light/"]
+  [[pack.variant]]
+  name = "lingmo-dark"
+  copy = ["lingmo-dark/"]

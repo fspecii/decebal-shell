@@ -1,0 +1,614 @@
+{
+ "format": 1,
+ "status": "INTEGRATED: image and theme records are included in data/wallhaven-curated.json after original and all crop hashes and the exact crop sheet were reviewed.",
+ "reviewed_on": "2026-10-31",
+ "schema": "data/wallhaven-curated.json as published by root (images[].full_resolution_review / crop_review / parent_verification / readability_metrics; themes[].dark / light / crop_policy)",
+ "disjoint": {
+  "checked_against": "the images of data/wallhaven-curated.json on every local and remote ref and every other port's records fragment (61 distinct ids)",
+  "result": "mldor9 and l8pe5r collide with no other id"
+ },
+ "policy": "Records are metadata and links only; nothing is bundled and nothing downloads by itself. Recommendations are selected in the separate Wallpaper pane. With Follow theme enabled by the user, theme and mode changes prepare the matching curated photograph; otherwise the wallpaper stays independent. The images remain the property of their owners.",
+ "images": {
+  "mldor9": {
+   "id": "mldor9",
+   "subject": "Snow-dusted Moraine Lake under low cloud: a pale, quiet sky band under the top bar and calm teal water above the dock (light mode).",
+   "page_url": "https://wallhaven.cc/w/mldor9",
+   "api_url": "https://wallhaven.cc/api/v1/w/mldor9",
+   "full_url": "https://w.wallhaven.cc/full/ml/wallhaven-mldor9.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/ml/mldor9.jpg",
+   "resolution": [
+    7138,
+    4759
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2025-07-12 18:56:30",
+   "uploader": {
+    "username": "Petunai42",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified"
+   },
+   "source_url": "https://www.reddit.com/r/EarthPorn/comments/1liywch/moraine_lake_alberta_oc_7138x4739/",
+   "source_verification": "reported by the uploader, not verified; not proof of authorship, capture method or licence",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 697,
+     "name": "cliff"
+    },
+    {
+     "id": 1265,
+     "name": "forest"
+    },
+    {
+     "id": 20174,
+     "name": "pine trees"
+    },
+    {
+     "id": 115,
+     "name": "trees"
+    },
+    {
+     "id": 464,
+     "name": "fog"
+    },
+    {
+     "id": 2428,
+     "name": "mist"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 23020,
+     "name": "Alberta"
+    },
+    {
+     "id": 5259,
+     "name": "Canada"
+    },
+    {
+     "id": 22056,
+     "name": "North America"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 22078,
+     "name": "watermarked"
+    },
+    {
+     "id": 638,
+     "name": "reflection"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 161458,
+     "name": "JKDickson"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance (sensor noise, grain, natural gradients); provenance is not proof of capture method",
+    "inspected": "full-resolution original, the three centre-cover crops by eye, and native-pixel crops (top-left, centre, bottom)"
+   },
+   "evidence": {
+    "detail_sha256": "accc11a98bdbbc423dcbfefc0df712acdd02a61dac2587b97d535742c9c6a3ea",
+    "thumbnail_sha256": "54a5b575032a715565dcbaace42fd1f2f5a3d06647345a94943b7b1e629ba95a"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "abb2a1fabbff61494815301010f09635bb30520ad2571db93b709b3bd5de52b2",
+    "bytes": 20886757,
+    "dimensions_verified": true,
+    "assessment": "accepted with cautions: 16:9 keeps the peaks, mist, lake and the foreground pine; the 3440x1440 crop loses upper sky and the pine's base; the portrait crop loses both side slopes and the pine but keeps the peaks, the mist band and the lake",
+    "notes": "7138x4759; a fresh download is byte-identical to the first one reviewed; photographic appearance.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   },
+   "crop_review": {
+    "algorithm": "centre cover crop then Lanczos resize (Version: ImageMagick 7.1.2-34 Q16-HDRI); JPEG q90 files hashed",
+    "16x9": {
+     "result": "accepted: 16:9 keeps the peaks, mist, lake and the foreground pine",
+     "sha256": "1424159232d636bf0ed9e7d6cd64f347afa17d10b0d416e7ba9f82bef9387463"
+    },
+    "ultrawide": {
+     "result": "accepted with caution: the 3440x1440 crop loses upper sky and the pine's base",
+     "sha256": "35fb54b62c5f72c3de5296573cf2a1ad4bb57f7be067e1cd46093c77e9f4ce36"
+    },
+    "portrait": {
+     "result": "accepted with caution: the portrait crop loses both side slopes and the pine but keeps the peaks, the mist band and the lake",
+     "sha256": "e977393129f74988c172150219559dade95195b9618524206f6054dd497728be"
+    }
+   },
+   "parent_verification": {
+    "status": "independently_accepted",
+    "fresh_api_and_original_sha_match": true,
+    "dimensions_match": true,
+    "crops_reviewed": [
+     "16x9",
+     "3440x1440",
+     "1080x1920"
+    ],
+    "reviewed_utc": "2026-10-31T08:18:27.776605+00:00",
+    "remaining": [
+     "physical compositor readability",
+     "licence still unknown"
+    ]
+   },
+   "readability_metrics": {
+    "note": "relative luminance (WCAG) of the top 32 px band (the declared Lingmo bar) and of the bottom-centre dock zone (bottom 100 px, middle 30 % of the width) after each centre crop",
+    "16x9": {
+     "panel_p95": 0.886,
+     "panel_max": 0.966,
+     "dock_zone_p95": 0.204
+    },
+    "ultrawide": {
+     "panel_p95": 0.853,
+     "panel_max": 0.913,
+     "dock_zone_p95": 0.223
+    },
+    "portrait": {
+     "panel_p95": 0.896,
+     "panel_max": 0.925,
+     "dock_zone_p95": 0.111
+    }
+   },
+   "integration_owner_review": {
+    "reviewed_on": "2026-10-31",
+    "original_and_all_crop_hashes_verified": true,
+    "crop_sheet_visually_reviewed": true,
+    "limits": "Physical-display readability, authorship, capture method and redistribution rights remain unverified."
+   }
+  },
+  "l8pe5r": {
+   "id": "l8pe5r",
+   "subject": "Moonlit alpine lake at night with star trails: a deep, dark sky under the top bar and a dark reflection above the dock (dark mode).",
+   "page_url": "https://wallhaven.cc/w/l8pe5r",
+   "api_url": "https://wallhaven.cc/api/v1/w/l8pe5r",
+   "full_url": "https://w.wallhaven.cc/full/l8/wallhaven-l8pe5r.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/l8/l8pe5r.jpg",
+   "resolution": [
+    5120,
+    3200
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2024-07-13 08:06:00",
+   "uploader": {
+    "username": "BloodStain",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 7936,
+     "name": "clear sky"
+    },
+    {
+     "id": 338,
+     "name": "night"
+    },
+    {
+     "id": 465,
+     "name": "hills"
+    },
+    {
+     "id": 740,
+     "name": "Moon"
+    },
+    {
+     "id": 4799,
+     "name": "moonlight"
+    },
+    {
+     "id": 358,
+     "name": "ice"
+    },
+    {
+     "id": 31540,
+     "name": "low light"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 26468,
+     "name": "snowy peak"
+    },
+    {
+     "id": 638,
+     "name": "reflection"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 245,
+     "name": "stars"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 6248,
+     "name": "cold"
+    },
+    {
+     "id": 42696,
+     "name": "nordic landscapes"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 1524,
+     "name": "Norway"
+    },
+    {
+     "id": 109,
+     "name": "photography"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance (sensor noise, grain, natural gradients); provenance is not proof of capture method",
+    "inspected": "full-resolution original, the three centre-cover crops by eye, and native-pixel crops (top-left, centre, bottom)"
+   },
+   "evidence": {
+    "detail_sha256": "0a2e1c1a7f8d8d6803da24b60ea0cbfd83d34f5c1fd6b8bb04b73e1a6d46c786",
+    "thumbnail_sha256": "ce4bf632616586e880f256ee9b3d4ca3581f879c79820b3d06a73e172b7913b5"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "750c26fdd1322d05c93d22d04c99a20e96a4519e877b0ba56852c4c266c36cce",
+    "bytes": 9526925,
+    "dimensions_verified": true,
+    "assessment": "accepted with cautions: 16:9 keeps the moonlit peak, the lake and its reflection; the ultrawide crop loses upper sky only; the portrait crop loses the side ridges but keeps the moon column and the reflection",
+    "notes": "5120x3200; a fresh download is byte-identical to the first one reviewed; photographic appearance.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   },
+   "crop_review": {
+    "algorithm": "centre cover crop then Lanczos resize (Version: ImageMagick 7.1.2-34 Q16-HDRI); JPEG q90 files hashed",
+    "16x9": {
+     "result": "accepted: 16:9 keeps the moonlit peak, the lake and its reflection",
+     "sha256": "f24f648cf8883289cf12b61752edac474a86aee5c57e526fdcab6d70b9c132e1"
+    },
+    "ultrawide": {
+     "result": "accepted with caution: the ultrawide crop loses upper sky only",
+     "sha256": "78fac491c1f10693de59d421c0c39684b81d789d7f9e0b86054e145011141281"
+    },
+    "portrait": {
+     "result": "accepted with caution: the portrait crop loses the side ridges but keeps the moon column and the reflection",
+     "sha256": "a0f01e189f9ef653fda49685842de7c32f7d6561f9b1a8acf31410a4781dd924"
+    }
+   },
+   "parent_verification": {
+    "status": "independently_accepted",
+    "fresh_api_and_original_sha_match": true,
+    "dimensions_match": true,
+    "crops_reviewed": [
+     "16x9",
+     "3440x1440",
+     "1080x1920"
+    ],
+    "reviewed_utc": "2026-10-31T08:18:27.776605+00:00",
+    "remaining": [
+     "physical compositor readability",
+     "licence still unknown"
+    ]
+   },
+   "readability_metrics": {
+    "note": "relative luminance (WCAG) of the top 32 px band (the declared Lingmo bar) and of the bottom-centre dock zone (bottom 100 px, middle 30 % of the width) after each centre crop",
+    "16x9": {
+     "panel_p95": 0.061,
+     "panel_max": 0.232,
+     "dock_zone_p95": 0.027
+    },
+    "ultrawide": {
+     "panel_p95": 0.091,
+     "panel_max": 0.95,
+     "dock_zone_p95": 0.118
+    },
+    "portrait": {
+     "panel_p95": 0.054,
+     "panel_max": 0.292,
+     "dock_zone_p95": 0.012
+    }
+   },
+   "integration_owner_review": {
+    "reviewed_on": "2026-10-31",
+    "original_and_all_crop_hashes_verified": true,
+    "crop_sheet_visually_reviewed": true,
+    "limits": "Physical-display readability, authorship, capture method and redistribution rights remain unverified."
+   }
+  }
+ },
+ "themes": {
+  "lingmo": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "Lingmo's accent is blue #3385FF and its look is cool and quiet; both photographs are cool-toned and leave a calm band under the top bar and above the dock.",
+   "dark": {
+    "image_id": "l8pe5r",
+    "rationale": "Moonlit alpine lake at night with star trails: a deep, dark sky under the top bar and a dark reflection above the dock (dark mode)."
+   },
+   "light": {
+    "image_id": "mldor9",
+    "rationale": "Snow-dusted Moraine Lake under low cloud: a pale, quiet sky band under the top bar and calm teal water above the dock (light mode)."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "Both originals are wider than 16:9 or taller; centre-fill crops the sides or the top on a different monitor aspect: the three reviewed crops show what each keeps.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  }
+ },
+ "bar_legibility": {
+  "light:mldor9": {
+   "image": "mldor9",
+   "mode": "light",
+   "bar_fill": "#f5f6fa",
+   "bar_alpha": 0.55,
+   "bar_text": "#252525",
+   "panel_thickness_px": 32,
+   "viewports": {
+    "1920x1080": {
+     "top": {
+      "min_contrast": 6.96,
+      "mean_contrast": 12.66,
+      "cells": 48
+     },
+     "bottom": {
+      "min_contrast": 5.69,
+      "mean_contrast": 7.16,
+      "cells": 48
+     },
+     "left": {
+      "min_contrast": 5.64,
+      "mean_contrast": 7.51,
+      "cells": 27
+     },
+     "right": {
+      "min_contrast": 5.63,
+      "mean_contrast": 9.39,
+      "cells": 27
+     }
+    },
+    "2560x1080": {
+     "top": {
+      "min_contrast": 5.8,
+      "mean_contrast": 11.57,
+      "cells": 64
+     },
+     "bottom": {
+      "min_contrast": 5.52,
+      "mean_contrast": 7.3,
+      "cells": 64
+     },
+     "left": {
+      "min_contrast": 5.54,
+      "mean_contrast": 7.86,
+      "cells": 27
+     },
+     "right": {
+      "min_contrast": 5.5,
+      "mean_contrast": 9.17,
+      "cells": 27
+     }
+    },
+    "1920x1200": {
+     "top": {
+      "min_contrast": 7.19,
+      "mean_contrast": 12.96,
+      "cells": 48
+     },
+     "bottom": {
+      "min_contrast": 5.64,
+      "mean_contrast": 7.02,
+      "cells": 48
+     },
+     "left": {
+      "min_contrast": 5.64,
+      "mean_contrast": 7.44,
+      "cells": 30
+     },
+     "right": {
+      "min_contrast": 5.5,
+      "mean_contrast": 9.46,
+      "cells": 30
+     }
+    },
+    "1080x1920": {
+     "top": {
+      "min_contrast": 13.43,
+      "mean_contrast": 13.73,
+      "cells": 27
+     },
+     "bottom": {
+      "min_contrast": 6.55,
+      "mean_contrast": 6.69,
+      "cells": 27
+     },
+     "left": {
+      "min_contrast": 5.85,
+      "mean_contrast": 8.55,
+      "cells": 48
+     },
+     "right": {
+      "min_contrast": 5.51,
+      "mean_contrast": 9.66,
+      "cells": 48
+     }
+    }
+   }
+  },
+  "dark:l8pe5r": {
+   "image": "l8pe5r",
+   "mode": "dark",
+   "bar_fill": "#1c1c1d",
+   "bar_alpha": 0.55,
+   "bar_text": "#ffffff",
+   "panel_thickness_px": 32,
+   "viewports": {
+    "1920x1080": {
+     "top": {
+      "min_contrast": 13.77,
+      "mean_contrast": 14.06,
+      "cells": 48
+     },
+     "bottom": {
+      "min_contrast": 16.84,
+      "mean_contrast": 17.28,
+      "cells": 48
+     },
+     "left": {
+      "min_contrast": 10.9,
+      "mean_contrast": 15.29,
+      "cells": 27
+     },
+     "right": {
+      "min_contrast": 12.17,
+      "mean_contrast": 16.04,
+      "cells": 27
+     }
+    },
+    "2560x1080": {
+     "top": {
+      "min_contrast": 12.78,
+      "mean_contrast": 13.11,
+      "cells": 64
+     },
+     "bottom": {
+      "min_contrast": 12.56,
+      "mean_contrast": 15.49,
+      "cells": 64
+     },
+     "left": {
+      "min_contrast": 10.9,
+      "mean_contrast": 15.45,
+      "cells": 27
+     },
+     "right": {
+      "min_contrast": 12.04,
+      "mean_contrast": 16.15,
+      "cells": 27
+     }
+    },
+    "1920x1200": {
+     "top": {
+      "min_contrast": 14.02,
+      "mean_contrast": 14.4,
+      "cells": 48
+     },
+     "bottom": {
+      "min_contrast": 17.31,
+      "mean_contrast": 17.7,
+      "cells": 48
+     },
+     "left": {
+      "min_contrast": 11.03,
+      "mean_contrast": 15.31,
+      "cells": 30
+     },
+     "right": {
+      "min_contrast": 12.02,
+      "mean_contrast": 16.02,
+      "cells": 30
+     }
+    },
+    "1080x1920": {
+     "top": {
+      "min_contrast": 14.41,
+      "mean_contrast": 14.52,
+      "cells": 27
+     },
+     "bottom": {
+      "min_contrast": 17.68,
+      "mean_contrast": 17.84,
+      "cells": 27
+     },
+     "left": {
+      "min_contrast": 9.08,
+      "mean_contrast": 14.24,
+      "cells": 48
+     },
+     "right": {
+      "min_contrast": 9.56,
+      "mean_contrast": 14.35,
+      "cells": 48
+     }
+    }
+   }
+  }
+ },
+ "bar_legibility_note": "Supplementary, not part of the catalogue schema: contrast of bar_text against the bar fill at bar_alpha over every 40 px cell of the centre-filled image, per edge and viewport. Lingmo's real bar adds a Gaussian blur and picks its ink from the wallpaper; neither is modelled, so this is a conservative check of what this package draws.",
+ "candidates_not_chosen": {
+  "ml2zwy": "tagged digital art / illustration (detail API)",
+  "m3eve8": "tagged digital art / illustration (detail API)",
+  "8gxggk": "thumbnail only: turquoise aerial sea with high-frequency foam, less calm behind a bar than the chosen pair",
+  "x1xlmv": "thumbnail only: warm sand and rock against a blue accent",
+  "95ejxd": "thumbnail only: aerial beach, not reviewed further",
+  "x6wm5v": "thumbnail only: blue dusk sea; a possible spare dark candidate, not reviewed at full resolution"
+ }
+}

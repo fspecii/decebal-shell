@@ -1,0 +1,106 @@
+{
+ "backdrop": "#1b3a5c",
+ "note": "physical pixels of the strip along a line through an empty part of the bar, measured by assets/desktop-ports/lingmo/tools/measure-strip.py from real decbar captures (tools/gui-capture.sh, private Xvfb, no compositor)",
+ "measurements": [
+  {
+   "capture": "bottom-1.25.png",
+   "edge": "bottom",
+   "thickness_px": 40,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.25
+  },
+  {
+   "capture": "bottom-1.png",
+   "edge": "bottom",
+   "thickness_px": 32,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.0
+  },
+  {
+   "capture": "bottom-2.png",
+   "edge": "bottom",
+   "thickness_px": 64,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 2.0
+  },
+  {
+   "capture": "left-1.25.png",
+   "edge": "left",
+   "thickness_px": 50,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.25
+  },
+  {
+   "capture": "left-1.png",
+   "edge": "left",
+   "thickness_px": 40,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.0
+  },
+  {
+   "capture": "left-2.png",
+   "edge": "left",
+   "thickness_px": 80,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 2.0
+  },
+  {
+   "capture": "top-1.25.png",
+   "edge": "top",
+   "thickness_px": 40,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.25
+  },
+  {
+   "capture": "top-1.png",
+   "edge": "top",
+   "thickness_px": 32,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 1.0
+  },
+  {
+   "capture": "top-2.png",
+   "edge": "top",
+   "thickness_px": 64,
+   "screen": [
+    1920,
+    1080
+   ],
+   "scale": 2.0
+  },
+  {
+   "capture": "top-short.png",
+   "edge": "top",
+   "thickness_px": 32,
+   "screen": [
+    1366,
+    600
+   ],
+   "scale": 1.0
+  }
+ ]
+}

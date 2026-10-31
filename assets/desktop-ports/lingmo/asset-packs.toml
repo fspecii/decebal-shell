@@ -1,0 +1,40 @@
+# Lingmo icon pack for the shared asset installer (contract: docs/desktop-asset-packs.md, commit 76b9285 of feat/claude-desktop-asset-packs).
+# Data only. No link_sources / link_source_trees: src/ contains no symlinks, and the links/ overlay is plain text that the contract does not interpret (see the description).
+# The cursor themes are deliberately NOT catalogued: their repository names no licence file (the contract requires one per pack, and
+# a template debian/copyright is not a grant). A user can still bring them in with `decthemectl assets import` and their own licence statement;
+# the evidence is in docs/desktop-ports/lingmo/reference-recipes.toml and sources.json.
+format = 1
+family = "lingmo"
+
+[[source]]
+id = "lingmo-icon-theme"
+repo = "https://github.com/LingmoOS/lingmo_icon_theme"
+revision = "main"
+commit = "0b6a4bab253154b786c51c9978960471fd98c88b"
+license = "GPL-3.0-or-later"          # debian/copyright: GPL-3+ (Lingmo OS contributors); LICENSE is the GPL-3.0 text; derived from Colloid-icon-theme (GPL-3.0)
+license_files = ["LICENSE"]
+license_oids = ["e62ec04cdeece724caeeeeaeb6ae1f6af1bb6b9a"]   # git rev-parse 0b6a4ba:LICENSE: pins the licence text independently of the archive bytes
+# the GitHub archive of exactly this commit: 4,975,741 bytes, pax comment = the commit, `src/` byte-identical to the local clone (10,396 files)
+archive_url = "https://github.com/LingmoOS/lingmo_icon_theme/archive/0b6a4bab253154b786c51c9978960471fd98c88b.tar.gz"
+archive_sha256 = "c5cbd4fa8dc246463f176dd12e81e68c84ecc432592d8c6c5c1bcf4aafff4043"
+strip_components = 1
+
+[[pack]]
+id = "lingmo-icons"
+name = "Lingmo"
+provides = ["icons"]
+source = "lingmo-icon-theme"
+path = "src"                          # the theme folder (index.theme says Name=Cutefish, Inherits=hicolor,breeze); users select it as `Lingmo`
+tree = "19ae41643ae10b340a88c6530c58e9d74e440ac9"    # git rev-parse 0b6a4ba:src
+install_name = "Lingmo"
+# DISCLOSED FALLBACK, in full: the upstream links/ overlay is 14137 REGULAR git blobs (mode 100644; there are 0 symlinks in src/ and in links/), each holding a target path as text.
+# The contract's link_sources / link_source_trees expand git symlinks only and no text alias is read, so none of them is installed. An icon name that exists only as such an alias is
+# absent from the installed theme and falls back to the inherited breeze or hicolor icon (14104 would resolve if the overlay were converted; 33 dangle upstream).
+# Also DISCLOSED: index.theme lists 96 icon directories and only 32 exist in src/. The other 64 are the @2x / @3x scaled directories, which upstream creates as symlinks in its
+# cmake install script (never run by the installer, and absent from git). The installer therefore reports this pack as DEGRADED (fewer than half present; it refuses only below a
+# quarter), which is accurate: 1x lookups use the real files, scaled lookups find no @2x/@3x directory.
+description = "Lingmo OS icon theme (Colloid derivative) with the multicolour systemlogo mark. DISCLOSED: the upstream links/ overlay (14137 plain-text aliases, not git symlinks) and the @2x/@3x directories (made by upstream's cmake) are not installed, so the pack reports DEGRADED and alias-only icon names fall back to breeze or hicolor."
+
+[[recommend]]
+theme = "lingmo"
+icons = "lingmo-icons"

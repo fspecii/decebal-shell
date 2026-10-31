@@ -1,0 +1,156 @@
+format = 1
+id = "lingmo"
+name = "Lingmo"
+version = "1.0.0"
+author = "LingmoOS Contributors (measured design); Decebal port"
+license = "MIT; values measured from LingmoOS, see NOTICE.md"
+description = "Lingmo OS's current Wayland desktop: 32 px translucent top status bar with the logo menu, tray and clock, a floating glass dock with 1.5x magnification, rdwm's native Lingmo window styles (30 px header, 11 px corners), and the Lingmo toolkit's light and dark palettes. Measured numbers only; no upstream code, shaders or artwork is copied."
+homepage = "https://github.com/LingmoOS/LingmoOS"
+min_shell_version = "0.3.0"
+tags = ["lingmo", "light", "dark", "glass", "dock", "port"]
+
+# Palettes: lingmo-sdk 752d2b2 src/ui/theme.cpp (Theme::light / Theme::dark) and toolkit_colors.cpp; popup surfaces from
+# lingmo-compositor 1cdaf0a shell/controlcenter/panel_style.cpp (statusSurfaceColor), titlebar and caption colours from
+# decoration/decoration_theme.cpp. Derived tokens (border, text_secondary, text_faint) are mixes of Lingmo's own recipes:
+#   border = text at 8% (light) / 12% (dark) over background  (ColorId::HeaderSeparator)
+#   text_secondary = disabledText (light), white at 60% over background (dark)  (PanelStyle::secondaryTextColor)
+#   text_faint = text at 40% over background  (ColorId::TextFieldPlaceholder)
+#   bar_text = black at alpha 217/255 on a light backdrop, white on a dark one  (BarContext::textColor, ui::Color{0,0,0,217})
+# The real status bar picks its ink from the wallpaper behind it; a package cannot, so the bar follows the mode.
+[colors.dark]
+background = "#1c1c1d"
+sidebar = "#2c2c2d"
+surface = "#2c2c2d"
+bar = "#1c1c1d"
+bar_text = "#ffffff"
+popup = "#242529"
+dock = "#616161"
+overlay = "#2c2c2d"
+titlebar = "#2c2c2d"
+titlebar_inactive = "#2c2c2d"
+border = "#373738"
+text = "#ffffff"
+text_secondary = "#a4a4a5"
+text_faint = "#777777"
+accent = "#3385ff"
+accent_text = "#ffffff"
+danger = "#ff453a"
+ok = "#35bf56"
+warn = "#fea042"
+
+[colors.light]
+background = "#f5f6fa"
+sidebar = "#f2f4f5"
+surface = "#ffffff"
+bar = "#f5f6fa"
+bar_text = "#252525"
+popup = "#fafafc"
+dock = "#999999"
+overlay = "#ffffff"
+titlebar = "#ffffff"
+titlebar_inactive = "#ffffff"
+border = "#e5e6ea"
+text = "#323238"
+text_secondary = "#64646e"
+text_faint = "#a7a8ac"
+accent = "#3385ff"
+accent_text = "#ffffff"
+danger = "#d92d20"
+ok = "#35bf56"
+warn = "#fea042"
+
+# radius 14 = ui::Theme::windowRadius/hugeRadius. dock_alpha: the dock's own tint at its default glassTint 0.5, computed from
+# dock_window.cpp glass(): alpha 0.29 dark / 0.25 light (one number here, so 0.27; kPace[10] = 0.5 exactly at the default). panel_alpha/popup_alpha 0.86 = panelGlass()
+# tint alpha. bar_alpha 0.55 = StatusBarSettings::kDefaultOpacity. blur 0.31 = bar blur sigma 20 of the 64 maximum.
+# dock_roundness 0.65 keeps upstream's radius-to-thickness ratio (thickness*28/86 = 0.326; this engine uses min(w,h)/2*roundness, so 0.65/2 = 0.325).
+# Measured in a real capture, the engine's panel is 73 px tall at size 54 (upstream's 86 includes a running-dot area), so the radius is about 24 px, not 28.
+# Glass: upstream's displacement is 36 on the dock, 20 on popups and 0 on the bar, with blur sigma 1 / 6 / 20; metrics are global
+# here, so the popup values (20 px lens, 14 px bezel, 6 px softening) are used. shadow and highlight are visual approximations of
+# the three-lobe shadow and 1.0 rim, not measured equivalents. outline 0.14 = shellOutline in light mode.
+[metrics]
+radius = 14
+dock_roundness = 0.65
+dock_alpha = 0.27
+dock_padding = 16
+popup_alpha = 0.86
+panel_alpha = 0.86
+bar_alpha = 0.55
+blur = 0.31
+glass_refraction = 20
+glass_edge = 14
+glass_blur = 6
+glass_highlight = 0.5
+glass_grain = 0
+shadow = 0.5
+outline = 0.14
+
+# The toolkit asks fontconfig for sans-serif; Lingmo ships Noto fonts (lingmo-settings-default depends on fonts-noto) and its
+# font collection carries Inter and Noto Sans CJK. 9 pt interface text, 10 pt on the bar.
+[font]
+ui = ["Noto Sans", "Inter", "Noto Sans CJK SC"]
+title = ["Noto Sans", "Inter", "Noto Sans CJK SC"]
+mono = ["Noto Sans Mono", "JetBrains Mono", "monospace"]
+display = ["Noto Sans", "Inter"]
+fallback = ["Noto Color Emoji"]
+scale = 1.0
+
+# Window style by mode (docs/desktop-ports/lingmo/decoration-style-modes.md): the native measured port pair `lingmo` / `lingmo-dark` when the RUNNING
+# rdwm lists it (its own `schema` answer, never the installed CLI's offline table), else the nearest native style of the same mode, `adwaita-light` /
+# `adwaita`, with a persistent "needs a newer rdwm" warning in Settings. `style` is the older key: engines without the mode keys read only it.
+# No height or radius here on purpose: a theme value would override the native geometry of whichever style ends up in use.
+# What this package applies is the stable native Lingmo geometry of rdwm's measured port: a 30 px header and an 11 px radius. The NEW lingmo-compositor
+# (1cdaf0a, decoration_theme.h) measures 36 px, 14 px and 32 px buttons: that is a reference recorded in docs/desktop-ports/lingmo/native/reference-numbers.json,
+# not something applied here, and the two are not claimed to be the same design.
+[decoration]
+style = "adwaita"
+style_light = "lingmo"
+style_dark = "lingmo-dark"
+fallback_style_light = "adwaita-light"
+fallback_style_dark = "adwaita"
+buttons = "right"
+title_align = "center"
+
+# Visual gaps only. Layouts, mfact, nmaster and smart_gaps are the user's global tiling behaviour and are never set by a theme.
+# 8/8 is Decebal tile-first spacing; the Lingmo compositor's own window gaps were not inspected and are not claimed.
+[rdwm]
+gap_inner = 8
+gap_outer = 8
+border_px = 1
+
+# The real status bar: logo/menu entry, application menus, tray, volume, network, battery, control centre, clock.
+# Every other applet stays one toggle away in Settings -> Panels; none of them is a Lingmo status-bar item.
+[bar]
+enabled = true
+style = "flat"
+position = "top"
+height = 32
+applets = ["app_menu", "tray", "volume", "network", "battery", "control_center", "clock"]
+
+# The floating glass dock: 54 px icons, bottom edge, 1.5x magnification (DockSettings defaults, DockMetrics base size 54).
+[dock]
+enabled = true
+style = "mac"
+position = "bottom"
+size = 54
+magnification = 1.5
+
+# The multicolour Lingmo mark is `systemlogo` in the Lingmo icon pack (an SVG gradient, so not tinted). If the pack is not installed
+# the contract draws the neutral grid, never Apple. With no application focused upstream shows the desktop's own exported menu;
+# "Desktop" is a neutral stand-in label (the engine default would be "Finder").
+[branding]
+logo = "icon:systemlogo"
+logo_tint = false
+desktop_label = "Desktop"
+
+# No [icons] section on purpose: the engine merges a theme's [icons] over the user's choice when the theme is applied, and an
+# icon pack the user picked must survive. The matching `Lingmo` icon pack is a separate user-initiated fetch
+# (assets/desktop-ports/lingmo/asset-packs.toml, `[[recommend]]`); until the user installs and selects it the bar logo is the neutral grid.
+
+# Quick settings: the glass control centre popover with raised tiles (tile radius 16), opened beside the bar's own button.
+[control_center]
+enabled = true
+position = "auto"
+style = "card"
+
+[desktop]
+widgets = "none"

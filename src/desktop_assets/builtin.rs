@@ -9,6 +9,7 @@
 pub const CATALOGS: &[(&str, &str)] = &[
     ("deepin", include_str!("../../assets/desktop-ports/deepin/asset-packs.toml")),
     ("gnome", include_str!("../../assets/desktop-ports/gnome/asset-packs.toml")),
+    ("lingmo", include_str!("../../assets/desktop-ports/lingmo/asset-packs.toml")),
     ("openkylin", include_str!("../../assets/desktop-ports/openkylin/asset-packs.toml")),
 ];
 

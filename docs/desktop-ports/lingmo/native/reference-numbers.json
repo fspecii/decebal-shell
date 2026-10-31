@@ -1,0 +1,66 @@
+{
+ "commit": "1cdaf0a86596ef3732e23d2450318728a180877b",
+ "repo": "LingmoOS/lingmo-compositor",
+ "values": {
+  "bar_edge_margin": {
+   "file": "src/shell/statusbar/bar_item.h",
+   "value": 12.0
+  },
+  "bar_highlight_gap": {
+   "file": "src/shell/statusbar/bar_item.h",
+   "value": 6.0
+  },
+  "bar_icon_size": {
+   "file": "src/shell/statusbar/bar_item.h",
+   "value": 16.0
+  },
+  "bar_item_gap": {
+   "file": "src/shell/statusbar/bar_item.h",
+   "value": 12.0
+  },
+  "decoration_button_size": {
+   "file": "src/decoration/decoration_theme.h",
+   "value": 32
+  },
+  "decoration_corner_radius": {
+   "file": "src/decoration/window_visual_style.cpp",
+   "value": 14
+  },
+  "decoration_titlebar_height": {
+   "file": "src/decoration/decoration_theme.h",
+   "value": 36
+  },
+  "dock_base_icon_size": {
+   "file": "src/shell/dock/dock_metrics.h",
+   "value": 54
+  },
+  "dock_icon_gap": {
+   "file": "src/shell/dock/dock_metrics.h",
+   "value": 16
+  },
+  "dock_length_padding": {
+   "file": "src/shell/dock/dock_metrics.h",
+   "value": 16
+  },
+  "dock_magnification_factor": {
+   "file": "src/shell/dock/dock_settings.h",
+   "value": 1.5
+  },
+  "dock_outer_padding": {
+   "file": "src/shell/dock/dock_metrics.h",
+   "value": 16
+  },
+  "status_bar_blur_sigma": {
+   "file": "src/shell/statusbar/status_bar_settings.h",
+   "value": 20.0
+  },
+  "status_bar_height": {
+   "file": "src/shell/statusbar/status_bar_window.h",
+   "value": 32
+  },
+  "status_bar_opacity": {
+   "file": "src/shell/statusbar/status_bar_settings.h",
+   "value": 0.55
+  }
+ }
+}

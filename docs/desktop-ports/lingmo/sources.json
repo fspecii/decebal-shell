@@ -1,0 +1,158 @@
+{
+  "format": 1,
+  "family": "lingmo",
+  "inspected_on": "2026-10-31",
+  "entry_point": "https://github.com/LingmoOS/LingmoOS",
+  "local_clones": "~/.cache/decebal-upstreams/lingmo (outside the checkout; depth-1 except lingmo-cursor-themes, fully fetched)",
+  "selection_rationale": "lingmo-meta (2026-10-28) `lingmo-shell-meta` Depends names lingmo-compositor, lingmo-core, lingmo-sdk, lingmo-icon-theme, lingmo-wallpapers, lingmo-framework: that is the current desktop. The LingmoOS/LingmoOS monorepo (last commit 2026-08-25, Qt/QML + KWin) and the lingmo-shell / dock / lingmo-statusbar / lingmo-appearance / lingmo-kwin repos are the previous FishUI/KWin generation and are used only where the new code states that it carried the numbers across.",
+  "primary": [
+    {
+      "repo": "LingmoOS/lingmo-compositor",
+      "commit": "1cdaf0a86596ef3732e23d2450318728a180877b",
+      "commit_date": "2026-10-30",
+      "role": "Wayland compositor + shell in one process: window decoration, status bar (menu bar, tray, indicators, clock), floating glass dock, Launchpad-style launcher, control centre, notifications, OSD",
+      "paths_read": [
+        "src/decoration/decoration_theme.{h,cpp}",
+        "src/decoration/window_visual_style.{h,cpp}",
+        "src/decoration/caption_button.cpp",
+        "src/decoration/decoration.cpp",
+        "src/decoration/decoration_node.cpp",
+        "src/shell/dock/{dock_metrics.h,dock_settings.h,dock_window.cpp,dock_magnification.h,dock_bounce.h}",
+        "src/shell/statusbar/{status_bar_window.h,status_bar_window.cpp,bar_item.{h,cpp},status_bar_settings.h,status_bar_panels.h,status_bar.h,clock_format.h}",
+        "src/shell/launcher/launcher_metrics.cpp",
+        "src/shell/controlcenter/panel_style.{h,cpp}",
+        "src/shell/osd/osd.h",
+        "src/shell/shell_data.cpp",
+        "src/toolkit/compositor_colors.{h,cpp}"
+      ],
+      "license": {
+        "file": "LICENSE = BSD 3-Clause (Copyright 2026 Reion Wong); LICENSE.chromium and LICENSE.sommelier for ported code",
+        "readme": "README says GPL-3.0-or-later",
+        "source_headers": "headers say 'BSD-style license'",
+        "verdict": "internally inconsistent upstream (BSD-3-Clause file and headers versus a GPL-3.0-or-later README). Only measured numbers and layout facts are taken; no source, shader or SVG path data is copied."
+      }
+    },
+    {
+      "repo": "LingmoOS/lingmo-sdk",
+      "commit": "752d2b24b398b11b995cbb82bfba0b8c161df7bd",
+      "commit_date": "2026-10-29",
+      "role": "Lingmo Toolkit (Skia/Wayland): ui::Theme light/dark tokens, accent palette, toolkit colour recipes, control geometry",
+      "paths_read": [
+        "src/ui/theme.{h,cpp}",
+        "src/ui/toolkit_colors.cpp"
+      ],
+      "license": {
+        "file": "LICENSE = BSD 3-Clause (Copyright 2026 Reion Wong)",
+        "source_headers": "SPDX GPL-3.0-or-later",
+        "verdict": "inconsistent upstream (BSD-3-Clause file, GPL-3.0-or-later SPDX headers). Colour values are design facts and are re-authored as TOML."
+      }
+    },
+    {
+      "repo": "LingmoOS/lingmo_icon_theme",
+      "commit": "0b6a4bab253154b786c51c9978960471fd98c88b",
+      "commit_date": "2026-10-30",
+      "role": "Lingmo icon theme (upstream's install script installs a single theme named `Lingmo`; `dark/` is not installed); `index.theme` is named Cutefish, Inherits=hicolor,breeze; includes `systemlogo`, `start-here`",
+      "tree_hashes": {
+        "src": "19ae41643ae10b340a88c6530c58e9d74e440ac9",
+        "dark": "527234a50063fee6610401a1729068084ca3efaa",
+        "links": "09d28c3591d256643c992999dc742b60336e6fc6"
+      },
+      "size_bytes_src": 29237423,
+      "size_bytes_links": 275311,
+      "license": {
+        "file": "LICENSE = GPL-3.0 text",
+        "debian_copyright": "License: GPL-3+ (Lingmo OS contributors)",
+        "provenance": "README: based on Colloid-icon-theme (vinceliuice, GPL-3.0); window-control symbolics adapted from FishUI artwork",
+        "verdict": "GPL-3.0-or-later; redistributable as a separate asset pack with the notice. 29 MB of SVG (57 MB on disk): delivered by fetch recipe, not committed."
+      }
+    },
+    {
+      "repo": "LingmoOS/lingmo-cursor-themes",
+      "commit": "2d7dbb8e4828b28225b72a05732fb3e169548962",
+      "commit_date": "2026-10-19",
+      "role": "X11 cursor themes `lingmo-light` and `lingmo-dark` (xcursor files, 38.9 MB and 46.3 MB)",
+      "tree_hashes": {
+        "lingmo-light": "d8bafbd1e3254695c74006ca1c9d54923738ef2f",
+        "lingmo-dark": "1882f974c9d9e0bd14ab6e33c05efcf661f23445"
+      },
+      "license": {
+        "file": "no LICENSE file; debian/copyright is an unfilled template; the generated README says 'License: not declared'",
+        "provenance": "README.old.md: 'forked from https://github.com/ful1e5/Bibata_Cursor' and 'licensed by GPLv3' (Bibata Cursor is GPL-3.0)",
+        "verdict": "licence is asserted only by a legacy README and by the Bibata origin; no grant in the repository itself. Not committed. Offered as a user-initiated fetch recipe with that uncertainty displayed. The installer owner decides whether to expose it."
+      }
+    },
+    {
+      "repo": "LingmoOS/lingmo-meta",
+      "commit": "506ddb7dd7fcd1e7722167d065e60423a57beced",
+      "commit_date": "2026-10-28",
+      "role": "metapackage that defines which repositories are the current desktop"
+    }
+  ],
+  "reference_only_previous_generation": [
+    {
+      "repo": "LingmoOS/LingmoOS",
+      "commit": "80c259ac5dfef1fa4be446b33c26f99c4f4750ae",
+      "commit_date": "2026-08-25",
+      "license": "GPL-3.0 (file)"
+    },
+    {
+      "repo": "LingmoOS/dock",
+      "commit": "0c1bc4903bc801c3d1fb6547fe1c4e64e3eaadce",
+      "commit_date": "2026-10-22",
+      "license": "LGPL (file)"
+    },
+    {
+      "repo": "LingmoOS/lingmo-statusbar",
+      "commit": "bae0235624244bb96e9f53abd3a6ab57fc5ae15a",
+      "commit_date": "2026-10-23",
+      "license": "GPL-3.0 (file)"
+    },
+    {
+      "repo": "LingmoOS/lingmo-launcher",
+      "commit": "59fb46ef0ef681f0805a3de402c5e08d10dda1f4",
+      "commit_date": "2026-10-19",
+      "license": "GPL-3.0 (file)"
+    },
+    {
+      "repo": "LingmoOS/lingmo-appearance",
+      "commit": "ee9c5f16f246ce0f7b07a461947520d167caeaf5",
+      "commit_date": "2026-10-19",
+      "license": "GPL-2.0-or-later (README; Darkly KDE style fork)"
+    },
+    {
+      "repo": "LingmoOS/lingmo-gtk-themes",
+      "commit": "70daf3d999ac8616b23ddd09f413ee69e58943bf",
+      "commit_date": "2026-10-19",
+      "license": "GPL-3.0 (file)"
+    },
+    {
+      "repo": "LingmoOS/theme",
+      "commit": "91426320496cf8c4de8774bf7e5bef3dff1191d1",
+      "commit_date": "2026-07-08",
+      "license": "GPL-3.0 (file); design-token library, not used by the shipping shell yet"
+    },
+    {
+      "repo": "LingmoOS/lingmo-core",
+      "commit": "4917b11fa370bacd0c33b2170556ee49c05e7a0b",
+      "commit_date": "2026-10-30",
+      "license": "BSD-3-Clause file / GPL-3.0-or-later README"
+    }
+  ],
+  "not_used": [
+    {
+      "repo": "LingmoOS/lingmo-wallpapers",
+      "reason": "The task requires matching Wallhaven candidates with provenance records rather than copied or generated art. Lingmo's own default wallpapers (Unsplash-licensed photographs per LICENSE.UNSPLASH) are a reference only; individual photographers were not verified.",
+      "commit": "8d4de2c86631a1dcd7975e7ef9a501705c04977b (main, 2026-10-28; read through the GitHub API, not cloned)",
+      "license": "LICENSE.GPLv3 and LICENSE.UNSPLASH at the repository root; README: GPL-3.0; 18 files in sources/"
+    },
+    {
+      "repo": "LingmoOS/lingmo-fonts-collection",
+      "license": "MIT (README)",
+      "reason": "616 MB; the shell asks fontconfig for sans-serif. Packaged fonts (Inter-Font-EN, NotoSansCJKsc) are named by family only."
+    },
+    {
+      "repo": "LingmoOS/velora-*",
+      "reason": "Deepin-derived DDE tree (velora-shell is described upstream as a DDE Shell library); not the current Lingmo desktop design source."
+    }
+  ]
+}
