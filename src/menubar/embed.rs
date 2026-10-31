@@ -135,6 +135,20 @@ impl DecBar {
         crate::gfx::with_render_scale(k, || self.status_toggle_l(kind, x / k))
     }
 
+    /// Extent the open popup would like (surface pixels): for the Control Center its natural width and full height, before
+    /// any fitting to the host's room. A host sizes its surface for this; the backend bounds the surface to the output and
+    /// the panel is then fitted to the room it really got (see [`DecBar::status_set_surface_size`]).
+    pub fn status_wanted_size(&self) -> Option<(f32, f32)> {
+        let k = self.ek();
+        if self.open == Open::Control {
+            let w = if self.cc_w > 0.0 { self.cc_w } else { controlcenter::panel_width(self.cc_style()) };
+            // the look's widest layout (GNOME's two columns), so a narrow first fit never shrinks the request
+            let w = w.max(controlcenter::panel_width(self.cc_style()));
+            return Some((w * k, self.cc_height * k));
+        }
+        self.status_size()
+    }
+
     /// Extent of the open popup in surface pixels.
     pub fn status_size(&self) -> Option<(f32, f32)> {
         let k = self.ek();

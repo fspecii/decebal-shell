@@ -1632,6 +1632,33 @@ mod tests {
     }
 
     #[test]
+    fn a_side_taskbar_grows_for_quick_settings_and_keeps_the_panel_at_its_size() {
+        use crate::panel::Edge;
+        use crate::taskbar::Hit;
+        for edge in [Edge::Left, Edge::Right] {
+            let mut r = edge_rig(&format!("qs-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            r.app.surface = (r.app.size().0.max(1), 720);
+            let z = r.app.win_to_surface(r.app.win_layout().unwrap().rect_of(Hit::Tray(crate::menubar::Tray::Control)).unwrap());
+            let (x, y) = (z.0 + z.2 / 2.0, z.1 + z.3 / 2.0);
+            r.app.pointer_button(x, y, Button::Left);
+            r.app.pointer_release(x, y, Button::Left);
+            assert!(r.app.win.as_ref().unwrap().status.status_open_kind().is_some(), "{edge:?}: quick settings opened");
+            // the backend: the size asked for, bounded by a 1280 x 720 output; then a frame
+            for _ in 0..2 {
+                let (w, _) = r.app.size();
+                r.app.resized(w.min(1280), 720);
+                let mut pm = Pixmap::new(r.app.surface.0, r.app.surface.1).unwrap();
+                r.app.draw(&mut pm);
+            }
+            let st = &r.app.win.as_ref().unwrap().status;
+            let (shown, wanted) = (st.status_size().unwrap(), st.status_wanted_size().unwrap());
+            assert!(r.app.surface.0 > 300, "{edge:?}: the surface grew for the panel ({:?})", r.app.surface);
+            assert!((shown.0 - wanted.0).abs() < 1.0, "{edge:?}: the panel keeps its width when it fits ({shown:?} of {wanted:?})");
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
     fn each_taskbar_applet_alone_is_its_own_zone() {
         use crate::panel::{AppletId as A, AppletSet, Edge};
         for edge in [Edge::Bottom, Edge::Left] {

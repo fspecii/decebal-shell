@@ -363,7 +363,8 @@ impl DockApp {
             let (mw, mh) = m.menu.size();
             extra = extra.max(if vertical { mw } else { mh } + MENU_GAP + POP_TOP);
         }
-        if let Some((pw, ph)) = self.win.as_ref().and_then(|w| w.status.status_size()) {
+        // the popup's wanted size: the backend keeps the surface on the output and the panel is fitted to what it got
+        if let Some((pw, ph)) = self.win.as_ref().and_then(|w| w.status.status_wanted_size()) {
             extra = extra.max(if vertical { pw } else { ph } + crate::menubar::STATUS_GAP + POP_TOP);
         }
         // a side strip is as tall as the monitor and grows sideways; a top / bottom one as wide and grows up / down
