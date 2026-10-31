@@ -110,7 +110,7 @@ class Gate:
             if int(pid) == os.getpid():
                 continue
             try:
-                if mark in Path(f"/proc/{pid}/environ").read_bytes().split(b"\0"):
+                if Path(f"/proc/{pid}").stat().st_uid == os.getuid() and mark in Path(f"/proc/{pid}/environ").read_bytes().split(b"\0"):
                     found.append(int(pid))
             except OSError:
                 continue
@@ -314,7 +314,7 @@ def one_run(gate, private, calls, theme, shots, screen, scale, mode, edge, keep,
             time.sleep(0.3)
             gate.x("xdotool", "click", "1")
             wait_for(lambda: (lambda b: b and abs(b[2] - fx1) <= 2 and abs(b[3] - fy1) <= 2)(bbox(base, shot(gate, shots / f"{tag}-pointer-expanded.png"))), f"{tag}: a click on the expand button did not expand")
-            rx, ry = restore_button(free, scale)
+            rx, ry = restore_button((fx0, fy0, fx1, fy1), scale)
             gate.x("xdotool", "mousemove", str(round(rx)), str(round(ry)))
             time.sleep(0.3)
             gate.x("xdotool", "click", "1")
@@ -409,6 +409,8 @@ def main():
             "DBUS_SESSION_BUS_ADDRESS": f"unix:path={private}/no-session-bus", "DBUS_SYSTEM_BUS_ADDRESS": f"unix:path={private}/no-system-bus",
             "PATH": str(private / "bin"), "LANG": "C.UTF-8", "DECEBAL_NATIVE_TOKEN": gate.token,
         }
+        if os.environ.get("E2E_PARENT_TOKEN"):
+            base_env["E2E_PARENT_TOKEN"] = os.environ["E2E_PARENT_TOKEN"]
         hashes = {
             "declaunch": sha(private / "bin/declaunch"), "declaunch_source_path": str(binary), "theme.toml": sha(package / "theme.toml"),
             "start_button_logo": sha(package / "icons/kylin-startmenu.png") if (package / "icons/kylin-startmenu.png").exists() else None,
