@@ -16,6 +16,12 @@ pub struct AppEntry {
     pub try_exec: String,
     /// The `.desktop` file (for `%k`); empty when unknown.
     pub file: String,
+    /// `Categories=` as written (`;`-separated freedesktop categories); empty when unknown.
+    pub categories: String,
+    /// `Keywords=` as written (`;`-separated search words); empty when unknown.
+    pub keywords: String,
+    /// The untranslated `Comment=` (a one-line description); empty when unknown.
+    pub comment: String,
 }
 
 fn app_dirs() -> Vec<PathBuf> {
@@ -63,6 +69,12 @@ pub fn parse_any(text: &str) -> Option<(AppEntry, bool)> {
                 e.path = v.to_string();
             } else if let Some(v) = line.strip_prefix("TryExec=") {
                 e.try_exec = v.to_string();
+            } else if let Some(v) = line.strip_prefix("Categories=") {
+                e.categories = v.to_string();
+            } else if let Some(v) = line.strip_prefix("Comment=") {
+                e.comment = v.to_string();
+            } else if let Some(v) = line.strip_prefix("Keywords=") {
+                e.keywords = v.to_string();
             } else if let Some(v) = line.strip_prefix("Terminal=") {
                 e.terminal = v == "true";
             } else if let Some(v) = line.strip_prefix("Type=") {
@@ -116,16 +128,27 @@ fn esc(s: &str) -> String {
 /// The app list saved by [`save_cache`]; empty when there is none yet.
 pub fn load_cache() -> Vec<AppEntry> {
     let Some(text) = cache_file().and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
+    parse_cache(&text)
+}
+
+/// The cache's lines: up to ten tab-separated columns; older caches have fewer and the rest reads as empty.
+fn parse_cache(text: &str) -> Vec<AppEntry> {
     text.lines()
         .filter_map(|l| {
-            let mut p = l.splitn(7, '\t');
+            let mut p = l.splitn(10, '\t');
             let (name, exec, icon) = (p.next()?.to_string(), p.next()?.to_string(), p.next()?.to_string());
             // Older caches have three columns only.
             let mut rest = || p.next().unwrap_or("").to_string();
-            let (path, terminal, try_exec, file) = (rest(), rest() == "1", rest(), rest());
-            Some(AppEntry { name, exec, icon, path, terminal, try_exec, file })
+            let (path, terminal, try_exec, file, categories, keywords, comment) = (rest(), rest() == "1", rest(), rest(), rest(), rest(), rest());
+            Some(AppEntry { name, exec, icon, path, terminal, try_exec, file, categories, keywords, comment })
         })
         .collect()
+}
+
+/// One cache line (no newline); tabs and newlines inside values become spaces.
+fn cache_line(a: &AppEntry) -> String {
+    let fields: [&str; 10] = [&a.name, &a.exec, &a.icon, &a.path, if a.terminal { "1" } else { "0" }, &a.try_exec, &a.file, &a.categories, &a.keywords, &a.comment];
+    fields.iter().map(|f| esc(f)).collect::<Vec<_>>().join("\t")
 }
 
 pub fn save_cache(apps: &[AppEntry]) {
@@ -133,8 +156,7 @@ pub fn save_cache(apps: &[AppEntry]) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let text: String =
-        apps.iter().map(|a| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon), esc(&a.path), u8::from(a.terminal), esc(&a.try_exec), esc(&a.file))).collect();
+    let text: String = apps.iter().map(|a| cache_line(a) + "\n").collect();
     let _ = publish_cache(&path, text.as_bytes());
 }
 
@@ -224,6 +246,26 @@ mod tests {
     }
 
     #[test]
+    fn the_cache_round_trips_all_columns_and_reads_older_layouts() {
+        let a = AppEntry {
+            name: "Gimp".into(),
+            exec: "gimp %U".into(),
+            icon: "gimp".into(),
+            path: "/w".into(),
+            terminal: true,
+            try_exec: "gimp".into(),
+            file: "/x/gimp.desktop".into(),
+            categories: "Graphics;".into(),
+            keywords: "photo;".into(),
+            comment: "Edit\timages".into(),
+        };
+        assert_eq!(cache_line(&a).split('\t').count(), 10, "tabs inside a value are flattened");
+        let back = parse_cache(&format!("{}\nOld\told\ticon\n", cache_line(&a)));
+        assert_eq!(back[0], AppEntry { comment: "Edit images".into(), ..a });
+        assert_eq!(back[1], AppEntry { name: "Old".into(), exec: "old".into(), icon: "icon".into(), ..Default::default() }, "three-column caches still load");
+    }
+
+    #[test]
     fn parses_a_normal_entry() {
         let t = "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot %U\nIcon=foot\n[Desktop Action x]\nName=Other\n";
         assert_eq!(parse_entry(t), Some(AppEntry { name: "Foot".into(), exec: "foot %U".into(), icon: "foot".into(), ..Default::default() }));
@@ -242,6 +284,13 @@ mod tests {
         assert_eq!(filter(&apps, "fi"), vec![1, 3, 2]);
         assert_eq!(filter(&apps, "").len(), 4);
         assert!(filter(&apps, "zzz").is_empty());
+    }
+
+    #[test]
+    fn categories_and_keywords_are_read_and_cached() {
+        let t = "[Desktop Entry]\nName=Gimp\nExec=gimp\nCategories=Graphics;2DGraphics;\nKeywords=photo;paint;\nComment=Edit images\nComment[de]=Bilder\n";
+        let e = parse_entry(t).unwrap();
+        assert_eq!((e.categories.as_str(), e.keywords.as_str(), e.comment.as_str()), ("Graphics;2DGraphics;", "photo;paint;", "Edit images"));
     }
 
     #[test]

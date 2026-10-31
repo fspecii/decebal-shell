@@ -304,7 +304,7 @@ pub const TOKENS: &[(&str, Kind, &str)] = &[
         "menu bar shape: a full-width strip, a floating pill, or the Caelestia pill bar on a screen edge (left by default, see `bar.position`; the dock hides with it)",
     ),
     ("dashboard_style", Kind::Choice(&["default", "dux"]), "native dashboard composition"),
-    ("launcher_style", Kind::Choice(&["default", "dux"]), "native application launcher composition"),
+    ("launcher_style", Kind::Choice(crate::launcher::style::KEYS), "native application launcher composition (the user's Settings choice overrides it)"),
     ("dashboard_profile", Kind::Choice(&["readme"]), "configured Dux README dashboard profile; not current upstream defaults"),
     ("titlebar_style", Kind::Choice(&["macos", "classic"]), "rdwm titlebar style"),
     ("titlebar_height", Kind::Num(16.0, 60.0), "rdwm titlebar height in px"),

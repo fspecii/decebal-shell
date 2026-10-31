@@ -178,7 +178,7 @@ fn fit(fonts: &Fonts, value: &str, size: f32, width: f32, weight: Weight) -> Str
 }
 impl Launcher {
     pub(super) fn is_dux(&self) -> bool {
-        crate::theme::th().launcher_style == "dux"
+        self.style == LauncherStyle::Dux
     }
     pub(super) fn prepare_dux(&mut self) {
         if !self.is_dux() {

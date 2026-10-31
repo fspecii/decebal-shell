@@ -198,11 +198,30 @@ pub struct ShellSettings {
     pub clock_hour12: bool,
     /// `weekday-day-month` (default), `day-month`, `weekday-day`, `none`.
     pub clock_date: String,
+    /// The launcher style the user picked, independent of the theme.
+    #[serde(deserialize_with = "lenient")]
+    pub launcher: LauncherSettings,
+}
+
+/// `decebal.json` -> `"launcher": { "style": "<key>" }`: a key of [`crate::launcher::style::KEYS`]; absent, `"theme"` or an
+/// unknown key follow the theme's `launcher_style`. Theme apply never writes it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct LauncherSettings {
+    #[serde(deserialize_with = "lenient")]
+    pub style: String,
 }
 
 impl Default for ShellSettings {
     fn default() -> Self {
-        Self { workspaces: Toggle::Word(Word::Auto), bar: BarSettings::default(), dock: DockGateSettings::default(), clock_hour12: false, clock_date: "weekday-day-month".into() }
+        Self {
+            workspaces: Toggle::Word(Word::Auto),
+            bar: BarSettings::default(),
+            dock: DockGateSettings::default(),
+            clock_hour12: false,
+            clock_date: "weekday-day-month".into(),
+            launcher: LauncherSettings::default(),
+        }
     }
 }
 

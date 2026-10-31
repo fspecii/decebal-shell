@@ -1012,6 +1012,50 @@ y = -30
     }
 
     #[test]
+    fn theme_palette_and_mode_changes_never_touch_the_users_launcher_choice() {
+        use crate::launcher::style::LauncherStyle;
+        let (dir, src, paths) = sandbox("launcher-choice");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        // a theme whose manifest names its own launcher style
+        install_sunset_manifest(&src, &format!("{SUNSET}\n[launcher]\nstyle = \"dux\"\n"));
+        std::fs::write(paths.shell_json(), json!({"launcher": {"style": "kde", "extra": true}}).to_string()).unwrap();
+        let mut base = src.selection();
+        for id in ["windows11", "sunset", "macos", "sunset"] {
+            apply(&src, &paths, id, &base).unwrap();
+            base = src.selection();
+            let shell = io::json_load(&paths.shell_json());
+            assert_eq!(shell["launcher"], json!({"style": "kde", "extra": true}), "{id} rewrote the launcher choice");
+            let theme = src.build(&base, true).0;
+            assert_eq!(LauncherStyle::resolve(shell["launcher"]["style"].as_str(), &theme.launcher_style), LauncherStyle::Kde);
+        }
+        assert_eq!(src.build(&base, true).0.launcher_style, "dux", "the manifest's token still reaches the theme");
+        // palette and mode edits of the same theme
+        for selection in [Selection { palette: Some("nord".into()), ..base.clone() }, Selection { mode: crate::theme::Mode::Light, ..base.clone() }] {
+            apply_selection(&src, &paths, &selection).unwrap();
+            assert_eq!(io::json_load(&paths.shell_json())["launcher"]["style"], "kde");
+        }
+        // "theme" (Use theme default) defers to the token, and is kept as written too
+        std::fs::write(paths.shell_json(), json!({"launcher": {"style": "theme"}}).to_string()).unwrap();
+        apply(&src, &paths, "sunset", &src.selection()).unwrap();
+        let shell = io::json_load(&paths.shell_json());
+        assert_eq!(shell["launcher"]["style"], "theme");
+        assert_eq!(LauncherStyle::resolve(shell["launcher"]["style"].as_str(), &src.build(&src.selection(), true).0.launcher_style), LauncherStyle::Dux);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn old_manifests_and_configs_without_new_launcher_keys_still_work() {
+        let (dir, src, paths) = sandbox("launcher-legacy");
+        install_sunset_manifest(&src, &format!("{SUNSET}\n[launcher]\nstyle = \"default\"\n"));
+        std::fs::write(paths.shell_json(), r#"{"theme":{"name":"sunset"},"launcher":"not-an-object"}"#).unwrap();
+        apply(&src, &paths, "sunset", &src.selection()).unwrap();
+        let shell: crate::config::ShellSettings = serde_json::from_value(io::json_load(&paths.shell_json())).unwrap();
+        assert_eq!(shell.launcher.style, "", "a malformed launcher key reads as 'follow the theme'");
+        assert_eq!(src.build(&src.selection(), true).0.launcher_style, "default");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn apply_sets_every_file_the_theme_owns() {
         let (d, src, paths) = sandbox("all");
         std::fs::write(&paths.rdwm_config, "# mine\n[general]\ntags = [\"a\"]\n").unwrap();

@@ -150,8 +150,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     let passive = popup && app.popup_passive();
     // The size a popup takes depends on the UI scale, so tell the app before asking for it.
     app.set_scale(xft_scale(&conn, screen.root));
-    let mon = if popup { super::x11::panel_monitor(&conn, screen.root, (sw as i32, sh as i32)) } else { super::x11::Rect { x: 0, y: 0, w: sw as i32, h: sh as i32 } };
+    let mon = if popup { super::x11::popup_monitor(&conn, screen.root, (sw as i32, sh as i32), &app.popup_monitor()) } else { super::x11::Rect { x: 0, y: 0, w: sw as i32, h: sh as i32 } };
     if popup {
+        app.set_popup_origin(mon.x, mon.y);
         app.set_popup(true);
         // Popups are placed on the primary monitor, so that is the "screen" they can use.
         app.set_screen(mon.w as u32, mon.h as u32);

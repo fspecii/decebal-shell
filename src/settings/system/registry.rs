@@ -14,7 +14,7 @@ pub struct Section {
 pub const SECTIONS: &[Section] = &[
     Section { title: "Start Here", panes: &["welcome"] },
     Section { title: "Network & Connectivity", panes: &["network", "bluetooth"] },
-    Section { title: "Appearance", panes: &["appearance", "wallpaper", "icons", "widgets", "config"] },
+    Section { title: "Appearance", panes: &["appearance", "wallpaper", "icons", "widgets", "launcher", "config"] },
     Section { title: "Displays", panes: &["displays"] },
     Section { title: "Sound", panes: &["sound"] },
     Section { title: "Notifications", panes: &["notifications"] },
@@ -37,6 +37,7 @@ pub const SETTINGS: &[(&str, &str, &str)] = &[
         "Getting Started",
         "first session tour onboarding help guide app search spotlight theme palette wallpaper icons widgets create no-code shift snapping gtk all apps reopen shortcuts undo logs recovery launch.log",
     ),
+    ("launcher", "Launcher style", "start menu launchpad windows gnome kde kickoff xfce whisker blackberry dux theme default"),
     ("sound", "Output device", "speakers headphones default sink"),
     ("sound", "Input device", "microphone mic default source"),
     ("sound", "Volume", "loudness level slider"),

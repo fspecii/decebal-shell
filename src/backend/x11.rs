@@ -148,6 +148,34 @@ pub(crate) fn panel_monitor(conn: &RustConnection, root: Window, screen: (i32, i
     pick.map(|m| Rect { x: m.x as i32, y: m.y as i32, w: m.width as i32, h: m.height as i32 }).unwrap_or(whole)
 }
 
+/// The monitor `hint` names among `monitors` (name, geometry, primary): by name, else the one holding the point,
+/// else the primary, else the first, else `whole`. Pure, so every single- and multi-output case is unit-tested.
+pub(crate) fn choose_monitor(monitors: &[(String, Rect, bool)], hint: &crate::window_app::MonitorHint, whole: Rect) -> Rect {
+    let usable = || monitors.iter().filter(|m| m.1.w > 0 && m.1.h > 0);
+    let by_name = hint.output.as_deref().and_then(|name| usable().find(|m| m.0 == name));
+    let by_point = || hint.point.and_then(|(x, y)| usable().find(|m| x >= m.1.x && y >= m.1.y && x < m.1.x + m.1.w && y < m.1.y + m.1.h));
+    by_name.or_else(by_point).or_else(|| usable().find(|m| m.2)).or_else(|| usable().next()).map_or(whole, |m| m.1)
+}
+
+/// [`choose_monitor`] over the server's RandR monitors (their names are the output names for automatic monitors).
+pub(crate) fn popup_monitor(conn: &RustConnection, root: Window, screen: (i32, i32), hint: &crate::window_app::MonitorHint) -> Rect {
+    let whole = Rect { x: 0, y: 0, w: screen.0, h: screen.1 };
+    let Some(reply) = conn.randr_get_monitors(root, true).ok().and_then(|c| c.reply().ok()) else { return whole };
+    let monitors: Vec<(String, Rect, bool)> = reply
+        .monitors
+        .iter()
+        .map(|m| {
+            let name = conn.get_atom_name(m.name).ok().and_then(|c| c.reply().ok()).map(|r| String::from_utf8_lossy(&r.name).into_owned()).unwrap_or_default();
+            (name, Rect { x: m.x.into(), y: m.y.into(), w: m.width.into(), h: m.height.into() }, m.primary)
+        })
+        .collect();
+    if let Some(name) = hint.output.as_deref().filter(|n| !monitors.iter().any(|m| m.0 == *n)) {
+        let known: Vec<&str> = monitors.iter().map(|m| m.0.as_str()).collect();
+        crate::log_warn!("no output named {name} (have {known:?}); using the anchor's or the panels' monitor");
+    }
+    choose_monitor(&monitors, hint, whole)
+}
+
 /// True when a compositing manager owns `_NET_WM_CM_S<screen>`; without one the transparent part of
 /// a 32-bit window is drawn solid black, so the visible shape has to be clipped as well.
 pub(crate) fn has_compositor(conn: &RustConnection, screen_num: usize) -> bool {
@@ -513,6 +541,34 @@ fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, max_by
     }
     conn.flush().map_err(err)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod monitor_tests {
+    #[test]
+    fn popup_monitors_follow_the_output_name_then_the_anchor_then_the_primary() {
+        use super::{choose_monitor, Rect};
+        use crate::window_app::MonitorHint;
+        let r = |x, w| Rect { x, y: 0, w, h: 1080 };
+        let whole = r(0, 4480);
+        let hint = |output: Option<&str>, point: Option<(i32, i32)>| MonitorHint { output: output.map(String::from), point };
+        // single output
+        let one = [("eDP-1".to_string(), r(0, 1920), false)];
+        assert_eq!(choose_monitor(&one, &hint(None, None), whole), r(0, 1920));
+        assert_eq!(choose_monitor(&one, &hint(Some("eDP-1"), None), whole), r(0, 1920));
+        assert_eq!(choose_monitor(&one, &hint(Some("HDMI-9"), Some((5000, 5))), whole), r(0, 1920), "unknown name, point off every monitor");
+        assert_eq!(choose_monitor(&[], &hint(Some("eDP-1"), None), whole), whole, "no RandR monitors at all");
+        // three outputs, the middle one primary
+        let three = [("DP-1".to_string(), r(0, 1920), false), ("DP-2".to_string(), r(1920, 1280), true), ("HDMI-1".to_string(), r(3200, 1280), false)];
+        assert_eq!(choose_monitor(&three, &hint(None, None), whole), r(1920, 1280), "the panels' (primary) monitor");
+        assert_eq!(choose_monitor(&three, &hint(Some("HDMI-1"), None), whole), r(3200, 1280), "--output wins");
+        assert_eq!(choose_monitor(&three, &hint(Some("HDMI-1"), Some((10, 10))), whole), r(3200, 1280), "--output over the anchor");
+        assert_eq!(choose_monitor(&three, &hint(None, Some((100, 1060))), whole), r(0, 1920), "the monitor under the applet");
+        assert_eq!(choose_monitor(&three, &hint(Some("gone"), Some((3300, 20))), whole), r(3200, 1280), "an unknown name falls back to the anchor");
+        assert_eq!(choose_monitor(&three, &hint(None, Some((1920, 0))), whole), r(1920, 1280), "edges belong to the right-hand monitor");
+        let no_primary = [("A".to_string(), r(0, 0), false), ("B".to_string(), r(0, 800), false)];
+        assert_eq!(choose_monitor(&no_primary, &hint(None, None), whole), r(0, 800), "empty monitors are skipped");
+    }
 }
 
 #[cfg(test)]

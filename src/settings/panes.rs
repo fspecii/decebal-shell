@@ -82,6 +82,13 @@ pub const PANES: &[PaneDef] = &[
         keywords: "advanced config configuration edit text file json toml raw presets profiles export import share backup restore revert save as preset decebal.json dock-settings config.toml",
     },
     PaneDef { id: "accessibility", title: "Accessibility", glyph: Glyph::Sys(glyphs::ACCESS), color: (10, 132, 255), keywords: "cursor size reduce motion text size contrast font large" },
+    PaneDef {
+        id: "launcher",
+        title: "Launcher",
+        glyph: Glyph::Sys(glyphs::APPS),
+        color: (0, 122, 255),
+        keywords: "launcher start menu launchpad app grid applications kickoff whisker gnome activities overview windows kde xfce blackberry dux style",
+    },
     // Getting Started: an overview pane that only navigates to the panes above (buttons set `sel.goto`).
     // Kept last so existing pane indexes (and the default start-up pane, 0 = General) stay unchanged.
     PaneDef {
@@ -417,6 +424,7 @@ impl Model {
                 v
             }
             "welcome" => self.pane_welcome(),
+            "launcher" => super::launcherpane::items(self),
             _ => self.pane_displays(),
         });
         items
@@ -1281,6 +1289,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);
+    }
+    if matches!(parts.as_slice(), ["ln", ..]) {
+        return super::launcherpane::apply(m, &parts, v);
     }
     if matches!(parts.as_slice(), ["ic", ..] | ["l", "icons", ..]) {
         return super::iconspane::apply(m, &parts, v);

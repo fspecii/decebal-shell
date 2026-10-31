@@ -1,4 +1,5 @@
-//! The Launchpad: a searchable grid of installed applications in a floating window.
+//! The application launcher: the Launchpad grid and the Dux list (drawn here and in `dux`), and the Windows,
+//! GNOME, KDE, Xfce and BlackBerry styles (`styled`). [`style`] says which one runs, [`placement`] where it goes.
 
 use crate::app::Button;
 use crate::apps::{self, AppEntry};
@@ -10,7 +11,14 @@ use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use tiny_skia::{Color, Pixmap};
 
+pub mod catalog;
 mod dux;
+pub mod placement;
+pub mod style;
+mod styled;
+
+use placement::{resolve_anchor, Anchor, Invocation};
+use style::LauncherStyle;
 
 const PAD: f32 = 28.0;
 const SEARCH_Y: f32 = 22.0;
@@ -20,8 +28,6 @@ const CELL_W: f32 = 132.0;
 const CELL_H: f32 = 116.0;
 const ICON: u32 = 60;
 const RADIUS: f32 = 14.0;
-const PANEL_MAX_W: u32 = 1100;
-const PANEL_MAX_H: u32 = 720;
 
 fn text_color() -> Color {
     crate::theme::th().text_c()
@@ -46,6 +52,24 @@ pub struct Launcher {
     fonts: Option<Fonts>,
     icons: IconCache,
     dux: Option<dux::State>,
+    style: LauncherStyle,
+    /// How declaunch was invoked (the panel applet's position, when it says).
+    inv: Invocation,
+    /// The panel in surface pixels, once the screen is known.
+    anchor: Option<Anchor>,
+    /// X11: shown as an override-redirect popup on the monitor at `origin_root`.
+    popup: bool,
+    origin_root: (f32, f32),
+    /// The surface or monitor size last reported.
+    screen: (u32, u32),
+    scale: f32,
+    /// The Windows, GNOME, KDE, Xfce and BlackBerry styles.
+    styled: Option<styled::Styled>,
+}
+
+/// `DECEBAL_SCALE` when set (a forced UI scale), else `scale`.
+fn ui_scale(scale: f32) -> f32 {
+    std::env::var("DECEBAL_SCALE").ok().and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(scale).clamp(0.75, 4.0)
 }
 
 impl Launcher {
@@ -54,6 +78,19 @@ impl Launcher {
     }
 
     pub fn with_apps(apps: Vec<AppEntry>) -> Self {
+        Self::with_style(apps, LauncherStyle::current())
+    }
+
+    /// The launcher in `style` (the Windows, GNOME, KDE, Xfce and BlackBerry styles read the user's pins too).
+    pub fn with_style(apps: Vec<AppEntry>, style: LauncherStyle) -> Self {
+        let styled = match style {
+            LauncherStyle::Default | LauncherStyle::Dux => None,
+            _ => Some(styled::Styled::new(style, catalog::Catalog::load(apps.clone()))),
+        };
+        Self::build(if styled.is_some() { Vec::new() } else { apps }, style, styled)
+    }
+
+    fn build(apps: Vec<AppEntry>, style: LauncherStyle, styled: Option<styled::Styled>) -> Self {
         let shown = apps::filter(&apps, "");
         let mut out = Self {
             apps,
@@ -68,12 +105,40 @@ impl Launcher {
             fonts: Fonts::load(),
             icons: IconCache::default(),
             dux: None,
+            style,
+            inv: Invocation::default(),
+            anchor: None,
+            popup: false,
+            origin_root: (0.0, 0.0),
+            screen: (0, 0),
+            scale: ui_scale(1.0),
+            styled,
         };
         if out.is_dux() {
             out.size = (620, 620);
             out.prepare_dux();
         }
         out
+    }
+
+    /// Where the panel's launcher button is (see [`placement`]); without one each style opens in its usual place.
+    pub fn with_invocation(mut self, inv: Invocation) -> Self {
+        self.inv = inv;
+        self
+    }
+
+    pub fn style(&self) -> LauncherStyle {
+        self.style
+    }
+
+    /// Resolves the panel anchor against the monitor the launcher is on (`screen` in surface pixels).
+    fn locate(&mut self, screen: (u32, u32)) {
+        self.anchor = resolve_anchor(&self.inv, self.origin_root, (screen.0 as f32, screen.1 as f32));
+    }
+
+    /// The card of the Launchpad / Dux looks for a surface `screen` big.
+    fn classic_card(&self, screen: (u32, u32)) -> placement::Rect {
+        placement::placement(self.style, self.anchor, (screen.0 as f32, screen.1 as f32), self.scale)
     }
 
     fn cols(&self) -> usize {
@@ -272,6 +337,9 @@ impl Default for Launcher {
 
 impl WindowApp for Launcher {
     fn title(&self) -> String {
+        if self.styled.is_some() {
+            return self.style.title().into();
+        }
         if self.is_dux() {
             "Launcher".into()
         } else {
@@ -280,7 +348,60 @@ impl WindowApp for Launcher {
     }
 
     fn initial_size(&self) -> (u32, u32) {
-        self.size
+        match &self.styled {
+            Some(st) => st.natural_size(self.size),
+            None => self.size,
+        }
+    }
+
+    fn set_popup(&mut self, popup: bool) {
+        self.popup = popup;
+    }
+
+    fn popup_monitor(&self) -> crate::window_app::MonitorHint {
+        // --output first, else the monitor under the applet, else the panels' monitor
+        crate::window_app::MonitorHint { output: self.inv.output.clone(), point: self.inv.point.map(|(x, y)| (x.round() as i32, y.round() as i32)) }
+    }
+
+    fn set_popup_origin(&mut self, x: i32, y: i32) {
+        self.origin_root = (x as f32, y as f32);
+    }
+
+    fn set_popup_alpha(&mut self, alpha: bool) {
+        if let Some(st) = self.styled.as_mut() {
+            st.alpha = alpha;
+        }
+    }
+
+    fn popup_fullscreen(&self) -> bool {
+        self.styled.is_some()
+    }
+
+    fn popup_translucent(&self) -> bool {
+        self.styled.is_some()
+    }
+
+    fn set_scale(&mut self, scale: f32) {
+        self.scale = ui_scale(scale);
+        if let Some(st) = self.styled.as_mut() {
+            st.scale = self.scale;
+        }
+    }
+
+    fn content_size(&self) -> Option<(u32, u32)> {
+        // An X11 Launchpad / Dux popup opened from a panel takes the card size placement() gives it.
+        (self.styled.is_none() && self.popup && self.anchor.is_some()).then(|| {
+            let r = self.classic_card(self.screen);
+            (r.w as u32, r.h as u32)
+        })
+    }
+
+    fn popup_anchor(&self) -> Option<crate::window_app::PopupAnchor> {
+        (self.styled.is_none() && self.popup && self.anchor.is_some()).then(|| {
+            // PopupAnchor's top-edge form places any rectangle that keeps the 8 px margin exactly.
+            let r = self.classic_card(self.screen);
+            crate::window_app::PopupAnchor { top: r.y as i32, center_x: Some((r.x + r.w / 2.0) as i32), edge: crate::window_app::Edge::Top }
+        })
     }
 
     fn app_id(&self) -> &'static str {
@@ -293,6 +414,9 @@ impl WindowApp for Launcher {
 
     fn set_overlay(&mut self, overlay: bool) {
         self.overlay = overlay;
+        if let Some(st) = self.styled.as_mut() {
+            st.alpha = true;
+        }
     }
 
     fn set_waker(&mut self, waker: Waker) {
@@ -304,18 +428,32 @@ impl WindowApp for Launcher {
     }
 
     fn set_screen(&mut self, w: u32, h: u32) {
+        self.screen = (w, h);
+        self.locate((w, h));
         if self.is_dux() {
             self.size = (w.saturating_sub(100).clamp(1, 620), h.saturating_sub(100).clamp(1, 620));
         }
     }
 
     fn resize(&mut self, w: u32, h: u32) {
-        if self.is_dux() && self.overlay {
-            self.size = (w.saturating_sub(100).clamp(1, 620), h.saturating_sub(100).clamp(1, 620));
-            self.origin = ((w as f32 - self.size.0 as f32) / 2.0, (h as f32 - self.size.1 as f32) / 2.0);
-        } else if self.overlay {
-            self.size = ((w.saturating_sub(80)).clamp(300, PANEL_MAX_W), (h.saturating_sub(120)).clamp(300, PANEL_MAX_H));
-            self.origin = ((w as f32 - self.size.0 as f32) / 2.0, (h as f32 - self.size.1 as f32) / 2.0);
+        if let Some(st) = self.styled.as_mut() {
+            // A full-screen surface (Wayland overlay, X11 popup): the card goes where placement() says.
+            st.full = self.overlay || self.popup;
+            if st.full {
+                self.screen = (w, h);
+                self.anchor = resolve_anchor(&self.inv, self.origin_root, (w as f32, h as f32));
+            }
+            st.anchor = self.anchor;
+            st.scale = self.scale;
+            st.resize(w, h);
+            return;
+        }
+        if self.overlay {
+            self.screen = (w, h);
+            self.locate((w, h));
+            let r = self.classic_card((w, h));
+            self.size = (r.w as u32, r.h as u32);
+            self.origin = (r.x, r.y);
         } else {
             self.size = (w, h);
             self.origin = (0.0, 0.0);
@@ -330,6 +468,9 @@ impl WindowApp for Launcher {
     }
 
     fn draw(&mut self, pm: &mut Pixmap) {
+        if let Some(st) = self.styled.as_mut() {
+            return st.draw(pm);
+        }
         if !self.overlay {
             self.draw_panel(pm);
             return;
@@ -355,6 +496,9 @@ impl WindowApp for Launcher {
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
+        if let Some(st) = self.styled.as_mut() {
+            return st.motion(x, y);
+        }
         self.motion(x - self.origin.0, y - self.origin.1)
     }
 
@@ -363,6 +507,9 @@ impl WindowApp for Launcher {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
+        if let Some(st) = self.styled.as_mut() {
+            return st.button(x, y, button, pressed);
+        }
         if !pressed || button != Button::Left {
             return Response::NONE;
         }
@@ -375,6 +522,9 @@ impl WindowApp for Launcher {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response {
+        if let Some(st) = self.styled.as_mut() {
+            return st.scroll(x, y, dy);
+        }
         if self.is_dux() {
             let (x, y) = (x - self.origin.0, y - self.origin.1);
             if x < 12.0 || x >= self.size.0 as f32 - 12.0 || y < 100.0 || y >= self.size.1 as f32 - 32.0 {
@@ -397,6 +547,9 @@ impl WindowApp for Launcher {
     }
 
     fn key(&mut self, ev: &KeyEvent) -> Response {
+        if let Some(st) = self.styled.as_mut() {
+            return st.key(ev);
+        }
         let cols = self.cols() as isize;
         match ev.key {
             Key::Escape => Response::act(Action::Close),
@@ -444,6 +597,13 @@ impl WindowApp for Launcher {
     }
 
     fn tick(&mut self) -> Response {
+        if let Some(st) = self.styled.as_mut() {
+            if crate::theme::take_changed() {
+                st.relayout();
+                return Response::REDRAW;
+            }
+            return Response::NONE;
+        }
         if crate::theme::take_changed() || (self.is_dux() && self.dux.as_ref().is_some_and(dux::State::stale)) {
             self.prepare_dux();
             self.clamp_scroll();
@@ -539,8 +699,8 @@ mod tests {
         let mut l = launcher(30);
         l.set_overlay(true);
         l.resize(3440, 1440);
-        assert_eq!(l.size, (PANEL_MAX_W, PANEL_MAX_H));
-        assert_eq!(l.origin, ((3440.0 - PANEL_MAX_W as f32) / 2.0, (1440.0 - PANEL_MAX_H as f32) / 2.0));
+        assert_eq!(l.size, (1100, 720));
+        assert_eq!(l.origin, ((3440.0 - 1100.0) / 2.0, (1440.0 - 720.0) / 2.0));
         assert_eq!(l.pointer_button(5.0, 5.0, Button::Left, true).action, Some(Action::Close));
         let (x, y, w, h) = l.cell_rect(0);
         let r = l.pointer_button(l.origin.0 + x + w / 2.0, l.origin.1 + y + h / 2.0, Button::Left, true);
@@ -564,6 +724,84 @@ mod tests {
         let mut pm = Pixmap::new(1000, 680).unwrap();
         l.draw(&mut pm);
         assert!(pm.pixel(500, 300).unwrap().alpha() > 0);
+    }
+
+    fn styled_launcher(style: LauncherStyle, n: usize) -> Launcher {
+        let mut l = Launcher::build(Vec::new(), style, Some(styled::tests::styled(style, n)));
+        l.fonts = None;
+        l
+    }
+
+    #[test]
+    fn styled_launchers_cover_the_output_and_put_the_card_where_placement_says() {
+        for style in styled::tests::STYLES {
+            for (scale, screen) in [(1.0, (1920, 1080)), (2.0, (1024, 600))] {
+                let inv = match placement::parse_args("toggle --edge left --anchor 20,500 --thickness 40".split(' ').map(String::from)) {
+                    placement::Parsed::Run(i) => i,
+                    other => panic!("{other:?}"),
+                };
+                let mut l = styled_launcher(style, 40).with_invocation(inv);
+                // the X11 order: scale, popup, monitor, then the full-monitor window
+                l.set_scale(scale);
+                l.set_popup(true);
+                l.set_screen(screen.0, screen.1);
+                assert!(l.popup_fullscreen() && l.popup_translucent(), "{style:?}");
+                l.set_popup_alpha(false);
+                l.resize(screen.0, screen.1);
+                let a = l.anchor.expect("the panel anchor");
+                assert_eq!((a.edge, a.thickness), (placement::Edge::Left, 40.0));
+                let want = placement::placement(style, Some(a), (screen.0 as f32, screen.1 as f32), scale);
+                let st = l.styled.as_ref().unwrap();
+                assert_eq!(st.card, want, "{style:?}");
+                assert!(!st.alpha, "no compositor: the card is painted opaque");
+                assert_eq!(l.pointer_button(5.0, screen.1 as f32 / 2.0, Button::Left, true).action, Some(Action::Close), "{style:?}: a click on the panel strip closes");
+                assert_eq!(l.key(&key(Key::Escape, "")).action, Some(Action::Close));
+            }
+        }
+    }
+
+    #[test]
+    fn the_x11_monitor_follows_output_then_anchor_and_anchors_become_monitor_local() {
+        let inv = match placement::parse_args("--output HDMI-1 --edge bottom --anchor 2880,1060 --thickness 40".split(' ').map(String::from)) {
+            placement::Parsed::Run(i) => i,
+            other => panic!("{other:?}"),
+        };
+        let mut l = styled_launcher(LauncherStyle::Kde, 10).with_invocation(inv);
+        assert_eq!(l.popup_monitor(), crate::window_app::MonitorHint { output: Some("HDMI-1".into()), point: Some((2880, 1060)) });
+        // the backend opened on the monitor at x = 1920: the applet is 960 px into it
+        l.set_popup_origin(1920, 0);
+        l.set_popup(true);
+        l.set_screen(1920, 1080);
+        l.resize(1920, 1080);
+        assert_eq!(l.anchor.unwrap().point, Some((960.0, 1060.0)));
+        assert_eq!(Launcher::build(Vec::new(), LauncherStyle::Default, None).popup_monitor(), crate::window_app::MonitorHint::default());
+    }
+
+    #[test]
+    fn x11_launchpad_and_dux_popups_follow_the_panel_anchor() {
+        use crate::window_app::PopupAnchor;
+        for style in [LauncherStyle::Default, LauncherStyle::Dux] {
+            for (edge, point) in [("bottom", "960,1060"), ("top", "100,14"), ("left", "16,900"), ("right", "1904,40")] {
+                let inv = match placement::parse_args(["--edge", edge, "--anchor", point, "--thickness", "36"].map(String::from)) {
+                    placement::Parsed::Run(i) => i,
+                    other => panic!("{other:?}"),
+                };
+                let mut l = Launcher::build((0..20).map(|i| app(&format!("App {i}"))).collect(), style, None).with_invocation(inv);
+                l.fonts = None;
+                l.set_popup(true);
+                l.set_screen(1920, 1080);
+                let want = placement::placement(style, l.anchor, (1920.0, 1080.0), 1.0);
+                assert_eq!(l.content_size(), Some((want.w as u32, want.h as u32)), "{style:?} {edge}");
+                let a: PopupAnchor = l.popup_anchor().unwrap();
+                // the X11 backend's own arithmetic puts the window exactly on the card
+                assert_eq!((a.left(1920, want.w as i32), a.y(1080, want.h as i32)), (want.x as i32, want.y as i32), "{style:?} {edge}");
+            }
+            // no panel: the original placement is untouched
+            let mut l = Launcher::build(vec![app("A")], style, None);
+            l.set_popup(true);
+            l.set_screen(1920, 1080);
+            assert_eq!((l.content_size(), l.popup_anchor()), (None, None));
+        }
     }
 
     /// `THEME_SHOTS=dir cargo test --lib -- --ignored launchpad_in_three_themes` writes the Launchpad in three themes.

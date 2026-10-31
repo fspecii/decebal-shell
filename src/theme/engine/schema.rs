@@ -166,7 +166,7 @@ pub const FIELDS: &[Field] = &[
     Field { path: "bar.band_radius", ty: Ty::Int(0, 48), desc: "Dux background band radius (source windowRadius L16); independent of widget pill radius", status: Wired },
     Field { path: "bar.radius", ty: Ty::Int(0, 48), desc: "Dux island corner radius in logical pixels", status: Wired },
     Field { path: "desktop.widgets", ty: Ty::Choice(&["none"]), desc: "explicit empty desktop profile; custom layouts require Ask/Keep/Replace confirmation", status: Wired },
-    Field { path: "launcher.style", ty: Ty::Choice(&["default", "dux"]), desc: "native launcher composition; Dux full compact applications-list profile", status: Wired },
+    Field { path: "launcher.style", ty: Ty::Choice(crate::launcher::style::KEYS), desc: "native launcher composition: default, dux, windows, gnome, kde, xfce or blackberry; the user's Settings choice overrides it", status: Wired },
     Field { path: "dashboard.profile", ty: Ty::Choice(&["readme"]), desc: "configured README-era clock/calendar/user/resource/media profile, not current upstream dashboard defaults", status: Wired },
     Field { path: "dashboard.style", ty: Ty::Choice(&["default", "dux"]), desc: "native dashboard composition; default preserves the existing dashboard", status: Wired },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },

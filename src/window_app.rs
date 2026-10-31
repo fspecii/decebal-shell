@@ -101,6 +101,14 @@ impl PopupAnchor {
     }
 }
 
+/// Which monitor an X11 popup opens on, see [`WindowApp::popup_monitor`]: a RandR monitor (output) name, else the
+/// monitor holding a root-window point, else the panels' monitor (primary, then the first).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MonitorHint {
+    pub output: Option<String>,
+    pub point: Option<(i32, i32)>,
+}
+
 /// Things the app can ask the window system to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -157,6 +165,12 @@ pub trait WindowApp {
     fn popup_anchor(&self) -> Option<PopupAnchor> {
         None
     }
+    /// Popup mode (X11): the monitor to open on; the default is the panels' monitor.
+    fn popup_monitor(&self) -> MonitorHint {
+        MonitorHint::default()
+    }
+    /// Popup mode (X11): the root-window position of the monitor the popup opened on (called before `set_screen`).
+    fn set_popup_origin(&mut self, _x: i32, _y: i32) {}
     /// Popup mode: a passive indicator (a HUD). The window takes no input at all: an empty input shape lets every
     /// click through, no event but exposure is selected, and neither the keyboard nor the pointer is grabbed or focused.
     fn popup_passive(&self) -> bool {

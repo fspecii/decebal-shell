@@ -1323,6 +1323,7 @@ fn pane_context(id: &str) -> &'static str {
         "storage" => "System information, disk usage and versions.",
         "config" => "Edit the settings files as text, and save, import or export presets.",
         "accessibility" => "Text size, cursor size, contrast and reduced motion.",
+        "launcher" => "The app launcher's style, independent of the theme.",
         _ => "",
     }
 }

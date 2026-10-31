@@ -12,6 +12,7 @@ pub mod icons;
 pub mod iconspane;
 pub mod io;
 pub mod keys;
+pub mod launcherpane;
 pub mod model;
 pub mod navigation;
 pub mod packages;

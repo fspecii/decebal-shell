@@ -59,3 +59,7 @@ close requests return before the holder exits, so three toggles leave no window.
 With serialization, three leave one holder and a fourth closes it. Concurrent
 seven/eight-request bursts also preserve parity. Existing mapped-window and
 launch-monitor tests retain their independent failure-reporting coverage.
+
+The guard wraps all three verbs of `single::acquire_clean` (`declaunch toggle|open|close`). `close` keeps it
+until the old holder has released its lock; `open` on a running launcher only probes the holder with signal 0
+and returns at once, so it never waits for that launcher to exit.

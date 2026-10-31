@@ -43,34 +43,41 @@ pub fn acquire(name: &str) -> Option<File> {
 /// applications inherit neither a blocked signal nor our close handler.
 /// This does not replace [`acquire`] for applications with a different lifecycle.
 pub fn acquire_clean_toggle(name: &str) -> Option<File> {
+    acquire_clean(name, Verb::Toggle)
+}
+
+/// What a launcher invocation asks of the singleton.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Verb {
+    /// Close a running instance, otherwise open (a bare invocation).
+    #[default]
+    Toggle,
+    /// Open unless one is already running (that one is left alone).
+    Open,
+    /// Close a running instance; never opens one.
+    Close,
+}
+
+/// [`acquire_clean_toggle`] with an explicit verb: `Some(guard)` when this process should open the launcher.
+/// Every request, whatever its verb, runs under [`launcher_request_guard`], so overlapping invocations are
+/// ordered and their close signals cannot coalesce. A close keeps that order until the closing instance has
+/// released its lock (bounded); `open` on a running launcher only probes it and returns at once.
+pub fn acquire_clean(name: &str, verb: Verb) -> Option<File> {
     // Serialize requests, not the lifetime of the popup. Standard signals may
-    // coalesce while a holder exits; another toggle must wait for that exit.
+    // coalesce while a holder exits; another request must wait for that exit.
     let _request = launcher_request_guard(name)?;
-    extern "C" fn close_launcher(_: libc::c_int) {
-        // SAFETY: _exit is async-signal-safe. These ephemeral launchers have no
-        // editor draft to flush; the OS releases their windows, grabs and locks.
-        unsafe { libc::_exit(0) };
-    }
-    // SAFETY: install the process's dedicated toggle disposition before any
-    // other launcher threads or its discoverable singleton lock exist.
-    unsafe {
-        let mut action: libc::sigaction = std::mem::zeroed();
-        action.sa_sigaction = close_launcher as *const () as usize;
-        libc::sigemptyset(&mut action.sa_mask);
-        if libc::sigaction(libc::SIGUSR1, &action, std::ptr::null_mut()) != 0 {
-            return None;
+    if verb == Verb::Close {
+        if signal(name, libc::SIGUSR1) {
+            wait_launcher_release(name);
         }
-        // A parent may reserve this signal too. Unblock only our dedicated
-        // toggle after its handler exists, still before publishing the lock.
-        let mut toggle: libc::sigset_t = std::mem::zeroed();
-        libc::sigemptyset(&mut toggle);
-        libc::sigaddset(&mut toggle, libc::SIGUSR1);
-        if libc::pthread_sigmask(libc::SIG_UNBLOCK, &toggle, std::ptr::null_mut()) != 0 {
-            return None;
-        }
+        return None;
     }
-    let guard = acquire_signalling(name, libc::SIGUSR1);
-    if guard.is_none() {
+    if !install_clean_close() {
+        return None;
+    }
+    // Signal 0 only probes the holder: `open` leaves a running launcher as it is.
+    let guard = acquire_signalling(name, if verb == Verb::Open { 0 } else { libc::SIGUSR1 });
+    if guard.is_none() && verb == Verb::Toggle {
         wait_launcher_release(name);
     }
     guard
@@ -108,6 +115,31 @@ fn wait_launcher_release(name: &str) {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// Installs the SIGUSR1 close disposition of [`acquire_clean_toggle`]; false when that failed.
+fn install_clean_close() -> bool {
+    extern "C" fn close_launcher(_: libc::c_int) {
+        // SAFETY: _exit is async-signal-safe. These ephemeral launchers have no
+        // editor draft to flush; the OS releases their windows, grabs and locks.
+        unsafe { libc::_exit(0) };
+    }
+    // SAFETY: install the process's dedicated toggle disposition before any
+    // other launcher threads or its discoverable singleton lock exist.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = close_launcher as *const () as usize;
+        libc::sigemptyset(&mut action.sa_mask);
+        if libc::sigaction(libc::SIGUSR1, &action, std::ptr::null_mut()) != 0 {
+            return false;
+        }
+        // A parent may reserve this signal too. Unblock only our dedicated
+        // toggle after its handler exists, still before publishing the lock.
+        let mut toggle: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut toggle);
+        libc::sigaddset(&mut toggle, libc::SIGUSR1);
+        libc::pthread_sigmask(libc::SIG_UNBLOCK, &toggle, std::ptr::null_mut()) == 0
     }
 }
 
@@ -244,6 +276,18 @@ mod tests {
         drop((a2, b));
         let _ = std::fs::remove_file(super::lock_path(&main));
         let _ = std::fs::remove_file(super::lock_path(&bottom));
+    }
+
+    #[test]
+    fn close_never_opens_and_open_probes_without_signalling() {
+        let name = format!("decebal-test-verbs-{}", std::process::id());
+        assert!(super::acquire_clean(&name, super::Verb::Close).is_none(), "close with nothing running opens nothing");
+        assert!(super::hold(&name).is_some(), "and leaves no holder behind");
+        // the request guard is released when the request returns
+        let request = super::launcher_request_guard(&name).expect("free again");
+        drop(request);
+        let _ = std::fs::remove_file(super::lock_path(&name));
+        let _ = std::fs::remove_file(super::runtime_file(&format!("{name}.request.lock")));
     }
 
     #[test]
