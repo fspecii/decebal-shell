@@ -8,7 +8,7 @@ use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Messages larger than this are refused (the protocol allows 128 MiB; notifications never need that).
 const MAX_MESSAGE: usize = 16 << 20;
@@ -290,6 +290,11 @@ pub const RETURN: u8 = 2;
 pub const ERROR: u8 = 3;
 pub const SIGNAL: u8 = 4;
 
+/// Header flag: the caller does not want a reply.
+pub const NO_REPLY_EXPECTED: u8 = 0x1;
+/// Header flag: do not start the destination's service just for this message (watch it appear instead).
+pub const NO_AUTO_START: u8 = 0x2;
+
 #[derive(Debug, Clone, Default)]
 pub struct Message {
     pub kind: u8,
@@ -452,6 +457,39 @@ fn unescape(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// Socket addresses of a D-Bus address string (`unix:path=...;unix:abstract=...,guid=...`), in order.
+/// Transports other than `unix:` and server-only keys (`dir`, `tmpdir`) are skipped. Never reads the environment.
+pub fn parse_address(addr: &str) -> Vec<SocketAddr> {
+    let mut out = Vec::new();
+    for cand in addr.split(';') {
+        let Some(rest) = cand.trim().strip_prefix("unix:") else { continue };
+        for kv in rest.split(',') {
+            if let Some(p) = kv.strip_prefix("path=") {
+                if let Ok(a) = SocketAddr::from_pathname(unescape(p)) {
+                    out.push(a);
+                }
+            } else if let Some(p) = kv.strip_prefix("abstract=") {
+                if let Ok(a) = SocketAddr::from_abstract_name(unescape(p).as_bytes()) {
+                    out.push(a);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The session bus address this process was started with (`$DBUS_SESSION_BUS_ADDRESS`, else `$XDG_RUNTIME_DIR/bus`).
+/// Read once by callers that then keep it immutable (accessibility never rewrites process environment variables).
+pub fn session_address() -> String {
+    match std::env::var("DBUS_SESSION_BUS_ADDRESS") {
+        Ok(a) if !a.trim().is_empty() => a,
+        _ => {
+            let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
+            format!("unix:path={dir}/bus")
+        }
+    }
+}
+
 /// Session bus address candidates: `$DBUS_SESSION_BUS_ADDRESS`, else `$XDG_RUNTIME_DIR/bus`.
 fn socket_addrs() -> Vec<SocketAddr> {
     let mut out = Vec::new();
@@ -485,9 +523,142 @@ pub struct Conn {
     serial: u32,
     /// Unique name assigned by the bus (`:1.42`).
     pub unique: String,
+    /// Complete messages that arrived while waiting for a specific reply (never dropped; see [`Conn::next_message`]).
+    backlog: std::collections::VecDeque<Message>,
+}
+
+/// What a cancellable connect does when its wake descriptor becomes readable: `true` = give up now.
+pub type Cancel<'a> = (RawFd, &'a mut dyn FnMut() -> bool);
+
+/// Waits until `fd` is readable (or `deadline`); a readable `cancel` descriptor runs its callback, which may abort.
+fn wait_in(fd: RawFd, cancel: &mut Option<Cancel>, deadline: Instant) -> io::Result<()> {
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "bus handshake timed out"));
+        }
+        let mut fds = vec![fd];
+        if let Some((c, _)) = cancel.as_ref() {
+            fds.push(*c);
+        }
+        let ready = crate::backend::poll_readable(&fds, Some(left))?;
+        if ready.get(1).copied().unwrap_or(false) {
+            if let Some((_, f)) = cancel.as_mut() {
+                if f() {
+                    return Err(io::Error::new(io::ErrorKind::Interrupted, "bus connection cancelled"));
+                }
+            }
+        }
+        if ready[0] {
+            return Ok(());
+        }
+    }
 }
 
 impl Conn {
+    /// Connects to the bus at `addr` (a D-Bus address string), authenticates and says Hello, without touching the
+    /// process environment. Blocks the calling thread for at most 5 s: call it from a worker, never a UI thread.
+    pub fn connect_address(addr: &str) -> io::Result<Conn> {
+        Self::connect_address_cancellable(addr, None, Duration::from_secs(5))
+    }
+
+    /// [`Conn::connect_address`] on a non-blocking socket: waits in `poll` on the socket and on an optional cancel
+    /// descriptor, up to `timeout` in total. Messages that arrive before the Hello reply stay queued (nothing is dropped).
+    pub fn connect_address_cancellable(addr: &str, mut cancel: Option<Cancel>, timeout: Duration) -> io::Result<Conn> {
+        let deadline = Instant::now() + timeout;
+        let mut last = io::Error::new(io::ErrorKind::NotFound, format!("no usable unix socket in bus address {addr:?}"));
+        for sa in parse_address(addr) {
+            let sock = match UnixStream::connect_addr(&sa) {
+                Ok(s) => s,
+                Err(e) => {
+                    last = e;
+                    continue;
+                }
+            };
+            match Self::handshake_nonblocking(sock, &mut cancel, deadline) {
+                Ok(c) => return Ok(c),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted || e.kind() == io::ErrorKind::TimedOut => return Err(e),
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
+    }
+
+    fn handshake_nonblocking(sock: UnixStream, cancel: &mut Option<Cancel>, deadline: Instant) -> io::Result<Conn> {
+        sock.set_nonblocking(true)?;
+        // SAFETY: getuid has no preconditions.
+        let uid = unsafe { libc::getuid() }.to_string();
+        let hex: String = uid.bytes().map(|b| format!("{b:02x}")).collect();
+        let mut c = Conn { sock, inbuf: Vec::new(), serial: 0, unique: String::new(), backlog: Default::default() };
+        c.write_all_nb(format!("\0AUTH EXTERNAL {hex}\r\n").as_bytes())?;
+        let mut line = Vec::new();
+        while !line.ends_with(b"\r\n") {
+            let mut byte = [0u8; 1];
+            match c.sock.read(&mut byte) {
+                Ok(0) => return Err(bad("bus closed during authentication")),
+                Ok(_) => line.push(byte[0]),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => wait_in(c.fd(), cancel, deadline)?,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+            if line.len() > 512 {
+                return Err(bad("oversized auth reply"));
+            }
+        }
+        if !line.starts_with(b"OK") {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("bus refused authentication: {}", String::from_utf8_lossy(&line).trim())));
+        }
+        c.write_all_nb(b"BEGIN\r\n")?;
+        let serial = c.send(&Message::call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello", "", Vec::new()))?;
+        let mut early = Vec::new();
+        let reply = loop {
+            let mut found = None;
+            while let Some(m) = c.next_message()? {
+                if m.reply_serial == serial && (m.kind == RETURN || m.kind == ERROR) {
+                    found = Some(m);
+                    break;
+                }
+                early.push(m);
+            }
+            if let Some(m) = found {
+                break m;
+            }
+            if !c.fill()? {
+                return Err(bad("bus closed before Hello"));
+            }
+            if c.inbuf.is_empty() || Message::decode(&c.inbuf)?.is_none() {
+                wait_in(c.fd(), cancel, deadline)?;
+            }
+        };
+        if reply.kind == ERROR {
+            return Err(io::Error::other(format!("Hello failed: {}", reply.error)));
+        }
+        c.unique = reply.args()?.first().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        // Anything that arrived ahead of the reply is delivered first, in order.
+        c.backlog.extend(early);
+        Ok(c)
+    }
+
+    fn write_all_nb(&mut self, mut bytes: &[u8]) -> io::Result<()> {
+        while !bytes.is_empty() {
+            match self.sock.write(bytes) {
+                Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+                Ok(n) => bytes = &bytes[n..],
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    crate::backend::poll_writable(self.fd(), Duration::from_secs(2))?;
+                }
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
+    /// Bytes or messages waiting in the input buffers (a complete message may be queued without the socket being readable).
+    pub fn buffered(&self) -> usize {
+        self.inbuf.len() + self.backlog.len()
+    }
+
     /// Connects to the session bus, authenticates and says Hello. Blocking; the socket is then non-blocking.
     pub fn session() -> io::Result<Conn> {
         let mut last = io::Error::new(io::ErrorKind::NotFound, "no session bus address");
@@ -522,7 +693,7 @@ impl Conn {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("bus refused authentication: {}", String::from_utf8_lossy(&line).trim())));
         }
         sock.write_all(b"BEGIN\r\n")?;
-        let mut c = Conn { sock, inbuf: Vec::new(), serial: 0, unique: String::new() };
+        let mut c = Conn { sock, inbuf: Vec::new(), serial: 0, unique: String::new(), backlog: Default::default() };
         let reply = c.call_blocking(Message::call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello", "", Vec::new()))?;
         c.unique = reply.args()?.first().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
         Ok(c)
@@ -571,6 +742,9 @@ impl Conn {
 
     /// Next complete buffered message, if any.
     pub fn next_message(&mut self) -> io::Result<Option<Message>> {
+        if let Some(m) = self.backlog.pop_front() {
+            return Ok(Some(m));
+        }
         match Message::decode(&self.inbuf)? {
             Some((m, used)) => {
                 self.inbuf.drain(..used);
@@ -697,6 +871,102 @@ mod tests {
         let e = Message::error_to(&call, "org.freedesktop.DBus.Error.UnknownMethod", "nope");
         let (d, _) = Message::decode(&e.encode(2)).unwrap().unwrap();
         assert_eq!((d.kind, d.error.as_str()), (ERROR, "org.freedesktop.DBus.Error.UnknownMethod"));
+    }
+
+    /// A minimal bus: accepts one client, says OK to EXTERNAL auth, then hands the connection to `serve`.
+    fn fake_bus(serve: impl FnOnce(&mut UnixStream) + Send + 'static) -> (String, std::thread::JoinHandle<()>, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("decebal-dbus-test-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bus");
+        let _ = std::fs::remove_file(&path);
+        let l = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        let t = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let mut line = Vec::new();
+            let mut b = [0u8; 1];
+            while !line.ends_with(b"\r\n") {
+                s.read_exact(&mut b).unwrap();
+                line.push(b[0]);
+            }
+            assert!(line.starts_with(b"\0AUTH EXTERNAL "));
+            s.write_all(b"OK 0123456789abcdef\r\n").unwrap();
+            serve(&mut s);
+        });
+        (format!("unix:path={},guid=0123", path.display()), t, dir)
+    }
+
+    fn read_msg(s: &mut UnixStream, buf: &mut Vec<u8>) -> Message {
+        loop {
+            if let Some((m, used)) = Message::decode(buf).unwrap() {
+                buf.drain(..used);
+                return m;
+            }
+            let mut tmp = [0u8; 4096];
+            let n = s.read(&mut tmp).unwrap();
+            assert!(n > 0, "client closed");
+            buf.extend_from_slice(&tmp[..n]);
+        }
+    }
+
+    #[test]
+    fn parses_addresses_without_touching_the_environment() {
+        assert_eq!(parse_address("unix:path=/run/a%20b,guid=1;tcp:host=x;unix:abstract=/tmp/dbus-x").len(), 2);
+        assert!(parse_address("tcp:host=localhost,port=1").is_empty());
+        assert!(parse_address("").is_empty());
+    }
+
+    #[test]
+    fn connect_address_keeps_traffic_that_arrives_before_the_hello_reply() {
+        let (addr, t, dir) = fake_bus(|s| {
+            let mut buf = Vec::new();
+            let mut begin = [0u8; 7];
+            s.read_exact(&mut begin).unwrap();
+            assert_eq!(&begin, b"BEGIN\r\n");
+            let hello = read_msg(s, &mut buf);
+            assert_eq!(hello.member, "Hello");
+            // A signal and a method call race ahead of the reply; neither may be lost.
+            s.write_all(&Message::signal("/x", "a.b", "Early", "", vec![]).encode(1)).unwrap();
+            let mut call = Message::call(":1.5", "/y", "a.b", "Ping", "", vec![]);
+            call.sender = ":1.9".into();
+            s.write_all(&call.encode(2)).unwrap();
+            let mut w = Writer::default();
+            w.string(":1.5");
+            let mut r = Message::reply_to(&hello, "s", w.buf);
+            r.reply_serial = hello.serial;
+            s.write_all(&r.encode(3)).unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+        });
+        let mut c = Conn::connect_address(&addr).unwrap();
+        assert_eq!(c.unique, ":1.5");
+        assert!(c.buffered() > 0);
+        assert_eq!(c.next_message().unwrap().unwrap().member, "Early");
+        assert_eq!(c.next_message().unwrap().unwrap().member, "Ping");
+        t.join().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_cancelled_connect_returns_at_once() {
+        let (addr, t, dir) = fake_bus(|s| {
+            // Never answers Hello.
+            let mut b = [0u8; 256];
+            let _ = s.read(&mut b);
+            std::thread::sleep(Duration::from_millis(500));
+        });
+        let (rx, tx) = UnixStream::pair().unwrap();
+        let start = Instant::now();
+        let poke = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            (&tx).write_all(&[1]).unwrap();
+            tx
+        });
+        let mut cancel = || true;
+        let r = Conn::connect_address_cancellable(&addr, Some((rx.as_raw_fd(), &mut cancel)), Duration::from_secs(5));
+        assert_eq!(r.err().map(|e| e.kind()), Some(io::ErrorKind::Interrupted));
+        assert!(start.elapsed() < Duration::from_secs(1));
+        let _ = poke.join();
+        t.join().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
