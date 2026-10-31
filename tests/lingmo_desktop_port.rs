@@ -743,17 +743,17 @@ fn without_a_running_wm_only_the_explicit_target_cli_is_proof_and_it_is_labelled
 fn an_unknown_or_transient_capability_stops_before_writing_and_is_not_offline_proof() {
     // a running rdwm that answers garbage: the CLI would say "supported", it must not be believed
     let (plan, _paths, dir) = plan_in_mode("garbage", Mode::Dark, Wm::Garbage);
-    let err = plan.err().expect("must stop");
+    let err = plan.expect_err("must stop");
     assert!(err.contains("could not be checked") && err.contains("Nothing was changed"), "{err}");
     let _ = fs::remove_dir_all(dir);
     // no rdwm and no usable target CLI
     let (plan, _paths, dir) = plan_in_mode("nocli", Mode::Dark, Wm::NotRunning(None));
-    let err = plan.err().expect("must stop");
+    let err = plan.expect_err("must stop");
     assert!(err.contains("could not list its styles"), "{err}");
     let _ = fs::remove_dir_all(dir);
     // a fallback that the old running rdwm does not list either is not proof: stop, nothing written
     let (plan, _paths, dir) = plan_in_mode("nofallback", Mode::Dark, Wm::Running(&["macos", "classic"]));
-    let err = plan.err().expect("must stop");
+    let err = plan.expect_err("must stop");
     assert!(err.contains("fallback `adwaita` is not listed"), "{err}");
     let _ = fs::remove_dir_all(dir);
 }
