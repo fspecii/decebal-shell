@@ -2,7 +2,7 @@
 //! context menu, drag-to-reorder and live reload of the pinned list.
 
 use crate::app::{App, Button, InputRect, Key, NavKey, Tick, Waker};
-use crate::backend::{Anchor, SurfaceSpec};
+use crate::backend::SurfaceSpec;
 use crate::config::{self, edit, Stamp};
 use crate::dock::{Dock, DockItem, Drag};
 use crate::dock_menu::{self, Action, Ctx, DockMenu, Outcome, TEXT_PX};
@@ -319,9 +319,42 @@ impl DockApp {
         self.menu.take().is_some()
     }
 
+    /// Length of the surface along the dock's edge.
+    fn dock_len(&self) -> f32 {
+        if self.dock.edge().is_vertical() {
+            self.surface.1 as f32
+        } else {
+            self.surface.0 as f32
+        }
+    }
+
+    /// The coordinate along the dock's edge of a surface point (x of the bottom dock, y of a side one).
+    fn along(&self, x: f32, y: f32) -> f32 {
+        self.dock.to_frame(self.surface.0 as f32, self.surface.1 as f32, x, y).0
+    }
+
+    /// Where the open context menu of the macOS dock is drawn: over a bottom dock, under a top one, beside a side one
+    /// (centred on its icon along the edge), on the surface.
+    fn mac_menu(&self, m: &DockMenu) -> crate::menubar::menus::Dropdown {
+        use crate::panel::Edge;
+        let (w, h) = (self.surface.0 as f32, self.surface.1 as f32);
+        let ph = self.dock.panel_height();
+        match self.dock.edge() {
+            Edge::Bottom => m.placed(w, menu_bottom(self.surface.1, ph)),
+            Edge::Top => m.placed(w, ph + MENU_GAP + m.size().1),
+            edge => {
+                let mut d = m.placed(f32::MAX / 8.0, 0.0);
+                d.x = if edge == Edge::Right { (w - ph - MENU_GAP - d.w).max(0.0) } else { ph + MENU_GAP };
+                let y = (m.anchor_x - d.h / 2.0).clamp(MENU_TOP, (h - d.h - MENU_TOP).max(MENU_TOP));
+                d.shift_y(y - d.y);
+                d
+            }
+        }
+    }
+
     fn open_menu(&mut self, i: usize) {
         let Some(item) = self.dock.items.get(i) else { return };
-        let layout = self.dock.layout(self.surface.0 as f32);
+        let layout = self.dock.layout(self.dock_len());
         let Some(cell) = layout.cells.get(i) else { return };
         let windows = self.tracker.as_ref().map(|t| t.windows_for(&item.id)).unwrap_or_default();
         let ctx = Ctx {
@@ -430,7 +463,7 @@ impl DockApp {
     /// Moves the dragged item over the neighbour under the pointer.
     fn drag_to(&mut self, x: f32) {
         let Some(d) = self.dock.drag else { return };
-        let layout = self.dock.layout(self.surface.0 as f32);
+        let layout = self.dock.layout(self.dock_len());
         let target = layout.cells.iter().position(|c| x >= c.x - 3.0 && x <= c.x + c.w + 3.0);
         let mut index = d.index;
         if let Some(t) = target {
@@ -462,6 +495,11 @@ impl App for DockApp {
         }
         let (w, h) = self.dock.canvas_size();
         match &self.menu {
+            // a side dock's menu opens beside it, the others' over / under it
+            Some(m) if self.dock.edge().is_vertical() => {
+                let need = (m.menu.size().0 + self.dock.panel_height() + MENU_GAP + MENU_TOP).ceil() as u32;
+                (w.max(need), h.max((m.menu.size().1 + 2.0 * MENU_TOP).ceil() as u32))
+            }
             Some(m) => {
                 let need = (m.menu.size().1 + self.dock.panel_height() + MENU_GAP + MENU_TOP).ceil() as u32;
                 (w, h.max(need))
@@ -486,9 +524,8 @@ impl App for DockApp {
             return self.win_draw(pm);
         }
         self.dock.draw(pm);
-        let bottom = menu_bottom(pm.height(), self.dock.panel_height());
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(pm.width() as f32, bottom);
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if let Some(f) = &mut m.fonts {
                 m.menu.draw(pm, &d, f);
                 f.trim();
@@ -507,11 +544,7 @@ impl App for DockApp {
             regions.push(self.dock.glass_region(self.surface.0 as f32, self.surface.1 as f32));
         }
         if let Some(menu) = &self.menu {
-            let placed = if self.is_windows() && self.win.is_some() {
-                self.win_menu_dropdown(&menu.menu)
-            } else {
-                menu.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1, self.dock.panel_height()))
-            };
+            let placed = if self.is_windows() && self.win.is_some() { self.win_menu_dropdown(&menu.menu) } else { self.mac_menu(&menu.menu) };
             regions.push(crate::glass::Region { x: placed.x, y: placed.y, w: placed.w, h: placed.h, radius: crate::theme::th().radius });
         }
         regions
@@ -521,28 +554,29 @@ impl App for DockApp {
         if self.is_windows() {
             return self.win_motion(x, y);
         }
+        let along = self.along(x, y);
         if let Some(p) = &self.press {
-            if self.dock.drag.is_none() && (x - p.x).abs() > DRAG_THRESHOLD && self.draggable(p.index) && self.menu.is_none() {
-                self.dock.drag = Some(Drag { index: p.index, x });
+            if self.dock.drag.is_none() && (along - p.x).abs() > DRAG_THRESHOLD && self.draggable(p.index) && self.menu.is_none() {
+                self.dock.drag = Some(Drag { index: p.index, x: along });
                 self.dock.hover_x = None;
                 self.wake();
             }
         }
         if self.dock.drag.is_some() {
-            self.drag_to(x);
+            self.drag_to(along);
             self.wake();
             return true;
         }
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1, self.dock.panel_height()));
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if d.contains(x, y) {
                 return m.menu.pointer_moved(&d, x, y);
             }
             let cleared = m.menu.pointer_moved(&d, -1.0, -1.0);
             return cleared;
         }
-        let changed = self.dock.hover_x != Some(x);
-        self.dock.hover_x = Some(x);
+        let changed = self.dock.hover_x != Some(along);
+        self.dock.hover_x = Some(along);
         if changed {
             self.wake(); // start the easing animation
         }
@@ -582,8 +616,17 @@ impl App for DockApp {
             return self.win_spec();
         }
         // a dock kept next to the Caelestia pill bar floats above it when that runs along the bottom (`bottom`, `split`)
-        let margin = 13 + crate::theme::th().bar_insets().bottom;
-        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: self.dock.panel_height().ceil() as i32, stretch: false, namespace: "decebal-dock" })
+        // the dock floats 13 px off its edge, and further when the bar uses the same edge (it never covers it)
+        let th = crate::theme::th();
+        let insets = th.bar_insets();
+        let edge = self.dock.edge();
+        let bar = match edge {
+            crate::panel::Edge::Bottom => insets.bottom,
+            crate::panel::Edge::Top => crate::theme::bar_bottom().ceil() as i32,
+            crate::panel::Edge::Left => insets.left,
+            crate::panel::Edge::Right => insets.right,
+        };
+        Some(SurfaceSpec { anchor: edge.anchor(), margin: 13 + bar, reserve: self.dock.panel_height().ceil() as i32, stretch: false, namespace: "decebal-dock" })
     }
 
     fn quit_requested(&self) -> bool {
@@ -620,7 +663,7 @@ impl App for DockApp {
             return tick;
         }
         changed |= self.sync_items();
-        let moving = self.dock.step(self.surface.0 as f32);
+        let moving = self.dock.step(self.dock_len());
         let redraw = changed || moving || self.animating;
         self.animating = moving;
         let mut next = moving.then(|| Duration::from_millis(16));
@@ -636,8 +679,9 @@ impl App for DockApp {
             return self.win_button(x, y, button);
         }
         let (w, h) = self.surface;
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
+        let along = self.along(x, y);
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if button == Button::Left && m.menu.press(&d, x, y) {
                 return false;
             }
@@ -656,7 +700,7 @@ impl App for DockApp {
         let hit = self.dock.hit_test(w as f32, h as f32, x, y);
         match (button, hit) {
             (Button::Left, Some(i)) => {
-                self.press = Some(Press { index: i, x });
+                self.press = Some(Press { index: i, x: along });
                 false
             }
             (Button::Right, Some(i)) => {
@@ -665,9 +709,9 @@ impl App for DockApp {
             }
             (Button::Right, None) => {
                 // The dock's own menu: right click on the panel between or around the icons.
-                let l = self.dock.layout(w as f32);
-                if x >= l.panel_x && x <= l.panel_x + l.panel_w && y >= h as f32 - self.dock.panel_height() {
-                    self.open_dock_menu(x);
+                let (px, py, pw, ph) = self.dock.panel_rect(w as f32, h as f32);
+                if x >= px && x <= px + pw && y >= py && y <= py + ph {
+                    self.open_dock_menu(along);
                     return true;
                 }
                 false
@@ -691,12 +735,10 @@ impl App for DockApp {
         }
         let (w, h) = self.surface;
         if self.menu.is_some() {
-            let out = match &mut self.menu {
-                Some(m) => {
-                    let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
-                    m.menu.release(&d, x, y)
-                }
-                None => Outcome::None,
+            let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+            let out = match (&mut self.menu, placed) {
+                (Some(m), Some(d)) => m.menu.release(&d, x, y),
+                _ => Outcome::None,
             };
             return self.finish_menu(out);
         }
@@ -760,10 +802,12 @@ impl App for DockApp {
             return self.win_input_rects();
         }
         let (w, h) = self.surface;
-        let strip = (self.dock.panel_height() + 8.0).ceil() as i32;
-        let mut rects = vec![InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip }];
+        let strip = self.dock.panel_height() + 8.0;
+        let len = if self.dock.edge().is_vertical() { h } else { w } as f32;
+        let (rx, ry, rw, rh) = self.dock.map(w as f32, h as f32, 0.0, 0.0, len, strip);
+        let mut rects = vec![InputRect { x: rx.floor() as i32, y: ry.floor() as i32, w: rw.ceil() as i32, h: rh.ceil() as i32 }];
         if let Some(m) = &self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
+            let d = self.mac_menu(&m.menu);
             rects.push(InputRect { x: d.x.floor() as i32, y: d.y.floor() as i32, w: d.w.ceil() as i32 + 1, h: d.h.ceil() as i32 });
         }
         rects
@@ -782,6 +826,7 @@ impl App for DockApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::Anchor;
     use crate::config::DockSettings;
     use crate::wm::{Control, Window};
     use std::cell::RefCell;
@@ -927,7 +972,7 @@ mod tests {
 
         fn row_point(&self, label: &str) -> (f32, f32) {
             let m = &self.app.menu.as_ref().unwrap().menu;
-            let d = m.placed(self.app.surface.0 as f32, menu_bottom(self.app.surface.1, self.app.dock.panel_height()));
+            let d = self.app.mac_menu(m);
             let i = m.entries.iter().position(|e| e.label == label).unwrap_or_else(|| panic!("no {label}"));
             (d.x + 30.0, d.rows[i].y + 5.0)
         }
@@ -1250,6 +1295,51 @@ mod tests {
             let (x, y) = self.zone(hit);
             self.app.pointer_button(x, y, b);
             self.app.pointer_release(x, y, b);
+        }
+    }
+
+    #[test]
+    fn the_macos_dock_sits_on_every_edge_with_upright_icons_hits_and_menus() {
+        use crate::panel::Edge;
+        for edge in Edge::ALL {
+            let mut r = rig(&format!("mac-{}", edge.as_str()), &["launchpad", "a", "b", "trash"], vec![]);
+            r.app.scale = Some(1.0);
+            r.set_settings(&format!(r#"{{"style":"mac","edge":"{}"}}"#, edge.as_str()));
+            let spec = r.app.surface_spec().unwrap();
+            assert_eq!((spec.anchor, spec.stretch), (edge.anchor(), false), "{edge:?}");
+            r.app.surface = r.app.dock.canvas_size();
+            let (w, h) = (r.app.surface.0 as f32, r.app.surface.1 as f32);
+            assert_eq!(edge.is_vertical(), h > w, "{edge:?}: a side dock is tall");
+            // the panel hugs the canvas side that faces the screen edge
+            let (px, py, pw, ph) = r.app.dock.panel_rect(w, h);
+            let hugs = match edge {
+                Edge::Bottom => (py + ph - h).abs() < 0.5,
+                Edge::Top => py.abs() < 0.5,
+                Edge::Left => px.abs() < 0.5,
+                Edge::Right => (px + pw - w).abs() < 0.5,
+            };
+            assert!(hugs, "{edge:?}: panel {:?} on {w}x{h}", (px, py, pw, ph));
+            // every icon is hit where it is drawn, in reading order along the edge
+            let len = if edge.is_vertical() { h } else { w };
+            let l = r.app.dock.layout(len);
+            for (i, c) in l.cells.iter().enumerate() {
+                let (x, y, _, _) = r.app.dock.map(w, h, c.x + c.w / 2.0, r.app.dock.panel_height() / 2.0, 0.0, 0.0);
+                assert_eq!(r.app.dock.hit_test(w, h, x, y), Some(i), "{edge:?} cell {i}");
+                assert!(r.app.input_rects()[0].x as f32 <= x && x <= (r.app.input_rects()[0].x + r.app.input_rects()[0].w) as f32, "{edge:?}: input covers the icon");
+            }
+            let mut pm = Pixmap::new(w as u32, h as u32).unwrap();
+            r.app.dock.draw(&mut pm);
+            // a right click opens the item's menu on the desktop side of the dock, on the surface, clear of the panel
+            let c = l.cells[1];
+            let (x, y, _, _) = r.app.dock.map(w, h, c.x + c.w / 2.0, r.app.dock.panel_height() / 2.0, 0.0, 0.0);
+            r.app.pointer_button(x, y, Button::Right);
+            assert!(r.app.menu.is_some(), "{edge:?}: menu");
+            let (sw, sh) = r.app.size();
+            r.app.surface = (sw, sh);
+            let d = r.app.mac_menu(&r.app.menu.as_ref().unwrap().menu);
+            let (px, py, pw, ph) = r.app.dock.panel_rect(sw as f32, sh as f32);
+            assert!(d.x >= 0.0 && d.y >= 0.0 && d.x + d.w <= sw as f32 + 0.5 && d.y + d.h <= sh as f32 + 0.5, "{edge:?}: menu {:?} on {sw}x{sh}", (d.x, d.y, d.w, d.h));
+            assert!(!(d.x < px + pw && px < d.x + d.w && d.y < py + ph && py < d.y + d.h), "{edge:?}: the menu covers the dock");
         }
     }
 

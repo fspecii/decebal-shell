@@ -60,7 +60,9 @@ pub(crate) fn place(spec: &SurfaceSpec, (w, h): (u32, u32), mon: Rect) -> (i32, 
         let height = if h == 0 { mon.h.max(1) as u32 } else { h };
         let w = w.max(1);
         let x = if spec.anchor == Anchor::Right { mon.x + mon.w - w as i32 - spec.margin } else { mon.x + spec.margin };
-        return (x, mon.y, w, height);
+        // a side dock (not stretched) is centred along the edge, as layer-shell centres it
+        let y = if h == 0 || spec.stretch { mon.y } else { mon.y + ((mon.h - height as i32) / 2).max(0) };
+        return (x, y, w, height);
     }
     let width = if w == 0 { mon.w.max(1) as u32 } else { w };
     // never taller than the monitor: a pill bar's surface also holds the popouts, which may ask for more than a small screen has
@@ -534,6 +536,14 @@ mod tests {
 
     fn mon(x: i32, y: i32, w: i32, h: i32) -> Rect {
         Rect { x, y, w, h }
+    }
+
+    #[test]
+    fn a_side_dock_is_centred_along_its_edge_and_a_side_bar_spans_it() {
+        let m = mon(0, 0, 1600, 900);
+        assert_eq!(place(&spec(Anchor::Left, 13, false), (80, 400), m), (13, 250, 80, 400));
+        assert_eq!(place(&spec(Anchor::Right, 13, false), (80, 400), m), (1600 - 80 - 13, 250, 80, 400));
+        assert_eq!(place(&spec(Anchor::Left, 0, true), (52, 0), m), (0, 0, 52, 900), "a rail is as tall as the monitor");
     }
 
     #[test]
