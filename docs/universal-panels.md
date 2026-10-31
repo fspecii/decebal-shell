@@ -65,7 +65,7 @@ only when the system lacks what it needs, and Settings says which (the "needs" c
 | key | aliases | does | needs |
 |---|---|---|---|
 | `launcher` | `launcherButton`, `logo`, `start` | opens the launcher (`declaunch`, at the applet, see below) | — |
-| `app_menu` | `appMenu`, `menus`, `global_menu` | system menu and the focused application's menus | — |
+| `app_menu` | `appMenu`, `menus`, `global_menu` | system menu and generic menus named after the focused application (common shortcuts and window commands, not the application's own menus; those need the exported-menu bridge, `docs/appmenu.md` on its branch) | — |
 | `workspaces` | `workspaceSwitcher`, `tags` | workspace switcher; the wheel cycles | a WM that reports workspaces |
 | `window_title` | `focusedWindow`, `window` | focused window; its menu (close, minimise) | — |
 | `tasks` | `taskButtons` | task buttons: focus, minimise, launch pinned | a WM that publishes its window list |

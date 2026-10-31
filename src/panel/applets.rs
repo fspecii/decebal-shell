@@ -161,7 +161,7 @@ pub const REGISTRY: &[Applet] = &[
         key: "app_menu",
         aliases: &["appMenu", "menus", "global_menu", "window_menu"],
         title: "Application menu",
-        action: "opens the system menu and the focused application's menus",
+        action: "opens the system menu and generic menus for the focused app (common shortcuts and window commands)",
         caps: &[Popup],
         need: Need::Nothing,
         workers: &[],
