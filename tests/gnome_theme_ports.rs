@@ -399,15 +399,13 @@ fn loadable_text(text: &str) -> String {
     }
 }
 
-/// The 0.3-framework manifests (`[branding]`, `[bar] applets`, `[dock] position`) are committed as PROPOSALS: this engine rejects those keys, so they cannot ship yet.
-/// Dual-engine limits, stated in the test: (1) a proposal differs from the shipped manifest only by the framework keys; (2) on an engine without the framework the only
-/// errors are those keys (an engine with it reports none); (3) the lists name real applets; (4) validation with a 0.3 engine is `tests/e2e/framework-0.3-validate.py`.
+/// The packages ship the framework defaults rather than leaving them in an unused proposal.
 #[test]
-fn proposed_framework_0_3_manifests_differ_from_the_shipped_ones_only_by_the_framework_keys() {
+fn framework_manifests_ship_the_declared_applets_and_branding() {
     for id in PORTS {
         let proposed_text = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/gnome-theme-ports/framework-0.3/{id}.theme.toml"))).unwrap();
         // the framework keys, parsed structurally
-        let mut doc: toml_edit::DocumentMut = proposed_text.parse().unwrap();
+        let doc: toml_edit::DocumentMut = proposed_text.parse().unwrap();
         let applets: Vec<String> = doc["bar"]["applets"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(!applets.is_empty() && applets.iter().all(|a| APPLET_KEYS.contains(&a.as_str())), "{id}: {applets:?}");
         let unique: BTreeSet<_> = applets.iter().collect();
@@ -420,21 +418,11 @@ fn proposed_framework_0_3_manifests_differ_from_the_shipped_ones_only_by_the_fra
         assert_eq!(branding["desktop_label"].as_str(), Some("Desktop"));
         assert_eq!(branding.get("launcher_label").and_then(|v| v.as_str()), if *id == "gnome-adwaita" { Some("Activities") } else { None });
         assert!(doc.get("min_shell_version").is_some() || proposed_text.contains("min_shell_version = \"0.3.0\""));
-        // as written on THIS engine: only the framework keys are refused (none are, once the framework is merged)
         let here = manifest::analyze(&loadable_text(&proposed_text));
-        let framework = |key: &str| key.starts_with("branding") || key == "bar.applets" || key == "dock.position";
-        let errors: Vec<_> = here.diags.iter().filter(|d| d.level == manifest::Level::Error).collect();
-        assert!(errors.iter().all(|d| framework(&d.key)), "{id}: an error outside the framework keys: {errors:?}");
-        // with those keys removed the proposal IS the shipped manifest (tokens, metrics, sections, extras)
-        doc.remove("branding");
-        doc["bar"].as_table_mut().unwrap().remove("applets");
-        if let Some(dock) = doc["dock"].as_table_mut() {
-            dock.remove("position");
-        }
-        let stripped = manifest::analyze(&loadable_text(&doc.to_string()));
+        assert!(here.def.is_some(), "{id}: {:?}", here.diags);
+        assert!(!here.diags.iter().any(|d| d.level == manifest::Level::Error), "{id}: {:?}", here.diags);
         let shipped = manifest::analyze(&text(id));
-        assert!(stripped.def.is_some(), "{id}: {:?}", stripped.diags);
-        assert_eq!(stripped.def, shipped.def, "{id}: the proposal drifted from the shipped manifest beyond the framework keys");
+        assert_eq!(here.def, shipped.def, "{id}: the validated fixture and shipped package must agree");
     }
 }
 

@@ -1,6 +1,3 @@
-# PROPOSED manifest for the 0.3 universal-panel framework: the shipped themes/gnome-catppuccin-dock/theme.toml plus `[bar] applets` and `[dock] position` and `[branding]`.
-# Not shipped: this tree's validator rejects those keys ("unknown key"). tests/gnome_theme_ports.rs proves it differs from the shipped manifest ONLY by them;
-# tests/e2e/framework-0.3-validate.py validates it with a 0.3 decthemectl.
 format = 1
 id = "gnome-catppuccin-dock"
 name = "GNOME Catppuccin Dock"

@@ -1,3 +1,5 @@
+> Integration status (2026-10-31): the 0.3.0 engine now includes the universal panel contract and GNOME Control Center. Both shipped packages include the validated applet defaults and theme branding below. Earlier proposal, engine-version and test-result sections record the port's original isolated branch; they do not describe the integrated build. Original GNOME runtime pixel parity and Orca remain unverified. Icon/cursor catalogue installation is held pending importer review fixes.
+
 # GNOME theme ports
 
 Two new native theme packages, researched from primary upstream sources on 2026-10-31:

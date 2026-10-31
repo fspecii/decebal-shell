@@ -106,10 +106,13 @@ radius = 16
 left = ["workspaceSwitcher", "focusedWindow"]
 center = ["clock", "notificationButton"]
 right = ["systemTray", "cpuUsage", "memUsage", "network", "audio", "battery", "controlCenterButton"]
+# default applet set of the 0.3 framework ([bar] applets); the Dux lists above stay as the preserved aliases
+applets = ["workspaces", "window_title", "clock", "notifications", "tray", "cpu", "memory", "network", "volume", "battery", "control_center"]
 
 [dock]
 enabled = true
 style = "mac"
+position = "bottom"            # [dock] position of the 0.3 framework (this tree warns that it is not applied)
 size = 48                       # dash-max-icon-size default 48
 align = "center"
 roundness = 0.8
@@ -134,3 +137,9 @@ tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actio
 
 [desktop]
 widgets = "none"
+
+# [branding] (universal-panel contract): Just Perfection hides Activities in this rice, so no launcher label.
+[branding]
+logo = "icon:start-here-symbolic"
+logo_tint = true
+desktop_label = "Desktop"

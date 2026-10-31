@@ -104,6 +104,8 @@ radius = 16                     # panel buttons are fully round (999 px radius),
 left = ["launcherButton", "workspaceSwitcher"]
 center = ["clock", "notificationButton"]
 right = ["network", "audio", "battery", "controlCenterButton"]
+# default applet set of the 0.3 framework ([bar] applets); the Dux lists above stay as the preserved aliases
+applets = ["launcher", "workspaces", "clock", "notifications", "network", "volume", "battery", "control_center"]
 
 [dock]
 enabled = false                 # stock GNOME shows the dash only inside the Overview
@@ -131,3 +133,10 @@ tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actio
 
 [desktop]
 widgets = "none"                # GNOME has no desktop widgets
+
+# Theme-owned branding follows the universal panel contract.
+[branding]
+logo = "icon:start-here-symbolic"   # Adwaita's symbolic GNOME mark from the user's icon theme; falls back to the neutral grid when missing
+logo_tint = true                    # repaint it in the bar's text colour
+launcher_label = "Activities"       # the Shell's launcher label; rails show the logo
+desktop_label = "Desktop"           # what a bar names when no window is focused

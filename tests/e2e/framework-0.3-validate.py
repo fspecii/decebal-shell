@@ -22,6 +22,7 @@ HERE = Path(__file__).resolve().parents[2]
 def main():
     ctl = Path(sys.argv[1]).resolve()
     themes = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else HERE / "themes"
+    failed = []
     with tempfile.TemporaryDirectory(prefix="framework-validate-") as tmp:
         home = Path(tmp) / "home"
         home.mkdir()
@@ -37,8 +38,8 @@ def main():
                 out = (run.stdout + run.stderr).strip().splitlines()
                 print(f"{ident} [{variant}]: exit {run.returncode}: {out[-1] if out else ''}")
                 if variant == "as written" and run.returncode != 0:
-                    print("   (expected on an engine without both the framework and the GNOME look; see the docstring)")
-    sys.exit(0)
+                    failed.append(ident)
+    sys.exit(bool(failed))
 
 
 if __name__ == "__main__":

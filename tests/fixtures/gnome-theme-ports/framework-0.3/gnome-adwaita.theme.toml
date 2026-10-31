@@ -1,6 +1,3 @@
-# PROPOSED manifest for the 0.3 universal-panel framework: the shipped themes/gnome-adwaita/theme.toml plus `[bar] applets` and `[branding]`.
-# Not shipped: this tree's validator rejects those keys ("unknown key"). tests/gnome_theme_ports.rs proves it differs from the shipped manifest ONLY by them;
-# tests/e2e/framework-0.3-validate.py validates it with a 0.3 decthemectl.
 format = 1
 id = "gnome-adwaita"
 name = "GNOME Adwaita"
@@ -137,9 +134,9 @@ tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actio
 [desktop]
 widgets = "none"                # GNOME has no desktop widgets
 
-# [branding] (universal-panel contract, docs/universal-panels.md at 71e3434): the GNOME identity every renderer shows instead of the style's own.
+# Theme-owned branding follows the universal panel contract.
 [branding]
-logo = "icon:start-here-symbolic"   # Adwaita's symbolic GNOME mark from the user's icon theme; falls back to the style's own logo when missing
+logo = "icon:start-here-symbolic"   # Adwaita's symbolic GNOME mark from the user's icon theme; falls back to the neutral grid when missing
 logo_tint = true                    # repaint it in the bar's text colour
 launcher_label = "Activities"       # the Shell's launcher label; rails show the logo
 desktop_label = "Desktop"           # what a bar names when no window is focused
