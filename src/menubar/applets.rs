@@ -1413,11 +1413,24 @@ pub(super) mod tests {
         set
     }
 
+    /// Every applet this machine can draw: Agents needs a Nerd Font and is left out where there is none.
+    fn drawable(id: &A) -> bool {
+        *id != A::Agents || crate::menubar::symbols::agents_available()
+    }
+
+    fn drawable_all() -> AppletSet {
+        let mut set = AppletSet::all();
+        if !drawable(&A::Agents) {
+            set.set(A::Agents, false);
+        }
+        set
+    }
+
     #[test]
     fn every_style_shows_every_applet_alone_on_every_edge() {
         for style in STYLES {
             for edge in Edge::ALL {
-                for id in A::all() {
+                for id in A::all().into_iter().filter(drawable) {
                     let bar = fixture(style, edge, AppletSet::of(&[id]), 1280);
                     let got = shown_applets(&bar);
                     assert_eq!(got, AppletSet::of(&[id]), "{} on {} with only {}", style.key(), edge.as_str(), id.key());
@@ -1447,7 +1460,7 @@ pub(super) mod tests {
                         }
                     }
                     // what does not fit is in the overflow list, never lost
-                    assert_eq!(shown_applets(&bar), AppletSet::all(), "{} {} {len}", style.key(), edge.as_str());
+                    assert_eq!(shown_applets(&bar), drawable_all(), "{} {} {len}", style.key(), edge.as_str());
                     if !bar.hidden_items().is_empty() {
                         assert!(lay.iter().any(|(k, _)| *k == Tray::More), "{} {} {len}: overflow cell", style.key(), edge.as_str());
                     }

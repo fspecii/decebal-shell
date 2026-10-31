@@ -82,6 +82,10 @@ mod tests {
     use super::*;
     #[test]
     fn moving_frames_are_bounded_and_decoder_is_reaped() {
+        if Command::new("ffmpeg").arg("-version").output().is_err() {
+            eprintln!("skipped: ffmpeg is not installed, so there is no clip to decode");
+            return;
+        }
         let path = std::env::temp_dir().join(format!("decebal-preview-{}.mp4", std::process::id()));
         assert!(Command::new("ffmpeg").args(["-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=12", "-t", "1", "-threads", "1", "-y"]).arg(&path).status().unwrap().success());
         let mut player = Player::start(&path, Arc::new(|| {})).unwrap();
