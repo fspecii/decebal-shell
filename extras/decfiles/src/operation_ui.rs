@@ -1,3 +1,6 @@
+// GtkDialog is deprecated since GTK 4.10 but remains in GTK 4; the tested default-response
+// semantics of these confirmations depend on it until a reviewed AlertDialog migration.
+#![allow(deprecated)]
 use super::Ui;
 use decfiles::{
     model::Intent,

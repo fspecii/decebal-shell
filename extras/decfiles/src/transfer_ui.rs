@@ -1,5 +1,8 @@
 //! Cut/Copy/Paste with GNOME Files-compatible clipboard formats. Copy and move work runs on
 //! the transfer worker; this module only polls its snapshot and answers conflict prompts.
+// GtkDialog is deprecated since GTK 4.10 but remains in GTK 4; the tested default-response
+// semantics of these confirmations depend on it until a reviewed AlertDialog migration.
+#![allow(deprecated)]
 use super::Ui;
 use decfiles::transfer::{self, clipboard, Choice, Mode, Phase, Report, Request, Transfer};
 use gio::prelude::*;
@@ -180,7 +183,12 @@ impl Ui {
             Some(fraction) => self.ops.progress.set_fraction(fraction),
             None => self.ops.progress.pulse(),
         }
-        self.ops.progress.set_text(Some(&format!("{} of {} items", progress.items_done.min(progress.items_total), progress.items_total)));
+        let items = format!("{} of {} items", progress.items_done.min(progress.items_total), progress.items_total);
+        self.ops.progress.set_text(Some(&if progress.bytes_total > 0 {
+            format!("{} of {} · {items}", glib::format_size(progress.bytes_done.min(progress.bytes_total)), glib::format_size(progress.bytes_total))
+        } else {
+            items
+        }));
         self.ops.transfer_state.replace(Some(serde_json::json!({"id":id, "mode":mode, "progress":progress, "conflict":snapshot.conflict})));
         if let Some(report) = snapshot.report {
             self.transfer_finished(id, report);

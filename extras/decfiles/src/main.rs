@@ -28,6 +28,9 @@ struct Ui {
     up: gtk::Button,
     layout: gtk::DropDown,
     columns: Cell<bool>,
+    /// Details sort (column id, descending). Survives re-render, view switches and navigation.
+    sort: RefCell<(String, bool)>,
+    view_model: RefCell<Option<gtk::SingleSelection>>,
     home: PathBuf,
     state_file: Option<PathBuf>,
     resolver: Resolver,
@@ -152,63 +155,76 @@ impl Ui {
         self.error.set_visible(model.error.is_some());
         self.status.set_text(&format!("{} items", model.columns.last().map_or(0, |column| column.entries.len())));
         let shown: Vec<_> = if self.columns.get() { model.columns.iter().enumerate().collect() } else { model.columns.iter().enumerate().next_back().into_iter().collect() };
+        self.view_model.replace(None);
         for (index, column) in shown {
             let store = gio::ListStore::new::<glib::BoxedAnyObject>();
             for entry in &column.entries {
                 store.append(&glib::BoxedAnyObject::new(entry.clone()));
             }
-            let selection = gtk::SingleSelection::new(Some(store));
+            let scroll = gtk::ScrolledWindow::builder().vexpand(true).hexpand(!self.columns.get()).min_content_width(if self.columns.get() { 250 } else { 400 }).build();
+            let details = (!self.columns.get()).then(|| self.details_view());
+            // Details sort natively; folders always stay first, as in the model order.
+            let items: gio::ListModel = match &details {
+                Some(view) => {
+                    let sorter = gtk::MultiSorter::new();
+                    sorter.append(folders_first());
+                    if let Some(chosen) = view.sorter() {
+                        sorter.append(chosen);
+                    }
+                    gtk::SortListModel::new(Some(store), Some(sorter)).upcast()
+                }
+                None => store.upcast(),
+            };
+            let selection = gtk::SingleSelection::new(Some(items));
             selection.set_autoselect(false);
             selection.set_can_unselect(true);
-            selection.set_selected(column.selected.as_ref().and_then(|path| column.entries.iter().position(|entry| &entry.path == path)).map_or(gtk::INVALID_LIST_POSITION, |index| index as u32));
+            let position = column.selected.as_ref().and_then(|path| (0..selection.n_items()).find(|&i| entry_at(&selection, i).is_some_and(|entry| &entry.path == path)));
+            selection.set_selected(position.unwrap_or(gtk::INVALID_LIST_POSITION));
             let weak = Rc::downgrade(self);
             selection.connect_selected_notify(move |selection| {
                 if let Some(ui) = weak.upgrade() {
                     ui.selected(index, selection);
                 }
             });
-            let scroll = gtk::ScrolledWindow::builder().vexpand(true).hexpand(!self.columns.get()).min_content_width(if self.columns.get() { 250 } else { 400 }).build();
-            if self.columns.get() {
-                let list = gtk::ListView::new(Some(selection.clone()), Some(factory(0)));
-                list.set_single_click_activate(true);
-                list.update_property(&[gtk::accessible::Property::Label(&format!("Folder column {}", column.path.display()))]);
-                let selected = selection.clone();
-                let weak = Rc::downgrade(self);
-                list.connect_activate(move |_, position| {
-                    if let Some(ui) = weak.upgrade() {
-                        ui.activate(&selected, position);
-                    }
-                });
-                scroll.set_child(Some(&list));
-                let box_ = gtk::Box::new(gtk::Orientation::Vertical, 0);
-                let title = gtk::Label::new(Some(&column.path.file_name().unwrap_or_else(|| column.path.as_os_str()).to_string_lossy()));
-                title.add_css_class("heading");
-                title.set_margin_top(8);
-                title.set_margin_bottom(8);
-                box_.append(&title);
-                box_.append(&scroll);
-                self.content.append(&box_);
-            } else {
-                let view = gtk::ColumnView::new(Some(selection.clone()));
-                view.update_property(&[gtk::accessible::Property::Label("Folder details")]);
-                for (name, kind) in [("Name", 0), ("Kind", 1), ("Size", 2)] {
-                    let column = gtk::ColumnViewColumn::new(Some(name), Some(factory(kind)));
-                    column.set_expand(kind == 0);
-                    column.set_resizable(true);
-                    view.append_column(&column);
+            match details {
+                None => {
+                    let list = gtk::ListView::new(Some(selection.clone()), Some(factory(0)));
+                    list.set_single_click_activate(true);
+                    list.update_property(&[gtk::accessible::Property::Label(&format!("Folder column {}", column.path.display()))]);
+                    let selected = selection.clone();
+                    let weak = Rc::downgrade(self);
+                    list.connect_activate(move |_, position| {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.activate(&selected, position);
+                        }
+                    });
+                    scroll.set_child(Some(&list));
+                    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                    let title = gtk::Label::new(Some(&column.path.file_name().unwrap_or_else(|| column.path.as_os_str()).to_string_lossy()));
+                    title.add_css_class("heading");
+                    title.set_margin_top(8);
+                    title.set_margin_bottom(8);
+                    box_.append(&title);
+                    box_.append(&scroll);
+                    self.content.append(&box_);
                 }
-                let selected = selection.clone();
-                let weak = Rc::downgrade(self);
-                view.connect_activate(move |_, position| {
-                    if let Some(ui) = weak.upgrade() {
-                        ui.activate(&selected, position);
-                    }
-                });
-                scroll.set_child(Some(&view));
-                self.content.append(&scroll);
+                Some(view) => {
+                    view.set_model(Some(&selection));
+                    let selected = selection.clone();
+                    let weak = Rc::downgrade(self);
+                    view.connect_activate(move |_, position| {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.activate(&selected, position);
+                        }
+                    });
+                    self.view_model.replace(Some(selection.clone()));
+                    scroll.set_child(Some(&view));
+                    self.content.append(&scroll);
+                }
             }
         }
         drop(model);
+
         if let Some(notice) = self.ops.notice() {
             self.status.set_text(&notice);
         }
@@ -216,12 +232,53 @@ impl Ui {
         self.dump();
     }
 
+    /// Name, Type, Size and Modified with native header sorting. The saved choice is
+    /// re-applied on every render and updated when the user clicks a header.
+    fn details_view(self: &Rc<Self>) -> gtk::ColumnView {
+        let view = gtk::ColumnView::new(None::<gtk::SingleSelection>);
+        view.update_property(&[gtk::accessible::Property::Label("Folder details")]);
+        let (sorted_by, descending) = self.sort.borrow().clone();
+        for (id, title, kind) in [("name", "Name", 0u8), ("type", "Type", 1), ("size", "Size", 2), ("modified", "Date modified", 3)] {
+            let column = gtk::ColumnViewColumn::new(Some(title), Some(factory(kind)));
+            column.set_id(Some(id));
+            column.set_expand(kind == 0);
+            column.set_resizable(true);
+            column.set_sorter(Some(&entry_sorter(kind)));
+            view.append_column(&column);
+            if id == sorted_by {
+                view.sort_by_column(Some(&column), if descending { gtk::SortType::Descending } else { gtk::SortType::Ascending });
+            }
+        }
+        let weak = Rc::downgrade(self);
+        if let Some(sorter) = view.sorter().and_downcast::<gtk::ColumnViewSorter>() {
+            sorter.connect_changed(move |sorter, _| {
+                let Some(ui) = weak.upgrade() else {
+                    return;
+                };
+                // A disposed view reports no primary column; header clicks only toggle order.
+                let Some(id) = sorter.primary_sort_column().and_then(|column| column.id()) else {
+                    return;
+                };
+                ui.sort.replace((id.to_string(), sorter.primary_sort_order() == gtk::SortType::Descending));
+                ui.dump();
+            });
+        }
+        view
+    }
+
     fn dump(&self) {
         // Explicit opt-in fixture hook. Never enabled by default or written into shell config.
         if let Some(path) = &self.state_file {
             let model = self.model.borrow();
-            let value =
-                serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str()});
+            let (sorted_by, descending) = self.sort.borrow().clone();
+            // Visible details order (bounded) proves native sorting, not just model order.
+            let view_order: Vec<String> = self
+                .view_model
+                .borrow()
+                .as_ref()
+                .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
+            let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
+                "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -232,18 +289,78 @@ impl Ui {
     }
 }
 
+fn entry_at(model: &impl IsA<gio::ListModel>, position: u32) -> Option<Entry> {
+    model.item(position).and_downcast::<glib::BoxedAnyObject>().map(|object| object.borrow::<Entry>().clone())
+}
+
+fn compare(a: &glib::Object, b: &glib::Object, by: impl Fn(&Entry, &Entry) -> std::cmp::Ordering) -> gtk::Ordering {
+    let (Some(a), Some(b)) = (a.downcast_ref::<glib::BoxedAnyObject>(), b.downcast_ref::<glib::BoxedAnyObject>()) else {
+        return gtk::Ordering::Equal;
+    };
+    by(&a.borrow::<Entry>(), &b.borrow::<Entry>()).into()
+}
+
+fn folders_first() -> gtk::CustomSorter {
+    gtk::CustomSorter::new(|a, b| compare(a, b, |a, b| b.directory.cmp(&a.directory)))
+}
+
+/// Ties fall back to the case-insensitive name and then exact path bytes, so order is stable.
+fn entry_sorter(kind: u8) -> gtk::CustomSorter {
+    gtk::CustomSorter::new(move |a, b| {
+        compare(a, b, |a, b| {
+            let primary = match kind {
+                1 => kind_text(a).to_lowercase().cmp(&kind_text(b).to_lowercase()),
+                2 => a.size.cmp(&b.size),
+                3 => a.modified.cmp(&b.modified),
+                _ => std::cmp::Ordering::Equal,
+            };
+            primary.then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())).then_with(|| a.path.cmp(&b.path))
+        })
+    })
+}
+
+fn kind_text(entry: &Entry) -> String {
+    if entry.directory {
+        "Folder".into()
+    } else if entry.content_type.is_empty() {
+        "File".into()
+    } else {
+        gio::content_type_get_description(&entry.content_type).to_string()
+    }
+}
+
+fn entry_icon(entry: &Entry) -> gio::Icon {
+    if entry.directory {
+        gio::ThemedIcon::new("folder").upcast()
+    } else if entry.content_type.is_empty() {
+        gio::ThemedIcon::new("text-x-generic").upcast()
+    } else {
+        gio::content_type_get_icon(&entry.content_type)
+    }
+}
+
 fn factory(kind: u8) -> gtk::SignalListItemFactory {
     let factory = gtk::SignalListItemFactory::new();
     factory.connect_setup(move |_, object| {
         let item = object.downcast_ref::<gtk::ListItem>().unwrap();
+        let cell = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        cell.set_margin_top(8);
+        cell.set_margin_bottom(8);
+        cell.set_margin_start(12);
+        cell.set_margin_end(12);
+        if kind == 0 {
+            // Icons come from the user's GTK icon theme for the GIO content type.
+            let icon = gtk::Image::new();
+            icon.set_pixel_size(16);
+            icon.set_accessible_role(gtk::AccessibleRole::Presentation);
+            cell.append(&icon);
+        }
         let label = gtk::Label::new(None);
-        label.set_xalign(0.0);
+        label.set_xalign(if kind == 2 { 1.0 } else { 0.0 });
+        label.set_hexpand(true);
         label.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        label.set_margin_top(8);
-        label.set_margin_bottom(8);
-        label.set_margin_start(12);
-        label.set_margin_end(12);
-        item.set_child(Some(&label));
+        cell.append(&label);
+        item.set_child(Some(&cell));
     });
     factory.connect_bind(move |_, object| {
         let item = object.downcast_ref::<gtk::ListItem>().unwrap();
@@ -251,30 +368,19 @@ fn factory(kind: u8) -> gtk::SignalListItemFactory {
             return;
         };
         let entry = object.borrow::<Entry>();
+        let cell = item.child().and_downcast::<gtk::Box>().unwrap();
         let value = match kind {
-            1 => {
-                if entry.directory {
-                    "Folder".into()
-                } else {
-                    "File".into()
-                }
-            }
-            2 => {
-                if entry.directory {
-                    "—".into()
-                } else {
-                    format!("{} B", entry.size)
-                }
-            }
-            _ => {
-                if entry.directory {
-                    format!("{}  ›", entry.name)
-                } else {
-                    entry.name.clone()
-                }
-            }
+            1 => kind_text(&entry),
+            2 if entry.directory => String::new(),
+            2 => glib::format_size(entry.size).to_string(),
+            3 => glib::DateTime::from_unix_local(entry.modified as i64).and_then(|time| time.format("%Y-%m-%d %H:%M")).map_or_else(|_| String::new(), |text| text.to_string()),
+            _ if entry.directory => format!("{}  ›", entry.name),
+            _ => entry.name.clone(),
         };
-        item.child().and_downcast::<gtk::Label>().unwrap().set_text(&value);
+        if kind == 0 {
+            cell.first_child().and_downcast::<gtk::Image>().unwrap().set_from_gicon(&entry_icon(&entry));
+        }
+        cell.last_child().and_downcast::<gtk::Label>().unwrap().set_text(&value);
     });
     factory
 }
@@ -354,6 +460,8 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         up,
         layout,
         columns: Cell::new(columns),
+        sort: RefCell::new(("name".into(), false)),
+        view_model: RefCell::new(None),
         home: home.clone(),
         state_file: std::env::var_os("DECFILES_EVIDENCE_STATE").map(PathBuf::from),
         resolver,
