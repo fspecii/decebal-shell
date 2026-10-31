@@ -2,7 +2,7 @@
 //! context menu, drag-to-reorder and live reload of the pinned list.
 
 use crate::app::{App, Button, InputRect, Key, NavKey, Tick, Waker};
-use crate::backend::{Anchor, SurfaceSpec};
+use crate::backend::SurfaceSpec;
 use crate::config::{self, edit, Stamp};
 use crate::dock::{Dock, DockItem, Drag};
 use crate::dock_menu::{self, Action, Ctx, DockMenu, Outcome, TEXT_PX};
@@ -96,6 +96,8 @@ pub struct DockApp {
     scale: Option<f32>,
     /// Lets the dock close itself while `dock.enabled` (decebal.json) says it is off; see [`DockApp::with_gate`].
     gate: std::cell::RefCell<Option<crate::menubar::gate::Gate>>,
+    /// `decdock --focus` (SIGUSR2): the request flag and the slot for the waker; see [`DockApp::with_focus_signal`].
+    focus_signal: Option<&'static crate::menubar::FocusSignal>,
 }
 
 impl DockApp {
@@ -120,7 +122,15 @@ impl DockApp {
             surface_origin: (0, 0),
             scale: None,
             gate: std::cell::RefCell::new(None),
+            focus_signal: None,
         }
+    }
+
+    /// Lets `decdock --focus` (SIGUSR2 to this process) start the taskbar's keyboard mode, like `decbar --focus` does
+    /// for the bar. Call before any other thread starts: the signal is blocked here and collected by a thread of its own.
+    pub fn with_focus_signal(mut self) -> Self {
+        self.focus_signal = Some(crate::menubar::DecBar::init_focus_signal());
+        self
     }
 
     /// Lets the dock close itself (the backend returns) while `dock.enabled` in `decebal.json` says it is off, which under
@@ -145,6 +155,64 @@ impl DockApp {
         let mut pm = Pixmap::new(w, h).ok_or("dock preview canvas")?;
         app.draw(&mut pm);
         Ok(pm)
+    }
+
+    /// The dock or taskbar placed on its edge of a `width` x `height` desktop, as the backend would place it (the
+    /// gallery's preview). Static sample pins; no trackers, watchers or event loop.
+    pub fn preview_desktop(width: u32, height: u32) -> Result<Pixmap, String> {
+        Self::preview_desktop_with(config::dock_settings(), width, height)
+    }
+
+    /// [`DockApp::preview_desktop`] for given dock settings.
+    pub fn preview_desktop_with(settings: config::DockSettings, width: u32, height: u32) -> Result<Pixmap, String> {
+        let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], settings);
+        let mut app = Self::new(dock).with_scale(1.0);
+        let th = crate::theme::th();
+        let insets = th.bar_insets();
+        let mut desk = Pixmap::new(width, height).ok_or("dock preview canvas")?;
+        let (w, h, x, y) = if let Some(win) = app.win.as_mut() {
+            win.time = "14:07".into();
+            win.date = "23/10/2026".into();
+            win.status.status_fill_sample();
+            // fixed sample tasks (a file manager pinned, a focused browser, a running terminal): the preview cache is not
+            // keyed on installed apps, and launchpad and trash are never task buttons
+            win.buttons = [("org.gnome.Nautilus", "", true, false), ("firefox", "Mozilla Firefox", true, true), ("foot", "Terminal", false, false)]
+                .into_iter()
+                .enumerate()
+                .map(|(i, (id, title, pinned, active))| crate::taskbar::TaskButton {
+                    app_id: id.into(),
+                    window: (i > 0).then_some(i as u64),
+                    title: title.into(),
+                    pinned,
+                    running: i > 0,
+                    active,
+                    windows: (i > 0) as usize,
+                })
+                .collect();
+            let bar = win.m.bar_h.ceil() as u32;
+            match app.win_vertical_edge() {
+                Some(true) => (bar, height, width as i32 - bar as i32 - insets.right, 0),
+                Some(false) => (bar, height, insets.left, 0),
+                None if app.win_panel_edge_top() => (width, bar, 0, crate::theme::bar_bottom().ceil() as i32),
+                None => (width, bar, 0, height as i32 - bar as i32 - insets.bottom),
+            }
+        } else {
+            let (w, h) = app.dock.canvas_size();
+            let spec = app.surface_spec().ok_or("dock spec")?;
+            let (cx, cy) = ((width as i32 - w as i32) / 2, (height as i32 - h as i32) / 2);
+            let (x, y) = match spec.anchor {
+                crate::backend::Anchor::Bottom => (cx, height as i32 - h as i32 - spec.margin),
+                crate::backend::Anchor::Top => (cx, spec.margin),
+                crate::backend::Anchor::Left => (spec.margin, cy),
+                crate::backend::Anchor::Right => (width as i32 - w as i32 - spec.margin, cy),
+            };
+            (w, h, x, y)
+        };
+        app.resized(w, h);
+        let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or("dock preview canvas")?;
+        app.draw(&mut pm);
+        desk.draw_pixmap(x, y, pm.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+        Ok(desk)
     }
 
     /// Forces the taskbar's DPI scale (tests; normally `DECEBAL_SCALE` or `Xft.dpi`).
@@ -319,9 +387,42 @@ impl DockApp {
         self.menu.take().is_some()
     }
 
+    /// Length of the surface along the dock's edge.
+    fn dock_len(&self) -> f32 {
+        if self.dock.edge().is_vertical() {
+            self.surface.1 as f32
+        } else {
+            self.surface.0 as f32
+        }
+    }
+
+    /// The coordinate along the dock's edge of a surface point (x of the bottom dock, y of a side one).
+    fn along(&self, x: f32, y: f32) -> f32 {
+        self.dock.to_frame(self.surface.0 as f32, self.surface.1 as f32, x, y).0
+    }
+
+    /// Where the open context menu of the macOS dock is drawn: over a bottom dock, under a top one, beside a side one
+    /// (centred on its icon along the edge), on the surface.
+    fn mac_menu(&self, m: &DockMenu) -> crate::menubar::menus::Dropdown {
+        use crate::panel::Edge;
+        let (w, h) = (self.surface.0 as f32, self.surface.1 as f32);
+        let ph = self.dock.panel_height();
+        match self.dock.edge() {
+            Edge::Bottom => m.placed(w, menu_bottom(self.surface.1, ph)),
+            Edge::Top => m.placed(w, ph + MENU_GAP + m.size().1),
+            edge => {
+                let mut d = m.placed(f32::MAX / 8.0, 0.0);
+                d.x = if edge == Edge::Right { (w - ph - MENU_GAP - d.w).max(0.0) } else { ph + MENU_GAP };
+                let y = (m.anchor_x - d.h / 2.0).clamp(MENU_TOP, (h - d.h - MENU_TOP).max(MENU_TOP));
+                d.shift_y(y - d.y);
+                d
+            }
+        }
+    }
+
     fn open_menu(&mut self, i: usize) {
         let Some(item) = self.dock.items.get(i) else { return };
-        let layout = self.dock.layout(self.surface.0 as f32);
+        let layout = self.dock.layout(self.dock_len());
         let Some(cell) = layout.cells.get(i) else { return };
         let windows = self.tracker.as_ref().map(|t| t.windows_for(&item.id)).unwrap_or_default();
         let ctx = Ctx {
@@ -430,7 +531,7 @@ impl DockApp {
     /// Moves the dragged item over the neighbour under the pointer.
     fn drag_to(&mut self, x: f32) {
         let Some(d) = self.dock.drag else { return };
-        let layout = self.dock.layout(self.surface.0 as f32);
+        let layout = self.dock.layout(self.dock_len());
         let target = layout.cells.iter().position(|c| x >= c.x - 3.0 && x <= c.x + c.w + 3.0);
         let mut index = d.index;
         if let Some(t) = target {
@@ -462,6 +563,11 @@ impl App for DockApp {
         }
         let (w, h) = self.dock.canvas_size();
         match &self.menu {
+            // a side dock's menu opens beside it, the others' over / under it
+            Some(m) if self.dock.edge().is_vertical() => {
+                let need = (m.menu.size().0 + self.dock.panel_height() + MENU_GAP + MENU_TOP).ceil() as u32;
+                (w.max(need), h.max((m.menu.size().1 + 2.0 * MENU_TOP).ceil() as u32))
+            }
             Some(m) => {
                 let need = (m.menu.size().1 + self.dock.panel_height() + MENU_GAP + MENU_TOP).ceil() as u32;
                 (w, h.max(need))
@@ -486,9 +592,8 @@ impl App for DockApp {
             return self.win_draw(pm);
         }
         self.dock.draw(pm);
-        let bottom = menu_bottom(pm.height(), self.dock.panel_height());
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(pm.width() as f32, bottom);
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if let Some(f) = &mut m.fonts {
                 m.menu.draw(pm, &d, f);
                 f.trim();
@@ -499,22 +604,15 @@ impl App for DockApp {
     fn glass_regions(&self) -> Vec<crate::glass::Region> {
         let mut regions = Vec::new();
         if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
-            regions.push(crate::glass::Region { x: 0.0, y: self.win_strip_top(), w: self.surface.0 as f32, h: w.m.bar_h, radius: 0.0 });
-            regions.extend(w.status.glass_regions());
+            let r = self.win_strip_rect();
+            regions.push(crate::glass::Region { x: r.0, y: r.1, w: r.2, h: r.3, radius: 0.0 });
+            let _ = w;
+            regions.extend(self.win.as_ref().map(|w| w.status.status_glass_regions()).unwrap_or_default());
         } else {
             regions.push(self.dock.glass_region(self.surface.0 as f32, self.surface.1 as f32));
         }
         if let Some(menu) = &self.menu {
-            let bottom = if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
-                if self.dock.settings.windows_position == crate::config::WinPosition::Top {
-                    w.m.bar_h + MENU_GAP + menu.menu.size().1
-                } else {
-                    self.surface.1 as f32 - w.m.bar_h - MENU_GAP
-                }
-            } else {
-                menu_bottom(self.surface.1, self.dock.panel_height())
-            };
-            let placed = menu.menu.placed(self.surface.0 as f32, bottom);
+            let placed = if self.is_windows() && self.win.is_some() { self.win_menu_dropdown(&menu.menu) } else { self.mac_menu(&menu.menu) };
             regions.push(crate::glass::Region { x: placed.x, y: placed.y, w: placed.w, h: placed.h, radius: crate::theme::th().radius });
         }
         regions
@@ -524,28 +622,29 @@ impl App for DockApp {
         if self.is_windows() {
             return self.win_motion(x, y);
         }
+        let along = self.along(x, y);
         if let Some(p) = &self.press {
-            if self.dock.drag.is_none() && (x - p.x).abs() > DRAG_THRESHOLD && self.draggable(p.index) && self.menu.is_none() {
-                self.dock.drag = Some(Drag { index: p.index, x });
+            if self.dock.drag.is_none() && (along - p.x).abs() > DRAG_THRESHOLD && self.draggable(p.index) && self.menu.is_none() {
+                self.dock.drag = Some(Drag { index: p.index, x: along });
                 self.dock.hover_x = None;
                 self.wake();
             }
         }
         if self.dock.drag.is_some() {
-            self.drag_to(x);
+            self.drag_to(along);
             self.wake();
             return true;
         }
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1, self.dock.panel_height()));
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if d.contains(x, y) {
                 return m.menu.pointer_moved(&d, x, y);
             }
             let cleared = m.menu.pointer_moved(&d, -1.0, -1.0);
             return cleared;
         }
-        let changed = self.dock.hover_x != Some(x);
-        self.dock.hover_x = Some(x);
+        let changed = self.dock.hover_x != Some(along);
+        self.dock.hover_x = Some(along);
         if changed {
             self.wake(); // start the easing animation
         }
@@ -574,6 +673,11 @@ impl App for DockApp {
         }
         let w = waker.clone();
         crate::theme::live::start_watcher(move || w.wake());
+        if let Some((_, slot)) = self.focus_signal {
+            if let Ok(mut s) = slot.lock() {
+                *s = Some(waker.clone());
+            }
+        }
         self.waker = Some(waker);
         if self.is_windows() {
             self.win_init();
@@ -585,8 +689,17 @@ impl App for DockApp {
             return self.win_spec();
         }
         // a dock kept next to the Caelestia pill bar floats above it when that runs along the bottom (`bottom`, `split`)
-        let margin = 13 + crate::theme::th().bar_insets().bottom;
-        Some(SurfaceSpec { anchor: Anchor::Bottom, margin, reserve: self.dock.panel_height().ceil() as i32, stretch: false, namespace: "decebal-dock" })
+        // the dock floats 13 px off its edge, and further when the bar uses the same edge (it never covers it)
+        let th = crate::theme::th();
+        let insets = th.bar_insets();
+        let edge = self.dock.edge();
+        let bar = match edge {
+            crate::panel::Edge::Bottom => insets.bottom,
+            crate::panel::Edge::Top => crate::theme::bar_bottom().ceil() as i32,
+            crate::panel::Edge::Left => insets.left,
+            crate::panel::Edge::Right => insets.right,
+        };
+        Some(SurfaceSpec { anchor: edge.anchor(), margin: 13 + bar, reserve: self.dock.panel_height().ceil() as i32, stretch: false, namespace: "decebal-dock" })
     }
 
     fn quit_requested(&self) -> bool {
@@ -617,13 +730,14 @@ impl App for DockApp {
             }
             changed = true;
         }
+        let focus = self.focus_signal.is_some_and(|(flag, _)| flag.swap(false, std::sync::atomic::Ordering::SeqCst));
         if self.is_windows() {
             let mut tick = self.win_tick();
-            tick.redraw |= changed;
+            tick.redraw |= changed || focus && self.win_focus_start();
             return tick;
         }
         changed |= self.sync_items();
-        let moving = self.dock.step(self.surface.0 as f32);
+        let moving = self.dock.step(self.dock_len());
         let redraw = changed || moving || self.animating;
         self.animating = moving;
         let mut next = moving.then(|| Duration::from_millis(16));
@@ -639,8 +753,9 @@ impl App for DockApp {
             return self.win_button(x, y, button);
         }
         let (w, h) = self.surface;
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
+        let along = self.along(x, y);
+        let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if button == Button::Left && m.menu.press(&d, x, y) {
                 return false;
             }
@@ -659,7 +774,7 @@ impl App for DockApp {
         let hit = self.dock.hit_test(w as f32, h as f32, x, y);
         match (button, hit) {
             (Button::Left, Some(i)) => {
-                self.press = Some(Press { index: i, x });
+                self.press = Some(Press { index: i, x: along });
                 false
             }
             (Button::Right, Some(i)) => {
@@ -668,9 +783,9 @@ impl App for DockApp {
             }
             (Button::Right, None) => {
                 // The dock's own menu: right click on the panel between or around the icons.
-                let l = self.dock.layout(w as f32);
-                if x >= l.panel_x && x <= l.panel_x + l.panel_w && y >= h as f32 - self.dock.panel_height() {
-                    self.open_dock_menu(x);
+                let (px, py, pw, ph) = self.dock.panel_rect(w as f32, h as f32);
+                if x >= px && x <= px + pw && y >= py && y <= py + ph {
+                    self.open_dock_menu(along);
                     return true;
                 }
                 false
@@ -694,12 +809,10 @@ impl App for DockApp {
         }
         let (w, h) = self.surface;
         if self.menu.is_some() {
-            let out = match &mut self.menu {
-                Some(m) => {
-                    let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
-                    m.menu.release(&d, x, y)
-                }
-                None => Outcome::None,
+            let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
+            let out = match (&mut self.menu, placed) {
+                (Some(m), Some(d)) => m.menu.release(&d, x, y),
+                _ => Outcome::None,
             };
             return self.finish_menu(out);
         }
@@ -723,7 +836,8 @@ impl App for DockApp {
 
     fn key(&mut self, key: Key) -> bool {
         if self.is_windows() {
-            return matches!(key, Key::Escape) && self.win_escape();
+            // Escape closes a menu or popup first, then leaves keyboard mode
+            return matches!(key, Key::Escape) && (self.win_escape() || self.win_focus_end());
         }
         match key {
             Key::Escape => self.close_menu(),
@@ -731,11 +845,14 @@ impl App for DockApp {
     }
 
     fn nav_key(&mut self, key: NavKey) -> bool {
+        if self.menu.is_none() && self.is_windows() {
+            return self.win_nav_key(key);
+        }
         let out = match (&mut self.menu, key) {
             (Some(m), NavKey::Up) => return m.menu.step(-1),
             (Some(m), NavKey::Down) => return m.menu.step(1),
             (Some(m), NavKey::Enter) => m.menu.activate_hovered(),
-            (None, _) => return false,
+            (Some(_), NavKey::Left | NavKey::Right) | (None, _) => return false,
         };
         self.finish_menu(out)
     }
@@ -763,10 +880,12 @@ impl App for DockApp {
             return self.win_input_rects();
         }
         let (w, h) = self.surface;
-        let strip = (self.dock.panel_height() + 8.0).ceil() as i32;
-        let mut rects = vec![InputRect { x: 0, y: h as i32 - strip, w: w as i32, h: strip }];
+        let strip = self.dock.panel_height() + 8.0;
+        let len = if self.dock.edge().is_vertical() { h } else { w } as f32;
+        let (rx, ry, rw, rh) = self.dock.map(w as f32, h as f32, 0.0, 0.0, len, strip);
+        let mut rects = vec![InputRect { x: rx.floor() as i32, y: ry.floor() as i32, w: rw.ceil() as i32, h: rh.ceil() as i32 }];
         if let Some(m) = &self.menu {
-            let d = m.menu.placed(w as f32, menu_bottom(h, self.dock.panel_height()));
+            let d = self.mac_menu(&m.menu);
             rects.push(InputRect { x: d.x.floor() as i32, y: d.y.floor() as i32, w: d.w.ceil() as i32 + 1, h: d.h.ceil() as i32 });
         }
         rects
@@ -785,6 +904,7 @@ impl App for DockApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::Anchor;
     use crate::config::DockSettings;
     use crate::wm::{Control, Window};
     use std::cell::RefCell;
@@ -930,7 +1050,7 @@ mod tests {
 
         fn row_point(&self, label: &str) -> (f32, f32) {
             let m = &self.app.menu.as_ref().unwrap().menu;
-            let d = m.placed(self.app.surface.0 as f32, menu_bottom(self.app.surface.1, self.app.dock.panel_height()));
+            let d = self.app.mac_menu(m);
             let i = m.entries.iter().position(|e| e.label == label).unwrap_or_else(|| panic!("no {label}"));
             (d.x + 30.0, d.rows[i].y + 5.0)
         }
@@ -1257,6 +1377,51 @@ mod tests {
     }
 
     #[test]
+    fn the_macos_dock_sits_on_every_edge_with_upright_icons_hits_and_menus() {
+        use crate::panel::Edge;
+        for edge in Edge::ALL {
+            let mut r = rig(&format!("mac-{}", edge.as_str()), &["launchpad", "a", "b", "trash"], vec![]);
+            r.app.scale = Some(1.0);
+            r.set_settings(&format!(r#"{{"style":"mac","edge":"{}"}}"#, edge.as_str()));
+            let spec = r.app.surface_spec().unwrap();
+            assert_eq!((spec.anchor, spec.stretch), (edge.anchor(), false), "{edge:?}");
+            r.app.surface = r.app.dock.canvas_size();
+            let (w, h) = (r.app.surface.0 as f32, r.app.surface.1 as f32);
+            assert_eq!(edge.is_vertical(), h > w, "{edge:?}: a side dock is tall");
+            // the panel hugs the canvas side that faces the screen edge
+            let (px, py, pw, ph) = r.app.dock.panel_rect(w, h);
+            let hugs = match edge {
+                Edge::Bottom => (py + ph - h).abs() < 0.5,
+                Edge::Top => py.abs() < 0.5,
+                Edge::Left => px.abs() < 0.5,
+                Edge::Right => (px + pw - w).abs() < 0.5,
+            };
+            assert!(hugs, "{edge:?}: panel {:?} on {w}x{h}", (px, py, pw, ph));
+            // every icon is hit where it is drawn, in reading order along the edge
+            let len = if edge.is_vertical() { h } else { w };
+            let l = r.app.dock.layout(len);
+            for (i, c) in l.cells.iter().enumerate() {
+                let (x, y, _, _) = r.app.dock.map(w, h, c.x + c.w / 2.0, r.app.dock.panel_height() / 2.0, 0.0, 0.0);
+                assert_eq!(r.app.dock.hit_test(w, h, x, y), Some(i), "{edge:?} cell {i}");
+                assert!(r.app.input_rects()[0].x as f32 <= x && x <= (r.app.input_rects()[0].x + r.app.input_rects()[0].w) as f32, "{edge:?}: input covers the icon");
+            }
+            let mut pm = Pixmap::new(w as u32, h as u32).unwrap();
+            r.app.dock.draw(&mut pm);
+            // a right click opens the item's menu on the desktop side of the dock, on the surface, clear of the panel
+            let c = l.cells[1];
+            let (x, y, _, _) = r.app.dock.map(w, h, c.x + c.w / 2.0, r.app.dock.panel_height() / 2.0, 0.0, 0.0);
+            r.app.pointer_button(x, y, Button::Right);
+            assert!(r.app.menu.is_some(), "{edge:?}: menu");
+            let (sw, sh) = r.app.size();
+            r.app.surface = (sw, sh);
+            let d = r.app.mac_menu(&r.app.menu.as_ref().unwrap().menu);
+            let (px, py, pw, ph) = r.app.dock.panel_rect(sw as f32, sh as f32);
+            assert!(d.x >= 0.0 && d.y >= 0.0 && d.x + d.w <= sw as f32 + 0.5 && d.y + d.h <= sh as f32 + 0.5, "{edge:?}: menu {:?} on {sw}x{sh}", (d.x, d.y, d.w, d.h));
+            assert!(!(d.x < px + pw && px < d.x + d.w && d.y < py + ph && py < d.y + d.h), "{edge:?}: the menu covers the dock");
+        }
+    }
+
+    #[test]
     fn style_switches_at_runtime_through_the_settings_file() {
         let mut r = rig("style", &["launchpad", "a", "trash"], vec![]);
         r.app.scale = Some(1.0);
@@ -1283,6 +1448,191 @@ mod tests {
         std::fs::remove_file(r.dir.join("settings.json")).unwrap();
         r.app.tick();
         assert!(!r.app.is_windows());
+    }
+
+    /// The taskbar on `edge` of a 1280 x 900 monitor with every applet's data.
+    fn edge_rig(name: &str, edge: crate::panel::Edge, applets: Option<crate::panel::AppletSet>) -> Rig {
+        crate::menubar::DecBar::status_test_applets(applets);
+        let mut r = win_rig(name, &["launchpad", "foot", "beta", "trash"], vec![active_win(1, "foot", "shell"), win(2, "mpv", "movie")]);
+        r.set_settings(&format!(r#"{{"style":"windows","edge":"{}"}}"#, edge.as_str()));
+        r.app.win.as_mut().unwrap().status.status_fill_for_tests();
+        let (w, h) = r.app.size();
+        r.app.surface = if edge.is_vertical() { (w.max(1), 900) } else { (1280, h.max(1)) };
+        r
+    }
+
+    fn overlaps(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> bool {
+        a.0 + 0.5 < b.0 + b.2 && b.0 + 0.5 < a.0 + a.2 && a.1 + 0.5 < b.1 + b.3 && b.1 + 0.5 < a.1 + a.3
+    }
+
+    #[test]
+    fn the_taskbar_draws_every_zone_on_every_edge_and_opens_popups_towards_the_desktop() {
+        use crate::panel::Edge;
+        use crate::taskbar::Hit;
+        for edge in Edge::ALL {
+            let mut r = edge_rig(&format!("edge-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            let spec = r.app.surface_spec().unwrap();
+            assert_eq!((spec.anchor, spec.reserve), (edge.anchor(), 48), "{edge:?}");
+            let strip = r.app.win_strip_rect();
+            let touches = match edge {
+                Edge::Top => strip.1 == 0.0,
+                Edge::Bottom => (strip.1 + strip.3 - r.app.surface.1 as f32).abs() < 1.0,
+                Edge::Left => strip.0 == 0.0,
+                Edge::Right => (strip.0 + strip.2 - r.app.surface.0 as f32).abs() < 1.0,
+            };
+            assert!(touches, "{edge:?}: strip {strip:?} on {:?}", r.app.surface);
+            let l = r.app.win_layout().unwrap();
+            let mut zones: Vec<(Hit, crate::taskbar::Rect)> = vec![(Hit::Start, l.start), (Hit::Clock, l.clock), (Hit::Desktop, l.desktop)];
+            zones.extend(l.search.map(|s| (Hit::Search, s)));
+            // a crowded strip scrolls its task row: only the buttons inside the visible span are zones
+            zones.extend(l.tasks.iter().enumerate().filter(|(_, t)| t.x >= l.clip.0 - 0.5 && t.x + t.w <= l.clip.1 + 0.5).map(|(i, t)| (Hit::Task(i), *t)));
+            zones.extend(l.tray.iter().map(|(k, t)| (Hit::Tray(*k), *t)));
+            let surf: Vec<_> = zones.iter().map(|(h, z)| (*h, r.app.win_to_surface(*z))).collect();
+            for (i, (h, z)) in surf.iter().enumerate() {
+                assert!(z.0 >= strip.0 - 0.5 && z.1 >= strip.1 - 0.5 && z.0 + z.2 <= strip.0 + strip.2 + 0.5 && z.1 + z.3 <= strip.1 + strip.3 + 0.5, "{edge:?} {h:?} {z:?} outside {strip:?}");
+                // the pointer finds every zone where it is drawn
+                assert_eq!(r.app.win_hit(z.0 + z.2 / 2.0, z.1 + z.3 / 2.0), Some(*h), "{edge:?} {h:?}");
+                for (h2, z2) in &surf[i + 1..] {
+                    assert!(!overlaps(*z, *z2), "{edge:?}: {h:?} overlaps {h2:?}");
+                }
+            }
+            // every popup applet of the tray opens beside the strip, on the surface
+            for (kind, _) in l.tray.iter().filter(|(k, _)| crate::menubar::DecBar::status_has_popup(*k)).cloned().collect::<Vec<_>>() {
+                r.app.win.as_mut().unwrap().status.status_close();
+                let z = r.app.win_to_surface(r.app.win_layout().unwrap().rect_of(Hit::Tray(kind)).unwrap());
+                let (cx, cy) = (z.0 + z.2 / 2.0, z.1 + z.3 / 2.0);
+                r.app.pointer_button(cx, cy, Button::Left);
+                r.app.pointer_release(cx, cy, Button::Left);
+                let open = r.app.win.as_ref().unwrap().status.status_open_kind();
+                assert_eq!(open, Some(kind), "{edge:?}: {kind:?} opens");
+                let (w, h) = r.app.size();
+                r.app.surface = if edge.is_vertical() { (w.max(r.app.surface.0), 900) } else { (1280, h.max(r.app.surface.1)) };
+                let strip = r.app.win_strip_rect();
+                let rect = r.app.win_input_rects().into_iter().skip(1).last().expect("popup input region");
+                let p = (rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
+                assert!(!overlaps(p, strip), "{edge:?} {kind:?}: popup {p:?} covers the strip {strip:?}");
+                assert!(p.0 >= 0.0 && p.1 >= 0.0 && p.0 + p.2 <= r.app.surface.0 as f32 + 1.0 && p.1 + p.3 <= r.app.surface.1 as f32 + 1.0, "{edge:?} {kind:?}: {p:?} off {:?}", r.app.surface);
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn a_short_side_taskbar_moves_what_does_not_fit_into_its_overflow_list() {
+        use crate::menubar::Tray;
+        use crate::panel::Edge;
+        let mut r = edge_rig("short-side", Edge::Left, Some(crate::panel::AppletSet::all()));
+        r.app.surface = (r.app.surface.0, 600);
+        let l = r.app.win_layout().unwrap();
+        let kinds: Vec<Tray> = l.tray.iter().map(|(k, _)| *k).collect();
+        assert!(kinds.contains(&Tray::More) && kinds.contains(&Tray::Control), "{kinds:?}");
+        let mut zones = vec![l.start, l.clock, l.desktop];
+        zones.extend(l.search);
+        zones.extend(l.tray.iter().map(|(_, t)| *t));
+        for (i, a) in zones.iter().enumerate() {
+            assert!(a.x >= 0.0 && a.x + a.w <= 600.5, "{a:?} off the strip");
+            for b in &zones[i + 1..] {
+                assert!(!(a.x + 0.5 < b.x + b.w && b.x + 0.5 < a.x + a.w), "{a:?} overlaps {b:?}");
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn a_side_taskbar_preview_draws_the_whole_strip() {
+        for edge in [crate::panel::Edge::Left, crate::panel::Edge::Right] {
+            let settings = DockSettings { style: config::DockStyle::Windows, edge: Some(edge), ..DockSettings::default() };
+            let pm = DockApp::preview_desktop_with(settings, 1920, 1080).unwrap();
+            if let Some(dir) = std::env::var_os("PANEL_PREVIEW_OUT") {
+                pm.save_png(std::path::Path::new(&dir).join(format!("taskbar-{}.png", edge.as_str()))).unwrap();
+            }
+            // the strip is painted down the whole edge, with content near its start (Start) and its end (clock)
+            let x = if edge == crate::panel::Edge::Left { 24 } else { 1920 - 24 };
+            let painted = |y: u32| pm.pixel(x, y).is_some_and(|p| p.alpha() > 0);
+            for y in [5, 300, 540, 900, 1075] {
+                assert!(painted(y), "{edge:?}: strip painted at y={y}");
+            }
+        }
+    }
+
+    #[test]
+    fn decdock_focus_walks_the_taskbar_by_keyboard_on_every_edge() {
+        use crate::menubar::Tray;
+        use crate::panel::Edge;
+        use crate::taskbar::Hit;
+        for edge in [Edge::Bottom, Edge::Left, Edge::Right, Edge::Top] {
+            let mut r = edge_rig(&format!("kb-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            assert!(!r.app.wants_keyboard());
+            // the signal of `decdock --focus`, as the collector thread leaves it
+            let signal: &'static crate::menubar::FocusSignal = Box::leak(Box::new((std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)), Default::default())));
+            r.app.focus_signal = Some(signal);
+            assert!(r.app.tick().redraw, "{edge:?}: keyboard mode starts with a redraw");
+            assert!(r.app.wants_keyboard(), "{edge:?}");
+            let items = r.app.win_focus_items();
+            assert_eq!(items.first(), Some(&Hit::Start));
+            assert_eq!(items.last(), Some(&Hit::Desktop));
+            assert!(items.iter().any(|h| matches!(h, Hit::Task(_))) && items.contains(&Hit::Clock));
+            // every zone is reached by the arrows of either axis and wraps around
+            let mut seen = Vec::new();
+            for _ in 0..items.len() {
+                seen.push(items[r.app.win.as_ref().unwrap().kb.unwrap()]);
+                assert!(r.app.nav_key(if edge.is_vertical() { NavKey::Down } else { NavKey::Right }));
+            }
+            assert_eq!(seen, items, "{edge:?}");
+            assert_eq!(r.app.win.as_ref().unwrap().kb, Some(0));
+            r.app.nav_key(NavKey::Up);
+            assert_eq!(r.app.win.as_ref().unwrap().kb, Some(items.len() - 1));
+            // the ring is drawn on the focused zone
+            let mut pm = Pixmap::new(r.app.surface.0, r.app.surface.1).unwrap();
+            r.app.draw(&mut pm);
+            // Enter on the sound cell opens its popup with the first row focused; the arrows walk it; Escape closes
+            // it, keyboard mode stays, a second Escape leaves
+            let at = items.iter().position(|h| *h == Hit::Tray(Tray::Audio)).expect("sound");
+            r.app.win.as_mut().unwrap().kb = Some(at);
+            assert!(r.app.nav_key(NavKey::Enter));
+            assert_eq!(r.app.win.as_ref().unwrap().status.status_open_kind(), Some(Tray::Audio), "{edge:?}");
+            assert!(r.app.nav_key(NavKey::Down), "{edge:?}: the popup's rows take the arrows");
+            assert!(r.app.key(Key::Escape));
+            assert_eq!(r.app.win.as_ref().unwrap().status.status_open_kind(), None);
+            assert!(r.app.wants_keyboard());
+            assert!(r.app.key(Key::Escape) && !r.app.wants_keyboard(), "{edge:?}: Escape leaves keyboard mode");
+            // Enter on Start opens the launcher, which takes the focus
+            signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            r.app.tick();
+            assert!(r.app.nav_key(NavKey::Enter));
+            assert_eq!(r.fx.borrow().launched.last().map(String::as_str), Some("launchpad"));
+            assert!(!r.app.wants_keyboard());
+            // a pointer press also ends it
+            signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            r.app.tick();
+            let (x, y) = (r.app.surface.0 as f32 / 2.0, r.app.surface.1 as f32 / 2.0);
+            r.app.pointer_button(x, y, Button::Left);
+            assert!(r.app.win.as_ref().unwrap().kb.is_none());
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn each_taskbar_applet_alone_is_its_own_zone() {
+        use crate::panel::{AppletId as A, AppletSet, Edge};
+        for edge in [Edge::Bottom, Edge::Left] {
+            for id in A::all() {
+                let r = edge_rig(&format!("alone-{}-{}", edge.as_str(), id.key()), edge, Some(AppletSet::of(&[id])));
+                let l = r.app.win_layout().unwrap();
+                let shown = match id {
+                    A::Launcher => l.start.w > 0.0,
+                    A::Search => l.search.is_some(),
+                    A::Tasks => !l.tasks.is_empty(),
+                    A::Clock => l.clock.w > 0.0,
+                    A::ShowDesktop => l.desktop.w > 0.0,
+                    _ => !l.tray.is_empty(),
+                };
+                assert!(shown, "{edge:?}: {} alone", id.key());
+                let others = (l.start.w > 0.0) as usize + l.search.is_some() as usize + (!l.tasks.is_empty()) as usize + (l.clock.w > 0.0) as usize + (l.desktop.w > 0.0) as usize + l.tray.len();
+                assert_eq!(others, if matches!(id, A::Tasks) { 1 } else { 1 }, "{edge:?}: {} alone shows only itself", id.key());
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
     }
 
     #[test]

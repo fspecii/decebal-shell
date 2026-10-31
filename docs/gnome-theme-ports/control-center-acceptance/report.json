@@ -1,0 +1,545 @@
+{
+  "decbar_sha256": "de240e115f0e05e0ad7696e83058efc1db382319cb078e87013adc07e9e9cbcf",
+  "pointer-1080-100-dark": {
+    "panel": [
+      1512.0,
+      8.0,
+      400.0,
+      618.0
+    ],
+    "scroll": 0.0,
+    "content": 618.0,
+    "targets": [
+      "Bluetooth",
+      "Brightness",
+      "DarkMode",
+      "Dnd",
+      "Focus",
+      "GameMode",
+      "IdleInhibit",
+      "Lock",
+      "MediaNext",
+      "MediaPrev",
+      "MediaToggle",
+      "Mute",
+      "Network",
+      "NightShift",
+      "Notifications",
+      "Power",
+      "Record",
+      "Screenshot",
+      "Settings",
+      "StayAwake",
+      "Volume",
+      "Wifi"
+    ],
+    "clicks": {
+      "Wifi": {
+        "recorded": [
+          "nmcli radio wifi off"
+        ]
+      },
+      "Bluetooth": {
+        "recorded": [
+          "bluetoothctl power off"
+        ]
+      },
+      "Network": {
+        "recorded": [
+          "nm-connection-editor "
+        ]
+      },
+      "Focus": {
+        "recorded": [
+          "decnotify dnd toggle"
+        ]
+      },
+      "NightShift": {
+        "recorded": [
+          "omarchy toggle nightlight"
+        ]
+      },
+      "DarkMode": {
+        "recorded": [
+          "decthemectl set mode light",
+          "desktop-style appearance toggle"
+        ]
+      },
+      "MediaPrev": {
+        "recorded": [
+          "playerctl previous"
+        ]
+      },
+      "MediaToggle": {
+        "recorded": [
+          "playerctl play-pause"
+        ]
+      },
+      "MediaNext": {
+        "recorded": [
+          "playerctl next"
+        ]
+      },
+      "Record": {
+        "recorded": [
+          "decutil record toggle"
+        ]
+      },
+      "IdleInhibit": {
+        "recorded": [
+          "decutil idle-inhibit toggle"
+        ]
+      },
+      "GameMode": {
+        "recorded": [
+          "decutil gamemode toggle"
+        ]
+      },
+      "Dnd": {
+        "recorded": [
+          "decutil dnd toggle"
+        ]
+      },
+      "Notifications": {
+        "recorded": [
+          "decnotify history"
+        ]
+      },
+      "Settings": {
+        "recorded": [
+          "decsettings "
+        ]
+      },
+      "Screenshot": {
+        "recorded": [
+          "decutil screenshot"
+        ]
+      },
+      "Lock": {
+        "recorded": [
+          "rdwm-lock "
+        ]
+      },
+      "Power": {
+        "recorded": [
+          "decsession "
+        ]
+      },
+      "Mute": {
+        "recorded": [
+          "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+        ]
+      },
+      "Brightness": {
+        "recorded": [
+          "brightnessctl -q -c backlight set 30%",
+          "brightnessctl -q -c backlight set 30%"
+        ]
+      },
+      "Volume": {
+        "recorded": [
+          "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.30",
+          "wpctl set-mute @DEFAULT_AUDIO_SINK@ 0",
+          "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.30",
+          "wpctl set-mute @DEFAULT_AUDIO_SINK@ 0"
+        ]
+      },
+      "StayAwake": {
+        "recorded": [
+          "decutil idle-inhibit on"
+        ]
+      }
+    },
+    "outside_click": "closed, nothing recorded"
+  },
+  "keyboard-1080-100-dark": {
+    "order": [
+      "Screenshot",
+      "Settings",
+      "Lock",
+      "Power",
+      "Mute",
+      "Volume",
+      "Brightness",
+      "Wifi",
+      "Network",
+      "Bluetooth",
+      "NightShift",
+      "DarkMode",
+      "Focus",
+      "Record",
+      "IdleInhibit",
+      "GameMode",
+      "Dnd",
+      "StayAwake",
+      "Notifications",
+      "MediaPrev",
+      "MediaToggle",
+      "MediaNext"
+    ],
+    "ring_pixels": {
+      "Screenshot": 96,
+      "Volume": 1288,
+      "MediaNext": 84
+    },
+    "wraps": true,
+    "enter": {
+      "Wifi": "nmcli radio wifi off",
+      "Volume": "nothing",
+      "Mute": "wpctl set-mute toggle"
+    },
+    "escape": "closed, nothing recorded"
+  },
+  "short-1280x520-200-light": {
+    "screen": [
+      1280,
+      520
+    ],
+    "scale": 2.0,
+    "mode": "light",
+    "panel": [
+      520.0,
+      8.0,
+      752.0,
+      504.0
+    ],
+    "content": 1017.0,
+    "scroll": 0.0,
+    "wheel": {
+      "max_scroll": 513.0,
+      "back_to_top": 0.0
+    },
+    "keyboard_reveal": {
+      "focus": "MediaNext",
+      "scroll": 457.0,
+      "ring_pixels": 72
+    },
+    "click_revealed": {
+      "MediaNext": [
+        "playerctl next"
+      ]
+    },
+    "bottom_edge_clicks": [
+      {
+        "x": 560,
+        "y": 510,
+        "under": [
+          "DarkMode"
+        ],
+        "recorded": [
+          "decthemectl set mode dark",
+          "desktop-style appearance toggle"
+        ]
+      },
+      {
+        "x": 896,
+        "y": 510,
+        "under": [],
+        "recorded": []
+      },
+      {
+        "x": 1232,
+        "y": 510,
+        "under": [
+          "Focus"
+        ],
+        "recorded": [
+          "decnotify dnd toggle"
+        ]
+      }
+    ],
+    "outside": "closed, nothing recorded"
+  },
+  "short-1366x600-125-dark": {
+    "screen": [
+      1366,
+      600
+    ],
+    "scale": 1.25,
+    "mode": "dark",
+    "panel": [
+      870.0,
+      8.0,
+      488.0,
+      584.0
+    ],
+    "content": 718.0,
+    "scroll": 0.0,
+    "wheel": {
+      "max_scroll": 134.0,
+      "back_to_top": 0.0
+    },
+    "keyboard_reveal": {
+      "focus": "MediaNext",
+      "scroll": 90.0,
+      "ring_pixels": 74
+    },
+    "click_revealed": {
+      "MediaNext": [
+        "playerctl next"
+      ]
+    },
+    "bottom_edge_clicks": [
+      {
+        "x": 910,
+        "y": 590,
+        "under": [
+          "StayAwake"
+        ],
+        "recorded": [
+          "decutil idle-inhibit on"
+        ]
+      },
+      {
+        "x": 1114,
+        "y": 590,
+        "under": [],
+        "recorded": []
+      },
+      {
+        "x": 1318,
+        "y": 590,
+        "under": [
+          "Notifications"
+        ],
+        "recorded": [
+          "decnotify history"
+        ]
+      }
+    ],
+    "outside": "closed, nothing recorded"
+  },
+  "short-1024x480-100-dark": {
+    "screen": [
+      1024,
+      480
+    ],
+    "scale": 1.0,
+    "mode": "dark",
+    "panel": [
+      616.0,
+      8.0,
+      400.0,
+      464.0
+    ],
+    "content": 618.0,
+    "scroll": 0.0,
+    "wheel": {
+      "max_scroll": 154.0,
+      "back_to_top": 0.0
+    },
+    "keyboard_reveal": {
+      "focus": "MediaNext",
+      "scroll": 114.0,
+      "ring_pixels": 64
+    },
+    "click_revealed": {
+      "MediaNext": [
+        "playerctl next"
+      ]
+    },
+    "bottom_edge_clicks": [
+      {
+        "x": 656,
+        "y": 470,
+        "under": [],
+        "recorded": []
+      },
+      {
+        "x": 816,
+        "y": 470,
+        "under": [],
+        "recorded": []
+      },
+      {
+        "x": 976,
+        "y": 470,
+        "under": [],
+        "recorded": []
+      }
+    ],
+    "outside": "closed, nothing recorded"
+  },
+  "bar-1920x1080-100-dark": {
+    "screen": [
+      1920,
+      1080
+    ],
+    "scale": 1.0,
+    "mode": "dark",
+    "host": "decbar menu bar",
+    "panel": [
+      1402.6074,
+      30.0,
+      400.0,
+      618.0
+    ],
+    "content": 618.0,
+    "clipped": false,
+    "escape": "panel closed, bar alive"
+  },
+  "bar-1280x520-200-light": {
+    "screen": [
+      1280,
+      520
+    ],
+    "scale": 2.0,
+    "mode": "light",
+    "host": "decbar menu bar",
+    "panel": [
+      317.21484,
+      30.0,
+      752.0,
+      482.0
+    ],
+    "content": 1017.0,
+    "clipped": true,
+    "click_revealed": {
+      "MediaNext": [
+        "playerctl next"
+      ]
+    },
+    "escape": "panel closed, bar alive"
+  },
+  "groups-sound-display-1080-100-light": {
+    "tiles": [
+      "sound",
+      "display"
+    ],
+    "targets": [
+      "Brightness",
+      "Mute",
+      "Volume"
+    ]
+  },
+  "groups-connectivity-1080-100-light": {
+    "tiles": [
+      "connectivity"
+    ],
+    "targets": [
+      "Bluetooth",
+      "Network",
+      "Wifi"
+    ]
+  },
+  "groups-focus-1080-100-light": {
+    "tiles": [
+      "focus"
+    ],
+    "targets": [
+      "DarkMode",
+      "Focus",
+      "NightShift"
+    ]
+  },
+  "groups-media-actions-1080-100-light": {
+    "tiles": [
+      "media",
+      "actions"
+    ],
+    "targets": [
+      "Lock",
+      "MediaNext",
+      "MediaPrev",
+      "MediaToggle",
+      "Notifications",
+      "Power",
+      "Screenshot",
+      "Settings",
+      "StayAwake"
+    ]
+  },
+  "groups-toggles-1080-100-light": {
+    "tiles": [
+      "toggles"
+    ],
+    "targets": [
+      "Dnd",
+      "GameMode",
+      "IdleInhibit",
+      "Record"
+    ]
+  },
+  "unavailable-1080-100-dark": {
+    "targets": [
+      "DarkMode",
+      "Record",
+      "Screenshot",
+      "Settings",
+      "StayAwake"
+    ],
+    "Screenshot": "nothing started"
+  },
+  "matrix-1080-100-dark": {
+    "panel": [
+      1512.0,
+      8.0,
+      400.0,
+      618.0
+    ],
+    "content": 618.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 96
+  },
+  "matrix-1080-125-dark": {
+    "panel": [
+      1424.0,
+      8.0,
+      488.0,
+      718.0
+    ],
+    "content": 718.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 96
+  },
+  "matrix-1080-200-dark": {
+    "panel": [
+      1160.0,
+      8.0,
+      752.0,
+      1017.0
+    ],
+    "content": 1017.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 109
+  },
+  "matrix-1080-100-light": {
+    "panel": [
+      1512.0,
+      8.0,
+      400.0,
+      618.0
+    ],
+    "content": 618.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 96
+  },
+  "matrix-1080-125-light": {
+    "panel": [
+      1424.0,
+      8.0,
+      488.0,
+      718.0
+    ],
+    "content": 718.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 96
+  },
+  "matrix-1080-200-light": {
+    "panel": [
+      1160.0,
+      8.0,
+      752.0,
+      1017.0
+    ],
+    "content": 1017.0,
+    "scroll": 0.0,
+    "focus": "Lock",
+    "ring_pixels": 109
+  }
+}

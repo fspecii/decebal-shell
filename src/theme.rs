@@ -28,6 +28,9 @@ pub const DOCK_BORDER_ALPHA: f32 = 0.05;
 pub const BAR_HEIGHT: f32 = 26.0;
 /// Width of a Caelestia side bar, including the strip it reserves.
 pub const PILL_BAR_THICKNESS: f32 = 52.0;
+/// Width of the classic menu bar, the floating bar or a taskbar-less bar when it runs down a side edge (KDE's default
+/// vertical panel thickness is 44; the stacked clock and an icon cell fit 40).
+pub const CLASSIC_RAIL_THICKNESS: f32 = 40.0;
 /// Horizontal bars need less height than a side bar needs width.
 pub const HORIZONTAL_PILL_BAR_THICKNESS: f32 = 40.0;
 
@@ -105,6 +108,7 @@ mod placement_tests {
             (crate::config::BarPosition::Bottom, 0.0),
         ] {
             theme.bar_position = position;
+            theme.bar_position_written = Some(position);
             assert_eq!(bar_bottom_for(&theme, true), expected);
         }
     }

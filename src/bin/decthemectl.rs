@@ -26,6 +26,15 @@ decthemectl layout [left|right|top|bottom|split]
                                  the left or right edge, a horizontal one along the top or bottom edge, or split = a top bar (OS icon,
                                  workspaces, window title) plus a bottom bar (tray, status icons, clock, power). Running bars re-lay out
                                  within about a second; the setting only shows under the Caelestia style. Without a name: print it.
+decthemectl panel [--json]       the panels: the bar's renderer and edge, the dock's edge, every applet on or off, and whether each
+                                 value is your choice or the theme's (docs/universal-panels.md)
+decthemectl panel edge top|bottom|left|right|split|theme
+                                 the bar's edge for every bar style (split: the Caelestia rail only); theme = the theme's default
+decthemectl panel dock top|bottom|left|right|theme
+                                 the dock's or taskbar's edge
+decthemectl panel applet KEY on|off|theme
+                                 one applet (clock, volume, weather, tray, launcher, tasks, ...); theme = the theme decides
+decthemectl panel reset          your panel choices removed: the theme decides everything again
 decthemectl dynamic on [OPTIONS]  \"Match wallpaper\": recolour the current theme (any theme) from the wallpaper. Off by default.
 decthemectl dynamic off          back to the theme's own colours (the settings are kept)
 decthemectl dynamic [status] [--json]
@@ -70,6 +79,90 @@ apply writes the selection to decebal.json and the matching colours to rdwm's co
 decspot, declaunch and decsettings follow within half a second.
 Environment: DECEBAL_CONFIG (folder of decebal.json), DECEBAL_THEMES, DECSETTINGS_CONFIG / RDWM_CONFIG,
 RDWMCTL, RDWM_SOCK.";
+
+/// `decthemectl panel ...`: the same user keys Settings → Panels writes.
+fn cmd_panel(src: &Source, args: &[String]) {
+    use decebal::panel::{self, AppletId, Edge};
+    let paths = Paths::discover();
+    let shell_path = paths.shell_json();
+    let dock_path = paths.dock_settings();
+    let mut shell = decebal::settings::io::json_load(&shell_path);
+    let write_bar = |shell: &serde_json::Value| decebal::settings::io::json_set(&shell_path, "bar", shell.get("bar").cloned()).unwrap_or_else(|e| die(&e));
+    match args.first().map(String::as_str) {
+        None | Some("--json") | Some("status") => {
+            let th = src.build(&src.selection(), system_dark()).0;
+            let user = panel::UserPanel::from_bar_json(&shell["bar"]);
+            let legacy = shell["bar"].get("position").and_then(|p| p.as_str()).and_then(BarPosition::parse);
+            let i = panel::Inputs {
+                renderer: th.bar_renderer(),
+                user: &user,
+                theme: &th.panel_theme,
+                legacy_position: legacy,
+                legacy_workspaces: panel::legacy_workspaces(th.panel_workspaces),
+                dux: Some(&th.bar_layout),
+                dock_user_edge: None,
+            };
+            let (edge, split, origin) = panel::resolve_edge(&i);
+            let dock = decebal::config::dock_settings();
+            let dock_edge = if dock.style == decebal::config::DockStyle::Windows { th.taskbar_panel(&dock).edge } else { dock.edge.or(th.panel_theme.dock_edge).unwrap_or(Edge::Bottom) };
+            let applets: Vec<(AppletId, bool, panel::Origin)> = AppletId::all()
+                .map(|id| {
+                    let (on, o) = panel::resolve_applet(&i, id);
+                    (id, on, o)
+                })
+                .collect();
+            if args.iter().any(|a| a == "--json") {
+                let list: serde_json::Map<String, serde_json::Value> = applets.iter().map(|(id, on, o)| (id.key().to_string(), serde_json::json!({"on": on, "from": o.title()}))).collect();
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"renderer": th.bar_renderer().key(), "edge": edge.as_str(), "split": split, "edge_from": origin.title(), "dock_edge": dock_edge.as_str(), "applets": list, "fingerprint": th.bar_panel().fingerprint()})).unwrap());
+                return;
+            }
+            println!("{}: {}{} ({})", th.bar_renderer().title(), if split { "top and bottom" } else { edge.as_str() }, "", origin.title());
+            println!("dock: {}", dock_edge.as_str());
+            for (id, on, o) in applets {
+                println!("  {:<15} {:<3} ({})", id.key(), if on { "on" } else { "off" }, o.title());
+            }
+        }
+        Some("edge") => {
+            let word = args.get(1).map(String::as_str).unwrap_or_else(|| die("panel edge top|bottom|left|right|split|theme"));
+            match word {
+                "theme" => panel::write_edge(&mut shell, None, None),
+                "split" => panel::write_edge(&mut shell, Some(Edge::Top), Some(true)),
+                w => panel::write_edge(&mut shell, Some(Edge::parse(w).unwrap_or_else(|| die(&format!("unknown edge `{w}`")))), Some(false)),
+            }
+            write_bar(&shell);
+            println!("bar edge: {word}");
+        }
+        Some("dock") => {
+            let word = args.get(1).map(String::as_str).unwrap_or_else(|| die("panel dock top|bottom|left|right|theme"));
+            let value = match word {
+                "theme" => None,
+                w => Some(serde_json::json!(Edge::parse(w).unwrap_or_else(|| die(&format!("unknown edge `{w}`"))).as_str())),
+            };
+            decebal::settings::io::json_set(&dock_path, "edge", value).unwrap_or_else(|e| die(&e));
+            println!("dock edge: {word}");
+        }
+        Some("applet") => {
+            let key = args.get(1).map(String::as_str).unwrap_or_else(|| die("panel applet KEY on|off|theme"));
+            let id = AppletId::parse(key).unwrap_or_else(|| die(&format!("unknown applet `{key}` ({})", AppletId::all().map(AppletId::key).collect::<Vec<_>>().join(", "))));
+            let on = match args.get(2).map(String::as_str) {
+                Some("on") => Some(true),
+                Some("off") => Some(false),
+                Some("theme") => None,
+                _ => die("panel applet KEY on|off|theme"),
+            };
+            panel::write_applet(&mut shell, id, on);
+            write_bar(&shell);
+            println!("{}: {}", id.key(), args[2]);
+        }
+        Some("reset") => {
+            panel::reset(&mut shell);
+            write_bar(&shell);
+            decebal::settings::io::json_set(&dock_path, "edge", None).unwrap_or_else(|e| die(&e));
+            println!("panels follow the theme");
+        }
+        Some(other) => die(&format!("unknown panel command `{other}`")),
+    }
+}
 
 fn die(msg: &str) -> ! {
     eprintln!("decthemectl: {msg}");
@@ -636,6 +729,7 @@ fn main() {
             let active = src.build(&src.selection(), system_dark()).0.pill_bar().is_some();
             println!("layout {}: {}{}", pos.as_str(), layout_phrase(pos), if active { "" } else { " (shows once the Caelestia style is on: decthemectl style caelestia)" });
         }
+        Some("panel") => cmd_panel(&src, &args[1..]),
         Some("dynamic") => cmd_dynamic(&src, &args[1..]),
         Some("watch") => cmd_watch(&src, &args[1..]),
         Some("font") => {

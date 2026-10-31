@@ -418,8 +418,13 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             Some(p @ ("top" | "bottom")) => {
                 o.insert("windowsPosition".into(), json!(p));
             }
-            Some(p) => notes.push(format!("dock.position = {p}: only top and bottom are supported by the dock today, left out")),
-            None => {}
+            // A previous theme may have written top. It must not outrank a new package's side edge.
+            // Explicit user positions live in `edge` and remain untouched.
+            Some("left" | "right") if apply_bar_layout => {
+                o.shift_remove("windowsPosition");
+                o.shift_remove("windows_position");
+            }
+            Some(_) | None => {}
         }
         if let Some(m) = dock.get("magnification") {
             o.insert("magnification".into(), m.clone());
@@ -1052,6 +1057,50 @@ y = -30
         let shell: crate::config::ShellSettings = serde_json::from_value(io::json_load(&paths.shell_json())).unwrap();
         assert_eq!(shell.launcher.style, "", "a malformed launcher key reads as 'follow the theme'");
         assert_eq!(src.build(&src.selection(), true).0.launcher_style, "default");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_side_taskbar_theme_does_not_inherit_an_old_top_position() {
+        let (dir, src, paths) = sandbox("side-taskbar-legacy");
+        install_sunset_manifest(&src, &format!("{SUNSET}\n[dock]\nstyle = \"windows\"\nposition = \"left\"\n"));
+        let original = json!({"style": "windows", "windowsPosition": "top", "edge": "right", "extra": 42});
+        std::fs::write(paths.dock_settings(), original.to_string()).unwrap();
+        let plan = plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap();
+        let next: Value = serde_json::from_str(&plan.writes.iter().find(|w| w.path == paths.dock_settings()).unwrap().new).unwrap();
+        assert!(next.get("windowsPosition").is_none());
+        assert_eq!(next["edge"], "right", "explicit user edge survives");
+        assert_eq!(next["extra"], 42);
+        let mut dock: crate::config::DockSettings = serde_json::from_value(next).unwrap();
+        let theme = src.theme_for("sunset", &Selection::default(), true).unwrap();
+        assert_eq!(theme.taskbar_panel(&dock).edge, crate::panel::Edge::Right);
+        dock.edge = None;
+        assert_eq!(theme.taskbar_panel(&dock).edge, crate::panel::Edge::Left);
+        assert_eq!(io::json_load(&paths.dock_settings()), original, "planning is read-only");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn panel_choices_survive_palette_mode_and_theme_changes() {
+        let (dir, src, paths) = sandbox("panel-user-keys");
+        install_sunset_manifest(&src, SUNSET);
+        let user = json!({"edge": "right", "split": false, "applets": {"weather": false, "media": true}});
+        let previous = json!({"theme":{"name":"sunset","mode":"dark"},"bar": {"edge": "right", "split": false, "applets": {"weather": false, "media": true}, "position": "left"}});
+        std::fs::write(paths.shell_json(), previous.to_string()).unwrap();
+        std::fs::write(paths.dock_settings(), r#"{"style": "mac", "edge": "left"}"#).unwrap();
+        let check = |planned: &Plan, what: &str| {
+            let after: Value = planned.writes.iter().find(|w| w.path == paths.shell_json()).map(|w| serde_json::from_str(&w.new).unwrap()).unwrap_or_else(|| previous.clone());
+            for key in ["edge", "split", "applets"] {
+                assert_eq!(after["bar"][key], user[key], "{what} changed bar.{key}");
+            }
+            if let Some(w) = planned.writes.iter().find(|w| w.path == paths.dock_settings()) {
+                assert_eq!(serde_json::from_str::<Value>(&w.new).unwrap()["edge"], "left", "{what} changed the dock edge");
+            }
+        };
+        let palette = Selection { name: "sunset".into(), mode: crate::theme::Mode::Light, palette: Some("nord".into()), sync_rdwm: false, ..Selection::default() };
+        check(&plan_selection(&src, &paths, &palette).unwrap(), "a palette and mode change");
+        check(&plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "applying the theme again");
+        check(&plan(&src, &paths, "nord", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "switching theme");
         let _ = std::fs::remove_dir_all(dir);
     }
 

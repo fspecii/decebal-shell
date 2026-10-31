@@ -62,7 +62,8 @@ pub enum WinSearch {
     Box,
 }
 
-/// Screen edge of the taskbar. Left and right are not drawn yet (unknown words give the bottom).
+/// The taskbar's old edge key (`windowsPosition`): top or bottom (unknown words give the bottom). The universal
+/// `edge` key of the same file wins over it and also offers left and right.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WinPosition {
@@ -108,6 +109,14 @@ pub struct DockSettings {
     /// `"auto"` (default, follows the system theme), `"dark"` or `"light"`.
     #[serde(alias = "windows_theme", deserialize_with = "lenient")]
     pub windows_theme: WinTheme,
+    /// The user's screen edge for the dock or the taskbar (`top`, `bottom`, `left`, `right`); `None` = the theme's
+    /// `[dock] position`, else `windowsPosition`, else the bottom. See [`crate::panel`].
+    #[serde(deserialize_with = "lenient_edge")]
+    pub edge: Option<crate::panel::Edge>,
+}
+
+fn lenient_edge<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<crate::panel::Edge>, D::Error> {
+    Ok(serde_json::Value::deserialize(d)?.as_str().and_then(crate::panel::Edge::parse))
 }
 
 /// A value that falls back to the type's default when it is not one of the known words.
@@ -133,6 +142,7 @@ impl Default for DockSettings {
             windows_search: WinSearch::Box,
             windows_position: WinPosition::Bottom,
             windows_theme: WinTheme::Auto,
+            edge: None,
         }
     }
 }

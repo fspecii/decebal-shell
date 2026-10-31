@@ -138,6 +138,23 @@ pub struct Frame<'a> {
     pub top: bool,
     /// Task being dragged: (button index, pointer x).
     pub drag: Option<(usize, f32)>,
+    /// The strip runs down a side edge: the layout is already transposed (zones along y) and everything is drawn
+    /// upright in its zone. `right`: it is the right edge (its hairline faces left).
+    pub vertical: bool,
+    pub right: bool,
+    pub extras: &'a Extras,
+}
+
+/// Applet state the snapshot does not carry.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Extras {
+    pub cpu: Option<f32>,
+    pub memory: Option<f32>,
+    pub workspace: Option<String>,
+    pub window_app: Option<String>,
+    pub playing: bool,
+    pub caps: bool,
+    pub num: bool,
 }
 
 /// Symbol name for a status item in the current state.
@@ -165,11 +182,12 @@ pub fn tray_symbol(kind: Tray, snap: &Snapshot) -> &'static str {
 
 /// The visible plate of a button in slot `r`: (x, y, w, h, corner radius). Square and full height in the
 /// classic look, a rounded inset tile otherwise.
-fn plate(m: &Metrics, r: Rect) -> (f32, f32, f32, f32, f32) {
-    if m.classic {
-        (r.x, 0.0, r.w, m.bar_h, 0.0)
-    } else {
-        (r.x + 2.0 * m.scale, ((m.bar_h - m.btn_h) / 2.0).round(), r.w - 4.0 * m.scale, m.btn_h, m.corner)
+fn plate(m: &Metrics, r: Rect, vertical: bool) -> (f32, f32, f32, f32, f32) {
+    match (m.classic, vertical) {
+        (true, false) => (r.x, 0.0, r.w, m.bar_h, 0.0),
+        (false, false) => (r.x + 2.0 * m.scale, ((m.bar_h - m.btn_h) / 2.0).round(), r.w - 4.0 * m.scale, m.btn_h, m.corner),
+        (true, true) => (0.0, r.y, m.bar_h, r.h, 0.0),
+        (false, true) => (((m.bar_h - m.btn_h) / 2.0).round(), r.y + 2.0 * m.scale, m.btn_h, r.h - 4.0 * m.scale, m.corner),
     }
 }
 
@@ -200,13 +218,19 @@ impl Painter {
     /// Draws the whole strip into a fresh pixmap `layout.width` x `bar_h`.
     pub fn draw_strip(&mut self, f: &Frame) -> Option<Pixmap> {
         let (m, c, l) = (f.m, f.c, f.layout);
-        let mut pm = Pixmap::new(l.width.ceil().max(1.0) as u32, m.bar_h as u32)?;
-        let h = m.bar_h;
-        fill_rect(&mut pm, 0.0, 0.0, l.width, h, rgba(c.bg, f.alpha));
-        let ey = if f.top { h - 1.0 } else { 0.0 };
-        fill_rect(&mut pm, 0.0, ey, l.width, 1.0, rgba(c.edge.0, c.edge.1));
+        let (sw, sh) = if f.vertical { (m.bar_h, l.width) } else { (l.width, m.bar_h) };
+        let mut pm = Pixmap::new(sw.ceil().max(1.0) as u32, sh.ceil().max(1.0) as u32)?;
+        fill_rect(&mut pm, 0.0, 0.0, sw, sh, rgba(c.bg, f.alpha));
+        // the hairline on the side that faces the desktop
+        if f.vertical {
+            fill_rect(&mut pm, if f.right { 0.0 } else { sw - 1.0 }, 0.0, 1.0, sh, rgba(c.edge.0, c.edge.1));
+        } else {
+            fill_rect(&mut pm, 0.0, if f.top { sh - 1.0 } else { 0.0 }, sw, 1.0, rgba(c.edge.0, c.edge.1));
+        }
 
-        self.draw_start(&mut pm, f);
+        if l.start.w > 0.0 && l.start.h > 0.0 {
+            self.draw_start(&mut pm, f);
+        }
         if let Some(r) = l.search {
             self.draw_search(&mut pm, f, r);
         }
@@ -214,8 +238,12 @@ impl Painter {
         for (kind, r) in &l.tray {
             self.draw_tray_item(&mut pm, f, *kind, *r);
         }
-        self.draw_clock(&mut pm, f);
-        self.draw_desktop(&mut pm, f);
+        if l.clock.w > 0.0 && l.clock.h > 0.0 {
+            self.draw_clock(&mut pm, f);
+        }
+        if l.desktop.w > 0.0 && l.desktop.h > 0.0 {
+            self.draw_desktop(&mut pm, f);
+        }
         if let Some(fo) = &self.fonts {
             fo.trim();
         }
@@ -235,16 +263,21 @@ impl Painter {
             base
         };
         if a > 0.0 {
-            let (x, y, w, h, rad) = plate(f.m, r);
+            let (x, y, w, h, rad) = plate(f.m, r, f.vertical);
             fill_rounded(pm, x, y, w, h, rad, rgba(c.overlay, a));
         }
     }
 
-    /// Four squares, the way every Windows since 8 draws its Start button.
+    /// Four squares, the way every Windows since 8 draws its Start button (or the theme's `[branding] logo`).
     fn draw_start(&mut self, pm: &mut Pixmap, f: &Frame) {
         let (m, c) = (f.m, f.c);
         let r = f.layout.start;
         self.state_fill(pm, f, Hit::Start, r, 0.0);
+        let size = (20.0 * m.scale).round();
+        if let Some(logo) = crate::menubar::theme_logo((size * 2.0) as u32, c.accent, &mut self.symbols) {
+            blit_scaled(pm, &logo, (r.cx() - size / 2.0).round(), (r.cy() - size / 2.0).round(), size, size, 1.0);
+            return;
+        }
         let q = (7.0 * m.scale).round();
         let g = (2.0 * m.scale).round().max(1.0);
         let total = 2.0 * q + g;
@@ -257,7 +290,7 @@ impl Painter {
 
     fn draw_search(&mut self, pm: &mut Pixmap, f: &Frame, r: Rect) {
         let (m, c) = (f.m, f.c);
-        if !f.show_search_label {
+        if !f.show_search_label || f.vertical {
             self.state_fill(pm, f, Hit::Search, r, 0.0);
             self.symbol(pm, "magnifyingglass", c.ink, 16.0 * m.scale, r.cx(), r.cy());
             return;
@@ -291,6 +324,24 @@ impl Painter {
         let (cl, cr) = l.clip;
         let cw = (cr - cl).max(0.0);
         if cw < 1.0 || f.buttons.is_empty() {
+            return;
+        }
+        if f.vertical {
+            let Some(mut tp) = Pixmap::new(m.bar_h.ceil() as u32, cw.ceil() as u32) else { return };
+            for (i, b) in f.buttons.iter().enumerate() {
+                let Some(mut r) = l.tasks.get(i).copied() else { break };
+                if r.y + r.h <= cl || r.y >= cr || f.drag.is_some_and(|d| d.0 == i) {
+                    continue;
+                }
+                r.y -= cl;
+                self.draw_task(&mut tp, f, i, b, r, false);
+            }
+            if let Some((i, p)) = f.drag {
+                if let (Some(b), Some(r)) = (f.buttons.get(i), l.tasks.get(i)) {
+                    self.draw_task(&mut tp, f, i, b, Rect { y: p - r.h / 2.0 - cl, ..*r }, true);
+                }
+            }
+            pm.draw_pixmap(0, cl.floor() as i32, tp.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
             return;
         }
         let Some(mut tp) = Pixmap::new(cw.ceil() as u32, m.bar_h as u32) else { return };
@@ -329,7 +380,7 @@ impl Painter {
         let base = if b.active { c.active_a } else { 0.0 };
         let hit = Hit::Task(i);
         // The button's visible plate, inside its slot.
-        let (px, py, pw, _, rad) = plate(m, r);
+        let (px, py, pw, ph, rad) = plate(m, r, f.vertical);
         let pressed = f.pressed == Some(hit) && f.hover == Some(hit);
         let a = if dragging {
             c.active_a + 0.05
@@ -341,7 +392,20 @@ impl Painter {
             base
         };
         if a > 0.0 {
-            fill_rounded(tp, px, py, pw, m.btn_h, rad, rgba(c.overlay, a));
+            fill_rounded(tp, px, py, pw, ph, rad, rgba(c.overlay, a));
+        }
+        if f.vertical {
+            // upright: the icon centred, the running mark on the side that faces the screen edge
+            let size = m.icon;
+            let icon = self.icons.get(&b.app_id, (size.ceil() as u32).max(1) * 2);
+            blit_scaled(tp, icon, (r.cx() - size / 2.0).round(), (r.cy() - size / 2.0).round(), size, size, if dragging { 0.85 } else { 1.0 });
+            if b.running {
+                let t = (3.0 * m.scale).round().max(2.0);
+                let (len, col) = if b.active { (16.0 * m.scale, c.accent) } else { (6.0 * m.scale, c.dim) };
+                let x = if f.right { px + pw - t - 1.0 * m.scale } else { px + 1.0 * m.scale };
+                fill_rounded(tp, x.round(), (r.cy() - len / 2.0).round(), t, len.round(), t / 2.0, rgba(col, 1.0));
+            }
+            return;
         }
         let labelled = !b.title.is_empty() || (f.layout.task_w > m.btn_w * 1.5 && !b.app_id.is_empty());
         let show_label = labelled && pw >= m.icon + 2.0 * m.pad + 30.0 * m.scale;
@@ -403,6 +467,60 @@ impl Painter {
             }
             Tray::Battery => draw_battery(pm, f, cx, cy),
             Tray::Weather => self.symbol(pm, f.weather.unwrap_or("weather-cloud"), c.ink, 16.0 * m.scale, cx, cy),
+            Tray::Cpu | Tray::Memory => {
+                let v = if kind == Tray::Cpu { f.extras.cpu } else { f.extras.memory };
+                let label = if kind == Tray::Cpu { "CPU" } else { "MEM" };
+                let px = 9.0 * m.scale;
+                let lw = self.measure(label, px);
+                self.text(pm, label, cx - lw / 2.0, cy - 6.0 * m.scale, px, Weight::Regular, rgba(c.dim, 1.0));
+                let t = v.map_or_else(|| "—".to_string(), |v| format!("{:.0}%", v * 100.0));
+                let tw = self.measure(&t, 10.5 * m.scale);
+                self.text(pm, &t, cx - tw / 2.0, cy + 6.0 * m.scale, 10.5 * m.scale, Weight::Regular, rgba(c.ink, 1.0));
+            }
+            Tray::Workspaces => {
+                let t = f.extras.workspace.clone().unwrap_or_else(|| "–".into());
+                let px = 12.0 * m.scale;
+                let tw = self.measure(&t, px);
+                stroke_rounded(pm, (cx - 10.0 * m.scale).round() + 0.5, (cy - 9.0 * m.scale).round() + 0.5, 20.0 * m.scale, 18.0 * m.scale, 4.0 * m.scale, rgba(c.ink, 0.7), 1.0);
+                self.text(pm, &t, cx - tw / 2.0, cy, px, Weight::Regular, rgba(c.ink, 1.0));
+            }
+            Tray::Window => match f.extras.window_app.clone() {
+                Some(app) => {
+                    let size = 18.0 * m.scale;
+                    let icon = self.icons.get(&app, (size.ceil() as u32) * 2);
+                    blit_scaled(pm, icon, (cx - size / 2.0).round(), (cy - size / 2.0).round(), size, size, 1.0);
+                }
+                None => self.symbol(pm, "apps", c.ink, 16.0 * m.scale, cx, cy),
+            },
+            Tray::Lock => {
+                let on = f.extras.caps || f.extras.num;
+                let t = match (f.extras.caps, f.extras.num) {
+                    (true, true) => "A1",
+                    (false, true) => "1",
+                    _ => "A",
+                };
+                let (w, h) = (20.0 * m.scale, 15.0 * m.scale);
+                if on {
+                    fill_rounded(pm, cx - w / 2.0, cy - h / 2.0, w, h, 4.0 * m.scale, rgba(c.accent, 1.0));
+                } else {
+                    stroke_rounded(pm, cx - w / 2.0 + 0.5, cy - h / 2.0 + 0.5, w - 1.0, h - 1.0, 4.0 * m.scale, rgba(c.dim, 1.0), 1.0);
+                }
+                let px = 10.0 * m.scale;
+                let tw = self.measure(t, px);
+                self.text(pm, t, cx - tw / 2.0, cy, px, Weight::Bold, rgba(if on { c.bg } else { c.ink }, 1.0));
+            }
+            Tray::Media => self.symbol(pm, if f.extras.playing { "pause" } else { "play" }, c.ink, 16.0 * m.scale, cx, cy),
+            Tray::Awake => self.symbol(pm, "cup", if f.tray.awake { c.accent } else { c.ink }, 16.0 * m.scale, cx, cy),
+            Tray::More => {
+                for offset in [-5.0, 0.0, 5.0] {
+                    let dot = 3.0 * m.scale;
+                    let (dx, dy) = if f.vertical { (0.0, offset * m.scale) } else { (offset * m.scale, 0.0) };
+                    fill_rounded(pm, cx + dx - dot / 2.0, cy + dy - dot / 2.0, dot, dot, dot / 2.0, rgba(c.ink, 1.0));
+                }
+            }
+            k @ (Tray::AppMenu | Tray::Agents | Tray::Clipboard | Tray::Notifications | Tray::Dash | Tray::Brightness | Tray::Power | Tray::Spotlight) => {
+                self.symbol(pm, crate::menubar::classic_symbol(k), c.ink, 16.0 * m.scale, cx, cy);
+            }
             k => {
                 let name = tray_symbol(k, f.tray);
                 self.symbol(pm, name, c.ink, 16.0 * m.scale, cx, cy);
@@ -421,7 +539,7 @@ impl Painter {
         } else {
             return;
         };
-        let (x, y, w, h, rad) = plate(m, r);
+        let (x, y, w, h, rad) = plate(m, r, f.vertical);
         fill_rounded(pm, x, y, w, h, rad, rgba(c.overlay, a));
     }
 
@@ -430,8 +548,16 @@ impl Painter {
         let r = f.layout.clock;
         self.state_fill_tray(pm, f, Hit::Clock, r);
         let px = 12.0 * m.scale;
-        let right = r.x + r.w - m.clock_pad;
         let line_gap = 8.5 * m.scale;
+        if f.vertical {
+            // stacked and centred in the strip: the time over the short date (the host passes them)
+            for (s, cy) in [(f.time, r.cy() - line_gap), (f.date, r.cy() + line_gap)] {
+                let w = self.measure(s, px);
+                self.text(pm, s, r.cx() - w / 2.0, cy, px, Weight::Regular, rgba(c.ink, 1.0));
+            }
+            return;
+        }
+        let right = r.x + r.w - m.clock_pad;
         for (s, cy) in [(f.time, m.bar_h / 2.0 - line_gap), (f.date, m.bar_h / 2.0 + line_gap)] {
             let w = self.measure(s, px);
             self.text(pm, s, right - w, cy, px, Weight::Regular, rgba(c.ink, 1.0));
@@ -441,6 +567,13 @@ impl Painter {
     fn draw_desktop(&mut self, pm: &mut Pixmap, f: &Frame) {
         let (m, c) = (f.m, f.c);
         let r = f.layout.desktop;
+        if f.vertical {
+            if f.hover == Some(Hit::Desktop) {
+                fill_rect(pm, 0.0, r.y, m.bar_h, r.h, rgba(c.overlay, c.hover_a * 1.6));
+            }
+            fill_rect(pm, 0.0, r.y, m.bar_h, 1.0, rgba(c.overlay, 0.22));
+            return;
+        }
         if f.hover == Some(Hit::Desktop) {
             fill_rect(pm, r.x, 0.0, r.w, m.bar_h, rgba(c.overlay, c.hover_a * 1.6));
         }
@@ -477,7 +610,8 @@ mod tests {
         let m = Metrics::new(1.0, align);
         let kinds = [Tray::Bluetooth, Tray::Network, Tray::Audio, Tray::Battery];
         let mut p = Painter::default();
-        let l = layout(&m, &Inputs { width: 1280.0, align, labels, search, buttons: n, tray: &kinds, clock_text_w: p.measure("27/10/2026", 12.0), scroll: 0.0 });
+        let l =
+            layout(&m, &Inputs { width: 1280.0, align, labels, search, buttons: n, tray: &kinds, clock_text_w: p.measure("27/10/2026", 12.0), scroll: 0.0, start: true, clock: true, desktop: true });
         let buttons: Vec<TaskButton> = (0..n)
             .map(|i| TaskButton {
                 app_id: format!("app{i}"),
@@ -508,8 +642,72 @@ mod tests {
             alpha: 0.95,
             top: false,
             drag: Some((0, 300.0)),
+            vertical: false,
+            right: false,
+            extras: &Extras::default(),
         };
         p.draw_strip(&f).unwrap()
+    }
+
+    #[test]
+    fn vertical_scrolled_tasks_and_drag_stay_inside_the_task_region() {
+        let m = Metrics::new(1.0, WinAlign::Left);
+        let c = Colors::dark();
+        let snap = Snapshot::default();
+        let extras = Extras::default();
+        let buttons: Vec<_> = (0..20).map(|i| TaskButton { app_id: format!("clip-{i}"), window: Some(i), title: "Task".into(), pinned: true, running: true, active: true, windows: 1 }).collect();
+        let mut p = Painter::default();
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 400.0,
+                align: WinAlign::Left,
+                labels: WinLabels::Never,
+                search: WinSearch::Button,
+                buttons: buttons.len(),
+                tray: &[Tray::Audio],
+                clock_text_w: 60.0,
+                scroll: 17.0,
+                start: true,
+                clock: true,
+                desktop: true,
+            },
+        )
+        .transposed();
+        let (cl, cr) = l.clip;
+        for drag in [None, Some((1, cl - 4.0)), Some((2, cr + 4.0))] {
+            let mut pm = Pixmap::new(m.bar_h.ceil() as u32, 400).unwrap();
+            let f = Frame {
+                m: &m,
+                c: &c,
+                layout: &l,
+                buttons: &buttons,
+                hover: None,
+                pressed: None,
+                open: None,
+                tray: &snap,
+                weather: None,
+                layout_name: None,
+                time: "12:00",
+                date: "01/01",
+                show_search_label: false,
+                alpha: 1.0,
+                top: false,
+                drag,
+                vertical: true,
+                right: false,
+                extras: &extras,
+            };
+            p.draw_tasks(&mut pm, &f);
+            assert!(pm.pixels().iter().any(|pixel| pixel.alpha() != 0), "visible tasks still paint");
+            for y in 0..pm.height() {
+                if (y as f32) < cl.floor() || (y as f32) >= cr.ceil() {
+                    for x in 0..pm.width() {
+                        assert_eq!(pm.pixel(x, y).unwrap().alpha(), 0, "task paint escaped at {x},{y}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

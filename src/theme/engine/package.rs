@@ -207,6 +207,11 @@ fn asset_list(def: &crate::theme::model::Def) -> Vec<(String, AssetKind, &'stati
     add(e.get("wallpaper").and_then(|m| m.get("image")), AssetKind::Image, "wallpaper");
     add(e.get("wallpaper").and_then(|m| m.get("images")), AssetKind::Image, "wallpaper");
     add(e.get("font").and_then(|m| m.get("files")), AssetKind::Font, "font");
+    if let Some(Value::String(s)) = e.get("branding").and_then(|b| b.get("logo")) {
+        if matches!(crate::panel::branding::parse_logo(s), Ok(crate::panel::branding::Logo::File(_))) {
+            v.push((s.clone(), AssetKind::Image, "logo"));
+        }
+    }
     v
 }
 

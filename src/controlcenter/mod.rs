@@ -4,6 +4,7 @@
 //! `hit` maps pointer positions back to [`Target`]s, so drawing and input share one layout.
 
 mod dux;
+mod gnome;
 pub mod settings;
 pub mod sys;
 
@@ -15,21 +16,22 @@ use tiny_skia::Pixmap;
 
 pub const PANEL_W: f32 = 340.0;
 
-/// The Dux grid uses two expanded four-cell tiles (source CcMetrics); legacy widths stay fixed.
+/// The Dux grid uses two expanded four-cell tiles (source CcMetrics); GNOME's follows the text scale (two `12em` toggles);
+/// legacy widths stay fixed.
 pub fn panel_width(style: Style) -> f32 {
-    if style == Style::Dux {
-        600.0
-    } else {
-        PANEL_W
+    match style {
+        Style::Dux => 600.0,
+        Style::Gnome => gnome::panel_width(),
+        _ => PANEL_W,
     }
 }
 
 /// Native style composition; callers use the same item list for painting and input.
 pub fn layout_styled(s: &Snapshot, tiles: &Tiles, style: Style) -> (Vec<Item>, f32) {
-    if style == Style::Dux {
-        dux::layout(s, tiles)
-    } else {
-        layout_with(s, tiles)
+    match style {
+        Style::Dux => dux::layout(s, tiles),
+        Style::Gnome => gnome::layout(s, tiles),
+        _ => layout_with(s, tiles),
     }
 }
 const PAD: f32 = 12.0;
@@ -53,6 +55,10 @@ pub struct Snapshot {
     pub battery: Option<sys::Battery>,
     /// `decutil` toggles; `None` when decutil is not installed (the row is hidden).
     pub util: Option<sys::Utils>,
+    /// A lock command exists (`rdwm-lock` or `loginctl`); the GNOME system row shows its Lock button only then.
+    pub lock: bool,
+    /// The session menu (`decsession`) is installed; the GNOME system row shows its Power button only then.
+    pub power: bool,
 }
 
 impl Snapshot {
@@ -80,6 +86,8 @@ impl Snapshot {
             light: sys::is_light(),
             battery: sys::probe_battery(),
             util: sys::probe_utils(),
+            lock: sys::lock_command().is_some(),
+            power: sys::session_menu().is_some(),
         }
         .with_volume()
     }
@@ -114,6 +122,12 @@ pub enum Target {
     Dnd,
     Notifications,
     Settings,
+    /// Mute / unmute the default output (the GNOME volume slider's button).
+    Mute,
+    /// Lock the session (`session::command(Lock)`).
+    Lock,
+    /// Open the session menu (`decsession`: suspend, restart, power off, log out).
+    Power,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -176,6 +190,11 @@ pub enum Draw {
     /// Square action tile background (accent when `on`).
     SmallTile {
         on: bool,
+    },
+    /// GNOME quick toggle: a pill (or, with `caps`, one segment of a split pill), accent when `on`. Painted only by `gnome.rs`.
+    Toggle {
+        on: bool,
+        caps: gnome::Caps,
     },
 }
 
@@ -430,6 +449,17 @@ pub fn layout_with(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
     (out, y + PAD)
 }
 
+/// Every control once, in reading order (its first rectangle): the keyboard stops.
+pub fn targets_in_order(items: &[Item]) -> Vec<Target> {
+    let mut seen = Vec::new();
+    for target in items.iter().filter_map(|i| i.target) {
+        if !seen.contains(&target) {
+            seen.push(target);
+        }
+    }
+    seen
+}
+
 /// Topmost interactive item under the point (panel-local coordinates).
 pub fn hit(items: &[Item], px: f32, py: f32) -> Option<(Target, R)> {
     items.iter().rev().find(|i| i.target.is_some() && i.r.contains(px, py)).and_then(|i| i.target.map(|t| (t, i.r)))
@@ -463,6 +493,10 @@ pub struct View<'a> {
 
 /// Paints the panel described by `view` into `pm`.
 pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut SymbolCache) {
+    if view.style == Style::Gnome {
+        gnome::draw(pm, view, fonts, symbols);
+        return;
+    }
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
     let (panel_r, tile_r, fluent) = look(view.style);
     let dux = view.style == Style::Dux;
@@ -519,7 +553,7 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 };
                 blit_symbol(pm, symbols, dux, icon, ink, 17.0, x + w / 2.0, y + h / 2.0);
             }
-            Draw::Hit => {}
+            Draw::Hit | Draw::Toggle { .. } => {}
             Draw::Glyph { icon, size, ink } => {
                 if hovered && it.target.is_some() && *size >= 16.0 && w <= 28.0 {
                     fill_circle(pm, x + w / 2.0, y + h / 2.0, w / 2.0, crate::theme::th().ink(0.14));
@@ -554,12 +588,31 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
     }
 }
 
+/// [`draw`], then the keyboard focus ring around `focus` when that control is among `view.items` (so a scrolled-away control gets none).
+pub fn draw_focused(pm: &mut Pixmap, view: &View, focus: Option<Target>, fonts: &mut Fonts, symbols: &mut SymbolCache) {
+    draw(pm, view, fonts, symbols);
+    if let Some(r) = focus.and_then(|wanted| view.items.iter().find(|i| i.target == Some(wanted)).map(|i| i.r)) {
+        draw_focus(pm, view.style, R { x: view.origin.0 + r.x, y: view.origin.1 + r.y, ..r });
+    }
+}
+
+/// The focus ring of `style` around `r` (absolute pixmap coordinates): GNOME's is a 2 px accent ring standing off the control so it
+/// stays visible on accent-filled toggles; the other looks keep the accent inset ring the Dux adapter always drew.
+pub fn draw_focus(pm: &mut Pixmap, style: Style, r: R) {
+    if style == Style::Gnome {
+        gnome::draw_focus(pm, r);
+    } else {
+        stroke_rounded(pm, r.x + 1.0, r.y + 1.0, r.w - 2.0, r.h - 2.0, 12.0, crate::theme::th().accent_c(), 2.0);
+    }
+}
+
 /// (panel radius, tile radius, fluent) of a resolved style: the card look doubles the theme radius for the panel and rounds the
 /// tiles to 16 px; the Windows 11 flyout takes the theme radius as it is (8 px there) for both and squares the toggles off.
 pub fn look(style: Style) -> (f32, f32, bool) {
     let th = crate::theme::th();
     match style {
         Style::Dux => (28.0, 12.0, true),
+        Style::Gnome => (gnome::PANEL_RADIUS, 16.0, false),
         Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
         _ => (th.r(2.0), 16.0, false),
     }
@@ -627,6 +680,8 @@ mod tests {
             light: false,
             battery: None,
             util: Some(sys::Utils::default()),
+            lock: false,
+            power: false,
         }
     }
 

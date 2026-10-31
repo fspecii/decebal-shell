@@ -37,6 +37,7 @@ pub mod lock;
 pub mod mem;
 pub mod menubar;
 pub mod notify;
+pub mod panel;
 pub mod preset;
 pub mod procmon;
 pub mod reveal;

@@ -189,10 +189,41 @@ impl Source {
     pub fn theme_for(&self, id: &str, sel: &Selection, system_dark: bool) -> Result<Theme, String> {
         let def = self.load_def(id)?;
         let mut theme = resolve_with(&def, id, sel, system_dark);
+        self.package_logo(id, &mut theme.branding);
         self.package_font_files(id, 0, &mut theme.fonts.files);
         theme.fonts.file_versions = theme.fonts.files.iter().map(|file| super::fontdb::package_file_version(file)).collect();
         theme.fonts.package_faces = super::fontdb::FontDb::read_package_faces_versioned(&theme.fonts.files, &theme.fonts.file_versions);
         Ok(theme)
+    }
+
+    /// A `[branding] logo` image becomes its path inside the package (canonical, never outside it); a missing or escaping
+    /// file means the neutral logo, never the style's trademark one.
+    fn package_logo(&self, id: &str, branding: &mut crate::panel::branding::Branding) {
+        use crate::panel::branding::Logo;
+        let Logo::File(rel) = &branding.logo else { return };
+        let path = self.logo_owner(id, 0);
+        let resolved = (|| {
+            let path = path.as_ref()?;
+            let rel = rel.to_str()?;
+            engine::archive::safe_rel_path(rel).ok()?;
+            let base = path.parent()?.canonicalize().ok()?;
+            let full = base.join(rel).canonicalize().ok()?;
+            (full.starts_with(&base) && full.is_file()).then_some(full)
+        })();
+        branding.logo = resolved.map_or(crate::panel::branding::NEUTRAL, Logo::File);
+    }
+
+    /// The package that declared the logo owns its relative asset path, including through inheritance.
+    fn logo_owner(&self, id: &str, depth: usize) -> Option<PathBuf> {
+        if depth > 8 {
+            return None;
+        }
+        let path = self.user_file(id);
+        let own = std::fs::read_to_string(&path).ok().and_then(|s| Def::parse(&s).ok()).or_else(|| builtin::def(id))?;
+        if own.extra.get("branding").and_then(|b| b.get("logo")).is_some() {
+            return Some(path);
+        }
+        own.inherit.filter(|parent| parent != id).and_then(|parent| self.logo_owner(&parent, depth + 1))
     }
 
     /// Package fonts are resolved outside painting and remain private to this process.
@@ -238,6 +269,22 @@ impl Source {
         }
     }
 
+    /// The theme with what `decebal.json` says about the bar, the panels and the Control Center filled in.
+    fn with_shell(&self, t: Theme) -> Theme {
+        let doc: serde_json::Value = std::fs::read_to_string(&self.shell_json).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let written = doc.get("bar").and_then(|b| b.get("position")).and_then(|p| p.as_str()).and_then(crate::config::BarPosition::parse);
+        let workspaces = doc.get("workspaces").and_then(|w| serde_json::from_value(w.clone()).ok()).unwrap_or(crate::config::Toggle::Word(crate::config::Word::Auto));
+        Theme {
+            bar_layout: crate::config::BarLayout::from_json(&doc["bar"]),
+            bar_position: written.unwrap_or_default(),
+            bar_position_written: written,
+            panel_user: crate::panel::UserPanel::from_bar_json(&doc["bar"]),
+            panel_workspaces: workspaces,
+            control_center: doc.get("control_center").map(crate::controlcenter::settings::Settings::from_json).unwrap_or_default(),
+            ..t
+        }
+    }
+
     /// Resolves the selection. A missing or broken theme falls back to the default one (with a message).
     pub fn build(&self, sel: &Selection, system_dark: bool) -> (Theme, Option<String>) {
         let (id, implied) = self.find(&sel.name).unwrap_or_else(|| (sel.name.clone(), None));
@@ -246,13 +293,10 @@ impl Source {
             sel.mode = m;
         }
         match self.theme_for(&id, &sel, system_dark) {
-            Ok(t) => (Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..t }, None),
+            Ok(t) => (self.with_shell(t), None),
             Err(e) => {
                 let def = builtin::def(builtin::DEFAULT_ID).expect("default theme");
-                (
-                    Theme { bar_layout: self.bar_layout(), bar_position: self.bar_position(), control_center: self.control_center(), ..resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark) },
-                    Some(e),
-                )
+                (self.with_shell(resolve_with(&def, builtin::DEFAULT_ID, &sel, system_dark)), Some(e))
             }
         }
     }
@@ -393,6 +437,10 @@ fn publish(t: Arc<Theme>) {
 
 /// The theme every drawing routine uses. Loaded on first use.
 pub fn current() -> Arc<Theme> {
+    #[cfg(test)]
+    if let Some(t) = THREAD_THEME.with(|slot| slot.borrow().clone()) {
+        return t;
+    }
     if let Some(t) = CURRENT.read().unwrap().as_ref() {
         return t.clone();
     }
@@ -401,6 +449,29 @@ pub fn current() -> Arc<Theme> {
     let t = l.theme.clone();
     publish(t.clone());
     t
+}
+
+#[cfg(test)]
+thread_local! {
+    static THREAD_THEME: std::cell::RefCell<Option<Arc<Theme>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Test only: `t` is the current theme for the calling test thread alone, so parallel tests that publish other themes cannot
+/// disturb it (and it cannot disturb them). Dropping the guard removes the override; nothing global changes.
+#[cfg(test)]
+pub fn thread_theme(t: Theme) -> ThreadTheme {
+    THREAD_THEME.with(|slot| *slot.borrow_mut() = Some(Arc::new(t)));
+    ThreadTheme
+}
+
+#[cfg(test)]
+pub struct ThreadTheme;
+
+#[cfg(test)]
+impl Drop for ThreadTheme {
+    fn drop(&mut self) {
+        THREAD_THEME.with(|slot| *slot.borrow_mut() = None);
+    }
 }
 
 /// Makes `t` the current theme without touching any file (previews, screenshots, tests).
@@ -479,6 +550,51 @@ mod tests {
         std::fs::create_dir_all(d.join("themes")).unwrap();
         let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
+    }
+
+    #[test]
+    fn a_package_logo_resolves_inside_its_package_and_never_outside() {
+        let (dir, src) = sandbox("brand-logo");
+        let pkg = dir.join("themes/brandy");
+        std::fs::create_dir_all(pkg.join("icons")).unwrap();
+        tiny_skia::Pixmap::new(4, 4).unwrap().save_png(pkg.join("icons/logo.png")).unwrap();
+        std::fs::write(dir.join("outside.png"), b"x").unwrap();
+        let load = |logo: &str| {
+            std::fs::write(pkg.join("theme.toml"), format!("format = 1\nid = \"brandy\"\nname = \"Brandy\"\n[branding]\nlogo = \"{logo}\"\ndesktop_label = \"Desktop\"\n")).unwrap();
+            src.theme_for("brandy", &Selection::default(), true).map(|t| t.branding)
+        };
+        let theme = |logo: &str| load(logo).unwrap();
+        let b = theme("icons/logo.png");
+        assert_eq!(b.logo, crate::panel::branding::Logo::File(pkg.join("icons/logo.png").canonicalize().unwrap()));
+        assert_eq!(b.desktop_label("Finder"), "Desktop");
+        assert!(load("../../outside.png").unwrap_err().contains("escapes the package"), "a manifest pointing outside its package does not load");
+        assert_eq!(theme("icons/missing.png").logo, crate::panel::branding::NEUTRAL, "a missing image is the neutral logo, not the style's");
+        assert_eq!(theme("icon:start-here").logo, crate::panel::branding::Logo::Icon("start-here".into()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_inherited_logo_uses_its_declaring_package() {
+        let (dir, src) = sandbox("inherited-brand-logo");
+        let parent = dir.join("themes/brand-parent");
+        let child = dir.join("themes/brand-child");
+        std::fs::create_dir_all(parent.join("icons")).unwrap();
+        std::fs::create_dir_all(child.join("icons")).unwrap();
+        tiny_skia::Pixmap::new(4, 4).unwrap().save_png(parent.join("icons/logo.png")).unwrap();
+        tiny_skia::Pixmap::new(8, 8).unwrap().save_png(child.join("icons/logo.png")).unwrap();
+        std::fs::write(parent.join("theme.toml"), "format = 1\nid = \"brand-parent\"\nname = \"Parent\"\n[branding]\nlogo = \"icons/logo.png\"\n").unwrap();
+        let write_child = |logo: &str| {
+            std::fs::write(child.join("theme.toml"), format!("format = 1\nid = \"brand-child\"\nname = \"Child\"\ninherit = \"brand-parent\"\n[branding]\ndesktop_label = \"Child desktop\"\n{logo}"))
+                .unwrap()
+        };
+        write_child("");
+        let load = || src.theme_for("brand-child", &Selection::default(), true).unwrap().branding.logo;
+        assert_eq!(load(), crate::panel::branding::Logo::File(parent.join("icons/logo.png").canonicalize().unwrap()));
+        write_child("logo = \"icons/logo.png\"");
+        assert_eq!(load(), crate::panel::branding::Logo::File(child.join("icons/logo.png").canonicalize().unwrap()));
+        write_child("logo = \"icons/missing.png\"");
+        assert_eq!(load(), crate::panel::branding::NEUTRAL, "an explicit missing child image must not inherit a parent image");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

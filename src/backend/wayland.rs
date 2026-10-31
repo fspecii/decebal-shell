@@ -489,8 +489,12 @@ impl<A: App + 'static> KeyboardHandler for State<A> {
             self.dirty |= self.app.nav_key(NavKey::Up);
         } else if event.keysym == Keysym::Down {
             self.dirty |= self.app.nav_key(NavKey::Down);
-        } else if event.keysym == Keysym::Return || event.keysym == Keysym::KP_Enter {
+        } else if event.keysym == Keysym::Return || event.keysym == Keysym::KP_Enter || event.keysym == Keysym::space {
             self.dirty |= self.app.nav_key(NavKey::Enter);
+        } else if event.keysym == Keysym::Left {
+            self.dirty |= self.app.nav_key(NavKey::Left);
+        } else if event.keysym == Keysym::Right {
+            self.dirty |= self.app.nav_key(NavKey::Right);
         }
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, _: KeyEvent) {}

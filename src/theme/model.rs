@@ -148,6 +148,16 @@ pub struct Theme {
     /// Where the Caelestia pill bar sits (`decebal.json` `bar.position`); only meaningful while `bar_style` is `vertical`.
     /// Not part of the theme file: [`super::live::Source::build`] fills it in from the settings, so a change reaches every program through the theme watcher.
     pub bar_position: crate::config::BarPosition,
+    /// `bar.position` as written, or `None` when `decebal.json` has none (then the theme package decides).
+    pub bar_position_written: Option<crate::config::BarPosition>,
+    /// The user's panel choices (`decebal.json` `bar.edge`, `bar.split`, `bar.applets`), filled in like `bar_position`.
+    pub panel_user: crate::panel::UserPanel,
+    /// The old `decebal.json` `workspaces` switch.
+    pub panel_workspaces: crate::config::Toggle,
+    /// What the theme package declares for its panels (`[bar] position` / `applets`, `[dock] position`).
+    pub panel_theme: crate::panel::ThemePanel,
+    /// The theme's logo and labels for the panels (`[branding]`); a package image is an absolute path inside the package.
+    pub branding: crate::panel::branding::Branding,
     /// The Control Center's settings (`decebal.json` `control_center`, which a theme's `[control_center]` fills): filled in by
     /// [`super::live::Source::build`] like `bar_position`, so a change reaches every program through the theme watcher.
     pub control_center: crate::controlcenter::settings::Settings,
@@ -203,27 +213,81 @@ impl Theme {
     pub fn bar_floating(&self) -> bool {
         self.bar_style == "floating"
     }
-    /// The bar runs down the left screen edge (caelestia's layout) instead of across the top.
+    /// The bar is the pill rail (caelestia's layout) instead of a strip across the screen.
     pub fn bar_vertical(&self) -> bool {
         self.bar_style == "vertical"
     }
-    /// Where the Caelestia pill bar sits, or `None` while the theme has the ordinary menu bar. (`bar_style = "vertical"` is
-    /// the theme's name for the pill bar; the edge comes from `bar.position`.)
-    pub fn pill_bar(&self) -> Option<crate::config::BarPosition> {
-        self.bar_vertical().then_some(self.bar_position)
+    /// Which renderer draws decbar.
+    pub fn bar_renderer(&self) -> crate::panel::Renderer {
+        crate::panel::Renderer::for_bar_style(&self.bar_style)
     }
-    /// Pixels the pill bar takes from each screen edge (all zero for the ordinary menu bar, whose strut the windows
-    /// already know): where other programs must keep clear of it.
+    /// decbar's effective panel: its edge and the applets it draws (see [`crate::panel::resolve`]).
+    pub fn bar_panel(&self) -> crate::panel::Effective {
+        let renderer = self.bar_renderer();
+        crate::panel::resolve(&crate::panel::Inputs {
+            renderer,
+            user: &self.panel_user,
+            theme: &self.panel_theme,
+            legacy_position: self.bar_position_written,
+            legacy_workspaces: crate::panel::legacy_workspaces(self.panel_workspaces),
+            dux: Some(&self.bar_layout),
+            dock_user_edge: None,
+        })
+    }
+    /// The Windows taskbar's effective panel, for the dock settings `dock`.
+    pub fn taskbar_panel(&self, dock: &crate::config::DockSettings) -> crate::panel::Effective {
+        crate::panel::resolve(&crate::panel::Inputs {
+            renderer: crate::panel::Renderer::Taskbar,
+            user: &self.panel_user,
+            theme: &self.panel_theme,
+            // `windowsPosition` only ever held top or bottom; bottom is also its default, so only top says anything
+            legacy_position: (dock.windows_position == crate::config::WinPosition::Top).then_some(crate::config::BarPosition::Top),
+            legacy_workspaces: None,
+            dux: None,
+            dock_user_edge: dock.edge,
+        })
+    }
+    /// The edge of decbar.
+    pub fn bar_edge(&self) -> crate::panel::Edge {
+        self.bar_panel().edge
+    }
+    /// Where the Caelestia pill bar sits, or `None` while the theme has another bar. (`bar_style = "vertical"` is
+    /// the theme's name for the pill bar; the edge comes from [`Theme::bar_panel`].)
+    pub fn pill_bar(&self) -> Option<crate::config::BarPosition> {
+        if !self.bar_vertical() {
+            return None;
+        }
+        let p = self.bar_panel();
+        Some(if p.split { crate::config::BarPosition::Split } else { p.edge.position() })
+    }
+    /// Thickness of decbar's strip on `edge` (what it reserves).
+    pub fn bar_thickness(&self, edge: crate::panel::Edge) -> f32 {
+        use crate::panel::Renderer as R;
+        match self.bar_renderer() {
+            R::Pill => crate::theme::pill_bar_thickness(edge.position()),
+            R::Dux => self.bar_height + 2.0 * self.bar_layout.margin,
+            _ if edge.is_vertical() => crate::theme::CLASSIC_RAIL_THICKNESS,
+            _ => crate::theme::BAR_HEIGHT,
+        }
+    }
+    /// Pixels decbar takes from each screen edge: where other programs must keep clear of it. A classic or Dux bar on the
+    /// top edge reports nothing here (its strut is what every program already expects, see [`crate::theme::bar_bottom_for`]).
     pub fn bar_insets(&self) -> Insets {
-        use crate::config::BarPosition as P;
-        let t = self.pill_bar().map_or(0, |p| crate::theme::pill_bar_thickness(p) as i32);
-        match self.pill_bar() {
-            None => Insets::default(),
-            Some(P::Left) => Insets { left: t, ..Insets::default() },
-            Some(P::Right) => Insets { right: t, ..Insets::default() },
-            Some(P::Top) => Insets { top: t, ..Insets::default() },
-            Some(P::Bottom) => Insets { bottom: t, ..Insets::default() },
-            Some(P::Split) => Insets { top: t, bottom: t, ..Insets::default() },
+        use crate::panel::Edge as E;
+        let p = self.bar_panel();
+        let t = self.bar_thickness(p.edge) as i32;
+        if self.bar_vertical() {
+            if p.split {
+                return Insets { top: t, bottom: t, ..Insets::default() };
+            }
+        } else if p.edge == E::Top {
+            return Insets::default();
+        }
+        match p.edge {
+            E::Left => Insets { left: t, ..Insets::default() },
+            E::Right => Insets { right: t, ..Insets::default() },
+            E::Top => Insets { top: t, ..Insets::default() },
+            E::Bottom => Insets { bottom: t, ..Insets::default() },
         }
     }
 }
@@ -572,6 +636,11 @@ impl Def {
             dashboard_profile: text_of("dashboard_profile").unwrap_or_else(|| "readme".into()),
             launcher_style: text_of("launcher_style").unwrap_or_else(|| "default".into()),
             bar_position: crate::config::BarPosition::default(),
+            bar_position_written: None,
+            panel_user: Default::default(),
+            panel_workspaces: crate::config::Toggle::Word(crate::config::Word::Auto),
+            panel_theme: crate::panel::ThemePanel::from_extra(&self.extra),
+            branding: crate::panel::branding::Branding::from_extra(&self.extra),
             control_center: Default::default(),
             window_buttons_right: self
                 .extra

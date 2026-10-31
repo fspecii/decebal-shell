@@ -188,6 +188,14 @@ impl Dropdown {
         Dropdown { x, y, w, h: cy + PAD - y, rows }
     }
 
+    /// Moves the dropdown (and its rows) by `dy`: a bottom bar opens it upwards.
+    pub fn shift_y(&mut self, dy: f32) {
+        self.y += dy;
+        for r in &mut self.rows {
+            r.y += dy;
+        }
+    }
+
     pub fn contains(&self, px: f32, py: f32) -> bool {
         px >= self.x && px < self.x + self.w && py >= self.y && py < self.y + self.h
     }
@@ -247,6 +255,11 @@ pub fn fallback_command(action: &str) -> Option<Vec<String>> {
 }
 
 impl Runner {
+    /// Tests: a runner whose every action counts as available (a helper path that is never run by them).
+    #[cfg(test)]
+    pub fn available_for_tests() -> Self {
+        Self { helper: Some(PathBuf::from("/nonexistent/mac-menu-action")) }
+    }
     pub fn detect() -> Self {
         let home = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/bin/mac-menu-action"));
         let helper = home.filter(|p| p.is_file()).or_else(|| find_in_path("mac-menu-action"));

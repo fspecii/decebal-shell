@@ -131,13 +131,62 @@ impl Dock {
         n * self.base_cell_w() + (n - 1.0) * self.settings.app_spacing + 2.0 * self.padding()
     }
 
-    /// Canvas (window) size that always fits the fully magnified dock.
+    /// Canvas (window) size that always fits the fully magnified dock: along the edge x across it (swapped for a side
+    /// dock, which runs down the screen).
     pub fn canvas_size(&self) -> (u32, u32) {
         let extra = self.items.len() as f32 * self.base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
         let w = (self.rest_width() + extra + 2.0 * SIDE_MARGIN).max(MIN_CANVAS_W);
         let headroom = (HEADROOM * self.icon_scale()).max(self.dimensions().0 * (self.settings.magnification - 1.0).max(0.0) + BOUNCE_H * self.icon_scale() + 4.0);
         let h = self.panel_height() + headroom;
-        (w.ceil() as u32, h.ceil() as u32)
+        if self.edge().is_vertical() {
+            (h.ceil() as u32, w.ceil() as u32)
+        } else {
+            (w.ceil() as u32, h.ceil() as u32)
+        }
+    }
+
+    /// The screen edge of the dock: the user's `edge`, else the theme's `[dock] position`, else the bottom.
+    pub fn edge(&self) -> crate::panel::Edge {
+        self.settings.edge.or(crate::theme::th().panel_theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom)
+    }
+
+    /// (length along the edge, depth across it) of a canvas `cw` x `ch`.
+    fn frame(&self, cw: f32, ch: f32) -> (f32, f32) {
+        if self.edge().is_vertical() {
+            (ch, cw)
+        } else {
+            (cw, ch)
+        }
+    }
+
+    /// A canvas point in the dock's own frame: (along the edge, distance from the screen edge).
+    pub fn to_frame(&self, cw: f32, ch: f32, x: f32, y: f32) -> (f32, f32) {
+        use crate::panel::Edge;
+        match self.edge() {
+            Edge::Bottom => (x, ch - y),
+            Edge::Top => (x, y),
+            Edge::Left => (y, x),
+            Edge::Right => (y, cw - x),
+        }
+    }
+
+    /// A box of the dock's frame (`a`.. along, `c`.. from the screen edge, `la` x `lc`) on the canvas: (x, y, w, h).
+    /// Icons are placed, never rotated.
+    pub fn map(&self, cw: f32, ch: f32, a: f32, c: f32, la: f32, lc: f32) -> (f32, f32, f32, f32) {
+        use crate::panel::Edge;
+        match self.edge() {
+            Edge::Bottom => (a, ch - c - lc, la, lc),
+            Edge::Top => (a, c, la, lc),
+            Edge::Left => (c, a, lc, la),
+            Edge::Right => (cw - c - lc, a, lc, la),
+        }
+    }
+
+    /// The visible panel on the canvas: (x, y, w, h).
+    pub fn panel_rect(&self, cw: f32, ch: f32) -> (f32, f32, f32, f32) {
+        let (len, _) = self.frame(cw, ch);
+        let l = self.layout(len);
+        self.map(cw, ch, l.panel_x, 0.0, l.panel_w, self.panel_height())
     }
 
     /// Starts the launch bounce for `id`.
@@ -249,68 +298,71 @@ impl Dock {
 
     /// Index of the item under canvas point (`x`, `y`), if any.
     pub fn hit_test(&self, canvas_w: f32, canvas_h: f32, x: f32, y: f32) -> Option<usize> {
-        let l = self.layout(canvas_w);
-        let top = canvas_h - self.panel_height() - 8.0;
-        if y < top || y > canvas_h {
+        let (len, _) = self.frame(canvas_w, canvas_h);
+        let l = self.layout(len);
+        let (a, c) = self.to_frame(canvas_w, canvas_h, x, y);
+        if c > self.panel_height() + 8.0 || c < 0.0 {
             return None;
         }
-        l.cells.iter().position(|c| x >= c.x && x <= c.x + c.w)
+        l.cells.iter().position(|cell| a >= cell.x && a <= cell.x + cell.w)
     }
 
     /// Actual rounded material plate, excluding animation headroom and side margins.
     pub fn glass_region(&self, canvas_w: f32, canvas_h: f32) -> crate::glass::Region {
-        let layout = self.layout(canvas_w);
-        crate::glass::Region {
-            x: layout.panel_x,
-            y: canvas_h - self.panel_height(),
-            w: layout.panel_w,
-            h: self.panel_height(),
-            radius: layout_radius(layout.panel_w, self.panel_height(), self.settings.roundness),
-        }
+        let (x, y, w, h) = self.panel_rect(canvas_w, canvas_h);
+        crate::glass::Region { x, y, w, h, radius: layout_radius(w, h, self.settings.roundness) }
     }
 
     /// Draws the whole dock into `pm`, which should be `canvas_size()` pixels.
     pub fn draw(&mut self, pm: &mut Pixmap) {
         gfx::clear(pm);
-        let cw = pm.width() as f32;
-        let ch = pm.height() as f32;
-        let layout = self.layout(cw);
-        let panel_y = ch - self.panel_height();
+        let (cw, ch) = (pm.width() as f32, pm.height() as f32);
+        // the dock is laid out along its edge (x of the bottom dock) and mapped onto the edge it sits on
+        let (len, _) = self.frame(cw, ch);
+        let layout = self.layout(len);
+        let ph = self.panel_height();
+        let (px0, py0, pw0, ph0) = self.map(cw, ch, layout.panel_x, 0.0, layout.panel_w, ph);
 
-        let radius = layout_radius(layout.panel_w, self.panel_height(), self.settings.roundness);
+        let radius = layout_radius(pw0, ph0, self.settings.roundness);
         // Theme colours: panel colour, opacity (`dock_alpha` 0.6 = the original look at default settings) and outline.
         let th = crate::theme::th();
         let alpha = if self.high_contrast { 1.0 } else { ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0) };
-        fill_rounded(pm, layout.panel_x, panel_y, layout.panel_w, self.panel_height(), radius, th.dock.color(alpha));
-        stroke_rounded(pm, layout.panel_x + 0.5, panel_y + 0.5, layout.panel_w - 1.0, self.panel_height() - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
+        fill_rounded(pm, px0, py0, pw0, ph0, radius, th.dock.color(alpha));
+        stroke_rounded(pm, px0 + 0.5, py0 + 0.5, pw0 - 1.0, ph0 - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
 
-        let icon_bottom = panel_y + PANEL_PAD_TOP * self.icon_scale() + self.dimensions().0;
+        // distance from the screen edge of the icons' base line (the bottom dock's `icon_bottom`) and of the dots
         let icon_size = self.dimensions().0;
+        let base = ph - PANEL_PAD_TOP * self.icon_scale() - icon_size;
+        let dot = base - DOT_OFFSET;
         let dragged = self.drag.map(|d| d.index);
+        let dot_at = |pm: &mut Pixmap, cell: &Cell| {
+            let (x, y, _, _) = self.map(cw, ch, cell.x + cell.w / 2.0, dot, 0.0, 0.0);
+            fill_circle(pm, x, y, DOT_RADIUS, crate::theme::th().ink(0.85));
+        };
+        let mut icons = Vec::new();
         for (i, (item, cell)) in self.items.iter().zip(&layout.cells).enumerate() {
+            if item.running {
+                dot_at(pm, cell);
+            }
             if dragged == Some(i) {
                 // The slot stays empty; the icon follows the pointer (drawn last).
-                if item.running {
-                    fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, crate::theme::th().ink(0.85));
-                }
                 continue;
             }
             let size = icon_size * cell.scale;
-            let px = (size.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
             let lift = self.bounce_offset(&item.id);
-            let icon = self.icons.get(&item.id, px);
             let ix = cell.x + (cell.w - size) / 2.0;
-            blit_scaled(pm, icon, ix, icon_bottom - size - lift, size, size, 1.0);
-            if item.running {
-                fill_circle(pm, cell.x + cell.w / 2.0, icon_bottom + DOT_OFFSET, DOT_RADIUS, crate::theme::th().ink(0.85));
-            }
+            icons.push((item.id.clone(), self.map(cw, ch, ix, base + lift, size, size), 1.0));
         }
         if let Some(d) = self.drag {
             if let Some(item) = self.items.get(d.index) {
                 let size = icon_size * 1.1;
-                let icon = self.icons.get(&item.id, (size.ceil() as u32) * 2);
-                blit_scaled(pm, icon, d.x - size / 2.0, icon_bottom - size - 8.0, size, size, 0.9);
+                icons.push((item.id.clone(), self.map(cw, ch, d.x - size / 2.0, base + 8.0, size, size), 0.9));
             }
+        }
+        for (id, (x, y, w, h), alpha) in icons {
+            let px = (w.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
+            let icon = self.icons.get(&id, px);
+            blit_scaled(pm, icon, x, y, w, h, alpha);
         }
     }
 }

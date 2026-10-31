@@ -1,0 +1,78 @@
+{
+  "binary_sha256": {
+    "decbar": "de240e115f0e05e0ad7696e83058efc1db382319cb078e87013adc07e9e9cbcf",
+    "decdock": "6955bb219f93d3e0e7ad02766e7c9de63609821b78552423f3a71cba5158e686",
+    "decutil": "c33c3c914192ca7419504cbf7f0e2ff8f5f6432bd985ccf56da93d8ca53f2956",
+    "decthemectl": "4d7a9bcea62daae65a6768b8baabce58f63c3c7d06972b72ac1a003ec4cdfc27"
+  },
+  "captures": [
+    {
+      "theme": "gnome-adwaita",
+      "mode": "dark",
+      "desktop": "gnome-adwaita-dark-desktop.png",
+      "sha256": "12b77c514cab742c541aca67f0f8b7a56d0506c67f4b9caa1cb8c31fa424fe59",
+      "band_pixel": [
+        34,
+        34,
+        38
+      ],
+      "panel_thickness": 32,
+      "wallpaper": null,
+      "control_center": "gnome-adwaita-dark-control-center.png",
+      "control_center_sha256": "3f150340c13e8b0ecf02491f592c283ebb7d836e7cc2142fb10b6182b8c0d5e8",
+      "control_center_changed_pixels": 148176,
+      "dock_pixels_off_backdrop": 0
+    },
+    {
+      "theme": "gnome-adwaita",
+      "mode": "light",
+      "desktop": "gnome-adwaita-light-desktop.png",
+      "sha256": "518fed27ee72d1fc45c98787a705a5d611c61f23aa331c1648fd668c2c418216",
+      "band_pixel": [
+        250,
+        250,
+        251
+      ],
+      "panel_thickness": 32,
+      "wallpaper": null,
+      "control_center": "gnome-adwaita-light-control-center.png",
+      "control_center_sha256": "834b47dca12876b80d64cda89385335092669182cea6f80ecde6d6054e723ba8",
+      "control_center_changed_pixels": 148176,
+      "dock_pixels_off_backdrop": 0
+    },
+    {
+      "theme": "gnome-catppuccin-dock",
+      "mode": "dark",
+      "desktop": "gnome-catppuccin-dock-dark-desktop.png",
+      "sha256": "0525961db81c4892e0ed208f151761c9bd0762273b703b305822c573deff8cab",
+      "band_pixel": [
+        30,
+        30,
+        46
+      ],
+      "panel_thickness": 32,
+      "wallpaper": null,
+      "control_center": "gnome-catppuccin-dock-dark-control-center.png",
+      "control_center_sha256": "acdb018fc85c77a7dbbd83888497d65483dfe7301c3952e44c449140560bd67f",
+      "control_center_changed_pixels": 148336,
+      "dock_pixels_off_backdrop": 25214
+    },
+    {
+      "theme": "gnome-catppuccin-dock",
+      "mode": "light",
+      "desktop": "gnome-catppuccin-dock-light-desktop.png",
+      "sha256": "2e415c4745390cd3c872d575aa260ee1d4aac6c6c3e5696b9d6b1f96e9976f0f",
+      "band_pixel": [
+        239,
+        241,
+        245
+      ],
+      "panel_thickness": 32,
+      "wallpaper": null,
+      "control_center": "gnome-catppuccin-dock-light-control-center.png",
+      "control_center_sha256": "41c7275f21e91a988b8d4ce75a6bf84dda41be6f5d16c64357829ad4e24a22cc",
+      "control_center_changed_pixels": 148458,
+      "dock_pixels_off_backdrop": 25214
+    }
+  ]
+}

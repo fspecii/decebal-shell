@@ -25,6 +25,13 @@ pub trait ActiveWindow {
     /// Ask the focused window to close / minimise (the active-window popout of the vertical bar).
     fn close_active(&self) {}
     fn minimize_active(&self) {}
+    /// Every window the window manager lists (the bar's task buttons and show desktop).
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        Vec::new()
+    }
+    fn activate_window(&self, _id: u64) {}
+    fn minimize_window(&self, _id: u64) {}
+    fn close_window(&self, _id: u64) {}
 }
 
 /// The real source: the compositor/EWMH window tracker from [`crate::wm`].
@@ -72,6 +79,68 @@ impl ActiveWindow for WmActive {
                 t.minimize(w.id);
             }
         }
+    }
+
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        self.tracker.as_ref().map(|t| t.snapshot().windows).unwrap_or_default()
+    }
+
+    fn activate_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.activate(id);
+        }
+    }
+
+    fn minimize_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.minimize(id);
+        }
+    }
+
+    fn close_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.close(id);
+        }
+    }
+}
+
+/// A host's own window tracker (the taskbar's): the embedded status engine reads it instead of starting another.
+pub struct TrackerActive(pub Tracker);
+
+impl ActiveWindow for TrackerActive {
+    fn active_app_name(&self) -> Option<String> {
+        self.0.snapshot().active().map(|w| w.app_id.clone())
+    }
+    fn workspaces(&self) -> Vec<Workspace> {
+        self.0.workspaces()
+    }
+    fn switch_workspace(&self, index: usize) {
+        self.0.switch_workspace(index);
+    }
+    fn active_title(&self) -> Option<String> {
+        self.0.snapshot().active().map(|w| w.title.clone()).filter(|t| !t.is_empty())
+    }
+    fn close_active(&self) {
+        if let Some(w) = self.0.snapshot().active() {
+            self.0.close(w.id);
+        }
+    }
+    fn minimize_active(&self) {
+        if let Some(w) = self.0.snapshot().active() {
+            self.0.minimize(w.id);
+        }
+    }
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        self.0.snapshot().windows
+    }
+    fn activate_window(&self, id: u64) {
+        self.0.activate(id);
+    }
+    fn minimize_window(&self, id: u64) {
+        self.0.minimize(id);
+    }
+    fn close_window(&self, id: u64) {
+        self.0.close(id);
     }
 }
 
