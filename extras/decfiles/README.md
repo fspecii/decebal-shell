@@ -33,11 +33,17 @@ does not save preferences or read/write Decebal configuration.
   folder, F2 renames the selected item, and Delete from the file list asks to move
   the selection to Trash. In the file list, Ctrl+C, Ctrl+X and Ctrl+V copy, cut and
   paste; the address entry keeps its ordinary text clipboard keys.
-- Details has real Name/Kind/Size columns and keyboard/pointer selection.
+- Details has real Name/Type/Size/Date modified columns and keyboard/pointer
+  selection. Clicking a header sorts natively (again to reverse); folders always
+  stay first. The sort choice survives re-rendering, view switches, navigation and
+  history. Names show the user's GTK icon theme icon for GIO's extension-based
+  `fast-content-type` (contents are never sniffed while listing); Type uses GIO's
+  description, such as "Plain text document".
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
   column keeps that parent and replaces the columns to its right.
-- Directory results are sorted folders-first, then by case-insensitive name.
+- Folder results start folders-first, then by case-insensitive name; ties in any
+  header sort fall back to that name and then the exact path bytes.
   File selection keeps the actual Unix path even for non-UTF8 filenames; GIO
   provides a readable display name. Files are **not opened or executed**.
 - Missing, unreadable or oversized folders show an error and preserve the prior
@@ -214,6 +220,19 @@ Copy/move evidence (default binary
   `duplicate-selected.png`.
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
+
+Sorting checkpoint: `tests/gates.py ARTIFACTS PREFIX` runs every native suite
+against binaries pinned by `tests/pin.py` and checks every result's binary and
+source hashes. With default `ea0797103300b8ffa6dfa3fece32b9bb095af0427e7a6035f6b850fa520f05fb`
+and fixture `b03b59004e5bbfcee57e49c26e02c7274cbaf9d281992072aec96abfffb9ff6f`
+(`/var/tmp/decfiles-views-artifacts/`), all 45 cases passed. They are navigation 8,
+operations 13, transfers 10 and the new `views-native.py` 6 (default sort, GIO
+types, Size ascending/descending keeping selection, Date modified, sort kept
+across columns and back and across navigation/Back), plus close 4 and
+transfers-cancel 4 on the fixture. Results are in `/var/tmp/decfiles-views-gate-*-evidence/`.
+The gtk4 crate's `v4_10` feature is enabled for `ColumnViewSorter`. GtkDialog is
+deprecated since GTK 4.10, so the two dialog modules allow that deprecation
+until a reviewed AlertDialog migration preserves their tested default responses.
 - `/var/tmp/decfiles-transfers-cancel-native-evidence/result.json`
   (`tests/transfers-cancel-native.py`, fixture binary only): a 150 ms delay per
   256 KiB chunk (`DECFILES_FIXTURE_TRANSFER_DELAY_MS`, capped at 5 s). It covers byte
@@ -291,7 +310,7 @@ many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move 
 picker, permanent delete, restore, undo, drag/drop, tabs, icon view, Finder gallery, Explorer
 command bar, bookmarks, mounts, remote backends, monitoring, search, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
-Sorting is fixed rather than header-driven. Profile styling, palette/icons,
+Profile styling, palette following,
 notifications, default-handler opt-in and shell launch/reveal integration are
 also pending. The address entry cannot type arbitrary non-UTF8 bytes; pointer
 navigation/selection preserves them losslessly.
