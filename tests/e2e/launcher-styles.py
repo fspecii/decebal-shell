@@ -25,6 +25,10 @@ EDGES = ["top", "bottom", "left", "right"]
 SCALES = [1.0, 1.25, 1.5, 2.0]
 THICK = 36  # logical panel thickness used for the captures
 
+# -I omits the script directory; import only this trusted fixture directory.
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb
 root = Path(tempfile.mkdtemp(prefix="decebal-launcher-styles-", dir=os.environ.get("LAUNCHER_STYLES_WORK", "/var/tmp")))
 root.chmod(0o700)
 env = dict(os.environ)
@@ -95,16 +99,10 @@ def run(*args, check=True):
 
 
 def start_x(size):
-    # -displayfd picks a free display itself; -noreset keeps RandR monitors defined by short-lived xrandr calls.
-    rd, wr = os.pipe()
     log = (root / f"xvfb-{len(owned)}.log").open("w")
-    x = subprocess.Popen(["Xvfb", "-displayfd", str(wr), "-screen", "0", f"{size[0]}x{size[1]}x24", "-noreset", "-nolisten", "tcp"], stdout=log, stderr=log, start_new_session=True, pass_fds=(wr,))
-    os.close(wr)
+    x, env["DISPLAY"] = start_private_xvfb(env=env, log=log, screen=f"{size[0]}x{size[1]}x24")
+    log.close()
     owned.append(x)
-    with os.fdopen(rd) as f:
-        num = f.readline().strip()
-    assert num.isdigit() and x.poll() is None, "private Xvfb"
-    env["DISPLAY"] = f":{num}"
     wait(lambda: run("xdotool", "getdisplaygeometry", check=False), "private Xvfb")
     return x
 
