@@ -277,7 +277,9 @@ def one_run(gate, private, calls, theme, shots, screen, scale, mode, edge, keep,
         cw, ch = box_n[2] - box_n[0], box_n[3] - box_n[1]
         assert cw <= 766 * scale + 2 and ch <= 688 * scale + 2, f"{tag}: card {cw}x{ch} larger than the 766x688 original at this scale"
         if big and edge == "bottom":
-            assert abs(cw - 766 * scale) <= 2 and abs(ch - min(688 * scale, free[3] - 8 * scale)) <= 4, f"{tag}: card {cw}x{ch}, expected 766x688 x{scale} (bounded by the free area)"
+            expected_w = min(766 * scale, free[2] - 16 * scale)
+            expected_h = min(688 * scale, free[3] - 16 * scale)
+            assert abs(cw - expected_w) <= 2 and abs(ch - expected_h) <= 4, f"{tag}: card {cw}x{ch}, expected {expected_w}x{expected_h} after both 8px margins"
         record["card_normal"] = list(box_n)
         if big:
             # the opaque card (no compositor) is the package's window colour: sampled in the plain top margin above the search bar
