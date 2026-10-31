@@ -1179,11 +1179,34 @@ class ReviewFixTests(TempCase):
             self.assertEqual(compared["processes"], [])
             self.assertIn("values", compared["incomparable_reasons"])
             json.dumps(compared, allow_nan=False)
+        for bad in (float("nan"), float("inf"), {"nested": float("nan")}, True, -1):
+            previous = document(20.0)
+            previous["processes"][0]["pid"] = bad
+            compared = tool.compare_recordings(current, previous)
+            self.assertFalse(compared["matched_run"])
+            self.assertEqual(compared["processes"], [])
+            json.dumps(compared, allow_nan=False)
         pair = tool._metric_pair(float("nan"), 1.0)
         self.assertEqual(pair["status"], "not_measured")
         self.assertIsNone(pair["current"])
         self.assertIsNone(pair["delta"])
         json.dumps(pair, allow_nan=False)
+
+    def test_comparison_filesystem_errors_are_output_errors(self):
+        from unittest.mock import patch
+        previous = self.tmp / "previous.json"
+        previous.write_text("{}")
+        for operation in ("lstat", "read"):
+            with patch.object(tool.os, operation, side_effect=OSError(errno.EIO, "fixture read failure")):
+                with self.assertRaises(tool.OutputError):
+                    tool._open_compare(previous)
+        real_close = tool.os.close
+        def failed_close(fd):
+            real_close(fd)
+            raise OSError(errno.EIO, "fixture close failure")
+        with patch.object(tool.os, "close", side_effect=failed_close):
+            with self.assertRaises(tool.OutputError):
+                tool._open_compare(previous)
 
     def test_comparison_error_still_publishes_the_current_sample(self):
         output = self.tmp / "out.json"

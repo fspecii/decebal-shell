@@ -744,6 +744,9 @@ def _metric_issue(value: object) -> str | None:
 def _process_compare_problem(proc: object) -> str | None:
     if not isinstance(proc, dict):
         return "structure"
+    pid = proc.get("pid")
+    if pid is not None and (isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0):
+        return "values" if isinstance(pid, float) and not math.isfinite(pid) else "structure"
     identity = proc.get("identity")
     if identity is not None and not isinstance(identity, dict):
         return "structure"
@@ -1103,7 +1106,7 @@ def publish_bytes(path: Path, data: bytes, force: bool) -> None:
         raise
 
 
-def _open_compare(path: Path) -> dict:
+def _read_compare(path: Path) -> dict:
     try:
         st = os.lstat(path)
     except FileNotFoundError as exc:
@@ -1142,6 +1145,14 @@ def _open_compare(path: Path) -> dict:
     if not isinstance(loaded, dict):
         raise OutputError("comparison file is not a JSON object")
     return loaded
+
+
+def _open_compare(path: Path) -> dict:
+    try:
+        return _read_compare(path)
+    except OSError as exc:
+        reason = exc.strerror or str(exc) or "filesystem error"
+        raise OutputError(f"comparison file is not readable: {reason}") from exc
 
 
 def system_units() -> Units:
