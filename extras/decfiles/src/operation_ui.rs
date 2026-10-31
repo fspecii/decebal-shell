@@ -252,7 +252,8 @@ impl Ui {
         let selected =
             self.ops.active.borrow().as_ref().is_some_and(|path| model.columns.iter().any(|column| column.selected.as_ref() == Some(path) && column.entries.iter().any(|entry| &entry.path == path)));
         let running = self.ops.running.borrow();
-        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && model.pending.is_none();
+        // Search results are not the folder model: file operations wait for a revealed result.
+        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && model.pending.is_none() && !self.is_searching();
         self.ops.create.set_sensitive(idle && model.current().is_some());
         self.ops.rename.set_sensitive(idle && selected);
         self.ops.trash.set_sensitive(idle && selected);
@@ -296,7 +297,7 @@ impl Ui {
     }
 
     pub(crate) fn can_start_dialog(&self) -> bool {
-        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none() && !self.ops.paste_reading.get()
+        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none() && !self.ops.paste_reading.get() && !self.is_searching()
     }
 
     pub fn name_dialog(self: &Rc<Self>, rename: bool) {

@@ -10,9 +10,11 @@ suites=[('default','native.py','DECFILES_BIN','DECFILES_EVIDENCE','navigation'),
  ('default','transfers-native.py','DECFILES_BIN','DECFILES_TRANSFERS_EVIDENCE','transfers'),
  ('default','views-native.py','DECFILES_BIN','DECFILES_VIEWS_EVIDENCE','views'),
  ('default','tabs-native.py','DECFILES_BIN','DECFILES_TABS_EVIDENCE','tabs'),
+ ('default','search-native.py','DECFILES_BIN','DECFILES_SEARCH_EVIDENCE','search'),
  ('fixture-delay','close-native.py','DECFILES_FIXTURE_BIN','DECFILES_CLOSE_EVIDENCE','close'),
  ('fixture-delay','transfers-cancel-native.py','DECFILES_FIXTURE_BIN','DECFILES_TRANSFERS_CANCEL_EVIDENCE','transfers-cancel'),
- ('fixture-delay','paste-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_PASTE_RACES_EVIDENCE','paste-races')]
+ ('fixture-delay','paste-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_PASTE_RACES_EVIDENCE','paste-races'),
+ ('fixture-delay','search-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_SEARCH_RACES_EVIDENCE','search-races')]
 sources={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_root.rglob('*')) if p.is_file() and 'target' not in p.parts and (p.suffix=='.rs' or p.name in ('Cargo.toml','Cargo.lock'))}
 summary={}
 for kind,script,bin_var,out_var,name in suites:

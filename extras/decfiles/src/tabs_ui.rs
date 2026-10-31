@@ -22,6 +22,7 @@ fn label_for(path: Option<&Path>) -> String {
 impl Ui {
     /// Open the current folder in a new tab, like Ctrl+T in GNOME Files.
     pub fn new_tab(self: &Rc<Self>) {
+        self.leave_search();
         self.drop_quiet_refresh();
         let Some(path) = self.model.borrow().current().map(Path::to_path_buf) else {
             return;
@@ -43,6 +44,9 @@ impl Ui {
     }
 
     pub fn switch_tab(self: &Rc<Self>, index: usize) {
+        if index != self.active_tab.get() {
+            self.leave_search();
+        }
         self.drop_quiet_refresh();
         if index == self.active_tab.get() || index >= self.tabs.borrow().len() || !self.can_start_dialog() {
             return;
@@ -70,6 +74,7 @@ impl Ui {
 
     /// Close a tab; closing the last tab closes the window (and its usual confirmation).
     pub fn close_tab(self: &Rc<Self>, index: usize) {
+        self.leave_search();
         self.drop_quiet_refresh();
         let count = self.tabs.borrow().len();
         if count <= 1 {

@@ -1,4 +1,5 @@
 mod operation_ui;
+mod search_ui;
 mod tabs_ui;
 mod transfer_ui;
 use decfiles::{
@@ -50,6 +51,10 @@ struct Ui {
     tabs: RefCell<Vec<tabs_ui::Tab>>,
     active_tab: Cell<usize>,
     tab_bar: gtk::Box,
+    search_entry: gtk::SearchEntry,
+    search: RefCell<Option<search_ui::SearchRun>>,
+    search_seq: Cell<u64>,
+    search_clearing: Cell<bool>,
     ops: operation_ui::Controls,
 }
 
@@ -58,6 +63,7 @@ impl Ui {
         if !self.navigation_allowed() {
             return;
         }
+        self.leave_search();
         if let Some(old) = self.cancel.borrow_mut().take() {
             old.cancel();
         }
@@ -254,10 +260,20 @@ impl Ui {
         self.error.set_text(model.error.as_deref().unwrap_or(""));
         self.error.set_visible(model.error.is_some());
         self.status.set_text(&format!("{} items", model.columns.last().map_or(0, |column| column.entries.len())));
-        let shown: Vec<_> = if self.columns.get() { model.columns.iter().enumerate().collect() } else { model.columns.iter().enumerate().next_back().into_iter().collect() };
+        let searching = self.is_searching();
+        let shown: Vec<_> = if searching {
+            Vec::new()
+        } else if self.columns.get() {
+            model.columns.iter().enumerate().collect()
+        } else {
+            model.columns.iter().enumerate().next_back().into_iter().collect()
+        };
         self.view_model.replace(None);
         let generation = self.render_generation.get().wrapping_add(1);
         self.render_generation.set(generation);
+        if searching {
+            last_view = self.search_view(generation);
+        }
         for (index, column) in shown {
             let store = gio::ListStore::new::<glib::BoxedAnyObject>();
             for entry in &column.entries {
@@ -395,7 +411,7 @@ impl Ui {
                 .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
             let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
                 "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order,
-                "tabs":self.tabs_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
+                "tabs":self.tabs_evidence(), "search":self.search_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -487,6 +503,7 @@ fn factory(kind: u8) -> gtk::SignalListItemFactory {
         let entry = object.borrow::<Entry>();
         let cell = item.child().and_downcast::<gtk::Box>().unwrap();
         let value = match kind {
+            4 => entry.path.parent().map_or_else(String::new, |parent| parent.display().to_string()),
             1 => kind_text(&entry),
             2 if entry.directory => String::new(),
             2 => glib::format_size(entry.size).to_string(),
@@ -521,6 +538,10 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     toolbar.append(&address);
     let go = gtk::Button::with_label("Go");
     toolbar.append(&go);
+    // Between Go and the layout selector, so the selector keeps its position.
+    let search_entry = gtk::SearchEntry::builder().placeholder_text("Search in folder").width_request(220).build();
+    search_entry.update_property(&[gtk::accessible::Property::Label("Search in this folder")]);
+    toolbar.append(&search_entry);
     let layout = gtk::DropDown::from_strings(&["Windows details", "macOS columns"]);
     layout.set_selected(u32::from(columns));
     layout.update_property(&[gtk::accessible::Property::Label("Browser layout")]);
@@ -602,6 +623,10 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         tabs: RefCell::new(vec![tabs_ui::Tab::default()]),
         active_tab: Cell::new(0),
         tab_bar,
+        search_entry,
+        search: RefCell::new(None),
+        search_seq: Cell::new(0),
+        search_clearing: Cell::new(false),
         ops,
     });
     let weak = Rc::downgrade(&ui);
@@ -690,6 +715,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     });
     ui.connect_operations();
     ui.connect_transfers();
+    ui.connect_search();
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let weak = Rc::downgrade(&ui);
@@ -723,6 +749,8 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
             }
         } else if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
             ui.close_tab(ui.active_tab.get());
+        } else if ctrl && (key == gtk::gdk::Key::f || key == gtk::gdk::Key::F) {
+            ui.search_entry.grab_focus();
         } else if ctrl && (key == gtk::gdk::Key::t || key == gtk::gdk::Key::T) {
             ui.new_tab();
         } else if ctrl && (key == gtk::gdk::Key::Tab || key == gtk::gdk::Key::ISO_Left_Tab || key == gtk::gdk::Key::Page_Down || key == gtk::gdk::Key::Page_Up) {

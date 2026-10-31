@@ -42,6 +42,17 @@ does not save preferences or read/write Decebal configuration.
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
   column keeps that parent and replaces the columns to its right.
+- Search: the toolbar's native search entry (Ctrl+F) searches the current folder
+  recursively for names containing the text (case-insensitive; non-UTF8 bytes match
+  as U+FFFD while results keep the exact path). One `decfiles-search` worker per
+  query never enters symlinks and is bounded to 32 levels, 200,000 visited entries
+  and 2,000 results; at most four search threads may be alive, even if cancelled
+  ones are still leaving a blocked syscall. Results stream incrementally into a
+  Name/Folder/Type list in discovery order. A newer query, Escape, navigation or a
+  tab switch cancels it, and stale results are ignored by search id. Activating a
+  folder result opens it; a file result opens its folder with the file selected.
+  File operations are unavailable while results are shown. Results are a
+  snapshot and are not live-updated; there is no content search or index.
 - Tabs: Ctrl+T opens the current folder in a new tab (at most 16). Each tab keeps its
   own navigation model (history, columns, selection) and explicit layout; the
   sort choice is window-wide. Ctrl+Tab/Ctrl+Shift+Tab and Ctrl+Page Down/Up
@@ -279,6 +290,22 @@ Copy/move evidence (default binary
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
 
+Search checkpoint: 23 Rust tests (two new: nested/raw/link-free/bounded results,
+and cancellation plus the live-worker bound). Default
+`8b450524f150597dbc370b10d554d856014c495da0f7011936d27e93819abf3e` and fixture
+`7aff7cf4aa653f90c6b7b325dba22ffa795a1117e4e1be3138f7053951cee026`
+(`/var/tmp/decfiles-search-artifacts/`) pass every gate in `/var/tmp/decfiles-search-gate-*-evidence/`:
+navigation 8, operations 13, transfers 10, views 12, tabs 6, close 4,
+transfers-cancel 4 and paste-races 2+1, plus the new `search-native.py` 7 and,
+on the fixture binary, `search-races-native.py` 2.
+
+- **search-native.py:** results, revealing file and folder results, Escape,
+  a background refresh during search, navigation leaving search, and an empty
+  result.
+- **search-races-native.py:** a newer query replacing a slow search with no
+  stale results, and navigation cancelling mid-walk. It uses a capped
+  `DECFILES_FIXTURE_SEARCH_DELAY_MS` per folder.
+
 Tabs checkpoint: default `b5201c3b546410b1324774d6a14ec54a5496b665bd6720953a26fa86cdf100f2`
 and fixture `702b12f27e75f9507d19a97f7735a6c11d14850e7072e37a61b683723001940a`
 (`/var/tmp/decfiles-tabs-artifacts/`) pass every gate in `/var/tmp/decfiles-tabs-gate-*-evidence/`
@@ -421,7 +448,7 @@ exit status 0.
 Copy/move/paste work on one selected item at a time (pasted clipboards may hold
 many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move to
 picker, permanent delete, restore, undo, drag/drop, icon view, Finder gallery, Explorer
-command bar, bookmarks, mounts, remote backends, search, opening or
+command bar, bookmarks, mounts, remote backends, content search/indexing, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
 Profile styling, palette following,
 notifications, default-handler opt-in and shell launch/reveal integration are
