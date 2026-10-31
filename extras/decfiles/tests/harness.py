@@ -1,7 +1,9 @@
 """Shared private-session harness for decfiles native suites: owned Xvfb, private bus,
 HOME/XDG directories and fixture trees. Never touches the live display, bus or user files."""
 from pathlib import Path
-import hashlib,json,os,select,subprocess,tempfile,time
+import hashlib,json,os,subprocess,sys,tempfile,time
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+import xserver
 
 class Session:
     def __init__(self,binary,out,prefix,extra_env=None):
@@ -21,16 +23,8 @@ class Session:
         f=(self.out/(name+'.log')).open('w');self.logs.append(f);return f
 
     def start_x(self):
-        # Other sessions start Xvfb concurrently; -displayfd can lose that race.
-        for attempt in range(4):
-            r,w=os.pipe()
-            x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=self.env,pass_fds=(w,),stdout=self.log(f'xvfb-{attempt}'),stderr=subprocess.STDOUT);os.close(w)
-            number=os.read(r,32).decode().strip() if select.select([r],[],[],5)[0] else '';os.close(r)
-            if number and x.poll() is None and subprocess.run(['xdotool','getdisplaygeometry'],env=dict(self.env,DISPLAY=':'+number),capture_output=True,timeout=5).returncode==0:
-                self.owned.append(x);self.env['DISPLAY']=':'+number;break
-            x.terminate();x.wait()
-        else:
-            raise AssertionError('no private Xvfb display could be started')
+        # Reserved high display, both socket namespaces proven ours before any input.
+        self.display=xserver.start(self.env,self.log,self.owned)[0]
         bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=self.env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);self.owned.append(bus)
         self.env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert self.env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
 
@@ -98,7 +92,7 @@ class Session:
         self.focus(self.window);self.key('ctrl+w');self.app.wait(timeout=8);assert self.app.returncode==0
         source_root=Path(__file__).resolve().parents[1]
         sources={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_root.rglob('*')) if p.is_file() and 'target' not in p.parts and (p.suffix=='.rs' or p.name in ('Cargo.toml','Cargo.lock'))}
-        result={'passed':True,'cases':self.cases,'binary':str(self.binary),'sha256':hashlib.sha256(self.binary.read_bytes()).hexdigest(),'source_hashes':sources,'private_root':str(self.root),**extra}
+        result={'passed':True,'cases':self.cases,'display':self.env.get('DISPLAY'),'binary':str(self.binary),'sha256':hashlib.sha256(self.binary.read_bytes()).hexdigest(),'source_hashes':sources,'private_root':str(self.root),**extra}
         (self.out/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 
     def close(self):

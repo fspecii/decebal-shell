@@ -3,6 +3,9 @@
 Private Xvfb/bus/HOME/XDG fixtures only; xclip talks to the private X server.
 DECFILES_BIN and DECFILES_TRANSFERS_EVIDENCE choose binary and evidence folder."""
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0,str(Path(__file__).resolve().parent))
+import xserver
 import hashlib,json,os,select,subprocess,tempfile,time
 binary=Path(os.environ.get('DECFILES_BIN',str(Path.home()/'.cache/decebal-files-target/debug/decfiles'))).resolve()
 root=Path(tempfile.mkdtemp(prefix='decfiles-transfers-native-',dir='/var/tmp'));root.chmod(0o700)
@@ -76,16 +79,8 @@ def offer(target,text):
 def same_meta(a,b):
  sa,sb=os.lstat(a),os.lstat(b);return (sa.st_mode&0o7777,sa.st_mtime_ns)==(sb.st_mode&0o7777,sb.st_mtime_ns)
 def start_x():
- # Other sessions start Xvfb servers concurrently; -displayfd can lose that race.
- # Accept only a private display that actually answers, otherwise retry.
- for attempt in range(4):
-  r,w=os.pipe();xlog=(out/f'xvfb-{attempt}.log').open('w');logs.append(xlog)
-  x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=env,pass_fds=(w,),stdout=xlog,stderr=subprocess.STDOUT);os.close(w)
-  number=os.read(r,32).decode().strip() if select.select([r],[],[],5)[0] else '';os.close(r)
-  if number and x.poll() is None and subprocess.run(['xdotool','getdisplaygeometry'],env=dict(env,DISPLAY=':'+number),capture_output=True,timeout=5).returncode==0:
-   owned.append(x);env['DISPLAY']=':'+number;return
-  x.terminate();x.wait()
- raise AssertionError('no private Xvfb display could be started')
+ # Reserved high display, both socket namespaces proven ours before any input.
+ xserver.start(env,lambda name:(lambda f:(logs.append(f),f)[1])((out/(name+'.log')).open('w')),owned)
 try:
  start_x()
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')

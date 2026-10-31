@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run every private native suite against pinned binaries and cross-check hashes.
 gates.py ARTIFACTS EVIDENCE_PREFIX  (ARTIFACTS holds default/ and fixture-delay/ from pin.py).
-A suite is retried only when its private Xvfb could not start (other sessions race -displayfd)."""
+A suite is retried only when no reserved high private display could be proven ours (tests/xserver.py)."""
 from pathlib import Path
 import hashlib,json,os,subprocess,sys
 artifacts,prefix=Path(sys.argv[1]),sys.argv[2];here=Path(__file__).resolve().parent;source_root=here.parent
@@ -23,7 +23,7 @@ for kind,script,bin_var,out_var,name in suites:
         result=Path(evidence,'result.json')
         if result.exists():break
         logs=' '.join(p.read_text(errors='replace') for p in Path(evidence).glob('*.log'))
-        if 'Cannot write display number' not in logs and 'Failed to open display' not in logs and 'no private Xvfb' not in run.stderr:break
+        if 'no reserved high private display' not in run.stderr:break
     assert result.exists(),f'{name} failed:\n{run.stdout[-1500:]}\n{run.stderr[-3000:]}'
     data=json.loads(result.read_text());assert data['passed'] and data['sha256']==manifest['sha256'] and data['source_hashes']==sources,name
     summary[name]={'binary':kind,'cases':len(data['cases']),'result':str(result)}

@@ -3,6 +3,9 @@
 DECFILES_BIN and DECFILES_EVIDENCE choose binary and retained evidence folder.
 """
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0,str(Path(__file__).resolve().parent))
+import xserver
 import hashlib,json,os,select,signal,subprocess,tempfile,time
 binary=Path(os.environ.get('DECFILES_BIN',str(Path.home()/'.cache/decebal-files-target/debug/decfiles'))).resolve()
 root=Path(tempfile.mkdtemp(prefix='decfiles-native-',dir='/var/tmp'));root.chmod(0o700)
@@ -44,9 +47,7 @@ def click(x,y,count=1):
  run(['xdotool','mousemove','--window',window,str(x),str(y),'click','--repeat',str(count),'--delay','100','1'])
 app=None
 try:
- r,w=os.pipe();xlog=(out/'xvfb.log').open('w');logs.append(xlog)
- x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=env,pass_fds=(w,),stdout=xlog,stderr=subprocess.STDOUT);owned.append(x);os.close(w)
- assert select.select([r],[],[],5)[0];env['DISPLAY']=':'+os.read(r,32).decode().strip();os.close(r)
+ xserver.start(env,lambda name:(lambda f:(logs.append(f),f)[1])((out/(name+'.log')).open('w')),owned)  # reserved high display, owned in both socket namespaces
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
  app=start([str(binary),str(base)],'app')
  wait(lambda:at(base),'initial folder did not load')

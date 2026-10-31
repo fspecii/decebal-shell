@@ -3,6 +3,9 @@
 Cancel, Keep Open, cancel-and-close and an external source change observable through
 actual GTK controls. Private Xvfb/bus/HOME/XDG fixtures only."""
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0,str(Path(__file__).resolve().parent))
+import xserver
 import hashlib,json,os,select,subprocess,tempfile,time
 binary=Path(os.environ.get('DECFILES_FIXTURE_BIN','/var/tmp/decfiles-transfer-artifacts/fixture-delay/decfiles')).resolve()
 root=Path(tempfile.mkdtemp(prefix='decfiles-transfers-cancel-',dir='/var/tmp'));root.chmod(0o700)
@@ -57,16 +60,8 @@ def finished(previous,status):
 def close_prompt():
  focus(window);key('ctrl+w');dialog=wait(lambda:find('^Close Files during an operation[?]$'),'close confirmation absent')[0];focus(dialog);return dialog
 def start_x():
- # Other sessions start Xvfb servers concurrently; -displayfd can lose that race.
- # Accept only a private display that actually answers, otherwise retry.
- for attempt in range(4):
-  r,w=os.pipe();xlog=(out/f'xvfb-{attempt}.log').open('w');logs.append(xlog)
-  x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=env,pass_fds=(w,),stdout=xlog,stderr=subprocess.STDOUT);os.close(w)
-  number=os.read(r,32).decode().strip() if select.select([r],[],[],5)[0] else '';os.close(r)
-  if number and x.poll() is None and subprocess.run(['xdotool','getdisplaygeometry'],env=dict(env,DISPLAY=':'+number),capture_output=True,timeout=5).returncode==0:
-   owned.append(x);env['DISPLAY']=':'+number;return
-  x.terminate();x.wait()
- raise AssertionError('no private Xvfb display could be started')
+ # Reserved high display, both socket namespaces proven ours before any input.
+ xserver.start(env,lambda name:(lambda f:(logs.append(f),f)[1])((out/(name+'.log')).open('w')),owned)
 try:
  start_x()
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
