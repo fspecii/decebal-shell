@@ -3,6 +3,7 @@
 #[cfg(feature = "x11")]
 pub(crate) mod glass;
 pub mod scaled;
+pub mod session;
 #[cfg(feature = "wayland")]
 pub mod wayland;
 #[cfg(feature = "wayland")]
@@ -61,28 +62,27 @@ pub fn ui_scale() -> f32 {
     1.0
 }
 
-/// Picks Wayland when a compositor with layer-shell is reachable, otherwise X11.
-/// Set `DECEBAL_BACKEND=x11` or `wayland` to force one.
+/// Runs `app` on the server [`session::panel_mode`] picks: Wayland (wlr-layer-shell) in a Wayland session, X11 in an
+/// X11 or tty session with a `DISPLAY` even when a `WAYLAND_DISPLAY` leaked into it. `DECEBAL_BACKEND=x11` or `wayland`
+/// forces one (and is an error, not a switch, when that server is not there).
 pub fn run<A: App + 'static>(app: A, spec: SurfaceSpec) -> Result<(), String> {
-    let forced = std::env::var("DECEBAL_BACKEND").ok();
-    #[cfg(feature = "wayland")]
-    if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && wayland::supported() {
-        return wayland::run(app, spec).map_err(|e| e.to_string());
+    match session::panel_mode() {
+        #[cfg(feature = "wayland")]
+        Some(session::Mode::Wayland) => wayland::run(app, spec).map_err(|e| e.to_string()),
+        #[cfg(feature = "x11")]
+        Some(session::Mode::X11) => x11::run(app, spec).map_err(|e| e.to_string()),
+        _ => {
+            let _ = (app, spec);
+            Err("no usable display: need a Wayland compositor with wlr-layer-shell, or an X11 DISPLAY".into())
+        }
     }
-    #[cfg(feature = "x11")]
-    if forced.as_deref() != Some("wayland") && std::env::var_os("DISPLAY").is_some() {
-        return x11::run(app, spec).map_err(|e| e.to_string());
-    }
-    let _ = (app, spec, forced);
-    Err("no usable display: need a Wayland compositor with wlr-layer-shell, or an X11 DISPLAY".into())
 }
 
 /// Surface pixels per logical pixel of a panel [`run_scaled`] at `scale`: `scale` on X11, 1 under a Wayland compositor
 /// (which scales every surface alike). What an unscaled surface beside the panel, like the summoned Control Center,
 /// multiplies the panel's logical thickness by.
 pub fn surface_scale(scale: f32) -> f32 {
-    let wayland = cfg!(feature = "wayland") && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some();
-    if wayland {
+    if session::panel_mode() == Some(session::Mode::Wayland) {
         1.0
     } else {
         scale

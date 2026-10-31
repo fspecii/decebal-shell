@@ -1430,7 +1430,7 @@ pub(super) mod tests {
     fn every_style_shows_every_applet_alone_on_every_edge() {
         for style in STYLES {
             for edge in Edge::ALL {
-                for id in A::all().into_iter().filter(drawable) {
+                for id in A::all().filter(drawable) {
                     let bar = fixture(style, edge, AppletSet::of(&[id]), 1280);
                     let got = shown_applets(&bar);
                     assert_eq!(got, AppletSet::of(&[id]), "{} on {} with only {}", style.key(), edge.as_str(), id.key());

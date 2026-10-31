@@ -4,9 +4,9 @@
 //! they get a 32-bit visual and real alpha; without one the visible shape is cut out of the window with the SHAPE extension, so rounded
 //! cards look right either way. The loop sleeps in `poll(2)` until an X event, a data source or the refresh timer wakes it.
 
-use super::config::{self, Instance, Place, Resolved, WidgetsConfig};
+use super::config::{self, Instance, Resolved, WidgetsConfig};
 use super::data::{Data, Live};
-use super::host::{data_with_options, dots_under, lay, theme_stamp, Paths};
+use super::host::{config_stamp, data_with_options, dots_under, lay, theme_stamp, wanted, Announcer, Paths, Tally, MAX_CARDS};
 use super::layout::{self, Ctx, Item};
 use super::paint::{self, FontMetrics, ImageCache, Painter};
 use crate::backend::x11::{self as bx, Rect as MonRect};
@@ -48,15 +48,33 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-/// True only once the host on this X display has completed its first render.
-pub fn ready() -> bool {
-    let Ok((conn, screen)) = crate::x11_connection::connect(None) else { return false };
-    let name = format!("_DECEBAL_WIDGET_HOST_S{screen}");
-    let Some(atom) = conn.intern_atom(true, name.as_bytes()).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0) else { return false };
-    conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
+/// Whether the host on this X display has completed its first render (it then owns `_DECEBAL_WIDGET_HOST_S<screen>`).
+/// One connection serves every check of a wait.
+pub struct ReadyProbe {
+    conn: RustConnection,
+    name: String,
+    atom: Atom,
 }
 
-pub fn run(paths: Paths) -> Result<(), String> {
+impl ReadyProbe {
+    pub fn connect() -> Option<ReadyProbe> {
+        let (conn, screen) = crate::x11_connection::connect(None).ok()?;
+        Some(ReadyProbe { conn, name: format!("_DECEBAL_WIDGET_HOST_S{screen}"), atom: 0 })
+    }
+
+    pub fn owned(&mut self) -> bool {
+        if self.atom == 0 {
+            // only once the host has created it; asking must not create the atom
+            self.atom = self.conn.intern_atom(true, self.name.as_bytes()).ok().and_then(|c| c.reply().ok()).map_or(0, |r| r.atom);
+            if self.atom == 0 {
+                return false;
+            }
+        }
+        self.conn.get_selection_owner(self.atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
+    }
+}
+
+pub(super) fn run(paths: Paths, mut announcer: Announcer) -> Result<(), String> {
     let (conn, screen_num) = crate::x11_connection::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let root = screen.root;
@@ -82,6 +100,8 @@ pub fn run(paths: Paths) -> Result<(), String> {
     let mut stamp = (crate::config::Stamp::of(&paths.shell_json), 0u64);
     let mut next_refresh = Instant::now();
     let mut rebuild = true;
+    // what the last build was for and what it made of it, for the readiness record
+    let mut built = (0u64, Tally::default());
 
     loop {
         if rebuild {
@@ -93,20 +113,35 @@ pub fn run(paths: Paths) -> Result<(), String> {
                     let _ = conn.free_colormap(c);
                 }
             }
+            let config = config_stamp(&paths.shell_json);
             let cfg = WidgetsConfig::load(&paths.shell_json);
+            let mut tally = Tally::default();
             let mon = bx::panel_monitor(&conn, root, (i32::from(screen.width_in_pixels), i32::from(screen.height_in_pixels)));
             let mut used: BTreeSet<String> = BTreeSet::new();
             let mut commands = Vec::new();
-            for inst in cfg.items.iter().filter(|i| cfg.enabled && i.enabled && i.place == Place::Desktop) {
+            for inst in wanted(&cfg) {
+                tally.wanted += 1;
+                if wins.len() >= MAX_CARDS {
+                    tally.broken += 1;
+                    continue;
+                }
                 match config::resolve(inst, &paths.themes_dir, cfg.allow_exec) {
                     Ok(res) => {
                         used.extend(res.def.paths.iter().cloned());
                         commands.extend(res.def.commands.iter().cloned());
                         wins.push(new_window(&conn, &screen, argb_visual, inst, res, mon, &data, &fonts)?);
                     }
-                    Err(e) => eprintln!("decwidgets: {}: {e}", inst.use_),
+                    Err(e) => {
+                        eprintln!("decwidgets: {}: {e}", inst.use_);
+                        tally.broken += 1;
+                    }
                 }
             }
+            if tally.wanted as usize > MAX_CARDS {
+                eprintln!("decwidgets: {} desktop widgets are enabled; only the first {MAX_CARDS} are shown", tally.wanted);
+            }
+            tally.shown = wins.len() as u32;
+            built = (config, tally);
             // A rebuild (new theme, wallpaper or colours) usually leaves the data the cards need unchanged: keep the running
             // collectors and their history. Only a different set of data groups or commands replaces (and so stops) them.
             live = match live.take() {
@@ -137,6 +172,8 @@ pub fn run(paths: Paths) -> Result<(), String> {
                 conn.set_selection_owner(ready_window, ready_atom, x11rb::CURRENT_TIME).map_err(err)?;
                 announced = true;
             }
+            // every card of the last build has had a frame: say what it showed (a no-op while that is unchanged)
+            announcer.settle(built.0, built.1);
             let ms = wins.iter().map(|w| w.res.def.refresh_ms).min().unwrap_or(1000);
             let ms = if crate::glass::Material::from_theme(&th).enabled() { ms.min(250) } else { ms };
             next_refresh = Instant::now() + Duration::from_millis(u64::from(ms));

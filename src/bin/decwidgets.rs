@@ -42,12 +42,9 @@ fn main() {
     }
     let src = Source::discover();
     match args.first().map(String::as_str) {
-        None | Some("daemon") => daemon(&src),
-        Some("autostart") => {
-            if decebal::widgets::host::mode().is_some() {
-                daemon(&src);
-            }
-        }
+        None | Some("daemon") => daemon(&src, false),
+        // a headless session (no usable display) is quietly skipped
+        Some("autostart") => daemon(&src, true),
         Some("-h" | "--help" | "help") => println!("{HELP}"),
         Some("-V" | "--version") => println!("decwidgets {}", env!("CARGO_PKG_VERSION")),
         Some("data") if args.iter().any(|a| a == "--json") => {
@@ -96,10 +93,10 @@ fn main() {
     }
 }
 
-fn daemon(src: &Source) {
+fn daemon(src: &Source, autostart: bool) {
     decebal::mem::limit_arenas();
-    let Some(_guard) = decebal::single::hold("decwidgets") else { return };
-    if let Err(e) = decebal::widgets::host::run(decebal::widgets::host::Paths { shell_json: src.shell_json.clone(), themes_dir: src.themes_dir.clone() }) {
+    // The host takes the lock of its display server itself (and returns when another host already serves it).
+    if let Err(e) = decebal::widgets::host::run(decebal::widgets::host::Paths { shell_json: src.shell_json.clone(), themes_dir: src.themes_dir.clone() }, autostart) {
         die(&e);
     }
 }
@@ -115,11 +112,33 @@ fn status(src: &Source, json: bool) {
             serde_json::json!({"use":i.use_,"enabled":i.enabled,"source":i.source,"error":problem})
         })
         .collect();
-    let running = decebal::widgets::host::is_running();
+    use decebal::widgets::host::HostState;
+    let state = decebal::widgets::host::state(Some(src.shell_json.as_path()));
+    let running = state.running();
     if json {
-        println!("{}", serde_json::json!({"running":running,"enabled":cfg.enabled,"config":src.shell_json,"items":instances}));
+        let (name, tally) = match state {
+            HostState::Down => ("down", None),
+            HostState::Starting => ("starting", None),
+            HostState::Ready(t) => ("ready", Some(t)),
+            HostState::Degraded(t) => ("degraded", Some(t)),
+            HostState::Legacy(_) => ("legacy", None),
+        };
+        let shown = tally.map(|t| serde_json::json!({"wanted":t.wanted,"shown":t.shown,"broken":t.broken,"unplaced":t.unplaced}));
+        let legacy_pid = match state {
+            HostState::Legacy(pid) => Some(pid),
+            _ => None,
+        };
+        println!("{}", serde_json::json!({"running":running,"state":name,"cards":shown,"legacy_pid":legacy_pid,"enabled":cfg.enabled,"config":src.shell_json,"items":instances}));
     } else {
-        println!("Desktop host: {}", if running { "ready" } else { "not running in this session" });
+        let host = match state {
+            HostState::Down => "not running in this session".to_string(),
+            HostState::Starting => "starting (has not shown the current configuration yet)".to_string(),
+            HostState::Ready(t) if t.wanted == 0 => "ready (no desktop widget enabled)".to_string(),
+            HostState::Ready(t) => format!("ready ({} shown)", t.shown),
+            HostState::Degraded(t) => format!("running, but {}", t.problem()),
+            HostState::Legacy(pid) => format!("a host from before the update (process {pid}) shows widgets on this display; log out and back in, or end that process, to switch to the updated host"),
+        };
+        println!("Desktop host: {host}");
         println!("Visibility: {}", if cfg.enabled { "shown" } else { "hidden" });
         println!("Configuration: {}", src.shell_json.display());
         if instances.is_empty() {

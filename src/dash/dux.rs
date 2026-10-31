@@ -159,9 +159,12 @@ impl Dash {
         } else {
             tm.hour
         };
+        // the clock face is rasterised once and composited without the render transform, so it is prepared at the
+        // surface size (`surface_scale`, 1 except on a scaled Wayland card) and painted at device coordinates
+        let k = self.surface_scale;
         self.dux.clock.request(crate::clockface::Input {
-            width: (g.clock.w - 32.0 * g.scale).max(1.0),
-            height: (g.clock.h - 32.0 * g.scale).max(1.0),
+            width: ((g.clock.w - 32.0 * g.scale) * k).max(1.0),
+            height: ((g.clock.h - 32.0 * g.scale) * k).max(1.0),
             hours: format!("{hour:02}"),
             minutes: format!("{:02}", tm.min),
             date: info::long_date(tm.wday, tm.mday, tm.mon),
@@ -177,7 +180,7 @@ impl Dash {
     }
     fn dicon(&mut self, pm: &mut Pixmap, name: &str, r: Rect, accent: bool) {
         let th = crate::theme::th();
-        if let Some(icon) = self.symbols.get_material(name, if accent { th.accent.t() } else { th.text.t() }, r.w.ceil().max(1.0) as u32) {
+        if let Some(icon) = self.symbols.get_material(name, if accent { th.accent.t() } else { th.text.t() }, (r.w * crate::gfx::render_scale()).ceil().max(1.0) as u32) {
             crate::gfx::blit_scaled(pm, icon, r.x, r.y, r.w, r.h, 1.0);
         }
     }
@@ -188,15 +191,19 @@ impl Dash {
         let th = crate::theme::th();
         let g = self.dux_grid();
         let s = g.scale;
-        self.dux.scroll = self.dux.scroll.clamp(0.0, (self.dux_bottom(&g) - pm.height() as f32).max(0.0));
+        // logical size: the pixmap is device-sized inside a render scale (a Wayland card at 125 % or 200 %)
+        let (pw, ph) = crate::gfx::logical_size(pm);
+        let (pw, ph) = (pw as f32, ph as f32);
+        self.dux.scroll = self.dux.scroll.clamp(0.0, (self.dux_bottom(&g) - ph).max(0.0));
         pm.fill(Color::TRANSPARENT);
-        fill_rounded(pm, 0.0, 0.0, pm.width() as f32, pm.height() as f32, 28.0, th.overlay.color(1.0));
+        fill_rounded(pm, 0.0, 0.0, pw, ph, 28.0, th.overlay.color(1.0));
         if self.dux.page == 0 {
             let clock = g.shift(g.clock, self.dux.scroll);
             Self::dcard(pm, clock);
             if self.dux.clock.enabled() {
                 let inset = 16.0 * s;
-                if !self.dux.clock.paint(pm, (clock.x + inset, clock.y + inset), th.accent_c(), th.sub()) {
+                let k = crate::gfx::render_scale();
+                if !self.dux.clock.paint(pm, ((clock.x + inset) * k, (clock.y + inset) * k), th.accent_c(), th.sub()) {
                     // Pending preparation: native vector dots need no font lookup.
                     for i in 0..3 {
                         fill_circle(pm, clock.cx() + (i as f32 - 1.0) * 8.0, clock.cy(), 2.0, th.sub());
@@ -224,7 +231,7 @@ impl Dash {
             self.dux_resources(pm, g.shift(g.resources, self.dux.scroll), s);
             self.dux_media(pm, g.shift(g.media, self.dux.scroll), s, false);
         } else {
-            let r = Rect::new(12.0 * s, 92.0 * s - self.dux.scroll, pm.width() as f32 - 24.0 * s, 490.0 * s);
+            let r = Rect::new(12.0 * s, 92.0 * s - self.dux.scroll, pw - 24.0 * s, 490.0 * s);
             match self.dux.page {
                 1 => self.dux_media(pm, r, s, true),
                 2 => self.dux_weather(pm, r, s),
@@ -232,8 +239,8 @@ impl Dash {
             }
         }
         // Fixed opaque navigation chrome covers scrolled cards; no backing pixmap allocation.
-        fill_rounded(pm, 0.0, 0.0, pm.width() as f32, 84.0 * s, 28.0, th.overlay.color(1.0));
-        fill_rect(pm, 0.0, 40.0 * s, pm.width() as f32, 44.0 * s, th.overlay.color(1.0));
+        fill_rounded(pm, 0.0, 0.0, pw, 84.0 * s, 28.0, th.overlay.color(1.0));
+        fill_rect(pm, 0.0, 40.0 * s, pw, 44.0 * s, th.overlay.color(1.0));
         for (i, (label, icon)) in PAGES.iter().enumerate() {
             let r = g.tabs[i];
             let selected = self.dux.page == i;
@@ -257,7 +264,7 @@ impl Dash {
             }
         }
         if th.outline > 0.0 {
-            stroke_rounded(pm, 0.5, 0.5, pm.width() as f32 - 1.0, pm.height() as f32 - 1.0, 27.5, th.outline_c(), 1.0);
+            stroke_rounded(pm, 0.5, 0.5, pw - 1.0, ph - 1.0, 27.5, th.outline_c(), 1.0);
         }
     }
     /// Preserve the deployed four-font package until its separately authored
@@ -430,7 +437,7 @@ impl Dash {
                 fill_circle(pm, b.cx(), b.cy(), b.w / 2.0, th.accent_c());
             }
             if on {
-                if let Some(image) = self.symbols.get_material(icon, th.accent_text.t(), (16.0 * s).ceil() as u32) {
+                if let Some(image) = self.symbols.get_material(icon, th.accent_text.t(), (16.0 * s * crate::gfx::render_scale()).ceil() as u32) {
                     crate::gfx::blit_scaled(pm, image, b.cx() - 8.0 * s, b.cy() - 8.0 * s, 16.0 * s, 16.0 * s, 1.0);
                 }
             } else {

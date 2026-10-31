@@ -712,36 +712,81 @@ pub fn apply(m: &mut Model, action: &str, value: CtlVal) {
     }
 }
 
-/// Saves the widget file, then adds it as an enabled desktop card. On any failure nothing is left behind.
+/// The file and its desktop reference are owned by one ordered worker transaction.
+const CREATE_TASK: &str = "Create widget";
+
+pub(super) fn creating(m: &Model) -> bool {
+    m.pending.values().any(|p| matches!(p, super::model::Pending::Task { label: CREATE_TASK, .. }))
+}
+
 fn create(m: &mut Model) {
+    if creating(m) {
+        return;
+    }
     let Some(d) = m.widget_builder.clone() else { return };
     if let Some(p) = d.problems().into_iter().next() {
         return m.say(p, true);
     }
-    let mut widgets = match read_widgets(m) {
-        Ok(w) => w,
-        Err(e) => return m.say(e, true),
-    };
-    let items = widgets.as_object_mut().expect("checked object").entry("items").or_insert_with(|| json!([])).as_array_mut().expect("checked array");
-    if items.len() >= super::widgetspane::LIMIT {
-        return m.say(format!("You can add up to {} widgets. Remove one before adding another.", super::widgetspane::LIMIT), true);
+    let path = m.paths.shell_json();
+    let directory = config::user_dir();
+    let draft = d.clone();
+    let old_intent = m.widget_intent;
+    m.widget_intent = m.widget_intent.wrapping_add(1);
+    let intent = m.widget_intent;
+    let accepted = m.run_task(
+        CREATE_TASK,
+        vec![path.clone()],
+        move || create_transaction(&path, &directory, &draft),
+        move |m, result| match result {
+            Ok(value) => {
+                // The form is closed only after both writes committed; never from a notice or queue acceptance.
+                if m.widget_builder.as_ref() == Some(&d) {
+                    m.widget_builder = None;
+                }
+                let file = value["path"].as_str().unwrap_or("your widgets folder");
+                let said = format!("Created “{}” and added it to your desktop. Its file is {file}", d.name);
+                super::widgetspane::created(m, intent, said);
+            }
+            Err(error) => m.say(format!("Could not create widget: {error}"), true),
+        },
+    );
+    if !accepted {
+        m.widget_intent = old_intent;
     }
-    // a saved card that names a user widget which has no file yet must not silently pick up the new one
+}
+
+fn create_transaction(path: &Path, directory: &Path, d: &Draft) -> Result<Value, String> {
+    let widgets = super::widgetspane::read_widgets(path)?;
+    let items = widgets.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
+    if items.len() >= super::widgetspane::LIMIT {
+        return Err(format!("You can add up to {} widgets. Remove one before adding another.", super::widgetspane::LIMIT));
+    }
     let used: Vec<String> = items.iter().filter_map(Instance::from_json).filter(|i| i.source.is_none()).map(|i| i.use_).collect();
-    let (id, path) = match write_new(&config::user_dir(), &slug(&d.name, d.template.key()), &|id| used.iter().any(|u| u == id), &|id| d.source(id)) {
-        Ok(v) => v,
-        Err(e) => return m.say(e, true),
-    };
+    let (id, file) = write_new(directory, &slug(&d.name, d.template.key()), &|id| used.iter().any(|u| u == id), &|id| d.source(id))?;
     let mut inst = Instance::desktop(&id, &d.anchor, d.x, d.y);
     inst.enabled = true;
-    items.push(inst.to_json());
-    widgets["enabled"] = json!(true);
-    let done = format!("Created “{}” and added it to your desktop. Its file is {}", d.name, path.display());
-    if super::widgetspane::save(m, widgets, &done) {
-        m.widget_builder = None;
-    } else {
-        let _ = std::fs::remove_file(&path);
+    let result = super::io::json_update_doc(path, |doc| {
+        let widgets = doc.as_object_mut().ok_or("Desktop settings must be a JSON object")?.entry("widgets").or_insert_with(|| json!({}));
+        let widgets = widgets.as_object_mut().ok_or("The widgets setting must be a JSON object")?;
+        let items = widgets.entry("items").or_insert_with(|| json!([])).as_array_mut().ok_or("The widget list must be an array")?;
+        if items.len() >= super::widgetspane::LIMIT {
+            return Err(format!("You can add up to {} widgets. Remove one before adding another.", super::widgetspane::LIMIT));
+        }
+        if items.iter().filter_map(Instance::from_json).any(|i| i.source.is_none() && i.use_ == id) {
+            return Err("The widget layout changed while creating this widget; try again".into());
+        }
+        items.push(inst.to_json());
+        widgets.insert("enabled".into(), json!(true));
+        widgets.remove("theme_widgets_absent");
+        Ok(())
+    });
+    if let Err(error) = result {
+        return match std::fs::remove_file(&file) {
+            Ok(()) => Err(error),
+            Err(cleanup) => Err(format!("{error}; could not remove the unreferenced widget file {}: {cleanup}", file.display())),
+        };
     }
+    Ok(json!({"path": file}))
 }
 
 // ---------------------------------------------------------------- preview
@@ -1013,6 +1058,82 @@ mod tests {
         assert_eq!(doc["widgets"]["items"][0], kept);
         assert_eq!(doc["widgets"]["items"].as_array().unwrap().len(), 3);
         assert_eq!(doc["widgets"]["allow_exec"], false);
+    }
+
+    #[test]
+    fn asynchronous_creation_failure_rolls_back_the_file_and_keeps_the_draft() {
+        let (mut m, _) = model_with("[general]\n");
+        let sb = sandbox(&m.paths.shell_dir);
+        save(&m, json!({"items": [], "allow_exec": false}));
+        let before = std::fs::read(m.paths.shell_json()).unwrap();
+        m.apply("wg:new:open", CtlVal::Click);
+        let draft = m.widget_builder.clone();
+        let (release, wait) = std::sync::mpsc::channel();
+        let wait = std::sync::Mutex::new(wait);
+        let (entered, started) = std::sync::mpsc::channel();
+        m.use_worker_with_sync_hook(std::sync::Arc::new(move |_| {
+            entered.send(()).unwrap();
+            wait.lock().unwrap().recv_timeout(std::time::Duration::from_secs(20)).unwrap();
+            Err(std::io::Error::other("injected widget settings write failure"))
+        }));
+        m.apply("wg:new:create", CtlVal::Click);
+        assert_eq!(m.widget_builder, draft, "queue acceptance does not close the draft");
+        started.recv_timeout(std::time::Duration::from_secs(20)).unwrap();
+        assert!(creating(&m));
+        assert_eq!(std::fs::read_dir(&sb.dir).unwrap().count(), 1, "the transaction owns its new file until commit");
+        // Layout controls cannot race the incomplete file/reference transaction.
+        m.apply("wg:enabled", CtlVal::Bool(false));
+        assert_eq!(std::fs::read(m.paths.shell_json()).unwrap(), before);
+        release.send(()).unwrap();
+        m.settle();
+        assert!(!creating(&m));
+        assert_eq!(m.widget_builder, draft);
+        assert_eq!(std::fs::read(m.paths.shell_json()).unwrap(), before);
+        assert_eq!(std::fs::read_dir(&sb.dir).unwrap().count(), 0, "no orphan on failed async commit");
+        assert!(m.notice.as_ref().is_some_and(|n| n.error && n.text.contains("injected widget settings write failure")));
+    }
+
+    #[test]
+    fn a_retained_batch_error_does_not_delete_a_successfully_created_widget() {
+        let (mut m, _) = model_with("[general]\n");
+        let sb = sandbox(&m.paths.shell_dir);
+        save(&m, json!({"items": []}));
+        m.apply("wg:new:open", CtlVal::Click);
+        m.use_worker_with_sync_hook(std::sync::Arc::new(|_| Ok(())));
+        let (release, wait) = std::sync::mpsc::channel();
+        assert!(m.run_task("Earlier failed change", Vec::new(), || Err("earlier error".into()), |m, r| m.say(r.unwrap_err(), true)));
+        assert!(m.run_task(
+            "Keep batch open",
+            Vec::new(),
+            move || {
+                wait.recv_timeout(std::time::Duration::from_secs(20)).map_err(|e| e.to_string())?;
+                Ok(Value::Null)
+            },
+            |_, _| {}
+        ));
+        let t = std::time::Instant::now();
+        while !m.notice.as_ref().is_some_and(|n| n.error) {
+            assert!(t.elapsed() < std::time::Duration::from_secs(20));
+            let events: Vec<_> = m.queue.lock().unwrap().drain(..).collect();
+            for event in events {
+                m.on_event(event);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        m.apply("wg:new:create", CtlVal::Click);
+        assert!(creating(&m));
+        release.send(()).unwrap();
+        for _ in 0..8 {
+            m.settle();
+            if m.pending.is_empty() {
+                break;
+            }
+        }
+        assert!(m.pending.is_empty());
+        assert!(m.widget_builder.is_none());
+        let doc = load(&m);
+        let id = doc["widgets"]["items"][0]["use"].as_str().unwrap();
+        assert!(sb.dir.join(format!("{id}.toml")).is_file(), "committed reference has its file despite the earlier error");
     }
 
     #[test]

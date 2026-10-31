@@ -616,7 +616,7 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
     {
         let cfg = crate::widgets::config::WidgetsConfig::load(&paths.shell_json());
         if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == crate::widgets::config::Place::Desktop) {
-            if let Err(e) = crate::widgets::host::ensure_running() {
+            if let Err(e) = crate::widgets::host::start() {
                 crate::log_warn!("widgets: {e}");
             }
         }

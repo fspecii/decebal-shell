@@ -1788,7 +1788,7 @@ mod tests {
         use crate::panel::{AppletId as A, AppletSet, Edge};
         for edge in [Edge::Bottom, Edge::Left] {
             // Agents needs a Nerd Font and is not drawn where there is none.
-            for id in A::all().into_iter().filter(|id| *id != A::Agents || crate::menubar::symbols::agents_available()) {
+            for id in A::all().filter(|id| *id != A::Agents || crate::menubar::symbols::agents_available()) {
                 let r = edge_rig(&format!("alone-{}-{}", edge.as_str(), id.key()), edge, Some(AppletSet::of(&[id])));
                 let l = r.app.win_layout().unwrap();
                 let shown = match id {

@@ -109,6 +109,20 @@ pub struct MonitorHint {
     pub point: Option<(i32, i32)>,
 }
 
+/// How a compact Wayland card (see [`WindowApp::wants_compact_popup`]) follows its output's scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PopupScale {
+    /// The app lays out and draws in logical pixels and does not apply [`WindowApp::set_scale`] itself: the card is
+    /// drawn at 1x and the compositor stretches it (the right size, soft on a HiDPI output). No scale is passed in.
+    #[default]
+    Logical,
+    /// The app multiplies its own layout by the scale given to [`WindowApp::set_scale`]: `content_size`, `set_screen`,
+    /// `resize`, the drawn pixmap, pointer positions and the anchor are in device pixels, and the card is presented
+    /// at the output's real integer or fractional scale (sharp). On Wayland that scale comes from the compositor,
+    /// never from the X resource database (`Xft.dpi` belongs to XWayland clients).
+    Applied,
+}
+
 /// Things the app can ask the window system to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -165,7 +179,9 @@ pub trait WindowApp {
     fn popup_anchor(&self) -> Option<PopupAnchor> {
         None
     }
-    /// Popup mode (X11): the monitor to open on; the default is the panels' monitor.
+    /// Popup mode: the monitor to open on. X11 defaults to the panels' monitor; a compact Wayland card matches the
+    /// output name, else the output whose logical rectangle holds `point`, else lets the compositor place it (its
+    /// focused output) and follows the output it really landed on.
     fn popup_monitor(&self) -> MonitorHint {
         MonitorHint::default()
     }
@@ -196,10 +212,17 @@ pub trait WindowApp {
     fn popup_translucent(&self) -> bool {
         false
     }
+    /// Compact Wayland card: whether the app applies the output scale itself (see [`PopupScale`]).
+    fn popup_scale(&self) -> PopupScale {
+        PopupScale::Logical
+    }
     /// Popup mode: whether the window really has an alpha channel (see [`WindowApp::popup_translucent`]).
     fn set_popup_alpha(&mut self, _alpha: bool) {}
     /// Popup mode, once the keyboard grab was tried: the X modifier state at that moment (`None` = the grab
     /// failed, e.g. another client holds it). An app that cannot work without the keyboard closes here.
+    /// A compact Wayland card reports `Some` when the compositor really gave its surface the keyboard (with the
+    /// modifiers translated to the X mask) and `None` when it did not within a short wait; a click on any output
+    /// outside the card still closes it then.
     fn input_grabbed(&mut self, _mods: Option<u16>) -> Response {
         Response::NONE
     }
@@ -259,23 +282,35 @@ pub trait WindowApp {
     }
 }
 
-/// Runs `app` in a normal top-level window: Wayland (xdg-shell) when the compositor offers it,
-/// otherwise X11. Set `DECEBAL_BACKEND=x11` or `wayland` to force one.
+/// Runs `app` in a normal top-level window: Wayland (xdg-shell; layer-shell for overlays and cards) or X11, as
+/// [`crate::backend::session::decide`] decides from `DECEBAL_BACKEND` (`x11` / `wayland` force one),
+/// `XDG_SESSION_TYPE`, `DISPLAY` and `WAYLAND_DISPLAY`. The compositor is probed once, for the protocols this app
+/// needs, and only when the policy would pick Wayland at all (never under a forced X11 backend).
 pub fn run_window<A: WindowApp + 'static>(app: A) -> Result<(), String> {
+    use crate::backend::session::{self, Mode};
     let forced = std::env::var("DECEBAL_BACKEND").ok();
-    // A card or HUD needs layer-shell; as a plain xdg window it would be a stray, decorated window.
+    let session_type = std::env::var("XDG_SESSION_TYPE").ok();
+    // A server this build cannot talk to does not count as present.
+    let display = cfg!(feature = "x11") && std::env::var_os("DISPLAY").is_some();
+    let wayland = cfg!(feature = "wayland") && std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let (forced, session_type) = (forced.as_deref(), session_type.as_deref());
+    // A card or HUD needs layer-shell and subsurfaces; as a plain xdg window it would be a stray, decorated window.
+    // `decide` runs this probe at most once, and only when the policy reaches Wayland.
     #[cfg(feature = "wayland")]
-    let wayland_ok = crate::backend::wayland_window::supported() && (!app.wants_compact_popup() || crate::backend::wayland_window::overlay_supported());
-    #[cfg(feature = "wayland")]
-    if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && wayland_ok {
-        return crate::backend::wayland_window::run(app).map_err(|e| e.to_string());
+    let probe = || crate::backend::wayland_window::probe().is_some_and(|s| s.runs(&app));
+    #[cfg(not(feature = "wayland"))]
+    let probe = || false;
+    match session::decide(forced, session_type, display, wayland, probe) {
+        #[cfg(feature = "wayland")]
+        Some(Mode::Wayland) => crate::backend::wayland_window::run(app).map_err(|e| e.to_string()),
+        #[cfg(feature = "x11")]
+        Some(Mode::X11) => crate::backend::x11_window::run(app).map_err(|e| e.to_string()),
+        #[allow(unreachable_patterns)]
+        _ => {
+            drop(app);
+            Err("no usable display: need a Wayland compositor with xdg-shell (layer-shell and subsurfaces for popups), or an X11 DISPLAY".into())
+        }
     }
-    #[cfg(feature = "x11")]
-    if forced.as_deref() != Some("wayland") && std::env::var_os("DISPLAY").is_some() {
-        return crate::backend::x11_window::run(app).map_err(|e| e.to_string());
-    }
-    let _ = (app, forced);
-    Err("no usable display: need a Wayland compositor with xdg-shell, or an X11 DISPLAY".into())
 }
 
 #[cfg(test)]

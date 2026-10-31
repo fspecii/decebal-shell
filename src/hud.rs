@@ -10,7 +10,7 @@ use crate::controlcenter::sys;
 use crate::gfx::{blit_scaled, fill_rounded, stroke_rounded};
 use crate::menubar::symbols::SymbolCache;
 use crate::text::{Fonts, Role, Weight};
-use crate::window_app::{Action, KeyEvent, Response, Waker, WindowApp};
+use crate::window_app::{Action, KeyEvent, PopupScale, Response, Waker, WindowApp};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -432,6 +432,11 @@ impl WindowApp for Hud {
 
     fn popup_translucent(&self) -> bool {
         true
+    }
+
+    fn popup_scale(&self) -> PopupScale {
+        // `layout` multiplies by `scale`, so a Wayland card is drawn at the output's own (fractional) scale.
+        PopupScale::Applied
     }
 
     fn popup_closes_on_focus_loss(&self) -> bool {

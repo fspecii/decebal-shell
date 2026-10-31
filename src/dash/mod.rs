@@ -7,6 +7,12 @@
 //!
 //! Layout and key handling live in [`layout`], numbers in [`sysinfo`], the player in [`mpris`]; this file owns
 //! the state and the event glue, [`draw`] the painting.
+//!
+//! Scale: the dashboard lays out, hit-tests and paints in logical pixels. As a compact Wayland card it is
+//! [`PopupScale::Applied`]: the backend hands it device pixels (screen, size, pointer) and a device-sized pixmap, and
+//! this file converts at the edge and paints through [`crate::gfx::with_render_scale`], so the card is the same
+//! logical size and layout at 1x, 125 % and 200 %, drawn sharp. On X11 the window stays logical: the Xft scale the
+//! X11 backend passes to `set_scale` is not applied (the dashboard follows the font scale there, as before).
 
 pub mod art;
 pub mod charts;
@@ -21,7 +27,7 @@ use crate::app::Button;
 use crate::menubar::symbols::SymbolCache;
 use crate::menubar::weather::{self, Weather};
 use crate::text::Fonts;
-use crate::window_app::{Action, Edge, KeyEvent, PopupAnchor, Response, Waker, WindowApp};
+use crate::window_app::{Action, Edge, KeyEvent, MonitorHint, PopupAnchor, PopupScale, Response, Waker, WindowApp};
 use layout::{Hit, KeyAction, Tab};
 use mpris::{Cmd, Mpris, Player, Status};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -74,6 +80,14 @@ pub struct Dash {
     drag_value: Option<f32>,
     last_vol_sent: Option<Instant>,
     theme_seen: u64,
+    /// `--output`: the monitor (output name) to open on.
+    output: Option<String>,
+    /// Device pixels per logical pixel of the surface: the Wayland output's scale once the card is
+    /// [`PopupScale::Applied`], else 1.
+    surface_scale: f32,
+    /// Shown as a compact Wayland card (`set_overlay(true)`): only then does `set_scale` describe the surface. The X11
+    /// backend never calls `set_overlay` and passes its Xft scale to `set_scale`, which stays unapplied.
+    wayland_card: bool,
 }
 
 /// Where the card hangs by default: just under the classic menu bar; with the Caelestia pill bar just under it when it runs
@@ -129,13 +143,51 @@ impl Dash {
             drag_value: None,
             last_vol_sent: None,
             theme_seen: crate::theme::generation(),
+            output: None,
+            surface_scale: 1.0,
+            wayland_card: false,
         };
         dash.prepare_dux_clock();
         dash
     }
 
+    /// Opens on the monitor (RandR / Wayland output name) `output` instead of the default one.
+    pub fn with_output(mut self, output: Option<String>) -> Dash {
+        self.output = output.filter(|o| !o.is_empty());
+        self
+    }
+
     pub fn tab(&self) -> Tab {
         self.tab
+    }
+
+    /// The card's size in logical pixels.
+    fn logical_size(&self) -> (u32, u32) {
+        if self.dux_enabled() {
+            self.dux_size()
+        } else {
+            (layout::CARD_W as u32, layout::CARD_H as u32)
+        }
+    }
+
+    /// Logical to device pixels, as the backend scales a logical card (`round(v x scale)`).
+    fn to_device(&self, v: u32) -> u32 {
+        if self.surface_scale == 1.0 {
+            return v;
+        }
+        (f64::from(v) * f64::from(self.surface_scale)).round() as u32
+    }
+
+    fn to_device_i(&self, v: i32) -> i32 {
+        (f64::from(v) * f64::from(self.surface_scale)).round() as i32
+    }
+
+    /// Device to logical pixels (0, an unknown size, stays 0).
+    fn to_logical(&self, v: u32) -> u32 {
+        if self.surface_scale == 1.0 || v == 0 {
+            return v;
+        }
+        ((f64::from(v) / f64::from(self.surface_scale)).round() as u32).max(1)
     }
 
     /// The player on show.
@@ -339,7 +391,34 @@ impl WindowApp for Dash {
     }
 
     fn popup_anchor(&self) -> Option<PopupAnchor> {
-        Some(self.anchor)
+        // the anchor (from the bar) is logical; an Applied card gives device pixels
+        let a = self.anchor;
+        Some(PopupAnchor { top: self.to_device_i(a.top), center_x: a.center_x.map(|x| self.to_device_i(x)), edge: a.edge })
+    }
+
+    fn set_overlay(&mut self, overlay: bool) {
+        self.wayland_card = overlay;
+        if !overlay {
+            self.surface_scale = 1.0;
+        }
+    }
+
+    fn popup_scale(&self) -> PopupScale {
+        // sizes, pointer and anchor are converted here and painting goes through the render scale (see the module docs)
+        PopupScale::Applied
+    }
+
+    fn set_scale(&mut self, scale: f32) {
+        if !self.wayland_card || !scale.is_finite() || scale <= 0.0 || scale == self.surface_scale {
+            return;
+        }
+        // the stored screen and size are logical and stay; the backend sends their device sizes for this scale next
+        self.surface_scale = scale.clamp(0.25, 8.0);
+        self.prepare_dux_clock();
+    }
+
+    fn popup_monitor(&self) -> MonitorHint {
+        MonitorHint { output: self.output.clone(), point: None }
     }
 
     fn popup_translucent(&self) -> bool {
@@ -359,11 +438,8 @@ impl WindowApp for Dash {
     }
 
     fn initial_size(&self) -> (u32, u32) {
-        if self.dux_enabled() {
-            self.dux_size()
-        } else {
-            (layout::CARD_W as u32, layout::CARD_H as u32)
-        }
+        let (w, h) = self.logical_size();
+        (self.to_device(w), self.to_device(h))
     }
 
     fn content_size(&self) -> Option<(u32, u32)> {
@@ -381,12 +457,12 @@ impl WindowApp for Dash {
     }
 
     fn set_screen(&mut self, width: u32, height: u32) {
-        self.dux.screen = (width, height);
+        self.dux.screen = (self.to_logical(width), self.to_logical(height));
         self.prepare_dux_clock();
     }
 
     fn resize(&mut self, width: u32, height: u32) {
-        self.dux.size = (width, height);
+        self.dux.size = (self.to_logical(width), self.to_logical(height));
         self.prepare_dux_clock();
     }
 
@@ -397,14 +473,18 @@ impl WindowApp for Dash {
     }
 
     fn draw(&mut self, pm: &mut Pixmap) {
-        if self.dux_enabled() {
-            self.dux_paint(pm);
-        } else {
-            self.paint(pm);
-        }
+        // `pm` is device-sized; the painters take logical coordinates and read the logical size through the render scale
+        crate::gfx::with_render_scale(self.surface_scale, || {
+            if self.dux_enabled() {
+                self.dux_paint(pm);
+            } else {
+                self.paint(pm);
+            }
+        });
     }
 
     fn pointer_motion(&mut self, x: f32, y: f32) -> Response {
+        let (x, y) = (x / self.surface_scale, y / self.surface_scale);
         if self.dux_enabled() {
             return self.dux_motion(x, y);
         }
@@ -446,6 +526,7 @@ impl WindowApp for Dash {
     }
 
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
+        let (x, y) = (x / self.surface_scale, y / self.surface_scale);
         if self.dux_enabled() {
             return self.dux_button(x, y, button, pressed);
         }
@@ -734,5 +815,99 @@ mod tests {
             let mut pm = Pixmap::new(layout::CARD_W as u32, layout::CARD_H as u32).unwrap();
             d.draw(&mut pm);
         }
+    }
+
+    /// A Dash set up as the Wayland backend sets up an Applied compact card at output scale `k`.
+    fn card_at(k: f32) -> Dash {
+        let mut d = dash();
+        d.set_overlay(true);
+        d.set_popup(true);
+        d.set_scale(k);
+        d.set_screen((1920.0 * k).round() as u32, (1080.0 * k).round() as u32);
+        let (w, h) = d.content_size().unwrap();
+        d.resize(w, h);
+        d
+    }
+
+    fn performance_frame(d: &mut Dash) -> Pixmap {
+        let (w, h) = d.content_size().unwrap();
+        d.set_tab(Tab::Performance);
+        d.pointer_leave();
+        d.cur.cpu = 1.0;
+        let mut pm = Pixmap::new(w, h).unwrap();
+        d.draw(&mut pm);
+        pm
+    }
+
+    #[test]
+    fn x11_keeps_the_logical_card_whatever_the_xft_scale() {
+        let mut d = dash();
+        d.set_popup(true);
+        // the X11 backend passes Xft.dpi / 96 here and never calls set_overlay
+        d.set_scale(2.0);
+        assert_eq!(d.surface_scale, 1.0);
+        assert_eq!(d.content_size(), Some((layout::CARD_W as u32, layout::CARD_H as u32)));
+        assert_eq!(d.popup_anchor(), dash().popup_anchor());
+        d.set_screen(3840, 2160);
+        assert_eq!(d.dux.screen, (3840, 2160));
+        let r = layout::tab_rect(1);
+        assert!(d.pointer_button(r.cx(), r.cy(), Button::Left, true).redraw);
+        assert_eq!(d.tab(), Tab::Media);
+        let (a, b) = (performance_frame(&mut d), performance_frame(&mut dash()));
+        assert!(a.data() == b.data(), "the X11 frame is the unscaled painter's");
+    }
+
+    #[test]
+    fn a_wayland_card_is_the_same_logical_card_at_every_output_scale() {
+        let th = crate::theme::th();
+        let near = |p: tiny_skia::PremultipliedColorU8, c: crate::theme::model::Rgb| p.alpha() == 255 && p.red().abs_diff(c.0) <= 3 && p.green().abs_diff(c.1) <= 3 && p.blue().abs_diff(c.2) <= 3;
+        let (_, cpu) = layout::perf_layout(false).into_iter().find(|(c, _)| *c == layout::PerfCard::Cpu).unwrap();
+        let (cx, cy) = (cpu.x + 52.0, cpu.y + 66.0);
+        let one_x = performance_frame(&mut dash());
+        for k in [1.0f32, 1.25, 2.0] {
+            let mut d = card_at(k);
+            let dev = |v: f32| (v * k).round();
+            let (w, h) = d.content_size().unwrap();
+            assert_eq!((w, h), (dev(layout::CARD_W) as u32, dev(layout::CARD_H) as u32), "device size at {k}");
+            assert_eq!(((w as f32 / k).round(), (h as f32 / k).round()), (layout::CARD_W, layout::CARD_H), "the backend's logical card at {k}");
+            assert_eq!(d.dux.screen, (1920, 1080), "screen kept logical at {k}");
+            let (logical, device) = (dash().popup_anchor().unwrap(), d.popup_anchor().unwrap());
+            assert_eq!((device.top, device.center_x), (dev(logical.top as f32) as i32, Some(dev(900.0) as i32)), "anchor at {k}");
+            // device pointer positions reach the logical targets
+            let r = layout::tab_rect(1);
+            assert!(d.pointer_button(r.cx() * k, r.cy() * k, Button::Left, true).redraw);
+            assert_eq!(d.tab(), Tab::Media, "tab click at {k}");
+            let r = layout::tab_rect(0);
+            assert!(d.pointer_motion(r.cx() * k, r.cy() * k).redraw, "hover at {k}");
+            assert_eq!(d.hover, Some(Hit::Tab(Tab::Overview)));
+            assert!(d.pointer_motion(r.right() * k + 2.0 * k, r.cy() * k).redraw, "leaving the tab at {k}");
+            // pixels: the card fills the device buffer and the CPU gauge sits where the logical layout puts it
+            let pm = performance_frame(&mut d);
+            assert_eq!(crate::gfx::render_scale(), 1.0, "the render scale ends with the frame");
+            for (x, y) in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
+                assert_eq!(pm.pixel(x, y).unwrap().alpha(), 0, "rounded corner {x},{y} at {k}");
+            }
+            for (x, y) in [(w / 2, 2), (w / 2, h - 3), (2, h / 2), (w - 3, h / 2)] {
+                assert!(pm.pixel(x, y).unwrap().alpha() > 200, "card edge {x},{y} at {k}");
+            }
+            let at = |x: f32, y: f32| pm.pixel((x * k) as u32, (y * k) as u32).unwrap();
+            for (dx, dy) in [(0.0, -31.0), (31.0, 0.0), (0.0, 31.0), (-31.0, 0.0)] {
+                assert!(near(at(cx + dx, cy + dy), th.danger), "full CPU ring at {dx},{dy} at {k}: {:?}", at(cx + dx, cy + dy));
+            }
+            for (dx, dy) in [(40.0, 0.0), (0.0, 22.0), (-22.0, 0.0)] {
+                assert!(!near(at(cx + dx, cy + dy), th.danger), "outside the 7.4 px ring at {dx},{dy} at {k}");
+            }
+            if k == 1.0 {
+                assert!(pm.data() == one_x.data(), "an Applied card at 1x is the X11 / unscaled frame");
+            }
+        }
+        // a new output scale keeps the logical card and screen
+        let mut d = card_at(1.25);
+        d.set_scale(2.0);
+        d.set_screen(3840, 2160);
+        assert_eq!(d.content_size(), Some(((layout::CARD_W * 2.0) as u32, (layout::CARD_H * 2.0) as u32)));
+        assert_eq!(d.dux.screen, (1920, 1080));
+        d.set_overlay(false);
+        assert_eq!(d.surface_scale, 1.0, "no longer a card: logical again");
     }
 }

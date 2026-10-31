@@ -1,7 +1,7 @@
 //! Widgets are a desktop preference shared by every theme. Edit the raw JSON so unknown
 //! instance options and theme/user metadata survive enable, placement and visibility changes.
 
-use super::model::{CtlVal, Model};
+use super::model::{CtlVal, Model, Notice, Pending};
 use super::ui::{Ctl, Item, Kind, Row};
 use crate::widgets::catalog::{self, Entry};
 use crate::widgets::config::{self, Instance, Place, WidgetsConfig};
@@ -209,6 +209,10 @@ fn change(widgets: &mut Value, parts: &[&str], value: CtlVal) -> Result<(), Stri
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
+    if super::widgetbuilder::creating(m) {
+        m.say("Creating your widget; please wait before changing the layout", false);
+        return;
+    }
     if let ["wg", "new", action] = parts {
         return super::widgetbuilder::apply(m, action, value);
     }
@@ -226,28 +230,79 @@ pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
     save(m, widgets, "Widget choices saved and applied");
 }
 
+/// Label of the readiness task on the settings worker.
+const HOST_TASK: &str = "Desktop widgets";
+
 /// Writes the `widgets` object, starts the desktop host when something should show, and reports with `saved`. Returns whether the
-/// settings file now holds `widgets`.
-pub(super) fn save(m: &mut Model, mut widgets: Value, saved: &str) -> bool {
+/// worker accepted the change (not whether it has committed).
+pub(super) fn save(m: &mut Model, widgets: Value, saved: &str) -> bool {
+    save_with(m, widgets, saved, crate::widgets::host::ensure_running)
+}
+
+/// [`save`] with the host readiness wait given: `readiness` starts the host if needed and waits (bounded) until it has shown the
+/// saved configuration. It runs on the ordered settings worker once the file is written, never on the UI thread: until it
+/// answers the notice says the desktop is starting; then the saved message (Ready) or the host's problem (Degraded, or it did
+/// not start) replaces it.
+fn save_with(m: &mut Model, mut widgets: Value, saved: &str, readiness: impl FnOnce() -> Result<(), String> + Send + 'static) -> bool {
     widgets.as_object_mut().unwrap().entry("enabled").or_insert(json!(true));
     if widgets["enabled"] == json!(true) {
         widgets.as_object_mut().unwrap().remove("theme_widgets_absent");
     }
+    let cfg = WidgetsConfig::from_json(&json!({"widgets": widgets}));
+    let shows = cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == Place::Desktop);
+    let said = if cfg.enabled { saved.to_string() } else { "Widgets hidden; your choices and positions are saved".to_string() };
+    let old_intent = m.widget_intent;
+    m.widget_intent = m.widget_intent.wrapping_add(1);
+    let intent = m.widget_intent;
+    // the host is asked only once the file holds these widgets (a failed write never reaches it), behind every earlier change
+    let then: super::model::AfterSave = Box::new(move |m: &mut Model| {
+        if m.widget_intent != intent {
+            return;
+        }
+        if shows {
+            start_host(m, intent, said, readiness);
+        } else {
+            m.say(said, false);
+        }
+    });
     // derived from the widgets as they are now (the file, or the pending change it builds on)
     let base = m.json_value_now("shell", "widgets");
-    m.edit_json_from("shell", "widgets", Some(widgets.clone()), base, None);
-    if m.notice.as_ref().is_some_and(|n| n.error) || m.shell.get("widgets") != Some(&widgets) {
-        return false;
+    let accepted = m.try_edit_json_then("shell", "widgets", Some(widgets), base, None, Some(then));
+    if !accepted {
+        m.widget_intent = old_intent;
     }
-    let cfg = WidgetsConfig::from_json(&json!({"widgets": widgets}));
-    if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == Place::Desktop) {
-        if let Err(e) = crate::widgets::host::ensure_running() {
-            m.say(format!("Widget choices saved, but the desktop could not display them: {e}"), true);
-            return true;
+    accepted
+}
+
+/// After the save: queues the host readiness wait on the settings worker and reports its outcome.
+fn start_host(m: &mut Model, intent: u64, said: String, readiness: impl FnOnce() -> Result<(), String> + Send + 'static) {
+    if m.widget_intent != intent {
+        return;
+    }
+    let done = move |m: &mut Model, r: Result<serde_json::Value, String>| {
+        if m.widget_intent != intent {
+            return;
         }
+        match r {
+            Ok(_) => m.say(said, false),
+            Err(e) => m.say(format!("Widget choices saved, but the desktop could not display them: {e}"), true),
+        }
+    };
+    if !m.run_task_quiet_done(HOST_TASK, move || readiness().map(|()| Value::Null), done) {
+        // the queue refused the wait (it said why); the choices themselves are on disk
+        m.say("Widget choices saved, but Settings could not start the desktop widgets; try again in a moment", true);
+        return;
     }
-    m.say(if cfg.enabled { saved } else { "Widgets hidden; your choices and positions are saved" }, false);
-    true
+    // still waiting (a worker thread; inline runs have answered already): say what is true right now
+    if m.widget_intent == intent && m.pending.values().any(|p| matches!(p, Pending::Task { label: HOST_TASK, .. })) && !m.notice.as_ref().is_some_and(|n| n.error) {
+        m.notice = Some(Notice { text: "Widget choices saved; starting the desktop widgets…".into(), error: false, at: std::time::Instant::now() });
+        m.dirty = true;
+    }
+}
+
+/// A newly created widget is already durable before this queues its optional readiness wait.
+pub(super) fn created(m: &mut Model, intent: u64, said: String) {
+    start_host(m, intent, said, crate::widgets::host::ensure_running);
 }
 
 #[cfg(test)]
@@ -339,6 +394,131 @@ mod tests {
         assert_eq!(doc["widgets"]["items"], json!([other]));
         assert_eq!(doc["widgets"]["enabled"], false);
         assert_eq!(doc["theme"]["name"], "windows11");
+    }
+
+    fn shown(m: &Model) -> (String, bool) {
+        m.notice.as_ref().map(|n| (n.text.clone(), n.error)).unwrap_or_default()
+    }
+
+    /// A real settings worker thread, as in the app (tests otherwise write inline).
+    fn threaded(m: &mut Model) {
+        m.use_worker_with_sync_hook(std::sync::Arc::new(|_| Ok(())));
+    }
+
+    /// Handles results until nothing is pending (a finished save may queue the host wait behind it).
+    fn settle_all(m: &mut Model) {
+        for _ in 0..8 {
+            m.settle();
+            if m.pending.is_empty() {
+                return;
+            }
+        }
+        panic!("work still pending");
+    }
+
+    #[test]
+    fn host_readiness_waits_on_the_settings_worker_after_the_file_is_written() {
+        let (mut m, _) = model_with("[general]\n");
+        save(&m, json!({"enabled":false,"items":[{"use":"builtin:clock-card","enabled":true,"future":1}],"kept":"yes"}));
+        threaded(&mut m);
+        let (release, gate) = std::sync::mpsc::channel::<()>();
+        let (seen_tx, seen) = std::sync::mpsc::channel::<Value>();
+        let path = m.paths.shell_json();
+        let started = std::time::Instant::now();
+        let mut widgets = read_widgets(&path).unwrap();
+        widgets["enabled"] = json!(true);
+        let ok = save_with(&mut m, widgets, "Widget choices saved and applied", move || {
+            // what the host will read: the saved file, at the time the wait begins
+            seen_tx.send(serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()).unwrap();
+            gate.recv_timeout(std::time::Duration::from_secs(20)).map_err(|_| "test gate".to_string())
+        });
+        assert!(ok, "the choices are accepted at once");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "the UI thread does not wait for the host");
+        assert_eq!(m.shell["widgets"]["enabled"], true, "shown while the worker writes it");
+        // the UI thread handles the finished write (as its event loop would); only then is the wait queued
+        let t0 = std::time::Instant::now();
+        while m.pending.values().any(|p| matches!(p, Pending::Json { .. })) {
+            assert!(t0.elapsed() < std::time::Duration::from_secs(20), "the write did not finish");
+            let evs: Vec<_> = m.queue.lock().unwrap().drain(..).collect();
+            evs.into_iter().for_each(|e| m.on_event(e));
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let doc = seen.recv_timeout(std::time::Duration::from_secs(20)).expect("the wait runs on the worker");
+        assert_eq!(doc["widgets"]["enabled"], true, "the host is asked only after the file holds the new choices");
+        assert_eq!(doc["widgets"]["items"][0]["future"], 1);
+        assert_eq!(doc["widgets"]["kept"], "yes", "unknown keys survive");
+        // saved, the wait has not answered: the notice says the desktop is starting, not that it shows the widgets
+        assert_eq!(shown(&m), ("Widget choices saved; starting the desktop widgets…".to_string(), false));
+        release.send(()).unwrap();
+        settle_all(&mut m);
+        assert_eq!(shown(&m), ("Widget choices saved and applied".to_string(), false), "ready: the saved message");
+    }
+
+    #[test]
+    fn a_degraded_or_absent_host_is_reported_after_the_save_and_hidden_widgets_never_start_one() {
+        let (mut m, _) = model_with("[general]\n");
+        save(&m, json!({"items":[{"use":"builtin:clock-card","enabled":true}]}));
+        threaded(&mut m);
+        let widgets = read_widgets(&m.paths.shell_json()).unwrap();
+        assert!(save_with(&mut m, widgets, "Widget choices saved and applied", || Err("1 of 1 widget has no display to go on".into())));
+        settle_all(&mut m);
+        let (text, error) = shown(&m);
+        assert!(error && text.starts_with("Widget choices saved, but the desktop could not display them: 1 of 1"), "{text}");
+        assert_eq!(load(&m)["widgets"]["items"][0]["use"], "builtin:clock-card", "the choices stay saved");
+        // hidden, or nothing on the desktop: no host is asked for
+        let mut widgets = read_widgets(&m.paths.shell_json()).unwrap();
+        widgets["enabled"] = json!(false);
+        assert!(save_with(&mut m, widgets, "unused", || panic!("no host for hidden widgets")));
+        settle_all(&mut m);
+        assert_eq!(shown(&m), ("Widgets hidden; your choices and positions are saved".to_string(), false));
+        let mut widgets = read_widgets(&m.paths.shell_json()).unwrap();
+        widgets["enabled"] = json!(true);
+        widgets["items"][0]["enabled"] = json!(false);
+        assert!(save_with(&mut m, widgets, "Saved without cards", || panic!("no host without enabled cards")));
+        settle_all(&mut m);
+        assert_eq!(shown(&m), ("Saved without cards".to_string(), false));
+    }
+
+    #[test]
+    fn an_older_readiness_result_cannot_replace_a_newer_hidden_notice() {
+        for failed in [false, true] {
+            let (mut m, _) = model_with("[general]\n");
+            save(&m, json!({"enabled":false,"items":[{"use":"builtin:clock-card","enabled":true}]}));
+            threaded(&mut m);
+            let (release, wait) = std::sync::mpsc::channel();
+            let (entered, started) = std::sync::mpsc::channel();
+            let mut enabled = read_widgets(&m.paths.shell_json()).unwrap();
+            enabled["enabled"] = json!(true);
+            assert!(save_with(&mut m, enabled, "Old enabled notice", move || {
+                entered.send(()).unwrap();
+                wait.recv_timeout(std::time::Duration::from_secs(20)).map_err(|e| e.to_string())?;
+                if failed {
+                    Err("obsolete failure".into())
+                } else {
+                    Ok(())
+                }
+            }));
+            // Dispatch only the save completion; the readiness task then blocks in the worker.
+            m.settle();
+            started.recv_timeout(std::time::Duration::from_secs(20)).unwrap();
+            let mut hidden = read_widgets(&m.paths.shell_json()).unwrap();
+            hidden["enabled"] = json!(false);
+            assert!(save_with(&mut m, hidden, "unused", || panic!("hidden layout has no host wait")));
+            release.send(()).unwrap();
+            settle_all(&mut m);
+            assert_eq!(load(&m)["widgets"]["enabled"], false);
+            assert_eq!(shown(&m), ("Widgets hidden; your choices and positions are saved".into(), false));
+        }
+    }
+
+    #[test]
+    fn a_failed_write_never_asks_the_host() {
+        let (mut m, _) = model_with("[general]\n");
+        std::fs::write(m.paths.shell_json(), "{not json").unwrap();
+        let widgets = json!({"enabled":true,"items":[{"use":"builtin:clock-card","enabled":true}]});
+        assert!(save_with(&mut m, widgets, "unused", || panic!("the host must not be asked for an unsaved change")), "accepted and failed are distinct outcomes");
+        assert!(m.notice.as_ref().unwrap().error);
+        assert_eq!(std::fs::read_to_string(m.paths.shell_json()).unwrap(), "{not json");
     }
 
     #[test]

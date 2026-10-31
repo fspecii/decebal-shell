@@ -79,7 +79,8 @@ impl Dash {
     }
 
     fn symbol(&mut self, pm: &mut Pixmap, name: &str, r: Rect, rgb: (u8, u8, u8), alpha: f32) {
-        let px = (r.w * 2.0).ceil() as u32;
+        // oversampled 2x (unchanged at 1x), and never coarser than the surface
+        let px = (r.w * crate::gfx::render_scale().max(2.0)).ceil() as u32;
         if let Some(sym) = self.symbols.get(name, rgb, px) {
             crate::gfx::blit_scaled(pm, sym, r.x, r.y, r.w, r.h, alpha);
         }
@@ -93,7 +94,9 @@ impl Dash {
 
     pub(super) fn paint(&mut self, pm: &mut Pixmap) {
         let th = crate::theme::th();
-        let (w, h) = (pm.width() as f32, pm.height() as f32);
+        // logical size: the pixmap is device-sized inside a render scale (a Wayland card at 125 % or 200 %)
+        let (w, h) = crate::gfx::logical_size(pm);
+        let (w, h) = (w as f32, h as f32);
         pm.fill(Color::TRANSPARENT);
         let radius = th.r(1.8);
         let base = if self.alpha { th.overlay_c() } else { th.overlay.color(1.0) };

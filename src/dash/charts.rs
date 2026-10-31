@@ -1,7 +1,11 @@
 //! Rings, sparklines and bars for the dashboard, drawn with tiny-skia paths.
+//!
+//! Coordinates are logical pixels: every path, stroke, gradient and image pattern goes through [`crate::gfx::transform`], so
+//! inside [`crate::gfx::with_render_scale`] (a widget card at 125 % or 200 %) they land where the gfx helpers and text do. At
+//! the default scale of 1 that transform is the identity and the pixels are what they always were.
 
 use super::layout::Rect;
-use crate::gfx::fill_rounded;
+use crate::gfx::{fill_rounded, transform};
 use tiny_skia::{Color, FillRule, FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Paint, Path, PathBuilder, Pattern, Pixmap, Point, SpreadMode, Stroke, Transform};
 
 fn paint(c: Color) -> Paint<'static> {
@@ -37,8 +41,9 @@ fn polyline(points: &[(f32, f32)]) -> Option<Path> {
 #[allow(clippy::too_many_arguments)] // a drawing helper: target, centre, radius, thickness, value, two colours
 pub fn ring(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, thick: f32, frac: f32, track: Color, fill: Color) {
     let stroke = Stroke { width: thick, line_cap: LineCap::Round, ..Stroke::default() };
+    let ts = transform();
     if let Some(circle) = PathBuilder::from_circle(cx, cy, r) {
-        pm.stroke_path(&circle, &paint(track), &Stroke { width: thick, ..Stroke::default() }, Transform::identity(), None);
+        pm.stroke_path(&circle, &paint(track), &Stroke { width: thick, ..Stroke::default() }, ts, None);
     }
     let frac = frac.clamp(0.0, 1.0);
     if frac <= 0.004 {
@@ -46,12 +51,12 @@ pub fn ring(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, thick: f32, frac: f32, tr
     }
     if frac >= 0.996 {
         if let Some(circle) = PathBuilder::from_circle(cx, cy, r) {
-            pm.stroke_path(&circle, &paint(fill), &Stroke { width: thick, ..Stroke::default() }, Transform::identity(), None);
+            pm.stroke_path(&circle, &paint(fill), &Stroke { width: thick, ..Stroke::default() }, ts, None);
         }
         return;
     }
     if let Some(path) = polyline(&arc_points(cx, cy, r, frac)) {
-        pm.stroke_path(&path, &paint(fill), &stroke, Transform::identity(), None);
+        pm.stroke_path(&path, &paint(fill), &stroke, ts, None);
     }
 }
 
@@ -101,12 +106,13 @@ pub fn sparkline(pm: &mut Pixmap, r: Rect, values: &[f32], max: f32, slots: usiz
             ) {
                 p.shader = g;
             }
-            pm.fill_path(&path, &p, FillRule::Winding, Transform::identity(), None);
+            // the gradient is in the path's (logical) space; the paint transform carries both to the surface
+            pm.fill_path(&path, &p, FillRule::Winding, transform(), None);
         }
     }
     if let Some(path) = polyline(&pts) {
         let stroke = Stroke { width: 1.6, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Stroke::default() };
-        pm.stroke_path(&path, &paint(line), &stroke, Transform::identity(), None);
+        pm.stroke_path(&path, &paint(line), &stroke, transform(), None);
     }
 }
 
@@ -143,7 +149,7 @@ pub fn arrow(pm: &mut Pixmap, cx: f32, cy: f32, size: f32, up: bool, c: Color) {
     }
     pb.close();
     if let Some(path) = pb.finish() {
-        pm.fill_path(&path, &paint(c), FillRule::Winding, Transform::identity(), None);
+        pm.fill_path(&path, &paint(c), FillRule::Winding, transform(), None);
     }
 }
 
@@ -165,9 +171,11 @@ fn fill_with_image(pm: &mut Pixmap, path: &Path, src: &Pixmap, r: Rect) {
     if src.width() == 0 || src.height() == 0 {
         return;
     }
+    // pattern and clip path are both logical; the paint transform maps the two to the surface together, so the picture is
+    // sampled from the source at the surface resolution instead of being enlarged afterwards
     let t = Transform::from_scale(r.w / src.width() as f32, r.h / src.height() as f32).post_translate(r.x, r.y);
     let p = Paint { anti_alias: true, shader: Pattern::new(src.as_ref(), SpreadMode::Pad, FilterQuality::Bilinear, 1.0, t), ..Paint::default() };
-    pm.fill_path(path, &p, FillRule::Winding, Transform::identity(), None);
+    pm.fill_path(path, &p, FillRule::Winding, transform(), None);
 }
 
 /// Colour of a load gauge: the accent normally, warning past 80 %, danger past 92 %.

@@ -43,6 +43,7 @@ pub enum Pending {
         value: Option<Value>,
         said: Option<String>,
         then: Option<AfterSave>,
+        report_success: bool,
     },
     Theme {
         selection: Value,
@@ -168,6 +169,8 @@ pub struct Model {
     /// Bumped by every accepted theme intent (design, mode, palette, accent, wallpaper colours...): a late result
     /// compares generations, not values, so a newer intent wins even when it returns to the same value (A, B, A).
     pub theme_intent: u64,
+    /// Latest accepted widget-layout intent; prevents obsolete readiness notices.
+    pub widget_intent: u64,
 
     /// The next TOML job is a wallpaper change (see `Job::Toml::cancel_follow`).
     cancel_follow: bool,
@@ -218,6 +221,7 @@ impl Model {
             batch_error: false,
             in_completion: false,
             theme_intent: 0,
+            widget_intent: 0,
 
             cancel_follow: false,
         };
@@ -447,16 +451,28 @@ impl Model {
 
     /// [`Model::edit_json_from`]; `then` runs on the UI thread once the value is on disk (not when it failed).
     pub fn edit_json_then(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, said: Option<String>, then: Option<AfterSave>) {
+        self.edit_json_with_notice(file, key, v, base, (said, then, true));
+    }
+
+    /// Reports queue acceptance independently of notices. `then` owns the success notice; write errors still report normally.
+    pub fn try_edit_json_then(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, said: Option<String>, then: Option<AfterSave>) -> bool {
+        self.edit_json_with_notice(file, key, v, base, (said, then, false))
+    }
+
+    fn edit_json_with_notice(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, completion: (Option<String>, Option<AfterSave>, bool)) -> bool {
+        let (said, then, report_success) = completion;
         let (file, path) = match file {
             "dock" => ("dock", self.paths.dock_settings()),
             "pinned" => ("pinned", self.paths.dock_pinned()),
             _ => ("shell", self.paths.shell_json()),
         };
         let job = Job::Json { path, key: key.to_string(), value: v.clone(), base, reconcile: Some(self.paths.shell_json()) };
-        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone(), said, then }).is_some_and(|seq| self.pending.contains_key(&seq)) {
+        let accepted = self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone(), said, then, report_success });
+        if accepted.is_some_and(|seq| self.pending.contains_key(&seq)) {
             set_key(self.json_mut(file), key, v);
         }
         self.dirty = true;
+        accepted.is_some()
     }
 
     /// Runs a theme package transaction in the persistence worker (planned there, against the files as the earlier
@@ -496,6 +512,11 @@ impl Model {
         done: impl FnOnce(&mut Model, Result<Value, String>) + 'static,
     ) -> bool {
         self.task(label, writes, false, Box::new(run), Box::new(done))
+    }
+
+    /// A bounded auxiliary task with a result callback, excluded from the persistence saving state.
+    pub fn run_task_quiet_done(&mut self, label: &'static str, run: impl FnOnce() -> Result<Value, String> + Send + 'static, done: impl FnOnce(&mut Model, Result<Value, String>) + 'static) -> bool {
+        self.task(label, Vec::new(), true, Box::new(run), Box::new(done))
     }
 
     fn task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, quiet: bool, run: Box<dyn FnOnce() -> Result<Value, String> + Send>, done: TaskDone) -> bool {
@@ -685,7 +706,7 @@ impl Model {
                 }
                 self.say(format!("Not saved: {}", f.message), true);
             }
-            (Pending::Json { file, said, then, .. }, Outcome::Json(r)) => {
+            (Pending::Json { file, said, then, report_success, .. }, Outcome::Json(r)) => {
                 let saved = match &r {
                     Ok(doc) => doc.clone(),
                     Err(_) => io::json_load(&d.path),
@@ -697,7 +718,8 @@ impl Model {
                     }
                 }
                 match r {
-                    Ok(_) => self.say(said.unwrap_or_else(|| "Saved".into()), false),
+                    Ok(_) if report_success => self.say(said.unwrap_or_else(|| "Saved".into()), false),
+                    Ok(_) => {}
                     Err(f) => {
                         if f.conflict {
                             self.recheck_files = true;

@@ -144,7 +144,7 @@ fn main() {
     if gated && role == Process::Main {
         let cfg = decebal::widgets::config::WidgetsConfig::load(&decebal::theme::live::Source::discover().shell_json);
         if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == decebal::widgets::config::Place::Desktop) {
-            if let Err(e) = decebal::widgets::host::ensure_running() {
+            if let Err(e) = decebal::widgets::host::start() {
                 decebal::log_warn!("widgets: {e}");
             }
         }
