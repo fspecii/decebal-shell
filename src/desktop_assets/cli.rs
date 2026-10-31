@@ -346,6 +346,9 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
             r.built.expanded_links
         ));
     }
+    if p.aliases != (0, 0, 0) {
+        out.push_str(&format!("\n  declared aliases: {} text links ({} replacing pack files), {} folder aliases", p.aliases.0, p.aliases.1, p.aliases.2));
+    }
     if let Some((present, listed)) = p.icon_dirs {
         out.push_str(&format!("\n  icon directories: {present} of {listed} listed in index.theme{}", if p.degraded { " (DEGRADED)" } else { "" }));
     }
@@ -433,6 +436,8 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
             license_oids: Default::default(),
             index_files: a.all("--index").into_iter().map(|p| (p, None)).collect(),
             xcursors: vec![],
+            text_links: vec![],
+            dir_aliases: vec![],
         },
         strip: if is_dir { 0 } else { strip },
         link_sources: a.all("--link-source"),

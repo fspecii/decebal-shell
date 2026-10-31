@@ -11,6 +11,7 @@
 //!
 //! Nothing here runs a program from a pack or interpolates a value into a shell.
 
+pub mod aliases;
 pub mod assemble;
 pub mod builtin;
 pub mod catalog;

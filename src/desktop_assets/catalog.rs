@@ -45,6 +45,10 @@ pub struct Pack {
     /// Cursors built natively from PNGs and declared hotspots (`[[pack.xcursor]]`), for sources that only ship a
     /// build script (openKylin's dark-sense).
     pub xcursor: Vec<super::xcursor::Cursor>,
+    /// Folders of regular files holding link targets (`[[pack.text_links]]`) and folder links (`[[pack.dir_alias]]`)
+    /// an upstream build would create; see [`super::aliases`].
+    pub text_links: Vec<super::aliases::TextLinks>,
+    pub dir_aliases: Vec<super::aliases::DirAlias>,
     pub description: String,
 }
 
@@ -341,6 +345,8 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
                 "index",
                 "index_oids",
                 "xcursor",
+                "text_links",
+                "dir_alias",
                 "description",
             ],
         );
@@ -439,8 +445,82 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         if !xcursor.is_empty() && !provides.contains(&Provides::Cursors) {
             cx.errors.push(format!("`{sc}xcursor` builds cursors: add \"cursors\" to provides"));
         }
+        let mut text_links = Vec::new();
+        for (j, x) in cx.tables(t, "text_links") {
+            let xs = format!("{sc}text_links[{j}].");
+            cx.known(x, &xs, &["from", "tree", "onto", "replace"]);
+            let from = cx.text(x, &xs, "from", true, 200).unwrap_or_default();
+            if !from.is_empty() {
+                cx.rel(x, &xs, "from", &from, false);
+                let inside = |a: &str, b: &str| b == "." || a == b || a.starts_with(&format!("{b}/"));
+                if !path.is_empty() && (inside(&from, &path) || inside(&path, &from)) {
+                    cx.errors.push(format!("`{xs}from`: `{from}` overlaps the pack's path `{path}`"));
+                }
+                if link_sources.iter().any(|l| inside(&from, l) || inside(l, &from)) {
+                    cx.errors.push(format!("`{xs}from`: `{from}` overlaps a link_sources folder"));
+                }
+            }
+            let tree = cx.text(x, &xs, "tree", true, 40).unwrap_or_default();
+            if !tree.is_empty() && !is_hex(&tree, 40) {
+                cx.errors.push(format!("`{xs}tree` must be 40 lower-case hex digits (git rev-parse <commit>:<from>)"));
+            }
+            let onto = cx.text(x, &xs, "onto", false, 200).unwrap_or_else(|| ".".into());
+            cx.rel(x, &xs, "onto", &onto, true);
+            let replace = match x.get("replace") {
+                None => false,
+                Some(i) => match i.as_bool() {
+                    Some(b) => b,
+                    None => {
+                        cx.err(i, &format!("{xs}replace"), "must be true or false");
+                        false
+                    }
+                },
+            };
+            text_links.push(super::aliases::TextLinks { from, tree, onto, replace });
+        }
+        if text_links.len() > super::aliases::MAX_TEXT_LINK_FOLDERS {
+            cx.errors.push(format!("`{sc}text_links`: more than {} folders", super::aliases::MAX_TEXT_LINK_FOLDERS));
+        }
+        let mut dir_aliases = Vec::new();
+        for (j, x) in cx.tables(t, "dir_alias") {
+            let xs = format!("{sc}dir_alias[{j}].");
+            cx.known(x, &xs, &["name", "target"]);
+            let name = cx.text(x, &xs, "name", true, 200).unwrap_or_default();
+            let target = cx.text(x, &xs, "target", true, 200).unwrap_or_default();
+            for (k, v) in [("name", &name), ("target", &target)] {
+                if !v.is_empty() {
+                    cx.rel(x, &xs, k, v, false);
+                }
+            }
+            if !name.is_empty() && (name == target || name.starts_with(&format!("{target}/")) || target.starts_with(&format!("{name}/"))) {
+                cx.errors.push(format!("`{xs}`: `{name}` -> `{target}` encloses itself"));
+            }
+            dir_aliases.push(super::aliases::DirAlias { name, target });
+        }
+        if dir_aliases.len() > super::aliases::MAX_DIR_ALIASES {
+            cx.errors.push(format!("`{sc}dir_alias`: more than {} folder aliases", super::aliases::MAX_DIR_ALIASES));
+        }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
-        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, license_oids, link_sources, link_source_trees, index, index_oids, xcursor, description });
+        packs.push(Pack {
+            id,
+            name,
+            provides,
+            source,
+            path,
+            tree,
+            install_name,
+            license,
+            license_files,
+            license_oids,
+            link_sources,
+            link_source_trees,
+            index,
+            index_oids,
+            xcursor,
+            text_links,
+            dir_aliases,
+            description,
+        });
     }
 
     let mut recommends = Vec::new();
@@ -725,6 +805,25 @@ cursors = "deepin-bloom"
         assert!(parse(&with("link_sources = [\"bloom\"]\nlink_source_trees = [\"nothex\"]"), "t").unwrap_err().iter().any(|e| e.contains("hex")));
         assert!(parse(&with("link_sources = [\"bloom-dark/sub\"]"), "t").unwrap_err().iter().any(|e| e.contains("overlaps")));
         assert!(parse(&GOOD.replace("path = \"bloom\"", "path = \"a/b\"\nlink_sources = [\"a\"]"), "t").unwrap_err().iter().any(|e| e.contains("overlaps")));
+    }
+
+    #[test]
+    fn text_links_and_folder_aliases_are_declared_and_checked() {
+        let x =
+            "[[pack.text_links]]\nfrom = \"links\"\ntree = \"09d28c3591d256643c992999dc742b60336e6fc6\"\nreplace = true\n\n[[pack.dir_alias]]\nname = \"apps@2x\"\ntarget = \"apps\"\n\n[[recommend]]";
+        let c = parse(&GOOD.replacen("[[recommend]]", x, 1), "t").unwrap();
+        let p = &c.packs[0];
+        assert_eq!((p.text_links.len(), p.text_links[0].onto.as_str(), p.text_links[0].replace, p.dir_aliases.len()), (1, ".", true, 1));
+        assert!(parse(GOOD, "t").unwrap().packs[0].text_links.is_empty(), "existing manifests are unchanged");
+        let bad = |from: &str, to: &str| parse(&GOOD.replacen("[[recommend]]", &x.replace(from, to), 1), "t").unwrap_err();
+        assert!(bad("from = \"links\"", "from = \"bloom/links\"").iter().any(|e| e.contains("overlaps the pack's path")));
+        assert!(bad("from = \"links\"", "from = \"../links\"").iter().any(|e| e.contains("escapes")));
+        assert!(bad("tree = \"09d2", "tree = \"zz").iter().any(|e| e.contains("hex")));
+        assert!(bad("replace = true", "replace = \"yes\"").iter().any(|e| e.contains("true or false")));
+        assert!(bad("target = \"apps\"", "target = \"apps@2x/x\"").iter().any(|e| e.contains("encloses itself")));
+        assert!(bad("target = \"apps\"", "target = \"/apps\"").iter().any(|e| e.contains("absolute")));
+        assert!(bad("replace = true", "replace = true\nfollow = true").iter().any(|e| e.contains("unknown key")));
+        assert!(bad("tree = \"09d28c3591d256643c992999dc742b60336e6fc6\"\n", "").iter().any(|e| e.contains("required")), "the pin is mandatory");
     }
 
     #[test]

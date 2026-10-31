@@ -35,6 +35,9 @@ pub struct Spec {
     pub index_files: Vec<(String, Option<String>)>,
     /// Cursors to build from PNGs of the pack (see [`super::xcursor`]).
     pub xcursors: Vec<super::xcursor::Cursor>,
+    /// Declared alias folders and folder links (see [`super::aliases`]); applied to the staged source before building.
+    pub text_links: Vec<super::aliases::TextLinks>,
+    pub dir_aliases: Vec<super::aliases::DirAlias>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -733,6 +736,8 @@ mod tests {
             license_oids: Default::default(),
             index_files: vec![],
             xcursors: vec![],
+            text_links: vec![],
+            dir_aliases: vec![],
         }
     }
 
@@ -742,7 +747,7 @@ mod tests {
         std::fs::create_dir_all(s.path().join("out")).unwrap();
         let tgz = targz(entries, None);
         let files = sp.license_files.iter().chain(sp.index_files.iter().map(|(p, _)| p)).cloned().collect();
-        let f = Filter { strip: 1, path: sp.path.clone(), files, link_sources: link_sources.iter().map(|x| x.to_string()).collect() };
+        let f = Filter { strip: 1, path: sp.path.clone(), files, link_sources: link_sources.iter().map(|x| x.to_string()).collect(), ..Filter::default() };
         let st = match from_tar(&tgz[..], Format::TarGz, s.path().join("src"), f, &Limits::default(), &keep) {
             Ok(st) => st,
             Err(e) => return (Err(e), s),
@@ -971,7 +976,7 @@ mod tests {
         std::fs::create_dir_all(s.path().join("src")).unwrap();
         std::fs::create_dir_all(s.path().join("out")).unwrap();
         let tgz = targz(&sibling_source(vec![]), None);
-        let f = Filter { strip: 1, path: "dark".into(), files: vec!["COPYING".into()], link_sources: vec!["lib".into()] };
+        let f = Filter { strip: 1, path: "dark".into(), files: vec!["COPYING".into()], link_sources: vec!["lib".into()], ..Filter::default() };
         let st = from_tar(&tgz[..], Format::TarGz, s.path().join("src"), f, &Limits::default(), &keep).unwrap();
         let tight = Limits { max_total: 100, ..Limits::default() };
         assert!(build(&st, &sp, &s.path().join("out"), &tight).unwrap_err().contains("exceeds"));

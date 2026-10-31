@@ -64,6 +64,17 @@ index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]   # optional
 index_oids = ["<40 hex>", "<40 hex>"]   # required with index: `git rev-parse <commit>:<file>` of each, same order
 description = "..."             # optional
 
+[[pack.text_links]]             # optional (at most 4): a folder of REGULAR files that each hold a link target as text,
+from = "links"                  #   a link tree stored without its link modes (Lingmo's links/). Only a folder named here is
+tree = "<40 hex>"               #   read this way. Required: `git rev-parse <commit>:<from>`, verified before any text is read
+onto = "."                      #   optional: where its files land, relative to `path` (default its root)
+replace = false                 #   optional: true lets an alias replace a pack file of the same name (upstream copied the
+                                #   links over the files); otherwise that is refused
+
+[[pack.dir_alias]]              # optional (at most 256): a folder link the upstream build creates
+name = "actions@2x"             #   pack-relative; must not exist yet
+target = "actions"              #   pack-relative folder; must exist and must not enclose `name`
+
 [[pack.xcursor]]                # optional, repeatable: a cursor built from PNGs of the pack (needs "cursors" in provides)
 name = "left_ptr"               # the file in cursors/
 config = """                    # xcursorgen's own line format: size xhot yhot file.png [delay_ms], files relative to `path`
@@ -103,6 +114,29 @@ git -C deepin-icon-theme rev-parse HEAD:bloom      # tree of the pack's path
 git -C adwaita-icon-theme rev-parse HEAD:index.theme   # index_oids
 sha256sum release-asset.tar.gz                     # archive_sha256, only for byte-stable files
 ```
+
+### Declared aliases (`text_links`, `dir_alias`)
+
+Some upstreams create links at build time instead of storing them: Lingmo's icon theme keeps 14 137 alias files in
+`links/` as regular text files (each holds a target such as `media-playback-pause.svg`) and its CMake install copies
+them over `src/` and adds `actions@2x -> actions` (and `@3x`) for eight contexts. A pack declares that data, nothing is
+run, and nothing undeclared is guessed:
+
+* only a folder named in `[[pack.text_links]]` is read as aliases, and only after its own tree id matched (for any
+  origin; a missing pin refuses the install);
+* each file must be a plain relative target: UTF-8, at most 1 KiB, no control character, line break or backslash, not
+  absolute, no empty component, and it must resolve inside the pack folder from the place it lands. Anything else
+  (binary data, a real symlink in the folder, a path out of the pack) refuses the pack;
+* an alias may not name a folder of the pack or lie below a file; replacing a pack file needs `replace = true`;
+* a folder alias must point at an existing folder of the pack that does not enclose it;
+* the aliases then become ordinary links of the staged source: chains collapse to the final file (at most 16 hops,
+  longer ones count as loops), loops and links to nothing are dropped with at most 20 warning lines plus a total,
+  and the installed links never leave the pack. Alias names without an icon extension are left out like any file;
+* provenance records `aliases = [text links, pack files replaced, folder aliases]`, the folder's tree among
+  `link_sources`, and `text_links` in `verified.outside`.
+
+Real result (private root, a clean clone at `0b6a4bab`): 14 137 aliases (15 replacing `src/` files), 16 folder aliases,
+96 of 96 icon directories (was 32), 33 aliases that dangle upstream dropped, 0 links leaving the pack, `complete: yes`.
 
 ### Example catalogues
 

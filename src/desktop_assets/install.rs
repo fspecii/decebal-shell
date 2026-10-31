@@ -86,6 +86,9 @@ pub struct Provenance {
     pub icon_dirs: Option<(usize, usize)>,
     #[serde(default)]
     pub degraded: bool,
+    /// Declared aliases applied: text links, pack files they replaced, folder aliases.
+    #[serde(default)]
+    pub aliases: (usize, usize, usize),
     pub files: usize,
     pub symlinks: usize,
     pub skipped: usize,
@@ -172,6 +175,8 @@ impl Request {
                 license_oids: e.license_oids(),
                 index_files: e.pack.index.iter().cloned().zip(e.pack.index_oids.iter().cloned().map(Some)).collect(),
                 xcursors: e.pack.xcursor.clone(),
+                text_links: e.pack.text_links.clone(),
+                dir_aliases: e.pack.dir_aliases.clone(),
             },
             strip: if archive { e.source.strip } else { 0 },
             link_sources: e.pack.link_sources.clone(),
@@ -179,7 +184,7 @@ impl Request {
                 tree: Some(e.pack.tree.clone()),
                 archive_sha256: if archive { e.source.archive_sha256.clone() } else { None },
                 commit: Some(e.source.commit.clone()),
-                link_trees: e.pack.link_sources.iter().cloned().zip(e.pack.link_source_trees.iter().cloned()).collect(),
+                link_trees: e.pack.link_sources.iter().cloned().zip(e.pack.link_source_trees.iter().cloned()).chain(e.pack.text_links.iter().map(|t| (t.from.clone(), t.tree.clone()))).collect(),
             },
             source: SourceRecord { id: e.source.id.clone(), repo: e.source.repo.clone(), revision: e.source.revision.clone(), path: e.pack.path.clone(), ..SourceRecord::default() },
             license: e.license().to_string(),
@@ -455,6 +460,12 @@ fn verify_pins(req: &Request, st: &Staged, archive_sha: Option<&str>) -> Result<
         }
         v.archive_sha256 = true;
     }
+    // a folder read as alias targets is pinned by its own tree id, always: no text is read as a link without it
+    for t in &req.spec.text_links {
+        if !req.pins.link_trees.iter().any(|(d, _)| *d == t.from) {
+            return Err(format!("text_links folder `{}` is not pinned (tree = git rev-parse <commit>:{})", t.from, t.from));
+        }
+    }
     // link_sources of a catalogue pack must be pinned before anything is built from them (each folder's tree, or the
     // whole archive's sha256)
     if req.origin == "catalog" && !req.link_sources.is_empty() && !v.archive_sha256 {
@@ -501,9 +512,9 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     let mut job = new_job(&staging, name)?;
     let (src_dir, out) = (job.dir.join("src"), job.dir.join("out"));
     let files = req.spec.license_files.iter().chain(req.spec.index_files.iter().map(|(p, _)| p)).cloned().collect();
-    let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files, link_sources: req.link_sources.clone() };
+    let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files, link_sources: req.link_sources.clone(), text_links: req.spec.text_links.iter().map(|t| t.from.clone()).collect() };
     let mut rec = req.source.clone();
-    let (staged, archive_sha) = match &req.input {
+    let (mut staged, archive_sha) = match &req.input {
         Input::Dir(d) => {
             rec.fetched_from = "directory".into();
             (source::from_dir(d, src_dir, filter, lim, &assemble::keep)?, None)
@@ -555,6 +566,8 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         }
     };
     let verified = verify_pins(req, &staged, archive_sha.as_deref())?;
+    // declared aliases become link nodes only now, after their folders' tree ids were verified
+    let aliases = super::aliases::apply(&mut staged, &req.spec.path, &req.spec.text_links, &req.spec.dir_aliases)?;
     rec.tree = staged.tree.clone();
     rec.archive_sha256 = archive_sha;
     if rec.commit.is_none() || verified.commit {
@@ -603,6 +616,7 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         from_link_sources: (built.expanded_files + built.copies, built.expanded_bytes, built.expanded_links + built.expanded_dirs),
         icon_dirs: (built.icon_dirs_declared > 0).then_some((built.icon_dirs, built.icon_dirs_declared)),
         degraded,
+        aliases: (aliases.text_links, aliases.replaced, aliases.dir_aliases),
         files,
         symlinks: links,
         skipped: built.skipped,
@@ -652,6 +666,9 @@ fn outside_checks(req: &Request, built: &Built, v: &mut Verified) -> Result<(), 
                 "none"
             },
         );
+    }
+    if !req.spec.text_links.is_empty() {
+        add("text_links", true, "tree");
     }
     if !req.spec.index_files.is_empty() {
         let pinned = req.spec.index_files.iter().all(|(_, o)| o.is_some());
@@ -825,6 +842,8 @@ pub(crate) mod tests {
                 license_oids: Default::default(),
                 index_files: vec![],
                 xcursors: vec![],
+                text_links: vec![],
+                dir_aliases: vec![],
             },
             strip: 1,
             link_sources: vec![],
@@ -1179,6 +1198,8 @@ pub(crate) mod tests {
                 images: super::super::xcursor::parse_config("24 4 0 24x24/left_ptr.png\n32 5 0 32x32/left_ptr.png").unwrap(),
                 aliases: vec!["default".into(), "top_left_arrow".into()],
             }],
+            text_links: vec![],
+            dir_aliases: vec![],
         };
         let rep = install(&r, &Limits::default()).unwrap();
         let t = s.path().join("icons/sense");
@@ -1338,6 +1359,8 @@ pub(crate) mod tests {
             license_oids: [("COPYING".to_string(), crate::desktop_assets::gitoid::hex(&crate::desktop_assets::gitoid::blob_oid(b"GPL\n")))].into(),
             index_files: vec![],
             xcursors: vec![super::super::xcursor::Cursor { name: "left_ptr".into(), images: super::super::xcursor::parse_config("24 1 1 24x24/left_ptr.png").unwrap(), aliases: vec![] }],
+            text_links: vec![],
+            dir_aliases: vec![],
         };
         r
     }
@@ -1404,6 +1427,52 @@ pub(crate) mod tests {
         assert!(!root.join("bloom/apps/48/evil.svg").exists(), "only the verified snapshot was staged");
         assert_ne!(fetch::hash_file(&a, 1 << 30).unwrap(), sha_a, "the original did change");
         assert!(staging_is_clean(&root), "the snapshot went with the job");
+    }
+
+    #[test]
+    fn text_link_folders_are_pinned_by_their_own_tree() {
+        let v = vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"GPL\n"),
+            E::file("top/src/index.theme", b"[Icon Theme]\nName=T\nDirectories=apps/48,apps@2x/48\n[apps/48]\nSize=48\n[apps@2x/48]\nSize=48\nScale=2\n"),
+            E::file("top/src/apps/48/real.svg", SVG),
+            E::file("top/links/apps/48/alias.svg", b"real.svg"),
+            E::file("top/links/apps/48/gone.svg", b"nothing.svg"),
+        ];
+        let s = Scratch::new("textlinks");
+        let a = s.write("t.tgz", &targz(&v, Some(COMMIT)));
+        let dummy = icon_source("bloom", vec![]);
+        let mut r = request(&s.path().join("i1"), &a, &dummy);
+        r.pins = Pins { tree: Some(tree_of(&v, "top/src")), archive_sha256: None, commit: Some(COMMIT.into()), link_trees: vec![("links".into(), tree_of(&v, "top/links"))] };
+        r.spec.path = "src".into();
+        r.spec.install_name = "t".into();
+        r.spec.provides = vec![Provides::Icons];
+        r.spec.text_links = vec![crate::desktop_assets::aliases::TextLinks { from: "links".into(), tree: tree_of(&v, "top/links"), onto: ".".into(), replace: false }];
+        r.spec.dir_aliases = vec![crate::desktop_assets::aliases::DirAlias { name: "apps@2x".into(), target: "apps".into() }];
+        r.spec.license_oids.insert("COPYING".into(), crate::desktop_assets::gitoid::hex(&crate::desktop_assets::gitoid::blob_oid(b"GPL\n")));
+        let rep = install(&r, &Limits::default()).unwrap();
+        let p = &rep.provenance;
+        assert_eq!((p.aliases, p.icon_dirs, p.degraded), ((2, 0, 1), Some((2, 2)), false));
+        assert!(p.verified.complete && p.verified.outside.iter().any(|o| o.what == "text_links" && o.verified && o.by == "tree"), "{:?}", p.verified);
+        assert!(p.link_sources.iter().any(|(d, t)| d == "links" && *t == tree_of(&v, "top/links")), "the receipt names the alias folder's tree");
+        assert_eq!(std::fs::read_link(s.path().join("i1/t/apps/48/alias.svg")).unwrap().display().to_string(), "real.svg");
+        assert_eq!(verify(&s.path().join("i1/t")).unwrap().1, Integrity::Ok);
+        // a changed alias text under an unchanged pack folder: its own pin catches it
+        let mut v2 = v.clone();
+        v2[4] = E::file("top/links/apps/48/alias.svg", b"other.svg");
+        assert_eq!(tree_of(&v2, "top/src"), tree_of(&v, "top/src"));
+        let b = s.write("t2.tgz", &targz(&v2, Some(COMMIT)));
+        let mut r2 = r.clone();
+        r2.input = Input::Archive(b);
+        r2.root = s.path().join("i2");
+        assert!(install(&r2, &Limits::default()).unwrap_err().contains("tree mismatch for link source `links`"));
+        // and without a pin no text is read as a link, whatever the origin
+        let mut r3 = r.clone();
+        r3.root = s.path().join("i3");
+        r3.origin = "local".into();
+        r3.pins.link_trees.clear();
+        assert!(install(&r3, &Limits::default()).unwrap_err().contains("text_links folder `links` is not pinned"));
+        assert!(!s.path().join("i2/t").exists() && !s.path().join("i3/t").exists());
     }
 
     #[test]

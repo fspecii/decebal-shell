@@ -43,6 +43,8 @@ pub struct Filter {
     pub files: Vec<String>,
     /// Folders to stage as well, for links of the theme that point into them.
     pub link_sources: Vec<String>,
+    /// Folders of regular files read as alias targets (`[[pack.text_links]]`): staged, with their own tree id.
+    pub text_links: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -65,7 +67,7 @@ impl Filter {
         if let Some(rel) = under(p, &self.path) {
             return Want::Theme(rel.to_string());
         }
-        if self.files.iter().any(|f| f == p) || self.link_sources.iter().any(|d| under(p, d).is_some()) {
+        if self.files.iter().any(|f| f == p) || self.link_sources.iter().chain(&self.text_links).any(|d| under(p, d).is_some()) {
             return Want::Extra;
         }
         Want::No
@@ -141,7 +143,7 @@ pub fn join_link(p: &str, target: &str) -> Option<String> {
 
 impl<'a> Builder<'a> {
     fn new(dir: PathBuf, filter: Filter, lim: &'a Limits, keep: Keep<'a>) -> Builder<'a> {
-        let link_trees = filter.link_sources.iter().map(|d| (d.clone(), TreeBuilder::default())).collect();
+        let link_trees = filter.link_sources.iter().chain(&filter.text_links).map(|d| (d.clone(), TreeBuilder::default())).collect();
         Builder {
             st: Staged { dir, filter, nodes: BTreeMap::new(), tree: None, link_trees: BTreeMap::new(), commit: None, entries: 0, bytes: 0, warnings: Vec::new() },
             lim,
@@ -452,7 +454,7 @@ fn walk(root: &Path, rel: &str, depth: usize, b: &mut Builder) -> Result<(), Str
 fn wanted_below(f: &Filter, dir: &str) -> bool {
     let pre = format!("{dir}/");
     let starts = |x: &str| x.starts_with(&pre);
-    f.path == "." || f.path == dir || starts(&f.path) || f.files.iter().any(|x| starts(x)) || f.link_sources.iter().any(|x| x == dir || starts(x))
+    f.path == "." || f.path == dir || starts(&f.path) || f.files.iter().any(|x| starts(x)) || f.link_sources.iter().chain(&f.text_links).any(|x| x == dir || starts(x))
 }
 
 impl Staged {
@@ -515,7 +517,7 @@ mod tests {
     fn stage(entries: &[E], path: &str, files: &[&str]) -> Result<(Staged, Scratch), String> {
         let s = Scratch::new("src");
         let tgz = targz(entries, Some("5d11ba4e4013a4d1e1c601265d55c66b95184922"));
-        let f = Filter { strip: 1, path: path.into(), files: files.iter().map(|x| x.to_string()).collect(), link_sources: vec![] };
+        let f = Filter { strip: 1, path: path.into(), files: files.iter().map(|x| x.to_string()).collect(), link_sources: vec![], ..Filter::default() };
         let st = from_tar(&tgz[..], tar::Format::TarGz, s.path().to_path_buf(), f, &Limits::default(), &keep_all)?;
         Ok((st, s))
     }
@@ -543,7 +545,7 @@ mod tests {
         std::fs::create_dir_all(d.path().join(".git/objects")).unwrap();
         std::fs::write(d.path().join(".git/config"), "x").unwrap();
         let s = Scratch::new("src");
-        let f = Filter { strip: 0, path: "ocean".into(), files: vec!["COPYING".into()], link_sources: vec![] };
+        let f = Filter { strip: 0, path: "ocean".into(), files: vec!["COPYING".into()], link_sources: vec![], ..Filter::default() };
         let st = from_dir(d.path(), s.path().to_path_buf(), f, &Limits::default(), &keep_all).unwrap();
         assert_eq!(st.tree.as_deref(), Some(tree_of(&src, "top/ocean").as_str()), "exec bits and links read from disk");
         assert!(!st.nodes.contains_key(".git"));
