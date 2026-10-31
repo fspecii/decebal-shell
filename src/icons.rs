@@ -162,7 +162,13 @@ impl IconCache {
     }
 }
 
+/// Rasterises one icon at exactly `size` pixels. The pixmap is its own surface, so a panel's render scale (see
+/// [`crate::gfx::with_render_scale`]) must not enlarge the built-in artwork that is drawn with the gfx helpers a second time.
 fn build(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Pixmap {
+    crate::gfx::with_render_scale(1.0, || build_at_native_scale(id, size, tint))
+}
+
+fn build_at_native_scale(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Pixmap {
     let (scale, _) = live::render_settings();
     let content = content_px(size, scale);
     let opts = raster::Opts { content, tint };
@@ -205,6 +211,18 @@ mod tests {
         }
         assert_eq!(cache.usage().0, 2, "surface tint is part of the bounded cache key");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn built_in_icons_are_the_same_picture_at_every_render_scale() {
+        // the launcher and the trash are drawn with the gfx helpers: inside a scaled panel they must still fill exactly their own pixmap once
+        for id in ["launchpad", "trash", "definitely-not-an-icon-xyz"] {
+            let plain = IconCache::default().get(id, 96).clone();
+            for k in [1.25, 2.0] {
+                let scaled = crate::gfx::with_render_scale(k, || IconCache::default().get(id, 96).clone());
+                assert_eq!(plain.data(), scaled.data(), "{id} at render scale {k}");
+            }
+        }
     }
 
     #[test]

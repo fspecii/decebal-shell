@@ -55,6 +55,12 @@ pub struct Dock {
     pub hover_x: Option<f32>,
     /// Icon currently being dragged to a new place.
     pub drag: Option<Drag>,
+    /// Logical size of the output the dock sits on (set by the app from the backend): a dock that would be wider (taller, for a side
+    /// dock) than its output shrinks everything with it, down to [`MIN_FIT`], instead of running off the screen.
+    pub output: Option<(f32, f32)>,
+    /// How far the panel is slid along the edge while it is longer than the canvas (a dock at [`MIN_FIT`] on a small output):
+    /// the keyboard ring keeps its item in view with it. Zero, and ignored, whenever the panel fits.
+    pub scroll: f32,
     /// Item the keyboard is on (`decdock --focus`): drawn with a focus ring; never moves the pointer or the magnification.
     pub focus: Option<usize>,
     /// Items that were just launched and bounce until their window appears (or a timeout).
@@ -73,6 +79,8 @@ const REACH: f32 = 150.0;
 /// Extra transparent room above the panel for magnified icons and the launch bounce.
 const HEADROOM: f32 = 40.0;
 const SIDE_MARGIN: f32 = 24.0;
+/// The most a dock shrinks to fit a short or narrow output (beyond it the surface is simply cut to the output).
+const MIN_FIT: f32 = 0.4;
 /// The canvas is never narrower than this, so a context menu always fits above even a tiny dock.
 const MIN_CANVAS_W: f32 = 300.0;
 /// Height of one bounce, period of one bounce, and how long an app may bounce while it starts.
@@ -93,6 +101,8 @@ impl Dock {
             settings,
             hover_x: None,
             drag: None,
+            output: None,
+            scroll: 0.0,
             focus: None,
             bounce: Vec::new(),
             eased: Vec::new(),
@@ -102,13 +112,48 @@ impl Dock {
         }
     }
 
-    fn dimensions(&self) -> (f32, f32) {
+    /// (icon size, padding) as the theme asks for them, before any fit to the output.
+    fn raw_dimensions(&self) -> (f32, f32) {
         #[cfg(test)]
         if let Some(dimensions) = self.dimensions_override {
             return dimensions;
         }
         let theme = crate::theme::th();
         (theme.dock_icon_size, theme.dock_padding)
+    }
+
+    fn dimensions(&self) -> (f32, f32) {
+        let (icon, padding) = self.raw_dimensions();
+        let fit = self.fit();
+        (icon * fit, padding * fit)
+    }
+
+    /// Length available along the dock's edge on its output, when known.
+    fn available(&self) -> Option<f32> {
+        self.output.map(|(w, h)| if self.edge().is_vertical() { h } else { w })
+    }
+
+    /// How much the whole dock (icons, padding, spacing, headroom) shrinks to fit the output along its edge: 1 when it fits.
+    fn fit(&self) -> f32 {
+        let Some(avail) = self.available() else { return 1.0 };
+        let (icon, padding) = self.raw_dimensions();
+        let (n, base) = (self.items.len() as f32, CELL_W * icon / ICON_SIZE);
+        let rest = if n == 0.0 { 2.0 * padding } else { n * base + (n - 1.0) * self.settings.app_spacing + 2.0 * padding };
+        let body = rest + n * base * (self.settings.magnification - 1.0).max(0.0) * 0.6;
+        if body + 2.0 * SIDE_MARGIN <= avail || body <= 0.0 {
+            return 1.0;
+        }
+        ((avail - 2.0 * SIDE_MARGIN) / body).clamp(MIN_FIT, 1.0)
+    }
+
+    /// The fit factor in force (tests).
+    #[cfg(test)]
+    pub fn fit_for_tests(&self) -> f32 {
+        self.fit()
+    }
+
+    fn spacing(&self) -> f32 {
+        self.settings.app_spacing * self.fit()
     }
 
     fn icon_scale(&self) -> f32 {
@@ -131,7 +176,7 @@ impl Dock {
         if n == 0.0 {
             return 2.0 * self.padding();
         }
-        n * self.base_cell_w() + (n - 1.0) * self.settings.app_spacing + 2.0 * self.padding()
+        n * self.base_cell_w() + (n - 1.0) * self.spacing() + 2.0 * self.padding()
     }
 
     /// Canvas (window) size that always fits the fully magnified dock: along the edge x across it (swapped for a side
@@ -139,6 +184,7 @@ impl Dock {
     pub fn canvas_size(&self) -> (u32, u32) {
         let extra = self.items.len() as f32 * self.base_cell_w() * (self.settings.magnification - 1.0).max(0.0) * 0.6;
         let w = (self.rest_width() + extra + 2.0 * SIDE_MARGIN).max(MIN_CANVAS_W);
+        let w = self.available().map_or(w, |a| w.min(a.max(1.0)));
         let headroom = (HEADROOM * self.icon_scale()).max(self.dimensions().0 * (self.settings.magnification - 1.0).max(0.0) + BOUNCE_H * self.icon_scale() + 4.0);
         let h = self.panel_height() + headroom;
         if self.edge().is_vertical() {
@@ -226,7 +272,7 @@ impl Dock {
     /// Scales the pointer asks for right now (1.0 everywhere without hover).
     fn target_scales(&self, rest_x: f32, n: usize) -> Vec<f32> {
         let base = self.base_cell_w();
-        let sp = self.settings.app_spacing;
+        let sp = self.spacing();
         let mag = if self.reduce_motion { 0.0 } else { (self.settings.magnification - 1.0).max(0.0) };
         (0..n)
             .map(|i| match self.hover_x {
@@ -257,7 +303,7 @@ impl Dock {
         }
         let bouncing = self.bouncing();
         let n = self.items.len();
-        let rest_x = (canvas_w - self.rest_width()) / 2.0;
+        let rest_x = self.origin(canvas_w, self.rest_width());
         let target = self.target_scales(rest_x, n);
         if self.eased.len() != n {
             self.eased = vec![1.0; n];
@@ -274,19 +320,45 @@ impl Dock {
         moving || bouncing
     }
 
+    /// Where a panel `len` long starts along a canvas `canvas_w` long: centred when it fits, else slid by [`Dock::scroll`].
+    fn origin(&self, canvas_w: f32, len: f32) -> f32 {
+        if len <= canvas_w {
+            (canvas_w - len) / 2.0
+        } else {
+            -self.scroll.clamp(0.0, len - canvas_w)
+        }
+    }
+
+    /// Slides an over-long panel so that item `i` is inside the canvas (with a small margin); a panel that fits stays centred.
+    pub fn reveal(&mut self, i: usize, canvas_w: f32) {
+        let l = self.layout(canvas_w);
+        if l.panel_w <= canvas_w {
+            self.scroll = 0.0;
+            return;
+        }
+        let Some(c) = l.cells.get(i) else { return };
+        let margin = 6.0;
+        if c.x < margin {
+            self.scroll -= margin - c.x;
+        } else if c.x + c.w > canvas_w - margin {
+            self.scroll += c.x + c.w - (canvas_w - margin);
+        }
+        self.scroll = self.scroll.clamp(0.0, l.panel_w - canvas_w);
+    }
+
     /// Computes cell positions for a canvas of width `canvas_w`.
     pub fn layout(&self, canvas_w: f32) -> Layout {
-        let sp = self.settings.app_spacing;
+        let sp = self.spacing();
         let base = self.base_cell_w();
         let n = self.items.len();
         let rest_w = self.rest_width();
-        let rest_x = (canvas_w - rest_w) / 2.0;
+        let rest_x = self.origin(canvas_w, rest_w);
 
         let scales = self.current_scales(rest_x, n);
 
         let total: f32 = scales.iter().map(|s| base * s).sum::<f32>() + sp * n.saturating_sub(1) as f32;
         let panel_w = total + 2.0 * self.padding();
-        let panel_x = (canvas_w - panel_w) / 2.0;
+        let panel_x = self.origin(canvas_w, panel_w);
         let mut x = panel_x + self.padding() - CONTENT_NUDGE * self.icon_scale();
         let cells = scales
             .iter()
@@ -313,13 +385,21 @@ impl Dock {
     /// Actual rounded material plate, excluding animation headroom and side margins.
     pub fn glass_region(&self, canvas_w: f32, canvas_h: f32) -> crate::glass::Region {
         let (x, y, w, h) = self.panel_rect(canvas_w, canvas_h);
-        crate::glass::Region { x, y, w, h, radius: layout_radius(w, h, self.settings.roundness) }
+        let radius = layout_radius(w, h, self.settings.roundness);
+        // an over-long panel is cut by the canvas: the blur mask never leaves the surface
+        let (x1, y1) = ((x + w).min(canvas_w), (y + h).min(canvas_h));
+        let (x, y) = (x.max(0.0), y.max(0.0));
+        crate::glass::Region { x, y, w: (x1 - x).max(0.0), h: (y1 - y).max(0.0), radius }
     }
 
     /// Draws the whole dock into `pm`, which should be `canvas_size()` pixels.
     pub fn draw(&mut self, pm: &mut Pixmap) {
         gfx::clear(pm);
-        let (cw, ch) = (pm.width() as f32, pm.height() as f32);
+        // the canvas in logical pixels (a panel drawn at 125 % / 200 % has a larger pixmap; see `gfx::with_render_scale`)
+        let (cw, ch) = {
+            let (w, h) = gfx::logical_size(pm);
+            (w as f32, h as f32)
+        };
         // the dock is laid out along its edge (x of the bottom dock) and mapped onto the edge it sits on
         let (len, _) = self.frame(cw, ch);
         let layout = self.layout(len);
@@ -363,7 +443,8 @@ impl Dock {
             }
         }
         for (id, (x, y, w, h), alpha) in icons {
-            let px = (w.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
+            // rasterise at 2x the surface size then scale down for crisp edges (vector icons are drawn at the real size, not enlarged)
+            let px = ((w * gfx::render_scale()).ceil() as u32).max(1) * 2;
             let icon = self.icons.get_for_surface(&id, px, th.dock_foreground().t());
             blit_scaled(pm, icon, x, y, w, h, alpha);
         }
@@ -561,5 +642,36 @@ mod tests {
     #[test]
     fn radius_formula() {
         assert!((layout_radius(355.0, 71.0, 0.45) - 15.975).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_dock_wider_than_its_output_shrinks_to_fit_and_slides_to_keep_an_item_in_view() {
+        let items: Vec<DockItem> = (0..12).map(|i| DockItem::pinned(&format!("a{i}"), false)).collect();
+        let mut d = Dock::new(items, DockSettings::default());
+        let natural = d.canvas_size();
+        assert_eq!(d.fit_for_tests(), 1.0, "without an output nothing shrinks");
+        d.output = Some((natural.0 as f32 + 10.0, 800.0));
+        assert_eq!(d.canvas_size(), natural, "an output it fits changes nothing");
+        let narrow = (natural.0 as f32 * 0.7).floor();
+        d.output = Some((narrow, 800.0));
+        let fit = d.fit_for_tests();
+        assert!(fit < 1.0 && fit > 0.4, "{fit}");
+        let (w, _) = d.canvas_size();
+        assert!(w as f32 <= narrow, "the canvas fits the output: {w}");
+        let l = d.layout(w as f32);
+        assert!(l.panel_x >= 0.0 && l.panel_x + l.panel_w <= w as f32 + 0.5, "the shrunk panel fits its canvas");
+        // far too small: the floor holds, the panel overflows and slides
+        d.output = Some((200.0, 800.0));
+        assert!((d.fit_for_tests() - MIN_FIT).abs() < 1e-6);
+        let w = d.canvas_size().0 as f32;
+        assert!(w <= 200.0);
+        assert!(d.layout(w).panel_w > w);
+        d.reveal(11, w);
+        let last = d.layout(w).cells[11];
+        assert!(last.x >= 0.0 && last.x + last.w <= w, "the last item slid into view: {last:?}");
+        d.reveal(0, w);
+        assert!(d.layout(w).cells[0].x >= 0.0 && d.scroll == 0.0 || d.layout(w).cells[0].x >= 0.0);
+        let g = d.glass_region(w, d.canvas_size().1 as f32);
+        assert!(g.x >= 0.0 && g.x + g.w <= w + 0.01, "the blur mask stays on the surface: {g:?}");
     }
 }

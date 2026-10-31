@@ -57,6 +57,8 @@ impl DockApp {
         let prev = self.tracker.as_ref().and_then(|t| t.snapshot().active().map(|w| w.id));
         self.dock.hover_x = None;
         self.kb = Some(Kb { id: first.id.clone(), index: 0, prev });
+        let len = self.dock_len();
+        self.dock.reveal(0, len);
         self.wake();
         true
     }
@@ -76,6 +78,8 @@ impl DockApp {
             kb.index = at;
             kb.id = id;
         }
+        let len = self.dock_len();
+        self.dock.reveal(at, len);
         started || moved
     }
 
@@ -105,6 +109,9 @@ impl DockApp {
             kb.index = index;
             kb.id = id;
         }
+        // a dock longer than its output (see `Dock::output`) slides so that the ring's item stays in view
+        let len = self.dock_len();
+        self.dock.reveal(index, len);
         self.wake();
         true
     }
@@ -161,7 +168,7 @@ impl DockApp {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::accessibility::Preferences;
     use crate::app::{App, Button, Key};
@@ -174,12 +181,12 @@ mod tests {
     use std::time::Duration;
 
     #[derive(Default)]
-    struct Log {
-        activated: Vec<u64>,
-        minimized: Vec<u64>,
-        closed: Vec<u64>,
-        launched: Vec<String>,
-        argv: Vec<Vec<String>>,
+    pub(in crate::dock_app) struct Log {
+        pub activated: Vec<u64>,
+        pub minimized: Vec<u64>,
+        pub closed: Vec<u64>,
+        pub launched: Vec<String>,
+        pub argv: Vec<Vec<String>>,
     }
 
     struct Rec(Arc<Mutex<Log>>);
@@ -208,18 +215,24 @@ mod tests {
         }
     }
 
-    struct Rig {
-        app: DockApp,
-        log: Arc<Mutex<Log>>,
-        dir: PathBuf,
+    pub(in crate::dock_app) struct Rig {
+        pub app: DockApp,
+        pub log: Arc<Mutex<Log>>,
+        pub dir: PathBuf,
     }
 
-    fn window(id: u64, app: &str, active: bool) -> Window {
+    pub(in crate::dock_app) fn window(id: u64, app: &str, active: bool) -> Window {
         Window { id, app_id: app.into(), title: format!("{app} window"), active, desktop: None, ..Default::default() }
     }
 
     /// A dock at `edge` with these pinned ids (plus the fixed Launchpad / Trash ends if asked), these windows and private files.
-    fn rig(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> Rig {
+    pub(in crate::dock_app) fn rig(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> Rig {
+        let (app, log, dir) = parts(name, edge, pinned, windows, reduce_motion);
+        Rig { app, log, dir }
+    }
+
+    /// The pieces of [`rig`], for tests that wrap the app themselves (the display scale).
+    pub(in crate::dock_app) fn parts(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> (DockApp, Arc<Mutex<Log>>, PathBuf) {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!("decebal-dockkb-{name}-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::create_dir_all(&dir).unwrap();
@@ -237,7 +250,7 @@ mod tests {
         app.tick();
         let (w, h) = app.size();
         app.resized(w, h);
-        Rig { app, log, dir }
+        (app, log, dir)
     }
 
     impl Rig {
@@ -265,7 +278,7 @@ mod tests {
         }
     }
 
-    const EDGES: [Edge; 4] = [Edge::Bottom, Edge::Top, Edge::Left, Edge::Right];
+    pub(in crate::dock_app) const EDGES: [Edge; 4] = [Edge::Bottom, Edge::Top, Edge::Left, Edge::Right];
 
     fn back_forward_menu(edge: Edge) -> (NavKey, NavKey, NavKey) {
         match edge {
@@ -511,5 +524,25 @@ mod tests {
         r.app.tick();
         assert!(!r.app.is_windows() && r.app.kb.is_none() && !r.app.wants_keyboard());
         assert!(!r.app.home_end(true), "without the mode, Home / End do nothing");
+    }
+
+    #[test]
+    fn pointer_motion_far_from_the_dock_never_magnifies_it_while_the_keyboard_holds_the_pointer_grab() {
+        for edge in EDGES {
+            let mut r = rig("grab-motion", edge, &["foot", "firefox", "nautilus"], vec![], false);
+            r.focus();
+            assert!(r.app.wants_pointer_grab());
+            let (w, h) = r.app.surface;
+            // a motion event the grab delivers from the middle of the other half of the screen: far outside the dock's strip
+            r.app.pointer_motion(w as f32 / 2.0, -(h as f32) * 3.0);
+            r.app.pointer_motion(-50.0, h as f32 * 4.0);
+            assert!(r.app.dock.hover_x.is_none(), "{edge:?}");
+            // over the strip it hovers as always
+            let r0 = r.app.input_rects()[0];
+            r.app.pointer_motion((r0.x + r0.w / 2) as f32, (r0.y + r0.h / 2) as f32);
+            assert!(r.app.dock.hover_x.is_some(), "{edge:?}");
+            r.app.pointer_motion(w as f32 / 2.0, -(h as f32) * 3.0);
+            assert!(r.app.dock.hover_x.is_none(), "{edge:?}: leaving the strip ends the hover");
+        }
     }
 }

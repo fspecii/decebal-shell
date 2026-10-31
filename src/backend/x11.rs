@@ -297,6 +297,7 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut screen_size = (screen.width_in_pixels as i32, screen.height_in_pixels as i32);
     let mut mon = panel_monitor(&conn, screen.root, screen_size);
     let atoms = intern_atoms(&conn)?;
+    app.output_size(mon.w.max(1) as u32, mon.h.max(1) as u32);
     // Follow monitor hot-plug / resolution changes.
     conn.randr_select_input(screen.root, randr::NotifyMask::SCREEN_CHANGE).map_err(err)?;
 
@@ -497,6 +498,8 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                         screen_size = (g.width as i32, g.height as i32);
                     }
                     mon = panel_monitor(&conn, screen.root, screen_size);
+                    app.output_size(mon.w.max(1) as u32, mon.h.max(1) as u32);
+                    dirty = true;
                 }
                 Event::DestroyNotify(_) => return Ok(()),
                 Event::Error(e) => return Err(Error(format!("server error: {e:?}"))),
@@ -679,6 +682,15 @@ mod tests {
         let dw = place(&dock, (400, 100), m);
         // monitor bottom is flush with the screen bottom
         assert_eq!(strut_partial(&dock, dw, m, (3200, 1080)).unwrap()[3], 84);
+    }
+
+    #[test]
+    fn a_dock_larger_than_a_short_or_narrow_output_is_cut_to_it() {
+        let bottom = SurfaceSpec { anchor: Anchor::Bottom, margin: 13, reserve: 60, stretch: false, namespace: "t" };
+        assert_eq!(place(&bottom, (968, 142), mon(0, 0, 800, 600)), (0, 600 - 142 - 13, 800, 142), "narrow output: as wide as it, flush left");
+        assert_eq!(place(&bottom, (968, 142), mon(0, 0, 1366, 600)), (199, 600 - 142 - 13, 968, 142), "a wide enough output centres it as before");
+        let left = SurfaceSpec { anchor: Anchor::Left, margin: 13, reserve: 60, stretch: false, namespace: "t" };
+        assert_eq!(place(&left, (142, 968), mon(0, 0, 1366, 600)), (13, 0, 142, 600), "short output: as tall as it");
     }
 
     #[test]

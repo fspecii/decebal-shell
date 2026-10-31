@@ -55,9 +55,9 @@ def wait(cond, what, timeout=15.0):
 
 
 class Scenario:
-    def __init__(self, bin_dir, evidence, edge, scale, mode):
+    def __init__(self, bin_dir, evidence, edge, scale, mode, tag=""):
         self.edge, self.scale, self.mode = edge, scale, mode
-        self.name = f"{edge}-{scale.replace('.', '_')}-{mode}"
+        self.name = f"{tag}{edge}-{scale.replace('.', '_')}-{mode}"
         self.evidence = evidence / self.name
         self.evidence.mkdir()
         self.tmp = tempfile.TemporaryDirectory(prefix="dock-kb-")

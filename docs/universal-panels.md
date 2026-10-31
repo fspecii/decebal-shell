@@ -175,6 +175,18 @@ reduced motion keeps everything static, and the Windows taskbar's own keyboard m
 Implementation: `src/dock_app/keyboard.rs`, the ring in `Dock::draw`, and one new `App::home_end` hook (default off) that the X11 and Wayland backends call for Home / End.
 Native acceptance: `tests/e2e/dock-mac-keyboard.py` (real `decdock`, real window manager, XTEST input; see `docs/gnome-theme-ports.md`).
 
+### The macOS dock at a display scale and on small outputs
+
+On X11 the dock is drawn at the display scale (`Xft.dpi` or `DECEBAL_SCALE`, 100/125/200 % checked) by the backend's `Scaled` wrapper, the same way the bars are: the app works in logical
+pixels, and the real window, the strut (`reserve` + `margin`), the input region, the glass mask, the icons, the text, the focus ring and the pointer are all the logical values times the
+scale; vector icons are rasterised at the real size, never enlarged, and the menu's rows are measured at the surface size so they fit the drawn glyphs. `decdock` runs through `run_scaled`;
+the Windows taskbar still applies the scale to itself (`App::backend_scaled()` is false in that style, so it is never scaled twice). Wayland compositors scale surfaces themselves, so nothing changes there.
+
+A dock never exceeds its output. The X11 backend tells the app the output size (`App::output_size`, at start and on every screen change) and cuts the window to it; the dock shrinks its icons,
+padding and spacing to fit along its edge (at least to 40 %), so a short output (a side dock) or a narrow one (a top/bottom dock) at 125/200 % keeps every item visible. Beyond that floor the panel
+is longer than the window and slides so that the keyboard ring's item stays in view (Home/End still reach the ends); the blur mask is cut to the surface. A context menu taller than a short output is
+cut by the window like any popup (no menu scrolling).
+
 ### Workers
 
 Turning an applet off stops the work only it needed: the weather fetch (`weather`), the MPRIS subscription

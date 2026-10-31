@@ -101,7 +101,8 @@ fn main() {
             let mut dock = Dock::new(dock_items(&running), config::dock_settings());
             dock.hover_x = hover;
             let app = DockApp::new(dock).with_scale(scale).track_windows().watch_config().with_gate(closed).with_focus_signal();
-            if let Err(e) = backend::run(app, spec) {
+            // the macOS dock is drawn at the display scale by the backend (`Xft.dpi` / `DECEBAL_SCALE`); the taskbar scales itself
+            if let Err(e) = backend::run_scaled(app, spec, scale) {
                 decebal::log_error!("fatal: {e}");
                 eprintln!("decdock: {e}");
                 std::process::exit(1);

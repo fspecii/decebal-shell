@@ -14,8 +14,17 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tiny_skia::Pixmap;
 
+#[cfg(test)]
+mod dpi_tests;
 mod keyboard;
 mod windows;
+
+/// Width of `s` in menu text in logical pixels. At a display scale the glyphs are rasterised at the surface size, so they are measured
+/// there and divided back: the menu's rows are as wide as the text drawn in them.
+fn measure_logical(f: &Fonts, s: &str) -> f32 {
+    let k = crate::gfx::render_scale();
+    f.measure(s, TEXT_PX * k, Weight::Regular) / k
+}
 
 /// Side effects of the dock (starting programs), replaceable in tests.
 pub trait Effects {
@@ -440,7 +449,7 @@ impl DockApp {
             has_desktop: launch::find_desktop_file(&item.id).is_some(),
         };
         let fonts = Fonts::load();
-        let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| f.measure(s, TEXT_PX, Weight::Regular));
+        let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| measure_logical(f, s));
         let mut entries = dock_menu::build_entries(&ctx);
         entries.extend(dock_menu::style_entries());
         let menu = DockMenu::new(&item.id, entries, cell.x + cell.w / 2.0, &measure);
@@ -457,7 +466,7 @@ impl DockApp {
         let s = &self.dock.settings;
         let entries = dock_menu::build_entries_dock(s.style, s.windows_align, s.windows_labels);
         let fonts = Fonts::load();
-        let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| f.measure(s, TEXT_PX, Weight::Regular));
+        let measure = |s: &str| fonts.as_ref().map_or(s.chars().count() as f32 * 7.0, |f| measure_logical(f, s));
         let menu = DockMenu::new("dock", entries, x, &measure);
         if let Some(f) = &fonts {
             f.trim();
@@ -586,6 +595,15 @@ impl App for DockApp {
         self.surface = (w, h);
     }
 
+    /// The macOS dock is drawn at the display scale by the backend; the taskbar applies the scale to itself.
+    fn backend_scaled(&self) -> bool {
+        !self.is_windows()
+    }
+
+    fn output_size(&mut self, w: u32, h: u32) {
+        self.dock.output = Some((w as f32, h as f32));
+    }
+
     fn surface_origin(&mut self, x: i32, y: i32) {
         self.surface_origin = (x, y);
         if let Some(win) = &mut self.win {
@@ -649,6 +667,15 @@ impl App for DockApp {
             }
             let cleared = m.menu.pointer_moved(&d, -1.0, -1.0);
             return cleared;
+        }
+        // While the keyboard mode holds the pointer grab, motion anywhere on the screen reaches the dock: only motion over its strip hovers
+        let over = self.input_rects().first().is_none_or(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
+        if !over {
+            let was = self.dock.hover_x.take().is_some();
+            if was {
+                self.wake();
+            }
+            return was;
         }
         let changed = self.dock.hover_x != Some(along);
         self.dock.hover_x = Some(along);

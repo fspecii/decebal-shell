@@ -94,6 +94,14 @@ pub trait App {
     fn nav_key(&mut self, _key: NavKey) -> bool {
         false
     }
+    /// Whether the display scale of [`crate::backend::run_scaled`] applies to this app right now. An app that applies the
+    /// scale itself (the Windows taskbar) says no while it does; the default is yes.
+    fn backend_scaled(&self) -> bool {
+        true
+    }
+    /// The size of the output the surface sits on, in the app's logical pixels (X11; called before the first
+    /// [`App::size`] and whenever the screen layout changes). An app whose natural size may not fit shrinks itself to it.
+    fn output_size(&mut self, _w: u32, _h: u32) {}
     /// Home (`end` false) or End (`end` true) while [`App::wants_keyboard`] is true; apps without a use for them ignore them.
     fn home_end(&mut self, _end: bool) -> bool {
         false
