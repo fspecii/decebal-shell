@@ -746,6 +746,17 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
     ui.connect_transfers();
     ui.connect_search();
     ui.start_theme(theme_reader);
+    // Connected after the operation guard: close-request emission stops at a handler that
+    // keeps the window open, so this runs only when the window really closes. The process
+    // exits right after the last window, before ::destroy, so pending work stops here.
+    let weak = Rc::downgrade(&ui);
+    ui.window.connect_close_request(move |_| {
+        if let Some(ui) = weak.upgrade() {
+            ui.close_theme();
+            ui.dump();
+        }
+        glib::Propagation::Proceed
+    });
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let weak = Rc::downgrade(&ui);
@@ -810,12 +821,8 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool, profile: Optio
     ui.window.connect_destroy(move |_| {
         retained.resolver.stop();
         retained.monitor.stop();
-        if let Some(monitor) = &retained.theme.monitor {
-            monitor.stop();
-        }
-        for source in [retained.theme.source.borrow_mut().take(), retained.theme.timer.borrow_mut().take()].into_iter().flatten() {
-            source.remove();
-        }
+        retained.close_theme();
+        retained.dump();
         for source in [retained.monitor_source.borrow_mut().take(), retained.refresh_timer.borrow_mut().take()].into_iter().flatten() {
             source.remove();
         }

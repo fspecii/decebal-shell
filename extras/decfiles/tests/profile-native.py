@@ -46,6 +46,10 @@ try:
     s.wait(lambda:profile().get('too_large',0)>too_large,'oversized gtk.css was not refused')
     assert profile()['id']=='explorer' and pixel(s,'oversized-ignored')=='#3c8c50' and s.state()['layout']=='columns'
     s.cases.append('a gtk.css over the 2 MiB cap is not read past the cap and changes nothing')
+    rejected=profile().get('rejected',0);css=Path(s.env['XDG_CONFIG_HOME'])/'gtk-4.0'/'gtk.css';fifo=css.with_suffix('.fifo');os.mkfifo(fifo);fifo.rename(css)
+    s.wait(lambda:profile().get('rejected',0)>rejected and not profile().get('active_read'),'FIFO gtk.css was not rejected before reading')
+    s.address(base/'Folder');s.address(base);assert profile()['id']=='explorer' and pixel(s,'fifo-rejected')=='#3c8c50'
+    s.cases.append('a non-regular gtk.css (FIFO) is rejected from metadata, never opened, and the app stays responsive')
     write(s,generated(None,'#3c8c50'));s.wait(lambda:profile().get('id')=='native' and 'decfiles-native' in profile()['window_classes'],'missing marker did not select Native')
     (Path(s.env['XDG_CONFIG_HOME'])/'gtk-4.0'/'gtk.css').unlink();time.sleep(.6);assert profile()['id']=='native' and s.state()['layout']=='columns'
     s.cases.append('no marker or no file means Native without touching the explicit layout')

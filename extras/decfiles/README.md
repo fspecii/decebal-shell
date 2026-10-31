@@ -47,10 +47,24 @@ does not save preferences or read/write Decebal configuration.
   A second bounded monitor watches that folder (or its parent until it exists),
   reads the file asynchronously through GIO, and reapplies it at USER+1 priority,
   so palette changes apply live.
-  Each read gets a generation. An older read stops at its next 64 KiB chunk, and
-  its completion is ignored, so a delayed read cannot revert a newer palette or
-  profile. The read is bounded: a file over 2 MiB is never read past the cap and
-  changes nothing.
+  **At most one physical read is outstanding.** A change during a read sets one
+  coalesced pending request and cancels the active read's GIO operations through
+  their explicit `GCancellable`. The next read starts only after the active one has
+  returned, and a read is applied only if nothing newer is pending. So a stale read
+  is never applied, and bursts cannot pile up tasks or streams.
+
+  Each read first queries the file type and size (`query_info_async`).
+  Non-regular inputs (FIFOs, devices, folders) are rejected before any open, and
+  files reported larger than 2 MiB are rejected without reading. Reads then
+  request at most the remaining allowance plus one sentinel byte, so a file that
+  grows past the cap is detected after at most 2 MiB + 1 byte. A file swapped for
+  a FIFO between the query and the open can still block that one read in GIO's
+  worker thread; cancellation cannot force a blocked POSIX `open` to return. It
+  stays bounded to that single outstanding read.
+
+  Closing (at `close-request`, because the process exits before `::destroy`)
+  cancels the active read, drops the pending request and starts nothing new. A
+  blocked worker is not joined.
   The shell's `/* Files visual profile: explorer|finder (native file operations) */`
   marker, or an explicit `--profile=explorer|finder|native`, selects:
   - window-scoped `decfiles-explorer` / `decfiles-finder` surfaces, using only the
@@ -339,6 +353,33 @@ Copy/move evidence (default binary
   `duplicate-selected.png`.
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
+
+Read-lifecycle checkpoint (root review of f0a73fd): gtk.css reads keep one
+physical read outstanding plus one coalesced request, cancel stale GIO
+operations, reject non-regular inputs before reading, read only remaining + 1
+sentinel bytes, and stop pending work at close.
+
+Default `7572a14b12e15e45c3be649c495d684e840182674d27251b6f44a1de29b9806a` and
+fixture `3383bd4b81f44330e11f0eb145bf580512dae05d29f737f3ad87a1410b5b38b2`
+(`/var/tmp/decfiles-lifecycle-artifacts/`) pass one final gate in
+`/var/tmp/decfiles-lifecycle-gate-*-evidence/`, with 28 Rust tests: navigation 8,
+operations 13, transfers 10, views 12, tabs 6, search 7, close 4,
+transfers-cancel 4, paste-races 2+1, search-races 2. Two suites gained cases:
+
+- **profile 6+1:** a FIFO `gtk.css` rejected from metadata, never opened, with
+  the app still responsive.
+- **theme-races 2+1:** the fixture now holds *every* read as if blocked in a
+  syscall cancellation cannot retire.
+  - A held stale read is never applied, not even briefly, and the newer file
+    wins after release.
+  - A burst of eight rewrites (several requests) starts at most two physical
+    reads, and the latest palette, profile and layout win.
+  - Closing during a held read with a pending request exits in about 0.03 s,
+    with the reader closed, nothing pending and no new read started
+    (`…-theme-races-evidence-close/`).
+
+The growth-past-cap sentinel path has no native test of its own; the oversized
+case is rejected from metadata first.
 
 Bounds checkpoint (root review of 28788b8): 28 Rust tests, including:
 
