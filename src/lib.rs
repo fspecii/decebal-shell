@@ -5,8 +5,8 @@
 //! same pixels can be pushed to a Wayland `wl_shm` buffer or an X11 ARGB window.
 
 pub mod app;
-pub mod apps;
 pub mod appmenu;
+pub mod apps;
 pub mod backend;
 pub mod calc;
 pub mod capture;
