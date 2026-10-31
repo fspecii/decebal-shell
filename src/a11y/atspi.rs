@@ -361,8 +361,8 @@ fn segments(c: &[char], gran: u32) -> Vec<(usize, usize)> {
         }
         _ => {
             let mut s = 0;
-            for i in 0..n {
-                if c[i] == '\n' {
+            for (i, ch) in c.iter().enumerate().take(n) {
+                if *ch == '\n' {
                     out.push((s, i + 1));
                     s = i + 1;
                 }
@@ -451,7 +451,7 @@ pub fn handle(ctx: &Ctx, t: &Tree, m: &Message) -> Outcome {
     if m.iface == PEER {
         return match m.member.as_str() {
             "Ping" => reply(m, "", |_| {}),
-            "GetMachineId" => reply(m, "s", |w| w.string(&std::fs::read_to_string("/etc/machine-id").unwrap_or_default().trim().to_string())),
+            "GetMachineId" => reply(m, "s", |w| w.string(std::fs::read_to_string("/etc/machine-id").unwrap_or_default().trim())),
             _ => unknown_method(m),
         };
     }
