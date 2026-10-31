@@ -414,15 +414,19 @@ def _read(src):
 
 # What an inventory may name: only this package's own install namespace under the exact prefix it was written for.
 def _owned(path, prefix):
-    p = re.escape(prefix)
-    return any(re.fullmatch(rx, path) for rx in (
-        rf'{p}/bin/(dec|mac)[a-z]+',
-        rf'{p}/lib/systemd/user/decebal-[a-z-]+\.service',
-        r'/etc/xdg/autostart/decebal-[a-z-]+\.desktop',
-        rf'{p}/share/applications/dec[a-z]+\.desktop',
-        rf'{p}/share/decebal/[^\n]+',
-        rf'{p}/share/(doc|licenses)/decebal/[^\n]+',
-    )) and not any(x in ('', '.', '..') for x in path.split('/')[1:])
+    # Shared system directories require exact shipped names. A dec*/mac* prefix also
+    # matches unrelated programs such as machinectl and macchanger.
+    binaries = set(BINS) | {'mac' + name[3:] for name in BINS if name not in NO_COMPAT}
+    exact = {f'{prefix}/bin/{name}' for name in binaries}
+    exact |= {f'{prefix}/share/applications/{name}.desktop' for name in APPLICATIONS}
+    exact |= {f'{prefix}/lib/systemd/user/decebal-{name}.service' for name in UNITS}
+    exact |= {f'/etc/xdg/autostart/decebal-{name}.desktop' for name in UNITS}
+    if path in exact:
+        return True
+    # Only package-exclusive trees may contain arbitrary asset names. Deliberately
+    # retain unknown/retired shared-directory names rather than guessing ownership.
+    roots = (f'{prefix}/share/decebal/', f'{prefix}/share/doc/decebal/', f'{prefix}/share/licenses/decebal/')
+    return path.startswith(roots) and not any(x in ('', '.', '..') for x in path.split('/')[1:])
 
 
 def _load_inventory(dest, prefix):

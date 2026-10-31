@@ -313,6 +313,14 @@ class ConfinementTests(StageFixture):
         self.installed()
         foreign = {'home/user/notes.txt': b'my notes', 'usr/local/lib/libfoo.so': b'lib', 'usr/local/bin/othertool': b'tool',
                    'etc/xdg/autostart/other-app.desktop': b'[Desktop Entry]\n', 'usr/local/share/applications/firefox.desktop': b'x'}
+        foreign.update({
+            'usr/local/bin/machinectl': b'foreign machine manager',
+            'usr/local/bin/macchanger': b'foreign MAC tool',
+            'usr/local/bin/decforeign': b'unrelated program',
+            'usr/local/share/applications/decforeign.desktop': b'unrelated desktop entry',
+            'usr/local/lib/systemd/user/decebal-foreign.service': b'unrelated service',
+            'etc/xdg/autostart/decebal-foreign.desktop': b'unrelated autostart',
+        })
         for rel, data in foreign.items():
             (self.dest / rel).parent.mkdir(parents=True, exist_ok=True)
             (self.dest / rel).write_bytes(data)
