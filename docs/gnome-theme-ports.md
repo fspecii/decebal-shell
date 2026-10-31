@@ -223,9 +223,9 @@ levels have no fallback (the percentage text remains). Traversal-looking names a
 
 ### Verification
 
-* **Metrics/painter evidence, not a pixel replica.** No GNOME Shell runtime exists on this host (`gnome-shell` is not installed), so there is no
-  source capture to diff against. The values above are measured from the pinned stylesheet and JS; the painter tests assert the resulting rectangles and
-  the exact pixels of the derived colours. Do not read the captures as a pixel-identical GNOME replica.
+* **Metrics/painter evidence against a compiled source reference, not a pixel replica.** The rendering is *not* compared against a running GNOME Shell (see
+  [Source reference](#source-reference-and-the-runtime-comparison-that-was-not-possible)); it is compared with the numbers the Shell's own stylesheet
+  compiles to, and the remaining differences are listed and numbered. Do not read the captures as a pixel-identical GNOME replica.
 * `cargo test --lib controlcenter::gnome`: 16 painter/layout tests (pinned metrics; every `Target` reachable; each group off removes exactly its controls;
   unavailable providers never clickable; state text/icons/order; 0.8-3.0× text scale with no overlap or overflow and touch areas ≥ 28 px; slider hit rows
   with 6 px extra; reading order; colour formulas; authentic icons + fallbacks; pixels in light and dark; hover; ellipsis at 200 %).
@@ -240,6 +240,38 @@ because publishing a global theme from a parallel test disturbed unrelated tests
 tests (`theme::engine::apply::tests::preview_reverts_by_itself`, two `theme::wallpaper_follow` tests) failed intermittently in one of two full runs and
 passed alone and on the rerun; they do not touch this code. Scratch directories must not contain "gnome" in their path: the omarchy apply test asserts that no
 command line mentions it.
+
+### Source reference and the runtime comparison that was not possible
+
+**Private upstream runtime comparison: attempted, impractical, not done.** Rendering the real quick-settings popover needs `gnome-shell` with `mutter` (plus
+`gjs`, `gnome-settings-daemon`, GTK 4/libadwaita, WebKitGTK for the extension host and a session/system bus). None of these is installed here, the Arch/Debian
+packages pull several hundred MB of dependencies and want `sudo`/a system bus, and the constraints of this work forbid host installs, a global bus and input
+injection. Building mutter + gnome-shell from source privately needs the same library stack. So no screenshot of a real Shell exists and none is claimed.
+
+**What was done instead: the stylesheet, compiled by upstream's own compiler.** `gnome-shell` 51.1 (`33da068`, archive `data/theme` only, sha256
+`22c1503a…`) was compiled with `sassc 3.6.2` / `libsass 3.6.6` (the compiler `data/theme/meson.build` invokes; `sassc -a gnome-shell-{dark,light}.scss`). The two
+Arch packages were downloaded to a private directory, **their SHA-256 matched on two mirrors and their detached signatures verified** (`gpg --verify`, Good
+signature, keys from the distribution keyring in a private `GNUPGHOME`; trust path *unknown*, so this authenticates the mirror copy, not the packager), extracted
+without installing anything, and run with `LD_LIBRARY_PATH` pointing at the extracted libsass, no network and no display. The compiled CSS is parsed as text by
+`tests/e2e/gnome-shell-reference.py` into `tests/fixtures/gnome-theme-ports/gnome-shell-51.1-quick-settings-reference.json` (package hashes, CSS hashes,
+30 dark / 30 light colours, 36 lengths). The Shell resolves four colour functions at run time (`st-mix`, `st-lighten`, `st-darken`, `st-transparentize`, in
+`st-theme-node.c`); the script evaluates them with a port of that C code with libadwaita's default blue accent as input.
+
+`cargo test --lib controlcenter::gnome` then asserts (a) every layout length (panel radius/padding, grid gaps, toggle height/padding/spacing, icon size, slider
+trough/handle, icon-button and menu-button padding, message card) against the reference, and (b) every colour the renderer derives (button normal/hover/insensitive,
+checked toggle and hover, menu button, card, panel surface and border) within ±2/255 of the Shell's value in both variants. The numeric differences that remain are
+*recorded in the test* (`KNOWN_DIFFERENCES`), not hidden:
+
+| difference | Shell | Decebal | size |
+|---|---|---|---|
+| mixed-colour rounding | St truncates each byte | rounds | ≤ 1/255 per channel |
+| light panel background | `$bg_color` `#fafafb` | the theme's `popup` token `#ffffff` | 5, 5, 4 per channel |
+| focus ring | inset 2 px ring, lightened accent at 80 % | 2 px accent ring standing 3 px off the control | 3 px outset, opaque |
+| pressed state | `:active` colours | not drawn (the pointer protocol gives the panel no press state) | one state |
+| message card padding | 6 + 6 px | fixed 12 px inset | 0 px, structure differs |
+
+Anything not in the fixture (glyph shapes, text rasterisation, shadow, the real Overview transition, font metrics of Cantarell vs the installed UI font)
+is *unmeasured*, not equal. `python3 -I tests/e2e/gnome-shell-reference.py DARK.css LIGHT.css provenance.json OUT.json` regenerates the fixture from the compiled CSS.
 
 ### Evidence (debug build `~/.cache/gnome-ports/target`, library test binary SHA-256 `31c96593510c4c4b1886afe8dc2fdec02806b1dadd3bfd0459132f3f31be990b`)
 
@@ -442,15 +474,17 @@ Glyphs of the bar are Material Symbols (blocker 3). rdwm titlebars were not capt
 
 ### Test results
 
-All run with the host session cleared (see [Test isolation](#test-isolation-incident-and-remediation)): `cargo test -j2 --test gnome_theme_ports` 11 passed (packages valid or refused for the 0.3.0 floor only,
+All run with the host session cleared (see [Test isolation](#test-isolation-incident-and-remediation)): `cargo test -j2 --test gnome_theme_ports` 13 passed (packages valid or refused for the 0.3.0 floor only,
 bundled font byte-identical, contrast, pinned tokens/geometry, palette and extension defaults, panel items, global tiling preference, apply structure, the 0.3.0/GNOME-look gate,
-wallpaper provenance incl. the pending Catppuccin dark slot, native preview render); in the sandbox below: `controlcenter:: menubar:: settings::ccpane theme::live` 262 passed;
+wallpaper provenance incl. the owner-reviewed Catppuccin dark photo, proposed 0.3 framework manifests, asset-pack catalogue, native preview render); in the sandbox below: `controlcenter:: menubar:: settings::ccpane theme::live` 262 passed;
 `spotlight::` 23 passed; the private-service driver 24 passed (stubs saw only `decnotify dnd status` once and `brightnessctl -m` twice).
-Source hashes (prefixes): `tests/gnome_theme_ports.rs` `c61d36db77139073…`, `tests/e2e/gnome-theme-ports-native.py` `d5e56a32591b10ce…`,
-`tests/fixtures/gnome-theme-ports/wallhaven-fragment.json` `4e9a4c118f733240…`.
-On this 0.2.x tree `theme::engine::shipped::every_theme_folder_is_a_valid_package_whose_id_is_its_folder` (not touched here) fails because the two packages now declare 0.3.0; it passes
-once merged into the 0.3.0 tree. A full `--lib` run has **not** been repeated since the isolation incident (root asked to coordinate first); an earlier full run showed only that test
-plus timing-sensitive `theme::engine::apply::preview_reverts_by_itself` / `theme::wallpaper_follow` tests failing under `nice` load, which passed alone.
+Full `--lib` run, sandbox only (single thread, 318 s): **1726 passed, 4 failed, 16 ignored**; the spawn log held only probes/queries (`sudo -n -l`, `nmcli`, `gsettings get`, `xset q`, `pactl`
+list/get, `xdg-mime query`, `ffmpeg` stand-in calls), no setter. The four failures are not in this change: `theme::engine::shipped::every_theme_folder_is_a_valid_package_whose_id_is_its_folder`
+(this 0.2.0 tree rejects the 0.3.0 floor; passes once merged into the 0.3.0 tree), `livewall::preview::…moving_frames_are_bounded_and_decoder_is_reaped` (needs a real `ffmpeg`; the sandbox has a recording stand-in),
+`theme::engine::cli::…the_whole_workflow_from_new_to_apply_and_undo` (`theme validate` prints `warning: theme.toml: no author` before `ok: Mine`, so the `starts_with("ok: Mine")` assertion fails; reproduced with `decthemectl` in the same environment), and
+`theme::engine::apply::…preview_reverts_by_itself` (timing/wallpaper-hook test; failed alone in the sandbox too and intermittently before). The last two were not compared against an unmodified build; none of them touches the files changed here.
+Source hashes (prefixes): `tests/gnome_theme_ports.rs` `05c2c7ac1b5749cb…`, `tests/e2e/gnome-shell-reference.py` `a0a643c2a1fe9228…`, `tests/e2e/gnome-asset-receipts.py` `cc793b05a6f1aeee…`,
+`tests/fixtures/gnome-theme-ports/wallhaven-fragment.json` `4d5930430636add6…`, `…/gnome-shell-51.1-quick-settings-reference.json` `3147543b3d5f57d9…`, `assets/desktop-ports/gnome/asset-packs.toml` `416318c34801e81b…`.
 
 ### Test isolation incident and remediation
 
@@ -462,6 +496,36 @@ Remediation, committed separately as `032b408` (spotlight only, production code 
 the test now asserts the intended Ctrl+Enter action, and a regression test shows Enter on copy/shell/URL/exec actions starts nothing. Practice since then: every Cargo job runs as
 `flock --close …/slot1.lock nice -n10 cargo …` with the host session variables unset; test binaries run in a sandbox (`env -i`, dead `DISPLAY`, private HOME/XDG, invalid session and system
 buses, a `PATH` of recording stubs that use shell builtins only, absolute `/usr/bin/timeout`, read-only `fc-list`/`fc-match` and harmless utilities linked through) and the spawn log is checked.
+
+## Icon and cursor assets (asset-pack catalogue)
+
+The shared contract is `docs/desktop-asset-packs.md` of the asset-pack owner (`feat/claude-desktop-asset-packs`): a port ships data only in
+`assets/desktop-ports/<family>/asset-packs.toml`; the installer pins, verifies and fetches; nothing from upstream is executed. This port's file is
+`assets/desktop-ports/gnome/asset-packs.toml` (`sha256 416318c3…`). Registering it in `src/desktop_assets/builtin.rs` (one `include_str!` line) is the root's
+job after the asset owner's branch lands; this change does not touch that file or the engine.
+
+| pack id | what | source pin | licence | recommended for |
+|---|---|---|---|---|
+| `gnome-papirus-dark` | Papirus-Dark icons (the rice's `[icons] theme`) | papirus-icon-theme `5f8b701d…` (tag 20260801), tree `f59bf656…`, archive sha256 `d57b247b…` (33 MB `.tar.gz`) | GPL-3.0-only, `LICENSE` copied | `gnome-catppuccin-dock` |
+| `gnome-papirus` | Papirus (light variant, and the base `Papirus-Dark` links into) | same commit, tree `56b5312e…` | GPL-3.0-only | – |
+
+`Papirus-Dark` is 51 655 relative symlinks into `../Papirus`, hence `link_sources = ["Papirus"]` (they become copies). `tests/e2e/gnome-asset-receipts.py`
+emulates the documented checks on the real archive (**all pass**): archive sha256, the pax comment equals the commit, the licence file exists, both git tree
+OIDs reproduce from the archive bytes, and every symlink stays inside the pack or its `link_sources`. The installer itself, and `decthemectl assets catalog check`,
+are not in this tree, so they were **not run**; `tests/gnome_theme_ports.rs::asset_pack_catalogue_follows_the_published_contract` checks the same rules the
+published validator lists (hex lengths, https, unique ids, references, the family prefix, the recommendation matching the theme's own icon theme, no command-like keys).
+
+**Not in the catalogue, and why** (each is an honest gap of the contract's "prebuilt trees only" rule, not a missing fact):
+
+* **Adwaita icons and cursors** (`gnome-adwaita`'s own look). `adwaita-icon-theme` 51.0 (`70ecd52f…`, LGPL-3.0 / CC-BY-SA-3.0) installs only through meson; the repository
+  tree is not an installable theme. It is the toolkit default and ships as the distribution package `adwaita-icon-theme`, which the control-center painter already
+  reads at run time. The theme recommends nothing; the package is a documented system dependency.
+* **Catppuccin cursors** (the rice's usual cursor). The repository holds SVG sources built by a `justfile` (GPL-2.0); the releases are `.zip` files, which the installer
+  refuses. Route: unpack one release yourself and `decthemectl assets import DIR --provides cursors --license GPL-2.0-only`.
+* **Bibata cursors**. Releases are `.tar.xz`, refused (no decoder). Same `import` route.
+
+So the rice gets a verified icon recommendation but no cursor recommendation until either the contract accepts `.zip`/`.xz` or an upstream publishes a prebuilt tree.
+No cursor or icon file is copied into this repository.
 
 ## Wallpaper candidates (independently accepted, not merged)
 
@@ -480,10 +544,9 @@ Photographic appearance does not certify capture method; licences stay unknown, 
 | gnome-adwaita | dark | [yx3w57](https://wallhaven.cc/w/yx3w57) | Tasman Lake **sunrise**, blue/violet/pink sky | 3840×2160 | jrmnt | SuperRare listing credits Paul Wilson (15-shot panorama, 2023-08-12; uncertified) | accepted, all crops |
 | gnome-adwaita | light | [v9kw2m](https://wallhaven.cc/w/v9kw2m) | Picos de Europa lake, cloud reflections | 5280×2970 | Petunai42 | r/EarthPorn post marked OC by u/Pchabs; image byte-identical | accepted, all crops |
 | gnome-catppuccin-dock | light | [d8prrm](https://wallhaven.cc/w/d8prrm) | Mount Fuji, pastel sunset, long exposure | 5120×2880 | Pc7 | none given | accepted, all crops |
-| gnome-catppuccin-dock | dark | **pending** | rejected candidate [833qd2](https://wallhaven.cc/w/833qd2) (Guangzhou skyline) | 3840×2160 | arg81 | none given | **rejected** for centre-fill: the 3440×1440 crop removes the upper parts of the tallest towers |
+| gnome-catppuccin-dock | dark | [rrezx7](https://wallhaven.cc/w/rrezx7) | Milky Way column and Magellanic Cloud over a red horizon glow, NZ | 4500×3000 (3:2) | jrmnt | post of the account `paulwilsonimage` (author unverified, post not opened) | **owner-reviewed** (all crops, panel/dock luminance); independent acceptance pending |
 
-For the Catppuccin dark slot a bounded replacement search (4 queries, 8 originals) found nothing passing every crop; the mapping stays pending
-rather than reusing an unrelated or duplicate photo (the Adwaita dark photo would be a plausible Mocha fallback but is deliberately not proposed).
+The Catppuccin dark slot's first candidate `833qd2` stays **rejected** (the 3440×1440 centre-fill crop removes the upper parts of the tallest towers). The replacement `rrezx7` came from a second, wider search (11 queries, ~40 originals' thumbnails, two full downloads) that preferred named-source night photography: crops at 16:9, 3440×1440 and 1080×1920 were viewed, and the top-32-px panel band and bottom-centre dock zone were measured (relative luminance p95 0.087-0.122 under the panel, ≤ 0.04 at the dock; Mocha text stays ≥ 4.5:1 on the 60 % crust panel while backdrop luminance ≤ 0.26). That review is the port owner's, not the independent reviewer's; no generated art is used and nothing is shipped or merged.
 
 Rejected during first selection: `lm2l3r` and `v9dzg8` (digital art / photo-manipulation / AI-style retro illustration), `jexxqy` (too little scene).
 

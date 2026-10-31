@@ -1,0 +1,145 @@
+# PROPOSED manifest for the 0.3 universal-panel framework: the shipped themes/gnome-adwaita/theme.toml plus `[bar] applets` and `[branding]`.
+# Not shipped: this tree's validator rejects those keys ("unknown key"). tests/gnome_theme_ports.rs proves it differs from the shipped manifest ONLY by them;
+# tests/e2e/framework-0.3-validate.py validates it with a 0.3 decthemectl.
+format = 1
+id = "gnome-adwaita"
+name = "GNOME Adwaita"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "GNOME 51 / libadwaita 1.10 Adwaita light and dark: 32 px top panel, 47 px headerbars with 15 px window corners, Adwaita Sans, the stock named colours and a quick-settings panel. Unaffiliated with GNOME."
+homepage = "https://gitlab.gnome.org/GNOME/libadwaita"
+min_shell_version = "0.3.0"
+tags = ["gnome", "adwaita", "libadwaita", "light", "dark", "native-panel"]
+
+# Colours are the libadwaita 1.10.0 named colours (src/stylesheet/_colors.scss, c9ab118) and the gnome-shell 51.1 sass
+# (data/theme/gnome-shell-sass, 33da068) resolved to opaque sRGB, because a package token is one opaque colour.
+# Alpha derived values (80 % foreground, 15 % border, 8 % card) are pre-blended over the surface they sit on.
+# Derivations are listed in README.md.
+[colors.light]
+background = "#fafafb"          # window_bg_color
+sidebar = "#ebebed"             # sidebar_bg_color
+surface = "#ffffff"             # card_bg_color / view_bg_color
+bar = "#fafafb"                 # shell light $panel_bg_color = $_base_color_light
+bar_text = "#222226"            # shell light $panel_fg_color = $_base_color_dark
+popup = "#ffffff"               # popover_bg_color
+dock = "#38383b"                # shell $system_overlay_bg_color: the dash is always dark
+overlay = "#f3f3f5"             # --overview-bg-color (light)
+titlebar = "#ffffff"            # headerbar_bg_color
+titlebar_inactive = "#fafafb"   # headerbar_backdrop_color = window_bg_color
+border = "#dcdcde"              # currentColor at 15 % (--border-opacity) over window_bg_color
+text = "#323237"                # window_fg_color rgb(0 0 6 / 80 %) over window_bg_color
+text_secondary = "#78787b"      # shell $insensitive_fg_color: 60 % foreground mix
+text_faint = "#969699"          # --disabled-opacity 50 % over window_bg_color
+accent = "#3584e4"              # accent_bg_color (blue) as a fill; accent_fg_color is white
+accent_text = "#ffffff"
+danger = "#c30000"              # destructive_color: red_3 clamped to oklab L<=0.5 for text
+ok = "#007c3d"                  # success_color: green_4 clamped to oklab L<=0.5
+warn = "#905400"                # warning_color: yellow_5 clamped to oklab L<=0.5
+
+[colors.dark]
+background = "#222226"          # window_bg_color
+sidebar = "#2e2e32"             # sidebar_bg_color
+surface = "#343437"             # card_bg_color rgb(255 255 255 / 8 %) over window_bg_color
+bar = "#000000"                 # shell dark $panel_bg_color = $dark_5
+bar_text = "#ffffff"            # shell $panel_fg_color = $light_1
+popup = "#36363a"               # popover_bg_color
+dock = "#38383b"                # shell $system_overlay_bg_color
+overlay = "#28282c"             # --overview-bg-color (dark)
+titlebar = "#2e2e32"            # headerbar_bg_color
+titlebar_inactive = "#222226"   # headerbar_backdrop_color = window_bg_color
+border = "#434347"              # currentColor at 15 % over window_bg_color
+text = "#ffffff"                # window_fg_color
+text_secondary = "#9b9b9d"      # shell $insensitive_fg_color: 50 % foreground mix over the popup
+text_faint = "#909092"          # --disabled-opacity 50 % over window_bg_color
+accent = "#3584e4"              # accent_bg_color
+accent_text = "#ffffff"
+danger = "#ff938c"              # destructive_color: red_4 raised to oklab L>=0.85 for text
+ok = "#78e9ab"                  # success_color: green_5 raised to oklab L>=0.85
+warn = "#ffc252"                # warning_color: #cd9309 raised to oklab L>=0.85
+
+[metrics]
+radius = 20                     # shell popover: $modal_radius * 1.25 = 20 px; the quick-settings card scales from it
+dock_roundness = 0.8            # dash: $modal_radius 16 + $dash_padding 12 = 28 px on a ~72 px high capsule
+dock_alpha = 1.0                # the dash is an opaque system overlay
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 1.0                 # the panel is opaque; transparent-in-overview is a framework gap, see docs/gnome-theme-ports.md
+shadow = 0.9                    # libadwaita window shadow 0 0 14px 5px rgb(0 0 0 / 15 %)
+outline = 0.1                   # popover outline ring
+dock_padding = 12               # $dash_padding = $base_padding * 2
+
+[font]
+files = ["fonts/MaterialSymbolsRounded.ttf"]   # glyphs of the native bar items (Apache-2.0); see ATTRIBUTION.md
+# Adwaita Sans / Adwaita Mono (adwaita-fonts, SIL OFL) are the GNOME 48+ interface/monospace faces. They are a system
+# dependency, not shipped; Cantarell and Inter are the fallbacks the existing Adwaita-like package also uses.
+ui = ["Adwaita Sans", "Cantarell", "Inter", "Noto Sans"]
+title = ["Adwaita Sans", "Cantarell", "Inter", "Noto Sans"]
+mono = ["Adwaita Mono", "JetBrains Mono", "Noto Sans Mono"]
+display = ["Adwaita Sans", "Cantarell", "Inter", "Noto Sans"]
+scale = 1.0
+
+[decoration]
+style = "adwaita"
+height = 47                     # headerbar min-height 47 px
+radius = 15                     # --window-radius = $button_radius 9 + 6
+title_align = "center"          # headerbar title is centred
+
+[rdwm]
+# Appearance only: gaps and border. Stock GNOME floats windows, but Decebal's global window policy (new apps tile first, normal free drag,
+# Shift-snap, auto-formation) is the user's explicit preference, so this package deliberately declares no layouts, mfact, nmaster or
+# smart_gaps and never changes how windows are arranged. Stock GNOME also has no window border (border_px = 0).
+gap_inner = 12
+gap_outer = 12
+border_px = 0
+
+[bar]
+enabled = true
+style = "dux"
+position = "top"
+height = 32                     # #panel height: 2.2em at 11 pt
+background = "band"
+margin = 0
+spacing = 0
+band_radius = 0
+radius = 16                     # panel buttons are fully round (999 px radius), bounded by half the face
+# Activities | date menu | quick-settings capsule, mapped to the native item ids.
+left = ["launcherButton", "workspaceSwitcher"]
+center = ["clock", "notificationButton"]
+right = ["network", "audio", "battery", "controlCenterButton"]
+# default applet set of the 0.3 framework ([bar] applets); the Dux lists above stay as the preserved aliases
+applets = ["launcher", "workspaces", "clock", "notifications", "network", "volume", "battery", "control_center"]
+
+[dock]
+enabled = false                 # stock GNOME shows the dash only inside the Overview
+style = "mac"
+size = 48
+align = "center"
+roundness = 0.8
+magnification = 1.0
+
+[icons]
+theme = "Adwaita"
+fallback = "hicolor"
+size_scale = 1.0
+monochrome_tint = true          # symbolic icons follow the foreground, as in GNOME
+
+[hot_corners]
+top_left = "overview"           # GNOME's default hot corner opens the Overview
+dwell_ms = 200
+
+[control_center]
+enabled = true
+position = "auto"               # beside the panel's own button on whichever edge the panel is on
+style = "gnome"                 # GNOME Shell 51.1 quick settings (control_center/gnome.rs); needs 0.3.0, see min_shell_version
+tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"]
+
+[desktop]
+widgets = "none"                # GNOME has no desktop widgets
+
+# [branding] (universal-panel contract, docs/universal-panels.md at 71e3434): the GNOME identity every renderer shows instead of the style's own.
+[branding]
+logo = "icon:start-here-symbolic"   # Adwaita's symbolic GNOME mark from the user's icon theme; falls back to the style's own logo when missing
+logo_tint = true                    # repaint it in the bar's text colour
+launcher_label = "Activities"       # the Shell's launcher label; rails show the logo
+desktop_label = "Desktop"           # what a bar names when no window is focused

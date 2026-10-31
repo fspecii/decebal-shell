@@ -487,3 +487,130 @@ fn keyboard_focus_is_a_distinct_accent_ring_around_the_control_not_a_hover_fill(
     assert!(Style::Gnome.scrolls() && Style::Dux.scrolls() && !Style::Card.scrolls() && !Style::Fluent.scrolls() && !Style::Auto.scrolls());
     assert_eq!(targets_in_order(&items).len(), 22);
 }
+
+// ------------------------------------------------------------------ source reference: gnome-shell 51.1 compiled by sassc
+//
+// tests/fixtures/gnome-theme-ports/gnome-shell-51.1-quick-settings-reference.json holds the numbers of the pinned stylesheet as compiled by the
+// compiler upstream uses (`tests/e2e/gnome-shell-reference.py` builds it; its provenance is inside). These tests compare the implementation with it
+// and list every difference that is intended, so nothing here is a "pixel replica" claim: no GNOME Shell runtime is available to diff against.
+
+fn reference() -> serde_json::Value {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gnome-theme-ports/gnome-shell-51.1-quick-settings-reference.json");
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// One CSS length of the reference in px at 100 % (the first value of a shorthand unless `index` picks another).
+fn ref_len(reference: &serde_json::Value, selector: &str, property: &str, index: Option<usize>) -> f32 {
+    let v = &reference["lengths"][selector][property]["px"];
+    let v = match index {
+        Some(i) => &v[i],
+        None if v.is_array() => &v[0],
+        None => v,
+    };
+    v.as_f64().unwrap_or_else(|| panic!("{selector} {property}: {v}")) as f32
+}
+
+#[test]
+fn lengths_match_the_compiled_gnome_shell_stylesheet() {
+    let r = reference();
+    assert_eq!(r["provenance"]["gnome_shell_commit"], "33da06854e229c256afd5872fedd83c28cbfa176");
+    assert!(r["provenance"]["compiler"].as_str().unwrap().contains("sassc"));
+    // (selector, property, shorthand index, the implementation's value at 100 %, tolerance in px): all `em` lengths are converted at 1em = 11 pt = 14.667 px
+    let rows: Vec<(&str, &str, Option<usize>, f32, f32)> = vec![
+        (".quick-settings", "padding", None, PANEL_PAD, 0.01),
+        (".quick-settings", "border-radius", None, PANEL_RADIUS, 0.01),
+        (".quick-settings-grid", "spacing-rows", None, GRID_GAP, 0.01),
+        (".quick-settings-grid", "spacing-columns", None, GRID_GAP, 0.01),
+        (".quick-toggle", "min-width", None, toggle_w(1.0), 0.01),
+        (".quick-toggle", "max-width", None, toggle_w(1.0), 0.01),
+        (".quick-toggle", "min-height", None, toggle_h(1.0), 0.02),
+        (".quick-toggle .quick-toggle-icon", "icon-size", None, icon_px(1.0), 0.01),
+        (".quick-toggle .quick-toggle-title", "font-size", None, HEADING_PX, 0.01),
+        (".quick-toggle .quick-toggle-subtitle", "font-size", None, CAPTION_PX, 0.01),
+        (".quick-toggle > StBoxLayout", "spacing", None, TOGGLE_SPACING, 0.01),
+        (".quick-toggle > StBoxLayout", "padding", Some(1), TOGGLE_PAD_RIGHT, 0.01),
+        (".quick-toggle:ltr > StBoxLayout", "padding-left", None, TOGGLE_PAD_LEFT, 0.01),
+        (".quick-toggle-has-menu .quick-toggle:ltr > StBoxLayout", "padding-right", None, SPLIT_TOGGLE_PAD_RIGHT, 0.01),
+        (".quick-toggle-has-menu .quick-toggle-menu-button", "padding", Some(1), MENU_BUTTON_PAD, 0.01),
+        (".quick-toggle-has-menu .quick-toggle-separator", "width", None, 1.0, 0.0),
+        (".quick-settings .icon-button", "padding", None, ICON_BUTTON_PAD, 0.01),
+        (".quick-slider .icon-button", "padding", None, SLIDER_PAD, 0.01),
+        (".quick-slider .slider-bin", "padding", None, SLIDER_PAD, 0.01),
+        (".quick-slider > StBoxLayout", "spacing", None, 6.0, 0.0),
+        (".quick-settings-system-item > StBoxLayout", "spacing", None, GRID_GAP, 0.01),
+        (".slider", "-barlevel-height", None, SLIDER_TROUGH, 0.0),
+        (".slider", "-slider-handle-radius", None, icon_px(1.0) / 2.0, 0.01),
+        (".message", "border-radius", None, 16.0, 0.01),
+    ];
+    for (selector, property, index, mine, tolerance) in rows {
+        let want = ref_len(&r, selector, property, index);
+        assert!((want - mine).abs() <= tolerance + 1e-4, "{selector} {property}: gnome-shell {want} px, implementation {mine} px");
+    }
+    // the em-scaled lengths follow the text scale in both (the toggle is 12em wide, its menu button padding 0.71575em)
+    for k in [1.25_f32, 2.0] {
+        assert!((toggle_w(k) - 12.0 * 14.6667 * k).abs() < 0.2 * k);
+        let (items, _) = layout_at(&full(), &Tiles::ALL, k);
+        let menu = items.iter().find(|i| matches!(i.draw, Draw::Toggle { caps: Caps::Right, .. })).unwrap();
+        assert!((menu.r.w - (16.0 + 2.0 * 10.4977) * k).abs() < 0.3 * k, "menu button width at {k}: {}", menu.r.w);
+    }
+}
+
+/// Differences kept on purpose (or forced by the token model), each with its reason: the reference is the Shell, not a target to copy blindly.
+const KNOWN_DIFFERENCES: &[(&str, &str)] = &[
+    ("rounding", "St truncates the byte of every mixed colour, Decebal rounds: channels may differ by 1/255"),
+    ("light panel background", "the Shell's light $bg_color is #fafafb; the gnome-adwaita light `popup` token is libadwaita's popover white #ffffff, and the look uses the theme's popup colour"),
+    ("focus ring", "the Shell draws an inset 2 px ring in a lightened accent at 80 % alpha; Decebal draws a 2 px accent ring standing 3 px off the control, which stays visible on accent-filled toggles and on the panel"),
+    ("pressed state", "the pointer protocol gives the panel no pressed state, so `:active` colours are not drawn"),
+    ("message card padding", "the card is laid out with a fixed 12 px inset (message 6 + message-box 6)"),
+];
+
+fn hex(c: Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2)
+}
+
+fn near(a: &str, b: Rgb, tolerance: i32) -> bool {
+    let a = Rgb::parse(a).unwrap();
+    [(a.0, b.0), (a.1, b.1), (a.2, b.2)].iter().all(|(x, y)| (*x as i32 - *y as i32).abs() <= tolerance)
+}
+
+#[test]
+fn colour_formulas_match_the_shell_colours_evaluated_with_the_st_algorithms() {
+    let r = reference();
+    assert_eq!(KNOWN_DIFFERENCES.len(), 5);
+    let accent = Rgb(0x35, 0x84, 0xe4);
+    // the Shell's own inputs: dark `$bg_color` #36363a / `$fg_color` white, light `#fafafb` / `#222226`
+    let variants = [("dark", Palette { dark: true, bg: Rgb(0x36, 0x36, 0x3a), fg: Rgb(255, 255, 255), accent, accent_fg: Rgb(255, 255, 255) }), ("light", Palette { dark: false, bg: Rgb(0xfa, 0xfa, 0xfb), fg: Rgb(0x22, 0x22, 0x26), accent, accent_fg: Rgb(255, 255, 255) })];
+    for (name, pal) in variants {
+        let c = &r["colours"][name];
+        let get = |key: &str| c[key].as_str().unwrap_or_else(|| panic!("{name}: reference has no {key}"));
+        let checks: Vec<(&str, Rgb)> = vec![
+            ("button/normal/background-color", pal.button(pal.bg)),
+            ("button/hover/background-color", pal.button_hover(pal.bg)),
+            ("button/insensitive/background-color", pal.button_insensitive(pal.bg)),
+            ("toggle/checked/background-color", pal.default_button(false)),
+            ("toggle/checked-hover/background-color", pal.default_button(true)),
+            ("menu-button/normal/background-color", pal.button(pal.menu_base())),
+            ("menu-button/checked/background-color", pal.menu_checked(false)),
+            ("message-card/normal/background-color", pal.card()),
+        ];
+        for (key, mine) in checks {
+            assert!(near(get(key), mine, 2), "{name} {key}: gnome-shell {} vs implementation {}", get(key), hex(mine));
+        }
+        // text colours and the panel surface
+        assert_eq!(get("button/normal/color"), hex(pal.fg), "{name}");
+        assert_eq!(r["colour_expressions"][name]["panel/background-color"], hex(pal.bg), "{name}");
+        // the panel border: dark `lighten(bg, 5 %)`, light `darken(bg, 7 %)` as `1px solid <colour>`
+        let border = r["colour_expressions"][name]["panel/border"].as_str().unwrap();
+        assert!(border.starts_with("1px solid ") && near(&border["1px solid ".len()..], pal.outer_border(), 2), "{name}: {border} vs {}", hex(pal.outer_border()));
+        // the separators: unchecked is 25 % foreground, checked `st-mix(accent_fg, accent, 30 %)` (dark; the light variant is documented in the fixture)
+        assert!(r["colour_expressions"][name]["separator"].as_str().is_some());
+    }
+    // the focus ring is a 2 px ring in both (the offset differs, see KNOWN_DIFFERENCES)
+    assert!(r["colour_expressions"]["dark"]["focus/box-shadow"].as_str().unwrap().starts_with("inset 0 0 0 2px"));
+    // the light variant of the checked-menu-button base differs from the dark by design: 92 % vs 85 % accent
+    assert!(near(r["colours"]["light"]["menu-button/checked/background-color"].as_str().unwrap(), variants_light_menu_checked(), 2));
+}
+
+fn variants_light_menu_checked() -> Rgb {
+    Palette { dark: false, bg: Rgb(0xfa, 0xfa, 0xfb), fg: Rgb(0x22, 0x22, 0x26), accent: Rgb(0x35, 0x84, 0xe4), accent_fg: Rgb(255, 255, 255) }.menu_checked(false)
+}

@@ -37,7 +37,7 @@ redistributed. The current curated loader ignores `recommended_mode`, so centre-
 | Mode | Wallhaven | Status |
 |---|---|---|
 | light | [d8prrm](https://wallhaven.cc/w/d8prrm) | Mount Fuji over a calm lake at pastel sunset, 5120×2880. Independently accepted for 16:9, 3440×1440 and portrait; not merged yet. Uploader Pc7; no source link. |
-| dark | **pending** | [833qd2](https://wallhaven.cc/w/833qd2) (Guangzhou skyline) is **rejected** as a universal default: a centre-fill crop to 3440×1440 cuts the upper sections of the two tallest towers. A bounded search (4 queries, 8 originals) found no replacement that passes every crop, so no dark photo is mapped and none is substituted. |
+| dark | [rrezx7](https://wallhaven.cc/w/rrezx7) | Milky Way column and Magellanic Cloud over a red horizon glow and dark mountains, New Zealand, 4500×3000 (3:2). Reviewed by the port owner for 16:9, 3440×1440 and portrait centre crops (subject kept in all three) and for the panel/dock zones (dark: panel band p95 luminance ≤ 0.12). **Independent acceptance and the catalogue merge are still pending.** Uploader jrmnt; the source link is a post of the account `paulwilsonimage` (author unverified, post not opened); licence unknown. Replaces the rejected candidate [833qd2](https://wallhaven.cc/w/833qd2) (Guangzhou skyline), whose 3440×1440 centre-fill crop cuts the tallest towers. |
 
 ## Status
 

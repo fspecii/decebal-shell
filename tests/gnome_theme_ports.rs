@@ -358,6 +358,86 @@ fn packages_declare_the_gnome_look_behind_the_0_3_0_gate() {
     }
 }
 
+/// The applet keys of the universal-panel contract (docs/universal-panels.md at 71e3434); unknown keys inside `[bar] applets` are ignored by a 0.3 engine, but the
+/// proposed lists must name real ones.
+const APPLET_KEYS: &[&str] = &[
+    "launcher",
+    "app_menu",
+    "workspaces",
+    "window_title",
+    "tasks",
+    "layout",
+    "media",
+    "clock",
+    "weather",
+    "tray",
+    "clipboard",
+    "cpu",
+    "memory",
+    "notifications",
+    "stay_awake",
+    "agents",
+    "lock_keys",
+    "volume",
+    "network",
+    "bluetooth",
+    "battery",
+    "brightness",
+    "search",
+    "dashboard",
+    "control_center",
+    "power",
+    "show_desktop",
+];
+
+/// The manifest text as this build can load it: below the gate the 0.3.0 floor is lowered to the build, so only the framework keys can differ.
+fn loadable_text(text: &str) -> String {
+    if gate_open() {
+        text.to_string()
+    } else {
+        text.replace(&format!("min_shell_version = \"{GATE_TEXT}\""), &format!("min_shell_version = \"{}\"", env!("CARGO_PKG_VERSION")))
+    }
+}
+
+/// The 0.3-framework manifests (`[branding]`, `[bar] applets`, `[dock] position`) are committed as PROPOSALS: this engine rejects those keys, so they cannot ship yet.
+/// Dual-engine limits, stated in the test: (1) a proposal differs from the shipped manifest only by the framework keys; (2) on an engine without the framework the only
+/// errors are those keys (an engine with it reports none); (3) the lists name real applets; (4) validation with a 0.3 engine is `tests/e2e/framework-0.3-validate.py`.
+#[test]
+fn proposed_framework_0_3_manifests_differ_from_the_shipped_ones_only_by_the_framework_keys() {
+    for id in PORTS {
+        let proposed_text = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/gnome-theme-ports/framework-0.3/{id}.theme.toml"))).unwrap();
+        // the framework keys, parsed structurally
+        let mut doc: toml_edit::DocumentMut = proposed_text.parse().unwrap();
+        let applets: Vec<String> = doc["bar"]["applets"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        assert!(!applets.is_empty() && applets.iter().all(|a| APPLET_KEYS.contains(&a.as_str())), "{id}: {applets:?}");
+        let unique: BTreeSet<_> = applets.iter().collect();
+        assert_eq!(unique.len(), applets.len(), "{id}: duplicate applets");
+        assert!(!applets.iter().any(|a| matches!(a.as_str(), "lock_keys" | "power")), "{id}: lock and power live in the quick-settings system row");
+        assert_eq!(doc["bar"]["applets"].as_array().unwrap().iter().filter(|a| a.as_str() == Some("control_center")).count(), 1);
+        let branding = doc["branding"].as_table().unwrap();
+        assert_eq!(branding["logo"].as_str(), Some("icon:start-here-symbolic"));
+        assert_eq!(branding["logo_tint"].as_bool(), Some(true));
+        assert_eq!(branding["desktop_label"].as_str(), Some("Desktop"));
+        assert_eq!(branding.get("launcher_label").and_then(|v| v.as_str()), if *id == "gnome-adwaita" { Some("Activities") } else { None });
+        assert!(doc.get("min_shell_version").is_some() || proposed_text.contains("min_shell_version = \"0.3.0\""));
+        // as written on THIS engine: only the framework keys are refused (none are, once the framework is merged)
+        let here = manifest::analyze(&loadable_text(&proposed_text));
+        let framework = |key: &str| key.starts_with("branding") || key == "bar.applets" || key == "dock.position";
+        let errors: Vec<_> = here.diags.iter().filter(|d| d.level == manifest::Level::Error).collect();
+        assert!(errors.iter().all(|d| framework(&d.key)), "{id}: an error outside the framework keys: {errors:?}");
+        // with those keys removed the proposal IS the shipped manifest (tokens, metrics, sections, extras)
+        doc.remove("branding");
+        doc["bar"].as_table_mut().unwrap().remove("applets");
+        if let Some(dock) = doc["dock"].as_table_mut() {
+            dock.remove("position");
+        }
+        let stripped = manifest::analyze(&loadable_text(&doc.to_string()));
+        let shipped = manifest::analyze(&text(id));
+        assert!(stripped.def.is_some(), "{id}: {:?}", stripped.diags);
+        assert_eq!(stripped.def, shipped.def, "{id}: the proposal drifted from the shipped manifest beyond the framework keys");
+    }
+}
+
 /// The user's explicit global window behaviour (new apps tile first, free drag, Shift-snap, auto-formation) must survive a theme apply:
 /// appearance may set decoration, gaps and border, never layouts or tiling parameters.
 #[test]
@@ -389,7 +469,7 @@ fn themes_never_override_the_global_tiling_preference() {
 fn wallhaven_fragment_records_provenance_and_claims_no_licence() {
     let frag: Value = serde_json::from_str(&fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gnome-theme-ports/wallhaven-fragment.json")).unwrap()).unwrap();
     let images = frag["images"].as_object().unwrap();
-    assert_eq!(images.len(), 4);
+    assert_eq!(images.len(), 5);
     for (id, img) in images {
         assert_eq!(img["purity"], "sfw", "{id}");
         assert!(img["license"]["identifier"].is_null(), "{id}: the API publishes no licence; none is invented");
@@ -415,7 +495,19 @@ fn wallhaven_fragment_records_provenance_and_claims_no_licence() {
                 Some(id) => {
                     assert!(images.contains_key(id), "{theme} {mode}");
                     assert!(readme.contains(&format!("https://wallhaven.cc/w/{id}")), "{theme}: README links {id}");
-                    assert_eq!(images[id]["parent_verification"]["status"], "independently_accepted", "{theme} {mode}: only accepted photos are mapped");
+                    let status = images[id]["parent_verification"]["status"].as_str().unwrap();
+                    assert!(matches!(status, "independently_accepted" | "owner_reviewed_independent_acceptance_pending"), "{theme} {mode}: only reviewed photos are mapped ({status})");
+                    if status != "independently_accepted" {
+                        // an owner-only review must show its work: all three crops, the readability numbers under the panel and dock, and what is still open
+                        let img = &images[id];
+                        for crop in ["16x9", "ultrawide", "portrait"] {
+                            assert!(img["crop_review"][crop]["result"].as_str().unwrap().starts_with("accepted"), "{id} {crop}");
+                            assert_eq!(img["crop_review"][crop]["sha256"].as_str().unwrap().len(), 64);
+                            assert!(img["readability_metrics"][crop]["panel_p95"].as_f64().unwrap() < 0.26, "{id} {crop}: panel readability");
+                        }
+                        assert!(img["parent_verification"]["remaining"].as_array().unwrap().iter().any(|r| r.as_str().unwrap().contains("independent acceptance")));
+                        assert!(img["license"]["identifier"].is_null() && img["author"]["name"].is_null());
+                    }
                 }
                 None => {
                     // an unaccepted slot stays visibly pending: no unrelated photo is substituted
@@ -432,6 +524,73 @@ fn wallhaven_fragment_records_provenance_and_claims_no_licence() {
 }
 
 /// The native preview worker draws the actual package; its backdrop pixel must be the variant's own background token.
+#[test]
+fn asset_pack_catalogue_follows_the_published_contract() {
+    // docs/desktop-asset-packs.md (asset owner): data only, https URLs, 40-hex pins, ids unique, references resolve, licence files named
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/desktop-ports/gnome/asset-packs.toml");
+    let raw = fs::read_to_string(&path).unwrap();
+    let doc: toml_edit::DocumentMut = raw.parse().unwrap();
+    assert_eq!(doc["format"].as_integer(), Some(1));
+    assert_eq!(doc["family"].as_str(), Some("gnome"));
+    let hex = |s: &str, n: usize| s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    let mut sources = BTreeSet::new();
+    for s in doc["source"].as_array_of_tables().unwrap() {
+        let id = s["id"].as_str().unwrap();
+        assert!(sources.insert(id.to_string()), "duplicate source {id}");
+        assert!(s["repo"].as_str().unwrap().starts_with("https://") && s["archive_url"].as_str().unwrap().starts_with("https://"));
+        let commit = s["commit"].as_str().unwrap();
+        assert!(hex(commit, 40) && hex(s["archive_sha256"].as_str().unwrap(), 64), "{id}: pins");
+        assert!(s["archive_url"].as_str().unwrap().contains(commit), "{id}: the archive is the pinned commit");
+        assert!(!s["license"].as_str().unwrap().is_empty() && !s["license_files"].as_array().unwrap().is_empty());
+    }
+    let mut packs = BTreeSet::new();
+    for p in doc["pack"].as_array_of_tables().unwrap() {
+        let id = p["id"].as_str().unwrap();
+        assert!(id.starts_with("gnome-") && packs.insert(id.to_string()), "{id}: family prefix, unique");
+        assert!(sources.contains(p["source"].as_str().unwrap()), "{id}: source exists");
+        assert!(hex(p["tree"].as_str().unwrap(), 40), "{id}: tree OID");
+        let path = p["path"].as_str().unwrap();
+        assert!(!path.starts_with('/') && !path.contains("..") && !path.contains('\\'), "{id}: path");
+        assert!(p["provides"].as_array().unwrap().iter().all(|k| matches!(k.as_str(), Some("icons" | "cursors"))));
+    }
+    for r in doc["recommend"].as_array_of_tables().unwrap() {
+        assert!(PORTS.contains(&r["theme"].as_str().unwrap()), "recommendations name a theme of this port");
+        let icons = r["icons"].as_str().unwrap();
+        assert!(packs.contains(icons), "{icons} is a pack");
+        // the rice's own [icons] theme names what the pack installs
+        let pack = doc["pack"].as_array_of_tables().unwrap().iter().find(|p| p["id"].as_str() == Some(icons)).unwrap();
+        let theme = real_text(r["theme"].as_str().unwrap());
+        assert!(theme.contains(&format!("theme = \"{}\"", pack["install_name"].as_str().unwrap())), "{icons}: install_name is the theme's icon theme");
+    }
+    // nothing but data: no key that could name a command
+    let keys: BTreeSet<&str> = raw.lines().filter(|l| !l.trim_start().starts_with(['#', '[']) && l.contains('=')).map(|l| l.split('=').next().unwrap().trim()).collect();
+    let known = [
+        "format",
+        "family",
+        "id",
+        "repo",
+        "revision",
+        "commit",
+        "license",
+        "license_files",
+        "archive_url",
+        "archive_sha256",
+        "strip_components",
+        "name",
+        "provides",
+        "source",
+        "path",
+        "tree",
+        "install_name",
+        "link_sources",
+        "description",
+        "theme",
+        "icons",
+        "cursors",
+    ];
+    assert!(keys.iter().all(|k| known.contains(k)), "unknown keys: {:?}", keys.iter().filter(|k| !known.contains(k)).collect::<Vec<_>>());
+}
+
 #[test]
 fn native_preview_renders_each_port_in_both_modes() {
     let bin = env!("CARGO_BIN_EXE_decthemectl");

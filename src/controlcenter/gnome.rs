@@ -38,6 +38,12 @@ const TOGGLE_PAD_RIGHT: f32 = 12.0;
 const TOGGLE_SPACING: f32 = 9.0;
 /// `.quick-settings .icon-button { padding: $base_padding * 1.75 }` (fixed) around a 16 px scalable icon.
 const ICON_BUTTON_PAD: f32 = 10.5;
+/// `.quick-toggle-has-menu .quick-toggle-menu-button { padding: 0.409em 0.71575em }`: scalable, 10.5 px horizontally at 100 %.
+const MENU_BUTTON_PAD: f32 = 10.5;
+/// `.quick-toggle-has-menu .quick-toggle:ltr > StBoxLayout { padding-right: 0.6135em }`: 9 px at 100 %, scalable.
+const SPLIT_TOGGLE_PAD_RIGHT: f32 = 9.0;
+/// `.slider { -barlevel-height: 4px }`.
+const SLIDER_TROUGH: f32 = 4.0;
 /// `.quick-slider .icon-button { padding: $base_padding }`, `.slider-bin { padding: $base_padding }`.
 const SLIDER_PAD: f32 = 6.0;
 
@@ -310,7 +316,7 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
 }
 
 fn push_tile(out: &mut Vec<Item>, t: &Tile, x: f32, y: f32, w: f32, h: f32, k: f32) {
-    let menu_w = if t.menu.is_some() { icon_px(k) + 2.0 * ICON_BUTTON_PAD } else { 0.0 };
+    let menu_w = if t.menu.is_some() { icon_px(k) + 2.0 * MENU_BUTTON_PAD * k } else { 0.0 };
     let main_w = w - menu_w;
     let caps = if t.menu.is_some() { Caps::Left } else { Caps::Pill };
     out.push(sized(x, y, main_w, h, Draw::Toggle { on: t.on, caps }, t.target));
@@ -324,7 +330,8 @@ fn push_tile(out: &mut Vec<Item>, t: &Tile, x: f32, y: f32, w: f32, h: f32, k: f
     let ix = x + TOGGLE_PAD_LEFT;
     out.push(sized(ix, y + (h - icon_px(k)) / 2.0, icon_px(k), icon_px(k), Draw::Glyph { icon: t.icon, size: icon_px(k), ink }, None));
     let tx = ix + icon_px(k) + TOGGLE_SPACING;
-    let text_w = (x + main_w - TOGGLE_PAD_RIGHT - tx).max(0.0);
+    let right_pad = if t.menu.is_some() { SPLIT_TOGGLE_PAD_RIGHT * k } else { TOGGLE_PAD_RIGHT };
+    let text_w = (x + main_w - right_pad - tx).max(0.0);
     let (title_h, sub_h) = (line(HEADING_PX, k), line(CAPTION_PX, k));
     match &t.subtitle {
         Some(sub) => {
@@ -787,9 +794,9 @@ pub fn draw_with(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut 
                 let handle = icon_px(k) / 2.0;
                 let cy = y + h / 2.0;
                 let v = value.clamp(0.0, 1.0);
-                fill_rounded(pm, x, cy - 2.0, w, 4.0, 2.0, pal.fg.color(0.10));
+                fill_rounded(pm, x, cy - SLIDER_TROUGH / 2.0, w, SLIDER_TROUGH, SLIDER_TROUGH / 2.0, pal.fg.color(0.10));
                 let hx = x + handle + v * (w - 2.0 * handle).max(0.0);
-                fill_rounded(pm, x, cy - 2.0, (hx - x).max(0.0), 4.0, 2.0, c(pal.accent));
+                fill_rounded(pm, x, cy - SLIDER_TROUGH / 2.0, (hx - x).max(0.0), SLIDER_TROUGH, SLIDER_TROUGH / 2.0, c(pal.accent));
                 fill_circle(pm, hx, cy, handle, c(pal.handle()));
             }
         }
