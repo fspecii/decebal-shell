@@ -592,8 +592,8 @@ impl DecBar {
         bar.app_name = "Sample application".into();
         bar.show_workspaces = true;
         bar.workspaces = crate::widgets::data::sample().tags.into_iter().map(|t| Workspace { name: t.name, active: t.active, occupied: t.occupied, urgent: t.urgent }).collect();
-        *bar.shared.snap.lock().map_err(|e| e.to_string())? = Snapshot::default();
-        *bar.shared.weather.lock().map_err(|e| e.to_string())? = None;
+        // fixed sample data (the gallery says so), so every enabled applet shows; nothing is probed
+        bar.fill_sample();
         let mut pm = Pixmap::new(width, height).ok_or("preview canvas")?;
         bar.draw(&mut pm);
         Ok(pm)

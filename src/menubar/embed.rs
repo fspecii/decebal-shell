@@ -559,6 +559,11 @@ impl DecBar {
         redraw
     }
 
+    /// The gallery preview's fixed sample data (no workers, no probes): what a typical machine shows.
+    pub fn status_fill_sample(&mut self) {
+        self.fill_sample();
+    }
+
     /// Tests of hosts: every data source an applet can need, filled with sample data (no workers).
     #[cfg(test)]
     pub fn status_fill_for_tests(&mut self) {

@@ -117,6 +117,15 @@ impl DockApp {
         taskbar_edge(&self.dock.settings)
     }
 
+    /// For the gallery: `Some(right)` for a side taskbar, `None` for a top / bottom one.
+    pub(super) fn win_vertical_edge(&self) -> Option<bool> {
+        self.win_vertical().then(|| self.on_right())
+    }
+
+    pub(super) fn win_panel_edge_top(&self) -> bool {
+        self.on_top()
+    }
+
     fn on_top(&self) -> bool {
         self.win_panel_edge() == crate::panel::Edge::Top
     }

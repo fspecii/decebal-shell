@@ -767,6 +767,35 @@ impl DecBar {
     }
 }
 
+impl DecBar {
+    /// Fixed sample data for static previews (labelled as such where shown): what a typical laptop reports. No worker
+    /// starts and nothing is probed.
+    pub(super) fn fill_sample(&mut self) {
+        self.update_snapshot(|s| {
+            *s = Snapshot {
+                net: Some(sys::Net { wifi_enabled: true, wifi_name: "Network".into(), wired_name: String::new() }),
+                bluetooth: Some(sys::Bluetooth { powered: true, connected: 0 }),
+                volume: Some(sys::Volume { level: 0.6, muted: false }),
+                battery: Some(sys::Battery { percent: 76, charging: false, status: "Discharging".into() }),
+                brightness: Some(70),
+                ..Snapshot::default()
+            }
+        });
+        if let Ok(mut w) = self.shared.weather.lock() {
+            *w = Some(sample_weather());
+        }
+        if let Ok(mut p) = self.dux_perf.lock() {
+            *p = Some((Some(0.18), Some(0.42)));
+        }
+        self.v_win = Some(("org.gnome.Nautilus".into(), "Files".into()));
+        self.v_win_len = self.fonts.as_ref().map_or(40.0, |f| f.measure("Files", TEXT_PX, Weight::Medium));
+        self.tasks = group_tasks(&[
+            crate::wm::Window { id: 1, app_id: "org.gnome.Nautilus".into(), title: "Files".into(), active: true, desktop: Some(0) },
+            crate::wm::Window { id: 2, app_id: "firefox".into(), title: "Web".into(), active: false, desktop: Some(0) },
+        ]);
+    }
+}
+
 /// What a rendered logo depends on.
 pub(super) type LogoKey = (crate::panel::branding::Logo, u32, (u8, u8, u8), bool);
 

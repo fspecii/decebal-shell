@@ -147,6 +147,44 @@ impl DockApp {
         Ok(pm)
     }
 
+    /// The dock or taskbar placed on its edge of a `width` x `height` desktop, as the backend would place it (the
+    /// gallery's preview). Static sample pins; no trackers, watchers or event loop.
+    pub fn preview_desktop(width: u32, height: u32) -> Result<Pixmap, String> {
+        let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], config::dock_settings());
+        let mut app = Self::new(dock).with_scale(1.0);
+        let th = crate::theme::th();
+        let insets = th.bar_insets();
+        let mut desk = Pixmap::new(width, height).ok_or("dock preview canvas")?;
+        let (w, h, x, y) = if let Some(win) = app.win.as_mut() {
+            win.time = "14:07".into();
+            win.date = "23/10/2026".into();
+            win.status.status_fill_sample();
+            let bar = win.m.bar_h.ceil() as u32;
+            match app.win_vertical_edge() {
+                Some(true) => (bar, height, width as i32 - bar as i32 - insets.right, 0),
+                Some(false) => (bar, height, insets.left, 0),
+                None if app.win_panel_edge_top() => (width, bar, 0, crate::theme::bar_bottom().ceil() as i32),
+                None => (width, bar, 0, height as i32 - bar as i32 - insets.bottom),
+            }
+        } else {
+            let (w, h) = app.dock.canvas_size();
+            let spec = app.surface_spec().ok_or("dock spec")?;
+            let (cx, cy) = ((width as i32 - w as i32) / 2, (height as i32 - h as i32) / 2);
+            let (x, y) = match spec.anchor {
+                crate::backend::Anchor::Bottom => (cx, height as i32 - h as i32 - spec.margin),
+                crate::backend::Anchor::Top => (cx, spec.margin),
+                crate::backend::Anchor::Left => (spec.margin, cy),
+                crate::backend::Anchor::Right => (width as i32 - w as i32 - spec.margin, cy),
+            };
+            (w, h, x, y)
+        };
+        app.resized(w, h);
+        let mut pm = Pixmap::new(w.max(1), h.max(1)).ok_or("dock preview canvas")?;
+        app.draw(&mut pm);
+        desk.draw_pixmap(x, y, pm.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+        Ok(desk)
+    }
+
     /// Forces the taskbar's DPI scale (tests; normally `DECEBAL_SCALE` or `Xft.dpi`).
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.scale = Some(scale);
