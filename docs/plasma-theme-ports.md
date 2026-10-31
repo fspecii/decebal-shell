@@ -6,6 +6,14 @@ the shared renderers are still being finished, no complete native four-edge, eve
 a genuine global application menu (Layan) is not implemented. Authoritative requirements: `docs/universal-panel-requirements.md`
 (integration checkout) and the contract `docs/universal-panels.md`.
 
+## Kickoff against the original (section 1 done)
+
+The launcher's KDE style is being brought to the original Kickoff section by section; the footer (Applications / Places tabs, Sleep / Hibernate / Restart /
+Shut Down, the Session menu) and the Places tab are done and measured against the official Breeze Dark and Breeze capture to within 1 px, with working
+actions. The identified original, the measurements, the differences and the open gap list (card size, header, sidebar, content, search, material,
+behaviour) are in `plasma-theme-ports/kickoff-fidelity.md`; the shared-engine hook is described in `plasma-theme-ports/kickoff-contract.md`. The packages
+stay NOT READY.
+
 ## State on root `7272017` (branch `feat/claude-plasma-packages-727`, 2026-10-31)
 
 The packages were re-based onto root `7272017` (generic source is root's: `plasma_style.rs`, the tracker, the pager, the typed `[taskbar]` renderer). Only the

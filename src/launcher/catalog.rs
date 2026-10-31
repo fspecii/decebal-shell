@@ -216,6 +216,27 @@ impl Catalog {
         self.recent = recent;
     }
 
+    /// The apps opened most often, most used first (Kickoff's Places -> Frequently Used).
+    pub fn frequent(&self, n: usize) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        for key in self.history.frequent("", 500) {
+            if let Some(i) = self.app_of_key(&key).filter(|i| !out.contains(i)) {
+                out.push(i);
+            }
+            if out.len() == n {
+                break;
+            }
+        }
+        out
+    }
+
+    /// Unix time app `i` was last launched from here or Spotlight.
+    pub fn last_launch(&self, i: usize) -> Option<u64> {
+        let a = &self.apps[i];
+        let legacy = if self.unique_name[i] { self.history.last_used(&legacy_key(a)) } else { None };
+        self.history.last_used(&history_key(a)).max(legacy)
+    }
+
     /// The ranking bonus of app `i`: its own history, or its name's when that name is unambiguous.
     fn boost(&self, i: usize, now: u64) -> i32 {
         let a = &self.apps[i];

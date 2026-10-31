@@ -1,0 +1,220 @@
+{
+  "source": {
+    "dark": {
+      "path": "plasma-workspace/lookandfeel/org.kde.breezedark/contents/previews/fullscreenpreview.jpg",
+      "sha256": "3b06913d44c165e69a7dabd669a5fc2e4df1e0c76329cdbad58bcb733852aa05",
+      "size": [
+        1920,
+        1080
+      ],
+      "card_crop": [
+        8,
+        504,
+        663,
+        1020
+      ]
+    },
+    "light": {
+      "path": "plasma-workspace/lookandfeel/org.kde.breeze/contents/previews/fullscreenpreview.jpg",
+      "sha256": "020281704596ca6c78410fd36b090e8c5baa078795e71a3c5945b42cbe53d3c6",
+      "size": [
+        1920,
+        1080
+      ],
+      "card_crop": [
+        8,
+        504,
+        663,
+        1020
+      ]
+    }
+  },
+  "modes": {
+    "dark": {
+      "original_groups": [
+        [
+          13,
+          109
+        ],
+        [
+          143,
+          204
+        ],
+        [
+          266,
+          320
+        ],
+        [
+          337,
+          420
+        ],
+        [
+          437,
+          502
+        ],
+        [
+          519,
+          607
+        ],
+        [
+          628,
+          643
+        ]
+      ],
+      "native_groups": [
+        [
+          13,
+          110
+        ],
+        [
+          143,
+          204
+        ],
+        [
+          265,
+          319
+        ],
+        [
+          337,
+          421
+        ],
+        [
+          436,
+          502
+        ],
+        [
+          519,
+          607
+        ],
+        [
+          628,
+          643
+        ]
+      ],
+      "offsets_native_minus_original": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "group_count_equal": true
+    },
+    "light": {
+      "original_groups": [
+        [
+          13,
+          109
+        ],
+        [
+          143,
+          204
+        ],
+        [
+          266,
+          320
+        ],
+        [
+          337,
+          420
+        ],
+        [
+          437,
+          502
+        ],
+        [
+          519,
+          607
+        ],
+        [
+          628,
+          643
+        ]
+      ],
+      "native_groups": [
+        [
+          13,
+          110
+        ],
+        [
+          143,
+          204
+        ],
+        [
+          265,
+          319
+        ],
+        [
+          337,
+          421
+        ],
+        [
+          436,
+          501
+        ],
+        [
+          519,
+          607
+        ],
+        [
+          628,
+          643
+        ]
+      ],
+      "offsets_native_minus_original": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "group_count_equal": true
+    }
+  }
+}
