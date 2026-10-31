@@ -12,3 +12,11 @@ The gallery previously accepted an existing PNG without decoding it, and cached 
 These checks cover one deliberately damaged visible preview and a private gallery browsing session. They do not prove all packages, all thumbnails simultaneously, physical displays or Wayland. The production `a82dc3c` bundle remains held; this repair is not installed and requires optimized-artifact acceptance.
 
 Use `SETTINGS_IDLE_REPAIR=1` with `tests/e2e/settings-gallery-first-open.py` to exercise autonomous recovery. `SETTINGS_CORRUPT_CACHE=1` with `tests/e2e/settings-preview-stress.py` now requires a decoded replacement image, rather than merely an app that remains alive. Both fixtures use owned high-display Xvfb servers and check ownership before input.
+
+## Optimized acceptance and combined regression
+
+The optimized Settings/renderer pair from `b261c13` passed its locked offline build and independent verification; manifest SHA256 `cc4457c93248f2a38ff74c34aa532d089d78fe5f0354ff31b577f53589f81418`. Exact release files passed idle repair/painting and browsing recovery: `/var/tmp/decebal-preview-repair-release-native-control/result.json`. The proposed runtime combination (other binaries from `a82dc3c`) passed eight private-rdwm dock lifecycle checks with no leftovers: `/var/tmp/decebal-dock-mixed-release-control/result.json`.
+
+Combined library coverage is 2,295 passed / 21 explicitly ignored / zero failures across two runs. The initial run hit its 600-second deadline; it is not a clean full-suite pass. The exact remaining test set passed in a separate job against the same executable hash. `/var/tmp/decebal-integrated-library-remainder/aggregate-result.json` records complete named coverage, the timeout, ignored enumeration and the nested crash-log harness output caveat. Physical/Wayland and ignored native acceptance remain separate.
+
+Managed planning initially refused the two-binary bundle under the standard-inventory rule; nothing was installed. The publisher now supports only this exact paired follow-up inventory in addition to standard bundles. It rejects a missing pair member per folder at planning and publication; normal seals, source provenance, folder/config checks and rollback remain mandatory. All 71 release-tool tests passed. This is a deliberate inventory addition, not an unverified composite bundle.

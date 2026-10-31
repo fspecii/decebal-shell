@@ -423,7 +423,7 @@ def plan(art, dests, only=None, expect_commit=None, proc='/proc', runtime_dir=No
     if managed_runtime:
         if config_watch is not None:
             raise ReleaseError('managed plans require the standard config watch')
-        _managed_manifest(rep)
+        _managed_manifest(rep, body['files'])
         if not set(names) <= SHIPPED_BINARIES:
             raise ReleaseError('managed plans allow only shipped runtime binary names')
         dirs = {}
@@ -683,9 +683,20 @@ def _managed_configs():
     return out
 
 
-def _managed_manifest(rep):
-    if set(rep['binaries']) != SHIPPED_BINARIES | {'examples/launchapp'}:
-        raise ReleaseError('managed publication requires the sealed standard shipped binary set')
+def _managed_manifest(rep, files):
+    names = set(rep['binaries'])
+    if names == SHIPPED_BINARIES | {'examples/launchapp'}:
+        return
+    # The preview producer and consumer are one explicitly supported follow-up unit. Every file still comes from
+    # this verified, clean, sealed release; no base binary is relabelled as belonging to the follow-up commit.
+    preview_pair = {'decsettings', 'decthemectl'}
+    if names != preview_pair:
+        raise ReleaseError('managed publication requires the sealed standard shipped binary set or the exact preview follow-up pair')
+    per_dest = {}
+    for entry in files:
+        per_dest.setdefault(entry['dest_dir'], set()).add(entry['name'])
+    if not per_dest or any(selected != preview_pair for selected in per_dest.values()):
+        raise ReleaseError('preview follow-up requires both decsettings and decthemectl in every selected destination')
 
 
 def _managed_plan(p):
@@ -883,7 +894,7 @@ def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc', manag
         if not rep['ok'] or rep['manifest_sha256'] != p['manifest_sha256']:
             raise ReleaseError('artifact no longer verifies or its manifest changed since planning: ' + '; '.join(rep['problems']))
         if managed_runtime:
-            _managed_manifest(rep)
+            _managed_manifest(rep, p['files'])
             if p['commit'] != rep['commit']:
                 raise ReleaseError('managed plan commit differs from manifest')
             if not _is_within(jd, pins.root_path) or not _is_within(Path(lock_path), pins.root_path):
