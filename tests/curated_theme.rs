@@ -23,6 +23,16 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).into()
 }
 
+fn offline_target(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let ctl = dir.join("rdwmctl");
+    // Prove mode-specific requests against the full bundled schema, without
+    // consulting the developer's installed CLI or running window manager.
+    fs::write(&ctl, format!("#!/bin/sh\nif [ \"$1\" = schema ]; then cat <<'SCHEMA'\n{}\nSCHEMA\nelse exit 0; fi\n", include_str!("../src/settings/rdwm-schema.json"))).unwrap();
+    fs::set_permissions(&ctl, fs::Permissions::from_mode(0o700)).unwrap();
+    ctl
+}
+
 #[test]
 fn catalogue_covers_shipped_designs_with_reviewed_sfw_provenance() {
     let catalogue: Value = serde_json::from_str(include_str!("../data/wallhaven-curated.json")).unwrap();
@@ -86,12 +96,7 @@ fn catalogue_covers_shipped_designs_with_reviewed_sfw_provenance() {
 fn aster_package_preserves_wallpaper_and_custom_widget_review() {
     let dir = std::env::temp_dir().join(format!("aster-contract-{}", std::process::id()));
     fs::create_dir_all(dir.join("shell")).unwrap();
-    let ctl = dir.join("rdwmctl");
-    // Mode-specific decoration requests need an explicit target capability proof.
-    // This offline target advertises the complete bundled schema for every family.
-    fs::write(&ctl, format!("#!/bin/sh\nif [ \"$1\" = schema ]; then cat <<'SCHEMA'\n{}\nSCHEMA\nelse exit 0; fi\n", include_str!("../src/settings/rdwm-schema.json"))).unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(&ctl, fs::Permissions::from_mode(0o700)).unwrap();
+    let ctl = offline_target(&dir);
     let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("rdwm.toml"), rdwmctl: ctl, socket: dir.join("none.sock") };
     let src = Source { shell_json: paths.shell_json(), themes_dir: root().join("themes") };
     let cfg = "[general]\n[wallpaper]\nimage = \"/private/selected-photo.jpg\"\nmode = \"fit\"\ncolor = \"#987654\"\n[decoration]\nenabled = true\nbuttons = false\nzoom_action = \"maximize\"\n";
@@ -175,7 +180,7 @@ fn every_visible_package_preserves_wallpaper_preferences_in_both_mode_plans() {
     let catalogue: Value = serde_json::from_str(include_str!("../data/wallhaven-curated.json")).unwrap();
     let dir = std::env::temp_dir().join(format!("visible-wallpaper-contract-{}", std::process::id()));
     fs::create_dir_all(dir.join("shell")).unwrap();
-    let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("rdwm.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("none.sock") };
+    let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("rdwm.toml"), rdwmctl: offline_target(&dir), socket: dir.join("none.sock") };
     let src = Source { shell_json: paths.shell_json(), themes_dir: root().join("themes") };
     let original_config = "[general]\n[wallpaper]\nimage = \"/private/independent-photo.jpg\"\nmode = \"fit\"\ncolor = \"#123456\"\n";
     fs::write(&paths.rdwm_config, original_config).unwrap();
