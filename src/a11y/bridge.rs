@@ -69,7 +69,8 @@ impl Config {
             locale,
             toolkit_version: env!("CARGO_PKG_VERSION").to_string(),
             queue: 32,
-            reply_timeout: Duration::from_secs(5),
+            // `DECEBAL_A11Y_REPLY_TIMEOUT_MS` (100..=60000): how long a request may wait for the UI thread.
+            reply_timeout: var("DECEBAL_A11Y_REPLY_TIMEOUT_MS").and_then(|v| v.trim().parse::<u64>().ok()).map_or(Duration::from_secs(5), |ms| Duration::from_millis(ms.clamp(100, 60_000))),
         }
     }
 }
@@ -594,10 +595,14 @@ impl Worker {
     }
 
     fn send(&mut self, m: &Message) {
+        let t0 = Instant::now();
         let failed = match self.a11y.as_mut() {
             Some(a) => a.conn.send(m).is_err(),
             None => false,
         };
+        if t0.elapsed() > Duration::from_millis(100) {
+            crate::log_warn!("accessibility bridge: sending {}.{} took {:?}", m.iface, m.member, t0.elapsed());
+        }
         if failed {
             self.lost();
         }
@@ -607,6 +612,7 @@ impl Worker {
         match m.kind {
             crate::dbus::CALL => {
                 self.status(|s| s.calls += 1);
+                crate::log_trace!("a11y call {}.{} {} from {}", m.iface, m.member, m.path, m.sender);
                 match atspi::handle(&self.ctx, &self.serving, &m) {
                     Outcome::Reply(r) => self.send(&r),
                     Outcome::None => {}
@@ -677,6 +683,7 @@ impl Worker {
             Ok(()) => {
                 self.status(|s| s.requests += 1);
                 self.pending.insert(id, Pending { call, kind, deadline });
+                crate::log_debug!("a11y worker: request {id} queued for the UI");
                 (self.shared.ui_wake)();
             }
             Err(TrySendError::Full(_)) => {
@@ -695,6 +702,7 @@ impl Worker {
 
     fn take_tree(&mut self) {
         let Some(new) = self.shared.slot.lock().unwrap().take() else { return };
+        crate::log_debug!("a11y worker: tree revision {} ({} nodes)", new.revision, new.len());
         if self.a11y.is_none() {
             return;
         }

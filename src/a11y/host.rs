@@ -126,6 +126,7 @@ impl Host {
         }
         self.current = Some(t);
         for (id, result) in std::mem::take(&mut self.awaiting) {
+            crate::log_debug!("a11y: reply {id} after revision {}: {result:?}", self.current.as_ref().map_or(0, |t| t.revision));
             bridge.reply(id, result);
         }
     }
@@ -175,6 +176,7 @@ impl Host {
         while let Some(r) = self.bridge.as_ref().and_then(Bridge::next_request) {
             self.queued.push_back(r);
         }
+        crate::log_debug!("a11y: service: {} queued, {} awaiting", self.queued.len(), self.awaiting.len());
         while self.awaiting.is_empty() {
             let Some(req) = self.queued.pop_front() else { break };
             let Some(tree) = &self.current else { break };
@@ -185,6 +187,7 @@ impl Host {
                 continue;
             }
             let result = validate(tree, &req).and_then(|target| app.a11y_action(&target));
+            crate::log_debug!("a11y: request {} {:?} on {:?} (rev {} vs {}): {:?}", req.id, req.op, req.node, req.revision, tree.revision, result.as_ref().map(|_| ()));
             match result {
                 Ok(r) => {
                     resp.redraw = true;
