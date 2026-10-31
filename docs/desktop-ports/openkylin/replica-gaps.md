@@ -111,3 +111,16 @@ owned-Xvfb glass input/bounds check and eight private Control Center action chec
 `/var/tmp/decebal-ukui-integrated-native-actions-gate/result.json`. These do not replace the pending integrated
 launcher matrix or optimized-release acceptance. The preceding 72-case launcher proof belongs to its explicitly
 recorded candidate binary.
+
+
+### Integrated launcher native acceptance
+
+The exact development launcher from the main integration source gate passed all 72 screen/scale/mode/edge
+combinations, keyboard expand/restore and search launching, plus pointer expand/restore and app launching.
+Evidence: `/var/tmp/decebal-ukui-integrated-launcher-matrix-evidence/native-launcher.json`; controller
+`/var/tmp/decebal-ukui-integrated-launcher-matrix-control/result.json`. Binary SHA256
+`b65c21ef2621cd4d5b2e9dd1a8e8a2ad01038d4f89045287547fa42fc09d934a`. No forced cleanup, rescued/leftover token processes or resource abort.
+Representative 1600×900/200% dark and 400×300/200% light captures were visually inspected. The extreme small
+case keeps bounds and keyboard access but compresses secondary sidebar controls; comfortable minimum target
+sizes and touch usability are not established by these geometry checks. No optimized-release, compositor-blur
+or upstream pixel-replica acceptance is claimed.
