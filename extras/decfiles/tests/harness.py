@@ -17,6 +17,7 @@ class Session:
         self.env.update(GDK_BACKEND='x11',GSK_RENDERER='cairo',GTK_A11Y='none',NO_AT_BRIDGE='1',GSETTINGS_BACKEND='memory',GIO_USE_VFS='local',
             DBUS_SYSTEM_BUS_ADDRESS='unix:path='+str(self.root/'no-system'),DECFILES_EVIDENCE_STATE=str(self.root/'state.json'))
         self.env.update(extra_env or {})
+        self.row_top=103  # first details row; the tab bar adds 40 px when shown
         self.home=Path(self.env['HOME']);self.owned=[];self.logs=[];self.app=None;self.window=None;self.cases=[]
 
     def log(self,name):
@@ -66,7 +67,7 @@ class Session:
     def select_item(self,path):
         """Click the row by its visible position in the sorted details view."""
         self.focus(self.window);wanted=str(path);index=self.state()['view_order'].index(wanted)
-        self.click(310,103+50*index);self.wait(lambda:self.op().get('selected')==wanted,'selection did not match '+wanted)
+        self.click(310,self.row_top+50*index);self.wait(lambda:self.op().get('selected')==wanted,'selection did not match '+wanted)
     def layout(self,columns):
         self.focus(self.window);self.click(980,26);self.key('End' if columns else 'Home');self.key('Return')
         self.wait(lambda:self.state().get('layout')==('columns' if columns else 'details'),'layout selector did not switch')

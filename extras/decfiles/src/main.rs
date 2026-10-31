@@ -1,4 +1,5 @@
 mod operation_ui;
+mod tabs_ui;
 mod transfer_ui;
 use decfiles::{
     loader,
@@ -46,6 +47,9 @@ struct Ui {
     quiet_revision: Cell<Option<u64>>,
     /// (background refreshes, refreshes whose visible entries were unchanged).
     monitor_stats: Cell<(u64, u64)>,
+    tabs: RefCell<Vec<tabs_ui::Tab>>,
+    active_tab: Cell<usize>,
+    tab_bar: gtk::Box,
     ops: operation_ui::Controls,
 }
 
@@ -147,6 +151,21 @@ impl Ui {
             glib::ControlFlow::Break
         });
         self.refresh_timer.replace(Some(timer));
+    }
+
+    /// A user action must not be refused because a background refresh is loading:
+    /// cancel that quiet refresh (its revision becomes stale) and re-arm it for later.
+    pub(crate) fn drop_quiet_refresh(self: &Rc<Self>) {
+        let quiet = self.quiet_revision.get();
+        if quiet.is_none() || self.model.borrow().pending.as_ref().map(|request| request.revision) != quiet {
+            return;
+        }
+        if let Some(cancel) = self.cancel.borrow_mut().take() {
+            cancel.cancel();
+        }
+        self.model.borrow_mut().pending = None;
+        self.quiet_revision.set(None);
+        self.folder_changed();
     }
 
     fn refresh_quietly(self: &Rc<Self>) {
@@ -316,6 +335,7 @@ impl Ui {
         if let Some(notice) = self.ops.notice() {
             self.status.set_text(&notice);
         }
+        self.render_tabs();
         self.update_operation_controls();
         self.dump();
     }
@@ -354,6 +374,14 @@ impl Ui {
         view
     }
 
+    /// Apply a tab's explicit layout; the dropdown stays in sync.
+    fn set_columns(self: &Rc<Self>, columns: bool) {
+        self.columns.set(columns);
+        if self.layout.selected() != u32::from(columns) {
+            self.layout.set_selected(u32::from(columns));
+        }
+    }
+
     fn dump(&self) {
         // Explicit opt-in fixture hook. Never enabled by default or written into shell config.
         if let Some(path) = &self.state_file {
@@ -367,7 +395,7 @@ impl Ui {
                 .map_or_else(Vec::new, |selection| (0..selection.n_items().min(256)).filter_map(|i| entry_at(selection, i).map(|entry| entry.path.to_string_lossy().into_owned())).collect());
             let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str(),
                 "sort":{"column":sorted_by,"descending":descending}, "view_order":view_order,
-                "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
+                "tabs":self.tabs_evidence(), "monitor":{"watching":self.watched.borrow().1.as_ref().map(|path| path.to_string_lossy().into_owned()),"refreshes":self.monitor_stats.get().0,"unchanged":self.monitor_stats.get().1}});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -498,6 +526,14 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     layout.update_property(&[gtk::accessible::Property::Label("Browser layout")]);
     toolbar.append(&layout);
     root.append(&toolbar);
+    // Hidden with one tab, so single-tab geometry matches the earlier layout.
+    let tab_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    tab_bar.set_margin_start(12);
+    tab_bar.set_margin_end(12);
+    tab_bar.set_margin_bottom(6);
+    tab_bar.set_visible(false);
+    tab_bar.update_property(&[gtk::accessible::Property::Label("Tabs")]);
+    root.append(&tab_bar);
     let error = gtk::Label::new(None);
     error.set_wrap(true);
     error.set_xalign(0.0);
@@ -563,6 +599,9 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         refresh_timer: RefCell::new(None),
         quiet_revision: Cell::new(None),
         monitor_stats: Cell::new((0, 0)),
+        tabs: RefCell::new(vec![tabs_ui::Tab::default()]),
+        active_tab: Cell::new(0),
+        tab_bar,
         ops,
     });
     let weak = Rc::downgrade(&ui);
@@ -683,7 +722,11 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
                 _ => ui.paste(),
             }
         } else if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
-            ui.window.close();
+            ui.close_tab(ui.active_tab.get());
+        } else if ctrl && (key == gtk::gdk::Key::t || key == gtk::gdk::Key::T) {
+            ui.new_tab();
+        } else if ctrl && (key == gtk::gdk::Key::Tab || key == gtk::gdk::Key::ISO_Left_Tab || key == gtk::gdk::Key::Page_Down || key == gtk::gdk::Key::Page_Up) {
+            ui.cycle_tab(!(key == gtk::gdk::Key::ISO_Left_Tab || key == gtk::gdk::Key::Page_Up || modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK)));
         } else if ctrl && (key == gtk::gdk::Key::l || key == gtk::gdk::Key::L) {
             ui.address.grab_focus();
             ui.address.select_region(0, -1);

@@ -300,6 +300,7 @@ impl Ui {
     }
 
     pub fn name_dialog(self: &Rc<Self>, rename: bool) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() {
             return;
         }
@@ -388,6 +389,7 @@ impl Ui {
     }
 
     pub fn trash_dialog(self: &Rc<Self>) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() {
             return;
         }

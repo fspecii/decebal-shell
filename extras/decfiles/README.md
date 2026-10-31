@@ -42,6 +42,16 @@ does not save preferences or read/write Decebal configuration.
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
   column keeps that parent and replaces the columns to its right.
+- Tabs: Ctrl+T opens the current folder in a new tab (at most 16). Each tab keeps its
+  own navigation model (history, columns, selection) and explicit layout; the
+  sort choice is window-wide. Ctrl+Tab/Ctrl+Shift+Tab and Ctrl+Page Down/Up
+  switch, and Ctrl+W closes the active tab, or the window when it is the last
+  one. The tab bar appears only with two or more tabs; it has equal-width
+  ellipsized tabs, each with a close button, plus a New tab button. Switching
+  happens only when no operation, dialog or clipboard read is active. A
+  switched-to tab is re-watched and refreshed, because it may have missed changes
+  while inactive. User actions supersede (cancel and re-arm) an in-flight
+  background refresh instead of being ignored.
 - The current folder is monitored: one `decfiles-monitor` inotify worker thread per
   window watches only the committed current physical folder (the watch's path
   lookup happens off the UI thread). Changes arrive latest-only over a wake
@@ -269,6 +279,16 @@ Copy/move evidence (default binary
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
 
+Tabs checkpoint: default `b5201c3b546410b1324774d6a14ec54a5496b665bd6720953a26fa86cdf100f2`
+and fixture `702b12f27e75f9507d19a97f7735a6c11d14850e7072e37a61b683723001940a`
+(`/var/tmp/decfiles-tabs-artifacts/`) pass every gate in `/var/tmp/decfiles-tabs-gate-*-evidence/`
+(21 Rust tests): navigation 8, operations 13, transfers 10, views 12, close 4,
+transfers-cancel 4, paste-races 2+1 and the new `tabs-native.py` 6. The tabs cases
+cover Ctrl+T, per-tab history/layout across Ctrl+Tab/Ctrl+Shift+Tab, copy in one
+tab and paste in another via actual tab buttons, monitoring following the active
+tab and refreshing a switched-to tab, Ctrl+W closing a tab rather than the window,
+and the close button.
+
 Monitoring checkpoint: 21 Rust tests, including the monitor's revision-scoped
 create, rename and watch-replacement test. Default
 `9e588cf013bdfbc80658195b971edc50ffed1541cb61fecd4ad9531a94d63ac9` and fixture
@@ -400,7 +420,7 @@ exit status 0.
 
 Copy/move/paste work on one selected item at a time (pasted clipboards may hold
 many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move to
-picker, permanent delete, restore, undo, drag/drop, tabs, icon view, Finder gallery, Explorer
+picker, permanent delete, restore, undo, drag/drop, icon view, Finder gallery, Explorer
 command bar, bookmarks, mounts, remote backends, search, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
 Profile styling, palette following,

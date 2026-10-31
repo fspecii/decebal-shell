@@ -63,6 +63,7 @@ impl Ui {
 
     /// Publish the selected item. Nothing on disk changes until Paste.
     pub fn clipboard_put(self: &Rc<Self>, mode: Mode) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() {
             return;
         }
@@ -97,6 +98,7 @@ impl Ui {
     /// Navigation is blocked while reading; the destination generation is checked again
     /// when the data arrives, and the whole read is bounded by a timeout.
     pub fn paste(self: &Rc<Self>) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() || self.ops.paste_reading.get() {
             return;
         }

@@ -9,6 +9,7 @@ suites=[('default','native.py','DECFILES_BIN','DECFILES_EVIDENCE','navigation'),
  ('default','operations-native.py','DECFILES_BIN','DECFILES_OPERATIONS_EVIDENCE','operations'),
  ('default','transfers-native.py','DECFILES_BIN','DECFILES_TRANSFERS_EVIDENCE','transfers'),
  ('default','views-native.py','DECFILES_BIN','DECFILES_VIEWS_EVIDENCE','views'),
+ ('default','tabs-native.py','DECFILES_BIN','DECFILES_TABS_EVIDENCE','tabs'),
  ('fixture-delay','close-native.py','DECFILES_FIXTURE_BIN','DECFILES_CLOSE_EVIDENCE','close'),
  ('fixture-delay','transfers-cancel-native.py','DECFILES_FIXTURE_BIN','DECFILES_TRANSFERS_CANCEL_EVIDENCE','transfers-cancel'),
  ('fixture-delay','paste-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_PASTE_RACES_EVIDENCE','paste-races')]
