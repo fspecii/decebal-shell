@@ -1618,6 +1618,25 @@ mod model_tests {
     }
 
     #[test]
+    fn the_launcher_style_answers_while_fsync_is_held_and_keeps_the_other_launcher_keys() {
+        let (mut m, _) = model_with("");
+        std::fs::write(m.paths.shell_json(), "{\"launcher\": {\"style\": \"theme\", \"future\": 1}, \"keep\": true}\n").unwrap();
+        m.on_files_changed();
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(2.0));
+        disk.blocked();
+        let took = timed(&mut m, "ln:style", CtlVal::Str("xfce".into()));
+        assert!(took < Duration::from_millis(250), "{took:?}");
+        assert_eq!(m.shell["launcher"]["style"], "xfce", "shown at once");
+        assert_eq!(io::json_load(&m.paths.shell_json())["launcher"]["style"], "theme", "not written while held");
+        disk.open();
+        m.settle();
+        let v = io::json_load(&m.paths.shell_json());
+        assert_eq!((v["launcher"]["style"].clone(), v["launcher"]["future"].clone(), v["keep"].clone()), ("xfce".into(), 1.into(), true.into()));
+        assert!(m.notice.as_ref().is_some_and(|n| !n.error && n.text.starts_with("Launcher style: Xfce")), "{:?}", m.notice);
+    }
+
+    #[test]
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
         let before = m.store.cfg.text();

@@ -496,11 +496,8 @@ pub fn write_pinned(path: &std::path::Path, list: &[String]) -> std::io::Result<
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension(format!("json.tmp{}", std::process::id()));
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
-        let _ = std::fs::remove_file(&tmp);
-    })
+    // The shared Settings write: per-file lock, unique temp, fsync, identity check at commit.
+    crate::settings::io::write_atomic(path, &text).map_err(std::io::Error::other)
 }
 
 /// Sets one key of the JSON object in `path` (creating the file), keeping every other key. Atomic like
