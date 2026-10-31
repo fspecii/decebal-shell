@@ -32,6 +32,8 @@ revision = "master"             # required: the branch or tag that was pinned (i
 commit = "5d11ba4e4013a4d1e1c601265d55c66b95184922"         # required: 40 hex; checked against a git archive's pax comment
 license = "GPL-3.0-or-later"    # required: SPDX expression as the upstream states it
 license_files = ["LICENSES/GPL-3.0-or-later.txt", "LICENSES/CC-BY-4.0.txt"]  # required, >= 1: paths in the source root
+license_oids = ["<40 hex>", "<40 hex>"]   # optional: `git rev-parse <commit>:<file>` of each, same order; pins the
+                                #   licence texts independently of the archive bytes
 # optional: lets `decthemectl assets install ID` download the source itself
 archive_url = "https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz"
 archive_sha256 = "<64 hex>"     # optional: only for byte-stable files (release assets); forge-generated archives
@@ -50,8 +52,12 @@ install_name = "bloom"          # optional: folder under ~/.local/share/icons (=
                                 #   default: the last part of `path`. [A-Za-z0-9][A-Za-z0-9._+-]*, at most 64
 license = "GPL-3.0-or-later"    # optional: overrides the source's licence for this pack
 license_files = ["bloom/COPYING"]   # optional: more files (source-root relative) copied with this pack
-link_sources = []               # optional: other source folders whose files symlinks of `path` may point into
-                                #   (e.g. ["ocean"] for ocean-dark); such links become plain copies
+license_oids = ["<40 hex>"]     # optional, as for the source
+link_sources = ["Papirus"]      # optional: other source folders that links of `path` point into (Papirus-Dark's size
+                                #   folders link to ../Papirus). File links become copies, folder links are expanded
+                                #   into real folders: the installed pack never links outside itself
+link_source_trees = ["<40 hex>"]  # `git rev-parse <commit>:<folder>` of each link source, same order. Without it an
+                                #   install that uses link-source files needs a matching archive_sha256, else it is refused
 index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]   # optional: source files concatenated into
                                 #   index.theme when the theme folder has none (Adwaita: "index.theme" in the repo root)
 index_oids = ["<40 hex>", "<40 hex>"]   # required with index: `git rev-parse <commit>:<file>` of each, same order
@@ -77,7 +83,9 @@ the repository):
 * unknown keys are errors ("did you mean ...?"); ids are unique; `source` / `recommend.*` refer to existing ids;
   a recommended pack provides the kind it is recommended for;
 * every path is relative, `/`-separated, without `..`, `.` parts, backslashes or control characters;
-* `commit`, `tree` and `index_oids` are 40 lowercase hex digits, `archive_sha256` 64 (and needs `archive_url`);
+* `commit`, `tree`, `index_oids`, `link_source_trees` and `license_oids` are 40 lowercase hex digits, one per listed
+  folder / file in the same order; `archive_sha256` is 64 (and needs `archive_url`);
+* a `link_sources` folder does not overlap the pack's `path`;
   URLs are `https://`;
 * `license` is non-empty and `license_files` lists at least one file per pack (source + pack lists combined).
 
@@ -129,7 +137,7 @@ What did not fit the format, found while pinning them (the port owners decide):
 | `info ID\|NAME` | metadata, pins, licence, installed state and recommendations of one pack |
 | `install ID [--archive FILE [--strip N] \| --source-dir DIR] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https), or use a downloaded archive, or a local clone of the source; the `tree` id (and `archive_sha256`, the archive's commit, `index_oids`) are checked |
 | `import PATH --provides icons,cursors --license SPDX --license-file REL... [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]` | install an archive or folder that is not in a catalogue (recorded as `local`; a licence file is still required). `REL` paths are relative to the source root |
-| `verify [NAME...]` | re-hash installed packs against their provenance record |
+| `verify [NAME...]` | re-hash installed packs against their provenance record; also reports DEGRADED packs (exit 1) |
 | `remove NAME [--force]` | delete a pack decebal installed (never a theme it did not install; `--force` to remove one in use) |
 | `use icons\|cursors NAME\|auto` | select a theme explicitly (survives theme changes) |
 | `use icons\|cursors theme` | hand the choice back to the theme's recommendation |
@@ -139,8 +147,9 @@ What did not fit the format, found while pinning them (the port owners decide):
 
 ## What install and import do
 
-1. **Stage**: a private folder `<root>/.decebal-staging/<name>.<pid>.<n>/` (mode 0700, same file system as the target, so
-   the final step is a `rename`). A lock file there serialises concurrent installs.
+1. **Lock and stage**: the install lock (`<root>/.decebal-staging/lock`) is taken **first** and held to the end; every
+   observation of the target is made under it. A private folder `<root>/.decebal-staging/<name>.<pid>.<n>/` (mode
+   0700, same file system as the target, so the final step is a `rename`) holds the work.
 2. **Read** the source as a stream: `.tar`, `.tar.gz` / `.tgz` (gzip is decompressed with a cap while it is read), or a
    folder (walked without following links). Only `path`, the licence files and `link_sources` are extracted;
    everything else is skipped unread. A git archive's pax comment is compared with `commit`.
@@ -149,14 +158,20 @@ What did not fit the format, found while pinning them (the port owners decide):
    `archive_sha256` (checked before the archive is read). Any mismatch stops here.
 4. **Build** the theme folder: icon files (`.svg`, `.png`, `.xpm`), `index.theme` / `cursor.theme`, Xcursor files under
    `cursors/` (magic `Xcur` checked), and text (`README*`, `COPYING*`, `LICENSE*`, `AUTHORS*`, `*.md`, `*.txt`).
+   Plasma 6 `cursors_scalable/<name>/metadata.json` is kept when it is a JSON array or object of at most 64 KiB.
    Everything else (build files, scripts, `Makefile`, `CMakeLists.txt`, `icon-theme.cache`, ...) is left out and counted.
+   Folder links into `link_sources` are expanded from the staged source: links inside a copy stay links, a folder
+   copied once is linked (inside the pack) when it is referenced again, a link to an enclosing folder is cut, overlapping
+   writes are refused, and depth (8), entries and bytes are bounded by the install limits.
    Files are written 0644, folders 0755: executable bits never survive. Internal symlinks are kept (relative);
    links into `link_sources` become copies; links to nothing are dropped with a warning.
 5. **Build cursors** declared with `[[pack.xcursor]]`: each PNG (read from the verified source, at most 256 px a side)
    becomes a premultiplied ARGB image of an Xcursor file with its hotspot (which must lie inside the image) and delay;
    aliases become links. A cursor both shipped in `cursors/` and declared is an error. The PNGs are not installed, and
    a cursor-only pack leaves out images outside `cursors/` and `cursors_scalable/`.
-6. **Validate**: a theme folder without `index.theme` gets the concatenated `index` files (each checked against its
+6. **Validate** (and measure): fewer than half of the `Directories` of index.theme present marks the pack
+   **DEGRADED** (report, provenance, `verify`, `info`, `list`, the pane); fewer than a quarter refuses it unless
+   `--allow-degraded`. Then: a theme folder without `index.theme` gets the concatenated `index` files (each checked against its
    `index_oids` blob id; they are read, not installed). Icons need an `index.theme` with `[Icon Theme]` and existing `Directories`; cursors need `cursors/`
    with a core pointer (`left_ptr` or `default`). `Inherits=` names must be plain names; a theme inheriting itself (DMZ's
    `cursor.theme`) is fine, missing parents are warnings. A cursor-only pack without `index.theme` gets a two-line one.
@@ -166,8 +181,12 @@ What did not fit the format, found while pinning them (the port owners decide):
    * absent: `rename` the staged folder into place;
    * a theme decebal did not install (no provenance file): **refused**, always (remove it yourself, or `--name`);
    * the same pack with the same content: nothing to do;
-   * an older / different decebal pack: needs `--force`; the old folder is renamed aside, the new one renamed in, the old
-     one deleted; if the second rename fails the old one is renamed back (rollback).
+   * an older / different decebal pack: needs `--force`. The policy (foreign, pack identity, `--force`, unchanged,
+     modified) is decided again from a fresh observation right before committing. `RENAME_EXCHANGE` swaps the folders
+     atomically and the swapped-out folder must be the pack that was observed (otherwise it is swapped back and nothing
+     is replaced). Without `renameat2` the old folder is renamed aside and the new one in; if that fails the old one is
+     renamed back, and if even that fails it is moved to `<root>/.decebal-recovery/` (never cleaned up automatically),
+     or the job folder is kept: an error path never deletes a previous version.
    A theme of the same name in a later root (`/usr/share/icons/bloom`) is reported: the new one shadows it.
    On any error the staging folder is removed; the target is untouched.
 
@@ -182,7 +201,8 @@ What did not fit the format, found while pinning them (the port owners decide):
   cannot be written through one. Hard links are copies of an earlier entry. Devices, FIFOs, sparse files and base-256
   sizes are refused.
 * **Caps** (defaults): 120 000 entries, 16 MiB per file, 1 GiB extracted, 512 MiB archive, 1 MiB per licence file.
-* **Ownership**: only folders carrying `.decebal-asset.json` are ever replaced or removed.
+* **Ownership**: only folders carrying `.decebal-asset.json` are ever replaced or removed. `remove` decides under the
+  install lock (what is there, whether it is in use) and checks the folder it moved aside is the pack it observed.
 
 ## Selection and theme recommendations
 
@@ -225,12 +245,23 @@ packs with licence, source and revision.
   "source": {"id": "deepin-icon-theme", "repo": "https://github.com/linuxdeepin/deepin-icon-theme",
              "revision": "master", "commit": "5d11...", "path": "bloom", "tree": "3c8e...",
              "archive_sha256": "...", "fetched_from": "archive|download|directory"},
-  "verified": {"tree": true, "archive_sha256": true, "commit": true},
+  "verified": {"tree": true, "archive_sha256": false, "commit": true,
+               "outside": [{"what": "link_sources", "verified": true, "by": "tree"},
+                           {"what": "licences", "verified": true, "by": "blob"}],
+               "complete": true},
+  "link_sources": [["Papirus", "56b5312e..."]], "from_link_sources": [48961, 127583232, 43507],
+  "icon_dirs": [210, 210], "degraded": false,
   "license": "GPL-3.0-or-later", "license_files": ["LICENSES/GPL-3.0-or-later.txt"],
   "content_hash": "sha256:...", "files": 9512, "symlinks": 7542, "skipped": 12,
   "installed_by": "decebal 0.2.1"
 }
 ```
+
+`verified.tree` covers only the pack's own folder. Everything the pack took from outside it is listed in
+`verified.outside` with what checked it (`tree`: `link_source_trees`; `blob`: `index_oids` / `license_oids`;
+`archive_sha256`: a pinned archive; `none`), and `verified.complete` is true only when every installed byte came from
+verified input. `commit` compares a git archive's pax comment with the pin: a consistency check, not authentication.
+The install report prints the same as one line (`outside the pack folder: ...; complete: yes|NO`).
 
 `content_hash` is `sha256` over the sorted entries (`path NUL F NUL size NUL sha256(file) LF` for files,
 `path NUL L NUL target LF` for links), without the provenance file itself; `verify` recomputes it.
@@ -262,6 +293,12 @@ the real `decthemectl` against `git archive` tarballs and a clone of the pinned 
   not installed; 10 of 10 sample cursors resolved and decoded;
 * explicit icon and cursor choices survived applying `deepin`, `nextkde` and `gnome-adwaita-like`; theme-owned slots
   followed and went back to their baseline.
+* the port owners' own catalogues (Plasma, GNOME, Lingmo) loaded together and validated; six packs downloaded over
+  HTTPS from their `archive_url`s with `tree`, `archive_sha256` and `commit` verified (Layan white cursors, Lingmo,
+  Papirus, Papirus-Dark, Breeze Light; Breeze cursors from a local `git archive` whose bytes equal the pinned sha256).
+* Papirus-Dark (folder links into `../Papirus`), from the GNOME owner's cached archive (sha256 = their pin) into a new
+  private root: 210 of 210 directories (12 before link-source expansion), 0 links leaving the pack, `complete: yes`
+  with `link_source_trees`, `verify` ok, 16 of 16 sample icons resolved.
 
 Upstream symlinks that dangle in the pinned commit itself (e.g. Lingmo `ocean-dark/apps/scalable ->
 ../../Crule/apps/scalable`, Deepin `uos-activator.svg -> deepin-license-activator.svg`) are dropped with a warning.
@@ -278,5 +315,7 @@ Upstream symlinks that dangle in the pinned commit itself (e.g. Lingmo `ocean-da
 * decebal's own surfaces do not load Xcursor themes themselves; the cursor theme reaches applications through
   "Apply to all apps" (GTK, gsettings, X resources) and a new session. When a theme-owned cursor goes back to "not
   set", "Apply to all apps" leaves the last written GTK / X value in place (it only writes a set value).
-* Licence files and `link_sources` outside the pack's `path` are covered by `archive_sha256` when that is pinned, not
-  by the tree id; `index` files are pinned by `index_oids`.
+* Licence files outside the pack's `path` are verified only by `license_oids` or a pinned `archive_sha256`; without
+  either the install says `licences NOT pinned; complete: NO`.
+* Expanding link sources copies their files (Papirus-Dark: ~49 000 files, ~125 MiB besides its own): self-contained
+  by design, at the cost of disk space.

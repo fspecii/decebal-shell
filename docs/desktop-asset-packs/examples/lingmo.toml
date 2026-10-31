@@ -29,6 +29,7 @@ source = "lingmo-icons"
 path = "ocean-dark"
 tree = "17a35532a3ba0e6125e3b5720c8857d112010e33"
 link_sources = ["ocean"]                      # 9 links point into ocean/: installed as copies
+link_source_trees = ["9e6cef436819f91394eff447e866953b8be90309"]   # git rev-parse <commit>:ocean
 
 [[recommend]]
 theme = "lingmo"
