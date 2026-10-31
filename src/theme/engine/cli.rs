@@ -31,7 +31,8 @@ decthemectl theme duplicate ID NEWID [--name N]
 decthemectl theme export ID [FILE]            write theme ID as a .dtheme (default ./ID.dtheme)
 decthemectl theme snapshot ID [--name N]      create a theme from the current settings (colours, titlebars, gaps, wallpaper, dock, widgets)
 
-Themes live in ~/.config/decebal/themes/ID/ (override with $DECEBAL_THEMES) and /usr/share/decebal/themes/. See docs/theme-engine.md.";
+Themes live in ~/.config/decebal/themes/ID/ (override with $DECEBAL_THEMES); installed ones are also read from decebal/themes/ under $XDG_DATA_HOME and
+$XDG_DATA_DIRS (set $DECEBAL_SYSTEM_THEMES to use that one folder instead). See docs/theme-engine.md.";
 
 fn flag(args: &[String], name: &str) -> bool {
     args.iter().any(|a| a == name)

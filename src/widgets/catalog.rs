@@ -2,7 +2,7 @@
 use super::config::{self, Instance};
 use super::{dsl, samples, Trust};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -56,10 +56,10 @@ fn widget_files(dir: &Path) -> Vec<std::path::PathBuf> {
 }
 
 pub fn list(themes_dir: &Path, allow_exec: bool) -> Vec<Entry> {
-    list_in(themes_dir, &config::user_dir(), &crate::theme::engine::store::system_dir(), allow_exec)
+    list_in(themes_dir, &config::user_dir(), &crate::theme::engine::store::installed_roots(), allow_exec)
 }
 
-fn list_in(themes: &Path, user: &Path, system: &Path, allow_exec: bool) -> Vec<Entry> {
+fn list_in(themes: &Path, user: &Path, installed: &[PathBuf], allow_exec: bool) -> Vec<Entry> {
     let mut out = Vec::new();
     for (id, text) in samples::SAMPLES {
         out.push(entry(format!("builtin.{id}"), suggested(&format!("builtin:{id}"), None), Ok((*text).into()), Trust::Theme));
@@ -70,7 +70,7 @@ fn list_in(themes: &Path, user: &Path, system: &Path, allow_exec: bool) -> Vec<E
     }
     let mut packages = BTreeSet::new();
     let mut themed = BTreeMap::new();
-    for root in [themes, system] {
+    for root in std::iter::once(themes).chain(installed.iter().map(PathBuf::as_path)) {
         let mut dirs: Vec<_> = std::fs::read_dir(root).into_iter().flatten().flatten().map(|e| e.path()).collect();
         dirs.sort();
         for dir in dirs {
@@ -109,7 +109,7 @@ mod tests {
         std::fs::write(dir.join("themes/other/theme.toml"), "format = 1\n").unwrap();
         std::fs::write(dir.join("themes/other/widgets/clock.toml"), samples::source("clock-card").unwrap()).unwrap();
         std::fs::write(dir.join("user/broken.toml"), "nonsense = [").unwrap();
-        let entries = list_in(&dir.join("themes"), &dir.join("user"), &dir.join("none"), false);
+        let entries = list_in(&dir.join("themes"), &dir.join("user"), &[dir.join("none")], false);
         assert_eq!(entries.len(), samples::SAMPLES.len() + 2);
         assert!(entries.iter().any(|e| e.instance.source.as_deref() == Some("other") && e.error.is_none()));
         assert!(entries.iter().any(|e| e.instance.use_ == "broken" && e.error.is_some()));

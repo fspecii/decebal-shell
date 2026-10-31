@@ -31,8 +31,20 @@ sunset-grid/
   widgets/sunset-clock.toml  widget files (see Widgets)
   README.md  LICENSE.txt     .md / .txt in the root, never read by the shell
 ```
-Installed themes live in `~/.config/decebal/themes/<id>/` (`$DECEBAL_THEMES`), system-wide ones in `/usr/share/decebal/themes/<id>/`
-(`$DECEBAL_SYSTEM_THEMES`); the user's folder wins. A single legacy `~/.config/decebal/themes/<name>.toml` (no `format` key) keeps working
+Installed themes live in `~/.config/decebal/themes/<id>/` (`$DECEBAL_THEMES`). Themes installed by `make install` or a package are
+read from `decebal/themes/<id>/` under the XDG data directories, in this order, first match wins:
+
+1. `$XDG_DATA_HOME` (default `~/.local/share`), so `make install PREFIX=$HOME/.local` works without administrator rights;
+2. each entry of `$XDG_DATA_DIRS` in the order written (default `/usr/local/share:/usr/share`), so the Makefile's default
+   `PREFIX=/usr/local` and a distribution's `/usr` are both found.
+
+As the XDG Base Directory specification says, an unset or empty variable uses its default and a relative entry is ignored. A custom
+prefix such as `/opt/decebal` is only found when `/opt/decebal/share` is in `$XDG_DATA_DIRS`. `$DECEBAL_SYSTEM_THEMES` replaces this
+whole list with the one folder it names (tests and sandboxes). The user's folder always wins over every installed folder, a theme and
+the parent it `extends` may live in different folders, and a theme's logo and fonts come from the package that declares them. The
+shell only ever writes to the user's folder (`theme install`, `new`, `duplicate`); installed folders are read-only and removed with
+`make uninstall` or the package manager. The theme preview worker runs with a private `HOME` and is handed the same list through the
+internal `DECEBAL_INSTALLED_THEME_ROOTS` variable. A single legacy `~/.config/decebal/themes/<name>.toml` (no `format` key) keeps working
 exactly as before, and `decthemectl theme duplicate NAME NEW` upgrades it to a package.
 
 `theme.toml` starts with `format = 1`. A reader that does not know the format refuses the file; format 2 will be a different number, not

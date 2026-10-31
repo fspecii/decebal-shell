@@ -213,3 +213,144 @@ fn official_preview_samples_cached_photography_without_changing_live_wallpaper()
     assert!(!dir.join("decebal.json").exists());
     fs::remove_dir_all(dir).unwrap();
 }
+
+/// Two installed roots as `make install` leaves them (`PREFIX=/usr/local` and `/usr`), a user data home with nothing in it, a relative
+/// entry that must be ignored, and an empty user theme folder: the child lives in one root, its parent, widget and logo in the other.
+struct Installed {
+    dir: PathBuf,
+    local: PathBuf,
+    usr: PathBuf,
+}
+fn installed_fixture() -> Installed {
+    let dir = std::env::temp_dir().join(format!("native-preview-installed-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let (local, usr) = (dir.join("usr-local/share/decebal/themes"), dir.join("usr/share/decebal/themes"));
+    fs::create_dir_all(dir.join("themes")).unwrap();
+    for pkg in [usr.join("lib-base/widgets"), usr.join("lib-base/icons"), usr.join("lib-base/fonts"), local.join("lib-kid")] {
+        fs::create_dir_all(pkg).unwrap();
+    }
+    let header = |id: &str| format!("format=1\nid=\"{id}\"\nname=\"{id}\"\nversion=\"1.0.0\"\nauthor=\"test\"\nlicense=\"MIT\"\n");
+    fs::write(
+        usr.join("lib-base/theme.toml"),
+        header("lib-base") + "[colors.dark]\nbackground=\"#101520\"\ntext=\"#ffffff\"\naccent=\"#ff77aa\"\n[colors.light]\nbackground=\"#f4f7ff\"\ntext=\"#112244\"\naccent=\"#774455\"\n[branding]\nlogo=\"icons/logo.png\"\n[font]\nfiles=[\"fonts/not-a-font.ttf\"]\n",
+    )
+    .unwrap();
+    fs::write(usr.join("lib-base/widgets/probe.toml"), "format=1\nid=\"probe\"\nsize=[300,100]\n[root]\ntype=\"text\"\ntext=\"12:34\"\nsize=48\n").unwrap();
+    image::RgbImage::from_pixel(8, 8, image::Rgb([200, 30, 30])).save(usr.join("lib-base/icons/logo.png")).unwrap();
+    fs::write(usr.join("lib-base/fonts/not-a-font.ttf"), b"package font bytes").unwrap();
+    fs::write(
+        local.join("lib-kid/theme.toml"),
+        header("lib-kid") + "extends=\"lib-base\"\n[bar]\nenabled=false\n[dock]\nenabled=false\n[[widgets]]\nuse=\"probe\"\nplace=\"desktop\"\nanchor=\"top-left\"\nx=70\ny=80\n",
+    )
+    .unwrap();
+    Installed { dir, local, usr }
+}
+impl Installed {
+    fn command(&self, themes: &std::path::Path) -> Command {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_decthemectl"));
+        c.args(["theme", "render", "lib-kid", "--mode", "dark", "--png"])
+            .arg(self.dir.join("out.png"))
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", self.dir.join("home"))
+            .env("XDG_CONFIG_HOME", self.dir.join("home/.config"))
+            .env("XDG_CACHE_HOME", self.dir.join("cache"))
+            .env("XDG_DATA_HOME", self.dir.join("home/data"))
+            .env("XDG_DATA_DIRS", format!("relative/ignored:{}:{}:{}/", self.dir.join("usr-local/share").display(), self.dir.join("usr/share").display(), self.dir.join("usr-local/share").display()))
+            .env("XDG_RUNTIME_DIR", self.dir.join("run"))
+            .env("DECEBAL_CONFIG", &self.dir)
+            .env("DECEBAL_THEMES", themes)
+            .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
+            .env("RDWMCTL", "/nonexistent/rdwmctl")
+            .env("DISPLAY", "")
+            .env("WAYLAND_DISPLAY", "")
+            .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent");
+        c
+    }
+    fn render(&self) -> String {
+        let out = self.command(&self.dir.join("themes")).output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(out.stdout).unwrap()
+    }
+}
+fn cache_path(output: &str) -> PathBuf {
+    PathBuf::from(output.split("(cache ").nth(1).unwrap().trim().trim_end_matches(')'))
+}
+
+#[test]
+fn native_preview_reads_every_installed_root_and_a_fresh_process_reuses_the_cache() {
+    let t = installed_fixture();
+    let tree = |root: &std::path::Path| -> Vec<(PathBuf, u64)> {
+        let mut v = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in fs::read_dir(&d).unwrap().flatten() {
+                let m = e.metadata().unwrap();
+                if m.is_dir() {
+                    stack.push(e.path());
+                } else {
+                    v.push((e.path(), m.len()));
+                }
+            }
+        }
+        v.sort();
+        v
+    };
+    let before = (tree(&t.local), tree(&t.usr));
+    let first = t.render();
+    let png = cache_path(&first);
+    let notes: serde_json::Value = serde_json::from_slice(&fs::read(png.with_extension("json")).unwrap()).unwrap();
+    assert_eq!(notes["widgets"], 1, "the parent's widget in the other root was drawn for the child: {notes}");
+    assert!(!notes["notes"].to_string().contains("not installed"), "{notes}");
+    // the same packages in the user's own folder, with no installed roots at all, draw the same pixels
+    let mine = t.dir.join("mine");
+    fs::create_dir_all(&mine).unwrap();
+    for (root, id) in [(&t.usr, "lib-base"), (&t.local, "lib-kid")] {
+        let dest = mine.join(id);
+        assert!(Command::new("cp").arg("-r").arg(root.join(id)).arg(&dest).status().unwrap().success());
+    }
+    let reference = t.dir.join("reference.png");
+    let out = {
+        let mut c = t.command(&mine);
+        c.env("DECEBAL_SYSTEM_THEMES", t.dir.join("no-system")).env("XDG_CACHE_HOME", t.dir.join("cache-reference"));
+        c.output().unwrap()
+    };
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    fs::copy(t.dir.join("out.png"), &reference).unwrap();
+    // (the reference run overwrote out.png; render the installed layout again for a like-for-like file)
+    assert_eq!(t.render(), first, "a fresh process finds the same stored preview");
+    assert_eq!(fs::read(t.dir.join("out.png")).unwrap(), fs::read(&reference).unwrap(), "installed roots and the user folder give the same native pixels");
+    // reuse: nothing is rewritten and no second image appears
+    let sentinel = std::time::UNIX_EPOCH + std::time::Duration::from_secs(123456);
+    fs::File::options().write(true).open(&png).unwrap().set_times(fs::FileTimes::new().set_modified(sentinel)).unwrap();
+    assert_eq!(t.render(), first);
+    assert_eq!(fs::metadata(&png).unwrap().modified().unwrap(), sentinel, "an unchanged install is not re-rendered");
+    assert_eq!(fs::read_dir(t.dir.join("cache/decebal/theme-previews/saved")).unwrap().count(), 1);
+    // dependencies in either root are part of the cache key
+    let widget = t.usr.join("lib-base/widgets/probe.toml");
+    fs::write(&widget, fs::read_to_string(&widget).unwrap().replace("12:34", "56:78")).unwrap();
+    let edited = t.render();
+    assert_ne!(edited, first, "an edit in the parent's root regenerates");
+    let logo = t.usr.join("lib-base/icons/logo.png");
+    image::RgbImage::from_pixel(8, 8, image::Rgb([30, 200, 30])).save(&logo).unwrap();
+    let relogo = t.render();
+    assert_ne!(relogo, edited, "the parent's logo asset is a dependency");
+    // a same-id package in the higher-priority root now wins, and the key says so
+    fs::create_dir_all(t.local.join("lib-base")).unwrap();
+    fs::write(
+        t.local.join("lib-base/theme.toml"),
+        fs::read_to_string(t.usr.join("lib-base/theme.toml")).unwrap().replace("#ff77aa", "#00ccff").replace("[branding]\nlogo=\"icons/logo.png\"\n[font]\nfiles=[\"fonts/not-a-font.ttf\"]\n", ""),
+    )
+    .unwrap();
+    let shadow = t.render();
+    assert_ne!(shadow, relogo);
+    // and the explicit override keeps its single-directory meaning: neither root is searched, so the parent is missing
+    let out = t.command(&t.dir.join("themes")).env("DECEBAL_SYSTEM_THEMES", t.dir.join("no-system")).output().unwrap();
+    assert!(!out.status.success(), "DECEBAL_SYSTEM_THEMES excludes the XDG roots");
+    // nothing but the files this test wrote itself exists in the installed roots
+    let mut want = before.0.clone();
+    want.push((t.local.join("lib-base/theme.toml"), fs::metadata(t.local.join("lib-base/theme.toml")).unwrap().len()));
+    want.sort();
+    assert_eq!(tree(&t.local), want);
+    assert!(!t.dir.join("decebal.json").exists());
+    fs::remove_dir_all(t.dir).unwrap();
+}

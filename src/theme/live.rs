@@ -75,26 +75,30 @@ impl Source {
         crate::settings::io::json_set(&self.shell_json, "theme", Some(sel.to_json()))
     }
 
-    /// The file a theme id is read from: `<id>/theme.toml` of a package (user folder, then the system one), else the flat `<id>.toml`.
-    fn user_file(&self, id: &str) -> PathBuf {
+    /// The file a theme id is read from: `<id>/theme.toml` of a package (the user's folder, then each installed root in priority order),
+    /// else the flat `<id>.toml`. Nothing installed ever outranks the user's package or flat file of the same id.
+    pub(super) fn user_file(&self, id: &str) -> PathBuf {
         let pkg = self.themes_dir.join(id).join("theme.toml");
         if pkg.is_file() {
             return pkg;
         }
         let flat = self.themes_dir.join(format!("{id}.toml"));
-        let sys = engine::store::system_dir().join(id).join("theme.toml");
-        if !flat.exists() && engine::schema::valid_ident(id) && sys.is_file() {
-            return sys;
+        if !flat.exists() {
+            if let Some(dir) = engine::store::installed_package(id) {
+                return dir.join("theme.toml");
+            }
         }
         flat
     }
 
     fn user_ids(&self) -> Vec<String> {
         let mut v: Vec<String> = Vec::new();
-        for dir in [&self.themes_dir, &engine::store::system_dir()] {
+        let roots = engine::store::installed_roots();
+        for (n, dir) in std::iter::once(&self.themes_dir).chain(roots.iter()).enumerate() {
             for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let p = e.path();
-                let id = if p.extension().is_some_and(|x| x == "toml") {
+                // flat `<id>.toml` files exist only in the user's folder; installed roots hold packages
+                let id = if n == 0 && p.extension().is_some_and(|x| x == "toml") {
                     p.file_stem().map(|s| s.to_string_lossy().into_owned())
                 } else if p.join("theme.toml").is_file() {
                     p.file_name().map(|s| s.to_string_lossy().into_owned()).filter(|n| !n.starts_with('.'))
@@ -630,6 +634,71 @@ files = ["oversized.ttf"]
         assert_eq!(theme.fonts.files, vec![file.canonicalize().unwrap()], "Source must not silently discard an oversize reference");
         assert!(theme.fonts.package_faces.is_empty(), "the bounded diagnostic loader rejects it");
         assert_eq!(theme.fonts.file_versions[0].0, 16 * 1024 * 1024 + 1);
+    }
+
+    fn installed(root: &std::path::Path, id: &str, extends: Option<&str>, body: &str, logo: Option<u32>, font: Option<&str>) -> PathBuf {
+        let dir = root.join(id);
+        std::fs::create_dir_all(dir.join("icons")).unwrap();
+        std::fs::create_dir_all(dir.join("fonts")).unwrap();
+        let mut text = format!("format = 1\nid = \"{id}\"\nname = \"{id}\"\n");
+        text += &extends.map(|p| format!("extends = \"{p}\"\n")).unwrap_or_default();
+        text += body;
+        if logo.is_some() {
+            text += "[branding]\nlogo = \"icons/logo.png\"\n";
+        }
+        if let Some(font) = font {
+            text += &format!("[font]\nfiles = [\"fonts/{font}\"]\n");
+            std::fs::write(dir.join("fonts").join(font), format!("not a real font: {id}")).unwrap();
+        }
+        if let Some(size) = logo {
+            tiny_skia::Pixmap::new(size, size).unwrap().save_png(dir.join("icons/logo.png")).unwrap();
+        }
+        std::fs::write(dir.join("theme.toml"), text).unwrap();
+        dir
+    }
+
+    #[test]
+    fn installed_parent_logo_and_fonts_resolve_across_roots_and_the_user_folder_wins() {
+        let (dir, src) = sandbox("installed-roots");
+        let (local, usr) = (dir.join("usr-local/decebal/themes"), dir.join("usr/decebal/themes"));
+        let _roots = engine::store::test_roots(vec![local.clone(), usr.clone()]);
+        // the child (high root) extends a parent that lives in the low root and declares the logo and one font
+        let parent = installed(&usr, "base", None, "", Some(4), Some("base.ttf"));
+        let child = installed(&local, "kid", Some("base"), "", None, Some("kid.ttf"));
+        // a lower-priority package of the child's id must not matter, and neither must a same-id parent in the higher root's shadow
+        installed(&usr, "kid", None, "[colors.dark]\naccent = \"#ff0000\"\n", Some(9), None);
+        let load = |src: &Source| src.theme_for("kid", &Selection::default(), true).unwrap();
+        let t = load(&src);
+        assert_eq!(t.branding.logo, crate::panel::branding::Logo::File(parent.join("icons/logo.png").canonicalize().unwrap()), "the logo belongs to the package that declared it");
+        assert_eq!(t.fonts.files, vec![child.join("fonts/kid.ttf").canonicalize().unwrap(), parent.join("fonts/base.ttf").canonicalize().unwrap()], "own font first, then the parent's");
+        assert_ne!(t.accent, Rgb(255, 0, 0), "the low-priority same-id package is shadowed");
+        // a font symlinked out of its installed package stays out
+        let outside = dir.join("outside.ttf");
+        std::fs::write(&outside, b"x").unwrap();
+        std::os::unix::fs::symlink(&outside, parent.join("fonts/escape.ttf")).unwrap();
+        std::fs::write(
+            parent.join("theme.toml"),
+            std::fs::read_to_string(parent.join("theme.toml")).unwrap().replace("files = [\"fonts/base.ttf\"]", "files = [\"fonts/base.ttf\", \"fonts/escape.ttf\"]"),
+        )
+        .unwrap();
+        let t = load(&src);
+        assert_eq!(t.fonts.files.len(), 2, "{:?}", t.fonts.files);
+        assert!(t.fonts.files.iter().all(|f| f.starts_with(local.canonicalize().unwrap()) || f.starts_with(usr.canonicalize().unwrap())));
+        // the user's config folder outranks every installed root, for the parent too
+        installed(&src.themes_dir, "base", None, "", Some(8), None);
+        let t = load(&src);
+        assert_eq!(t.branding.logo, crate::panel::branding::Logo::File(src.themes_dir.join("base/icons/logo.png").canonicalize().unwrap()));
+        assert_eq!(t.fonts.files, vec![child.join("fonts/kid.ttf").canonicalize().unwrap()], "the user's parent has no font; the installed one is shadowed whole");
+        // the listing shows each id once, built-ins untouched, and nothing was written into an installed root
+        let ids: Vec<_> = src.list().into_iter().map(|e| e.id).collect();
+        assert_eq!(ids.iter().filter(|i| ["base", "kid"].contains(&i.as_str())).count(), 2);
+        assert!(!local.join("base").exists());
+        // the watcher's stamps follow the resolved file
+        let sel = Selection { name: "kid".into(), ..Selection::default() };
+        let before = src.stamps(&sel);
+        std::fs::write(child.join("theme.toml"), std::fs::read_to_string(child.join("theme.toml")).unwrap() + "# edit\n").unwrap();
+        assert_ne!(src.stamps(&sel), before);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
