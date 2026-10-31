@@ -126,6 +126,22 @@ Theme selection may choose presentation defaults, never rewrite user bookmarks,
 view/sort choices, default app, file contents or clipboard state. Explicit layout
 choices stay fixed across palette changes.
 
+## Optional native foundation — implementation assigned
+
+A new standalone `extras/decfiles` crate is assigned for the first read-only
+browser foundation. Cached GTK4 0.10.3 and GIO/GLib 0.21.5 bindings were found on
+2026-10-31; dependency availability must still be confirmed by its actual offline
+build. It must not add GTK dependencies to the shell or change the default
+directory handler. The assigned first gate is functional asynchronous directory
+loading, history/address navigation and both details and hierarchical-column
+layouts against private fixture directories.
+
+This assignment is not acceptance evidence. Native controls, correct operation
+outcomes and cancellation/stale-result tests are required before integrating it.
+Standard GTK controls help supply semantics; they do not by themselves prove
+screen-reader acceptance. File operations, tabs, search, clipboard, drag/drop,
+remote/mount integration and the remaining release gates below stay open.
+
 ## Phase 3: operational acceptance and release boundary
 
 Run destructive operations only on isolated fixture trees. Record before/after

@@ -60,3 +60,18 @@ Acceptance includes selecting a second search result with both keyboard and
 pointer, then using its detail Open/Pin actions: the action must refer to the
 visible selection. Launcher output/anchor options must place the actual window
 on the requested secondary output, rather than only storing those options.
+
+## GNOME Control Center integration gate
+
+The GNOME port's first native quick-settings implementation does not establish
+complete acceptance: its initial clipped viewport and keyboard routing only
+operate for the Dux style. Before deploying GNOME, short-window content must
+scroll, keyboard focus must be distinct from hover, and the actual native window
+must dispatch enabled actions to a private command recorder. Tests that call
+activation methods but record only status probes do not prove setter actions.
+Screenshot and other process-launching targets must obey the same private
+action-recording boundary. No test may invoke live system controls.
+
+A package must not use old generic `card` styling as evidence of its GNOME
+quick-settings port. The intended release activates `style = "gnome"` with
+`min_shell_version = "0.3.0"`; missing services remain honestly unavailable.
