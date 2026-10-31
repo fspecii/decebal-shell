@@ -326,6 +326,10 @@ mod x {
         c.create_window(0, win, root, -1, -1, 1, 1, 0, WindowClass::INPUT_ONLY, 0, &CreateWindowAux::new().override_redirect(1).event_mask(EventMask::PROPERTY_CHANGE)).map_err(e)?;
         let me = super::super::Worker::current();
         c.change_property8(PropMode::REPLACE, win, mark, AtomEnum::STRING, marker(me.pid, me.start).as_bytes()).map_err(e)?;
+        // Install the directory watch before taking the initial snapshot. An atomic settings replacement during
+        // selection setup must remain queued, even when ensure() observes ownership before this loop starts.
+        let dir = ini.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+        let watch = inotify_watch(&dir)?;
         let mut table = Table::default();
         table.update(from_ini(&std::fs::read_to_string(ini).unwrap_or_default()));
         c.change_property8(PropMode::REPLACE, win, settings_atom, settings_atom, &table.serialize()).map_err(e)?;
@@ -339,8 +343,6 @@ mod x {
         let announce = ClientMessageEvent::new(32, root, manager, [time, sel, win, 0, 0]);
         c.send_event(false, root, EventMask::STRUCTURE_NOTIFY, announce).map_err(e)?;
         c.flush().map_err(e)?;
-        let dir = ini.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
-        let watch = inotify_watch(&dir)?;
         let xfd = c.stream().as_raw_fd();
         let wfd = watch.as_raw_fd();
         let release = |c: &Conn| {
