@@ -58,6 +58,12 @@ older “no AT-SPI” statement below is historical.
 Explorer/Finder file-manager profiles provide appearance and integration around
 existing file operations. They are not replacement interaction models, Finder
 column view or an Explorer ribbon. See [file-manager profiles](file-manager-profiles.md).
+The separate optional [Decebal Files prototype](../extras/decfiles/README.md)
+already implements details/columns, address navigation, tabs, search and basic
+file operations; it is not installed or a production default. File opening,
+Open With, multi-selection, mounts, undo/restore and broader acceptance remain
+incomplete. Do not count those prototype workflows as absent, or count them as
+qualified default-shell behavior.
 
 The next product work therefore includes complete Wayland session integration,
 launcher and shell accessibility, familiar file workflows, authentic theme
