@@ -875,7 +875,68 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         check("asset choice: value and its ownership committed together, their key kept", doc.get("system", {}).get("cursorTheme") == names[pick] and doc["asset_packs"]["cursors"] == {"user": True} and doc.get("editor") == 1, doc)
         return s
 
-    for name, fn in [("asset-choice", asset_choice), ("theme-external", theme_external), ("launcher", launcher), ("editor-validation", editor_validation), ("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
+    # ---- trackpad swipes in Keyboard & Input
+    INLINE = "[general]\nunknown_future_key = \"kept\"\n\n[gestures]\nenabled = true\nthreshold = 120.0\nnatural = false\nfuture_gesture_key = \"kept\"\n# my swipes\nbindings = [\n  { fingers = 3, direction = \"left\", action = \"viewnext\" },\n  { fingers = 4, direction = \"up\", action = \"focus_up\" },\n]\n"
+
+    def gesture_rdwmctl():
+        """A private stand-in for an rdwmctl whose schema lists [gestures] (rdwm docs/gestures.md: enabled, threshold
+        40-2000 logical delta units, natural); not the WM owner's published JSON."""
+        snap = _json.loads((HERE.parent.parent.parent / "src/settings/rdwm-schema.json").read_text())
+        k = lambda key, ty, d, lo, hi, desc: {"section": "gestures", "key": key, "type": ty, "default": d, "min": lo, "max": hi, "choices": [], "desc": desc}  # noqa: E731
+        snap["keys"] += [k("enabled", "bool", True, None, None, "Native trackpad swipes"), k("threshold", "float", 120.0, 40.0, 2000.0, "Swipe distance"), k("natural", "bool", False, None, None, "Reverse swipe direction")]
+        sj = gate.parent / "gesture-schema.json"
+        sj.write_text(_json.dumps(snap))
+        ctl = gate.parent / "gesture-rdwmctl"
+        ctl.write_text(f"#!/bin/sh\ncase \"$1\" in schema) cat '{sj}';; *) exit 0;; esac\n")
+        ctl.chmod(0o755)
+        return ctl
+
+    def gestures_old_wm():
+        s = Tracked("gestures-old", pane="inputdev", extra_files={"cfg/config.toml": INLINE})
+        app = find_app(s.p.pid)
+        ix = wait(lambda: (lambda i: i if any("updated rdwm" in (n.get_name() or "") for n in i.values()) else None)(index(app)), "the explanation", 10)
+        check("gestures (older WM): the section explains that an updated rdwm is needed", True)
+        check("gestures (older WM): no swipe controls are offered", not any(k and k.startswith("ctl:r:gestures:") for k in ix))
+        check("gestures (older WM): config.toml is untouched", s.config.read_text() == INLINE)
+        return s
+
+    def gestures_new_wm():
+        s = Tracked("gestures-new", pane="inputdev", extra_files={"cfg/config.toml": INLINE}, env_extra={"RDWMCTL": str(gesture_rdwmctl())})
+        app = find_app(s.p.pid)
+        sw = node(app, "ctl:r:gestures:enabled")
+        names = [n.get_name() or "" for n in index(app).values()]
+        check("gestures: the current bindings are listed", "3 fingers, swipe left" in names and "4 fingers, swipe up" in names, [n for n in names if "fingers" in n])
+        t, t0 = hold(3.0)
+        ms, r = do_action(sw, "toggle")
+        check("gestures: the switch answers while the disk is held", quick("gestures_toggle_reply", ms) and r is True, [ms, r])
+        travel = node(app, "ctl:r:gestures:threshold")
+        mn, mx = Atspi.Value.get_minimum_value(travel), Atspi.Value.get_maximum_value(travel)
+        check("gestures: required travel exposes the schema's range", (mn, mx) == (40.0, 2000.0), (mn, mx))
+        ms, r = set_value(travel, 300.0)
+        check("gestures: required travel answers while held", quick("gestures_travel_reply", ms) and r is True and held_for(t0, 3.0), [ms, r])
+        ms, r = do_action(node(app, "ctl:r:gestures:natural"), "toggle")
+        check("gestures: reverse direction answers while held", quick("gestures_reverse_reply", ms) and r is True)
+        check("gestures: nothing written while held", s.config.read_text() == INLINE)
+        want = INLINE.replace("enabled = true", "enabled = false").replace("threshold = 120.0", "threshold = 300.0").replace("natural = false", "natural = true")
+        wait(lambda: not gate.exists() and s.config.read_text() == want, "gesture settings saved", 15)
+        check("gestures: the three settings land exactly; bindings, comment and unknown keys byte for byte", s.config.read_text() == want, s.config.read_text())
+        # search routing: typing finds the section in Keyboard & Input
+        Atspi.EditableText.set_text_contents(node(app, "search"), "swipe")
+        hits = wait(lambda: [k for k in index(app) if k and k.startswith("hit:inputdev")] or None, "search hits", 5)
+        check("gestures: search for 'swipe' leads to Keyboard & Input", bool(hits), hits)
+        return s
+
+    def gestures_failure():
+        s = Tracked("gestures-fail", pane="inputdev", fail="config.toml", extra_files={"cfg/config.toml": INLINE}, env_extra={"RDWMCTL": str(gesture_rdwmctl())})
+        app = find_app(s.p.pid)
+        ms, r = do_action(node(app, "ctl:r:gestures:enabled"), "toggle")
+        got = wait(lambda: [m for m in alerts(app) if "Not saved" in m] or None, "failure alert", 15)
+        check("gestures: a failed write is reported", bool(got), got)
+        wait(lambda: "checked" in states(node(app, "ctl:r:gestures:enabled")), "switch back", 5)
+        check("gestures: the switch shows the saved value again and the file is byte-identical", s.config.read_text() == INLINE)
+        return s
+
+    for name, fn in [("gestures-old-wm", gestures_old_wm), ("gestures-new-wm", gestures_new_wm), ("gestures-failure", gestures_failure), ("asset-choice", asset_choice), ("theme-external", theme_external), ("launcher", launcher), ("editor-validation", editor_validation), ("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
         scenario(name, fn)
 
 if __name__ == "__main__":

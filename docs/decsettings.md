@@ -97,7 +97,7 @@ the pane list (`panes::PANES`, ids below) and the sidebar sections (`system::reg
 | Network (`network`) | `nmcli -t` | Wi-Fi radio, scan, join (password sheet for secured networks), saved/forget, VPN toggles, ethernet + IP/DNS |
 | Bluetooth (`bluetooth`) | `bluetoothctl` | power, discoverable, 8 s scan, pair (+trust+connect), connect, disconnect, forget |
 | Displays (`displays`, extended) | `xrandr --query` + `xrandr --output ...` | resolution, refresh, rotation, position, primary, mirror/extend, enable; **15 s keep/revert**; scale (rdwm `[decoration] scale` + `Xft.dpi`); Night Shift when gammastep/redshift exist |
-| Keyboard & Input (`inputdev`) | `setxkbmap`, `localectl list-x11-keymap-layouts`, `xset r rate`, `xinput list/list-props/set-prop` | layout, Caps Lock behaviour (XKB option), key repeat, pointer speed / natural scrolling / tap-to-click per device (libinput properties). The old key-binding editor is now "Shortcuts" (`keyboard`) |
+| Keyboard & Input (`inputdev`) | `setxkbmap`, `localectl list-x11-keymap-layouts`, `xset r rate`, `xinput list/list-props/set-prop` | layout, Caps Lock behaviour (XKB option), key repeat, pointer speed / natural scrolling / tap-to-click per device (libinput properties); trackpad swipes (rdwm `[gestures]`, see below). The old key-binding editor is now "Shortcuts" (`keyboard`) |
 | Notifications (`notifications`) | file `~/.config/decebal/notifications.toml` | see schema below |
 | Power & Battery (`power`) | `powerprofilesctl`, `xset q/s/dpms`, sysfs `power_supply`, logind.conf (read-only) | battery card only when a battery exists |
 | Default Apps (`defaults`) | `xdg-mime query/default`, `xdg-settings`, `.desktop` files | candidates are the installed apps whose `MimeType=` claims the type |
@@ -231,3 +231,18 @@ its cached result. Socket replacement invalidates a mixed-instance poll;
 coalesced, ordered runtime observations prevent a late reload worker from
 restoring support after a newer disconnect. Identical idle observations do not
 request another repaint.
+
+## Trackpad swipes (Keyboard & Input)
+rdwm recognises native three- and four-finger swipes (`[gestures]`, rdwm `docs/gestures.md`). The section at the
+end of Keyboard & Input (`src/settings/gestures.rs`) offers a control for each `[gestures]` key the loaded schema lists
+(the installed `rdwmctl schema --offline`, else the bundled snapshot): **Swipe gestures** (`enabled`), **Required
+swipe travel** (`threshold`, with the schema's range, in rdwm's logical touchpad delta units, not millimetres) and
+**Reverse swipe direction** (`gestures.natural`, independent of the pointer's natural scrolling). They save like every
+other control (schema range check, `rdwmctl check-config`, the persistence worker); a change touches only its key.
+* An rdwm whose schema does not list `[gestures]` (the bundled snapshot does not yet): the section says the controls
+  need an updated rdwm and writes nothing; a `[gestures]` section already in config.toml stays as it is.
+* Bindings are listed (3/4 fingers, direction, action; "rdwm's default bindings" when absent; `[]` means every swipe
+  is off) but not edited here: they are an inline list in config.toml, kept exactly as written; edit them in
+  Config & Presets.
+* A schema entry says rdwm can parse the keys, not that the touchpad, driver and session deliver swipe events.
+* Search: "swipe", "gesture", "trackpad" lead to the section.
