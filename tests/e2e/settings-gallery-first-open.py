@@ -15,6 +15,8 @@ import sys
 import tempfile
 import time
 
+from PIL import Image
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from private_x11 import start_private_xvfb, listeners_owned
 
@@ -145,6 +147,35 @@ def main():
             assert first_gallery, 'gallery controls never appeared after the sole Appearance click'
             assert first_png, 'native renderer never completed a PNG'
             assert post_png, 'native preview completion did not cause a further frame with painted theme previews'
+            if os.environ.get('SETTINGS_IDLE_REPAIR') == '1':
+                damaged = list(cache.glob('*.png'))
+                assert damaged, 'idle recovery needs an existing rendered preview'
+                app.terminate()
+                app.wait(timeout=5)
+                for path in damaged:
+                    path.write_bytes(b'broken private PNG for idle repair')
+                (root / 'layout.json').unlink(missing_ok=True)
+                with (out / 'settings-idle-repair.log').open('w') as log:
+                    warm = subprocess.Popen([str(binary), '--config', str(cfg), 'appearance'], env=env, stdout=log, stderr=log)
+                processes.append(warm)
+                window = wait(lambda: run('xdotool', 'search', '--class', 'DecSettings').splitlines()[0])
+                run('xdotool', 'windowsize', window, '1040', '1600')
+                # No further pointer, key, resize or expose command until repair and the autonomous repaint are observed.
+                idle_start = time.monotonic()
+                def repaired_and_painted():
+                    assert warm.poll() is None, 'Settings exited during idle recovery'
+                    try:
+                        for path in damaged:
+                            with Image.open(path) as image:
+                                image.load()
+                        return doc().get('theme_previews_painted', 0) >= final['theme_previews_painted']
+                    except (OSError, ValueError):
+                        return False
+                wait(repaired_and_painted, timeout=60)
+                result['idle_repair'] = {'repaired_pngs': len(damaged), 'seconds': time.monotonic() - idle_start,
+                                         'painted': doc()['theme_previews_painted'], 'input_after_resize': 0}
+                time.sleep(.3)
+                capture('idle-repair-painted', doc())
         except Exception as exc:
             failure = str(exc)
         finally:
