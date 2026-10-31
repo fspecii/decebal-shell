@@ -626,7 +626,7 @@ mod tests {
         h.join().ok();
         let sock = d.join("new.sock");
         let h = fake_wm(&sock, |cmd| (cmd == "schema").then(|| schema_reply(NEW).to_string()));
-        assert_eq!(probe_at(&sock, &Path::new("/nonexistent/rdwmctl")), Capability::Running { styles: set(NEW) });
+        assert_eq!(probe_at(&sock, Path::new("/nonexistent/rdwmctl")), Capability::Running { styles: set(NEW) });
         h.join().ok();
     }
 
@@ -654,7 +654,8 @@ mod tests {
         let d = tmpdir("probe-transient");
         // the target CLI would say "supported"; a running but unhelpful wm must still be Unknown
         let ctl = fake_ctl(&d, Some(&schema_reply(NEW).to_string()));
-        let cases: Vec<(&str, Box<dyn Fn(&str) -> Option<String> + Send>)> = vec![
+        type Reply = Box<dyn Fn(&str) -> Option<String> + Send>;
+        let cases: Vec<(&str, Reply)> = vec![
             ("error", Box::new(|_| Some(json!({"ok": false, "error": "unknown command"}).to_string()))),
             ("garbage", Box::new(|_| Some("not json".to_string()))),
             ("silent", Box::new(|_| None)),
@@ -868,9 +869,7 @@ mod tests {
     fn a_large_helper_output_is_drained_while_it_runs() {
         // more than a pipe holds: a parent that waits for exit before reading would deadlock the helper
         let d = tmpdir("helper-large");
-        let body = format!(
-            "if [ \"$1 $2\" = \"schema --offline\" ]; then printf '{{\"ok\":true,\"keys\":[{{\"section\":\"decoration\",\"key\":\"style\",\"choices\":[\"a\",\"b\"]}}],\"pad\":\"'; head -c 2000000 /dev/zero | tr '\\0' 'x'; printf '\"}}\\n'; else exit 2; fi"
-        );
+        let body = "if [ \"$1 $2\" = \"schema --offline\" ]; then printf '{\"ok\":true,\"keys\":[{\"section\":\"decoration\",\"key\":\"style\",\"choices\":[\"a\",\"b\"]}],\"pad\":\"'; head -c 2000000 /dev/zero | tr '\\0' 'x'; printf '\"}\\n'; else exit 2; fi".to_string();
         let ctl = script(&d, "ctl-large", &body);
         let none = d.join("none.sock");
         let t = Instant::now();
