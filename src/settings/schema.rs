@@ -2,8 +2,8 @@
 //!
 //! Source of truth is rdwm itself: `rdwmctl schema --offline` prints the table generated next to the
 //! parser. A frozen copy (`rdwm-schema.json`) is the fallback when rdwmctl is not installed; a test
-//! compares the snapshot with the installed rdwmctl when one is found, and another one checks that
-//! every key the panes use exists in the table.
+//! explicitly compares the snapshot with a paired rdwmctl when requested, and another checks that
+//! every key the panes use exists in the table. Unit tests do not depend on the host's installed version.
 
 use serde_json::Value;
 use std::path::Path;
@@ -90,6 +90,23 @@ impl Schema {
 mod tests {
     use super::*;
 
+    struct SchemaFixture(std::path::PathBuf);
+
+    impl SchemaFixture {
+        fn new(label: &str) -> Self {
+            let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+            let path = std::env::temp_dir().join(format!("decebal-schema-{label}-{}-{stamp}", std::process::id()));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for SchemaFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn snapshot_parses_and_has_the_basics() {
         let s = Schema::snapshot();
@@ -102,29 +119,43 @@ mod tests {
         }
     }
 
-    /// When an rdwmctl is reachable (RDWMCTL env, PATH or the sibling rdwm worktree) the bundled
-    /// snapshot must equal what the parser's own table says; regenerate it otherwise:
-    /// `rdwmctl schema --offline > src/settings/rdwm-schema.json`.
     #[test]
-    fn snapshot_matches_installed_rdwmctl_if_any() {
-        let candidates = [
-            std::env::var_os("RDWMCTL").map(Into::into),
-            Some(std::path::PathBuf::from("rdwmctl")),
-            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Projects/rdwm-settings/target/debug/rdwmctl")),
-        ];
-        for c in candidates.into_iter().flatten() {
-            let Some(out) = Command::new(&c).args(["schema", "--offline"]).output().ok().filter(|o| o.status.success()) else { continue };
-            let Ok(live) = serde_json::from_slice::<Value>(&out.stdout) else { continue };
-            if live["keys"].as_array().is_some_and(|k| k.iter().any(|x| x["section"] == "decoration")) {
-                let snap: Value = serde_json::from_str(SNAPSHOT).unwrap();
-                let keyset = |v: &Value| v["keys"].as_array().unwrap().iter().map(|k| format!("{}.{}", k["section"], k["key"])).collect::<std::collections::BTreeSet<_>>();
-                let (a, b) = (keyset(&live), keyset(&snap));
-                // Newer rdwm may add keys (the app then shows them only after the snapshot is refreshed);
-                // keys that vanished would break the panes.
-                assert!(b.is_subset(&a), "snapshot has keys rdwm no longer knows: {:?}", b.difference(&a).collect::<Vec<_>>());
-                return;
-            }
-        }
-        eprintln!("(no rdwmctl found: snapshot not cross-checked)");
+    fn an_older_live_schema_is_authoritative_instead_of_gaining_snapshot_capabilities() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = SchemaFixture::new("old");
+        let tool = dir.0.join("rdwmctl");
+        let old = serde_json::json!({"keys":[{"section":"general","key":"mfact","type":"float","default":0.6,"min":0.05,"max":0.95}],"layouts":[],"actions":[]});
+        std::fs::write(&tool, format!("#!/bin/sh\n[ \"$1\" = schema ] && [ \"$2\" = --offline ] || exit 9\nprintf '%s' '{}'\n", old)).unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let schema = Schema::load(&tool);
+        assert!(schema.live);
+        assert_eq!(schema.get("general", "mfact").unwrap().default, serde_json::json!(0.6));
+        assert!(!schema.has("input", "natural_scroll"), "an old binary must not gain newer snapshot controls");
+        assert!(Schema::snapshot().has("input", "natural_scroll"), "fixture must exercise the version difference");
+    }
+
+    #[test]
+    fn an_unavailable_tool_uses_the_bundled_fallback() {
+        let dir = SchemaFixture::new("missing");
+        // The fresh directory contains no executable; never search the host PATH.
+        let schema = Schema::load(&dir.0.join("not-installed"));
+        assert!(!schema.live);
+        assert_eq!(schema.keys, Schema::snapshot().keys);
+    }
+
+    /// Opt in with an explicit binary paired with this snapshot. An arbitrary installed version is not a reference.
+    /// Run: RDWMCTL_SCHEMA_REFERENCE=/absolute/rdwmctl cargo test --lib snapshot_matches_paired_rdwmctl -- --ignored
+    #[test]
+    #[ignore = "integration: requires RDWMCTL_SCHEMA_REFERENCE pointing at a paired rdwmctl"]
+    fn snapshot_matches_paired_rdwmctl() {
+        let reference = std::env::var_os("RDWMCTL_SCHEMA_REFERENCE").expect("set RDWMCTL_SCHEMA_REFERENCE to the paired binary");
+        assert!(Path::new(&reference).is_absolute(), "reference must be an explicit absolute path");
+        let out = Command::new(reference).args(["schema", "--offline"]).output().expect("run paired rdwmctl");
+        assert!(out.status.success(), "paired rdwmctl failed");
+        let live: Value = serde_json::from_slice(&out.stdout).expect("paired rdwmctl returned schema JSON");
+        let snap: Value = serde_json::from_str(SNAPSHOT).unwrap();
+        let keyset = |v: &Value| v["keys"].as_array().expect("schema keys").iter().map(|k| format!("{}.{}", k["section"], k["key"])).collect::<std::collections::BTreeSet<_>>();
+        let (a, b) = (keyset(&live), keyset(&snap));
+        assert!(b.is_subset(&a), "paired rdwmctl is missing snapshot keys: {:?}", b.difference(&a).collect::<Vec<_>>());
     }
 }
