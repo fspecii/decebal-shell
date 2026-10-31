@@ -31,6 +31,8 @@ pub const SAVING: &str = "Saving…";
 pub type TaskDone = Box<dyn FnOnce(&mut Model, Result<Value, String>)>;
 /// Runs on the UI thread once a JSON change is on disk.
 pub type AfterSave = Box<dyn FnOnce(&mut Model)>;
+/// A change to several keys of `decebal.json` (see `Model::edit_shell_doc`).
+pub type ShellChange = Arc<dyn Fn(&mut Value) + Send + Sync>;
 
 /// An accepted change the persistence worker has not finished, keyed by its ticket in [`Model::pending`].
 pub enum Pending {
@@ -38,7 +40,7 @@ pub enum Pending {
     Json { file: &'static str, key: String, value: Option<Value>, said: Option<String>, then: Option<AfterSave> },
     Theme { selection: Value, done: ThemeDone },
     /// A pane's owner transaction; `files` it writes are re-read when it finished.
-    Task { label: &'static str, files: bool, quiet: bool, done: TaskDone },
+    Task { label: &'static str, files: bool, quiet: bool, done: TaskDone, shell: Option<ShellChange> },
 }
 
 impl std::fmt::Debug for Pending {
@@ -472,7 +474,39 @@ impl Model {
 
     fn task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, quiet: bool, run: Box<dyn FnOnce() -> Result<Value, String> + Send>, done: TaskDone) -> bool {
         let files = !writes.is_empty();
-        self.submit(Job::Task(persist::Task { label, writes, run, reply: None }), Pending::Task { label, files, quiet, done }).is_some()
+        self.submit(Job::Task(persist::Task { label, writes, run, reply: None }), Pending::Task { label, files, quiet, done, shell: None }).is_some()
+    }
+
+    /// Changes several keys of `decebal.json` in one atomic write (a value together with the record of who chose it,
+    /// say). `change` is shown at once on top of the saved file, and applied on the worker to the file as it is at
+    /// commit (`io::json_update_doc`: compare-and-swap, re-applied if someone saved meanwhile). `after` runs once it
+    /// is on disk and may only update the model or enqueue work.
+    pub fn edit_shell_doc(&mut self, label: &'static str, change: impl Fn(&mut Value) + Send + Sync + 'static, said: String, after: Option<AfterSave>) -> bool {
+        let change: ShellChange = Arc::new(change);
+        let (path, c) = (self.paths.shell_json(), change.clone());
+        let run = Box::new(move || {
+            io::json_update_doc(&path, |d| {
+                c(d);
+                Ok(())
+            })
+            .map(|_| Value::Null)
+        });
+        let done: TaskDone = Box::new(move |m: &mut Model, r: Result<Value, String>| match r {
+            Ok(_) => {
+                if let Some(after) = after {
+                    after(m);
+                }
+                m.say(said, false);
+            }
+            Err(e) => m.say(format!("Not saved: {e}"), true),
+        });
+        let pending = Pending::Task { label, files: true, quiet: false, done, shell: Some(change.clone()) };
+        let Some(seq) = self.submit(Job::Task(persist::Task { label, writes: vec![self.paths.shell_json()], run, reply: None }), pending) else { return false };
+        if self.pending.contains_key(&seq) {
+            change(&mut self.shell);
+        }
+        self.dirty = true;
+        true
     }
 
     /// [`Model::run_task`] for housekeeping the user did not ask for (an offline cache): no "Saving…" toast.
@@ -559,6 +593,7 @@ impl Model {
             match p {
                 Pending::Json { file: f, key, value, .. } if *f == file => set_key(&mut doc, key, value.clone()),
                 Pending::Theme { selection, .. } if file == "shell" => set_key(&mut doc, "theme", Some(selection.clone())),
+                Pending::Task { shell: Some(change), .. } if file == "shell" && doc.is_object() => change(&mut doc),
                 _ => {}
             }
         }

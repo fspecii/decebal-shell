@@ -169,11 +169,13 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            // interim merge resolution (the next commit makes value and ownership one atomic write)
-            save_then(m, &cfg, |m| {
-                let _ = crate::desktop_assets::policy::mark_user(&m.paths.shell_json(), crate::desktop_assets::Provides::Cursors);
-                request(m);
-            });
+            // The cursor and who chose it (`asset_packs`) change in one atomic write; the apply request follows it.
+            let pick = match &cfg.cursor_theme {
+                Some(t) => crate::desktop_assets::policy::Choice::Name(t.clone()),
+                None => crate::desktop_assets::policy::Choice::Auto,
+            };
+            let said = format!("Cursor theme for apps: {}", cfg.cursor_theme.as_deref().unwrap_or("not set"));
+            m.edit_shell_doc("system-cursor", move |doc| crate::desktop_assets::policy::choose(doc, crate::desktop_assets::Provides::Cursors, &pick), said, Some(Box::new(request)));
         }
         (["sy", "now"], CtlVal::Click) => {
             if cfg.enabled {

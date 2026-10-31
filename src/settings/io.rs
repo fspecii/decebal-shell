@@ -475,6 +475,37 @@ pub fn json_update(path: &Path, key: &str, v: Option<Value>, guard: impl Fn(&Val
     })
 }
 
+/// Several keys of one JSON object file in one atomic write: `change` is applied to the file as it is, under the file
+/// lock, and committed only while the file is still what was read (a save made meanwhile, even during the fsync, is
+/// read again and `change` applied on top of it). Keeps keys `change` does not touch; never overwrites a file that is
+/// not a JSON object. Returns the committed document.
+pub fn json_update_doc(path: &Path, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    with_file_lock(path, |t| {
+        let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut attempt = 0;
+        loop {
+            let before = stamp(t);
+            let mut doc = match std::fs::read_to_string(t) {
+                Ok(s) if s.trim().is_empty() => Value::Object(Default::default()),
+                Ok(s) => serde_json::from_str::<Value>(&s).ok().filter(Value::is_object).ok_or_else(|| format!("{name} is not a JSON object right now; not overwriting it"))?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Value::Object(Default::default()),
+                Err(e) => return Err(format!("{}: {e}", t.display())),
+            };
+            change(&mut doc)?;
+            let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+            text.push('\n');
+            match write_locked(t, &text, before) {
+                Ok(()) => return Ok(doc),
+                Err(e) if is_changed_on_disk(&e) && attempt < 3 => {
+                    attempt += 1;
+                    crate::log_info!("{name} changed on disk while saving; applying the change again on top (attempt {attempt})");
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    })
+}
+
 // ---------------------------------------------------------------- IPC
 
 /// One request/reply round trip on rdwm's socket. Short timeouts: the UI must never hang on it.

@@ -1735,6 +1735,67 @@ mod model_tests {
     }
 
     #[test]
+    fn a_cursor_choice_and_its_ownership_land_in_one_write_with_a_save_made_meanwhile_kept() {
+        use crate::desktop_assets::{policy, Provides};
+        let (mut m, _) = model_with("[general]\n");
+        let shell = m.paths.shell_json();
+        std::fs::write(&shell, "{\"system\": {\"enabled\": true}}\n").unwrap();
+        m.on_files_changed();
+        let entered = Arc::new(AtomicUsize::new(0));
+        let (release, e2) = (Arc::new(AtomicBool::new(false)), entered.clone());
+        let r2 = release.clone();
+        m.use_worker_with_sync_hook(Arc::new(move |_| {
+            if e2.fetch_add(1, Ordering::SeqCst) == 0 {
+                while !r2.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+            }
+            Ok(())
+        }));
+        let took = timed(&mut m, "ic:cursor", CtlVal::Str("DMZ-White".into()));
+        while entered.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(took < Duration::from_millis(250), "{took:?}");
+        assert_eq!(policy::current(&m.shell, Provides::Cursors).as_deref(), Some("DMZ-White"), "shown at once");
+        assert_eq!(policy::owner(&m.shell, Provides::Cursors), policy::Owner::User, "with its owner");
+        // an editor saves another key while our fsync is held
+        std::thread::sleep(Duration::from_millis(15));
+        std::fs::write(&shell, "{\"system\": {\"enabled\": true}, \"editor\": 1}\n").unwrap();
+        release.store(true, Ordering::SeqCst);
+        m.settle();
+        let doc = io::json_load(&shell);
+        assert_eq!(policy::current(&doc, Provides::Cursors).as_deref(), Some("DMZ-White"));
+        assert_eq!(policy::owner(&doc, Provides::Cursors), policy::Owner::User, "value and ownership committed together");
+        assert_eq!((doc["editor"].clone(), doc["system"]["enabled"].clone()), (1.into(), true.into()), "their key survives: {doc}");
+    }
+
+    #[test]
+    fn a_failed_choice_writes_neither_the_value_nor_its_ownership() {
+        use crate::desktop_assets::{policy, Provides};
+        let (mut m, _) = model_with("[general]\n");
+        let shell = m.paths.shell_json();
+        let orig = "{\"icons\": {\"theme\": \"Papirus\", \"future\": 1}}\n";
+        std::fs::write(&shell, orig).unwrap();
+        m.on_files_changed();
+        let disk = Disk::attach(&mut m, Some(1));
+        m.apply("ic:cursor", CtlVal::Str("DMZ-White".into()));
+        disk.blocked();
+        disk.open();
+        m.settle();
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), orig, "nothing half-written");
+        assert_eq!(policy::current(&m.shell, Provides::Cursors), None, "the shown choice is taken back");
+        assert!(m.notice.as_ref().is_some_and(|n| n.error));
+        // an icon size change keeps the icons object's unknown key and the chosen theme
+        let disk = Disk::attach(&mut m, None);
+        disk.open();
+        m.apply("ic:scale", CtlVal::Num(120.0));
+        m.settle();
+        let doc = io::json_load(&shell);
+        assert_eq!((doc["icons"]["theme"].clone(), doc["icons"]["future"].clone(), doc["icons"]["size_scale"].clone()), ("Papirus".into(), 1.into(), 1.2.into()), "{doc}");
+    }
+
+    #[test]
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
         let before = m.store.cfg.text();

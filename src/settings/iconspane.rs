@@ -161,23 +161,45 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-fn write(m: &mut Model, cfg: &IconConfig, msg: String) {
-    match cfg.write(&cfg_path(m)) {
-        Ok(()) => {
+/// Changes the `icons` object through the persistence worker: `change` is applied to the object as it is in the
+/// file at commit (other keys, and keys of the object this version does not know, are kept). `chosen`: the theme was
+/// picked by the user, so its ownership record (`asset_packs`) changes in the same atomic write.
+fn write(m: &mut Model, change: impl Fn(&mut IconConfig) + Send + Sync + 'static, chosen: bool, msg: String) {
+    let after: crate::settings::model::AfterSave = Box::new(|m: &mut Model| {
+        // the icon cache follows the file; reading it is the worker's job, not the UI's
+        m.run_task_quiet("icons-poll", || {
             live::poll_now();
-            m.dirty = true;
-            m.say(msg, false);
-        }
-        Err(e) => m.say(format!("Not saved: {e}"), true),
-    }
+            Ok(serde_json::Value::Null)
+        });
+    });
+    m.edit_shell_doc(
+        "icons",
+        move |doc| {
+            let mut c = IconConfig::from_json(doc);
+            change(&mut c);
+            let mut obj = doc.get("icons").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+            for k in ["theme", "size_scale", "monochrome_tint", "fallback"] {
+                obj.shift_remove(k);
+            }
+            if let serde_json::Value::Object(known) = c.to_json() {
+                obj.extend(known);
+            }
+            doc["icons"] = serde_json::Value::Object(obj);
+            if chosen {
+                // an explicit choice: applying a theme keeps it (docs/desktop-asset-packs.md)
+                let pick = if c.is_auto() { crate::desktop_assets::policy::Choice::Auto } else { crate::desktop_assets::policy::Choice::Name(c.theme.clone()) };
+                crate::desktop_assets::policy::choose(doc, crate::desktop_assets::Provides::Icons, &pick);
+            }
+        },
+        msg,
+        Some(after),
+    );
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     if crate::desktop_assets::pane::apply(m, parts, &v) {
         return;
     }
-    let path = cfg_path(m);
-    let mut cfg = IconConfig::read(&path);
     match (parts, v) {
         (["l", "icons", "pick", id], CtlVal::Click) => {
             *HIGHLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = Some((*id).to_string());
@@ -187,50 +209,47 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             let hl = HIGHLIGHT.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let Some(hl) = hl else { return };
             let list = themes();
-            if hl == AUTO {
-                cfg.theme = AUTO.into();
+            let theme = if hl == AUTO {
+                AUTO.to_string()
             } else if let Some(t) = list.iter().find(|t| t.id == hl).filter(|t| t.kind.selectable()) {
-                cfg.theme = t.id.clone();
+                t.id.clone()
             } else {
                 m.say("That theme has no application icons", true);
                 return;
-            }
-            let msg = format!("Icon theme: {}", if cfg.is_auto() { "Auto" } else { &cfg.theme });
-            write(m, &cfg, msg);
-            // an explicit choice: applying a theme keeps it (docs/desktop-asset-packs.md)
-            let _ = crate::desktop_assets::policy::mark_user(&path, crate::desktop_assets::Provides::Icons);
+            };
+            let msg = format!("Icon theme: {}", if theme == AUTO { "Auto" } else { &theme });
+            write(m, move |c| c.theme = theme.clone(), true, msg);
         }
         (["ic", "scale"], CtlVal::Num(n)) => {
-            cfg.size_scale = (n / 100.0).clamp(f64::from(SCALE_MIN), f64::from(SCALE_MAX)) as f32;
-            let msg = format!("Icon size: {:.0} %", n.round());
-            write(m, &cfg, msg);
+            let v = (n / 100.0).clamp(f64::from(SCALE_MIN), f64::from(SCALE_MAX)) as f32;
+            write(m, move |c| c.size_scale = v, false, format!("Icon size: {:.0} %", n.round()));
         }
-        (["ic", "scale"], CtlVal::Reset) => {
-            cfg.size_scale = 1.0;
-            write(m, &cfg, "Icon size: 100 %".into());
-        }
-        (["ic", "tint"], CtlVal::Bool(b)) => {
-            cfg.monochrome_tint = b;
-            write(m, &cfg, format!("Symbolic icon tint: {}", if b { "on" } else { "off" }));
-        }
+        (["ic", "scale"], CtlVal::Reset) => write(m, |c| c.size_scale = 1.0, false, "Icon size: 100 %".into()),
+        (["ic", "tint"], CtlVal::Bool(b)) => write(m, move |c| c.monochrome_tint = b, false, format!("Symbolic icon tint: {}", if b { "on" } else { "off" })),
         (["ic", "fallback"], CtlVal::Str(s)) => {
-            cfg.fallback = s;
-            let msg = format!("Fallback theme: {}", cfg.fallback);
-            write(m, &cfg, msg);
+            let msg = format!("Fallback theme: {s}");
+            write(m, move |c| c.fallback = s.clone(), false, msg);
         }
-        (["ic", "fallback"], CtlVal::Reset) => {
-            cfg.fallback = DEFAULT_FALLBACK.into();
-            write(m, &cfg, format!("Fallback theme: {DEFAULT_FALLBACK}"));
+        (["ic", "fallback"], CtlVal::Reset) => write(m, |c| c.fallback = DEFAULT_FALLBACK.into(), false, format!("Fallback theme: {DEFAULT_FALLBACK}")),
+        (["ic", "reset"], CtlVal::Click) => {
+            *HIGHLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            let after: crate::settings::model::AfterSave = Box::new(|m: &mut Model| {
+                m.run_task_quiet("icons-poll", || {
+                    live::poll_now();
+                    Ok(serde_json::Value::Null)
+                });
+            });
+            m.edit_shell_doc(
+                "icons-reset",
+                |doc| {
+                    if let Some(o) = doc.as_object_mut() {
+                        o.shift_remove("icons");
+                    }
+                },
+                "Icon settings reset".into(),
+                Some(after),
+            );
         }
-        (["ic", "reset"], CtlVal::Click) => match IconConfig::reset(&path) {
-            Ok(()) => {
-                *HIGHLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                live::poll_now();
-                m.dirty = true;
-                m.say("Icon settings reset", false);
-            }
-            Err(e) => m.say(format!("Not saved: {e}"), true),
-        },
         _ => {}
     }
 }
