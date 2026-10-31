@@ -374,11 +374,7 @@ mod tests {
         let base = Window { id: 1, app_id: "foot".into(), desktop: Some(0), ..Default::default() };
         assert!(t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))));
         assert!(!t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))));
-        for changed in [
-            Window { minimized: true, ..base.clone() },
-            Window { attention: true, ..base.clone() },
-            Window { geometry: Some(Geometry { x: 5, y: 6, w: 7, h: 8 }), ..base.clone() },
-        ] {
+        for changed in [Window { minimized: true, ..base.clone() }, Window { attention: true, ..base.clone() }, Window { geometry: Some(Geometry { x: 5, y: 6, w: 7, h: 8 }), ..base.clone() }] {
             assert!(t.replace_all(vec![changed.clone()], vec![], Some((1920, 1080))));
             assert!(t.replace_all(vec![base.clone()], vec![], Some((1920, 1080))), "back to the plain window");
         }

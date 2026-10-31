@@ -383,7 +383,19 @@ mod tests {
         let prop = |atom| Event::PropertyNotify(PropertyNotifyEvent { response_type: 28, sequence: 0, window: 1, atom, time: 0, state: Property::NEW_VALUE });
         assert!(event_refreshes(&prop(40), &[10, 40]));
         assert!(!event_refreshes(&prop(41), &[10, 40]));
-        let configure = Event::ConfigureNotify(ConfigureNotifyEvent { response_type: 22, sequence: 0, event: 1, window: 1, above_sibling: 0, x: 3, y: 4, width: 5, height: 6, border_width: 0, override_redirect: false });
+        let configure = Event::ConfigureNotify(ConfigureNotifyEvent {
+            response_type: 22,
+            sequence: 0,
+            event: 1,
+            window: 1,
+            above_sibling: 0,
+            x: 3,
+            y: 4,
+            width: 5,
+            height: 6,
+            border_width: 0,
+            override_redirect: false,
+        });
         assert!(event_refreshes(&configure, &[]));
         let map = Event::MapNotify(MapNotifyEvent { response_type: 19, sequence: 0, event: 1, window: 1, override_redirect: false });
         assert!(event_refreshes(&map, &[]));

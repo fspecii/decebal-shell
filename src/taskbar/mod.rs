@@ -201,11 +201,31 @@ pub fn build_buttons(pinned: &[String], windows: &[Window], labels: WinLabels, r
             out.push(TaskButton { app_id: id, window: None, title: String::new(), pinned: pin, running: false, active: false, windows: 0, minimized: false, attention: false });
         } else if labels == WinLabels::Always {
             for (i, w) in ws.iter().enumerate() {
-                out.push(TaskButton { app_id: id.clone(), window: Some(w.id), title: w.title.clone(), pinned: pin && i == 0, running: true, active: w.active, windows: 1, minimized: w.minimized, attention: w.attention });
+                out.push(TaskButton {
+                    app_id: id.clone(),
+                    window: Some(w.id),
+                    title: w.title.clone(),
+                    pinned: pin && i == 0,
+                    running: true,
+                    active: w.active,
+                    windows: 1,
+                    minimized: w.minimized,
+                    attention: w.attention,
+                });
             }
         } else {
             let lead = ws.iter().find(|w| w.active).unwrap_or(&ws[0]);
-            out.push(TaskButton { app_id: id, window: Some(lead.id), title: lead.title.clone(), pinned: pin, running: true, active: ws.iter().any(|w| w.active), windows: ws.len(), minimized: ws.iter().all(|w| w.minimized), attention: ws.iter().any(|w| w.attention) });
+            out.push(TaskButton {
+                app_id: id,
+                window: Some(lead.id),
+                title: lead.title.clone(),
+                pinned: pin,
+                running: true,
+                active: ws.iter().any(|w| w.active),
+                windows: ws.len(),
+                minimized: ws.iter().all(|w| w.minimized),
+                attention: ws.iter().any(|w| w.attention),
+            });
         }
     }
     out

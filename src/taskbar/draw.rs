@@ -844,7 +844,9 @@ mod tests {
         let c = Colors::dark();
         let snap = Snapshot::default();
         let extras = Extras::default();
-        let buttons: Vec<_> = (0..20).map(|i| TaskButton { app_id: format!("clip-{i}"), window: Some(i), title: "Task".into(), pinned: true, running: true, active: true, windows: 1, ..TaskButton::default() }).collect();
+        let buttons: Vec<_> = (0..20)
+            .map(|i| TaskButton { app_id: format!("clip-{i}"), window: Some(i), title: "Task".into(), pinned: true, running: true, active: true, windows: 1, ..TaskButton::default() })
+            .collect();
         let mut p = Painter::default();
         let l = layout(
             &m,
@@ -947,8 +949,9 @@ mod tests {
             },
         );
         let painted = if vertical { l.transposed() } else { l.clone() };
-        let mut buttons: Vec<TaskButton> =
-            (0..3).map(|i| TaskButton { app_id: format!("app{i}"), window: Some(i as u64), title: String::new(), pinned: true, running: true, active: i == 1, windows: 1, ..TaskButton::default() }).collect();
+        let mut buttons: Vec<TaskButton> = (0..3)
+            .map(|i| TaskButton { app_id: format!("app{i}"), window: Some(i as u64), title: String::new(), pinned: true, running: true, active: i == 1, windows: 1, ..TaskButton::default() })
+            .collect();
         tweak(&mut buttons);
         let c = if light { Colors::light() } else { Colors::dark() };
         let snap = Snapshot::default();
@@ -1017,7 +1020,9 @@ mod tests {
                 assert_ne!((min.red(), min.green(), min.blue()), (plain_of(0).red(), plain_of(0).green(), plain_of(0).blue()), "edge {edge:?} light {light}: minimised looks like idle");
                 assert_ne!((att.red(), att.green(), att.blue()), (plain_of(2).red(), plain_of(2).green(), plain_of(2).blue()), "edge {edge:?} light {light}: attention looks like idle");
                 // attention (warning at .35) moves the pixel much further than minimised (text at .08)
-                let dist = |a: tiny_skia::PremultipliedColorU8, b: tiny_skia::PremultipliedColorU8| (a.red() as i32 - b.red() as i32).abs() + (a.green() as i32 - b.green() as i32).abs() + (a.blue() as i32 - b.blue() as i32).abs();
+                let dist = |a: tiny_skia::PremultipliedColorU8, b: tiny_skia::PremultipliedColorU8| {
+                    (a.red() as i32 - b.red() as i32).abs() + (a.green() as i32 - b.green() as i32).abs() + (a.blue() as i32 - b.blue() as i32).abs()
+                };
                 assert!(dist(att, plain_of(2)) > dist(min, plain_of(0)), "edge {edge:?} light {light}");
             }
         }
@@ -1199,7 +1204,14 @@ mod tests {
         let g = |x, y, w, h| Some(Geometry { x, y, w, h });
         let win = |desktop, active, minimized, geometry| Window { id: 1, app_id: "a".into(), desktop, active, minimized, geometry, ..Window::default() };
         let desk = Some((1000, 500));
-        let windows = [win(Some(0), true, false, g(0, 0, 500, 250)), win(Some(1), false, false, g(500, 250, 500, 250)), win(Some(1), false, true, g(0, 0, 10, 10)), win(None, false, false, g(0, 0, 1000, 50)), win(Some(0), false, false, None), win(Some(9), false, false, g(0, 0, 9, 9))];
+        let windows = [
+            win(Some(0), true, false, g(0, 0, 500, 250)),
+            win(Some(1), false, false, g(500, 250, 500, 250)),
+            win(Some(1), false, true, g(0, 0, 10, 10)),
+            win(None, false, false, g(0, 0, 1000, 50)),
+            win(Some(0), false, false, None),
+            win(Some(9), false, false, g(0, 0, 9, 9)),
+        ];
         let placed = pager_windows(&windows, desk, 2);
         assert_eq!(placed.len(), 2);
         assert_eq!(placed[0], vec![PagerWindow { x: 0.0, y: 0.0, w: 0.5, h: 0.5, active: true }, PagerWindow { x: 0.0, y: 0.0, w: 1.0, h: 0.1, active: false }]);

@@ -536,11 +536,7 @@ impl DockApp {
         let vertical = self.win_vertical();
         let shape = crate::panel::plasma_style::pager_shape(w.status.status_desktop_size());
         let cells = crate::panel::plasma_style::pager_cells(w.status.status_workspace_count(), shape.0, shape.1, r.w, w.m.icon, vertical);
-        cells
-            .iter()
-            .enumerate()
-            .map(|(i, c)| format!("pagercell {i} {}\n", r.x + if vertical { c.y + c.h / 2.0 } else { c.x + c.w / 2.0 }))
-            .collect()
+        cells.iter().enumerate().map(|(i, c)| format!("pagercell {i} {}\n", r.x + if vertical { c.y + c.h / 2.0 } else { c.x + c.w / 2.0 })).collect()
     }
 
     fn win_dump(&mut self, l: &Layout, y0: f32) {
