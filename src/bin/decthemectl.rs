@@ -116,7 +116,7 @@ fn cmd_panel(src: &Source, args: &[String]) {
                 println!("{}", serde_json::to_string_pretty(&serde_json::json!({"renderer": th.bar_renderer().key(), "edge": edge.as_str(), "split": split, "edge_from": origin.title(), "dock_edge": dock_edge.as_str(), "applets": list, "fingerprint": th.bar_panel().fingerprint()})).unwrap());
                 return;
             }
-            println!("{}: {}{} ({})", th.bar_renderer().title(), if split { "top and bottom" } else { edge.as_str() }, "", origin.title());
+            println!("{}: {} ({})", th.bar_renderer().title(), if split { "top and bottom" } else { edge.as_str() }, origin.title());
             println!("dock: {}", dock_edge.as_str());
             for (id, on, o) in applets {
                 println!("  {:<15} {:<3} ({})", id.key(), if on { "on" } else { "off" }, o.title());
