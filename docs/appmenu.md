@@ -100,26 +100,31 @@ menus.stop(Duration::from_millis(200));          // or just drop(menus)
 Ready(Arc<Exported>), Failed{window, reason}, Stopped}`; `Exported { token, window, service,
 owner, path, tree: Arc<MenuTree> }`.
 
-## Bar integration (commit "Show the focused window's exported menus …")
-
-Kept narrow so it can be rebased around the panel owner's scaling work:
+## Bar integration (on top of the universal-panels branch)
 
 * `src/menubar/active.rs`: `ActiveWindow::active_focus() -> appmenu::Focus` (default
-  `Focus::None`); `WmActive` derives it from its existing tracker with `Focus::from_window`.
-  Better long term: `wm::Tracker` exposes the protocol it actually started, replacing
-  `appmenu::tracker_protocol()`'s mirror of `Tracker::start`.
+  `Focus::None`), implemented for `WmActive` and for the taskbar's `TrackerActive`, both from
+  their existing tracker with `Focus::from_window`. Better long term: `wm::Tracker` exposes the
+  protocol it actually started, replacing `appmenu::tracker_protocol()`'s mirror of
+  `Tracker::start`.
 * `src/menubar/menus.rs`: `build()` returns only `apple`, `app`, `window`, `help`; the static
   File/Edit/View lists are gone.
-* `src/menubar/exported.rs` (new): `Exported` glue: `set_enabled`, `set_focus`, `poll`,
-  `compose` (splices exported titles after the app menu, or puts the honest reason as an inert
-  first row of the app menu), `click` (`Sent`/`Moved`/`Ignored`; submenus drill down in place
-  with a `‹ Parent` row), `opened`/`closed`, `available`/`shortcut` per row, `identity`.
-* `src/menubar/mod.rs`: one `app_menu` field; `refresh_app_name` starts/stops the worker
-  (live bar only: a waker exists, not embedded, classic horizontal layout, not Dux, and
-  `DECBAR_NO_APP_MENUS` unset), feeds focus, rebuilds menus on change and closes an open
-  exported menu whose identity changed; `open_menu`/`close` notify the app;
-  `run_menu_item` routes exported rows; `draw_dropdown` takes availability/shortcut from them.
-* Root may prefer a real applet/config switch instead of `DECBAR_NO_APP_MENUS`.
+* `src/menubar/applets.rs` `sync_workers`: the worker runs exactly while the `app_menu` applet is
+  shown (`p.shows(AppletId::AppMenu)`); turning the applet off stops it and releases its bus
+  connection and the registrar name.
+* `src/menubar/exported.rs` (new): `compose` splices the exported titles into `self.menus` after
+  the app menu, in the same `Menu`/`Item` shape, so the classic strip, the folded app_menu popup
+  of every renderer and keyboard mode all list them; without an exported menu the app menu
+  carries the honest reason as an inert first row. `click` → `Sent`/`Moved`/`Ignored` (nested
+  submenus drill down in place with a `‹ Parent` row).
+* `src/menubar/mod.rs`: `menu_item_available(i, j)` / `menu_item_shortcut(i, j)` are the one
+  source of row availability and right-hand text (dropdown, popup rows, keyboard focus);
+  `run_menu_item` dispatches exported rows; `menu_opened(i)` / `menu_closed()` are called from
+  `open_menu`/`close` and from the popup's `Act::MenuOpen`/`Act::MenuBack`; `refresh_app_name`
+  (keeping the `branding().desktop_label` fallback) feeds focus, rebuilds on change and drops an
+  open dropdown or popup page whose exported menu changed hands; an application's
+  `ItemActivationRequested` opens the dropdown where titles are drawn, else the app_menu popup on
+  that menu's page.
 
 ## Tests
 
@@ -132,7 +137,9 @@ Kept narrow so it can be rebased around the panel owner's scaling work:
   exporters, hijack refusal, re-entrant calls during a click, no bus, Wayland, reconnect.
 * `tests/e2e/appmenu-cargo.sh test -j2 --offline --test appmenu_lifecycle`: no thread, fd or
   bus name left after `stop()` or drop, three rounds.
-* `src/menubar/exported.rs` test: a real `DecBar` with pointer clicks on titles and rows against the
+* `src/menubar/exported.rs` tests: the folded app_menu popup (reason row disabled, exported rows
+  enabled with `⌃N`/`▸`, nested drill-down, `MenuBack` closing on the app side) and the
+  application request opening the popup page on the Pill and Dux renderers; and a real `DecBar` with pointer clicks on titles and rows against the
   private bus + recording exporter: honest reason row with no exporter, exported titles after the
   app menu, AboutToShow on open, disabled rows inert, clicks delivered as ids 10 and 160 (nested
   submenu through drill-down and back), sliding to another title closes the first on the app side,

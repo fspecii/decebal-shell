@@ -665,7 +665,15 @@ impl DecBar {
         }
         if let Some(i) = self.app_menu.take_request() {
             self.close();
-            self.open_menu(i);
+            // The title strip's dropdown exists only on the horizontal renderers that draw titles.
+            if !self.pill_bar() && self.spans().get(i).is_some() {
+                self.open_menu(i);
+            } else if self.panel().shows(crate::panel::AppletId::AppMenu) {
+                // Renderers without the title strip fold the menus into the app_menu popup: open its page.
+                self.app_menu_page = None;
+                self.open_popup(Tray::AppMenu);
+                self.run_act(popup::Act::MenuOpen(i));
+            }
             return true;
         }
         false

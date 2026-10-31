@@ -464,6 +464,33 @@ mod tests {
             assert!(Instant::now() < end, "{:?}", app.records("Event"));
             std::thread::sleep(Duration::from_millis(5));
         }
+
         reset();
+    }
+
+    #[test]
+    fn an_application_request_opens_its_page_where_menus_are_folded() {
+        use super::super::applets::tests::{fixture, reset};
+        use super::super::Tray;
+        use crate::panel::{AppletId, AppletSet, Edge, Renderer};
+        for style in [Renderer::Pill, Renderer::Dux] {
+            let bus = PrivateBus::start();
+            let mut bar = fixture(style, Edge::Left, AppletSet::of(&[AppletId::AppMenu]), 900);
+            bar.active = Box::new(Focused);
+            let address = bus.address.clone();
+            bar.app_menu.set_enabled(true, || Config::with_address(address), || Arc::new(|| {}));
+            let app = Fake::connect(&bus.address, layout());
+            settle(&mut bar, "registrar", |b| b.app_menu.handle().is_some_and(|h| h.snapshot().registrar == RegistrarRole::Owned));
+            app.register(WINDOW, MENU_PATH);
+            settle(&mut bar, "exported titles", |b| keys(b).contains(&KEY));
+            let edit = bar.menus.iter().position(|m| m.key == KEY && m.title == "Edit").unwrap();
+            let mut w = crate::dbus::Writer::default();
+            w.u32(20);
+            w.u32(0);
+            app.send(crate::dbus::Message::signal(MENU_PATH, crate::appmenu::DBUSMENU, "ItemActivationRequested", "iu", w.buf));
+            settle(&mut bar, "requested page", |b| b.open == Open::Popup(Tray::AppMenu) && b.app_menu_page == Some(edit));
+            assert_eq!(app.wait_records("AboutToShow", 1)[0].id, 2, "{style:?}: the page told the app its menu opened");
+            reset();
+        }
     }
 }
