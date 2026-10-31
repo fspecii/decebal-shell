@@ -133,7 +133,7 @@ class Pressure:
         return None
 
 
-def run(command, slots, timeout, max_io_stall=10):
+def run(command, slots, timeout, max_io_stall=10, quiet_seconds=0):
     ionice = shutil.which('ionice')
     if not ionice:
         raise Refused('ionice is required; refusing to run without idle I/O priority')
@@ -150,6 +150,27 @@ def run(command, slots, timeout, max_io_stall=10):
         signal.signal(sig, lambda signum, frame: cancel.append(signum))
     child = None
     try:
+        # Measure before creating any native fixture or detached compositor.
+        # Refuse rather than continuously retrying on a busy desktop.
+        admission_deadline = time.monotonic() + quiet_seconds
+        while time.monotonic() < admission_deadline:
+            if cancel:
+                raise Refused(f'interrupted before command start by signal {cancel[0]}')
+            if (slots / 'paused').exists():
+                raise Refused('developer jobs paused before command start')
+            pressure_reason = pressure.check()
+            if pressure_reason:
+                pause_jobs(slots)
+                raise Refused(f'{pressure_reason}; admission refused, no command started')
+            time.sleep(min(.05, max(0, admission_deadline - time.monotonic())))
+        if quiet_seconds:
+            pressure_reason = pressure.check()
+            if pressure_reason:
+                pause_jobs(slots)
+                raise Refused(f'{pressure_reason}; admission refused, no command started')
+            pressure = Pressure(max_io_stall)
+        if cancel or (slots / 'paused').exists():
+            raise Refused('developer jobs paused or interrupted before command start')
         child = subprocess.Popen([ionice, '-c', '3', '--', *command], env=env,
                                  stdin=subprocess.DEVNULL, close_fds=True, start_new_session=True,
                                  preexec_fn=lambda: os.setpriority(os.PRIO_PROCESS, 0, 19))
@@ -200,6 +221,7 @@ def main():
     parser.add_argument('--queue-timeout', type=float, default=60)
     parser.add_argument('--timeout', type=float, default=1800)
     parser.add_argument('--max-io-stall', type=float, default=10, help='pause jobs above this full I/O stall percentage over a measured interval of at least one second (default: 10)')
+    parser.add_argument('--quiet-seconds', type=float, default=0, help='measure I/O before starting; refuse and pause if over budget (0 disables, otherwise 1..30 seconds)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--pause', action='store_true')
     modes.add_argument('--resume', action='store_true')
@@ -219,9 +241,11 @@ def main():
             raise Refused('provide a command and positive execution deadline')
         if not math.isfinite(args.max_io_stall) or not 0 < args.max_io_stall <= 100:
             raise Refused('I/O stall budget must be finite and in (0, 100]')
+        if not math.isfinite(args.quiet_seconds) or (args.quiet_seconds != 0 and not 1 <= args.quiet_seconds <= 30):
+            raise Refused('quiet observation must be 0 or between 1 and 30 seconds')
         cargo_args(command)
         held = acquire(slots, time.monotonic() + args.queue_timeout)
-        return run(command, slots, args.timeout, args.max_io_stall)
+        return run(command, slots, args.timeout, args.max_io_stall, args.quiet_seconds)
     except (Refused, OSError) as error:
         print(f'desktop-job: {error}', file=sys.stderr)
         return 75

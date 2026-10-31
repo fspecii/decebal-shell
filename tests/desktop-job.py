@@ -71,6 +71,41 @@ class DesktopJobTests(unittest.TestCase):
         self.assertTrue((self.slots / 'paused').exists())
         self.assertEqual(self.call('--', sys.executable, '-c', 'pass').returncode, 75)
 
+    def test_admission_pressure_pauses_without_spawning_a_fixture(self):
+        module = self.module()
+        module.directory(self.slots)
+        with patch.object(module.Pressure, 'check', return_value='I/O over budget'), patch.object(module.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(module.Refused, 'no command started'):
+                module.run([sys.executable, '-c', 'pass'], self.slots, 5, quiet_seconds=1)
+            spawn.assert_not_called()
+        self.assertTrue((self.slots / 'paused').exists())
+
+    def test_admission_respects_pause_before_spawning(self):
+        module = self.module()
+        module.directory(self.slots)
+        module.pause_jobs(self.slots)
+        with patch.object(module.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(module.Refused, 'paused before command start'):
+                module.run([sys.executable, '-c', 'pass'], self.slots, 5, quiet_seconds=1)
+            spawn.assert_not_called()
+
+    def test_quiet_admission_starts_the_original_command_once(self):
+        module = self.module()
+        module.directory(self.slots)
+        marker = self.root / 'started-after-admission'
+        code = f'from pathlib import Path;Path({str(marker)!r}).write_text("once")'
+        started = time.monotonic()
+        with patch.object(module.Pressure, 'check', return_value=None):
+            result = module.run([sys.executable, '-c', code], self.slots, 5, quiet_seconds=1)
+        self.assertEqual(result, 0)
+        self.assertGreaterEqual(time.monotonic() - started, 1)
+        self.assertEqual(marker.read_text(), 'once')
+        self.assertFalse((self.slots / 'paused').exists())
+
+    def test_invalid_admission_duration_is_refused(self):
+        for value in ('nan', 'inf', '-1', '.5', '31'):
+            self.assertEqual(self.call('--quiet-seconds', value, '--', sys.executable, '-c', 'pass').returncode, 75)
+
     def test_unavailable_pressure_refuses_before_spawning(self):
         module = self.module()
         module.directory(self.slots)

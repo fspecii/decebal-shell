@@ -81,3 +81,9 @@ through that interval. Multi-phase drivers must also handle SIGTERM and wait
 for their active fixture; an immediately exiting driver cannot preserve a
 fixture's cleanup window. Detached private compositors still require their
 fixture's owned-handle shutdown and must not be killed by process name.
+
+For native release gates, pass `--quiet-seconds 5` before `--`. The runner holds
+both slots and measures the existing I/O budget before creating the command.
+An over-budget observation refuses admission with exit 75, leaves jobs paused,
+and starts no fixture. It does not retry automatically or change the runtime
+pressure threshold. The observation accepts 1–30 seconds (0 disables it).
