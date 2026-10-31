@@ -381,7 +381,11 @@ impl BarLayout {
         let mut seen = std::collections::BTreeSet::new();
         for group in [&mut out.left, &mut out.center, &mut out.right] {
             // the Dux ids of the first batch, or any applet key of the registry (`tasks`, `search`, `volume`...); the same set the manifest validator accepts
-            group.retain(|id| (DUX_BAR_ITEMS.contains(&id.as_str()) || crate::panel::AppletId::parse(id).is_some()) && seen.insert(id.clone()));
+            group.retain(|id| {
+                let parsed = crate::panel::AppletId::parse(id);
+                let canonical = parsed.map_or(id.as_str(), |a| a.key());
+                (DUX_BAR_ITEMS.contains(&id.as_str()) || parsed.is_some()) && seen.insert(canonical.to_string())
+            });
             group.truncate(24);
         }
         out.margin = out.margin.clamp(0.0, 48.0);

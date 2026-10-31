@@ -79,10 +79,11 @@ impl Layout {
 /// `cluster` = Some((gap between group faces, padding inside a face)): the groups are placed adjacent, in order, as ONE run centred on the bar and sized by
 /// its content (the three-island taskbar of UKUI's panel); `None` keeps the stock start / centre / end placement.
 fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, mut groups: [Vec<(Kind, f32)>; 3], cluster: Option<(f32, f32)>) -> Layout {
-    let pad = cluster.map_or(0.0, |c| c.1);
+    let available = (width - margin * 2.0).max(0.0);
+    // Reserve an overflow target before decorative padding on very short outputs.
+    let pad = cluster.map_or(0.0, |c| c.1.min(((available - 56.0 - gap) / 2.0).max(0.0)));
     let gg = cluster.map_or(gap, |c| c.0);
     let size = |v: &Vec<(Kind, f32)>| if v.is_empty() { 0.0 } else { v.iter().map(|(_, w)| w).sum::<f32>() + gap * v.len().saturating_sub(1) as f32 + 2.0 * pad };
-    let available = (width - margin * 2.0).max(0.0);
     // the space the faces' own gaps take: the stock layout counts two gaps; a cluster counts one between each pair of faces that exist
     let between = |groups: &[Vec<(Kind, f32)>; 3]| if cluster.is_some() { gg * groups.iter().filter(|g| !g.is_empty()).count().saturating_sub(1) as f32 } else { 2.0 * gap };
     let mut hidden: Vec<Kind> = Vec::new();
@@ -141,21 +142,24 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
         if size(&groups[2]) > available {
             drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
         }
+        if size(&groups[2]) > available && groups[2].iter().any(|(k, _)| *k == Kind::Tray(Tray::More)) {
+            drop_where(&mut groups[2], &|kind| kind == Kind::Tray(Tray::More), &mut hidden);
+        }
     } else {
-    if groups.iter().map(size).sum::<f32>() + 2.0 * gap > available {
-        drop_where(&mut groups[1], &|_| false, &mut hidden);
-    }
-    let lw = size(&groups[0]);
-    let rw = size(&groups[2]);
-    if lw + rw + gap > available {
-        drop_where(&mut groups[0], &|kind| kind == Kind::Tray(Tray::Logo), &mut hidden);
-    }
-    if size(&groups[0]) + size(&groups[2]) + gap > available {
-        drop_where(&mut groups[0], &|_| false, &mut hidden);
-    }
-    if size(&groups[2]) > available {
-        drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
-    }
+        if groups.iter().map(size).sum::<f32>() + 2.0 * gap > available {
+            drop_where(&mut groups[1], &|_| false, &mut hidden);
+        }
+        let lw = size(&groups[0]);
+        let rw = size(&groups[2]);
+        if lw + rw + gap > available {
+            drop_where(&mut groups[0], &|kind| kind == Kind::Tray(Tray::Logo), &mut hidden);
+        }
+        if size(&groups[0]) + size(&groups[2]) + gap > available {
+            drop_where(&mut groups[0], &|_| false, &mut hidden);
+        }
+        if size(&groups[2]) > available {
+            drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
+        }
     }
     let sizes = groups.each_ref().map(size);
     // Upstream CenterLayout's default index centering keeps the configured
@@ -303,9 +307,11 @@ impl DecBar {
         let settings = &th.bar_layout;
         let p = self.panel();
         let mut groups: [Vec<A>; 3] = Default::default();
+        let mut seen = Vec::new();
         for (out, ids) in groups.iter_mut().zip([&settings.left, &settings.center, &settings.right]) {
             for id in ids.iter().filter_map(|k| A::parse(k)) {
-                if p.shows(id) && !out.contains(&id) {
+                if p.shows(id) && !seen.contains(&id) {
+                    seen.push(id);
                     out.push(id);
                 }
             }
@@ -442,9 +448,7 @@ impl DecBar {
         let scale = 1.0;
         let size: f32 = 14.0 * scale;
         let ink = if active { th.accent.t() } else { th.bar_text.t() };
-        if let Some(icon) = self.symbols.get_material(name, ink, size.round() as u32) {
-            crate::gfx::blit_scaled(pm, icon, (item.x + (item.w - size) / 2.0).round(), (item.y + (item.h - size) / 2.0).round(), size, size, 1.0);
-        }
+        controlcenter::blit_symbol(pm, &mut self.symbols, true, name, ink, size, item.x + item.w / 2.0, item.y + item.h / 2.0);
     }
     pub(super) fn dux_draw(&mut self, pm: &mut Pixmap) {
         let th = crate::theme::th();

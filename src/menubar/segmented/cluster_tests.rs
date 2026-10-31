@@ -108,7 +108,9 @@ fn the_stock_placement_is_unchanged_without_a_cluster() {
 
 #[test]
 fn bar_layout_reads_the_cluster_keys_clamped_and_accepts_registry_keys() {
-    let l = crate::config::BarLayout::from_json(&serde_json::json!({"cluster": true, "group_gap": 99, "group_padding": -4, "left": ["launcher"], "center": ["tasks", "search"], "right": ["systemTray", "bogus"]}));
+    let l = crate::config::BarLayout::from_json(
+        &serde_json::json!({"cluster": true, "group_gap": 99, "group_padding": -4, "left": ["launcher"], "center": ["tasks", "search"], "right": ["systemTray", "bogus"]}),
+    );
     assert!(l.cluster);
     assert_eq!((l.group_gap, l.group_padding), (48.0, 0.0));
     assert_eq!((l.left.len(), l.center.len(), l.right.len()), (1, 2, 1), "registry keys stay, unknown ids go");
@@ -126,4 +128,44 @@ fn a_manifest_may_ask_for_a_cluster_and_is_checked() {
     assert_eq!(ok("cluster = true\ngroup_gap = 8\ngroup_padding = 12\ncenter = [\"tasks\", \"search\"]\n"), Vec::<String>::new());
     assert!(ok("group_gap = 99\n").iter().any(|e| e.contains("group_gap")), "out of range");
     assert!(ok("center = [\"bogus\"]\n").iter().any(|e| e.contains("bogus")), "unknown ids are still refused");
+}
+
+#[test]
+fn applet_aliases_are_deduplicated_across_all_groups() {
+    let l = crate::config::BarLayout::from_json(&serde_json::json!({"left":["launcherButton"],"center":["launcher"],"right":["start"]}));
+    assert_eq!((l.left.len(), l.center.len(), l.right.len()), (1, 0, 0));
+}
+
+#[test]
+fn cluster_second_pass_keeps_a_real_overflow_target_when_padding_would_hide_it() {
+    use super::super::applets::tests::{fixture, reset};
+    use crate::panel::{AppletSet, Edge, Renderer};
+    for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+        let mut t = crate::theme::builtin::def("nord").unwrap().resolve("nord", true, &crate::theme::model::Selection::default());
+        t.bar_layout.cluster = true;
+        t.bar_layout.margin = 7.0;
+        t.bar_layout.spacing = 24.0;
+        t.bar_layout.group_padding = 32.0;
+        // Bypass JSON normalisation too: the layout must reject duplicate aliases itself.
+        t.bar_layout.left = vec!["launcherButton".into()];
+        t.bar_layout.center = vec!["launcher".into()];
+        t.bar_layout.right = vec!["start".into()];
+        let _theme = crate::theme::live::thread_theme(t);
+        let mut bar = fixture(Renderer::Dux, edge, AppletSet::all(), 160);
+        let groups = bar.dux_groups();
+        assert_eq!(groups.iter().flatten().filter(|id| **id == crate::panel::AppletId::Launcher).count(), 1);
+        // The logical layout is transposed as a whole on side edges.
+        bar.width = 160;
+        let lay = bar.dux_layout();
+        assert!(!lay.hidden.is_empty());
+        let more = lay.items.iter().find(|i| i.kind == Kind::Tray(Tray::More)).expect("overflow remains painted");
+        assert!(lay.hit(more.x + more.w / 2.0, more.y + more.h / 2.0).is_some());
+        assert!(lay.groups.iter().all(|g| g.x >= 11.0 - 0.01 && g.x + g.w <= 149.0 + 0.01));
+        assert!(!bar.dux_hidden().is_empty(), "hidden controls remain in the overflow model");
+        let mut pm = Pixmap::new(28, 28).unwrap();
+        bar.symbols = crate::menubar::symbols::SymbolCache::default();
+        bar.dux_symbol(&mut pm, "apps", Item { kind: Kind::Tray(Tray::More), x: 0.0, y: 0.0, w: 28.0, h: 28.0 }, false);
+        assert!(pm.data().chunks_exact(4).any(|p| p[3] != 0), "overflow is visible without package fonts");
+        reset();
+    }
 }

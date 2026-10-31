@@ -675,7 +675,7 @@ pub fn fit(s: &str, max_w: f32, size: f32, weight: Weight, fonts: &Fonts) -> Str
 }
 
 #[allow(clippy::too_many_arguments)]
-fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, material: bool, name: &str, rgb: (u8, u8, u8), size: f32, cx: f32, cy: f32) {
+pub(crate) fn blit_symbol(pm: &mut Pixmap, symbols: &mut SymbolCache, material: bool, name: &str, rgb: (u8, u8, u8), size: f32, cx: f32, cy: f32) {
     // Keep this look usable in themes without licensed package Material faces.
     // The semantic fallback is intentional; Dux packages still use actual Material glyphs.
     if material {
