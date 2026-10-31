@@ -3,6 +3,7 @@
 
 SETTINGS_BIN=/absolute/decsettings SETTINGS_EVIDENCE_DIR=/tmp/evidence python3 ...
 SETTINGS_CORRUPT_CACHE=1 damages one private cached PNG before a warm relaunch.
+SETTINGS_TAB_SECONDS=30 also switches all four real Appearance tabs while scrolling.
 Requires Xvfb, xdotool, import. Copies repo themes (or SETTINGS_THEMES_DIR) into the fixture.
 """
 import hashlib
@@ -139,6 +140,38 @@ def main():
                     corrupted = True
                 time.sleep(.25)
             assert any(s['pngs'] for s in result['samples']), 'No native previews generated; not a valid preview stress run'
+            tab_seconds = float(os.environ.get('SETTINGS_TAB_SECONDS', '0'))
+            if tab_seconds > 0:
+                tabs = ('theme', 'palettes', 'customise', 'apps')
+                tab_cases = []
+                tab_deadline = time.monotonic() + tab_seconds
+                while time.monotonic() < tab_deadline:
+                    assert app.poll() is None, f'Settings exited during tab switching: {app.returncode}'
+                    # Tabs scroll with content. Read their current hit rectangles only
+                    # after returning to the top; stale offscreen targets prove nothing.
+                    run('xdotool', 'mousemove', '--window', window, '850', '600',
+                        'click', '--repeat', '8', '--delay', '10', '4')
+                    def visible_tabs():
+                        control = next(c for c in doc()['ctls'] if c['id'] == 'ap:tab')
+                        tx, ty, tw, th = control['rect']
+                        if tx >= 0 and ty >= 0 and tx + tw <= 1040 and ty + th <= 1600:
+                            return control
+                        run('xdotool', 'mousemove', '--window', window, '850', '600',
+                            'click', '--repeat', '8', '--delay', '10', '4')
+                        return None
+                    control = wait(visible_tabs)
+                    index = len(tab_cases) % len(tabs)
+                    tx, ty, tw, th = control['parts'][index]
+                    run('xdotool', 'mousemove', '--window', window,
+                        str(int(tx + tw / 2)), str(int(ty + th / 2)), 'click', '1')
+                    expected = tabs[index]
+                    wait(lambda: next(c for c in doc()['ctls'] if c['id'] == 'ap:tab')['value'] == expected)
+                    tab_cases.append(expected)
+                    run('xdotool', 'mousemove', '--window', window, '850', '600',
+                        'click', '--repeat', '2', '--delay', '25', '5')
+                assert set(tab_cases) == set(tabs), 'Tab duration did not exercise every tab'
+                result['internal_tabs'] = {'iterations': len(tab_cases), 'visited': sorted(set(tab_cases))}
+                capture('after-internal-tabs', doc())
             final = doc()
             capture('after-stress', final)
             result.update(final_pane=final['pane'], final_frames=final['frames'],

@@ -44,6 +44,36 @@ physical hardware readiness.
   Their new packages are not accepted as complete ports until authentic rendering,
   four-edge placement and every selectable applet work together.
 
+## Current installed Settings — bounded disappearance check
+
+The installed optimized Settings SHA
+`8cac883d022a6de398d410717db470ecd42b0cdf31ec75b4eae6570a9e9cc02a`
+passed private-X11 rapid browsing: 122 theme-gallery iterations, 135 wallpaper
+iterations and 86 internal Appearance-tab switches (30 seconds each). One
+Appearance click began preview painting; a later settled capture showed all
+visible cards populated. A fresh process reused 24 visited PNG/reference files
+with identical hashes, mtimes and sizes. Eight final visible fixture wallpaper
+centres remained correct and idle redecodes were zero.
+
+Peak Settings RSS was 54,540 KiB, with ten threads and 23 FDs; these are bounded
+observations, not a general leak or crash absence guarantee. Parent verified
+three pinned executable hashes against the installed files, two harness hashes,
+and reviewed warm-theme and wallpaper captures. Evidence and reproducible
+harness instructions: `/var/tmp/settings-current-stress/summary.json` and
+`README.md`. Controlled fixture termination used SIGTERM; no unexpected exit
+was observed. The user's historical disappearance remains **unconfirmed**.
+Physical input/GPU, Wayland and wallpaper/theme replica fidelity are outside
+this private test.
+
+The repository's `tests/e2e/settings-preview-stress.py` now accepts
+`SETTINGS_TAB_SECONDS` to exercise all four internal tabs with fresh visible hit
+targets after scrolling back to the top. The extended fixture passed 40 switches
+in ten seconds plus warm-cache and same-window/config-rejection reopen checks
+against the same optimized Settings binary. Evidence:
+`/var/tmp/settings-repo-tab-gate-final/result.json`. Its original three-click
+preview diagnostic remains intentional; it does not replace the independent
+one-click first-open proof above.
+
 ## Earlier accepted iteration
 
 - Combined follow-up: all-bin optimized build passed (9m 30s),1,643 library tests
