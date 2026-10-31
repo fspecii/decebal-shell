@@ -312,7 +312,7 @@ type Verdict = Result<bool, String>;
 /// Locks the screen and returns once the right password was entered (the grabs are released first).
 /// `Err` means the lock could not be established (no grab); nothing is left on screen in that case.
 pub fn run(cfg: &Config, auth: Arc<dyn Authenticator>) -> Result<(), Error> {
-    let (conn, num) = x11rb::connect(None).map_err(|e| Error(format!("cannot open the X display: {e}")))?;
+    let (conn, num) = crate::x11_connection::connect(None).map_err(|e| Error(format!("cannot open the X display: {e}")))?;
     let screen = conn.setup().roots[num].clone();
     let root = screen.root;
     let (mut w, mut h) = (screen.width_in_pixels, screen.height_in_pixels);
@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(std::env::var("DECLOCK_PERF_PRIVATE").as_deref(), Ok("1"));
         let display = std::env::var("DISPLAY").unwrap();
         assert!(!matches!(display.as_str(), ":0" | ":1"));
-        let (c, n) = x11rb::connect(None).unwrap();
+        let (c, n) = crate::x11_connection::connect(None).unwrap();
         let screen = &c.setup().roots[n];
         let (w, h) = (screen.width_in_pixels, screen.height_in_pixels);
         assert_eq!((w, h), (3440, 1440));

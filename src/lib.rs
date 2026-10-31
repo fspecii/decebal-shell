@@ -63,3 +63,6 @@ pub mod a11y;
 pub mod accessibility;
 
 pub mod sni;
+
+#[cfg(feature = "x11")]
+pub mod x11_connection;

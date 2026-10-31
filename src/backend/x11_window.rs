@@ -139,7 +139,7 @@ fn popup_left<A: WindowApp>(app: &A, mon: &super::x11::Rect, w: u32) -> i32 {
 }
 
 pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
-    let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
+    let (conn, screen_num) = crate::x11_connection::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let at = atoms(&conn)?;
     let keymap = Keymap::load(&conn)?;
@@ -226,7 +226,7 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     conn.create_gc(gc, win, &CreateGCAux::new()).map_err(err)?;
 
     // Cross-thread wake-up: a second connection that pokes our window with a client message.
-    let wake_conn = Arc::new(x11rb::connect(None).map_err(err)?.0);
+    let wake_conn = Arc::new(crate::x11_connection::connect(None).map_err(err)?.0);
     let wake_atom = at.wake;
     let waker: Waker = {
         let wc = wake_conn.clone();
@@ -478,7 +478,7 @@ fn grab_input(conn: &RustConnection, win: Window, _root: Window) -> Option<u16> 
 /// Politely closes another client's window (`WM_DELETE_WINDOW` when it supports it, else kills the client),
 /// on its own short-lived connection.
 pub fn close_window(id: u32) {
-    let Ok((conn, _)) = x11rb::connect(None) else { return };
+    let Ok((conn, _)) = crate::x11_connection::connect(None) else { return };
     let (Ok(protocols), Ok(delete)) = (intern(&conn, "WM_PROTOCOLS"), intern(&conn, "WM_DELETE_WINDOW")) else { return };
     let supports = conn.get_property(false, id, protocols, AtomEnum::ATOM, 0, 64).ok().and_then(|c| c.reply().ok()).and_then(|r| r.value32().map(|mut v| v.any(|a| a == delete))).unwrap_or(false);
     if supports {

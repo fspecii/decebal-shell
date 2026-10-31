@@ -148,7 +148,7 @@ struct Daemon {
 
 impl Daemon {
     fn new() -> Result<Daemon, String> {
-        let (conn, n) = x11rb::connect(None).map_err(err)?;
+        let (conn, n) = crate::x11_connection::connect(None).map_err(err)?;
         let root = conn.setup().roots[n].root;
         conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::SUBSTRUCTURE_NOTIFY)).map_err(err)?.check().map_err(err)?;
         // RandR 1.5 monitors; without the extension the screen is the one monitor.

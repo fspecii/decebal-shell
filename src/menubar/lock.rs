@@ -44,7 +44,7 @@ pub fn spawn_watcher(locks: Locks, wake: impl Fn() + Send + 'static) -> bool {
     if std::env::var_os("DISPLAY").is_none() || std::env::var("DECEBAL_BACKEND").as_deref() == Ok("wayland") {
         return false;
     }
-    let Ok((conn, _)) = x11rb::connect(None) else { return false };
+    let Ok((conn, _)) = crate::x11_connection::connect(None) else { return false };
     let core_kbd: xkb::DeviceSpec = xkb::ID::USE_CORE_KBD.into();
     let ok = conn.xkb_use_extension(1, 0).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.supported);
     if !ok {

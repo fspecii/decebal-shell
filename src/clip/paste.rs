@@ -15,7 +15,7 @@ const HELD_MASK: u16 = 0x1 | 0x4 | 0x8 | 0x40;
 
 /// The window that has the keyboard focus right now (`None` for no focus or the pointer-root pseudo window).
 pub fn current_focus() -> Option<Window> {
-    let (conn, _) = x11rb::connect(None).ok()?;
+    let (conn, _) = crate::x11_connection::connect(None).ok()?;
     let f = conn.get_input_focus().ok()?.reply().ok()?.focus;
     (f > 1).then_some(f)
 }
@@ -40,7 +40,7 @@ fn keycode_of(conn: &RustConnection, sym: u32) -> Option<u8> {
 /// (the clipboard is set; the user pastes by hand).
 pub fn paste(focus: Option<Window>) -> Result<bool, String> {
     let e = |e: &dyn std::fmt::Display| e.to_string();
-    let (conn, n) = x11rb::connect(None).map_err(|x| e(&x))?;
+    let (conn, n) = crate::x11_connection::connect(None).map_err(|x| e(&x))?;
     let root = conn.setup().roots[n].root;
     // The popup's connection is closing in the server right now; give it a moment, so its focus revert cannot undo ours.
     std::thread::sleep(Duration::from_millis(15));

@@ -274,7 +274,7 @@ fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size
 
 /// `Xft.dpi / 96` of the default display (1.0 when unset or unreachable).
 pub fn xft_scale_of_display() -> f32 {
-    match x11rb::connect(None) {
+    match crate::x11_connection::connect(None) {
         Ok((conn, n)) => super::x11_window::xft_scale(&conn, conn.setup().roots[n].root),
         Err(_) => 1.0,
     }
@@ -282,7 +282,7 @@ pub fn xft_scale_of_display() -> f32 {
 
 pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut spec = app.surface_spec().unwrap_or(spec);
-    let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
+    let (conn, screen_num) = crate::x11_connection::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let visual = argb_visual(&screen).ok_or_else(|| Error("no 32-bit ARGB visual".into()))?;
     let mut screen_size = (screen.width_in_pixels as i32, screen.height_in_pixels as i32);

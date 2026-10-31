@@ -118,7 +118,7 @@ impl Control for Ewmh {
 
 /// Name of the running EWMH window manager (`_NET_SUPPORTING_WM_CHECK` -> `_NET_WM_NAME`).
 pub fn wm_name() -> Option<String> {
-    let (conn, n) = x11rb::connect(None).ok()?;
+    let (conn, n) = crate::x11_connection::connect(None).ok()?;
     let root = conn.setup().roots[n].root;
     let check = prop32(&conn, root, atom(&conn, "_NET_SUPPORTING_WM_CHECK")?, AtomEnum::WINDOW).first().copied()?;
     let name = text_prop(&conn, check, atom(&conn, "_NET_WM_NAME")?, atom(&conn, "UTF8_STRING")?);
@@ -126,7 +126,7 @@ pub fn wm_name() -> Option<String> {
 }
 
 pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
-    let Ok((conn, screen_num)) = x11rb::connect(None) else {
+    let Ok((conn, screen_num)) = crate::x11_connection::connect(None) else {
         return false;
     };
     let root = conn.setup().roots[screen_num].root;

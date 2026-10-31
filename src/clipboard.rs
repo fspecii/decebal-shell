@@ -127,7 +127,7 @@ pub fn serve_x11(text: &str) -> Result<(), String> {
     use x11rb::protocol::xproto::*;
     use x11rb::protocol::Event;
     let e = |e: &dyn std::fmt::Display| e.to_string();
-    let (conn, n) = x11rb::connect(None).map_err(|x| e(&x))?;
+    let (conn, n) = crate::x11_connection::connect(None).map_err(|x| e(&x))?;
     let root = conn.setup().roots[n].root;
     let clipboard = conn.intern_atom(false, b"CLIPBOARD").map_err(|x| e(&x))?.reply().map_err(|x| e(&x))?.atom;
     let atoms = SelAtoms::intern(&conn)?;
@@ -168,7 +168,7 @@ mod tests {
         std::thread::spawn(|| {
             let _ = super::serve_x11("héllo 14");
         });
-        let (conn, n) = x11rb::connect(None).unwrap();
+        let (conn, n) = crate::x11_connection::connect(None).unwrap();
         let root = conn.setup().roots[n].root;
         let atom = |s: &str| conn.intern_atom(false, s.as_bytes()).unwrap().reply().unwrap().atom;
         let (clip, utf8, prop) = (atom("CLIPBOARD"), atom("UTF8_STRING"), atom("DECSPOT_TEST"));
