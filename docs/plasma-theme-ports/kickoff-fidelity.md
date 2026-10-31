@@ -76,3 +76,11 @@ orders applications and recent documents by time, Frequently Used by launch coun
 `cargo test --lib launcher::` 55 passed (placement tests for every style, edge and scale included); `cargo test --test plasma_theme_ports` 13 passed (including the `[launcher] style = "kde"` assertion that had been
 waiting for a build slot); `cargo clippy --lib --tests -- -D warnings` clean. Debug build of this branch's commit on root `7272017` plus the changes
 described in `kickoff-contract.md`.
+
+## Main integration acceptance (2026-10-31)
+
+The footer, session controls and asynchronous Places loader are integrated into the shell; the full Plasma package remains NOT READY for the gaps above. Main integration `2c81d18` passed 84 launcher/fuzzy tests (4 ignored), formatting, all-target Clippy with warnings denied and a dev launcher build. Evidence: `/var/tmp/decebal-kickoff-main-integration-gate/result.json`.
+
+A missing icon pack now uses semantic session/navigation glyphs after exact theme lookup and before generic fallback (`a7b6ca8`). Fifteen icon-related tests, formatting and the dev launcher build passed: `/var/tmp/decebal-launcher-semantic-icons-gate/result.json`. This is a fallback, not bundled Breeze artwork.
+
+The immutable dev artifact was then exercised in private Xvfb: 40 captures over dark/light, 100/200% UI scale, all four panel edges and unanchored placement, two screen sizes, and four two-monitor placement cases. Keyboard launch, Escape, hover, outside-click and pointer launch passed; wheel scrolling was not established with the short fixture list. The dark 100% footer capture was visually inspected. Evidence: `/var/tmp/decebal-kickoff-native-control-icons/result.json` and `/var/tmp/decebal-kickoff-native-evidence-icons/manifest.json`; no rescued/leftover fixture processes and no I/O-pressure abort. Optimized artifact acceptance and live installation remain outstanding.
