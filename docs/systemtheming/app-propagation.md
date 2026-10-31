@@ -226,3 +226,27 @@ not rdwm. This is not optimized-artifact, actual-rdwm, Qt, Files, high-DPI,
 all-theme or already-running-application acceptance. Those remain separate gates.
 The corrected harness self-test also passed, including partial helper replies and
 PIDFD-targeted cleanup. No live desktop configuration or installed binary changed.
+
+
+### High-DPI rendering and live-update characterization
+
+The corrected 200% fixture completed 348 checks for Nord and Windows 11 in both
+modes, including GTK3, GTK4, libadwaita and Files. New/reopened apps used the
+selected palette. Both the fixture and outer token audit reported no leftover
+processes. Evidence: `/var/tmp/decebal-gtk-hidpi-live-control-v2/result.json` and
+`/var/tmp/decebal-gtk-hidpi-live-pixels-v2/results.json`.
+
+**Live palette updates did not pass:** all eight running-app comparisons remained
+stale (four toolkits, theme change and dark/light change). Their identities stayed
+valid. This fixture has no XSETTINGS service; implementing the native X11
+notification bridge is the next product task. Libadwaita user-CSS reload remains
+an independent limitation. The 348 successful fixture checks must not be cited as
+eight successful live updates.
+
+The first run is retained as a failed/interrupted fixture: its Files header oracle
+omitted the configured titlebar role, covered GTK3 windows produced black Xvfb
+captures, and reopening reused stale JSON window ids. The corrected harness uses
+scale-aware header sampling with the configured roles, raises the owned window
+before capture, bounds capture waits, and gives every probe fresh metadata/logs.
+The interrupted run's remaining private bus and X server were stopped through
+run-token-checked pidfds; the corrected run needed no outer cleanup rescue.
