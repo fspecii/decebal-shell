@@ -54,6 +54,7 @@ orders applications and recent documents by time, Frequently Used by launch coun
 - The Session menu always opens upward inside the card; Plasma's menu is a separate popup that is bottom-posed on top and side panels.
 - The Computer list lacks Network (`remote:/`) and Recent Files / Locations (`recentlyused:/`), which are KIO locations; "System Settings" is listed only when installed; devices are the removable media mounted under `/run/media/$USER`, not Solid's list.
 - Tooltips of the icon-only Session button and the Places icons are not drawn.
+- The Places lists are read by one background worker when the tab first opens (nothing at start-up, nothing while painting); until it answers the tab shows Show KRunner, Home and a "Reading places..." note. Without the host's waker hook (`kickoff-places-hook.md`) the answer appears at the next input event.
 - The History list has no timestamps for applications launched outside Decebal (KActivitiesStats is not available); only launches from this launcher and Spotlight count.
 - Fonts, text rendering (no subpixel/hinting match), and the exact icon rasterisation differ from Qt's.
 

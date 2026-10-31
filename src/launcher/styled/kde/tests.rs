@@ -19,6 +19,7 @@ fn kde(n: usize) -> super::super::Styled {
     RAN.with(|r| r.borrow_mut().clear());
     OPENED.with(|o| o.borrow_mut().clear());
     disarm();
+    places::reset();
     st
 }
 
@@ -168,17 +169,10 @@ fn a_narrow_card_moves_every_action_behind_the_session_button() {
 #[test]
 fn the_places_tab_lists_computer_history_and_frequently_used_and_opens_them() {
     let mut st = kde(12);
-    st.m.entries.insert(
-        "computer",
-        vec![
-            Entry { name: "Show KRunner".into(), detail: "Search, calculate, or run a command".into(), icon: "krunner".into(), open: vec!["decspot".into()], at: 0 },
-            Entry { name: "Home".into(), detail: "/home/t".into(), icon: "user-home".into(), open: vec!["xdg-open".into(), "/home/t".into()], at: 0 },
-        ],
-    );
-    st.m.entries.insert(
-        "documents",
-        vec![Entry { name: "notes.txt".into(), detail: "~/Documents".into(), icon: "text-plain".into(), open: vec!["xdg-open".into(), "/home/t/Documents/notes.txt".into()], at: 2000 }],
-    );
+    places::install(places::Loaded {
+        computer: vec![Entry { name: "Home".into(), detail: "/home/t".into(), icon: "user-home".into(), open: vec!["xdg-open".into(), "/home/t".into()], at: 0 }],
+        documents: vec![Entry { name: "notes.txt".into(), detail: "~/Documents".into(), icon: "text-plain".into(), open: vec!["xdg-open".into(), "/home/t/Documents/notes.txt".into()], at: 2000 }],
+    });
     assert!(zone(&st, "cats").items.contains(&Target::View(View::Favorites)), "Applications tab first");
     let r = click(&mut st, "footer", Target::Style(TAB, 1));
     assert!(!closes(&r) && tab(&st.m) == 1);
@@ -190,7 +184,10 @@ fn the_places_tab_lists_computer_history_and_frequently_used_and_opens_them() {
     assert_eq!(OPENED.with(|o| o.borrow().clone()), [vec!["xdg-open".to_string(), "/home/t".to_string()]]);
     // History: the document and the apps launched from here, newest first
     let mut st = kde(12);
-    st.m.entries.insert("documents", vec![Entry { name: "notes.txt".into(), detail: "~/Documents".into(), icon: "text-plain".into(), open: vec!["xdg-open".into(), "/n".into()], at: 2000 }]);
+    places::install(places::Loaded {
+        computer: Vec::new(),
+        documents: vec![Entry { name: "notes.txt".into(), detail: "~/Documents".into(), icon: "text-plain".into(), open: vec!["xdg-open".into(), "/n".into()], at: 2000 }],
+    });
     let apps = {
         let mut a = fixture_apps(12);
         a.sort_by_key(|e| e.name.to_lowercase());
@@ -336,9 +333,19 @@ fn capture(dark: bool) {
             st.resize(655, 516);
             // the Computer list as Kickoff builds it on a machine with this home
             if tab == 1 {
-                if let Some(c) = st.m.entries.get_mut("computer") {
-                    c.truncate(3);
-                }
+                places::install(places::Loaded {
+                    computer: vec![
+                        Entry { name: "Home".into(), detail: "/home/konqi".into(), icon: "user-home".into(), open: vec!["xdg-open".into(), "/home/konqi".into()], at: 0 },
+                        Entry {
+                            name: "Documents".into(),
+                            detail: "/home/konqi/Documents".into(),
+                            icon: "folder-documents".into(),
+                            open: vec!["xdg-open".into(), "/home/konqi/Documents".into()],
+                            at: 0,
+                        },
+                    ],
+                    documents: Vec::new(),
+                });
             }
             let mut pm = tiny_skia::Pixmap::new(655, 516).unwrap();
             st.draw(&mut pm);
@@ -553,4 +560,133 @@ fn log_out_in_the_menu_is_disarmed_by_moving_the_selection() {
     let r = st.key(&key(Key::Enter));
     assert!(!closes(&r) && ran().is_empty(), "armed again, not run");
     assert!(closes(&st.key(&key(Key::Enter))) && ran() == [Sys::Logout]);
+}
+
+// ------------------------------------------------------------------------------------------------------------- the Places lists load off the UI path
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+
+const LONG: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// A waker that signals a channel: the deterministic "the worker finished" handshake (the timeout only turns a hang into a failure).
+fn wake_channel() -> mpsc::Receiver<()> {
+    let (tx, rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    set_waker(Arc::new(move || drop(tx.lock().unwrap().send(()))));
+    rx
+}
+
+/// A Places worker that holds until `release` is dropped or sent to (or, with `until_cancelled`, until it is asked to stop).
+fn held(name: &'static str, until_cancelled: bool) -> (mpsc::Sender<()>, mpsc::Receiver<()>, impl FnOnce(&AtomicBool) -> places::Loaded + Send + 'static) {
+    let (release, hold) = mpsc::channel::<()>();
+    let (started_tx, started) = mpsc::channel::<()>();
+    let worker = move |cancel: &AtomicBool| {
+        started_tx.send(()).ok();
+        if until_cancelled {
+            while !cancel.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+        } else {
+            drop(hold.recv_timeout(LONG));
+        }
+        places::Loaded { computer: vec![Entry { name: name.into(), detail: "d".into(), icon: "folder".into(), open: vec!["xdg-open".into(), name.into()], at: 0 }], documents: Vec::new() }
+    };
+    (release, started, worker)
+}
+
+fn snapshot(st: &super::super::Styled) -> (usize, String, &'static str, usize, usize, usize) {
+    (tab(&st.m), st.m.query().to_string(), st.m.zone, st.m.sel(st.m.zone), place(&st.m), st.m.ui("kde.menu"))
+}
+
+#[test]
+fn building_the_launcher_and_opening_places_never_wait_for_the_disk() {
+    let mut st = kde(10);
+    // nothing is read when the launcher is built
+    assert_eq!(places::state(), places::State::Idle);
+    assert!(places::data().is_none() && places::spawned() == 0);
+    // a worker that is stuck: opening the tab through the real control returns at once, with the rows that need no disk
+    let (release, started, worker) = held("Stuck", false);
+    places::request(worker);
+    started.recv_timeout(LONG).unwrap();
+    let r = click(&mut st, "footer", Target::Style(TAB, 1));
+    assert!(!closes(&r) && tab(&st.m) == 1);
+    assert_eq!(places::state(), places::State::Loading);
+    let rows = computer_rows();
+    assert_eq!(rows[0].name, "Show KRunner");
+    if std::env::var_os("HOME").is_some() {
+        assert_eq!(rows.get(1).map(|e| e.name.as_str()), Some("Home"), "Home needs no file system");
+    }
+    assert_eq!(zone(&st, "apps").items.len(), rows.len());
+    // the sidebar, the footer and the keyboard all keep working while it is stuck
+    click(&mut st, "cats", Target::Style(PLACE, 1));
+    assert_eq!(place(&st.m), 1);
+    click(&mut st, "cats", Target::Style(PLACE, 0));
+    st.m.zone = "apps";
+    st.m.sel.insert("apps", 1);
+    st.relayout();
+    let opened = st.key(&key(Key::Enter));
+    if std::env::var_os("HOME").is_some() {
+        assert!(closes(&opened) && !OPENED.with(|o| o.borrow().is_empty()), "Home opens while the rest is still being read");
+    }
+    drop(release);
+}
+
+#[test]
+fn opening_and_closing_places_many_times_while_the_worker_is_blocked_never_adds_a_thread() {
+    let mut st = kde(10);
+    let (release, started, worker) = held("Stuck", false);
+    places::request(worker);
+    started.recv_timeout(LONG).unwrap();
+    for _ in 0..300 {
+        click(&mut st, "footer", Target::Style(TAB, 1));
+        click(&mut st, "footer", Target::Style(TAB, 0));
+    }
+    assert_eq!(places::spawned(), 1, "one worker however many times the tab was opened and closed");
+    assert!(places::state() == places::State::Loading);
+    drop(release);
+}
+
+#[test]
+fn a_late_answer_changes_the_store_and_nothing_the_user_is_looking_at() {
+    let mut st = kde(10);
+    let woken = wake_channel();
+    let (release, started, worker) = held("Arrived", false);
+    places::request(worker);
+    started.recv_timeout(LONG).unwrap();
+    click(&mut st, "footer", Target::Style(TAB, 1));
+    // still on Places, the user moves to History, types a search and focuses a result
+    click(&mut st, "cats", Target::Style(PLACE, 1));
+    st.key(&KeyEvent { key: Key::Char, text: "a".into(), ch: Some('a'), ctrl: false, shift: false, alt: false });
+    st.key(&key(Key::Down));
+    let before = (snapshot(&st), st.zones.clone());
+    release.send(()).unwrap();
+    woken.recv_timeout(LONG).expect("the worker announced itself through the waker");
+    assert!(tick(), "the host takes the answer in on its tick");
+    st.relayout();
+    assert_eq!((snapshot(&st), st.zones.clone()), before, "the page, the query, the focus and the zones are exactly what they were");
+    assert_eq!(places::data().unwrap().computer[0].name, "Arrived");
+    assert_eq!(places::spawned(), 1);
+    // the query is cleared and Computer opened: the answer is there, and it is not read again
+    click(&mut st, "footer", Target::Style(TAB, 1));
+    click(&mut st, "cats", Target::Style(PLACE, 0));
+    assert!(computer_rows().iter().any(|e| e.name == "Arrived"));
+    assert_eq!(places::spawned(), 1);
+}
+
+#[test]
+fn leaving_places_stops_the_worker_and_discards_its_answer_and_the_next_opening_starts_one_new_worker() {
+    let mut st = kde(10);
+    let woken = wake_channel();
+    let (_release, started, worker) = held("Abandoned", true);
+    places::request(worker);
+    started.recv_timeout(LONG).unwrap();
+    click(&mut st, "footer", Target::Style(TAB, 1));
+    click(&mut st, "footer", Target::Style(TAB, 0));
+    woken.recv_timeout(LONG).expect("the stopped worker finished");
+    assert!(!tick(), "its answer is discarded");
+    assert!(places::data().is_none() && places::state() == places::State::Idle);
+    // the next opening starts exactly one new worker (the real one)
+    click(&mut st, "footer", Target::Style(TAB, 1));
+    assert_eq!(places::spawned(), 2);
 }

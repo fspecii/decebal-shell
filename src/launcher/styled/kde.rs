@@ -26,9 +26,9 @@ const SESSION: u8 = 3;
 const MENU: u8 = 4;
 /// A row of the Places sidebar.
 const PLACE: u8 = 5;
-/// A row of the Computer list (index into `entries["computer"]`).
+/// A row of the Computer list (index into [`computer_rows`]).
 const COMPUTER_ROW: u8 = 6;
-/// A row of the History list that is a document (index into `entries["documents"]`).
+/// A row of the History list that is a document (index into [`document_rows`]).
 const DOCUMENT_ROW: u8 = 7;
 
 // The footer, in logical pixels, measured on the identified original capture (docs/plasma-theme-ports/kickoff-fidelity.md).
@@ -94,14 +94,42 @@ fn shown(m: &Model) -> View {
 
 // ---------------------------------------------------------------------------------------------------------------- state
 
-/// Reads what the Places tab and the footer need from disk, once, when the launcher is built (never while painting).
+/// Called when the launcher is built: no file system work beyond the tiny `/sys/power/state` probe. The Places lists are read by one worker the first
+/// time the tab opens ([`places`]); nothing waits for it.
 pub fn prepare(m: &mut Model) {
-    let (mut computer, documents) = places::load();
-    computer
-        .insert(0, Entry { name: "Show KRunner".into(), detail: "Search, calculate, or run a command".into(), icon: "krunner".into(), open: vec![crate::launch::sibling_or_path("decspot")], at: 0 });
-    m.entries.insert("computer", computer);
-    m.entries.insert("documents", documents);
     m.ui.insert("kde.hibernate", system::probe_hibernate() as usize);
+}
+
+fn krunner() -> Entry {
+    Entry { name: "Show KRunner".into(), detail: "Search, calculate, or run a command".into(), icon: "krunner".into(), open: vec![crate::launch::sibling_or_path("decspot")], at: 0 }
+}
+
+/// The Computer list now: Show KRunner, then the places the worker found, or Home alone (which needs no file system access) while it is still reading.
+fn computer_rows() -> Vec<Entry> {
+    let mut rows = vec![krunner()];
+    match places::data() {
+        Some(d) => rows.extend(d.computer.iter().cloned()),
+        None => rows.extend(places::fallback().computer),
+    }
+    rows
+}
+
+/// The documents of the history now (none until the worker has delivered them).
+fn document_rows() -> Vec<Entry> {
+    places::data().map(|d| d.documents.clone()).unwrap_or_default()
+}
+
+/// Where the launcher host tells the style how to wake the event loop: called once with the host's waker (see docs/plasma-theme-ports/kickoff-places-hook.md).
+/// Not wired by the shared engine yet; until it is, a finished worker is noticed at the next input event.
+#[allow(dead_code)] // the shared engine does not forward the host's waker yet (docs/plasma-theme-ports/kickoff-places-hook.md); the tests use it
+pub fn set_waker(w: crate::window_app::Waker) {
+    places::set_waker(w);
+}
+
+/// Takes a finished Places answer in; true when the host should redraw. The host calls it from its `tick` once the waker fired.
+#[allow(dead_code)] // as above: the host's `tick` calls it once the hook exists
+pub fn tick() -> bool {
+    places::poll()
 }
 
 /// 0 = Applications, 1 = Places.
@@ -247,10 +275,9 @@ fn footer(m: &Model, f: &Frame, s: f32) -> Footer {
 
 /// The apps of the Places page behind a sidebar row, and its documents.
 fn places_targets(m: &Model) -> Vec<Target> {
-    let docs = |key: &'static str| m.entries.get(key).map_or(0, Vec::len);
     match place(m) {
         places::COMPUTER => {
-            let mut out: Vec<Target> = (0..docs("computer")).map(|i| Target::Style(COMPUTER_ROW, i as u16)).collect();
+            let mut out: Vec<Target> = (0..computer_rows().len()).map(|i| Target::Style(COMPUTER_ROW, i as u16)).collect();
             // ComputerModel lists System Settings (when installed) after "Show KRunner"
             if let Some(i) = m.cat.apps.iter().position(|a| matches!(crate::launcher::catalog::app_id(a).as_str(), "systemsettings" | "org.kde.systemsettings")) {
                 out.insert(1.min(out.len()), Target::App(i));
@@ -260,7 +287,7 @@ fn places_targets(m: &Model) -> Vec<Target> {
         places::HISTORY => {
             // RecentUsageModel: applications and documents, most recent first
             let mut rows: Vec<(u64, Target)> = m.cat.recent.iter().map(|&i| (m.cat.last_launch(i).unwrap_or(0), Target::App(i))).collect();
-            rows.extend(m.entries.get("documents").into_iter().flatten().enumerate().map(|(i, e)| (e.at, Target::Style(DOCUMENT_ROW, i as u16))));
+            rows.extend(document_rows().iter().enumerate().map(|(i, e)| (e.at, Target::Style(DOCUMENT_ROW, i as u16))));
             rows.sort_by_key(|r| std::cmp::Reverse(r.0));
             rows.into_iter().take(50).map(|r| r.1).collect()
         }
@@ -271,6 +298,8 @@ fn places_targets(m: &Model) -> Vec<Target> {
 // ---------------------------------------------------------------------------------------------------------------- layout
 
 pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
+    // a Places answer that arrived since the last event is taken in here (layout runs after every event); it only fills the store, never a page or a query
+    places::poll();
     // every focus change is followed by a layout: an arming made elsewhere ends here
     if ARM.with(|a| a.get()).is_some() && armed(m).is_none() {
         disarm();
@@ -353,6 +382,11 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
     match kind {
         TAB => {
             m.ui.insert("kde.tab", (i as usize).min(1));
+            if i == 1 {
+                places::request(|cancel| places::load(cancel));
+            } else {
+                places::cancel();
+            }
             disarm();
             m.ui.insert("kde.menu", 0);
             reset_lists(m);
@@ -390,8 +424,8 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
             Outcome::Relayout
         }
         COMPUTER_ROW | DOCUMENT_ROW => {
-            let key = if kind == COMPUTER_ROW { "computer" } else { "documents" };
-            match m.entries.get(key).and_then(|l| l.get(i as usize)) {
+            let rows = if kind == COMPUTER_ROW { computer_rows() } else { document_rows() };
+            match rows.get(i as usize) {
                 Some(e) if !e.open.is_empty() => {
                     spawn(&e.open);
                     Outcome::Close
@@ -535,8 +569,8 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
                     list_row(p, rect, focused, &app.icon, &app.name, desc);
                 }
                 ("apps", Target::Style(kind @ (COMPUTER_ROW | DOCUMENT_ROW), k)) => {
-                    let list = if kind == COMPUTER_ROW { "computer" } else { "documents" };
-                    if let Some(e) = m.entries.get(list).and_then(|l| l.get(k as usize)) {
+                    let rows = if kind == COMPUTER_ROW { computer_rows() } else { document_rows() };
+                    if let Some(e) = rows.get(k as usize) {
                         list_row(p, rect, focused, &e.icon, &e.name, &e.detail);
                     }
                 }
@@ -582,6 +616,10 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
                 _ => {}
             }
         }
+    }
+    // the worker has not delivered yet (it may be stuck on a slow mount; the lists above are what needs no disk)
+    if tab(m) == 1 && places::state() == places::State::Loading && !m.searching() {
+        p.text_center("Reading places...", f.content.x + f.content.w / 2.0, f.content.bottom() - 10.0 * s, 11.0 * s, Weight::Regular, sub, f.content.w - 16.0 * s);
     }
     let empty = if m.searching() { m.results.is_empty() } else { zones.iter().find(|z| z.id == "apps").is_some_and(|z| z.items.is_empty()) };
     if empty {
