@@ -16,6 +16,7 @@
 pub mod applets;
 pub mod branding;
 pub mod frame;
+pub mod plasma_style;
 
 /// The first release with this framework (the 0.3.0 feature batch): packages that use `[bar] applets`, `[branding]`, a
 /// non-top edge for a non-rail bar or a side dock declare it as `min_shell_version` (0.2.x rejects `[bar] applets` and
@@ -28,7 +29,11 @@ pub fn needs_framework(extra: &serde_json::Map<String, Value>) -> bool {
     let style = bar.and_then(|b| b.get("style")).and_then(Value::as_str).unwrap_or("flat");
     let edge = bar.and_then(|b| b.get("position")).and_then(Value::as_str).and_then(Edge::parse);
     let dock = extra.get("dock").and_then(|d| d.get("position")).and_then(Value::as_str).and_then(Edge::parse);
-    extra.contains_key("branding") || bar.is_some_and(|b| b.get("applets").is_some()) || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top)) || dock.is_some_and(Edge::is_vertical)
+    extra.contains_key("branding")
+        || extra.contains_key("taskbar")
+        || bar.is_some_and(|b| b.get("applets").is_some())
+        || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top))
+        || dock.is_some_and(Edge::is_vertical)
 }
 
 pub use applets::{AppletId, AppletSet, Cap, Need, Worker, REGISTRY};

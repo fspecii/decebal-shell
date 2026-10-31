@@ -266,11 +266,11 @@ impl Host {
         use crate::panel::Edge;
         let windows = dock.style == DockStyle::Windows;
         if windows && shell.dock_visible(pill.is_some()) {
-            let m = crate::taskbar::Metrics::new(scale, dock.windows_align);
+            let m = crate::taskbar::Metrics::new(scale, dock.windows_align).themed(&crate::theme::th());
             return match crate::theme::th().taskbar_panel(dock).edge {
-                Edge::Top => Host::Taskbar { top: true, thickness: m.bar_h },
-                Edge::Bottom => Host::Taskbar { top: false, thickness: m.bar_h },
-                edge => Host::Panel { edge, thickness: m.bar_h, taskbar: true },
+                Edge::Top => Host::Taskbar { top: true, thickness: m.bar_h + m.float_gap },
+                Edge::Bottom => Host::Taskbar { top: false, thickness: m.bar_h + m.float_gap },
+                edge => Host::Panel { edge, thickness: m.bar_h + m.float_gap, taskbar: true },
             };
         }
         if shell.bar_visible(dock.style) {

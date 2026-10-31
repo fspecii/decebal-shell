@@ -25,7 +25,7 @@ use std::{
 };
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-pub const VERSION: &str = "native-theme-preview-6";
+pub const VERSION: &str = "native-theme-preview-7";
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);

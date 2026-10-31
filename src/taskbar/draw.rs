@@ -10,6 +10,8 @@ use crate::icons::IconCache;
 use crate::menubar::popup::draw_layout_icon;
 use crate::menubar::symbols::SymbolCache;
 use crate::menubar::Tray;
+use crate::panel::plasma_style::{task_indicator, DesktopForm, Indicator, TaskState, Tone, WorkspaceForm, PAGER_SCREEN};
+use crate::panel::Edge;
 use crate::text::{Fonts, Weight};
 use crate::theme::{Selection, Theme};
 use tiny_skia::Pixmap;
@@ -30,6 +32,8 @@ pub struct Colors {
     pub press_a: f32,
     pub active_a: f32,
     pub accent: Rgb,
+    /// The warning colour (a task demanding attention in a frame-style taskbar).
+    pub warn: Rgb,
     pub search_bg: (Rgb, f32),
     pub search_ink: Rgb,
     pub search_edge: (Rgb, f32),
@@ -52,6 +56,7 @@ impl Colors {
             press_a: if light { 0.03 } else { 0.04 },
             active_a: if light { 0.07 } else { 0.10 },
             accent: t.accent.t(),
+            warn: t.warn.t(),
             search_bg: if light { (t.surface.t(), 0.75) } else { (t.dock_foreground().t(), 0.07) },
             search_ink: t.dock_secondary().t(),
             search_edge: (t.dock_foreground().t(), 0.09),
@@ -152,6 +157,8 @@ pub struct Extras {
     pub cpu: Option<f32>,
     pub memory: Option<f32>,
     pub workspace: Option<String>,
+    /// Every workspace as (current, has windows, wants attention), in order: the pager cells of a theme that asks for them.
+    pub workspaces: Vec<(bool, bool, bool)>,
     pub window_app: Option<String>,
     pub playing: bool,
     pub caps: bool,
@@ -184,6 +191,10 @@ pub fn tray_symbol(kind: Tray, snap: &Snapshot) -> &'static str {
 /// The visible plate of a button in slot `r`: (x, y, w, h, corner radius). Square and full height in the
 /// classic look, a rounded inset tile otherwise.
 fn plate(m: &Metrics, r: Rect, vertical: bool) -> (f32, f32, f32, f32, f32) {
+    // a theme that sets `[taskbar] inset`: the cell fills the strip along it and stays `inset` inside across it
+    if let Some(inset) = m.inset {
+        return if vertical { (inset, r.y, (m.bar_h - 2.0 * inset).max(1.0), r.h, m.corner) } else { (r.x, inset, r.w, (m.bar_h - 2.0 * inset).max(1.0), m.corner) };
+    }
     match (m.classic, vertical) {
         (true, false) => (r.x, 0.0, r.w, m.bar_h, 0.0),
         (false, false) => (r.x + 2.0 * m.scale, ((m.bar_h - m.btn_h) / 2.0).round(), r.w - 4.0 * m.scale, m.btn_h, m.corner),
@@ -221,12 +232,21 @@ impl Painter {
         let (m, c, l) = (f.m, f.c, f.layout);
         let (sw, sh) = if f.vertical { (m.bar_h, l.width) } else { (l.width, m.bar_h) };
         let mut pm = Pixmap::new(sw.ceil().max(1.0) as u32, sh.ceil().max(1.0) as u32)?;
-        fill_rect(&mut pm, 0.0, 0.0, sw, sh, rgba(c.bg, f.alpha));
-        // the hairline on the side that faces the desktop
-        if f.vertical {
-            fill_rect(&mut pm, if f.right { 0.0 } else { sw - 1.0 }, 0.0, 1.0, sh, rgba(c.edge.0, c.edge.1));
+        if m.float_gap > 0.0 {
+            // a floating panel: a rounded plate, outlined all round (Plasma's panel radius is the theme's radius)
+            let rad = (m.corner * 2.0).min(sw.min(sh) / 2.0);
+            fill_rounded(&mut pm, 0.0, 0.0, sw, sh, rad, rgba(c.bg, f.alpha));
+            stroke_rounded(&mut pm, 0.5, 0.5, sw - 1.0, sh - 1.0, (rad - 0.5).max(0.0), rgba(c.edge.0, c.edge.1), 1.0);
         } else {
-            fill_rect(&mut pm, 0.0, if f.top { sh - 1.0 } else { 0.0 }, sw, 1.0, rgba(c.edge.0, c.edge.1));
+            fill_rect(&mut pm, 0.0, 0.0, sw, sh, rgba(c.bg, f.alpha));
+        }
+        // the hairline on the side that faces the desktop (a floating plate is outlined all round instead)
+        if m.float_gap <= 0.0 {
+            if f.vertical {
+                fill_rect(&mut pm, if f.right { 0.0 } else { sw - 1.0 }, 0.0, 1.0, sh, rgba(c.edge.0, c.edge.1));
+            } else {
+                fill_rect(&mut pm, 0.0, if f.top { sh - 1.0 } else { 0.0 }, sw, 1.0, rgba(c.edge.0, c.edge.1));
+            }
         }
 
         if l.start.w > 0.0 && l.start.h > 0.0 {
@@ -274,8 +294,10 @@ impl Painter {
         let (m, c) = (f.m, f.c);
         let r = f.layout.start;
         self.state_fill(pm, f, Hit::Start, r, 0.0);
-        let size = (20.0 * m.scale).round();
-        if let Some(logo) = crate::menubar::theme_logo((size * 2.0) as u32, c.accent, &mut self.symbols) {
+        let size = m.start_icon.unwrap_or_else(|| (20.0 * m.scale).round());
+        // `[branding] logo_tint` means the bar's text colour, on the taskbar too; an untinted logo keeps the accent
+        let ink = if crate::theme::th().branding.tint { c.ink } else { c.accent };
+        if let Some(logo) = crate::menubar::theme_logo((size * 2.0) as u32, ink, &mut self.symbols) {
             blit_scaled(pm, &logo, (r.cx() - size / 2.0).round(), (r.cy() - size / 2.0).round(), size, size, 1.0);
             return;
         }
@@ -383,24 +405,37 @@ impl Painter {
         // The button's visible plate, inside its slot.
         let (px, py, pw, ph, rad) = plate(m, r, f.vertical);
         let pressed = f.pressed == Some(hit) && f.hover == Some(hit);
-        let a = if dragging {
-            c.active_a + 0.05
-        } else if pressed {
-            c.press_a
-        } else if f.hover == Some(hit) {
-            c.hover_a.max(base)
+        let framed = m.indicator == Indicator::Frame;
+        if framed {
+            // the theme's own marking: a tinted cell with a strong line towards the desktop (see `plasma_style::task_indicator`)
+            let state = if dragging || b.active {
+                TaskState::Active
+            } else if f.hover == Some(hit) || pressed {
+                TaskState::Hover
+            } else {
+                TaskState::Normal
+            };
+            self.draw_frame_cell(tp, f, (px, py, pw, ph, rad), state);
         } else {
-            base
-        };
-        if a > 0.0 {
-            fill_rounded(tp, px, py, pw, ph, rad, rgba(c.overlay, a));
+            let a = if dragging {
+                c.active_a + 0.05
+            } else if pressed {
+                c.press_a
+            } else if f.hover == Some(hit) {
+                c.hover_a.max(base)
+            } else {
+                base
+            };
+            if a > 0.0 {
+                fill_rounded(tp, px, py, pw, ph, rad, rgba(c.overlay, a));
+            }
         }
         if f.vertical {
             // upright: the icon centred, the running mark on the side that faces the screen edge
             let size = m.icon;
             let icon = self.icons.get_for_surface(&b.app_id, (size.ceil() as u32).max(1) * 2, c.ink);
             blit_scaled(tp, icon, (r.cx() - size / 2.0).round(), (r.cy() - size / 2.0).round(), size, size, if dragging { 0.85 } else { 1.0 });
-            if b.running {
+            if b.running && !framed {
                 let t = (3.0 * m.scale).round().max(2.0);
                 let (len, col) = if b.active { (16.0 * m.scale, c.accent) } else { (6.0 * m.scale, c.dim) };
                 let x = if f.right { px + pw - t - 1.0 * m.scale } else { px + 1.0 * m.scale };
@@ -427,8 +462,8 @@ impl Painter {
             };
             self.text(tp, &shown, tx, m.bar_h / 2.0, fpx, Weight::Regular, rgba(c.ink, 1.0));
         }
-        // Running indicator.
-        if b.running {
+        // Running indicator (a frame-style theme marks state with the cell itself).
+        if b.running && !framed {
             let t = (3.0 * m.scale).round().max(2.0);
             if m.classic {
                 let th = (2.0 * m.scale).round().max(2.0);
@@ -443,6 +478,74 @@ impl Painter {
                 // A second plate peeking out on the right: "several windows".
                 let sx = px + pw + if m.classic { -2.0 } else { 0.0 };
                 fill_rect(tp, sx.round(), py + 6.0 * m.scale, 1.0, m.btn_h - 12.0 * m.scale, rgba(c.dim, 0.5));
+            }
+        }
+    }
+
+    /// The edge the strip sits on, from the frame's flags.
+    fn panel_edge(f: &Frame) -> Edge {
+        match (f.vertical, f.right, f.top) {
+            (true, true, _) => Edge::Right,
+            (true, false, _) => Edge::Left,
+            (false, _, true) => Edge::Top,
+            (false, _, false) => Edge::Bottom,
+        }
+    }
+
+    /// One cell of a frame-style taskbar in `state`: the fill over the plate and a line on every side, the strong one on the side
+    /// facing the desktop.
+    fn draw_frame_cell(&mut self, tp: &mut Pixmap, f: &Frame, plate: (f32, f32, f32, f32, f32), state: TaskState) {
+        let (m, c) = (f.m, f.c);
+        let Some(spec) = task_indicator(state, Self::panel_edge(f)) else { return };
+        let (x, y, w, h, rad) = plate;
+        let tone = match spec.tone {
+            Tone::Accent => c.accent,
+            Tone::Text => c.ink,
+            Tone::Warn => c.warn,
+        };
+        fill_rounded(tp, x, y, w, h, rad, rgba(tone, spec.fill_alpha));
+        if spec.line_alpha <= 0.0 {
+            return;
+        }
+        let t = (spec.line_px * m.scale).round().max(1.0).min(h / 2.0).min(w / 2.0);
+        let inset = (spec.corner_inset * m.scale).round().min(w / 2.0).min(h / 2.0);
+        for side in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+            let a = if side == spec.strong_side { spec.strong_alpha } else { spec.line_alpha };
+            let (rx, ry, rw, rh) = match side {
+                Edge::Top => (x + inset, y, w - 2.0 * inset, t),
+                Edge::Bottom => (x + inset, y + h - t, w - 2.0 * inset, t),
+                Edge::Left => (x, y + inset, t, h - 2.0 * inset),
+                Edge::Right => (x + w - t, y + inset, t, h - 2.0 * inset),
+            };
+            if rw > 0.0 && rh > 0.0 {
+                fill_rect(tp, rx, ry, rw, rh, rgba(tone, a));
+            }
+        }
+    }
+
+    /// The pager: one miniature cell per workspace on the screen's aspect, the current one highlighted, an occupied one marked.
+    /// Window outlines need window geometry, which the tracker does not carry, so none are drawn.
+    fn draw_pager(&mut self, pm: &mut Pixmap, f: &Frame, r: Rect) {
+        let (m, c) = (f.m, f.c);
+        let n = f.extras.workspaces.len();
+        let across = (m.icon).min(if f.vertical { r.w } else { r.h });
+        let along = if f.vertical { r.h } else { r.w };
+        let cells = crate::panel::plasma_style::pager_cells(n, PAGER_SCREEN.0, PAGER_SCREEN.1, along, across, f.vertical);
+        let (ox, oy) = if f.vertical { (r.x + (r.w - across) / 2.0, r.y) } else { (r.x, r.y + (r.h - across) / 2.0) };
+        for (cell, (active, occupied, urgent)) in cells.iter().zip(&f.extras.workspaces) {
+            let (x, y) = (ox + cell.x, oy + cell.y);
+            let rad = (m.corner * 0.6).max(1.0);
+            fill_rounded(pm, x, y, cell.w, cell.h, rad, rgba(c.ink, 0.08));
+            stroke_rounded(pm, x + 0.5, y + 0.5, cell.w - 1.0, cell.h - 1.0, rad, rgba(c.ink, 0.30), 1.0);
+            if *active {
+                self.draw_frame_cell(pm, f, (x, y, cell.w, cell.h, rad), TaskState::Active);
+            } else if *urgent {
+                self.draw_frame_cell(pm, f, (x, y, cell.w, cell.h, rad), TaskState::Attention);
+            }
+            if *occupied {
+                // "windows here": a small plate in the middle of the cell (no geometry is known)
+                let (pw, ph) = ((cell.w * 0.45).round().max(2.0), (cell.h * 0.45).round().max(2.0));
+                fill_rounded(pm, (x + (cell.w - pw) / 2.0).round(), (y + (cell.h - ph) / 2.0).round(), pw, ph, 1.0, rgba(c.ink, if *active { 0.75 } else { 0.5 }));
             }
         }
     }
@@ -478,6 +581,7 @@ impl Painter {
                 let tw = self.measure(&t, 10.5 * m.scale);
                 self.text(pm, &t, cx - tw / 2.0, cy + 6.0 * m.scale, 10.5 * m.scale, Weight::Regular, rgba(c.ink, 1.0));
             }
+            Tray::Workspaces if m.workspace_form == WorkspaceForm::Cells && !f.extras.workspaces.is_empty() => self.draw_pager(pm, f, r),
             Tray::Workspaces => {
                 let t = f.extras.workspace.clone().unwrap_or_else(|| "–".into());
                 let px = 12.0 * m.scale;
@@ -568,6 +672,12 @@ impl Painter {
     fn draw_desktop(&mut self, pm: &mut Pixmap, f: &Frame) {
         let (m, c) = (f.m, f.c);
         let r = f.layout.desktop;
+        if m.desktop_form == DesktopForm::Icon {
+            // a square cell with the desktop glyph (the theme's `[taskbar] desktop = "icon"`)
+            self.state_fill(pm, f, Hit::Desktop, r, 0.0);
+            self.symbol(pm, "desktop", c.ink, (m.icon * 0.85).round(), r.cx(), r.cy());
+            return;
+        }
         if f.vertical {
             if f.hover == Some(Hit::Desktop) {
                 fill_rect(pm, 0.0, r.y, m.bar_h, r.h, rgba(c.overlay, c.hover_a * 1.6));
@@ -605,14 +715,31 @@ fn draw_battery(pm: &mut Pixmap, f: &Frame, cx: f32, cy: f32) {
 mod tests {
     use super::*;
     use crate::config::{WinAlign, WinLabels, WinSearch};
+    use crate::panel::Edge;
     use crate::taskbar::{layout, Inputs};
 
     fn frame_pm(align: WinAlign, light: bool, labels: WinLabels, search: WinSearch, n: usize) -> Pixmap {
         let m = Metrics::new(1.0, align);
         let kinds = [Tray::Bluetooth, Tray::Network, Tray::Audio, Tray::Battery];
         let mut p = Painter::default();
-        let l =
-            layout(&m, &Inputs { width: 1280.0, align, labels, search, buttons: n, tray: &kinds, clock_text_w: p.measure("27/10/2026", 12.0), scroll: 0.0, start: true, clock: true, desktop: true });
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 1280.0,
+                align,
+                labels,
+                search,
+                buttons: n,
+                tray: &kinds,
+                clock_text_w: p.measure("27/10/2026", 12.0),
+                scroll: 0.0,
+                start: true,
+                clock: true,
+                desktop: true,
+                pager: 0,
+                vertical: false,
+            },
+        );
         let buttons: Vec<TaskButton> = (0..n)
             .map(|i| TaskButton {
                 app_id: format!("app{i}"),
@@ -672,6 +799,8 @@ mod tests {
                 start: true,
                 clock: true,
                 desktop: true,
+                pager: 0,
+                vertical: true,
             },
         )
         .transposed();
@@ -709,6 +838,264 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn plasma_style() -> crate::panel::plasma_style::TaskbarStyle {
+        use crate::panel::plasma_style::{DesktopForm, Indicator, TaskbarStyle, WorkspaceForm};
+        TaskbarStyle {
+            thickness: Some(44.0),
+            icon: Some(28.0),
+            cell_width: Some(50.0),
+            gap: Some(0.0),
+            inset: Some(0.0),
+            float_gap: 0.0,
+            indicator: Indicator::Frame,
+            desktop: DesktopForm::Icon,
+            workspaces: WorkspaceForm::Cells,
+        }
+    }
+
+    /// One frame-style strip on `edge` with an active task in the middle.
+    fn styled_strip(edge: Edge, light: bool) -> (Pixmap, Layout, Metrics) {
+        let vertical = edge.is_vertical();
+        let m = Metrics::new(1.0, WinAlign::Left).styled(&plasma_style());
+        let mut p = Painter::default();
+        let kinds = [Tray::Network, Tray::Audio];
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 640.0,
+                align: WinAlign::Left,
+                labels: WinLabels::Never,
+                search: WinSearch::None,
+                buttons: 3,
+                tray: &kinds,
+                clock_text_w: 60.0,
+                scroll: 0.0,
+                start: true,
+                clock: true,
+                desktop: true,
+                pager: 0,
+                vertical,
+            },
+        );
+        let painted = if vertical { l.transposed() } else { l.clone() };
+        let buttons: Vec<TaskButton> =
+            (0..3).map(|i| TaskButton { app_id: format!("app{i}"), window: Some(i as u64), title: String::new(), pinned: true, running: true, active: i == 1, windows: 1 }).collect();
+        let c = if light { Colors::light() } else { Colors::dark() };
+        let snap = Snapshot::default();
+        let extras = Extras::default();
+        let f = Frame {
+            m: &m,
+            c: &c,
+            layout: &painted,
+            buttons: &buttons,
+            hover: None,
+            pressed: None,
+            open: None,
+            tray: &snap,
+            weather: None,
+            layout_name: None,
+            time: "14:07",
+            date: "23/10",
+            show_search_label: false,
+            alpha: 1.0,
+            top: edge == Edge::Top,
+            drag: None,
+            vertical,
+            right: edge == Edge::Right,
+            extras: &extras,
+        };
+        (p.draw_strip(&f).unwrap(), painted, m)
+    }
+
+    fn luma(p: tiny_skia::PremultipliedColorU8) -> i32 {
+        (p.red() as i32 * 3 + p.green() as i32 * 6 + p.blue() as i32) / 10
+    }
+
+    #[test]
+    fn the_frame_indicator_puts_its_strong_line_on_the_side_facing_the_desktop_on_every_edge() {
+        for light in [false, true] {
+            for edge in [Edge::Bottom, Edge::Top, Edge::Left, Edge::Right] {
+                let (pm, l, m) = styled_strip(edge, light);
+                let r = l.tasks[1];
+                let (cx, cy) = (r.cx().round() as u32, r.cy().round() as u32);
+                // sample 1 px inside each side of the active cell's plate, away from the corners
+                let t = 1;
+                let side = |side: Edge| match side {
+                    Edge::Top => (cx, r.y as u32 + t),
+                    Edge::Bottom => (cx, (r.y + r.h) as u32 - 1 - t),
+                    Edge::Left => (r.x as u32 + t, cy),
+                    Edge::Right => ((r.x + r.w) as u32 - 1 - t, cy),
+                };
+                let facing = match edge {
+                    Edge::Bottom => Edge::Top,
+                    Edge::Top => Edge::Bottom,
+                    Edge::Left => Edge::Right,
+                    Edge::Right => Edge::Left,
+                };
+                let at = |e: Edge| {
+                    let (x, y) = side(e);
+                    pm.pixel(x, y).unwrap()
+                };
+                // the cell's fill, sampled beside the icon (the icon itself is a coloured picture)
+                let centre = pm.pixel(r.x as u32 + 5, cy).unwrap();
+                let strong = at(facing);
+                // the strong line is the accent at .90: far more accent (blue) than the cell fill, and the weak lines in between
+                let blue = |p: tiny_skia::PremultipliedColorU8| p.blue() as i32 - p.red() as i32;
+                assert!(blue(strong) > blue(centre) + 8, "edge {edge:?} light {light}: strong {strong:?} vs centre {centre:?}");
+                for other in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right].into_iter().filter(|e| *e != facing) {
+                    assert!(blue(strong) >= blue(at(other)), "edge {edge:?}: {other:?} is not stronger than the desktop side");
+                }
+                // a task that is not active has no frame at all
+                let idle = l.tasks[0];
+                let flat = pm.pixel(idle.x as u32 + 5, idle.cy() as u32).unwrap();
+                assert!(blue(flat) < blue(centre), "an idle task is not tinted");
+                assert_eq!(pm.width().min(pm.height()), m.bar_h as u32, "strip thickness comes from the style");
+            }
+        }
+    }
+
+    #[test]
+    fn the_style_sets_the_taskbar_numbers_and_the_default_changes_nothing() {
+        let plain = Metrics::new(1.0, WinAlign::Left);
+        assert_eq!(plain.styled(&crate::panel::plasma_style::TaskbarStyle::default()), plain, "no [taskbar]: the Windows numbers");
+        let m = plain.styled(&plasma_style());
+        assert_eq!((m.bar_h, m.icon, m.btn_w, m.start_w, m.gap, m.inset, m.float_gap), (44.0, 28.0, 50.0, 50.0, 0.0, Some(0.0), 0.0));
+        let doubled = Metrics::new(2.0, WinAlign::Left).styled(&plasma_style());
+        assert_eq!((doubled.bar_h, doubled.icon, doubled.btn_w), (88.0, 56.0, 100.0), "sizes scale with the UI");
+        let floating = plain.styled(&crate::panel::plasma_style::TaskbarStyle { float_gap: 8.0, ..plasma_style() });
+        assert_eq!(floating.float_gap, 8.0);
+    }
+
+    #[test]
+    fn show_desktop_is_a_square_icon_cell_when_the_style_asks_and_a_sliver_otherwise() {
+        let (pm, l, m) = styled_strip(Edge::Bottom, false);
+        assert!(l.desktop.w >= m.bar_h, "square cell, not the 6 px sliver: {:?}", l.desktop);
+        let (cx, cy) = (l.desktop.cx() as u32, l.desktop.cy() as u32);
+        let bg = pm.pixel(cx + 20, cy).unwrap();
+        let ink = (cx - 8..cx + 8).flat_map(|x| (cy - 8..cy + 8).map(move |y| (x, y))).any(|(x, y)| (luma(pm.pixel(x, y).unwrap()) - luma(bg)).abs() > 40);
+        assert!(ink, "the desktop glyph is drawn");
+        let plain = Metrics::new(1.0, WinAlign::Left);
+        assert!(plain.desktop_w < 10.0, "Windows keeps its sliver");
+    }
+
+    #[test]
+    fn a_floating_strip_is_a_rounded_plate_without_the_flat_hairline() {
+        let mut st = plasma_style();
+        st.float_gap = 8.0;
+        let m = Metrics::new(1.0, WinAlign::Left).styled(&st);
+        let mut p = Painter::default();
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 400.0,
+                align: WinAlign::Left,
+                labels: WinLabels::Never,
+                search: WinSearch::None,
+                buttons: 0,
+                tray: &[],
+                clock_text_w: 60.0,
+                scroll: 0.0,
+                start: true,
+                clock: true,
+                desktop: true,
+                pager: 0,
+                vertical: false,
+            },
+        );
+        let c = Colors::dark();
+        let snap = Snapshot::default();
+        let extras = Extras::default();
+        let f = Frame {
+            m: &m,
+            c: &c,
+            layout: &l,
+            buttons: &[],
+            hover: None,
+            pressed: None,
+            open: None,
+            tray: &snap,
+            weather: None,
+            layout_name: None,
+            time: "14:07",
+            date: "23/10",
+            show_search_label: false,
+            alpha: 1.0,
+            top: false,
+            drag: None,
+            vertical: false,
+            right: false,
+            extras: &extras,
+        };
+        let pm = p.draw_strip(&f).unwrap();
+        assert_eq!(pm.pixel(0, 0).unwrap().alpha(), 0, "the corner is cut away");
+        assert!(pm.pixel(200, 22).unwrap().alpha() > 250, "the plate is opaque inside");
+    }
+
+    #[test]
+    fn the_pager_draws_one_cell_per_workspace_with_the_current_one_marked() {
+        use crate::panel::plasma_style::WorkspaceForm;
+        let m = Metrics::new(1.0, WinAlign::Left).styled(&plasma_style());
+        assert_eq!(m.workspace_form, WorkspaceForm::Cells);
+        let mut p = Painter::default();
+        let ws = vec![(false, true, false), (true, true, false), (false, false, false), (false, false, true)];
+        let extras = Extras { workspaces: ws.clone(), ..Extras::default() };
+        let kinds = [Tray::Workspaces, Tray::Audio];
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 700.0,
+                align: WinAlign::Left,
+                labels: WinLabels::Never,
+                search: WinSearch::None,
+                buttons: 0,
+                tray: &kinds,
+                clock_text_w: 60.0,
+                scroll: 0.0,
+                start: true,
+                clock: true,
+                desktop: true,
+                pager: ws.len(),
+                vertical: false,
+            },
+        );
+        let rect = l.tray.iter().find(|(k, _)| *k == Tray::Workspaces).unwrap().1;
+        assert!(rect.w > m.tray_w * 2.0, "the pager takes room for four cells: {rect:?}");
+        let c = Colors::dark();
+        let snap = Snapshot::default();
+        let f = Frame {
+            m: &m,
+            c: &c,
+            layout: &l,
+            buttons: &[],
+            hover: None,
+            pressed: None,
+            open: None,
+            tray: &snap,
+            weather: None,
+            layout_name: None,
+            time: "14:07",
+            date: "23/10",
+            show_search_label: false,
+            alpha: 1.0,
+            top: false,
+            drag: None,
+            vertical: false,
+            right: false,
+            extras: &extras,
+        };
+        let pm = p.draw_strip(&f).unwrap();
+        let cells = crate::panel::plasma_style::pager_cells(4, 16.0, 9.0, rect.w, m.icon, false);
+        assert_eq!(cells.len(), 4);
+        let blue = |x: f32, y: f32| {
+            let p = pm.pixel(x as u32, y as u32).unwrap();
+            p.blue() as i32 - p.red() as i32
+        };
+        let centre = |i: usize| (rect.x + cells[i].x + cells[i].w / 2.0, (m.bar_h - m.icon) / 2.0 + cells[i].y + 3.0);
+        let (ax, ay) = centre(1);
+        let (bx, by) = centre(0);
+        assert!(blue(ax, ay) > blue(bx, by) + 10, "the current workspace is tinted with the accent");
     }
 
     #[test]

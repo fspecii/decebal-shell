@@ -348,12 +348,23 @@ impl DecBar {
         crate::taskbar::draw::Extras {
             cpu: perf.and_then(|p| p.0),
             memory: perf.and_then(|p| p.1),
+            workspaces: ws.iter().map(|w| (w.active, w.occupied, w.urgent)).collect(),
             workspace: ws.iter().position(|w| w.active).map(|i| if ws[i].name.chars().count() <= 2 && !ws[i].name.is_empty() { ws[i].name.clone() } else { (i + 1).to_string() }),
             window_app: self.v_win.as_ref().map(|(id, _)| id.clone()),
             playing: self.dux_player().is_some_and(|p| p.status == crate::dash::mpris::Status::Playing),
             caps: self.locks.caps(),
             num: self.locks.num(),
         }
+    }
+
+    /// How many workspaces the bar knows (the pager's cells).
+    pub fn status_workspace_count(&self) -> usize {
+        self.bar_workspaces().len()
+    }
+
+    /// Switches to workspace `i` (a click on a pager cell).
+    pub fn status_switch_workspace(&mut self, i: usize) {
+        self.v_switch_workspace(i);
     }
 
     /// Latest system data (volume, network, battery, light/dark theme).

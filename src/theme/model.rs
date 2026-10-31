@@ -158,6 +158,8 @@ pub struct Theme {
     pub panel_theme: crate::panel::ThemePanel,
     /// The theme's logo and labels for the panels (`[branding]`); a package image is an absolute path inside the package.
     pub branding: crate::panel::branding::Branding,
+    /// The taskbar's typed appearance (`[taskbar]`); the default changes nothing.
+    pub taskbar: crate::panel::plasma_style::TaskbarStyle,
     /// The Control Center's settings (`decebal.json` `control_center`, which a theme's `[control_center]` fills): filled in by
     /// [`super::live::Source::build`] like `bar_position`, so a change reaches every program through the theme watcher.
     pub control_center: crate::controlcenter::settings::Settings,
@@ -665,6 +667,7 @@ impl Def {
             panel_workspaces: crate::config::Toggle::Word(crate::config::Word::Auto),
             panel_theme: crate::panel::ThemePanel::from_extra(&self.extra),
             branding: crate::panel::branding::Branding::from_extra(&self.extra),
+            taskbar: crate::panel::plasma_style::TaskbarStyle::from_extra(&self.extra),
             control_center: Default::default(),
             window_buttons_right: self
                 .extra

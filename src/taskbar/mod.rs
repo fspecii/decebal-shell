@@ -45,6 +45,8 @@ pub struct Metrics {
     pub btn_h: f32,
     pub gap: f32,
     pub icon: f32,
+    /// Explicit or thickness-derived Start icon size; absent keeps the original Windows glyph.
+    pub start_icon: Option<f32>,
     pub pad: f32,
     pub start_w: f32,
     pub search_box_w: f32,
@@ -59,6 +61,14 @@ pub struct Metrics {
     pub icon_min: f32,
     /// Corner radius of a button's plate.
     pub corner: f32,
+    /// How far a plate stays inside the strip across it, when the theme's `[taskbar]` sets one (else the style's own).
+    pub inset: Option<f32>,
+    /// Gap between the strip and the screen edge and its two ends (a floating panel); 0 = flush.
+    pub float_gap: f32,
+    /// The theme's `[taskbar] indicator`, `desktop` and `workspaces` choices (see [`crate::panel::plasma_style`]).
+    pub indicator: crate::panel::plasma_style::Indicator,
+    pub desktop_form: crate::panel::plasma_style::DesktopForm,
+    pub workspace_form: crate::panel::plasma_style::WorkspaceForm,
 }
 
 impl Metrics {
@@ -75,6 +85,7 @@ impl Metrics {
             btn_h: r(if classic { 44.0 } else { 40.0 }),
             gap: r(if classic { 0.0 } else { 4.0 }),
             icon: r(24.0),
+            start_icon: None,
             pad: r(12.0),
             start_w: r(if classic { 48.0 } else { 44.0 }),
             search_box_w: r(if classic { 236.0 } else { 184.0 }),
@@ -86,12 +97,53 @@ impl Metrics {
             label_min: r(64.0),
             icon_min: r(32.0),
             corner: 4.0 * s,
+            inset: None,
+            float_gap: 0.0,
+            indicator: Default::default(),
+            desktop_form: Default::default(),
+            workspace_form: Default::default(),
         }
     }
 
-    /// Takes the plate corner from the theme's radius (8 gives the Windows 11 default of 4).
+    /// Takes the plate corner from the theme's radius (8 gives the Windows 11 default of 4), then applies the theme's `[taskbar]`
+    /// style on top: only the values it sets change, so a theme without the section keeps the Windows numbers.
     pub fn themed(mut self, t: &crate::theme::Theme) -> Metrics {
         self.corner = (t.radius * 0.5).clamp(2.0, 8.0) * self.scale;
+        self.styled(&t.taskbar)
+    }
+
+    /// Applies a [`crate::panel::plasma_style::TaskbarStyle`] (pixels at scale 1.0) to these metrics.
+    pub fn styled(mut self, st: &crate::panel::plasma_style::TaskbarStyle) -> Metrics {
+        let sc = self.scale;
+        let r = move |v: f32| (v * sc).round();
+        if let Some(v) = st.thickness {
+            self.bar_h = r(v);
+            // the plate follows the strip unless an inset says otherwise
+            self.btn_h = self.bar_h;
+        }
+        if let Some(v) = st.icon_px() {
+            self.icon = r(v);
+            self.start_icon = Some(self.icon);
+        }
+        if let Some(v) = st.cell_width {
+            self.btn_w = r(v);
+            self.start_w = r(v);
+            self.search_btn_w = r(v);
+        }
+        if let Some(v) = st.gap {
+            self.gap = r(v);
+        }
+        if let Some(v) = st.inset {
+            self.inset = Some(r(v));
+            self.btn_h = (self.bar_h - 2.0 * r(v)).max(1.0);
+        }
+        if st.desktop == crate::panel::plasma_style::DesktopForm::Icon {
+            self.desktop_w = self.btn_w.max(self.bar_h);
+        }
+        self.float_gap = r(st.float_gap);
+        self.indicator = st.indicator;
+        self.desktop_form = st.desktop;
+        self.workspace_form = st.workspaces;
         self
     }
 }
@@ -220,12 +272,16 @@ pub struct Inputs<'a> {
     pub start: bool,
     pub clock: bool,
     pub desktop: bool,
+    /// Workspace cells the pager shows (0: the workspace applet is the renderer's own single cell).
+    pub pager: usize,
+    /// The strip runs down a side edge (its zones are laid out along y after the transposition).
+    pub vertical: bool,
 }
 
 /// Number of application-indicator cells that leave the native Start/search,
 /// clock, builtin tray and at least one task target unobscured. Overflow is a
 /// normal cell, selected by the shared status engine inside this same budget.
-pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: usize, builtins: usize, clock_text_w: f32) -> usize {
+pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: usize, builtins: usize, clock_text_w: f32, extra_w: f32) -> usize {
     let search_w = match search {
         WinSearch::None => 0.0,
         WinSearch::Button => m.search_btn_w,
@@ -239,11 +295,21 @@ pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: u
         + m.desktop_w
         + (clock_text_w + 2.0 * m.clock_pad).ceil()
         + m.gap.max(4.0 * m.scale)
-        + builtins as f32 * m.tray_w;
+        + builtins as f32 * m.tray_w
+        + extra_w;
     if !width.is_finite() {
         return 0;
     }
     ((width - fixed).max(0.0) / m.tray_w).floor().min(32.0) as usize
+}
+
+/// Width along the strip of one tray cell: the pager takes room for its cells, everything else one `tray_w`.
+fn tray_cell_w(m: &Metrics, kind: Tray, i: &Inputs) -> f32 {
+    if kind == Tray::Workspaces && i.pager > 0 {
+        (crate::panel::plasma_style::pager_extent(i.pager, m.icon, i.vertical) + 2.0 * (4.0 * m.scale).round()).max(m.tray_w)
+    } else {
+        m.tray_w
+    }
 }
 
 pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
@@ -259,8 +325,9 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
         .iter()
         .rev()
         .map(|&k| {
-            tx -= m.tray_w;
-            (k, Rect { x: tx, y: 0.0, w: m.tray_w, h })
+            let w = tray_cell_w(m, k, i);
+            tx -= w;
+            (k, Rect { x: tx, y: 0.0, w, h })
         })
         .collect();
     tray.reverse();
@@ -384,12 +451,26 @@ mod tests {
                 for scale in [0.75, 1.0, 2.0] {
                     let m = Metrics::new(scale, align);
                     for width in [640.0, 1280.0, 3440.0] {
-                        let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale);
+                        let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale, 0.0);
                         let mut kinds = vec![Tray::Audio, Tray::Network, Tray::Battery, Tray::Control];
                         kinds.extend((0..capacity).map(|key| Tray::Indicator(key as u64)));
                         let l = layout(
                             &m,
-                            &Inputs { width, align, labels: WinLabels::Never, search, buttons: 8, tray: &kinds, clock_text_w: 72.0 * scale, scroll: 0.0, start: true, clock: true, desktop: true },
+                            &Inputs {
+                                width,
+                                align,
+                                labels: WinLabels::Never,
+                                search,
+                                buttons: 8,
+                                tray: &kinds,
+                                clock_text_w: 72.0 * scale,
+                                scroll: 0.0,
+                                start: true,
+                                clock: true,
+                                desktop: true,
+                                pager: 0,
+                                vertical: false,
+                            },
                         );
                         if capacity > 0 {
                             let left = l.tray.first().unwrap().1.x;
@@ -402,7 +483,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(indicator_capacity(&Metrics::new(1.0, WinAlign::Center), f32::NAN, WinSearch::None, 0, 0, 0.0), 0);
+        assert_eq!(indicator_capacity(&Metrics::new(1.0, WinAlign::Center), f32::NAN, WinSearch::None, 0, 0, 0.0, 0.0), 0);
     }
 
     fn m() -> Metrics {
@@ -422,6 +503,8 @@ mod tests {
             start: true,
             clock: true,
             desktop: true,
+            pager: 0,
+            vertical: false,
         }
     }
 
@@ -437,6 +520,19 @@ mod tests {
         assert!(Metrics::new(1.0, WinAlign::Left).classic && !m().classic);
         assert_eq!(Metrics::new(f32::NAN, WinAlign::Center).scale, 1.0);
         assert_eq!(Metrics::new(50.0, WinAlign::Center).scale, 4.0);
+    }
+
+    #[test]
+    fn start_icon_size_does_not_depend_on_an_unrelated_plate_inset() {
+        use crate::panel::plasma_style::TaskbarStyle;
+        let original = Metrics::new(1.0, WinAlign::Center);
+        assert_eq!(original.start_icon, None, "the Windows glyph keeps its existing size");
+        let explicit = original.styled(&TaskbarStyle { icon: Some(32.0), ..Default::default() });
+        assert_eq!(explicit.inset, None);
+        assert_eq!((explicit.start_icon, explicit.icon), (Some(32.0), 32.0));
+        let derived = Metrics::new(2.0, WinAlign::Center).styled(&TaskbarStyle { thickness: Some(44.0), ..Default::default() });
+        assert_eq!(derived.start_icon, Some(derived.icon));
+        assert_eq!(derived.inset, None);
     }
 
     #[test]

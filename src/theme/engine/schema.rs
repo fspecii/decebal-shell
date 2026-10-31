@@ -183,6 +183,15 @@ pub const FIELDS: &[Field] = &[
     Field { path: "dock.align", ty: Ty::Choice(&["center", "left"]), desc: "Windows taskbar icon alignment", status: Wired },
     Field { path: "dock.roundness", ty: Ty::Num(0.0, 1.0), desc: "0 square .. 1 pill", status: Wired },
     Field { path: "dock.magnification", ty: Ty::Num(1.0, 2.5), desc: "hover magnification of the macOS dock", status: Wired },
+    Field { path: "taskbar.thickness", ty: Ty::Int(24, 96), desc: "thickness of the Windows-style taskbar strip in px at scale 1 (height of a top/bottom strip, width of a side strip); absent = the renderer's own", status: Wired },
+    Field { path: "taskbar.icon_size", ty: Ty::Int(12, 64), desc: "drawn size of task and Start icons in px; absent with a thickness = thickness minus two paddings (Plasma's rule)", status: Wired },
+    Field { path: "taskbar.cell_width", ty: Ty::Int(24, 120), desc: "width of a task or Start cell along the strip", status: Wired },
+    Field { path: "taskbar.gap", ty: Ty::Int(0, 16), desc: "space between cells along the strip", status: Wired },
+    Field { path: "taskbar.inset", ty: Ty::Int(0, 16), desc: "how far a cell's plate stays inside the strip across it (0: the cell fills the strip)", status: Wired },
+    Field { path: "taskbar.float_gap", ty: Ty::Int(0, 32), desc: "distance between the strip and the screen edge and both its ends, a floating panel (0: flush)", status: Wired },
+    Field { path: "taskbar.indicator", ty: Ty::Choice(&["default", "frame"]), desc: "task state marking: the renderer's own, or a tinted cell with a strong line on the side facing the desktop (focus, hover)", status: Wired },
+    Field { path: "taskbar.desktop", ty: Ty::Choice(&["sliver", "icon"]), desc: "show-desktop applet: a thin sliver or a square icon cell", status: Wired },
+    Field { path: "taskbar.workspaces", ty: Ty::Choice(&["name", "cells"]), desc: "workspace applet: the current workspace's name, or one miniature cell per workspace", status: Wired },
     Field { path: "control_center.enabled", ty: Ty::Bool, desc: "the Control Center (quick settings): its button in the menu bar, pill bar and taskbar, `decutil control-center` and the hot-corner action (default true: every theme has it)", status: Wired },
     Field { path: "control_center.position", ty: Ty::Choice(&crate::controlcenter::settings::POSITION_NAMES), desc: "corner the panel opens in when summoned by a key or hot corner; `auto` = beside the bar's own button (under the menu bar, above the taskbar, next to the pill bar)", status: Wired },
     Field { path: "control_center.style", ty: Ty::Choice(&crate::controlcenter::settings::STYLE_NAMES), desc: "`card` (big rounded tiles, macOS / Caelestia), `fluent` (the theme's radius as it is, Windows 11 flyout), `dux`, `gnome` (GNOME Shell 51.1 quick settings: pill toggles, slider rows, icon-button row; needs a release that knows it) or `auto` (fluent under the Windows taskbar)", status: Wired },
@@ -273,7 +282,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "taskbar", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

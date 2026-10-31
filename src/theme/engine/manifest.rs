@@ -237,7 +237,8 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"];
+const SECTIONS: &[&str] =
+    &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "taskbar", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),

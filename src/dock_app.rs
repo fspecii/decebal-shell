@@ -168,7 +168,8 @@ impl DockApp {
         let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], settings);
         let mut app = Self::new(dock).with_scale(1.0);
         let th = crate::theme::th();
-        let insets = th.bar_insets();
+        // a bar that is not shown (a taskbar theme's `enabled = "auto"`) takes no room from the strip's edge
+        let insets = if config::shell_settings().bar_visible(app.dock.settings.style) { th.bar_insets() } else { crate::theme::Insets::default() };
         let mut desk = Pixmap::new(width, height).ok_or("dock preview canvas")?;
         let (w, h, x, y) = if let Some(win) = app.win.as_mut() {
             win.time = "14:07".into();
@@ -189,7 +190,7 @@ impl DockApp {
                     windows: (i > 0) as usize,
                 })
                 .collect();
-            let bar = win.m.bar_h.ceil() as u32;
+            let bar = (win.m.bar_h + win.m.float_gap).ceil() as u32;
             match app.win_vertical_edge() {
                 Some(true) => (bar, height, width as i32 - bar as i32 - insets.right, 0),
                 Some(false) => (bar, height, insets.left, 0),
@@ -1608,6 +1609,24 @@ mod tests {
             let (x, y) = (r.app.surface.0 as f32 / 2.0, r.app.surface.1 as f32 / 2.0);
             r.app.pointer_button(x, y, Button::Left);
             assert!(r.app.win.as_ref().unwrap().kb.is_none());
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn keyboard_pager_opens_the_list_instead_of_choosing_its_middle_workspace() {
+        use crate::menubar::Tray;
+        use crate::panel::{plasma_style::WorkspaceForm, Edge};
+        use crate::taskbar::Hit;
+        for edge in Edge::ALL {
+            let mut r = edge_rig(&format!("kb-pager-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            r.app.win.as_mut().unwrap().m.workspace_form = WorkspaceForm::Cells;
+            let items = r.app.win_focus_items();
+            let pager = items.iter().position(|h| *h == Hit::Tray(Tray::Workspaces)).expect("workspace applet");
+            r.app.win.as_mut().unwrap().kb = Some(pager);
+            assert!(r.app.nav_key(NavKey::Enter));
+            assert_eq!(r.app.win.as_ref().unwrap().status.status_open_kind(), Some(Tray::Workspaces), "{edge:?}: keyboard users can navigate the complete workspace list");
+            assert!(r.app.key(Key::Escape));
         }
         crate::menubar::DecBar::status_test_applets(None);
     }
