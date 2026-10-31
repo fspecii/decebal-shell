@@ -362,23 +362,10 @@ impl Painter<'_> {
         String::new()
     }
 
-    /// Greedy word wrap.
+    /// Greedy word wrap (`\n` starts a new line; an empty paragraph stays an empty line). A word wider than `max` on
+    /// its own is split (see [`long_cut`]): no character is dropped or elided, and the text size is never reduced.
     pub fn wrap(&self, t: &str, max: f32, px: f32, w: Weight) -> Vec<String> {
-        let mut lines = Vec::new();
-        for para in t.split('\n') {
-            let mut cur = String::new();
-            for word in para.split_whitespace() {
-                let cand = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
-                if !cur.is_empty() && self.measure(&cand, px, w) > max {
-                    lines.push(std::mem::take(&mut cur));
-                    cur = word.to_string();
-                } else {
-                    cur = cand;
-                }
-            }
-            lines.push(cur);
-        }
-        lines
+        wrap_with(t, &|s: &str| self.measure(s, px, w) <= max)
     }
 }
 
@@ -1168,35 +1155,94 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
     fr
 }
 
-/// Greedy word wrap of the page title in its own font; a single word wider than `max` is split by characters.
+/// Greedy word wrap of the page title in its own font; a single word wider than `max` is split (see [`long_cut`]).
 fn wrap_title(p: &Painter, title: &str, max: f32, px: f32) -> Vec<String> {
-    let fits = |t: &str| p.measure_as(Role::Title, t, px, Weight::SemiBold) <= max;
-    let mut lines: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for word in title.split_whitespace() {
-        let cand = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
-        if fits(&cand) {
-            cur = cand;
-            continue;
-        }
-        if !cur.is_empty() {
-            lines.push(std::mem::take(&mut cur));
-        }
-        for ch in word.chars() {
-            let mut cand = cur.clone();
-            cand.push(ch);
-            if !cur.is_empty() && !fits(&cand) {
-                lines.push(std::mem::take(&mut cur));
-                cur.push(ch);
-            } else {
-                cur = cand;
-            }
-        }
-    }
-    if !cur.is_empty() || lines.is_empty() {
-        lines.push(cur);
+    let mut lines = wrap_with(title.trim(), &|t: &str| p.measure_as(Role::Title, t, px, Weight::SemiBold) <= max);
+    lines.retain(|l| !l.is_empty());
+    if lines.is_empty() {
+        lines.push(String::new());
     }
     lines
+}
+
+/// Greedy wrap by `fits` (does a line fit?). Paragraphs split at `\n`, words at whitespace; a word that does not fit
+/// a line of its own is cut into pieces by [`long_cut`]. Concatenating the pieces gives back every word unchanged.
+pub(crate) fn wrap_with(t: &str, fits: &dyn Fn(&str) -> bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    for para in t.split('\n') {
+        let start = lines.len();
+        let mut cur = String::new();
+        for word in para.split_whitespace() {
+            let cand = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
+            if fits(&cand) {
+                cur = cand;
+                continue;
+            }
+            if !cur.is_empty() {
+                lines.push(std::mem::take(&mut cur));
+            }
+            let mut rest = word;
+            while !rest.is_empty() && !fits(rest) {
+                let cut = long_cut(rest, fits);
+                lines.push(rest[..cut].to_string());
+                rest = &rest[cut..];
+            }
+            cur = rest.to_string();
+        }
+        // an empty paragraph is an empty line; a split that used up the last word adds none
+        if !cur.is_empty() || lines.len() == start {
+            lines.push(cur);
+        }
+    }
+    lines
+}
+
+/// Characters that belong to the cluster before them: combining marks, variation selectors, zero-width joiners (and
+/// the character after a joiner), emoji modifiers. Without a segmentation table this keeps the common cases intact.
+fn joins_previous(c: char, prev: Option<char>) -> bool {
+    prev == Some('\u{200D}')
+        || matches!(c as u32,
+            0x0300..=0x036F | 0x0483..=0x0489 | 0x0591..=0x05BD | 0x0610..=0x061A | 0x064B..=0x065F | 0x0670
+            | 0x0900..=0x0903 | 0x093A..=0x094F | 0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E
+            | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x200C | 0x200D | 0x20D0..=0x20FF | 0x3099 | 0x309A
+            | 0xFE00..=0xFE0F | 0xFE20..=0xFE2F | 0x1F3FB..=0x1F3FF | 0xE0100..=0xE01EF)
+}
+
+/// Byte offset at which to cut `t`, a word that does not fit a line: the longest prefix of whole clusters that fits
+/// (binary search: O(log n) measurements), moved back to just after the last `-`, `/`, `.`, `_`, `?`, `&`, `=` or `:`
+/// in it, if any (compound words and URLs break there: "four-" / "finger", not "four-finge" / "r"). At least one cluster: a single glyph wider than
+/// the column is put on a line of its own (it overflows; nothing narrower exists to draw) rather than dropped.
+fn long_cut(t: &str, fits: &dyn Fn(&str) -> bool) -> usize {
+    let mut ends: Vec<usize> = Vec::new();
+    let mut prev = None;
+    for (i, c) in t.char_indices() {
+        if !ends.is_empty() && joins_previous(c, prev) {
+            *ends.last_mut().expect("cluster") = i + c.len_utf8();
+        } else {
+            ends.push(i + c.len_utf8());
+        }
+        prev = Some(c);
+    }
+    let (mut lo, mut hi) = (0usize, ends.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        if fits(&t[..ends[mid - 1]]) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    let end = ends[lo.max(1) - 1];
+    if end == t.len() {
+        return end;
+    }
+    t[..end]
+        .char_indices()
+        .rev()
+        .find(|(_, c)| matches!(c, '-' | '/' | '.' | '_' | '?' | '&' | '=' | ':'))
+        .map(|(i, c)| i + c.len_utf8())
+        .filter(|&b| b > 0 && b < end && ends.contains(&b))
+        .unwrap_or(end)
 }
 
 /// Flat page navigation (see [`Item::Nav`]): underlined tabs or chips, wrapped onto as many lines as the width needs so every
@@ -1313,6 +1359,96 @@ pub fn part_at(parts: &[Rect], x: f32, y: f32) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Text measured as 5.5 px per character at 10 px (the painter without fonts): deterministic widths.
+    fn plain() -> Painter<'static> {
+        Painter { fonts: None, s: 1.0 }
+    }
+
+    fn joined(lines: &[String]) -> String {
+        lines.iter().flat_map(|l| l.split_whitespace()).collect::<Vec<_>>().concat()
+    }
+
+    #[test]
+    fn wrapped_lines_never_exceed_the_width_and_keep_every_character() {
+        let p = plain();
+        // the 640x540 200 % case: "window-manager" alone was wider than the column and ran past the card
+        for (text, max) in [("Three- and four-finger trackpad swipes run window-manager actions", 40.0), ("https://example.org/a/very/long/path?x=1&y=2", 60.0)] {
+            let lines = p.wrap(text, max, 10.0, Weight::Regular);
+            for l in &lines {
+                assert!(p.measure(l, 10.0, Weight::Regular) <= max, "{l:?} is wider than {max} in {lines:?}");
+            }
+            assert_eq!(joined(&lines), text.split_whitespace().collect::<Vec<_>>().concat(), "no character lost");
+        }
+    }
+
+    #[test]
+    fn long_tokens_break_at_punctuation_or_whole_clusters() {
+        let p = plain();
+        assert_eq!(p.wrap("window-manager", 40.0, 10.0, Weight::Regular), ["window-", "manager"]);
+        // a hyphen early in the fitting part still wins over cutting a word
+        assert_eq!(p.wrap("four-finger trackpad", 56.0, 10.0, Weight::Regular), ["four-", "finger", "trackpad"]);
+        let url = p.wrap("https://example.org/a/very/long/path?x=1&y=2", 60.0, 10.0, Weight::Regular);
+        assert!(url.iter().take(url.len() - 1).all(|l| l.ends_with(['/', '.', '?', '&', '=', ':', '-'])), "{url:?}");
+        // CJK has no spaces: any character boundary is allowed
+        let cjk = p.wrap("设置窗口管理器手势", 30.0, 10.0, Weight::Regular);
+        assert_eq!(cjk, ["设置窗口管", "理器手势"]);
+        // combining marks, joiners and modifiers stay with their base
+        let acc = "e\u{301}e\u{301}e\u{301}e\u{301}";
+        let lines = p.wrap(acc, 23.0, 10.0, Weight::Regular);
+        assert_eq!(lines.concat(), acc);
+        assert!(lines.iter().all(|l| !l.starts_with('\u{301}')), "{lines:?}");
+        let family = "\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}x";
+        let lines = p.wrap(family, 6.0, 10.0, Weight::Regular);
+        assert_eq!(lines, ["\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}", "x"], "a joined sequence is one cluster");
+    }
+
+    #[test]
+    fn blank_lines_normal_words_and_a_glyph_wider_than_the_column() {
+        let p = plain();
+        assert_eq!(p.wrap("a\n\nb", 100.0, 10.0, Weight::Regular), ["a", "", "b"]);
+        assert_eq!(p.wrap("one two three", 100.0, 10.0, Weight::Regular), ["one two three"]);
+        assert_eq!(p.wrap("one two three", 40.0, 10.0, Weight::Regular), ["one two", "three"], "ordinary wrapping unchanged");
+        // nothing narrower than one glyph exists: each goes on a line of its own (it overflows), none is dropped
+        assert_eq!(p.wrap("ab", 3.0, 10.0, Weight::Regular), ["a", "b"]);
+        assert_eq!(p.wrap("", 50.0, 10.0, Weight::Regular), [""]);
+    }
+
+    #[test]
+    fn a_huge_token_costs_logarithmic_measurements_per_line() {
+        let calls = std::cell::Cell::new(0usize);
+        let token = "x".repeat(20_000);
+        let fits = |t: &str| {
+            calls.set(calls.get() + 1);
+            t.chars().count() <= 50
+        };
+        let lines = wrap_with(&token, &fits);
+        assert_eq!(lines.len(), 400);
+        assert_eq!(lines.concat(), token);
+        assert!(calls.get() <= 400 * 18, "{} measurements", calls.get());
+    }
+
+    #[test]
+    fn titles_split_long_words_the_same_way() {
+        let p = plain();
+        let lines = wrap_title(&p, "Swipe-gestures-and-bindings", 60.0, 10.0);
+        assert_eq!(lines.concat(), "Swipe-gestures-and-bindings");
+        assert!(lines.len() > 1);
+    }
+
+    #[test]
+    fn with_real_fonts_the_swipe_detail_fits_a_narrow_200_percent_column() {
+        let Some(mut fonts) = crate::text::Fonts::load() else { return };
+        let p = Painter { fonts: Some(&mut fonts), s: 2.0 };
+        let text = "Three- and four-finger trackpad swipes run window-manager actions";
+        let px = p.u(11.0);
+        let max = p.measure("window-man", px, Weight::Regular); // narrower than "window-manager"
+        let lines = p.wrap(text, max, px, Weight::Regular);
+        for l in &lines {
+            assert!(p.measure(l, px, Weight::Regular) <= max, "{l:?} in {lines:?}");
+        }
+        assert_eq!(joined(&lines), text.split_whitespace().collect::<Vec<_>>().concat());
+    }
     use super::*;
 
     #[test]

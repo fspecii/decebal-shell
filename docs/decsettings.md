@@ -248,3 +248,17 @@ other control (schema range check, `rdwmctl check-config`, the persistence worke
   config.toml, kept exactly as written; edit them in Config & Presets, whose overview shows the default as TOML.
 * A schema entry says rdwm can parse the keys, not that the touchpad, driver and session deliver swipe events.
 * Search: "swipe", "gesture", "trackpad" lead to the section.
+
+## Small windows and large text: wrapping long words
+Explanations, row details, page context and titles wrap greedily at spaces (`Painter::wrap`, `wrap_title`). A
+word wider than the column on its own (`window-manager` at 640x540 with 200 % interface and 200 % text) is split
+instead of running past its card (`ui::long_cut`): the widest prefix of whole characters that fits, found by binary
+search (a few measurements per line, also for very long input), moved back to just after a `-`, `/`, `.`, `_`, `?`,
+`&`, `=` or `:` when the fitting part has one (`four-` / `finger`, URLs at their separators). Combining marks,
+variation selectors, emoji modifiers and zero-width-joiner sequences stay with their base character; CJK text
+breaks between characters. No character is dropped or elided and the text size is never reduced.
+* Limits: without a full Unicode segmentation table, clusters are recognised for the common combining ranges only;
+  a single character wider than the column is put on a line of its own and still overflows it (nothing narrower
+  exists to draw); runs of spaces inside a line collapse to one, as before. Wrapping does not hyphenate words.
+* Keyboard focus: when rows above the focused control load later (the Keyboard & Input data arrives
+  asynchronously), the view does not follow the control; Tab again reveals it.
