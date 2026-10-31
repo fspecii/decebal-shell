@@ -608,6 +608,26 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
+/// Lifecycle calls may wait for another process's claim/commit lock. Keep them on the
+/// existing ordered persistence worker, including calls made after a choice was saved.
+fn follow_action(m: &mut Model, stop: bool) {
+    let path = m.paths.shell_json();
+    lifecycle_task(m, move || if stop { super::follow::stop(&path).map(Some) } else { Ok(super::follow::request(&path)) });
+}
+
+fn lifecycle_task(m: &mut Model, run: impl FnOnce() -> Result<Option<String>, String> + Send + 'static) {
+    m.run_task(
+        "asset-lifecycle",
+        Vec::new(),
+        move || run().map(|message| message.map_or(serde_json::Value::Null, serde_json::Value::String)),
+        |m, result| match result {
+            Ok(serde_json::Value::String(message)) => m.say(message, false),
+            Ok(_) => {}
+            Err(error) => m.say(format!("Asset job: {error}"), true),
+        },
+    );
+}
+
 /// `ic:cursor` and `ic:follow-theme`; `true` when handled.
 pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
     // A choice changes the value and who owns it (`asset_packs`) in one atomic write on the persistence worker.
@@ -616,9 +636,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
         let follow = slots.iter().any(|(_, c)| *c == Choice::Theme);
         let after: Option<crate::settings::model::AfterSave> = follow.then(|| {
             Box::new(|m: &mut Model| {
-                if let Some(n) = super::follow::request(&m.paths.shell_json()) {
-                    m.say(n, false);
-                }
+                follow_action(m, false);
             }) as crate::settings::model::AfterSave
         });
         m.edit_shell_doc(
@@ -671,16 +689,20 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             let b = *b;
             let after: crate::settings::model::AfterSave = Box::new(move |m: &mut Model| {
                 if b {
-                    if let Some(n) = super::follow::request(&m.paths.shell_json()) {
-                        m.say(n, false);
-                    }
+                    follow_action(m, false);
                 }
             });
             m.edit_shell_doc("asset-downloads", move |doc| policy::set_downloads(doc, b), format!("Download matching packs: {}", if b { "on" } else { "off" }), Some(after));
             return true;
         }
-        (["ic", "follow-stop"], CtlVal::Click) => super::follow::stop(&m.paths.shell_json()),
-        (["ic", "follow-retry"], CtlVal::Click) => super::follow::request(&m.paths.shell_json()).ok_or_else(|| "nothing to download (downloads off, or the packs are installed)".to_string()),
+        (["ic", "follow-stop"], CtlVal::Click) => {
+            follow_action(m, true);
+            return true;
+        }
+        (["ic", "follow-retry"], CtlVal::Click) => {
+            follow_action(m, false);
+            return true;
+        }
         (["ic", "follow-theme"], CtlVal::Click) => {
             choose(m, vec![(Provides::Icons, Choice::Theme), (Provides::Cursors, Choice::Theme)], "Icons and cursor follow the theme".into());
             return true;
@@ -707,6 +729,30 @@ mod tests {
 
     fn ctl<'a>(items: &'a [Item], id: &str) -> Option<&'a Ctl> {
         items.iter().find_map(|i| if let Item::Card(rows) = i { rows.iter().flat_map(|r| r.ctls.iter()).find(|c| c.id == id) } else { None })
+    }
+
+    #[test]
+    fn lifecycle_lock_wait_does_not_block_settings_input() {
+        use std::sync::{mpsc, Arc};
+        use std::time::Duration;
+        let (mut m, _) = model_with("");
+        m.use_worker_with_sync_hook(Arc::new(|_| Ok(())));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        lifecycle_task(&mut m, move || {
+            entered_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
+            Ok(Some("Asset worker finished".into()))
+        });
+        // Receiving this before releasing the simulated lock proves dispatch returned
+        // while the worker is still blocked; no wall-clock UI timing threshold needed.
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(m.saving());
+        m.apply("j:dock:appSpacing", CtlVal::Num(6.0));
+        assert_eq!(m.dock["appSpacing"], 6.0);
+        release_tx.send(()).unwrap();
+        m.settle();
+        assert!(!m.saving());
     }
 
     #[test]
