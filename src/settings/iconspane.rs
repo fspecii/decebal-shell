@@ -81,7 +81,8 @@ fn preview_theme(hl: &str, themes: &[ThemeInfo], desktop: Option<&str>) -> Strin
 }
 
 pub fn items(m: &Model) -> Vec<Item> {
-    let cfg = IconConfig::read(&cfg_path(m));
+    // while a change is still being saved, the shown document (with it) rather than the file without it
+    let cfg = if m.saving() { IconConfig::from_json(&m.shell) } else { IconConfig::read(&cfg_path(m)) };
     let themes = themes();
     let st = live::status();
     let cur = configured(&cfg, &themes);

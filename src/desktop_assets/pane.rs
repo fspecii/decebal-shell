@@ -100,7 +100,8 @@ fn owner_detail(o: &Owner) -> &'static str {
 
 pub fn items(m: &Model) -> Vec<Item> {
     let path = m.paths.shell_json();
-    let doc = crate::settings::io::json_load(&path);
+    // while a change is still being saved, the shown document (with it) rather than the file without it
+    let doc = if m.saving() { m.shell.clone() } else { crate::settings::io::json_load(&path) };
     let root = super::default_root();
     let roots = super::roots_with(&root);
     let mut out = Vec::new();

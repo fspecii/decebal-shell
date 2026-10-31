@@ -848,7 +848,30 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         check("editor validation: the hand-saved file is kept", s.config.read_text() == theirs, s.config.read_text())
         return s
 
-    for name, fn in [("theme-external", theme_external), ("launcher", launcher), ("editor-validation", editor_validation), ("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
+    # ---- an asset choice: value and ownership in one write, an editor's save meanwhile kept
+    def asset_choice():
+        s = Tracked("asset-choice", pane="icons", extra_files={"decebal/decebal.json": _json.dumps({"theme": {"name": "nord"}, "system": {"enabled": False}}) + "\n"})
+        app = find_app(s.p.pid)
+        menu = node(app, "ctl:ic:cursor/menu")
+        names = [menu.get_child_at_index(i).get_name() for i in range(menu.get_child_count())]
+        pick = next((i for i, n in enumerate(names) if n and n not in ("Not set",) and "not installed" not in n), None)
+        if pick is None:
+            check("asset choice: no cursor theme installed on this machine to choose (skipped)", True, names)
+            return s
+        shell = s.dir / "decebal" / "decebal.json"
+        t, t0 = hold(3.0)
+        tm = time.time()
+        r = Atspi.Selection.select_child(menu, pick)
+        lat["asset_choice_reply"] = round((time.time() - tm) * 1000, 1)
+        check("asset choice: answers while the disk is held", r is True and lat["asset_choice_reply"] < 1000 and held_for(t0, 3.0), [r, lat["asset_choice_reply"]])
+        time.sleep(0.4)
+        external_write(shell, _json.dumps({"theme": {"name": "nord"}, "system": {"enabled": False}, "editor": 1}) + "\n")
+        wait(lambda: not gate.exists() and "asset_packs" in _json.loads(shell.read_text()), "choice committed", 15)
+        doc = _json.loads(shell.read_text())
+        check("asset choice: value and its ownership committed together, their key kept", doc.get("system", {}).get("cursorTheme") == names[pick] and doc["asset_packs"]["cursors"] == {"user": True} and doc.get("editor") == 1, doc)
+        return s
+
+    for name, fn in [("asset-choice", asset_choice), ("theme-external", theme_external), ("launcher", launcher), ("editor-validation", editor_validation), ("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
         scenario(name, fn)
 
 if __name__ == "__main__":

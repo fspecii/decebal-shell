@@ -156,6 +156,18 @@ after merge, as agreed).
 * System pane actions (commands plus session file) report when they finish, as before ("Saved" or the error); the
   control shows the new state at once.
 
+## Asset packs (root 423c869)
+
+The icon and cursor choice and its ownership record (`asset_packs`, `desktop_assets::policy`) are one atomic write:
+`Model::edit_shell_doc` applies `policy::choose` to the shown `decebal.json` at once and, on the worker, to the file
+as it is at commit (`io::json_update_doc`, compare-and-swap; a save made meanwhile is read again and the change
+applied on top). Cursor choice/reset, "follow the theme" (both slots in one write), the icons pane's theme pick,
+size, tint, fallback and reset, and the System pane's cursor field go through it; the icon cache poll and apply
+requests are quiet tasks. While a change is pending the two panes show the shown document instead of the file.
+Native: a cursor picked through AT-SPI answers in 118 ms while held; an editor's save of another key during the
+held fsync is kept; the file then holds the cursor and `{"user": true}` together (66/66 checks, binary `b2be977f…`,
+`full-candidate4`).
+
 ## Native evidence, concurrent cases (candidate `ffd8b40`, binary `8d6e25f8…`, 2026-10-31)
 
 All 64 checks pass (`~/.cache/decebal-settings-io-evidence/full-candidate3/results.json`), the 54 below plus: a
