@@ -584,7 +584,13 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         try:
             fn()
         except Exception as e:  # noqa: BLE001 - one family failing must not hide the others
-            check(f"{name}: aborted: {type(e).__name__}: {e}", False)
+            # where each thread waits (a persistence thread in a real fsync means the host disk stalled, not the app)
+            stuck = {}
+            for st in started:
+                if st.p.poll() is None:
+                    stuck[st.name] = [t for t in threads(st.p.pid) if t["comm"] in ("decset-persist",) or t["tid"] == st.p.pid]
+            results.setdefault("family_threads_on_failure", {})[name] = stuck
+            check(f"{name}: aborted: {type(e).__name__}: {e}", False, stuck)
         finally:
             gate.unlink(missing_ok=True)
             while started:

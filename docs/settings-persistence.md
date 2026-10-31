@@ -156,6 +156,20 @@ after merge, as agreed).
 * System pane actions (commands plus session file) report when they finish, as before ("Saved" or the error); the
   control shows the new state at once.
 
+## Third review round: held races (2146cb5)
+
+* A write returns the identity of the file it put in place (from the open temp file, before the rename); rollback
+  and the worker's own-write bookkeeping use it (and a per-thread commit log), never a later look at the path.
+* Temp and scratch files: `io::create_owned` (create_new; a collision takes the next number; only our files are
+  removed). `config::write_setting` is one protocol update (read, merge, commit under the lock).
+* Returning to Notifications/Privacy/Accessibility does not re-read a file whose save of ours is pending; palette
+  save uses explicit theme-intent generations; Revert keeps cursor, selection and scroll.
+* Fail-before/pass-after: the nine `race_*` regressions, identical code, on c9ef5e7 (+ the test-only after-commit
+  hook, `race-proofs/old-tree-hook-only.diff`) 0/9, on 2146cb5 9/9, each old failure being its race
+  (`~/.cache/decebal-settings-io-evidence/race-proofs/`). Unit suite 998/998. Native 66/66 on binary `8f799c84…`
+  (`full-candidate5b`); an earlier run on the same binary at load average ~13 from other builds had the editor save
+  and Restore time out after the gate opened (the following fsync took over 15 s); re-runs pass.
+
 ## Asset packs (root 423c869)
 
 The icon and cursor choice and its ownership record (`asset_packs`, `desktop_assets::policy`) are one atomic write:
