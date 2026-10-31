@@ -102,4 +102,4 @@ Files outside `src/settings/io*` / `persist.rs` changed narrowly: `model.rs` (pe
 `wallhaven/cli.rs` (headless inline writes), `tomlcfg.rs` (`array_move` fix), `app/a11y.rs` (toast `Busy` state and
 one test), `Cargo.toml` (`settings-io-fault` feature). Pre-existing, unrelated: clippy lints in `a11y/atspi.rs` and
 `a11y/bridge.rs`; `theme::engine::cli::tests::the_whole_workflow_from_new_to_apply_and_undo` fails in this private
-environment on the foundation tree as well.
+environment on the baseline (7f4faf0 + fault hook only) exactly as on the candidate (`cli.rs:383`, `validate`).
