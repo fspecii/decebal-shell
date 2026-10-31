@@ -1085,26 +1085,21 @@ fn post(shell_json: &Path, intent: Intent) {
     OUTBOX_CHANGED.notify_all();
 }
 
-/// A short-lived process (a CLI theme change) must not exit with requests still in its outbox: drain them here, waiting at most
-/// `limit` for a batch the dispatcher is writing.
+/// Give the dispatcher up to `limit` to persist queued requests before a short-lived process exits.
+/// Never perform queue I/O here: taking a pending batch onto the exit thread could wait forever on a file lock.
 pub fn flush_outbox(limit: Duration) {
+    wait_outbox(&OUTBOX, &OUTBOX_CHANGED, limit);
+}
+
+fn wait_outbox(outbox: &std::sync::Mutex<Outbox>, changed: &std::sync::Condvar, limit: Duration) {
     let deadline = std::time::Instant::now() + limit;
-    let mut o = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
-    loop {
-        if o.busy {
-            let left = deadline.saturating_duration_since(std::time::Instant::now());
-            if left.is_zero() {
-                return;
-            }
-            o = OUTBOX_CHANGED.wait_timeout(o, left).unwrap_or_else(|e| e.into_inner()).0;
-        } else if !o.slots.is_empty() {
-            let batch = std::mem::take(&mut o.slots);
-            drop(o);
-            drain(batch);
-            o = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
-        } else {
+    let mut o = outbox.lock().unwrap_or_else(|e| e.into_inner());
+    while o.busy || !o.slots.is_empty() {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
             return;
         }
+        o = changed.wait_timeout(o, left).unwrap_or_else(|e| e.into_inner()).0;
     }
 }
 
@@ -1675,6 +1670,18 @@ mod tests {
         }
         let (e, _) = super::testutil::env(&d, &[]);
         assert_eq!(Queue::load(&e, &d.join("decebal.json")).pending.map(|t| t.intent), Some(Intent::Full), "one full producer among eight: the queue keeps full");
+    }
+
+    #[test]
+    fn exit_wait_never_takes_unpersisted_work_onto_the_exit_thread() {
+        let outbox = std::sync::Mutex::new(Outbox::default());
+        let changed = std::sync::Condvar::new();
+        let path = Path::new("/not-a-real-config/decebal.json");
+        outbox.lock().unwrap().post(path, Intent::Full);
+        let start = std::time::Instant::now();
+        wait_outbox(&outbox, &changed, Duration::from_millis(10));
+        assert!(start.elapsed() < Duration::from_secs(1));
+        assert_eq!(outbox.lock().unwrap().slots.get(path), Some(&Intent::Full), "exit only waits; persistence remains dispatcher-owned");
     }
 
     /// The outbox coalesces per configuration and never loses a full request, whatever the posting order.
