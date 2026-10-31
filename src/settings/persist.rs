@@ -178,6 +178,34 @@ pub enum ThemeRequest {
     Widgets { selection: Selection, reset_colors: bool, choice: WidgetChoice },
 }
 
+impl ThemeRequest {
+    /// The selection the engine will store for this request, by the same rules its planner uses (canonical id,
+    /// the mode a `name-light`/`name-dark` id implies, and a complete design restoring its own colours). The window
+    /// shows it while the job is pending and later changes build on it. Pinned to the planner by a test.
+    pub fn planned_selection(&self, src: &Source) -> Selection {
+        let (name, base, reset_colors) = match self {
+            ThemeRequest::Selection(s) => (s.name.as_str(), s, false),
+            ThemeRequest::Package { name, base } => (name.as_str(), base, true),
+            ThemeRequest::Widgets { selection, reset_colors, .. } => (selection.name.as_str(), selection, *reset_colors),
+        };
+        let mut sel = base.clone();
+        sel.name = name.to_string();
+        let found = src.find(name);
+        if let Some((id, _)) = &found {
+            sel.name = id.clone();
+        }
+        if reset_colors {
+            sel.palette = None;
+            sel.accent = None;
+            sel.dynamic = None;
+        }
+        if let Some((_, Some(mode))) = found {
+            sel.mode = mode;
+        }
+        sel
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ThemeJob {
     pub src: Source,
@@ -202,6 +230,9 @@ pub enum Job {
         path: PathBuf,
         key: String,
         value: Option<Value>,
+        /// The key's value the window showed when the change was made (`None`: absent). Someone else changing
+        /// this same key behind our back fails the job instead of being overwritten; other keys always merge.
+        base: Option<Value>,
         /// Afterwards let the dock follow `dock.visible` and the theme in this `decebal.json`.
         reconcile: Option<PathBuf>,
     },
@@ -237,7 +268,7 @@ pub struct Failure {
 pub enum Outcome {
     Toml(Result<TomlSaved, Failure>),
     /// The committed JSON document.
-    Json(Result<Value, String>),
+    Json(Result<Value, Failure>),
     Theme(Result<Applied, String>),
 }
 
@@ -303,7 +334,7 @@ impl Runner {
         };
         let outcome = match job {
             Job::Toml { path, rdwmctl, patch, epoch, base } => Outcome::Toml(self.toml(&path, &rdwmctl, &patch, epoch, base)),
-            Job::Json { path, key, value, reconcile: rec } => Outcome::Json(json(&path, &key, value, rec.as_deref())),
+            Job::Json { path, key, value, base, reconcile: rec } => Outcome::Json(self.json(&path, &key, value, base, rec.as_deref())),
             Job::Theme(t) => Outcome::Theme(self.theme(*t)),
         };
         let took = t0.elapsed();
@@ -345,7 +376,14 @@ impl Runner {
             crate::log_warn!("rdwm config rejected, nothing written: {e}");
             return Err(fail(e));
         }
-        io::write_atomic(path, &text).map_err(fail)?;
+        // At commit: the file must still be the one checked above, however long validation and the fsync took.
+        if let Err(e) = io::write_if_unchanged(path, &text, now) {
+            if io::is_changed_on_disk(&e) {
+                st.conflicted = true;
+                return Err(conflict());
+            }
+            return Err(fail(e));
+        }
         crate::log_info!("rdwm config saved: {}", path.display());
         let stamp = io::stamp(path);
         st.known = Some(stamp);
@@ -370,8 +408,39 @@ impl Runner {
         if let Some(st) = style {
             apply_style(&paths, st).map_err(|e| format!("theme applied, shell style not saved: {e}"))?;
         }
+        for p in [paths.shell_json(), paths.dock_settings()] {
+            self.files.entry(p.clone()).or_default().known = Some(io::stamp(&p));
+        }
         crate::log_info!("theme `{}` applied: files {:?}, rdwm reloaded {}, undo `{}`", applied.theme_id, applied.files, applied.reloaded, applied.undo_id);
         Ok(applied)
+    }
+}
+
+impl Runner {
+    /// One key, merged into the file as it is at commit (see `io::json_update`). The key itself may only be replaced
+    /// when it is still what the window showed, or the file is exactly as our own last write left it.
+    fn json(&mut self, path: &Path, key: &str, value: Option<Value>, base: Option<Value>, rec: Option<&Path>) -> Result<Value, Failure> {
+        let known = self.files.get(path).and_then(|f| f.known);
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let guard = |doc: &Value, now: Stamp| {
+            let theirs = doc.get(key);
+            if Some(now) == known || theirs == base.as_ref() || theirs == value.as_ref() {
+                Ok(())
+            } else {
+                crate::log_warn!("{name}: `{key}` changed on disk since it was shown; not overwriting");
+                Err(format!("{name}: `{key}` changed on disk; reloaded it, please repeat the change"))
+            }
+        };
+        match io::json_update(path, key, value.clone(), guard) {
+            Ok((doc, stamp)) => {
+                self.files.entry(path.to_path_buf()).or_default().known = Some(stamp);
+                if let Some(shell) = rec {
+                    reconcile(shell);
+                }
+                Ok(doc)
+            }
+            Err(message) => Err(Failure { conflict: message.contains("changed on disk"), message }),
+        }
     }
 }
 
@@ -388,14 +457,6 @@ fn reconcile(shell: &Path) {
     if let Err(e) = crate::dock_lifecycle::reconcile(shell) {
         crate::log_warn!("dock: {e}");
     }
-}
-
-fn json(path: &Path, key: &str, value: Option<Value>, rec: Option<&Path>) -> Result<Value, String> {
-    io::json_set(path, key, value)?;
-    if let Some(shell) = rec {
-        reconcile(shell);
-    }
-    Ok(io::json_load(path))
 }
 
 /// The dock and bar keys of a shell style, computed from the files the theme transaction just wrote.
@@ -518,7 +579,7 @@ impl Persister {
                     return Err(Refused::Closed);
                 }
                 let seq = st.next;
-                if let Job::Json { path, key, value, reconcile } = &job {
+                if let Job::Json { path, key, value, reconcile, .. } = &job {
                     // Equivalent only when no other job for this file sits between the two sets.
                     let last = st.jobs.iter().rposition(|(_, j)| j.touches(path));
                     if let Some((old_seq, Job::Json { key: k, value: v, reconcile: r, .. })) = last.map(|i| &mut st.jobs[i]) {
@@ -729,7 +790,7 @@ mod tests {
         while calls.load(Ordering::SeqCst) == 0 {
             std::thread::sleep(Duration::from_millis(1));
         }
-        let b = p.submit(Job::Json { path: json.clone(), key: "appSpacing".into(), value: Some(9.into()), reconcile: None }).unwrap();
+        let b = p.submit(Job::Json { path: json.clone(), key: "appSpacing".into(), value: Some(9.into()), base: None, reconcile: None }).unwrap();
         let c = p.submit(toml_job(&cfg, "[general]\nborder_px = 2\n", |c| c.set("general", "gap_inner", &Val::Int(5)).unwrap(), 7)).unwrap();
         assert!(t0.elapsed() < Duration::from_millis(500), "submitting must not wait for the disk");
         assert_eq!(p.backlog(), 3);
@@ -754,7 +815,7 @@ mod tests {
         let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
         let q: Recorded = Default::default();
         let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), gated(gate.clone(), calls.clone(), None));
-        let set = |k: &str, v: i64, path: &Path| Job::Json { path: path.into(), key: k.into(), value: Some(v.into()), reconcile: None };
+        let set = |k: &str, v: i64, path: &Path| Job::Json { path: path.into(), key: k.into(), value: Some(v.into()), base: None, reconcile: None };
         p.submit(set("blocker", 0, &other)).unwrap();
         while calls.load(Ordering::SeqCst) == 0 {
             std::thread::sleep(Duration::from_millis(1));
@@ -791,19 +852,19 @@ mod tests {
         let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
         let q: Recorded = Default::default();
         let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), gated(gate.clone(), calls.clone(), None));
-        p.submit(Job::Json { path: d.join("first.json"), key: "k".into(), value: Some(0.into()), reconcile: None }).unwrap();
+        p.submit(Job::Json { path: d.join("first.json"), key: "k".into(), value: Some(0.into()), base: None, reconcile: None }).unwrap();
         while calls.load(Ordering::SeqCst) == 0 {
             std::thread::sleep(Duration::from_millis(1));
         }
         for i in 0..CAPACITY {
-            p.submit(Job::Json { path: json.clone(), key: format!("k{}", i % 2), value: Some((i as i64).into()), reconcile: None }).unwrap();
+            p.submit(Job::Json { path: json.clone(), key: format!("k{}", i % 2), value: Some((i as i64).into()), base: None, reconcile: None }).unwrap();
         }
-        assert_eq!(p.submit(Job::Json { path: d.join("b.json"), key: "z".into(), value: None, reconcile: None }), Err(Refused::Full));
+        assert_eq!(p.submit(Job::Json { path: d.join("b.json"), key: "z".into(), value: None, base: None, reconcile: None }), Err(Refused::Full));
         gate.store(false, Ordering::SeqCst);
         assert!(p.close(Duration::from_secs(30)), "close drains every queued job");
         assert_eq!(done(&q).len(), CAPACITY + 1);
         assert_eq!(io::json_load(&json)["k1"], (CAPACITY as i64 - 1));
-        assert_eq!(p.submit(Job::Json { path: json, key: "z".into(), value: None, reconcile: None }), Err(Refused::Closed));
+        assert_eq!(p.submit(Job::Json { path: json, key: "z".into(), value: None, base: None, reconcile: None }), Err(Refused::Closed));
     }
 
     #[test]
@@ -829,11 +890,11 @@ mod tests {
         opener.join().unwrap();
         assert_eq!(std::fs::read_to_string(&cfg).unwrap(), "[general]\nborder_px = 5\n");
         assert_eq!(done(&q).len(), 5);
-        assert_eq!(p.submit(Job::Json { path: d.join("x.json"), key: "k".into(), value: None, reconcile: None }), Err(Refused::Closed));
+        assert_eq!(p.submit(Job::Json { path: d.join("x.json"), key: "k".into(), value: None, base: None, reconcile: None }), Err(Refused::Closed));
         // a disk that never answers: teardown gives up after its limit instead of hanging forever
         let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
         let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), gated(gate.clone(), calls.clone(), None));
-        p.submit(Job::Json { path: d.join("stuck.json"), key: "k".into(), value: Some(1.into()), reconcile: None }).unwrap();
+        p.submit(Job::Json { path: d.join("stuck.json"), key: "k".into(), value: Some(1.into()), base: None, reconcile: None }).unwrap();
         while calls.load(Ordering::SeqCst) == 0 {
             std::thread::sleep(Duration::from_millis(1));
         }
@@ -895,6 +956,137 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&cfg).unwrap(), orig);
         let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tmp") || n.contains("decsettings-check")).collect();
         assert!(left.is_empty(), "{left:?}");
+    }
+
+    /// Holds the worker inside one fsync until `release`, then lets everything through.
+    fn hold_first(release: Arc<AtomicBool>, entered: Arc<AtomicUsize>) -> io::fault::SyncHook {
+        Arc::new(move |_| {
+            if entered.fetch_add(1, Ordering::SeqCst) == 0 {
+                let t0 = Instant::now();
+                while !release.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(20) {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn worker_synchronous_writer_and_external_editor_on_one_json_file_keep_every_key() {
+        let d = tmpdir("interleave");
+        let shell = d.join("decebal.json");
+        std::fs::write(&shell, "{\"theirs\": 1}\n").unwrap();
+        let (release, entered) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hold_first(release.clone(), entered.clone()));
+        // A: the worker sets `ours` and is held inside its fsync
+        p.submit(Job::Json { path: shell.clone(), key: "ours".into(), value: Some(1.into()), base: None, reconcile: None }).unwrap();
+        while entered.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // external editor: replaces the file while A's fsync is held (no lock: another process)
+        std::thread::sleep(Duration::from_millis(15));
+        std::fs::write(&shell, "{\"theirs\": 2, \"editor\": true}\n").unwrap();
+        // B: a synchronous writer in this process (another pane) on the same file must wait for A
+        let (b_path, b_done) = (shell.clone(), Arc::new(AtomicBool::new(false)));
+        let flag = b_done.clone();
+        let b = std::thread::spawn(move || {
+            let r = io::json_set(&b_path, "sync", Some(true.into()));
+            flag.store(true, Ordering::SeqCst);
+            r
+        });
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!b_done.load(Ordering::SeqCst), "the synchronous writer waits for the file lock");
+        release.store(true, Ordering::SeqCst);
+        b.join().unwrap().unwrap();
+        assert!(p.wait_idle(Duration::from_secs(10)));
+        let all = done(&q);
+        assert!(matches!(&all[0].outcome, Outcome::Json(Ok(_))), "{:?}", all[0].outcome);
+        let v = io::json_load(&shell);
+        assert_eq!((v["theirs"].clone(), v["editor"].clone(), v["ours"].clone(), v["sync"].clone()), (2.into(), true.into(), 1.into(), true.into()), "{v}");
+        let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tmp")).collect();
+        assert!(left.is_empty(), "{left:?}");
+    }
+
+    #[test]
+    fn the_same_key_changed_behind_our_back_is_refused_at_commit_not_overwritten() {
+        let d = tmpdir("samekey");
+        let shell = d.join("decebal.json");
+        std::fs::write(&shell, "{\"bar\": {\"position\": \"top\"}}\n").unwrap();
+        let (release, entered) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hold_first(release.clone(), entered.clone()));
+        let shown = serde_json::json!({"position": "top"});
+        p.submit(Job::Json { path: shell.clone(), key: "bar".into(), value: Some(serde_json::json!({"position": "left"})), base: Some(shown), reconcile: None }).unwrap();
+        while entered.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        std::thread::sleep(Duration::from_millis(15));
+        let theirs = "{\"bar\": {\"position\": \"bottom\"}, \"x\": 1}\n";
+        std::fs::write(&shell, theirs).unwrap();
+        release.store(true, Ordering::SeqCst);
+        assert!(p.wait_idle(Duration::from_secs(10)));
+        match &done(&q)[0].outcome {
+            Outcome::Json(Err(f)) => assert!(f.conflict && f.message.contains("`bar` changed on disk"), "{f:?}"),
+            o => panic!("{o:?}"),
+        }
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), theirs);
+    }
+
+    #[test]
+    fn a_toml_edit_saved_by_someone_else_while_our_fsync_is_held_is_kept() {
+        let d = tmpdir("toml-held");
+        let cfg = d.join("config.toml");
+        std::fs::write(&cfg, "[general]\nborder_px = 1\n").unwrap();
+        let (release, entered) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hold_first(release.clone(), entered.clone()));
+        p.submit(toml_job(&cfg, "[general]\nborder_px = 1\n", |c| c.set("general", "gap_inner", &Val::Int(4)).unwrap(), 30)).unwrap();
+        p.submit(toml_job(&cfg, "[general]\nborder_px = 1\n", |c| c.set("general", "smart_gaps", &Val::Bool(true)).unwrap(), 30)).unwrap();
+        while entered.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        std::thread::sleep(Duration::from_millis(15));
+        std::fs::write(&cfg, "# by hand\n[general]\nborder_px = 7\n").unwrap();
+        release.store(true, Ordering::SeqCst);
+        assert!(p.wait_idle(Duration::from_secs(10)));
+        let all = done(&q);
+        assert!(all.iter().all(|d| matches!(&d.outcome, Outcome::Toml(Err(Failure { conflict: true, .. })))), "{all:?}");
+        assert_eq!(std::fs::read_to_string(&cfg).unwrap(), "# by hand\n[general]\nborder_px = 7\n");
+    }
+
+    #[test]
+    fn the_shown_selection_follows_the_planner_exactly() {
+        let (d, src, paths) = crate::theme::engine::apply::tests::sandbox("planned-selection");
+        std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+        let custom = Selection {
+            name: "nord".into(),
+            palette: Some("catppuccin".into()),
+            accent: crate::theme::model::Rgb::parse("#ff9f0a"),
+            mode: crate::theme::model::Mode::Light,
+            ..Selection::default()
+        };
+        std::fs::write(paths.shell_json(), serde_json::json!({"theme": custom.to_json()}).to_string()).unwrap();
+        let mut names: Vec<String> = src.list().into_iter().filter(|e| e.error.is_none()).map(|e| e.id).collect();
+        names.extend(["Nord".into(), "dracula-light".into(), "windows11-dark".into()]);
+        let mut compared = 0;
+        for name in &names {
+            let mut sel = custom.clone();
+            sel.name = name.clone();
+            let cases = [
+                (ThemeRequest::Selection(sel.clone()), engine::plan_selection(&src, &paths, &sel)),
+                (ThemeRequest::Package { name: name.clone(), base: custom.clone() }, engine::plan(&src, &paths, name, &custom)),
+                (ThemeRequest::Widgets { selection: sel.clone(), reset_colors: true, choice: WidgetChoice::Keep }, engine::plan_with_widgets(&src, &paths, name, &sel, WidgetChoice::Keep)),
+                (ThemeRequest::Widgets { selection: sel.clone(), reset_colors: false, choice: WidgetChoice::Keep }, engine::plan_selection_with_widgets(&src, &paths, &sel, WidgetChoice::Keep)),
+            ];
+            for (req, plan) in cases {
+                let Ok(plan) = plan else { continue };
+                assert_eq!(req.planned_selection(&src), plan.selection, "{name}: {req:?}");
+                compared += 1;
+            }
+        }
+        assert!(compared > 40, "{compared}");
+        let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]
@@ -1116,10 +1308,46 @@ mod model_tests {
     }
 
     #[test]
+    fn rdwm_reloads_once_everything_settled_even_when_the_last_write_failed() {
+        let (mut m, cfg) = model_with("[general]\n");
+        m.rt.running = true; // a dead socket: the reload request itself is what is counted
+        let disk = Disk::attach(&mut m, Some(2));
+        m.apply("r:general:gap_inner", CtlVal::Num(3.0));
+        disk.blocked();
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true));
+        disk.open();
+        m.settle();
+        assert_eq!(file(&cfg), "[general]\ngap_inner = 3\n", "A committed, B failed");
+        assert_eq!(m.reload_requests, 1, "A's commit reached rdwm although B, the last job, failed");
+        assert!(m.notice.as_ref().unwrap().error);
+    }
+
+    #[test]
+    fn a_new_design_picked_over_a_custom_palette_keeps_its_own_colours_through_a_pending_mode_change() {
+        let (mut m, _) = model_with("[general]\n");
+        m.apply("l:theme:nord", CtlVal::Click);
+        m.apply("l:palette:catppuccin", CtlVal::Click);
+        m.apply("l:accent:#ff9f0a", CtlVal::Click);
+        let saved = crate::settings::themepane::source(&m).selection();
+        assert_eq!((saved.palette.as_deref(), saved.accent.is_some()), (Some("catppuccin"), true), "the base has custom colours");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("l:tcard:apply:dracula", CtlVal::Click);
+        disk.blocked();
+        let shown = m.theme_selection();
+        assert_eq!((shown.name.as_str(), shown.palette.as_deref(), shown.accent), ("dracula", None, None), "shown as the engine will store it");
+        m.apply("th:mode", CtlVal::Str("light".into()));
+        disk.open();
+        m.settle();
+        let sel = crate::settings::themepane::source(&m).selection();
+        assert_eq!((sel.name.as_str(), sel.mode, sel.palette.as_deref(), sel.accent), ("dracula", crate::theme::model::Mode::Light, None, None), "the old palette did not come back");
+        assert!(!m.notice.as_ref().unwrap().error, "{:?}", m.notice);
+    }
+
+    #[test]
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
         let before = m.store.cfg.text();
-        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err("late".into())), took: Duration::ZERO });
+        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err(Failure { conflict: false, message: "late".into() })), took: Duration::ZERO });
         assert_eq!(m.store.cfg.text(), before);
         assert!(m.notice.is_none());
     }

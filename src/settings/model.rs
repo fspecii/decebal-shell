@@ -31,7 +31,7 @@ pub const SAVING: &str = "Saving…";
 #[derive(Debug, Clone)]
 pub enum Pending {
     Toml(TomlPatch),
-    Json { file: &'static str, key: String, value: Option<Value> },
+    Json { file: &'static str, key: String, value: Option<Value>, said: Option<String> },
     Theme { selection: Value, done: ThemeDone },
 }
 
@@ -123,6 +123,10 @@ pub struct Model {
     pub pending: BTreeMap<u64, Pending>,
     /// A file change arrived while our own writes were in flight: look again once they are done.
     recheck_files: bool,
+    /// A committed config.toml change rdwm has not been told about yet (told once no TOML job is left).
+    reload_due: bool,
+    /// How often rdwm was asked to reload (diagnostics and tests).
+    pub reload_requests: u64,
 }
 
 pub fn cap(s: &str) -> String {
@@ -165,6 +169,8 @@ impl Model {
             persist: if cfg!(test) { Persister::inline() } else { Persister::spawn(queue_for_worker, wake_for_worker) },
             pending: BTreeMap::new(),
             recheck_files: false,
+            reload_due: false,
+            reload_requests: 0,
         };
         m.rt = io::poll_runtime(&m.paths.socket);
         m.refresh_wallpaper_follow_notice();
@@ -294,10 +300,11 @@ impl Model {
     }
 
     /// Tells rdwm to re-read the file (on a thread: the UI never waits for the socket).
-    pub fn reload_rdwm(&self) {
+    pub fn reload_rdwm(&mut self) {
         if !self.rt.running {
             return;
         }
+        self.reload_requests += 1;
         let (sock, queue, wake) = (self.paths.socket.clone(), self.queue.clone(), self.wake.clone());
         std::thread::spawn(move || {
             let r = io::ipc_call(&sock, &json!({"cmd":"reload"})).map(|_| ());
@@ -338,13 +345,43 @@ impl Model {
     }
 
     pub fn edit_json(&mut self, file: &str, key: &str, v: Option<Value>) {
+        self.edit_json_said(file, key, v, None)
+    }
+
+    /// [`Model::edit_json`] with the notice shown once it committed (default "Saved").
+    pub fn edit_json_said(&mut self, file: &str, key: &str, v: Option<Value>, said: Option<String>) {
+        let base = self.json_mut(file).get(key).cloned();
+        self.edit_json_from(file, key, v, base, said)
+    }
+
+    /// The value of a top-level JSON key that new edits start from: the shown one while a change to that file is
+    /// pending, else the file as it is now (for panes that compute from the file rather than the shown copy).
+    pub fn json_value_now(&mut self, file: &str, key: &str) -> Option<Value> {
+        let pending = self.pending.values().any(|p| match p {
+            Pending::Json { file: f, .. } => *f == file,
+            Pending::Theme { .. } => file != "pinned",
+            Pending::Toml(_) => false,
+        });
+        if pending {
+            return self.json_mut(file).get(key).cloned();
+        }
+        let path = match file {
+            "dock" => self.paths.dock_settings(),
+            "pinned" => self.paths.dock_pinned(),
+            _ => self.paths.shell_json(),
+        };
+        io::json_load(&path).get(key).cloned()
+    }
+
+    /// Sets a key whose new value was derived from `base` (the key's value it started from; `None`: absent).
+    pub fn edit_json_from(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, said: Option<String>) {
         let (file, path) = match file {
             "dock" => ("dock", self.paths.dock_settings()),
             "pinned" => ("pinned", self.paths.dock_pinned()),
             _ => ("shell", self.paths.shell_json()),
         };
-        let job = Job::Json { path, key: key.to_string(), value: v.clone(), reconcile: Some(self.paths.shell_json()) };
-        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone() }).is_some_and(|seq| self.pending.contains_key(&seq)) {
+        let job = Job::Json { path, key: key.to_string(), value: v.clone(), base, reconcile: Some(self.paths.shell_json()) };
+        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone(), said }).is_some_and(|seq| self.pending.contains_key(&seq)) {
             set_key(self.json_mut(file), key, v);
         }
         self.dirty = true;
@@ -353,11 +390,7 @@ impl Model {
     /// Runs a theme package transaction in the persistence worker (planned there, against the files as the earlier
     /// jobs leave them). The new selection is shown at once; the theme's other files follow when it committed.
     pub fn apply_theme(&mut self, src: crate::theme::live::Source, paths: Paths, request: ThemeRequest, style: Option<crate::theme::style::Style>, done: ThemeDone) -> bool {
-        let selection = match &request {
-            ThemeRequest::Selection(s) | ThemeRequest::Widgets { selection: s, .. } => s.clone(),
-            ThemeRequest::Package { name, base } => crate::theme::model::Selection { name: name.clone(), ..base.clone() },
-        };
-        let selection = selection.to_json();
+        let selection = request.planned_selection(&src).to_json();
         let Some(seq) = self.submit(Job::Theme(Box::new(ThemeJob { src, paths, request, style })), Pending::Theme { selection: selection.clone(), done }) else { return false };
         if self.pending.contains_key(&seq) {
             set_key(&mut self.shell, "theme", Some(selection));
@@ -370,7 +403,7 @@ impl Model {
     pub fn theme_selection(&self) -> crate::theme::model::Selection {
         let shown = self.pending.values().rev().find_map(|p| match p {
             Pending::Theme { selection, .. } => Some(selection),
-            Pending::Json { file: "shell", key, value: Some(v) } if key == "theme" => Some(v),
+            Pending::Json { file: "shell", key, value: Some(v), .. } if key == "theme" => Some(v),
             _ => None,
         });
         match shown {
@@ -429,7 +462,7 @@ impl Model {
         let mut doc = saved;
         for p in self.pending.values() {
             match p {
-                Pending::Json { file: f, key, value } if *f == file => set_key(&mut doc, key, value.clone()),
+                Pending::Json { file: f, key, value, .. } if *f == file => set_key(&mut doc, key, value.clone()),
                 Pending::Theme { selection, .. } if file == "shell" => set_key(&mut doc, "theme", Some(selection.clone())),
                 _ => {}
             }
@@ -473,9 +506,7 @@ impl Model {
                 self.store.adopt(saved.text, saved.stamp);
                 self.rebuild_cfg();
                 self.file_error = None;
-                if saved.changed && !toml_left {
-                    self.reload_rdwm();
-                }
+                self.reload_due |= saved.changed;
                 if idle && self.notice.as_ref().is_none_or(|n| !n.error) {
                     self.say(if self.rt.running { "Saved and applied" } else { "Saved (rdwm is not running)" }, false);
                 }
@@ -491,16 +522,21 @@ impl Model {
                 }
                 self.say(format!("Not saved: {}", f.message), true);
             }
-            (Pending::Json { file, .. }, Outcome::Json(r)) => {
+            (Pending::Json { file, said, .. }, Outcome::Json(r)) => {
                 let saved = match &r {
                     Ok(doc) => doc.clone(),
                     Err(_) => io::json_load(&d.path),
                 };
                 *self.json_mut(file) = self.json_shown(file, saved);
                 match r {
-                    Ok(_) if idle && self.notice.as_ref().is_none_or(|n| !n.error) => self.say("Saved", false),
+                    Ok(_) if idle && self.notice.as_ref().is_none_or(|n| !n.error) => self.say(said.unwrap_or_else(|| "Saved".into()), false),
                     Ok(_) => {}
-                    Err(e) => self.say(format!("Not saved: {e}"), true),
+                    Err(f) => {
+                        if f.conflict {
+                            self.recheck_files = true;
+                        }
+                        self.say(format!("Not saved: {}", f.message), true);
+                    }
                 }
             }
             (Pending::Theme { done, .. }, Outcome::Theme(r)) => {
@@ -541,6 +577,10 @@ impl Model {
                 }
             }
             (p, o) => crate::log_warn!("persist: mismatched result {o:?} for {p:?}"),
+        }
+        // rdwm reads the file once everything for it committed, whatever the last result was.
+        if !toml_left && std::mem::take(&mut self.reload_due) {
+            self.reload_rdwm();
         }
         if idle && self.recheck_files {
             self.on_files_changed();
