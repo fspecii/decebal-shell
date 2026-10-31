@@ -408,6 +408,20 @@ def card_box(c, base, open_shot):
     return mask.getbbox()
 
 
+def await_card(c, base, label):
+    """Kickoff's window maps before its card is painted (the application scan runs first): poll the screen for up to 8 s instead of one fixed delay."""
+    deadline, shot, box = time.time() + 8, None, None
+    while time.time() < deadline:
+        time.sleep(0.5)
+        shot = c.shot(label)
+        box = card_box(c, base, shot)
+        if box:
+            time.sleep(0.4)  # let it finish drawing, then measure the settled card
+            shot = c.shot(label)
+            return card_box(c, base, shot), shot
+    return None, shot
+
+
 def case_launcher(c):
     """A click on Start opens Kickoff towards the desktop (an anchored popup beside the panel); a second click closes it."""
     c.park()
@@ -416,9 +430,7 @@ def case_launcher(c):
     before = c.windows()
     c.click(*c.at("start"))
     new = wait(lambda: c.windows() - before, f"{c.tag}: Kickoff did not open", tries=100)
-    time.sleep(1.0)
-    opened = c.shot("kickoff")
-    box = card_box(c, base, opened)
+    box, opened = await_card(c, base, "kickoff")
     if not box:
         c.click(*c.at("start"))
     assert box, f"{c.tag}: Kickoff drew nothing outside the strip"
@@ -541,8 +553,7 @@ def case_bar_launcher(c):
     before = c.windows()
     c.click(x, y)
     new = wait(lambda: c.windows() - before, f"{c.tag}: Kickoff did not open", tries=100)
-    time.sleep(1.0)
-    box = card_box(c, base, c.shot("kickoff"))
+    box, _ = await_card(c, base, "kickoff")
     c.click(x, y)
     assert box, f"{c.tag}: Kickoff drew nothing outside the strip"
     rect = (box[0], box[1], box[2] - box[0], box[3] - box[1])
@@ -733,6 +744,7 @@ def main():
     ap.add_argument("--modes", default="dark,light")
     ap.add_argument("--require-anchor", action="store_true", help="fail when Kickoff is not anchored on the Start button")
     ap.add_argument("--qt-fixture", default=str(Path.home() / ".cache/decebal-appmenu-target/appmenu-fixtures/qt-fixture"), help="the root's real Qt menu exporter (tests/e2e/appmenu/qt-fixture.cpp), built by tests/e2e/appmenu-real.sh")
+    ap.add_argument("--binary-note", default="", help="free text recorded in the report, e.g. the source revision an immutable binary was built from")
     ap.add_argument("--cases", default="", help="default: the package's own list")
     args = ap.parse_args()
     out = Path(args.out)
@@ -751,6 +763,7 @@ def main():
                         failures += 1
     repo = Path(args.repo)
     manifest = {
+        "binary_note": args.binary_note,
         "source_head": subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, capture_output=True).stdout.strip(),
         "binaries": {p.name: sha(p) for p in sorted(Path(args.bin_dir).glob("dec*")) if p.is_file() and p.name in ("decdock", "decbar", "decthemectl", "declaunch", "decspot")},
         "rdwm": {"path": str(args.rdwm), "sha256": sha(args.rdwm)}, "rdwmctl": {"path": str(args.rdwmctl), "sha256": sha(args.rdwmctl)}, "qt_fixture": {"path": str(args.qt_fixture), "sha256": sha(args.qt_fixture)},

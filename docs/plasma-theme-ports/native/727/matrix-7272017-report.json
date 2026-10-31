@@ -1,0 +1,4173 @@
+{
+  "source_head": "b3a3d24c37f334744b8f4715e2a99e1699aae4c6",
+  "binaries": {
+    "decbar": "b8a66b99a4fdb6c94339437c8e0ae34174efef335309dbc7c637343ba8c9e268",
+    "decdock": "84c3fb5f47a28f3d83dc62062669afc54c9a9e3576d4d46eefe2b4494b3fd191",
+    "declaunch": "292eedad92227678cc47dde774716293ed2d45e393b91e90674ebd90a7225770",
+    "decspot": "ec497eb81f361da5720ed7701a79869a4b54a595ab7559ac557796880c55c23f",
+    "decthemectl": "e0297000400868669b3a6479cccf8a7f9f8af64c8b4d20d055a40ade127be384"
+  },
+  "rdwm": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/ab1b588/rdwm",
+    "sha256": "468de6120c7af168e847b154e254ef60a04634df82a49381c7d30aa604d48ab5"
+  },
+  "rdwmctl": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/8db572d-ctl/rdwmctl",
+    "sha256": "2d3b846fff4e179e0fc169ced0cd94c49211f835aad4948769564f51af136db8"
+  },
+  "qt_fixture": {
+    "path": "/home/ambsd/.cache/decebal-appmenu-target/appmenu-fixtures/qt-fixture",
+    "sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+  },
+  "harness": {
+    "plasma-packages-native.py": "079b949cd42d5b022cd70123599b367724d674ce82036509e17bb566d616c321",
+    "private_x11.py": "a82511d842161db16933086b690cb9a5e2d36318d53436426e8a533e4c389d9c"
+  },
+  "themes": {
+    "plasma-breeze": "5a9619ccc0b0a98d069e5827d62f9adbe52c9a622bb182ad7da40d3f420dc3dd",
+    "plasma-layan": "8f7defc982801fda097375058632ecf0c51bfa41a097118a2ea29cfed03f63dc"
+  },
+  "entries": [
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            31,
+            1036,
+            59,
+            1064
+          ],
+          "ink_px": 724
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 37203
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 123284
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 63654
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 20
+        },
+        {
+          "step": "launcher",
+          "card": [
+            650,
+            472,
+            620,
+            555
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 915.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 66381,
+          "moved": 132762
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            38,
+            1024,
+            74,
+            1060
+          ],
+          "ink_px": 1228
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 55883
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 196524
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 100662
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 20
+        },
+        {
+          "step": "launcher",
+          "card": [
+            573,
+            320,
+            775,
+            694
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 904.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 103882,
+          "moved": 198824
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            62,
+            992,
+            118,
+            1048
+          ],
+          "ink_px": 3027
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 143648
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 503290
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 258190
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 9
+        },
+        {
+          "step": "launcher",
+          "card": [
+            340,
+            16,
+            1240,
+            959
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 870.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 263595,
+          "moved": 466882
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "work_area": [
+        0,
+        52,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            31,
+            16,
+            59,
+            44
+          ],
+          "ink_px": 724
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 37203
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 123284
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 63654
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 20
+        },
+        {
+          "step": "launcher",
+          "card": [
+            647,
+            472,
+            626,
+            560
+          ],
+          "gap": 420,
+          "near_the_panel": false,
+          "centre_offset_along": 915.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 66381,
+          "moved": 132762
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "work_area": [
+        0,
+        65,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            38,
+            20,
+            74,
+            56
+          ],
+          "ink_px": 1228
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 55883
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 196524
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 100662
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 20
+        },
+        {
+          "step": "launcher",
+          "card": [
+            569,
+            320,
+            1133,
+            750
+          ],
+          "gap": 255,
+          "near_the_panel": false,
+          "centre_offset_along": 1079.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 103882,
+          "moved": 198824
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "work_area": [
+        0,
+        104,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            62,
+            32,
+            118,
+            88
+          ],
+          "ink_px": 3027
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 143648
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 503290
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 258190
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 9
+        },
+        {
+          "step": "launcher",
+          "card": [
+            333,
+            105,
+            1254,
+            907
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 870.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 263595,
+          "moved": 466882
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        52,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            16,
+            31,
+            44,
+            59
+          ],
+          "ink_px": 724
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 37203
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 123284
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 63654
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            647,
+            472,
+            626,
+            560
+          ],
+          "gap": 595,
+          "near_the_panel": false,
+          "centre_offset_along": -298.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 66381,
+          "moved": 132762
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        65,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            20,
+            38,
+            56,
+            74
+          ],
+          "ink_px": 1228
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 55883
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 196524
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 100662
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            569,
+            320,
+            785,
+            713
+          ],
+          "gap": 504,
+          "near_the_panel": false,
+          "centre_offset_along": -365.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 103882,
+          "moved": 198824
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        104,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            32,
+            62,
+            88,
+            118
+          ],
+          "ink_px": 3027
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 143648
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 503290
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 258190
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 13
+        },
+        {
+          "step": "launcher",
+          "card": [
+            333,
+            16,
+            1254,
+            996
+          ],
+          "gap": 229,
+          "near_the_panel": false,
+          "centre_offset_along": -506.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 263595,
+          "moved": 466882
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1876,
+            31,
+            1904,
+            59
+          ],
+          "ink_px": 724
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 37203
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 123284
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 63654
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            647,
+            472,
+            626,
+            560
+          ],
+          "gap": 595,
+          "near_the_panel": false,
+          "centre_offset_along": -298.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 66381,
+          "moved": 132762
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1864,
+            38,
+            1900,
+            74
+          ],
+          "ink_px": 1228
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 55883
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 196524
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 100662
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            569,
+            320,
+            785,
+            713
+          ],
+          "gap": 501,
+          "near_the_panel": false,
+          "centre_offset_along": -365.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 103882,
+          "moved": 198824
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1832,
+            62,
+            1888,
+            118
+          ],
+          "ink_px": 3027
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 143648
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 503290
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 258190
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 13
+        },
+        {
+          "step": "launcher",
+          "card": [
+            333,
+            16,
+            1254,
+            996
+          ],
+          "gap": 229,
+          "near_the_panel": false,
+          "centre_offset_along": -506.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 263595,
+          "moved": 466882
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            31,
+            1036,
+            59,
+            1064
+          ],
+          "ink_px": 705
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 27804
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 92216
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 47535
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            650,
+            472,
+            620,
+            555
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 915.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 46777,
+          "moved": 93554
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            38,
+            1024,
+            74,
+            1060
+          ],
+          "ink_px": 1191
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 41752
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 146790
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 75172
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            573,
+            320,
+            775,
+            694
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 904.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 74116,
+          "moved": 141923
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "work_area": [
+        0,
+        0,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            62,
+            992,
+            118,
+            1048
+          ],
+          "ink_px": 2966
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 107329
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 376006
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 192822
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 10
+        },
+        {
+          "step": "launcher",
+          "card": [
+            340,
+            16,
+            1240,
+            959
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 870.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 191909,
+          "moved": 341210
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "work_area": [
+        0,
+        52,
+        1920,
+        1028
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            31,
+            16,
+            59,
+            44
+          ],
+          "ink_px": 705
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 27804
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 92216
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 47535
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            639,
+            472,
+            642,
+            571
+          ],
+          "gap": 420,
+          "near_the_panel": false,
+          "centre_offset_along": 915.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 46777,
+          "moved": 93554
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "work_area": [
+        0,
+        65,
+        1920,
+        1015
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            38,
+            20,
+            74,
+            56
+          ],
+          "ink_px": 1191
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 41752
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 146790
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 75172
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            559,
+            320,
+            803,
+            714
+          ],
+          "gap": 255,
+          "near_the_panel": false,
+          "centre_offset_along": 904.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 74116,
+          "moved": 141923
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "work_area": [
+        0,
+        104,
+        1920,
+        976
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            62,
+            32,
+            118,
+            88
+          ],
+          "ink_px": 2966
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 107329
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 376006
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 192822
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 1,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 10
+        },
+        {
+          "step": "launcher",
+          "card": [
+            318,
+            105,
+            1284,
+            907
+          ],
+          "gap": 1,
+          "near_the_panel": true,
+          "centre_offset_along": 870.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 191909,
+          "moved": 341210
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        52,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            16,
+            31,
+            44,
+            59
+          ],
+          "ink_px": 705
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 27804
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 92216
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 47535
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            639,
+            472,
+            642,
+            571
+          ],
+          "gap": 587,
+          "near_the_panel": false,
+          "centre_offset_along": -292.5,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 46777,
+          "moved": 93554
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        65,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            20,
+            38,
+            56,
+            74
+          ],
+          "ink_px": 1191
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 41752
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 146790
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 75172
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "launcher",
+          "card": [
+            559,
+            320,
+            803,
+            714
+          ],
+          "gap": 494,
+          "near_the_panel": false,
+          "centre_offset_along": -365.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 74116,
+          "moved": 141923
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "FAIL: plasma-breeze-light-left-200: Kickoff drew nothing outside the strip",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "work_area": [
+        104,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            32,
+            62,
+            88,
+            118
+          ],
+          "ink_px": 2966
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 107329
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 376006
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 192822
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 13
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 191909,
+          "moved": 341210
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "FAIL: plasma-breeze-light-right-100: Kickoff drew nothing outside the strip",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1868,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1876,
+            31,
+            1904,
+            59
+          ],
+          "ink_px": 705
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 27804
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 92216
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 47535
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 21
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 46777,
+          "moved": 93554
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1855,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1864,
+            38,
+            1900,
+            74
+          ],
+          "ink_px": 1191
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 41752
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 146790
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 75172
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 22
+        },
+        {
+          "step": "launcher",
+          "card": [
+            559,
+            320,
+            803,
+            714
+          ],
+          "gap": 493,
+          "near_the_panel": false,
+          "centre_offset_along": -365.0,
+          "anchored_on_start": false,
+          "clamped_to_margin": false
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 74116,
+          "moved": 141923
+        }
+      ]
+    },
+    {
+      "package": "plasma-breeze",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "glyph": "ok",
+        "applets": "ok",
+        "launcher": "ok",
+        "popup": "ok",
+        "keyboard": "ok"
+      },
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "work_area": [
+        0,
+        0,
+        1816,
+        1080
+      ],
+      "steps": [
+        {
+          "step": "glyph",
+          "box": [
+            1832,
+            62,
+            1888,
+            118
+          ],
+          "ink_px": 2966
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 107329
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 376006
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 192822
+        },
+        {
+          "step": "no_search_zone"
+        },
+        {
+          "step": "applets",
+          "all_off_groups": 0,
+          "launcher_alone_groups": 1,
+          "tasks_alone_groups": 3,
+          "clock_alone_groups": 2,
+          "show_desktop_alone_groups": 1,
+          "workspaces_alone_groups": 1,
+          "registry_roundtrip": 27,
+          "all_on_groups": 13
+        },
+        {
+          "step": "launcher",
+          "card": [
+            318,
+            16,
+            1468,
+            997
+          ],
+          "gap": 30,
+          "near_the_panel": true,
+          "centre_offset_along": -505.5,
+          "anchored_on_start": true,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "keyboard",
+          "ring": 191909,
+          "moved": 341210
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              32
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            994
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 10365
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 36129
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 18907
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            8,
+            484,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 300.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            75,
+            10,
+            1713,
+            23
+          ],
+          "items_without_window": 10,
+          "items_with_exporting_window": 13,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 41370,
+          "moved": 210638
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              40
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            972
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 17199
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 57080
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 29407
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            10,
+            335,
+            789,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 381.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            94,
+            13,
+            1899,
+            29
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 64920,
+          "moved": 329588
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              64
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            908
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 44282
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 135619
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 76255
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            16,
+            16,
+            1240,
+            992
+          ],
+          "gap": 8,
+          "centre_offset_along": 598.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            151,
+            21,
+            1505,
+            46
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 168474,
+          "moved": 848384
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              32,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            0,
+            32,
+            1920,
+            962
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 10365
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 36129
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 18907
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            8,
+            36,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 300.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            75,
+            10,
+            1713,
+            23
+          ],
+          "items_without_window": 10,
+          "items_with_exporting_window": 13,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 41370,
+          "moved": 210638
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              40,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            0,
+            40,
+            1920,
+            932
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 17199
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 57080
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 29407
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            10,
+            45,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 374.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            94,
+            13,
+            1661,
+            29
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 64920,
+          "moved": 329588
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "FAIL: plasma-layan-dark-top-200: Kickoff drew nothing outside the strip",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              64,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            64,
+            1920,
+            844
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 44282
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 135619
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 76255
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            151,
+            21,
+            1505,
+            46
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 168474,
+          "moved": 848384
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              40,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            40,
+            0,
+            1880,
+            994
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 13692
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 46061
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 23978
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            44,
+            8,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 264.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            5,
+            475,
+            35,
+            514
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 48930,
+          "moved": 116340
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              50,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            50,
+            0,
+            1870,
+            972
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 21836
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 72037
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 37470
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            55,
+            10,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 329.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            7,
+            459,
+            43,
+            507
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 76761,
+          "moved": 182451
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              80,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            80,
+            0,
+            1840,
+            908
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 57443
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 167885
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 96317
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            88,
+            16,
+            1240,
+            1048
+          ],
+          "gap": 8,
+          "centre_offset_along": 490.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            12,
+            410,
+            68,
+            487
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 198714,
+          "moved": 471348
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              40,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1880,
+            994
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 13692
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 46061
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 23978
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            1256,
+            8,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 264.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            5,
+            475,
+            35,
+            514
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 48930,
+          "moved": 116340
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              50,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1870,
+            972
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 21836
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 72037
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 37470
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            1090,
+            10,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 329.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            7,
+            459,
+            43,
+            507
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 76761,
+          "moved": 191450
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              80,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1840,
+            908
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 57443
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 167885
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 96317
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            592,
+            16,
+            1240,
+            1048
+          ],
+          "gap": 8,
+          "centre_offset_along": 490.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            12,
+            410,
+            68,
+            487
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 198714,
+          "moved": 471348
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              32
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              118
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            962
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 4859
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 16957
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 8856
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            8,
+            484,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 300.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            75,
+            11,
+            1713,
+            23
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 19282,
+          "moved": 98226
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              40
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              148
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            932
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 8066
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 26764
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 13769
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            10,
+            335,
+            789,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 381.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            95,
+            13,
+            1661,
+            29
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 30240,
+          "moved": 153662
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "bottom",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              0,
+              64
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              236
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1920,
+            844
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 20799
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 63572
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 35760
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            16,
+            16,
+            1261,
+            992
+          ],
+          "gap": 8,
+          "centre_offset_along": 608.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            151,
+            21,
+            1505,
+            46
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 78580,
+          "moved": 395781
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              32,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            0,
+            32,
+            1920,
+            962
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 4859
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 16957
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 8856
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            8,
+            36,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 300.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            75,
+            11,
+            1713,
+            23
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 19282,
+          "moved": 98226
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              40,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            0,
+            40,
+            1920,
+            932
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 8066
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 26764
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 13769
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            10,
+            45,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 374.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            95,
+            13,
+            1661,
+            29
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 30240,
+          "moved": 153662
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              64,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            64,
+            1920,
+            844
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 20799
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 63572
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 35760
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            16,
+            72,
+            1261,
+            992
+          ],
+          "gap": 8,
+          "centre_offset_along": 608.5,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            151,
+            21,
+            1505,
+            46
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 78580,
+          "moved": 395781
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              40,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            40,
+            0,
+            1880,
+            994
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 6415
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 21609
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 11233
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            44,
+            8,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 264.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            5,
+            475,
+            35,
+            514
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 22810,
+          "moved": 54244
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              50,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            50,
+            0,
+            1870,
+            972
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 10246
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 33728
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 17555
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            55,
+            10,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 329.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            8,
+            459,
+            42,
+            507
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 35724,
+          "moved": 84817
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "left",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              80,
+              0,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            80,
+            0,
+            1840,
+            908
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 26962
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 78612
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 45125
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            88,
+            16,
+            1240,
+            1048
+          ],
+          "gap": 8,
+          "centre_offset_along": 490.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            12,
+            410,
+            68,
+            487
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 92692,
+          "moved": 219880
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 1.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              40,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              86
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1880,
+            994
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 6415
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 21609
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 11233
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            1256,
+            8,
+            620,
+            560
+          ],
+          "gap": 4,
+          "centre_offset_along": 264.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            5,
+            475,
+            35,
+            514
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 22810,
+          "moved": 54244
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 1.25,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              50,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              108
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1870,
+            972
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 10246
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 33728
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 17555
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            1090,
+            10,
+            775,
+            700
+          ],
+          "gap": 5,
+          "centre_offset_along": 329.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            8,
+            459,
+            42,
+            507
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 35724,
+          "moved": 84817
+        }
+      ]
+    },
+    {
+      "package": "plasma-layan",
+      "edge": "right",
+      "scale": 2.0,
+      "mode": "light",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              80,
+              0,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            0,
+            1840,
+            908
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 26962
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 78612
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 45125
+        },
+        {
+          "step": "search_icon",
+          "items_on": 6,
+          "items_off": 5
+        },
+        {
+          "step": "launcher",
+          "card": [
+            592,
+            16,
+            1240,
+            1048
+          ],
+          "gap": 8,
+          "centre_offset_along": 490.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            12,
+            410,
+            68,
+            487
+          ],
+          "items_without_window": 7,
+          "items_with_exporting_window": 9,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 92692,
+          "moved": 219880
+        }
+      ]
+    }
+  ],
+  "failures": 3,
+  "limits": [
+    "X11 only; no Wayland",
+    "network/audio/battery/bluetooth zones need system data this private world does not have, so they are checked as effective settings only"
+  ]
+}

@@ -1,0 +1,50 @@
+ok   plasma-breeze-dark-bottom-100 
+ok   plasma-breeze-dark-bottom-125 
+ok   plasma-breeze-dark-bottom-200 
+ok   plasma-breeze-dark-top-100 
+ok   plasma-breeze-dark-top-125 
+ok   plasma-breeze-dark-top-200 
+ok   plasma-breeze-dark-left-100 
+ok   plasma-breeze-dark-left-125 
+ok   plasma-breeze-dark-left-200 
+ok   plasma-breeze-dark-right-100 
+ok   plasma-breeze-dark-right-125 
+ok   plasma-breeze-dark-right-200 
+ok   plasma-breeze-light-bottom-100 
+ok   plasma-breeze-light-bottom-125 
+ok   plasma-breeze-light-bottom-200 
+ok   plasma-breeze-light-top-100 
+ok   plasma-breeze-light-top-125 
+ok   plasma-breeze-light-top-200 
+ok   plasma-breeze-light-left-100 
+ok   plasma-breeze-light-left-125 
+FAIL plasma-breeze-light-left-200 {'launcher': 'FAIL: plasma-breeze-light-left-200: Kickoff drew nothing outside the strip'}
+FAIL plasma-breeze-light-right-100 {'launcher': 'FAIL: plasma-breeze-light-right-100: Kickoff drew nothing outside the strip'}
+ok   plasma-breeze-light-right-125 
+ok   plasma-breeze-light-right-200 
+ok   plasma-layan-dark-bottom-100 
+ok   plasma-layan-dark-bottom-125 
+ok   plasma-layan-dark-bottom-200 
+ok   plasma-layan-dark-top-100 
+ok   plasma-layan-dark-top-125 
+FAIL plasma-layan-dark-top-200 {'bar_launcher': 'FAIL: plasma-layan-dark-top-200: Kickoff drew nothing outside the strip'}
+ok   plasma-layan-dark-left-100 
+ok   plasma-layan-dark-left-125 
+ok   plasma-layan-dark-left-200 
+ok   plasma-layan-dark-right-100 
+ok   plasma-layan-dark-right-125 
+ok   plasma-layan-dark-right-200 
+ok   plasma-layan-light-bottom-100 
+ok   plasma-layan-light-bottom-125 
+ok   plasma-layan-light-bottom-200 
+ok   plasma-layan-light-top-100 
+ok   plasma-layan-light-top-125 
+ok   plasma-layan-light-top-200 
+ok   plasma-layan-light-left-100 
+ok   plasma-layan-light-left-125 
+ok   plasma-layan-light-left-200 
+ok   plasma-layan-light-right-100 
+ok   plasma-layan-light-right-125 
+ok   plasma-layan-light-right-200 
+{"entries": 48, "failures": 3}
+exit 1

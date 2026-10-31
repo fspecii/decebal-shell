@@ -6,6 +6,32 @@ the shared renderers are still being finished, no complete native four-edge, eve
 a genuine global application menu (Layan) is not implemented. Authoritative requirements: `docs/universal-panel-requirements.md`
 (integration checkout) and the contract `docs/universal-panels.md`.
 
+## State on root `7272017` (branch `feat/claude-plasma-packages-727`, 2026-10-31)
+
+The packages were re-based onto root `7272017` (generic source is root's: `plasma_style.rs`, the tracker, the pager, the typed `[taskbar]` renderer). Only the
+packages, these docs, `tests/plasma_theme_ports.rs`, my tools and the package native harnesses are mine. Both packages validate with the strict validator
+and declare `[launcher] style = "kde"` (Kickoff: the anchored popup that opens from the launcher towards the screen).
+
+**Native acceptance, `tests/e2e/plasma-packages-native.py`** (private Xvfb on a reserved high display from `tests/e2e/private_x11.py`, both listening
+transports verified as the exact child's, a from-scratch environment, the pinned rdwm `ab1b588` `468de612…` and rdwmctl `8db572d` `2d3b846f…`, root's
+real Qt menu exporter, debug binaries of `7272017`; every report records the binary and harness sha256):
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Both packages, 4 edges x 100/125/200 % x dark/light (48 entries): strut = work area, Kickoff glyph differs from the grid / Windows / Apple controls, no search box (Breeze) / one search icon (Layan), every registry applet alone / all on / all off (Breeze), clock popup on the desktop side, `--focus` ring, Layan bar launcher | 45 ok, 3 failed: Kickoff's window mapped before its card was painted (the screenshot after the click was pixel-identical to the one before). The harness now polls up to 8 s. Layan dark top 200 % re-run: ok. The two Breeze entries (light left 200 %, light right 100 %) passed in the anchor gate below. The full 48 were **not** re-run end to end with the fixed harness | `native/727/matrix-7272017{.log,-report.json}`, `layan-top-200-rerun-report.json` |
+| Start-click anchor, root fix `fbddaf87f10b404b6574ff916bba767acbaa42f2`, immutable `decdock` `ec0106d5…0557dd3`, `--require-anchor` mandatory, Breeze, 4 edges x 100/125/200 % x dark/light | **24 / 24 ok**: Kickoff opens on the desktop side of the strip, inside the output, 1 px from the strip, centred on Start or clamped to the output margin (card at 8 / 10 / 16 px from the screen edge at 100 / 125 / 200 %). The same package with the `7272017` `decdock`: bottom card 915 px off Start, top 420 px from the strip, left / right 595 px from the strip | `native/727/anchor-gate-fbddaf8{.log,-report.json}`, `anchored-*-kickoff-fbddaf8.png`, `finding-*` |
+| Layan `app_menu` on, real exporter | with no window the bar says `Desktop Window Help` (neutral label plus the bar's own generic menus, never File / Edit / View); with root's real Qt window focused it shows `Qt-fixture File Edit Window Help`, the window's own exported titles. Top and left at 100 % and top at 200 % were captured | `native/727/layan-top-100-app-menu-*.png` |
+
+**Remaining blockers (the packages stay NOT READY; the human gate in `tests/plasma_theme_ports.rs` is untouched):**
+
+1. `launcher` and `app_menu` together draw the logo twice in the flat bar (R9), so Layan keeps `app_menu` off by default (the user can turn it on and it is live).
+2. Layan's real Plasma layout (Kickoff, appmenu, spacer, tray, split clock, KRunner icon) is approximated: the bar also shows its own generic `Window` / `Help` menus beside the exported titles, there is no panel spacer, and `window_title` stands in when `app_menu` is off. KRunner is not implemented: the search applet opens `decspot`.
+3. Kickoff itself: only the Applications tab, a Leave button that opens `decsession`, favourites as a grid (`docs/launcher-styles.md`, "Fidelity gaps"). Not compared against a running Plasma.
+4. Window decoration: rdwm has no separate button-side key, so `decoration.buttons` is accepted but not applied; Aurorae is an approximation (`decoration-metadata.md`), no replica is claimed.
+5. Applets that need system data (network, volume, battery, bluetooth, brightness) are checked as effective settings only in a private world; the strip's drawing is proven for launcher, tasks, clock, show desktop and workspaces.
+6. Optional assets: the Breeze / Layan cursor catalogue validates (`decthemectl assets catalog check`: 2 sources, 3 packs) but no install was run here; there is no Tela icon pack in the catalogue and nothing was fetched or verified over the network, so no icon-pack rights are claimed.
+7. X11 only; Wayland is untested. The launcher contract test assertion added in `f18d95a` was not run (heavy slot-2 work is held by request).
+
 ## Current state: merged on root `8b3f822`, with the Plasma taskbar style wired into the real renderer
 
 This branch now contains the root's universal-panel 0.3, GNOME and review-fix integration (`8b3f822`, merge commit `94fc7b0`; no root file

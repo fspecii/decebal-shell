@@ -1,0 +1,120 @@
+{
+  "binary_note": "decdock fbddaf8 immutable; rerun of the entry that flaked (Kickoff card not yet painted at the fixed 1 s) with polling",
+  "source_head": "b3a3d24c37f334744b8f4715e2a99e1699aae4c6",
+  "binaries": {
+    "decbar": "b8a66b99a4fdb6c94339437c8e0ae34174efef335309dbc7c637343ba8c9e268",
+    "decdock": "ec0106d5ecc5cf1e17f7ac1ef5030873165fa843989fef6c81fe3ebe0a557dd3",
+    "declaunch": "292eedad92227678cc47dde774716293ed2d45e393b91e90674ebd90a7225770",
+    "decspot": "ec497eb81f361da5720ed7701a79869a4b54a595ab7559ac557796880c55c23f",
+    "decthemectl": "e0297000400868669b3a6479cccf8a7f9f8af64c8b4d20d055a40ade127be384"
+  },
+  "rdwm": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/ab1b588/rdwm",
+    "sha256": "468de6120c7af168e847b154e254ef60a04634df82a49381c7d30aa604d48ab5"
+  },
+  "rdwmctl": {
+    "path": "/home/ambsd/.cache/rdwm-super-arrow-artifacts/8db572d-ctl/rdwmctl",
+    "sha256": "2d3b846fff4e179e0fc169ced0cd94c49211f835aad4948769564f51af136db8"
+  },
+  "qt_fixture": {
+    "path": "/home/ambsd/.cache/decebal-appmenu-target/appmenu-fixtures/qt-fixture",
+    "sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+  },
+  "harness": {
+    "plasma-packages-native.py": "7fac6ec51ef2d7fc495b699c89abe0832964231591ad9381179d7c0c78579f51",
+    "private_x11.py": "a82511d842161db16933086b690cb9a5e2d36318d53436426e8a533e4c389d9c"
+  },
+  "themes": {
+    "plasma-layan": "8f7defc982801fda097375058632ecf0c51bfa41a097118a2ea29cfed03f63dc"
+  },
+  "entries": [
+    {
+      "package": "plasma-layan",
+      "edge": "top",
+      "scale": 2.0,
+      "mode": "dark",
+      "cases": {
+        "bar": "ok",
+        "bar_launcher": "ok",
+        "appmenu": "ok",
+        "keyboard_bar": "ok"
+      },
+      "steps": [
+        {
+          "step": "bar_strut",
+          "struts": {
+            "bar": [
+              0,
+              0,
+              64,
+              0
+            ],
+            "dock": [
+              0,
+              0,
+              0,
+              172
+            ]
+          },
+          "work_area": [
+            0,
+            64,
+            1920,
+            844
+          ]
+        },
+        {
+          "step": "glyph_vs_grid",
+          "distance": 44282
+        },
+        {
+          "step": "glyph_vs_windows",
+          "distance": 135619
+        },
+        {
+          "step": "glyph_vs_apple",
+          "distance": 76255
+        },
+        {
+          "step": "search_icon",
+          "items_on": 7,
+          "items_off": 6
+        },
+        {
+          "step": "launcher",
+          "card": [
+            16,
+            72,
+            1240,
+            992
+          ],
+          "gap": 8,
+          "centre_offset_along": 598.0,
+          "clamped_to_margin": true
+        },
+        {
+          "step": "appmenu_live",
+          "changed_in_strip": [
+            151,
+            21,
+            1505,
+            46
+          ],
+          "items_without_window": 11,
+          "items_with_exporting_window": 14,
+          "fixture_sha256": "eed7213fd142337b7833a4f2fdf4f42b3ce9f008cee4d35845259c9d3980cd12"
+        },
+        {
+          "step": "keyboard",
+          "ring": 168474,
+          "moved": 848384
+        }
+      ]
+    }
+  ],
+  "failures": 0,
+  "limits": [
+    "X11 only; no Wayland",
+    "network/audio/battery/bluetooth zones need system data this private world does not have, so they are checked as effective settings only"
+  ]
+}
