@@ -41,10 +41,8 @@ def sha256(p):
 
 def outer(a):
     ev = Path(a.evidence).expanduser().resolve()
-    ev.mkdir(parents=True, exist_ok=True)
+    ev.mkdir(parents=True, exist_ok=False)
     root = ev / "root"
-    if root.exists():
-        shutil.rmtree(root)
     for d in ["home", "cfg", "data", "cache", "state", "run", "tmp"]:
         (root / d).mkdir(parents=True)
     os.chmod(root / "run", 0o700)

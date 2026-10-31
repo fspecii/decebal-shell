@@ -535,15 +535,30 @@ mod tests {
         // A long-running decsettings that predates a theme (an old binary has no "caelestia" in its table) reports
         // "no theme caelestia"; a current one must load everything the CLI lists, in both modes.
         let (mut m, _) = model_with("[general]\n");
+        // This fixture has no running WM. Capability checks use the complete pinned schema,
+        // including the mode-specific decoration families, rather than the host's session.
+        let ctl = m.paths.shell_dir.join("fixture-rdwmctl");
+        std::fs::write(ctl.with_extension("schema"), include_str!("rdwm-schema.json")).unwrap();
+        std::fs::write(&ctl, "#!/bin/sh\ncase \"$1\" in schema) cat \"$0.schema\";; check) exit 0;; *) exit 1;; esac\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
+        m.paths.rdwmctl = ctl.clone();
+        m.store.rdwmctl = ctl;
+        let choose = |m: &mut Model, id: &str| {
+            m.apply(&format!("l:theme:{id}"), CtlVal::Click);
+            if m.widget_choice.is_some() {
+                m.apply("wc:keep", CtlVal::Click);
+            }
+        };
         let entries = source(&m).list();
         assert!(entries.iter().any(|e| e.id == "caelestia"), "the listing has Caelestia");
         for e in entries.iter().filter(|e| e.error.is_none()) {
             for mode in ["light", "dark", "auto"] {
-                m.apply("l:theme:caelestia", CtlVal::Click); // start from somewhere else so every pick is a change
+                choose(&mut m, "caelestia"); // start from somewhere else so every pick is a change
                 m.apply("th:mode", CtlVal::Str(mode.into()));
-                m.apply(&format!("l:theme:{}", e.id), CtlVal::Click);
+                choose(&mut m, &e.id);
                 let sel = selection(&m);
-                assert_eq!(sel.name, e.id, "{} / {mode}: the pick was stored", e.id);
+                assert_eq!(sel.name, e.id, "{} / {mode}: the pick was stored; notice={:?}; widget_choice={}", e.id, m.notice, m.widget_choice.is_some());
                 let its = items(&m);
                 let warn = its.iter().find_map(|i| match i {
                     Item::Note { text, warn: true } if text.contains("could not be loaded") => Some(text.clone()),
