@@ -174,8 +174,11 @@ fn panel_fingerprint(src: &Source, selection: &Selection, def: &crate::theme::mo
         dux: Some(&dux),
         dock_user_edge: None,
     };
-    let dock_edge = user_keys["dock_edge"].as_str().and_then(crate::panel::Edge::parse).or(theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom);
-    format!("{}/dock:{}", crate::panel::resolve(&i).fingerprint(), dock_edge.as_str())
+    let user_dock = user_keys["dock_edge"].as_str().and_then(crate::panel::Edge::parse);
+    let dock_edge = user_dock.or(theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom);
+    // the taskbar has applets of its own (Start, search, task buttons, show desktop) with their own defaults
+    let taskbar = crate::panel::resolve(&crate::panel::Inputs { renderer: crate::panel::Renderer::Taskbar, legacy_workspaces: None, dux: None, dock_user_edge: user_dock, ..i });
+    format!("{}/dock:{}/taskbar:{}", crate::panel::resolve(&i).fingerprint(), dock_edge.as_str(), taskbar.fingerprint())
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -733,6 +736,11 @@ mod performance_tests {
         let fewer = key(json!({"bar": {"applets": {"clock": false}}}), json!({}));
         let docked = key(json!({}), json!({"edge": "right"}));
         assert!(base != moved && base != fewer && base != docked && moved != fewer, "edge, applets and dock edge each regenerate it");
+        // applets only the taskbar draws by default still change what a taskbar theme's preview shows
+        let no_tasks = key(json!({"bar": {"applets": {"tasks": false}}}), json!({}));
+        let no_desktop = key(json!({"bar": {"applets": {"show_desktop": false}}}), json!({}));
+        let no_start = key(json!({"bar": {"applets": {"launcher": false}}}), json!({}));
+        assert!(no_tasks != base && no_desktop != base && no_start != base && no_tasks != no_desktop, "taskbar-only applet choices regenerate it");
         // an override equal to the default changes nothing visible, but it is the user's choice: it is part of the key too
         assert_eq!(key(json!({"bar": {"edge": "left"}}), json!({})), moved, "stable for the same inputs");
         let _ = fs::remove_dir_all(&dir);

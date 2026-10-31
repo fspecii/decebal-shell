@@ -8,10 +8,22 @@ registry, `mod.rs` the resolution, `frame.rs` the edge geometry). The acceptance
 
 ## Implementation status
 
-This section is updated with each commit of the universal-panel work.
+Done (0.3.0 batch): the registry, keys and resolution order; every bar style (menu bar, floating bar, pill rail, Dux band)
+on all four edges with every applet, overflow lists and worker gating; the Windows taskbar on all four edges with every
+applet; the macOS dock on all four edges; `[branding]`; Settings → Panels; `decthemectl panel`; keyboard mode
+(`decbar --focus`); previews that show the effective panels and key their cache on them.
 
-- Done: registry, keys, resolution order, user/theme/legacy precedence, workers rule, manifest schema, `LaunchAnchor`.
-- In progress: renderer edges and applets, Settings → Panels, `decthemectl panel`, worker gating, previews.
+Known limits:
+
+- The bars draw at one logical scale (as before); the taskbar follows `DECEBAL_SCALE` / `Xft.dpi`.
+- The taskbar has no keyboard mode of its own yet (its popups and menus take Up/Down/Enter/Escape).
+- On a side taskbar, a StatusNotifierItem's Activate gets the item's along/across position as its x/y hint.
+- `decbar --control-center` summoned by a key or hot corner places itself for a top menu bar or a top/bottom taskbar;
+  it does not yet know a side taskbar or a bottom/side classic bar (its `Host::detect` belongs to the Control Center
+  owner).
+- Applet order inside a renderer is fixed (the renderer's own reading order).
+- Native evidence is X11 (private Xvfb without a window manager: strut hints are checked as values, not as a work area
+  a WM honoured). Wayland layer-shell anchoring is unit-tested only.
 
 ## Surfaces and processes
 

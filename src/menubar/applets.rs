@@ -221,6 +221,22 @@ pub(super) fn group_tasks(windows: &[crate::wm::Window]) -> Vec<Task> {
 impl DecBar {
     /// This bar's effective panel: renderer, edge and enabled applets (`decbar --position` moves it).
     pub(super) fn panel(&self) -> Effective {
+        #[cfg(not(test))]
+        {
+            let generation = crate::theme::generation();
+            if let Some((g, p)) = self.panel_cache.get().filter(|(g, _)| *g == generation) {
+                let _ = g;
+                return p;
+            }
+            let p = self.resolve_panel();
+            self.panel_cache.set(Some((generation, p)));
+            p
+        }
+        #[cfg(test)]
+        self.resolve_panel()
+    }
+
+    fn resolve_panel(&self) -> Effective {
         let th = crate::theme::th();
         #[allow(unused_mut)]
         let mut p = if self.embedded {
@@ -760,10 +776,20 @@ impl DecBar {
         self.ensure_indicator_host();
     }
 
-    /// What the minute refresh must probe: nothing when no applet (and no Control Center button) shows system state.
-    pub(super) fn snapshot_wanted(&self) -> bool {
+    /// What the minute refresh probes: each kind of state only while an applet shows it. The Control Center takes a
+    /// full snapshot when it opens and while it is open, so its button alone needs nothing between; the application
+    /// menu's Apple menu names the current appearance. Hosts (the taskbar) keep their sound / network / battery icons.
+    pub(super) fn probes(&self) -> Probes {
         let p = self.panel();
-        [A::Volume, A::Network, A::Bluetooth, A::Battery, A::Brightness, A::StayAwake, A::ControlCenter, A::AppMenu].iter().any(|id| p.shows(*id))
+        Probes {
+            net: p.shows(A::Network),
+            volume: p.shows(A::Volume),
+            battery: p.shows(A::Battery),
+            bluetooth: p.shows(A::Bluetooth),
+            brightness: p.shows(A::Brightness),
+            awake: p.shows(A::StayAwake),
+            light: p.shows(A::AppMenu),
+        }
     }
 }
 

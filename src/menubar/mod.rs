@@ -378,6 +378,8 @@ pub struct DecBar {
     focus_waker: Arc<Mutex<Option<Waker>>>,
     /// The theme's logo, rendered once per size and colour.
     brand_cache: Option<(applets::LogoKey, Option<Pixmap>)>,
+    /// The resolved panel and the theme generation it was resolved for (it is asked for many times a frame).
+    panel_cache: std::cell::Cell<Option<(u64, crate::panel::Effective)>>,
     /// What an embedding host (the taskbar) had no room for: the overflow cell lists it.
     embed_hidden: std::cell::RefCell<Vec<Tray>>,
 }
@@ -480,6 +482,7 @@ impl DecBar {
             focus_request: Arc::new(AtomicBool::new(false)),
             focus_waker: Arc::new(Mutex::new(None)),
             embed_hidden: std::cell::RefCell::new(Vec::new()),
+            panel_cache: std::cell::Cell::new(None),
         };
         if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
             bar.symbols.prepare_material();
@@ -503,6 +506,7 @@ impl DecBar {
     /// Which half of a split layout this process draws (`decbar --role bottom`); the default is the main bar.
     pub fn with_process(mut self, process: vbar::Process) -> Self {
         self.process = process;
+        self.panel_cache.set(None);
         self.was_place = self.place();
         if process == vbar::Process::Bottom {
             // two bars must not write the same test file
@@ -518,6 +522,7 @@ impl DecBar {
     /// Draws the pill bar at `position` whatever `bar.position` says (`decbar --position`, for screenshots).
     pub fn with_position(mut self, position: Option<crate::config::BarPosition>) -> Self {
         self.position_override = position;
+        self.panel_cache.set(None);
         self.was_place = self.place();
         self
     }
@@ -880,8 +885,9 @@ impl DecBar {
         if cfg!(test) {
             return;
         }
-        // the open Control Center asks for a full snapshot itself; the minute refresh only runs for applets that show it
-        if !full && !self.snapshot_wanted() {
+        // the open Control Center asks for a full snapshot itself; the minute refresh probes only what applets show
+        let want = self.probes();
+        if !full && !want.any() {
             return;
         }
         if self.shared.snap_busy.swap(true, Ordering::SeqCst) {
@@ -889,13 +895,9 @@ impl DecBar {
         }
         let shared = Arc::clone(&self.shared);
         let waker = self.waker.clone();
-        let brightness = self.shows(crate::panel::AppletId::Brightness);
         std::thread::spawn(move || {
             let prev = shared.snap.lock().map(|s| s.clone()).unwrap_or_default();
-            let mut next = if full { Snapshot::collect() } else { collect_light(&prev) };
-            if brightness && !full {
-                next.brightness = sys::probe_brightness();
-            }
+            let next = if full { Snapshot::collect() } else { collect_light(&prev, want) };
             // A volume the user just set (the wheel, a slider) is still being applied by the worker: a probe taken
             // meanwhile reads the old value and would undo the next wheel step.
             let just_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_secs(1));
@@ -1452,19 +1454,50 @@ impl DecBar {
 
 const PAD_SEP: f32 = 8.0;
 
-/// A cheap refresh: network, volume, stay-awake, appearance; Bluetooth only if it was seen before.
-fn collect_light(prev: &Snapshot) -> Snapshot {
-    let mut s = prev.clone();
-    s.net = sys::probe_net();
-    if let Some((v, name)) = sys::probe_volume() {
-        s.volume = Some(v);
-        s.sink = name;
+/// Which system probes the minute refresh runs: one per kind of state an enabled applet shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Probes {
+    pub net: bool,
+    pub volume: bool,
+    pub battery: bool,
+    pub bluetooth: bool,
+    pub brightness: bool,
+    pub awake: bool,
+    pub light: bool,
+}
+
+impl Probes {
+    pub fn any(self) -> bool {
+        self.net || self.volume || self.battery || self.bluetooth || self.brightness || self.awake || self.light
     }
-    s.awake = awake::refresh();
-    s.light = sys::is_light();
-    s.battery = sys::probe_battery();
-    if prev.bluetooth.is_some() || sys::have("bluetoothctl") {
+}
+
+/// A cheap refresh of what `want` names (Bluetooth only if it was seen before or its tool exists); the rest is kept.
+fn collect_light(prev: &Snapshot, want: Probes) -> Snapshot {
+    let mut s = prev.clone();
+    if want.net {
+        s.net = sys::probe_net();
+    }
+    if want.volume {
+        if let Some((v, name)) = sys::probe_volume() {
+            s.volume = Some(v);
+            s.sink = name;
+        }
+    }
+    if want.awake {
+        s.awake = awake::refresh();
+    }
+    if want.light {
+        s.light = sys::is_light();
+    }
+    if want.battery {
+        s.battery = sys::probe_battery();
+    }
+    if want.bluetooth && (prev.bluetooth.is_some() || sys::have("bluetoothctl")) {
         s.bluetooth = sys::probe_bluetooth();
+    }
+    if want.brightness {
+        s.brightness = sys::probe_brightness();
     }
     s
 }

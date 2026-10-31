@@ -379,6 +379,11 @@ pub fn resolve_edge(i: &Inputs) -> (Edge, bool, Origin) {
 
 /// Whether one applet is on, and where that came from.
 pub fn resolve_applet(i: &Inputs, id: AppletId) -> (bool, Origin) {
+    resolve_applet_with(i, id, i.dux.map(dux_items))
+}
+
+/// [`resolve_applet`] with the Dux item lists already turned into a set (once per resolution, not per applet).
+fn resolve_applet_with(i: &Inputs, id: AppletId, dux: Option<AppletSet>) -> (bool, Origin) {
     if let Some(on) = i.user.applets.get(&id) {
         return (*on, Origin::User);
     }
@@ -393,8 +398,8 @@ pub fn resolve_applet(i: &Inputs, id: AppletId) -> (bool, Origin) {
         return (set.contains(id), Origin::Theme);
     }
     if i.renderer == Renderer::Dux {
-        if let Some(l) = i.dux {
-            return (dux_items(l).contains(id), Origin::Theme);
+        if let Some(set) = dux {
+            return (set.contains(id), Origin::Theme);
         }
     }
     (i.renderer.defaults().contains(id), Origin::Renderer)
@@ -408,8 +413,9 @@ pub fn dux_items(l: &crate::config::BarLayout) -> AppletSet {
 pub fn resolve(i: &Inputs) -> Effective {
     let (edge, split, _) = resolve_edge(i);
     let mut enabled = AppletSet::EMPTY;
+    let dux = if i.renderer == Renderer::Dux { i.dux.map(dux_items) } else { None };
     for id in AppletId::all() {
-        enabled.set(id, resolve_applet(i, id).0);
+        enabled.set(id, resolve_applet_with(i, id, dux).0);
     }
     let explicit = AppletSet::of(&i.user.applets.iter().filter(|(_, on)| **on).map(|(id, _)| *id).collect::<Vec<_>>());
     Effective { renderer: i.renderer, edge, split, applets: enabled, explicit }
@@ -445,15 +451,14 @@ pub fn legacy_workspaces(t: crate::config::Toggle) -> Option<bool> {
 // ------------------------------------------------------------------------------------------------ writing
 
 /// Sets (`Some`) or clears (`None`, back to the theme's default) the user's bar edge in a `decebal.json` document. A
-/// single edge also ends a split layout; `bar.position` is updated too so older readers agree.
+/// single edge also ends a split layout. The older `bar.position` stays as the theme wrote it, so clearing the user's
+/// edge really returns to the theme's (0.2.x readers keep their own layout: they never see the user's edge).
 pub fn write_edge(shell: &mut Value, edge: Option<Edge>, split: Option<bool>) {
     let bar = bar_obj(shell);
     match edge {
         Some(e) => {
             bar.insert("edge".into(), Value::from(e.as_str()));
-            let split = split.unwrap_or(false);
-            bar.insert("split".into(), Value::from(split));
-            bar.insert("position".into(), Value::from(if split { "split" } else { e.as_str() }));
+            bar.insert("split".into(), Value::from(split.unwrap_or(false)));
         }
         None => {
             bar.shift_remove("edge");
@@ -466,11 +471,15 @@ pub fn write_edge(shell: &mut Value, edge: Option<Edge>, split: Option<bool>) {
 pub fn write_applet(shell: &mut Value, id: AppletId, on: Option<bool>) {
     let bar = bar_obj(shell);
     let applets = bar.entry("applets").or_insert_with(|| Value::Object(Default::default()));
+    if let Value::Array(list) = applets {
+        // the list form names every enabled applet: it becomes the map form first, keeping each choice
+        let on: Vec<AppletId> = list.iter().filter_map(Value::as_str).filter_map(AppletId::parse).collect();
+        *applets = Value::Object(AppletId::all().map(|a| (a.key().to_string(), Value::from(on.contains(&a)))).collect());
+    }
     if !applets.is_object() {
         *applets = Value::Object(Default::default());
     }
     let map = applets.as_object_mut().expect("object");
-    // a list (all keys known) becomes the map form first
     match on {
         Some(v) => {
             map.insert(id.key().into(), Value::from(v));
@@ -603,16 +612,46 @@ mod tests {
         let u = UserPanel::from_bar_json(&doc["bar"]);
         assert_eq!(u.edge, Some(Edge::Bottom));
         assert_eq!(u.applets.get(&AppletId::Weather), Some(&false));
-        assert_eq!(doc["bar"]["position"], "bottom", "older readers see the same edge");
+        assert_eq!(doc["bar"]["position"], "left", "the theme's older key is left alone");
         write_applet(&mut doc, AppletId::Weather, None);
         write_applet(&mut doc, AppletId::Media, None);
         assert!(doc["bar"].get("applets").is_none());
         reset(&mut doc);
-        assert_eq!(doc, json!({"bar": {"enabled": true, "position": "bottom", "keep": 1}, "theme": {"name": "nord"}}));
+        assert_eq!(doc, json!({"bar": {"enabled": true, "position": "left", "keep": 1}, "theme": {"name": "nord"}}));
         // the list form names exactly the enabled ones; junk is ignored
         let u = UserPanel::from_bar_json(&json!({"applets": ["clock", "nope", 3], "edge": "sideways"}));
         assert_eq!(u.edge, None);
         assert_eq!(u.applets.iter().filter(|(_, on)| **on).count(), 1);
+    }
+
+    #[test]
+    fn a_reset_rail_returns_to_the_themes_edge() {
+        // the rail's theme said left (bar.position); the user chose bottom, then reset
+        let mut doc = json!({"bar": {"position": "left"}});
+        write_edge(&mut doc, Some(Edge::Bottom), None);
+        let theme = ThemePanel::default();
+        let edge = |doc: &Value| {
+            let user = UserPanel::from_bar_json(&doc["bar"]);
+            let legacy = doc["bar"]["position"].as_str().and_then(BarPosition::parse);
+            resolve_edge(&Inputs { legacy_position: legacy, ..inputs(Renderer::Pill, &user, &theme) }).0
+        };
+        assert_eq!(edge(&doc), Edge::Bottom);
+        reset(&mut doc);
+        assert_eq!(edge(&doc), Edge::Left, "reset gives the theme's edge back");
+        write_edge(&mut doc, Some(Edge::Right), None);
+        write_edge(&mut doc, None, None);
+        assert_eq!(edge(&doc), Edge::Left);
+    }
+
+    #[test]
+    fn editing_one_applet_keeps_the_others_of_a_list_choice() {
+        let mut doc = json!({"bar": {"applets": ["clock", "volume", "weather"]}});
+        write_applet(&mut doc, AppletId::Weather, Some(false));
+        let u = UserPanel::from_bar_json(&doc["bar"]);
+        assert_eq!(u.applets.get(&AppletId::Clock), Some(&true));
+        assert_eq!(u.applets.get(&AppletId::Volume), Some(&true));
+        assert_eq!(u.applets.get(&AppletId::Weather), Some(&false));
+        assert_eq!(u.applets.get(&AppletId::Battery), Some(&false), "unlisted ones stay off");
     }
 
     #[test]

@@ -379,9 +379,18 @@ impl AppletId {
     /// The key or an alias, case-insensitive with `-` / `_` / space ignored (so `launcherButton`, `app-menu` and
     /// `APP_MENU` all parse).
     pub fn parse(s: &str) -> Option<AppletId> {
-        let norm = |t: &str| t.chars().filter(|c| !matches!(c, '-' | '_' | ' ')).flat_map(char::to_lowercase).collect::<String>();
-        let want = norm(s);
-        REGISTRY.iter().find(|a| norm(a.key) == want || a.aliases.iter().any(|al| norm(al) == want)).map(|a| a.id)
+        // compares without allocating: this runs for every Dux item on every resolution
+        fn same(a: &str, b: &str) -> bool {
+            let (mut x, mut y) = (a.chars().filter(|c| !matches!(c, '-' | '_' | ' ')), b.chars().filter(|c| !matches!(c, '-' | '_' | ' ')));
+            loop {
+                match (x.next(), y.next()) {
+                    (None, None) => return true,
+                    (Some(p), Some(q)) if p.eq_ignore_ascii_case(&q) => {}
+                    _ => return false,
+                }
+            }
+        }
+        REGISTRY.iter().find(|a| same(a.key, s) || a.aliases.iter().any(|al| same(al, s))).map(|a| a.id)
     }
     pub fn all() -> impl Iterator<Item = AppletId> {
         REGISTRY.iter().map(|a| a.id)

@@ -40,6 +40,7 @@ impl DecBar {
     pub fn status_engine() -> DecBar {
         let mut bar = DecBar::new(Box::new(StaticApp(String::new())));
         bar.embedded = true;
+        bar.panel_cache.set(None);
         bar.embed.taskbar = true;
         bar.was_place = None;
         bar
