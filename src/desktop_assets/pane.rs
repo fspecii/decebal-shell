@@ -137,6 +137,18 @@ impl Capture {
 }
 
 /// A private folder for one install's log, created fresh (never an existing path, never through a link), mode 0700.
+struct JobDirCleanup(std::path::PathBuf);
+
+impl Drop for JobDirCleanup {
+    fn drop(&mut self) {
+        if let Err(e) = std::fs::remove_dir(&self.0) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(self.0.clone());
+            }
+        }
+    }
+}
+
 fn job_dir() -> Result<std::path::PathBuf, String> {
     use std::os::unix::fs::DirBuilderExt;
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -336,6 +348,7 @@ fn run_install(pack: &str, limit: std::time::Duration, mut finish: Finish) {
         Ok(d) => d,
         Err(e) => return fail(&mut finish, e),
     };
+    let _cleanup_on_unwind = JobDirCleanup(dir.clone());
     let cleanup = |e: String| {
         let _ = std::fs::remove_dir(&dir);
         e
@@ -825,6 +838,10 @@ mod tests {
         let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
         let pids = crate::desktop_assets::testkit::Scratch::new("pane-panic-pids");
         let pf = pids.path().join("pid");
+        let id = u64::MAX - 15;
+        let dir = std::env::temp_dir().join(format!("decebal-asset-install-{}-{}-{id}", unsafe { libc::getuid() }, std::process::id()));
+        assert!(!dir.exists(), "the cleanup test must own a fresh path");
+        *NEXT_ID.lock().unwrap() = Some(id);
         PANIC_IN_WORKER.store(true, std::sync::atomic::Ordering::SeqCst);
         let (last, woke, _s) = run_fake("pane-panic", &format!("sleep 300 &\necho $! > '{}'\nexit 1", pf.display()), None);
         PANIC_IN_WORKER.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -832,6 +849,7 @@ mod tests {
         assert!(!ok && woke == 1 && line.contains("stopped unexpectedly"), "{line}");
         let pid: i32 = std::fs::read_to_string(&pf).unwrap().trim().parse().unwrap();
         assert!(gone(pid), "the install's group was cleaned up before the panic");
+        assert!(!dir.exists(), "the empty owned job directory was cleaned up during unwind");
     }
 
     #[test]
