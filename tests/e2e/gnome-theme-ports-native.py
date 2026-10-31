@@ -20,6 +20,9 @@ import time
 
 from PIL import Image, ImageChops
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gnome_xvfb  # noqa: E402
+
 HERE = Path(__file__).resolve().parents[2]
 def loadable_themes(bin_dir, themes, scratch):
     """The themes folder to point decbar/decthemectl at. The packages need decebal 0.3.0 (the release with the GNOME look); on an older
@@ -105,7 +108,7 @@ def run_all(bin_dir, themes, evidence, wallpapers):
                     stub = root / "bin" / app
                     stub.write_text("#!/bin/sh\nexit 1\n")
                     stub.chmod(0o755)
-                display = next(f":{n}" for n in range(352, 400) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
+                display = gnome_xvfb.reserve_display()  # explicitly reserved HIGH number (>= 700), free in both socket namespaces; never :0, no -displayfd
                 env = dict(
                     os.environ,
                     HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"), XDG_CACHE_HOME=str(root / "cache"),
@@ -123,6 +126,7 @@ def run_all(bin_dir, themes, evidence, wallpapers):
                 try:
                     def run(*args, timeout=30, check=True):
                         return subprocess.run(args, env=env, text=True, capture_output=True, check=check, timeout=timeout).stdout.strip()
+                    gnome_xvfb.verify_owned(server, display)  # owned server, both socket namespaces, before any client connects or input is sent
                     wait(lambda: server.poll() is None and run("xdotool", "getdisplaygeometry"), "private Xvfb ready")
                     wallpaper = None
                     solid = True
@@ -211,8 +215,7 @@ def run_all(bin_dir, themes, evidence, wallpapers):
                             child.wait(timeout=5)
                         except subprocess.TimeoutExpired:
                             child.kill()
-                    server.terminate()
-                    server.wait(timeout=10)
+                    gnome_xvfb.stop_owned(server)
                     log.close()
     (evidence / "report.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))

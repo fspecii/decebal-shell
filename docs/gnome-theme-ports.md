@@ -320,7 +320,7 @@ recorder lines and every measured rectangle are in [`control-center-acceptance/`
 
 ### Native acceptance: the real windows, real pointer and keyboard (`tests/e2e/gnome-cc-acceptance.py`)
 
-The driver starts a private Xvfb (a fresh display, never `:0`), a private XRender compositor and backdrop, a private HOME/XDG/runtime and no
+The driver starts a private Xvfb (an explicitly reserved display number ≥ 700 that is free in both X socket namespaces, never `:0`, no `-displayfd`; `tests/e2e/gnome_xvfb.py` proves the server is its own, via the lock-file pid and the filesystem and abstract sockets held by that pid, before any client or input, and stops only that process), a private XRender compositor and backdrop, a private HOME/XDG/runtime and no
 session or system bus. It runs a **copy** of the built `decbar` next to **recording stand-ins** for every program the panel can start (nmcli,
 bluetoothctl, wpctl, playerctl, brightnessctl, decnotify, omarchy, decutil, decsettings, decsession, decthemectl, rdwm-lock, loginctl,
 nm-connection-editor, desktop-style) and a `PATH` that holds only those (plus read-only `fc-list`/`fc-match`/`sh`/`sleep`). Setters are not put in dry-run:

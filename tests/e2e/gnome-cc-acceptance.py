@@ -2,7 +2,7 @@
 """Native acceptance of the GNOME quick-settings look: the real `decbar --control-center` window driven by real pointer and keyboard events.
 Usage: python3 tests/e2e/gnome-cc-acceptance.py DECBAR_BINARY EVIDENCE_DIR [ONLY_SCENARIO ...]
 
-Everything is private: Xvfb on a fresh display (never :0), a private HOME/XDG/runtime and no session or system bus, a private XRender
+Everything is private: Xvfb on an explicitly reserved high display (>= 700, verified owned in both socket namespaces, never :0), a private HOME/XDG/runtime and no session or system bus, a private XRender
 compositor, and a private `bin/` that holds a COPY of decbar plus recording stand-ins for every program the panel can start (nmcli,
 bluetoothctl, wpctl, playerctl, brightnessctl, decnotify, omarchy, decutil, decsettings, decsession, decthemectl, rdwm-lock, loginctl,
 nm-connection-editor...). The copy matters: decbar prefers programs next to its own binary, so the stand-ins are what it finds. `PATH` is that
@@ -20,6 +20,9 @@ import tempfile
 import time
 
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gnome_xvfb  # noqa: E402
 
 # Programs the panel can start. Probes print what a populated machine would; everything else records and succeeds.
 RECORDED = {
@@ -105,10 +108,8 @@ class Desktop:
             (bat / "type").write_text("Battery\n")
             (bat / "capacity").write_text("82\n")
             (bat / "status").write_text("Discharging\n")
-        for n in range(500, 540):
-            if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists():
-                self.display = f":{n}"
-                break
+        # an explicitly reserved HIGH display (>= 700), free in both socket namespaces; never :0, never -displayfd (see gnome_xvfb.py)
+        self.display = gnome_xvfb.reserve_display()
         config = {"theme": {"name": sc.theme, "mode": sc.mode}, "control_center": {"style": "gnome", "position": "top-right"}, "bar": {"enabled": sc.bar}, "dock": {"enabled": False}}
         if sc.tiles is not None:
             config["control_center"]["tiles"] = sc.tiles
@@ -127,6 +128,13 @@ class Desktop:
         self.children = []
         w, h = sc.screen
         self.server = subprocess.Popen(["Xvfb", self.display, "-screen", "0", f"{w}x{h}x24", "-nolisten", "tcp"], env=self.infra, stdout=self.log, stderr=self.log)
+        try:
+            gnome_xvfb.verify_owned(self.server, self.display)  # before any client connects or any input is sent
+        except Exception:
+            gnome_xvfb.stop_owned(self.server)
+            self.log.close()
+            self.tmp.cleanup()
+            raise
         wait(lambda: self.server.poll() is None and self.run("xdotool", "getdisplaygeometry"), "private Xvfb ready")
         backdrop = self.root / "backdrop.png"
         Image.new("RGB", (w, h), SCREEN_BACKDROP).save(backdrop)
@@ -246,8 +254,7 @@ class Desktop:
                 child.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 child.kill()
-        self.server.terminate()
-        self.server.wait(timeout=10)
+        gnome_xvfb.stop_owned(self.server)
         self.log.close()
         self.tmp.cleanup()
 
