@@ -58,8 +58,35 @@ const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 const KEEP_HEAD: usize = 16 << 10;
 const KEEP_TAIL: usize = 16 << 10;
 
+/// After SIGKILL, how long the worker waits for the exit before it reports that the process has not exited yet. A
+/// process in an uninterruptible kernel wait cannot be reaped before that wait ends: the worker keeps waiting for it
+/// (the job stays pending), so the deadline bounds when the stop is requested, not when the process is gone.
+const REAP_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[cfg(test)]
 static DEADLINE: std::sync::Mutex<Option<std::time::Duration>> = std::sync::Mutex::new(None);
+#[cfg(test)]
+static GRACE: std::sync::Mutex<Option<std::time::Duration>> = std::sync::Mutex::new(None);
+/// Test hooks: fail the worker's thread start; panic in the worker after supervising; run before the failure log is
+/// written (with the job folder); pretend the killed child has not exited within the reap grace.
+#[cfg(test)]
+static FAIL_SPAWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+static PANIC_IN_WORKER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+type DirHook = Option<Box<dyn Fn(&std::path::Path) + Send>>;
+#[cfg(test)]
+static BEFORE_LOG: std::sync::Mutex<DirHook> = std::sync::Mutex::new(None);
+#[cfg(test)]
+static SLOW_REAP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn stop_grace() -> std::time::Duration {
+    #[cfg(test)]
+    if let Some(d) = *GRACE.lock().unwrap_or_else(|e| e.into_inner()) {
+        return d;
+    }
+    STOP_GRACE
+}
 #[cfg(test)]
 static NEXT_ID: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
 /// The log folder of the last failed install (kept for the user), removed when the next install starts.
@@ -186,7 +213,7 @@ impl Drop for Finish {
 
 /// Runs the child to its end or to the deadline, draining its output (bounded) as it goes; returns its success,
 /// whether it was stopped, and the kept output. The child's process group is cleaned up before the child is reaped.
-fn supervise(mut child: std::process::Child, out: std::fs::File, limit: std::time::Duration) -> (bool, bool, Capture) {
+fn supervise(mut child: std::process::Child, out: std::fs::File, limit: std::time::Duration, slow_reap: &dyn Fn(u32)) -> (bool, bool, Capture) {
     use std::io::Read;
     let pid = child.id();
     let mut out = out;
@@ -218,7 +245,7 @@ fn supervise(mut child: std::process::Child, out: std::fs::File, limit: std::tim
             stopped = true;
             signal_group(pid, libc::SIGTERM);
             let grace = std::time::Instant::now();
-            while !exited(pid) && grace.elapsed() < STOP_GRACE {
+            while !exited(pid) && grace.elapsed() < stop_grace() {
                 drain(&mut out, &mut cap, &mut eof);
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
@@ -228,6 +255,22 @@ fn supervise(mut child: std::process::Child, out: std::fs::File, limit: std::tim
     }
     // whatever the child left behind in its group goes too, while the child (zombie or alive) still holds the group id
     signal_group(pid, libc::SIGKILL);
+    // a killed process normally exits at once; one in an uninterruptible kernel wait exits only when that wait ends.
+    // Wait a bounded time, then say so (the caller keeps the job pending) and keep waiting: reaping cannot be forced
+    let reap_from = std::time::Instant::now();
+    #[allow(unused_mut)]
+    let mut gone = exited(pid);
+    while !gone && reap_from.elapsed() < REAP_GRACE {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        gone = exited(pid);
+    }
+    #[cfg(test)]
+    if SLOW_REAP.load(std::sync::atomic::Ordering::SeqCst) {
+        gone = false;
+    }
+    if !gone {
+        slow_reap(pid);
+    }
     let status = child.wait().ok();
     // the writers are gone: read what is left, briefly
     let tail_until = std::time::Instant::now() + std::time::Duration::from_millis(500);
@@ -245,21 +288,54 @@ fn outcome_line(text: &str, ok: bool) -> String {
     pick.map(|l| l.chars().take(400).collect()).unwrap_or_default()
 }
 
-/// Starts `decthemectl assets install ID` (fixed arguments, no shell, its own process group) and supervises it on a
-/// worker thread: output through a pipe into a bounded buffer, a deadline, the group cleaned up at the end, the
+/// Starts `decthemectl assets install ID` (fixed arguments, no shell, its own process group) on a worker thread and
+/// supervises it there: output through a pipe into a bounded buffer, a deadline, the group cleaned up at the end, the
 /// outcome recorded, and the Settings loop woken through its queue (like its other workers), without any input.
+/// The calling (UI) thread only claims the job and starts the worker: it never creates the child, waits or reaps, and
+/// a worker that cannot start leaves no child behind (none was created).
 fn start_install(pack: &str, queue: crate::settings::io::Queue, wake: std::sync::Arc<dyn Fn() + Send + Sync>) -> Result<(), String> {
-    use std::os::fd::{FromRawFd, OwnedFd};
-    use std::os::unix::process::CommandExt;
     let mut g = JOB.lock().unwrap_or_else(|e| e.into_inner());
     if g.is_some() {
         return Err("another pack is being installed".into());
     }
+    // published before the worker exists and the lock released: the worker's guard clears it on every path, a failed
+    // thread start included (which drops the guard, unrun, inside `spawn`)
+    *g = Some(pack.to_string());
+    drop(g);
+    let finish = Finish { pack: pack.to_string(), queue, wake, outcome: None };
+    let (pack_s, limit) = (pack.to_string(), deadline());
+    let work = move || run_install(&pack_s, limit, finish);
+    #[cfg(test)]
+    let spawned = if FAIL_SPAWN.load(std::sync::atomic::Ordering::SeqCst) {
+        drop(work);
+        Err(std::io::Error::other("injected thread start failure"))
+    } else {
+        std::thread::Builder::new().name("asset-install".into()).spawn(work).map(|_| ())
+    };
+    #[cfg(not(test))]
+    let spawned = std::thread::Builder::new().name("asset-install".into()).spawn(work).map(|_| ());
+    spawned.map_err(|e| {
+        let msg = format!("could not start the install supervisor: {e}");
+        // the guard has cleared the job and reported; make its outcome precise
+        *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((pack.to_string(), false, msg.clone()));
+        msg
+    })
+}
+
+/// The worker: creates the job folder, the pipe and the child, supervises it and fills in the outcome. Every early
+/// return still goes through `finish` (dropped at the end), so exactly one outcome and one wake are reported.
+fn run_install(pack: &str, limit: std::time::Duration, mut finish: Finish) {
+    use std::os::fd::{FromRawFd, OwnedFd};
+    use std::os::unix::process::CommandExt;
     if let Some(old) = KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = std::fs::remove_file(old.join("install.log"));
         let _ = std::fs::remove_dir(&old);
     }
-    let dir = job_dir()?;
+    let fail = |finish: &mut Finish, msg: String| finish.outcome = Some((false, msg));
+    let dir = match job_dir() {
+        Ok(d) => d,
+        Err(e) => return fail(&mut finish, e),
+    };
     let cleanup = |e: String| {
         let _ = std::fs::remove_dir(&dir);
         e
@@ -268,85 +344,84 @@ fn start_install(pack: &str, queue: crate::settings::io::Queue, wake: std::sync:
     let mut fds = [0 as libc::c_int; 2];
     // SAFETY: pipe2 fills two descriptors that we then own.
     if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
-        return Err(cleanup(format!("pipe: {}", std::io::Error::last_os_error())));
+        return fail(&mut finish, cleanup(format!("pipe: {}", std::io::Error::last_os_error())));
     }
     // SAFETY: fresh descriptors from pipe2, owned exactly once each.
     let (read_end, write_end) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
     // SAFETY: fcntl on a descriptor we own.
-    unsafe {
+    let nonblocking = unsafe {
         use std::os::fd::AsRawFd;
         let fd = read_end.as_raw_fd();
         let flags = libc::fcntl(fd, libc::F_GETFL);
-        if flags < 0 || libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
-            return Err(cleanup("pipe: cannot make it non-blocking".into()));
-        }
+        flags >= 0 && libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) >= 0
+    };
+    if !nonblocking {
+        return fail(&mut finish, cleanup("pipe: cannot make it non-blocking".into()));
     }
-    let write2 = write_end.try_clone().map_err(|e| cleanup(e.to_string()))?;
+    let write2 = match write_end.try_clone() {
+        Ok(w) => w,
+        Err(e) => return fail(&mut finish, cleanup(e.to_string())),
+    };
     let child = {
         let mut cmd = std::process::Command::new(program());
         cmd.args(["assets", "install", pack]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::from(write_end)).stderr(std::process::Stdio::from(write2)).process_group(0);
-        crate::controlcenter::sys::die_with_parent(&mut cmd).spawn().map_err(|e| cleanup(format!("could not start decthemectl: {e}")))?
+        // dies with this worker thread, which outlives it in every path below
+        match crate::controlcenter::sys::die_with_parent(&mut cmd).spawn() {
+            Ok(c) => c,
+            Err(e) => return fail(&mut finish, cleanup(format!("could not start decthemectl: {e}"))),
+        }
         // `cmd` and with it our copies of the write end are dropped here: EOF comes when the child's group is gone
     };
-    let pid = child.id();
     let out = std::fs::File::from(read_end);
-    let (pack_s, limit) = (pack.to_string(), deadline());
-    // published before the worker exists and the lock released: the guard below clears it on every path, a failed
-    // thread spawn included (which drops the guard inside `spawn`)
-    *g = Some(pack_s.clone());
-    drop(g);
-    let mut finish = Finish { pack: pack_s, queue, wake, outcome: None };
-    let dir2 = dir.clone();
-    let spawned = std::thread::Builder::new().name("asset-install".into()).spawn(move || {
-        let (ok, stopped, cap) = supervise(child, out, limit);
-        let text = cap.text();
-        let mut line = outcome_line(&text, ok);
-        if stopped {
-            line = format!("did not finish within {} minutes and was stopped", limit.as_secs().div_ceil(60));
-        } else if line.is_empty() {
-            line = if ok { "installed".into() } else { "decthemectl failed without a message".into() };
+    // reported while the job stays pending: the process was killed but has not exited yet
+    let (queue, wake, pack_s) = (finish.queue.clone(), finish.wake.clone(), finish.pack.clone());
+    let slow = move |pid: u32| {
+        let msg = format!("stop requested; process {pid} was killed but has not exited yet (an uninterruptible wait?); the install stays pending until it does");
+        *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((pack_s.clone(), false, msg));
+        queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(crate::settings::io::Ev::FilesChanged);
+        wake();
+    };
+    let (ok, stopped, cap) = supervise(child, out, limit, &slow);
+    #[cfg(test)]
+    if PANIC_IN_WORKER.load(std::sync::atomic::Ordering::SeqCst) {
+        panic!("injected worker panic");
+    }
+    let text = cap.text();
+    let mut line = outcome_line(&text, ok);
+    if stopped {
+        line = format!("did not finish within {} minutes and was stopped", limit.as_secs().div_ceil(60));
+    } else if line.is_empty() {
+        line = if ok { "installed".into() } else { "decthemectl failed without a message".into() };
+    }
+    if cap.dropped() > 0 {
+        line.push_str(&format!(" (output truncated: {} bytes not kept)", cap.dropped()));
+    }
+    if ok {
+        let _ = std::fs::remove_dir(&dir);
+    } else {
+        #[cfg(test)]
+        if let Some(h) = BEFORE_LOG.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            h(&dir);
         }
-        if cap.dropped() > 0 {
-            line.push_str(&format!(" (output truncated: {} bytes not kept)", cap.dropped()));
-        }
-        if ok {
-            let _ = std::fs::remove_dir(&dir2);
-        } else {
-            match write_log(&dir2, &text) {
-                Ok(p) => {
-                    line.push_str(&format!("; log: {}", p.display()));
-                    *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir2.clone());
-                }
-                Err(e) => {
-                    line.push_str(&format!("; the log could not be written ({e})"));
-                    // Remove an empty owned job folder. Preserve and track a partial log
-                    // instead of leaving an untracked directory when publication fails.
-                    if let Err(cleanup) = std::fs::remove_dir(&dir2) {
-                        if cleanup.kind() != std::io::ErrorKind::NotFound {
-                            *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir2.clone());
-                            line.push_str(&format!("; diagnostic folder: {}", dir2.display()));
-                        }
+        match write_log(&dir, &text) {
+            Ok(p) => {
+                line.push_str(&format!("; log: {}", p.display()));
+                *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir.clone());
+            }
+            Err(e) => {
+                line.push_str(&format!("; the log could not be written ({e})"));
+                // Remove an empty owned job folder. Preserve and track a partial log
+                // instead of leaving an untracked directory when publication fails.
+                if let Err(cleanup) = std::fs::remove_dir(&dir) {
+                    if cleanup.kind() != std::io::ErrorKind::NotFound {
+                        *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir.clone());
+                        line.push_str(&format!("; diagnostic folder: {}", dir.display()));
                     }
                 }
             }
         }
-        finish.outcome = Some((ok, line));
-        drop(finish);
-    });
-    match spawned {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // the closure (child handle, pipe, guard) was dropped unrun; the guard cleared the job. The child is still
-            // ours and unreaped: stop its group, then reap it
-            signal_group(pid, libc::SIGKILL);
-            // SAFETY: waits for our own child by pid; no memory is passed.
-            unsafe {
-                libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0);
-            }
-            let _ = std::fs::remove_dir(&dir);
-            Err(format!("could not start the install supervisor: {e}"))
-        }
     }
+    finish.outcome = Some((ok, line));
 }
 
 /// Is an install running?
@@ -592,7 +667,15 @@ mod tests {
         let s = crate::desktop_assets::testkit::Scratch::new(tag);
         let fake = s.write("fake-decthemectl", format!("#!/bin/sh\n{script}\n").as_bytes());
         std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
-        *PROGRAM.lock().unwrap() = Some(fake.display().to_string());
+        let (last, woke, _) = run_fake_program(&format!("{tag}-run"), &fake.display().to_string(), limit);
+        (last, woke, s)
+    }
+
+    /// Runs `program` as the installer through the real supervisor; waits (without input) until the job is no longer
+    /// pending and returns the outcome, the number of wakes and a scratch folder.
+    fn run_fake_program(tag: &str, program: &str, limit: Option<std::time::Duration>) -> (Option<(String, bool, String)>, usize, crate::desktop_assets::testkit::Scratch) {
+        let s = crate::desktop_assets::testkit::Scratch::new(tag);
+        *PROGRAM.lock().unwrap() = Some(program.to_string());
         *DEADLINE.lock().unwrap() = limit;
         let q: crate::settings::io::Queue = std::sync::Arc::new(std::sync::Mutex::new(Default::default()));
         let woke = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -608,10 +691,10 @@ mod tests {
         .unwrap();
         assert!(installing());
         let until = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        while q.lock().unwrap().is_empty() && std::time::Instant::now() < until {
+        while (installing() || q.lock().unwrap().is_empty()) && std::time::Instant::now() < until {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert_eq!(q.lock().unwrap().len(), 1, "exactly one completion event");
+        assert_eq!(q.lock().unwrap().len(), woke.load(std::sync::atomic::Ordering::SeqCst), "one queue event per wake");
         assert!(!installing(), "the pending job is cleared");
         *PROGRAM.lock().unwrap() = None;
         *DEADLINE.lock().unwrap() = None;
@@ -695,14 +778,147 @@ mod tests {
         assert_eq!(std::fs::read_dir(victim.path()).unwrap().count(), 0, "nothing was written through the link");
         assert_eq!(std::fs::read_link(&planted).unwrap(), victim.path(), "the planted link is untouched");
         std::fs::remove_file(&planted).unwrap();
-        // a program that cannot start: an error, nothing pending, no folder left behind
+        // a program that cannot start: reported as the outcome (the worker creates the child), nothing pending, no folder
         *NEXT_ID.lock().unwrap() = Some(id + 1);
-        *PROGRAM.lock().unwrap() = Some("/nonexistent/decthemectl".into());
-        let q: crate::settings::io::Queue = std::sync::Arc::new(std::sync::Mutex::new(Default::default()));
-        let e = start_install("deepin-bloom", q, std::sync::Arc::new(|| ())).unwrap_err();
-        *PROGRAM.lock().unwrap() = None;
-        assert!(e.contains("could not start decthemectl"), "{e}");
+        let (last, woke, _s2) = run_fake_program("pane-nostart", "/nonexistent/decthemectl", None);
+        let (_, ok, line) = last.unwrap();
+        assert!(!ok && woke == 1 && line.contains("could not start decthemectl"), "{line}");
         assert!(!installing());
         assert!(!std::env::temp_dir().join(format!("decebal-asset-install-{uid}-{}-{}", std::process::id(), id + 1)).exists());
+    }
+
+    #[test]
+    fn a_worker_that_cannot_start_launches_no_child() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        use std::os::unix::fs::PermissionsExt;
+        let s = crate::desktop_assets::testkit::Scratch::new("pane-nothread");
+        let marker = s.path().join("ran");
+        let fake = s.write("fake", format!("#!/bin/sh\ntouch '{}'\n", marker.display()).as_bytes());
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
+        *PROGRAM.lock().unwrap() = Some(fake.display().to_string());
+        FAIL_SPAWN.store(true, std::sync::atomic::Ordering::SeqCst);
+        let q: crate::settings::io::Queue = std::sync::Arc::new(std::sync::Mutex::new(Default::default()));
+        let woke = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let w2 = woke.clone();
+        let started = std::time::Instant::now();
+        let e = start_install(
+            "deepin-bloom",
+            q.clone(),
+            std::sync::Arc::new(move || {
+                w2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }),
+        )
+        .unwrap_err();
+        FAIL_SPAWN.store(false, std::sync::atomic::Ordering::SeqCst);
+        *PROGRAM.lock().unwrap() = None;
+        assert!(started.elapsed() < std::time::Duration::from_millis(500), "nothing waited on the calling thread");
+        assert!(e.contains("could not start the install supervisor"), "{e}");
+        assert!(!installing());
+        assert_eq!((q.lock().unwrap().len(), woke.load(std::sync::atomic::Ordering::SeqCst)), (1, 1), "reported once");
+        assert!(LAST.lock().unwrap().as_ref().is_some_and(|l| !l.1 && l.2.contains("could not start the install supervisor")));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!marker.exists(), "no child was ever started");
+    }
+
+    #[test]
+    fn a_panicking_worker_still_reports_once_and_leaves_no_process() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        let pids = crate::desktop_assets::testkit::Scratch::new("pane-panic-pids");
+        let pf = pids.path().join("pid");
+        PANIC_IN_WORKER.store(true, std::sync::atomic::Ordering::SeqCst);
+        let (last, woke, _s) = run_fake("pane-panic", &format!("sleep 300 &\necho $! > '{}'\nexit 1", pf.display()), None);
+        PANIC_IN_WORKER.store(false, std::sync::atomic::Ordering::SeqCst);
+        let (_, ok, line) = last.unwrap();
+        assert!(!ok && woke == 1 && line.contains("stopped unexpectedly"), "{line}");
+        let pid: i32 = std::fs::read_to_string(&pf).unwrap().trim().parse().unwrap();
+        assert!(gone(pid), "the install's group was cleaned up before the panic");
+    }
+
+    #[test]
+    fn a_log_that_cannot_be_written_is_reported_and_its_folder_handled() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        // the log cannot be created and the folder is empty: the folder is removed, nothing is tracked
+        *BEFORE_LOG.lock().unwrap() = Some(Box::new(|d: &std::path::Path| {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o500)).unwrap();
+        }));
+        let (last, _, _s) = run_fake("pane-nolog", "echo 'decthemectl: refused'\nexit 1", None);
+        let line = last.unwrap().2;
+        assert!(line.starts_with("decthemectl: refused; the log could not be written") && !line.contains("diagnostic folder"), "{line}");
+        assert!(KEPT_LOG.lock().unwrap().is_none());
+        // a partial log is already there: the folder is kept, tracked and named
+        *BEFORE_LOG.lock().unwrap() = Some(Box::new(|d: &std::path::Path| std::fs::write(d.join("install.log"), "partial").unwrap()));
+        let (last, _, _s) = run_fake("pane-partial", "echo 'decthemectl: refused'\nexit 1", None);
+        *BEFORE_LOG.lock().unwrap() = None;
+        let line = last.unwrap().2;
+        let kept = KEPT_LOG.lock().unwrap().clone().expect("tracked");
+        assert!(line.contains("the log could not be written") && line.contains(&format!("diagnostic folder: {}", kept.display())), "{line}");
+        assert_eq!(std::fs::read_to_string(kept.join("install.log")).unwrap(), "partial", "the partial log is preserved");
+    }
+
+    #[test]
+    fn a_child_that_ignores_sigterm_is_killed_after_the_grace() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        let pids = crate::desktop_assets::testkit::Scratch::new("pane-term-pids");
+        let pf = pids.path().join("pid");
+        *GRACE.lock().unwrap() = Some(std::time::Duration::from_millis(500));
+        let started = std::time::Instant::now();
+        let (last, woke, _s) = run_fake("pane-noterm", &format!("trap '' TERM\necho $$ > '{}'\nwhile :; do sleep 1; done", pf.display()), Some(std::time::Duration::from_millis(500)));
+        *GRACE.lock().unwrap() = None;
+        let (_, ok, line) = last.unwrap();
+        assert!(!ok && woke == 1 && line.starts_with("did not finish"), "{line}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(8), "SIGKILL after the grace: {:?}", started.elapsed());
+        let pid: i32 = std::fs::read_to_string(&pf).unwrap().trim().parse().unwrap();
+        assert!(gone(pid));
+    }
+
+    #[test]
+    fn a_leader_that_exits_early_does_not_leave_its_descendants_holding_the_job() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        let pids = crate::desktop_assets::testkit::Scratch::new("pane-early-pids");
+        let pf = pids.path().join("pid");
+        let started = std::time::Instant::now();
+        let (last, woke, _s) = run_fake("pane-early", &format!("sleep 300 &\necho $! > '{}'\necho 'installed: deepin-bloom -> /x/bloom'\nexit 0", pf.display()), None);
+        let (_, ok, line) = last.unwrap();
+        assert!(ok && woke == 1 && line.starts_with("installed: deepin-bloom"), "{line}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "the descendant holding the pipe did not delay completion");
+        let pid: i32 = std::fs::read_to_string(&pf).unwrap().trim().parse().unwrap();
+        assert!(gone(pid), "the descendant was killed with the group");
+    }
+
+    #[test]
+    fn a_process_that_has_not_exited_after_the_kill_keeps_the_job_pending_and_says_so() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        use std::os::unix::fs::PermissionsExt;
+        // a process in an uninterruptible wait cannot be made here; the hook makes the reap look slow instead
+        let s = crate::desktop_assets::testkit::Scratch::new("pane-slowreap");
+        let fake = s.write("fake", b"#!/bin/sh\necho 'installed: deepin-bloom -> /x/bloom'\n");
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
+        *PROGRAM.lock().unwrap() = Some(fake.display().to_string());
+        SLOW_REAP.store(true, std::sync::atomic::Ordering::SeqCst);
+        // what the pane would see at each wake: still pending?, and the message
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(bool, String)>::new()));
+        let s2 = seen.clone();
+        let q: crate::settings::io::Queue = std::sync::Arc::new(std::sync::Mutex::new(Default::default()));
+        start_install(
+            "deepin-bloom",
+            q.clone(),
+            std::sync::Arc::new(move || {
+                let msg = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone().map(|l| l.2).unwrap_or_default();
+                s2.lock().unwrap().push((installing(), msg));
+            }),
+        )
+        .unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while installing() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        SLOW_REAP.store(false, std::sync::atomic::Ordering::SeqCst);
+        *PROGRAM.lock().unwrap() = None;
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 2, "{seen:?}");
+        assert!(seen[0].0 && seen[0].1.contains("has not exited yet") && seen[0].1.contains("stays pending"), "first wake: still pending, said honestly: {seen:?}");
+        assert!(!seen[1].0 && seen[1].1.starts_with("installed"), "second wake: finished: {seen:?}");
+        assert_eq!(q.lock().unwrap().len(), 2);
     }
 }
