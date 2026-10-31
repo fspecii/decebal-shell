@@ -82,6 +82,9 @@ end-to-end test: `tests/e2e/theme-engine.sh`.
 
 ## Install
 
+Building needs a Rust toolchain (cargo) and `python3` (the install step, `packaging/stage.py`; see
+[packaging/README.md](packaging/README.md)).
+
 ```sh
 make && sudo make install          # or: makepkg -si
 systemctl --user enable --now decebal-dock.service decebal-bar.service

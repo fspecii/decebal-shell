@@ -65,9 +65,11 @@ def check_prefix(prefix):
     if not PREFIX_RE.fullmatch(prefix):
         raise StageError('PREFIX must be absolute and contain only letters, digits, /, _, ., + or - '
                          '(it is written into unit and D-Bus files; no whitespace or shell/systemd metacharacters)')
+    if prefix.rstrip('/') == '':
+        raise StageError('PREFIX=/ is not supported (use /usr or /usr/local)')
     if any(p in ('.', '..') for p in prefix.split('/')) or '//' in prefix:
         raise StageError('PREFIX must be absolute without ., .. or empty path components')
-    return prefix.rstrip('/') or '/'
+    return prefix.rstrip('/')
 
 
 def check_destdir(destdir):
@@ -184,86 +186,283 @@ def inventory(prefix, build_data=None, source=ROOT):
     return items
 
 
-def _write(target, data, mode):
-    parent = os.path.dirname(target)
-    os.makedirs(parent, mode=0o755, exist_ok=True)
-    tmp = os.path.join(parent, f'.{os.path.basename(target)}.stage-{secrets.token_hex(4)}')
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    try:
-        with os.fdopen(fd, 'wb') as f:
-            f.write(data)
-            os.fchmod(f.fileno(), mode)
-        os.replace(tmp, target)       # replaces a symlink at target itself, never writes through it
-    except BaseException:
+# ------------------------------------------------------------------ destination tree (anchored descriptor walks)
+#
+# DESTDIR (or / when empty) is the one trusted anchor; it is opened once and every directory below it is reached
+# component by component with openat(O_DIRECTORY|O_NOFOLLOW), created with mkdirat when missing. Files are created,
+# replaced (renameat over a temp in the same held directory), read and unlinked only relative to held directory
+# descriptors, so a symlinked intermediate parent is refused rather than followed, including one swapped in mid-run.
+# A symlink at the final name is replaced, never written through.
+
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+MAX_INVENTORY = 16 << 20
+FAULTS: dict = {}       # fixture-test hooks only; nothing in the CLI sets them
+
+
+def _fault(point, **ctx):
+    hook = FAULTS.get(point)
+    if hook:
+        hook(**ctx)
+
+
+def _split(path):
+    parts = path.split('/')[1:]
+    if not path.startswith('/') or any(p in ('', '.', '..') for p in parts):
+        raise StageError(f'unsafe install path {path!r}')
+    return parts[:-1], parts[-1]
+
+
+class Dest:
+    def __init__(self, destdir):
+        self.destdir = destdir
+
+    def anchor(self, create):
+        """Descriptor of DESTDIR (followed: it is the caller's own staging root), or None when it does not exist yet."""
+        root = self.destdir or '/'
         try:
-            os.unlink(tmp)
+            return os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
         except FileNotFoundError:
-            pass
-        raise
+            if not create:
+                return None
+            os.makedirs(root, 0o755, exist_ok=True)
+            return os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+
+    def walk(self, dirs, create):
+        """(fd of the deepest directory reached, number of components reached). Refuses symlinks and non-directories."""
+        fd = self.anchor(create)
+        if fd is None:
+            return None, -1
+        for i, part in enumerate(dirs):
+            try:
+                nfd = os.open(part, DIR_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    return fd, i
+                try:
+                    os.mkdir(part, 0o755, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                try:
+                    nfd = os.open(part, DIR_FLAGS, dir_fd=fd)
+                except OSError as e:
+                    os.close(fd)
+                    raise StageError(f'{self.show(dirs[:i + 1])}: not a real directory ({e.strerror}); refusing to follow it')
+            except OSError as e:
+                os.close(fd)
+                raise StageError(f'{self.show(dirs[:i + 1])}: symlink or non-directory parent ({e.strerror}); refusing to follow it')
+            os.close(fd)
+            fd = nfd
+        return fd, len(dirs)
+
+    def show(self, dirs):
+        return f'{self.destdir}/' + '/'.join(dirs)
+
+    def preflight(self, path):
+        """No writes: every existing parent is a real directory, the deepest one is writable, the final name is not a
+        directory. Returns a problem string or None."""
+        dirs, name = _split(path)
+        try:
+            fd, reached = self.walk(dirs, create=False)
+        except StageError as e:
+            return str(e)
+        if fd is None:
+            parent = os.path.dirname(self.destdir.rstrip('/')) or '/'
+            return None if os.access(parent, os.W_OK | os.X_OK) else f'{parent} is not writable'
+        try:
+            if not os.access('.', os.W_OK | os.X_OK, dir_fd=fd):
+                return f'{self.show(dirs[:reached])} is not writable'
+            if reached == len(dirs):
+                try:
+                    st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    if stat.S_ISDIR(st.st_mode):
+                        return f'{self.destdir}{path} is a directory'
+                except FileNotFoundError:
+                    pass
+            return None
+        finally:
+            os.close(fd)
+
+    def write(self, path, data, mode):
+        _fault('before_write', path=path)
+        dirs, name = _split(path)
+        fd, _ = self.walk(dirs, create=True)
+        tmp = f'.{name}.stage-{secrets.token_hex(4)}'
+        try:
+            wfd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=fd)
+            try:
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(wfd, view):]
+                os.fchmod(wfd, mode)
+            finally:
+                os.close(wfd)
+            os.replace(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)
+        except BaseException:
+            try:
+                os.unlink(tmp, dir_fd=fd)
+            except OSError:
+                pass
+            raise
+        finally:
+            os.close(fd)
+
+    def read_regular(self, path, limit):
+        """Bytes of a regular file reached without following any symlink, or None when absent."""
+        dirs, name = _split(path)
+        fd, reached = self.walk(dirs, create=False)
+        if fd is None or reached < len(dirs):
+            if fd is not None:
+                os.close(fd)
+            return None
+        try:
+            try:
+                ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fd)
+            except FileNotFoundError:
+                return None
+            except OSError as e:
+                raise StageError(f'{self.destdir}{path}: not a regular file ({e.strerror})')
+            try:
+                return _read_fd(ffd, limit, f'{self.destdir}{path}')
+            finally:
+                os.close(ffd)
+        finally:
+            os.close(fd)
+
+    def remove_if(self, path, digest):
+        """'removed', 'absent' or 'kept' (changed, or not a regular file). Parents are never followed."""
+        dirs, name = _split(path)
+        fd, reached = self.walk(dirs, create=False)
+        if fd is None or reached < len(dirs):
+            if fd is not None:
+                os.close(fd)
+            return 'absent'
+        try:
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return 'absent'
+            if not stat.S_ISREG(st.st_mode):
+                return 'kept'
+            ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fd)
+            try:
+                same = os.fstat(ffd).st_ino == st.st_ino and hashlib.sha256(_read_fd(ffd, MAX_FILE, path)).hexdigest() == digest
+            except StageError:
+                same = False
+            finally:
+                os.close(ffd)
+            if not same:
+                return 'kept'
+            _fault('before_unlink', path=path)
+            os.unlink(name, dir_fd=fd)
+            return 'removed'
+        finally:
+            os.close(fd)
+
+    def prune(self, top):
+        """rmdir empty directories at and below the owned folder `top` (never follows symlinks)."""
+        dirs, name = _split(top)
+        fd, reached = self.walk(dirs, create=False)
+        if fd is None or reached < len(dirs):
+            if fd is not None:
+                os.close(fd)
+            return
+        try:
+            _prune_at(fd, name)
+        finally:
+            os.close(fd)
+
+
+def _prune_at(pfd, name):
+    try:
+        fd = os.open(name, DIR_FLAGS, dir_fd=pfd)
+    except OSError:
+        return
+    try:
+        for entry in os.listdir(fd):
+            _prune_at(fd, entry)
+    finally:
+        os.close(fd)
+    try:
+        os.rmdir(name, dir_fd=pfd)
+    except OSError:
+        pass
+
+
+def _read_fd(fd, limit, label):
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode):
+        raise StageError(f'{label} is not a regular file')
+    if st.st_size > limit:
+        raise StageError(f'{label} is {st.st_size} bytes, over the {limit}-byte limit')
+    _fault('source_opened', fd=fd, label=label)
+    chunks, n = [], 0
+    while b := os.read(fd, 1 << 20):
+        n += len(b)
+        if n > limit:
+            raise StageError(f'{label} grew past the {limit}-byte limit while being read')
+        chunks.append(b)
+    return b''.join(chunks)
 
 
 def _read(src):
     fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise StageError(f'{src} is not a regular file')
-        with os.fdopen(fd, 'rb', closefd=False) as f:
-            return f.read(MAX_FILE + 1)
+        return _read_fd(fd, MAX_FILE, str(src))
     finally:
         os.close(fd)
 
 
-def _unwritable(target):
-    """The nearest existing ancestor of target when it is not a writable directory, else None."""
-    d = os.path.dirname(target)
-    while not os.path.lexists(d):
-        d = os.path.dirname(d)
-    return None if os.path.isdir(d) and not os.path.islink(d) and os.access(d, os.W_OK | os.X_OK) else d
+# What an inventory may name: only this package's own install namespace under the exact prefix it was written for.
+def _owned(path, prefix):
+    p = re.escape(prefix)
+    return any(re.fullmatch(rx, path) for rx in (
+        rf'{p}/bin/(dec|mac)[a-z]+',
+        rf'{p}/lib/systemd/user/decebal-[a-z-]+\.service',
+        r'/etc/xdg/autostart/decebal-[a-z-]+\.desktop',
+        rf'{p}/share/applications/dec[a-z]+\.desktop',
+        rf'{p}/share/decebal/[^\n]+',
+        rf'{p}/share/(doc|licenses)/decebal/[^\n]+',
+    )) and not any(x in ('', '.', '..') for x in path.split('/')[1:])
 
 
-def _allowed(path, prefix):
-    return (path.startswith(prefix.rstrip('/') + '/') or path.startswith('/etc/xdg/autostart/')) \
-        and not any(p in ('', '.', '..') for p in path.split('/')[1:])
-
-
-def _load_inventory(destdir, prefix):
-    try:
-        data = json.loads(Path(destdir + f'{prefix}/{INVENTORY_REL}').read_text())
-    except FileNotFoundError:
+def _load_inventory(dest, prefix):
+    raw = dest.read_regular(f'{prefix}/{INVENTORY_REL}', MAX_INVENTORY)
+    if raw is None:
         return None
-    if data.get('schema') != SCHEMA_INVENTORY or not isinstance(data.get('files'), dict):
-        raise StageError('existing install inventory is not readable; refusing to guess what to remove')
-    bad = [p for p in data['files'] if not _allowed(p, data.get('prefix', prefix))]
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise StageError('existing install inventory is not valid JSON; refusing to guess what to remove')
+    if not isinstance(data, dict) or data.get('schema') != SCHEMA_INVENTORY or not isinstance(data.get('files'), dict):
+        raise StageError('existing install inventory has an unknown format; refusing to guess what to remove')
+    if data.get('prefix') != prefix:
+        raise StageError(f'install inventory was written for prefix {data.get("prefix")!r}, not {prefix!r}; refusing')
+    bad = [p for p, d in data['files'].items() if not (isinstance(p, str) and _owned(p, prefix)
+                                                       and isinstance(d, str) and re.fullmatch(r'[0-9a-f]{64}', d))]
     if bad:
-        raise StageError(f'install inventory lists paths outside its prefix: {bad[:3]}')
+        raise StageError(f'install inventory names paths outside the decebal install namespace: {bad[:3]}; refusing')
     return data
 
 
-def _remove_if_unchanged(destdir, files, report):
+def _remove_if_unchanged(dest, files, report):
     for path, digest in sorted(files.items()):
-        target = destdir + path
-        try:
-            current, _ = sha256_file(target)
-        except FileNotFoundError:
-            continue
-        except StageError:
+        state = dest.remove_if(path, digest)
+        if state == 'removed':
+            report['removed'].append(path)
+        elif state == 'kept':
             report['kept_changed'].append(path)
-            continue
-        if current != digest:
-            report['kept_changed'].append(path)
-            continue
-        os.unlink(target)
-        report['removed'].append(path)
 
 
 def install(prefix, destdir, manifest, source=ROOT, write_inventory=True):
     prefix, destdir = check_prefix(prefix), check_destdir(destdir)
+    dest = Dest(destdir)
     build_data = load_build(manifest)
     items = inventory(prefix, build_data, source)
-    old = _load_inventory(destdir, prefix)
-    blocked = sorted({_unwritable(destdir + dst) for dst, *_ in items} - {None})
+    old = _load_inventory(dest, prefix) if write_inventory else None
+    targets = [dst for dst, *_ in items] + [f'{prefix}/{INVENTORY_REL}']
+    blocked = sorted({p for p in map(dest.preflight, targets) if p})
     if blocked:
-        raise StageError(f'not writable, nothing installed: {blocked} (PREFIX={prefix}; autostart entries always go to '
+        raise StageError(f'nothing installed: {blocked[:5]} (PREFIX={prefix}; autostart entries always go to '
                          '$DESTDIR/etc/xdg/autostart)')
     # Pass 1 reads, transforms and digests every file before anything is written, so a bad source fails with no writes.
     planned = []
@@ -283,36 +482,34 @@ def install(prefix, destdir, manifest, source=ROOT, write_inventory=True):
             data = _read(src)
             if hashlib.sha256(data).hexdigest() != digest:
                 raise StageError(f'{src} changed while installing; files written so far: {len(written)}')
-        _write(destdir + dst, data, mode)
+        dest.write(dst, data, mode)
         written[dst] = digest
     report = {'installed': len(written), 'removed': [], 'kept_changed': []}
-    if not write_inventory:      # distribution packages: the package manager owns the file list
+    if not write_inventory:      # package builds: the package manager records the file list
         return report
     if old:
-        _remove_if_unchanged(destdir, {p: d for p, d in old['files'].items() if p not in written}, report)
-    inv = {'schema': SCHEMA_INVENTORY, 'prefix': prefix, 'build_manifest': str(manifest),
-           'source_commit': build_data.get('source_commit'), 'source_dirty': build_data.get('source_dirty'),
+        _remove_if_unchanged(dest, {p: d for p, d in old['files'].items() if p not in written}, report)
+    inv = {'schema': SCHEMA_INVENTORY, 'prefix': prefix, 'source_commit': build_data.get('source_commit'),
+           'source_dirty': build_data.get('source_dirty'),
            'binaries': {n: b['sha256'] for n, b in build_data['binaries'].items()}, 'files': written}
-    _write(destdir + f'{prefix}/{INVENTORY_REL}', (json.dumps(inv, indent=2, sort_keys=True) + '\n').encode(), 0o644)
+    dest.write(f'{prefix}/{INVENTORY_REL}', (json.dumps(inv, indent=2, sort_keys=True) + '\n').encode(), 0o644)
     return report
 
 
 def uninstall(prefix, destdir):
     prefix, destdir = check_prefix(prefix), check_destdir(destdir)
+    dest = Dest(destdir)
     report = {'removed': [], 'kept_changed': []}
-    old = _load_inventory(destdir, prefix)
+    old = _load_inventory(dest, prefix)
     if old is None:
         raise StageError(f'no {prefix}/{INVENTORY_REL} under DESTDIR; nothing is removed without an install inventory')
-    _remove_if_unchanged(destdir, old['files'], report)
-    os.unlink(destdir + f'{prefix}/{INVENTORY_REL}')
-    # Prune only directories this package owns and that are now empty.
+    blocked = sorted({p for p in map(dest.preflight, list(old['files']) + [f'{prefix}/{INVENTORY_REL}']) if p})
+    if blocked:
+        raise StageError(f'nothing removed: {blocked[:5]}')
+    _remove_if_unchanged(dest, old['files'], report)
+    dest.remove_if(f'{prefix}/{INVENTORY_REL}', hashlib.sha256(dest.read_regular(f'{prefix}/{INVENTORY_REL}', MAX_INVENTORY)).hexdigest())
     for top in (f'{prefix}/share/decebal', f'{prefix}/share/doc/decebal', f'{prefix}/share/licenses/decebal'):
-        base = destdir + top
-        for dirpath, _, _ in sorted(os.walk(base, topdown=False), key=lambda w: -len(w[0])):
-            try:
-                os.rmdir(dirpath)
-            except OSError:
-                pass
+        dest.prune(top)
     return report
 
 

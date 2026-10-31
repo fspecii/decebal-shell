@@ -17,7 +17,9 @@ import tempfile
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / 'packaging'))
+# STAGE_UNDER_TEST points the same tests at another copy of stage.py (fail-before evidence).
+STAGE = Path(os.environ.get('STAGE_UNDER_TEST') or REPO / 'packaging/stage.py')
+sys.path.insert(0, str(STAGE.parent))
 import stage as S  # noqa: E402
 
 FAKE_CARGO = r'''#!/usr/bin/env python3
@@ -65,7 +67,7 @@ class StageFixture(unittest.TestCase):
         self.src = base / 'src'
         (self.src / 'packaging').mkdir(parents=True)
         shutil.copy2(REPO / 'Makefile', self.src / 'Makefile')
-        shutil.copy2(REPO / 'packaging/stage.py', self.src / 'packaging/stage.py')
+        shutil.copy2(STAGE, self.src / 'packaging/stage.py')
         shutil.copytree(REPO / 'contrib', self.src / 'contrib', symlinks=True)
         for f in ('README.md', 'LICENSE', 'Cargo.toml'):
             shutil.copy2(REPO / f, self.src / f)
@@ -206,7 +208,8 @@ class MakeInstallTests(StageFixture):
         self.addCleanup((self.dest / 'etc').chmod, 0o755)
         r = self.make('-o', 'all', 'install', f'DESTDIR={self.dest}')
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn('not writable, nothing installed', r.stderr)
+        self.assertIn('nothing installed', r.stderr)
+        self.assertIn('not writable', r.stderr)
         self.assertEqual(self.files_under(self.dest), [])
 
     def test_undecodable_unit_fails_before_any_write(self):
@@ -272,6 +275,188 @@ class MakeInstallTests(StageFixture):
         self.assertEqual((self.dest / 'usr/local/bin/decbar').read_text(), 'legacy')
 
 
+class ConfinementTests(StageFixture):
+    """Attacks on the destination tree. OUTSIDE is a sibling of DESTDIR inside the private fixture."""
+
+    def setUp(self):
+        super().setUp()
+        self.outside = Path(self.tmp.name) / 'outside'
+        self.outside.mkdir()
+        if not hasattr(S, 'FAULTS'):       # older stage.py under STAGE_UNDER_TEST: hooks simply never fire
+            S.FAULTS = {}
+        S.FAULTS.clear()
+        self.addCleanup(S.FAULTS.clear)
+        self.manifest = self.src / 'target/decebal-build-manifest.json'
+
+    def built(self):
+        r = self.make('all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def installed(self, prefix='/usr/local'):
+        r = self.make('install', f'DESTDIR={self.dest}', f'PREFIX={prefix}')
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def snapshot(self, root):
+        return {str(p.relative_to(root)): (p.read_bytes() if p.is_file() and not p.is_symlink() else os.readlink(p) if p.is_symlink() else None)
+                for p in sorted(Path(root).rglob('*'))}
+
+    def inventory_path(self, prefix='/usr/local'):
+        return self.dest / prefix.lstrip('/') / 'share/decebal/install-inventory.json'
+
+    def forge(self, prefix, files, real_prefix='/usr/local'):
+        p = self.inventory_path(real_prefix)
+        inv = json.loads(p.read_text())
+        inv.update(prefix=prefix, files=files)
+        p.write_text(json.dumps(inv))
+
+    def test_forged_inventory_prefix_or_foreign_paths_delete_nothing(self):
+        self.installed()
+        foreign = {'home/user/notes.txt': b'my notes', 'usr/local/lib/libfoo.so': b'lib', 'usr/local/bin/othertool': b'tool',
+                   'etc/xdg/autostart/other-app.desktop': b'[Desktop Entry]\n', 'usr/local/share/applications/firefox.desktop': b'x'}
+        for rel, data in foreign.items():
+            (self.dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.dest / rel).write_bytes(data)
+        before = self.snapshot(self.dest)
+        cases = [('/', {'/home/user/notes.txt': sha(b'my notes')})]
+        cases += [('/usr/local', {'/' + rel: sha(data)}) for rel, data in foreign.items() if not rel.startswith('home/')]
+        cases += [('/usr/local', {'/usr/local/share/decebal/../../lib/libfoo.so': sha(b'lib')})]
+        for prefix, files in cases:
+            self.forge(prefix, files)
+            for args in (['uninstall'], ['-o', 'all', 'install']):
+                r = self.make(*args, f'DESTDIR={self.dest}')
+                self.assertNotEqual(r.returncode, 0, (prefix, files, args))
+                self.assertIn('refusing', r.stderr)
+            for rel, data in foreign.items():
+                self.assertEqual((self.dest / rel).read_bytes(), data, (prefix, files))
+        r = self.make('uninstall', f'DESTDIR={self.dest}', 'PREFIX=/')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('PREFIX=/ is not supported', r.stderr)
+        after = self.snapshot(self.dest)
+        after.pop('usr/local/share/decebal/install-inventory.json'), before.pop('usr/local/share/decebal/install-inventory.json')
+        self.assertEqual(after, before)
+
+    def test_symlinked_ancestor_refused_before_any_install_write(self):
+        self.built()
+        (self.outside / 'local/bin').mkdir(parents=True)
+        self.dest.mkdir()
+        os.symlink(self.outside, self.dest / 'usr')
+        r = self.make('-o', 'all', 'install', f'DESTDIR={self.dest}')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('symlink or non-directory parent', r.stderr)
+        self.assertEqual(self.files_under(self.outside), [])
+        self.assertEqual(sorted(os.listdir(self.outside)), ['local'])
+        self.assertEqual(os.listdir(self.dest), ['usr'])
+        self.assertFalse((self.dest / 'etc').exists(), 'no other folder created before the refusal')
+
+    def test_symlinked_ancestor_at_uninstall_removes_nothing(self):
+        self.installed()
+        # bin replaced by a symlink to OUTSIDE holding byte-identical copies (same digests as the inventory)
+        shutil.move(self.dest / 'usr/local/bin', self.outside / 'bin')
+        os.symlink(self.outside / 'bin', self.dest / 'usr/local/bin')
+        before_out, before_dest = self.snapshot(self.outside), self.snapshot(self.dest)
+        r = self.make('uninstall', f'DESTDIR={self.dest}')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('nothing removed', r.stderr)
+        self.assertEqual(self.snapshot(self.outside), before_out)
+        self.assertEqual(self.snapshot(self.dest), before_dest)
+
+    def test_inventory_behind_symlinked_parent_or_symlink_is_refused(self):
+        self.installed()
+        share = self.dest / 'usr/local/share'
+        shutil.move(share, self.outside / 'share')
+        os.symlink(self.outside / 'share', share)
+        before = self.snapshot(self.outside)
+        r = self.make('uninstall', f'DESTDIR={self.dest}')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.snapshot(self.outside), before)
+        os.unlink(share)
+        shutil.move(self.outside / 'share', share)
+        inv = self.inventory_path()
+        shutil.move(inv, self.outside / 'inv.json')
+        os.symlink(self.outside / 'inv.json', inv)
+        before = self.snapshot(self.dest)
+        r = self.make('uninstall', f'DESTDIR={self.dest}')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('not a regular file', r.stderr)
+        self.assertEqual(self.snapshot(self.dest), before)
+
+    def test_parent_replaced_mid_install_is_not_followed(self):
+        self.built()
+        fired = []
+
+        def swap(path):
+            if '/share/decebal/themes/' in path and not fired:
+                fired.append(path)
+                share = self.dest / 'usr/local/share'
+                os.rename(share, self.dest / 'moved-share')
+                os.symlink(self.outside, share)
+        S.FAULTS['before_write'] = swap
+        with self.assertRaisesRegex(S.StageError, 'symlink or non-directory parent'):
+            S.install('/usr/local', str(self.dest), str(self.manifest), source=self.src)
+        self.assertTrue(fired)
+        self.assertEqual(self.files_under(self.outside), [], 'nothing written through the swapped-in symlink')
+
+    def test_parent_replaced_mid_uninstall_is_not_followed(self):
+        self.installed()
+        mirror = self.outside / 'bin'
+        shutil.copytree(self.dest / 'usr/local/bin', mirror)
+        fired = []
+
+        def swap(path):
+            if not fired:
+                fired.append(path)
+                b = self.dest / 'usr/local/bin'
+                os.rename(b, self.dest / 'moved-bin')
+                os.symlink(mirror, b)
+        S.FAULTS['before_unlink'] = swap
+        before = self.snapshot(self.outside)
+        with self.assertRaisesRegex(S.StageError, 'symlink or non-directory parent'):
+            S.uninstall('/usr/local', str(self.dest))
+        self.assertTrue(fired)
+        self.assertEqual(self.snapshot(self.outside), before, 'no OUTSIDE file unlinked')
+
+    def _limit_with_oversized_theme_file(self):
+        sizes = [Path(src).stat().st_size for _, src, *_ in S.inventory('/usr/local', json.loads(self.manifest.read_text()), self.src)]
+        limit = max(sizes) + 16
+        (self.src / 'themes/spaced theme/wallpapers/huge wall.png').write_bytes(b'x' * (limit + 1))
+        return limit
+
+    def test_oversized_source_refused_before_any_write(self):
+        self.built()
+        limit = self._limit_with_oversized_theme_file()
+        old = S.MAX_FILE
+        S.MAX_FILE = limit
+        self.addCleanup(setattr, S, 'MAX_FILE', old)
+        with self.assertRaisesRegex(S.StageError, f'over the {limit}-byte limit'):
+            S.install('/usr/local', str(self.dest), str(self.manifest), source=self.src)
+        self.assertFalse(self.dest.exists())
+
+    def test_source_growing_past_limit_while_read_refused(self):
+        self.built()
+        target = self.src / 'themes/spaced theme/theme.toml'
+        sizes = [Path(src).stat().st_size for _, src, *_ in S.inventory('/usr/local', json.loads(self.manifest.read_text()), self.src)]
+        old = S.MAX_FILE
+        S.MAX_FILE = max(sizes) + 16
+        self.addCleanup(setattr, S, 'MAX_FILE', old)
+
+        def grow(fd, label):
+            if label == str(target):
+                with open(target, 'ab') as f:
+                    f.write(b'#' * (S.MAX_FILE + 1))
+        S.FAULTS['source_opened'] = grow
+        with self.assertRaisesRegex(S.StageError, 'grew past'):
+            S.install('/usr/local', str(self.dest), str(self.manifest), source=self.src)
+        self.assertFalse(self.dest.exists())
+
+    def test_final_name_that_is_a_directory_is_refused_up_front(self):
+        self.built()
+        (self.dest / 'usr/local/bin/decbar').mkdir(parents=True)
+        r = self.make('-o', 'all', 'install', f'DESTDIR={self.dest}')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('is a directory', r.stderr)
+        self.assertEqual(self.files_under(self.dest), [])
+
+
 class RepositoryContractTests(unittest.TestCase):
     """Read-only checks of the real tree."""
 
@@ -305,6 +490,12 @@ class RepositoryContractTests(unittest.TestCase):
         for w in (REPO / 'widgets').glob('*.toml'):
             self.assertIn(f'include_str!("../../widgets/{w.name}")', samples, f'{w.name} is neither compiled in nor installed')
         self.assertIn('include_str!("../../../data/wallhaven-curated.json")', (REPO / 'src/settings/wallhaven/curated.rs').read_text())
+
+    def test_python_build_dependency_is_declared(self):
+        self.assertRegex((REPO / 'PKGBUILD').read_text(), r"(?m)^makedepends=\(.*'python'.*\)")
+        install = (REPO / 'README.md').read_text().split('## Install', 1)[1].split('\n## ', 1)[0]
+        self.assertIn('python3', install)
+        self.assertIn('python3', (REPO / 'packaging/README.md').read_text().split('| Debian', 1)[1].split('\n', 1)[0])
 
     def test_makefile_and_pkgbuild_share_the_staging_contract(self):
         mk = (REPO / 'Makefile').read_text()
