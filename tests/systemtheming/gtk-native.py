@@ -241,7 +241,17 @@ def stop(p):
 
 
 def cleanup(*_):
-    S.cleanup()
+    try:
+        if xvfb is not None and xvfb.poll() is None:
+            # The product manager may be a detached child of apply-system, outside Session's groups.
+            # Stop only its marked owner on our re-proved private display before taking the server down.
+            gnome_xvfb.verify_owned(xvfb, display)
+            result = subprocess.run([ctl, "system", "xsettings", "stop", "--display", display], env=env, capture_output=True, text=True, timeout=3)
+            (out / "xsettings-stop.json").write_text(json.dumps({"exit": result.returncode, "stdout": result.stdout, "stderr": result.stderr}))
+    except Exception as error:
+        (out / "xsettings-stop-error.txt").write_text(str(error))
+    finally:
+        S.cleanup()
 
 
 def _terminated(signum, _frame):
@@ -581,8 +591,8 @@ live = []
 # GTK 3 / GTK 4 on X11 learn a new gtk-theme-name only through XSETTINGS (none runs here; settings.ini is read at startup).
 # libadwaita reads color-scheme from GSettings live (ADW_DISABLE_PORTAL: the keyfile backend notifies) but never re-reads user CSS.
 LIVE_EXPECTATION = {
-    "gtk3": "stale: no XSETTINGS daemon in this fixture, so the new theme name is not delivered to running GTK 3 apps",
-    "gtk4": "stale: no XSETTINGS daemon in this fixture, so the new theme name is not delivered to running GTK 4 apps",
+    "gtk3": "live requires an XSETTINGS provider; the product may start its own after apply (see apply report)",
+    "gtk4": "live requires an XSETTINGS provider; the product may start its own after apply (see apply report)",
     "adw": "mode only at most: libadwaita follows color-scheme live but loads the user gtk.css palette only at startup",
     "files": "mode only at most: Files is libadwaita (same limit)",
 }
