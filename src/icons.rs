@@ -190,6 +190,7 @@ fn control_fallback(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Option<P
     let name = match id {
         "applications-all-symbolic" => "apps",
         "bookmarks" => "bookmarks",
+        "configure" => "gear",
         "compass" => "folder",
         "system-suspend" => "moon",
         "system-suspend-hibernate" => "snowflake",
@@ -222,6 +223,7 @@ mod tests {
         for id in [
             "applications-all-symbolic",
             "bookmarks",
+            "configure",
             "compass",
             "system-suspend",
             "system-suspend-hibernate",
