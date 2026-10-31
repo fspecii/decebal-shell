@@ -239,10 +239,12 @@ end of Keyboard & Input (`src/settings/gestures.rs`) offers a control for each `
 swipe travel** (`threshold`, with the schema's range, in rdwm's logical touchpad delta units, not millimetres) and
 **Reverse swipe direction** (`gestures.natural`, independent of the pointer's natural scrolling). They save like every
 other control (schema range check, `rdwmctl check-config`, the persistence worker); a change touches only its key.
-* An rdwm whose schema does not list `[gestures]` (the bundled snapshot does not yet): the section says the controls
-  need an updated rdwm and writes nothing; a `[gestures]` section already in config.toml stays as it is.
-* Bindings are listed (3/4 fingers, direction, action; "rdwm's default bindings" when absent; `[]` means every swipe
-  is off) but not edited here: they are an inline list in config.toml, kept exactly as written; edit them in
-  Config & Presets.
+* The bundled snapshot carries rdwm's published `[gestures]` rows and `gesture_bindings` (rdwm 1181481, imported
+  verbatim from its `rdwmctl schema --offline`, sha256 39d8c65b…; the rest of the snapshot unchanged). An installed
+  rdwm whose schema does not list `[gestures]` hides the controls: the section says they need an updated rdwm and
+  writes nothing; a `[gestures]` section already in config.toml stays as it is.
+* Bindings are listed with their args (3/4 fingers, direction, action; rdwm's schema default when config.toml has
+  none; `[]` means every swipe is off) but not edited here (`table_list` gets no control): they are an inline list in
+  config.toml, kept exactly as written; edit them in Config & Presets, whose overview shows the default as TOML.
 * A schema entry says rdwm can parse the keys, not that the touchpad, driver and session deliver swipe events.
 * Search: "swipe", "gesture", "trackpad" lead to the section.

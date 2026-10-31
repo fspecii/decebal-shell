@@ -1704,12 +1704,16 @@ mod tests {
 
     #[test]
     fn the_overview_writes_table_list_defaults_as_toml() {
-        let mut m = model("overview-table-list");
-        let default = serde_json::json!([{"action": "viewnext", "args": [], "direction": "left", "fingers": 3}]);
-        m.schema.keys.push(crate::settings::schema::KeyMeta { section: "gestures".into(), key: "bindings".into(), ty: "table_list".into(), default, min: None, max: None, choices: vec![], desc: String::new() });
+        // the bundled snapshot's gestures.bindings (rdwm 1181481)
+        let m = model("overview-table-list");
         let text = overview(&m);
         let line = text.lines().find(|l| l.starts_with("bindings = ")).expect("listed");
-        assert_eq!(line, "bindings = [{ action = \"viewnext\", args = [], direction = \"left\", fingers = 3 }]  # default");
+        assert_eq!(
+            line,
+            "bindings = [{ action = \"viewnext\", args = [], direction = \"left\", fingers = 3 }, { action = \"viewprev\", args = [], direction = \"right\", fingers = 3 }, { action = \"viewnext\", args = [], direction = \"left\", fingers = 4 }, { action = \"viewprev\", args = [], direction = \"right\", fingers = 4 }]  # default"
+        );
+        let toml_part = line.trim_end_matches("  # default");
+        assert!(toml_part.parse::<toml_edit::DocumentMut>().is_ok(), "valid TOML: {toml_part}");
         assert!(text.contains("mfact = 0.55  # default") || text.contains("mfact ="), "scalars unchanged");
     }
 

@@ -135,6 +135,7 @@ mod tests {
     /// The `[gestures]` keys as rdwm's parser accepts them (docs/gestures.md); the published schema entry is the
     /// WM owner's, this only stands in for it.
     pub fn with_gesture_schema(m: &mut Model) {
+        without_gesture_schema(m);
         let k = |key: &str, ty: &str, default: serde_json::Value, min: Option<f64>, max: Option<f64>, desc: &str| KeyMeta {
             section: SECTION.into(),
             key: key.into(),
@@ -150,6 +151,11 @@ mod tests {
         m.schema.keys.push(k("natural", "bool", json!(false), None, None, "Reverse swipe direction"));
     }
 
+    /// An rdwm whose schema predates [gestures].
+    fn without_gesture_schema(m: &mut Model) {
+        m.schema.keys.retain(|k| k.section != SECTION);
+    }
+
     fn rows(items: &[Item]) -> Vec<&Row> {
         items.iter().filter_map(|i| if let Item::Card(r) = i { Some(r.iter().collect::<Vec<_>>()) } else { None }).flatten().collect()
     }
@@ -162,11 +168,30 @@ mod tests {
 
     #[test]
     fn without_gesture_keys_in_the_schema_the_section_explains_and_offers_nothing() {
-        let (m, _) = model_with(INLINE);
-        assert!(!m.schema.has(SECTION, "enabled"), "the bundled snapshot predates [gestures]");
+        let (mut m, cfg) = model_with(INLINE);
+        without_gesture_schema(&mut m);
         let its = items(&m);
         assert!(ctl(&its, "r:gestures:enabled").is_none() && ctl(&its, "r:gestures:threshold").is_none());
         assert!(its.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("need an updated rdwm") && text.contains("does not list [gestures]"))));
+        assert_eq!(std::fs::read_to_string(cfg).unwrap(), INLINE);
+    }
+
+    #[test]
+    fn the_bundled_snapshot_lists_rdwms_published_gesture_keys() {
+        // imported from rdwm 1181481's `rdwmctl schema --offline` (sha256 39d8c65b...)
+        let s = crate::settings::schema::Schema::snapshot();
+        let t = s.get(SECTION, "threshold").unwrap();
+        assert_eq!((t.ty.as_str(), t.min, t.max, t.default.clone()), ("float", Some(40.0), Some(2000.0), json!(120.0)));
+        assert_eq!((s.get(SECTION, "enabled").unwrap().default.clone(), s.get(SECTION, "natural").unwrap().default.clone()), (json!(true), json!(false)));
+        let b = s.get(SECTION, "bindings").unwrap();
+        assert_eq!(b.ty, "table_list");
+        assert_eq!(b.default.as_array().unwrap().len(), 4);
+        // the real snapshot drives the pane: controls plus rdwm's default list
+        let (m, _) = model_with("[general]\n");
+        let its = items(&m);
+        assert!(ctl(&its, "r:gestures:enabled").is_some() && ctl(&its, "r:gestures:threshold").is_some() && ctl(&its, "r:gestures:natural").is_some());
+        let shown: Vec<String> = rows(&its).iter().map(|r| format!("{} | {}", r.label, r.detail)).collect();
+        assert!(shown.contains(&"4 fingers, swipe right | viewprev".to_string()), "{shown:?}");
     }
 
     #[test]

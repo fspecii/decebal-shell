@@ -878,21 +878,20 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
     # ---- trackpad swipes in Keyboard & Input
     INLINE = "[general]\nunknown_future_key = \"kept\"\n\n[gestures]\nenabled = true\nthreshold = 120.0\nnatural = false\nfuture_gesture_key = \"kept\"\n# my swipes\nbindings = [\n  { fingers = 3, direction = \"left\", action = \"viewnext\" },\n  { fingers = 4, direction = \"up\", action = \"focus_up\" },\n]\n"
 
-    def gesture_rdwmctl():
-        """A private stand-in for an rdwmctl whose schema lists [gestures] (rdwm docs/gestures.md: enabled, threshold
-        40-2000 logical delta units, natural); not the WM owner's published JSON."""
+    def older_rdwmctl():
+        """A private stand-in for an rdwm whose schema predates [gestures]: the bundled snapshot without those rows."""
         snap = _json.loads((HERE.parent.parent.parent / "src/settings/rdwm-schema.json").read_text())
-        k = lambda key, ty, d, lo, hi, desc: {"section": "gestures", "key": key, "type": ty, "default": d, "min": lo, "max": hi, "choices": [], "desc": desc}  # noqa: E731
-        snap["keys"] += [k("enabled", "bool", True, None, None, "Native trackpad swipes"), k("threshold", "float", 120.0, 40.0, 2000.0, "Swipe distance"), k("natural", "bool", False, None, None, "Reverse swipe direction")]
-        sj = gate.parent / "gesture-schema.json"
+        snap["keys"] = [k for k in snap["keys"] if k["section"] != "gestures"]
+        snap.pop("gesture_bindings", None)
+        sj = gate.parent / "older-schema.json"
         sj.write_text(_json.dumps(snap))
-        ctl = gate.parent / "gesture-rdwmctl"
+        ctl = gate.parent / "older-rdwmctl"
         ctl.write_text(f"#!/bin/sh\ncase \"$1\" in schema) cat '{sj}';; *) exit 0;; esac\n")
         ctl.chmod(0o755)
         return ctl
 
     def gestures_old_wm():
-        s = Tracked("gestures-old", pane="inputdev", extra_files={"cfg/config.toml": INLINE})
+        s = Tracked("gestures-old", pane="inputdev", extra_files={"cfg/config.toml": INLINE}, env_extra={"RDWMCTL": str(older_rdwmctl())})
         app = find_app(s.p.pid)
         ix = wait(lambda: (lambda i: i if any("updated rdwm" in (n.get_name() or "") for n in i.values()) else None)(index(app)), "the explanation", 10)
         check("gestures (older WM): the section explains that an updated rdwm is needed", True)
@@ -901,7 +900,8 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         return s
 
     def gestures_new_wm():
-        s = Tracked("gestures-new", pane="inputdev", extra_files={"cfg/config.toml": INLINE}, env_extra={"RDWMCTL": str(gesture_rdwmctl())})
+        # the bundled snapshot (rdwmctl not installed here) carries rdwm 1181481's [gestures] rows
+        s = Tracked("gestures-new", pane="inputdev", extra_files={"cfg/config.toml": INLINE})
         app = find_app(s.p.pid)
         sw = node(app, "ctl:r:gestures:enabled")
         names = [n.get_name() or "" for n in index(app).values()]
@@ -927,7 +927,7 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         return s
 
     def gestures_failure():
-        s = Tracked("gestures-fail", pane="inputdev", fail="config.toml", extra_files={"cfg/config.toml": INLINE}, env_extra={"RDWMCTL": str(gesture_rdwmctl())})
+        s = Tracked("gestures-fail", pane="inputdev", fail="config.toml", extra_files={"cfg/config.toml": INLINE})
         app = find_app(s.p.pid)
         ms, r = do_action(node(app, "ctl:r:gestures:enabled"), "toggle")
         got = wait(lambda: [m for m in alerts(app) if "Not saved" in m] or None, "failure alert", 15)

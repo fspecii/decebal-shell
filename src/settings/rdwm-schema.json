@@ -814,6 +814,44 @@
       "variant": "dark"
     }
   ],
+  "gesture_bindings": {
+    "fields": [
+      {
+        "choices": [
+          3,
+          4
+        ],
+        "key": "fingers",
+        "type": "int"
+      },
+      {
+        "choices": [
+          "left",
+          "right",
+          "up",
+          "down"
+        ],
+        "key": "direction",
+        "type": "enum"
+      },
+      {
+        "choices_from": "actions",
+        "key": "action",
+        "type": "enum"
+      },
+      {
+        "default": [],
+        "item_type": "string",
+        "key": "args",
+        "type": "list"
+      }
+    ],
+    "replaces_defaults": true,
+    "unique": [
+      "fingers",
+      "direction"
+    ]
+  },
   "keys": [
     {
       "choices": [],
@@ -1733,6 +1771,71 @@
       "min": null,
       "section": "wallpaper",
       "type": "table"
+    },
+    {
+      "choices": [],
+      "default": true,
+      "desc": "Recognise native three/four-finger touchpad swipes (only where the backend and device deliver them)",
+      "key": "enabled",
+      "max": null,
+      "min": null,
+      "section": "gestures",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": 120.0,
+      "desc": "Swipe travel before a binding fires, in accumulated logical delta units (not millimetres; feel depends on device and driver)",
+      "key": "threshold",
+      "max": 2000.0,
+      "min": 40.0,
+      "section": "gestures",
+      "type": "float"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "desc": "Reverse both swipe axes",
+      "key": "natural",
+      "max": null,
+      "min": null,
+      "section": "gestures",
+      "type": "bool"
+    },
+    {
+      "choices": [],
+      "default": [
+        {
+          "action": "viewnext",
+          "args": [],
+          "direction": "left",
+          "fingers": 3
+        },
+        {
+          "action": "viewprev",
+          "args": [],
+          "direction": "right",
+          "fingers": 3
+        },
+        {
+          "action": "viewnext",
+          "args": [],
+          "direction": "left",
+          "fingers": 4
+        },
+        {
+          "action": "viewprev",
+          "args": [],
+          "direction": "right",
+          "fingers": 4
+        }
+      ],
+      "desc": "Swipe bindings: rows described by gesture_bindings; setting the key replaces the whole default list, [] disables all",
+      "key": "bindings",
+      "max": null,
+      "min": null,
+      "section": "gestures",
+      "type": "table_list"
     }
   ],
   "layouts": [
