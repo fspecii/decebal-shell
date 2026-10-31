@@ -584,7 +584,7 @@ mod tests {
         tiny_skia::Pixmap::new(8, 8).unwrap().save_png(child.join("icons/logo.png")).unwrap();
         std::fs::write(parent.join("theme.toml"), "format = 1\nid = \"brand-parent\"\nname = \"Parent\"\n[branding]\nlogo = \"icons/logo.png\"\n").unwrap();
         let write_child = |logo: &str| {
-            std::fs::write(child.join("theme.toml"), format!("format = 1\nid = \"brand-child\"\nname = \"Child\"\ninherit = \"brand-parent\"\n[branding]\ndesktop_label = \"Child desktop\"\n{logo}"))
+            std::fs::write(child.join("theme.toml"), format!("format = 1\nid = \"brand-child\"\nname = \"Child\"\nextends = \"brand-parent\"\n[branding]\ndesktop_label = \"Child desktop\"\n{logo}"))
                 .unwrap()
         };
         write_child("");

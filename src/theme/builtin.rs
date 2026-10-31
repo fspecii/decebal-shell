@@ -25,6 +25,8 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("dracula", include_str!("../../themes/dracula/theme.toml")),
     ("solarized", include_str!("../../themes/solarized/theme.toml")),
     ("windows11", include_str!("../../themes/windows11/theme.toml")),
+    ("gnome-adwaita", include_str!("../../themes/gnome-adwaita/theme.toml")),
+    ("gnome-catppuccin-dock", include_str!("../../themes/gnome-catppuccin-dock/theme.toml")),
     ("caelestia", include_str!("../../themes/caelestia/theme.toml")),
     ("high-contrast", include_str!("../../themes/high-contrast/theme.toml")),
     ("caelestia-mocha", include_str!("../../themes/caelestia-mocha/theme.toml")),

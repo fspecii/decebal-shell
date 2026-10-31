@@ -1063,7 +1063,7 @@ y = -30
     #[test]
     fn a_side_taskbar_theme_does_not_inherit_an_old_top_position() {
         let (dir, src, paths) = sandbox("side-taskbar-legacy");
-        install_sunset_manifest(&src, &format!("{SUNSET}\n[dock]\nstyle = \"windows\"\nposition = \"left\"\n"));
+        install_sunset_manifest(&src, &SUNSET.replace("position = \"top\"", "position = \"left\""));
         let original = json!({"style": "windows", "windowsPosition": "top", "edge": "right", "extra": 42});
         std::fs::write(paths.dock_settings(), original.to_string()).unwrap();
         let plan = plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap();

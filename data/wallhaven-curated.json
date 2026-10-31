@@ -1,12 +1,13 @@
 {
   "format": 1,
-  "curated_on": "2026-10-30",
+  "curated_on": "2026-10-31",
   "scope": {
     "parent_commit": "0ba18b0248c605049a219c5950655e93ce347f35",
-    "coverage": "22 visible shipped nonlegacy packages; 42 distinct reviewed photographs, 44 mode recommendations. Dux Lavender deliberately reuses two visually re-reviewed existing choices.",
+    "coverage": "24 visible shipped nonlegacy packages; 46 distinct reviewed photographs, 48 mode recommendations. Dux Lavender deliberately reuses two visually re-reviewed existing choices.",
     "exclude_legacy_via": "theme::palette::legacy_theme",
     "uncovered_theme_ids": [],
-    "dux_acceptance_parent": "fca4442"
+    "dux_acceptance_parent": "fca4442",
+    "gnome_integration": "GNOME packages included after independent crop acceptance, with fresh rrezx7 metadata and byte-identical original verified 2026-10-31."
   },
   "policy": {
     "provider": "https://wallhaven.cc",
@@ -19,7 +20,7 @@
     },
     "detail_filter": "Reject AI-art tag 133451 and AI generator/tag names; also reject selected candidates tagged digital art/illustration/space art. Never equate absence of a tag with certified non-AI provenance.",
     "copyright": "All images remain property of original owners. Catalogue stores links/metadata only; full artworks and provider thumbnails are not redistributed.",
-    "runtime": "Recommendations belong to separate Wallpaper → For this theme selection. Theme packages set no wallpaper image/mode/colour and trigger no downloads. Parent owns explicit picker/cache runtime; no generated fallback.",
+    "runtime": "Recommendations are selected in the separate Wallpaper pane. With Follow theme enabled, theme/mode changes prepare the matching curated photograph; otherwise wallpaper remains independent. No artwork is bundled with theme packages.",
     "search_urls": [
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bmountains+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
       "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bforest+-ai_art&categories=100&purity=100&sorting=favorites&atleast=2560x1440&ratios=landscape&ai_art_filter=0",
@@ -4493,6 +4494,535 @@
         "notes": "Exact 16:9. Architectural convergence retained; hard-edged UI must remain opaque.",
         "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/license/capture method remain unverified"
       }
+    },
+    "yx3w57": {
+      "id": "yx3w57",
+      "subject": "Tasman Lake sunrise, blue/violet/pink sky (corrected: sunrise, not dusk)",
+      "page_url": "https://wallhaven.cc/w/yx3w57",
+      "api_url": "https://wallhaven.cc/api/v1/w/yx3w57",
+      "full_url": "https://w.wallhaven.cc/full/yx/wallhaven-yx3w57.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/yx/yx3w57.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2024-02-19 14:09:37",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": "Paul Wilson",
+        "verification": "credited by the linked SuperRare listing (creator paulwilsonimage); identity and capture method not independently certified",
+        "reported_candidate": null,
+        "candidate_basis": null,
+        "source_url": "https://superrare.com/artwork-v2/tasman-47020",
+        "listing_claims": {
+          "subject": "Tasman Lake sunrise",
+          "capture_date": "2023-08-12",
+          "method": "15-shot panorama (uncertified)"
+        }
+      },
+      "source_url": "https://superrare.com/artwork-v2/tasman-47020",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 95390,
+          "name": "Tasman Lake"
+        },
+        {
+          "id": 7080,
+          "name": "New Zealand"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 64,
+          "name": "sunset"
+        },
+        {
+          "id": 740,
+          "name": "Moon"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 137664,
+          "name": "Paul Wilson"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 638,
+          "name": "reflection"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method"
+      },
+      "evidence": {
+        "detail_sha256": "ffa85f95fda6ceec5a24158097a6d6f3fb3b1d175fa64eb1633d7f69725ad84e",
+        "thumbnail_sha256": "26a7ec310e4b0db1aed0ac143a7bc16c42366065745e3f932dcc42aa7963654c"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "a3bac37436b91649b28b0a44e7a4093375013c436587a92b2e3d5526dac1aeb7",
+        "bytes": 9537335,
+        "dimensions_verified": true,
+        "notes": "Independent crop review accepts 16:9, ultrawide and portrait centre-fill composition. Source authorship and licence remain unverified; links and metadata only, no artwork redistribution."
+      },
+      "parent_verification": {
+        "status": "independently_accepted",
+        "fresh_api_and_original_sha_match": true,
+        "dimensions_match": true,
+        "crops_reviewed": [
+          "16x9",
+          "3440x1440",
+          "1080x1920"
+        ],
+        "remaining": [
+          "physical compositor readability",
+          "licence still unknown"
+        ]
+      },
+      "crop_review": {
+        "16x9": "accepted: full composition retained",
+        "ultrawide": "accepted: centre mountains, moon and reflection remain; peripheral sky/foreground reduced",
+        "portrait": "accepted: centre peak, crescent and reflection remain; side peaks intentionally cropped"
+      }
+    },
+    "v9kw2m": {
+      "id": "v9kw2m",
+      "subject": "Picos de Europa lake with cloud reflections",
+      "page_url": "https://wallhaven.cc/w/v9kw2m",
+      "api_url": "https://wallhaven.cc/api/v1/w/v9kw2m",
+      "full_url": "https://w.wallhaven.cc/full/v9/wallhaven-v9kw2m.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/v9/v9kw2m.jpg",
+      "resolution": [
+        5280,
+        2970
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2022-07-17 15:01:31",
+      "uploader": {
+        "username": "Petunai42",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "source post is marked OC by u/Pchabs; its original image is byte-identical to the Wallhaven file; real-world identity not verified",
+        "reported_candidate": null,
+        "candidate_basis": null,
+        "reported_handle": "u/Pchabs"
+      },
+      "source_url": "https://www.reddit.com/r/EarthPorn/comments/w18hvs/the_mountains_of_picos_de_europa_spain_oc/",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 10630,
+          "name": "aerial view"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method"
+      },
+      "evidence": {
+        "detail_sha256": "eab9001129e7ff11d47186e0fdb6377d6f628a7388f04970790c979021604f0c",
+        "thumbnail_sha256": "e322e3b244d4d5c1bd5b878578fa36b4e1ea03d830a70902b9f5420c5f3d01f5"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "1dc0f335523adcaccfe53ed495e4b5eb4268762a0f1725adee18b9075849e564",
+        "bytes": 1458570,
+        "dimensions_verified": true,
+        "notes": "Independent crop review accepts 16:9, ultrawide and portrait centre-fill composition. Source authorship and licence remain unverified; links and metadata only, no artwork redistribution."
+      },
+      "parent_verification": {
+        "status": "independently_accepted",
+        "fresh_api_and_original_sha_match": true,
+        "dimensions_match": true,
+        "crops_reviewed": [
+          "16x9",
+          "3440x1440",
+          "1080x1920"
+        ],
+        "remaining": [
+          "physical compositor readability",
+          "licence still unknown"
+        ]
+      },
+      "crop_review": {
+        "16x9": "accepted: full composition retained",
+        "ultrawide": "accepted: main peaks and lake reflections retained",
+        "portrait": "accepted: central mountain/cloud/reflection remain; broad left/right context lost"
+      }
+    },
+    "rrezx7": {
+      "id": "rrezx7",
+      "subject": "Southern-hemisphere Milky Way column and Magellanic Cloud over a red horizon glow and dark mountains, New Zealand",
+      "page_url": "https://wallhaven.cc/w/rrezx7",
+      "api_url": "https://wallhaven.cc/api/v1/w/rrezx7",
+      "full_url": "https://w.wallhaven.cc/full/rr/wallhaven-rrezx7.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/rr/rrezx7.jpg",
+      "resolution": [
+        4500,
+        3000
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2023-11-05 11:47:06",
+      "uploader": {
+        "username": "jrmnt",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified; the reported source link is the post of the account paulwilsonimage (the post itself was not opened: x.com blocks automated reads)",
+        "reported_candidate": "Paul Wilson (account paulwilsonimage)",
+        "candidate_basis": "Wallhaven source link https://twitter.com/paulwilsonimage/status/1476863186242441217; no author tag",
+        "source_account": "paulwilsonimage"
+      },
+      "source_url": "https://twitter.com/paulwilsonimage/status/1476863186242441217",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 7080,
+          "name": "New Zealand"
+        },
+        {
+          "id": 245,
+          "name": "stars"
+        },
+        {
+          "id": 3907,
+          "name": "starry night"
+        },
+        {
+          "id": 4732,
+          "name": "Milky Way"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 338,
+          "name": "night"
+        },
+        {
+          "id": 45706,
+          "name": "nightscape"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "visual_assessment": "photographic appearance (long-exposure astro landscape); provenance is not proof of capture method; tags include photography, Milky Way, nightscape"
+      },
+      "evidence": {
+        "detail_sha256": "ecb962152a3f1bc03a444ea86409a1d6bbf14ff573caec67d795899c0e6431bb",
+        "thumbnail_sha256": "b2e96dd0759439fc3c80144ace2121977110e77d7d5c9af3f2a03339e9a5c6f6"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "0ec7e6170f76b728085fcfe6317ad81c54c493e745a5a8cfe9d7db7c2486404f",
+        "bytes": 11411751,
+        "dimensions_verified": true,
+        "notes": "Independent crop review accepts 16:9, ultrawide and portrait centre-fill composition. Source authorship and licence remain unverified; links and metadata only, no artwork redistribution."
+      },
+      "parent_verification": {
+        "status": "independently_accepted",
+        "fresh_api_and_original_sha_match": true,
+        "dimensions_match": true,
+        "crops_reviewed": [
+          "16x9",
+          "3440x1440",
+          "1080x1920"
+        ],
+        "reviewed_utc": "2026-10-31T04:24:31.084395+00:00",
+        "remaining": [
+          "physical compositor readability",
+          "licence still unknown"
+        ]
+      },
+      "crop_review": {
+        "algorithm": "centre cover crop then Lanczos resize (Pillow 13.0.0); JPEG q90 files hashed",
+        "16x9": {
+          "result": "accepted: Milky Way column, Large Magellanic Cloud, horizon glow and ridge all retained",
+          "sha256": "4d18637b4fa218c1da49c0c85611af522bed15c7b19c9d560a142d932664720d"
+        },
+        "ultrawide": {
+          "result": "accepted: the cropped 3:2 source loses only upper sky and part of the foreground; column, cloud and glow line stay",
+          "sha256": "659b0522e823c126426d1473a74722931c34fc75fa1747e4a6789108f85d5b78"
+        },
+        "portrait": {
+          "result": "accepted: central Milky Way column, glow and the nearer ridge remain; side ridges are cropped",
+          "sha256": "8084e1307d0aa9e29ebab16ffcf03bd4e0944081929c54c96655679ebbb7e7b9"
+        }
+      },
+      "readability_metrics": {
+        "note": "relative luminance of the top 32 px band (panel) and the bottom-centre dock zone after each centre crop; Mocha text #cdd6f4 over the 60 % crust panel stays >= 4.5:1 while backdrop luminance <= 0.26",
+        "16x9": {
+          "panel_p95": 0.116,
+          "panel_max": 0.631,
+          "dock_zone_p95": 0.029
+        },
+        "ultrawide": {
+          "panel_p95": 0.087,
+          "panel_max": 0.276,
+          "dock_zone_p95": 0.04
+        },
+        "portrait": {
+          "panel_p95": 0.122,
+          "panel_max": 0.284,
+          "dock_zone_p95": 0.019
+        }
+      }
+    },
+    "d8prrm": {
+      "id": "d8prrm",
+      "subject": "Mount Fuji over a calm lake at pastel sunset, long exposure",
+      "page_url": "https://wallhaven.cc/w/d8prrm",
+      "api_url": "https://wallhaven.cc/api/v1/w/d8prrm",
+      "full_url": "https://w.wallhaven.cc/full/d8/wallhaven-d8prrm.png",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/d8/d8prrm.jpg",
+      "resolution": [
+        5120,
+        2880
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2025-09-08 15:48:00",
+      "uploader": {
+        "username": "Pc7",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 40,
+          "name": "water"
+        },
+        {
+          "id": 398,
+          "name": "lake"
+        },
+        {
+          "id": 2729,
+          "name": "sky"
+        },
+        {
+          "id": 190,
+          "name": "clouds"
+        },
+        {
+          "id": 1466,
+          "name": "long exposure"
+        },
+        {
+          "id": 84,
+          "name": "snow"
+        },
+        {
+          "id": 26468,
+          "name": "snowy peak"
+        },
+        {
+          "id": 12313,
+          "name": "town"
+        },
+        {
+          "id": 328,
+          "name": "mountains"
+        },
+        {
+          "id": 45110,
+          "name": "far view"
+        },
+        {
+          "id": 10743,
+          "name": "Mount Fuji"
+        },
+        {
+          "id": 7,
+          "name": "Japan"
+        },
+        {
+          "id": 95770,
+          "name": "Lake Kawaguchi"
+        },
+        {
+          "id": 122,
+          "name": "sunlight"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "visual_assessment": "photographic appearance; provenance is not proof of capture method"
+      },
+      "evidence": {
+        "detail_sha256": "55457d3f660a230b10ff6cbb789d204e8e3c9af33e10c6b1f3452f849a221c1a",
+        "thumbnail_sha256": "ff1f0dcc7b07123b1f42820ed9f41485046a97365b0ea76848b5ef350111635d"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "ce339df07649131af6388cc5c876c91b953f68883334654504bf0262b8c0c26e",
+        "bytes": 9748874,
+        "dimensions_verified": true,
+        "notes": "Independent crop review accepts 16:9, ultrawide and portrait centre-fill composition. Source authorship and licence remain unverified; links and metadata only, no artwork redistribution."
+      },
+      "parent_verification": {
+        "status": "independently_accepted",
+        "fresh_api_and_original_sha_match": true,
+        "dimensions_match": true,
+        "crops_reviewed": [
+          "16x9",
+          "3440x1440",
+          "1080x1920"
+        ],
+        "remaining": [
+          "physical compositor readability",
+          "licence still unknown"
+        ]
+      },
+      "crop_review": {
+        "16x9": "accepted: full composition retained",
+        "ultrawide": "accepted: Fuji summit and shoreline retained; smooth water remains beneath bottom dock",
+        "portrait": "accepted: Fuji summit remains central with ample sky and water; slopes crop naturally"
+      }
     }
   },
   "themes": {
@@ -4842,6 +5372,38 @@
         "rationale": "Re-reviewed photographic torii at a lavender sunset gives a soft violet/rose counterpart to Purple Light. Reuses the reviewed Synthwave light choice intentionally; keep the central gate visible between the side cards."
       },
       "placement": "Independent user choice / optional Follow theme recommendation only. Clock upper-left, media lower-right, focus lower-left, resources upper-right: opposite columns avoid stacking the enlarged resource/focus cards on 720px outputs. Central landscape remains open. 16:9 fill crops the 3:2 dark image vertically; ultrawide crops may trim reflections/foreground. No wallpaper defaults/downloads/writes during theme application; parent owns Follow theme runtime."
+    },
+    "gnome-adwaita": {
+      "status": "accepted",
+      "rationale": "Calm blue/violet dusk and a bright blue alpine lake match the Adwaita night/day hues.",
+      "dark": {
+        "image_id": "yx3w57",
+        "rationale": "Violet-blue sunrise sky over dark water suits the black panel; 16:9, 3440x1440 and portrait crops accepted."
+      },
+      "light": {
+        "image_id": "v9kw2m",
+        "rationale": "Bright cloud and lake reflections suit the near-white panel; all three crops accepted."
+      },
+      "same_image_both_modes": false,
+      "recommended_mode": "fill",
+      "placement": "Centre-fill; no recommended_mode is honoured by the current loader."
+    },
+    "gnome-catppuccin-dock": {
+      "status": "accepted",
+      "rationale": "Pastel Fuji sunset sits on Latte; a dark Milky Way over a red horizon glow sits on Mocha (mauve/peach/red accents).",
+      "dark": {
+        "image_id": "rrezx7",
+        "rationale": "Dark sky and foreground under the translucent crust panel and the dock; Milky Way and glow carry the Mocha pinks; all three crops keep the subject.",
+        "replaces_rejected": "833qd2",
+        "rejected_candidate_reason": "3440x1440 centre-fill crops off the upper sections of the two tallest central towers (independent acceptance)"
+      },
+      "light": {
+        "image_id": "d8prrm",
+        "rationale": "Pastel pink/peach sky and blue water pair with Latte; all three crops accepted."
+      },
+      "same_image_both_modes": false,
+      "recommended_mode": "fill",
+      "placement": "Centre-fill; no recommended_mode is honoured by the current loader."
     }
   },
   "full_resolution_audit": {

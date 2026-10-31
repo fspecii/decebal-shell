@@ -1,3 +1,5 @@
+> Catalogue integration (2026-10-31): both packages are registered built-ins and have matching curated wallpapers in `data/wallhaven-curated.json`. The replacement `rrezx7` passed independent landscape/ultrawide/portrait review plus a fresh API and original-byte check (SHA-256 `0ec7e6170f76b728085fcfe6317ad81c54c493e745a5a8cfe9d7db7c2486404f`). Later historical notes about pending registration/catalogue acceptance are superseded by this entry. Images remain unbundled and their authorship/licences unverified.
+
 > Integration status (2026-10-31): the 0.3.0 engine now includes the universal panel contract and GNOME Control Center. Both shipped packages include the validated applet defaults and theme branding below. Earlier proposal, engine-version and test-result sections record the port's original isolated branch; they do not describe the integrated build. Original GNOME runtime pixel parity and Orca remain unverified. Icon/cursor catalogue installation is held pending importer review fixes.
 
 # GNOME theme ports
