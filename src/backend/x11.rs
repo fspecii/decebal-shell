@@ -60,16 +60,18 @@ pub(crate) struct Rect {
 pub(crate) fn place(spec: &SurfaceSpec, (w, h): (u32, u32), mon: Rect) -> (i32, i32, u32, u32) {
     if spec.anchor.is_side() {
         // A vertical panel: flush with the monitor's left (or right) edge, as tall as the monitor when it asks for 0.
-        let height = if h == 0 { mon.h.max(1) as u32 } else { h };
-        let w = w.max(1);
+        // never larger than the monitor: a side panel's surface also holds its popouts, which may ask for more than it has
+        // (the app is told the real size and fits its popouts to it)
+        let height = if h == 0 { mon.h.max(1) as u32 } else { h.min(mon.h.max(1) as u32) };
+        let w = w.max(1).min(mon.w.max(1) as u32);
         let x = if spec.anchor == Anchor::Right { mon.x + mon.w - w as i32 - spec.margin } else { mon.x + spec.margin };
         // a side dock (not stretched) is centred along the edge, as layer-shell centres it
         let y = if h == 0 || spec.stretch { mon.y } else { mon.y + ((mon.h - height as i32) / 2).max(0) };
         return (x, y, w, height);
     }
-    let width = if w == 0 { mon.w.max(1) as u32 } else { w };
+    let width = if w == 0 { mon.w.max(1) as u32 } else { w.min(mon.w.max(1) as u32) };
     // never taller than the monitor: a pill bar's surface also holds the popouts, which may ask for more than a small screen has
-    let h = if spec.stretch { h.min(mon.h.max(1) as u32) } else { h };
+    let h = h.min(mon.h.max(1) as u32);
     let x = mon.x + ((mon.w - width as i32) / 2).max(0);
     let y = match spec.anchor {
         Anchor::Bottom => mon.y + mon.h - h as i32 - spec.margin,
@@ -606,6 +608,12 @@ mod tests {
         assert_eq!(place(&spec(Anchor::Left, 13, false), (80, 400), m), (13, 250, 80, 400));
         assert_eq!(place(&spec(Anchor::Right, 13, false), (80, 400), m), (1600 - 80 - 13, 250, 80, 400));
         assert_eq!(place(&spec(Anchor::Left, 0, true), (52, 0), m), (0, 0, 52, 900), "a rail is as tall as the monitor");
+        // a request larger than the monitor (a side rail whose popout room asks for a wide panel at 200 %) is bounded by it
+        let small = mon(100, 0, 640, 360);
+        assert_eq!(place(&spec(Anchor::Left, 0, true), (900, 0), small), (100, 0, 640, 360));
+        assert_eq!(place(&spec(Anchor::Right, 0, true), (900, 0), small), (100, 0, 640, 360));
+        assert_eq!(place(&spec(Anchor::Bottom, 0, false), (2000, 900), small).2, 640);
+        assert_eq!(place(&spec(Anchor::Bottom, 0, false), (2000, 900), small).3, 360);
     }
 
     #[test]
