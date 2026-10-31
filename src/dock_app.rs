@@ -1635,8 +1635,12 @@ mod tests {
     fn a_side_taskbar_grows_for_quick_settings_and_keeps_the_panel_at_its_size() {
         use crate::panel::Edge;
         use crate::taskbar::Hit;
-        for edge in [Edge::Left, Edge::Right] {
-            let mut r = edge_rig(&format!("qs-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+        for (edge, scale) in [(Edge::Left, 1.0), (Edge::Right, 1.0), (Edge::Left, 1.25), (Edge::Right, 2.0)] {
+            let mut r = edge_rig(&format!("qs-{}-{scale}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            // the taskbar at a display scale: its metrics, the engine and the room all in surface pixels
+            r.app.scale = Some(scale);
+            r.app.win_init();
+            r.app.win.as_mut().unwrap().status.status_fill_for_tests();
             r.app.surface = (r.app.size().0.max(1), 720);
             let z = r.app.win_to_surface(r.app.win_layout().unwrap().rect_of(Hit::Tray(crate::menubar::Tray::Control)).unwrap());
             let (x, y) = (z.0 + z.2 / 2.0, z.1 + z.3 / 2.0);
@@ -1652,8 +1656,10 @@ mod tests {
             }
             let st = &r.app.win.as_ref().unwrap().status;
             let (shown, wanted) = (st.status_size().unwrap(), st.status_wanted_size().unwrap());
-            assert!(r.app.surface.0 > 300, "{edge:?}: the surface grew for the panel ({:?})", r.app.surface);
-            assert!((shown.0 - wanted.0).abs() < 1.0, "{edge:?}: the panel keeps its width when it fits ({shown:?} of {wanted:?})");
+            assert!(r.app.surface.0 as f32 > 300.0 * scale, "{edge:?} {scale}: the surface grew for the panel ({:?})", r.app.surface);
+            // shown at its natural width (the wanted size adds the margins around it)
+            let natural = crate::controlcenter::panel_width(crate::theme::th().control_center.style.resolve(true)) * scale;
+            assert!((shown.0 - natural).abs() < 1.0, "{edge:?} {scale}: the panel keeps its width when it fits ({shown:?}, natural {natural}, wanted {wanted:?})");
         }
         crate::menubar::DecBar::status_test_applets(None);
     }

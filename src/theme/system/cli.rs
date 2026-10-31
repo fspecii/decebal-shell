@@ -166,6 +166,10 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 other => return Err(format!("unknown key `{other}`")),
             }
             cfg.save(&src.shell_json)?;
+            if k == "cursor-theme" {
+                // an explicit choice: applying a theme keeps it (docs/desktop-asset-packs.md)
+                crate::desktop_assets::policy::mark_user(&src.shell_json, crate::desktop_assets::Provides::Cursors)?;
+            }
             if cfg.enabled {
                 print_report(&apply_now(src, &Opts::default())?, false);
             }

@@ -169,7 +169,11 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            save_then(m, &cfg, request);
+            // interim merge resolution (the next commit makes value and ownership one atomic write)
+            save_then(m, &cfg, |m| {
+                let _ = crate::desktop_assets::policy::mark_user(&m.paths.shell_json(), crate::desktop_assets::Provides::Cursors);
+                request(m);
+            });
         }
         (["sy", "now"], CtlVal::Click) => {
             if cfg.enabled {

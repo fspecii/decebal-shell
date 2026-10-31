@@ -10,6 +10,9 @@ bar's popups) looks them up through one module, `src/icons.rs` and `src/icons/*`
 * System Settings -> Icons (`decsettings icons`): the installed themes (Auto first) with a preview grid of 16 common
   icons for the highlighted one, **Use this theme**, icon size, symbolic tint and fallback theme.
 * `decthemectl icons list | set NAME|auto | status | reset | scale N | tint on|off | fallback NAME|none`.
+* Icon and cursor packs of desktop ports (Deepin, openKylin, Lingmo, KDE, GNOME), installed from pinned and verified
+  upstream sources with their licences: `decthemectl assets` and [desktop-asset-packs.md](desktop-asset-packs.md). The
+  Icons pane also selects the cursor theme, independently of the icon theme.
 * By hand, in `decebal.json` (the folder of `DECEBAL_CONFIG`, default `~/.config/omarchy`):
 
 ```json

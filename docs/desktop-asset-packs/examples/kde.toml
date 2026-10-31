@@ -1,0 +1,50 @@
+# Example companion catalogue for KDE looks (the nextkde theme). Pins from `git rev-parse` on 2026-10-31.
+# Breeze Dark icons are generated at build time (no icons-dark/ in the repository) and cannot be imported.
+format = 1
+family = "kde"
+
+[[source]]
+id = "breeze-icons"
+repo = "https://invent.kde.org/frameworks/breeze-icons"
+revision = "master"
+commit = "e3c7154b4f243413b0cb9028484977f3c37de15c"
+license = "LGPL-3.0-or-later"                 # COPYING-ICONS: "The Breeze Icon Theme in icons/"
+license_files = ["COPYING-ICONS"]
+license_oids = ["63d73657ce416e625bbaedf549fb2d9981616640"]   # git rev-parse <commit>:<file>, same order
+strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
+
+[[source]]
+id = "breeze"
+repo = "https://invent.kde.org/plasma/breeze"
+revision = "master"
+commit = "75561b7f32f3121603a0f2c8ea929b20a0d6c311"
+license = "LGPL-3.0-or-later"                 # cursors/Breeze/COPYING-ICONS
+license_files = ["cursors/Breeze/COPYING-ICONS"]
+license_oids = ["9b426e7643491fb934e6309d6dc9efdeb7715a95"]   # git rev-parse <commit>:<file>, same order
+strip_components = 1                          # forge / git archive --prefix tarballs wrap one folder; --source-dir ignores it
+
+[[pack]]
+id = "kde-breeze-icons"
+name = "Breeze"
+provides = ["icons"]
+source = "breeze-icons"
+path = "icons"
+tree = "a075dff16ef66a3a356abec39e502f0dbc4a4564"
+install_name = "breeze"
+# CMake builds index.theme as breeze.theme.in + commonthemeinfo.theme.in; the same two files, pinned, as data
+index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]
+index_oids = ["1ca7213bfb3c4655f42877764e42da3a2af5f0e6", "ece3248f3057db17ca841f14e6ecf3bd0699346e"]
+
+[[pack]]
+id = "kde-breeze-cursors"
+name = "Breeze cursors"
+provides = ["cursors"]
+source = "breeze"
+path = "cursors/Breeze/Breeze"
+tree = "ac0e5396057e0a7864d75fad624e81722b9c497d"
+install_name = "breeze_cursors"               # the name Plasma uses
+
+[[recommend]]
+theme = "nextkde"
+icons = "kde-breeze-icons"
+cursors = "kde-breeze-cursors"
