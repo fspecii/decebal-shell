@@ -149,6 +149,43 @@ pub fn classify(window: u32, marker: Option<&str>, alive: impl Fn(u32, u64) -> b
     }
 }
 
+/// The X requests a selection claim needs, so the claim's order and its cleanup on every path are testable without a server.
+pub trait ClaimOps {
+    fn grab(&mut self) -> Result<(), String>;
+    fn ungrab(&mut self);
+    fn owner(&mut self) -> Result<u32, String>;
+    fn set_owner(&mut self, window: u32) -> Result<(), String>;
+}
+
+/// The outcome of [`claim`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Claim {
+    Won,
+    /// The selection belongs to this window; it was not taken.
+    Held(u32),
+}
+
+/// Takes the selection for `window` only if nobody owns it, atomically: the owner check and the claim happen under a server grab,
+/// so no other client can claim in between (a check-then-set without the grab would silently steal a manager that started in
+/// the gap). The grab covers only these requests, no file I/O or waiting, and is released on every path (also on errors).
+pub fn claim(ops: &mut impl ClaimOps, window: u32) -> Result<Claim, String> {
+    struct Ungrab<'a, O: ClaimOps>(&'a mut O);
+    impl<O: ClaimOps> Drop for Ungrab<'_, O> {
+        fn drop(&mut self) {
+            self.0.ungrab();
+        }
+    }
+    ops.grab()?;
+    let g = Ungrab(ops);
+    let current = g.0.owner()?;
+    if current != 0 {
+        return Ok(Claim::Held(current));
+    }
+    g.0.set_owner(window)?;
+    let now = g.0.owner()?;
+    Ok(if now == window { Claim::Won } else { Claim::Held(now) })
+}
+
 /// What [`ensure`] found or did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -227,24 +264,48 @@ mod x {
         Err("no PropertyNotify from the X server".into())
     }
 
-    fn inotify_watch(dir: &Path) -> R<i32> {
+    /// An inotify descriptor watching `dir`; closed when dropped, on every exit path.
+    fn inotify_watch(dir: &Path) -> R<std::os::fd::OwnedFd> {
+        use std::os::fd::{AsRawFd, FromRawFd};
         use std::os::unix::ffi::OsStrExt;
         std::fs::create_dir_all(dir).map_err(|err| format!("{}: {err}", dir.display()))?;
-        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
-        if fd < 0 {
+        let raw = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+        if raw < 0 {
             return Err(std::io::Error::last_os_error().to_string());
         }
+        let fd = unsafe { std::os::fd::OwnedFd::from_raw_fd(raw) };
         let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).map_err(e)?;
         let mask = libc::IN_CLOSE_WRITE | libc::IN_MOVED_TO | libc::IN_CREATE | libc::IN_DELETE | libc::IN_MOVED_FROM;
-        if unsafe { libc::inotify_add_watch(fd, path.as_ptr(), mask) } < 0 {
-            let err = std::io::Error::last_os_error();
-            unsafe { libc::close(fd) };
-            return Err(err.to_string());
+        if unsafe { libc::inotify_add_watch(fd.as_raw_fd(), path.as_ptr(), mask) } < 0 {
+            return Err(std::io::Error::last_os_error().to_string());
         }
         Ok(fd)
     }
 
-    fn drain(fd: i32) {
+    /// The X side of [`claim`] for one selection, with a fixed server timestamp.
+    struct XClaim<'a> {
+        c: &'a Conn,
+        sel: u32,
+        time: u32,
+    }
+
+    impl ClaimOps for XClaim<'_> {
+        fn grab(&mut self) -> R<()> {
+            self.c.grab_server().map_err(e)?.check().map_err(e)
+        }
+        fn ungrab(&mut self) {
+            let _ = self.c.ungrab_server();
+            let _ = self.c.flush();
+        }
+        fn owner(&mut self) -> R<u32> {
+            Ok(self.c.get_selection_owner(self.sel).map_err(e)?.reply().map_err(e)?.owner)
+        }
+        fn set_owner(&mut self, window: u32) -> R<()> {
+            self.c.set_selection_owner(window, self.sel, self.time).map_err(e)?.check().map_err(e)
+        }
+    }
+
+    fn drain(fd: std::os::fd::RawFd) {
         let mut buf = [0u8; 4096];
         while unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) } > 0 {}
     }
@@ -269,12 +330,11 @@ mod x {
         table.update(from_ini(&std::fs::read_to_string(ini).unwrap_or_default()));
         c.change_property8(PropMode::REPLACE, win, settings_atom, settings_atom, &table.serialize()).map_err(e)?;
         let time = timestamp(&c, win)?;
-        c.set_selection_owner(win, sel, time).map_err(e)?;
-        if c.get_selection_owner(sel).map_err(e)?.reply().map_err(e)?.owner != win {
-            // another manager won the race between our check and our claim: it stays
+        // Everything slow (settings file, timestamp round trip) happened before; the grab covers only check-and-claim.
+        if let Claim::Held(owner) = claim(&mut XClaim { c: &c, sel, time }, win)? {
             let _ = c.destroy_window(win);
             let _ = c.flush();
-            return Err("another XSETTINGS manager took the display first; it is left alone".into());
+            return Err(format!("another XSETTINGS manager (window {owner:#x}) owns the display; it is left alone"));
         }
         let announce = ClientMessageEvent::new(32, root, manager, [time, sel, win, 0, 0]);
         c.send_event(false, root, EventMask::STRUCTURE_NOTIFY, announce).map_err(e)?;
@@ -282,6 +342,7 @@ mod x {
         let dir = ini.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
         let watch = inotify_watch(&dir)?;
         let xfd = c.stream().as_raw_fd();
+        let wfd = watch.as_raw_fd();
         let release = |c: &Conn| {
             if c.get_selection_owner(sel).ok().and_then(|ck| ck.reply().ok()).is_some_and(|r| r.owner == win) {
                 let _ = c.set_selection_owner(0u32, sel, time);
@@ -295,32 +356,29 @@ mod x {
                     Event::SelectionClear(ev) if ev.selection == sel => {
                         let _ = c.destroy_window(win);
                         let _ = c.flush();
-                        unsafe { libc::close(watch) };
                         return Ok("another XSETTINGS manager took over; Decebal's ended".into());
                     }
                     Event::ClientMessage(ev) if ev.window == win && ev.type_ == quit => {
                         let d = ev.data.as_data32();
                         if d[0] == me.pid && (u64::from(d[2]) << 32 | u64::from(d[1])) == me.start {
                             release(&c);
-                            unsafe { libc::close(watch) };
                             return Ok("stopped on request".into());
                         }
                     }
                     _ => {}
                 }
             }
-            let mut fds = [libc::pollfd { fd: xfd, events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: watch, events: libc::POLLIN, revents: 0 }];
+            let mut fds = [libc::pollfd { fd: xfd, events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: wfd, events: libc::POLLIN, revents: 0 }];
             let n = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
             if n < 0 && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
                 release(&c);
                 return Err(std::io::Error::last_os_error().to_string());
             }
             if fds[0].revents & (libc::POLLHUP | libc::POLLERR) != 0 {
-                unsafe { libc::close(watch) };
                 return Ok("the X server went away".into());
             }
             if fds[1].revents & libc::POLLIN != 0 {
-                drain(watch);
+                drain(wfd);
                 // A missing file (between unlink and rename) publishes nothing new; the rename that follows triggers again.
                 if let Ok(text) = std::fs::read_to_string(ini) {
                     if table.update(from_ini(&text)) {
@@ -342,7 +400,7 @@ mod x {
         }
         use std::os::unix::process::CommandExt;
         let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.exists()).unwrap_or_else(|| PathBuf::from("decthemectl"));
-        let mut child = std::process::Command::new(exe)
+        let child = std::process::Command::new(exe)
             .args(["system", "xsettings", "serve", "--display", display, "--ini"])
             .arg(ini)
             .env("DISPLAY", display)
@@ -352,19 +410,57 @@ mod x {
             .process_group(0)
             .spawn()
             .map_err(|err| format!("could not start the XSETTINGS manager: {err}"))?;
+        // Every exit below either hands the serving child to a reaper or ends it through `Launched`'s drop.
+        let mut launched = Launched(Some(child));
+        let pid = launched.0.as_ref().map(|c| c.id()).unwrap_or_default();
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline {
-            if let Some(status) = child.try_wait().map_err(e)? {
+            if let Some(status) = launched.0.as_mut().and_then(|c| c.try_wait().ok().flatten()) {
+                launched.0 = None; // reaped
                 return Err(format!("the XSETTINGS manager exited at once ({status})"));
             }
             match probe(display)? {
-                Owner::Ours { pid, .. } if pid == child.id() => return Ok(Status::Started { pid }),
-                Owner::Ours { pid, .. } => return Ok(Status::Running { pid }), // a concurrent start won; ours ends by itself
+                Owner::Ours { pid: owner, .. } if owner == pid => {
+                    launched.serve_on();
+                    return Ok(Status::Started { pid });
+                }
+                // a concurrent start won (or another manager appeared): ours sees that and ends; `Launched` reaps it
+                Owner::Ours { pid: owner, .. } => return Ok(Status::Running { pid: owner }),
                 Owner::Foreign { .. } => return Ok(Status::Foreign),
                 Owner::None => std::thread::sleep(Duration::from_millis(50)),
             }
         }
-        Err("the XSETTINGS manager did not take the selection within 2 s".into())
+        Err("the XSETTINGS manager did not take the selection within 2 s; it was stopped".into())
+    }
+
+    /// The manager child [`ensure`] started. Dropped while still held, it gets two seconds to end by itself (it does when it finds
+    /// another owner) and is then killed. Only this exact, not yet reaped child is signalled: its pid cannot have been reused.
+    struct Launched(Option<std::process::Child>);
+
+    impl Launched {
+        /// It serves: a thread waits for it, so it never lingers as a zombie of a long-lived caller.
+        fn serve_on(&mut self) {
+            if let Some(mut child) = self.0.take() {
+                let _ = std::thread::Builder::new().name("decebal-xsettings-reaper".into()).spawn(move || {
+                    let _ = child.wait();
+                });
+            }
+        }
+    }
+
+    impl Drop for Launched {
+        fn drop(&mut self) {
+            let Some(mut child) = self.0.take() else { return };
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                if child.try_wait().ok().flatten().is_some() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     /// Asks Decebal's manager (proved by its marker) to release the selection and exit; another manager is never touched.
@@ -458,6 +554,69 @@ mod tests {
         assert_eq!(classify(9, None, alive), Owner::Foreign { window: 9 }, "xsettingsd, gsd-xsettings, ...: never touched");
         assert_eq!(classify(9, Some("garbage"), alive), Owner::Foreign { window: 9 });
         assert_eq!(marker(42, 777), "42 777");
+    }
+
+    /// A scripted X server for [`claim`]: owners returned in order, optional failures, and the request log.
+    struct Fake {
+        owners: Vec<u32>,
+        fail: Option<&'static str>,
+        log: Vec<String>,
+    }
+
+    impl ClaimOps for Fake {
+        fn grab(&mut self) -> Result<(), String> {
+            self.log.push("grab".into());
+            if self.fail == Some("grab") {
+                return Err("grab failed".into());
+            }
+            Ok(())
+        }
+        fn ungrab(&mut self) {
+            self.log.push("ungrab".into());
+        }
+        fn owner(&mut self) -> Result<u32, String> {
+            self.log.push("owner".into());
+            if self.fail == Some("owner") {
+                return Err("owner failed".into());
+            }
+            Ok(if self.owners.is_empty() { 0 } else { self.owners.remove(0) })
+        }
+        fn set_owner(&mut self, w: u32) -> Result<(), String> {
+            self.log.push(format!("set {w}"));
+            if self.fail == Some("set") {
+                return Err("set failed".into());
+            }
+            Ok(())
+        }
+    }
+
+    fn fake(owners: &[u32], fail: Option<&'static str>) -> Fake {
+        Fake { owners: owners.to_vec(), fail, log: Vec::new() }
+    }
+
+    #[test]
+    fn a_claim_checks_and_sets_under_one_grab_and_never_takes_an_owned_selection() {
+        let mut f = fake(&[0, 7], None);
+        assert_eq!(claim(&mut f, 7), Ok(Claim::Won));
+        assert_eq!(f.log, ["grab", "owner", "set 7", "owner", "ungrab"]);
+        let mut f = fake(&[99], None);
+        assert_eq!(claim(&mut f, 7), Ok(Claim::Held(99)), "a manager that started before the grab is never replaced");
+        assert_eq!(f.log, ["grab", "owner", "ungrab"], "no SetSelectionOwner at all");
+        let mut f = fake(&[0, 99], None);
+        assert_eq!(claim(&mut f, 7), Ok(Claim::Held(99)), "a claim that did not stick is reported, not assumed");
+    }
+
+    #[test]
+    fn every_claim_error_releases_the_grab() {
+        for step in ["owner", "set"] {
+            let mut f = fake(&[0, 7], Some(step));
+            assert!(claim(&mut f, 7).is_err(), "{step}");
+            assert_eq!(f.log.last().map(String::as_str), Some("ungrab"), "{step}: {:?}", f.log);
+            assert_eq!(f.log.iter().filter(|l| *l == "ungrab").count(), 1);
+        }
+        let mut f = fake(&[0], Some("grab"));
+        assert!(claim(&mut f, 7).is_err());
+        assert_eq!(f.log, ["grab"], "nothing was grabbed, nothing is released or claimed");
     }
 
     #[test]

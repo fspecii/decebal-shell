@@ -732,21 +732,19 @@ impl Target for Gtk {
         // Only after the GTK files were committed: the manager publishes what was just written.
         let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
         let suppressed = std::env::var("DECEBAL_XSETTINGS").is_ok_and(|v| v == "0");
-        if let Some(display) = cx.env.display.as_deref().filter(|d| super::xsettings::wanted(Some(d), wayland, suppressed, cx.cfg.option("gtk.xsettings"))) {
-            ensure_xsettings(cx, display);
+        if let Some(display) = cx.env.display.clone().filter(|d| super::xsettings::wanted(Some(d), wayland, suppressed, true)) {
+            if cx.cfg.option("gtk.xsettings") {
+                ensure_xsettings(cx, &display);
+            } else {
+                // Switched off later: Decebal's own manager stops; another manager is never touched.
+                stop_xsettings(cx, &display);
+            }
         }
     }
 
     fn undo(&self, cx: &mut super::Ctx) {
-        #[cfg(feature = "x11")]
-        {
-            if let Some(display) = cx.env.display.as_deref().filter(|_| !cfg!(test)) {
-                match super::xsettings::stop(display) {
-                    Ok(true) => cx.report.notes.push("GTK: Decebal's XSETTINGS manager stopped".into()),
-                    Ok(false) => {}
-                    Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}")),
-                }
-            }
+        if let Some(display) = cx.env.display.clone().filter(|_| !cfg!(test)) {
+            stop_xsettings(cx, &display);
         }
         super::gsettings_restore(cx, "gtk");
     }
@@ -766,6 +764,22 @@ fn ensure_xsettings(cx: &mut super::Ctx, display: &str) {
 
 #[cfg(not(feature = "x11"))]
 fn ensure_xsettings(_cx: &mut super::Ctx, _display: &str) {}
+
+/// Stops Decebal's XSETTINGS manager (proved by its marker); any other manager is left alone.
+fn stop_xsettings(cx: &mut super::Ctx, display: &str) {
+    #[cfg(feature = "x11")]
+    {
+        match super::xsettings::stop(display) {
+            Ok(true) => cx.report.notes.push("GTK: Decebal's XSETTINGS manager stopped".into()),
+            Ok(false) => {}
+            Err(e) => cx.report.warnings.push(format!("GTK: XSETTINGS manager: {e}")),
+        }
+    }
+    #[cfg(not(feature = "x11"))]
+    {
+        let _ = (cx, display);
+    }
+}
 
 /// The icon / cursor publication ([`super::publish_assets`]): `gtk-icon-theme-name` / `gtk-cursor-theme-name` in both `settings.ini`
 /// files and gsettings `icon-theme` / `cursor-theme`, for installed themes only. No CSS, colour, font, theme-name or layout key.

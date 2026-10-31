@@ -107,10 +107,16 @@ The manager is `decthemectl system xsettings serve --display D --ini PATH`, so t
   change, and only changed settings carry the new last-change serial.
 * **Ownership:** the `_XSETTINGS_S<screen>` selection is the singleton.
   - An existing owner is never replaced, whether another daemon or Decebal's own.
-  - The selection is claimed with a server timestamp, verified after claiming, and announced with `MANAGER`.
-  - On SelectionClear the manager ends quietly.
+  - The owner check and the claim happen together under a brief server grab: GetSelectionOwner, SetSelectionOwner (server
+    timestamp taken beforehand), then GetSelectionOwner again. A manager that starts at the same moment can't be stolen in the
+    gap. The grab covers no file I/O or waiting and is released on every path, errors included.
+  - A successful claim is announced with `MANAGER`. On SelectionClear the manager ends quietly.
 * **Lifetime:** the start is observed. The new process must be seen owning the selection, with its marker
   `_DECEBAL_XSETTINGS_OWNER` = "pid start-time", within 2 s; otherwise the apply reports a warning.
+  - A serving child is handed to a reaper thread.
+  - A child that lost to a concurrent start, or that timed out or failed, gets 2 s to end by itself and is then killed. That is the
+    only signal ever sent, and only to this exact, unreaped child. The inotify descriptor is an `OwnedFd`, closed on every exit.
+  - Turning "Live GTK settings on X11" off stops Decebal's manager at the next GTK apply; another manager is left alone.
   - `decthemectl system xsettings status|stop`, and turning GTK integration off, send `_DECEBAL_XSETTINGS_QUIT` with that pid and
     start time to the owner window.
   - The manager checks the pid and start time, releases the selection and exits. No process is signalled.
@@ -122,7 +128,7 @@ The manager is `decthemectl system xsettings serve --display D --ini PATH`, so t
 **Native gates (UNRUN):**
 
 ```sh
-# 1. unit: protocol layout, serials, ownership classification
+# 1. unit: protocol layout, serials, ownership classification, grab-wrapped claim order and ungrab on every error
 cargo test --lib theme::system::xsettings
 # 2. private X11 live acceptance (owned Xvfb, private HOME/XDG; no other manager on that display): with the build's decthemectl
 #    and DECEBAL_XSETTINGS unset, run the native harness strict for plain GTK:
@@ -131,6 +137,9 @@ DECTHEMECTL=target/debug/decthemectl python3 tests/systemtheming/gtk-native.py O
 # 3. ownership: start a foreign owner of _XSETTINGS_S0 first (any test client holding the selection) -> apply reports "another
 #    XSETTINGS manager", the foreign owner keeps it; then `decthemectl system off` -> Decebal's manager (if any) releases, the
 #    foreign one is untouched; `system xsettings status` before/after.
+# 4. race: two real contenders (two `decthemectl system xsettings serve` on one private display, and a foreign client
+#    claiming _XSETTINGS_S0 while ours starts): exactly one owner, the loser exits, the foreign owner is never replaced,
+#    and no child process is left behind.
 ```
 
 Native gate 2 needs one harness change before it can pass: its private `apply()` passes `DECEBAL_SYSTEM_AUTOMATIC=0`, which does
