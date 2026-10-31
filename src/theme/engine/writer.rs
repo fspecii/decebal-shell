@@ -116,7 +116,9 @@ fn minimum_shell_version(def: &Def) -> &'static str {
     let modern_extra = ["bar", "dashboard", "launcher", "control_center"].iter().any(|section| def.extra.get(*section).and_then(|v| v.get("style")).and_then(Value::as_str) == Some("dux"))
         || def.extra.get("font").and_then(|v| v.get("files")).and_then(Value::as_array).is_some_and(|a| !a.is_empty())
         || def.extra.get("desktop").and_then(|v| v.get("widgets")).and_then(Value::as_str) == Some("none");
-    if modern_style || modern_extra {
+    if crate::panel::needs_framework(&def.extra) {
+        crate::panel::SINCE
+    } else if modern_style || modern_extra {
         "0.2.0"
     } else {
         "0.1.0"

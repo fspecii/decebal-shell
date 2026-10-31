@@ -97,7 +97,8 @@ fn main() {
         control_center(&verb, corner);
         return;
     }
-    let show_workspaces = decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm());
+    // the workspaces applet (and the old `workspaces` switch, which it reads) decides whether they show
+    let show_workspaces = true;
     if let Some(path) = png {
         let mut bar = DecBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces).with_height(height).with_process(role).with_position(position);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
@@ -151,11 +152,7 @@ fn main() {
             }
         }
         let closed = Arc::new(AtomicBool::new(false));
-        let mut bar = DecBar::new(make_active(app_id.clone()))
-            .with_frame_publisher()
-            .with_workspaces(decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm()))
-            .with_process(role)
-            .with_position(position);
+        let mut bar = DecBar::new(make_active(app_id.clone())).with_frame_publisher().with_workspaces(show_workspaces).with_process(role).with_position(position);
         if gated {
             bar = bar.with_gate(closed.clone());
             if role == Process::Main {

@@ -16,6 +16,20 @@
 pub mod applets;
 pub mod frame;
 
+/// The first release with this framework: packages that use `[bar] applets`, a non-top edge for a non-rail bar or a side
+/// dock declare it as `min_shell_version` (0.2.0 rejects `[bar] applets` as an unknown key). The release owner pins it to
+/// the version that first ships this module; until then it follows the crate version.
+pub const SINCE: &str = env!("CARGO_PKG_VERSION");
+
+/// Whether a theme's extra sections use something only this framework understands (see [`SINCE`]).
+pub fn needs_framework(extra: &serde_json::Map<String, Value>) -> bool {
+    let bar = extra.get("bar");
+    let style = bar.and_then(|b| b.get("style")).and_then(Value::as_str).unwrap_or("flat");
+    let edge = bar.and_then(|b| b.get("position")).and_then(Value::as_str).and_then(Edge::parse);
+    let dock = extra.get("dock").and_then(|d| d.get("position")).and_then(Value::as_str).and_then(Edge::parse);
+    bar.is_some_and(|b| b.get("applets").is_some()) || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top)) || dock.is_some_and(Edge::is_vertical)
+}
+
 pub use applets::{AppletId, AppletSet, Cap, Need, Worker, REGISTRY};
 
 use crate::config::BarPosition;
@@ -314,6 +328,9 @@ pub struct Effective {
     pub split: bool,
     /// Enabled applets.
     pub applets: AppletSet,
+    /// Applets the user switched on explicitly. A state indicator (Stay Awake, lock keys) that the user asked for stays
+    /// on the panel as a control while its state is off; by default it only appears while on, as before.
+    pub explicit: AppletSet,
 }
 
 impl Effective {
@@ -322,7 +339,7 @@ impl Effective {
     }
     /// Stable digest of what changes a panel's picture: the native preview cache keys on it.
     pub fn fingerprint(&self) -> String {
-        format!("{}:{}:{}:{:x}", self.renderer.key(), self.edge.as_str(), if self.split { "split" } else { "single" }, self.applets.bits())
+        format!("{}:{}:{}:{:x}:{:x}", self.renderer.key(), self.edge.as_str(), if self.split { "split" } else { "single" }, self.applets.bits(), self.explicit.bits())
     }
 }
 
@@ -393,7 +410,8 @@ pub fn resolve(i: &Inputs) -> Effective {
     for id in AppletId::all() {
         enabled.set(id, resolve_applet(i, id).0);
     }
-    Effective { renderer: i.renderer, edge, split, applets: enabled }
+    let explicit = AppletSet::of(&i.user.applets.iter().filter(|(_, on)| **on).map(|(id, _)| *id).collect::<Vec<_>>());
+    Effective { renderer: i.renderer, edge, split, applets: enabled, explicit }
 }
 
 /// The background workers a panel needs for `applets`. `control_center` is true while its button is shown: its sound

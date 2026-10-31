@@ -9,6 +9,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -375,35 +376,80 @@ pub fn is_sink_event(line: &str) -> bool {
 /// keys pressed elsewhere show up at once. Uses `pactl subscribe` (a blocking read, zero polling);
 /// without it the volume is re-read every few seconds.
 pub fn watch_volume<F: Fn() + Send + 'static>(on_event: F) {
+    std::mem::forget(watch_volume_until(on_event));
+}
+
+/// A running volume subscription; dropping it stops the `pactl subscribe` child (or the `wpctl` poll) and its thread.
+pub struct VolumeWatch {
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    child: Arc<Mutex<Option<u32>>>,
+}
+
+impl Drop for VolumeWatch {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Some(pid) = self.child.lock().ok().and_then(|c| *c) {
+            // SAFETY: signals the subscription child this watcher started (and has not reaped yet).
+            unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
+            }
+        }
+    }
+}
+
+/// [`watch_volume`] that ends when the returned handle is dropped (the volume applet and the Control Center are off).
+pub fn watch_volume_until<F: Fn() + Send + 'static>(on_event: F) -> VolumeWatch {
+    use std::sync::atomic::Ordering::SeqCst;
+    let watch = VolumeWatch { stop: Arc::new(std::sync::atomic::AtomicBool::new(false)), child: Arc::new(Mutex::new(None)) };
+    let (stop, child_pid) = (Arc::clone(&watch.stop), Arc::clone(&watch.child));
     if !have("pactl") {
         if have("wpctl") {
             std::thread::spawn(move || {
                 let mut last = probe_volume().map(|v| v.0);
-                loop {
+                while !stop.load(SeqCst) {
                     std::thread::sleep(Duration::from_secs(3));
                     let now = probe_volume().map(|v| v.0);
-                    if now != last {
+                    if now != last && !stop.load(SeqCst) {
                         last = now;
                         on_event();
                     }
                 }
             });
         }
-        return;
+        return watch;
     }
-    std::thread::spawn(move || loop {
-        if let Ok(mut child) = die_with_parent(Command::new("pactl").arg("subscribe").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())).spawn() {
-            if let Some(out) = child.stdout.take() {
-                for line in std::io::BufRead::lines(std::io::BufReader::new(out)).map_while(Result::ok) {
-                    if is_sink_event(&line) {
-                        on_event();
+    std::thread::spawn(move || {
+        while !stop.load(SeqCst) {
+            if let Ok(mut child) = die_with_parent(Command::new("pactl").arg("subscribe").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())).spawn() {
+                if let Ok(mut c) = child_pid.lock() {
+                    *c = Some(child.id());
+                }
+                if stop.load(SeqCst) {
+                    let _ = child.kill();
+                }
+                if let Some(out) = child.stdout.take() {
+                    for line in std::io::BufRead::lines(std::io::BufReader::new(out)).map_while(Result::ok) {
+                        if stop.load(SeqCst) {
+                            break;
+                        }
+                        if is_sink_event(&line) {
+                            on_event();
+                        }
                     }
                 }
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Ok(mut c) = child_pid.lock() {
+                    *c = None;
+                }
             }
-            let _ = child.wait();
+            if stop.load(SeqCst) {
+                return;
+            }
+            std::thread::sleep(Duration::from_secs(5));
         }
-        std::thread::sleep(Duration::from_secs(5));
     });
+    watch
 }
 
 // ----------------------------------------------------------- wi-fi networks

@@ -159,6 +159,9 @@ pub fn shapes(name: &str) -> Option<String> {
         "weather-snow" => fill("M7 14.5a4.2 4.2 0 0 1-.5-8.3A5.6 5.6 0 0 1 17 8a3.3 3.3 0 0 1-.4 6.5z", None) + &stroke("M8 18.5v.01M12 18.5v.01M16 18.5v.01M10 21v.01M14 21v.01", None),
         "weather-storm" => fill("M7 14a4.2 4.2 0 0 1-.5-8.3A5.6 5.6 0 0 1 17 7.5a3.3 3.3 0 0 1-.4 6.5z", None) + &fill("M12.8 13l-3.6 5h2.8l-1 4 4.4-6h-2.9z", None),
         "weather-fog" => fill("M7 12a4.2 4.2 0 0 1-.5-8.3A5.6 5.6 0 0 1 17 5.5a3.3 3.3 0 0 1-.4 6.5z", None) + &stroke("M5 16h14M7 20h10", None),
+        // the folded application menu (three lines) and show desktop (a screen with nothing on it)
+        "menu" => stroke("M4.5 7h15M4.5 12h15M4.5 17h15", None),
+        "desktop" => stroke("M3.5 5.5h17v11h-17zM9 20h6M12 16.5V20", None),
         _ => return None,
     })
 }
@@ -332,6 +335,8 @@ fn material_codepoint(name: &str) -> Option<char> {
         "eye" => 0xe8f4,
         "magnifyingglass" => 0xe8b6,
         "lock" => 0xe897,
+        "menu" => 0xe5d2,
+        "desktop" => 0xe30c,
         _ => return None,
     })
 }

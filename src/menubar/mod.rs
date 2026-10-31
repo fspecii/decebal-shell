@@ -2,6 +2,7 @@
 //! Control Center. One surface that grows downward while a menu or the panel is open.
 
 pub mod active;
+mod applets;
 pub mod awake;
 mod ccviewport;
 pub mod clock;
@@ -162,11 +163,24 @@ pub enum Tray {
     Spotlight,
     Control,
     Clock,
-    // Only the vertical bar has these: the OS icon, the focused window, the power button, caps/num lock.
+    // The OS icon / launcher, the focused window, the power button, caps/num lock.
     Logo,
     Window,
     Power,
     Lock,
+    // Applets every renderer can show (see crate::panel): the folded application menus, media, notification history,
+    // clipboard history, CPU / memory load, brightness, one task button per window, show desktop.
+    AppMenu,
+    Media,
+    Notifications,
+    Clipboard,
+    Cpu,
+    Memory,
+    Brightness,
+    Task(u64),
+    ShowDesktop,
+    /// The overflow cell: applets that do not fit, in a list.
+    More,
 }
 pub type IndicatorRect = (Tray, (f32, f32, f32, f32));
 
@@ -331,7 +345,12 @@ pub struct DecBar {
     v_win_len: f32,
     logo_symbol: String,
     locks: lock::Locks,
-    lock_watcher: bool,
+    /// The lock-key watcher, while the lock-keys applet is on.
+    lock_watcher: Option<lock::Watch>,
+    /// The volume subscription, while the volume applet or the Control Center button is on.
+    volume_watch: Option<sys::VolumeWatch>,
+    /// Ends the rdwm layout/tag subscription, while neither the layout nor the workspaces applet is on.
+    layout_stop: Option<Arc<AtomicBool>>,
     dux_mpris: Option<crate::dash::mpris::Mpris>,
     dux_perf: Arc<Mutex<Option<ResourceSample>>>,
     dux_sampler: Arc<Mutex<crate::dash::sysinfo::Sampler>>,
@@ -342,6 +361,14 @@ pub struct DecBar {
     frame_theme_generation: Option<u64>,
     dux_effect: Option<(segmented::Kind, Instant, bool)>,
     dux_reduce_motion: bool,
+    /// Task buttons (one per application) while the task applet is on.
+    tasks: Vec<applets::Task>,
+    /// Windows show desktop minimised, to bring back on the next press.
+    desk_hidden: Vec<u64>,
+    /// The folded application menu shows this menu's items (`None`: the list of menus).
+    app_menu_page: Option<usize>,
+    /// An applet opened from the overflow list (its popup hangs from the overflow cell).
+    more_target: Option<Tray>,
 }
 
 impl DecBar {
@@ -420,7 +447,9 @@ impl DecBar {
             v_win_len: 0.0,
             logo_symbol: String::new(),
             locks: lock::Locks::default(),
-            lock_watcher: false,
+            lock_watcher: None,
+            volume_watch: None,
+            layout_stop: None,
             dux_mpris: None,
             dux_perf: Arc::new(Mutex::new(None)),
             dux_sampler: Arc::new(Mutex::new(crate::dash::sysinfo::Sampler::new(crate::dash::sysinfo::Paths::default()))),
@@ -431,6 +460,10 @@ impl DecBar {
             frame_theme_generation: None,
             dux_effect: None,
             dux_reduce_motion: crate::accessibility::Preferences::from_env().reduce_motion,
+            tasks: Vec::new(),
+            desk_hidden: Vec::new(),
+            app_menu_page: None,
+            more_target: None,
         };
         if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
             bar.symbols.prepare_material();
@@ -563,30 +596,9 @@ impl DecBar {
     fn start_watchers(&mut self, waker: Waker) {
         self.waker = Some(waker.clone());
         self.ensure_indicator_host();
-        self.ensure_lock_watcher();
-        let tw = waker.clone();
+        let tw = waker;
         crate::theme::live::start_watcher(move || tw.wake());
-        let (w, sh) = (waker.clone(), Arc::clone(&self.shared));
-        rdwm::spawn_watcher(Arc::clone(&self.shared.layout), move || {
-            sh.changed.store(true, Ordering::SeqCst);
-            w.wake();
-        });
-        // Volume changes made elsewhere (keys, other apps) show up without polling.
-        let (shared, w) = (Arc::clone(&self.shared), waker);
-        sys::watch_volume(move || {
-            let recently_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_millis(500));
-            if recently_set {
-                return;
-            }
-            if let Some((v, name)) = sys::probe_volume() {
-                if let Ok(mut s) = shared.snap.lock() {
-                    s.volume = Some(v);
-                    s.sink = name;
-                }
-                shared.changed.store(true, Ordering::SeqCst);
-                w.wake();
-            }
-        });
+        self.sync_workers();
     }
 
     fn snapshot(&self) -> Snapshot {
@@ -619,10 +631,10 @@ impl DecBar {
     }
 
     fn spans(&self) -> Vec<Span> {
-        if self.dux() {
+        if self.dux() || !self.shows(crate::panel::AppletId::AppMenu) {
             return Vec::new();
         }
-        let dx = inset();
+        let dx = inset() + if self.shows(crate::panel::AppletId::Launcher) { BTN_W } else { 0.0 };
         let mut spans = title_spans(&self.menus, |m| self.label_w(m));
         if dx > 0.0 {
             spans.iter_mut().for_each(|s| s.x += dx);
@@ -630,64 +642,155 @@ impl DecBar {
         spans
     }
 
-    fn tray_items(&self) -> Vec<(Tray, f32)> {
+    /// Width of an item on the classic strip.
+    fn classic_width(&self, kind: Tray, snap: &Snapshot, weather: Option<&Weather>) -> f32 {
+        let measure = |s: &str, px: f32, w: Weight| self.fonts.as_ref().map(|f| f.measure(s, px, w)).unwrap_or(s.chars().count() as f32 * px * 0.55);
+        match kind {
+            Tray::Workspaces => workspaces_width(self.workspaces.len()),
+            Tray::Layout => 30.0,
+            Tray::Weather => weather.map_or(BTN_W, |w| ICON_PX + 6.0 + measure(&format!("{}°", w.temp_c), TEXT_PX, Weight::Regular) + 18.0),
+            Tray::Battery => snap.battery.as_ref().map_or(BTN_W, |b| 30.0 + measure(&format!("{}%", b.percent), 11.0, Weight::Regular) + 6.0),
+            Tray::Clock => measure(&self.clock_text, TEXT_PX, Weight::Regular) + 17.0,
+            Tray::Window => measure(&self.v_window_text(), TEXT_PX, Weight::Medium).min(220.0) + 16.0,
+            Tray::Media => ICON_PX + 6.0 + measure(&self.dux_player().map(|p| p.meta.title).unwrap_or_default(), TEXT_PX, Weight::Regular).min(140.0) + 14.0,
+            Tray::Cpu | Tray::Memory => measure("CPU 100%", 11.0, Weight::Regular) + 14.0,
+            _ => BTN_W,
+        }
+    }
+
+    /// The right-hand items and those that did not fit (they go to the overflow cell, which takes their place).
+    fn classic_fit(&self) -> (Vec<(Tray, f32)>, Vec<Tray>) {
         let snap = self.snapshot();
-        let mut items = Vec::new();
-        if self.show_workspaces && !self.workspaces.is_empty() {
-            items.push((Tray::Workspaces, workspaces_width(self.workspaces.len())));
-        }
-        if self.layout_state().is_some() {
-            items.push((Tray::Layout, 30.0));
-        }
         let weather = self.shared.weather.lock().ok().and_then(|w| w.clone());
-        if let Some(w) = &weather {
-            let tw = self.fonts.as_ref().map(|f| f.measure(&format!("{}°", w.temp_c), TEXT_PX, Weight::Regular)).unwrap_or(14.0);
-            items.push((Tray::Weather, ICON_PX + 6.0 + tw + 18.0));
+        let order: Vec<_> = applets::CLASSIC_ORDER.iter().copied().filter(|id| *id != crate::panel::AppletId::Tray).collect();
+        let mut kinds = self.applet_items(&order, 0);
+        // the tray's application cells go where the menu bar always had them: before the workspaces
+        let at = kinds.iter().position(|k| !matches!(k, Tray::Window | Tray::Task(_))).unwrap_or(kinds.len());
+        let left_end = self.spans().last().map_or(LEFT_PAD + inset() + if self.shows(crate::panel::AppletId::Launcher) { BTN_W } else { 0.0 }, |s| s.x + s.w);
+        let room = (self.width as f32 - inset() - RIGHT_PAD - left_end - 12.0).max(0.0);
+        let width = |ks: &[Tray]| ks.iter().map(|k| self.classic_width(*k, &snap, weather.as_ref())).sum::<f32>();
+        let mut hidden = Vec::new();
+        if self.width > 0 {
+            // what gives way first on a narrow screen; the clock and quick settings stay
+            for victim in [
+                Tray::Window,
+                Tray::Media,
+                Tray::Cpu,
+                Tray::Memory,
+                Tray::Weather,
+                Tray::Clipboard,
+                Tray::Notifications,
+                Tray::Agents,
+                Tray::Dash,
+                Tray::Spotlight,
+                Tray::Brightness,
+                Tray::Layout,
+                Tray::Lock,
+                Tray::ShowDesktop,
+                Tray::Power,
+                Tray::Bluetooth,
+                Tray::Battery,
+                Tray::Network,
+                Tray::Audio,
+                Tray::Workspaces,
+                Tray::Awake,
+            ] {
+                let more = if hidden.is_empty() { 0.0 } else { BTN_W };
+                if width(&kinds) + more <= room {
+                    break;
+                }
+                let tasks = victim == Tray::Window;
+                kinds.retain(|k| {
+                    let gone = *k == victim || (tasks && matches!(k, Tray::Task(_)));
+                    if gone {
+                        hidden.push(*k);
+                    }
+                    !gone
+                });
+            }
         }
-        if snap.awake {
-            items.push((Tray::Awake, BTN_W));
+        let used = width(&kinds) + if hidden.is_empty() { 0.0 } else { BTN_W };
+        let at = at.min(kinds.len());
+        if self.shows(crate::panel::AppletId::Tray) {
+            let limit = ((room - used).max(0.0) / BTN_W).floor() as usize;
+            let cells = self.indicator_kinds(limit.clamp(1, 8));
+            kinds.splice(at..at, cells);
         }
-        if symbols::agents_available() {
-            items.push((Tray::Agents, BTN_W));
+        if !hidden.is_empty() {
+            let clock = kinds.iter().position(|k| *k == Tray::Clock).unwrap_or(kinds.len());
+            kinds.insert(clock, Tray::More);
         }
-        if let Some(b) = &snap.battery {
-            let tw = self.fonts.as_ref().map(|f| f.measure(&format!("{}%", b.percent), 11.0, Weight::Regular)).unwrap_or(24.0);
-            items.push((Tray::Battery, 30.0 + tw + 6.0));
+        (kinds.into_iter().map(|k| (k, self.classic_width(k, &snap, weather.as_ref()))).collect(), hidden)
+    }
+
+    fn tray_items(&self) -> Vec<(Tray, f32)> {
+        self.classic_fit().0
+    }
+
+    /// The applets the overflow cell lists, whatever the renderer.
+    pub(super) fn hidden_items(&self) -> Vec<Tray> {
+        if self.pill_bar() {
+            return self.v_hidden();
         }
-        if snap.bluetooth.is_some() {
-            items.push((Tray::Bluetooth, BTN_W));
+        if self.dux() {
+            return self.dux_hidden();
         }
-        if snap.volume.is_some() {
-            items.push((Tray::Audio, BTN_W));
+        self.classic_fit().1
+    }
+
+    /// Items at the left edge, before the menus: the launcher.
+    fn left_items(&self) -> Vec<(Tray, Span)> {
+        if self.dux() || !self.shows(crate::panel::AppletId::Launcher) {
+            return Vec::new();
         }
-        if snap.net.is_some() {
-            items.push((Tray::Network, BTN_W));
-        }
-        items.push((Tray::Dash, BTN_W));
-        items.push((Tray::Spotlight, BTN_W));
-        if crate::theme::th().control_center.enabled {
-            items.push((Tray::Control, BTN_W));
-        }
-        let clock_w = self.fonts.as_ref().map(|f| f.measure(&self.clock_text, TEXT_PX, Weight::Regular)).unwrap_or(100.0) + 17.0;
-        items.push((Tray::Clock, clock_w));
-        let left_end = self.spans().last().map_or(LEFT_PAD, |s| s.x + s.w);
-        let used: f32 = items.iter().map(|(_, w)| *w).sum();
-        let available = (self.width as f32 - inset() - RIGHT_PAD - left_end - used - 12.).max(0.);
-        let limit = (available / BTN_W).floor() as usize;
-        let indicators = self.indicator_kinds(limit.clamp(1, 8));
-        items.splice(0..0, indicators.into_iter().map(|k| (k, BTN_W)));
-        items
+        vec![(Tray::Logo, Span { x: LEFT_PAD + inset() - 2.0, w: BTN_W })]
     }
 
     fn tray(&self) -> Vec<(Tray, Span)> {
         if self.dux() {
             return self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, Span { x: i.x, w: i.w })) } else { None }).collect();
         }
-        tray_spans(self.width as f32 - inset(), &self.tray_items())
+        let mut out = self.left_items();
+        out.extend(tray_spans(self.width as f32 - inset(), &self.tray_items()));
+        out
+    }
+
+    /// Where the right-hand items start (the menus end before it).
+    fn right_start(&self) -> f32 {
+        self.tray().into_iter().find(|(k, _)| *k != Tray::Logo).map_or(self.width as f32, |(_, s)| s.x - 8.)
+    }
+
+    /// The edge of a horizontal bar (top unless the panel is on the bottom edge).
+    pub(super) fn bottom(&self) -> bool {
+        !self.embedded && !self.pill_bar() && self.panel().edge == crate::panel::Edge::Bottom
+    }
+
+    /// Surface y of the strip of a horizontal bar: 0 on top, the surface's last rows at the bottom.
+    pub(super) fn strip_top(&self) -> f32 {
+        if self.bottom() {
+            (self.height as f32 - self.bar_bottom()).max(0.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// The point is on the strip of a horizontal bar.
+    pub(super) fn in_strip(&self, y: f32) -> bool {
+        let top = self.strip_top();
+        y >= top && y < top + self.bar_bottom()
+    }
+
+    /// Top of a box `h` tall opened from the strip: under a top bar, over a bottom one.
+    pub(super) fn open_y(&self, h: f32, gap: f32) -> f32 {
+        if self.bottom() {
+            (self.strip_top() - gap - h).max(0.0)
+        } else {
+            self.bar_bottom() + gap
+        }
     }
 
     fn title_hit(&self, x: f32) -> Option<usize> {
-        let limit = self.tray().first().map_or(self.width as f32, |(_, s)| s.x - 8.);
+        let limit = self.right_start();
         self.spans().iter().position(|s| s.x + s.w <= limit && x >= s.x && x < s.x + s.w)
     }
 
@@ -696,6 +799,9 @@ impl DecBar {
         let span = *self.spans().get(idx)?;
         let f = self.fonts.as_ref();
         let mut d = Dropdown::layout(menu, span.x, self.bar_bottom() + MENU_GAP, |s| f.map(|f| f.measure(s, TEXT_PX, Weight::Regular)).unwrap_or(7.0 * s.chars().count() as f32));
+        if self.bottom() {
+            d.shift_y(self.open_y(d.h, MENU_GAP) - d.y);
+        }
         // Keep it on screen.
         let over = d.x + d.w - self.width as f32;
         if over > 0.0 && self.width > 0 {
@@ -712,10 +818,21 @@ impl DecBar {
             return self.v_panel_origin();
         }
         let right = self.tray().iter().find(|(k, _)| *k == Tray::Control).map(|(_, s)| s.x + s.w).unwrap_or(self.width as f32);
-        ((right - self.cc_width()).max(0.0), self.bar_bottom() + PANEL_GAP)
+        let y = if self.bottom() { self.open_y(self.cc_visible_height(), PANEL_GAP) } else { self.bar_bottom() + PANEL_GAP };
+        ((right - self.cc_width()).max(0.0), y)
     }
 
     fn open_bottom(&self) -> Option<f32> {
+        if self.bottom() {
+            // the surface grows upwards: the strip plus what hangs over it
+            let depth = match self.open {
+                Open::None => None,
+                Open::Menu(i) => self.dropdown(i).map(|d| d.h + MENU_GAP),
+                Open::Control => Some(PANEL_GAP + self.cc_height),
+                Open::Popup(_) => self.popup.as_ref().map(|p| p.h + MENU_GAP).or(self.calendar.as_ref().map(|_| Calendar::H + MENU_GAP)),
+            };
+            return depth.map(|d| self.bar_bottom() + d);
+        }
         match self.open {
             Open::None => None,
             Open::Menu(i) => self.dropdown(i).map(|d| d.y + d.h),
@@ -736,14 +853,22 @@ impl DecBar {
         if cfg!(test) {
             return;
         }
+        // the open Control Center asks for a full snapshot itself; the minute refresh only runs for applets that show it
+        if !full && !self.snapshot_wanted() {
+            return;
+        }
         if self.shared.snap_busy.swap(true, Ordering::SeqCst) {
             return;
         }
         let shared = Arc::clone(&self.shared);
         let waker = self.waker.clone();
+        let brightness = self.shows(crate::panel::AppletId::Brightness);
         std::thread::spawn(move || {
             let prev = shared.snap.lock().map(|s| s.clone()).unwrap_or_default();
-            let next = if full { Snapshot::collect() } else { collect_light(&prev) };
+            let mut next = if full { Snapshot::collect() } else { collect_light(&prev) };
+            if brightness && !full {
+                next.brightness = sys::probe_brightness();
+            }
             // A volume the user just set (the wheel, a slider) is still being applied by the worker: a probe taken
             // meanwhile reads the old value and would undo the next wheel step.
             let just_set = shared.vol_set_at.lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed() < Duration::from_secs(1));
@@ -763,8 +888,8 @@ impl DecBar {
     }
 
     pub(super) fn spawn_weather(&self) {
-        // Unit tests never reach the network (or the on-disk cache).
-        if cfg!(test) {
+        // Unit tests never reach the network (or the on-disk cache); with the weather applet off nothing fetches.
+        if cfg!(test) || !self.shows(crate::panel::AppletId::Weather) {
             return;
         }
         if self.shared.weather_busy.swap(true, Ordering::SeqCst) {
@@ -844,6 +969,9 @@ impl DecBar {
         !self.embedded && self.cc_style() == controlcenter::settings::Style::Dux && !self.pill_bar()
     }
     fn cc_visible_height(&self) -> f32 {
+        if self.cc_clipped() && self.bottom() {
+            return self.cc_height.min((self.strip_top() - PANEL_GAP - BOTTOM_MARGIN).max(0.0));
+        }
         if self.cc_clipped() {
             ccviewport::height(self.cc_height, self.panel_origin().1, self.height as f32)
         } else {
@@ -1029,6 +1157,9 @@ impl DecBar {
     }
 
     fn spotlight(&self) {
+        if cfg!(test) {
+            return vbar::launch_ui(vec!["decspot".into()]);
+        }
         let decspot = crate::launch::sibling_or_path("decspot");
         let cmds: [&[&str]; 4] = [&[&decspot], &["rofi", "-show", "drun"], &["wofi", "--show", "drun"], &["fuzzel"]];
         for c in cmds {
@@ -1041,7 +1172,7 @@ impl DecBar {
 
     /// Opens `decdash` centred under the bar item (it toggles itself closed when already open).
     fn dashboard(&self, item: Span) {
-        crate::launch::spawn_argv(&dash_argv(&crate::launch::sibling_or_path("decdash"), item));
+        vbar::launch_ui(dash_argv(&crate::launch::sibling_or_path("decdash"), item));
     }
 
     // ---------------------------------------------------------------- draw
@@ -1076,7 +1207,7 @@ impl DecBar {
 
         // Left: titles.
         let spans = self.spans();
-        let title_limit = self.tray().first().map_or(w, |(_, s)| s.x - 8.);
+        let title_limit = self.right_start();
         let menus = self.menus.clone();
         for (i, (m, s)) in menus.iter().zip(&spans).enumerate() {
             if s.x + s.w > title_limit {
@@ -1163,7 +1294,69 @@ impl DecBar {
                     };
                     self.symbol(pm, icon, ICON_PX, cx, 12.5);
                 }
-                Tray::Logo | Tray::Window | Tray::Power | Tray::Lock => {}
+                Tray::Window => {
+                    let room = s.w - 16.0;
+                    let shown = match &self.fonts {
+                        Some(f) => controlcenter::fit(&self.v_window_text(), room, TEXT_PX, Weight::Medium, f),
+                        None => String::new(),
+                    };
+                    self.text(pm, &shown, s.x + 8.0, TEXT_PX, Weight::Medium, (ink().0, ink().1, ink().2, 1.0));
+                }
+                Tray::Media => {
+                    let player = self.dux_player();
+                    let playing = player.as_ref().is_some_and(|p| p.status == crate::dash::mpris::Status::Playing);
+                    self.symbol(pm, if playing { "pause" } else { "play" }, ICON_PX - 2.0, s.x + 8.0 + ICON_PX / 2.0, 12.5);
+                    let title = player.map(|p| p.meta.title).unwrap_or_default();
+                    let shown = match &self.fonts {
+                        Some(f) => controlcenter::fit(&title, s.w - ICON_PX - 20.0, TEXT_PX, Weight::Regular, f),
+                        None => String::new(),
+                    };
+                    self.text(pm, &shown, s.x + 8.0 + ICON_PX + 6.0, TEXT_PX, Weight::Regular, (ink().0, ink().1, ink().2, 1.0));
+                }
+                Tray::Cpu | Tray::Memory => {
+                    let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+                    let value = perf.and_then(|p| if kind == Tray::Cpu { p.0 } else { p.1 });
+                    let label = if kind == Tray::Cpu { "CPU" } else { "MEM" };
+                    let lw = self.fonts.as_ref().map_or(20.0, |f| f.measure(label, 11.0, Weight::Medium));
+                    let faint = crate::theme::th().bar_text.color(0.6);
+                    self.text(pm, label, s.x + 7.0, 11.0, Weight::Medium, (ink().0, ink().1, ink().2, faint.alpha()));
+                    let text = value.map_or_else(|| "—%".to_string(), |v| format!("{:.0}%", v * 100.0));
+                    self.text(pm, &text, s.x + 7.0 + lw + 4.0, 11.0, Weight::Regular, (ink().0, ink().1, ink().2, 1.0));
+                }
+                Tray::Lock => {
+                    let on = self.locks.caps() || self.locks.num();
+                    let label = match (self.locks.caps(), self.locks.num()) {
+                        (true, true) => "A1",
+                        (true, false) => "A",
+                        (false, true) => "1",
+                        _ => "A",
+                    };
+                    let th = crate::theme::th();
+                    if on {
+                        fill_rounded(pm, cx - 9.0, 6.0, 18.0, 14.0, 4.0, th.bar_text.color(0.9));
+                    } else {
+                        stroke_rounded(pm, cx - 8.5, 6.5, 17.0, 13.0, 4.0, th.bar_text.color(0.45), 1.0);
+                    }
+                    let fg = if on { th.bar.t() } else { ink() };
+                    if let Some(f) = self.fonts.as_mut() {
+                        let lw = f.measure(label, 10.0, Weight::Bold);
+                        let top = 13.0 + 3.6 - f.ascent(10.0, Weight::Bold);
+                        f.draw(pm, label, cx - lw / 2.0, top, 10.0, Weight::Bold, color(fg.0, fg.1, fg.2, if on { 1.0 } else { 0.6 }));
+                    }
+                }
+                Tray::Task(key) => {
+                    let Some(t) = self.task(key).cloned() else { continue };
+                    let icon = self.v_icons.get(&t.app_id, 32).clone();
+                    crate::gfx::blit_scaled(pm, &icon, cx - 8.0, 5.0, 16.0, 16.0, 1.0);
+                    if t.active() {
+                        fill_rounded(pm, cx - 4.0, 22.0, 8.0, 2.0, 1.0, crate::theme::th().bar_text.color(0.9));
+                    }
+                }
+                Tray::Logo => self.symbol(pm, applets::classic_symbol(kind), ICON_PX - 1.0, cx, 12.5),
+                Tray::AppMenu | Tray::Power | Tray::Notifications | Tray::Clipboard | Tray::Brightness | Tray::ShowDesktop | Tray::More => {
+                    let name = if kind == Tray::More { "chevron-left" } else { applets::classic_symbol(kind) };
+                    self.symbol(pm, name, ICON_PX, cx, 12.5)
+                }
                 Tray::Dash => self.symbol(pm, "chart", ICON_PX, cx, 12.5),
                 Tray::Spotlight => self.symbol(pm, "magnifyingglass", ICON_PX, cx, 12.5),
                 Tray::Control => {
@@ -1240,7 +1433,7 @@ impl App for DecBar {
     fn size(&self) -> (u32, u32) {
         if let Some(p) = self.place() {
             // a side bar is as tall as the monitor (0), a top / bottom bar as wide as it; the rest is room for popouts
-            return if p.edge.is_side() { (vbar::SURFACE_W, 0) } else { (0, vbar::SURFACE_H) };
+            return p.surface_size();
         }
         (0, surface_height(self.open_bottom()))
     }
@@ -1252,13 +1445,29 @@ impl App for DecBar {
         Some(if let Some(p) = self.place() {
             DecBar::v_spec(p)
         } else {
-            crate::backend::SurfaceSpec { anchor: crate::backend::Anchor::Top, margin: 0, reserve: self.bar_bottom().ceil() as i32, stretch: true, namespace: "decebal-bar" }
+            crate::backend::SurfaceSpec {
+                anchor: if self.bottom() { crate::backend::Anchor::Bottom } else { crate::backend::Anchor::Top },
+                margin: 0,
+                reserve: self.bar_bottom().ceil() as i32,
+                stretch: true,
+                namespace: "decebal-bar",
+            }
         })
     }
 
     fn resized(&mut self, w: u32, h: u32) {
         self.width = w;
         self.height = h;
+        if self.bottom() {
+            // a bottom bar's surface grew or shrank upwards: what hangs over the strip moves with it
+            let top = self.strip_top();
+            if let Some(p) = self.popup.as_mut() {
+                p.y = (top - MENU_GAP - p.h).max(0.0);
+            }
+            if let Some(c) = self.calendar.as_mut() {
+                c.y = (top - MENU_GAP - Calendar::H).max(0.0);
+            }
+        }
         self.cc_sync_viewport();
     }
 
@@ -1280,15 +1489,36 @@ impl App for DecBar {
         self.width = pm.width();
         self.height = pm.height();
         self.cc_sync_viewport();
-        self.draw_bar(pm);
-        let indicator_rects = if self.dux() {
-            self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, (i.x, i.y, i.w, i.h))) } else { None }).collect::<Vec<_>>()
+        let top = self.strip_top();
+        if top > 0.0 {
+            // a bottom bar: the strip is drawn as it is on top, then put on the last rows of the surface
+            if let Some(mut strip) = Pixmap::new(pm.width(), self.bar_bottom().ceil().max(1.0) as u32) {
+                self.draw_bar(&mut strip);
+                pm.draw_pixmap(0, top.round() as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+            }
         } else {
-            self.tray().into_iter().map(|(k, s)| (k, (s.x, 0., s.w, BAR_HEIGHT))).collect::<Vec<_>>()
+            self.draw_bar(pm);
+        }
+        let indicator_rects = if self.dux() {
+            self.dux_layout().items.into_iter().filter_map(|i| if let segmented::Kind::Tray(k) = i.kind { Some((k, (i.x, i.y + top, i.w, i.h))) } else { None }).collect::<Vec<_>>()
+        } else {
+            self.tray().into_iter().map(|(k, s)| (k, (s.x, top, s.w, BAR_HEIGHT))).collect::<Vec<_>>()
         };
         self.indicator_debug(&indicator_rects);
         if self.debug_tray.is_some() {
-            let text: String = self.tray().iter().map(|(k, s)| format!("{:?} {}\n", k, (s.x + s.w / 2.0).round())).collect();
+            let text: String = self
+                .tray()
+                .iter()
+                .map(
+                    |(k, s)| {
+                        if top > 0.0 {
+                            format!("{:?} {} {}\n", k, (s.x + s.w / 2.0).round(), (top + self.bar_bottom() / 2.0).round())
+                        } else {
+                            format!("{:?} {}\n", k, (s.x + s.w / 2.0).round())
+                        }
+                    },
+                )
+                .collect();
             if let Some((path, last)) = self.debug_tray.as_mut() {
                 if *last != text {
                     let _ = std::fs::write(&*path, &text);
@@ -1339,12 +1569,13 @@ impl App for DecBar {
                 let radius = self.v_geo().pill_width() / 2.0;
                 regions.extend(self.v_layout().pills.into_iter().map(|(_, r)| crate::glass::Region { x: r.x, y: r.y, w: r.w, h: r.h, radius: radius.min(r.w.min(r.h) / 2.0) }));
             } else if self.dux() {
-                regions.extend(self.dux_regions());
+                let top = self.strip_top();
+                regions.extend(self.dux_regions().into_iter().map(|r| crate::glass::Region { y: r.y + top, ..r }));
             } else if floating() {
                 let height = BAR_HEIGHT - 2.0 * PILL_MARGIN_Y;
-                regions.push(crate::glass::Region { x: PILL_MARGIN_X, y: PILL_MARGIN_Y, w: self.width as f32 - 2.0 * PILL_MARGIN_X, h: height, radius: height / 2.0 });
+                regions.push(crate::glass::Region { x: PILL_MARGIN_X, y: self.strip_top() + PILL_MARGIN_Y, w: self.width as f32 - 2.0 * PILL_MARGIN_X, h: height, radius: height / 2.0 });
             } else {
-                regions.push(crate::glass::Region { x: 0.0, y: 0.0, w: self.width as f32, h: BAR_HEIGHT, radius: 0.0 });
+                regions.push(crate::glass::Region { x: 0.0, y: self.strip_top(), w: self.width as f32, h: BAR_HEIGHT, radius: 0.0 });
             }
         }
         match self.open {
@@ -1375,8 +1606,8 @@ impl App for DecBar {
         }
         let mut redraw = false;
         self.leave_at = None;
-        if self.dux() && self.cc_drag.is_none() && self.popup_drag.is_none() && y < self.bar_bottom() {
-            let next = self.dux_layout().hit(x, y).map(|i| i.kind);
+        if self.dux() && self.cc_drag.is_none() && self.popup_drag.is_none() && self.in_strip(y) {
+            let next = self.dux_layout().hit(x, y - self.strip_top()).map(|i| i.kind);
             let changed = next != self.dux_hover;
             if changed {
                 self.dux_effect = next.map(|kind| (kind, Instant::now(), true)).or_else(|| self.dux_hover.map(|kind| (kind, Instant::now(), false)));
@@ -1412,7 +1643,7 @@ impl App for DecBar {
                 self.leave_at = Some(Instant::now());
             }
         }
-        let title = if y < self.bar_bottom() { self.title_hit(x) } else { None };
+        let title = if self.in_strip(y) { self.title_hit(x) } else { None };
         if title != self.hover_title {
             self.hover_title = title;
             redraw = true;
@@ -1477,11 +1708,12 @@ impl App for DecBar {
             return self.v_button(x, y, button);
         }
         self.leave_at = None;
-        if self.dux() && y < self.bar_bottom() {
-            if self.dux_layout().hit(x, y).is_none() {
+        let (top, on_strip) = (self.strip_top(), self.in_strip(y));
+        if self.dux() && on_strip {
+            if self.dux_layout().hit(x, y - top).is_none() {
                 return self.close();
             }
-            if self.dux_custom_press(x, y, button) {
+            if self.dux_custom_press(x, y - top, button) {
                 return true;
             }
         }
@@ -1490,49 +1722,38 @@ impl App for DecBar {
             self.close();
             return true;
         }
-        if y < self.bar_bottom() {
-            if let Some((kind, _)) = self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) {
-                match kind {
-                    Tray::Indicator(key) => {
-                        match self.indicator_press(key, button, x as i32, y as i32) {
-                            indicators::IndicatorPress::Menu => self.open_popup(kind),
-                            indicators::IndicatorPress::Handled => {
-                                self.close();
-                            }
-                            indicators::IndicatorPress::Ignored => return false,
-                        }
-                        return true;
-                    }
-                    Tray::Indicators if button == Button::Left || button == Button::Right => {
-                        self.indicator_page = 0;
-                        if self.open == Open::Popup(kind) {
+        let item = if on_strip { self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) } else { None };
+        if let Some((kind, _)) = item {
+            match kind {
+                Tray::Indicator(key) => {
+                    match self.indicator_press(key, button, x as i32, y as i32) {
+                        indicators::IndicatorPress::Menu => self.open_popup(kind),
+                        indicators::IndicatorPress::Handled => {
                             self.close();
-                        } else {
-                            self.open_popup(kind);
                         }
-                        return true;
+                        indicators::IndicatorPress::Ignored => return false,
                     }
-                    _ => {}
+                    return true;
                 }
+                Tray::Indicators if button == Button::Left || button == Button::Right => {
+                    self.indicator_page = 0;
+                    if self.open == Open::Popup(kind) {
+                        self.close();
+                    } else {
+                        self.open_popup(kind);
+                    }
+                    return true;
+                }
+                _ => {}
             }
         }
-        if button == Button::Middle && y < self.bar_bottom() {
-            // Middle click on the sound icon mutes.
-            if self.tray().iter().any(|(k, s)| *k == Tray::Audio && x >= s.x && x < s.x + s.w) {
-                self.toggle_mute_now();
-                if matches!(self.open, Open::Popup(Tray::Audio)) {
-                    self.rebuild_popup();
-                }
-                return true;
-            }
-        }
-        if button == Button::Right && y < self.bar_bottom() && self.awake_options(x) {
-            return true;
+        if let (Some((kind, s)), Button::Middle | Button::Right) = (item, button) {
+            return self.applet_press(kind, (s.x, top, s.w, self.bar_bottom()), button);
         }
         if button != Button::Left {
             return false;
         }
-        if y < self.bar_bottom() {
+        if on_strip {
             if let Some(i) = self.title_hit(x) {
                 if self.open == Open::Menu(i) {
                     self.close();
@@ -1542,70 +1763,24 @@ impl App for DecBar {
                 }
                 return true;
             }
-            for (kind, s) in self.tray() {
-                if x < s.x || x >= s.x + s.w {
-                    continue;
+            let Some((kind, s)) = item else { return self.close() };
+            return match kind {
+                Tray::Workspaces => {
+                    let scale = if self.dux() { crate::theme::live::font_scale().max(1.0) } else { 1.0 };
+                    if let Some(i) = workspace_hit(Span { x: s.x, w: s.w / scale }, self.workspaces.len(), s.x + (x - s.x) / scale) {
+                        self.close();
+                        self.active.switch_workspace(i);
+                    }
+                    false
                 }
-                match kind {
-                    Tray::Workspaces => {
-                        let scale = if self.dux() { crate::theme::live::font_scale().max(1.0) } else { 1.0 };
-                        if let Some(i) = workspace_hit(Span { x: s.x, w: s.w / scale }, self.workspaces.len(), s.x + (x - s.x) / scale) {
-                            self.close();
-                            self.active.switch_workspace(i);
-                        }
-                        return false;
-                    }
-                    Tray::Control => {
-                        if self.open == Open::Control {
-                            self.close();
-                        } else {
-                            self.close();
-                            self.open_control();
-                        }
-                        return true;
-                    }
-                    Tray::Dash => {
-                        self.close();
-                        self.dashboard(s);
-                        return true;
-                    }
-                    Tray::Logo | Tray::Spotlight => {
-                        self.close();
-                        self.spotlight();
-                        return true;
-                    }
-                    Tray::Power => {
-                        self.close();
-                        vbar::launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
-                        return true;
-                    }
-                    Tray::Window => {
-                        self.close();
-                        self.dashboard(s);
-                        return true;
-                    }
-                    Tray::Awake => {
-                        self.close();
-                        self.awake_off();
-                        return true;
-                    }
-                    Tray::Agents => {
-                        self.close();
-                        self.process_monitor(vec!["--x".to_string(), format!("{}", (s.x + s.w / 2.0).round() as i32)]);
-                        return true;
-                    }
-                    Tray::Layout | Tray::Weather | Tray::Battery | Tray::Bluetooth | Tray::Audio | Tray::Network | Tray::Clock => {
-                        if self.open == Open::Popup(kind) {
-                            self.close();
-                        } else {
-                            self.open_popup(kind);
-                        }
-                        return true;
-                    }
-                    _ => {}
+                // the Dux focused-window item opens the dashboard, as upstream
+                Tray::Window if self.dux() => {
+                    self.close();
+                    self.dashboard(s);
+                    true
                 }
-            }
-            return self.close();
+                _ => self.applet_press(kind, (s.x, top, s.w, self.bar_bottom()), Button::Left),
+            };
         }
         match self.open {
             Open::Menu(i) => {
@@ -1660,7 +1835,7 @@ impl App for DecBar {
         if self.pill_bar() && self.v_scroll(x, y, dy) {
             return true;
         }
-        if !self.pill_bar() && y < self.bar_bottom() && self.tray_scroll(x, dy) {
+        if !self.pill_bar() && self.in_strip(y) && self.tray_scroll(x, dy) {
             return true;
         }
         if self.open != Open::Control {
@@ -1754,36 +1929,39 @@ impl App for DecBar {
             return self.v_input_rects();
         }
         let w = self.width.max(1) as i32;
-        let bh = self.bar_bottom();
+        let (top, bh) = (self.strip_top(), self.bar_bottom());
+        let bottom = self.bottom();
         let mut rects = if self.dux() {
-            self.dux_regions().into_iter().map(|g| InputRect { x: g.x.floor() as i32, y: g.y.floor() as i32, w: g.w.ceil() as i32, h: g.h.ceil() as i32 }).collect()
+            self.dux_regions().into_iter().map(|g| InputRect { x: g.x.floor() as i32, y: (g.y + top).floor() as i32, w: g.w.ceil() as i32, h: g.h.ceil() as i32 }).collect()
         } else {
-            vec![InputRect { x: 0, y: 0, w, h: bh as i32 }]
+            vec![InputRect { x: 0, y: top as i32, w, h: bh as i32 }]
+        };
+        // A box opened from the strip, with the gap between them: the pointer never leaves the surface on its way there.
+        let reach = |x: f32, y: f32, bw: f32, h: f32| {
+            if bottom {
+                InputRect { x: x.floor() as i32, y: y.floor() as i32, w: bw.ceil() as i32, h: (top - y.floor()).ceil() as i32 }
+            } else {
+                InputRect { x: x.floor() as i32, y: bh as i32, w: bw.ceil() as i32, h: (y + h - bh).ceil() as i32 }
+            }
         };
         match self.open {
             Open::Menu(i) => {
                 if let Some(d) = self.dropdown(i) {
-                    // Starts at the bar's bottom edge so the pointer never leaves the surface in the gap above the menu.
-                    rects.push(InputRect { x: d.x.floor() as i32, y: bh as i32, w: d.w.ceil() as i32, h: (d.y + d.h - bh).ceil() as i32 });
+                    rects.push(reach(d.x, d.y, d.w, d.h));
                 }
             }
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
-                rects.push(InputRect { x: ox.floor() as i32, y: bh as i32, w: self.cc_width() as i32, h: (oy + self.cc_visible_height() - bh).ceil() as i32 });
+                rects.push(reach(ox, oy, self.cc_width(), self.cc_visible_height()));
             }
             Open::Popup(kind) => {
-                // The gap between the item and the popup belongs to the popup, so the pointer stays on
-                // the surface on its way down (the popup may be clamped away from the item).
-                if let Some(span) = self.tray_span(kind) {
-                    let top = self.popup.as_ref().map(|p| p.y).or(self.calendar.as_ref().map(|c| c.y)).unwrap_or(bh);
-                    if top > bh {
-                        rects.push(InputRect { x: span.x.floor() as i32, y: bh as i32, w: span.w.ceil() as i32, h: (top - bh).ceil() as i32 });
-                    }
+                // The gap between the item and the popup belongs to the popup (the popup may be clamped away from the item).
+                let boxed = self.popup.as_ref().map(|p| (p.x, p.y, p.w, p.h)).or(self.calendar.as_ref().map(|c| (c.x, c.y, Calendar::W, Calendar::H)));
+                if let (Some(span), Some((_, py, _, ph))) = (self.tray_span(kind).or_else(|| self.tray_span(Tray::More)), boxed) {
+                    rects.push(reach(span.x, py, span.w, ph));
                 }
-                if let Some(p) = &self.popup {
-                    rects.push(InputRect { x: p.x.floor() as i32, y: bh as i32, w: p.w.ceil() as i32, h: (p.y + p.h - bh).ceil() as i32 });
-                } else if let Some(c) = &self.calendar {
-                    rects.push(InputRect { x: c.x.floor() as i32, y: bh as i32, w: Calendar::W.ceil() as i32, h: (c.y + Calendar::H - bh).ceil() as i32 });
+                if let Some((px, py, pw, ph)) = boxed {
+                    rects.push(reach(px, py, pw, ph));
                 }
             }
             Open::None => {}
@@ -1884,9 +2062,6 @@ impl DecBar {
             if vertical && self.logo_symbol.is_empty() {
                 self.logo_symbol = vbar::logo_symbol();
             }
-            if vertical {
-                self.ensure_lock_watcher();
-            }
             redraw = true;
         }
         if vertical {
@@ -1935,6 +2110,10 @@ impl DecBar {
         if self.refresh_workspaces() {
             redraw = true;
         }
+        if self.refresh_tasks() {
+            redraw = true;
+        }
+        self.sync_workers();
         if self.open == Open::Control && self.cc_drag.is_none() && self.last_full_refresh.elapsed() >= PANEL_REFRESH {
             self.last_full_refresh = Instant::now();
             self.spawn_snapshot(true);

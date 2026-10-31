@@ -49,6 +49,22 @@ pub enum Act {
         mac: String,
         connect: bool,
     },
+    /// The folded application menu: show menu `n`, back to the list of menus, run item (menu, item).
+    MenuOpen(usize),
+    MenuBack,
+    MenuRun(usize, usize),
+    /// The media applet's transport.
+    MediaPrev,
+    MediaToggle,
+    MediaNext,
+    /// Opens the dashboard's media page.
+    MediaOpen,
+    /// A task button's menu.
+    TaskFocus(u64),
+    TaskMinimize(u64),
+    TaskClose(u64),
+    /// A row of the overflow list: does what pressing that applet does.
+    OpenApplet(super::Tray),
 }
 
 #[derive(Debug, Clone, PartialEq)]

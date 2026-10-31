@@ -21,7 +21,10 @@ This section is updated with each commit of the universal-panel work.
 | the dock | `decdock` | the macOS dock | `dock.enabled` and `dock-settings.json` `style = "mac"` |
 | the taskbar | `decdock` (the same process, other style) | the Windows taskbar | `dock.enabled` and `style = "windows"` |
 
-The dock and the taskbar are one process with two looks, so a theme never runs both. The bar is a separate process
+The dock and the taskbar are one process with two looks, so a theme never runs both. The macOS dock holds
+applications only. On a theme whose bar is off (a dock-only or empty desktop), Settings → Panels says so: turning an
+applet on there also turns the bar on (`bar.enabled = true`, the same single `decbar` process), so every applet can be
+enabled on every theme without a second dock or bar process. The bar is a separate process
 and may run beside either (a theme with `[bar] enabled = true` and a taskbar dock shows both). When the bar and the
 dock or taskbar share an edge, both reserve their strut and the dock/taskbar stands off the bar
 (`Theme::bar_insets`), so neither covers the other.
@@ -36,7 +39,7 @@ digits, icon cells and short labels instead of rotated text. Popups open on the 
 | Menu bar | `flat` (default) | the strip with application menus; menus and popups open away from the edge | a 40 px rail; the application menus fold into one menu button |
 | Floating bar | `floating` | the floating pill | a rounded floating rail |
 | Pill rail | `vertical` | horizontal pills | vertical pills; also `split` (top bar + bottom bar) |
-| Dux bar | `dux` | the band and its three islands | the band turned: islands stacked start / centre / end |
+| Dux bar | `dux` | one rounded band with individual widget faces in three layout groups (start / centre / end); the `islands` background profile keeps separate faces | the band turned: the three groups stacked along it |
 | Taskbar | dock `style = "windows"` | Windows 11 / 10 taskbar | Windows 10-style vertical taskbar |
 | Dock | dock `style = "mac"` | magnifying dock (top mirrors bottom) | dock on the side, magnifying along it (as in macOS) |
 
@@ -62,9 +65,9 @@ only when the system lacks what it needs, and Settings says which (the "needs" c
 | `cpu` | `cpuUsage` | processor load; the process monitor | — |
 | `memory` | `memUsage`, `ram` | memory use; the process monitor | — |
 | `notifications` | `notificationButton` | notification history (`decnotify history`) | `decnotify` |
-| `stay_awake` | `awake`, `caffeine` | Stay Awake indicator; timed sessions | shown while on |
+| `stay_awake` | `awake`, `caffeine` | Stay Awake: turn on/off; right click: timed sessions | by default shown while on; turned on explicitly it stays as a control |
 | `agents` | `process_monitor` | the process monitor (`decmon`) | `decmon` |
-| `lock_keys` | `lock`, `capslock` | Caps / Num Lock | shown while on |
+| `lock_keys` | `lock`, `capslock` | Caps / Num Lock | by default shown while on; turned on explicitly it always shows their state |
 | `volume` | `audio`, `sound` | output slider; wheel, middle-click mute | an audio output |
 | `network` | `wifi` | Wi-Fi networks, connection editor | a network interface |
 | `bluetooth` | — | paired devices | a Bluetooth adapter |
@@ -86,8 +89,8 @@ Default sets (when neither the user nor the theme says otherwise):
 | Taskbar | `launcher`, `search`, `tasks`, `layout`, `weather`, `bluetooth`, `network`, `volume`, `battery`, `tray`, `control_center`, `clock`, `show_desktop` |
 
 Each renderer places applets in its own reading order (the menu bar keeps menus at the start and status items at the
-end; the rail keeps head, window and tail pills; Dux keeps its three islands, and an applet enabled outside the Dux lists
-joins the end island; the taskbar keeps Start/search/tasks then tray/clock). Applet order is not configurable yet.
+end; the rail keeps head, window and tail pills; Dux keeps its three layout groups, and an applet enabled outside the Dux lists
+joins the group it belongs to (launcher/menus/workspaces/window/tasks start, media/clock/weather centre, the rest end); the taskbar keeps Start/search/tasks then tray/clock). Applet order is not configurable yet.
 
 ### Workers
 
@@ -114,7 +117,15 @@ position = "bottom"       # this theme's default dock / taskbar edge: top | bott
 - `position` and `applets` are *defaults*. They are read from the package each time the theme is built and never copied
   over the user's choices. A palette, accent, mode or wallpaper-colour change does not touch the panel.
 - `applets` is the full default set: keys not listed are off by default (the user can turn them on). Leave it out to
-  keep the renderer's default set. Unknown keys are ignored, so a newer package still loads on an older Decebal.
+  keep the renderer's default set. Unknown *applet keys inside the list* are ignored by this engine, so a package that
+  names an applet from a later release still loads here.
+- Compatibility with older Decebal, checked against the 0.2.0 validator: it rejects unknown keys, so a package with
+  `[bar] applets` fails to install there ("unknown key"). `[bar] position` and `[dock] position` are known keys there and
+  validate, but 0.2.0 draws the menu bar and Dux bar only on top and the taskbar only top/bottom (a left/right dock
+  position is left out with a note). A package that uses `[bar] applets`, or relies on a non-top edge for a non-rail bar or
+  a side dock, must declare `min_shell_version` as the first release that ships this framework. The parent assigns
+  that number at integration (`crate::panel::SINCE`); `decthemectl theme pack`/export writes it automatically for such
+  packages. Older packages and configurations keep loading unchanged.
 - No per-theme special-case settings: a Plasma-like port is `[dock] style = "windows"` with `[bar] enabled = "auto"`
   (or a flat bar on the bottom), a GNOME-like port is `[bar] style = "dux"` with `left = ["launcher", "workspaces"]`,
   `center = ["clock"]`, `right = ["tray", "volume", "network", "battery", "power"]` and `[dock] enabled = false`, or a

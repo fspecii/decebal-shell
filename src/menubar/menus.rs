@@ -188,6 +188,14 @@ impl Dropdown {
         Dropdown { x, y, w, h: cy + PAD - y, rows }
     }
 
+    /// Moves the dropdown (and its rows) by `dy`: a bottom bar opens it upwards.
+    pub fn shift_y(&mut self, dy: f32) {
+        self.y += dy;
+        for r in &mut self.rows {
+            r.y += dy;
+        }
+    }
+
     pub fn contains(&self, px: f32, py: f32) -> bool {
         px >= self.x && px < self.x + self.w && py >= self.y && py < self.y + self.h
     }

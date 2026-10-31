@@ -100,7 +100,7 @@ impl Need {
                 "decspot" => "needs decspot (search) installed",
                 _ => "needs a Decebal program installed",
             },
-            Need::ActiveState => "shown only while it is on",
+            Need::ActiveState => "by default shown only while it is on; turned on here it stays as a control",
         }
     }
 }

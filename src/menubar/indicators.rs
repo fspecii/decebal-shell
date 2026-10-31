@@ -45,7 +45,7 @@ fn children<'a>(root: &'a [MenuItem], path: &[i32]) -> &'a [MenuItem] {
 }
 impl DecBar {
     fn indicator_host_wanted(&self) -> bool {
-        self.embedded || self.place().is_none_or(|p| p.part != super::vbar::Part::Head)
+        self.shows(crate::panel::AppletId::Tray) && (self.embedded || self.place().is_none_or(|p| p.part != super::vbar::Part::Head))
     }
     pub(super) fn ensure_indicator_host(&mut self) {
         if !self.indicator_host_wanted() {

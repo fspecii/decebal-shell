@@ -25,6 +25,13 @@ pub trait ActiveWindow {
     /// Ask the focused window to close / minimise (the active-window popout of the vertical bar).
     fn close_active(&self) {}
     fn minimize_active(&self) {}
+    /// Every window the window manager lists (the bar's task buttons and show desktop).
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        Vec::new()
+    }
+    fn activate_window(&self, _id: u64) {}
+    fn minimize_window(&self, _id: u64) {}
+    fn close_window(&self, _id: u64) {}
 }
 
 /// The real source: the compositor/EWMH window tracker from [`crate::wm`].
@@ -71,6 +78,28 @@ impl ActiveWindow for WmActive {
             if let Some(w) = t.snapshot().active() {
                 t.minimize(w.id);
             }
+        }
+    }
+
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        self.tracker.as_ref().map(|t| t.snapshot().windows).unwrap_or_default()
+    }
+
+    fn activate_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.activate(id);
+        }
+    }
+
+    fn minimize_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.minimize(id);
+        }
+    }
+
+    fn close_window(&self, id: u64) {
+        if let Some(t) = &self.tracker {
+            t.close(id);
         }
     }
 }
