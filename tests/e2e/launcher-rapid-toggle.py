@@ -10,42 +10,94 @@ open/close verbs of the panel contract and that a genuine SIGTERM is still a fai
 LAUNCHER_BIN_DIR picks the binaries, LAUNCHAPP_BIN the monitored launch helper.
 """
 from pathlib import Path
-import fcntl, hashlib, json, os, signal, subprocess, tempfile, time
+import fcntl, hashlib, json, os, signal, subprocess, tempfile, time, shutil, uuid
 
-repo = Path(__file__).resolve().parents[2]
+repo = Path(os.environ.get('DECEBAL_QA_REPO', Path(__file__).resolve().parents[2])).resolve()
 target = Path(os.environ.get("CARGO_TARGET_DIR", repo / "target"))
 bins = Path(os.environ.get("LAUNCHER_BIN_DIR", target / "debug"))
 helper = Path(os.environ.get("LAUNCHAPP_BIN", bins / "examples/launchapp"))
 evidence = Path(os.environ.get("LAUNCHER_RAPID_EVIDENCE", "/var/tmp/launcher-rapid-evidence"))
-evidence.mkdir(parents=True, exist_ok=True)
+evidence.mkdir(mode=0o700, parents=True, exist_ok=False)
 # -I omits the script directory; import only this trusted fixture directory.
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(repo / "tests/e2e"))
+import private_x11
 from private_x11 import start_private_xvfb
 root = Path(tempfile.mkdtemp(prefix="decebal-launcher-rapid-", dir=os.environ.get("LAUNCHER_RAPID_WORK", "/var/tmp")))
 root.chmod(0o700)
-env = dict(os.environ)
-for k in list(env):
-    if k in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "RDWM_SOCK", "SESSION_MANAGER", "AT_SPI_BUS_ADDRESS", "DBUS_SESSION_BUS_ADDRESS") or k.startswith(("DECEBAL_", "DECSPOT_", "DECSETTINGS_")):
-        env.pop(k, None)
+token = uuid.uuid4().hex
+marker = ('LAUNCHER_RAPID_QA_TOKEN=' + token).encode()
+env = {'LANG': 'C.UTF-8', 'LAUNCHER_RAPID_QA_TOKEN': token}
+if os.environ.get('E2E_PARENT_TOKEN'):
+    env['E2E_PARENT_TOKEN'] = os.environ['E2E_PARENT_TOKEN']
 for k, v in {"HOME": "home", "XDG_CONFIG_HOME": "cfg", "XDG_CONFIG_DIRS": "nocfg", "XDG_DATA_HOME": "data", "XDG_DATA_DIRS": "nodata", "XDG_CACHE_HOME": "cache",
              "XDG_STATE_HOME": "state", "XDG_RUNTIME_DIR": "run", "DECEBAL_CONFIG": "shell", "DECEBAL_THEMES": "themes", "DECEBAL_SYSTEM_THEMES": "systemthemes"}.items():
     env[k] = str(root / v)
     Path(env[k]).mkdir(parents=True, exist_ok=True)
 os.chmod(env["XDG_RUNTIME_DIR"], 0o700)
-env.update(DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(root / "no-system-bus"))
+env.update(DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0",
+           DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(root / "no-system-bus"),
+           DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(root / "no-session-bus"),
+           PULSE_SERVER="unix:" + str(root / "no-audio"))
+source_binary = (bins / 'declaunch').resolve(strict=True)
+source_helper = helper.resolve(strict=True)
+isolated = root / 'bin'; isolated.mkdir()
+binary = isolated / 'declaunch'; helper = isolated / 'launchapp'
+for src, dst in ((source_binary, binary), (source_helper, helper)):
+    shutil.copy2(src, dst); dst.chmod(0o555)
+    assert hashlib.sha256(src.read_bytes()).digest() == hashlib.sha256(dst.read_bytes()).digest()
+for name in ('decnotify','decsettings','rdwmctl','decutil','xdg-open','systemctl','loginctl','nmcli','pactl','wpctl','playerctl','gsettings','curl'):
+    p = isolated / name; p.write_text('#!/bin/sh\nexit 1\n'); p.chmod(0o700)
+for name in ('fc-list','fc-match'):
+    p = isolated / name; p.write_text('#!/bin/sh\nexec /usr/bin/'+name+' "$@"\n'); p.chmod(0o700)
+env['PATH'] = str(isolated)
+env['RDWMCTL'] = str(isolated / 'rdwmctl')
 notice = root / "notify.sh"
 notice.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$XDG_STATE_HOME/notices"\n')
 notice.chmod(0o755)
 env["DECEBAL_NOTIFY"] = str(notice)
-binary = bins / "declaunch"
 apps = Path(env["XDG_DATA_HOME"]) / "applications"
 apps.mkdir()
 owned, logs = [], []
-records = {"declaunch_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(), "commit": subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()}
+records = {"passed": False, "declaunch_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+           "helper_sha256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+           "fixture_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+           "commit": subprocess.run(["/usr/bin/git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip(),
+           "work_dir": str(root), "scope": "owned private X11 rapid launcher lifecycle; no physical input or native Start-button click"}
+xvfb = None
+
+def interrupted(signum, frame):
+    raise SystemExit(128 + signum)
+for sig in (signal.SIGINT, signal.SIGTERM):
+    signal.signal(sig, interrupted)
+
+def marked():
+    found = []
+    for p in Path('/proc').iterdir():
+        try:
+            if p.name.isdigit() and p.stat().st_uid == os.getuid() and marker in (p/'environ').read_bytes().split(b'\0'):
+                found.append(int(p.name))
+        except OSError:
+            pass
+    return found
+
+def send_owned(pid, sig):
+    fd = os.pidfd_open(pid)
+    try:
+        p = Path('/proc')/str(pid)
+        assert p.stat().st_uid == os.getuid()
+        assert marker in (p/'environ').read_bytes().split(b'\0')
+        signal.pidfd_send_signal(fd, sig)
+    finally:
+        os.close(fd)
+
+def prove_x():
+    assert xvfb is not None and private_x11.listeners_owned(xvfb, int(env['DISPLAY'][1:])), 'lost private X server ownership'
+
 
 
 def start(args, label):
+    prove_x()
     f = (root / (label + ".log")).open("w")
     logs.append(f)
     p = subprocess.Popen(list(map(str, args)), env=env, stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
@@ -77,23 +129,22 @@ def holder():
 
 
 def ours():
-    """declaunch processes of this private session (matched by its runtime dir), zombies excluded."""
+    """Exact fixture token and copied executable, never process-name matching."""
     found = []
-    for d in Path("/proc").iterdir():
-        if not d.name.isdigit():
-            continue
+    want = binary.stat()
+    for pid in marked():
         try:
-            if (d / "comm").read_text().strip() != "declaunch" or "Z" in (d / "stat").read_text().split(")")[1].split()[0]:
-                continue
-            if (b"XDG_RUNTIME_DIR=" + env["XDG_RUNTIME_DIR"].encode() + b"\0") in (d / "environ").read_bytes():
-                found.append(int(d.name))
-        except (FileNotFoundError, ProcessLookupError, PermissionError, IndexError):
+            st = (Path('/proc')/str(pid)/'exe').stat()
+            if (st.st_dev, st.st_ino) == (want.st_dev, want.st_ino):
+                found.append(pid)
+        except OSError:
             pass
     return found
 
 
 def mapped():
-    return subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "declaunch"], env=env, capture_output=True, text=True, timeout=5).stdout.split()
+    prove_x()
+    return subprocess.run(["/usr/bin/xdotool", "search", "--onlyvisible", "--class", "declaunch"], env=env, capture_output=True, text=True, timeout=5).stdout.split()
 
 
 def invoke(args, label):
@@ -122,7 +173,7 @@ def launchlog():
 
 try:
     log = (root / "xvfb.log").open("w"); logs.append(log)
-    xvfb, env["DISPLAY"] = start_private_xvfb(env=env, log=log); owned.append(xvfb)
+    xvfb, env["DISPLAY"] = start_private_xvfb(env=env, log=log, executable="/usr/bin/Xvfb"); owned.append(xvfb)
     panel = ["toggle", "--edge", "bottom", "--anchor", "640,782", "--thickness", "36"]
     rounds = []
     # A: bursts of N toggles, each one fired as soon as the previous has exited or taken the lock.
@@ -175,25 +226,83 @@ try:
     # D: a genuine SIGTERM is still a failure status (only the intentional USR1 close is clean).
     e = invoke(["open"], "sigterm")
     wait(mapped, "sigterm target mapped")
-    e.send_signal(signal.SIGTERM)
+    send_owned(e.pid, signal.SIGTERM)
     assert e.wait(timeout=8) == -signal.SIGTERM, e.returncode
     settle(False, "after sigterm")
     records["genuine_sigterm_status"] = e.returncode
     records["passed"] = True
+except BaseException as exc:
+    records.update(passed=False, error=repr(exc))
 finally:
-    for pid in ours():
+    cleanup_errors = []
+    # Ask the holder to close through its own typed command before terminating clients.
+    if xvfb is not None:
         try:
-            os.kill(pid, signal.SIGKILL)
+            prove_x()
+            if holder() is not None:
+                q = subprocess.run([str(binary), 'close'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                assert q.returncode == 0
+                wait(lambda: holder() is None, 'typed close during cleanup')
+        except BaseException as exc:
+            cleanup_errors.append('typed close: ' + repr(exc))
+    for p in reversed(owned):
+        if p is xvfb:
+            continue
+        # poll may reap; never signal a reaped Popen's number without token revalidation.
+        if p.poll() is None:
+            try:
+                send_owned(p.pid, signal.SIGTERM)
+                p.wait(timeout=5)
+            except ProcessLookupError:
+                pass
+            except subprocess.TimeoutExpired:
+                records['forced_cleanup'] = True
+                try:
+                    send_owned(p.pid, signal.SIGKILL); p.wait(timeout=3)
+                except BaseException as exc:
+                    cleanup_errors.append(repr(exc))
+            except BaseException as exc:
+                cleanup_errors.append(repr(exc))
+    expected = {xvfb.pid} if xvfb is not None else set()
+    until = time.monotonic() + 3
+    while set(marked()) - expected and time.monotonic() < until:
+        time.sleep(.05)
+    records['detached_pids'] = sorted(set(marked()) - expected)
+    if records['detached_pids']:
+        records['passed'] = False
+        for pid in records['detached_pids']:
+            try:
+                send_owned(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except BaseException as exc:
+                cleanup_errors.append(repr(exc))
+    if xvfb is not None:
+        private_x11._owned.discard(xvfb)
+        try:
+            send_owned(xvfb.pid, signal.SIGTERM); xvfb.wait(timeout=5)
         except ProcessLookupError:
             pass
-    for p in reversed(owned):
-        if p.poll() is None:
-            p.kill()
-        try:
-            p.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            pass
+            records['forced_cleanup'] = True
+            try:
+                send_owned(xvfb.pid, signal.SIGKILL); xvfb.wait(timeout=3)
+            except BaseException as exc:
+                cleanup_errors.append(repr(exc))
+        except BaseException as exc:
+            cleanup_errors.append(repr(exc))
+    until = time.monotonic() + 3
+    while marked() and time.monotonic() < until:
+        time.sleep(.05)
+    records['leftover_pids'] = marked()
+    records['cleanup_errors'] = cleanup_errors
+    if cleanup_errors or records['leftover_pids'] or records.get('forced_cleanup'):
+        records['passed'] = False
     for f in logs:
-        f.close()
-    (evidence / "result.json").write_text(json.dumps(records, indent=1) + "\n")
-    print(json.dumps(records, indent=1))
+        try:
+            f.close()
+        except BaseException as exc:
+            cleanup_errors.append(repr(exc)); records['passed'] = False
+    (evidence / 'result.json').write_text(json.dumps(records, indent=2) + '\n')
+    print(json.dumps(records, indent=2))
+sys.exit(0 if records['passed'] else 1)
