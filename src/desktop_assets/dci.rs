@@ -306,6 +306,16 @@ pub fn build_within(st: &Staged, pack: &str, display_name: &str, plan: &Convert,
     if containers.len() > budget.containers {
         return Err(format!("{} DCI containers, at most {}", containers.len(), budget.containers));
     }
+    // The ordinary assembly pass must not replace generated images, aliases or their
+    // provenance. Refuse source collisions before writing any converted output.
+    let mut reserved = vec!["NOTICE.txt".to_string(), "CONVERSION.json".to_string()];
+    reserved.extend(containers.iter().map(|(_, icon)| format!("{}/{icon}.png", plan.size)));
+    for rel in reserved {
+        let source = if pack == "." { rel.clone() } else { format!("{pack}/{rel}") };
+        if st.nodes.contains_key(&source) {
+            return Err(format!("dci_convert output `{rel}` collides with a source entry"));
+        }
+    }
     let size_dir = out.join(plan.size.to_string());
     std::fs::create_dir_all(&size_dir).map_err(|e| e.to_string())?;
     let mut o = Outcome::default();
@@ -549,6 +559,23 @@ pub(crate) mod tests {
 
     fn plan() -> Convert {
         Convert { size: 64, inherits: vec!["bloom".into()], attribution: "fixture icons, CC-BY-4.0".into() }
+    }
+
+    #[test]
+    fn source_entries_cannot_replace_generated_images_aliases_or_provenance() {
+        for rel in ["64/good.png", "64/alias.png", "NOTICE.txt", "CONVERSION.json"] {
+            for as_link in [false, true] {
+                let mut entries = pack();
+                let path = format!("top/icons/{rel}");
+                entries.push(if as_link { E::link(&path, "good.dci") } else { E::file(&path, b"foreign bytes") });
+                let (st, scratch) = stage(&entries);
+                let out = scratch.path().join("collision-out");
+                std::fs::create_dir(&out).unwrap();
+                let err = build(&st, "icons", "Fixture", &plan(), &out, 1 << 20).unwrap_err();
+                assert!(err.contains("collides with a source entry"), "{rel}: {err}");
+                assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0, "refuse before conversion writes");
+            }
+        }
     }
 
     fn pack() -> Vec<E> {
