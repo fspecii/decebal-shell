@@ -34,11 +34,28 @@ pub struct SourceRecord {
     pub url: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What was checked. `tree` covers only the pack's own folder; everything the pack took from outside it (files and
+/// folders of `link_sources`, `index` files, licence texts) is listed in `outside`, and `complete` is true only when
+/// every installed byte came from verified input. `commit` compares a git archive's pax comment with the pin: a
+/// consistency check, not authentication.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Verified {
     pub tree: bool,
     pub archive_sha256: bool,
     pub commit: bool,
+    #[serde(default)]
+    pub outside: Vec<OutsideCheck>,
+    #[serde(default)]
+    pub complete: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutsideCheck {
+    /// `link_sources`, `index` or `licences`.
+    pub what: String,
+    pub verified: bool,
+    /// `tree`, `blob`, `archive_sha256` or `none`.
+    pub by: String,
 }
 
 /// `.decebal-asset.json` of an installed pack.
@@ -58,6 +75,17 @@ pub struct Provenance {
     pub license: String,
     pub license_files: Vec<String>,
     pub content_hash: String,
+    /// The tree ids read for each `link_sources` folder.
+    #[serde(default)]
+    pub link_sources: Vec<(String, String)>,
+    /// Files, bytes and folder links that came from `link_sources`.
+    #[serde(default)]
+    pub from_link_sources: (usize, u64, usize),
+    /// Icon directories of index.theme present and listed, and whether that is fewer than half.
+    #[serde(default)]
+    pub icon_dirs: Option<(usize, usize)>,
+    #[serde(default)]
+    pub degraded: bool,
     pub files: usize,
     pub symlinks: usize,
     pub skipped: usize,
@@ -92,6 +120,8 @@ pub struct Pins {
     pub tree: Option<String>,
     pub archive_sha256: Option<String>,
     pub commit: Option<String>,
+    /// `link_sources` folder -> pinned tree id.
+    pub link_trees: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +141,8 @@ pub struct Request {
     pub root: PathBuf,
     pub force: bool,
     pub dry_run: bool,
+    /// Install even when fewer than a quarter of the listed icon directories exist.
+    pub allow_degraded: bool,
 }
 
 impl Request {
@@ -137,18 +169,25 @@ impl Request {
                 install_name: e.pack.install_name.clone(),
                 display_name: e.pack.name.clone(),
                 license_files: e.license_files(),
+                license_oids: e.license_oids(),
                 index_files: e.pack.index.iter().cloned().zip(e.pack.index_oids.iter().cloned().map(Some)).collect(),
                 xcursors: e.pack.xcursor.clone(),
             },
             strip: if archive { e.source.strip } else { 0 },
             link_sources: e.pack.link_sources.clone(),
-            pins: Pins { tree: Some(e.pack.tree.clone()), archive_sha256: if archive { e.source.archive_sha256.clone() } else { None }, commit: Some(e.source.commit.clone()) },
+            pins: Pins {
+                tree: Some(e.pack.tree.clone()),
+                archive_sha256: if archive { e.source.archive_sha256.clone() } else { None },
+                commit: Some(e.source.commit.clone()),
+                link_trees: e.pack.link_sources.iter().cloned().zip(e.pack.link_source_trees.iter().cloned()).collect(),
+            },
             source: SourceRecord { id: e.source.id.clone(), repo: e.source.repo.clone(), revision: e.source.revision.clone(), path: e.pack.path.clone(), ..SourceRecord::default() },
             license: e.license().to_string(),
             input,
             root,
             force: false,
             dry_run: false,
+            allow_degraded: false,
         })
     }
 }
@@ -401,7 +440,7 @@ fn keep_previous(job: &mut Job, root: &Path, target: &Path, old: &Path, why: &st
 }
 
 fn verify_pins(req: &Request, st: &Staged, archive_sha: Option<&str>) -> Result<Verified, String> {
-    let mut v = Verified::default();
+    let mut v = Verified { tree: false, archive_sha256: false, commit: false, outside: Vec::new(), complete: false };
     let tree = st.tree.as_deref().ok_or_else(|| format!("`{}` holds no files in the source (wrong path or strip_components?)", req.spec.path))?;
     if let Some(want) = &req.pins.tree {
         if want != tree {
@@ -415,6 +454,13 @@ fn verify_pins(req: &Request, st: &Staged, archive_sha: Option<&str>) -> Result<
             return Err(format!("archive sha256 mismatch: pinned {want}, got {got}"));
         }
         v.archive_sha256 = true;
+    }
+    for (d, want) in &req.pins.link_trees {
+        match st.link_trees.get(d) {
+            Some(Some(got)) if got == want => {}
+            Some(Some(got)) => return Err(format!("tree mismatch for link source `{d}`: pinned {want}, read {got}")),
+            _ => return Err(format!("link source `{d}` holds no files in the source")),
+        }
     }
     if let (Some(want), Some(got)) = (&req.pins.commit, &st.commit) {
         if want != got {
@@ -497,6 +543,22 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     }
     let mut built = assemble::build(&staged, &req.spec, &out, lim)?;
     built.warnings.splice(0..0, staged.warnings.iter().cloned());
+    let mut verified = verified;
+    outside_checks(req, &built, &mut verified)?;
+    let degraded = built.icon_dirs_declared > 0 && built.icon_dirs * 2 < built.icon_dirs_declared;
+    if degraded {
+        let msg = format!(
+            "only {} of the {} icon directories listed in index.theme exist (missing e.g. {}){}",
+            built.icon_dirs,
+            built.icon_dirs_declared,
+            built.missing_dirs_sample.join(", "),
+            if built.dropped_links > 0 { format!("; {} links were dropped (folders of another theme? declare it in link_sources)", built.dropped_links) } else { String::new() }
+        );
+        if built.icon_dirs * 4 < built.icon_dirs_declared && !req.allow_degraded {
+            return Err(format!("degraded pack refused: {msg}; --allow-degraded installs it anyway"));
+        }
+        built.warnings.insert(0, format!("DEGRADED: {msg}"));
+    }
     let roots = super::roots_with(&req.root);
     let installed = crate::icons::resolve::list_themes(&roots);
     let missing_parents: Vec<String> =
@@ -516,6 +578,10 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         license: req.license.clone(),
         license_files: built.licenses.clone(),
         content_hash: built.content_hash.clone(),
+        link_sources: staged.link_trees.iter().filter_map(|(d, t)| t.clone().map(|t| (d.clone(), t))).collect(),
+        from_link_sources: (built.expanded_files + built.copies, built.expanded_bytes, built.expanded_links + built.expanded_dirs),
+        icon_dirs: (built.icon_dirs_declared > 0).then_some((built.icon_dirs, built.icon_dirs_declared)),
+        degraded,
         files,
         symlinks: links,
         skipped: built.skipped,
@@ -540,6 +606,72 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     };
     place(&mut job, &req.root, &out, &target, expect)?;
     Ok(report(if expect.is_some() { Action::Replaced } else { Action::Installed }))
+}
+
+/// Records what the pack took from outside its folder and whether each part was verified; refuses unverified
+/// `link_sources` content for catalogue packs (it becomes icons of the pack).
+fn outside_checks(req: &Request, built: &Built, v: &mut Verified) -> Result<(), String> {
+    let by_archive = v.archive_sha256;
+    let mut add = |what: &str, verified: bool, by: &str| v.outside.push(OutsideCheck { what: what.into(), verified, by: by.into() });
+    let used_links = built.copies + built.expanded_files + built.expanded_dirs > 0;
+    if used_links {
+        let all_pinned = !req.link_sources.is_empty() && req.link_sources.iter().all(|d| req.pins.link_trees.iter().any(|(p, _)| p == d));
+        let ok = all_pinned || by_archive;
+        if !ok && req.origin == "catalog" {
+            return Err("files from link_sources are not pinned: add link_source_trees (git rev-parse <commit>:<folder>) or an archive_sha256".into());
+        }
+        add(
+            "link_sources",
+            ok,
+            if all_pinned {
+                "tree"
+            } else if by_archive {
+                "archive_sha256"
+            } else {
+                "none"
+            },
+        );
+    }
+    if !req.spec.index_files.is_empty() {
+        let pinned = req.spec.index_files.iter().all(|(_, o)| o.is_some());
+        add(
+            "index",
+            pinned || by_archive,
+            if pinned {
+                "blob"
+            } else if by_archive {
+                "archive_sha256"
+            } else {
+                "none"
+            },
+        );
+    }
+    if built.licences_outside > 0 {
+        let pinned = built.licences_pinned == built.licences_outside;
+        add(
+            "licences",
+            pinned || by_archive,
+            if pinned {
+                "blob"
+            } else if by_archive {
+                "archive_sha256"
+            } else {
+                "none"
+            },
+        );
+    }
+    v.complete = (v.tree || by_archive) && v.outside.iter().all(|o| o.verified);
+    Ok(())
+}
+
+/// Icon directories of an installed theme: (present, listed), or `None` without an index or directories.
+pub fn health(dir: &Path) -> Option<(usize, usize)> {
+    let ix = crate::icons::index::parse(&std::fs::read_to_string(dir.join("index.theme")).ok()?);
+    if ix.dirs.is_empty() {
+        return None;
+    }
+    let present = ix.dirs.iter().filter(|d| super::safe_rel(&d.path).is_ok() && dir.join(&d.path).is_dir()).count();
+    Some((present, ix.dirs.len()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -664,18 +796,20 @@ pub(crate) mod tests {
                 install_name: "bloom".into(),
                 display_name: "Bloom".into(),
                 license_files: vec!["COPYING".into()],
+                license_oids: Default::default(),
                 index_files: vec![],
                 xcursors: vec![],
             },
             strip: 1,
             link_sources: vec![],
             input: Input::Archive(archive.to_path_buf()),
-            pins: Pins { tree: Some(tree_of(entries, "top/bloom")), archive_sha256: Some(fetch::hash_file(archive, 1 << 30).unwrap()), commit: Some(COMMIT.into()) },
+            pins: Pins { tree: Some(tree_of(entries, "top/bloom")), archive_sha256: Some(fetch::hash_file(archive, 1 << 30).unwrap()), commit: Some(COMMIT.into()), link_trees: vec![] },
             source: SourceRecord { id: "fixture".into(), repo: "https://example.org/fixture".into(), revision: "main".into(), path: "bloom".into(), ..SourceRecord::default() },
             license: "GPL-3.0-or-later".into(),
             root: root.to_path_buf(),
             force: false,
             dry_run: false,
+            allow_degraded: false,
         }
     }
 
@@ -699,7 +833,10 @@ pub(crate) mod tests {
         let t = root.join("bloom");
         assert!(t.join("index.theme").is_file() && t.join("LICENSES/COPYING").is_file() && t.join(PROVENANCE).is_file());
         let p = Provenance::read(&t).unwrap();
-        assert_eq!((p.verified, p.source.commit.as_deref(), p.source.fetched_from.as_str()), (Verified { tree: true, archive_sha256: true, commit: true }, Some(COMMIT), "archive"));
+        assert_eq!((p.verified.tree, p.verified.archive_sha256, p.verified.commit, p.verified.complete), (true, true, true, true));
+        assert_eq!((p.source.commit.as_deref(), p.source.fetched_from.as_str()), (Some(COMMIT), "archive"));
+        assert_eq!((p.icon_dirs, p.degraded), (Some((2, 2)), false));
+        assert_eq!(p.verified.outside, [OutsideCheck { what: "licences".into(), verified: true, by: "archive_sha256".into() }], "COPYING lies outside the pack folder; the pinned archive covers it");
         assert_eq!(p.provides, ["icons", "cursors"]);
         assert!(staging_is_clean(&root));
         assert_eq!(verify(&t).unwrap().1, Integrity::Ok);
@@ -1009,6 +1146,7 @@ pub(crate) mod tests {
             install_name: "sense".into(),
             display_name: "Sense".into(),
             license_files: vec!["debian/copyright".into()],
+            license_oids: Default::default(),
             index_files: vec![],
             xcursors: vec![super::super::xcursor::Cursor {
                 name: "left_ptr".into(),
@@ -1041,6 +1179,102 @@ pub(crate) mod tests {
         r3.spec = r.spec.clone();
         r3.pins.tree = Some(tree_of(&alias_clash, "top/sense"));
         assert!(install(&r3, &Limits::default()).unwrap_err().contains("`top_left_arrow` is both shipped"), "an alias is not silently replaced by a shipped file");
+    }
+
+    /// `dark` with folder links into `lib` (see assemble's tests), as an archive.
+    fn sibling(s: &Scratch, name: &str) -> (PathBuf, Vec<E>) {
+        let mut v = vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"GPL\n"),
+            E::file("top/lib/48/apps/a.svg", SVG),
+            E::file("top/lib/48/places/f.svg", SVG),
+            E::file("top/dark/index.theme", b"[Icon Theme]\nName=Dark\nDirectories=48/apps,48/places,own\n[48/apps]\nSize=48\n[48/places]\nSize=48\n[own]\nSize=16\n"),
+            E::file("top/dark/own/x.svg", SVG),
+        ];
+        v.push(E::link("top/dark/48", "../lib/48"));
+        (s.write(name, &targz(&v, Some(COMMIT))), v)
+    }
+
+    fn dark_request(root: &Path, a: &Path, v: &[E]) -> Request {
+        let dummy = icon_source("bloom", vec![]);
+        let mut r = request(root, a, &dummy);
+        r.spec.path = "dark".into();
+        r.spec.install_name = "dark".into();
+        r.spec.provides = vec![Provides::Icons];
+        r.pins.tree = Some(tree_of(v, "top/dark"));
+        r
+    }
+
+    #[test]
+    fn link_sources_are_pinned_by_their_own_tree_or_the_archive() {
+        let s = Scratch::new("linktrees");
+        let (a, v) = sibling(&s, "d.tgz");
+        // pinned by tree: complete
+        let mut r = dark_request(&s.path().join("i1"), &a, &v);
+        r.link_sources = vec!["lib".into()];
+        r.pins.archive_sha256 = None;
+        r.pins.link_trees = vec![("lib".into(), tree_of(&v, "top/lib"))];
+        r.spec.license_oids.insert("COPYING".into(), crate::desktop_assets::gitoid::hex(&crate::desktop_assets::gitoid::blob_oid(b"GPL\n")));
+        let rep = install(&r, &Limits::default()).unwrap();
+        let p = &rep.provenance;
+        assert!(p.verified.complete && p.verified.outside.iter().any(|o| o.what == "link_sources" && o.verified && o.by == "tree"), "{:?}", p.verified);
+        assert!(p.verified.outside.iter().any(|o| o.what == "licences" && o.by == "blob"));
+        // the same install without the licence pin is not called complete
+        let mut r0 = r.clone();
+        r0.root = s.path().join("i0");
+        r0.spec.license_oids.clear();
+        let p0 = install(&r0, &Limits::default()).unwrap().provenance;
+        assert!(!p0.verified.complete && p0.verified.outside.iter().any(|o| o.what == "licences" && !o.verified));
+        assert_eq!(p.link_sources, [("lib".to_string(), tree_of(&v, "top/lib"))]);
+        assert_eq!((p.icon_dirs, p.degraded), (Some((3, 3)), false));
+        assert!(p.from_link_sources.0 == 2, "{:?}", p.from_link_sources);
+        // a wrong link tree pin
+        let mut r2 = r.clone();
+        r2.root = s.path().join("i2");
+        r2.pins.link_trees = vec![("lib".into(), "2".repeat(40))];
+        assert!(install(&r2, &Limits::default()).unwrap_err().contains("tree mismatch for link source `lib`"));
+        // neither a link tree pin nor an archive sha256: a catalogue pack refuses the unverified files
+        let mut r3 = r.clone();
+        r3.root = s.path().join("i3");
+        r3.pins.link_trees = vec![];
+        assert!(install(&r3, &Limits::default()).unwrap_err().contains("not pinned"));
+        // a pinned archive covers them, and says so
+        let mut r4 = r3.clone();
+        r4.root = s.path().join("i4");
+        r4.pins.archive_sha256 = Some(fetch::hash_file(&a, 1 << 30).unwrap());
+        let p = install(&r4, &Limits::default()).unwrap().provenance;
+        assert!(p.verified.complete && p.verified.outside.iter().any(|o| o.by == "archive_sha256"));
+        // a local import without pins installs, and says it is not complete
+        let mut r5 = r3.clone();
+        r5.root = s.path().join("i5");
+        r5.origin = "local".into();
+        let p = install(&r5, &Limits::default()).unwrap().provenance;
+        assert!(!p.verified.complete && p.verified.outside.iter().any(|o| o.what == "link_sources" && !o.verified));
+    }
+
+    #[test]
+    fn a_degraded_pack_is_refused_or_marked_and_verify_reports_it() {
+        let s = Scratch::new("degraded");
+        let (a, v) = sibling(&s, "d.tgz");
+        // no link_sources: 1 of 3 directories -> fewer than half: marked; add more listed dirs for "fewer than a quarter"
+        let mut r = dark_request(&s.path().join("i1"), &a, &v);
+        let rep = install(&r, &Limits::default()).unwrap();
+        assert!(rep.provenance.degraded && rep.built.warnings[0].starts_with("DEGRADED: only 1 of the 3"), "{:?}", rep.built.warnings);
+        assert_eq!(health(&s.path().join("i1/dark")), Some((1, 3)));
+        let mut many = v.clone();
+        many.retain(|e| !e.name.ends_with("index.theme"));
+        many.push(E::file(
+            "top/dark/index.theme",
+            b"[Icon Theme]\nName=Dark\nDirectories=48/apps,48/places,a,b,c,own\n[48/apps]\nSize=48\n[48/places]\nSize=48\n[a]\nSize=1\n[b]\nSize=1\n[c]\nSize=1\n[own]\nSize=16\n",
+        ));
+        let b = s.write("many.tgz", &targz(&many, Some(COMMIT)));
+        r = dark_request(&s.path().join("i2"), &b, &many);
+        r.pins.archive_sha256 = Some(fetch::hash_file(&b, 1 << 30).unwrap());
+        let e = install(&r, &Limits::default()).unwrap_err();
+        assert!(e.contains("degraded pack refused: only 1 of the 6") && e.contains("link_sources") && e.contains("--allow-degraded"), "{e}");
+        assert!(!s.path().join("i2/dark").exists());
+        r.allow_degraded = true;
+        assert!(install(&r, &Limits::default()).unwrap().provenance.degraded);
     }
 
     #[test]

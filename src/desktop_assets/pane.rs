@@ -25,14 +25,8 @@ fn listing(root: &std::path::Path, roots: &crate::icons::resolve::Roots) -> List
     }
 }
 
-/// The one background install the pane may run, and the outcome of the last one.
-struct Job {
-    pack: String,
-    child: std::process::Child,
-    log: std::path::PathBuf,
-}
-
-static JOB: std::sync::Mutex<Option<Job>> = std::sync::Mutex::new(None);
+/// The pack being installed in the background (at most one), and the outcome of the last install.
+static JOB: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static LAST: std::sync::Mutex<Option<(String, bool, String)>> = std::sync::Mutex::new(None);
 #[cfg(test)]
 static PROGRAM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
@@ -56,42 +50,44 @@ fn program() -> String {
     std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.is_file()).map_or_else(|| "decthemectl".into(), |p| p.display().to_string())
 }
 
-/// Starts `decthemectl assets install ID` (fixed arguments, no shell) with its output in a log file.
-fn start_install(pack: &str) -> Result<(), String> {
+/// Starts `decthemectl assets install ID` (fixed arguments, no shell) on a worker thread that waits for it, records
+/// the outcome and wakes the Settings loop through its queue (like its other workers), so the pane updates when the
+/// install ends, without any input.
+fn start_install(pack: &str, queue: crate::settings::io::Queue, wake: std::sync::Arc<dyn Fn() + Send + Sync>) -> Result<(), String> {
     let mut g = JOB.lock().unwrap_or_else(|e| e.into_inner());
     if g.is_some() {
         return Err("another pack is being installed".into());
     }
-    let log = std::env::temp_dir().join(format!("decebal-asset-install-{}.log", std::process::id()));
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+    let log = std::env::temp_dir().join(format!("decebal-asset-install-{}-{nanos}.log", std::process::id()));
     let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
     let err = out.try_clone().map_err(|e| e.to_string())?;
-    let child = std::process::Command::new(program())
+    let mut child = std::process::Command::new(program())
         .args(["assets", "install", pack])
         .stdin(std::process::Stdio::null())
         .stdout(out)
         .stderr(err)
         .spawn()
         .map_err(|e| format!("could not start decthemectl: {e}"))?;
-    *g = Some(Job { pack: pack.to_string(), child, log });
+    *g = Some(pack.to_string());
+    let pack = pack.to_string();
+    std::thread::spawn(move || {
+        let ok = child.wait().is_ok_and(|s| s.success());
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        let line = text.lines().find(|l| l.starts_with("installed") || l.starts_with("already") || l.starts_with("replaced") || l.starts_with("decthemectl:")).unwrap_or("").trim().to_string();
+        let _ = std::fs::remove_file(&log);
+        *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((pack, ok, line));
+        *JOB.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        // the icon folder changed: the Settings loop re-reads its files and redraws
+        queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(crate::settings::io::Ev::FilesChanged);
+        wake();
+    });
     Ok(())
 }
 
-/// Collects a finished install; `true` while one is running.
-fn poll_install() -> bool {
-    let mut g = JOB.lock().unwrap_or_else(|e| e.into_inner());
-    let Some(j) = g.as_mut() else { return false };
-    match j.child.try_wait() {
-        Ok(None) => true,
-        res => {
-            let ok = matches!(res, Ok(Some(s)) if s.success());
-            let text = std::fs::read_to_string(&j.log).unwrap_or_default();
-            let line = text.lines().find(|l| l.starts_with("installed") || l.starts_with("already") || l.starts_with("replaced") || l.starts_with("decthemectl:")).unwrap_or("").trim().to_string();
-            let _ = std::fs::remove_file(&j.log);
-            *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((j.pack.clone(), ok, line));
-            *g = None;
-            false
-        }
-    }
+/// Is an install running?
+fn installing() -> bool {
+    JOB.lock().unwrap_or_else(|e| e.into_inner()).is_some()
 }
 
 fn owner_detail(o: &Owner) -> &'static str {
@@ -131,7 +127,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         rows.push(Row::new(format!("Suggested by {}", r.theme)).detail(format!("Icons {}, cursors {}", r.icons.as_deref().unwrap_or("-"), r.cursors.as_deref().unwrap_or("-"))).ctl(c));
     }
     out.push(Item::Card(rows));
-    let running = poll_install();
+    let running = installing();
     if let Some(r) = rec.as_ref().filter(|r| !r.missing.is_empty()) {
         let set = catalogs();
         let mut install_rows = Vec::new();
@@ -162,7 +158,7 @@ pub fn items(m: &Model) -> Vec<Item> {
             out.push(Item::Card(install_rows));
         }
     }
-    let job = JOB.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|j| j.pack.clone());
+    let job = JOB.lock().unwrap_or_else(|e| e.into_inner()).clone();
     if let Some(p) = job {
         out.push(Item::Note { text: format!("Installing {p}: downloading and verifying, this can take a minute."), warn: false });
     } else if let Some((p, ok, line)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone() {
@@ -182,7 +178,15 @@ pub fn items(m: &Model) -> Vec<Item> {
                         p.license,
                         if p.source.repo.is_empty() { "local" } else { &p.source.repo },
                         commit,
-                        if p.verified.tree || p.verified.archive_sha256 { ", verified" } else { ", unpinned" }
+                        if p.degraded {
+                            ", DEGRADED: few icon directories"
+                        } else if p.verified.complete {
+                            ", verified"
+                        } else if p.verified.tree || p.verified.archive_sha256 {
+                            ", partly verified"
+                        } else {
+                            ", unpinned"
+                        }
                     ))
                 })
                 .collect(),
@@ -204,7 +208,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             let set = catalogs();
             match set.find(id).filter(|e| e.pack.id == *id && e.source.archive_url.is_some()) {
                 None => Err(format!("no downloadable asset pack `{id}`")),
-                Some(_) => start_install(id).map(|_| format!("Installing {id}")),
+                Some(_) => start_install(id, m.queue.clone(), m.wake.clone()).map(|_| format!("Installing {id}")),
             }
         }
         (["ic", "follow-theme"], CtlVal::Click) => policy::choose_in_file(&path, Provides::Icons, &Choice::Theme)
@@ -277,7 +281,7 @@ mod tests {
         let s = crate::desktop_assets::testkit::Scratch::new("pane-install");
         let fake = s.write(
             "fake-decthemectl",
-            b"#!/bin/sh\n[ \"$1 $2 $3\" = \"assets install deepin-bloom\" ] || { echo \"decthemectl: bad args $*\"; exit 1; }\necho \"installed: deepin-bloom -> /x/bloom\"\n",
+            b"#!/bin/sh\n[ \"$1 $2 $3\" = \"assets install deepin-bloom\" ] || { echo \"decthemectl: bad args $*\"; exit 1; }\nsleep 1\necho \"installed: deepin-bloom -> /x/bloom\"\n",
         );
         std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
         let mut set = crate::desktop_assets::catalog::Set::default();
@@ -292,13 +296,28 @@ mod tests {
         assert!(ctl(&items(&m), "ic:install:deepin-bloom").is_some_and(|c| c.enabled));
         m.apply("ic:install:nope", CtlVal::Click);
         assert!(JOB.lock().unwrap().is_none(), "unknown ids start nothing");
+        let woke = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let w2 = woke.clone();
+        m.wake = std::sync::Arc::new(move || {
+            w2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        m.queue.lock().unwrap().clear();
         m.apply("ic:install:deepin-bloom", CtlVal::Click);
+        assert!(installing(), "the child runs in the background");
+        let its = items(&m);
+        assert!(its.iter().any(|i| matches!(i, Item::Note { text, .. } if text.starts_with("Installing deepin-bloom"))));
+        assert!(!ctl(&its, "ic:install:deepin-bloom").unwrap().enabled, "one install at a time");
+        // nothing calls items() or sends input from here on: the worker alone must deliver the completion
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while poll_install() && std::time::Instant::now() < deadline {
+        while m.queue.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
+        assert!(matches!(m.queue.lock().unwrap().pop_front(), Some(crate::settings::io::Ev::FilesChanged)), "a queue event for the Settings loop");
+        assert_eq!(woke.load(std::sync::atomic::Ordering::SeqCst), 1, "and exactly one wake");
+        assert!(!installing());
         let its = items(&m);
         assert!(its.iter().any(|i| matches!(i, Item::Note { text, warn: false } if text.contains("installed: deepin-bloom"))), "the outcome is shown");
+        assert!(ctl(&its, "ic:install:deepin-bloom").unwrap().enabled);
         *PROGRAM.lock().unwrap() = None;
         *CATALOGS.lock().unwrap() = None;
     }

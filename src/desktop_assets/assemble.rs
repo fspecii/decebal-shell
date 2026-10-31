@@ -15,6 +15,10 @@ use std::path::Path;
 
 /// The provenance file inside an installed pack (not part of its content hash).
 pub const PROVENANCE: &str = ".decebal-asset.json";
+/// Largest `cursors_scalable/<name>/metadata.json` accepted (real ones are well under 4 KiB).
+pub const MAX_METADATA: u64 = 64 << 10;
+/// Nested folder-link expansions followed through `link_sources`.
+pub const MAX_EXPANSION_DEPTH: usize = 8;
 
 #[derive(Debug, Clone)]
 pub struct Spec {
@@ -25,6 +29,8 @@ pub struct Spec {
     pub display_name: String,
     /// Source-relative licence files (at least one).
     pub license_files: Vec<String>,
+    /// Pinned git blob ids of licence files (`license_oids`), by path; checked when present.
+    pub license_oids: std::collections::BTreeMap<String, String>,
     /// Source files concatenated into `index.theme` when the theme folder has none, with their pinned blob ids.
     pub index_files: Vec<(String, Option<String>)>,
     /// Cursors to build from PNGs of the pack (see [`super::xcursor`]).
@@ -48,6 +54,18 @@ pub struct Built {
     pub cursors: usize,
     /// Cursors built from PNGs.
     pub cursors_built: usize,
+    /// Folder links into `link_sources` expanded into real folders, the files and bytes they brought, and the folder
+    /// links that became links to an already expanded copy.
+    pub expanded_dirs: usize,
+    pub expanded_files: usize,
+    pub expanded_bytes: u64,
+    pub expanded_links: usize,
+    /// Licence files outside the pack folder whose blob id was pinned and matched.
+    pub licences_pinned: usize,
+    pub licences_outside: usize,
+    /// `Directories` of index.theme: listed, present; a few missing ones for diagnostics.
+    pub icon_dirs_declared: usize,
+    pub missing_dirs_sample: Vec<String>,
     pub inherits: Vec<String>,
     pub content_hash: String,
 }
@@ -78,6 +96,10 @@ pub fn keep(rel: &str) -> bool {
     if rel.starts_with("cursors/") && rel.matches('/').count() == 1 {
         return true;
     }
+    // Plasma 6 scalable cursors: cursors_scalable/<name>/metadata.json next to the SVGs
+    if rel.starts_with("cursors_scalable/") && rel.matches('/').count() == 2 && rel.ends_with("/metadata.json") {
+        return true;
+    }
     let l = name.to_ascii_lowercase();
     if l == "icon-theme.cache" {
         return false;
@@ -93,6 +115,17 @@ fn content_ok(rel: &str, data_head: &[u8], full: &Path, size: u64, lim: &Limits)
     let l = rel.to_ascii_lowercase();
     if rel.starts_with("cursors/") {
         return cursor::check_file(full);
+    }
+    if rel.starts_with("cursors_scalable/") && rel.ends_with("/metadata.json") {
+        if size > MAX_METADATA {
+            return Err(format!("metadata.json larger than {} KiB", MAX_METADATA >> 10));
+        }
+        let data = std::fs::read(full).map_err(|e| e.to_string())?;
+        return match serde_json::from_slice::<serde_json::Value>(&data) {
+            Ok(v) if v.is_array() || v.is_object() => Ok(()),
+            Ok(_) => Err("metadata.json is not a JSON array or object".into()),
+            Err(e) => Err(format!("metadata.json is not valid JSON ({e})")),
+        };
     }
     if l.ends_with(".png") {
         return if data_head.starts_with(b"\x89PNG\r\n\x1a\n") { Ok(()) } else { Err("not a PNG".into()) };
@@ -290,6 +323,9 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
             Resolved::Escapes => return Err(format!("link `{rel}` leaves the source")),
         }
     }
+    // folder links: inside the theme they stay links; into a link source they are expanded from the staged source (the
+    // installed pack stays self-contained and never links into another installed theme); anything else is dropped
+    let mut expanded: std::collections::BTreeMap<String, String> = Default::default();
     for (rel, t) in dir_links {
         if hidden(&rel) {
             skip(&mut b, &rel, Some("hidden".into()));
@@ -301,9 +337,13 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
                 std::os::unix::fs::symlink(relative(&rel, trel), out.join(&rel)).map_err(|e| e.to_string())?;
                 b.links += 1;
             }
+            None if st.filter.link_sources.iter().any(|d| under(&t, d).is_some_and(|r| !r.is_empty())) => {
+                let mut cx = Expand { st, spec, out, lim, kept: &kept, expanded: &mut expanded, stack: Vec::new() };
+                cx.dir(&t, &rel, 0, &mut b)?;
+            }
             _ => {
                 b.dropped_links += 1;
-                b.warnings.push(format!("folder link `{rel}` -> `{t}` is outside the theme, empty or encloses itself, dropped"));
+                b.warnings.push(format!("folder link `{rel}` -> `{t}` is outside the theme and its link_sources, empty or encloses itself, dropped"));
             }
         }
     }
@@ -355,6 +395,171 @@ fn index_from_files(st: &Staged, spec: &Spec, out: &Path, lim: &Limits, b: &mut 
     Ok(())
 }
 
+/// Expands folder links that point into `link_sources`, reading only the verified staged source.
+struct Expand<'a> {
+    st: &'a Staged,
+    spec: &'a Spec,
+    out: &'a Path,
+    lim: &'a Limits,
+    kept: &'a std::collections::BTreeSet<String>,
+    /// Source folder -> where its first expansion went (later links to it become links to that copy).
+    expanded: &'a mut std::collections::BTreeMap<String, String>,
+    /// Source folders being expanded (cycle detection).
+    stack: Vec<String>,
+}
+
+impl Expand<'_> {
+    fn free(&self, rel: &str) -> Result<(), String> {
+        if std::fs::symlink_metadata(self.out.join(rel)).is_ok() {
+            return Err(format!("`{rel}` would be written twice (folder links into link_sources overlap)"));
+        }
+        Ok(())
+    }
+
+    fn budget(&self, b: &Built, more: u64) -> Result<(), String> {
+        if b.expanded_files + b.expanded_links >= self.lim.max_entries || b.expanded_bytes + more > self.lim.max_total {
+            return Err(format!("expanding folder links of link_sources exceeds {} entries or {} MiB", self.lim.max_entries, self.lim.max_total >> 20));
+        }
+        Ok(())
+    }
+
+    /// Writes the source folder `src` (inside a link source) as the pack folder `dst`.
+    fn dir(&mut self, src: &str, dst: &str, depth: usize, b: &mut Built) -> Result<(), String> {
+        if depth > MAX_EXPANSION_DEPTH {
+            return Err(format!("folder links into link_sources nest deeper than {MAX_EXPANSION_DEPTH} (`{dst}`)"));
+        }
+        // a link to the folder being expanded or to one enclosing it would copy forever: cut
+        if self.stack.iter().any(|s| s == src || s.starts_with(&format!("{src}/"))) {
+            b.dropped_links += 1;
+            b.warnings.push(format!("folder link `{dst}` -> `{src}` encloses itself, dropped"));
+            return Ok(());
+        }
+        // a link to a folder inside a copy already made (Papirus' `categories -> apps`): link to that part of the copy
+        let inside = self.expanded.iter().filter(|(k, _)| src.starts_with(&format!("{k}/"))).max_by_key(|(k, _)| k.len()).map(|(k, d)| format!("{d}/{}", &src[k.len() + 1..]));
+        if let Some(mapped) = inside.filter(|m| self.out.join(m).is_dir() && !(dst == m || dst.starts_with(&format!("{m}/")) || m.starts_with(&format!("{dst}/")))) {
+            self.free(dst)?;
+            mkdirs(self.out, parent(dst))?;
+            std::os::unix::fs::symlink(relative(dst, &mapped), self.out.join(dst)).map_err(|e| e.to_string())?;
+            b.expanded_links += 1;
+            b.links += 1;
+            return Ok(());
+        }
+        // a folder already expanded elsewhere in the pack: link to that copy instead of copying it again
+        if let Some(first) = self.expanded.get(src).cloned() {
+            if !(dst == first || dst.starts_with(&format!("{first}/")) || first.starts_with(&format!("{dst}/"))) {
+                self.free(dst)?;
+                mkdirs(self.out, parent(dst))?;
+                std::os::unix::fs::symlink(relative(dst, &first), self.out.join(dst)).map_err(|e| e.to_string())?;
+                b.expanded_links += 1;
+                b.links += 1;
+                return Ok(());
+            }
+        }
+        self.free(dst)?;
+        self.expanded.insert(src.to_string(), dst.to_string());
+        self.stack.push(src.to_string());
+        b.expanded_dirs += 1;
+        let prefix = format!("{src}/");
+        let entries: Vec<(&String, &Node)> = self.st.nodes.range(prefix.clone()..).take_while(|(k, _)| k.starts_with(&prefix)).collect();
+        let mut links = Vec::new();
+        mkdirs(self.out, dst)?;
+        for (k, node) in entries {
+            let rel = format!("{dst}/{}", &k[prefix.len()..]);
+            match node {
+                Node::Dir => {}
+                Node::Link(_) => links.push((k.clone(), rel)),
+                Node::File { staged: true, size, .. } if keep(&rel) => {
+                    let from = self.st.file_path(k);
+                    if let Err(why) = content_ok(&rel, &head(&from).map_err(|e| e.to_string())?, &from, *size, self.lim) {
+                        b.skipped += 1;
+                        if b.skipped_sample.len() < 8 {
+                            b.skipped_sample.push(format!("{rel} ({why})"));
+                        }
+                        continue;
+                    }
+                    self.budget(b, *size)?;
+                    self.free(&rel)?;
+                    mkdirs(self.out, parent(&rel))?;
+                    std::fs::copy(&from, self.out.join(&rel)).map_err(|e| e.to_string())?;
+                    std::fs::set_permissions(self.out.join(&rel), std::fs::Permissions::from_mode(0o644)).map_err(|e| e.to_string())?;
+                    b.expanded_files += 1;
+                    b.expanded_bytes += size;
+                    b.files += 1;
+                }
+                Node::File { .. } => b.skipped += 1,
+            }
+        }
+        // links inside the expanded folder: to a file of this copy (or of the theme) they stay links, to another folder of
+        // a link source they expand in turn
+        let mut dirs = Vec::new();
+        for (k, rel) in links {
+            match self.st.resolve(&k) {
+                Resolved::File(tf) => {
+                    if !keep(&rel) {
+                        b.skipped += 1;
+                        continue;
+                    }
+                    let target = if let Some(suf) = under(&tf, src).filter(|s| !s.is_empty()) {
+                        Some(format!("{dst}/{suf}"))
+                    } else {
+                        under(&tf, &self.spec.path).filter(|t| self.kept.contains(*t)).map(String::from)
+                    };
+                    match target.filter(|t| self.out.join(t).is_file()) {
+                        Some(t) => {
+                            self.budget(b, 0)?;
+                            self.free(&rel)?;
+                            mkdirs(self.out, parent(&rel))?;
+                            std::os::unix::fs::symlink(relative(&rel, &t), self.out.join(&rel)).map_err(|e| e.to_string())?;
+                            b.expanded_links += 1;
+                            b.links += 1;
+                        }
+                        None => match self.st.nodes.get(&tf) {
+                            Some(Node::File { staged: true, size, .. }) if self.st.filter.link_sources.iter().any(|d| under(&tf, d).is_some()) => {
+                                let from = self.st.file_path(&tf);
+                                if content_ok(&rel, &head(&from).map_err(|e| e.to_string())?, &from, *size, self.lim).is_err() {
+                                    b.skipped += 1;
+                                    continue;
+                                }
+                                self.budget(b, *size)?;
+                                self.free(&rel)?;
+                                mkdirs(self.out, parent(&rel))?;
+                                std::fs::copy(&from, self.out.join(&rel)).map_err(|e| e.to_string())?;
+                                std::fs::set_permissions(self.out.join(&rel), std::fs::Permissions::from_mode(0o644)).map_err(|e| e.to_string())?;
+                                b.expanded_files += 1;
+                                b.expanded_bytes += size;
+                                b.files += 1;
+                            }
+                            _ => {
+                                b.dropped_links += 1;
+                            }
+                        },
+                    }
+                }
+                Resolved::Dir(td) => dirs.push((rel, td)),
+                Resolved::Missing(_) | Resolved::Loop => b.dropped_links += 1,
+                Resolved::Escapes => return Err(format!("link `{rel}` leaves the source")),
+            }
+        }
+        for (rel, td) in dirs {
+            if hidden(&rel) {
+                continue;
+            }
+            match under(&td, &self.spec.path) {
+                Some(trel) if !trel.is_empty() && self.out.join(trel).is_dir() => {
+                    self.free(&rel)?;
+                    mkdirs(self.out, parent(&rel))?;
+                    std::os::unix::fs::symlink(relative(&rel, trel), self.out.join(&rel)).map_err(|e| e.to_string())?;
+                    b.links += 1;
+                }
+                None if self.st.filter.link_sources.iter().any(|d| under(&td, d).is_some_and(|r| !r.is_empty())) => self.dir(&td, &rel, depth + 1, b)?,
+                _ => b.dropped_links += 1,
+            }
+        }
+        self.stack.pop();
+        Ok(())
+    }
+}
+
 fn validate(out: &Path, spec: &Spec, b: &mut Built) -> Result<(), String> {
     let index = out.join("index.theme");
     let text = std::fs::read_to_string(&index).ok();
@@ -374,6 +579,8 @@ fn validate(out: &Path, spec: &Spec, b: &mut Built) -> Result<(), String> {
                 return Err("index.theme lists no icon Directories (a cursor-only theme? use provides = [\"cursors\"])".into());
             }
             b.icon_dirs = ix.dirs.iter().filter(|d| super::safe_rel(&d.path).is_ok() && out.join(&d.path).is_dir()).count();
+            b.icon_dirs_declared = ix.dirs.len();
+            b.missing_dirs_sample = ix.dirs.iter().filter(|d| !(super::safe_rel(&d.path).is_ok() && out.join(&d.path).is_dir())).take(5).map(|d| d.path.clone()).collect();
             if b.icon_dirs == 0 {
                 return Err("none of the Directories of index.theme exists in the pack".into());
             }
@@ -407,6 +614,21 @@ fn licences(st: &Staged, spec: &Spec, out: &Path, kept: &std::collections::BTree
     }
     let dir = out.join("LICENSES");
     for lf in &spec.license_files {
+        let outside = under(lf, &spec.path).is_none();
+        if outside {
+            b.licences_outside += 1;
+        }
+        if let Some(want) = spec.license_oids.get(lf) {
+            match st.nodes.get(lf) {
+                Some(Node::File { oid, .. }) if super::gitoid::hex(oid) == *want => {
+                    if outside {
+                        b.licences_pinned += 1;
+                    }
+                }
+                Some(Node::File { oid, .. }) => return Err(format!("licence file `{lf}`: pinned blob {want}, read {}", super::gitoid::hex(oid))),
+                _ => return Err(format!("licence file `{lf}` is missing from the source")),
+            }
+        }
         let from = match under(lf, &spec.path) {
             Some(rel) if kept.contains(rel) => out.join(rel),
             _ => match st.nodes.get(lf) {
@@ -495,6 +717,7 @@ mod tests {
             install_name: path.rsplit('/').next().unwrap().into(),
             display_name: "Fixture".into(),
             license_files: lic.iter().map(|s| s.to_string()).collect(),
+            license_oids: Default::default(),
             index_files: vec![],
             xcursors: vec![],
         }
@@ -631,6 +854,134 @@ mod tests {
         sp.index_files = vec![("missing.theme".into(), None)];
         let (r, _s) = run(&src, &sp, &[]);
         assert!(r.unwrap_err().contains("missing"));
+    }
+
+    #[test]
+    fn plasma_scalable_cursor_metadata_is_kept_only_when_it_is_bounded_json() {
+        let meta = br#"[{"filename": "default.svg", "hotspot_x": 4, "hotspot_y": 2, "nominal_size": 24}]"#;
+        let src = vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"LGPL\n"),
+            E::file("top/c/index.theme", b"[Icon Theme]\nName=C\n"),
+            E::file("top/c/cursors/left_ptr", &xcursor(24)),
+            E::file("top/c/cursors_scalable/default/default.svg", SVG),
+            E::file("top/c/cursors_scalable/default/metadata.json", meta),
+            E::file("top/c/cursors_scalable/broken/metadata.json", b"{not json"),
+            E::file("top/c/cursors_scalable/scalar/metadata.json", b"42"),
+            E::file("top/c/cursors_scalable/huge/metadata.json", &[b' '; (MAX_METADATA + 1) as usize]),
+            E::file("top/c/metadata.json", b"{}"),
+            E::file("top/c/cursors_scalable/default/deeper/metadata.json", b"{}"),
+        ];
+        let (r, s) = run(&src, &spec("c", &[Provides::Cursors], &["COPYING"]), &[]);
+        let b = r.unwrap();
+        let out = s.path().join("out");
+        assert_eq!(std::fs::read(out.join("cursors_scalable/default/metadata.json")).unwrap(), meta);
+        for gone in
+            ["cursors_scalable/broken/metadata.json", "cursors_scalable/scalar/metadata.json", "cursors_scalable/huge/metadata.json", "metadata.json", "cursors_scalable/default/deeper/metadata.json"]
+        {
+            assert!(!out.join(gone).exists(), "{gone}");
+        }
+        assert!(b.skipped_sample.iter().any(|x| x.contains("not valid JSON")), "{:?}", b.skipped_sample);
+        assert!(keep("cursors_scalable/x/metadata.json"));
+        assert!(keep("cursors/metadata.json"), "in cursors/ it must be an Xcursor file, checked by content");
+    }
+
+    /// A source with a pack `dark` whose size folders are links into the sibling theme `lib` (as Papirus-Dark into Papirus).
+    fn sibling_source(extra: Vec<E>) -> Vec<E> {
+        let mut v = vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"GPL\n"),
+            E::file("top/lib/index.theme", b"[Icon Theme]\nName=Lib\n"),
+            E::file("top/lib/48/apps/a.svg", SVG),
+            E::link("top/lib/48/apps/b.svg", "a.svg"),
+            E::link("top/lib/48/places", "../64/places"),
+            E::link("top/lib/48/cycle", ".."),
+            E::link("top/lib/48/categories", "apps"),
+            E::file("top/lib/64/places/folder.svg", SVG),
+            E::file(
+                "top/dark/index.theme",
+                b"[Icon Theme]\nName=Dark\nDirectories=48/apps,48/places,48@2x/apps,own\n[48/apps]\nSize=48\n[48/places]\nSize=48\n[48@2x/apps]\nSize=48\nScale=2\n[own]\nSize=16\n",
+            ),
+            E::file("top/dark/own/x.svg", SVG),
+            E::link("top/dark/48", "../lib/48"),
+            E::link("top/dark/48@2x", "../lib/48"),
+        ];
+        v.extend(extra);
+        v
+    }
+
+    #[test]
+    fn folder_links_into_link_sources_become_self_contained_folders() {
+        let sp = spec("dark", &[Provides::Icons], &["COPYING"]);
+        let (r, s) = run(&sibling_source(vec![]), &sp, &["lib"]);
+        let b = r.unwrap();
+        let out = s.path().join("out");
+        assert!(std::fs::symlink_metadata(out.join("48")).unwrap().is_dir(), "a real folder, not a link out of the pack");
+        assert!(out.join("48/apps/a.svg").is_file());
+        assert_eq!(std::fs::read_link(out.join("48/apps/b.svg")).unwrap().to_str(), Some("a.svg"), "links inside the copy stay links");
+        assert!(std::fs::symlink_metadata(out.join("48/places")).unwrap().is_dir() && out.join("48/places/folder.svg").is_file(), "nested folder links expand too");
+        assert!(std::fs::symlink_metadata(out.join("48/cycle")).is_err(), "a link to an enclosing folder is cut");
+        assert_eq!(std::fs::read_link(out.join("48/categories")).unwrap().to_str(), Some("apps"), "a folder inside the copy: linked, not cut and not copied twice");
+        assert_eq!(std::fs::read_link(out.join("48@2x")).unwrap().to_str(), Some("48"), "the same folder twice: one copy and a link inside the pack");
+        assert_eq!((b.icon_dirs, b.icon_dirs_declared), (4, 4));
+        assert_eq!((b.expanded_dirs, b.expanded_files, b.expanded_links), (2, 2, 3), "{b:?}");
+        // every link of the result stays inside the pack
+        for e in walk_links(&out) {
+            let t = std::fs::read_link(&e).unwrap();
+            let resolved = e.parent().unwrap().join(&t).canonicalize().unwrap();
+            assert!(resolved.starts_with(out.canonicalize().unwrap()), "{} -> {}", e.display(), t.display());
+        }
+        // without link_sources: the folders are dropped and the theme is visibly incomplete
+        let (r, _s) = run(&sibling_source(vec![]), &sp, &[]);
+        let b = r.unwrap();
+        assert_eq!((b.icon_dirs, b.icon_dirs_declared), (1, 4));
+        assert_eq!(b.missing_dirs_sample, ["48/apps", "48/places", "48@2x/apps"]);
+    }
+
+    fn walk_links(d: &Path) -> Vec<std::path::PathBuf> {
+        let mut v = Vec::new();
+        for e in std::fs::read_dir(d).unwrap().flatten() {
+            let m = std::fs::symlink_metadata(e.path()).unwrap();
+            if m.file_type().is_symlink() {
+                v.push(e.path());
+            } else if m.is_dir() {
+                v.extend(walk_links(&e.path()));
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn expansion_is_bounded_and_refuses_overlaps() {
+        let sp = spec("dark", &[Provides::Icons], &["COPYING"]);
+        let s = Scratch::new("exp-budget");
+        std::fs::create_dir_all(s.path().join("src")).unwrap();
+        std::fs::create_dir_all(s.path().join("out")).unwrap();
+        let tgz = targz(&sibling_source(vec![]), None);
+        let f = Filter { strip: 1, path: "dark".into(), files: vec!["COPYING".into()], link_sources: vec!["lib".into()] };
+        let st = from_tar(&tgz[..], Format::TarGz, s.path().join("src"), f, &Limits::default(), &keep).unwrap();
+        let tight = Limits { max_total: 100, ..Limits::default() };
+        assert!(build(&st, &sp, &s.path().join("out"), &tight).unwrap_err().contains("exceeds"));
+        // a pack file where an expansion would write is a conflict, not an overwrite
+        let (r, _s) = run(&sibling_source(vec![E::link("top/dark/dup", "../lib/48"), E::file("top/lib/48/apps/dup", b"x")]), &sp, &["lib"]);
+        r.unwrap();
+        let (r, _s) = run(&sibling_source(vec![E::link("top/lib/64/places/folder2.svg", "../../../dark/own/x.svg")]), &sp, &["lib"]);
+        assert!(r.unwrap().files > 0, "a link from the link source back into the pack resolves to the pack's file");
+    }
+
+    #[test]
+    fn licence_blob_pins_are_checked() {
+        use super::super::gitoid::{blob_oid, hex};
+        let src = icon_source("bloom", vec![]);
+        let mut sp = spec("bloom", &[Provides::Icons], &["COPYING"]);
+        let good = hex(&blob_oid(b"GNU GENERAL PUBLIC LICENSE\nVersion 3\n"));
+        sp.license_oids.insert("COPYING".into(), good);
+        let (r, _s) = run(&src, &sp, &[]);
+        let b = r.unwrap();
+        assert_eq!((b.licences_outside, b.licences_pinned), (1, 1));
+        sp.license_oids.insert("COPYING".into(), "0".repeat(40));
+        let (r, _s) = run(&src, &sp, &[]);
+        assert!(r.unwrap_err().contains("pinned blob"));
     }
 
     #[test]

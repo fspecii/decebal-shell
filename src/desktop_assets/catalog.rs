@@ -15,6 +15,8 @@ pub struct Source {
     pub commit: String,
     pub license: String,
     pub license_files: Vec<String>,
+    /// `git rev-parse <commit>:<file>` of each licence file, same order (optional).
+    pub license_oids: Vec<String>,
     pub archive_url: Option<String>,
     pub archive_sha256: Option<String>,
     pub strip: usize,
@@ -31,6 +33,7 @@ pub struct Pack {
     pub install_name: String,
     pub license: Option<String>,
     pub license_files: Vec<String>,
+    pub license_oids: Vec<String>,
     pub link_sources: Vec<String>,
     /// `git rev-parse <commit>:<folder>` of each `link_sources` folder, same order (optional when `archive_sha256` pins
     /// the whole archive; required otherwise for an install that uses them).
@@ -79,6 +82,15 @@ pub struct Entry<'a> {
 impl Entry<'_> {
     pub fn license(&self) -> &str {
         self.pack.license.as_deref().unwrap_or(&self.source.license)
+    }
+
+    /// Pinned blob ids of licence files, by path (from the source's and the pack's `license_oids`).
+    pub fn license_oids(&self) -> std::collections::BTreeMap<String, String> {
+        let mut m = std::collections::BTreeMap::new();
+        for (f, o) in self.source.license_files.iter().zip(&self.source.license_oids).chain(self.pack.license_files.iter().zip(&self.pack.license_oids)) {
+            m.insert(f.clone(), o.clone());
+        }
+        m
     }
 
     /// Source-relative licence files: the source's, then the pack's own.
@@ -259,7 +271,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
     let mut sources = Vec::new();
     for (i, t) in cx.tables(root, "source") {
         let sc = format!("source[{i}].");
-        cx.known(t, &sc, &["id", "repo", "revision", "commit", "license", "license_files", "archive_url", "archive_sha256", "strip_components"]);
+        cx.known(t, &sc, &["id", "repo", "revision", "commit", "license", "license_files", "license_oids", "archive_url", "archive_sha256", "strip_components"]);
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
             cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
@@ -300,7 +312,11 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
                 }
             },
         };
-        sources.push(Source { id, repo, revision, commit, license, license_files, archive_url, archive_sha256, strip });
+        let license_oids = cx.list(t, &sc, "license_oids");
+        if !license_oids.is_empty() && (license_oids.len() != license_files.len() || license_oids.iter().any(|o| !is_hex(o, 40))) {
+            cx.errors.push(format!("`{sc}license_oids` pins every licence file with 40 hex digits (git rev-parse <commit>:<file>), in the same order"));
+        }
+        sources.push(Source { id, repo, revision, commit, license, license_files, license_oids, archive_url, archive_sha256, strip });
     }
 
     let mut packs = Vec::new();
@@ -309,7 +325,24 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         cx.known(
             t,
             &sc,
-            &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "link_source_trees", "index", "index_oids", "xcursor", "description"],
+            &[
+                "id",
+                "name",
+                "provides",
+                "source",
+                "path",
+                "tree",
+                "install_name",
+                "license",
+                "license_files",
+                "license_oids",
+                "link_sources",
+                "link_source_trees",
+                "index",
+                "index_oids",
+                "xcursor",
+                "description",
+            ],
         );
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
@@ -349,6 +382,10 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         let license_files = cx.list(t, &sc, "license_files");
         for f in &license_files {
             cx.rel(t, &sc, "license_files", f, false);
+        }
+        let license_oids = cx.list(t, &sc, "license_oids");
+        if !license_oids.is_empty() && (license_oids.len() != license_files.len() || license_oids.iter().any(|o| !is_hex(o, 40))) {
+            cx.errors.push(format!("`{sc}license_oids` pins every licence file with 40 hex digits (git rev-parse <commit>:<file>), in the same order"));
         }
         let link_sources = cx.list(t, &sc, "link_sources");
         for f in &link_sources {
@@ -403,7 +440,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
             cx.errors.push(format!("`{sc}xcursor` builds cursors: add \"cursors\" to provides"));
         }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
-        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, link_source_trees, index, index_oids, xcursor, description });
+        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, license_oids, link_sources, link_source_trees, index, index_oids, xcursor, description });
     }
 
     let mut recommends = Vec::new();

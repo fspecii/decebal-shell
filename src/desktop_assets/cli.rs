@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 
 pub const HELP: &str = "decthemectl assets list [--json]                 catalogue packs and installed decebal packs
 decthemectl assets info ID|NAME [--json]         pins, licence, installed state of one pack
-decthemectl assets install ID [--archive FILE [--strip N] | --source-dir DIR] [--force] [--dry-run]
+decthemectl assets install ID [--archive FILE [--strip N] | --source-dir DIR] [--force] [--dry-run] [--allow-degraded]
                                                  install a catalogue pack: download its pinned https archive (sha256 checked),
                                                  or a downloaded archive (sha256 checked), or a local clone (git tree id checked)
 decthemectl assets import PATH --provides icons[,cursors] --license SPDX --license-file REL [--license-file REL]...
                           (REL paths are relative to the source root, after --strip)
-                          [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]
+                          [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run] [--allow-degraded]
                                                  install an archive (.tar, .tar.gz) or folder that is not in a catalogue
 decthemectl assets verify [NAME...] [--json]     re-hash installed packs against their provenance
 decthemectl assets remove NAME [--force]         delete a pack decebal installed (--force: also when it is in use)
@@ -61,7 +61,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         } else if let Some((k, v)) = x.split_once('=').filter(|(k, _)| VALUED.contains(k)) {
             a.opts.push((k.to_string(), v.to_string()));
         } else if x.starts_with("--") {
-            if !["--json", "--force", "--dry-run"].contains(&x.as_str()) {
+            if !["--json", "--force", "--dry-run", "--allow-degraded"].contains(&x.as_str()) {
                 return Err(format!("unknown option {x}"));
             }
             a.flags.push(x.clone());
@@ -114,6 +114,7 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
             }
             req.force = a.flag("--force");
             req.dry_run = a.flag("--dry-run");
+            req.allow_degraded = a.flag("--allow-degraded");
             report(&install::install(&req, &ctx.limits)?, json)
         }
         Some("import") => import(ctx, &a, rest.first().ok_or("import needs an archive or folder")?, json),
@@ -189,6 +190,7 @@ fn state_of(ctx: &Ctx, e: &catalog::Entry) -> &'static str {
         Existing::Foreign => "name taken by a theme decebal did not install",
         Existing::Ours(p) if p.pack != e.pack.id => "name taken by another pack",
         Existing::Ours(p) if p.source.tree.as_deref() != Some(e.pack.tree.as_str()) => "installed, the catalogue pins a newer revision (install --force)",
+        Existing::Ours(_) if install::health(&ctx.root.join(&e.pack.install_name)).is_some_and(|(p, l)| p * 2 < l) => "installed, DEGRADED (few icon directories)",
         Existing::Ours(_) => "installed",
     }
 }
@@ -277,7 +279,7 @@ fn info(ctx: &Ctx, id: &str, json: bool) -> Result<String, String> {
     }
     match prov {
         Some(p) => out.push_str(&format!(
-            "installed: {} from {} ({}), commit {}, tree {}, verified tree={} sha256={} commit={}, {} files, {} links, {} left out\n  licence files: {}",
+            "installed: {} from {} ({}), commit {}, tree {}, verified tree={} sha256={} commit={}, {} files, {} links, {} left out\n  {}{}\n  licence files: {}",
             p.install_name,
             p.source.fetched_from,
             p.origin,
@@ -289,6 +291,11 @@ fn info(ctx: &Ctx, id: &str, json: bool) -> Result<String, String> {
             p.files,
             p.symlinks,
             p.skipped,
+            verification_line(&p.verified),
+            match install::health(&ctx.root.join(&p.install_name)) {
+                Some((present, listed)) if present * 2 < listed => format!("\n  DEGRADED: {present} of {listed} icon directories exist"),
+                _ => String::new(),
+            },
             p.license_files.join(", ")
         )),
         None => out.push_str("not installed"),
@@ -329,6 +336,19 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
         p.license_files.join(", "),
         p.content_hash
     );
+    out.push_str(&format!("\n  {}", verification_line(&p.verified)));
+    if r.built.expanded_dirs + r.built.copies > 0 {
+        out.push_str(&format!(
+            "\n  from link_sources: {} folders expanded, {} files ({} KiB) copied, {} links to expanded copies",
+            r.built.expanded_dirs,
+            r.built.expanded_files + r.built.copies,
+            r.built.expanded_bytes >> 10,
+            r.built.expanded_links
+        ));
+    }
+    if let Some((present, listed)) = p.icon_dirs {
+        out.push_str(&format!("\n  icon directories: {present} of {listed} listed in index.theme{}", if p.degraded { " (DEGRADED)" } else { "" }));
+    }
     if !r.built.skipped_sample.is_empty() {
         out.push_str(&format!("\n  left out, e.g.: {}", r.built.skipped_sample.join(", ")));
     }
@@ -342,6 +362,16 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
         out.push_str(&format!("\nnote: inherits `{m}`, which is not installed (its icons fall back to hicolor)"));
     }
     Ok(out)
+}
+
+/// One honest line: the pack folder's own check, and each thing taken from outside it.
+fn verification_line(v: &install::Verified) -> String {
+    let mut parts = Vec::new();
+    for o in &v.outside {
+        parts.push(format!("{} {}", o.what, if o.verified { format!("verified ({})", o.by) } else { "NOT pinned".into() }));
+    }
+    let outside = if parts.is_empty() { "nothing taken from outside the pack folder".to_string() } else { format!("outside the pack folder: {}", parts.join(", ")) };
+    format!("{outside}; complete: {}", if v.complete { "yes" } else { "NO" })
 }
 
 fn yes(b: bool) -> &'static str {
@@ -400,18 +430,20 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
             install_name: name.clone(),
             display_name: name.clone(),
             license_files,
+            license_oids: Default::default(),
             index_files: a.all("--index").into_iter().map(|p| (p, None)).collect(),
             xcursors: vec![],
         },
         strip: if is_dir { 0 } else { strip },
         link_sources: a.all("--link-source"),
         input: if is_dir { Input::Dir(src.clone()) } else { Input::Archive(src.clone()) },
-        pins: Pins { tree: hexpin("--tree", 40)?, archive_sha256: if is_dir { None } else { hexpin("--sha256", 64)? }, commit: None },
+        pins: Pins { tree: hexpin("--tree", 40)?, archive_sha256: if is_dir { None } else { hexpin("--sha256", 64)? }, commit: None, link_trees: vec![] },
         source: SourceRecord { id: "local".into(), repo: std::fs::canonicalize(&src).unwrap_or(src).display().to_string(), revision: String::new(), path: theme_path, ..SourceRecord::default() },
         license,
         root: ctx.root.clone(),
         force: a.flag("--force"),
         dry_run: a.flag("--dry-run"),
+        allow_degraded: a.flag("--allow-degraded"),
     };
     report(&install::install(&req, &ctx.limits)?, json)
 }
@@ -423,7 +455,13 @@ fn verify(ctx: &Ctx, names: &[&str], json: bool) -> Result<String, String> {
     for d in &dirs {
         let name = d.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         match install::verify(d) {
-            Ok((_, Integrity::Ok)) => rows.push((name, "ok".to_string())),
+            Ok((_, Integrity::Ok)) => match install::health(d) {
+                Some((present, listed)) if present * 2 < listed => {
+                    bad = true;
+                    rows.push((name, format!("content ok, DEGRADED: {present} of {listed} icon directories exist")));
+                }
+                _ => rows.push((name, "ok".to_string())),
+            },
             Ok((_, Integrity::Modified { recorded, now })) => {
                 bad = true;
                 rows.push((name, format!("MODIFIED (recorded {recorded}, now {now})")));
