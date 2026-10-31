@@ -29,7 +29,9 @@ fn sep() -> Item {
     Item { label: String::new(), action: "", shortcut: "", separator: true }
 }
 
-/// All menus for the app named `app`.
+/// The shell's own menus for the app named `app`: the system menu, the app menu (window
+/// commands) and Window/Help. Application menus (File, Edit, …) only ever come from the app's
+/// exported menu ([`crate::appmenu`], spliced in after the app menu by the bar).
 pub fn build(app: &str, light: bool) -> Vec<Menu> {
     vec![
         Menu {
@@ -69,54 +71,6 @@ pub fn build(app: &str, light: bool) -> Vec<Menu> {
                 item("Show Hidden Windows", "show-minimized", "⌘S"),
                 sep(),
                 item(&format!("Quit {app}"), "close-window", "⌘W"),
-            ],
-        },
-        Menu {
-            key: "file",
-            title: "File".into(),
-            icon: false,
-            bold: false,
-            items: vec![
-                item("New Window", "new-window", "⌃N"),
-                item("New Tab", "new-tab", "⌃T"),
-                item("Open…", "open", "⌃O"),
-                sep(),
-                item("Save", "save", "⌃S"),
-                item("Print…", "print", "⌃P"),
-                sep(),
-                item("Close Window", "close-window", "⌘W"),
-            ],
-        },
-        Menu {
-            key: "edit",
-            title: "Edit".into(),
-            icon: false,
-            bold: false,
-            items: vec![
-                item("Undo", "undo", "⌃Z"),
-                item("Redo", "redo", "⌃⇧Z"),
-                sep(),
-                item("Cut", "cut", "⌘X"),
-                item("Copy", "copy", "⌘C"),
-                item("Paste", "paste", "⌘V"),
-                item("Select All", "select-all", "⌃A"),
-                sep(),
-                item("Find…", "find", "⌃F"),
-                item("Emoji & Symbols", "emoji", ""),
-            ],
-        },
-        Menu {
-            key: "view",
-            title: "View".into(),
-            icon: false,
-            bold: false,
-            items: vec![
-                item("Zoom In", "zoom-in", "⌃+"),
-                item("Zoom Out", "zoom-out", "⌃−"),
-                item("Actual Size", "zoom-reset", "⌃0"),
-                sep(),
-                item("Reload", "reload", "⌃R"),
-                item("Enter Full Screen", "fullscreen", "⌘F"),
             ],
         },
         Menu {
@@ -332,7 +286,7 @@ mod tests {
     fn menus_match_the_original_titles() {
         let m = build("Foot", false);
         let titles: Vec<&str> = m.iter().map(|m| m.key).collect();
-        assert_eq!(titles, ["apple", "app", "file", "edit", "view", "window", "help"]);
+        assert_eq!(titles, ["apple", "app", "window", "help"], "no made-up File/Edit/View menus");
         assert!(m[1].bold && m[1].title == "Foot");
         assert!(m[0].icon);
     }
@@ -349,21 +303,21 @@ mod tests {
     #[test]
     fn dropdown_has_min_width_and_row_geometry() {
         let m = build("Foot", false);
-        let d = Dropdown::layout(&m[2], 100.0, 28.0, width);
+        let d = Dropdown::layout(&m[1], 100.0, 28.0, width);
         assert!(d.w >= MIN_W);
-        assert_eq!(d.rows.len(), m[2].items.len());
+        assert_eq!(d.rows.len(), m[1].items.len());
         assert_eq!(d.rows[0].y, 28.0 + PAD);
-        // 6 rows of 24 + 2 separators of 11 + padding
-        assert_eq!(d.h, 6.0 * ROW_H + 2.0 * SEP_H + 2.0 * PAD);
+        // 4 rows of 24 + 2 separators of 11 + padding
+        assert_eq!(d.h, 4.0 * ROW_H + 2.0 * SEP_H + 2.0 * PAD);
     }
 
     #[test]
     fn hit_test_finds_items_and_skips_separators() {
         let m = build("Foot", false);
-        let menu = &m[2];
+        let menu = &m[1];
         let d = Dropdown::layout(menu, 100.0, 28.0, width);
         assert_eq!(d.hit(menu, 120.0, d.rows[0].y + 5.0), Some(0));
-        assert_eq!(d.hit(menu, 120.0, d.rows[3].y + 5.0), None, "separator");
+        assert_eq!(d.hit(menu, 120.0, d.rows[1].y + 5.0), None, "separator");
         assert_eq!(d.hit(menu, 101.0, d.rows[0].y + 5.0), None, "inside padding");
         assert_eq!(d.hit(menu, 120.0, 5.0), None, "above");
     }
@@ -371,7 +325,7 @@ mod tests {
     #[test]
     fn contains_covers_the_whole_panel() {
         let m = build("Foot", false);
-        let d = Dropdown::layout(&m[3], 50.0, 28.0, width);
+        let d = Dropdown::layout(&m[2], 50.0, 28.0, width);
         assert!(d.contains(55.0, 30.0));
         assert!(!d.contains(49.0, 30.0));
         assert!(!d.contains(55.0, d.y + d.h + 1.0));
@@ -380,7 +334,7 @@ mod tests {
     #[test]
     fn wide_labels_widen_the_dropdown() {
         let m = build("Foot", false);
-        let d = Dropdown::layout(&m[5], 0.0, 0.0, |s| s.chars().count() as f32 * 12.0);
+        let d = Dropdown::layout(&m[2], 0.0, 0.0, |s| s.chars().count() as f32 * 12.0);
         assert!(d.w > MIN_W);
     }
 
