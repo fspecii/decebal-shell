@@ -25,7 +25,7 @@ const BAR: (f32, f32) = (356.0, 56.0);
 const NO_BLUR_ALPHA: f32 = 0.90;
 
 pub(super) fn panel_alpha(th: &crate::theme::Theme, style: Style) -> Option<f32> {
-    (style == Style::Ukui).then(|| if th.blur > 0.0 { th.panel_alpha } else { NO_BLUR_ALPHA })
+    (style == Style::Ukui).then_some(if th.blur > 0.0 { th.panel_alpha } else { NO_BLUR_ALPHA })
 }
 
 /// One icon shortcut (`IconButton.qml`).
@@ -36,13 +36,10 @@ struct Shortcut {
     target: Target,
 }
 
-/// The panel for `tiles`; a selection that leaves nothing to show (no group has a control on this machine) falls back to every group, as the other styles do.
+/// The panel for `tiles`: exactly the enabled groups. A group that is switched off (an explicit applet/tile choice) never comes back; a selection whose groups have nothing on this machine
+/// (no media player, no `decutil`, no radios) leaves the header and, when the actions group is enabled, its Settings button.
 pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
-    let (out, height, body) = build(s, tiles);
-    if body || *tiles == Tiles::ALL {
-        return (out, height);
-    }
-    let (out, height, _) = build(s, &Tiles::ALL);
+    let (out, height, _) = build(s, tiles);
     (out, height)
 }
 
@@ -110,7 +107,14 @@ fn build(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32, bool) {
         out.push(item(x, top, CELL.0, CELL.1, Draw::SmallTile { on: c.on }, Some(c.target)));
         // IconButton.qml: the 24 px icon 8 px from the top, then the name 4 px below it
         out.push(item(x + (CELL.0 - 24.0) / 2.0, top + 8.0 + 4.0, 24.0, 24.0, Draw::Glyph { icon: c.icon, size: 22.0, ink: if c.on { Ink::White } else { Ink::Primary } }, None));
-        out.push(item(x + 4.0, top + 8.0 + 4.0 + 24.0 + 4.0, CELL.0 - 8.0, 15.0, Draw::Text { text: c.name.to_string(), size: 12.0, weight: Weight::Regular, ink: if c.on { Ink::White } else { Ink::Primary }, align: Align::Center }, None));
+        out.push(item(
+            x + 4.0,
+            top + 8.0 + 4.0 + 24.0 + 4.0,
+            CELL.0 - 8.0,
+            15.0,
+            Draw::Text { text: c.name.to_string(), size: 12.0, weight: Weight::Regular, ink: if c.on { Ink::White } else { Ink::Primary }, align: Align::Center },
+            None,
+        ));
     }
     if rows > 0 {
         body = true;
@@ -136,7 +140,14 @@ fn build(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32, bool) {
                 let tx = ix + 24.0 + 8.0;
                 out.push(item(tx, y + (BAR.1 - 16.0) / 2.0, SIDE + BAR.0 - 12.0 - tx, 16.0, Draw::Track { value }, Some(target)));
             }
-            None => out.push(item(SIDE + 12.0, y + (BAR.1 - 16.0) / 2.0, BAR.0 - 24.0, 16.0, Draw::Text { text: "Unavailable".into(), size: 12.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Left }, None)),
+            None => out.push(item(
+                SIDE + 12.0,
+                y + (BAR.1 - 16.0) / 2.0,
+                BAR.0 - 24.0,
+                16.0,
+                Draw::Text { text: "Unavailable".into(), size: 12.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Left },
+                None,
+            )),
         }
         y += BAR.1 + ROW_GAP;
     }
@@ -148,7 +159,14 @@ fn build(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32, bool) {
         let title = if m.title.is_empty() { "Not Playing" } else { m.title.as_str() };
         let controls = SIDE + BAR.0 - 12.0 - 3.0 * 32.0;
         out.push(item(SIDE + 12.0, y + 9.0, controls - SIDE - 12.0 - 8.0, 20.0, Draw::Text { text: title.to_string(), size: 14.0, weight: Weight::Bold, ink: Ink::Primary, align: Align::Left }, None));
-        out.push(item(SIDE + 12.0, y + 31.0, controls - SIDE - 12.0 - 8.0, 16.0, Draw::Text { text: m.artist.clone(), size: 12.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Left }, None));
+        out.push(item(
+            SIDE + 12.0,
+            y + 31.0,
+            controls - SIDE - 12.0 - 8.0,
+            16.0,
+            Draw::Text { text: m.artist.clone(), size: 12.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Left },
+            None,
+        ));
         for (i, (icon, t)) in [("backward", Target::MediaPrev), (if m.playing { "pause" } else { "play" }, Target::MediaToggle), ("forward", Target::MediaNext)].into_iter().enumerate() {
             out.push(item(controls + i as f32 * 32.0, y + (BAR.1 - 32.0) / 2.0, 32.0, 32.0, Draw::Glyph { icon, size: 18.0, ink: Ink::Primary }, Some(t)));
         }
@@ -243,8 +261,14 @@ mod tests {
         assert!(items.iter().any(|i| i.target == Some(Target::GameMode)) && !items.iter().any(|i| i.target == Some(Target::Settings)));
         s.media = None;
         s.util = None;
-        let (items, _) = layout(&s, &media_only);
-        assert!(items.iter().any(|i| i.target == Some(Target::Wifi)), "nothing to show for the selection: every group, as the other styles do");
+        let (items, h) = layout(&s, &media_only);
+        assert!(items.iter().all(|i| i.target.is_none()), "no media player: the media-only panel has no control and nothing is resurrected");
+        assert_eq!(h, 14.0 + 32.0 + ROW_GAP - ROW_GAP + 24.0, "header only");
+        let nothing = Tiles { connectivity: false, focus: false, display: false, sound: false, media: false, toggles: false, actions: false };
+        assert!(layout(&snapshot(), &nothing).0.iter().all(|i| i.target.is_none()), "every group disabled: no control at all");
+        let settings_only = Tiles { actions: true, ..nothing };
+        let (items, _) = layout(&snapshot(), &settings_only);
+        assert!(items.iter().any(|i| i.target == Some(Target::Settings)) && !items.iter().any(|i| i.target == Some(Target::Wifi)), "actions only: the configured Settings button, not the rest");
     }
 
     #[test]

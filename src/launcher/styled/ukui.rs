@@ -47,11 +47,7 @@ fn frame(r: Rect, s: f32) -> Frame {
     // and the plugin tabs and favourites are not laid out rather than squeezed to nothing
     let compact = rest - natural_page - DIVIDER * s < (88.0 + 24.0) * s;
     let page = Rect { w: if compact { rest } else { natural_page }, ..r };
-    let widgets = if compact {
-        Rect { x: page.right(), w: 0.0, ..r }
-    } else {
-        Rect { x: page.right() + DIVIDER * s, w: (sidebar.x - DIVIDER * s - page.right() - DIVIDER * s).max(1.0), ..r }
-    };
+    let widgets = if compact { Rect { x: page.right(), w: 0.0, ..r } } else { Rect { x: page.right() + DIVIDER * s, w: (sidebar.x - DIVIDER * s - page.right() - DIVIDER * s).max(1.0), ..r } };
     // A card shorter than the 160 px the page needs for the search bar, the header and one row (a small output at a large scale) compresses those vertical
     // measures proportionally; the list then shows one squeezed row instead of leaving the card.
     let v = s * (r.h / (160.0 * s)).clamp(0.2, 1.0);
@@ -87,8 +83,12 @@ struct Expanded {
 fn expanded_frame(r: Rect, s: f32) -> Expanded {
     let (lw, lh) = (r.w / s, r.h / s);
     let top = (48.0 * lh / 1080.0).round().max(8.0) * s;
-    let search = Rect { x: r.x + (r.w - (372.0 * s).min(r.w - 32.0 * s)) / 2.0, y: r.y + top, w: (372.0 * s).min(r.w - 32.0 * s).max(1.0), h: 36.0 * s };
-    let restore = Rect { x: r.right() - 40.0 * s - 36.0 * s, y: search.y, w: 36.0 * s, h: 36.0 * s };
+    let restore = Rect { x: (r.right() - 40.0 * s - 36.0 * s).max(r.x), y: r.y + top, w: (36.0 * s).min(r.w), h: 36.0 * s };
+    // the search bar is centred when its 372 px fit between the card's left margin and the restore button (12 px apart); a narrow card narrows and shifts it instead of
+    // running under the button
+    let (left, right) = (r.x + 16.0 * s, (restore.x - 12.0 * s).max(r.x + 16.0 * s + 1.0));
+    let w = (372.0 * s).min(right - left).max(1.0);
+    let search = Rect { x: (r.x + (r.w - w) / 2.0).clamp(left, (right - w).max(left)), y: r.y + top, w, h: 36.0 * s };
     let sidebar_w = (112.0 * s).min(r.w * 0.2);
     let sidebar = Rect { x: r.right() - 32.0 * s - sidebar_w, y: search.bottom() + top, w: sidebar_w, h: (r.bottom() - search.bottom() - top - 4.0 * s).max(1.0) };
     let (cols, cw, ch) = expanded_grid(lw, lh);
@@ -501,7 +501,11 @@ mod tests {
             for z in &st.zones {
                 for i in z.visible(st.m.offset(z.id)) {
                     let r = z.rect(i, st.m.offset(z.id)).unwrap();
-                    assert!(r.w > 0.0 && r.h > 0.0 && r.x >= free.x - 0.5 && r.y >= free.y - 0.5 && r.right() <= free.right() + 0.5 && r.bottom() <= free.bottom() + 0.5, "{} {i} {r:?} outside {free:?}: {ctx}", z.id);
+                    assert!(
+                        r.w > 0.0 && r.h > 0.0 && r.x >= free.x - 0.5 && r.y >= free.y - 0.5 && r.right() <= free.right() + 0.5 && r.bottom() <= free.bottom() + 0.5,
+                        "{} {i} {r:?} outside {free:?}: {ctx}",
+                        z.id
+                    );
                     seen.push((z.id, i, r));
                 }
             }
@@ -529,5 +533,84 @@ mod tests {
         st.resize(766, 688);
         let actions = st.zones.iter().find(|z| z.id == "actions").unwrap();
         assert!(!actions.items.contains(&Target::Fullscreen), "a plain window cannot grow: no inert button");
+    }
+
+    fn overlaps(a: &Rect, b: &Rect) -> bool {
+        a.x < b.right() - 0.5 && b.x < a.right() - 0.5 && a.y < b.bottom() - 0.5 && b.y < a.bottom() - 0.5
+    }
+
+    fn inside(r: &Rect, outer: &Rect) -> bool {
+        r.w > 0.0 && r.h > 0.0 && r.x >= outer.x - 0.5 && r.y >= outer.y - 0.5 && r.right() <= outer.right() + 0.5 && r.bottom() <= outer.bottom() + 0.5
+    }
+
+    #[test]
+    fn painted_search_header_and_content_rectangles_stay_inside_and_apart_in_both_modes() {
+        use crate::launcher::placement::{Anchor, Edge};
+        for screen in [(400u32, 300u32), (320, 240), (640, 360), (800, 480), (1280, 720), (1920, 1080)] {
+            for scale in [1.0f32, 1.25, 1.5, 2.0] {
+                for edge in [None, Some(Edge::Bottom), Some(Edge::Top), Some(Edge::Left), Some(Edge::Right)] {
+                    for expanded in [false, true] {
+                        let mut st = styled(LauncherStyle::Ukui, 30);
+                        st.full = true;
+                        st.scale = scale;
+                        let (w, h, t) = (screen.0 as f32, screen.1 as f32, 32.0 * scale);
+                        st.anchor = edge.map(|edge| Anchor {
+                            edge,
+                            point: Some(match edge {
+                                Edge::Top => (w * 0.1, t / 2.0),
+                                Edge::Bottom => (w / 2.0, h - t / 2.0),
+                                Edge::Left => (t / 2.0, h * 0.9),
+                                Edge::Right => (w - t / 2.0, h * 0.2),
+                            }),
+                            thickness: t,
+                        });
+                        st.resize(screen.0, screen.1);
+                        if expanded {
+                            st.activate(Target::Fullscreen, "");
+                            assert!(st.m.expanded);
+                        }
+                        let ctx = format!("{screen:?} @{scale} {edge:?} expanded {expanded}, card {:?}", st.card);
+                        let card = st.card;
+                        // the rectangles the painter uses, named
+                        let mut parts: Vec<(&str, Rect)> = Vec::new();
+                        if expanded {
+                            let e = expanded_frame(card, scale);
+                            parts.extend([("search", e.search), ("restore", e.restore), ("grid area", e.area), ("sidebar", e.sidebar)]);
+                        } else {
+                            let f = frame(card, scale);
+                            parts.extend([("search", f.search), ("header", f.header), ("list", f.list), ("sidebar", f.sidebar)]);
+                            if !f.compact {
+                                parts.extend([("tabs", f.tabs), ("favourites", f.favourites)]);
+                            }
+                        }
+                        for (n, r) in &parts {
+                            assert!(inside(r, &card), "{n} {r:?} is empty or leaves the card: {ctx}");
+                        }
+                        // the search bar and the header never lie over another painted block or a control
+                        let search = parts[0].1;
+                        for (n, r) in parts.iter().skip(1) {
+                            if *n == "header" || *n == "list" && !expanded {
+                                continue; // the header and list share the page column below the search bar: checked by order below
+                            }
+                            assert!(!overlaps(&search, r), "search {search:?} overlaps {n} {r:?}: {ctx}");
+                        }
+                        for z in &st.zones {
+                            for i in z.visible(st.m.offset(z.id)) {
+                                let r = z.rect(i, st.m.offset(z.id)).unwrap();
+                                assert!(!overlaps(&search, &r), "search {search:?} overlaps {} item {i} {r:?}: {ctx}", z.id);
+                            }
+                        }
+                        if expanded {
+                            let e = expanded_frame(card, scale);
+                            assert!(!overlaps(&e.area, &e.sidebar) && !overlaps(&e.restore, &e.sidebar) && !overlaps(&e.restore, &e.area), "{ctx}");
+                        } else {
+                            let f = frame(card, scale);
+                            assert!(search.bottom() <= f.header.y + 0.5 && f.header.bottom() <= f.list.y + 0.5, "search, header, list in order: {ctx}");
+                            assert!(!overlaps(&f.page, &f.sidebar) && (f.compact || !overlaps(&f.widgets, &f.sidebar) && !overlaps(&f.page, &f.widgets)), "{ctx}");
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -74,6 +74,17 @@ FIRST_DISPLAY, abstract_sockets, free_display, verify_owned = fixture.FIRST_DISP
 USED_DISPLAYS = set()
 
 
+def make_baseline(path, mode):
+    """A `pre` hook: screenshot the panel alone (the baseline to diff the opened card against), repainting the flat backdrop if the root window was still black (a known startup race)."""
+    def baseline(run, r, env):
+        for _ in range(6):
+            run("import", "-window", "root", str(path)); c = Image.open(path).convert("RGB").getpixel((960, 540))
+            if max(abs(c[i] - BACKDROP[mode][i]) for i in range(3)) <= 6: break
+            set_root(env["DISPLAY"], r / "backdrop.png"); time.sleep(1.2)
+        return None
+    return baseline
+
+
 def clock_mask(edge, sc, thick, W=1920, H=1080):
     """The taskbar's clock/tray end of the strip, which changes between two screenshots (the minute ticks): ignored when looking for the opened card, which sits at the Start end."""
     return [{"bottom": (W - 320 * sc, H - thick, W, H), "top": (W - 320 * sc, 0, W, thick), "left": (0, H - 160 * sc, thick, H), "right": (W - thick, H - 160 * sc, W, H)}[edge]]
@@ -266,8 +277,7 @@ def main():
                     for edge in ("bottom", "top", "left", "right"):
                         name = f"startmenu-edge-{edge}-{t}-{m}-{int(sc * 100)}.png"
                         point = {"bottom": (round(24 * sc), 1080 - thick // 2), "top": (round(24 * sc), thick // 2), "left": (thick // 2, round(24 * sc)), "right": (1920 - thick // 2, round(24 * sc))}[edge]
-                        def baseline(run, r, env, name=name):
-                            run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                        baseline = make_baseline(OUT / ("base-" + name), m)
                         r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, extra=["declaunch", "open", "--edge", edge, "--anchor", f"{point[0]},{point[1]}", "--thickness", str(thick)])
                         assert r["other_windows"].get("UKUI Menu"), f"{name}: the launcher did not open ({r['other_windows']})"
                         box = diff_bbox(OUT / ("base-" + name), OUT / name, ignore=clock_mask(edge, sc, thick)); assert box, f"{name}: the card did not change the picture"
@@ -290,8 +300,7 @@ def main():
                     thick = round(48 * sc)
                     for edge in ("bottom", "top", "left", "right"):
                         name = f"start-click-{edge}-{t}-{m}-{int(sc * 100)}.png"
-                        def baseline(run, r, env, name=name):
-                            run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                        baseline = make_baseline(OUT / ("base-" + name), m)
                         def click_start(run, r, env, before, edge=edge, sc=sc):
                             win = next((w for w in run("xdotool", "search", "--name", "decebal-dock").split()), None); assert win, "no dock window"
                             g = run("xdotool", "getwindowgeometry", win).replace("\n", " ")
@@ -326,8 +335,7 @@ def main():
             restore = (1920 - 40 * sc - 18 * sc, top + 18 * sc)
             for what in ("expanded", "restored"):
                 name = f"startmenu-{what}-{m}-{int(sc * 100)}.png"
-                def baseline(run, r, env, name=name):
-                    run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                baseline = make_baseline(OUT / ("base-" + name), m)
                 def act(run, r, env, before, what=what, expand=expand, restore=restore, card_bottom=card_bottom, card_h=card_h, sc=sc):
                     run("xdotool", "mousemove", str(int(8 * sc + 160 * sc)), str(int(card_bottom - card_h + 32 * sc))); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "te"); time.sleep(0.5)
                     run("xdotool", "mousemove", str(int(expand[0])), str(int(expand[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
@@ -335,7 +343,7 @@ def main():
                         run("xdotool", "mousemove", str(int(restore[0])), str(int(restore[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
                     return dict(expand=expand, restore=restore)
                 r = case("openkylin", m, sc, "1920x1080", shot=name, pre=baseline, post=act, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
-                box = diff_bbox(OUT / ("base-" + name), OUT / name, ignore=clock_mask("bottom", sc, thick)); assert box, f"{name}: nothing is shown"
+                box = diff_bbox(OUT / ("base-" + name), OUT / name, threshold=5, ignore=clock_mask("bottom", sc, thick)); assert box, f"{name}: nothing is shown"   # a 65 % dark card over the flat backdrop differs by only ~6-19 levels
                 x0, y0, x1, y1 = box; w, h = x1 - x0, y1 - y0
                 if what == "expanded":
                     assert x0 <= 4 and x1 >= 1916 and y0 <= 4 and abs(y1 - (H - thick)) <= 6 * sc, f"{name}: the full-screen menu covers {box}, not the whole free area (strip {thick})"

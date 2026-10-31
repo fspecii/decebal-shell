@@ -140,12 +140,12 @@ fn tile_groups_are_honoured_and_a_selection_never_leaves_only_a_header() {
             assert!(!bar.cc_items.iter().any(|i| i.target == Some(*t)), "{group}: {t:?} must not show (Settings only comes with the actions group)");
         }
     }
-    // no hardware for the only enabled group: the whole panel rather than a header alone
+    // no hardware for the only enabled group: nothing is resurrected (a disabled group stays disabled)
     let _theme = Ukui::new(only(|t| t.media = true));
     let mut bar = control_bar();
     bar.update_snapshot(|s| s.media = None);
     bar.relayout_control();
-    assert!(bar.cc_items.iter().any(|i| i.target == Some(Target::Wifi)), "falls back to every group");
+    assert!(bar.cc_items.iter().all(|i| i.target.is_none()), "no control comes back");
 }
 
 #[test]
