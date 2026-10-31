@@ -883,7 +883,11 @@ fn plasma_wallpaper_records_merge_into_the_shipped_catalogue_and_stay_honest() {
                     }
                 }
             }
-            let crops_recorded = if ours { full["crops_checked"]["21:9"].is_string() && full["crops_checked"]["9:16"].is_string() } else { image["crop_review"]["ultrawide"].is_string() && image["crop_review"]["portrait"].is_string() };
+            let crops_recorded = if ours {
+                full["crops_checked"]["21:9"].is_string() && full["crops_checked"]["9:16"].is_string()
+            } else {
+                image["crop_review"]["ultrawide"].is_string() && image["crop_review"]["portrait"].is_string()
+            };
             assert!(crops_recorded, "{id}: ultrawide and portrait crops recorded");
         }
     }
