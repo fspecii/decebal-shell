@@ -30,6 +30,9 @@ env = {'PATH': str(bins) + os.pathsep + os.defpath, 'HOME': str(root / 'home'), 
        'SMOKE_QA_TOKEN': token, 'DECEBAL_SYSTEM_AUTOMATIC': '0', 'DECEBAL_BACKEND': 'x11',
        'DBUS_SESSION_BUS_ADDRESS': 'unix:path=' + str(root / 'no-bus'),
        'DBUS_SYSTEM_BUS_ADDRESS': 'unix:path=' + str(root / 'no-system-bus')}
+# A supervising test runner can identify detached descendants after a hard interruption.
+if os.environ.get('E2E_PARENT_TOKEN'):
+    env['E2E_PARENT_TOKEN'] = os.environ['E2E_PARENT_TOKEN']
 for key, name in [('HOME', 'home'), ('XDG_CONFIG_HOME', 'config'), ('XDG_DATA_HOME', 'data'),
                   ('XDG_CACHE_HOME', 'cache'), ('XDG_STATE_HOME', 'state'), ('XDG_RUNTIME_DIR', 'run'),
                   ('XDG_DATA_DIRS', 'no-data'), ('XDG_CONFIG_DIRS', 'no-config')]:
