@@ -380,7 +380,9 @@ mod tests {
         let out = run_ok(&["new", "mine", "--from", "nord"], &src, &paths);
         assert!(out.contains("created"));
         let dir = src.themes_dir.join("mine");
-        assert!(run_ok(&["validate", dir.to_str().unwrap()], &src, &paths).starts_with("ok: Mine"));
+        // An unset USER leaves the optional author empty and emits a warning before success.
+        let validation = run_ok(&["validate", dir.to_str().unwrap()], &src, &paths);
+        assert!(validation.lines().any(|line| line.starts_with("ok: Mine")), "{validation}");
         let list = run_ok(&["list"], &src, &paths);
         assert!(list.contains("mine") && list.contains("nord") && list.contains("built-in") && list.contains("user"), "{list}");
         let j: serde_json::Value = serde_json::from_str(&run_ok(&["list", "--json"], &src, &paths)).unwrap();
@@ -389,7 +391,8 @@ mod tests {
         let packed = d.join("mine.dtheme");
         let out = run_ok(&["pack", dir.to_str().unwrap(), "-o", packed.to_str().unwrap()], &src, &paths);
         assert!(out.contains("sha256:"));
-        assert!(run_ok(&["validate", packed.to_str().unwrap()], &src, &paths).starts_with("ok:"));
+        let validation = run_ok(&["validate", packed.to_str().unwrap()], &src, &paths);
+        assert!(validation.lines().any(|line| line.starts_with("ok:")), "{validation}");
         run_ok(&["uninstall", "mine"], &src, &paths);
         assert!(!dir.exists());
         let out = run_ok(&["install", packed.to_str().unwrap(), "--apply"], &src, &paths);
