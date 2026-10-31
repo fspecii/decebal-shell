@@ -18,7 +18,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 Separate bundled artwork: `icons/kylin-startmenu.png` is copied unchanged from openkylin-theme at
 3c78d714aa8fac723c9a5360bd54484789a647ab. Copyright 2014 National University of Defense Technology (NUDT) & Kylin Ltd,
 as declared by that repository's debian/copyright. Its declared licence is GNU GPL version 3 only; the full text is in
-LICENSES/GPL-3.0-only.txt. The package SPDX expression is MIT AND GPL-3.0-only: MIT covers the independent manifest,
+LICENSE-GPL-3.0-only.txt. The package SPDX expression is MIT AND GPL-3.0-only: MIT covers the independent manifest,
 widgets and documentation; GPL-3.0-only covers this image. This does not relicense the artwork under MIT.
 
 Other icon and cursor packs and wallpapers are separate, not bundled. Trademarks are not licensed by these copyright
