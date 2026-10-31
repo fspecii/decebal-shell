@@ -226,7 +226,7 @@ A package is data. The loader enforces, for archives and folders alike (`package
 ## Widgets
 
 A widget is a small declarative file, `widgets/<name>.toml`: containers, text with format strings, icons, bars, rings, graphs, images,
-workspace dots, and click actions from a fixed list. It is drawn on the desktop by `decwidgets` (an X11 daemon, one small override-redirect
+workspace dots, and click actions from a fixed list. It is drawn on the desktop by `decwidgets` (a daemon for Wayland and X11, one small layer-shell surface or override-redirect
 window per widget at the bottom of the stack, SHAPE-cut so rounded cards look right without a compositor and real alpha with one).
 The widget uses the theme's colours by name, so it follows theme, mode and wallpaper-colour changes.
 

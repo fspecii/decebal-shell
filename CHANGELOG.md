@@ -13,6 +13,7 @@
 
 ## Unreleased
 
+- Desktop widgets (`decwidgets`), the dashboard (`decdash`) and the on-screen display (`dechud`) now run natively on Wayland as well as X11 and detect the session themselves (`DECEBAL_BACKEND=x11|wayland` forces one). Widgets are one wlr-layer-shell surface per card on the bottom layer, with clicks, scrolling, live data and theme changes as on X11; the dashboard is a card anchored under the bar that closes on Escape or a click outside; the HUD is a click-through card above the bottom edge. A compositor without layer-shell falls back to X11 (XWayland) when there is one.
 - Wayland windows paint an already configured first frame before blocking for further events. A private quiescent-compositor regression proves the old stall and fixed first buffer commit; accessibility acceptance now waits for its owned compositor output and records protocol diagnostics.
 - Settings wraps long labels and URLs within narrow cards without reducing text size. Keyboard focus follows controls when content loads, while explicit scrolling stays under user control; oversized rows no longer oscillate between redraws.
 - Taskbar Start sends the clicked button's position and panel edge to the launcher, including side panels, fractional scale and floating gaps.

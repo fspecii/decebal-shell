@@ -8,7 +8,7 @@
 //!
 //! * [`dsl`]: the file format and its validator.  * [`fmt`]: format strings.  * [`data`]: values and live sources.
 //! * [`layout`]: measuring and arranging.  * [`paint`]: drawing.  * [`config`]: which widgets run where.  * [`samples`]: shipped examples.
-//! * `host` (X11): the `decwidgets` daemon's windows.
+//! * `host`: the `decwidgets` daemon, on Wayland (`host_wayland`, layer-shell surfaces) or X11 (`host_x11`, windows).
 
 pub mod actions;
 pub mod catalog;
@@ -22,8 +22,11 @@ pub mod layout;
 pub mod paint;
 pub mod samples;
 
-#[cfg(feature = "x11")]
 pub mod host;
+#[cfg(feature = "wayland")]
+mod host_wayland;
+#[cfg(feature = "x11")]
+mod host_x11;
 
 /// Where a widget definition came from, which decides what it may do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
