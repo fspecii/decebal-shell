@@ -579,7 +579,10 @@ fn colour_formulas_match_the_shell_colours_evaluated_with_the_st_algorithms() {
     assert_eq!(KNOWN_DIFFERENCES.len(), 5);
     let accent = Rgb(0x35, 0x84, 0xe4);
     // the Shell's own inputs: dark `$bg_color` #36363a / `$fg_color` white, light `#fafafb` / `#222226`
-    let variants = [("dark", Palette { dark: true, bg: Rgb(0x36, 0x36, 0x3a), fg: Rgb(255, 255, 255), accent, accent_fg: Rgb(255, 255, 255) }), ("light", Palette { dark: false, bg: Rgb(0xfa, 0xfa, 0xfb), fg: Rgb(0x22, 0x22, 0x26), accent, accent_fg: Rgb(255, 255, 255) })];
+    let variants = [
+        ("dark", Palette { dark: true, bg: Rgb(0x36, 0x36, 0x3a), fg: Rgb(255, 255, 255), accent, accent_fg: Rgb(255, 255, 255) }),
+        ("light", Palette { dark: false, bg: Rgb(0xfa, 0xfa, 0xfb), fg: Rgb(0x22, 0x22, 0x26), accent, accent_fg: Rgb(255, 255, 255) }),
+    ];
     for (name, pal) in variants {
         let c = &r["colours"][name];
         let get = |key: &str| c[key].as_str().unwrap_or_else(|| panic!("{name}: reference has no {key}"));
