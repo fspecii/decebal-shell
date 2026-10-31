@@ -170,12 +170,23 @@ class Case:
         im = Image.open(path).convert("RGB")
         return im.crop(crop) if crop else im
 
+    @property
+    def bar_mode(self):
+        """The package's panel is the flat bar (`decbar`) rather than the taskbar (`decdock`)."""
+        return self.package == "plasma-layan"
+
     def apply(self):
-        (self.root / "config/dock-settings.json").write_text(json.dumps({"edge": self.edge}))
+        # a taskbar package follows the user's dock edge; a bar package follows the user's bar edge (Settings -> Panels writes these)
+        (self.root / "config/dock-settings.json").write_text(json.dumps({"edge": "bottom" if self.bar_mode else self.edge}))
         self.run(self.bin("decthemectl"), "theme", "apply", self.package, "--no-rdwm")
         cfg = json.loads((self.root / "config/decebal.json").read_text())
         cfg["theme"]["mode"] = self.mode
+        if self.bar_mode:
+            cfg.setdefault("bar", {})["edge"] = self.edge
         (self.root / "config/decebal.json").write_text(json.dumps(cfg))
+        if self.bar_mode:
+            self.spawn(self.bin("decbar"))
+            self.bar_t = None
 
     def dump(self):
         rows = {}
@@ -219,6 +230,10 @@ class Case:
         time.sleep(0.6)
 
     def park(self):
+        if self.bar_mode:
+            x0, y0, x1, y1 = self.strip_box()
+            self.run("xdotool", "mousemove", *((1100, (y0 + y1) // 2) if self.horizontal else ((x0 + x1) // 2, 1100)))
+            return
         s = self.surface()
         sx, sy = (float(v) for v in self.dump()["start"][0])
         self.run("xdotool", "mousemove", round(s["X"] + 1100) if self.horizontal else round(s["X"] + sx), round(s["Y"] + sy) if self.horizontal else round(s["Y"] + 1100))
@@ -231,7 +246,17 @@ class Case:
         v = dict(line.split("=") for line in out.splitlines() if "=" in line)
         return int(v["X"]), int(v["Y"]), int(v["WIDTH"]), int(v["HEIGHT"])
 
+    def bar_window(self):
+        return wait(lambda: self.run("xdotool", "search", "--name", "decebal-bar", check=False).splitlines()[0], "bar window")
+
+    def bar_strut(self):
+        """[left, right, top, bottom] the bar publishes."""
+        return wait(lambda: [int(v) for v in self.run("xprop", "-id", self.bar_window(), "_NET_WM_STRUT_PARTIAL").split("=")[-1].replace(" ", "").split(",") if v.lstrip("-").isdigit()][:4], "bar strut")
+
     def strip_box(self):
+        if self.bar_mode:
+            l, r, t_, b = self.bar_strut()
+            return {"top": (0, 0, W, t_), "bottom": (0, H - b, W, H), "left": (0, 0, l, H), "right": (W - r, 0, W, H)}[self.edge]
         t, g = self.t, self.g
         return {"bottom": (g, H - g - t, W - g, H - g), "top": (g, g, W - g, g + t), "left": (g, g, g + t, H - g), "right": (W - g - t, g, W - g, H - g)}[self.edge]
 
@@ -457,7 +482,132 @@ def case_keyboard(c):
     c.step("keyboard", ring=ink_distance(ringed, base), moved=ink_distance(moved, ringed))
 
 
-CASES = {"glyph": case_glyph, "applets": case_applets, "launcher": case_launcher, "popup": case_popup, "keyboard": case_keyboard}
+
+# ------------------------------------------------------------------------------------------------------------ the flat bar (Layan)
+def first_item(c, shot):
+    """Centre (screen px) of the first thing the bar draws: the Kickoff button."""
+    sx0, sy0, sx1, sy1 = c.strip_box()
+    runs = ink_groups(c, shot)
+    assert runs, f"{c.tag}: the bar draws nothing"
+    along = (runs[0][0] + runs[0][1]) / 2 + 6
+    return (round(sx0 + along), (sy0 + sy1) // 2) if c.horizontal else ((sx0 + sx1) // 2, round(sy0 + along))
+
+
+def case_bar(c, controls):
+    """The bar is on its edge with its strut, the work area follows every strut, the glyph is Kickoff's (not Apple, Windows or the grid) and the
+    search applet is a magnifier icon, not a box."""
+    c.park()
+    time.sleep(1.0)
+    shot = c.shot("bar")
+    struts = {"bar": c.bar_strut(), "dock": [int(v) for v in c.run("xprop", "-id", c.dock_window(), "_NET_WM_STRUT_PARTIAL").split("=")[-1].replace(" ", "").split(",") if v.lstrip("-").isdigit()][:4]}
+    left, right, top, bottom = (max(st[i] for st in struts.values()) for i in range(4))
+    expect = (left, top, W - left - right, H - top - bottom)
+    area = json.loads(c.run(c.args.rdwmctl, "state"))["state"]["monitors"][0]["workarea"]
+    assert (area["x"], area["y"], area["w"], area["h"]) == expect, f"{c.tag}: work area {area} vs the struts {struts}"
+    side = {"left": 0, "right": 1, "top": 2, "bottom": 3}[c.edge]
+    assert struts["bar"][side] > 0, f"{c.tag}: the bar publishes no strut on its edge {struts['bar']}"
+    c.step("bar_strut", struts=struts, work_area=list(expect))
+    x, y = first_item(c, shot)
+    half = round(14 * c.scale)
+    box = (x - half, y - half, x + half, y + half)
+    glyph = shot.crop(box)
+    for name, other in (controls or {}).items():
+        d = ink_distance(glyph, other.crop(box))
+        assert d > 300 * c.scale, f"{c.tag}: the first item equals the {name} control (distance {d})"
+        c.step("glyph_vs_" + name, distance=d)
+    eff = effective(c)
+    assert eff.get("search") and not eff.get("app_menu") and eff.get("window_title"), f"{c.tag}: the package's applet set is not in effect: {eff}"
+    # the search applet is an icon: switching it off removes ink from the bar and nothing else moves (the strip's other items keep their place)
+    ctl = c.bin("decthemectl")
+    c.run(ctl, "panel", "applet", "search", "off")
+    wait(lambda: effective(c).get("search") is False, f"{c.tag}: search off")
+    c.park()
+    time.sleep(1.0)
+    without = c.shot("bar-no-search")
+    c.run(ctl, "panel", "applet", "search", "theme")
+    wait(lambda: effective(c).get("search") is True, f"{c.tag}: search back to the theme's choice")
+    d = ImageChops.difference(shot, without).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
+    assert d, f"{c.tag}: the search applet draws nothing"
+    box_w, box_h = d[2] - d[0], d[3] - d[1]
+    assert max(box_w, box_h) <= round(40 * c.scale), f"{c.tag}: the search applet is {box_w}x{box_h}px: not an icon button"
+    c.step("search_icon", bbox=d)
+
+
+def case_bar_launcher(c):
+    """The bar passes `--edge/--anchor/--thickness`, so Kickoff opens from the button towards the desktop, centred on it or at the output margin."""
+    c.park()
+    time.sleep(0.8)
+    base = c.shot("kickoff-before")
+    x, y = first_item(c, base)
+    before = c.windows()
+    c.click(x, y)
+    new = wait(lambda: c.windows() - before, f"{c.tag}: Kickoff did not open", tries=100)
+    time.sleep(1.0)
+    box = card_box(c, base, c.shot("kickoff"))
+    c.click(x, y)
+    assert box, f"{c.tag}: Kickoff drew nothing outside the strip"
+    rect = (box[0], box[1], box[2] - box[0], box[3] - box[1])
+    c.desktop_side_ok(rect, "Kickoff card")
+    sx0, sy0, sx1, sy1 = c.strip_box()
+    gap = {"bottom": sy0 - box[3], "top": box[1] - sy1, "left": box[0] - sx1, "right": sx0 - box[2]}[c.edge]
+    assert 0 <= gap <= round(24 * c.scale), f"{c.tag}: Kickoff sits {gap}px from the bar"
+    along = ((box[0] + box[2]) / 2 - x) if c.horizontal else ((box[1] + box[3]) / 2 - y)
+    clamped = (box[0] <= round(12 * c.scale)) if c.horizontal else (box[1] <= round(12 * c.scale))
+    assert clamped or abs(along) <= 3, f"{c.tag}: Kickoff is neither centred on its button nor at the output margin (offset {along})"
+    wait(lambda: not (c.windows() & new), f"{c.tag}: a second click did not close Kickoff")
+    c.step("launcher", card=rect, gap=gap, centre_offset_along=round(along, 1), clamped_to_margin=clamped)
+
+
+def case_bar_appmenu(c):
+    """`app_menu` on: with no exporting window the bar says so honestly (a neutral label, never File/Edit/View of another desktop); with a real Qt window
+    that exports its menu over com.canonical.AppMenu.Registrar the bar shows that window's own titles."""
+    ctl = c.bin("decthemectl")
+    c.park()
+    time.sleep(0.8)
+    base = c.shot("appmenu-off")
+    c.run(ctl, "panel", "applet", "app_menu", "on")
+    wait(lambda: effective(c).get("app_menu") is True, f"{c.tag}: app_menu on")
+    c.park()
+    time.sleep(2.0)
+    idle = c.shot("appmenu-no-window")
+    assert ImageChops.difference(base, idle).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox(), f"{c.tag}: turning app_menu on changed nothing"
+    record, ready = c.root / "appmenu.record", c.root / "appmenu.ready"
+    env = dict(c.env, QT_QPA_PLATFORM="xcb", APPMENU_RECORD=str(record), APPMENU_READY=str(ready))
+    p = subprocess.Popen([str(c.args.qt_fixture)], env=env, stdout=c.log, stderr=c.log, stdin=subprocess.DEVNULL, start_new_session=True)
+    c.procs.append(p)
+    wait(lambda: ready.exists() and ready.read_text().strip(), f"{c.tag}: the Qt fixture window did not map", tries=200)
+    c.park()
+    time.sleep(3.0)
+    exported = c.shot("appmenu-qt-window")
+    changed = ImageChops.difference(idle, exported).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
+    assert changed, f"{c.tag}: the bar did not change for a focused window that exports a menu"
+    # the fixture's titles are File and Edit; they must be drawn by the bar now, in the region the exported titles take
+    c.step("appmenu_live", changed_bbox=changed, fixture_sha256=sha(c.args.qt_fixture))
+    c.run(ctl, "panel", "applet", "app_menu", "theme")
+    wait(lambda: effective(c).get("app_menu") is False, f"{c.tag}: app_menu back to the theme's choice (off)")
+
+
+def case_keyboard_bar(c):
+    """`decbar --focus`: a ring that moves with the arrows; Escape leaves."""
+    c.park()
+    time.sleep(0.6)
+    base = c.shot("kb-base")
+    c.spawn(c.bin("decbar"), "--focus")
+    time.sleep(1.2)
+    ringed = c.shot("kb-ring")
+    assert ink_distance(ringed, base) > 150, f"{c.tag}: --focus drew no ring"
+    c.run("xdotool", "key", "Right" if c.horizontal else "Down")
+    time.sleep(0.6)
+    moved = c.shot("kb-moved")
+    assert ink_distance(moved, ringed) > 80, f"{c.tag}: the ring did not move with the arrow key"
+    c.run("xdotool", "key", "Escape")
+    time.sleep(0.8)
+    assert ink_distance(c.shot("kb-left"), base) < ink_distance(ringed, base) * 0.25, f"{c.tag}: Escape did not leave keyboard mode"
+    c.step("keyboard", ring=ink_distance(ringed, base), moved=ink_distance(moved, ringed))
+
+
+CASES = {"glyph": case_glyph, "applets": case_applets, "launcher": case_launcher, "popup": case_popup, "keyboard": case_keyboard,
+         "bar": case_bar, "bar_launcher": case_bar_launcher, "appmenu": case_bar_appmenu, "keyboard_bar": case_keyboard_bar}
 
 
 def control_copy(args, package, logo, out_root):
@@ -478,22 +628,26 @@ def run_case(args, package, edge, scale, mode, cases, controls, report):
     try:
         c.start()
         c.apply()
-        c.dock_window()
-        wait(lambda: c.dump()["start"], f"{tag}: the dock painted")
-        time.sleep(1.0)
-        # the strut is the work area, and a client window lies inside it
-        strut = wait(lambda: [int(v) for v in c.run("xprop", "-id", c.dock_window(), "_NET_WM_STRUT_PARTIAL").split("=")[-1].replace(" ", "").split(",") if v.lstrip("-").isdigit()][:4], "strut")
-        side = {"left": 0, "right": 1, "top": 2, "bottom": 3}[edge]
-        reserve = strut[side]
-        assert reserve in (c.t + c.g, round((THICKNESS + GAP) * scale)), f"{tag}: strut {strut}"
-        expect = {"bottom": (0, 0, W, H - reserve), "top": (0, reserve, W, H - reserve), "left": (reserve, 0, W - reserve, H), "right": (0, 0, W - reserve, H)}[edge]
-        area = json.loads(c.run(args.rdwmctl, "state"))["state"]["monitors"][0]["workarea"]
-        assert (area["x"], area["y"], area["w"], area["h"]) == expect, f"{tag}: work area {area} vs strut {expect}"
-        entry["strut"], entry["work_area"] = strut, list(expect)
+        if c.bar_mode:
+            c.bar_window()
+            time.sleep(3.0)
+        else:
+            c.dock_window()
+            wait(lambda: c.dump()["start"], f"{tag}: the dock painted")
+            time.sleep(1.0)
+            # the strut is the work area, and a client window lies inside it
+            strut = wait(lambda: [int(v) for v in c.run("xprop", "-id", c.dock_window(), "_NET_WM_STRUT_PARTIAL").split("=")[-1].replace(" ", "").split(",") if v.lstrip("-").isdigit()][:4], "strut")
+            side = {"left": 0, "right": 1, "top": 2, "bottom": 3}[edge]
+            reserve = strut[side]
+            assert reserve in (c.t + c.g, round((THICKNESS + GAP) * scale)), f"{tag}: strut {strut}"
+            expect = {"bottom": (0, 0, W, H - reserve), "top": (0, reserve, W, H - reserve), "left": (reserve, 0, W - reserve, H), "right": (0, 0, W - reserve, H)}[edge]
+            area = json.loads(c.run(args.rdwmctl, "state"))["state"]["monitors"][0]["workarea"]
+            assert (area["x"], area["y"], area["w"], area["h"]) == expect, f"{tag}: work area {area} vs strut {expect}"
+            entry["strut"], entry["work_area"] = strut, list(expect)
         for name in cases:
             try:
                 fn = CASES[name]
-                fn(c, controls.get((package, mode, edge, scale))) if name == "glyph" else fn(c)
+                fn(c, controls.get((package, mode, edge, scale))) if name in ("glyph", "bar") else fn(c)
                 entry["cases"][name] = "ok"
             except AssertionError as e:
                 entry["cases"][name] = f"FAIL: {e}"
@@ -521,7 +675,11 @@ def capture_controls(args, package, edge, scale, mode, report):
         try:
             c.start()
             c.apply()
-            wait(lambda: c.dump()["start"], "control dock painted")
+            if c.bar_mode:
+                c.bar_window()
+                time.sleep(3.0)
+            else:
+                wait(lambda: c.dump()["start"], "control dock painted")
             c.park()
             time.sleep(1.2)
             shots[logo] = c.shot("start")
@@ -542,19 +700,20 @@ def main():
     ap.add_argument("--scales", default="1,1.25,2")
     ap.add_argument("--modes", default="dark,light")
     ap.add_argument("--require-anchor", action="store_true", help="fail when Kickoff is not anchored on the Start button")
-    ap.add_argument("--cases", default="glyph,applets,launcher,popup,keyboard")
+    ap.add_argument("--qt-fixture", default=str(Path.home() / ".cache/decebal-appmenu-target/appmenu-fixtures/qt-fixture"), help="the root's real Qt menu exporter (tests/e2e/appmenu/qt-fixture.cpp), built by tests/e2e/appmenu-real.sh")
+    ap.add_argument("--cases", default="", help="default: the package's own list")
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True)  # a fresh directory only
     args.worlds = Path(tempfile.mkdtemp(prefix="plpk-", dir="/var/tmp"))  # short, private, kept (nothing is deleted by path)
-    cases = args.cases.split(",")
     report, failures = [], 0
     for package in args.packages.split(","):
+        cases = args.cases.split(",") if args.cases else (["bar", "bar_launcher", "appmenu", "keyboard_bar"] if package == "plasma-layan" else ["glyph", "applets", "launcher", "popup", "keyboard"])
         for mode in args.modes.split(","):
             for edge in args.edges.split(","):
                 for scale in (float(v) for v in args.scales.split(",")):
                     controls = {}
-                    if "glyph" in cases:
+                    if "glyph" in cases or "bar" in cases:
                         controls[(package, mode, edge, scale)] = capture_controls(args, package, edge, scale, mode, report)
                     if not run_case(args, package, edge, scale, mode, cases, controls, report):
                         failures += 1
@@ -562,7 +721,7 @@ def main():
     manifest = {
         "source_head": subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, capture_output=True).stdout.strip(),
         "binaries": {p.name: sha(p) for p in sorted(Path(args.bin_dir).glob("dec*")) if p.is_file() and p.name in ("decdock", "decbar", "decthemectl", "declaunch", "decspot")},
-        "rdwm": {"path": str(args.rdwm), "sha256": sha(args.rdwm)}, "rdwmctl": {"path": str(args.rdwmctl), "sha256": sha(args.rdwmctl)},
+        "rdwm": {"path": str(args.rdwm), "sha256": sha(args.rdwm)}, "rdwmctl": {"path": str(args.rdwmctl), "sha256": sha(args.rdwmctl)}, "qt_fixture": {"path": str(args.qt_fixture), "sha256": sha(args.qt_fixture)},
         "harness": {p.name: sha(p) for p in (Path(__file__), Path(private_x11.__file__))},
         "themes": {p: sha(repo / "themes" / p / "theme.toml") for p in args.packages.split(",")},
         "entries": report, "failures": failures,

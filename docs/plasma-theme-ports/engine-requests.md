@@ -169,3 +169,23 @@ pub fn pager_cells(desktops: u32, rows: u32, screen_w: f32, screen_h: f32, thick
 ```
 
 with unit tests that reproduce each source number above. **Not started: waiting for the root's agreement on the API and file ownership.**
+
+
+## Findings on root `7272017` that need a generic-renderer decision (reported, not patched)
+
+**R8. The taskbar's Start (and Search) give the launcher no panel anchor.** `dock_app/windows.rs`, `Hit::Start`, runs
+`effects.launch("launchpad")`, which starts `declaunch` with no `--edge`, `--anchor` or `--thickness` (the bar's launcher applet does pass them:
+`menubar::applets::open_launcher` with `panel::frame::LaunchAnchor`). `docs/launcher-styles.md` says an anchored style opens from the applet towards
+the screen, centred on it; without the flags it opens in its natural place. Measured under the pinned rdwm with the real `declaunch`
+(`[launcher] style = "kde"`, Kickoff): bottom edge, 100 %: the card is 1 px above the strip but centred on the screen, 915 px from the Start button;
+left edge, 100 %: the card is 598 px from the strip, nowhere near the panel (`native/727/finding-*-kickoff-*.png`). So Kickoff opens on the desktop side
+of the panel on every edge (inside the output, clear of the strip) but does not hang from its button. Proposed fix (about ten lines, not applied):
+run `declaunch toggle` with `LaunchAnchor { edge, x, y, thickness }` built from the Start cell's centre in root pixels and the strip thickness (the
+same call the bar makes). `tests/e2e/plasma-packages-native.py --require-anchor` turns the measured gap into a failure so the fix is gated.
+Search has the same shape (`search_argv()` is not given the anchor); KRunner is a centred floating box, so Search is correct as it is.
+
+**R9. `launcher` and `app_menu` together draw the logo twice in the flat bar.** The system menu keeps its glyph beside the launcher button
+(`native/727/finding-layan-launcher-plus-app-menu-two-logos.png`, top = both on, bottom = `app_menu` only). Layan upstream has one Kickoff button
+followed by the application menu, so the package keeps `app_menu` off by default (the user can turn it on, and with a real exporting window it
+shows that window's own titles, see the native run). A renderer rule (the system menu does not repeat the logo when `launcher` is shown) would let
+Layan enable `app_menu` by default.
