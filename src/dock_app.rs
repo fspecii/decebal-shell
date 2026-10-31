@@ -1402,13 +1402,10 @@ mod tests {
             self.app.tick();
         }
 
-        fn strip_y(&self) -> f32 {
-            self.app.surface.1 as f32 - self.app.win.as_ref().unwrap().m.bar_h / 2.0
-        }
-
         fn zone(&self, hit: crate::taskbar::Hit) -> (f32, f32) {
             let r = self.app.win_layout().unwrap().rect_of(hit).unwrap_or_else(|| panic!("no zone {hit:?}"));
-            (r.cx(), self.strip_y())
+            let (x, y, w, h) = self.app.win_to_surface(r);
+            (x + w / 2.0, y + h / 2.0)
         }
 
         fn task_of(&self, app: &str) -> usize {
@@ -1509,6 +1506,37 @@ mod tests {
 
     fn overlaps(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> bool {
         a.0 + 0.5 < b.0 + b.2 && b.0 + 0.5 < a.0 + a.2 && a.1 + 0.5 < b.1 + b.3 && b.1 + 0.5 < a.1 + a.3
+    }
+
+    #[test]
+    fn taskbar_start_passes_its_actual_global_anchor_at_every_edge_and_scale() {
+        use crate::panel::{frame::LaunchAnchor, AppletSet, Edge};
+        use crate::taskbar::Hit;
+        for edge in Edge::ALL {
+            for scale in [1.0, 1.25, 2.0] {
+                let mut r = edge_rig(&format!("start-anchor-{}-{scale}", edge.as_str()), edge, Some(AppletSet::all()));
+                r.app.scale = Some(scale);
+                r.app.win_apply_settings();
+                // Floating strips and surfaces enlarged for a popup must still report the
+                // Start cell's physical position, including a monitor left of the primary.
+                r.app.win.as_mut().unwrap().m.float_gap = 8.0 * scale;
+                let across = (r.app.win.as_ref().unwrap().m.bar_h + 8.0 * scale + 180.0).ceil() as u32;
+                r.app.surface = if edge.is_vertical() { (across, 1100) } else { (1800, across) };
+                r.app.surface_origin(-1900, 137);
+                let (x, y) = r.zone(Hit::Start);
+                let height = r.app.win.as_ref().unwrap().m.bar_h;
+                r.wclick(Hit::Start, Button::Left);
+                let calls = r.fx.borrow();
+                assert!(calls.launched.is_empty(), "Start must use the positioned launcher command");
+                let argv = calls.argv.last().expect("Start command");
+                assert!(argv[0].ends_with("declaunch") && argv[1] == "toggle");
+                let at = LaunchAnchor::parse(argv).expect("all anchor flags");
+                assert_eq!(at.edge, edge);
+                assert!((at.x - (x - 1900.0)).abs() <= 0.51, "{edge:?} {scale}: x {at:?}, click {x},{y}");
+                assert!((at.y - (y + 137.0)).abs() <= 0.51, "{edge:?} {scale}: y {at:?}, click {x},{y}");
+                assert!((at.thickness - height).abs() <= 0.51, "strip thickness is scaled exactly once");
+            }
+        }
     }
 
     #[test]
@@ -1646,7 +1674,11 @@ mod tests {
             signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
             r.app.tick();
             assert!(r.app.nav_key(NavKey::Enter));
-            assert_eq!(r.fx.borrow().launched.last().map(String::as_str), Some("launchpad"));
+            let spawned = r.fx.borrow();
+            let argv = spawned.argv.last().expect("Start spawns the launcher");
+            assert!(argv[0].ends_with("declaunch") && argv[1] == "toggle");
+            assert_eq!(crate::panel::frame::LaunchAnchor::parse(argv).unwrap().edge, edge);
+            drop(spawned);
             assert!(!r.app.wants_keyboard());
             // a pointer press also ends it
             signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -1782,15 +1814,17 @@ mod tests {
         assert_eq!(&names[..2], ["foot", "beta"], "launchpad and trash are not task buttons");
         r.wclick(Hit::Start, Button::Left);
         r.wclick(Hit::Search, Button::Left);
-        assert_eq!(r.fx.borrow().launched, vec!["launchpad"]);
-        assert_eq!(r.fx.borrow().argv.len(), 1, "search starts spotlight");
+        assert!(r.fx.borrow().launched.is_empty());
+        assert_eq!(r.fx.borrow().argv.len(), 2, "Start and search use explicit commands");
+        assert!(r.fx.borrow().argv[0][0].ends_with("declaunch"));
+        assert!(crate::panel::frame::LaunchAnchor::parse(&r.fx.borrow().argv[0]).is_some());
         // the focused app's button minimises, a background app's button focuses, a closed one launches
         let foot = r.task_of("foot");
         r.wclick(Hit::Task(foot), Button::Left);
         assert_eq!(r.calls.lock().unwrap().minimized, vec![1]);
         let beta = r.task_of("beta");
         r.wclick(Hit::Task(beta), Button::Left);
-        assert_eq!(r.fx.borrow().launched, vec!["launchpad", "beta"]);
+        assert_eq!(r.fx.borrow().launched, vec!["beta"]);
         let mpv = r.task_of("mpv");
         r.wclick(Hit::Task(mpv), Button::Left);
         assert_eq!(r.calls.lock().unwrap().activated, vec![2]);

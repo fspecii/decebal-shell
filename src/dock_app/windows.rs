@@ -879,7 +879,21 @@ impl DockApp {
         }
         match hit {
             Hit::Start => {
-                if !self.effects.launch("launchpad") {
+                let mut argv = vec![crate::launch::sibling_or_path("declaunch"), "toggle".to_string()];
+                if let Some(r) = self.win_layout().and_then(|layout| layout.rect_of(Hit::Start)) {
+                    let (x, y, w, h) = self.win_to_surface(r);
+                    // The launcher contract uses global physical pixels. The strip and its
+                    // buttons are already display-scaled; neither scale nor floating gap is
+                    // applied again. Its actual centre includes that gap and popup growth.
+                    let anchor = crate::panel::frame::LaunchAnchor {
+                        edge: taskbar_edge(&self.dock.settings),
+                        x: self.surface_origin.0 as f32 + x + w / 2.0,
+                        y: self.surface_origin.1 as f32 + y + h / 2.0,
+                        thickness: self.win_bar_h(),
+                    };
+                    argv.extend(anchor.args());
+                }
+                if !self.effects.spawn(&argv) {
                     eprintln!("decdock: could not open the launcher");
                 }
             }
