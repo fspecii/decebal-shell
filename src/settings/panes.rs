@@ -578,7 +578,7 @@ impl Model {
     pub(super) fn window_style_items(&self) -> Vec<Item> {
         let mut deco = Vec::new();
         deco.extend(self.r_toggle("decoration", "enabled", "Window title bars", "Show a title bar with close, minimise and zoom buttons on every window"));
-        let designs = super::decorations::choices(&self.schema);
+        let designs = super::decorations::choices_for(&self.schema, &self.rt);
         deco.extend(self.r_popup(
             "decoration",
             "style",
@@ -625,7 +625,13 @@ impl Model {
         cols.extend(self.r_color("decoration", "focused_fg", "Focused title text", ""));
         cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused title bar", ""));
         cols.extend(self.r_color("decoration", "unfocused_fg", "Unfocused title text", ""));
-        let mut out = vec![Item::Header("Title bars".into()), Item::Card(deco)];
+        let mut out = vec![Item::Header("Title bars".into())];
+        // A fallback in use (the theme's wanted window style is newer than the running rdwm): stays visible until the wanted style applies.
+        // Read from the model's snapshot of decebal.json (reloaded with the watcher's events), never from the file while the controls are built.
+        if let Some(text) = crate::theme::engine::decoration_compat::warning(&self.shell) {
+            out.push(Item::Note { text, warn: true });
+        }
+        out.push(Item::Card(deco));
         out.extend(self.window_shadow_items(window_shadow_wayland_session()));
         out.extend([
             Item::Header("Borders".into()),

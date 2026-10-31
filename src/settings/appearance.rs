@@ -732,6 +732,22 @@ mod tests {
     }
 
     #[test]
+    fn a_window_style_fallback_warning_comes_from_the_model_snapshot_and_stays_until_cleared() {
+        let (mut m, _) = model_with("[decoration]\nenabled = true\n");
+        m.sel.tab = Tab::Customise;
+        m.sel.section = Section::WindowStyle;
+        let notes = |m: &Model| -> Vec<String> { items(m).into_iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text) } else { None }).collect() };
+        assert!(!notes(&m).iter().any(|t| t.contains("needs a newer rdwm")));
+        // the snapshot of decebal.json decides; nothing is read from disk while the controls are built
+        let _ = std::fs::remove_file(m.paths.shell_json());
+        m.shell = serde_json::json!({"decoration_compat": {"theme": "x", "mode": "dark", "desired": "lingmo-dark", "applied": "adwaita", "proof": "running",
+            "message": "Window style `lingmo-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now."}});
+        assert!(notes(&m).iter().any(|t| t.contains("needs a newer rdwm")), "{:?}", notes(&m));
+        m.shell = serde_json::json!({});
+        assert!(!notes(&m).iter().any(|t| t.contains("needs a newer rdwm")));
+    }
+
+    #[test]
     fn window_style_reset_removes_the_look_but_not_the_behaviour() {
         let (mut m, cfg) = model_with("[decoration]\nenabled = true\nheight = 40\nradius = 3\nmiddle_click_close = true\n[general]\nborder_px = 4\n");
         m.apply("ap:reset:window", CtlVal::Click);

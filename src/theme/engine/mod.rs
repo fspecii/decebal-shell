@@ -6,6 +6,7 @@
 //! * [`apply`]: apply a theme to every config file it owns, atomically, with undo and timed preview.
 //! * [`capture`]: snapshot the current look into a new package.
 //! * [`cli`]: the `decthemectl theme ...` commands.
+//! * [`decoration_compat`]: mode-specific window styles and the proof that the running window manager supports them.
 //!
 //! Themes are data. Nothing here runs a command named by a theme, opens a path outside the package, or evaluates code.
 
@@ -13,6 +14,7 @@ pub mod apply;
 pub mod archive;
 pub mod capture;
 pub mod cli;
+pub mod decoration_compat;
 #[cfg(test)]
 mod golden;
 pub mod manifest;

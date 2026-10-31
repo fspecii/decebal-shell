@@ -404,6 +404,8 @@ fn run(j: &Job) -> Result<(), String> {
             .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
             .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
             .env("DECEBAL_SCALE", "1")
+            // the preview draws the wanted window style with its own decoration helper and never talks to a window manager
+            .env(super::decoration_compat::PREVIEW_ENV, "preview")
             // Candidate previews are deterministic theme samples, not session overrides.
             .env_remove("DECEBAL_FONT_SCALE")
             .env_remove("DECEBAL_HIGH_CONTRAST")

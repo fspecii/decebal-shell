@@ -23,12 +23,31 @@ pub const DESIGNS: &[(&str, &str)] = &[
     ("Xfce Default · raised controls", "xfce-default"),
     ("Xfce Daloa · blue caption cells", "xfce-daloa"),
     ("Xfce Kokodi · rounded blue", "xfce-kokodi"),
+    ("openKylin UKUI · light", "openkylin"),
+    ("openKylin UKUI · dark", "openkylin-dark"),
+    ("Deepin Chameleon · light", "deepin"),
+    ("Deepin Chameleon · dark", "deepin-dark"),
+    ("LingmoOS · light", "lingmo"),
+    ("LingmoOS · dark", "lingmo-dark"),
 ];
 
-/// Respect an older live rdwm's actual supported set. The updated frozen schema is the offline fallback.
+/// The measured-port styles added after the 18-style set. An rdwm that is running but cannot report its styles (an older build) is never assumed to know them.
+pub const NEWER: &[&str] = &["openkylin", "openkylin-dark", "deepin", "deepin-dark", "lingmo", "lingmo-dark"];
+
+/// The designs a window manager that is NOT running would offer: the explicit target CLI's table (the bundled snapshot when none is installed).
 pub fn choices(schema: &Schema) -> Vec<(&'static str, &'static str)> {
     let supported = schema.get("decoration", "style");
     DESIGNS.iter().copied().filter(|(_, id)| supported.is_some_and(|m| m.choices.iter().any(|s| s == id))).collect()
+}
+
+/// The designs to offer now. A running rdwm decides, from its own `schema` reply; one that is running but did not list its styles is offered only
+/// the older set (never the measured ports); the offline table is used only while none runs.
+pub fn choices_for(schema: &Schema, rt: &super::io::Runtime) -> Vec<(&'static str, &'static str)> {
+    match (&rt.decoration_styles, rt.running) {
+        (Some(listed), _) => DESIGNS.iter().copied().filter(|(_, id)| listed.iter().any(|s| s == id)).collect(),
+        (None, true) => choices(schema).into_iter().filter(|(_, id)| !NEWER.contains(id)).collect(),
+        (None, false) => choices(schema),
+    }
 }
 
 /// Generated directly by the native rdwm-deco helper, not guessed generic macOS metrics.
@@ -68,7 +87,7 @@ mod tests {
     fn catalogue_matches_supported_schema_and_never_offers_no_buttons() {
         let schema = Schema::snapshot();
         let options = choices(&schema);
-        assert_eq!(options.len(), 17);
+        assert_eq!(options.len(), 23);
         for (_, id) in &options {
             assert!(default_value(id, "height").is_some());
         }
@@ -84,11 +103,41 @@ mod tests {
                 .to_vec();
         let offered = choices(&previous);
         assert_eq!(offered.len(), 14);
+        assert!(!offered.iter().any(|(_, s)| NEWER.contains(s)));
         assert!(!offered.iter().any(|(_, s)| s.starts_with("xfce-")), "unsupported IDs are never offered to an older rdwm");
         let mut older = schema;
         older.keys.iter_mut().find(|m| m.section == "decoration" && m.key == "style").unwrap().choices = vec!["macos".into(), "classic".into()];
         assert_eq!(choices(&older), vec![("macOS · traffic lights left", "macos"), ("Classic · flat strip", "classic")]);
     }
+    #[test]
+    fn the_picker_follows_the_running_wm_and_never_assumes_the_measured_ports() {
+        use crate::settings::io::Runtime;
+        let schema = Schema::snapshot();
+        fn ids(v: Vec<(&'static str, &'static str)>) -> Vec<&'static str> {
+            v.into_iter().map(|(_, id)| id).collect()
+        }
+        // a running rdwm that listed its styles decides, even when the installed CLI's table knows more
+        let running = Runtime { running: true, decoration_styles: Some(vec!["macos".into(), "lingmo".into(), "lingmo-dark".into()]), ..Runtime::default() };
+        assert_eq!(ids(choices_for(&schema, &running)), ["macos", "lingmo", "lingmo-dark"]);
+        // running but unable to list (an older rdwm): only the older set, whatever the offline table says
+        let silent = Runtime { running: true, decoration_styles: None, ..Runtime::default() };
+        let offered = ids(choices_for(&schema, &silent));
+        assert!(offered.contains(&"adwaita") && !offered.iter().any(|id| NEWER.contains(id)), "{offered:?}");
+        // no rdwm running: the offline table (the explicit target CLI, or the bundled snapshot) decides
+        let off = choices_for(&schema, &Runtime::default());
+        assert_eq!(off.len(), 23);
+        assert!(NEWER.iter().all(|id| ids(off.clone()).contains(id)));
+    }
+
+    #[test]
+    fn measured_ports_use_the_renderers_own_native_metrics() {
+        // from the running rdwm's own style records (openkylin / deepin / lingmo measured ports)
+        for (id, height, radius) in [("openkylin", 38, 12), ("openkylin-dark", 38, 12), ("deepin", 50, 8), ("deepin-dark", 50, 8), ("lingmo", 30, 11), ("lingmo-dark", 30, 11)] {
+            assert_eq!(default_value(id, "height"), Some(Val::Int(height)), "{id}");
+            assert_eq!(default_value(id, "radius"), Some(Val::Int(radius)), "{id}");
+        }
+    }
+
     #[test]
     fn xfce_designs_use_the_native_renderers_own_metrics() {
         // Values exported by the actual rdwm-deco renderer (tools/build-decoration-preview.py metadata), not guessed defaults.
