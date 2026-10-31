@@ -111,7 +111,7 @@ impl Capture {
 
 /// A private folder for one install's log, created fresh (never an existing path, never through a link), mode 0700.
 fn job_dir() -> Result<std::path::PathBuf, String> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::DirBuilderExt;
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     // SAFETY: getuid has no failure mode and touches no memory.
     let uid = unsafe { libc::getuid() };
@@ -125,11 +125,8 @@ fn job_dir() -> Result<std::path::PathBuf, String> {
         }
         let d = base.join(format!("decebal-asset-install-{uid}-{}-{id}", std::process::id()));
         // create_dir fails on anything already there, a link included: it never reuses or follows one
-        match std::fs::create_dir(&d) {
-            Ok(()) => {
-                std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
-                return Ok(d);
-            }
+        match std::fs::DirBuilder::new().mode(0o700).create(&d) {
+            Ok(()) => return Ok(d),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(format!("{}: {e}", d.display())),
         }
@@ -320,7 +317,17 @@ fn start_install(pack: &str, queue: crate::settings::io::Queue, wake: std::sync:
                     line.push_str(&format!("; log: {}", p.display()));
                     *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir2.clone());
                 }
-                Err(e) => line.push_str(&format!("; the log could not be written ({e})")),
+                Err(e) => {
+                    line.push_str(&format!("; the log could not be written ({e})"));
+                    // Remove an empty owned job folder. Preserve and track a partial log
+                    // instead of leaving an untracked directory when publication fails.
+                    if let Err(cleanup) = std::fs::remove_dir(&dir2) {
+                        if cleanup.kind() != std::io::ErrorKind::NotFound {
+                            *KEPT_LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir2.clone());
+                            line.push_str(&format!("; diagnostic folder: {}", dir2.display()));
+                        }
+                    }
+                }
             }
         }
         finish.outcome = Some((ok, line));
