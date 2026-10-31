@@ -43,8 +43,7 @@ THICKNESS, GAP = 44, 8  # the declared [taskbar] numbers of plasma-breeze, px at
 REGISTRY = ["launcher", "app_menu", "workspaces", "window_title", "tasks", "layout", "media", "clock", "weather", "tray", "clipboard", "cpu", "memory",
             "notifications", "stay_awake", "agents", "lock_keys", "volume", "network", "bluetooth", "battery", "brightness", "search", "dashboard",
             "control_center", "power", "show_desktop"]
-# applets whose zone the dock reports by name in DECDOCK_DEBUG_LAYOUT, and the line that shows it
-ZONES = {"launcher": "start", "tasks": "task", "clock": "clock", "show_desktop": "desktop", "workspaces": "pagercell"}
+ALONE = ("launcher", "tasks", "clock", "show_desktop", "workspaces")  # the applets whose drawing this machine can supply in a private world
 
 
 def sha(path):
@@ -292,40 +291,86 @@ def effective(c):
     return found
 
 
+def ink_groups(c, shot):
+    """Runs of content along the strip: the strip's interior (rounded ends and edge line excluded) is reduced to the pixels that differ from its own
+    dominant colour, projected on the strip's axis, and runs separated by less than a few pixels are one group. The dump lists every zone even when
+    its applet is off, and zones collapse into each other's place when a neighbour is off, so what is drawn is counted, not where zones are reported."""
+    sx0, sy0, sx1, sy1 = c.strip_box()
+    crop = shot.crop((sx0 + 6, sy0 + 6, sx1 - 6, sy1 - 6))
+    colours = crop.getcolors(maxcolors=1 << 22) or []
+    base = max(colours)[1]
+    mask = Image.new("L", crop.size, 0)
+    mask.putdata([255 if max(abs(px[i] - base[i]) for i in range(3)) > 40 else 0 for px in crop.get_flattened_data()])
+    along = mask.resize((crop.width, 1), Image.BOX) if c.horizontal else mask.resize((1, crop.height), Image.BOX)
+    on = [v > 0 for v in along.get_flattened_data()]
+    runs, start, last = [], None, None
+    join = max(5, round(6 * c.scale))
+    for i, v in enumerate(on):
+        if v:
+            if start is None:
+                start = i
+            elif i - last > join:
+                runs.append((start, last))
+                start = i
+            last = i
+    if start is not None:
+        runs.append((start, last))
+    return runs
+
+
+def drawn(c, label):
+    c.park()
+    time.sleep(1.0)
+    shot = c.shot(label)
+    return len(ink_groups(c, shot))
+
+
 def case_applets(c):
-    """Every registry applet alone, all on, all off: through the user's own switch, read back from the CLI and from the dock's zones."""
+    """Every registry applet alone, all on, all off: through the user's own switch (`decthemectl panel applet`), read back from the CLI and from what
+    the dock draws along the strip."""
     results = {}
     baseline = effective(c)
-    assert set(REGISTRY) <= set(baseline) | {"app_menu"}, f"{c.tag}: the panel listing lacks applets {sorted(set(REGISTRY) - set(baseline))}"
+    missing = sorted(set(REGISTRY) - set(baseline))
+    assert not missing, f"{c.tag}: the panel listing lacks applets {missing}"
+    ctl = c.bin("decthemectl")
     for key in REGISTRY:
-        c.run(c.bin("decthemectl"), "panel", "applet", key, "off")
+        c.run(ctl, "panel", "applet", key, "off")
     wait(lambda: not any(effective(c).values()), f"{c.tag}: all applets off")
-    time.sleep(0.8)
-    off = c.dump()
-    for key, line in ZONES.items():
-        assert line not in off or key not in ("tasks", "workspaces"), f"{c.tag}: {key} still draws with everything off"
-    c.shot("all-off")
-    results["all_off"] = sorted(off)
-    for key in ("launcher", "tasks", "clock", "show_desktop", "workspaces", "search"):
-        c.run(c.bin("decthemectl"), "panel", "applet", key, "on")
+    n = drawn(c, "all-off")
+    assert n == 0, f"{c.tag}: with every applet off the dock still draws {n} groups"
+    results["all_off_groups"] = n
+    # groups each applet draws alone: the glyph, the pinned task buttons (one group each, 4+ px apart), the clock, the show-desktop icon, the pager cells
+    for key in ALONE:
+        c.run(ctl, "panel", "applet", key, "on")
         wait(lambda: effective(c).get(key) and sum(effective(c).values()) == 1, f"{c.tag}: {key} alone")
-        time.sleep(0.8)
-        rows = c.dump()
-        shown = [z for z, line in ZONES.items() if line in rows]
-        results[key + "_alone"] = shown
-        if key in ZONES:
-            assert ZONES[key] in rows, f"{c.tag}: {key} on but its zone {ZONES[key]} is not drawn: {sorted(rows)}"
-            assert [z for z in ZONES if z != key and ZONES[z] in rows and ZONES[z] != ZONES[key]] == [], f"{c.tag}: {key} alone also draws {shown}"
-        c.run(c.bin("decthemectl"), "panel", "applet", key, "off")
+        n = drawn(c, f"alone-{key}")
+        results[key + "_alone_groups"] = n
+        assert n >= 1, f"{c.tag}: {key} is on but draws nothing"
+        # a side strip stacks the clock as two rows (time over date, upright), so its clock is two groups along the strip
+        if key == "clock" and not c.horizontal:
+            assert n == 2, f"{c.tag}: the stacked clock draws {n} groups"
+        elif key != "tasks":
+            assert n == 1, f"{c.tag}: {key} alone draws {n} separate groups"
+        c.run(ctl, "panel", "applet", key, "off")
         wait(lambda: not any(effective(c).values()), f"{c.tag}: {key} off again")
+    # the applets that need data this private world cannot supply (network, volume, battery, ...) and the rest of the registry: on and off through the
+    # same switch, read back from the CLI
     for key in REGISTRY:
-        c.run(c.bin("decthemectl"), "panel", "applet", key, "on")
-    wait(lambda: all(effective(c).get(k, True) for k in REGISTRY), f"{c.tag}: all on")
-    time.sleep(0.8)
-    results["all_on"] = sorted(c.dump())
-    c.shot("all-on")
-    c.run(c.bin("decthemectl"), "panel", "applet", "launcher", "theme")
-    c.run(c.bin("decthemectl"), "panel", "reset")
+        if key in ALONE:
+            continue
+        c.run(ctl, "panel", "applet", key, "on")
+        wait(lambda: effective(c).get(key) is True, f"{c.tag}: {key} on")
+        c.run(ctl, "panel", "applet", key, "off")
+        wait(lambda: effective(c).get(key) is False, f"{c.tag}: {key} off")
+    results["registry_roundtrip"] = len(REGISTRY)
+    for key in REGISTRY:
+        c.run(ctl, "panel", "applet", key, "on")
+    wait(lambda: all(effective(c).values()), f"{c.tag}: all on")
+    n_on = drawn(c, "all-on")
+    assert n_on >= 5, f"{c.tag}: with everything on only {n_on} groups are drawn"
+    results["all_on_groups"] = n_on
+    c.run(ctl, "panel", "reset")
+    wait(lambda: effective(c) == baseline, f"{c.tag}: `panel reset` returns the package's own set")
     c.step("applets", **results)
 
 
