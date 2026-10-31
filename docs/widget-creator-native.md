@@ -40,6 +40,22 @@ Shutdown goes through pidfds: Settings, then every token process (the host is id
 
 * One X11 session at 1280x800, scale 1, no compositor, no window manager. Focus relies on `xdotool windowfocus` and pointer position. If Settings does not map without a window manager that is a result to report; the gate does not add one.
 * The failure is a permission failure on the private config directory, not a disk-full or crash fault; it needs uid ≠ 0. It exercises the production rollback path (`create_transaction`), not a race.
-* The preview check compares pixels in a fixed area, so it proves the preview reacts to the form, not that the rendering is correct. Host readiness is `decwidgets status --json`, not a pixel check of the card on the desktop.
+* The preview check compares overlapping pixels in a band derived from the enabled toggle and Type control at the pinned 1x scale, so it proves the preview reacts to the form, not that the rendering is correct. Host readiness is `decwidgets status --json`, not a pixel check of the card on the desktop.
 * Wayland, multi-monitor placement, other templates (analog, metrics, quick note, timer) and keyboard-only operation are not covered. Source unit tests in `widgetbuilder.rs` cover the templates and the synchronous/asynchronous rollback.
 * The notice text (`Could not create widget`) and the rectangle ids (`wg:new:*`) are taken from the current source; a rename needs a matching change here.
+
+## Review correction checkpoint
+
+The source review found that the original crop covered page headings rather than
+the widget preview and that Xvfb inherited the token used by host cleanup. The
+fixture now derives a fresh preview band for every shot, compares the common
+height when the template changes, excludes the owned server from host scanning,
+and continues cleanup after individual verification errors. All 16 helper tests
+pass, including different-height preview and cleanup-error regressions.
+
+The first corrected native attempt against optimized `9d663b4` was interrupted by
+the global I/O guard before widget creation. It is **not native acceptance**.
+The supervisor's group interruption left its separately grouped Xvfb alive; root
+verified its exact start time, executable and private configuration environment
+and stopped that owned orphan using a pidfd. Native fixture completion and its
+preview band still need validation during a quiet test window.

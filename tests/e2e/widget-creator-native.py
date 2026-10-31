@@ -283,8 +283,11 @@ def initial_config():
 
 
 def changed_area(a, b):
-    """Pixels in the bounding box of the difference between two same-sized images (0 when identical)."""
+    """Changed bounding-box area in the common prefix, allowing preview heights to change."""
     from PIL import ImageChops
+    w, h = min(a.width, b.width), min(a.height, b.height)
+    assert w > 0 and h > 0, "empty preview comparison"
+    a, b = a.crop((0, 0, w, h)), b.crop((0, 0, w, h))
     box = ImageChops.difference(a, b).convert("L").point(lambda v: 255 if v > 3 else 0).getbbox()
     return 0 if box is None else (box[2] - box[0]) * (box[3] - box[1])
 
@@ -434,6 +437,21 @@ class Gate:
         self.x("import", "-window", self.wid, str(path))
         return path
 
+    def preview_shot(self, name):
+        # At the pinned 1x UI scale, the enabled toggle is followed by the rest
+        # of its row, the card gap and the 28px Create header. The Type row is
+        # below the preview and its caption. Recompute after every template
+        # change: clocks and notes have different preview heights.
+        layout = self.layout()
+        sidebar_right = max(p["rect"][0] + p["rect"][2] for p in layout["panes"])
+        _, enabled_y, _, enabled_h = self.ctl("wg:enabled")["rect"]
+        template_y = self.ctl("wg:new:template")["rect"][1]
+        box = (int(sidebar_right) + 8, int(enabled_y + enabled_h + 52),
+               self.window_width() - 8, int(template_y - 40))
+        assert box[3] - box[1] >= 40, f"preview band is too short: {box}"
+        assert 0 <= box[1] < box[3] <= self.window_height(), f"preview is clipped: {box}"
+        return Image.open(self.shot(name)).convert("RGB").crop(box)
+
     # -- cleanup
     def stop_popen(self, name, proc, grace=6):
         if proc is None or proc.poll() is not None:
@@ -451,21 +469,32 @@ class Gate:
 
     def close(self):
         """One cleanup path: Settings, then every other token process (the desktop host it started), then Xvfb, then proof nothing is left."""
-        self.stop_popen("decsettings", self.settings)
-        for pid in self.host_pids():
-            exe = exe_of(pid)
-            expected = exe is not None and Path(exe) == self.private / "bin" / "decwidgets"
-            if exe is None:
-                continue                  # exited on its own between the scan and now
-            if not expected:
-                self.ledger.unexpected.append(f"{pid}:{exe}")
-            ours = lambda p: self.token_matches(p)
-            self.ledger.events.append(f"stopped {'host' if expected else 'stray'} {pid} exe={exe}")
-            if stop_pid(pid, verify=ours) == "forced":
-                self.ledger.forced.append(f"pid {pid}")
-        if self.server is not None:
-            self.stop_popen("Xvfb", self.server)
-            self.x11.close(self.server)
+        try:
+            try:
+                self.stop_popen("decsettings", self.settings)
+            except Exception as error:
+                self.ledger.unexpected.append(f"Settings cleanup: {error}")
+            for pid in self.host_pids():
+                if self.server is not None and pid == self.server.pid:
+                    continue  # Xvfb inherits the token; its owned handle is stopped below.
+                try:
+                    exe = exe_of(pid)
+                    expected = exe is not None and Path(exe) == self.private / "bin" / "decwidgets"
+                    if exe is None:
+                        continue
+                    if not expected:
+                        self.ledger.unexpected.append(f"{pid}:{exe}")
+                    self.ledger.events.append(f"stopped {'host' if expected else 'stray'} {pid} exe={exe}")
+                    if stop_pid(pid, verify=self.token_matches) == "forced":
+                        self.ledger.forced.append(f"pid {pid}")
+                except Exception as error:
+                    self.ledger.unexpected.append(f"pid {pid} cleanup: {error}")
+        finally:
+            if self.server is not None:
+                try:
+                    self.stop_popen("Xvfb", self.server)
+                finally:
+                    self.x11.close(self.server)
         deadline = time.monotonic() + 3
         while scan_token(self.token, exclude=(os.getpid(),)) and time.monotonic() < deadline:
             time.sleep(0.05)
@@ -602,11 +631,7 @@ def run_flow(gate, hashes):
     assert gate.ctl("wg:new:template")["value"] == "clock" and gate.ctl("wg:new:name")["value"] == "My clock" and gate.ctl("wg:new:create")["enabled"], "unexpected default draft"
     assert state["warnings"] == [], state["warnings"]
     gate.scroll_top()
-    sidebar_right = max(p["rect"][0] + p["rect"][2] for p in gate.layout()["panes"])
-    template_y = gate.ctl("wg:new:template")["rect"][1]
-    box = (int(sidebar_right) + 8, 60, gate.window_width() - 8, int(min(template_y - 4, 60 + 110)))
-    assert box[3] - box[1] >= 40, f"the preview area above the form is only {box[3] - box[1]}px tall"
-    preview_default = Image.open(gate.shot("form-clock-default")).convert("RGB").crop(box)
+    preview_default = gate.preview_shot("form-clock-default")
     assert region_has_content(preview_default), "the preview area holds no painted content"
 
     # ---- case 1: a 12-hour clock without the date
@@ -618,7 +643,7 @@ def run_flow(gate, hashes):
     gate.wait(lambda: gate.ctl("wg:new:date")["value"] is False, "date toggle did not turn off")
     gate.scroll_top()
     time.sleep(0.4)
-    preview_toggled = Image.open(gate.shot("form-clock-12h")).convert("RGB").crop(box)
+    preview_toggled = gate.preview_shot("form-clock-12h")
     assert changed_area(preview_default, preview_toggled) >= 200, "the preview did not visibly change when the clock options changed"
     clock = {k: gate.ctl(f"wg:new:{k}")["value"] for k in ("anchor", "x", "y")}
     clock_before = json.loads(config_path.read_text())
@@ -656,7 +681,7 @@ def run_flow(gate, hashes):
     gate.wait(lambda: gate.ctl("wg:new:create")["enabled"] and gate.layout()["warnings"] == [], "Create did not become available")
     gate.scroll_top()
     time.sleep(0.4)
-    preview_note = Image.open(gate.shot("form-note")).convert("RGB").crop(box)
+    preview_note = gate.preview_shot("form-note")
     assert region_has_content(preview_note) and changed_area(preview_toggled, preview_note) >= 200, "the note preview is empty or equals the clock preview"
     note = {k: gate.ctl(f"wg:new:{k}")["value"] for k in ("anchor", "x", "y")}
     draft = {k: gate.ctl(f"wg:new:{k}")["value"] for k in ("template", "name", "text", "size")}

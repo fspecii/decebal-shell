@@ -257,6 +257,34 @@ class Isolation(unittest.TestCase):
                 self.assertIn(str(private), value, key)
 
 
+class ReviewedRegressions(unittest.TestCase):
+    def test_preview_comparison_handles_different_template_heights(self):
+        from PIL import Image
+        a = Image.new("RGB", (100, 120), "black")
+        b = Image.new("RGB", (100, 60), "black")
+        self.assertEqual(gate.changed_area(a, b), 0)
+        b.paste("white", (10, 10, 30, 30))
+        self.assertEqual(gate.changed_area(a, b), 400)
+
+    def test_cleanup_skips_server_and_continues_after_host_verification_error(self):
+        from unittest.mock import Mock, patch
+        g = object.__new__(gate.Gate)
+        g.settings, g.server = Mock(pid=10), Mock(pid=20)
+        g.private, g.token = Path("/private"), "private-token"
+        g.x11, g.logs, g.ledger = Mock(), [], gate.Ledger()
+        g.stop_popen = Mock()
+        g.host_pids = Mock(return_value=[20, 30, 40])
+        with patch.object(gate, "scan_token", return_value=[]), \
+             patch.object(gate, "exe_of", return_value="/private/bin/decwidgets"), \
+             patch.object(gate, "stop_pid", side_effect=[AssertionError("identity changed"), "stopped"]) as stop:
+            g.close()
+        self.assertEqual([c.args[0] for c in stop.call_args_list], [30, 40])
+        self.assertEqual([c.args[0] for c in g.stop_popen.call_args_list], ["decsettings", "Xvfb"])
+        g.x11.close.assert_called_once_with(g.server)
+        self.assertTrue(any("identity changed" in e for e in g.ledger.unexpected))
+        self.assertEqual(g.ledger.leftovers, [])
+
+
 TOKEN = gate.TOKEN_VAR
 
 if __name__ == "__main__":
