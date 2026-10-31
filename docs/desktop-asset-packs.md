@@ -125,7 +125,7 @@ What did not fit the format, found while pinning them (the port owners decide):
 
 | command | does |
 |---|---|
-| `list` | every catalogue pack (installed / not installed / modified / name taken by a foreign theme) and every installed decebal pack |
+| `list` | every catalogue pack (installed / not installed / the catalogue pins a newer revision / name taken by a foreign theme) and every installed decebal pack |
 | `info ID\|NAME` | metadata, pins, licence, installed state and recommendations of one pack |
 | `install ID [--archive FILE [--strip N] \| --source-dir DIR] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https), or use a downloaded archive, or a local clone of the source; the `tree` id (and `archive_sha256`, the archive's commit, `index_oids`) are checked |
 | `import PATH --provides icons,cursors --license SPDX --license-file REL... [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]` | install an archive or folder that is not in a catalogue (recorded as `local`; a licence file is still required). `REL` paths are relative to the source root |
@@ -208,6 +208,12 @@ What did not fit the format, found while pinning them (the port owners decide):
   `[icons] theme` (icons only; existing behaviour). The other `[icons]` keys (scale, tint, fallback) merge as before.
 * Wallpaper and widget policies are not touched.
 
+**Icons pane** (System Settings -> Icons): besides the icon themes, a *Cursor theme* menu (installed cursor themes,
+independent of the icon theme; choosing one is explicit), the current theme's suggestion with *Use the theme's
+suggestion*, an *Install* button for each suggested pack that is missing and has a download (it runs
+`decthemectl assets install ID` in the background, never through a shell, and shows the outcome), and the installed
+packs with licence, source and revision.
+
 ## Installed provenance
 
 `<theme>/.decebal-asset.json` (hidden, ignored by toolkits):
@@ -228,6 +234,15 @@ What did not fit the format, found while pinning them (the port owners decide):
 
 `content_hash` is `sha256` over the sorted entries (`path NUL F NUL size NUL sha256(file) LF` for files,
 `path NUL L NUL target LF` for links), without the provenance file itself; `verify` recomputes it.
+
+## Tests
+
+* `cargo test --lib desktop_assets`: tar reader (pax / GNU names, checksums, caps, hostile headers), SHA-1 and git tree
+  ids against `git write-tree`, staging (traversal, links, write-through-link, duplicates, hard links, folder sources
+  with the same tree id as their archive), assembly (allowlist, links, licences, index files, cursor-only packs),
+  Xcursor parsing / building, install (pins, foreign / conflicting folders, tamper and `--force`, rollback without
+  `renameat2`, the lock), the policy, the CLI, the pane rows, and the example catalogues.
+* `cargo test --test desktop_assets`: the real `decthemectl` in a cleared environment on folder sources.
 
 ## Evidence (2026-10-31)
 
