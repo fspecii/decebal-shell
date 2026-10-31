@@ -29,15 +29,27 @@ pub struct SourceRecord {
     pub tree: Option<String>,
     /// SHA-256 of the archive file (not for folders).
     pub archive_sha256: Option<String>,
-    /// `download`, `archive` or `directory`.
+    /// `download`, `archive`, `directory` or `git`.
     pub fetched_from: String,
     pub url: Option<String>,
+    /// A git fetch (`gitpack`): its requests, and whether every pin was found below the pinned commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git: Option<GitRecord>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitRecord {
+    /// Every pinned tree and blob was found at its path below the pinned commit's tree.
+    pub commit_chain: bool,
+    /// Objects in the content pack.
+    pub objects: usize,
+    pub requests: Vec<super::gitpack::Exchange>,
 }
 
 /// What was checked. `tree` covers only the pack's own folder; everything the pack took from outside it (files and
 /// folders of `link_sources`, `index` files, licence texts) is listed in `outside`, and `complete` is true only when
-/// every installed byte came from verified input. `commit` compares a git archive's pax comment with the pin: a
-/// consistency check, not authentication.
+/// every installed byte came from verified input. `commit` compares a git archive's pax comment with the pin (a
+/// consistency check, not authentication); for a git fetch it means every pin was found below the pinned commit.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Verified {
     pub tree: bool,
@@ -117,6 +129,8 @@ impl Provenance {
 pub enum Input {
     /// Fetch the catalogue's `archive_url`.
     Download(String),
+    /// Fetch the pinned objects from the source's `git_url` (`gitpack`).
+    Git(String),
     Archive(PathBuf),
     Dir(PathBuf),
 }
@@ -156,12 +170,13 @@ impl Request {
     pub fn from_catalog(e: catalog::Entry, input: Option<Input>, root: PathBuf) -> Result<Request, String> {
         let input = match input {
             Some(i) => i,
-            None => Input::Download(
-                e.source
-                    .archive_url
-                    .clone()
-                    .ok_or_else(|| format!("`{}` has no archive_url: pass --archive FILE (a download of {} at {}) or --source-dir DIR (a clone)", e.pack.id, e.source.repo, e.source.commit))?,
-            ),
+            None => match (&e.source.archive_url, &e.source.git_url) {
+                (Some(u), _) => Input::Download(u.clone()),
+                (None, Some(g)) => Input::Git(g.clone()),
+                (None, None) => {
+                    return Err(format!("`{}` has no archive_url or git_url: pass --archive FILE (a download of {} at {}) or --source-dir DIR (a clone)", e.pack.id, e.source.repo, e.source.commit))
+                }
+            },
         };
         let archive = matches!(input, Input::Download(_) | Input::Archive(_));
         Ok(Request {
@@ -453,6 +468,42 @@ fn keep_previous(job: &mut Job, root: &Path, target: &Path, old: &Path, why: &st
     }
 }
 
+/// The objects a git fetch requests: every one pinned by id (a fetch has no other way to know them).
+fn git_plan(req: &Request) -> Result<super::gitpack::Plan, String> {
+    let commit = req.pins.commit.clone().ok_or("a git fetch needs the pinned commit")?;
+    let tree = req.pins.tree.clone().ok_or("a git fetch needs the pack's tree pin")?;
+    let mut trees = vec![(req.spec.path.clone(), tree)];
+    for d in &req.link_sources {
+        let (_, o) = req.pins.link_trees.iter().find(|(p, _)| p == d).ok_or_else(|| format!("link source `{d}` has no link_source_trees pin: a git fetch requests objects by id"))?;
+        trees.push((d.clone(), o.clone()));
+    }
+    for (d, o) in &req.pins.link_trees {
+        if !trees.iter().any(|(p, _)| p == d) {
+            trees.push((d.clone(), o.clone()));
+        }
+    }
+    let mut blobs = Vec::new();
+    for f in &req.spec.license_files {
+        let o = req.spec.license_oids.get(f).ok_or_else(|| format!("licence file `{f}` has no license_oids pin: a git fetch requests objects by id"))?;
+        blobs.push((f.clone(), o.clone()));
+    }
+    for (f, o) in &req.spec.index_files {
+        let o = o.clone().ok_or_else(|| format!("index file `{f}` has no index_oids pin"))?;
+        if !blobs.iter().any(|(p, _)| p == f) {
+            blobs.push((f.clone(), o));
+        }
+    }
+    Ok(super::gitpack::Plan { commit, trees, blobs })
+}
+
+fn git_transport() -> Box<dyn super::gitpack::Transport> {
+    #[cfg(test)]
+    if let Some(t) = tests::GIT.with(|g| g.borrow_mut().take()) {
+        return t;
+    }
+    Box::new(fetch::GitHttps)
+}
+
 fn verify_pins(req: &Request, st: &Staged, archive_sha: Option<&str>) -> Result<Verified, String> {
     let mut v = Verified { tree: false, archive_sha256: false, commit: false, outside: Vec::new(), complete: false };
     let tree = st.tree.as_deref().ok_or_else(|| format!("`{}` holds no files in the source (wrong path or strip_components?)", req.spec.path))?;
@@ -531,6 +582,21 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
             rec.fetched_from = "directory".into();
             (source::from_dir(d, src_dir, filter, lim, &keep)?, None)
         }
+        Input::Git(url) => {
+            rec.fetched_from = "git".into();
+            rec.url = Some(url.clone());
+            let plan = git_plan(req)?;
+            let t: Box<dyn super::gitpack::Transport> = git_transport();
+            let got = super::gitpack::fetch(&*t, url, &plan, &job.dir, lim)
+                .map_err(|e| format!("git fetch from {url}: {e} (nothing was installed; --source-dir DIR with a clone at {} or --archive FILE still work)", plan.commit))?;
+            let mut st = source::from_git(&got.pack, &plan.trees, &plan.blobs, src_dir, filter, lim, &keep)?;
+            // the pins were found below the pinned commit itself: that is the commit the content belongs to
+            if got.chain {
+                st.commit = Some(plan.commit.clone());
+            }
+            rec.git = Some(GitRecord { commit_chain: got.chain, objects: got.pack.len(), requests: got.exchanges });
+            (st, None)
+        }
         Input::Archive(_) | Input::Download(_) => {
             // the archive that is hashed is the archive that is read: an external file is copied into this private job
             // while it is hashed (bytes capped as they stream), and only that owned snapshot is sniffed and staged
@@ -559,7 +625,7 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
                     let (sha, _) = fetch::download(url, &f, lim.max_archive)?;
                     (f, sha)
                 }
-                Input::Dir(_) => unreachable!(),
+                Input::Dir(_) | Input::Git(_) => unreachable!(),
             };
             if let Some(want) = &req.pins.archive_sha256 {
                 if *want != sha {
@@ -846,6 +912,7 @@ pub(crate) mod tests {
         pub static FAIL: std::cell::RefCell<Vec<Step>> = const { std::cell::RefCell::new(Vec::new()) };
         /// Runs right after an external archive was copied and hashed (to mutate the original in tests).
         pub static AFTER_SNAPSHOT: std::cell::RefCell<PathHook> = const { std::cell::RefCell::new(None) };
+        pub static GIT: std::cell::RefCell<Option<Box<dyn crate::desktop_assets::gitpack::Transport>>> = const { std::cell::RefCell::new(None) };
     }
 
     pub const COMMIT: &str = "5d11ba4e4013a4d1e1c601265d55c66b95184922";
@@ -1548,6 +1615,69 @@ pub(crate) mod tests {
         assert!(install(&r3, &Limits::default()).unwrap_err().contains("licence file `LICENSES/CC-BY-4.0.txt`: pinned blob"));
         assert!(!s.path().join("i2/conv").exists() && !s.path().join("i3/conv").exists());
         assert!(staging_is_clean(&s.path().join("i3")));
+    }
+
+    #[test]
+    fn a_git_fetch_installs_only_the_pinned_objects_bound_to_the_commit() {
+        use crate::desktop_assets::gitoid::{blob_oid, hex};
+        use crate::desktop_assets::gitpack::tests::{pack, response, Fake, Raw, Repo};
+        let s = Scratch::new("git-install");
+        let v = icon_source("bloom", vec![E::file("top/other/huge.bin", &[7u8; 8192])]);
+        let repo = Repo::from_entries(&v);
+        let git = |r: &Request, t: Fake| {
+            GIT.with(|g| *g.borrow_mut() = Some(Box::new(t)));
+            install(r, &Limits::default())
+        };
+        let mut r = request(&s.path().join("g1"), &s.write("unused", b"not read"), &v);
+        r.input = Input::Git("https://example.org/fixture.git".into());
+        r.strip = 0;
+        r.pins.archive_sha256 = None;
+        r.pins.commit = Some(repo.commit.clone());
+        r.spec.license_oids = [("COPYING".to_string(), hex(&blob_oid(b"GNU GENERAL PUBLIC LICENSE\nVersion 3\n")))].into();
+        let rep = git(&r, Fake::new(repo.clone())).unwrap();
+        let p = &rep.provenance;
+        assert_eq!((p.verified.tree, p.verified.commit, p.verified.complete), (true, true, true));
+        assert_eq!((p.source.fetched_from.as_str(), p.source.commit.as_deref()), ("git", Some(repo.commit.as_str())));
+        let g = p.source.git.as_ref().unwrap();
+        assert_eq!((g.requests.len(), g.commit_chain), (3, true));
+        let t = s.path().join("g1/bloom");
+        assert!(t.join("index.theme").is_file() && t.join("LICENSES/COPYING").is_file() && t.join("cursors/left_ptr").is_file());
+        assert_eq!(verify(&t).unwrap().1, Integrity::Ok);
+        assert!(staging_is_clean(&s.path().join("g1")));
+        // a pin the commit does not have: refused before any content is fetched; nothing published
+        let mut r2 = r.clone();
+        r2.root = s.path().join("g2");
+        r2.pins.tree = Some("1".repeat(40));
+        let e = git(&r2, Fake::new(repo.clone())).unwrap_err();
+        assert!(e.contains("the pin is tree 1111") && e.contains("nothing was installed") && e.contains("--source-dir"), "{e}");
+        // every licence is pinned by id, or the fetch is not attempted
+        let mut r3 = r.clone();
+        r3.root = s.path().join("g3");
+        r3.spec.license_oids.clear();
+        assert!(git(&r3, Fake::new(repo.clone())).unwrap_err().contains("has no license_oids pin"));
+        // a server that leaves out an object below the pinned tree
+        let tree = crate::desktop_assets::gitpack::parse_oid(&tree_of(&v, "top/bloom")).unwrap();
+        let mut objs = Vec::new();
+        repo.closure(tree, true, &mut objs);
+        objs.push(blob_oid(b"GNU GENERAL PUBLIC LICENSE\nVersion 3\n"));
+        let raws: Vec<Raw> = objs.iter().filter(|o| **o != blob_oid(&xcursor(24))).map(|o| Raw::Whole(repo.objects[o].0, repo.objects[o].1.clone())).collect();
+        let mut f = Fake::new(repo.clone());
+        f.tamper = Some((1, response(&pack(&raws), None)));
+        let mut r4 = r.clone();
+        r4.root = s.path().join("g4");
+        assert!(git(&r4, f).unwrap_err().contains("the server did not send `bloom/cursors/left_ptr`"));
+        // the archive rules hold for fetched trees: a link leaving the source is refused
+        let v5 = icon_source("bloom", vec![E::link("top/bloom/places/scalable/evil.svg", "../../../../etc/passwd")]);
+        let repo5 = Repo::from_entries(&v5);
+        let mut r5 = r.clone();
+        r5.root = s.path().join("g5");
+        r5.pins.tree = Some(tree_of(&v5, "top/bloom"));
+        r5.pins.commit = Some(repo5.commit.clone());
+        assert!(git(&r5, Fake::new(repo5)).unwrap_err().contains("points outside the source"));
+        for d in ["g2", "g3", "g4", "g5"] {
+            assert!(!s.path().join(d).join("bloom").exists(), "{d}: nothing published");
+            assert!(staging_is_clean(&s.path().join(d)), "{d}");
+        }
     }
 
     #[test]

@@ -77,6 +77,68 @@ pub fn download(url: &str, out: &Path, cap: u64) -> Result<(String, u64), String
     copy_hashed(resp.into_reader(), out, cap)
 }
 
+/// git's smart HTTP over the built-in client (`gitpack::Transport`): https only, **no redirects** (a moved repository
+/// is reported with where it went, never followed), no credentials, a deadline for each whole request.
+pub struct GitHttps;
+
+impl GitHttps {
+    fn agent(deadline: Duration) -> ureq::Agent {
+        ureq::AgentBuilder::new()
+            .https_only(true)
+            .redirects(0)
+            .timeout_connect(Duration::from_secs(15))
+            .timeout_read(Duration::from_secs(60))
+            .timeout(deadline)
+            .user_agent(concat!("git/2.0 (decebal/", env!("CARGO_PKG_VERSION"), " asset-packs)"))
+            .build()
+    }
+
+    fn check(url: &str, r: Result<ureq::Response, ureq::Error>, ctype: &str) -> Result<ureq::Response, String> {
+        let resp = match r {
+            Ok(r) => r,
+            Err(ureq::Error::Status(code, r)) => return Err(format!("{url}: HTTP {code} {}", r.status_text())),
+            Err(e) => return Err(format!("{url}: {e}")),
+        };
+        if resp.status() != 200 {
+            let to = resp.header("Location").map(|l| format!(" to {}", l.chars().take(200).collect::<String>())).unwrap_or_default();
+            return Err(format!("{url}: HTTP {} (moved{to}? git_url must name the repository itself)", resp.status()));
+        }
+        if resp.content_type() != ctype {
+            return Err(format!("{url}: the reply is `{}`, not `{ctype}` (not a smart git server)", resp.content_type()));
+        }
+        Ok(resp)
+    }
+}
+
+impl super::gitpack::Transport for GitHttps {
+    fn get(&self, url: &str, cap: u64) -> Result<Vec<u8>, String> {
+        if !url.starts_with("https://") {
+            return Err(format!("refusing `{url}`: only https:// is fetched"));
+        }
+        let r = Self::agent(Duration::from_secs(60)).get(url).set("Git-Protocol", "version=2").call();
+        let resp = Self::check(url, r, "application/x-git-upload-pack-advertisement")?;
+        let mut v = Vec::new();
+        resp.into_reader().take(cap + 1).read_to_end(&mut v).map_err(|e| format!("{url}: {e}"))?;
+        if v.len() as u64 > cap {
+            return Err(format!("{url}: the reply is larger than {} KiB", cap >> 10));
+        }
+        Ok(v)
+    }
+
+    fn post(&self, url: &str, body: &[u8]) -> Result<Box<dyn Read>, String> {
+        if !url.starts_with("https://") {
+            return Err(format!("refusing `{url}`: only https:// is fetched"));
+        }
+        let r = Self::agent(Duration::from_secs(15 * 60))
+            .post(url)
+            .set("Git-Protocol", "version=2")
+            .set("Content-Type", "application/x-git-upload-pack-request")
+            .set("Accept", "application/x-git-upload-pack-result")
+            .send_bytes(body);
+        Ok(Box::new(Self::check(url, r, "application/x-git-upload-pack-result")?.into_reader()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::testkit::Scratch;

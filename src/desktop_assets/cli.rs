@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 
 pub const HELP: &str = "decthemectl assets list [--json]                 catalogue packs and installed decebal packs
 decthemectl assets info ID|NAME [--json]         pins, licence, installed state of one pack
-decthemectl assets install ID [--archive FILE [--strip N] | --source-dir DIR] [--force] [--dry-run] [--allow-degraded]
+decthemectl assets install ID [--archive FILE [--strip N] | --source-dir DIR | --git] [--force] [--dry-run] [--allow-degraded]
                                                  install a catalogue pack: download its pinned https archive (sha256 checked),
+                                                 or fetch only its pinned git objects from git_url (ids checked against the commit),
                                                  or a downloaded archive (sha256 checked), or a local clone (git tree id checked)
 decthemectl assets import PATH --provides icons[,cursors] --license SPDX --license-file REL [--license-file REL]...
                           (REL paths are relative to the source root, after --strip)
@@ -99,16 +100,17 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
         Some("install") => {
             let id = rest.first().ok_or("install needs a pack id (decthemectl assets list)")?;
             let e = ctx.set.find(id).ok_or_else(|| format!("no catalogue pack `{id}` (decthemectl assets list)"))?;
-            let input = match (a.opt("--archive"), a.opt("--source-dir")) {
-                (Some(_), Some(_)) => return Err("--archive and --source-dir exclude each other".into()),
-                (Some(f), None) => Some(Input::Archive(f.into())),
-                (None, Some(d)) => Some(Input::Dir(d.into())),
-                (None, None) => None,
+            let input = match (a.opt("--archive"), a.opt("--source-dir"), a.flag("--git")) {
+                (Some(_), Some(_), _) | (Some(_), _, true) | (_, Some(_), true) => return Err("--archive, --source-dir and --git exclude each other".into()),
+                (Some(f), None, false) => Some(Input::Archive(f.into())),
+                (None, Some(d), false) => Some(Input::Dir(d.into())),
+                (None, None, true) => Some(Input::Git(e.source.git_url.clone().ok_or_else(|| format!("`{id}` has no git_url in its catalogue"))?)),
+                (None, None, false) => None,
             };
             let mut req = Request::from_catalog(e, input, ctx.root.clone())?;
             if let Some(s) = a.opt("--strip") {
-                if matches!(req.input, Input::Dir(_)) {
-                    return Err("--strip applies to archives, not to --source-dir".into());
+                if matches!(req.input, Input::Dir(_) | Input::Git(_)) {
+                    return Err("--strip applies to archives, not to --source-dir or --git".into());
                 }
                 req.strip = s.parse().ok().filter(|n| *n <= 4).ok_or("--strip takes 0..4")?;
             }
@@ -204,7 +206,7 @@ fn list(ctx: &Ctx, json: bool) -> String {
             .map(|e| {
                 json!({"id": e.pack.id, "name": e.pack.name, "family": e.catalog.family, "provides": e.pack.provides.iter().map(|p| p.id()).collect::<Vec<_>>(),
                        "install_name": e.pack.install_name, "license": e.license(), "commit": e.source.commit, "tree": e.pack.tree,
-                       "downloadable": e.source.archive_url.is_some(), "state": state_of(ctx, &e)})
+                       "downloadable": e.source.downloadable(), "state": state_of(ctx, &e)})
             })
             .collect();
         let inst: Vec<_> =
@@ -250,7 +252,7 @@ fn info(ctx: &Ctx, id: &str, json: bool) -> Result<String, String> {
         return Ok(serde_json::to_string_pretty(&json!({
             "catalog": e.map(|e| json!({"id": e.pack.id, "name": e.pack.name, "family": e.catalog.family, "origin": e.catalog.origin, "path": e.pack.path, "tree": e.pack.tree,
                 "install_name": e.pack.install_name, "license": e.license(), "license_files": e.license_files(), "repo": e.source.repo, "revision": e.source.revision,
-                "commit": e.source.commit, "archive_url": e.source.archive_url, "archive_sha256": e.source.archive_sha256})),
+                "commit": e.source.commit, "archive_url": e.source.archive_url, "archive_sha256": e.source.archive_sha256, "git_url": e.source.git_url})),
             "installed": prov, "recommended_by": recommended_by,
         }))
         .unwrap_or_default());
@@ -272,7 +274,12 @@ fn info(ctx: &Ctx, id: &str, json: bool) -> Result<String, String> {
             e.license_files().join(", "),
             ctx.root.join(&e.pack.install_name).display()
         ));
-        out.push_str(&format!("  download:  {}\n", e.source.archive_url.as_deref().unwrap_or("none (use --archive or --source-dir)")));
+        let download = match (&e.source.archive_url, &e.source.git_url) {
+            (Some(u), _) => u.clone(),
+            (None, Some(g)) => format!("{g} (git: only the pinned objects)"),
+            (None, None) => "none (use --archive or --source-dir)".into(),
+        };
+        out.push_str(&format!("  download:  {download}\n"));
         if !recommended_by.is_empty() {
             out.push_str(&format!("  suggested by the themes: {}\n", recommended_by.join(", ")));
         }
@@ -337,6 +344,17 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
         p.content_hash
     );
     out.push_str(&format!("\n  {}", verification_line(&p.verified)));
+    if let Some(g) = &p.source.git {
+        out.push_str(&format!(
+            "\n  git fetch: {} requests, {} bytes ({}), {} objects; every pin found below commit {}: {}",
+            g.requests.len(),
+            g.requests.iter().map(|x| x.bytes).sum::<u64>(),
+            g.requests.iter().map(|x| format!("{} {}", x.what, x.bytes)).collect::<Vec<_>>().join(", "),
+            g.objects,
+            p.source.commit.as_deref().unwrap_or("?"),
+            yes(g.commit_chain)
+        ));
+    }
     if r.built.expanded_dirs + r.built.copies > 0 {
         out.push_str(&format!(
             "\n  from link_sources: {} folders expanded, {} files ({} KiB) copied, {} links to expanded copies",

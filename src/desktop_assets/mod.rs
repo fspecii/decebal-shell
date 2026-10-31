@@ -20,6 +20,7 @@ pub mod cursor;
 pub mod dci;
 pub mod fetch;
 pub mod gitoid;
+pub mod gitpack;
 pub mod install;
 pub mod pane;
 pub mod policy;

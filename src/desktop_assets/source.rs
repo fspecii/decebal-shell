@@ -451,6 +451,81 @@ fn walk(root: &Path, rel: &str, depth: usize, b: &mut Builder) -> Result<(), Str
     Ok(())
 }
 
+/// Stages pinned git objects of a verified pack (`gitpack`): each of `roots` (source-relative path, pinned id) is a tree,
+/// expanded with everything below it, or a single blob. Roots inside an earlier tree root are covered by it. Names,
+/// links and caps go through the same checks as an archive; the tree ids are computed again from what is staged.
+pub fn from_git(pack: &super::gitpack::Pack, trees: &[(String, String)], blobs: &[(String, String)], dir: PathBuf, filter: Filter, lim: &Limits, keep: Keep) -> Result<Staged, String> {
+    use super::gitpack::{self, OBJ_BLOB};
+    let mut b = Builder::new(dir, filter, lim, keep);
+    let mut done: Vec<String> = Vec::new();
+    let covered = |p: &str, done: &[String]| done.iter().any(|d| d == "." || d == p || under(p, d).is_some());
+    for (p, oid) in trees {
+        if covered(p, &done) {
+            continue;
+        }
+        let o = gitpack::parse_oid(oid).ok_or_else(|| format!("`{p}`: the pinned tree id is not 40 hex digits"))?;
+        git_tree(pack, &o, if p == "." { "" } else { p }, 0, &mut b)?;
+        done.push(p.clone());
+    }
+    for (p, oid) in blobs {
+        if covered(p, &done) {
+            continue;
+        }
+        super::safe_rel(p)?;
+        let o = gitpack::parse_oid(oid).ok_or_else(|| format!("`{p}`: the pinned blob id is not 40 hex digits"))?;
+        let (k, data) = pack.get(&o)?.ok_or_else(|| format!("the server did not send `{p}` ({oid})"))?;
+        if k != OBJ_BLOB {
+            return Err(format!("`{p}` ({oid}) is not a blob"));
+        }
+        b.st.entries += 1;
+        b.file(p, data.len() as u64, false, &mut |sink| sink(&data))?;
+    }
+    Ok(b.done())
+}
+
+fn git_tree(pack: &super::gitpack::Pack, oid: &[u8; 20], rel: &str, depth: usize, b: &mut Builder) -> Result<(), String> {
+    use super::gitpack::{parse_tree, Mode, OBJ_BLOB, OBJ_TREE};
+    if depth > super::MAX_DEPTH {
+        return Err(format!("`{rel}` is nested deeper than {} folders", super::MAX_DEPTH));
+    }
+    let here = if rel.is_empty() { "." } else { rel };
+    let (k, data) = pack.get(oid)?.ok_or_else(|| format!("the server did not send the tree of `{here}`"))?;
+    if k != OBJ_TREE {
+        return Err(format!("`{here}` is not a tree object"));
+    }
+    let entries = parse_tree(&data)?;
+    if b.st.entries + b.pending + entries.len() > b.lim.max_entries {
+        return Err(format!("more than {} entries", b.lim.max_entries));
+    }
+    b.pending += entries.len();
+    for e in entries {
+        b.pending -= 1;
+        let p = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
+        super::safe_rel(&p)?;
+        b.st.entries += 1;
+        match e.mode {
+            Mode::Dir => {
+                b.dir(&p)?;
+                git_tree(pack, &e.oid, &p, depth + 1, b)?;
+            }
+            Mode::Gitlink => return Err(format!("`{p}` is a submodule (another repository); it cannot be fetched with this pack")),
+            Mode::File | Mode::Exec | Mode::Link => {
+                let (k, data) = pack.get(&e.oid)?.ok_or_else(|| format!("the server did not send `{p}`"))?;
+                if k != OBJ_BLOB {
+                    return Err(format!("`{p}` is not a blob"));
+                }
+                if e.mode == Mode::Link {
+                    let t = std::str::from_utf8(&data).map_err(|_| format!("symlink `{p}` has a target that is not UTF-8"))?;
+                    b.link(&p, t)?;
+                } else {
+                    b.file(&p, data.len() as u64, e.mode == Mode::Exec, &mut |sink| sink(&data))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn wanted_below(f: &Filter, dir: &str) -> bool {
     let pre = format!("{dir}/");
     let starts = |x: &str| x.starts_with(&pre);

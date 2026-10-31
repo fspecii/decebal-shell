@@ -485,7 +485,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         let set = catalogs();
         let mut install_rows = Vec::new();
         for miss in &r.missing {
-            match set.find(miss).filter(|e| e.source.archive_url.is_some()) {
+            match set.find(miss).filter(|e| e.source.downloadable()) {
                 Some(e) => {
                     let mut c = Ctl::new(format!("ic:install:{}", e.pack.id), Kind::Button { label: "Install".into(), danger: false });
                     c.enabled = !running;
@@ -575,7 +575,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
         }
         (["ic", "install", id], CtlVal::Click) => {
             let set = catalogs();
-            match set.find(id).filter(|e| e.pack.id == *id && e.source.archive_url.is_some()) {
+            match set.find(id).filter(|e| e.pack.id == *id && e.source.downloadable()) {
                 None => Err(format!("no downloadable asset pack `{id}`")),
                 Some(_) => start_install(id, m.queue.clone(), m.wake.clone()).map(|_| format!("Installing {id}")),
             }

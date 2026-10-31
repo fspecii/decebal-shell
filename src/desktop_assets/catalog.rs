@@ -20,6 +20,15 @@ pub struct Source {
     pub archive_url: Option<String>,
     pub archive_sha256: Option<String>,
     pub strip: usize,
+    /// A smart-HTTP git URL the pinned objects can be fetched from (`gitpack`), for sources without a usable archive.
+    pub git_url: Option<String>,
+}
+
+impl Source {
+    /// Can `decthemectl assets install ID` get the source by itself?
+    pub fn downloadable(&self) -> bool {
+        self.archive_url.is_some() || self.git_url.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,6 +151,16 @@ pub fn is_id(s: &str) -> bool {
 
 fn https(s: &str) -> bool {
     s.strip_prefix("https://").is_some_and(|r| !r.is_empty() && !r.starts_with('/') && !r.chars().any(|c| c.is_whitespace() || c.is_control()))
+}
+
+/// `https://host/path`: a host name, no user, port, query or fragment, a path of plain parts.
+pub fn git_url_ok(s: &str) -> bool {
+    let Some((host, path)) = s.strip_prefix("https://").and_then(|r| r.split_once('/')) else { return false };
+    let host_ok = !host.is_empty() && host.len() <= 253 && host.split('.').all(|l| !l.is_empty() && l.len() <= 63 && l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') && !l.starts_with('-'));
+    let path_ok = !path.is_empty()
+        && !path.ends_with('/')
+        && path.split('/').all(|p| !p.is_empty() && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'~')));
+    host_ok && path_ok && s.len() <= 300
 }
 
 impl Cx<'_> {
@@ -277,7 +296,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
     let mut sources = Vec::new();
     for (i, t) in cx.tables(root, "source") {
         let sc = format!("source[{i}].");
-        cx.known(t, &sc, &["id", "repo", "revision", "commit", "license", "license_files", "license_oids", "archive_url", "archive_sha256", "strip_components"]);
+        cx.known(t, &sc, &["id", "repo", "revision", "commit", "license", "license_files", "license_oids", "archive_url", "archive_sha256", "strip_components", "git_url"]);
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
             cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
@@ -322,7 +341,11 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         if !license_oids.is_empty() && (license_oids.len() != license_files.len() || license_oids.iter().any(|o| !is_hex(o, 40))) {
             cx.errors.push(format!("`{sc}license_oids` pins every licence file with 40 hex digits (git rev-parse <commit>:<file>), in the same order"));
         }
-        sources.push(Source { id, repo, revision, commit, license, license_files, license_oids, archive_url, archive_sha256, strip });
+        let git_url = cx.text(t, &sc, "git_url", false, 300);
+        if git_url.as_deref().is_some_and(|u| !git_url_ok(u)) {
+            cx.errors.push(format!("`{sc}git_url` must be https://host/path (no user, port, query or fragment)"));
+        }
+        sources.push(Source { id, repo, revision, commit, license, license_files, license_oids, archive_url, archive_sha256, strip, git_url });
     }
 
     let mut packs = Vec::new();
@@ -604,6 +627,15 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
                 if s.license.trim().is_empty() && p.license.is_none() {
                     errs.push(format!("pack `{}`: no licence", p.id));
                 }
+                // a git fetch requests objects by id only: everything the pack reads from outside its tree is pinned
+                if s.git_url.is_some() {
+                    if s.license_oids.len() != s.license_files.len() || p.license_oids.len() != p.license_files.len() {
+                        errs.push(format!("pack `{}`: the source has a git_url, so every licence file needs its license_oids pin", p.id));
+                    }
+                    if p.link_source_trees.len() != p.link_sources.len() {
+                        errs.push(format!("pack `{}`: the source has a git_url, so every link_sources folder needs its link_source_trees pin", p.id));
+                    }
+                }
             }
         }
     }
@@ -880,6 +912,44 @@ cursors = "deepin-bloom"
         assert!(bad("[pack.dci_convert]", "[[pack.dci_convert]]").iter().any(|e| e.contains("must be a table")));
         let e = parse(&GOOD.replacen("[[recommend]]", x, 1), "t").unwrap_err();
         assert!(e.iter().any(|e| e.contains("provides must be")), "{e:?}");
+    }
+
+    #[test]
+    fn a_git_url_is_a_plain_https_repository_and_needs_every_pin() {
+        let with = |url: &str, oids: bool| {
+            let mut t = GOOD.replacen("strip_components = 1", &format!("strip_components = 1\ngit_url = \"{url}\""), 1);
+            if oids {
+                t = t.replacen("license_files = [\"COPYING\"]", "license_files = [\"COPYING\"]\nlicense_oids = [\"94a9ed024d3859793618152ea559a168bbcbb5e2\"]", 1);
+            }
+            parse(&t, "t")
+        };
+        let c = with("https://github.com/linuxdeepin/deepin-icon-theme.git", true).unwrap();
+        assert_eq!(c.sources[0].git_url.as_deref(), Some("https://github.com/linuxdeepin/deepin-icon-theme.git"));
+        assert!(c.sources[0].downloadable() && parse(GOOD, "t").unwrap().sources[0].git_url.is_none());
+        assert!(with("https://github.com/linuxdeepin/deepin-icon-theme.git", false).unwrap_err().iter().any(|e| e.contains("needs its license_oids pin")));
+        for bad in [
+            "http://github.com/a/b.git",
+            "https://user@github.com/a/b.git",
+            "https://github.com:8443/a/b.git",
+            "https://github.com/a/b.git?x=1",
+            "https://github.com/a/b.git#f",
+            "https://github.com/a/../b.git",
+            "https://github.com/",
+            "https://github.com",
+            "https://-bad.com/a.git",
+            "https://github.com/a b.git",
+        ] {
+            assert!(with(bad, true).unwrap_err().iter().any(|e| e.contains("git_url` must be")), "{bad}");
+        }
+        assert!(!git_url_ok("https://github.com/a//b.git") && git_url_ok("https://gitee.com/lingmo/lingmo-icons.git"));
+        // link_sources of such a source are pinned by their trees too
+        let t = GOOD.replacen("strip_components = 1", "strip_components = 1\ngit_url = \"https://example.org/x.git\"", 1).replacen(
+            "license_files = [\"COPYING\"]",
+            "license_files = [\"COPYING\"]\nlicense_oids = [\"94a9ed024d3859793618152ea559a168bbcbb5e2\"]",
+            1,
+        );
+        let t = t.replacen("path = \"bloom\"", "path = \"bloom\"\nlink_sources = [\"Papirus\"]", 1);
+        assert!(parse(&t, "t").unwrap_err().iter().any(|e| e.contains("needs its link_source_trees pin")));
     }
 
     #[test]

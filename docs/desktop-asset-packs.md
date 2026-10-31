@@ -40,6 +40,8 @@ archive_sha256 = "<64 hex>"     # optional: only for byte-stable files (release 
                                 #   change bytes without changing content, the tree ids pin the content
 strip_components = 1            # leading path parts of archives to drop: 1 for GitHub/Gitee/`git archive --prefix`
                                 #   tarballs (set it even without archive_url: `--archive` uses it); default 0
+git_url = "https://github.com/linuxdeepin/deepin-icon-theme.git"   # optional: fetch only the pinned git objects
+                                #   (see "Fetching pinned git objects"); needs license_oids for every licence file
 
 [[pack]]
 id = "deepin-bloom"             # required, unique across ALL catalogues: prefix it with the family
@@ -213,6 +215,53 @@ What did not fit the format, found while pinning them (the port owners decide):
 * Breeze Dark icons are generated at build time (no `icons-dark/` in the repository).
 * Current Adwaita ships no cursors in its repository.
 
+### Fetching pinned git objects (`git_url`)
+
+For a source without a usable archive (deepin-desktop-theme is ~1 GB of history and its archive is mostly other
+themes), a `[[source]]` may name `git_url`: `https://host/path`, a host name and plain path parts, no user, port,
+query or fragment. `install ID` uses it when there is no `archive_url` (`--git` chooses it explicitly). It speaks git's
+smart HTTP protocol version 2 (git's `gitprotocol-v2` / `gitprotocol-http` / `gitformat-pack` documents) with the
+built-in HTTPS client and asks only for objects the catalogue pins by id, so every pack of such a source needs
+`license_oids` for every licence file and `link_source_trees` for every `link_sources` folder (the validator refuses
+the catalogue otherwise; `tree`, `text_links.tree` and `index_oids` are required anyway).
+
+Three requests, each reply untrusted and capped while it streams:
+
+| request | asks for | cap |
+|---|---|---|
+| `GET <git_url>/info/refs?service=git-upload-pack`, `Git-Protocol: version=2` | the capability advertisement: version 2, `fetch` with `shallow` and `filter`, SHA-1 ids | 64 KiB |
+| `fetch`: `want <commit>`, `deepen 1`, `filter blob:none` | the pinned commit and its trees, no file content | 64 MiB |
+| `fetch`: `want` each pinned tree and blob, no filter | exactly those, with everything below the trees | `max_archive` (512 MiB) |
+
+* **Binding**: after the second request every pin must be found at its path below the pinned commit's own tree
+  (`<commit>:<path>` for the pack's `tree`, `link_source_trees`, `text_links`, `license_oids`, `index_oids`), so the
+  content is the commit's, wherever the server stored it. `verified.commit` means exactly this for a git fetch.
+* **Network**: https only, **no redirects** (a moved repository is an error naming where it went), no credentials,
+  cookies or netrc; connect 15 s, each read 60 s, each request a deadline (1 min, 15 min for the packs). The pane's
+  install supervisor (timeout, stop) bounds the whole install as for downloads.
+* **Responses**: pkt-lines of 4..65520 bytes; an `ERR` line or side band 3 stops with the server's text; progress
+  (band 2, `no-progress` is requested) at most 1 MiB; only the sections a shallow fetch has; nothing after the end.
+* **Packs** are written to the job folder while they stream and read from there: version 2, the object count exact,
+  the SHA-1 trailer checked, nothing between the last object and it; types commit, tree, blob, tag and the two delta
+  types only; no thin packs (every delta base in the same pack; an offset base must be an earlier object's start);
+  delta chains of at most 64; every copy / insert instruction checked against its base and result; at most
+  `max_entries` objects, each at most `max_file` (16 MiB) inflated, an object inflating to more or less than its header
+  says is refused, and all inflating together is bounded by `max_stream` (4 GiB of work, a compression bomb stops
+  there). Objects are rebuilt from the file when needed: memory follows the largest object, not the pack. Every
+  object's id is recomputed from its bytes; an object asked for and not sent refuses the install.
+* **Staging**: the pinned trees are expanded through the same reader as archives and folders (path rules, link rules,
+  entry, size and depth caps; gitlinks, non-canonical modes, unsorted or repeated tree entries and names with `/`,
+  `..`, backslashes or control characters are refused), and the tree ids are then computed again from the staged bytes
+  exactly as for an archive. Conversion (`[pack.dci_convert]`) and everything after it are unchanged.
+* **Failure** of any step installs nothing and says so, naming `--source-dir` / `--archive` as the way that still works
+  (an upstream that rewrote its history answers `not our ref`: the pin is gone from the forge, not changed).
+* **Provenance**: `fetched_from: "git"`, `url`, and `git: {commit_chain, objects, requests: [{what, bytes, sha256}]}`.
+
+Identity is SHA-1, as for every tree pin of this format; decebal does not run collision detection (GitHub refuses
+colliding objects on push). The forge sees the request (address, user agent), as for archive downloads.
+
+Real result (pinned deepin-desktop-theme a0c79e3, tree fb56b39d, private HOME and root): see "Evidence".
+
 ## Commands
 
 `decthemectl assets help` prints them. `--root DIR` (or `$DECEBAL_ASSET_ROOT`) installs somewhere other than
@@ -222,7 +271,7 @@ What did not fit the format, found while pinning them (the port owners decide):
 |---|---|
 | `list` | every catalogue pack (installed / not installed / the catalogue pins a newer revision / name taken by a foreign theme) and every installed decebal pack |
 | `info ID\|NAME` | metadata, pins, licence, installed state and recommendations of one pack |
-| `install ID [--archive FILE [--strip N] \| --source-dir DIR] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https), or use a downloaded archive, or a local clone of the source; the `tree` id (and `archive_sha256`, the archive's commit, `index_oids`) are checked |
+| `install ID [--archive FILE [--strip N] \| --source-dir DIR \| --git] [--force] [--dry-run]` | install a catalogue pack: download `archive_url` (https), or fetch the pinned git objects from `git_url` (when there is no `archive_url`, or with `--git`), or use a downloaded archive, or a local clone of the source; the `tree` id (and `archive_sha256`, the archive's commit, `index_oids`) are checked |
 | `import PATH --provides icons,cursors --license SPDX --license-file REL... [--name NAME] [--path REL] [--strip N] [--link-source REL]... [--index REL]... [--tree OID] [--sha256 HEX] [--force] [--dry-run]` | install an archive or folder that is not in a catalogue (recorded as `local`; a licence file is still required). `REL` paths are relative to the source root |
 | `verify [NAME...]` | re-hash installed packs against their provenance record; also reports DEGRADED packs (exit 1) |
 | `remove NAME [--force]` | delete a pack decebal installed (never a theme it did not install; `--force` to remove one in use) |
@@ -337,7 +386,8 @@ packs with licence, source and revision.
   "family": "deepin", "origin": "catalog",
   "source": {"id": "deepin-icon-theme", "repo": "https://github.com/linuxdeepin/deepin-icon-theme",
              "revision": "master", "commit": "5d11...", "path": "bloom", "tree": "3c8e...",
-             "archive_sha256": "...", "fetched_from": "archive|download|directory"},
+             "archive_sha256": "...", "fetched_from": "archive|download|directory|git", "url": "...",
+             "git": {"commit_chain": true, "objects": 862, "requests": [{"what": "...", "bytes": 0, "sha256": "..."}]}},
   "verified": {"tree": true, "archive_sha256": false, "commit": true,
                "outside": [{"what": "link_sources", "verified": true, "by": "tree"},
                            {"what": "licences", "verified": true, "by": "blob"}],
@@ -353,8 +403,8 @@ packs with licence, source and revision.
 `verified.tree` covers only the pack's own folder. Everything the pack took from outside it is listed in
 `verified.outside` with what checked it (`tree`: `link_source_trees`; `blob`: `index_oids` / `license_oids`;
 `archive_sha256`: a pinned archive; `none`), and `verified.complete` is true only when every installed byte came from
-verified input. `commit` compares a git archive's pax comment with the pin: a consistency check, not authentication.
-The install report prints the same as one line (`outside the pack folder: ...; complete: yes|NO`).
+verified input. `commit` compares a git archive's pax comment with the pin: a consistency check, not authentication;
+for a git fetch it means every pin was found below the pinned commit's tree. The install report prints the same as one line (`outside the pack folder: ...; complete: yes|NO`).
 
 `content_hash` is `sha256` over the sorted entries (`path NUL F NUL size NUL sha256(file) LF` for files,
 `path NUL L NUL target LF` for links), without the provenance file itself; `verify` recomputes it.
