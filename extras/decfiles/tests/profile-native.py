@@ -41,6 +41,11 @@ try:
     write(s,generated('explorer','#3c8c50'));s.wait(lambda:profile().get('id')=='explorer','profile not followed back');time.sleep(.3)
     assert s.state()['layout']=='columns' and profile()['layout_explicit']
     s.cases.append('an explicitly chosen layout survives palette and profile changes')
+    too_large=profile().get('too_large',0)
+    write(s,generated('finder','#aa00aa')+'/*'+'x'*(3*1024*1024)+'*/\n')
+    s.wait(lambda:profile().get('too_large',0)>too_large,'oversized gtk.css was not refused')
+    assert profile()['id']=='explorer' and pixel(s,'oversized-ignored')=='#3c8c50' and s.state()['layout']=='columns'
+    s.cases.append('a gtk.css over the 2 MiB cap is not read past the cap and changes nothing')
     write(s,generated(None,'#3c8c50'));s.wait(lambda:profile().get('id')=='native' and 'decfiles-native' in profile()['window_classes'],'missing marker did not select Native')
     (Path(s.env['XDG_CONFIG_HOME'])/'gtk-4.0'/'gtk.css').unlink();time.sleep(.6);assert profile()['id']=='native' and s.state()['layout']=='columns'
     s.cases.append('no marker or no file means Native without touching the explicit layout')

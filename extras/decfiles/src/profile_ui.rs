@@ -15,6 +15,10 @@ pub struct Theme {
     pub palette: gtk::CssProvider,
     pub palette_text: std::cell::RefCell<Option<String>>,
     pub reloads: std::cell::Cell<u64>,
+    /// Latest read generation; older completions are discarded, never applied.
+    pub generation: std::cell::Cell<u64>,
+    pub stale_ignored: std::cell::Cell<u64>,
+    pub too_large: std::cell::Cell<u64>,
     pub from_cli: bool,
     pub monitor: Option<Monitor>,
     pub watching: std::cell::RefCell<Option<PathBuf>>,
@@ -35,6 +39,9 @@ impl Theme {
             palette: gtk::CssProvider::new(),
             palette_text: Default::default(),
             reloads: Default::default(),
+            generation: Default::default(),
+            stale_ignored: Default::default(),
+            too_large: Default::default(),
             from_cli,
             monitor,
             watching: Default::default(),
@@ -105,17 +112,62 @@ impl Ui {
         self.theme.timer.replace(Some(timer));
     }
 
-    /// Asynchronous read; a missing file means no palette override and the Native profile.
+    /// Asynchronous, bounded read. Each read gets a new generation; an older read stops at
+    /// its next chunk and its result is never applied, so a delayed completion cannot revert
+    /// a newer palette. A missing file means no palette override and the Native profile;
+    /// a file larger than the cap is not read past the cap and changes nothing.
     fn reload_theme(self: &Rc<Self>) {
+        let generation = self.theme.generation.get() + 1;
+        self.theme.generation.set(generation);
         let file = gio::File::for_path(&self.theme.gtk_css);
         let weak = Rc::downgrade(self);
         glib::MainContext::default().spawn_local(async move {
-            let text = match file.load_contents_future().await {
-                Ok((bytes, _)) if bytes.len() <= MAX_CSS => String::from_utf8_lossy(&bytes).into_owned(),
-                Ok(_) => return,
-                Err(_) => String::new(),
+            let current = |weak: &std::rc::Weak<Ui>| weak.upgrade().filter(|ui| ui.theme.generation.get() == generation);
+            let text = match file.read_future(glib::Priority::DEFAULT).await {
+                Err(_) => Some(String::new()),
+                Ok(stream) => {
+                    let mut data = Vec::new();
+                    let outcome = loop {
+                        if current(&weak).is_none() {
+                            break None;
+                        }
+                        match stream.read_bytes_future(64 * 1024, glib::Priority::DEFAULT).await {
+                            Ok(chunk) if chunk.is_empty() => break Some(true),
+                            Ok(chunk) if data.len() + chunk.len() <= MAX_CSS => data.extend_from_slice(&chunk),
+                            Ok(_) => break Some(false),
+                            Err(_) => break None,
+                        }
+                    };
+                    let _ = stream.close_future(glib::Priority::DEFAULT).await;
+                    match outcome {
+                        Some(true) => Some(String::from_utf8_lossy(&data).into_owned()),
+                        Some(false) => {
+                            if let Some(ui) = weak.upgrade() {
+                                ui.theme.too_large.set(ui.theme.too_large.get() + 1);
+                                ui.dump();
+                            }
+                            None
+                        }
+                        None => None,
+                    }
+                }
             };
+            #[cfg(feature = "fixture-delay")]
+            if generation == 1 {
+                // Fixture builds only: hold the first (startup) read so a newer one can finish first.
+                if let Some(delay) = std::env::var("DECFILES_FIXTURE_THEME_DELAY_MS").ok().and_then(|value| value.parse::<u64>().ok()).filter(|delay| *delay > 0) {
+                    glib::timeout_future(Duration::from_millis(delay.min(10_000))).await;
+                }
+            }
             let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            if ui.theme.generation.get() != generation {
+                ui.theme.stale_ignored.set(ui.theme.stale_ignored.get() + 1);
+                ui.dump();
+                return;
+            }
+            let Some(text) = text else {
                 return;
             };
             if ui.theme.palette_text.borrow().as_deref() != Some(text.as_str()) {
@@ -154,7 +206,7 @@ impl Ui {
 
     pub fn profile_evidence(&self) -> serde_json::Value {
         serde_json::json!({"id":self.profile.get().id(), "from_cli":self.theme.from_cli, "layout_explicit":self.layout_explicit.get(),
-            "palette_reloads":self.theme.reloads.get(), "gtk_css":self.theme.gtk_css.to_string_lossy(),
+            "palette_reloads":self.theme.reloads.get(), "generation":self.theme.generation.get(), "stale_ignored":self.theme.stale_ignored.get(), "too_large":self.theme.too_large.get(), "gtk_css":self.theme.gtk_css.to_string_lossy(),
             "window_classes":self.window.css_classes().iter().map(|class| class.to_string()).collect::<Vec<_>>()})
     }
 }

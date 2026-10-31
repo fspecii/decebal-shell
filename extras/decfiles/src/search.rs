@@ -14,6 +14,19 @@ use std::{
 pub const MAX_RESULTS: usize = 2000;
 pub const MAX_VISITED: u64 = 200_000;
 pub const MAX_DEPTH: usize = 32;
+/// Folders queued for a later visit; deeper/wider trees beyond this are reported as truncated.
+pub const MAX_PENDING: usize = 10_000;
+/// Hits are published to the UI in batches of at most this many.
+const BATCH: usize = 128;
+
+#[derive(Clone, Copy, Debug)]
+struct Limits {
+    results: usize,
+    visited: u64,
+    pending: usize,
+}
+
+const LIMITS: Limits = Limits { results: MAX_RESULTS, visited: MAX_VISITED, pending: MAX_PENDING };
 /// Cancelled searches may still be leaving a blocked syscall; refuse to pile up threads.
 pub const MAX_LIVE: usize = 4;
 static LIVE: AtomicUsize = AtomicUsize::new(0);
@@ -21,6 +34,8 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Status {
     pub visited: u64,
+    /// Largest number of folders that were queued at once (bounded by MAX_PENDING).
+    pub peak_pending: usize,
     pub skipped: u64,
     pub done: bool,
     pub truncated: bool,
@@ -51,18 +66,24 @@ impl Search {
         Self::spawn(
             root,
             query,
+            LIMITS,
             #[cfg(any(test, feature = "fixture-delay"))]
             std::time::Duration::ZERO,
         )
     }
 
+    #[cfg(test)]
+    fn start_limited(root: PathBuf, query: &str, limits: Limits) -> io::Result<Self> {
+        Self::spawn(root, query, limits, std::time::Duration::ZERO)
+    }
+
     /// Fixture builds only: a capped delay per folder makes cancellation observable.
     #[cfg(any(test, feature = "fixture-delay"))]
     pub fn start_throttled(root: PathBuf, query: &str, delay: std::time::Duration) -> io::Result<Self> {
-        Self::spawn(root, query, delay.min(std::time::Duration::from_secs(2)))
+        Self::spawn(root, query, LIMITS, delay.min(std::time::Duration::from_secs(2)))
     }
 
-    fn spawn(root: PathBuf, query: &str, #[cfg(any(test, feature = "fixture-delay"))] delay: std::time::Duration) -> io::Result<Self> {
+    fn spawn(root: PathBuf, query: &str, limits: Limits, #[cfg(any(test, feature = "fixture-delay"))] delay: std::time::Duration) -> io::Result<Self> {
         let query = query.to_lowercase();
         if query.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Enter text to search for."));
@@ -78,6 +99,7 @@ impl Search {
                 &worker,
                 root,
                 &query,
+                limits,
                 #[cfg(any(test, feature = "fixture-delay"))]
                 delay,
             );
@@ -108,8 +130,24 @@ impl Drop for Search {
     }
 }
 
-fn walk(shared: &Shared, root: PathBuf, query: &str, #[cfg(any(test, feature = "fixture-delay"))] delay: std::time::Duration) {
+/// Budgets are enforced per entry while a folder is being read: hits are flushed in
+/// bounded batches, the visited and result limits stop enumeration mid-folder, and the
+/// queue of folders still to visit is capped.
+fn walk(shared: &Shared, root: PathBuf, query: &str, limits: Limits, #[cfg(any(test, feature = "fixture-delay"))] delay: std::time::Duration) {
     let mut stack = vec![(root, 0usize)];
+    let mut visited = 0u64;
+    let mut hits = 0usize;
+    let mut batch: Vec<Entry> = Vec::with_capacity(BATCH);
+    let mut unvisited = 0u64;
+    let flush = |batch: &mut Vec<Entry>, visited: u64, skipped: u64, truncated: bool, peak: usize| {
+        let mut state = shared.state.lock().unwrap_or_else(|error| error.into_inner());
+        state.hits.append(batch);
+        state.status.visited = visited;
+        state.status.skipped += skipped;
+        state.status.truncated |= truncated;
+        state.status.peak_pending = state.status.peak_pending.max(peak);
+    };
+    let mut peak = 1;
     while let Some((folder, depth)) = stack.pop() {
         if shared.cancel.load(Ordering::SeqCst) {
             return;
@@ -119,13 +157,18 @@ fn walk(shared: &Shared, root: PathBuf, query: &str, #[cfg(any(test, feature = "
             std::thread::sleep(delay);
         }
         let Ok(children) = std::fs::read_dir(&folder) else {
-            shared.state.lock().unwrap_or_else(|error| error.into_inner()).status.skipped += 1;
+            unvisited += 1;
             continue;
         };
-        let mut found = Vec::new();
-        let mut visited = 0;
-        for child in children.flatten() {
+        for child in children {
             if shared.cancel.load(Ordering::SeqCst) {
+                return;
+            }
+            let Ok(child) = child else {
+                continue;
+            };
+            if visited >= limits.visited || hits >= limits.results {
+                flush(&mut batch, visited, std::mem::take(&mut unvisited), true, peak);
                 return;
             }
             visited += 1;
@@ -134,25 +177,24 @@ fn walk(shared: &Shared, root: PathBuf, query: &str, #[cfg(any(test, feature = "
             let name = child.file_name();
             if matches(&name, query) {
                 let content_type = if directory { String::new() } else { gio::content_type_guess(Some(std::path::Path::new(&name)), None::<&[u8]>).0.to_string() };
-                found.push(Entry { path: child.path(), name: name.to_string_lossy().into_owned(), directory, content_type, ..Default::default() });
+                batch.push(Entry { path: child.path(), name: name.to_string_lossy().into_owned(), directory, content_type, ..Default::default() });
+                hits += 1;
             }
             if directory && depth < MAX_DEPTH {
-                stack.push((child.path(), depth + 1));
+                if stack.len() < limits.pending {
+                    stack.push((child.path(), depth + 1));
+                    peak = peak.max(stack.len());
+                } else {
+                    shared.state.lock().unwrap_or_else(|error| error.into_inner()).status.truncated = true;
+                }
+            }
+            if batch.len() >= BATCH || visited.is_multiple_of(1024) {
+                flush(&mut batch, visited, std::mem::take(&mut unvisited), false, peak);
             }
         }
-        let mut state = shared.state.lock().unwrap_or_else(|error| error.into_inner());
-        state.status.visited += visited;
-        let room = MAX_RESULTS - state.hits.len();
-        if found.len() > room {
-            found.truncate(room);
-            state.status.truncated = true;
-        }
-        state.hits.extend(found);
-        if state.status.truncated || state.status.visited >= MAX_VISITED {
-            state.status.truncated = true;
-            return;
-        }
+        flush(&mut batch, visited, std::mem::take(&mut unvisited), false, peak);
     }
+    flush(&mut batch, visited, unvisited, false, peak);
 }
 
 #[cfg(test)]
@@ -211,6 +253,38 @@ mod tests {
         assert!(Search::start(root.clone(), "").is_err());
         std::fs::remove_dir_all(&root).unwrap();
         std::fs::remove_dir_all(&outside).unwrap();
+    }
+
+    #[test]
+    fn budgets_are_enforced_inside_enumeration_on_a_real_huge_folder() {
+        let _serial = SERIAL.lock().unwrap_or_else(|error| error.into_inner());
+        let root = PathBuf::from("/var/tmp").join(format!("decfiles-search-huge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let huge = root.join("huge");
+        std::fs::create_dir_all(&huge).unwrap();
+        for index in 0..20_000 {
+            std::fs::write(huge.join(format!("match-{index:05}")), b"").unwrap();
+        }
+        // The visited budget stops a single 20,000-entry folder mid-enumeration.
+        let limits = Limits { results: 100_000, visited: 1_000, pending: 50 };
+        let (hits, status) = finish(&Search::start_limited(root.clone(), "match", limits).unwrap());
+        assert!(status.done && status.truncated);
+        assert_eq!(status.visited, 1_000, "visited stops exactly at the budget");
+        assert!(hits.len() < 1_000);
+        // The result budget stops it as well, never holding more than the limit.
+        let limits = Limits { results: 300, visited: 1_000_000, pending: 50 };
+        let (hits, status) = finish(&Search::start_limited(root.clone(), "match", limits).unwrap());
+        assert_eq!(hits.len(), 300);
+        assert!(status.truncated && status.visited <= 302, "{status:?}");
+        // Wide folder trees: the queue of folders to visit stays bounded.
+        let wide = root.join("wide");
+        for index in 0..400 {
+            std::fs::create_dir_all(wide.join(format!("d{index:03}"))).unwrap();
+        }
+        let limits = Limits { results: 100_000, visited: 1_000_000, pending: 50 };
+        let (_, status) = finish(&Search::start_limited(wide.clone(), "zzz", limits).unwrap());
+        assert!(status.truncated && status.peak_pending <= 50, "{status:?}");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -141,6 +141,9 @@ struct Options {
     /// Force the private `O_EXCL` staging file instead of `O_TMPFILE`.
     #[cfg(test)]
     named_files: bool,
+    /// Smaller operation item budget for deterministic limit tests.
+    #[cfg(test)]
+    item_limit: Option<u64>,
 }
 
 struct Shared {
@@ -245,6 +248,8 @@ impl Shared {
 
 #[derive(Debug)]
 enum ItemError {
+    /// The one per-operation item budget is exhausted; the whole operation stops.
+    Limit,
     Exists,
     Cancelled,
     Failed(String),
@@ -376,7 +381,7 @@ fn list_dir(fd: RawFd, limit: u64) -> io::Result<Vec<CString>> {
             continue;
         }
         if names.len() as u64 >= limit {
-            break Err(io::Error::other(format!("a folder has more than {MAX_ITEMS} items")));
+            break Err(io::Error::new(io::ErrorKind::QuotaExceeded, "the operation item limit was reached"));
         }
         names.push(name.to_owned());
     };
@@ -434,9 +439,36 @@ enum Staged {
 struct Copied {
     name: CString,
     source: libc::stat,
-    dest: (libc::dev_t, libc::ino_t),
+    /// The published copy as it was right after publication (identity, size, times).
+    published: Option<libc::stat>,
+    /// 64-bit FNV-1a digest of the bytes copied (regular files only).
+    digest: Option<u64>,
+    /// Exact target of a copied symbolic link.
+    link: Option<CString>,
     children: Option<Vec<Copied>>,
     complete: bool,
+}
+
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}
+
+/// The published copy is still exactly what was published: same inode and, for
+/// non-folders, the same size, modification and change times. ctime cannot be set
+/// from userspace, so in-place rewrites and truncation are detected even if mtime is restored.
+fn published_unchanged(published: &libc::stat, now: &libc::stat) -> bool {
+    same_inode(published, now)
+        && (kind(now) == libc::S_IFDIR
+            || (published.st_size == now.st_size
+                && published.st_mtime == now.st_mtime
+                && published.st_mtime_nsec == now.st_mtime_nsec
+                && published.st_ctime == now.st_ctime
+                && published.st_ctime_nsec == now.st_ctime_nsec))
 }
 
 fn identity(stat: &libc::stat) -> (libc::dev_t, libc::ino_t) {
@@ -495,6 +527,8 @@ struct Worker<'a> {
     notes: Vec<String>,
     changed: bool,
     kept_originals: usize,
+    /// One item budget for the whole operation: scans, staging and copies all draw on it.
+    items_left: u64,
     next_conflict: u64,
     items_done: u64,
     bytes_done: u64,
@@ -518,6 +552,13 @@ impl<'a> Worker<'a> {
             notes: Vec::new(),
             changed: false,
             kept_originals: 0,
+            items_left: {
+                #[cfg(test)]
+                let limit = shared.options.item_limit.unwrap_or(MAX_ITEMS);
+                #[cfg(not(test))]
+                let limit = MAX_ITEMS;
+                limit
+            },
             next_conflict: 0,
             items_done: 0,
             bytes_done: 0,
@@ -553,6 +594,23 @@ impl<'a> Worker<'a> {
         });
     }
 
+    /// Count one transferred item against the operation budget.
+    fn take_item(&mut self) -> Result<(), ItemError> {
+        if self.items_left == 0 {
+            return Err(ItemError::Limit);
+        }
+        self.items_left -= 1;
+        Ok(())
+    }
+
+    fn limit_message(&self) -> String {
+        #[cfg(test)]
+        let limit = self.shared.options.item_limit.unwrap_or(MAX_ITEMS);
+        #[cfg(not(test))]
+        let limit = MAX_ITEMS;
+        format!("this preview transfers at most {limit} items in one operation; the rest was not transferred")
+    }
+
     fn check_cancel(&self) -> Result<(), ItemError> {
         if self.shared.cancelled() {
             Err(ItemError::Cancelled)
@@ -570,7 +628,7 @@ impl<'a> Worker<'a> {
             return Err(ScanError::Limit(format!("folders nested deeper than {MAX_DEPTH} levels are not supported")));
         }
         if *budget == 0 {
-            return Err(ScanError::Limit(format!("this preview transfers at most {MAX_ITEMS} items at once")));
+            return Err(ScanError::Limit(self.limit_message()));
         }
         *budget -= 1;
         let metadata = std::fs::symlink_metadata(path).map_err(|_| ScanError::Unreadable)?;
@@ -653,7 +711,8 @@ impl<'a> Worker<'a> {
         // cross-device fallback counts its own subtree when it happens.
         let mut totals = (sources.len() as u64, 0);
         if self.mode == Mode::Copy {
-            let mut budget = MAX_ITEMS;
+            // Early refusal only; the same budget is enforced again while staging.
+            let mut budget = self.items_left;
             totals = (0, 0);
             for source in &sources {
                 match self.scan(source, 0, &mut budget) {
@@ -676,6 +735,7 @@ impl<'a> Worker<'a> {
             progress.bytes_total = totals.1;
             progress.phase = Phase::Transferring;
         });
+        self.hook("scanned", &destination);
         let mut cancelled = self.shared.cancelled();
         for source in &sources {
             if cancelled {
@@ -688,6 +748,11 @@ impl<'a> Worker<'a> {
                 }
                 Ok(None) => report.skipped += 1,
                 Err(ItemError::Cancelled) => cancelled = true,
+                Err(ItemError::Limit) => {
+                    let message = self.limit_message();
+                    self.fail(source, message);
+                    break;
+                }
                 Err(ItemError::Exists) => self.fail(source, "an item with that name appeared in the destination"),
                 Err(ItemError::Failed(message)) => self.fail(source, message),
             }
@@ -774,8 +839,12 @@ impl<'a> Worker<'a> {
     #[allow(clippy::too_many_arguments)]
     fn place(&mut self, staged: &mut Option<(Staged, Copied)>, parent: &OwnedFd, name: &CStr, source: &Path, destination_dir: &OwnedFd, target: &CStr, destination: &Path) -> Result<(), ItemError> {
         if self.mode == Mode::Move && staged.is_none() {
+            if self.items_left == 0 {
+                return Err(ItemError::Limit);
+            }
             match rename_noreplace(parent.as_raw_fd(), name, destination_dir.as_raw_fd(), target) {
                 Ok(()) => {
+                    self.items_left -= 1;
                     self.changed = true;
                     self.advance(1, 0);
                     return Ok(());
@@ -788,14 +857,15 @@ impl<'a> Worker<'a> {
                 },
             }
             // Different filesystem: verified copy, then remove only claimed, unchanged originals.
-            let mut budget = MAX_ITEMS;
+            // The early check uses what is left of the one operation budget.
+            let mut budget = self.items_left;
             match self.scan(source, 0, &mut budget) {
                 Ok((items, bytes)) => self.progress(|progress| {
                     progress.items_total += items.saturating_sub(1);
                     progress.bytes_total += bytes;
                 }),
                 Err(ScanError::Cancelled) => return Err(ItemError::Cancelled),
-                Err(ScanError::Limit(message)) => return Err(ItemError::Failed(format!("not moved across filesystems: {message}"))),
+                Err(ScanError::Limit(_)) => return Err(ItemError::Limit),
                 Err(ScanError::Unreadable) => {}
             }
         }
@@ -805,7 +875,7 @@ impl<'a> Worker<'a> {
         self.hook("before-publish", destination);
         let published = self.publish(&staged.as_ref().unwrap().0, destination_dir, target)?;
         let (_, mut copied) = staged.take().unwrap();
-        copied.dest = published;
+        copied.published = Some(published);
         self.changed = true;
         self.hook("published", destination);
         if self.mode == Mode::Move {
@@ -820,15 +890,20 @@ impl<'a> Worker<'a> {
         if depth > MAX_DEPTH {
             return Err(ItemError::Failed(format!("nested deeper than {MAX_DEPTH} levels")));
         }
+        self.take_item()?;
         let stat = stat_at(parent.as_raw_fd(), name)?;
-        let copied = |stat: libc::stat| Copied { name: name.to_owned(), source: stat, dest: (0, 0), children: None, complete: true };
+        let copied = |stat: libc::stat| Copied { name: name.to_owned(), source: stat, published: None, digest: None, link: None, children: None, complete: true };
         match kind(&stat) {
             libc::S_IFLNK => {
                 let (target, stat) = self.read_link(parent, name, source)?;
                 self.advance(1, 0);
-                Ok((Staged::Link { target, times: times(&stat) }, copied(stat)))
+                let record = Copied { link: Some(target.clone()), ..copied(stat) };
+                Ok((Staged::Link { target, times: times(&stat) }, record))
             }
-            libc::S_IFREG => Ok((self.stage_file(parent, name, &stat, destination_dir)?, copied(stat))),
+            libc::S_IFREG => {
+                let (staged, digest) = self.stage_file(parent, name, &stat, destination_dir)?;
+                Ok((staged, Copied { digest: Some(digest), ..copied(stat) }))
+            }
             libc::S_IFDIR => self.stage_dir(parent, name, &stat, source, destination_dir, depth),
             _ => Err(ItemError::Failed("special files such as devices, sockets and pipes are not copied".into())),
         }
@@ -859,7 +934,7 @@ impl<'a> Worker<'a> {
         Err(ItemError::Failed("the link kept changing while it was being read".into()))
     }
 
-    fn stage_file(&mut self, parent: &OwnedFd, name: &CStr, before: &libc::stat, destination_dir: &OwnedFd) -> Result<Staged, ItemError> {
+    fn stage_file(&mut self, parent: &OwnedFd, name: &CStr, before: &libc::stat, destination_dir: &OwnedFd) -> Result<(Staged, u64), ItemError> {
         // O_NONBLOCK and O_NOFOLLOW: a leaf swapped for a FIFO or symlink cannot block or redirect us.
         // SAFETY: owned FDs; results owned exactly once.
         let raw = retry(|| unsafe { libc::openat(parent.as_raw_fd(), name.as_ptr(), libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY | libc::O_CLOEXEC) });
@@ -876,7 +951,7 @@ impl<'a> Worker<'a> {
             Staged::Anonymous(fd) | Staged::Named { fd, .. } => fd.as_raw_fd(),
             Staged::Link { .. } => unreachable!(),
         };
-        let result = self.copy_bytes(&input, output, before).and_then(|copied| {
+        let result = self.copy_bytes(&input, output, before).and_then(|(copied, digest)| {
             let after = stat_fd(input.as_raw_fd())?;
             if copied != after.st_size as u64 || !unchanged(before, &after) {
                 return Err(ItemError::Failed("the file changed while it was being copied; no copy was kept".into()));
@@ -886,12 +961,12 @@ impl<'a> Worker<'a> {
             if unsafe { libc::fchmod(output, copied_mode(before)) } != 0 || unsafe { libc::futimens(output, times.as_ptr()) } != 0 {
                 return Err(last_error().into());
             }
-            Ok(())
+            Ok(digest)
         });
         match result {
-            Ok(()) => {
+            Ok(digest) => {
                 self.advance(1, 0);
-                Ok(staged)
+                Ok((staged, digest))
             }
             Err(error) => {
                 self.discard(staged, destination_dir);
@@ -931,7 +1006,14 @@ impl<'a> Worker<'a> {
         if !same_inode(&stat_fd(source_dir.as_raw_fd())?, stat) {
             return Err(ItemError::Failed("the folder changed while it was being opened".into()));
         }
-        let children = list_dir(source_dir.as_raw_fd(), MAX_ITEMS).map_err(|error| ItemError::Failed(describe(&error)))?;
+        // A folder larger than what is left of the operation budget stops the operation.
+        let children = list_dir(source_dir.as_raw_fd(), self.items_left.saturating_add(1)).map_err(|error| {
+            if error.kind() == io::ErrorKind::QuotaExceeded {
+                ItemError::Limit
+            } else {
+                ItemError::Failed(describe(&error))
+            }
+        })?;
         let private = private_name("folder");
         // SAFETY: NUL-terminated leaf; mkdirat fails with EEXIST and never merges.
         if unsafe { libc::mkdirat(destination_dir.as_raw_fd(), private.as_ptr(), 0o700) } != 0 {
@@ -958,7 +1040,7 @@ impl<'a> Worker<'a> {
             let child_source = source.join(OsStr::from_bytes(child.to_bytes()));
             let outcome = self.stage(&source_dir, &child, &child_source, &created, depth + 1).and_then(|(child_staged, mut record)| match self.publish(&child_staged, &created, &child) {
                 Ok(published) => {
-                    record.dest = published;
+                    record.published = Some(published);
                     Ok(record)
                 }
                 Err(error) => {
@@ -968,9 +1050,9 @@ impl<'a> Worker<'a> {
             });
             match outcome {
                 Ok(record) => copied_children.push(record),
-                Err(ItemError::Cancelled) => {
+                Err(error @ (ItemError::Cancelled | ItemError::Limit)) => {
                     self.discard(staged, destination_dir);
-                    return Err(ItemError::Cancelled);
+                    return Err(error);
                 }
                 Err(ItemError::Exists) => {
                     complete = false;
@@ -988,12 +1070,12 @@ impl<'a> Worker<'a> {
             libc::fchmod(created.as_raw_fd(), copied_mode(stat));
             libc::futimens(created.as_raw_fd(), times.as_ptr());
         }
-        Ok((staged, Copied { name: name.to_owned(), source: *stat, dest: (0, 0), children: Some(copied_children), complete }))
+        Ok((staged, Copied { name: name.to_owned(), source: *stat, published: None, digest: None, link: None, children: Some(copied_children), complete }))
     }
 
     /// Atomically publish under `target`; never replaces. Exists keeps the staging for a retry.
     /// The published name must then resolve to the staged inode.
-    fn publish(&mut self, staged: &Staged, destination_dir: &OwnedFd, target: &CStr) -> Result<(libc::dev_t, libc::ino_t), ItemError> {
+    fn publish(&mut self, staged: &Staged, destination_dir: &OwnedFd, target: &CStr) -> Result<libc::stat, ItemError> {
         let dir = destination_dir.as_raw_fd();
         let expected = match staged {
             Staged::Anonymous(fd) => {
@@ -1023,7 +1105,7 @@ impl<'a> Worker<'a> {
             }
         };
         match stat_at(dir, target) {
-            Ok(now) if identity(&now) == expected => Ok(expected),
+            Ok(now) if identity(&now) == expected => Ok(now),
             _ => {
                 if let Staged::Named { name, .. } = staged {
                     // Our private name was swapped before publication. Put what we published
@@ -1065,16 +1147,17 @@ impl<'a> Worker<'a> {
     /// the same unchanged inode that was copied, then remove the claimed item. Folders are
     /// removed only when every child was removed and they are empty. Returns true if removed.
     fn remove_original(&mut self, parent: &OwnedFd, destination_dir: &OwnedFd, destination_name: &CStr, item: &Copied, source: &Path) -> bool {
-        match stat_at(destination_dir.as_raw_fd(), destination_name) {
-            Ok(now) if identity(&now) == item.dest => {}
-            _ => return self.keep(source, "its copy at the destination changed or disappeared"),
+        if !self.copy_still_published(destination_dir, destination_name, item) {
+            return self.keep(source, "its copy at the destination changed or disappeared");
         }
         let directory = item.children.is_some();
         if let Some(children) = &item.children {
             let (Ok(source_dir), Ok(destination_child)) = (open_child_dir(parent.as_raw_fd(), &item.name), open_child_dir(destination_dir.as_raw_fd(), destination_name)) else {
                 return self.keep(source, "it could not be opened again");
             };
-            if !stat_fd(source_dir.as_raw_fd()).is_ok_and(|now| same_inode(&now, &item.source)) || !stat_fd(destination_child.as_raw_fd()).is_ok_and(|now| identity(&now) == item.dest) {
+            if !stat_fd(source_dir.as_raw_fd()).is_ok_and(|now| same_inode(&now, &item.source))
+                || !stat_fd(destination_child.as_raw_fd()).is_ok_and(|now| item.published.is_some_and(|published| same_inode(&now, &published)))
+            {
                 return self.keep(source, "it changed during the move");
             }
             let mut all = true;
@@ -1114,9 +1197,67 @@ impl<'a> Worker<'a> {
         self.keep(source, &reason)
     }
 
-    fn copy_bytes(&mut self, input: &OwnedFd, output: RawFd, before: &libc::stat) -> Result<u64, ItemError> {
+    /// Immediately before an original is claimed: the published copy must still have its
+    /// recorded identity, size and times, and (for files) the same bytes, (for links) the
+    /// same target. This narrows but cannot remove the window before the claim: there is
+    /// no compare-and-swap across filesystems.
+    fn copy_still_published(&mut self, destination_dir: &OwnedFd, name: &CStr, item: &Copied) -> bool {
+        let Some(published) = item.published else {
+            return false;
+        };
+        let unchanged_now = || stat_at(destination_dir.as_raw_fd(), name).is_ok_and(|now| published_unchanged(&published, &now));
+        if !unchanged_now() {
+            return false;
+        }
+        if let Some(expected) = &item.link {
+            let mut buffer = vec![0u8; libc::PATH_MAX as usize + 1];
+            // SAFETY: bounded buffer; readlinkat does not follow the leaf.
+            let length = unsafe { libc::readlinkat(destination_dir.as_raw_fd(), name.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len()) };
+            if length < 0 || &buffer[..length as usize] != expected.as_bytes() {
+                return false;
+            }
+        }
+        if let Some(expected) = item.digest {
+            // SAFETY: owned directory FD; O_NOFOLLOW|O_NONBLOCK so a swapped leaf cannot redirect or block.
+            let raw = retry(|| unsafe { libc::openat(destination_dir.as_raw_fd(), name.as_ptr(), libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY | libc::O_CLOEXEC) });
+            if raw < 0 {
+                return false;
+            }
+            let file = unsafe { OwnedFd::from_raw_fd(raw) };
+            if !stat_fd(file.as_raw_fd()).is_ok_and(|now| published_unchanged(&published, &now)) {
+                return false;
+            }
+            let mut buffer = vec![0u8; CHUNK];
+            let (mut hash, mut total) = (FNV_OFFSET, 0u64);
+            loop {
+                if self.shared.cancelled() {
+                    return false;
+                }
+                // SAFETY: bounded buffer.
+                let read = retry(|| unsafe { libc::read(file.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len()) });
+                if read < 0 {
+                    return false;
+                }
+                if read == 0 {
+                    break;
+                }
+                total += read as u64;
+                if total > published.st_size as u64 {
+                    return false;
+                }
+                hash = fnv1a(hash, &buffer[..read as usize]);
+            }
+            if hash != expected || total != published.st_size as u64 {
+                return false;
+            }
+        }
+        unchanged_now()
+    }
+
+    fn copy_bytes(&mut self, input: &OwnedFd, output: RawFd, before: &libc::stat) -> Result<(u64, u64), ItemError> {
         let mut buffer = vec![0u8; CHUNK];
         let mut copied = 0u64;
+        let mut digest = FNV_OFFSET;
         loop {
             self.check_cancel()?;
             #[cfg(any(test, feature = "fixture-delay"))]
@@ -1130,8 +1271,9 @@ impl<'a> Worker<'a> {
                 return Err(last_error().into());
             }
             if read == 0 {
-                return Ok(copied);
+                return Ok((copied, digest));
             }
+            digest = fnv1a(digest, &buffer[..read as usize]);
             let mut written = 0;
             while written < read as usize {
                 let count = retry(|| unsafe { libc::write(output, buffer[written..].as_ptr().cast(), read as usize - written) });
@@ -1805,6 +1947,132 @@ mod tests {
         assert!(report.cancelled && !report.changed, "{report:?}");
         assert!(private_leftovers(&destination).is_empty() && private_leftovers(&other).is_empty() && !other.join("named.txt").exists());
         cleanup(&other);
+        cleanup(&root);
+    }
+
+    fn limited(request: Request, limit: u64, hook: impl Fn(&str, &Path) + Send + Sync + 'static) -> Report {
+        let transfer = Transfer::start_with(request, Options { hook: Some(Arc::new(hook)), item_limit: Some(limit), ..Options::default() }).unwrap();
+        wait(&transfer, |_, conflict, _| panic!("unexpected conflict {conflict:?}"))
+    }
+
+    /// Rewrite a file in place (same inode, same length) and restore its mtime.
+    fn tamper_in_place(path: &Path) {
+        use std::io::{Seek, Write};
+        let before = std::fs::metadata(path).unwrap().modified().unwrap();
+        let mut file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+        let length = file.metadata().unwrap().len() as usize;
+        file.seek(std::io::SeekFrom::Start(0)).unwrap();
+        file.write_all(&vec![b'#'; length]).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(before)).unwrap();
+    }
+
+    #[test]
+    fn cross_device_move_keeps_originals_whose_published_copy_changed_in_place() {
+        let root = fixture("inplace");
+        let other = PathBuf::from("/dev/shm").join(format!("decfiles-transfer-inplace-{}", std::process::id()));
+        if other.exists() {
+            cleanup(&other);
+        }
+        std::fs::create_dir(&other).unwrap();
+        if std::fs::metadata(&other).unwrap().dev() == std::fs::metadata(&root).unwrap().dev() {
+            eprintln!("skipping: /dev/shm shares the fixture filesystem");
+            cleanup(&other);
+            cleanup(&root);
+            return;
+        }
+        let source = root.join("source");
+        std::fs::create_dir(&source).unwrap();
+        for name in ["overwritten.txt", "truncated.txt", "untouched.txt"] {
+            write(&source.join(name), b"original bytes!!", 0o600);
+        }
+        std::fs::create_dir(source.join("folder")).unwrap();
+        write(&source.join("folder/inner.txt"), b"inner original", 0o600);
+        write(&source.join("folder/other.txt"), b"other original", 0o600);
+        let target = other.clone();
+        let sources = ["overwritten.txt", "truncated.txt", "folder", "untouched.txt"].map(|name| source.join(name));
+        let report = hooked(request(Mode::Move, &sources, &other, None), false, move |point, path| {
+            if point != "published" {
+                return;
+            }
+            if path == target.join("overwritten.txt") {
+                tamper_in_place(path);
+            } else if path == target.join("truncated.txt") {
+                std::fs::OpenOptions::new().write(true).open(path).unwrap().set_len(3).unwrap();
+            } else if path == target.join("folder") {
+                tamper_in_place(&path.join("inner.txt"));
+            }
+        });
+        assert_eq!(report.completed, 4, "{report:?}");
+        assert!(report.message.contains("was kept: its copy at the destination changed or disappeared"), "{}", report.message);
+        // Every original whose published copy changed in place is kept with its own bytes.
+        for name in ["overwritten.txt", "truncated.txt"] {
+            assert_eq!(std::fs::read(source.join(name)).unwrap(), b"original bytes!!", "{name}");
+        }
+        assert_eq!(std::fs::read(source.join("folder/inner.txt")).unwrap(), b"inner original");
+        assert!(!source.join("folder/other.txt").exists(), "unchanged siblings still move");
+        assert!(source.join("folder").is_dir(), "the folder keeps its kept child");
+        assert!(!source.join("untouched.txt").exists(), "an unchanged copy still completes the move");
+        assert_eq!(std::fs::read(other.join("untouched.txt")).unwrap(), b"original bytes!!");
+        assert!(private_leftovers(&source).is_empty() && private_leftovers(&source.join("folder")).is_empty());
+        cleanup(&other);
+        cleanup(&root);
+    }
+
+    #[test]
+    fn one_operation_budget_covers_every_source_and_files_added_after_the_scan() {
+        let root = fixture("budget");
+        let source = root.join("source");
+        let destination = root.join("destination");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::create_dir(&destination).unwrap();
+        // Six sources of three items each exceed one ten-item budget.
+        let sources: Vec<_> = (0..6)
+            .map(|index| {
+                let folder = source.join(format!("folder-{index}"));
+                std::fs::create_dir(&folder).unwrap();
+                write(&folder.join("a"), b"a", 0o600);
+                write(&folder.join("b"), b"b", 0o600);
+                folder
+            })
+            .collect();
+        let report = limited(request(Mode::Copy, &sources, &destination, None), 10, |_, _| {});
+        assert!(report.message.starts_with("Nothing was copied: this preview transfers at most 10 items"), "{}", report.message);
+        assert_eq!(std::fs::read_dir(&destination).unwrap().count(), 0);
+        let other = PathBuf::from("/dev/shm").join(format!("decfiles-transfer-budget-{}", std::process::id()));
+        if other.exists() {
+            cleanup(&other);
+        }
+        std::fs::create_dir(&other).unwrap();
+        if std::fs::metadata(&other).unwrap().dev() != std::fs::metadata(&root).unwrap().dev() {
+            // Cross-device moves share the same budget instead of resetting it per source.
+            let report = limited(request(Mode::Move, &sources, &other, None), 10, |_, _| {});
+            assert_eq!((report.completed, report.failure_count), (3, 1), "{report:?}");
+            assert!(report.failures[0].message.contains("at most 10 items"));
+            assert_eq!(std::fs::read_dir(&other).unwrap().count(), 3);
+            for folder in &sources[3..] {
+                assert_eq!(std::fs::read_dir(folder).unwrap().count(), 2, "untouched after the limit");
+            }
+        }
+        cleanup(&other);
+        // Files added after the initial scan cannot exceed the budget: nothing is published.
+        for nested in [false, true] {
+            let grow = root.join(format!("grow-{nested}"));
+            std::fs::create_dir_all(grow.join("sub")).unwrap();
+            write(&grow.join("a"), b"a", 0o600);
+            write(&grow.join("sub/x"), b"x", 0o600);
+            let added = if nested { grow.join("sub") } else { grow.clone() };
+            let report = limited(request(Mode::Copy, std::slice::from_ref(&grow), &destination, None), 10, move |point, _| {
+                if point == "scanned" {
+                    for index in 0..20 {
+                        std::fs::write(added.join(format!("late-{index}")), b"late").unwrap();
+                    }
+                }
+            });
+            assert_eq!((report.completed, report.failure_count, report.changed), (0, 1, false), "{report:?}");
+            assert!(report.failures[0].message.contains("at most 10 items"), "{report:?}");
+            assert!(!destination.join(format!("grow-{nested}")).exists());
+            assert!(private_leftovers(&destination).is_empty());
+        }
         cleanup(&root);
     }
 

@@ -47,6 +47,10 @@ does not save preferences or read/write Decebal configuration.
   A second bounded monitor watches that folder (or its parent until it exists),
   reads the file asynchronously through GIO, and reapplies it at USER+1 priority,
   so palette changes apply live.
+  Each read gets a generation. An older read stops at its next 64 KiB chunk, and
+  its completion is ignored, so a delayed read cannot revert a newer palette or
+  profile. The read is bounded: a file over 2 MiB is never read past the cap and
+  changes nothing.
   The shell's `/* Files visual profile: explorer|finder (native file operations) */`
   marker, or an explicit `--profile=explorer|finder|native`, selects:
   - window-scoped `decfiles-explorer` / `decfiles-finder` surfaces, using only the
@@ -66,8 +70,10 @@ does not save preferences or read/write Decebal configuration.
 - Search: the toolbar's native search entry (Ctrl+F) searches the current folder
   recursively for names containing the text (case-insensitive; non-UTF8 bytes match
   as U+FFFD while results keep the exact path). One `decfiles-search` worker per
-  query never enters symlinks and is bounded to 32 levels, 200,000 visited entries
-  and 2,000 results; at most four search threads may be alive, even if cancelled
+  query never enters symlinks and is bounded to 32 levels, 200,000 visited entries,
+  2,000 results and 10,000 queued folders. Budgets are checked for every entry *while* a
+  folder is read (a huge folder stops mid-enumeration), and hits are published in
+  batches of at most 128. At most four search threads may be alive, even if cancelled
   ones are still leaving a blocked syscall. Results stream incrementally into a
   Name/Folder/Type list in discovery order. A newer query, Escape, navigation or a
   tab switch cancels it, and stale results are ignored by search id. Activating a
@@ -179,8 +185,20 @@ provider identity, and our local cut state is dropped when another owner takes o
 Paste copies or moves into the current folder on one `decfiles-transfer` worker
 thread per operation (one operation at a time). The UI thread never touches the
 filesystem: it polls a latest-only snapshot every 50 ms for the progress row
-(current item, bytes and items) and answers conflict prompts. Copies are counted
-first and refused before any change above 100,000 items or 64 nested levels.
+(current item, bytes and items) and answers conflict prompts.
+
+**One item budget per operation** (100,000 items, 64 nested levels) covers
+everything:
+
+- every selected source (not reset per source);
+- the copy pre-scan, which refuses before any change;
+- each cross-device move scan, which uses what is left;
+- every staged item;
+- every folder listing, which may not exceed what is left.
+
+Files added after the scan therefore cannot exceed it. Reaching the limit stops the
+whole operation, publishes nothing for the item in progress, and leaves later
+sources untouched.
 
 All work is relative to owned directory FDs and never follows the selected leaf.
 Each selected item is **staged privately, then published atomically**:
@@ -215,7 +233,18 @@ each original removed, and only if all of the following hold:
 3. The claimed item is the same unchanged inode (size and modification time)
    that was copied.
 
-Folders are removed last, only when empty. Anything that fails a check is
+Before the claim, the published copy must still match what was recorded right after
+publication:
+
+- the same inode, size, modification time and change time (`ctime` cannot be set
+  from userspace, so in-place rewrites and truncation are caught even if mtime is
+  restored);
+- for files, the same bytes: a 64-bit FNV-1a digest of the bytes as copied is
+  compared with a fresh read of the copy;
+- for links, the same target.
+
+This narrows the window before the claim but is not a compare-and-swap across
+filesystems. Folders are removed last, only when empty. Anything that fails a check is
 restored to its own name (never replacing anything) and kept, and the message
 says why. An original that changed or was replaced, a copy that changed or
 disappeared, or a read-only source folder therefore keeps the original. Children
@@ -310,6 +339,34 @@ Copy/move evidence (default binary
   `duplicate-selected.png`.
 - The same binary passed the earlier 13 operation and eight navigation cases:
   `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
+
+Bounds checkpoint (root review of 28788b8): 28 Rust tests, including:
+
+- `cross_device_move_keeps_originals_whose_published_copy_changed_in_place`:
+  a same-inode overwrite with mtime restored, a truncation, and a nested file
+  rewritten in place all keep their originals, while unchanged items still move;
+- `one_operation_budget_covers_every_source_and_files_added_after_the_scan`:
+  with a test budget of 10, a six-source copy is refused up front, and a
+  six-source cross-device move stops after three with the rest untouched. Files
+  added after the scan, at top level or nested, publish nothing and leave no
+  staging;
+- `budgets_are_enforced_inside_enumeration_on_a_real_huge_folder`: in a real
+  20,000-entry folder, visited stops at exactly 1,000, results at 300, and
+  queued folders stay at most 50.
+
+Default `3eb5e887b9630f123304ccb2601749dd9ceaa0a4dfc6993593a976fd6c5b7eda` and fixture
+`0521324c8c9a2647887dea9a7cc30c4e9219342d5b3aaeabee0f9c03b6a4e784`
+(`/var/tmp/decfiles-bounds-artifacts/`) pass one final gate in
+`/var/tmp/decfiles-bounds-gate-*-evidence/`: navigation 8, operations 13,
+transfers 10, views 12, tabs 6, search 7, close 4, transfers-cancel 4,
+paste-races 2+1 and search-races 2.
+
+The gate also covers `profile-native.py` 5+1, whose new case is an oversized
+gtk.css that changes nothing, and the new `theme-races-native.py` 1. In the
+latter, a startup read held by `DECFILES_FIXTURE_THEME_DELAY_MS` completes after
+a newer read and is ignored: profile, layout and rendered pixels stay with the
+newer file. Earlier receipts, including the failed
+`/var/tmp/decfiles-profile-gate-*` run, are kept unchanged.
 
 Profile checkpoint: 25 Rust tests (two new, including the shell-marker contract).
 
