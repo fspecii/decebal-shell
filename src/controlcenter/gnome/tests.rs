@@ -118,10 +118,12 @@ fn disabled_groups_remove_exactly_their_controls() {
         // Record lives in the decutil toggles group
         assert_eq!(items.iter().any(|i| i.target == Some(Target::Record)), name != "toggles" || false, "{name}");
     }
-    // a selection of unavailable groups never produces an empty box
+    // An unavailable selection remains visible and inert without restoring other groups.
     let bare = Snapshot::default();
     let (items, h) = layout_at(&bare, &Tiles::from_names(["display"]), 1.0);
-    assert!(!items.is_empty() && h > 100.0);
+    assert!(!items.is_empty() && h > 0.0);
+    assert!(items.iter().all(|item| item.target.is_none()));
+    assert!(targets_in_order(&items).is_empty());
 }
 
 #[test]

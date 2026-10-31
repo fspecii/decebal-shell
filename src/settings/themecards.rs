@@ -32,7 +32,7 @@ pub struct Card {
     pub hash_mismatch: bool,
 }
 
-type ShotCache = HashMap<PathBuf, Option<Pixmap>>;
+type ShotCache = HashMap<PathBuf, Pixmap>;
 static SHOTS: Mutex<Option<ShotCache>> = Mutex::new(None);
 
 /// A screenshot decoded once, at card size (the files are validated images of bounded size, but a card only needs a thumbnail).
@@ -42,18 +42,19 @@ fn shot(path: &PathBuf) -> Option<Pixmap> {
     if cache.len() >= 64 && !cache.contains_key(path) {
         cache.clear();
     }
-    cache
-        .entry(path.clone())
-        .or_insert_with(|| {
-            let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.thumbnail(420, 280).to_rgba8();
-            let mut pm = Pixmap::new(img.width(), img.height())?;
-            for (d, s) in pm.data_mut().chunks_exact_mut(4).zip(img.pixels()) {
-                let a = u32::from(s[3]);
-                d.copy_from_slice(&[(u32::from(s[0]) * a / 255) as u8, (u32::from(s[1]) * a / 255) as u8, (u32::from(s[2]) * a / 255) as u8, s[3]]);
-            }
-            Some(pm)
-        })
-        .clone()
+    if let Some(img) = cache.get(path) {
+        return Some(img.clone());
+    }
+    // A worker can atomically replace a missing/corrupt PNG at this same content-addressed path.
+    // Cache successful decodes only, so a temporary failure cannot pin the placeholder forever.
+    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.thumbnail(420, 280).to_rgba8();
+    let mut pm = Pixmap::new(img.width(), img.height())?;
+    for (d, s) in pm.data_mut().chunks_exact_mut(4).zip(img.pixels()) {
+        let a = u32::from(s[3]);
+        d.copy_from_slice(&[(u32::from(s[0]) * a / 255) as u8, (u32::from(s[1]) * a / 255) as u8, (u32::from(s[2]) * a / 255) as u8, s[3]]);
+    }
+    cache.insert(path.clone(), pm.clone());
+    Some(pm)
 }
 
 /// Uniform contain transform: preserve every image edge, with letterboxing as needed.
@@ -200,6 +201,18 @@ pub fn draw(pm: &mut Pixmap, p: &mut Painter, cards: &[Card], x0: f32, y: f32, c
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_preview_repaired_at_the_same_path_is_painted_after_a_failed_decode() {
+        let tmp = crate::theme::system::testutil::tmp("card-repaired-png");
+        let path = tmp.join("preview.png");
+        std::fs::write(&path, b"broken PNG").unwrap();
+        assert!(shot(&path).is_none());
+        let mut image = Pixmap::new(420, 280).unwrap();
+        image.fill(tiny_skia::Color::WHITE);
+        image.save_png(&path).unwrap();
+        assert!(shot(&path).unwrap().data() == image.data(), "the repaired PNG is decoded and painted");
+    }
 
     #[test]
     fn edge_marked_preview_is_contained_without_stretch_at_multiple_aspects() {

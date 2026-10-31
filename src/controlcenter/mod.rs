@@ -68,6 +68,12 @@ pub fn layout_styled(s: &Snapshot, tiles: &Tiles, style: Style) -> (Vec<Item>, f
         _ => layout_with(s, tiles),
     }
 }
+/// Empty selections and unavailable-only selections stay inert, rather than enabling unrelated groups.
+fn empty_layout(width: f32, pad: f32, no_groups: bool) -> (Vec<Item>, f32) {
+    let message = if no_groups { "No controls selected" } else { "Selected controls are unavailable" };
+    let height = 48.0 * crate::theme::live::font_scale().max(1.0);
+    (vec![text(pad, pad, width - 2.0 * pad, message, 12.0, Weight::Regular, Ink::Secondary)], height + 2.0 * pad)
+}
 const PAD: f32 = 12.0;
 const GAP: f32 = 10.0;
 
@@ -475,9 +481,8 @@ pub fn layout_with(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
         // the last group above ended with a gap
         y = (y - GAP).max(PAD);
     }
-    if out.is_empty() && *tiles != Tiles::ALL {
-        // every chosen group is unavailable on this machine (no brightness control, no player): never show an empty box
-        return layout_with(s, &Tiles::ALL);
+    if out.is_empty() {
+        return empty_layout(PANEL_W, PAD, tiles.names().is_empty());
     }
 
     (out, y + PAD)
@@ -766,6 +771,24 @@ mod tests {
             let mut pm = Pixmap::new(32, 32).unwrap();
             blit_symbol(&mut pm, &mut symbols, true, name, (255, 255, 255), 20.0, 16.0, 16.0);
             assert!(pm.data().chunks_exact(4).any(|pixel| pixel[3] != 0), "missing fallback for {name}");
+        }
+    }
+
+    #[test]
+    fn disabled_groups_never_reappear_in_any_style_or_narrow_layout() {
+        let none = Tiles::from_names(std::iter::empty());
+        for style in [Style::Card, Style::Fluent, Style::Gnome, Style::Dux] {
+            for (snapshot, tiles) in [(full(), none), (Snapshot::default(), Tiles::from_names(["media"]))] {
+                for room in [240.0, 1000.0] {
+                    let panel = layout_fitted(&snapshot, &tiles, style, room);
+                    assert!(panel.height > 0.0 && !panel.items.is_empty(), "{style:?}: neutral content");
+                    assert!(panel.items.iter().all(|item| item.target.is_none()), "{style:?}: no unrelated actions");
+                    assert!(targets_in_order(&panel.items).is_empty(), "{style:?}: no keyboard stops");
+                    for item in &panel.items {
+                        assert!(hit(&panel.items, item.r.x + item.r.w / 2.0, item.r.y + item.r.h / 2.0).is_none(), "{style:?}: inert pointer area");
+                    }
+                }
+            }
         }
     }
 

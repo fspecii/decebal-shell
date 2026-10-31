@@ -349,9 +349,8 @@ pub fn layout_cols(s: &Snapshot, tiles: &Tiles, k: f32, columns: u8) -> (Vec<Ite
         y += h;
     }
 
-    if out.is_empty() && *tiles != Tiles::ALL {
-        // every chosen group is unavailable on this machine: never show an empty box (the common layouts do the same)
-        return layout_cols(s, &Tiles::ALL, k, columns);
+    if out.is_empty() {
+        return empty_layout(panel_width_cols(k, columns), PANEL_PAD, tiles.names().is_empty());
     }
     (out, y + PANEL_PAD)
 }

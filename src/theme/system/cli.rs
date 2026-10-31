@@ -9,9 +9,13 @@ pub const HELP: &str = "decthemectl apply-system [--dry-run] [--only gtk,qt,...]
 decthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
                                  off puts every changed file and setting back (originals are saved by the first apply)
 decthemectl system status [--json]
+decthemectl system xsettings serve --display D --ini PATH | status [--display D] | stop [--display D]
+                                 the X11 XSETTINGS manager the GTK target starts (never replaces another one)
+decthemectl system palette --json  the resolved colour roles the app targets render from
 decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11 terminals
-decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font  (VALUE none = unset; signals and gtk-font take on|off:
-                                 gtk-font, on by default, writes the theme's font to GTK's settings.ini and gsettings when it names an installed one)";
+decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font gtk-theme  (VALUE none = unset; signals, gtk-font and gtk-theme take on|off:
+                                 gtk-font, on by default, writes the theme's fonts to GTK's settings.ini and gsettings when installed ones are named;
+                                 gtk-theme, on by default, selects the generated Decebal GTK 3 / GTK 4 theme, off keeps your own)";
 
 fn print_report(r: &Report, dry: bool) {
     if !r.applied.is_empty() {
@@ -43,6 +47,7 @@ pub fn run(args: &[String], src: &Source) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("apply-system") => {
             let mut opts = Opts::default();
+            let (mut debounced, mut shell_json) = (None, None);
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -54,14 +59,23 @@ pub fn run(args: &[String], src: &Source) -> Result<(), String> {
                     }
                     "--debounced" => {
                         i += 1;
-                        let nonce = args.get(i).ok_or("--debounced needs a token")?;
-                        run_debounced(src, nonce)?;
-                        return Ok(());
+                        debounced = Some(args.get(i).ok_or("--debounced needs a token")?.clone());
+                    }
+                    // the configuration a queued request belongs to, passed literally by its producer (never rediscovered)
+                    "--shell-json" => {
+                        i += 1;
+                        shell_json = Some(std::path::PathBuf::from(args.get(i).ok_or("--shell-json needs a path")?));
                     }
                     other => return Err(format!("unknown option {other}")),
                 }
                 i += 1;
             }
+            if let Some(nonce) = debounced {
+                let src = Source { shell_json: shell_json.unwrap_or_else(|| src.shell_json.clone()), themes_dir: src.themes_dir.clone() };
+                run_debounced(&src, &nonce)?;
+                return Ok(());
+            }
+            let src = &Source { shell_json: shell_json.unwrap_or_else(|| src.shell_json.clone()), themes_dir: src.themes_dir.clone() };
             let r = apply_now(src, &opts)?;
             if json {
                 println!(
@@ -107,6 +121,13 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             }
             Ok(())
         }
+        Some("xsettings") => xsettings(&args[1..]),
+        Some("palette") => {
+            // The resolved roles every target renders from (the native GTK harness compares pixels against these).
+            let (p, _) = current_palette(src)?;
+            println!("{}", p.to_json());
+            Ok(())
+        }
         Some("status") | None => {
             let st = status(&env, &cfg);
             let applied = super::applied_theme(&env);
@@ -115,7 +136,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(
-                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "gtk_font": cfg.option("gtk.font"), "targets": t})
+                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "gtk_font": cfg.option("gtk.font"), "gtk_theme": cfg.option("gtk.theme"), "targets": t})
                     )
                     .unwrap()
                 );
@@ -163,6 +184,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 "cursor-theme" => cfg.cursor_theme = (!unset).then(|| v.clone()),
                 "signals" => cfg.signals = matches!(v.as_str(), "true" | "on" | "1" | "yes"),
                 "gtk-font" => cfg.set_option("gtk.font", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
+                "gtk-theme" => cfg.set_option("gtk.theme", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
                 other => return Err(format!("unknown key `{other}`")),
             }
             cfg.save(&src.shell_json)?;
@@ -176,5 +198,40 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             Ok(())
         }
         Some(other) => Err(format!("unknown system command `{other}`\n{HELP}")),
+    }
+}
+
+/// `decthemectl system xsettings serve|status|stop`.
+fn xsettings(args: &[String]) -> Result<(), String> {
+    let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let display = opt("--display").or_else(|| std::env::var("DISPLAY").ok()).filter(|d| !d.is_empty()).ok_or("no X display (--display or DISPLAY)")?;
+    #[cfg(feature = "x11")]
+    {
+        use super::xsettings::{probe, serve, stop, Owner};
+        match args.first().map(String::as_str) {
+            Some("serve") => {
+                let ini = opt("--ini").map(std::path::PathBuf::from).ok_or("serve needs --ini PATH")?;
+                println!("{}", serve(&display, &ini)?);
+                Ok(())
+            }
+            Some("status") | None => {
+                match probe(&display)? {
+                    Owner::None => println!("no XSETTINGS manager on {display}"),
+                    Owner::Ours { pid, window, .. } => println!("Decebal's XSETTINGS manager on {display}: pid {pid}, window {window:#x}"),
+                    Owner::Foreign { window } => println!("another XSETTINGS manager owns {display} (window {window:#x})"),
+                }
+                Ok(())
+            }
+            Some("stop") => {
+                println!("{}", if stop(&display)? { "stopped" } else { "no Decebal XSETTINGS manager was running" });
+                Ok(())
+            }
+            Some(other) => Err(format!("unknown xsettings command `{other}`")),
+        }
+    }
+    #[cfg(not(feature = "x11"))]
+    {
+        let _ = display;
+        Err("this build has no X11 support".into())
     }
 }

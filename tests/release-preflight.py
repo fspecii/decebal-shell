@@ -924,6 +924,57 @@ class ManagedRuntimeTests(Base):
         with self.assertRaisesRegex(R.ReleaseError, 'standard'):
             self.make_plan()
 
+    def preview_bundle(self):
+        folder = self.root / 'preview-followup'
+        folder.mkdir()
+        self.art = make_bundle(folder, {'decsettings': b'new-settings', 'decthemectl': b'new-renderer'})
+
+    def test_exact_preview_pair_publishes_and_rolls_back_without_touching_other_binaries(self):
+        self.preview_bundle()
+        self.make_plan(only=['decsettings', 'decthemectl'])
+        self.assertEqual(self.publish()['state'], 'committed')
+        for d in self.dests:
+            self.assertEqual((d / 'decsettings').read_bytes(), b'new-settings')
+            self.assertEqual((d / 'decthemectl').read_bytes(), b'new-renderer')
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+            self.assertEqual((d / 'rdwm').read_bytes(), b'foreign')
+        self.assertEqual(R.rollback(self.journal, self.lock, managed_runtime=True)['state'], 'rolled_back')
+        for d in self.dests:
+            self.assertFalse((d / 'decsettings').exists())
+            self.assertFalse((d / 'decthemectl').exists())
+        self.assertEqual(R.CONFIG_WATCH[0].read_text(), 'config')
+
+    def test_preview_followup_cannot_select_only_one_member(self):
+        self.preview_bundle()
+        for name in ('decsettings', 'decthemectl'):
+            with self.assertRaisesRegex(R.ReleaseError, 'both'):
+                self.make_plan(only=[name])
+
+    def test_preview_followup_rechecks_pair_per_folder_before_publishing(self):
+        self.preview_bundle()
+        p = self.make_plan(only=['decsettings', 'decthemectl'])
+        p['files'].pop()
+        self.edit_plan(p)
+        with self.assertRaisesRegex(R.ReleaseError, 'both'):
+            self.publish()
+        self.assertFalse(self.journal.exists())
+        for d in self.dests:
+            self.assertFalse((d / 'decsettings').exists())
+            self.assertFalse((d / 'decthemectl').exists())
+
+    def test_preview_followup_failure_rolls_back_both_folders(self):
+        self.preview_bundle()
+        self.make_plan(only=['decsettings', 'decthemectl'])
+        def fail(index, **kw):
+            if index == 2:
+                raise R.ReleaseError('fixture followup failure')
+        R.FAULTS['after_commit'] = fail
+        self.assertEqual(self.publish()['state'], 'rolled_back')
+        for d in self.dests:
+            self.assertFalse((d / 'decsettings').exists())
+            self.assertFalse((d / 'decthemectl').exists())
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+
     def test_stale_plan_refused(self):
         p = self.make_plan()
         p['created_utc'] = '2000-01-01T00:00:00Z'

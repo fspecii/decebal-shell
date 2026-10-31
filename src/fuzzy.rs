@@ -128,6 +128,18 @@ impl History {
         (freq + recency) as i32
     }
 
+    /// Keys by use count (then most recent), the order Kickoff's "Frequently Used" lists.
+    pub fn frequent(&self, prefix: &str, n: usize) -> Vec<String> {
+        let mut rows: Vec<_> = self.map.iter().filter(|(k, _)| k.starts_with(prefix)).collect();
+        rows.sort_by(|a, b| b.1.count.cmp(&a.1.count).then(b.1.last.cmp(&a.1.last)).then(a.0.cmp(b.0)));
+        rows.into_iter().take(n).map(|(k, _)| k.clone()).collect()
+    }
+
+    /// Unix time a key was last opened.
+    pub fn last_used(&self, key: &str) -> Option<u64> {
+        self.map.get(key).map(|u| u.last)
+    }
+
     /// Keys by most recent use.
     pub fn recent(&self, prefix: &str, n: usize) -> Vec<String> {
         let mut rows: Vec<_> = self.map.iter().filter(|(k, _)| k.starts_with(prefix)).collect();

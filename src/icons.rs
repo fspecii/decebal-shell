@@ -179,9 +179,30 @@ fn build_at_native_scale(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Pix
         render_file(Path::new(id), size, opts)
     } else {
         let themed = |generic: bool| live::lookup(id, content, generic).and_then(|f| raster::render(&f, size, opts));
-        themed(false).or_else(|| matches!(id, "trash" | "trash-full").then(|| trash(size)).flatten()).or_else(|| themed(true))
+        themed(false).or_else(|| matches!(id, "trash" | "trash-full").then(|| trash(size)).flatten()).or_else(|| control_fallback(id, size, tint)).or_else(|| themed(true))
     };
     pm.or_else(|| placeholder(size)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"))
+}
+
+/// Recognizable shell controls when their freedesktop artwork is absent. Exact theme artwork wins;
+/// app-generic fallback must not turn session actions into anonymous grey tiles.
+fn control_fallback(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Option<Pixmap> {
+    let name = match id {
+        "applications-all-symbolic" => "apps",
+        "bookmarks" => "bookmarks",
+        "configure" => "gear",
+        "compass" => "folder",
+        "system-suspend" => "moon",
+        "system-suspend-hibernate" => "snowflake",
+        "system-reboot" => "refresh",
+        "system-shutdown" => "power",
+        "system-log-out" => "logout",
+        "system-lock-screen" => "lock",
+        "system-switch-user" => "person",
+        "system-save-session" => "download",
+        _ => return None,
+    };
+    crate::menubar::symbols::render(name, tint.unwrap_or_else(|| crate::theme::th().text.t()), size)
 }
 
 fn placeholder(size: u32) -> Option<Pixmap> {
@@ -195,6 +216,33 @@ fn placeholder(size: u32) -> Option<Pixmap> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_session_and_navigation_artwork_has_tinted_semantic_glyphs() {
+        let mut shapes = std::collections::HashSet::new();
+        for id in [
+            "applications-all-symbolic",
+            "bookmarks",
+            "configure",
+            "compass",
+            "system-suspend",
+            "system-suspend-hibernate",
+            "system-reboot",
+            "system-shutdown",
+            "system-log-out",
+            "system-lock-screen",
+            "system-switch-user",
+            "system-save-session",
+        ] {
+            let white = control_fallback(id, 32, Some((255, 255, 255))).unwrap();
+            let black = control_fallback(id, 32, Some((0, 0, 0))).unwrap();
+            assert!(white.pixels().iter().any(|p| p.alpha() == 0), "{id} is a glyph, not an opaque tile");
+            assert!(white.pixels().iter().any(|p| p.alpha() > 0));
+            assert_ne!(white.data(), black.data(), "{id} follows its surface foreground");
+            assert!(shapes.insert(white.data().to_vec()), "{id} needs a distinct semantic shape");
+        }
+        assert!(control_fallback("unknown-application", 32, None).is_none(), "ordinary apps retain their existing lookup policy");
+    }
 
     #[test]
     fn one_symbolic_icon_can_cache_distinct_surface_foregrounds() {

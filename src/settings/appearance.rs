@@ -410,6 +410,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
 /// Every setting of the tabs, for the search box: (view, label, extra words). The pane test below checks that every row the
 /// tabs draw is covered, so a new setting cannot silently be unfindable.
 pub const INDEX: &[(Tab, Section, &str, &str)] = &[
+    (Tab::Customise, Section::Icons, "Download matching packs", "icons cursors theme packs download licence verified pinned sources background"),
     // Theme
     (Tab::Theme, Section::Colours, "Layout", "style macos windows caelestia shell layout bar dock look"),
     (Tab::Theme, Section::Colours, "Themes", "theme desktop design packages cards apply preview export duplicate delete install create macos windows 11 caelestia catalog"),
@@ -540,6 +541,8 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Customise, Section::Icons, "Tint symbolic icons", "monochrome text colour"),
     (Tab::Customise, Section::Icons, "Fallback theme", "hicolor missing icons"),
     (Tab::Customise, Section::Icons, "Cursor theme", "mouse pointer cursor bibata adwaita"),
+    (Tab::Customise, Section::Icons, "Theme matching", "follow theme custom icons cursors restore matching pack"),
+    (Tab::Customise, Section::Icons, "Download matching packs", "automatic downloads icons cursors verified asset packs install retry stop"),
     // Wallpaper
     (Tab::Wallpaper, Section::Colours, "For this theme", "curated recommended photography wallhaven dark light wallpaper"),
     (Tab::Wallpaper, Section::Colours, "Wallpaper", "background picture image desktop wallhaven"),
@@ -557,7 +560,8 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Apps, Section::Colours, "Omarchy theme hooks", "hooks omarchy theme-set scripts"),
     (Tab::Apps, Section::Colours, "Qt apps", "qt5 qt6 qt6ct kvantum"),
     (Tab::Apps, Section::Colours, "Terminals and Omarchy apps", "alacritty kitty foot ghostty waybar mako"),
-    (Tab::Apps, Section::Colours, "Theme font in GTK apps", "gtk font"),
+    (Tab::Apps, Section::Colours, "Theme font in GTK apps", "gtk font monospace"),
+    (Tab::Apps, Section::Colours, "Theme GTK 3 and GTK 4 controls", "gtk3 gtk4 buttons widgets controls theme decebal keep my own gtk theme"),
     (Tab::Apps, Section::Colours, "X11 terminals", "xterm urxvt xresources"),
     (Tab::Apps, Section::Colours, "Choose what is themed", "advanced targets per app options"),
     (Tab::Apps, Section::Colours, "File manager appearance", "files nautilus explorer windows finder macos profile spacing"),
