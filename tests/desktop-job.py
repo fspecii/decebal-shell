@@ -46,6 +46,47 @@ class DesktopJobTests(unittest.TestCase):
             os.environ['DECEBAL_BUILD_SLOTS'] = str(self.slots)
             self.assertEqual(module.default_slots(), self.slots)
 
+    def module(self):
+        spec = importlib.util.spec_from_file_location('desktop_job', RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_pressure_uses_measured_intervals_and_handles_counter_reset(self):
+        module = self.module()
+        with patch.object(module, 'io_full_total', side_effect=[100, 200100, 10, 300010]), patch.object(module.time, 'monotonic', side_effect=[0, .5, 2, 3, 5]):
+            pressure = module.Pressure(10)
+            self.assertIsNone(pressure.check(), 'do not infer pressure from a subsecond interval')
+            self.assertIsNone(pressure.check(), 'exactly 10 percent is allowed')
+            self.assertIsNone(pressure.check(), 'a reset counter cannot produce negative pressure')
+            self.assertIn('15.0%', pressure.check())
+
+    def test_pressure_abort_ends_owned_job_and_keeps_future_jobs_paused(self):
+        module = self.module()
+        module.directory(self.slots)
+        values = iter([0, 900000])
+        with patch.object(module, 'io_full_total', side_effect=lambda: next(values)):
+            code = module.run([sys.executable, '-c', 'import time;time.sleep(60)'], self.slots, 5)
+        self.assertEqual(code, 130)
+        self.assertTrue((self.slots / 'paused').exists())
+        self.assertEqual(self.call('--', sys.executable, '-c', 'pass').returncode, 75)
+
+    def test_unavailable_pressure_refuses_before_spawning(self):
+        module = self.module()
+        module.directory(self.slots)
+        for contents in ('some total=100', 'full total=broken', 'full total=-1'):
+            with patch.object(module.Path, 'read_text', return_value=contents), patch.object(module.subprocess, 'Popen') as spawn:
+                with self.assertRaises(module.Refused):
+                    module.run([sys.executable, '-c', 'pass'], self.slots, 5)
+                spawn.assert_not_called()
+
+    def test_invalid_pressure_budget_never_starts_child(self):
+        marker = self.root / 'started'
+        for value in ('nan', 'inf', '0', '-1', '101'):
+            r = self.call('--max-io-stall', value, '--', sys.executable, '-c', f'from pathlib import Path;Path({str(marker)!r}).touch()')
+            self.assertEqual(r.returncode, 75, r.stderr)
+        self.assertFalse(marker.exists())
+
     def test_low_priorities_jobs_and_lean_defaults_reach_child(self):
         code = 'import os,json;print(json.dumps({"nice":os.getpriority(os.PRIO_PROCESS,0),"jobs":os.environ["CARGO_BUILD_JOBS"],"threads":os.environ["RUST_TEST_THREADS"],"debug":os.environ["CARGO_PROFILE_DEV_DEBUG"],"target":os.environ["CARGO_TARGET_DIR"]}))'
         env = {k: v for k, v in os.environ.items() if k not in ('CARGO_BUILD_JOBS', 'RUST_TEST_THREADS', 'CARGO_PROFILE_DEV_DEBUG', 'CARGO_TARGET_DIR')}

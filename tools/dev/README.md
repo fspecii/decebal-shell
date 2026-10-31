@@ -32,6 +32,12 @@ command group. `--resume` only removes that flag: it does **not** restart agents
 resume old processes. Do not remove a user-requested pause until the user has agreed to the resumption scope.
 Never delete lock files to bypass a running job.
 
+The runner samples Linux `/proc/pressure/io` full-stall time over measured intervals of at least one second.
+Above 10% it ends only its owned command group, returns 130 and leaves the shared queue paused. This is a
+responsiveness budget, not a diagnosis of a faulty disk or proof of which process caused the stalls. Use
+`--max-io-stall PERCENT` for an explicit finite budget in `(0, 100]`; unavailable pressure counters refuse the
+job before it starts. A pressure-aborted test is not a pass. Inspect the system before explicitly resuming.
+
 Queue wait defaults to 60 seconds (exit 75 if unavailable); execution defaults to 30 minutes (exit 124 on timeout).
 `--queue-timeout` and `--timeout` accept finite seconds. Interrupts and an active pause return 130. The command
 has no stdin; output is inherited, with no environment dump or separate log. Redirect noisy output to a private
