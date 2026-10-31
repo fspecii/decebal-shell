@@ -56,8 +56,9 @@ license_oids = ["<40 hex>"]     # optional, as for the source
 link_sources = ["Papirus"]      # optional: other source folders that links of `path` point into (Papirus-Dark's size
                                 #   folders link to ../Papirus). File links become copies, folder links are expanded
                                 #   into real folders: the installed pack never links outside itself
-link_source_trees = ["<40 hex>"]  # `git rev-parse <commit>:<folder>` of each link source, same order. Without it an
-                                #   install that uses link-source files needs a matching archive_sha256, else it is refused
+link_source_trees = ["<40 hex>"]  # `git rev-parse <commit>:<folder>` of each link source, same order. Without it a
+                                #   catalogue install needs a matching archive_sha256, else it is refused before anything
+                                #   is built
 index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]   # optional: source files concatenated into
                                 #   index.theme when the theme folder has none (Adwaita: "index.theme" in the repo root)
 index_oids = ["<40 hex>", "<40 hex>"]   # required with index: `git rev-parse <commit>:<file>` of each, same order
@@ -150,7 +151,10 @@ What did not fit the format, found while pinning them (the port owners decide):
 1. **Lock and stage**: the install lock (`<root>/.decebal-staging/lock`) is taken **first** and held to the end; every
    observation of the target is made under it. A private folder `<root>/.decebal-staging/<name>.<pid>.<n>/` (mode
    0700, same file system as the target, so the final step is a `rename`) holds the work.
-2. **Read** the source as a stream: `.tar`, `.tar.gz` / `.tgz` (gzip is decompressed with a cap while it is read), or a
+2. **Snapshot**: an archive given with `--archive` is copied into the job folder while it is hashed (bytes capped as
+   they stream); a download is written there while it is hashed. Only that owned snapshot is sniffed and read, so the
+   bytes that were checked against `archive_sha256` are the bytes that are staged.
+   **Read** the source as a stream: `.tar`, `.tar.gz` / `.tgz` (gzip is decompressed with a cap while it is read), or a
    folder (walked without following links). Only `path`, the licence files and `link_sources` are extracted;
    everything else is skipped unread. A git archive's pax comment is compared with `commit`.
 3. **Verify**: the git tree OID of `path` (blob/tree objects computed from the exact bytes and modes read) must equal
@@ -165,7 +169,9 @@ What did not fit the format, found while pinning them (the port owners decide):
    writes are refused, and depth (8), entries and bytes are bounded by the install limits.
    Files are written 0644, folders 0755: executable bits never survive. Internal symlinks are kept (relative);
    links into `link_sources` become copies; links to nothing are dropped with a warning.
-5. **Build cursors** declared with `[[pack.xcursor]]`: each PNG (read from the verified source, at most 256 px a side)
+5. **Build cursors** declared with `[[pack.xcursor]]`: each PNG (read from the verified source, its size taken from the
+   PNG header and checked against 256 px a side and one budget for all cursors of the pack, 64 MiB / 4096 images,
+   before it is decoded; a PNG reached through a link into `link_sources` counts as an outside input)
    becomes a premultiplied ARGB image of an Xcursor file with its hotspot (which must lie inside the image) and delay;
    aliases become links. A cursor both shipped in `cursors/` and declared is an error. The PNGs are not installed, and
    a cursor-only pack leaves out images outside `cursors/` and `cursors_scalable/`.
@@ -200,7 +206,8 @@ What did not fit the format, found while pinning them (the port owners decide):
   absolute or escaping targets refuse the pack. No symlink is ever created in the staging source tree, so a later entry
   cannot be written through one. Hard links are copies of an earlier entry. Devices, FIFOs, sparse files and base-256
   sizes are refused.
-* **Caps** (defaults): 120 000 entries, 16 MiB per file, 1 GiB extracted, 512 MiB archive, 1 MiB per licence file.
+* **Caps** (defaults): 120 000 entries (counted while folders are read), 16 MiB per file, 1 GiB extracted, 512 MiB
+  archive, 1 MiB per licence file, 64 MiB / 4096 images of generated cursors.
 * **Ownership**: only folders carrying `.decebal-asset.json` are ever replaced or removed. `remove` decides under the
   install lock (what is there, whether it is in use) and checks the folder it moved aside is the pack it observed.
 
