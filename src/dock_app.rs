@@ -96,6 +96,8 @@ pub struct DockApp {
     scale: Option<f32>,
     /// Lets the dock close itself while `dock.enabled` (decebal.json) says it is off; see [`DockApp::with_gate`].
     gate: std::cell::RefCell<Option<crate::menubar::gate::Gate>>,
+    /// `decdock --focus` (SIGUSR2): the request flag and the slot for the waker; see [`DockApp::with_focus_signal`].
+    focus_signal: Option<&'static crate::menubar::FocusSignal>,
 }
 
 impl DockApp {
@@ -120,7 +122,15 @@ impl DockApp {
             surface_origin: (0, 0),
             scale: None,
             gate: std::cell::RefCell::new(None),
+            focus_signal: None,
         }
+    }
+
+    /// Lets `decdock --focus` (SIGUSR2 to this process) start the taskbar's keyboard mode, like `decbar --focus` does
+    /// for the bar. Call before any other thread starts: the signal is blocked here and collected by a thread of its own.
+    pub fn with_focus_signal(mut self) -> Self {
+        self.focus_signal = Some(crate::menubar::DecBar::init_focus_signal());
+        self
     }
 
     /// Lets the dock close itself (the backend returns) while `dock.enabled` in `decebal.json` says it is off, which under
@@ -655,6 +665,11 @@ impl App for DockApp {
         }
         let w = waker.clone();
         crate::theme::live::start_watcher(move || w.wake());
+        if let Some((_, slot)) = self.focus_signal {
+            if let Ok(mut s) = slot.lock() {
+                *s = Some(waker.clone());
+            }
+        }
         self.waker = Some(waker);
         if self.is_windows() {
             self.win_init();
@@ -707,9 +722,10 @@ impl App for DockApp {
             }
             changed = true;
         }
+        let focus = self.focus_signal.is_some_and(|(flag, _)| flag.swap(false, std::sync::atomic::Ordering::SeqCst));
         if self.is_windows() {
             let mut tick = self.win_tick();
-            tick.redraw |= changed;
+            tick.redraw |= changed || focus && self.win_focus_start();
             return tick;
         }
         changed |= self.sync_items();
@@ -812,7 +828,8 @@ impl App for DockApp {
 
     fn key(&mut self, key: Key) -> bool {
         if self.is_windows() {
-            return matches!(key, Key::Escape) && self.win_escape();
+            // Escape closes a menu or popup first, then leaves keyboard mode
+            return matches!(key, Key::Escape) && (self.win_escape() || self.win_focus_end());
         }
         match key {
             Key::Escape => self.close_menu(),
@@ -820,6 +837,9 @@ impl App for DockApp {
     }
 
     fn nav_key(&mut self, key: NavKey) -> bool {
+        if self.menu.is_none() && self.is_windows() {
+            return self.win_nav_key(key);
+        }
         let out = match (&mut self.menu, key) {
             (Some(m), NavKey::Up) => return m.menu.step(-1),
             (Some(m), NavKey::Down) => return m.menu.step(1),
@@ -1525,6 +1545,63 @@ mod tests {
                 assert!(painted(y), "{edge:?}: strip painted at y={y}");
             }
         }
+    }
+
+    #[test]
+    fn decdock_focus_walks_the_taskbar_by_keyboard_on_every_edge() {
+        use crate::menubar::Tray;
+        use crate::panel::Edge;
+        use crate::taskbar::Hit;
+        for edge in [Edge::Bottom, Edge::Left, Edge::Right, Edge::Top] {
+            let mut r = edge_rig(&format!("kb-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            assert!(!r.app.wants_keyboard());
+            // the signal of `decdock --focus`, as the collector thread leaves it
+            let signal: &'static crate::menubar::FocusSignal = Box::leak(Box::new((std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)), Default::default())));
+            r.app.focus_signal = Some(signal);
+            assert!(r.app.tick().redraw, "{edge:?}: keyboard mode starts with a redraw");
+            assert!(r.app.wants_keyboard(), "{edge:?}");
+            let items = r.app.win_focus_items();
+            assert_eq!(items.first(), Some(&Hit::Start));
+            assert_eq!(items.last(), Some(&Hit::Desktop));
+            assert!(items.iter().any(|h| matches!(h, Hit::Task(_))) && items.contains(&Hit::Clock));
+            // every zone is reached by the arrows of either axis and wraps around
+            let mut seen = Vec::new();
+            for _ in 0..items.len() {
+                seen.push(items[r.app.win.as_ref().unwrap().kb.unwrap()]);
+                assert!(r.app.nav_key(if edge.is_vertical() { NavKey::Down } else { NavKey::Right }));
+            }
+            assert_eq!(seen, items, "{edge:?}");
+            assert_eq!(r.app.win.as_ref().unwrap().kb, Some(0));
+            r.app.nav_key(NavKey::Up);
+            assert_eq!(r.app.win.as_ref().unwrap().kb, Some(items.len() - 1));
+            // the ring is drawn on the focused zone
+            let mut pm = Pixmap::new(r.app.surface.0, r.app.surface.1).unwrap();
+            r.app.draw(&mut pm);
+            // Enter on the sound cell opens its popup with the first row focused; the arrows walk it; Escape closes
+            // it, keyboard mode stays, a second Escape leaves
+            let at = items.iter().position(|h| *h == Hit::Tray(Tray::Audio)).expect("sound");
+            r.app.win.as_mut().unwrap().kb = Some(at);
+            assert!(r.app.nav_key(NavKey::Enter));
+            assert_eq!(r.app.win.as_ref().unwrap().status.status_open_kind(), Some(Tray::Audio), "{edge:?}");
+            assert!(r.app.nav_key(NavKey::Down), "{edge:?}: the popup's rows take the arrows");
+            assert!(r.app.key(Key::Escape));
+            assert_eq!(r.app.win.as_ref().unwrap().status.status_open_kind(), None);
+            assert!(r.app.wants_keyboard());
+            assert!(r.app.key(Key::Escape) && !r.app.wants_keyboard(), "{edge:?}: Escape leaves keyboard mode");
+            // Enter on Start opens the launcher, which takes the focus
+            signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            r.app.tick();
+            assert!(r.app.nav_key(NavKey::Enter));
+            assert_eq!(r.fx.borrow().launched.last().map(String::as_str), Some("launchpad"));
+            assert!(!r.app.wants_keyboard());
+            // a pointer press also ends it
+            signal.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            r.app.tick();
+            let (x, y) = (r.app.surface.0 as f32 / 2.0, r.app.surface.1 as f32 / 2.0);
+            r.app.pointer_button(x, y, Button::Left);
+            assert!(r.app.win.as_ref().unwrap().kb.is_none());
+        }
+        crate::menubar::DecBar::status_test_applets(None);
     }
 
     #[test]

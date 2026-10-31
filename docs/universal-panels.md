@@ -11,12 +11,12 @@ registry, `mod.rs` the resolution, `frame.rs` the edge geometry). The acceptance
 Done (0.3.0 batch): the registry, keys and resolution order; every bar style (menu bar, floating bar, pill rail, Dux band)
 on all four edges with every applet, overflow lists and worker gating; the Windows taskbar on all four edges with every
 applet; the macOS dock on all four edges; `[branding]`; Settings → Panels; `decthemectl panel`; keyboard mode
-(`decbar --focus`); previews that show the effective panels and key their cache on them.
+(`decbar --focus`, `decdock --focus` for the taskbar); every bar style at the display scale on X11 (`DECEBAL_SCALE` /
+`Xft.dpi`, checked at 100/125/200%); previews that show the effective panels and key their cache on them.
 
 Known limits:
 
-- The bars draw at one logical scale (as before); the taskbar follows `DECEBAL_SCALE` / `Xft.dpi`.
-- The taskbar has no keyboard mode of its own yet (its popups and menus take Up/Down/Enter/Escape).
+- The macOS dock has no keyboard mode (its menus take Up/Down/Enter/Escape); the taskbar's is `decdock --focus`.
 - On a side taskbar, a StatusNotifierItem's Activate gets the item's along/across position as its x/y hint.
 - `decbar --control-center` summoned by a key or hot corner places itself for a top menu bar or a top/bottom taskbar;
   it does not yet know a side taskbar or a bottom/side classic bar (its `Host::detect` belongs to the Control Center
@@ -111,7 +111,13 @@ ring sits on the first applet, Left/Right (or Up/Down) move it in reading order,
 (the same typed action, no synthesized pointer events), the arrows walk the opened popup's rows, Left/Right step its
 slider, the calendar's month or (in the application menu) back, and move between the classic bar's menus; Escape closes
 what is open, then leaves keyboard mode. The bar never takes the keyboard by itself. The Control Center keeps its own
-keyboard routing. The taskbar's own keyboard mode is not done yet (its popups and menus take Up/Down/Enter/Escape).
+keyboard routing.
+
+`decdock --focus` does the same for the running Windows-style taskbar on any edge: the ring walks Start, search, each
+task button (a button scrolled out of the row scrolls into view), the tray cells, the clock and show desktop. Enter on a
+tray cell or the clock opens its popup with the first row focused and the popup's keys apply (the quick settings keep
+the Control Center's routing); Enter on Start, search, a task or show desktop does the click and leaves keyboard mode,
+since the launcher or window takes the focus. Escape closes an open popup or menu, then leaves; a pointer press leaves.
 
 ### Workers
 

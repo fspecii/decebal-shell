@@ -827,6 +827,9 @@ impl DecBar {
     }
 }
 
+/// A process's keyboard-mode request (`decbar --focus`, `decdock --focus`: SIGUSR2) and the waker of its event loop.
+pub type FocusSignal = (Arc<AtomicBool>, Arc<Mutex<Option<Waker>>>);
+
 /// Something the keyboard can focus on a panel: an applet's item, or one of the classic bar's menu titles.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum Focus {
@@ -890,12 +893,11 @@ impl DecBar {
 
     /// Blocks SIGUSR2 and starts its collector, once per process (the bar is built again each time it comes back on
     /// screen). Call before other threads start.
-    pub fn init_focus_signal() -> &'static (Arc<AtomicBool>, Arc<Mutex<Option<Waker>>>) {
-        type Shared = (Arc<AtomicBool>, Arc<Mutex<Option<Waker>>>);
-        static SIGNAL: std::sync::OnceLock<Shared> = std::sync::OnceLock::new();
+    pub fn init_focus_signal() -> &'static FocusSignal {
+        static SIGNAL: std::sync::OnceLock<FocusSignal> = std::sync::OnceLock::new();
         SIGNAL.get_or_init(|| {
             crate::single::block_signals(&[libc::SIGUSR2]);
-            let shared: Shared = (Arc::new(AtomicBool::new(false)), Arc::new(Mutex::new(None)));
+            let shared: FocusSignal = (Arc::new(AtomicBool::new(false)), Arc::new(Mutex::new(None)));
             let (flag, waker) = (Arc::clone(&shared.0), Arc::clone(&shared.1));
             let _ = std::thread::Builder::new().name("bar-focus".into()).spawn(move || {
                 while crate::single::wait_signal(&[libc::SIGUSR2]) == Some(libc::SIGUSR2) {

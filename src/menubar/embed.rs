@@ -456,6 +456,23 @@ impl DecBar {
         Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: w.ceil() as i32, h: h.ceil() as i32 })
     }
 
+    /// The host's keyboard inside an open tray popup or the calendar: the bar's own popup keys (arrows between rows,
+    /// Left/Right on sliders and the calendar, Enter runs). False when nothing is open.
+    pub fn status_nav_key(&mut self, key: crate::app::NavKey) -> bool {
+        if self.open == Open::None {
+            return false;
+        }
+        // the Control Center (quick settings) keeps the routing it has on the bar
+        crate::app::App::nav_key(self, key)
+    }
+
+    /// After the keyboard opened a popup: its first row focused.
+    pub fn status_focus_first_row(&mut self) {
+        if let Some(p) = self.popup.as_ref() {
+            self.popup_hover = (0..p.rows.len()).find(|j| p.rows[*j].interactive());
+        }
+    }
+
     pub fn status_close(&mut self) -> bool {
         self.close()
     }

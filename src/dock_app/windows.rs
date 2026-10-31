@@ -36,6 +36,8 @@ pub(super) struct WinState {
     pub last_minute: Option<(u32, u32)>,
     /// Windows hidden by "show desktop", restored by the next click on the sliver.
     pub hidden: Vec<u64>,
+    /// Keyboard mode (`decdock --focus`): the focused zone, an index into [`DockApp::win_focus_items`].
+    pub kb: Option<usize>,
     /// Test hook (`DECDOCK_DEBUG_LAYOUT=file`): zone centres in surface coordinates after each draw.
     pub debug: Option<(PathBuf, String)>,
 }
@@ -63,6 +65,7 @@ impl WinState {
             clock_w,
             last_minute: None,
             hidden: Vec::new(),
+            kb: None,
             debug: std::env::var_os("DECDOCK_DEBUG_LAYOUT").map(|p| (PathBuf::from(p), String::new())),
         }
     }
@@ -474,6 +477,11 @@ impl DockApp {
                 w.status.status_draw_indicator(pm, *key, cx, cy, 18.0 * w.m.scale);
             }
         }
+        if let Some(r) = w.kb.and_then(|i| focus_rect(&layout, &w.buttons, i)) {
+            let (x, y, rw, rh) = if vertical { (x0 + r.y, r.x, r.h, r.w) } else { (r.x, y0 + r.y, r.w, r.h) };
+            let th = crate::theme::th();
+            crate::gfx::stroke_rounded(pm, x + 1.0, y + 1.0, (rw - 2.0).max(1.0), (rh - 2.0).max(1.0), (4.0 * w.m.scale).min(rw.min(rh) / 2.0), th.accent.color(1.0), 2.0 * w.m.scale);
+        }
         w.status.status_draw(pm);
         let indicator_rects: Vec<_> = layout
             .tray
@@ -678,6 +686,10 @@ impl DockApp {
     }
 
     pub(super) fn win_button(&mut self, x: f32, y: f32, button: Button) -> bool {
+        // the pointer ends keyboard mode
+        if let Some(w) = self.win.as_mut() {
+            w.kb = None;
+        }
         let placed = self.menu.as_ref().map(|m| self.win_menu_dropdown(&m.menu));
         let along = self.win_along(x, y);
         if let (Some(m), Some(d)) = (&mut self.menu, placed) {
@@ -958,7 +970,80 @@ impl DockApp {
     }
 
     pub(super) fn win_wants_keyboard(&self) -> bool {
-        self.menu.is_some() || self.win.as_ref().is_some_and(|w| w.status.status_open_kind().is_some())
+        self.menu.is_some() || self.win.as_ref().is_some_and(|w| w.kb.is_some() || w.status.status_open_kind().is_some())
+    }
+
+    // -------------------------------------------------------------- keyboard
+
+    /// The zones the keyboard walks, in strip order: Start, search, every task button, the tray cells, the clock and
+    /// the show-desktop sliver (whichever are on).
+    pub(super) fn win_focus_items(&self) -> Vec<Hit> {
+        let (Some(l), Some(w)) = (self.win_layout(), self.win.as_ref()) else { return Vec::new() };
+        focus_hits(&l, w.buttons.len())
+    }
+
+    /// `decdock --focus`: keyboard mode on the first zone, popups and menus closed. False when there is nothing to focus.
+    pub(super) fn win_focus_start(&mut self) -> bool {
+        self.close_menu();
+        let any = !self.win_focus_items().is_empty();
+        let Some(w) = self.win.as_mut() else { return false };
+        w.status.status_close();
+        w.kb = any.then_some(0);
+        any
+    }
+
+    /// Leaves keyboard mode; false when it was not on.
+    pub(super) fn win_focus_end(&mut self) -> bool {
+        self.win.as_mut().and_then(|w| w.kb.take()).is_some()
+    }
+
+    /// Arrows between the zones (either pair, on any edge), Enter or Space does what a click does. Inside an open tray
+    /// popup or the calendar the keys are the popup's.
+    pub(super) fn win_nav_key(&mut self, key: NavKey) -> bool {
+        if self.win.as_ref().is_some_and(|w| w.status.status_open_kind().is_some()) {
+            let handled = self.win.as_mut().is_some_and(|w| w.status.status_nav_key(key));
+            self.win_place_popup();
+            return handled;
+        }
+        let Some(i) = self.win.as_ref().and_then(|w| w.kb) else { return false };
+        let items = self.win_focus_items();
+        if items.is_empty() {
+            return self.win_focus_end();
+        }
+        let i = i.min(items.len() - 1);
+        let next = match key {
+            NavKey::Left | NavKey::Up => (i + items.len() - 1) % items.len(),
+            NavKey::Right | NavKey::Down => (i + 1) % items.len(),
+            NavKey::Enter => {
+                let hit = items[i];
+                let along = self.win_layout().and_then(|l| l.rect_of(hit)).map_or(0.0, |r| r.cx());
+                self.win_click(hit, along);
+                if self.win.as_ref().is_some_and(|w| w.status.status_open_kind().is_some()) {
+                    // a popup opened: its first row takes the keys
+                    if let Some(w) = self.win.as_mut() {
+                        w.status.status_focus_first_row();
+                    }
+                } else if matches!(hit, Hit::Start | Hit::Search | Hit::Task(_) | Hit::Desktop) {
+                    // the launcher, search or a window takes the focus from here
+                    self.win_focus_end();
+                }
+                return true;
+            }
+        };
+        // a task button scrolled out of the row comes into view
+        if let (Hit::Task(_), Some(l)) = (items[next], self.win_layout()) {
+            if let (Some(r), Some(w)) = (l.rect_of(items[next]), self.win.as_mut()) {
+                if r.x < l.clip.0 {
+                    w.scroll = (w.scroll - (l.clip.0 - r.x)).clamp(0.0, l.scroll_max);
+                } else if r.x + r.w > l.clip.1 {
+                    w.scroll = (w.scroll + (r.x + r.w - l.clip.1)).clamp(0.0, l.scroll_max);
+                }
+            }
+        }
+        if let Some(w) = self.win.as_mut() {
+            w.kb = Some(next);
+        }
+        true
     }
 
     pub(super) fn win_escape(&mut self) -> bool {
@@ -966,4 +1051,29 @@ impl DockApp {
         let closed_popup = self.win.as_mut().is_some_and(|w| w.status.status_close());
         closed_menu || closed_popup
     }
+}
+
+/// [`DockApp::win_focus_items`] for a layout with `buttons` task buttons.
+fn focus_hits(l: &Layout, buttons: usize) -> Vec<Hit> {
+    let mut out = Vec::new();
+    if l.start.w > 0.0 {
+        out.push(Hit::Start);
+    }
+    if l.search.is_some() {
+        out.push(Hit::Search);
+    }
+    out.extend((0..buttons.min(l.tasks.len())).map(Hit::Task));
+    out.extend(l.tray.iter().map(|(k, _)| Hit::Tray(*k)));
+    if l.clock.w > 0.0 {
+        out.push(Hit::Clock);
+    }
+    if l.desktop.w > 0.0 {
+        out.push(Hit::Desktop);
+    }
+    out
+}
+
+/// The layout rectangle of keyboard zone `i`.
+fn focus_rect(l: &Layout, buttons: &[TaskButton], i: usize) -> Option<taskbar::Rect> {
+    focus_hits(l, buttons.len()).get(i).and_then(|h| l.rect_of(*h))
 }

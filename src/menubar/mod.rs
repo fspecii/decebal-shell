@@ -10,7 +10,7 @@ mod embed;
 pub mod gate;
 mod indicators;
 pub mod lock;
-pub use applets::{classic_symbol, theme_logo};
+pub use applets::{classic_symbol, theme_logo, FocusSignal};
 pub use embed::GAP as STATUS_GAP;
 pub mod menus;
 pub mod overlay;
