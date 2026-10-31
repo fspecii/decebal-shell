@@ -2,8 +2,9 @@
 
 Decebal windows built on `WindowApp` can publish a semantic accessibility tree over AT-SPI2, the protocol Orca and
 other Linux assistive technologies use. System Settings (`decsettings`) is the first complete adapter: a screen
-reader can read, navigate and operate every page of it. Bars, docks and other `App` surfaces do not publish a tree
-yet; nothing here makes the whole desktop accessible.
+reader can read, navigate and operate every page of it. The launcher (`declaunch`) is the second, in every style it
+ships. Bars, docks and other `App` surfaces do not publish a tree yet; nothing here makes the whole desktop
+accessible.
 
 ## Turning it on
 
@@ -45,6 +46,49 @@ While no assistive technology listens, a window builds no tree; the only cost is
 Every control whose setting has a default also offers `reset` (the right-click "back to default").
 `AccessibleId` is a stable key (`ctl:<control id>`, `pane:<page>`, `search`, ...): it survives redraws, scrolling and
 rebuilds, and the numeric object paths do too for the life of the window.
+
+## What the launcher exposes
+
+`declaunch` publishes one tree for the Launchpad, Dux, Windows, GNOME, KDE, Xfce, BlackBerry and UKUI styles
+(application "Launcher", `frame` named after the style). The Launchpad and Dux are described from their own grid and
+list layout; the six styled launchers from the style engine's zones, i.e. the geometry the style really laid out and
+painted, so each style shows its own tabs, lists and buttons and a style that adds or moves a control is described
+without a change to the adapter. Only what is on screen is described: a row scrolled off, a page that is not showing
+or a list that is cut at the card has no node and so no action.
+
+| Part | Roles and interfaces |
+| --- | --- |
+| Search | `entry` (Text, EditableText, caret, selection, placeholder as in the style; action `activate` opens the selected app, or the first result). Its extents are exact in the Launchpad and Dux; the style engine does not publish where a styled launcher puts its search box, so there it has none |
+| Status | `status bar` "N results" / "No matching apps" while searching; a `notification` "No matching apps" appears once when a search reaches no match (announced). Typing and result counts that merely change are not announced |
+| App lists | `list` (Selection) of `list item`s, one per app, named after the app, described by its desktop `Comment=` (and "Pinned"), `posinset`/`setsize` attributes, Selected for the highlighted one. Actions `activate` (open), and in the styled launchers `pin` / `unpin`. An app that cannot start (missing `TryExec`) is disabled |
+| Letter headings | `heading` (level 2) in alphabetical lists |
+| Categories, views, widget tabs, page dots | `page tab list` of `page tab`s (Selection); the current view or page is Selected; action `click` shows it |
+| Buttons | `button`s for what the style draws: All apps / Back, Settings, Power, Account, Computer, Expand / Restore, Clear search, Close / Show Apps, and the best-match Open and Pin buttons (Windows) |
+| Session menu | an open Kickoff Session menu is a modal `menu`; everything else is refused while it is open |
+
+`AccessibleId`s are `search`, `status`, `zone:<zone>`, `<zone>/app:<desktop id>`, `<zone>/view:<view>`,
+`<zone>/page:<n>`, `detail/open:<desktop id>`, ...: apps are keyed by desktop-file id, never by list position, so
+a node survives searching (the results list shows the same app as the same object), reordering by pinning,
+scrolling and paging. An app that shares its id with another gets `#n` in catalog order.
+
+Focus: while the last key typed text, the focus is the search entry; after an arrow, Tab or Page key it is the
+highlighted app (or button) the launcher will act on. Enter, a click and the accessibility `activate` all open the
+selected app. Keyboard navigation itself is unchanged and stays style-consistent: the adapter only follows it.
+
+Actions are the launcher's own: `activate` on an app starts exactly that app through the same launch as Enter or a
+click (detached, so the launch is asynchronous), records it in the usage history (styled launchers) and closes the launcher like the
+keyboard does; if the launch fails the request is refused with the reason and the launcher stays open. `pin` /
+`unpin` toggle the same favourites list (and file) as a right click. Choosing a tab or page, clearing the search and
+the footer buttons run the engine's own `activate` arms; a test compares each of them with a real click on the same
+control and requires the same response and the same state. Editing the search text through EditableText gives the
+same results, selection and focus zone as typing it. A request that raced a keystroke (the app is no longer in the
+list, already pinned, ...) is refused, never applied to whatever moved into its place.
+
+Not exposed (they keep working with keyboard and pointer): the controls a style owns itself (Kickoff's footer tabs,
+system buttons, Session menu rows, header buttons and Places rows; every `Target::Style` item), because their names
+and effects live in that style's module. The items of an open Session menu are therefore not listed, only the menu.
+Loading state (Kickoff's Places) is not announced for the same reason. The extents of a styled launcher's search box
+are missing (see above). Bars and docks are not covered, and nothing here claims physical Orca acceptance.
 
 ## How actions run
 
@@ -125,6 +169,13 @@ A tree holds at most 4096 objects (it says so when cut), strings 4 KiB, text 256
 choices (the rest stay reachable by type-ahead in the open list).
 
 ## Testing it privately
+
+Launcher: `src/launcher/a11y/tests.rs` has source tests that build the real launcher in every style, describe it and
+dispatch requests the way the host does (stable ids across search / reorder / scrolling, the exact app launched, stale
+/ disabled / offpage refusal, the modal menu, editable search semantics, focus and selection, bounds against each
+style's zones, parity with real clicks). `tests/e2e/a11y_launcher.py` is a drafted private native probe for the same
+(declaunch per style in a private bus, Xvfb and tree, fixture apps whose `Exec=` writes a marker file); it has not been
+run.
 
 `tests/e2e/a11y_settings.py` runs the real `decsettings` inside a private HOME/XDG tree, a private `dbus-run-session`
 (real `at-spi-bus-launcher`; the real `at-spi2-registryd` is started on the private accessibility bus because its

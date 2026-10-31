@@ -11,6 +11,7 @@ use crate::wallhaven::textfield::TextField;
 use crate::window_app::{Action, Key, KeyEvent, Response, Waker, WindowApp};
 use tiny_skia::{Color, Pixmap};
 
+mod a11y;
 pub mod catalog;
 mod dux;
 pub mod placement;
@@ -65,6 +66,10 @@ pub struct Launcher {
     scale: f32,
     /// The Windows, GNOME, KDE, Xfce and BlackBerry styles.
     styled: Option<styled::Styled>,
+    /// What the accessibility adapter remembers between trees (see [`a11y`]).
+    a11y: a11y::Memory,
+    /// Starts an app (the real launch; tests put a recording stand-in here).
+    spawn: fn(&AppEntry) -> bool,
 }
 
 /// `DECEBAL_SCALE` when set (a forced UI scale), else `scale`.
@@ -113,6 +118,8 @@ impl Launcher {
             screen: (0, 0),
             scale: ui_scale(1.0),
             styled,
+            a11y: a11y::Memory::default(),
+            spawn: launch::spawn_app,
         };
         if out.is_dux() {
             out.size = (620, 620);
@@ -214,7 +221,7 @@ impl Launcher {
 
     fn launch_selected(&mut self) -> Response {
         match self.shown.get(self.sel).and_then(|&i| self.apps.get(i)) {
-            Some(a) if launch::spawn_app(a) => Response::act(Action::Close),
+            Some(a) if (self.spawn)(a) => Response::act(Action::Close),
             _ => Response::NONE,
         }
     }
@@ -550,6 +557,7 @@ impl WindowApp for Launcher {
     }
 
     fn key(&mut self, ev: &KeyEvent) -> Response {
+        self.a11y_note_key(ev);
         if let Some(st) = self.styled.as_mut() {
             return st.key(ev);
         }
@@ -597,6 +605,18 @@ impl WindowApp for Launcher {
             }
             Key::Char => Response::NONE,
         }
+    }
+
+    fn a11y_name(&self) -> Option<String> {
+        Some("Launcher".into())
+    }
+
+    fn a11y_tree(&mut self, tree: &mut crate::a11y::TreeBuilder) {
+        a11y::tree(self, tree);
+    }
+
+    fn a11y_action(&mut self, target: &crate::a11y::Target) -> Result<Response, crate::a11y::ActionError> {
+        a11y::act(self, target)
     }
 
     fn tick(&mut self) -> Response {
