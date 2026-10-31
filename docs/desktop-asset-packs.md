@@ -439,6 +439,10 @@ way that still works.
 
 * Wallpaper and widget policies are not touched.
 
+Settings sends claim, retry and stop actions to its ordered persistence worker, including actions requested after a
+choice is saved. Waiting for another process's asset lock does not block pointer or keyboard input. A pending action
+is not evidence that a download completed; the job status and log report its outcome.
+
 **Icons pane** (System Settings -> Icons): besides the icon themes, a *Cursor theme* menu (installed cursor themes,
 independent of the icon theme; choosing one makes the cursor custom), *Theme matching* with *Follow theme* / *Custom*
 for icons and for the cursor (and *Restore X* while following), *Download matching packs*, the background download with

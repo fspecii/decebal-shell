@@ -2,14 +2,15 @@
 //! applied a theme's matching pack) is handed to app integration, which the GTK lane owns (`theme::system`: GTK
 //! `settings.ini`, gsettings, Qt, X resources). Nothing here writes toolkit files.
 //!
-//! Contract with the GTK lane: publishing the *icon and cursor theme* of a Follow-theme slot must not depend on the
-//! unrelated global "Apply to all apps" opt-in. Until the GTK lane provides that entry point, this hands the change to
-//! the existing debounced request, which publishes only when "Apply to all apps" is on (an honest limit, reported by
-//! `selection_changed`'s caller).
+//! App integration is enabled by default; explicit master and target opt-outs must remain honored. The intended
+//! narrow publication updates icon/cursor settings without reapplying unrelated application colours or fonts.
+//! Until that entry point is integrated and accepted, this uses the existing full debounced request. Its boolean
+//! reports the configured master switch, not proof that a worker started or that applications changed.
 
 use std::path::Path;
 
-/// The icon / cursor selection in `shell_json` changed; returns whether app publication was requested on every path.
+/// Notify app integration of an icon/cursor change; returns whether its master switch is enabled.
+/// Worker dispatch and successful application are asynchronous and are not proven by this return value.
 pub fn selection_changed(shell_json: &Path) -> bool {
     crate::theme::system::request(shell_json);
     crate::theme::system::Config::load(shell_json).enabled
