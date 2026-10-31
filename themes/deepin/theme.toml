@@ -1,0 +1,144 @@
+format = 1
+id = "deepin"
+name = "Deepin"
+version = "0.1.0"
+author = "decebal"
+license = "MIT"
+description = "Deepin Desktop Environment: DTK light and dark palettes, a full-width translucent dock with a centred launcher, tasks and a system tray, 50 px Chameleon-style window titles. The matching Bloom icons and cursors are separate GPL-3.0-or-later packs that are suggested, never applied."
+homepage = "https://github.com/linuxdeepin"
+min_shell_version = "0.3.0"
+tags = ["deepin", "dde", "dtk", "light-dark", "translucent", "dock"]
+
+# Colours. Sources, all read at the revisions in docs/desktop-ports/deepin/sources.json:
+#  * dtkgui src/kernel/dguiapplicationhelper.cpp standardPalette(): Window #f8f8f8 / #252525, Base #fff / #282828, Highlight #0081ff,
+#    DPalette TextTitle (black / white at 0.85), QPalette WindowText (0.7) and TextTips (0.6), FrameBorder (0.05 / 0.1),
+#    ItemBackground (0.03 / 0.05), TextWarning #ff5736 / #e43f2e, ToolTipBase (#fff 0.8 / #2d2d2d 0.8).
+#    Translucent entries are flattened on the Window colour (derived values: text, text_secondary, text_faint, border for dark,
+#    sidebar); the light border is Chameleon's own window border.
+#  * dde-shell panels/dock/package/main.qml: the dock's blend colour rgb(235,235,235) / rgb(10,10,10); its alpha is the appearance
+#    `Opacity` (dde-appearance default 0.4, nirvana WindowOpacity=0.4; 0.6 / 85 of 255 only when the service is absent).
+#  * Accent: DTK's Highlight is #0081ff (light) and Chameleon's pressed glyph is #0081ff in both modes, so both modes use it. The
+#    default global theme nirvana (deepin-desktop-theme, a0c79e3) sets ActiveColor #1f6ee7 (light) and #024cca (dark): the latter
+#    is only 2.1:1 on the dark window and is drawn as a fill with #f1f6ff text in DTK, which Decebal's foreground accent cannot do.
+#  * deepin-kwin deepin-chameleon decoration.json: titlebar background white / #101010.
+#  * ok, warn: the Deepin accent presets #23c400 and #f8cb00 (dtkdeclarative examples); not an upstream semantic palette.
+# accent_text stays white as in DTK (HighlightedText): white on #0081ff is 3.8:1, an upstream choice kept for fidelity.
+[colors.dark]
+background = "#252525"
+sidebar = "#303030"
+surface = "#282828"
+bar = "#0a0a0a"
+bar_text = "#dadada"
+popup = "#2d2d2d"
+dock = "#0a0a0a"
+overlay = "#2d2d2d"
+titlebar = "#101010"
+titlebar_inactive = "#101010"
+border = "#3b3b3b"
+text = "#dedede"
+text_secondary = "#bebebe"
+text_faint = "#a8a8a8"
+accent = "#0081ff"
+accent_text = "#ffffff"
+danger = "#e43f2e"
+ok = "#23c400"
+warn = "#f8cb00"
+
+[colors.light]
+background = "#f8f8f8"
+sidebar = "#f1f1f1"
+surface = "#ffffff"
+bar = "#ebebeb"
+bar_text = "#252525"
+popup = "#ffffff"
+dock = "#ebebeb"
+overlay = "#ffffff"
+titlebar = "#ffffff"
+titlebar_inactive = "#ffffff"
+border = "#e0e0e0"
+text = "#252525"
+text_secondary = "#4a4a4a"
+text_faint = "#636363"
+accent = "#0081ff"
+accent_text = "#ffffff"
+danger = "#ff5736"
+ok = "#23c400"
+warn = "#f8cb00"
+
+# dtkdeclarative qt6/src/qml/FlowStyle.qml: control radius 8, floating panel 14, popup 18, menu 12 (the default window radius).
+# The dock and bar opacity is the appearance Opacity, 0.4, over a blurred backdrop (nirvana WindowOpacity). The dock shadow is
+# rgba(0,0,0,0.1) at radius 40 with a 1 px border (rgba(0,0,0,0.15) light).
+[metrics]
+radius = 14
+dock_roundness = 0
+dock_alpha = 0.4
+bar_alpha = 0.4
+popup_alpha = 0.9
+panel_alpha = 0.9
+shadow = 0.7
+outline = 0.15
+dock_padding = 8
+blur = 0.6
+
+# appearance defaults: Font_Standard "Source Han Sans SC", Font_Monospace "Noto Mono", 10.5 pt (dde-appearance). Neither font is
+# bundled; Noto Sans CJK SC (same design) and Noto Sans stand in when Source Han Sans is not installed.
+[font]
+ui = ["Source Han Sans SC", "Noto Sans CJK SC", "Noto Sans"]
+title = ["Source Han Sans SC", "Noto Sans CJK SC", "Noto Sans"]
+mono = ["Noto Mono", "Noto Sans Mono", "monospace"]
+display = ["Source Han Sans SC", "Noto Sans CJK SC", "Noto Sans"]
+fallback = ["Noto Color Emoji"]
+scale = 1.0
+
+# Chameleon (deepin-kwin 6648082): titlebar 50, 50 x 50 flat buttons on the right, centred 14 px title, window radius 8 (dde-services' dtk-window-radius).
+# rdwm draws it natively as `deepin` (light) and `deepin-dark` (rdwm 952457b), so the style follows the colour mode through the mode-specific
+# window-style contract (docs/desktop-ports/lingmo/decoration-style-modes.md): the engine proves the wanted style against the RUNNING rdwm's own
+# `schema` reply and uses the fallback only if that same reply lists it, with a persistent Settings warning. `style` is the older key for engines
+# without the contract. No height/radius here: a theme value would override the native geometry (50 / 8) of whichever style ends up in use.
+[decoration]
+style = "adwaita"
+style_light = "deepin"
+style_dark = "deepin-dark"
+fallback_style_light = "adwaita-light"
+fallback_style_dark = "adwaita"
+
+# Visual gaps and the 1 px border only. Tiling policy (layouts, mfact, nmaster, smart_gaps) is the user's global behaviour and is
+# deliberately not set. The dock's floating margin is 8 (dde-shell fashion mode).
+[rdwm]
+gap_inner = 8
+gap_outer = 8
+border_px = 1
+
+# dde-shell has no top bar: the dock is the only panel (dde-shell panels/dock, Position default bottom, all four edges). The
+# Windows-style taskbar is the shared renderer with the same structure: launcher at the start, centred task icons, tray and clock
+# at the end, show-desktop at the far edge. The bar stays off ("auto"); the user can turn any applet on in Settings -> Panels.
+[bar]
+enabled = "auto"
+style = "flat"
+height = 28
+applets = ["launcher", "workspaces", "tasks", "search", "tray", "bluetooth", "network", "volume", "battery", "notifications", "control_center", "clock", "power", "show_desktop"]
+
+# Icon size 36 = dock size 56 * 9 / 14 (dde-shell dockItemIconSize); roundness 0: efficient mode is a full-width strip.
+[dock]
+enabled = true
+style = "windows"
+position = "bottom"
+size = 36
+align = "center"
+roundness = 0
+
+# The dock's launcher button is the deepin-launcher place icon of the user's icon theme (Bloom when it is the chosen one); in any other
+# icon theme the neutral grid shows. There is deliberately no [icons] section: applying a theme writes it over the user's icon choice
+# (measured: Adwaita became bloom), and icons stay an independent Settings choice. The matching pack is suggested in
+# assets/desktop-ports/deepin/asset-packs.toml ([[recommend]]) instead.
+[branding]
+logo = "icon:deepin-launcher"
+logo_tint = false
+
+[control_center]
+enabled = true
+position = "bottom-right"
+style = "card"
+
+[desktop]
+widgets = "none"

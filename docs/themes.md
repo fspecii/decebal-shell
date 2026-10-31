@@ -84,6 +84,12 @@ Tags: adwaita, libadwaita, clean, light, dark, rounded. Apply: `decthemectl them
 
 Light variant: ![Adwaita-like light](themes/gnome-adwaita-like-light.png)
 
+## Deepin
+
+A source-backed DTK light/dark palette, a full-width translucent taskbar on any edge, and native Chameleon-style decorations when supported by the running rdwm. Bloom icons and cursors are optional, verified packs in Icons; applying the theme preserves your icon choice. The panel uses Decebal’s shared renderer; fidelity limits and provenance are in [the port notes](desktop-ports/deepin/README.md).
+
+Apply with `decthemectl theme apply deepin`.
+
 ## Gallery
 
 | theme | look | apply |

@@ -32,6 +32,7 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("openkylin-light-seeking", include_str!("../../themes/openkylin-light-seeking/theme.toml")),
     ("openkylin-heyin", include_str!("../../themes/openkylin-heyin/theme.toml")),
     ("openkylin-classic", include_str!("../../themes/openkylin-classic/theme.toml")),
+    ("deepin", include_str!("../../themes/deepin/theme.toml")),
     ("caelestia", include_str!("../../themes/caelestia/theme.toml")),
     ("high-contrast", include_str!("../../themes/high-contrast/theme.toml")),
     ("caelestia-mocha", include_str!("../../themes/caelestia-mocha/theme.toml")),

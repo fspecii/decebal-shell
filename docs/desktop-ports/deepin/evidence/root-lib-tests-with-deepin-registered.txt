@@ -1,0 +1,8 @@
+job brmxs2f1m (not re-run): cargo test --lib -- desktop_assets theme::engine::shipped
+tree: root 7680c65 + this branch's themes/assets/tests/docs + the registration patch below; clean empty HOME; slot2 with flock --close
+--- raw output ---
+test desktop_assets::pane::tests::cursor_choice_and_following_the_theme_go_through_the_pane ... FAILED
+thread 'desktop_assets::pane::tests::cursor_choice_and_following_the_theme_go_through_the_pane' (2148192) panicked at src/desktop_assets/pane.rs:265:9:
+test result: FAILED. 67 passed; 1 failed; 0 ignored; 0 measured; 1932 filtered out; finished in 33.62s
+
+[exited with code 0]

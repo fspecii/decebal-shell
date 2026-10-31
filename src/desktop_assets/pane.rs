@@ -257,17 +257,20 @@ mod tests {
         assert_eq!(sel.map(|i| opts[i].1.as_str()), Some("DMZ-White"), "an uninstalled choice is still shown");
 
         let mut doc = crate::settings::io::json_load(&path);
-        policy::apply_theme(&mut doc, &policy::Recommendation { theme: "deepin".into(), icons: Some("bloom".into()), cursors: Some("bloom".into()), missing: vec!["deepin-bloom-dark".into()] });
+        policy::apply_theme(
+            &mut doc,
+            &policy::Recommendation { theme: "fixture-desktop".into(), icons: Some("bloom".into()), cursors: Some("bloom".into()), missing: vec!["fixture-bloom-dark".into()] },
+        );
         crate::settings::io::json_set(&path, policy::KEY, doc.get(policy::KEY).cloned()).unwrap();
         crate::settings::io::json_set(&path, "icons", doc.get("icons").cloned()).unwrap();
         let its = items(&m);
         assert!(ctl(&its, "ic:follow-theme").is_some_and(|c| c.enabled), "the cursor is the user's: following the theme changes something");
-        assert!(its.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("assets install deepin-bloom-dark"))));
+        assert!(its.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("assets install fixture-bloom-dark"))));
 
         m.apply("ic:follow-theme", CtlVal::Click);
         let doc = crate::settings::io::json_load(&path);
         assert_eq!((policy::current(&doc, Provides::Icons).as_deref(), policy::current(&doc, Provides::Cursors).as_deref()), (Some("bloom"), Some("bloom")));
-        assert_eq!(policy::owner(&doc, Provides::Cursors), Owner::Theme("deepin".into()));
+        assert_eq!(policy::owner(&doc, Provides::Cursors), Owner::Theme("fixture-desktop".into()));
         assert!(!ctl(&items(&m), "ic:follow-theme").unwrap().enabled, "already following");
 
         m.apply("ic:cursor", CtlVal::Reset);

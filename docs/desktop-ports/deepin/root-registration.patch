@@ -1,0 +1,58 @@
+diff --git i/Makefile w/Makefile
+index 443dcfd..611708b 100644
+--- i/Makefile
++++ w/Makefile
+@@ -1,6 +1,6 @@
+ PREFIX ?= /usr/local
+ DESTDIR ?=
+-SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like
++SHOWCASE_THEMES = gruvbox-dark everforest synthwave frutiger-aero gnome-adwaita-like deepin
+ # Programs that did not exist under the old macshell name get no mac* compatibility wrapper.
+ NO_COMPAT = declock decmon decwall decnotes dectimer
+ BINS = decwall decdock decbar dechaven declaunch decspot decswitch decexpose dechud declock decdash decmon decsession decutil decsettings decthemectl decnotify decwm decclip dechot decwidgets decnotes dectimer
+diff --git i/docs/themes.md w/docs/themes.md
+index 7fc8810..180f55a 100644
+--- i/docs/themes.md
++++ w/docs/themes.md
+@@ -84,6 +84,15 @@ Tags: adwaita, libadwaita, clean, light, dark, rounded. Apply: `decthemectl them
+ 
+ Light variant: ![Adwaita-like light](themes/gnome-adwaita-like-light.png)
+ 
++## Deepin
++
++A source-backed port of the Deepin Desktop Environment (DDE 25): DTK light and dark palettes, a full-width translucent dock (the shared taskbar, on any
++edge) with a centred launcher, tasks, tray and clock, 50 px Chameleon-sized window titles. Unaffiliated with Deepin / UnionTech. The matching Bloom icons and
++cursors are separate packs pinned in `assets/desktop-ports/deepin/asset-packs.toml` and installed with `decthemectl assets install deepin-bloom`; the theme
++never selects them. Measurements, gaps and evidence: [desktop-ports/deepin](desktop-ports/deepin/README.md).
++
++Tags: deepin, dde, dtk, light, dark, translucent, dock. Apply: `decthemectl theme apply deepin`
++
+ ## Gallery
+ 
+ | theme | look | apply |
+@@ -93,6 +102,7 @@ Light variant: ![Adwaita-like light](themes/gnome-adwaita-like-light.png)
+ | Synthwave | neon magenta and cyan on deep purple, restrained native borders | `decthemectl theme apply synthwave` |
+ | Frutiger Aero | glossy aqua and sky blue, glass cards, taskbar | `decthemectl theme apply frutiger-aero` |
+ | Adwaita-like | clean libadwaita-inspired headerbars, centred titles | `decthemectl theme apply gnome-adwaita-like` |
++| Deepin | DTK palettes, full-width translucent dock, 50 px titles | `decthemectl theme apply deepin` |
+ 
+ ## Theme gallery
+ 
+diff --git i/src/desktop_assets/builtin.rs w/src/desktop_assets/builtin.rs
+index 85f92da..b2a893a 100644
+--- i/src/desktop_assets/builtin.rs
++++ w/src/desktop_assets/builtin.rs
+@@ -6,8 +6,11 @@
+ //! ("deepin", include_str!("../../assets/desktop-ports/deepin/asset-packs.toml")),
+ //! ```
+ 
+-pub const CATALOGS: &[(&str, &str)] =
+-    &[("gnome", include_str!("../../assets/desktop-ports/gnome/asset-packs.toml")), ("openkylin", include_str!("../../assets/desktop-ports/openkylin/asset-packs.toml"))];
++pub const CATALOGS: &[(&str, &str)] = &[
++    ("deepin", include_str!("../../assets/desktop-ports/deepin/asset-packs.toml")),
++    ("gnome", include_str!("../../assets/desktop-ports/gnome/asset-packs.toml")),
++    ("openkylin", include_str!("../../assets/desktop-ports/openkylin/asset-packs.toml")),
++];
+ 
+ #[cfg(test)]
+ mod tests {

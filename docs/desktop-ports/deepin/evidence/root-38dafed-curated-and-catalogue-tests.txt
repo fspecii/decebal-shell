@@ -1,0 +1,26 @@
+job bz5wcs412 (not re-run): root 38dafed + this branch's themes/assets/tests/docs + root-registration.patch + the Deepin wallpaper fragment merged into a scratch copy of data/wallhaven-curated.json (56 -> 58 images, 29 -> 30 themes); clean empty HOME; slot2 with flock --close
+steps: (1) cargo test --test curated_theme catalogue_covers  (2) cargo test --test deepin_port --test deepin_decoration_modes  (3) cargo test --lib -- desktop_assets::builtin
+--- raw output ---
+test catalogue_covers_shipped_designs_with_reviewed_sfw_provenance ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.04s
+---
+test the_engine_wants_the_pair_for_both_modes_with_the_older_fallbacks ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test colour_tokens_are_recomputed_from_the_pinned_dtk_palette ... ok
+test metrics_and_panel_follow_the_measured_dock ... ok
+test every_surface_is_readable_in_both_modes ... ok
+test no_licensed_artwork_is_stored_in_the_port ... ok
+test package_never_writes_global_or_user_owned_choices ... ok
+test asset_catalogue_pins_the_upstream_and_recommends_without_selecting ... ok
+test docs_pin_every_repository_and_name_the_gaps ... ok
+test window_style_follows_the_colour_mode_with_a_proven_fallback_and_native_geometry ... ok
+test manifest_is_a_deterministic_valid_package ... ok
+test wallpaper_fragment_follows_the_root_catalogue_contract ... ok
+test nirvana_conversion_is_pinned_verified_against_git_objects_and_licensed ... ok
+test nirvana_reader_refuses_hostile_containers_and_explains_every_refusal ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
+---
+test desktop_assets::builtin::tests::every_port_catalogue_in_the_repository_is_compiled_in_and_valid ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2054 filtered out; finished in 0.01s
+
+[exited with code 0]

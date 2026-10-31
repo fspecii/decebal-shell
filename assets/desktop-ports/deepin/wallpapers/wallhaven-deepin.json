@@ -1,0 +1,571 @@
+{
+  "format": 1,
+  "curated_on": "2026-10-31",
+  "scope": "Fragment for the Deepin port, for the root to merge (images, themes.deepin, rejected_recommendations); nothing central is edited here. Two photographs in the root's policy (SFW, photography, no digital-art or AI-related tag); ids disjoint from the root catalogue at 38dafed (56 images, 29 themes). Links and metadata only; no artwork is stored or redistributed. Authorship and licence are unknown and stay unknown.",
+  "policy": {
+    "provider": "https://wallhaven.cc",
+    "purity": "sfw",
+    "query_filters": {
+      "categories": "100",
+      "purity": "100",
+      "sorting": "favorites",
+      "atleast": "3840x2160",
+      "ratios": "16x9,16x10",
+      "q": "+photography +<subject> (subjects below)",
+      "ai_art_filter": "not used; every candidate's detail response was checked instead"
+    },
+    "detail_filter": "Reject AI-art tag 133451 and AI generator/tag names; also reject candidates tagged digital art, illustration, space art, 3D or CGI, any other desktop's or vendor's name or logo. Never equate absence of a tag with certified non-AI provenance.",
+    "copyright": "All images remain property of original owners. Catalogue stores links/metadata only; full artworks and provider thumbnails are not redistributed.",
+    "search_urls": [
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bglass+%2Bnight&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Barchitecture+%2Bdark&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Breflection+%2Bmonochrome&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bice&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bfog+%2Bblue&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10",
+      "https://wallhaven.cc/api/v1/search?q=%2Bphotography+%2Bglacier&categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10"
+    ],
+    "candidates_viewed": "24 large thumbnails in two contact sheets (12 dark, 12 light); detail responses fetched for 8 (1pvd8v, ex5m3w, jxgvxy, we97wq, r2k6km, k8xdr6, 4dmlvl, vqexy5); full-resolution originals downloaded for the two selected only",
+    "runtime": "Recommendations are selected in the separate Wallpaper pane. Theme packages bundle no artwork and set no wallpaper."
+  },
+  "images": {
+    "ex5m3w": {
+      "id": "ex5m3w",
+      "subject": "A lit grid window and tiled interior wall seen at night in a near-black graphite facade (monochrome, low light, minimalist architecture)",
+      "page_url": "https://wallhaven.cc/w/ex5m3w",
+      "api_url": "https://wallhaven.cc/api/v1/w/ex5m3w",
+      "full_url": "https://w.wallhaven.cc/full/ex/wallhaven-ex5m3w.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/ex/ex5m3w.jpg",
+      "resolution": [
+        6016,
+        3384
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2024-11-13 01:15:30",
+      "uploader": {
+        "username": "Jcurry",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified; Wallhaven tag 'Jonathan Curry' and uploader account Jcurry agree, nothing else was opened",
+        "reported_candidate": "Jonathan Curry",
+        "candidate_basis": "Wallhaven tag 147722 'Jonathan Curry' on this image; no source link"
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 147722,
+          "name": "Jonathan Curry"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 2278,
+          "name": "minimalism"
+        },
+        {
+          "id": 369,
+          "name": "dark"
+        },
+        {
+          "id": 74,
+          "name": "abstract"
+        },
+        {
+          "id": 988,
+          "name": "urban"
+        },
+        {
+          "id": 989,
+          "name": "architecture"
+        },
+        {
+          "id": 1379,
+          "name": "monochrome"
+        },
+        {
+          "id": 31540,
+          "name": "low light"
+        },
+        {
+          "id": 14151,
+          "name": "tiles"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance (low-light architectural photograph: sensor grain, real light fall-off, mullion shadows); provenance is not proof of capture method; no AI-related tag, no digital-art, 3D or CGI tag",
+        "inspected": "full-resolution original, centre-fill crops at 16:9, 3440x1440 and 1080x1920 and native-pixel detail patches (centre and bottom-right corner)"
+      },
+      "evidence": {
+        "detail_sha256": "3f8190240bc22e9e4e5de94182df8da80dfacb5e1b75578dc075ee903ebd6002",
+        "thumbnail_sha256": "1dfbec15790b7c5b6ed4fcc997595dd5adfe56a46e068f7dbb1644bfb01345a3"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "e6f7b335f044522d9779c285bc39e67b85ad26d8952e19f59d1bb6f6ec8706d1",
+        "bytes": 3744072,
+        "dimensions_verified": true,
+        "assessment": "usable: very quiet graphite field, one lit window as the only detail",
+        "notes": "Measured on the 6016x3384 original: whole-image mean rgb(48,47,42), upper third rgb(27,27,27) (neutral graphite), lower third rgb(38,38,35). The lit window is warm sepia, not cool: it suits a graphite desktop with a quiet accent but not a glass-blue one. 16:9 and ultrawide centre-fill keep the lit grid (ultrawide trims its top); the 9:16 centre slice keeps only the left part of the window. Most of the frame is flat near-black, so desktop widgets and the dock stay legible without opaque cards. No watermark or logo seen in the corners at native size.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship, licence and capture method remain unverified"
+      },
+      "crop_review": {
+        "algorithm": "centre cover crop then resize (Version: ImageMagick 7.1.2-34 Q16-HDRI x86_64 c5d4ca8a0:20261014); JPEG q90 files hashed",
+        "16x9": {
+          "result": "accepted: the window, its mullions and the tiled wall stay whole; flat graphite on the left and right",
+          "sha256": "68a792767cdd411dfe64d58ccf9e81af301dcae810a11eb3bf06260f403aeef2"
+        },
+        "ultrawide": {
+          "result": "accepted: the 21:9 crop of the 16:9 original trims the ceiling at the top of the window and some wall at the bottom; grid and wall remain",
+          "sha256": "36543f10a87401a6102569131e6f2ea991d43dd78a98f079c186ffcfb4f088b3"
+        },
+        "portrait": {
+          "result": "accepted with a caution: only the left part of the window survives the 9:16 centre slice; the rest is flat graphite",
+          "sha256": "7b810c5bb5438dfc54f090abc0c0309a58292c5dcf6ca28d7b64ffcd5cb60342"
+        }
+      },
+      "parent_verification": {
+        "status": "accepted_visual_review_with_documented_crop_limits",
+        "reviewed_on": "2026-10-31",
+        "evidence": "Original and all three crop hashes verified against private files; crop review sheets and native-pixel patches independently inspected by integration owner.",
+        "remaining": [
+          "Original authorship, capture method and licence remain unverified; portrait architecture crop keeps only part of window, ice foreground is busy."
+        ]
+      }
+    },
+    "r2k6km": {
+      "id": "r2k6km",
+      "subject": "Pale overcast sky over a field of white and pale-blue ice floes in a glacier lagoon (Jokulsarlon, Iceland)",
+      "page_url": "https://wallhaven.cc/w/r2k6km",
+      "api_url": "https://wallhaven.cc/api/v1/w/r2k6km",
+      "full_url": "https://w.wallhaven.cc/full/r2/wallhaven-r2k6km.jpg",
+      "thumbnail_url": "https://th.wallhaven.cc/lg/r2/r2k6km.jpg",
+      "resolution": [
+        3840,
+        2160
+      ],
+      "purity": "sfw",
+      "category": "general",
+      "uploaded_at": "2020-09-09 12:40:26",
+      "uploader": {
+        "username": "prinstusind",
+        "is_author": null
+      },
+      "author": {
+        "name": null,
+        "verification": "not independently verified; Wallhaven gives no author tag and no source link",
+        "reported_candidate": null,
+        "candidate_basis": null
+      },
+      "source_url": null,
+      "source_verification": "source not provided by Wallhaven",
+      "license": {
+        "identifier": null,
+        "url": null,
+        "status": "unknown; no redistribution permission established"
+      },
+      "tags": [
+        {
+          "id": 104248,
+          "name": "Jokulsarlon"
+        },
+        {
+          "id": 3669,
+          "name": "Iceland"
+        },
+        {
+          "id": 37,
+          "name": "nature"
+        },
+        {
+          "id": 711,
+          "name": "landscape"
+        },
+        {
+          "id": 42696,
+          "name": "nordic landscapes"
+        },
+        {
+          "id": 109,
+          "name": "photography"
+        },
+        {
+          "id": 104337,
+          "name": "glacier lagoon"
+        }
+      ],
+      "ai_review": {
+        "flagged_ai": false,
+        "rejected_tag_ids": [
+          133451
+        ],
+        "returned_ai_boolean": null,
+        "visual_assessment": "photographic appearance (landscape photograph: natural cloud and ice texture, real water reflections); provenance is not proof of capture method; no AI-related tag, no digital-art, 3D or CGI tag",
+        "inspected": "full-resolution original, centre-fill crops at 16:9, 3440x1440 and 1080x1920 and native-pixel detail patches (centre and bottom-right corner)"
+      },
+      "evidence": {
+        "detail_sha256": "f2ae637c72cc8d21b9e9d251341884734a686cc304d198325006372c7965e5a1",
+        "thumbnail_sha256": "f03bcffe91df8e9d15449a3ec1e0bab71b32d73d5331545bc7ebe020bd161fa0"
+      },
+      "full_resolution_review": {
+        "reviewed_on": "2026-10-31",
+        "sha256": "dc17ed889456377e234db96572210bf0292faeaed0a0609ae3763fdb2a0a513f",
+        "bytes": 5936095,
+        "dimensions_verified": true,
+        "assessment": "usable with a stated caution: pale upper half, busier darker lower half",
+        "notes": "Measured on the 3840x2160 original: upper third rgb(215,224,233) pale cool blue-white, whole-image mean rgb(157,175,190), lower third rgb(95,117,133) with dark water between the floes. The sky is quiet behind a top bar; the ice field is detailed, so cards over it should be opaque. 16:9 is the native aspect (no crop); ultrawide keeps the horizon and floes; the 9:16 centre slice keeps sky, mountains and a column of floes. No watermark or logo seen in the corners at native size.",
+        "provenance_limit": "visual photographic assessment and current provider tags only; original authorship, licence and capture method remain unverified"
+      },
+      "crop_review": {
+        "algorithm": "centre cover crop then resize (Version: ImageMagick 7.1.2-34 Q16-HDRI x86_64 c5d4ca8a0:20261014); JPEG q90 files hashed",
+        "16x9": {
+          "result": "accepted: native 16:9, nothing cropped",
+          "sha256": "12f8453177f7f77aa1ba76ece355239d91894a908a31e4659dee48ed77f979c3"
+        },
+        "ultrawide": {
+          "result": "accepted: trims top sky and bottom ice; horizon, mountains and floes remain",
+          "sha256": "856f126038bfed5f27d997346cd1070c093d8978851ada2cb6aac3cd56349747"
+        },
+        "portrait": {
+          "result": "accepted: sky, distant mountains and a column of floes in the centre slice",
+          "sha256": "06c7c59c520ef0d465d9a9004ea47939ebc9a1197f0cdbb942d6ccaa2a150324"
+        }
+      },
+      "parent_verification": {
+        "status": "accepted_visual_review_with_documented_crop_limits",
+        "reviewed_on": "2026-10-31",
+        "evidence": "Original and all three crop hashes verified against private files; crop review sheets and native-pixel patches independently inspected by integration owner.",
+        "remaining": [
+          "Original authorship, capture method and licence remain unverified; portrait architecture crop keeps only part of window, ice foreground is busy."
+        ]
+      }
+    }
+  },
+  "themes": {
+    "deepin": {
+      "status": "candidate_live_checked_on_download",
+      "rationale": "Graphite and pale blue-white photography in place of Deepin's blue-silk and smoked-glass renders (the latter are CGI, rejected by the root policy).",
+      "dark": {
+        "image_id": "ex5m3w",
+        "rationale": "Near-neutral graphite (upper third rgb 27,27,27) with one lit window: matches the #252525 / #101010 dark surfaces; warm light is the only colour."
+      },
+      "light": {
+        "image_id": "r2k6km",
+        "rationale": "Pale cool blue-white sky and ice (upper third rgb 215,224,233) near the light window colour #f8f8f8 with a blue tint; the accent #0081ff stays legible."
+      },
+      "same_image_both_modes": false,
+      "placement": "Centre-fill. Dark: keep the lit window in the middle third; the rest is flat graphite. Light: the sky occupies the top third, so a top bar sits on pale blue; the lower half is busy ice, so cards or a dock over it should be opaque.",
+      "recommended_mode": "fill",
+      "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch; 16:9, 3440x1440 and 1080x1920 centre crops were reviewed (see crop_review)"
+    }
+  },
+  "full_resolution_audit": {
+    "reviewed_on": "2026-10-31",
+    "initial_choices_reviewed": 2,
+    "current_choices_reviewed": 2,
+    "replacement_count": 2,
+    "download_limits": {
+      "max_files": 2,
+      "max_bytes_per_file": 33554432,
+      "timeout_seconds_per_file": 120,
+      "concurrent_downloads": 1
+    },
+    "method": "curl of each detail response (sha256 of the raw bytes), of the large thumbnail and of the original; sha256sum; ImageMagick centre cover crops (-resize WxH^ -gravity center -extent WxH, -quality 90) at 1920x1080, 3440x1440, 1080x1920; native-pixel patches (1000x560 centre, 900x300 bottom-right) inspected by eye; mean colours from 1x1 resizes of the whole image and its top and bottom thirds",
+    "private_evidence": "/var/tmp/decebal-deepin/wh/{full,crops,detail,th,detail-check.png,review-*.png,SHA256SUMS} (originals and crops are not committed; SHA256SUMS lists every file and equals the hashes in this fragment)",
+    "unverified": "No licence/copyright/capture-method guarantee; no full photo or derivative committed; physical compositor readability not checked; ultrawide and portrait were reviewed as crops, not on a display"
+  },
+  "rejected_recommendations": [
+    {
+      "theme_id": "deepin",
+      "mode": "dark",
+      "id": "7j2wl9",
+      "page_url": "https://wallhaven.cc/w/7j2wl9",
+      "sha256": "96bb816cd3a169c67518782477fe044342512b47f5d9e5a4538a6005a8418922",
+      "reason": "Earlier port pick: a 3D render (tags 3D Abstract, CGI, digital art). The root policy rejects digital art and asks for photographs. Kept as historical in historical_candidates.",
+      "replacement_id": "ex5m3w"
+    },
+    {
+      "theme_id": "deepin",
+      "mode": "light",
+      "id": "3zg3xd",
+      "page_url": "https://wallhaven.cc/w/3zg3xd",
+      "sha256": "b36ca9b32a71c7ec202eb031efaac6a1b814520b5f0db9d6c1ed12350bdd0e22",
+      "reason": "Earlier port pick: a 3D render (tags 3D Abstract, digital art). The root policy rejects digital art and asks for photographs. Kept as historical in historical_candidates.",
+      "replacement_id": "r2k6km"
+    }
+  ],
+  "historical_candidates": {
+    "note": "The first Deepin picks (CGI renders), kept as evidence of what was rejected and why; not images of the catalogue.",
+    "images": {
+      "3zg3xd": {
+        "ai_review": {
+          "flagged_ai": false,
+          "rejected_tag_ids": [
+            133451
+          ],
+          "visual_assessment": "CGI/3D abstract renders; capture method and provenance are not proof of anything beyond the provider's tags"
+        },
+        "api_url": "https://wallhaven.cc/api/v1/w/3zg3xd",
+        "author": {
+          "name": null,
+          "reported_candidate": null,
+          "verification": "not independently verified"
+        },
+        "category": "general",
+        "center_fill_crops": {
+          "16:10": {
+            "height": 2880,
+            "width": 4608,
+            "x": 256,
+            "y": 0
+          },
+          "21:9": {
+            "height": 2194,
+            "width": 5120,
+            "x": 0,
+            "y": 343
+          },
+          "3:2": {
+            "height": 2880,
+            "width": 4320,
+            "x": 400,
+            "y": 0
+          },
+          "4:3": {
+            "height": 2880,
+            "width": 3840,
+            "x": 640,
+            "y": 0
+          }
+        },
+        "design_fit": "Deepin's own light wallpapers are blue silk on pale blue; this is the closest SFW, non-vendor result found. Light UI surfaces stay opaque over it.",
+        "evidence": {
+          "detail_sha256": "b08e0c0478466ec8c8816d997b546fc10df7d20604ce9e44dab77227a091ebbb",
+          "full_bytes": 5336403,
+          "full_sha256": "b36ca9b32a71c7ec202eb031efaac6a1b814520b5f0db9d6c1ed12350bdd0e22"
+        },
+        "file_type": "image/png",
+        "full_url": "https://w.wallhaven.cc/full/3z/wallhaven-3zg3xd.png",
+        "id": "3zg3xd",
+        "license": {
+          "identifier": null,
+          "status": "unknown; no redistribution permission established",
+          "url": null
+        },
+        "notes": "Wallhaven tags `3D Abstract`, `digital art` and `Starkiteckt` (a tag, not verified authorship). A small faint mark sits at the bottom centre (about 47 % x, 97 % y): preserve it. Uploader name is not the author.",
+        "page_url": "https://wallhaven.cc/w/3zg3xd",
+        "purity": "sfw",
+        "resolution": [
+          5120,
+          2880
+        ],
+        "source_url": null,
+        "source_verification": "source not provided by Wallhaven",
+        "subject": "A pale-blue hexagon studio floor under a glowing nebula sky",
+        "tags": [
+          {
+            "id": 479,
+            "name": "digital art"
+          },
+          {
+            "id": 2278,
+            "name": "minimalism"
+          },
+          {
+            "id": 2729,
+            "name": "sky"
+          },
+          {
+            "id": 74,
+            "name": "abstract"
+          },
+          {
+            "id": 62977,
+            "name": "3D Abstract"
+          },
+          {
+            "id": 24174,
+            "name": "Starkiteckt"
+          }
+        ],
+        "uploaded_at": "2022-01-08 08:38:37",
+        "uploader": {
+          "is_author": null,
+          "username": "Graphaholic"
+        }
+      },
+      "7j2wl9": {
+        "ai_review": {
+          "flagged_ai": false,
+          "rejected_tag_ids": [
+            133451
+          ],
+          "visual_assessment": "CGI/3D abstract renders; capture method and provenance are not proof of anything beyond the provider's tags"
+        },
+        "api_url": "https://wallhaven.cc/api/v1/w/7j2wl9",
+        "author": {
+          "name": null,
+          "reported_candidate": null,
+          "verification": "not independently verified"
+        },
+        "category": "general",
+        "center_fill_crops": {
+          "16:10": {
+            "height": 2160,
+            "width": 3456,
+            "x": 192,
+            "y": 0
+          },
+          "21:9": {
+            "height": 1646,
+            "width": 3840,
+            "x": 0,
+            "y": 257
+          },
+          "3:2": {
+            "height": 2160,
+            "width": 3240,
+            "x": 300,
+            "y": 0
+          },
+          "4:3": {
+            "height": 2160,
+            "width": 2880,
+            "x": 480,
+            "y": 0
+          }
+        },
+        "design_fit": "The charcoal field matches Deepin's dark window colour #252525 and the glass echoes the frosted dock; no brand mark.",
+        "evidence": {
+          "detail_sha256": "83b7487df1160c3749ca15331946b16155db2cac4a3a88544a532dcabc3dcc96",
+          "full_bytes": 485135,
+          "full_sha256": "96bb816cd3a169c67518782477fe044342512b47f5d9e5a4538a6005a8418922"
+        },
+        "file_type": "image/jpeg",
+        "full_url": "https://w.wallhaven.cc/full/7j/wallhaven-7j2wl9.jpg",
+        "id": "7j2wl9",
+        "license": {
+          "identifier": null,
+          "status": "unknown; no redistribution permission established",
+          "url": null
+        },
+        "notes": "Wallhaven lists tags `3D Abstract`, `CGI`, `digital art` and `Milad Fakurian` (the name is a tag, not verified authorship). The detail response's source field points at an Unsplash photo page; that page was not opened, so the Unsplash licence is not inferred. Left disc starts at about 12% of the width: 4:3 fill touches its rim.",
+        "page_url": "https://wallhaven.cc/w/7j2wl9",
+        "purity": "sfw",
+        "resolution": [
+          3840,
+          2160
+        ],
+        "source_url": "https://unsplash.com/photos/a-blue-and-white-logo-gphL7D-rMpM",
+        "source_verification": "source link reported by Wallhaven; not opened",
+        "subject": "Two overlapping smoked-glass discs with a blue rim light on a near-black ground",
+        "tags": [
+          {
+            "id": 74,
+            "name": "abstract"
+          },
+          {
+            "id": 62977,
+            "name": "3D Abstract"
+          },
+          {
+            "id": 479,
+            "name": "digital art"
+          },
+          {
+            "id": 638,
+            "name": "reflection"
+          },
+          {
+            "id": 2698,
+            "name": "circle"
+          },
+          {
+            "id": 2278,
+            "name": "minimalism"
+          },
+          {
+            "id": 14189,
+            "name": "dark background"
+          },
+          {
+            "id": 75,
+            "name": "CGI"
+          },
+          {
+            "id": 198,
+            "name": "simple background"
+          },
+          {
+            "id": 3693,
+            "name": "glass"
+          },
+          {
+            "id": 157744,
+            "name": "Milad Fakurian"
+          },
+          {
+            "id": 1189,
+            "name": "sphere"
+          }
+        ],
+        "uploaded_at": "2025-08-14 08:28:43",
+        "uploader": {
+          "is_author": null,
+          "username": "Funzen"
+        }
+      }
+    },
+    "themes": {
+      "deepin": {
+        "crop_policy": "keep original aspect; centre fill; verify portrait and ultrawide separately",
+        "dark": {
+          "image_id": "7j2wl9",
+          "rationale": "Graphite ground and frosted glass match the dark window colours and the blurred dock."
+        },
+        "light": {
+          "image_id": "3zg3xd",
+          "rationale": "Pale blue with a soft horizon keeps the accent #0081ff legible and is close to Deepin's light wallpaper colours."
+        },
+        "placement": "center-fill; both sources are 16:9, so 16:10 and narrower outputs crop the sides (see center_fill_crops); ultrawide fill crops top and bottom and is unverified",
+        "rationale": "Smoked glass for the dark graphite palette, a pale-blue studio for the light one; both are neutral abstract renders without another desktop's logo.",
+        "recommended_mode": "fill",
+        "same_image_both_modes": false,
+        "status": "curated_live_checked_on_download"
+      }
+    },
+    "other_rejected": [
+      {
+        "id": "8oqzok, 57r8x5",
+        "reason": "detail tags `Windows 11` / `Microsoft Windows`: another desktop's identity"
+      },
+      {
+        "id": "d6rx7g, l3z5ol, y85yld, 3qwq69, zyzw3o, l3x572, m95xmm",
+        "reason": "thumbnails are the Windows 11 Bloom flower or Start logo; detail tags not fetched"
+      },
+      {
+        "id": "9o57yk",
+        "reason": "detail tags `Apple Inc.`, `MacBook`, `macOS`: another desktop's identity"
+      },
+      {
+        "id": "6lolz7",
+        "reason": "detail tag `Dell`: vendor stock wallpaper"
+      }
+    ],
+    "search": "https://wallhaven.cc/api/v1/search?categories=100&purity=100&sorting=favorites&atleast=3840x2160&ratios=16x9,16x10&topRange=1y with q in {abstract, gradient, waves, silk, ribbon, liquid, wave+blue+render, glass+abstract, paper+fold, soft+gradient+3d} and colour filters 0066cc/3399ff/abbcda; 56 large thumbnails from the top results were viewed in four contact sheets; detail responses were fetched only for the shortlisted ids (8oqzok, 57r8x5, g7elo3, g7l393, 9o57yk, 7j2wl9, gw2r2e, ly2l2p, 6lolz7, 3zg3xd)."
+  }
+}

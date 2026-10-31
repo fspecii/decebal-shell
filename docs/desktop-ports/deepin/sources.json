@@ -1,0 +1,170 @@
+{
+ "cloned_to": "~/.cache/decebal-upstreams/deepin (git clone --depth 1 --filter=blob:none; sparse checkout for deepin-icon-theme and deepin-desktop-theme)",
+ "date": "2026-10-31",
+ "format": 1,
+ "org": "https://github.com/linuxdeepin",
+ "repos": {
+  "dde-appearance": {
+   "branch": "master",
+   "committed": "2026-10-26T17:01:53+08:00",
+   "license": "GPL-3.0-or-later; dconfig json CC0-1.0",
+   "revision": "7190e5939236c8e18b14d55c4f86199d4844e781",
+   "url": "https://github.com/linuxdeepin/dde-appearance",
+   "use": "read",
+   "used_for": "defaults: icon theme nirvana, cursor bloom, font Source Han Sans SC 10.5, Noto Mono, cursor size 24, opacity 0.4"
+  },
+  "dde-dock": {
+   "branch": "master",
+   "committed": "2025-01-14T19:32:23+08:00",
+   "license": "LGPL-3.0",
+   "revision": "a90f386ddc6c0c53bd3b8099cb9e281c9b48e98b",
+   "url": "https://github.com/linuxdeepin/dde-dock",
+   "use": "listed",
+   "used_for": "previous-generation dock (V20/V23), history only"
+  },
+  "dde-kwin": {
+   "branch": "master",
+   "committed": "2026-05-18T10:16:52+08:00",
+   "license": "see repository",
+   "revision": "e1ebf03b0a8eb3f4c43876a2cfc9f61d98d0fd9a",
+   "url": "https://github.com/linuxdeepin/dde-kwin",
+   "use": "listed",
+   "used_for": "configuration scripts only; the decoration moved to deepin-kwin"
+  },
+  "dde-launchpad": {
+   "branch": "master",
+   "committed": "2026-10-26T03:40:19Z",
+   "license": "GPL-3.0-or-later",
+   "revision": "b6a8b6349bc525675d79a894fc8050a5b2c971bc",
+   "url": "https://github.com/linuxdeepin/dde-launchpad",
+   "use": "read, metrics only",
+   "used_for": "fullscreen (8 x 4 grid) and windowed launcher structure (qml/Helper.qml, FullscreenFrame.qml, windowed/*)"
+  },
+  "dde-services": {
+   "branch": "master",
+   "committed": "see git",
+   "license": "see repository",
+   "revision": "69fcd013ee97f0b4008bc5f480983a155640c75f",
+   "url": "https://github.com/linuxdeepin/dde-services",
+   "use": "values only",
+   "used_for": "src/plugin-qt/xsettings/misc/org.deepin.XSettings.json: icon-theme-name bloom, gtk-cursor-theme-name bloom (size 24), dtk-window-radius 8"
+  },
+  "dde-shell": {
+   "branch": "master",
+   "committed": "2026-10-28T06:17:02Z",
+   "license": "GPL-3.0-or-later (some files LGPL-3.0-or-later); json CC0-1.0",
+   "revision": "b2a4ea2da76dc1f00a1da93904c75c6aa6330367",
+   "url": "https://github.com/linuxdeepin/dde-shell",
+   "use": "read, metrics only",
+   "used_for": "dock panel: sizes, positions, hide modes, fashion/efficient, blur colours, plugin and tray structure (panels/dock/{constants.h,dconfig/*.json,package/main.qml,tray,taskmanager})"
+  },
+  "dde-tray-loader": {
+   "branch": "master",
+   "committed": "2026-10-20T13:37:19Z",
+   "license": "see repository",
+   "revision": "0253c9fb169c3043c8603c7164c3d8f86028d2cf",
+   "url": "https://github.com/linuxdeepin/dde-tray-loader",
+   "use": "read",
+   "used_for": "list of dock plugins: airplane-mode bluetooth brightness datetime dnd-mode eye-comfort-mode keyboard-layout media notification onboard power shutdown sound"
+  },
+  "dde-wallpapers": {
+   "branch": "master",
+   "committed": "2023-07-10T06:41:47Z",
+   "license": "MIT",
+   "revision": "7007826bee34f664aa4bc6d232c1ce4c7e60d819",
+   "url": "https://github.com/linuxdeepin/dde-wallpapers",
+   "use": "listed",
+   "used_for": "last commit 2023-07-10, old"
+  },
+  "dde-widgets": {
+   "branch": "master",
+   "committed": "2024-09-27T06:07:42Z",
+   "license": "GPL-3.0",
+   "revision": "090c0430b482e2c6a14d2d315f92f3ebb724979d",
+   "url": "https://github.com/linuxdeepin/dde-widgets",
+   "use": "listed",
+   "used_for": "widget host, last commit 2024-09-27"
+  },
+  "deepin-desktop-theme": {
+   "branch": "master",
+   "committed": "2026-06-24T15:45:15+08:00",
+   "license": "CC-BY-4.0 (README, .reuse/dep5)",
+   "revision": "a0c79e31467ab602d96605475dca69eb835c5d90",
+   "url": "https://github.com/linuxdeepin/deepin-desktop-theme",
+   "use": "nirvana DCI icons: maintainer conversion recipe tools/build_nirvana.py (output not committed; hash manifest assets/desktop-ports/deepin/nirvana/MANIFEST.json)",
+   "used_for": "global themes nirvana (the default), bloom, flow, hazy-color, macaron, organic-glass, origin, square, vintage; icons are DCI containers"
+  },
+  "deepin-gtk-theme": {
+   "branch": "master",
+   "committed": "2026-06-22T11:05:30Z",
+   "license": "GPL-3.0",
+   "revision": "d234c7ccc1b24ae215d49ca4bd94b3b5d4566e78",
+   "url": "https://github.com/linuxdeepin/deepin-gtk-theme",
+   "use": "listed, not used yet",
+   "used_for": "GTK theme reference"
+  },
+  "deepin-icon-theme": {
+   "branch": "master",
+   "committed": "2026-06-22T11:06:10Z",
+   "license": "GPL-3.0-or-later (.reuse/dep5)",
+   "revision": "5d11ba4e4013a4d1e1c601265d55c66b95184922",
+   "url": "https://github.com/linuxdeepin/deepin-icon-theme",
+   "use": "pinned for the asset installer (GPL-3.0-or-later)",
+   "used_for": "Bloom icon and cursor themes: pinned in assets/desktop-ports/deepin/asset-packs.toml (commit and tree ids); nothing is copied into this repository"
+  },
+  "deepin-kwin": {
+   "branch": "master",
+   "committed": "2025-09-25T19:05:05+08:00",
+   "license": "plugin C++ GPL-3.0-or-later; svg and json CC0-1.0",
+   "revision": "664808264f5a49c306834565d0e0c631a8feda27",
+   "url": "https://github.com/linuxdeepin/deepin-kwin",
+   "use": "read, metrics only",
+   "used_for": "Chameleon decoration metrics (docs/desktop-ports/deepin/DECORATION-CONTRACT.md); nothing is copied: rdwm draws its own and the manifest selects rdwm's deepin / deepin-dark styles"
+  },
+  "deepin-specifications": {
+   "branch": "master",
+   "committed": "see git",
+   "license": "see repository (documentation)",
+   "revision": "d00a44bcb52f996e522956db26c34d341c232365",
+   "url": "https://github.com/linuxdeepin/deepin-specifications",
+   "use": "read",
+   "used_for": "unstable/\u56fe\u6807\u6587\u4ef6\u89c4\u8303.md: the DCI container format and layer naming, implemented independently in assets/desktop-ports/deepin/tools/build_nirvana.py"
+  },
+  "deepin-wallpapers": {
+   "branch": "master",
+   "committed": "2026-09-10T20:36:03+08:00",
+   "license": "CC-BY-4.0 (UnionTech) for deepin/*; CC-BY-NC-ND-4.0 and Unsplash licence under nonfree/",
+   "revision": "caae39a555fbeac36da0cacc0fd00d73b2706c7e",
+   "url": "https://github.com/linuxdeepin/deepin-wallpapers",
+   "use": "inspected, not copied",
+   "used_for": "reference for the wallpaper colours only"
+  },
+  "dtkdeclarative": {
+   "branch": "master",
+   "committed": "2026-10-30T01:43:57Z",
+   "license": "LGPL-3.0-or-later; json CC0-1.0",
+   "revision": "0159003c7971513e195dabede01eb93ef93b7cb0",
+   "url": "https://github.com/linuxdeepin/dtkdeclarative",
+   "use": "metric values only",
+   "used_for": "control metrics: qt6/src/qml/FlowStyle.qml (radius 8/12/14/18, titleBar 50, windowButton 50, button 36)"
+  },
+  "dtkgui": {
+   "branch": "master",
+   "committed": "2026-10-28T08:50:36Z",
+   "license": "LGPL-3.0-or-later",
+   "revision": "fa3d6fd7b69370173f79fff315b1bbe2359af3d5",
+   "url": "https://github.com/linuxdeepin/dtkgui",
+   "use": "colour values only",
+   "used_for": "DTK light/dark palettes (src/kernel/dguiapplicationhelper.cpp standardPalette)"
+  },
+  "qt6platform-plugins": {
+   "branch": "master",
+   "committed": "2025-12-11T21:24:22+08:00",
+   "license": "see repository",
+   "revision": "42bf4d6c231c91d43d595ac3122a6102d588dab7",
+   "url": "https://github.com/linuxdeepin/qt6platform-plugins",
+   "use": "listed",
+   "used_for": "default window radius handling (dplatformwindowhelper)"
+  }
+ }
+}

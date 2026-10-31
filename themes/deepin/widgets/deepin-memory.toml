@@ -1,0 +1,89 @@
+format = 1
+id = "deepin-memory"
+name = "Deepin memory monitor"
+description = "dde-widgets Memory Monitor, small size (170 x 170): memory and swap legend, two concentric rings, the percentage in the middle."
+size = [170, 170]
+refresh = 1000
+
+# Measured from dde-widgets (090c043) memorymonitor/memorywidget.{h,cpp} and app/global.h: SmallSize 170 x 170, legend dots 6 px,
+# ring width 6, memory #00C5C0, swap #FEDF19, ring track at 0.1 opacity of the text colour, 15 px top margin, 8 px gaps. Upstream's
+# rings are 270-degree arcs; the shared ring node draws full circles, so these are full rings (a known difference).
+[root]
+type = "col"
+padding = [14, 14]
+gap = 8
+justify = "start"
+align = "center"
+background = "popup"
+radius = "theme"
+border = "border@0.6"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "row"
+gap = 8
+align = "center"
+justify = "center"
+
+[[root.children.children]]
+type = "row"
+width = 6
+height = 6
+radius = 3
+background = "#00c5c0"
+
+[[root.children.children]]
+type = "text"
+text = "{mem.used:bytes} / {mem.total:bytes}"
+size = 12
+
+[[root.children]]
+type = "row"
+gap = 8
+align = "center"
+justify = "center"
+
+[[root.children.children]]
+type = "row"
+width = 6
+height = 6
+radius = 3
+background = "#fedf19"
+
+[[root.children.children]]
+type = "text"
+text = "Swap {swap.usage:pct}"
+size = 12
+
+[[root.children]]
+type = "stack"
+width = 88
+height = 88
+
+[[root.children.children]]
+type = "ring"
+value = "mem.usage"
+size = 88
+thickness = 6
+color = "#00c5c0"
+track = "text@0.1"
+
+[[root.children.children]]
+type = "ring"
+value = "swap.usage"
+size = 74
+thickness = 6
+color = "#fedf19"
+track = "text@0.1"
+
+[[root.children.children]]
+type = "col"
+justify = "center"
+align = "center"
+
+[[root.children.children.children]]
+type = "text"
+text = "{mem.usage:pct1}"
+size = 13
+weight = "bold"
+text_align = "center"
