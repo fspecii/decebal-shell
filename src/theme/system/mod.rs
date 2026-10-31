@@ -62,8 +62,13 @@ pub struct Palette {
     pub cyan: Rgb,
     /// The theme's UI font, when it names one.
     pub font: Option<String>,
+    /// The interface and monospace font chains, first choice first (fallbacks when the first is not installed).
+    pub ui_fonts: Vec<String>,
+    pub mono_fonts: Vec<String>,
     pub font_pt: f32,
     pub radius: f32,
+    /// Menu / popover opacity from the theme (1 = opaque). Only those backgrounds use it, never window content.
+    pub popup_alpha: f32,
     /// `classic` titlebars (buttons on the right) or `macos` (on the left).
     pub classic_buttons: bool,
 }
@@ -118,8 +123,11 @@ impl Palette {
             magenta,
             cyan,
             font: (!t.font_family.is_empty()).then(|| t.font_family.clone()),
+            ui_fonts: t.fonts.chain(super::fonts::Role::Ui).to_vec(),
+            mono_fonts: t.fonts.chain(super::fonts::Role::Mono).to_vec(),
             font_pt: (11.0 * t.font_scale * 2.0).round() / 2.0,
             radius: t.radius,
+            popup_alpha: t.popup_alpha.clamp(0.0, 1.0),
             classic_buttons: t.window_buttons_right,
         }
     }
@@ -134,6 +142,44 @@ impl Palette {
             c = self.text.over(self.accent, 0.1 * (i + 1) as f32);
         }
         c
+    }
+
+    /// Every role as `#rrggbb`, plus the font and button facts (`decthemectl system palette --json`).
+    pub fn to_json(&self) -> Value {
+        let roles = [
+            ("bg", self.bg),
+            ("sidebar", self.sidebar),
+            ("surface", self.surface),
+            ("popup", self.popup),
+            ("titlebar", self.titlebar),
+            ("titlebar_inactive", self.titlebar_inactive),
+            ("border", self.border),
+            ("text", self.text),
+            ("text_secondary", self.text_secondary),
+            ("text_faint", self.text_faint),
+            ("accent", self.accent),
+            ("accent_text", self.accent_text),
+            ("accent_on_bg", self.accent_on_bg()),
+            ("red", self.red),
+            ("green", self.green),
+            ("yellow", self.yellow),
+            ("blue", self.blue),
+            ("orange", self.orange),
+            ("magenta", self.magenta),
+            ("cyan", self.cyan),
+        ];
+        let mut o: serde_json::Map<String, Value> = roles.iter().map(|(k, c)| (k.to_string(), json!(c.hex()))).collect();
+        o.insert("id".into(), json!(self.id));
+        o.insert("name".into(), json!(self.name));
+        o.insert("dark".into(), json!(self.dark));
+        o.insert("font".into(), json!(self.font));
+        o.insert("font_pt".into(), json!(self.font_pt));
+        o.insert("radius".into(), json!(self.radius));
+        o.insert("popup_alpha".into(), json!(self.popup_alpha));
+        o.insert("ui_fonts".into(), json!(self.ui_fonts));
+        o.insert("mono_fonts".into(), json!(self.mono_fonts));
+        o.insert("classic_buttons".into(), json!(self.classic_buttons));
+        Value::Object(o)
     }
 
     /// `c` pushed toward white by `t` (for the bright terminal colours).
@@ -163,8 +209,15 @@ pub struct Config {
 }
 
 /// The per-target on/off options: `(key, default, title, detail)`. Only a value that differs from the default is stored.
-pub const OPTIONS: &[(&str, bool, &str, &str)] =
-    &[("gtk.font", true, "Theme font in GTK apps", "Write the theme's interface font (when it names an installed one) to GTK's settings.ini and gsettings; off leaves your GTK font alone")];
+pub const OPTIONS: &[(&str, bool, &str, &str)] = &[
+    ("gtk.font", true, "Theme font in GTK apps", "Write the theme's interface and monospace fonts (the first installed ones of their chains) to GTK's settings.ini and gsettings; off leaves your GTK fonts alone"),
+    (
+        "gtk.theme",
+        true,
+        "Theme GTK 3 and GTK 4 controls",
+        "Select a generated Decebal GTK theme so plain GTK 3 / GTK 4 apps get the theme's buttons, fields, header bars and states (libadwaita apps are coloured either way); off keeps your own GTK theme",
+    ),
+];
 
 impl Default for Config {
     fn default() -> Self {
@@ -300,6 +353,8 @@ impl Runner for SysRunner {
 pub struct Env {
     pub home: PathBuf,
     pub config_home: PathBuf,
+    /// `$XDG_DATA_HOME`: where generated toolkit themes (`themes/Decebal*`) live.
+    pub data_home: PathBuf,
     pub state_home: PathBuf,
     /// Manifest, backups and the lock.
     pub state_dir: PathBuf,
@@ -321,6 +376,7 @@ impl Env {
         let home = var("HOME").unwrap_or_else(|| PathBuf::from("/nonexistent"));
         let config_home = var("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"));
         let state_home = var("XDG_STATE_HOME").unwrap_or_else(|| home.join(".local/state"));
+        let data_home = var("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share"));
         let omarchy_path =
             var("OMARCHY_PATH").filter(|p| p.is_dir()).or_else(|| ["/usr/share/omarchy".into(), home.join(".local/share/omarchy")].into_iter().find(|p: &PathBuf| p.join("default/themed").is_dir()));
         Env {
@@ -334,6 +390,7 @@ impl Env {
             runtime_dir: var("XDG_RUNTIME_DIR"),
             home,
             config_home,
+            data_home,
             state_home,
             run: Box::new(SysRunner),
         }
@@ -418,6 +475,17 @@ fn dconf_path(schema: &str, key: &str) -> String {
 
 /// Sets gsettings keys, remembering what they held (once per key) for [`gsettings_restore`].
 pub fn gsettings_set(cx: &mut Ctx, owner: &str, entries: &[(String, String, String)]) {
+    gsettings_write(cx.env, cx.st, cx.report, owner, entries);
+}
+
+/// [`gsettings_set`] without a palette context (the icon / cursor publication has none).
+fn gsettings_write(env: &Env, st: &mut State, report: &mut Report, owner: &str, entries: &[(String, String, String)]) {
+    struct Cx<'a> {
+        env: &'a Env,
+        st: &'a mut State,
+        report: &'a mut Report,
+    }
+    let cx = &mut Cx { env, st, report };
     if entries.is_empty() {
         return;
     }
@@ -519,8 +587,13 @@ fn skip_reason(t: &dyn Target, cfg: &Config, env: &Env, opts: &Opts) -> Option<S
 /// fails); then gsettings and the reload commands run.
 pub fn apply(env: &Env, cfg: &Config, p: &Palette, opts: &Opts) -> Result<Report, String> {
     let _lock = if opts.dry_run { None } else { Some(lock(&env.state_dir)?) };
-    let mut st = State::load(&env.state_dir);
+    apply_locked(env, cfg, p, opts)
+}
+
+/// [`apply`] for a caller that already holds the system lock (the debounced worker claims its request under it).
+fn apply_locked(env: &Env, cfg: &Config, p: &Palette, opts: &Opts) -> Result<Report, String> {
     let mut report = Report::default();
+    let mut st = State::load(&env.state_dir);
     let all = targets();
     let mut changes = Vec::new();
     let mut plans: Vec<(&dyn Target, Plan)> = Vec::new();
@@ -597,7 +670,8 @@ pub fn off(env: &Env, cfg: &Config, p: &Palette) -> Result<Report, String> {
     }
     st.extra.clear();
     let _ = std::fs::remove_file(env.state_dir.join("last-result.json"));
-    let _ = std::fs::remove_file(pending_file(env));
+    // An explicit "off" drops queued requests: a worker that wakes later finds no ticket and writes nothing.
+    let _ = with_queue(env, |q| q.pending = None);
     if st.is_empty() && st.dirs.is_empty() {
         let _ = std::fs::remove_file(env.state_dir.join("manifest.json"));
         let _ = std::fs::remove_dir(env.state_dir.join("backups"));
@@ -651,15 +725,25 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
     }
 }
 
+/// The system configuration as the targets see it: an explicit `system.iconTheme` wins, otherwise the theme's shell icon pack
+/// (`icons.theme`) is carried to apps too.
+fn effective_config(shell_json: &Path) -> Config {
+    let mut cfg = Config::load(shell_json);
+    if cfg.icon_theme.is_none() {
+        cfg.icon_theme = crate::settings::io::json_load(shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
+    }
+    cfg
+}
+
 /// `decthemectl apply-system`.
 pub fn apply_now(src: &Source, opts: &Opts) -> Result<Report, String> {
-    let mut cfg = Config::load(&src.shell_json);
-    // Explicit system override wins; otherwise carry the theme's shell icon pack to apps too.
-    if cfg.icon_theme.is_none() {
-        cfg.icon_theme = crate::settings::io::json_load(&src.shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
-    }
+    apply_now_inner(src, opts, false)
+}
+
+fn apply_now_inner(src: &Source, opts: &Opts, lock_held: bool) -> Result<Report, String> {
+    let cfg = effective_config(&src.shell_json);
     let env = Env::discover();
-    let result = current_palette(src).and_then(|(p, _)| apply(&env, &cfg, &p, opts));
+    let result = current_palette(src).and_then(|(p, _)| if lock_held { apply_locked(&env, &cfg, &p, opts) } else { apply(&env, &cfg, &p, opts) });
     if !opts.dry_run {
         if let Err(error) = &result {
             record_failure(&env, error);
@@ -675,13 +759,14 @@ pub struct Completion {
     pub warnings: Vec<String>,
 }
 
-/// Honest asynchronous status for Settings: queued work is not a completed apply.
+/// Honest asynchronous status for Settings: queued or running work is not a completed apply.
 pub fn completion(env: &Env) -> Completion {
     let value: Value = std::fs::read_to_string(env.state_dir.join("last-result.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let busy = Queue::load(env).busy();
     Completion {
-        pending: pending_file(env).exists(),
-        error: if pending_file(env).exists() { None } else { value["error"].as_str().map(String::from) },
-        warnings: if pending_file(env).exists() { Vec::new() } else { value["warnings"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() },
+        pending: busy,
+        error: if busy { None } else { value["error"].as_str().map(String::from) },
+        warnings: if busy { Vec::new() } else { value["warnings"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() },
     }
 }
 
@@ -689,15 +774,157 @@ fn record_failure(env: &Env, error: &str) {
     let _ = files::write_atomic(&env.state_dir.join("last-result.json"), &json!({"error": error, "warnings": []}).to_string());
 }
 
-fn pending_file(env: &Env) -> PathBuf {
-    env.state_dir.join("pending")
-}
-
 fn automatic_enabled(value: Option<&str>) -> bool {
     value != Some("0")
 }
 
-/// Called after any theme / style / font / wallpaper-colour change: when "Apply to all apps" is on, asks for one apply
+// ---------------------------------------------------------------- request ownership
+//
+// Producers (a theme change: [`request`]; an accepted icon / cursor selection: [`publish_assets`]) and the debounced worker
+// ([`run_debounced`]) share one queue, `requests.json` in the state directory, changed only by a read-modify-write under its own
+// lock (`requests.lock`). That lock is held for a few file operations and never during an apply, so a producer on a UI thread never
+// waits for one.
+//
+// * Enqueue: a new ticket replaces the pending one and inherits its intent when wider: `Full` (every enabled target) outranks
+//   `Assets` (icon / cursor keys only), so an outstanding theme apply is never narrowed, whatever the order of producers.
+// * Claim: a worker takes the pending ticket only if it is still its own, moving it to `running`, and only while holding the apply
+//   lock; it reads the selection after claiming, so any later change has queued a newer ticket that will run after it.
+// * Finish / abandon: a worker clears `running` only when it is still its own ticket; a failed spawn drops only its own pending one.
+
+/// What a request asks for. Ordered: merging keeps the wider one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Intent {
+    /// Publish the icon / cursor selection only ([`ASSET_TARGETS`], icon and cursor keys, nothing else).
+    Assets,
+    /// Render the theme to every enabled target.
+    Full,
+}
+
+impl Intent {
+    fn id(self) -> &'static str {
+        match self {
+            Intent::Assets => "assets",
+            Intent::Full => "full",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ticket {
+    pub nonce: String,
+    pub intent: Intent,
+    /// The worker running it (0 while pending); a running ticket whose process is gone no longer counts as busy.
+    pub pid: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Queue {
+    pub pending: Option<Ticket>,
+    pub running: Option<Ticket>,
+}
+
+impl Queue {
+    fn path(env: &Env) -> PathBuf {
+        env.state_dir.join("requests.json")
+    }
+
+    fn load(env: &Env) -> Queue {
+        let v: Value = std::fs::read_to_string(Self::path(env)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let ticket = |v: &Value| {
+            Some(Ticket {
+                nonce: v.get("nonce")?.as_str()?.to_string(),
+                intent: if v.get("intent")?.as_str()? == "assets" { Intent::Assets } else { Intent::Full },
+                pid: v.get("pid").and_then(Value::as_u64).unwrap_or(0) as u32,
+            })
+        };
+        Queue { pending: ticket(&v["pending"]), running: ticket(&v["running"]) }
+    }
+
+    fn save(&self, env: &Env) -> Result<(), String> {
+        if self.pending.is_none() && self.running.is_none() {
+            return match std::fs::remove_file(Self::path(env)) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+                _ => Ok(()),
+            };
+        }
+        let t = |t: &Option<Ticket>| t.as_ref().map(|t| json!({"nonce": t.nonce, "intent": t.intent.id(), "pid": t.pid}));
+        files::write_atomic(&Self::path(env), &json!({"pending": t(&self.pending), "running": t(&self.running)}).to_string())
+    }
+
+    /// A producer's request: replaces the pending ticket, never narrowing its intent.
+    pub fn enqueue(&mut self, nonce: &str, intent: Intent) {
+        let intent = self.pending.as_ref().map_or(intent, |p| p.intent.max(intent));
+        self.pending = Some(Ticket { nonce: nonce.to_string(), intent, pid: 0 });
+    }
+
+    /// Is `nonce` still the newest request?
+    pub fn is_pending(&self, nonce: &str) -> bool {
+        self.pending.as_ref().is_some_and(|p| p.nonce == nonce)
+    }
+
+    /// The worker for `nonce` takes its ticket (only if it is still the newest); `None` means superseded.
+    pub fn claim(&mut self, nonce: &str, pid: u32) -> Option<Intent> {
+        if !self.is_pending(nonce) {
+            return None;
+        }
+        let mut t = self.pending.take()?;
+        t.pid = pid;
+        let intent = t.intent;
+        self.running = Some(t);
+        Some(intent)
+    }
+
+    /// The worker for `nonce` is done; a newer running ticket is never cleared.
+    pub fn finish(&mut self, nonce: &str) {
+        if self.running.as_ref().is_some_and(|r| r.nonce == nonce) {
+            self.running = None;
+        }
+    }
+
+    /// The worker for `nonce` could not be started: drop its ticket if nothing newer replaced it.
+    pub fn abandon(&mut self, nonce: &str) {
+        if self.is_pending(nonce) {
+            self.pending = None;
+        }
+    }
+
+    /// Work is queued or a live worker is running.
+    pub fn busy(&self) -> bool {
+        self.pending.is_some() || self.running.as_ref().is_some_and(|r| r.pid == 0 || unsafe { libc::kill(r.pid as i32, 0) } == 0)
+    }
+}
+
+/// One read-modify-write of the request queue under its own short lock.
+fn with_queue<R>(env: &Env, f: impl FnOnce(&mut Queue) -> R) -> Result<R, String> {
+    use std::os::fd::AsRawFd;
+    std::fs::create_dir_all(&env.state_dir).map_err(|e| format!("{}: {e}", env.state_dir.display()))?;
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(env.state_dir.join("requests.lock")).map_err(|e| e.to_string())?;
+    unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) };
+    let mut q = Queue::load(env);
+    let r = f(&mut q);
+    q.save(env)?;
+    Ok(r)
+}
+
+fn new_nonce() -> String {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    format!(
+        "{}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    )
+}
+
+/// Queues `intent` and starts its worker. Never blocks beyond the queue's few file operations.
+fn queue_request(env: &Env, intent: Intent) -> Result<(), String> {
+    let nonce = new_nonce();
+    with_queue(env, |q| q.enqueue(&nonce, intent))?;
+    spawn_ctl(&["apply-system", "--debounced", &nonce]);
+    Ok(())
+}
+
+/// Called after any theme / style / font / wallpaper-colour change: unless app integration is explicitly off, asks for one apply
 /// shortly (several changes in a row make one run). Never blocks and never fails the caller.
 /// `DECEBAL_SYSTEM_SYNC=1` runs it inline instead (scripts and tests).
 /// `DECEBAL_SYSTEM_AUTOMATIC=0` suppresses automatic requests before any I/O; explicit apply-system still works.
@@ -715,12 +942,91 @@ pub fn request(shell_json: &Path) {
         let _ = apply_now(&src, &Opts::default());
         return;
     }
-    let env = Env::discover();
-    let nonce = format!("{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
-    if std::fs::create_dir_all(&env.state_dir).is_err() || std::fs::write(pending_file(&env), &nonce).is_err() {
-        return;
+    let _ = queue_request(&Env::discover(), Intent::Full);
+}
+
+/// The targets an icon / cursor publication may touch: never Omarchy, browser, editors, hooks, terminals, Kvantum or X11.
+pub const ASSET_TARGETS: &[&str] = &["gtk", "qt"];
+
+/// The answer of [`publish_assets`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Publication {
+    /// A debounced background publication was queued (merged into a pending theme apply when there is one).
+    Requested,
+    /// Nothing will be published, and why (an explicit opt-out, the targets are off, or automatic propagation is suppressed).
+    Off(String),
+}
+
+/// The accepted icon / cursor selection in `shell_json` changed (`icons.theme`, `system.iconTheme`, `system.cursorTheme`): publish it to
+/// GTK and Qt without running the rest of the pipeline. Never blocks. Writes exactly: GTK `settings.ini` `gtk-icon-theme-name` /
+/// `gtk-cursor-theme-name` (gtk-3.0 and gtk-4.0), gsettings `icon-theme` / `cursor-theme`, qt5ct / qt6ct `[Appearance] icon_theme`.
+///
+/// * Explicit opt-outs win: `system.enabled = false` (unset means on), or the `gtk` and `qt` targets switched off, publish nothing.
+///   An explicit `system.iconTheme` keeps winning over the theme's `icons.theme`. A theme that is not installed is not published.
+/// * Ordering: see the request ownership protocol above. A pending theme apply keeps its full intent; the worker publishes the
+///   selection current when it claims its ticket.
+pub fn publish_assets(shell_json: &Path) -> Publication {
+    if cfg!(test) || !automatic_enabled(std::env::var("DECEBAL_SYSTEM_AUTOMATIC").ok().as_deref()) {
+        return Publication::Off("automatic app integration is suppressed in this process".into());
     }
-    spawn_ctl(&["apply-system", "--debounced", &nonce]);
+    let env = Env::discover();
+    if let Err(why) = asset_gate(&Config::load(shell_json), &env) {
+        return Publication::Off(why);
+    }
+    match queue_request(&env, Intent::Assets) {
+        Ok(()) => Publication::Requested,
+        Err(e) => Publication::Off(format!("cannot queue the request: {e}")),
+    }
+}
+
+/// Why an icon / cursor publication must not write anything, if it must not.
+fn asset_gate(cfg: &Config, env: &Env) -> Result<(), String> {
+    if !cfg.enabled {
+        return Err("app integration is switched off".into());
+    }
+    if !targets().iter().filter(|t| ASSET_TARGETS.contains(&t.id())).any(|t| cfg.is_on(t.as_ref(), env) && t.available(env).is_ok()) {
+        return Err("the GTK and Qt app targets are switched off".into());
+    }
+    Ok(())
+}
+
+/// The icon / cursor publication itself, under the system lock: only the asset keys of the enabled asset targets, through the same
+/// file transaction (originals saved, `off` restores) and gsettings bookkeeping as a full apply.
+fn publish_assets_locked(env: &Env, cfg: &Config) -> Result<Report, String> {
+    let mut report = Report::default();
+    if let Err(why) = asset_gate(cfg, env) {
+        report.notes.push(format!("icons and cursors not published: {why}"));
+        return Ok(report);
+    }
+    let mut st = State::load(&env.state_dir);
+    let mut changes = Vec::new();
+    let mut plans = Vec::new();
+    for t in targets().iter().filter(|t| ASSET_TARGETS.contains(&t.id())) {
+        if let Some(why) = skip_reason(t.as_ref(), cfg, env, &Opts::default()) {
+            report.skipped.push((t.id().into(), why));
+            continue;
+        }
+        let plan = match t.id() {
+            "gtk" => gtk::asset_plan(cfg, env),
+            _ => qt::asset_plan(cfg, env),
+        };
+        let mut ch = files::plan(&plan.edits);
+        for c in &mut ch {
+            c.owner = t.id().into();
+        }
+        changes.extend(ch);
+        plans.push((t.id(), plan));
+    }
+    report.unchanged = changes.iter().filter(|c| c.is_noop()).count();
+    report.wrote = files::commit(&changes, &env.state_dir, &mut st)?;
+    for (id, plan) in &plans {
+        gsettings_write(env, &mut st, &mut report, id, &plan.gsettings);
+        report.applied.push(id.to_string());
+    }
+    report.warnings.extend(gtk::missing_themes(cfg, env));
+    st.save(&env.state_dir)?;
+    files::write_atomic(&env.state_dir.join("last-result.json"), &json!({"error": null, "warnings": report.warnings, "applied": report.applied, "intent": "assets"}).to_string())?;
+    Ok(report)
 }
 
 /// Starts `decthemectl ARGS` detached (it lives next to the running program, else on PATH). Does nothing in unit tests.
@@ -733,24 +1039,28 @@ pub fn spawn_ctl(args: &[&str]) {
         if args.first() == Some(&"apply-system") {
             let env = Env::discover();
             record_failure(&env, &format!("Could not start app theme integration: {error}"));
-            if args.get(2).is_some_and(|nonce| std::fs::read_to_string(pending_file(&env)).ok().as_deref() == Some(*nonce)) {
-                let _ = std::fs::remove_file(pending_file(&env));
+            if let Some(nonce) = args.get(2) {
+                let _ = with_queue(&env, |q| q.abandon(nonce));
             }
         }
     }
 }
 
-/// The child started by [`request`]: waits a moment and applies only if no newer request arrived.
+/// The child started by a producer: waits a moment, then runs its ticket only if it is still the newest (see the protocol above).
 pub fn run_debounced(src: &Source, nonce: &str) -> Result<Option<Report>, String> {
     let env = Env::discover();
     std::thread::sleep(Duration::from_millis(700));
-    if std::fs::read_to_string(pending_file(&env)).ok().as_deref() != Some(nonce) {
+    if !with_queue(&env, |q| q.is_pending(nonce))? {
         return Ok(None);
     }
-    let result = apply_now(src, &Opts::default());
-    if std::fs::read_to_string(pending_file(&env)).ok().as_deref() == Some(nonce) {
-        let _ = std::fs::remove_file(pending_file(&env));
-    }
+    let _apply = lock(&env.state_dir)?;
+    let Some(intent) = with_queue(&env, |q| q.claim(nonce, std::process::id()))? else { return Ok(None) };
+    // Everything is read from here on: a change made after this point has queued a newer ticket.
+    let result = match intent {
+        Intent::Full => apply_now_inner(src, &Opts::default(), true),
+        Intent::Assets => publish_assets_locked(&env, &effective_config(&src.shell_json)).inspect_err(|e| record_failure(&env, e)),
+    };
+    let _ = with_queue(&env, |q| q.finish(nonce));
     result.map(Some)
 }
 
@@ -819,6 +1129,7 @@ pub mod testutil {
         std::fs::create_dir_all(home.join(".config")).unwrap();
         let e = Env {
             config_home: home.join(".config"),
+            data_home: home.join(".local/share"),
             state_home: home.join(".local/state"),
             state_dir: root.join("state"),
             gen_dir: home.join(".config/decebal/system"),
@@ -878,14 +1189,23 @@ mod tests {
     fn completion_distinguishes_pending_failure_and_success() {
         let d = tmp("completion");
         let (env, _) = env(&d, &[]);
-        std::fs::create_dir_all(&env.state_dir).unwrap();
-        std::fs::write(pending_file(&env), "nonce").unwrap();
+        with_queue(&env, |q| q.enqueue("nonce", Intent::Full)).unwrap();
         record_failure(&env, "write failed");
         let result = completion(&env);
         assert!(result.pending);
         assert!(result.error.is_none(), "a retry hides stale errors while pending");
-        std::fs::remove_file(pending_file(&env)).unwrap();
+        with_queue(&env, |q| assert_eq!(q.claim("nonce", std::process::id()), Some(Intent::Full))).unwrap();
+        assert!(completion(&env).pending, "a live running worker is still pending work");
+        with_queue(&env, |q| q.finish("nonce")).unwrap();
+        assert!(!Queue::path(&env).exists(), "an empty queue leaves no file");
         assert_eq!(completion(&env).error.as_deref(), Some("write failed"));
+        with_queue(&env, |q| {
+            q.enqueue("crashed", Intent::Full);
+            q.claim("crashed", u32::MAX - 1);
+        })
+        .unwrap();
+        assert!(!completion(&env).pending, "a running ticket whose worker died is not shown as pending forever");
+        with_queue(&env, |q| q.finish("crashed")).unwrap();
         files::write_atomic(&env.state_dir.join("last-result.json"), "{\"warnings\":[\"reopen GTK apps\"]}").unwrap();
         assert!(!completion(&env).pending);
         assert!(completion(&env).error.is_none());
@@ -1010,12 +1330,150 @@ mod tests {
         assert!(r.skipped.iter().any(|(t, why)| t == "qt" && why == "off"));
     }
 
+    /// Every order of producers: the pending intent is the widest one asked for since the last claim.
+    #[test]
+    fn enqueue_never_narrows_a_pending_intent_in_any_order() {
+        let seqs: [&[Intent]; 6] = [
+            &[Intent::Full, Intent::Assets],
+            &[Intent::Assets, Intent::Full],
+            &[Intent::Assets, Intent::Assets],
+            &[Intent::Full, Intent::Full],
+            &[Intent::Assets, Intent::Full, Intent::Assets],
+            &[Intent::Full, Intent::Assets, Intent::Assets],
+        ];
+        for seq in seqs {
+            let mut q = Queue::default();
+            for (i, intent) in seq.iter().enumerate() {
+                q.enqueue(&format!("n{i}"), *intent);
+            }
+            let want = *seq.iter().max().unwrap();
+            assert_eq!(q.pending.as_ref().map(|t| (t.nonce.as_str(), t.intent)), Some((format!("n{}", seq.len() - 1).as_str(), want)), "{seq:?}");
+        }
+    }
+
+    /// Root's scenario: an asset change and a theme change race; whichever worker survives still runs every target.
+    #[test]
+    fn a_theme_change_racing_an_asset_publication_keeps_its_full_intent() {
+        let mut q = Queue::default();
+        q.enqueue("full-1", Intent::Full); // theme change
+        q.enqueue("assets-2", Intent::Assets); // asset follow completes right after
+        assert_eq!(q.claim("full-1", 10), None, "the older worker is superseded");
+        assert_eq!(q.claim("assets-2", 11), Some(Intent::Full), "the surviving worker inherits the full intent");
+        // and the other order
+        let mut q = Queue::default();
+        q.enqueue("assets-1", Intent::Assets);
+        q.enqueue("full-2", Intent::Full);
+        assert_eq!(q.claim("assets-1", 10), None);
+        assert_eq!(q.claim("full-2", 11), Some(Intent::Full));
+    }
+
+    /// A request arriving while a worker runs is kept for the next worker; finishing never clears someone else's ticket.
+    #[test]
+    fn claim_finish_and_abandon_only_touch_their_own_ticket() {
+        let mut q = Queue::default();
+        q.enqueue("a", Intent::Full);
+        assert_eq!(q.claim("a", 1), Some(Intent::Full));
+        assert_eq!(q.claim("a", 1), None, "a ticket is claimed once");
+        q.enqueue("b", Intent::Assets);
+        assert_eq!(q.pending.as_ref().unwrap().intent, Intent::Assets, "the running full apply read the selection before b: an icon-only follow-up is enough");
+        q.finish("b");
+        assert!(q.running.is_some(), "b is not running: a's ticket stays");
+        q.finish("a");
+        assert!(q.running.is_none() && q.is_pending("b"), "a's end leaves b queued");
+        q.enqueue("c", Intent::Assets);
+        q.abandon("b");
+        assert!(q.is_pending("c"), "a stale spawn failure never drops a newer request");
+        q.abandon("c");
+        assert!(q.pending.is_none());
+    }
+
+    /// Many producers on threads through the real lock and file: the queue stays valid and the full intent survives.
+    #[test]
+    fn concurrent_producers_through_the_file_lock_keep_one_widest_ticket() {
+        let d = tmp("queue-threads");
+        let (env, _) = env(&d, &[]);
+        let env = std::sync::Arc::new(env.state_dir.clone());
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let (dir, barrier) = (env.clone(), barrier.clone());
+                std::thread::spawn(move || {
+                    let (e, _) = super::testutil::env(dir.parent().unwrap(), &[]);
+                    barrier.wait();
+                    with_queue(&e, |q| q.enqueue(&format!("t{i}"), if i == 3 { Intent::Full } else { Intent::Assets })).unwrap();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        let (e, _) = super::testutil::env(&d, &[]);
+        let q = Queue::load(&e);
+        assert_eq!(q.pending.map(|t| t.intent), Some(Intent::Full), "one full producer among eight: the queue keeps full");
+    }
+
+    #[test]
+    fn asset_publication_respects_explicit_opt_outs() {
+        let d = tmp("assetgate");
+        let (env, _) = env(&d, &["qt6ct"]);
+        let mut cfg = Config::default();
+        assert_eq!(asset_gate(&cfg, &env), Ok(()), "unset master switch means on");
+        cfg.targets.insert("gtk".into(), false);
+        assert_eq!(asset_gate(&cfg, &env), Ok(()), "qt is still on when installed");
+        cfg.targets.insert("qt".into(), false);
+        assert!(asset_gate(&cfg, &env).is_err(), "both asset targets off: nothing");
+        cfg.targets.clear();
+        cfg.enabled = false;
+        assert!(asset_gate(&cfg, &env).is_err(), "explicit opt-out");
+        let r = publish_assets_locked(&env, &cfg).unwrap();
+        assert!(r.wrote.is_empty() && !env.config_home.join("gtk-3.0").exists(), "an opted-out publication writes nothing");
+        assert_eq!(publish_assets(&d.join("decebal.json")), Publication::Off("automatic app integration is suppressed in this process".into()));
+        assert!(!ASSET_TARGETS.iter().any(|t| ["omarchy", "browser", "editors", "hooks", "terminals", "kvantum", "x11"].contains(t)));
+    }
+
+    /// The icon / cursor publication changes those keys and nothing else: custom CSS, fonts, GTK theme and Qt palette stay.
+    #[test]
+    fn an_icons_only_publication_writes_only_icon_and_cursor_keys() {
+        let d = tmp("assetkeys");
+        let (mut env, fake) = env(&d, &["qt6ct", "xrdb", "gsettings"]);
+        env.other_backend = true;
+        fake.answers.borrow_mut().push(("gsettings list-schemas".into(), "org.gnome.desktop.interface\n".into()));
+        let icons = env.data_home.join("icons/Papirus");
+        std::fs::create_dir_all(&icons).unwrap();
+        std::fs::write(icons.join("index.theme"), "[Icon Theme]\nName=Papirus\n").unwrap();
+        std::fs::create_dir_all(env.home.join(".icons/Bibata/cursors")).unwrap();
+        let css = env.config_home.join("gtk-4.0/gtk.css");
+        let ini = env.config_home.join("gtk-3.0/settings.ini");
+        let qt = env.config_home.join("qt6ct/qt6ct.conf");
+        for f in [&css, &ini, &qt] {
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        }
+        std::fs::write(&css, "/* mine */\nwindow { background: red; }\n").unwrap();
+        std::fs::write(&ini, "[Settings]\ngtk-theme-name=Orchis\ngtk-font-name=My Font 12\ngtk-icon-theme-name=Old\n").unwrap();
+        std::fs::write(&qt, "[Appearance]\ncolor_scheme_path=/mine.conf\nstyle=kvantum\n").unwrap();
+        let cfg = Config { icon_theme: Some("Papirus".into()), cursor_theme: Some("Bibata".into()), ..Config::default() };
+        let r = publish_assets_locked(&env, &cfg).unwrap();
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        assert_eq!(std::fs::read_to_string(&css).unwrap(), "/* mine */\nwindow { background: red; }\n", "user CSS untouched");
+        assert_eq!(std::fs::read_to_string(&ini).unwrap(), "[Settings]\ngtk-theme-name=Orchis\ngtk-font-name=My Font 12\ngtk-icon-theme-name=Papirus\ngtk-cursor-theme-name=Bibata\n");
+        assert_eq!(std::fs::read_to_string(&qt).unwrap(), "[Appearance]\ncolor_scheme_path=/mine.conf\nstyle=kvantum\nicon_theme=Papirus\n");
+        assert!(!env.data_home.join("themes").exists() && !env.config_home.join("qt6ct/colors").exists(), "no generated theme or colour scheme");
+        let calls = fake.calls.borrow().join("\n");
+        assert!(calls.contains("gsettings set org.gnome.desktop.interface icon-theme 'Papirus'") && calls.contains("cursor-theme 'Bibata'"), "{calls}");
+        for other in ["gtk-theme", "color-scheme", "font-name", "button-layout", "xrdb"] {
+            assert!(!calls.contains(other), "{other} must not be touched:\n{calls}");
+        }
+        let r = off(&env, &cfg, &palette(true)).unwrap();
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        assert!(std::fs::read_to_string(&ini).unwrap().contains("gtk-icon-theme-name=Old"), "off restores the original keys");
+    }
+
     #[test]
     fn dry_run_writes_nothing() {
         let d = tmp("dry");
         let (env, _) = env(&d, &[]);
         let cfg = Config { enabled: true, ..Config::default() };
-        let r = apply(&env, &cfg, &palette(false), &Opts { dry_run: true, only: None }).unwrap();
+        let r = apply(&env, &cfg, &palette(false), &Opts { dry_run: true, ..Default::default() }).unwrap();
         assert!(!r.wrote.is_empty());
         assert!(!env.config_home.join("gtk-4.0").exists() && !env.state_dir.exists());
     }

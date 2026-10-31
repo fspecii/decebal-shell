@@ -130,6 +130,18 @@ impl Target for Qt {
     }
 }
 
+/// The icon publication ([`super::publish_assets`]): only `[Appearance] icon_theme` in qt5ct.conf / qt6ct.conf, for an installed theme.
+/// The colour scheme, style and every other key stay as they are.
+pub fn asset_plan(cfg: &Config, env: &Env) -> Plan {
+    let mut plan = Plan::default();
+    let Some(icon) = cfg.icon_theme.as_ref().filter(|i| super::gtk::installed(env, i, false)) else { return plan };
+    for dir in flavours(env) {
+        let conf = env.config_home.join(dir).join(format!("{dir}.conf"));
+        plan.edits.push(Edit::Ini { path: conf, sets: vec![("Appearance".into(), "icon_theme".into(), icon.clone())] });
+    }
+    plan
+}
+
 impl Target for Kvantum {
     fn id(&self) -> &'static str {
         "kvantum"

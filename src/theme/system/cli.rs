@@ -9,9 +9,11 @@ pub const HELP: &str = "decthemectl apply-system [--dry-run] [--only gtk,qt,...]
 decthemectl system on|off        \"Apply to all apps\": on applies now and after every theme/style/font/wallpaper-colour change;
                                  off puts every changed file and setting back (originals are saved by the first apply)
 decthemectl system status [--json]
+decthemectl system palette --json  the resolved colour roles the app targets render from
 decthemectl system target NAME on|off|default    NAME: omarchy browser editors hooks gtk qt kvantum x11 terminals
-decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font  (VALUE none = unset; signals and gtk-font take on|off:
-                                 gtk-font, on by default, writes the theme's font to GTK's settings.ini and gsettings when it names an installed one)";
+decthemectl system set KEY VALUE KEY: icon-theme cursor-theme signals gtk-font gtk-theme  (VALUE none = unset; signals, gtk-font and gtk-theme take on|off:
+                                 gtk-font, on by default, writes the theme's fonts to GTK's settings.ini and gsettings when installed ones are named;
+                                 gtk-theme, on by default, selects the generated Decebal GTK 3 / GTK 4 theme, off keeps your own)";
 
 fn print_report(r: &Report, dry: bool) {
     if !r.applied.is_empty() {
@@ -107,6 +109,12 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             }
             Ok(())
         }
+        Some("palette") => {
+            // The resolved roles every target renders from (the native GTK harness compares pixels against these).
+            let (p, _) = current_palette(src)?;
+            println!("{}", p.to_json());
+            Ok(())
+        }
         Some("status") | None => {
             let st = status(&env, &cfg);
             let applied = super::applied_theme(&env);
@@ -115,7 +123,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(
-                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "gtk_font": cfg.option("gtk.font"), "targets": t})
+                        &serde_json::json!({"enabled": cfg.enabled, "applied_theme": applied, "icon_theme": cfg.icon_theme, "cursor_theme": cfg.cursor_theme, "signals": cfg.signals, "gtk_font": cfg.option("gtk.font"), "gtk_theme": cfg.option("gtk.theme"), "targets": t})
                     )
                     .unwrap()
                 );
@@ -163,6 +171,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
                 "cursor-theme" => cfg.cursor_theme = (!unset).then(|| v.clone()),
                 "signals" => cfg.signals = matches!(v.as_str(), "true" | "on" | "1" | "yes"),
                 "gtk-font" => cfg.set_option("gtk.font", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
+                "gtk-theme" => cfg.set_option("gtk.theme", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
                 other => return Err(format!("unknown key `{other}`")),
             }
             cfg.save(&src.shell_json)?;
