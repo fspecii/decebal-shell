@@ -53,7 +53,7 @@ session = fixture_bin / "decsession"
 session.write_text('#!/bin/sh\nprintf "decsession\\n" >> "$LAUNCHER_FIXTURE_CALLS"\n')
 session.chmod(0o755)
 # Native Kickoff actions call session helpers directly; all of them must stay inside the fixture.
-for name in ("systemctl", "loginctl", "rdwmctl", "xdg-open", "shutdown", "reboot", "halt"):
+for name in ("systemctl", "loginctl", "rdwmctl", "xdg-open", "shutdown", "reboot", "halt", "decsettings"):
     helper = fixture_bin / name
     helper.write_text('#!/bin/sh\nprintf "%s\n" "blocked-helper ' + name + ' $*" >> "$LAUNCHER_FIXTURE_CALLS"\n')
     helper.chmod(0o755)
@@ -369,6 +369,33 @@ try:
         assert p.wait(timeout=8) == 0, (style, "click exit")
         wait(lambda: "07" in calls.read_text().splitlines()[before:], f"{style}: clicking Chess did not launch it")
         result["click_launches"] = True
+        if style == "kde":
+            # Natural 655x516 card and header measurements, at 100%, anchored to the top without a panel.
+            # Settings is a fixture sibling, so these actions can never reach the live Settings window.
+            set_scale(1.0)
+            desktop((1366, 768))
+            for pane, point in (("users", (379, 27)), ("launcher", (954, 27))):
+                before = len(calls.read_text().splitlines())
+                p = open_launcher(["open", "--edge", "top", "--anchor", "683,0", "--thickness", "0"])
+                capture(evidence / "interactions" / f"kde-header-{pane}.png")
+                run("xdotool", "mousemove", str(point[0]), str(point[1]), "click", "1")
+                assert p.wait(timeout=8) == 0, ("KDE header", pane, "did not close")
+                wait(lambda: "blocked-helper decsettings " + pane in calls.read_text().splitlines()[before:],
+                     f"KDE header did not open the {pane} pane")
+                result["header_" + pane + "_opens"] = True
+            p = open_launcher(["open", "--edge", "top", "--anchor", "683,0", "--thickness", "0"])
+            run("xdotool", "type", "--delay", "20", "zzzz")
+            time.sleep(.2)
+            capture(evidence / "interactions" / "kde-header-query.png")
+            run("xdotool", "mousemove", "919", "27", "click", "1")
+            before = len(calls.read_text().splitlines())
+            run("xdotool", "type", "--delay", "20", "atlas")
+            time.sleep(.2)
+            run("xdotool", "key", "Return")
+            assert p.wait(timeout=8) == 0
+            wait(lambda: "09" in calls.read_text().splitlines()[before:], "KDE clear did not remove the previous query")
+            result["header_clear_removes_query"] = True
+            set_scale(1.25)
         records["interactions"].append(result)
         desktop((1366, 768))
     stop_x(x)
