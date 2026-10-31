@@ -35,6 +35,8 @@ impl Env {
             .env("XDG_DATA_HOME", d.join("data"))
             .env("XDG_DATA_DIRS", d.join("datadirs"))
             .env("XDG_RUNTIME_DIR", d.join("run"))
+            .env("XDG_STATE_HOME", d.join("state"))
+            .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
             .env("DECEBAL_CONFIG", d.join("config"))
             .env("DECEBAL_ASSET_CATALOGS", d.join("catalogs"))
             .env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={}", d.join("run/no-bus").display()))
@@ -187,4 +189,44 @@ fn a_catalogue_pack_is_checked_against_its_tree_pin() {
     let info: Value = serde_json::from_str(&e.ok(&["info", "it-wave", "--json"])).unwrap();
     assert_eq!((info["installed"]["origin"].as_str(), info["recommended_by"][0].as_str()), (Some("catalog"), Some("it-theme")));
     assert!(e.ok(&["list"]).lines().any(|l| l.starts_with("it-wave") && l.trim_end().ends_with("installed")));
+}
+
+/// Real worker entry point, private configuration and state, no pack/network involved.
+/// Download/install success is deliberately not claimed by these lifecycle regressions.
+fn worker_fixture(tag: &str, phase: &str, generation: u64) -> (Env, PathBuf, PathBuf, String) {
+    use decebal::desktop_assets::follow::{job_dir_in, Status};
+    let e = Env::new(tag);
+    let intended = e.dir.join("other profile/custom settings.json");
+    std::fs::create_dir_all(intended.parent().unwrap()).unwrap();
+    std::fs::write(&intended, serde_json::json!({"theme":{"name":"fixture"}, "asset_packs":{"generation":generation}, "unrelated":"keep"}).to_string()).unwrap();
+    std::fs::write(e.dir.join("config/decebal.json"), b"{\"sentinel\":\"default must stay untouched\"}").unwrap();
+    let dir = job_dir_in(&e.dir.join("state/decebal/assets"), &intended);
+    std::fs::create_dir_all(&dir).unwrap();
+    let token = "1-123-456".to_string();
+    let status = Status { token: token.clone(), generation: 1, theme: "fixture".into(), phase: phase.into(), ..Default::default() };
+    std::fs::write(dir.join("follow.json"), serde_json::to_vec(&status).unwrap()).unwrap();
+    (e, intended, dir, token)
+}
+
+#[test]
+fn a_real_stale_worker_updates_only_the_claimed_configuration_status() {
+    let (e, intended, dir, token) = worker_fixture("worker-stale", "starting", 2);
+    let config_before = std::fs::read(&intended).unwrap();
+    let default_before = std::fs::read(e.dir.join("config/decebal.json")).unwrap();
+    let out = e.ok(&["follow-theme", "--shell-json", intended.to_str().unwrap(), "--generation", "1", "--job", &token]);
+    assert!(out.contains("later theme or choice"), "{out}");
+    assert_eq!(decebal::desktop_assets::follow::status_at(&dir).unwrap().phase, "superseded");
+    assert_eq!(std::fs::read(&intended).unwrap(), config_before);
+    assert_eq!(std::fs::read(e.dir.join("config/decebal.json")).unwrap(), default_before);
+}
+
+#[test]
+fn a_real_worker_honors_stop_recorded_before_its_commit() {
+    let (e, intended, dir, token) = worker_fixture("worker-stopped", "stopping", 1);
+    let before = std::fs::read(&intended).unwrap();
+    let out = e.ok(&["follow-theme", "--shell-json", intended.to_str().unwrap(), "--generation", "1", "--job", &token]);
+    assert!(out.contains("stopped before the commit"), "{out}");
+    assert_eq!(decebal::desktop_assets::follow::status_at(&dir).unwrap().phase, "stopped");
+    assert_eq!(std::fs::read(&intended).unwrap(), before);
+    assert!(!e.icons().join(".staging").exists(), "no installer or download was needed");
 }
