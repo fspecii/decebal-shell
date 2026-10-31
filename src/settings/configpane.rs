@@ -254,7 +254,7 @@ pub fn overview(m: &Model) -> String {
                 let _ = writeln!(out, "# {} is not set", k.key);
             }
             None => {
-                let _ = writeln!(out, "{} = {}  # default", k.key, k.default);
+                let _ = writeln!(out, "{} = {}  # default", k.key, toml_text(&k.default));
             }
         }
     }
@@ -289,6 +289,33 @@ pub fn overview(m: &Model) -> String {
     let _ = writeln!(out, "\n## Pinned apps (dock-pinned-macos.json)\n");
     let _ = writeln!(out, "pinned = [{}]", pinned.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>().join(", "));
     out
+}
+
+/// A schema default as TOML (`table_list` defaults are arrays of objects: inline tables, not JSON).
+fn toml_text(v: &serde_json::Value) -> String {
+    fn conv(v: &serde_json::Value) -> Option<toml_edit::Value> {
+        Some(match v {
+            serde_json::Value::Bool(b) => (*b).into(),
+            serde_json::Value::Number(n) => match n.as_i64() {
+                Some(i) => i.into(),
+                None => n.as_f64()?.into(),
+            },
+            serde_json::Value::String(s) => s.as_str().into(),
+            serde_json::Value::Array(a) => toml_edit::Value::Array(a.iter().map(conv).collect::<Option<toml_edit::Array>>()?),
+            serde_json::Value::Object(o) => {
+                let mut t = toml_edit::InlineTable::new();
+                for (k, x) in o {
+                    t.insert(k, conv(x)?);
+                }
+                toml_edit::Value::InlineTable(t)
+            }
+            serde_json::Value::Null => return None,
+        })
+    }
+    match v {
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => conv(v).map(|t| t.to_string().trim().to_string()).unwrap_or_else(|| v.to_string()),
+        _ => v.to_string(),
+    }
 }
 
 fn load_buf(m: &Model, tab: Tab) -> Buf {
@@ -1673,6 +1700,17 @@ mod tests {
         assert!(buf_mut(&mut m).ed.is_modified(), "the late typing is not marked saved");
         assert!(buf_mut(&mut m).ed.text().contains("\"late\""));
         assert!(!m.notice.as_ref().unwrap().error);
+    }
+
+    #[test]
+    fn the_overview_writes_table_list_defaults_as_toml() {
+        let mut m = model("overview-table-list");
+        let default = serde_json::json!([{"action": "viewnext", "args": [], "direction": "left", "fingers": 3}]);
+        m.schema.keys.push(crate::settings::schema::KeyMeta { section: "gestures".into(), key: "bindings".into(), ty: "table_list".into(), default, min: None, max: None, choices: vec![], desc: String::new() });
+        let text = overview(&m);
+        let line = text.lines().find(|l| l.starts_with("bindings = ")).expect("listed");
+        assert_eq!(line, "bindings = [{ action = \"viewnext\", args = [], direction = \"left\", fingers = 3 }]  # default");
+        assert!(text.contains("mfact = 0.55  # default") || text.contains("mfact ="), "scalars unchanged");
     }
 
     #[test]

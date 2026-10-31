@@ -20,6 +20,24 @@ pub struct Binding {
     pub fingers: Option<i64>,
     pub direction: String,
     pub action: String,
+    pub args: Vec<String>,
+}
+
+impl Binding {
+    /// One row of the schema's `gestures.bindings` default (`{action, args, direction, fingers}`).
+    fn from_json(v: &serde_json::Value) -> Binding {
+        Binding {
+            fingers: v["fingers"].as_i64(),
+            direction: v["direction"].as_str().unwrap_or("?").to_string(),
+            action: v["action"].as_str().unwrap_or("?").to_string(),
+            args: v["args"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
+        }
+    }
+}
+
+/// rdwm's own default bindings when its schema lists them (`table_list` default).
+pub fn default_bindings(m: &Model) -> Option<Vec<Binding>> {
+    m.schema.get(SECTION, "bindings")?.default.as_array().map(|a| a.iter().map(Binding::from_json).collect())
 }
 
 /// The bindings in the shown document: `None` when the key is absent (rdwm's defaults apply), else the list
@@ -31,6 +49,7 @@ pub fn bindings(m: &Model) -> Option<Vec<Binding>> {
         fingers: t.get("fingers").and_then(|v| v.as_integer()),
         direction: t.get("direction").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
         action: t.get("action").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
+        args: t.get("args").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
     };
     if let Some(a) = item.as_array() {
         return Some(a.iter().filter_map(|v| v.as_inline_table()).map(|t| of(t)).collect());
@@ -43,7 +62,8 @@ pub fn bindings(m: &Model) -> Option<Vec<Binding>> {
 
 fn binding_row(b: &Binding) -> Row {
     let fingers = b.fingers.map_or("?".to_string(), |n| n.to_string());
-    Row::new(format!("{fingers} fingers, swipe {}", b.direction)).detail(b.action.clone())
+    let action = if b.args.is_empty() { b.action.clone() } else { format!("{} {}", b.action, b.args.join(" ")) };
+    Row::new(format!("{fingers} fingers, swipe {}", b.direction)).detail(action)
 }
 
 /// The keys of `[gestures]` this schema lists.
@@ -86,7 +106,13 @@ pub fn items(m: &Model) -> Vec<Item> {
     match bindings(m) {
         Some(list) if list.is_empty() => out.push(Item::Card(vec![Row::new("No swipe bindings").detail("bindings = [] in config.toml: every swipe is off")])),
         Some(list) => out.push(Item::Card(list.iter().map(binding_row).collect())),
-        None => out.push(Item::Card(vec![Row::new("rdwm's default bindings").detail("No bindings in config.toml, so the window manager's built-in swipes apply")])),
+        None => {
+            let mut rows = vec![Row::new("rdwm's default bindings").detail("No bindings in config.toml, so the window manager's built-in swipes apply")];
+            if let Some(defaults) = default_bindings(m) {
+                rows.extend(defaults.iter().map(binding_row));
+            }
+            out.push(Item::Card(rows));
+        }
     }
     let editable = if have.contains(&"bindings") { "" } else { " This rdwm's schema does not describe the bindings either." };
     out.push(Item::Note {
@@ -181,6 +207,23 @@ mod tests {
     }
 
     #[test]
+    fn without_bindings_in_the_file_the_schema_default_is_listed() {
+        let (mut m, _) = model_with("[gestures]\nenabled = true\n");
+        with_gesture_schema(&mut m);
+        // the row as rdwm 1181481 publishes it (type table_list)
+        let default = json!([{"action": "viewnext", "args": [], "direction": "left", "fingers": 3}, {"action": "viewprev", "args": [], "direction": "right", "fingers": 3}, {"action": "viewnext", "args": [], "direction": "left", "fingers": 4}, {"action": "view", "args": ["2"], "direction": "up", "fingers": 4}]);
+        m.schema.keys.push(KeyMeta { section: SECTION.into(), key: "bindings".into(), ty: "table_list".into(), default, min: None, max: None, choices: Vec::new(), desc: String::new() });
+        let its = items(&m);
+        let shown: Vec<String> = rows(&its).iter().map(|r| format!("{} | {}", r.label, r.detail)).collect();
+        assert!(shown.iter().any(|r| r.starts_with("rdwm's default bindings")), "{shown:?}");
+        assert!(shown.contains(&"3 fingers, swipe right | viewprev".to_string()) && shown.contains(&"4 fingers, swipe up | view 2".to_string()), "{shown:?}");
+        assert!(ctl(&its, "r:gestures:bindings").is_none(), "a table_list gets no control");
+        // writing a setting does not materialise the default list in the file
+        m.apply("r:gestures:enabled", CtlVal::Bool(false));
+        assert_eq!(bindings(&m), None);
+    }
+
+    #[test]
     fn absent_and_empty_bindings_say_what_applies() {
         let (mut m, _) = model_with("[gestures]\nenabled = true\n");
         with_gesture_schema(&mut m);
@@ -191,6 +234,6 @@ mod tests {
         assert_eq!(bindings(&m), Some(Vec::new()));
         assert!(rows(&items(&m)).iter().any(|r| r.label == "No swipe bindings"));
         let (m, _) = model_with("[[gestures.bindings]]\nfingers = 3\ndirection = \"down\"\naction = \"focus_down\"\n");
-        assert_eq!(bindings(&m).unwrap()[0], Binding { fingers: Some(3), direction: "down".into(), action: "focus_down".into() });
+        assert_eq!(bindings(&m).unwrap()[0], Binding { fingers: Some(3), direction: "down".into(), action: "focus_down".into(), args: Vec::new() });
     }
 }
