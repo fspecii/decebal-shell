@@ -872,6 +872,32 @@ class ManagedRuntimeTests(Base):
         for d in self.dests:
             self.assertEqual((d / 'decbar').read_bytes(), b'old')
 
+    def test_config_edit_during_publish_rolls_back_binaries_only(self):
+        self.make_plan()
+        def edit(index, **kw):
+            if index == 1:
+                R.CONFIG_WATCH[0].write_text('user edit')
+        R.FAULTS['after_commit'] = edit
+        self.assertEqual(self.publish()['state'], 'rolled_back')
+        self.assertEqual(R.CONFIG_WATCH[0].read_text(), 'user edit')
+        for d in self.dests:
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+
+    def test_same_content_config_replacement_during_publish_rolls_back(self):
+        self.make_plan()
+        replacement = R.CONFIG_WATCH[0].with_name('replacement')
+        replacement.write_text('config')
+        replacement_inode = replacement.stat().st_ino
+        def replace(index, **kw):
+            if index == 1:
+                os.replace(replacement, R.CONFIG_WATCH[0])
+        R.FAULTS['after_commit'] = replace
+        self.assertEqual(self.publish()['state'], 'rolled_back')
+        self.assertEqual(R.CONFIG_WATCH[0].stat().st_ino, replacement_inode)
+        self.assertEqual(R.CONFIG_WATCH[0].read_text(), 'config')
+        for d in self.dests:
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+
     def test_default_publish_still_refuses_live_and_managed_plan(self):
         self.make_plan()
         with self.assertRaisesRegex(R.ReleaseError, 'explicit'):

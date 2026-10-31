@@ -955,6 +955,8 @@ def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc', manag
                 if moved:
                     raise ReleaseError(f'destination folder replaced during publish: {moved}; rolling back the pinned folders')
                 after = config_fingerprint(p['config_watch'])
+                if managed_runtime and _managed_configs() != managed['config_identity']:
+                    raise ReleaseError('managed config changed during publish; preserving config and rolling back binaries')
                 j.data.update(state='committed', finished_utc=utc(), config_after=after, configs_match_plan=after == p['config_watch'])
                 j.save()
             except (ReleaseError, OSError) as e:
