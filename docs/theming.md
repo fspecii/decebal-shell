@@ -404,3 +404,15 @@ renderer needs a compositor and keeps geometry-only moves free of pixel uploads.
 An already running older rdwm remains unchanged until a new session; apply the
 theme there to pick up its strength. Custom/CSD decorations and Wayland remain
 separate work. See [implementation and limits](window-shadow-design.md).
+
+
+Control Center empty-selection regression checkpoint (candidate `d54bd27`):
+182 focused tests passed, one ignored; formatting, strict all-target Clippy and
+Settings/bar development builds passed under the single low-priority job limit.
+Coverage includes actual Settings pointer controls, disable-all persistence and
+reopen with foreign keys preserved, theme parsing/apply distinctions between
+omitted and empty lists, and inert layouts/keyboard targets across all four
+looks at wide/narrow sizes. The first run retained an old GNOME height assertion
+for the removed fallback; it failed and was corrected to require visible inert
+content. Evidence: `/var/tmp/decebal-control-center-groups-source-gate-v2/result.json`.
+This is source/dev acceptance; native desktop and optimized rollout remain pending.
