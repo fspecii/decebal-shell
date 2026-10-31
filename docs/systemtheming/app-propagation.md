@@ -478,3 +478,27 @@ server and a live fixture-owned Settings process, checking PID when available.
 This is dev-candidate X11 evidence. Optimized-build and physical-session acceptance,
 Qt live updates, Wayland, and reset restoring a prior external icon selection are
 not proven by this test. The installed desktop remains on a82/b261.
+
+
+### Optimized manual-icon acceptance and installation
+
+Release source `858c69bc6cb8ab38fcdd55feeea8549e1b004681` built the Settings/CLI
+pair in 318 seconds under the serialized low-priority job runner. The sealed
+manifest (`33eff13b382b35ad9709be389a86c81acdc9f51794e0ebbb2d5ccdcd6e966d8f`)
+passed the publisher's provenance and integrity verifier. Those exact binaries
+passed 32 manual-icon checks (CLI and real Settings controls), preview cache
+corruption/recovery plus browsing/reopen checks, 228 GTK checks with four live
+colour changes, and 11 XSETTINGS ownership checks. No pressure abort, fixture
+rescue or leftover processes occurred.
+
+Evidence: `/var/tmp/decebal-manual-icons-optimized-native-gate/result.json`,
+`/var/tmp/decebal-manual-icons-preview-release-native-control/result.json`, and
+`/var/tmp/decebal-manual-icons-release-gtk-regression-control/result.json`.
+
+The managed publisher installed both pair members in both managed runtime
+folders; all four file hashes and unchanged watched configuration were verified.
+Journal: `/home/ambsd/.local/state/decebal/deployments/manual-icons-858c69b-20261031-200200`.
+Open Settings processes/drafts and desktop daemons were preserved; newly opened
+Settings uses this release. The rest of the shell remains the previously
+qualified a82 runtime. This is isolated X11 release acceptance, not physical
+hardware, Wayland, Qt live-update or full desktop-replica proof.
