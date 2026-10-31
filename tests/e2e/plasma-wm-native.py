@@ -133,24 +133,27 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
         debug = root / "layout.txt"
         wm_config = root / "rdwm.toml"
         wm_config.write_text("[general]\nborder_px = 0\n[bar]\nshow = false\n[decoration]\nenabled = false\n")
+        # Built from scratch: nothing is inherited from the caller (no DISPLAY, WAYLAND_DISPLAY, XAUTHORITY, session or bus variables), so no
+        # client can reach any server but the private one named below.
         env = dict(
-            os.environ,
             HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"), XDG_CACHE_HOME=str(root / "cache"),
             XDG_STATE_HOME=str(root / "state"), XDG_DATA_HOME=str(root / "data"), XDG_RUNTIME_DIR=str(root / "run"),
             DECEBAL_CONFIG=str(root / "config"), DECEBAL_THEMES=str(themes), DECEBAL_SYSTEM_THEMES=str(root / "empty-themes"),
             DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DECEBAL_SCALE=str(scale), DECDOCK_DEBUG_LAYOUT=str(debug), DISPLAY=display,
             DBUS_SESSION_BUS_ADDRESS=f"unix:path={private}/no-bus", DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={private}/no-system",
             RDWMCTL=str(rdwm_dir / "rdwmctl"), RDWM_SOCK=str(root / "run/rdwm.sock"), RDWM_CONFIG=str(wm_config),
-            PATH=f'{root / "bin"}:{os.environ["PATH"]}',
+            PATH=f'{root / "bin"}:/usr/bin:/bin', LANG="C.UTF-8",
         )
-        for key in ["WAYLAND_DISPLAY", "PULSE_SERVER", "XAUTHORITY", "SESSION_MANAGER", "HYPRLAND_INSTANCE_SIGNATURE"]:
-            env.pop(key, None)
         log = (evidence / f"{tag}.log").open("w")
         server = subprocess.Popen(["Xvfb", display, "-screen", "0", f"{W}x{H}x24", "-nolisten", "tcp"], env=env, stdout=log, stderr=log)
         children, clients = [], None
         entry = {"mode": mode, "edge": edge, "scale": scale, "steps": []}
         try:
+            proven = []
+
             def run(*args, timeout=30, check=True):
+                # nothing but the Xvfb itself starts before `verify_owned`; every later client runs only on the proven private display
+                assert proven and env["DISPLAY"] == display and int(display[1:]) >= gnome_xvfb.FIRST, "refusing a client call before the private server was verified"
                 return subprocess.run([str(a) for a in args], env=env, text=True, capture_output=True, check=check, timeout=timeout).stdout.strip()
 
             def ctl(*args):
@@ -165,8 +168,10 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
                 return Image.open(path).convert("RGB")
 
             gnome_xvfb.verify_owned(server, display)  # before any client connects or input is sent
+            proven.append(display)
             wait(lambda: server.poll() is None and run("xdotool", "getdisplaygeometry"), "private Xvfb ready")
             (root / "picom.conf").write_text('backend = "xrender";\nvsync = false;\nuse-damage = false;\nshadow = false;\nfading = false;\n')
+            assert proven
             children.append(subprocess.Popen(["picom", "--config", str(root / "picom.conf")], env=env, stdout=log, stderr=log))
             time.sleep(0.8)
             children.append(subprocess.Popen([str(rdwm_dir / "rdwm"), "--backend", "x11", "--config", str(wm_config)], env=env, stdout=log, stderr=log))
@@ -197,9 +202,21 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             wins = [clients.make(cls, title, shade) for cls, title, shade in names]
             ids = [w.id for w in wins]
 
+            def dump_text():
+                # the dock rewrites the file after every draw: a read can land between its truncate and write
+                for _ in range(50):
+                    try:
+                        text = debug.read_text()
+                        if text.strip():
+                            return text
+                    except FileNotFoundError:
+                        pass
+                    time.sleep(0.1)
+                raise AssertionError(f"{tag}: the dock's layout dump never appeared")
+
             def layout():
                 rows = {}
-                for line in debug.read_text().splitlines():
+                for line in dump_text().splitlines():
                     parts = line.split()
                     rows.setdefault(parts[0], []).append(parts[1:])
                 return rows
@@ -210,7 +227,7 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
                 rows = layout().get("task", [])
                 return {r[0]: (float(r[1]), float(r[2]), r[3] == "1") for r in rows if r[0].startswith("plasmafake")}
 
-            wait(lambda: len(tasks()) == 3, f"{tag}: three task buttons (have {tasks()})")
+            wait(lambda: len(tasks()) == 3, f"{tag}: three task buttons (have {tasks()})", tries=400)
             geo = {}
             for i, win in enumerate(wins):
                 out = run("xdotool", "getwindowgeometry", "--shell", win.id)
@@ -243,24 +260,36 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             def hidden(win):
                 return "_NET_WM_STATE_HIDDEN" in run("xprop", "-id", win.id, "_NET_WM_STATE", check=False)
 
+            def park():
+                """The pointer rests on empty strip space: rdwm focuses the window under it, so the middle of the desktop would steal the focus."""
+                sf, (sx, sy) = surface(), (float(v) for v in layout()["start"][0])
+                run("xdotool", "mousemove", round(sf["X"] + 1100) if horizontal else round(sf["X"] + sx), round(sf["Y"] + sy) if horizontal else round(sf["Y"] + 1100))
+
             keys = ["plasmafakea", "plasmafakeb", "plasmafakec"]
             # park the pointer in the middle of the desktop, then take the idle look of the buttons
-            run("xdotool", "mousemove", W // 2, H // 2)
+            park()
+            wait(lambda: active() == ids[2], f"{tag}: the newest window should hold the focus")
             time.sleep(0.6)
             idle = shot("idle")
+            step("dump_idle", layout=dump_text(), active=active(), ids=ids)
+            # the newest window is focused when the WM maps it: only the first two are idle in this shot
             idle_look = {k: mean(idle, button_box(k)) for k in keys}
 
             # ---- focus, minimise, restore with real clicks
             click(*at(keys[0]))
             wait(lambda: active() == ids[0], f"{tag}: clicking the first task focuses its window")
-            run("xdotool", "mousemove", W // 2, H // 2)
+            wait(lambda: tasks()[keys[0]][2] and not tasks()[keys[2]][2], f"{tag}: the dock's tracker did not follow the focus: {tasks()}")
+            park()
             time.sleep(0.6)
             focused = shot("focused")
+            step("dump_focused", layout=dump_text(), active=active())
             assert apart(mean(focused, button_box(keys[0])), idle_look[keys[0]]) > 20, f"{tag}: the focused task is not marked"
             assert apart(mean(focused, button_box(keys[1])), idle_look[keys[1]]) < 6, f"{tag}: an unfocused task changed"
+            assert apart(mean(focused, button_box(keys[2])), idle_look[keys[2]]) > 20, f"{tag}: the task that lost the focus keeps its mark"
+            idle_look[keys[2]] = mean(focused, button_box(keys[2]))  # now it is the idle look of the third task
             click(*at(keys[0]))  # clicking the focused task again minimises it
             wait(lambda: hidden(wins[0]), f"{tag}: the focused task's second click minimises (WM state HIDDEN)")
-            run("xdotool", "mousemove", W // 2, H // 2)
+            park()
             time.sleep(0.8)
             minimised = shot("minimised")
             m_look = mean(minimised, button_box(keys[0]))
@@ -274,7 +303,7 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             # ---- attention: the ICCCM urgency hint, then the EWMH state
             target = keys[2]
             clients.urgency(wins[2], True)
-            run("xdotool", "mousemove", W // 2, H // 2)
+            park()
             wait(lambda: apart(mean(shot("urgent"), button_box(target)), idle_look[target]) > 25, f"{tag}: an urgent window does not tint its task")
             clients.urgency(wins[2], False)
             wait(lambda: apart(mean(shot("urgent-cleared"), button_box(target)), idle_look[target]) < 8, f"{tag}: the tint stays after the urgency hint is cleared")
@@ -294,7 +323,7 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             before = shot("pager-ws1")
             click(*cell_xy(1))
             wait(lambda: current() == 1, f"{tag}: clicking pager cell 2 switches the workspace")
-            run("xdotool", "mousemove", W // 2, H // 2)
+            park()
             time.sleep(0.8)
             on_two = shot("pager-ws2")
             # the empty workspace is the active cell now: the strip changed there and the first cell lost its highlight
@@ -303,7 +332,7 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             click(*cell_xy(0))
             wait(lambda: current() == 0, f"{tag}: clicking pager cell 1 comes back")
             # the windows' outlines are drawn inside the first cell: it differs from an empty one by more than its highlight
-            run("xdotool", "mousemove", W // 2, H // 2)
+            park()
             time.sleep(0.8)
             back = shot("pager-back")
             cell_box = lambda i: (lambda x, y, r: (x - r, y - r, x + r, y + r))(*cell_xy(i), max(3, round(5 * scale)))
@@ -371,9 +400,22 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             step("contrast", ratio=round(ratio, 2), ink=ink, base=base)
             entry["ok"] = True
             print(f"ok {tag}: reserve {reserve}, contrast {ratio:.1f}")
-        except AssertionError:
+        except Exception as e:
             entry["ok"] = False
-            raise
+            entry["error"] = str(e)
+            import traceback
+            entry["trace"] = traceback.format_exc()[-1500:]
+            # what the owned display looked like when the step failed
+            try:
+                entry["private_dir"] = sorted(os.listdir(root))
+                run("import", "-window", "root", evidence / f"{tag}-failure.png")
+                entry["windows"] = [run("xdotool", "getwindowname", w, check=False) + " " + run("xdotool", "getwindowgeometry", w, check=False).replace("\n", " ") for w in run("xdotool", "search", "--onlyvisible", "--name", ".", check=False).splitlines()]
+                entry["dock_processes"] = [p.name for p in Path("/proc").iterdir() if p.name.isdigit() and b"decdock" in (p / "cmdline").read_bytes()] if True else []
+            except Exception:
+                pass
+            if not isinstance(e, AssertionError):
+                e = AssertionError(f"{tag}: {type(e).__name__}: {e}")
+            raise e
         finally:
             report.append(entry)
             if clients:

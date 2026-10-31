@@ -10,7 +10,9 @@ use crate::icons::IconCache;
 use crate::menubar::popup::draw_layout_icon;
 use crate::menubar::symbols::SymbolCache;
 use crate::menubar::Tray;
-use crate::panel::plasma_style::{task_indicator, DesktopForm, Indicator, TaskState, Tone, WorkspaceForm, PAGER_SCREEN};
+#[cfg(test)]
+use crate::panel::plasma_style::PAGER_SCREEN;
+use crate::panel::plasma_style::{task_indicator, DesktopForm, Indicator, TaskState, Tone, WorkspaceForm};
 use crate::panel::Edge;
 use crate::text::{Fonts, Weight};
 use crate::theme::{Selection, Theme};
@@ -1008,7 +1010,7 @@ mod tests {
                 // the cell fill, sampled away from the icon, against the plain strip behind the cells
                 let probe = |i: usize| {
                     let r = l.tasks[i];
-                    let (x, y) = if edge.is_vertical() { (r.x as u32 + 5, r.cy() as u32) } else { (r.x as u32 + 5, r.cy() as u32) };
+                    let (x, y) = (r.x as u32 + 5, r.cy() as u32);
                     pm.pixel(x, y).unwrap()
                 };
                 let (min, att) = (probe(0), probe(2));

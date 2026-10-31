@@ -536,7 +536,7 @@ impl DockApp {
         let vertical = self.win_vertical();
         let shape = crate::panel::plasma_style::pager_shape(w.status.status_desktop_size());
         let cells = crate::panel::plasma_style::pager_cells(w.status.status_workspace_count(), shape.0, shape.1, r.w, w.m.icon, vertical);
-        cells.iter().enumerate().map(|(i, c)| format!("pagercell {i} {}\n", r.x + if vertical { c.y + c.h / 2.0 } else { c.x + c.w / 2.0 })).collect()
+        cells.iter().enumerate().map(|(i, c)| format!("pagercell {i} {}\n", self.win_along0() + r.x + if vertical { c.y + c.h / 2.0 } else { c.x + c.w / 2.0 })).collect()
     }
 
     fn win_dump(&mut self, l: &Layout, y0: f32) {
@@ -544,22 +544,24 @@ impl DockApp {
         let vertical = self.win_vertical();
         let edge = self.win_panel_edge().as_str();
         let x0 = self.win_strip_x();
+        // positions along the strip are surface coordinates: the layout starts after the floating gap
+        let a0 = self.win_along0();
         let Some(w) = self.win.as_mut() else { return };
         let Some((path, last)) = w.debug.as_mut() else { return };
         if vertical {
             // zone centres as surface points: the strip's middle across, the layout's position along
             let cx = x0 + w.m.bar_h / 2.0;
-            let mut t = format!("edge {edge}\nbar {} {x0} {}\nstart {cx} {}\n", l.width, w.m.bar_h, l.start.cx());
+            let mut t = format!("edge {edge}\nbar {} {x0} {}\nstart {cx} {}\n", l.width, w.m.bar_h, l.start.cx() + a0);
             if let Some(s) = l.search {
-                t += &format!("search {cx} {}\n", s.cx());
+                t += &format!("search {cx} {}\n", s.cx() + a0);
             }
             for (b, r) in w.buttons.iter().zip(&l.tasks) {
-                t += &format!("task {} {cx} {} {}\n", b.app_id, r.cx(), u8::from(b.active));
+                t += &format!("task {} {cx} {} {}\n", b.app_id, r.cx() + a0, u8::from(b.active));
             }
             for (k, r) in &l.tray {
-                t += &format!("tray {k:?} {cx} {}\n", r.cx());
+                t += &format!("tray {k:?} {cx} {}\n", r.cx() + a0);
             }
-            t += &format!("clock {cx} {}\ndesktop {cx} {}\nstrut {}\n", l.clock.cx(), l.desktop.cx(), w.m.bar_h);
+            t += &format!("clock {cx} {}\ndesktop {cx} {}\nstrut {}\n", l.clock.cx() + a0, l.desktop.cx() + a0, w.m.bar_h);
             t += &pager_lines;
             if let Some((x, y, pw, ph)) = w.status.status_rect().map(|r| (r.x, r.y, r.w, r.h)) {
                 t += &format!("popup {x} {y} {pw} {ph}\n");
@@ -571,17 +573,17 @@ impl DockApp {
             return;
         }
         let cy = y0 + w.m.bar_h / 2.0;
-        let mut t = format!("bar {} {} {}\nstart {} {cy}\n", l.width, y0, w.m.bar_h, l.start.cx());
+        let mut t = format!("bar {} {} {}\nstart {} {cy}\n", l.width, y0, w.m.bar_h, l.start.cx() + a0);
         if let Some(s) = l.search {
-            t += &format!("search {} {cy}\n", s.cx());
+            t += &format!("search {} {cy}\n", s.cx() + a0);
         }
         for (b, r) in w.buttons.iter().zip(&l.tasks) {
-            t += &format!("task {} {} {cy} {}\n", b.app_id, r.cx(), u8::from(b.active));
+            t += &format!("task {} {} {cy} {}\n", b.app_id, r.cx() + a0, u8::from(b.active));
         }
         for (k, r) in &l.tray {
-            t += &format!("tray {k:?} {} {cy}\n", r.cx());
+            t += &format!("tray {k:?} {} {cy}\n", r.cx() + a0);
         }
-        t += &format!("clock {} {cy}\ndesktop {} {cy}\nstrut {}\n", l.clock.cx(), l.desktop.cx(), w.m.bar_h);
+        t += &format!("clock {} {cy}\ndesktop {} {cy}\nstrut {}\n", l.clock.cx() + a0, l.desktop.cx() + a0, w.m.bar_h);
         t += &pager_lines;
         if let Some((x, y, pw, ph)) = w.status.status_rect().map(|r| (r.x, r.y, r.w, r.h)) {
             t += &format!("popup {x} {y} {pw} {ph}\n");
