@@ -423,6 +423,87 @@ class ConfinementTests(StageFixture):
         self.assertTrue(fired)
         self.assertEqual(self.snapshot(self.outside), before, 'no OUTSIDE file unlinked')
 
+    # ---- removal protocol: a concurrent replacement of a file being removed must never be deleted
+
+    def replace_at(self, rel, data):
+        tmp = self.dest / (rel + '.racer-tmp')
+        tmp.write_bytes(data)
+        os.replace(tmp, self.dest / rel)
+
+    def quarantine_leftovers(self):
+        return [str(p.relative_to(self.dest)) for p in self.dest.rglob('.decebal-quarantine-*')]
+
+    def test_replacement_right_before_unlink_is_not_deleted(self):
+        """Deterministic version of the race the 7b99684 protocol lost: the file is replaced after its content was
+        verified and immediately before the removal step."""
+        self.installed()
+        rel = 'usr/local/bin/decbar'
+        fired = []
+
+        def race(path):
+            if path == '/usr/local/bin/decbar' and not fired:
+                fired.append(path)
+                self.replace_at(rel, b'#!/bin/sh\necho admin replacement\n')
+        S.FAULTS['before_unlink'] = race
+        report = S.uninstall('/usr/local', str(self.dest))
+        self.assertTrue(fired)
+        self.assertEqual((self.dest / rel).read_bytes(), b'#!/bin/sh\necho admin replacement\n', 'replacement deleted')
+        self.assertFalse((self.dest / 'usr/local/bin/decwm').exists(), 'unchanged owned files still removed')
+        self.assertEqual(self.quarantine_leftovers(), [])
+
+    def test_replacement_before_quarantine_is_verified_and_put_back(self):
+        self.installed()
+        rel = 'usr/local/bin/decwm'
+
+        def race(path):
+            if path == '/' + rel:
+                self.replace_at(rel, b'changed before the move\n')
+        S.FAULTS['before_quarantine'] = race
+        report = S.uninstall('/usr/local', str(self.dest))
+        self.assertEqual((self.dest / rel).read_bytes(), b'changed before the move\n')
+        self.assertIn('/' + rel, report['kept_changed'])
+        self.assertEqual(self.quarantine_leftovers(), [])
+
+    def test_name_recreated_while_quarantined_preserves_both(self):
+        self.installed()
+        rel = 'usr/local/bin/decwm'
+        seen = {}
+
+        def before(path):
+            if path == '/' + rel:
+                self.replace_at(rel, b'admin version A\n')
+
+        def after(path):
+            if path == '/' + rel:
+                q = [p for p in (self.dest / 'usr/local/bin').iterdir() if p.name.startswith('.decebal-quarantine-')]
+                seen['mode'] = stat.S_IMODE(q[0].stat().st_mode)
+                (self.dest / rel).write_bytes(b'admin version B\n')
+        S.FAULTS['before_quarantine'] = before
+        S.FAULTS['after_quarantine'] = after
+        report = S.uninstall('/usr/local', str(self.dest))
+        self.assertEqual(seen['mode'], 0o700, 'quarantine folder is private')
+        self.assertEqual((self.dest / rel).read_bytes(), b'admin version B\n', 'new file at the name never clobbered')
+        kept = [p for p in report['preserved'] if p['path'] == '/' + rel]
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(Path(kept[0]['kept_as']).read_bytes(), b'admin version A\n', 'moved file preserved, not deleted')
+        self.assertTrue(Path(kept[0]['kept_as']).is_relative_to(self.dest / 'usr/local/bin'))
+
+    def test_removal_never_follows_a_symlink_swapped_in_for_the_file(self):
+        self.installed()
+        target = self.outside / 'precious'
+        target.write_bytes((self.dest / 'usr/local/bin/decwm').read_bytes())     # same digest as the inventory entry
+        rel = 'usr/local/bin/decwm'
+
+        def race(path):
+            if path == '/' + rel:
+                os.unlink(self.dest / rel)
+                os.symlink(target, self.dest / rel)
+        S.FAULTS['before_quarantine'] = race
+        report = S.uninstall('/usr/local', str(self.dest))
+        self.assertTrue(target.exists())
+        self.assertTrue((self.dest / rel).is_symlink(), 'the symlink is put back, its target untouched')
+        self.assertIn('/' + rel, report['kept_changed'])
+
     def _limit_with_oversized_theme_file(self):
         sizes = [Path(src).stat().st_size for _, src, *_ in S.inventory('/usr/local', json.loads(self.manifest.read_text()), self.src)]
         limit = max(sizes) + 16

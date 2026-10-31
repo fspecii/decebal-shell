@@ -26,13 +26,22 @@ one file list:
   under `themes/` (fonts, wallpapers, widgets, licences; any file name except newlines), README and LICENSE; plus 9
   autostart entries in `$DESTDIR/etc/xdg/autostart`. Top-level `widgets/*.toml`,
   `assets/desktop-ports/*/asset-packs.toml` and `data/wallhaven-curated.json` are compiled into the binaries.
-* **Confinement.** `DESTDIR` (or `/`) is the one trusted anchor: it is opened once, and every folder below it is
-  reached one component at a time with `openat(O_DIRECTORY|O_NOFOLLOW)` (created with `mkdirat` when missing). Files
-  are created, replaced (temp file + `renameat` in the same held folder), read and unlinked only through those held
-  folder descriptors. A symlinked or non-directory intermediate folder is refused, in a preflight that runs before the
-  first write and again on every later step, so a folder swapped for a symlink mid-run is refused, not followed. A
-  symlink at the final name is replaced, never written through; a directory there is refused up front. DESTDIR itself
-  may be a symlink (it is the caller's own staging root).
+* **Confinement.** `DESTDIR` (or `/`) is the one trusted anchor. It is re-opened by path at the start of every step
+  (following symlinks: it is the caller's own staging root), so if DESTDIR itself is moved or replaced between steps,
+  later steps use whatever DESTDIR names then. Every folder *below* it is reached one component at a time with
+  `openat(O_DIRECTORY|O_NOFOLLOW)` (created with `mkdirat` when missing). Files are created, replaced (temp file +
+  `renameat` in the same held folder), read and removed only through those held folder descriptors. A symlinked or
+  non-directory intermediate folder is refused, in a preflight that runs before the first write and again on every
+  later step, so a folder swapped for a symlink mid-run is refused, not followed. A symlink at the final name is
+  replaced, never written through; a directory there is refused up front.
+* **Removal protocol** (reinstall cleanup and `make uninstall`). A file is never unlinked by its installed name. In the
+  held parent folder a fresh private folder (`.decebal-quarantine-*`, mode 0700) is created; whatever is at the name is
+  moved into it with `renameat2(RENAME_NOREPLACE)`; the moved entry is verified there (regular file, no symlink
+  followed, bounded read, sha256 equal to the inventory); only then is it unlinked *inside the private folder*. If it
+  does not match it is moved back with `RENAME_NOREPLACE`; if the name was re-created meanwhile, nothing is clobbered:
+  the moved file stays in the private folder and is reported as `preserved` with its location. A replacement made at
+  the installed name after the move is a different file and is never touched. Needs a filesystem with
+  `renameat2(RENAME_NOREPLACE)` (ext4, btrfs, xfs, tmpfs); elsewhere removal refuses.
 * `make install` also writes `$PREFIX/share/decebal/install-inventory.json` (every installed path with its sha256 and
   the build's commit). It is read only as a bounded regular file reached without symlinks, only for the exact
   requested `PREFIX`, and every path in it must be in this package's own namespace (`$PREFIX/bin/{dec,mac}*`,
@@ -51,9 +60,13 @@ one file list:
   recipes.
 * It never runs `systemctl`, `daemon-reload`, `update-desktop-database` or anything under `$HOME`, and enables nothing.
   Regressions: `python3 tests/packaging-stage.py` (fake cargo, private DESTDIR/HOME, no real build).
-* Limits: the install is not atomic across files (a write failure part-way leaves a mix; rerunning repairs it). Between
-  the digest check and the unlink of a file being removed, a process that can write that installed folder could
-  replace the file; folders are root-owned for real installs.
+* Limits and concurrency assumptions: the install is not atomic across files (a write failure part-way leaves a mix;
+  rerunning repairs it). The removal protocol makes the *name* safe, not the *inode*: a process that already holds a
+  writable descriptor to the installed file can still change it after verification, and that inode is then unlinked
+  (the writer keeps its descriptor; the content is gone from the tree). The private folder is mode 0700 and owned by the
+  installing user, so only processes running as that user (or root) can enter it and interfere there. A crash between the
+  move and the unlink/restore leaves a `.decebal-quarantine-*` folder holding the file; nothing is lost, it is just not
+  back at its name. These are narrowed races with stated assumptions, not a race-free guarantee.
 
 Not changed by this layer (runtime assets owned elsewhere): the autostart entries start their programs at login for
 every user of a non-rdwm desktop (`NotShowIn=`/`OnlyShowIn=`/`TryExec=` as written in `contrib/`); autostart and

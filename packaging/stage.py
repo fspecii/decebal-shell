@@ -17,6 +17,7 @@ BUILD_MANIFEST and DECEBAL_CARGO environment variables, so make recipes never in
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -188,13 +189,26 @@ def inventory(prefix, build_data=None, source=ROOT):
 
 # ------------------------------------------------------------------ destination tree (anchored descriptor walks)
 #
-# DESTDIR (or / when empty) is the one trusted anchor; it is opened once and every directory below it is reached
-# component by component with openat(O_DIRECTORY|O_NOFOLLOW), created with mkdirat when missing. Files are created,
-# replaced (renameat over a temp in the same held directory), read and unlinked only relative to held directory
-# descriptors, so a symlinked intermediate parent is refused rather than followed, including one swapped in mid-run.
-# A symlink at the final name is replaced, never written through.
+# DESTDIR (or / when empty) is the one trusted anchor: it is re-opened by path (following symlinks, as the caller's
+# own staging root) at the start of every walk, so if DESTDIR itself is moved or replaced between steps, later steps
+# use whatever DESTDIR names then. Every directory *below* it is reached component by component with
+# openat(O_DIRECTORY|O_NOFOLLOW), created with mkdirat when missing. Files are created, replaced (renameat over a temp
+# in the same held directory), read and removed only relative to held directory descriptors, so a symlinked
+# intermediate parent is refused rather than followed, including one swapped in mid-run. A symlink at the final name
+# is replaced, never written through.
 
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+RENAME_NOREPLACE = 1
+_libc = ctypes.CDLL(None, use_errno=True)
+
+
+def _rename_noreplace(sfd, sname, dfd, dname):
+    """renameat2(RENAME_NOREPLACE): atomic, and never replaces an existing entry at the destination."""
+    if _libc.renameat2(sfd, os.fsencode(sname), dfd, os.fsencode(dname), RENAME_NOREPLACE) != 0:
+        e = ctypes.get_errno()
+        if e in (22, 38, 95):       # EINVAL / ENOSYS / EOPNOTSUPP: no RENAME_NOREPLACE here
+            raise StageError(f'{dname}: this filesystem cannot rename without replacing (renameat2 NOREPLACE); nothing removed')
+        raise OSError(e, os.strerror(e), dname)
 MAX_INVENTORY = 16 << 20
 FAULTS: dict = {}       # fixture-test hooks only; nothing in the CLI sets them
 
@@ -329,34 +343,82 @@ class Dest:
             os.close(fd)
 
     def remove_if(self, path, digest):
-        """'removed', 'absent' or 'kept' (changed, or not a regular file). Parents are never followed."""
+        """Remove the file at `path` only if it is the regular file with `digest`. Returns (state, kept_as) with state
+        'removed', 'absent', 'kept' (changed, or not a regular file; left at its name) or 'preserved' (changed, and the
+        name was re-created meanwhile, so it stays in the private folder named by kept_as).
+
+        Protocol, all relative to the held parent directory (never following a symlink):
+          1. mkdirat a fresh private folder (0700) in that parent: same filesystem, so the next step is a rename;
+          2. renameat2(RENAME_NOREPLACE) whatever is at the name into it. From then on no pathname outside the private
+             folder refers to that entry, so a later replacement at the original name is a different, untouched file;
+          3. verify the moved entry there (regular, O_NOFOLLOW, bounded read, sha256);
+          4. match: unlink it inside the private folder. Mismatch: rename it back with RENAME_NOREPLACE; if the name
+             was re-created meanwhile, never clobber it, keep the moved entry in the private folder and report it.
+        """
         dirs, name = _split(path)
         fd, reached = self.walk(dirs, create=False)
         if fd is None or reached < len(dirs):
             if fd is not None:
                 os.close(fd)
-            return 'absent'
+            return 'absent', None
         try:
             try:
                 st = os.stat(name, dir_fd=fd, follow_symlinks=False)
             except FileNotFoundError:
-                return 'absent'
+                return 'absent', None
             if not stat.S_ISREG(st.st_mode):
-                return 'kept'
-            ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fd)
+                return 'kept', None
+            _fault('before_quarantine', path=path)
+            qname = f'.decebal-quarantine-{secrets.token_hex(6)}'
+            os.mkdir(qname, 0o700, dir_fd=fd)
+            qfd = os.open(qname, DIR_FLAGS, dir_fd=fd)
+            result = ('absent', None)
             try:
-                same = os.fstat(ffd).st_ino == st.st_ino and hashlib.sha256(_read_fd(ffd, MAX_FILE, path)).hexdigest() == digest
-            except StageError:
-                same = False
+                qst = os.fstat(qfd)
+                if qst.st_uid != os.geteuid() or stat.S_IMODE(qst.st_mode) & 0o077:
+                    raise StageError(f'{self.show(dirs)}/{qname}: private folder is not private; nothing removed')
+                try:
+                    _rename_noreplace(fd, name, qfd, name)
+                except FileNotFoundError:
+                    result = ('absent', None)
+                else:
+                    _fault('after_quarantine', path=path)
+                    if self._matches_at(qfd, name, digest):
+                        _fault('before_unlink', path=path)
+                        os.unlink(name, dir_fd=qfd)
+                        result = ('removed', None)
+                    else:
+                        try:
+                            _rename_noreplace(qfd, name, fd, name)
+                            result = ('kept', None)
+                        except FileExistsError:
+                            result = ('preserved', f'{self.show(dirs)}/{qname}/{name}')
             finally:
-                os.close(ffd)
-            if not same:
-                return 'kept'
-            _fault('before_unlink', path=path)
-            os.unlink(name, dir_fd=fd)
-            return 'removed'
+                os.close(qfd)
+            if result[0] != 'preserved':
+                try:
+                    os.rmdir(qname, dir_fd=fd)
+                except OSError:
+                    pass
+            return result
         finally:
             os.close(fd)
+
+    @staticmethod
+    def _matches_at(dfd, name, digest):
+        try:
+            st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            if not stat.S_ISREG(st.st_mode):
+                return False
+            ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dfd)
+        except OSError:
+            return False
+        try:
+            return os.fstat(ffd).st_ino == st.st_ino and hashlib.sha256(_read_fd(ffd, MAX_FILE, name)).hexdigest() == digest
+        except StageError:
+            return False
+        finally:
+            os.close(ffd)
 
     def prune(self, top):
         """rmdir empty directories at and below the owned folder `top` (never follows symlinks)."""
@@ -450,11 +512,13 @@ def _load_inventory(dest, prefix):
 
 def _remove_if_unchanged(dest, files, report):
     for path, digest in sorted(files.items()):
-        state = dest.remove_if(path, digest)
+        state, kept_as = dest.remove_if(path, digest)
         if state == 'removed':
             report['removed'].append(path)
         elif state == 'kept':
             report['kept_changed'].append(path)
+        elif state == 'preserved':
+            report['preserved'].append({'path': path, 'kept_as': kept_as})
 
 
 def install(prefix, destdir, manifest, source=ROOT, write_inventory=True):
@@ -488,7 +552,7 @@ def install(prefix, destdir, manifest, source=ROOT, write_inventory=True):
                 raise StageError(f'{src} changed while installing; files written so far: {len(written)}')
         dest.write(dst, data, mode)
         written[dst] = digest
-    report = {'installed': len(written), 'removed': [], 'kept_changed': []}
+    report = {'installed': len(written), 'removed': [], 'kept_changed': [], 'preserved': []}
     if not write_inventory:      # package builds: the package manager records the file list
         return report
     if old:
@@ -503,7 +567,7 @@ def install(prefix, destdir, manifest, source=ROOT, write_inventory=True):
 def uninstall(prefix, destdir):
     prefix, destdir = check_prefix(prefix), check_destdir(destdir)
     dest = Dest(destdir)
-    report = {'removed': [], 'kept_changed': []}
+    report = {'removed': [], 'kept_changed': [], 'preserved': []}
     old = _load_inventory(dest, prefix)
     if old is None:
         raise StageError(f'no {prefix}/{INVENTORY_REL} under DESTDIR; nothing is removed without an install inventory')
@@ -511,7 +575,9 @@ def uninstall(prefix, destdir):
     if blocked:
         raise StageError(f'nothing removed: {blocked[:5]}')
     _remove_if_unchanged(dest, old['files'], report)
-    dest.remove_if(f'{prefix}/{INVENTORY_REL}', hashlib.sha256(dest.read_regular(f'{prefix}/{INVENTORY_REL}', MAX_INVENTORY)).hexdigest())
+    raw = dest.read_regular(f'{prefix}/{INVENTORY_REL}', MAX_INVENTORY)
+    if raw is not None:
+        dest.remove_if(f'{prefix}/{INVENTORY_REL}', hashlib.sha256(raw).hexdigest())
     for top in (f'{prefix}/share/decebal', f'{prefix}/share/doc/decebal', f'{prefix}/share/licenses/decebal'):
         dest.prune(top)
     return report
