@@ -181,6 +181,68 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     vec![list, fav, Zone::fixed("tabs", tabs), Zone::fixed("actions", actions)]
 }
 
+/// The painted geometry of one full-screen app plate inside its click cell (`FullScreenAppItem.qml`: a 160 x 160 plate, the icon 60 % of its width 16 px from the top, the name
+/// 8 px below it in a 20 px line). A cell narrower or shorter than the plate shrinks the plate to the cell (centred on the cell) and the icon, gaps and name uniformly, so every
+/// painted pixel stays inside the cell that is also the hit target. At the original size nothing is scaled.
+#[derive(Debug, Clone, Copy)]
+struct PlateInk {
+    plate: Rect,
+    icon: Rect,
+    label: Rect,
+    px: f32,
+}
+
+fn full_plate(cell: Rect, s: f32) -> PlateInk {
+    let (pw, ph) = ((160.0 * s).min(cell.w), (160.0 * s).min(cell.h));
+    let plate = Rect { x: cell.x + (cell.w - pw) / 2.0, y: cell.y, w: pw, h: ph };
+    let natural = (16.0 + 8.0 + 20.0) * s + pw * 0.6;
+    let k = (ph / natural).min(1.0);
+    let side = pw * 0.6 * k;
+    let icon = Rect { x: plate.x + (pw - side) / 2.0, y: plate.y + 16.0 * s * k, w: side, h: side };
+    let label = Rect { x: plate.x + (4.0 * s).min(pw / 4.0), y: icon.bottom() + 8.0 * s * k, w: (pw - 2.0 * (4.0 * s).min(pw / 4.0)).max(1.0), h: 20.0 * s * k };
+    PlateInk { plate, icon, label, px: (14.0 * s * k).max(1.0) }
+}
+
+/// A favourites cell (`FavoriteDelegate`: 88 x 100, the icon 48 px 8 px from the top, the name centred 76 px down); a shorter cell scales icon, margin and name together.
+fn fav_ink(cell: Rect, s: f32) -> PlateInk {
+    let k = (cell.h / (100.0 * s)).min(1.0);
+    let side = (48.0 * s * k).min(cell.w);
+    let icon = Rect { x: cell.x + (cell.w - side) / 2.0, y: cell.y + 8.0 * s * k, w: side, h: side };
+    let line = 20.0 * s * k;
+    let label = Rect { x: cell.x + (4.0 * s).min(cell.w / 4.0), y: cell.y + 76.0 * s * k - line / 2.0, w: (cell.w - 2.0 * (4.0 * s).min(cell.w / 4.0)).max(1.0), h: line };
+    PlateInk { plate: Rect { x: cell.x + (2.0 * s).min(cell.w / 4.0), y: cell.y, w: (cell.w - 2.0 * (2.0 * s).min(cell.w / 4.0)).max(1.0), h: cell.h }, icon, label, px: (14.0 * s * k).max(1.0) }
+}
+
+/// An application row (`AppItem.qml`: 40 px, a 32 px icon 8 px in, the 14 px name); a squeezed row scales them.
+fn row_ink(row: Rect, s: f32) -> PlateInk {
+    let k = (row.h / (40.0 * s)).min(1.0);
+    let side = (32.0 * s * k).min(row.w / 2.0);
+    let icon = Rect { x: row.x + (8.0 * s).min(row.w / 4.0), y: row.y + (row.h - side) / 2.0, w: side, h: side };
+    let text_x = icon.right() + 8.0 * s * k;
+    let label = Rect { x: text_x, y: row.y + (row.h - 20.0 * s * k) / 2.0, w: (row.right() - text_x - 16.0 * s).max(1.0), h: 20.0 * s * k };
+    PlateInk { plate: row, icon, label, px: (14.0 * s * k).max(1.0) }
+}
+
+/// What the search pill paints: the magnifier (half the pill's height, centred h/2 from the left edge) and the query line to its right. A pill too narrow for a readable
+/// query (less than 24 px of text) is a compact glyph-only pill: the magnifier shrinks to fit and is centred, there is no text line.
+#[derive(Debug, Clone, Copy)]
+struct SearchInk {
+    glyph: Rect,
+    text: Option<Rect>,
+}
+
+fn search_ink(search: Rect, s: f32) -> SearchInk {
+    let h = search.h;
+    let text_w = search.w - h - 12.0 * s;
+    if text_w >= 24.0 * s {
+        let size = h / 2.0;
+        SearchInk { glyph: Rect { x: search.x + h / 2.0 - size / 2.0, y: search.y + (h - size) / 2.0, w: size, h: size }, text: Some(Rect { x: search.x + h, y: search.y, w: text_w, h }) }
+    } else {
+        let size = (h / 2.0).min(search.w * 0.7).max(1.0);
+        SearchInk { glyph: Rect { x: search.x + (search.w - size) / 2.0, y: search.y + (search.h - size) / 2.0, w: size, h: size }, text: None }
+    }
+}
+
 /// The window material (`DtThemeBackground` default: the window colour at the style's transparency). Over a compositor that blurs (the shell asks for it when the theme's `blur` is on)
 /// the alpha is the theme's `transparencyBlur` (`panel_alpha`: 65 %, HeYin 75 %); with blur off it is `transparencyNoBlur` (90 % in every UKUI global theme); a surface without an
 /// alpha channel is opaque. Text, icons and controls are drawn on top at full opacity, so content stays readable whatever the backdrop.
@@ -230,13 +292,15 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let search = e.as_ref().map_or(f.search, |e| e.search);
     p.fill(search, search.h / 2.0, th.ink(0.04));
     p.stroke(search, search.h / 2.0, if m.searching() { th.accent.color(1.0) } else { th.ink(0.06) }, 1.0);
-    let scy = search.y + search.h / 2.0;
-    p.glyph(Glyph::Search, search.x + search.h / 2.0, scy, search.h / 2.0, sub);
-    p.query(m.query(), m.field.before_cursor(), "Search App", search.x + search.h, scy, 14.0 * s, ink, th.faint(), search.w - search.h - 12.0 * s);
+    let si = search_ink(search, s);
+    p.glyph(Glyph::Search, si.glyph.x + si.glyph.w / 2.0, si.glyph.y + si.glyph.h / 2.0, si.glyph.w, sub);
+    if let Some(t) = si.text {
+        p.query(m.query(), m.field.before_cursor(), "Search App", t.x, t.y + t.h / 2.0, 14.0 * s, ink, th.faint(), t.w);
+    }
 
     // the list header: a bold title (the all-apps list is "All"), 16 px side margin
     if !expanded {
-        p.text(if m.searching() { "Search results" } else { "All" }, f.header.x + 16.0 * s, f.header.y + f.header.h / 2.0, 14.0 * s, Weight::Bold, ink, f.header.w - 32.0 * s);
+        p.text(if m.searching() { "Search results" } else { "All" }, f.header.x + 16.0 * s, f.header.y + f.header.h / 2.0, 14.0 * s, Weight::Bold, ink, (f.header.w - 32.0 * s).max(1.0));
     }
 
     // the widget page tabs: the selected plugin in the primary ink, the other faint, a `kRadiusMin` fill under the hovered one
@@ -246,7 +310,7 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             let Target::View(v) = z.items[i] else { continue };
             hl(p, rect, m.focused(z.id, i), false);
             let on = shown(m) == v;
-            p.text_center(Model::view_title(v), rect.x + rect.w / 2.0, rect.y + rect.h / 2.0, 14.0 * s, Weight::SemiBold, if on { ink } else { th.faint() }, rect.w - 8.0 * s);
+            p.text_center(Model::view_title(v), rect.x + rect.w / 2.0, rect.y + rect.h / 2.0, 14.0 * s, Weight::SemiBold, if on { ink } else { th.faint() }, (rect.w - 8.0 * s).max(1.0));
         }
     }
 
@@ -259,13 +323,13 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             match (z.id, z.items[i]) {
                 ("fav", Target::App(a)) => {
                     // 84 wide inside the 88 cell, the icon on top (8 px margin), the name below; `kRadiusMax` hover
-                    let cell = Rect { x: rect.x + 2.0 * s, y: rect.y, w: rect.w - 4.0 * s, h: rect.h };
+                    let g = fav_ink(rect, s);
                     if focused {
-                        p.fill(cell, 8.0 * s, hover);
+                        p.fill(g.plate, 8.0 * s, hover);
                     }
                     let app = &m.cat.apps[a];
-                    p.icon(&app.icon, rect.x + (rect.w - 48.0 * s) / 2.0, rect.y + 8.0 * s, 48.0 * s);
-                    p.text_center(&app.name, rect.x + rect.w / 2.0, rect.y + 76.0 * s, 14.0 * s, Weight::Regular, ink, rect.w - 8.0 * s);
+                    p.icon(&app.icon, g.icon.x, g.icon.y, g.icon.w);
+                    p.text_center(&app.name, g.label.x + g.label.w / 2.0, g.label.y + g.label.h / 2.0, g.px, Weight::Regular, ink, g.label.w);
                 }
                 (_, Target::Letter(c)) => {
                     // LabelItem: a bold letter at 12 px, then a 1 px divider line (spacing 14)
@@ -273,25 +337,24 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
                     p.fill(Rect { x: rect.x + 12.0 * s + 14.0 * s + 14.0 * s, y: cy, w: rect.w - 12.0 * s - 28.0 * s - 14.0 * s - 16.0 * s, h: 1.0 }, 0.0, div);
                 }
                 ("apps" | "results", Target::App(a)) if expanded => {
-                    // FullScreenAppItem: a 160 x 160 `kRadiusMax` plate, the icon 60 % of its width 16 px from the top, the name 8 px below it
-                    let plate = Rect { x: rect.x + (rect.w - 160.0 * s) / 2.0, y: rect.y, w: (160.0 * s).min(rect.w), h: (160.0 * s).min(rect.h) };
+                    // FullScreenAppItem: a 160 x 160 `kRadiusMax` plate centred in its cell (see `full_plate`)
+                    let g = full_plate(rect, s);
                     if focused {
-                        p.fill(plate, 8.0 * s, hover);
-                        p.stroke(plate, 8.0 * s, th.accent.color(if m.keyboard { 1.0 } else { 0.0 }), if m.keyboard { 2.0 * s } else { 0.0 });
+                        p.fill(g.plate, 8.0 * s, hover);
+                        p.stroke(g.plate, 8.0 * s, th.accent.color(if m.keyboard { 1.0 } else { 0.0 }), if m.keyboard { 2.0 * s } else { 0.0 });
                     }
                     let app = &m.cat.apps[a];
-                    let icon = plate.w * 0.6;
-                    p.icon(&app.icon, plate.x + (plate.w - icon) / 2.0, plate.y + 16.0 * s, icon);
-                    p.text_center(&app.name, plate.x + plate.w / 2.0, plate.y + 16.0 * s + icon + 8.0 * s + 10.0 * s, 14.0 * s, Weight::Regular, ink, plate.w - 8.0 * s);
+                    p.icon(&app.icon, g.icon.x, g.icon.y, g.icon.w);
+                    p.text_center(&app.name, g.label.x + g.label.w / 2.0, g.label.y + g.label.h / 2.0, g.px, Weight::Regular, ink, g.label.w);
                 }
                 ("apps" | "results", Target::App(a)) => {
                     // AppItem: the row inset 4, a 32 px icon (2 px from the edge) and the name; `kRadiusMin` fills
-                    let row = Rect { x: rect.x, y: rect.y, w: rect.w - 14.0 * s, h: rect.h };
+                    let row = Rect { x: rect.x, y: rect.y, w: (rect.w - 14.0 * s).max(1.0), h: rect.h };
                     hl(p, row, focused, false);
+                    let g = row_ink(row, s);
                     let app = &m.cat.apps[a];
-                    let icon = 32.0 * s;
-                    p.icon(&app.icon, row.x + 8.0 * s, cy - icon / 2.0, icon);
-                    p.text(&app.name, row.x + 8.0 * s + icon + 8.0 * s, cy, 14.0 * s, Weight::Regular, ink, row.w - icon - 24.0 * s);
+                    p.icon(&app.icon, g.icon.x, g.icon.y, g.icon.w);
+                    p.text(&app.name, g.label.x, g.label.y + g.label.h / 2.0, g.px, Weight::Regular, ink, g.label.w);
                 }
                 ("actions", t) => {
                     hl(p, rect, focused, false);
@@ -311,7 +374,7 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let empty = if m.searching() { m.results.is_empty() } else { false };
     if empty {
         let list = e.as_ref().map_or(f.list, |e| e.area);
-        p.text_center("No matches", list.x + list.w / 2.0, list.y + 40.0 * s, 14.0 * s, Weight::Regular, sub, f.list.w - 24.0 * s);
+        p.text_center("No matches", list.x + list.w / 2.0, list.y + 40.0 * s, 14.0 * s, Weight::Regular, sub, (list.w - 24.0 * s).max(1.0));
     }
     let _ = f.widgets;
 }
@@ -544,9 +607,9 @@ mod tests {
     }
 
     #[test]
-    fn painted_search_header_and_content_rectangles_stay_inside_and_apart_in_both_modes() {
+    fn painted_geometry_of_search_plates_icons_names_and_controls_stays_inside_and_apart_in_both_modes() {
         use crate::launcher::placement::{Anchor, Edge};
-        for screen in [(400u32, 300u32), (320, 240), (640, 360), (800, 480), (1280, 720), (1920, 1080)] {
+        for screen in [(320u32, 240u32), (400, 300), (480, 320), (640, 360), (800, 480), (1280, 720), (1920, 1080)] {
             for scale in [1.0f32, 1.25, 1.5, 2.0] {
                 for edge in [None, Some(Edge::Bottom), Some(Edge::Top), Some(Edge::Left), Some(Edge::Right)] {
                     for expanded in [false, true] {
@@ -586,8 +649,20 @@ mod tests {
                         for (n, r) in &parts {
                             assert!(inside(r, &card), "{n} {r:?} is empty or leaves the card: {ctx}");
                         }
-                        // the search bar and the header never lie over another painted block or a control
+                        // the search bar and the header never lie over another painted block or a control; the header exists only in the start menu, the full-screen menu has none
                         let search = parts[0].1;
+                        let si = search_ink(search, scale);
+                        assert!(inside(&si.glyph, &search), "magnifier {:?} leaves the search pill {search:?}: {ctx}", si.glyph);
+                        if let Some(t) = si.text {
+                            assert!(inside(&t, &search) && t.w >= 24.0 * scale - 0.5, "query line {t:?} in {search:?}: {ctx}");
+                        }
+                        if expanded {
+                            // 12 logical px between the search bar and Restore wherever the card leaves room for both
+                            let e = expanded_frame(card, scale);
+                            if e.restore.x - 12.0 * scale >= card.x + 16.0 * scale + 1.0 {
+                                assert!(e.restore.x - e.search.right() >= 12.0 * scale - 0.5, "search {:?} and Restore {:?} are closer than 12 logical px: {ctx}", e.search, e.restore);
+                            }
+                        }
                         for (n, r) in parts.iter().skip(1) {
                             if *n == "header" || *n == "list" && !expanded {
                                 continue; // the header and list share the page column below the search bar: checked by order below
@@ -597,7 +672,31 @@ mod tests {
                         for z in &st.zones {
                             for i in z.visible(st.m.offset(z.id)) {
                                 let r = z.rect(i, st.m.offset(z.id)).unwrap();
+                                let target = z.items[i];
                                 assert!(!overlaps(&search, &r), "search {search:?} overlaps {} item {i} {r:?}: {ctx}", z.id);
+                                // the ink each item paints (the same geometry functions the painter calls) lies inside the cell that is also its click target
+                                let inks: Vec<(&str, Rect)> = match (z.id, target) {
+                                    ("fav", Target::App(_)) => {
+                                        let g = fav_ink(r, scale);
+                                        vec![("plate", g.plate), ("icon", g.icon), ("name", g.label)]
+                                    }
+                                    ("apps" | "results", Target::App(_)) if expanded => {
+                                        let g = full_plate(r, scale);
+                                        vec![("plate", g.plate), ("icon", g.icon), ("name", g.label)]
+                                    }
+                                    ("apps" | "results", Target::App(_)) => {
+                                        let g = row_ink(Rect { w: (r.w - 14.0 * scale).max(1.0), ..r }, scale);
+                                        vec![("icon", g.icon), ("name", g.label)]
+                                    }
+                                    _ => Vec::new(),
+                                };
+                                for (n, ink) in inks {
+                                    assert!(inside(&ink, &r) && inside(&ink, &card), "{} item {i} {n} {ink:?} leaves its cell {r:?} or the card: {ctx}", z.id);
+                                }
+                                if target.focusable() {
+                                    let hit = st.hit(r.x + r.w / 2.0, r.y + r.h / 2.0).map(|h| (h.0, h.1, h.2));
+                                    assert_eq!(hit, Some((z.id, i, target)), "{} item {i} is not clickable at its centre: {ctx}", z.id);
+                                }
                             }
                         }
                         if expanded {

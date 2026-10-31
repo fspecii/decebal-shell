@@ -21,6 +21,9 @@ const BAR: (f32, f32) = (356.0, 56.0);
 
 /// The panel's alpha for the UKUI style: the sidebar is an ordinary window, the window colour at `transparencyBlur` (`panel_alpha`) when the compositor blurs, `transparencyNoBlur`
 /// otherwise (see `launcher::styled::ukui::material`); `None` for the other styles.
+/// The line shown when no control is enabled or available.
+const NO_CONTROLS: &str = "No controls available";
+
 /// `transparencyNoBlur` of every UKUI global theme (the same number as the launcher's).
 const NO_BLUR_ALPHA: f32 = 0.90;
 
@@ -172,6 +175,11 @@ fn build(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32, bool) {
         }
         y += BAR.1 + ROW_GAP;
     }
+    // nothing is enabled or nothing exists on this machine for the enabled groups: a neutral line under the header instead of a bare title (not interactive, no control is invented)
+    if !body {
+        out.push(item(SIDE, y, BAR.0, 20.0, Draw::Text { text: NO_CONTROLS.into(), size: 12.0, weight: Weight::Regular, ink: Ink::Secondary, align: Align::Left }, None));
+        y += 20.0 + ROW_GAP;
+    }
     // ShortcuPanel: `height: panelLayout.height + 38` = 14 top + content + 24 bottom
     (out, y - ROW_GAP + 24.0, body)
 }
@@ -263,7 +271,8 @@ mod tests {
         s.util = None;
         let (items, h) = layout(&s, &media_only);
         assert!(items.iter().all(|i| i.target.is_none()), "no media player: the media-only panel has no control and nothing is resurrected");
-        assert_eq!(h, 14.0 + 32.0 + ROW_GAP - ROW_GAP + 24.0, "header only");
+        assert_eq!(h, 14.0 + 32.0 + ROW_GAP + 20.0 + 24.0, "header and the neutral line");
+        assert!(items.iter().any(|i| matches!(&i.draw, Draw::Text { text, .. } if text == NO_CONTROLS)), "an explanatory line, not a bare title");
         let nothing = Tiles { connectivity: false, focus: false, display: false, sound: false, media: false, toggles: false, actions: false };
         assert!(layout(&snapshot(), &nothing).0.iter().all(|i| i.target.is_none()), "every group disabled: no control at all");
         let settings_only = Tiles { actions: true, ..nothing };

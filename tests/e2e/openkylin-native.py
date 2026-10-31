@@ -79,10 +79,18 @@ def make_baseline(path, mode):
     def baseline(run, r, env):
         for _ in range(6):
             run("import", "-window", "root", str(path)); c = Image.open(path).convert("RGB").getpixel((960, 540))
-            if max(abs(c[i] - BACKDROP[mode][i]) for i in range(3)) <= 6: break
+            if max(abs(c[i] - BACKDROP[mode][i]) for i in range(3)) <= 6: return None
             set_root(env["DISPLAY"], r / "backdrop.png"); time.sleep(1.2)
-        return None
+        raise AssertionError(f"{path.name}: the root window was still {c}, not the {mode} backdrop {BACKDROP[mode]}, after 6 repaints; the baseline cannot be trusted")
     return baseline
+
+
+def card_threshold(theme, mode):
+    """Mode-aware diff threshold for a translucent card over the flat backdrop: half of the largest per-channel difference between the composited card
+    (window colour x panel_alpha + backdrop x (1 - alpha), the flat fixture backdrop) and the backdrop itself. Dark v11 over the dark backdrop is ~19.5 (threshold ~9.7), light ~42."""
+    t = tomllib.loads((ROOT / "themes" / theme / "theme.toml").read_text()); a = t["metrics"]["panel_alpha"]; w = t["colors"][mode]["background"]
+    win = [int(w[1 + 2 * i:3 + 2 * i], 16) for i in range(3)]; bd = BACKDROP[mode]
+    return max(3.0, max(abs(a * win[i] + (1 - a) * bd[i] - bd[i]) for i in range(3)) / 2.0)
 
 
 def clock_mask(edge, sc, thick, W=1920, H=1080):
@@ -343,7 +351,7 @@ def main():
                         run("xdotool", "mousemove", str(int(restore[0])), str(int(restore[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
                     return dict(expand=expand, restore=restore)
                 r = case("openkylin", m, sc, "1920x1080", shot=name, pre=baseline, post=act, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
-                box = diff_bbox(OUT / ("base-" + name), OUT / name, threshold=5, ignore=clock_mask("bottom", sc, thick)); assert box, f"{name}: nothing is shown"   # a 65 % dark card over the flat backdrop differs by only ~6-19 levels
+                box = diff_bbox(OUT / ("base-" + name), OUT / name, threshold=card_threshold("openkylin", m), ignore=clock_mask("bottom", sc, thick)); assert box, f"{name}: nothing is shown"   # the full-screen card paints no shadow, so the threshold only has to separate the card from the backdrop
                 x0, y0, x1, y1 = box; w, h = x1 - x0, y1 - y0
                 if what == "expanded":
                     assert x0 <= 4 and x1 >= 1916 and y0 <= 4 and abs(y1 - (H - thick)) <= 6 * sc, f"{name}: the full-screen menu covers {box}, not the whole free area (strip {thick})"
