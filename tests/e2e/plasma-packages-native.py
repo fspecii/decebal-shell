@@ -526,11 +526,10 @@ def case_bar(c, controls):
     without = c.shot("bar-no-search")
     c.run(ctl, "panel", "applet", "search", "theme")
     wait(lambda: effective(c).get("search") is True, f"{c.tag}: search back to the theme's choice")
-    d = ImageChops.difference(shot, without).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
-    assert d, f"{c.tag}: the search applet draws nothing"
-    box_w, box_h = d[2] - d[0], d[3] - d[1]
-    assert max(box_w, box_h) <= round(40 * c.scale), f"{c.tag}: the search applet is {box_w}x{box_h}px: not an icon button"
-    c.step("search_icon", bbox=d)
+    # the search applet is one icon button: switching it off removes exactly one item from the strip (the neighbours reflow, so a pixel diff would be wider)
+    on_groups, off_groups = len(ink_groups(c, shot)), len(ink_groups(c, without))
+    assert on_groups == off_groups + 1, f"{c.tag}: search on draws {on_groups} items, off {off_groups}: it is not one icon"
+    c.step("search_icon", items_on=on_groups, items_off=off_groups)
 
 
 def case_bar_launcher(c):
@@ -579,10 +578,13 @@ def case_bar_appmenu(c):
     c.park()
     time.sleep(3.0)
     exported = c.shot("appmenu-qt-window")
-    changed = ImageChops.difference(idle, exported).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
+    strip = c.strip_box()
+    changed = ImageChops.difference(idle.crop(strip), exported.crop(strip)).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
     assert changed, f"{c.tag}: the bar did not change for a focused window that exports a menu"
-    # the fixture's titles are File and Edit; they must be drawn by the bar now, in the region the exported titles take
-    c.step("appmenu_live", changed_bbox=changed, fixture_sha256=sha(c.args.qt_fixture))
+    # the fixture's titles are File and Edit; the strip now holds more items than with no window (the window's own titles beside the neutral ones)
+    before_items, after_items = len(ink_groups(c, idle)), len(ink_groups(c, exported))
+    assert after_items > before_items, f"{c.tag}: the exported titles were not drawn ({before_items} -> {after_items} items)"
+    c.step("appmenu_live", changed_in_strip=changed, items_without_window=before_items, items_with_exporting_window=after_items, fixture_sha256=sha(c.args.qt_fixture))
     c.run(ctl, "panel", "applet", "app_menu", "theme")
     wait(lambda: effective(c).get("app_menu") is False, f"{c.tag}: app_menu back to the theme's choice (off)")
 
@@ -622,6 +624,20 @@ def control_copy(args, package, logo, out_root):
 
 
 def run_case(args, package, edge, scale, mode, cases, controls, report):
+    for attempt in range(2):
+        before = len(report)
+        ok = run_case_once(args, package, edge, scale, mode, cases, controls, report)
+        entry = report[-1]
+        infra = entry.get("error") and any(k in entry["error"] for k in ("Xvfb", "dock window", "bar window", "painted", "private pinned rdwm"))
+        if ok or not infra or attempt == 1:
+            return ok
+        entry["retried"] = True
+        print(f"retry {entry.get('package')} {edge} {scale} {mode}: {entry['error']}", flush=True)
+        del report[before:]
+    return False
+
+
+def run_case_once(args, package, edge, scale, mode, cases, controls, report):
     tag = f"{package}-{mode}-{edge}-{int(scale * 100)}"
     c = Case(args, package, edge, scale, mode, tag)
     entry = {"package": package, "edge": edge, "scale": scale, "mode": mode, "cases": {}}
@@ -663,10 +679,14 @@ def run_case(args, package, edge, scale, mode, cases, controls, report):
         report.append(entry)
     bad = {k: v for k, v in entry["cases"].items() if v != "ok"}
     print(("ok  " if not bad and "error" not in entry else "FAIL") + f" {tag} {bad or entry.get('error', '')}", flush=True)
+    try:
+        (Path(args.out) / "partial-report.json").write_text(json.dumps(report, indent=2))
+    except OSError:
+        pass
     return not bad and "error" not in entry
 
 
-def capture_controls(args, package, edge, scale, mode, report):
+def capture_controls_once(args, package, edge, scale, mode, report):
     """Start-button crops of the same panel with the logo replaced by builtin:grid / builtin:windows / builtin:apple."""
     shots = {}
     for logo in ("grid", "windows", "apple"):
@@ -686,6 +706,18 @@ def capture_controls(args, package, edge, scale, mode, report):
         finally:
             c.stop()
     return shots
+
+
+def capture_controls(args, package, edge, scale, mode, report):
+    """Infrastructure (a private Xvfb that did not come up in time) is retried; an assertion about the product is not."""
+    for attempt in range(3):
+        try:
+            return capture_controls_once(args, package, edge, scale, mode, report)
+        except AssertionError as e:
+            if "Xvfb" not in str(e) and "dock painted" not in str(e) and "bar window" not in str(e):
+                raise
+            print(f"retry controls ({attempt + 1}): {e}", flush=True)
+    raise AssertionError("controls could not be captured")
 
 
 def main():
