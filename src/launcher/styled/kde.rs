@@ -380,7 +380,7 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
         TAB => {
             m.ui.insert("kde.tab", (i as usize).min(1));
             if i == 1 {
-                places::request(|cancel| places::load(cancel));
+                places::request(places::load);
             } else {
                 places::cancel();
             }
