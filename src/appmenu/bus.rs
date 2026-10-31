@@ -69,6 +69,14 @@ impl Cancel {
         Ok(())
     }
 
+    fn check_until(&self, end: Instant) -> io::Result<()> {
+        self.check()?;
+        if Instant::now() >= end {
+            return Err(timed_out("bus deadline passed"));
+        }
+        Ok(())
+    }
+
     /// Reads the pending wake bytes; EOF counts as a stop.
     fn drain(&self) -> io::Result<()> {
         let Some(mut w) = self.wake.as_ref() else { return Ok(()) };
@@ -184,7 +192,7 @@ fn connect_target(t: &Target, end: Instant, cancel: &Cancel) -> io::Result<UnixS
     }
     let len = (std::mem::offset_of!(libc::sockaddr_un, sun_path) + bytes.len() + extra) as libc::socklen_t;
     loop {
-        cancel.check()?;
+        cancel.check_until(end)?;
         // SAFETY: `sa` is a valid sockaddr_un and `len` does not exceed its size.
         let r = unsafe { libc::connect(fd.as_raw_fd(), (&sa as *const libc::sockaddr_un).cast(), len) };
         if r == 0 {
@@ -219,6 +227,7 @@ fn connect_target(t: &Target, end: Instant, cancel: &Cancel) -> io::Result<UnixS
 fn write_until(sock: &mut UnixStream, bytes: &[u8], end: Instant, cancel: &Cancel) -> io::Result<()> {
     let mut off = 0;
     while off < bytes.len() {
+        cancel.check_until(end)?;
         match sock.write(&bytes[off..]) {
             Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
             Ok(n) => off += n,
@@ -234,6 +243,7 @@ fn write_until(sock: &mut UnixStream, bytes: &[u8], end: Instant, cancel: &Cance
 fn read_until(sock: &mut UnixStream, out: &mut Vec<u8>, max: usize, end: Instant, cancel: &Cancel) -> io::Result<()> {
     let mut tmp = [0u8; 4096];
     loop {
+        cancel.check_until(end)?;
         let room = max.saturating_sub(out.len()).min(tmp.len());
         if room == 0 {
             return Err(bad("bus peer sent too much during the handshake"));
@@ -302,7 +312,9 @@ impl Bus {
         let hello = Message::call(BUS, BUS_PATH, BUS, "Hello", "", Vec::new()).encode(serial);
         write_until(&mut bus.sock, &hello, end, &bus.cancel)?;
         loop {
+            bus.cancel.check_until(end)?;
             while let Some(m) = bus.next_message()? {
+                bus.cancel.check_until(end)?;
                 if m.reply_serial == serial {
                     if m.kind != crate::dbus::RETURN {
                         return Err(bad("Hello refused"));
@@ -482,6 +494,8 @@ pub(crate) mod tests {
         TrickleAuth,
         /// Completes auth, then trickles a Hello reply that never completes.
         TrickleHello,
+        /// Sends complete unrelated replies continuously instead of answering Hello.
+        FloodHello,
         /// Completes auth and Hello, then reads 1 KiB every 20 ms.
         SlowReader,
     }
@@ -516,7 +530,7 @@ pub(crate) mod tests {
                                 std::thread::sleep(Duration::from_millis(20));
                             }
                         }
-                        Peer::TrickleHello | Peer::SlowReader => {
+                        Peer::TrickleHello | Peer::FloodHello | Peer::SlowReader => {
                             read_line(&mut c);
                             let _ = c.write_all(b"OK 0123456789abcdef0123456789abcdef\r\n");
                             read_line(&mut c);
@@ -533,7 +547,15 @@ pub(crate) mod tests {
                             };
                             let mut w = Writer::default();
                             w.string(":1.99");
-                            let reply = Message::reply_to(&hello, "s", w.buf).encode(1);
+                            let mut reply = Message::reply_to(&hello, "s", w.buf);
+                            if matches!(peer, Peer::FloodHello) {
+                                reply.reply_serial = hello.serial + 1;
+                                let bytes = reply.encode(1).repeat(64);
+                                let _ = c.set_write_timeout(Some(Duration::from_secs(2)));
+                                while c.write_all(&bytes).is_ok() {}
+                                return;
+                            }
+                            let reply = reply.encode(1);
                             if let Peer::TrickleHello = peer {
                                 for b in &reply[..reply.len() - 1] {
                                     if c.write_all(&[*b]).is_err() {
@@ -610,6 +632,35 @@ pub(crate) mod tests {
             drop(b);
         });
         Cancel::new(Some(a), stop)
+    }
+
+    #[test]
+    fn ready_io_still_checks_expired_deadlines_and_cancellation() {
+        let (mut client, mut peer) = UnixStream::pair().unwrap();
+        client.set_nonblocking(true).unwrap();
+        peer.write_all(b"ready").unwrap();
+        let mut bytes = Vec::new();
+        let expired = Instant::now() - Duration::from_millis(1);
+        assert_eq!(read_until(&mut client, &mut bytes, 1024, expired, &Cancel::never()).unwrap_err().kind(), io::ErrorKind::TimedOut);
+        assert_eq!(write_until(&mut client, b"ready", expired, &Cancel::never()).unwrap_err().kind(), io::ErrorKind::TimedOut);
+        let stopped = Cancel::new(None, Arc::new(AtomicBool::new(true)));
+        assert!(is_cancelled(&read_until(&mut client, &mut bytes, 1024, end(1000), &stopped).unwrap_err()));
+        assert!(is_cancelled(&write_until(&mut client, b"ready", end(1000), &stopped).unwrap_err()));
+    }
+
+    #[test]
+    fn continuous_unrelated_hello_messages_respect_deadline_and_stop() {
+        let d = Dir::new();
+        let p = d.sock("flood");
+        serve(&p, Peer::FloodHello);
+        let t = Instant::now();
+        let error = Bus::connect(&addr(&p), end(200), Cancel::never(), 1 << 20, Duration::from_secs(1)).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(t.elapsed() < Duration::from_secs(2));
+        let t = Instant::now();
+        let error = Bus::connect(&addr(&p), end(30_000), stop_after(Duration::from_millis(150)), 1 << 20, Duration::from_secs(1)).err().unwrap();
+        assert!(is_cancelled(&error));
+        assert!(t.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
