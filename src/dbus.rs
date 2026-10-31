@@ -645,7 +645,10 @@ impl Conn {
                 Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
                 Ok(n) => bytes = &bytes[n..],
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    crate::backend::poll_writable(self.fd(), Duration::from_secs(2))?;
+                    // A peer that stops reading for 2 s is an error, not a reason to spin forever.
+                    if !crate::backend::poll_writable(self.fd(), Duration::from_secs(2))? {
+                        return Err(io::Error::new(io::ErrorKind::TimedOut, "bus socket not writable for 2 s"));
+                    }
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
@@ -717,7 +720,10 @@ impl Conn {
                 Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
                 Ok(n) => off += n,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    crate::backend::poll_writable(self.fd(), Duration::from_secs(2))?;
+                    // A peer that stops reading for 2 s is an error, not a reason to spin forever.
+                    if !crate::backend::poll_writable(self.fd(), Duration::from_secs(2))? {
+                        return Err(io::Error::new(io::ErrorKind::TimedOut, "bus socket not writable for 2 s"));
+                    }
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
