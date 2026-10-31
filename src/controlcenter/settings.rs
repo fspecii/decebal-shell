@@ -17,7 +17,7 @@ pub const TILE_NAMES: [&str; 7] = ["connectivity", "focus", "display", "sound", 
 /// Values of `position`.
 pub const POSITION_NAMES: [&str; 5] = ["auto", "top-right", "top-left", "bottom-right", "bottom-left"];
 /// Values of `style`.
-pub const STYLE_NAMES: [&str; 4] = ["auto", "card", "fluent", "dux"];
+pub const STYLE_NAMES: [&str; 5] = ["auto", "card", "fluent", "dux", "gnome"];
 
 /// Which tile groups the panel shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,6 +136,9 @@ pub enum Style {
     Fluent,
     /// Source-measured Dux two-column tiles and tonal strip sliders.
     Dux,
+    /// GNOME Shell 51.1 quick settings: pill toggles in two columns, slider rows and an icon-button system row (`gnome.rs`).
+    /// Selectable under any theme; the content and actions are the common controller's.
+    Gnome,
 }
 
 impl Style {
@@ -145,6 +148,7 @@ impl Style {
             "card" => Style::Card,
             "fluent" => Style::Fluent,
             "dux" => Style::Dux,
+            "gnome" => Style::Gnome,
             _ => return None,
         })
     }
@@ -155,7 +159,14 @@ impl Style {
             Style::Card => "card",
             Style::Fluent => "fluent",
             Style::Dux => "dux",
+            Style::Gnome => "gnome",
         }
+    }
+
+    /// The looks the hosts give a clipped scrolling viewport and keyboard focus (Up/Down/Enter, a focus ring, wheel scrolling on a short
+    /// screen): Dux and GNOME. The macOS/Windows looks are short enough to need neither.
+    pub fn scrolls(self) -> bool {
+        matches!(self, Style::Dux | Style::Gnome)
     }
 
     /// `auto` resolved for a panel that hangs from a Windows-style taskbar (or not).

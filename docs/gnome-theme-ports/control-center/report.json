@@ -1,0 +1,26 @@
+{
+  "binary_sha256": "31c96593510c4c4b1886afe8dc2fdec02806b1dadd3bfd0459132f3f31be990b",
+  "pngs": {
+    "decbar-gnome-control-center.png": "87fff5632df61bb91a511626b04c2b6e9493db6dd5042e5d0ae9ff6bdd4c6ec0",
+    "macos-light-100-all.png": "ad49b9421c81ae3801499b05883e4d618a5968787d1b1c6693cfe509334db0ac",
+    "macos-light-100-grid.png": "53402555d4280fb89fd596f390b8bd272cb29e22ccb678acf384de3b579d4321",
+    "macos-light-100-sliders.png": "5bc85300bc148f1696627a215e0d8482b973828c8b561bed7e43a6c25b57be44",
+    "macos-light-100.png": "a9712a2447a0ddbc26c09389bfc1622e3976b6e1cdabda3d879016fb5ed37b28",
+    "macos-light-125-all.png": "c12f56e412528f3de1a531eeecc4d6557059dfd05e874411282be7fb5bc692a6",
+    "macos-light-125-grid.png": "26f0995b744f264e41bd230bc07d602a49ad24b542c47493716fe1be2b7c4b42",
+    "macos-light-125-sliders.png": "00ed557b6e344debb92d76232aafc240acf1325080cc1390b559093889dd99e8",
+    "macos-light-200-all.png": "8016d85465e71299a7f668ca6b519780014f5085fec0eb2af8f7b26b24e5c72e",
+    "macos-light-200-grid.png": "eed3a72b24aa6a2b758878363604e6011a9c416dbbb64e5ae924219b931445bd",
+    "macos-light-200-sliders.png": "9b8ec72d158ff39851bc97b65e168803ab1ac8f9350c3bb729801e29ce7960ab",
+    "nord-dark-100-all.png": "e90063d1409840d110c8d2ce0c532c10db847eb14d9da19288494b432ae31192",
+    "nord-dark-100-grid.png": "fe5dedb0be07e26d40c54ee65467eef7ff02bc4b15d6ef964650d155701fefa0",
+    "nord-dark-100-sliders.png": "ea1c5584650b7adbee6d982893ace2ddf03ed854565e65437adfe8fd43aaa9df",
+    "nord-dark-100.png": "520258825f98edd888731cbbf6bfb867c236a913ba3a3542bfcc1bb5401cbbb9",
+    "nord-dark-125-all.png": "e7b8ea01cc9fafb109c431615f0c2a51e31fe0612a537b23af97a17166cba2b3",
+    "nord-dark-125-grid.png": "50d38866b25b459a2c28444c02eb707dd441ace472b224d03489a3070dbe902c",
+    "nord-dark-125-sliders.png": "cb7b36e53c05acb7b9e0fd97ed3788178e0f1305b02d65279be76a936640b8d6",
+    "nord-dark-200-all.png": "d8b533bf7875befadd06e8269bdaf547631d10e045c8927d52cd3f43656a9fb7",
+    "nord-dark-200-grid.png": "bc62dddcded04376daa69949b74a3d1a622bcf04ac9041a3064d45a2a8bffffa",
+    "nord-dark-200-sliders.png": "55ea6d69dd1d5fc71c024b39277cbda502eb4412e41d179617cd0c66aa3a6de7"
+  }
+}

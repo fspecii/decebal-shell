@@ -310,6 +310,9 @@ pub struct DecBar {
     leave_at: Option<Instant>,
     /// Test hook (`DECBAR_DEBUG_TRAY=file`): where the status items' centres are written after each draw.
     debug_tray: Option<(std::path::PathBuf, String)>,
+    /// Test hook (`DECBAR_DEBUG_PANEL=file`): the open Control Center's rectangle, scroll, content height, every control's rectangle and the
+    /// keyboard focus, rewritten when they change (the same format `overlay.rs` writes, so one driver serves both hosts).
+    debug_panel: Option<(std::path::PathBuf, String)>,
     last_full_refresh: Instant,
     // Window-manager workspaces (optional indicator)
     show_workspaces: bool,
@@ -436,6 +439,7 @@ impl DecBar {
             popup_drag: None,
             leave_at: None,
             debug_tray: std::env::var_os("DECBAR_DEBUG_TRAY").map(|p| (std::path::PathBuf::from(p), String::new())),
+            debug_panel: std::env::var_os("DECBAR_DEBUG_PANEL").map(|p| (std::path::PathBuf::from(p), String::new())),
             last_full_refresh: Instant::now(),
             show_workspaces: false,
             workspaces: Vec::new(),
@@ -994,8 +998,32 @@ impl DecBar {
         crate::theme::th().control_center.style.resolve(self.embed.taskbar)
     }
 
+    /// Writes the `DECBAR_DEBUG_PANEL` report for the open Control Center (nothing without the variable).
+    fn debug_control_panel(&mut self, surface_w: u32, surface_h: u32) {
+        if self.debug_panel.is_none() {
+            return;
+        }
+        let (ox, oy) = self.panel_origin();
+        let scroll = if self.cc_clipped() { self.cc_viewport.scroll } else { 0.0 };
+        let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\n", ox, oy, self.cc_width(), self.cc_visible_height(), surface_w, surface_h, scroll, self.cc_height);
+        let mut seen = Vec::new();
+        for item in &self.cc_items {
+            if let Some(target) = item.target.filter(|t| !seen.contains(t)) {
+                seen.push(target);
+                text += &format!("target {target:?} {} {} {} {}\n", ox + item.r.x, oy + item.r.y - scroll, item.r.w, item.r.h);
+            }
+        }
+        text += &format!("focus {}\n", self.cc_viewport.focus.map_or("none".to_string(), |t| format!("{t:?}")));
+        if let Some((path, last)) = self.debug_panel.as_mut() {
+            if *last != text {
+                let _ = std::fs::write(&*path, &text);
+                *last = text;
+            }
+        }
+    }
+
     fn cc_clipped(&self) -> bool {
-        !self.embedded && self.cc_style() == controlcenter::settings::Style::Dux && !self.pill_bar()
+        !self.embedded && self.cc_style().scrolls() && !self.pill_bar()
     }
     fn cc_visible_height(&self) -> f32 {
         if self.cc_clipped() && self.bottom() {
@@ -1114,7 +1142,30 @@ impl DecBar {
             }
             Target::Screenshot => {
                 self.close();
-                crate::launch::spawn_argv(&crate::capture::command());
+                // through the dry-run aware application hook like every other control (this used to call `launch::spawn_argv` directly)
+                let argv = crate::capture::command();
+                sys::spawn_application(&argv.iter().map(String::as_str).collect::<Vec<_>>());
+            }
+            Target::Mute => {
+                sys::toggle_mute();
+                self.update_snapshot(|s| {
+                    if let Some(v) = s.volume.as_mut() {
+                        v.muted = !v.muted;
+                    }
+                });
+            }
+            Target::Lock => {
+                self.close();
+                // only where a lock program exists; a refused spawn is not reported as success
+                if let Some(argv) = sys::lock_command() {
+                    sys::spawn_application(&argv.iter().map(String::as_str).collect::<Vec<_>>());
+                }
+            }
+            Target::Power => {
+                self.close();
+                if let Some(menu) = sys::session_menu() {
+                    sys::spawn_application(&[&menu]);
+                }
             }
             Target::Record => {
                 self.close();
@@ -1604,16 +1655,17 @@ impl App for DecBar {
             Open::Menu(i) => self.draw_dropdown(pm, i),
             Open::Control => {
                 let (ox, oy) = self.panel_origin();
+                self.debug_control_panel(pm.width(), pm.height());
                 let style = self.cc_style();
                 let clipped = self.cc_clipped();
                 let width = self.cc_width();
                 let height = self.cc_visible_height();
                 if let Some(f) = self.fonts.as_mut() {
                     if clipped {
-                        self.cc_viewport.draw(pm, (ox, oy), width, height, &self.cc_items, self.cc_hover, f, &mut self.symbols);
+                        self.cc_viewport.draw(pm, (ox, oy), width, height, &self.cc_items, self.cc_hover, style, f, &mut self.symbols);
                     } else {
                         let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
-                        controlcenter::draw(pm, &view, f, &mut self.symbols);
+                        controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
                     }
                 }
             }
@@ -1959,7 +2011,7 @@ impl App for DecBar {
         if let Some(handled) = self.panel_nav(key) {
             return handled;
         }
-        if self.cc_style() != controlcenter::settings::Style::Dux || self.open != Open::Control {
+        if !self.cc_style().scrolls() || self.open != Open::Control {
             return false;
         }
         let targets = ccviewport::targets(&self.cc_items);
@@ -2213,6 +2265,9 @@ impl DecBar {
         Tick { redraw, next: Some(close_in.map_or(wake, |c| c.min(wake))) }
     }
 }
+
+#[cfg(test)]
+mod gnome_cc_tests;
 
 #[cfg(test)]
 mod tests {

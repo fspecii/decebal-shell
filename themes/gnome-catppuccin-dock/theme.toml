@@ -1,0 +1,136 @@
+format = 1
+id = "gnome-catppuccin-dock"
+name = "GNOME Catppuccin Dock"
+version = "1.0.0"
+author = "decebal"
+license = "MIT"
+description = "A popular GNOME rice: Catppuccin Mocha / Latte with a translucent Blur my Shell top panel, a Dash to Dock bottom dock, Vitals-style CPU and memory readouts, Inter and Papirus icons. Unaffiliated with GNOME or Catppuccin."
+homepage = "https://github.com/catppuccin/palette"
+min_shell_version = "0.3.0"
+tags = ["gnome", "rice", "catppuccin", "dash-to-dock", "blur-my-shell", "mocha", "latte", "native-panel"]
+
+# Catppuccin palette 1.8.0 (catppuccin/palette 07d02aa, MIT) Mocha (dark) and Latte (light), mauve accent.
+[colors.dark]
+background = "#1e1e2e"          # base
+sidebar = "#181825"             # mantle
+surface = "#313244"             # surface0
+bar = "#11111b"                 # crust
+bar_text = "#cdd6f4"            # text
+popup = "#1e1e2e"               # base
+dock = "#181825"                # mantle
+overlay = "#1e1e2e"             # base
+titlebar = "#181825"            # mantle
+titlebar_inactive = "#1e1e2e"   # base
+border = "#45475a"              # surface1
+text = "#cdd6f4"
+text_secondary = "#a6adc8"      # subtext0
+text_faint = "#7f849c"          # overlay1
+accent = "#cba6f7"              # mauve
+accent_text = "#11111b"         # crust
+danger = "#f38ba8"              # red
+ok = "#a6e3a1"                  # green
+warn = "#f9e2af"                # yellow
+
+[colors.light]
+background = "#eff1f5"          # base
+sidebar = "#dce0e8"             # crust
+surface = "#e6e9ef"             # mantle
+bar = "#e6e9ef"                 # mantle
+bar_text = "#4c4f69"            # text
+popup = "#eff1f5"               # base
+dock = "#e6e9ef"                # mantle
+overlay = "#eff1f5"             # base
+titlebar = "#e6e9ef"            # mantle
+titlebar_inactive = "#eff1f5"   # base
+border = "#bcc0cc"              # surface1
+text = "#4c4f69"
+text_secondary = "#5c5f77"      # subtext1 (subtext0 #6c6f85 is below 4.5:1 on the surfaces)
+text_faint = "#7c7f93"          # overlay2
+accent = "#8839ef"              # mauve
+accent_text = "#eff1f5"         # base
+danger = "#d20f39"              # red
+ok = "#40a02b"                  # green
+warn = "#df8e1d"                # yellow
+
+[metrics]
+radius = 20                     # the Shell's popover radius; Catppuccin themes keep libadwaita geometry
+dock_roundness = 0.8            # Dash to Dock stylesheet: $dash_border_radius = 16 + 12 = 28 px
+dock_alpha = 0.8                # Dash to Dock background-opacity default 0.8
+popup_alpha = 1.0
+panel_alpha = 1.0
+bar_alpha = 0.6                 # Blur my Shell panel brightness default 0.6, approximated as a tint alpha
+blur = 0.6                      # Blur my Shell is on for panel, dock and overview
+glass_refraction = 0
+glass_edge = 2
+glass_highlight = 0
+glass_grain = 0
+glass_blur = 24                 # Blur my Shell sigma 30 exceeds the native 24 px cap
+shadow = 0.9
+outline = 0.12
+dock_padding = 12               # $dash_padding
+
+[font]
+files = ["fonts/MaterialSymbolsRounded.ttf"]   # glyphs of the native bar items (Apache-2.0); see ATTRIBUTION.md
+# Inter and a Nerd-Font JetBrains Mono are the usual rice pairing. Both are system dependencies, not shipped.
+ui = ["Inter", "Adwaita Sans", "Noto Sans"]
+title = ["Inter", "Adwaita Sans", "Noto Sans"]
+mono = ["JetBrainsMono Nerd Font", "JetBrains Mono", "Adwaita Mono", "Noto Sans Mono"]
+display = ["Inter", "Adwaita Sans", "Noto Sans"]
+scale = 1.0
+
+[decoration]
+style = "adwaita"
+height = 47
+radius = 15
+title_align = "center"
+
+[rdwm]
+# Appearance only: gaps and border. Tiling extensions (Forge / Pop Shell) are part of the usual rice, but the arrangement policy is the user's
+# global preference (new apps tile first, normal free drag, Shift-snap, auto-formation), so no layouts, mfact, nmaster or smart_gaps are
+# declared. Focus and normal borders default to the accent and the border colour, so mauve rings follow the variant.
+gap_inner = 8
+gap_outer = 8
+border_px = 2
+
+[bar]
+enabled = true
+style = "dux"
+position = "top"
+height = 32                     # Just Perfection leaves the Shell default panel size
+background = "band"
+margin = 0
+spacing = 0
+band_radius = 0
+radius = 16
+# Workspace dots (Activities hidden by Just Perfection) | clock | AppIndicator tray + Vitals CPU/RAM + system capsule.
+left = ["workspaceSwitcher", "focusedWindow"]
+center = ["clock", "notificationButton"]
+right = ["systemTray", "cpuUsage", "memUsage", "network", "audio", "battery", "controlCenterButton"]
+
+[dock]
+enabled = true
+style = "mac"
+size = 48                       # dash-max-icon-size default 48
+align = "center"
+roundness = 0.8
+magnification = 1.0             # Dash to Dock does not magnify
+
+[icons]
+# Papirus is the standard rice icon theme; it is a system dependency. Adwaita is the declared fallback when it is absent.
+theme = "Papirus-Dark"
+fallback = "Adwaita"
+size_scale = 1.0
+monochrome_tint = true
+
+[hot_corners]
+top_left = "overview"
+dwell_ms = 200
+
+[control_center]
+enabled = true
+position = "auto"
+style = "gnome"                 # GNOME Shell 51.1 quick settings (control_center/gnome.rs); needs 0.3.0, see min_shell_version
+tiles = ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"]
+
+[desktop]
+widgets = "none"

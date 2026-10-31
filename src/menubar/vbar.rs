@@ -1597,7 +1597,7 @@ impl DecBar {
                 let style = self.cc_style();
                 if let Some(f) = self.fonts.as_mut() {
                     let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
-                    controlcenter::draw(pm, &view, f, &mut self.symbols);
+                    controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
                 }
             }
             Open::Popup(_) => {

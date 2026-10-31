@@ -16,6 +16,7 @@ pub(super) struct Viewport {
     source: Vec<Item>,
     translated: Vec<Item>,
     stamp: (f32, u32),
+    style: Option<Style>,
 }
 
 /// A target can occur on its tile, leading icon and slider fill. Keyboard
@@ -52,12 +53,13 @@ impl Viewport {
         (x >= origin.0 && x < origin.0 + width && y >= origin.1 && y < origin.1 + height).then_some((x - origin.0, y - origin.1 + self.scroll))
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn draw(&mut self, pm: &mut Pixmap, origin: (f32, f32), width: f32, height: f32, items: &[Item], hover: Option<Target>, fonts: &mut Fonts, symbols: &mut SymbolCache) {
+    pub fn draw(&mut self, pm: &mut Pixmap, origin: (f32, f32), width: f32, height: f32, items: &[Item], hover: Option<Target>, style: Style, fonts: &mut Fonts, symbols: &mut SymbolCache) {
         let (width, height) = (width.ceil().max(1.0) as u32, height.ceil().max(1.0) as u32);
-        if self.buffer.as_ref().is_none_or(|buffer| buffer.width() != width || buffer.height() != height) {
+        if self.buffer.as_ref().is_none_or(|buffer| buffer.width() != width || buffer.height() != height) || self.style != Some(style) {
+            self.style = Some(style);
             self.buffer = Pixmap::new(width, height);
             self.mask = Mask::new(width, height).and_then(|mut mask| {
-                let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, 28.0)?;
+                let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, controlcenter::look(style).0)?;
                 mask.fill_path(&path, tiny_skia::FillRule::Winding, true, crate::gfx::transform());
                 Some(mask)
             });
@@ -75,10 +77,8 @@ impl Viewport {
         }
         let Some(buffer) = self.buffer.as_mut() else { return };
         crate::gfx::clear(buffer);
-        controlcenter::draw(buffer, &controlcenter::View { origin: (0.0, 0.0), items: &self.translated, height: height as f32, hover, style: Style::Dux }, fonts, symbols);
-        if let Some((_, focus)) = targets(items).into_iter().find(|(target, _)| Some(*target) == self.focus) {
-            crate::gfx::stroke_rounded(buffer, focus.x + 1.0, focus.y - self.scroll + 1.0, focus.w - 2.0, focus.h - 2.0, 12.0, crate::theme::th().accent_c(), 2.0);
-        }
+        // the focus ring is drawn with the translated items, so a control scrolled out of view gets none
+        controlcenter::draw_focused(buffer, &controlcenter::View { origin: (0.0, 0.0), items: &self.translated, height: height as f32, hover, style }, self.focus, fonts, symbols);
         if !items.is_empty() && height as f32 > 32.0 {
             let content = items.iter().map(|item| item.r.y + item.r.h).fold(0.0f32, f32::max) + 16.0;
             if content > height as f32 {

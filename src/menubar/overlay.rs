@@ -112,8 +112,13 @@ impl Overlay {
         self.bar.cc_style() == controlcenter::settings::Style::Dux
     }
 
+    /// Whether this look gets the clipped scrolling viewport and keyboard focus (Dux and GNOME).
+    fn viewport(&self) -> bool {
+        self.bar.cc_style().scrolls()
+    }
+
     fn viewport_height(&self) -> f32 {
-        if self.dux() {
+        if self.viewport() {
             self.bar.cc_height.min((self.surface.1 as f32 - self.place.inset_y - EDGE_GAP).max(1.0))
         } else {
             self.bar.cc_height
@@ -122,7 +127,7 @@ impl Overlay {
 
     fn viewport_rect(&self) -> Option<InputRect> {
         let mut rect = self.bar.status_rect()?;
-        if self.dux() {
+        if self.viewport() {
             rect.h = self.viewport_height().ceil() as i32;
         }
         Some(rect)
@@ -134,9 +139,10 @@ impl Overlay {
         let width = self.bar.cc_width().ceil() as u32;
         let height = self.viewport_height().ceil().max(1.0) as u32;
         if self.buffer.as_ref().is_none_or(|b| b.width() != width || b.height() != height) {
+            let radius = controlcenter::look(self.bar.cc_style()).0;
             self.buffer = Pixmap::new(width, height);
             self.mask = tiny_skia::Mask::new(width, height).and_then(|mut mask| {
-                let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, 28.0)?;
+                let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, radius)?;
                 mask.fill_path(&path, tiny_skia::FillRule::Winding, true, tiny_skia::Transform::identity());
                 Some(mask)
             });
@@ -154,17 +160,9 @@ impl Overlay {
             self.viewport_stamp = (self.scroll, height);
         }
         let items = &self.viewport_items;
+        let style = self.bar.cc_style();
         if let Some(fonts) = self.bar.fonts.as_mut() {
-            controlcenter::draw(
-                buffer,
-                &controlcenter::View { origin: (0.0, 0.0), items, height: height as f32, hover: self.bar.cc_hover, style: controlcenter::settings::Style::Dux },
-                fonts,
-                &mut self.bar.symbols,
-            );
-            if let Some(focus) = self.focus.and_then(|wanted| self.bar.cc_items.iter().find(|item| item.target == Some(wanted)).map(|item| (wanted, item.r))) {
-                let r = focus.1;
-                stroke_rounded(buffer, r.x + 1.0, r.y - self.scroll + 1.0, r.w - 2.0, r.h - 2.0, 12.0, crate::theme::th().accent_c(), 2.0);
-            }
+            controlcenter::draw_focused(buffer, &controlcenter::View { origin: (0.0, 0.0), items, height: height as f32, hover: self.bar.cc_hover, style }, self.focus, fonts, &mut self.bar.symbols);
         }
         if self.bar.cc_height > height as f32 {
             let track = height as f32 - 32.0;
@@ -182,7 +180,7 @@ impl Overlay {
 
 impl App for Overlay {
     fn size(&self) -> (u32, u32) {
-        (0, if self.dux() { (self.place.inset_y + self.bar.cc_height + EDGE_GAP).ceil().max(1.0) as u32 } else { Overlay::surface_height(&self.place) })
+        (0, if self.viewport() { (self.place.inset_y + self.bar.cc_height + EDGE_GAP).ceil().max(1.0) as u32 } else { Overlay::surface_height(&self.place) })
     }
 
     fn surface_spec(&self) -> Option<SurfaceSpec> {
@@ -205,13 +203,23 @@ impl App for Overlay {
         }
         self.surface = (pm.width(), pm.height());
         self.sync();
-        if self.dux() {
+        if self.viewport() {
             self.draw_viewport(pm);
         } else {
             self.bar.status_draw(pm);
         }
         if let (Some(r), Some((path, last))) = (self.viewport_rect(), self.debug.as_mut()) {
-            let text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height(), self.scroll, self.bar.cc_height);
+            let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height(), self.scroll, self.bar.cc_height);
+            // every control once (its first rectangle) in surface coordinates, and the keyboard focus: what the native acceptance driver clicks
+            let (ox, oy) = self.bar.embed.origin;
+            let mut seen = Vec::new();
+            for item in &self.bar.cc_items {
+                if let Some(target) = item.target.filter(|t| !seen.contains(t)) {
+                    seen.push(target);
+                    text += &format!("target {target:?} {} {} {} {}\n", ox + item.r.x, oy + item.r.y - self.scroll, item.r.w, item.r.h);
+                }
+            }
+            text += &format!("focus {}\n", self.focus.map_or("none".to_string(), |t| format!("{t:?}")));
             if *last != text {
                 let _ = std::fs::write(&*path, &text);
                 *last = text;
@@ -224,7 +232,7 @@ impl App for Overlay {
         self.left_at = None;
         self.sync();
         self.focus = None;
-        self.bar.status_motion(x, if self.dux() { y + self.scroll } else { y })
+        self.bar.status_motion(x, if self.viewport() { y + self.scroll } else { y })
     }
 
     fn pointer_leave(&mut self) -> bool {
@@ -239,7 +247,7 @@ impl App for Overlay {
         self.focus = None;
         self.sync();
         let inside = self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
-        if button == Button::Left && inside && self.bar.status_press(x, if self.dux() { y + self.scroll } else { y }) {
+        if button == Button::Left && inside && self.bar.status_press(x, if self.viewport() { y + self.scroll } else { y }) {
             if !self.open_now() {
                 self.quit = true;
             }
@@ -257,7 +265,7 @@ impl App for Overlay {
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> bool {
         self.sync();
-        if self.dux() {
+        if self.viewport() {
             self.focus = None;
             self.bar.cc_hover = None;
             if self.viewport_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32) {
@@ -280,7 +288,7 @@ impl App for Overlay {
     }
 
     fn nav_key(&mut self, key: crate::app::NavKey) -> bool {
-        if !self.dux() {
+        if !self.viewport() {
             return false;
         }
         let mut targets = Vec::new();

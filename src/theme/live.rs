@@ -423,6 +423,10 @@ fn publish(t: Arc<Theme>) {
 
 /// The theme every drawing routine uses. Loaded on first use.
 pub fn current() -> Arc<Theme> {
+    #[cfg(test)]
+    if let Some(t) = THREAD_THEME.with(|slot| slot.borrow().clone()) {
+        return t;
+    }
     if let Some(t) = CURRENT.read().unwrap().as_ref() {
         return t.clone();
     }
@@ -431,6 +435,29 @@ pub fn current() -> Arc<Theme> {
     let t = l.theme.clone();
     publish(t.clone());
     t
+}
+
+#[cfg(test)]
+thread_local! {
+    static THREAD_THEME: std::cell::RefCell<Option<Arc<Theme>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Test only: `t` is the current theme for the calling test thread alone, so parallel tests that publish other themes cannot
+/// disturb it (and it cannot disturb them). Dropping the guard removes the override; nothing global changes.
+#[cfg(test)]
+pub fn thread_theme(t: Theme) -> ThreadTheme {
+    THREAD_THEME.with(|slot| *slot.borrow_mut() = Some(Arc::new(t)));
+    ThreadTheme
+}
+
+#[cfg(test)]
+pub struct ThreadTheme;
+
+#[cfg(test)]
+impl Drop for ThreadTheme {
+    fn drop(&mut self) {
+        THREAD_THEME.with(|slot| *slot.borrow_mut() = None);
+    }
 }
 
 /// Makes `t` the current theme without touching any file (previews, screenshots, tests).

@@ -493,7 +493,7 @@ impl DecBar {
             let style = self.cc_style();
             let view = controlcenter::View { origin: self.embed.origin, items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
             if let Some(f) = self.fonts.as_mut() {
-                controlcenter::draw(pm, &view, f, &mut self.symbols);
+                controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
                 f.trim();
             }
             return;

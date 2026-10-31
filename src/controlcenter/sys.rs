@@ -693,6 +693,19 @@ pub fn probe_utils() -> Option<Utils> {
     Some(Utils { record: crate::util::record::status(&ctx, &crate::util::RealSys).is_some(), idle: crate::util::idle::status(&ctx), game: crate::util::game::status(&ctx) })
 }
 
+/// The command that locks the session (`rdwm-lock`, else `loginctl lock-session`), when its program exists. Dry-run assumes it does,
+/// like [`decutil`], so a test can record it.
+pub fn lock_command() -> Option<Vec<String>> {
+    let argv = crate::session::command(crate::session::Choice::Lock, &crate::session::Env::detect());
+    (is_dry_run() || argv.first().is_some_and(|program| have(program))).then_some(argv)
+}
+
+/// Where the session menu program (`decsession`) is, when it exists (next to the running binary, else on `PATH`).
+pub fn session_menu() -> Option<String> {
+    let p = crate::launch::sibling_or_path("decsession");
+    (is_dry_run() || (p.contains('/') && std::path::Path::new(&p).is_file()) || have("decsession")).then_some(p)
+}
+
 /// `decutil FEATURE toggle` in the background (`feature`: `record`, `idle-inhibit`, `gamemode`, `dnd`).
 pub fn util_toggle(feature: &str) {
     if let Some(m) = decutil() {
