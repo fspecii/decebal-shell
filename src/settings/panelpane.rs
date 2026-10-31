@@ -217,23 +217,18 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         _ => return,
     };
-    if shell != m.shell {
-        if let Err(e) = super::io::json_set(&m.paths.shell_json(), "bar", shell.get("bar").cloned()) {
-            m.say(format!("Not saved: {e}"), true);
-            m.dirty = true;
-            return;
-        }
-        m.shell = super::io::json_load(&m.paths.shell_json());
+    // Both keys go through the persistence worker, in order; the notice follows once they are on disk.
+    let bar_changed = shell.get("bar") != m.shell.get("bar");
+    if bar_changed {
+        let last = dock_edge_value.is_none();
+        m.edit_json_said("shell", "bar", shell.get("bar").cloned(), last.then(|| said.clone()));
     }
     if let Some(v) = dock_edge_value {
-        if let Err(e) = super::io::json_set(&m.paths.dock_settings(), "edge", v) {
-            m.say(format!("Not saved: {e}"), true);
-            m.dirty = true;
-            return;
-        }
-        m.dock = super::io::json_load(&m.paths.dock_settings());
+        m.edit_json_said("dock", "edge", v, Some(said.clone()));
     }
-    m.say(said, false);
+    if !bar_changed && m.notice.as_ref().is_none_or(|n| !n.error) && !m.saving() {
+        m.say(said, false);
+    }
     m.dirty = true;
 }
 
