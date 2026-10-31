@@ -714,6 +714,7 @@ impl Model {
             "bluetooth" => bluetooth::items(h),
             "inputdev" => {
                 let mut v = input::items(h);
+                v.extend(super::touchpad::items(self));
                 v.extend(super::gestures::items(self));
                 v
             }

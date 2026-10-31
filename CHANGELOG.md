@@ -13,6 +13,7 @@
 
 ## Unreleased
 
+- Keyboard & Input has a native Wayland section, "Touchpad, mouse & keyboard (rdwm)": natural scrolling, tap to click, left-handed buttons, pointer speed and key repeat, saved to rdwm's `[input]` and applied to every libinput device on reload. The `xinput`/`xset` rows only reached X11 apps, so on Wayland their "not installed" rows and the red "No X server" error are hidden. Needs an rdwm whose schema lists `[input]`; older ones show nothing extra.
 - Wayland windows paint an already configured first frame before blocking for further events. A private quiescent-compositor regression proves the old stall and fixed first buffer commit; accessibility acceptance now waits for its owned compositor output and records protocol diagnostics.
 - Settings wraps long labels and URLs within narrow cards without reducing text size. Keyboard focus follows controls when content loads, while explicit scrolling stays under user control; oversized rows no longer oscillate between redraws.
 - Taskbar Start sends the clicked button's position and panel edge to the launcher, including side panels, fractional scale and floating gaps.
