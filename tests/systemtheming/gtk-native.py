@@ -227,6 +227,7 @@ base_env.update(
 )
 (priv / "cfg/decebal").mkdir()
 S = Session(base_env)
+(out / "session.json").write_text(json.dumps({"pid": os.getpid(), "token": S.token}))
 env = S.env  # every child, and every helper command, carries the run token
 xvfb = display = wm = None
 
@@ -294,7 +295,8 @@ def verify_display():
 
 
 def run(argv, **kw):
-    return subprocess.run(argv, env=env, capture_output=True, text=True, timeout=120, **kw)
+    kw.setdefault("timeout", 120)
+    return subprocess.run(argv, env=env, capture_output=True, text=True, **kw)
 
 
 # ---------------------------------------------------------------- colour helpers
@@ -356,13 +358,19 @@ def apply(theme, mode, extra_cfg=None):
     return json.loads(r.stdout or "{}"), json.loads(pal.stdout)
 
 
+launch_sequence = 0
+
+
 def launch(kit, title, case, scale):
+    global launch_sequence
+    launch_sequence += 1
     extra = {"GDK_SCALE": str(scale)} if scale != 1 else {}
-    js = case / f"{kit}.json"
+    js = case / f"{kit}-{launch_sequence}.json"
+    log = case / f"{kit}-{launch_sequence}.log"
     if kit == "files":
-        p = spawn(["nautilus", "--new-window", str(priv / "home/Files QA")], case / f"{kit}.log", extra)
+        p = spawn(["nautilus", "--new-window", str(priv / "home/Files QA")], log, extra)
     else:
-        p = spawn([sys.executable, "-I", str(HERE / "gtk_probe.py"), kit, title, str(js)], case / f"{kit}.log", extra)
+        p = spawn([sys.executable, "-I", str(HERE / "gtk_probe.py"), kit, title, str(js)], log, extra)
     deadline = time.time() + 25
     if kit == "files":
         while time.time() < deadline:
@@ -377,18 +385,23 @@ def launch(kit, title, case, scale):
     while time.time() < deadline:
         if js.exists():
             info = json.loads(js.read_text())
+            info["probe_json"] = str(js)
             hint("focus", info["xid"])
             time.sleep(0.4)
             return p, info
         if p.poll() is not None:
-            raise AssertionError(f"{kit} probe exited: {(case / f'{kit}.log').read_text()[-2000:]}")
+            raise AssertionError(f"{kit} probe exited: {log.read_text()[-2000:]}")
         time.sleep(0.1)
     raise AssertionError(f"{kit} probe did not report")
 
 
 def shot(info, path):
     verify_display()
-    r = run(["import", "-window", str(info["xid"]), str(path)])
+    # Xvfb has no compositor/backing pixmap for an obscured GTK3 window.
+    # Raise it and allow Expose to repaint before sampling; do not change its synthetic focus hint.
+    xdo("windowraise", info["xid"])
+    time.sleep(0.2)
+    r = run(["import", "-window", str(info["xid"]), str(path)], timeout=10)
     if r.returncode:
         raise AssertionError(f"capture failed: {r.stderr}")
     return Image.open(path).convert("RGB")
@@ -468,7 +481,7 @@ def surfaces(case_id, kit, img, info, pal):
 def states(case_id, kit, case, info, base, pal, title):
     s, b = info["scale"], info["boxes"]
     P = {k: hexrgb(v) for k, v in pal.items() if isinstance(v, str) and v.startswith("#")}
-    ev = pathlib.Path(str(case / f"{kit}.json") + ".events")
+    ev = pathlib.Path(info["probe_json"] + ".events")
     xdo("windowfocus", "--sync", info["xid"])
     # hover
     x, y = centre(info, "btn")
@@ -540,7 +553,7 @@ def states(case_id, kit, case, info, base, pal, title):
     hint("focus", info["xid"])
 
 
-def files_checks(case_id, img, pal):
+def files_checks(case_id, img, pal, scale):
     P = {k: hexrgb(v) for k, v in pal.items() if isinstance(v, str) and v.startswith("#")}
     total = img.width * img.height
     hist = img.getcolors(total)
@@ -548,11 +561,12 @@ def files_checks(case_id, img, pal):
     got = {r: round(share(P[r]), 3) for r in ("bg", "sidebar")}
     check(case_id, got["bg"] > 0.15, "Files content uses the window colour", got)
     check(case_id, got["sidebar"] > 0.05, "Files sidebar uses the sidebar colour", got)
-    # libadwaita's top bars are flat: the header band is the window (content) or sidebar colour, never a toolkit default.
-    band = img.crop((8, 4, img.width - 8, 40))
+    # Joined libadwaita bars may use titlebar, window or sidebar roles.
+    # The Windows package deliberately has a titlebar distinct from its content.
+    band = img.crop((8 * scale, 4 * scale, img.width - 8 * scale, 40 * scale))
     bh = band.getcolors(band.width * band.height)
-    themed = sum(n for n, c in bh if near(c, P["bg"], 4) or near(c, P["sidebar"], 4)) / (band.width * band.height)
-    check(case_id, themed >= 0.25, "Files header band follows the theme", {"bg_or_sidebar_share": round(themed, 3)})
+    themed = sum(n for n, c in bh if any(near(c, P[role], 4) for role in ("titlebar", "bg", "sidebar"))) / (band.width * band.height)
+    check(case_id, themed >= 0.25, "Files header band follows the theme", {"themed_header_share": round(themed, 3)})
     # The places sidebar: the left fifth below the header, its body text against its own background.
     side = img.crop((8, img.height // 5, img.width // 5, img.height * 3 // 5))
     bg = mode_colour(side)
@@ -670,7 +684,7 @@ try:
                         try:
                             img = shot(info, case / f"{kit}.png")
                             if kit == "files":
-                                files_checks(f"{case_id}/files", img, pal)
+                                files_checks(f"{case_id}/files", img, pal, scale)
                             else:
                                 check(f"{case_id}/{kit}", info.get("scale") == scale, "toolkit runs at the requested scale", info.get("scale"))
                                 surfaces(f"{case_id}/{kit}", kit, img, info, pal)
