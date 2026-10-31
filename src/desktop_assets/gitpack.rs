@@ -20,7 +20,7 @@ use super::gitoid::{self, Sha1};
 use super::Limits;
 use crate::theme::engine::sha256::{self, Sha256};
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
@@ -394,6 +394,9 @@ impl Pack {
                 }
                 c = hb[j];
                 j += 1;
+                if u64::from(c & 0x7f) > (u64::MAX >> shift) {
+                    return Err("an object's size does not fit".into());
+                }
                 size |= u64::from(c & 0x7f) << shift;
                 shift += 7;
             }
@@ -556,7 +559,7 @@ fn delta_size(d: &[u8], j: &mut usize) -> Result<u64, String> {
     loop {
         let c = *d.get(*j).ok_or("a delta header runs past its end")?;
         *j += 1;
-        if shift > 63 {
+        if shift > 63 || u64::from(c & 0x7f) > (u64::MAX >> shift) {
             return Err("a delta size does not fit".into());
         }
         v |= u64::from(c & 0x7f) << shift;
@@ -643,6 +646,7 @@ pub struct TreeEntry {
 pub fn parse_tree(d: &[u8]) -> Result<Vec<TreeEntry>, String> {
     let mut v: Vec<TreeEntry> = Vec::new();
     let mut prev: Option<Vec<u8>> = None;
+    let mut names = HashSet::new();
     let mut j = 0;
     while j < d.len() {
         let sp = d[j..].iter().position(|&b| b == b' ').ok_or("a tree entry has no mode")? + j;
@@ -671,6 +675,9 @@ pub fn parse_tree(d: &[u8]) -> Result<Vec<TreeEntry>, String> {
         }
         if prev.as_ref().is_some_and(|p| *p >= key) {
             return Err(format!("tree entries are not in git's order (or repeat) at `{name}`"));
+        }
+        if !names.insert(name) {
+            return Err(format!("tree entries repeat the name `{name}`"));
         }
         prev = Some(key);
         v.push(TreeEntry { mode, name: name.to_string(), oid });
@@ -1193,12 +1200,33 @@ pub(crate) mod tests {
         bad(e("100644", "a\\b"), "name");
         bad([e("100644", "b"), e("100644", "a")].concat(), "order");
         bad([e("100644", "a"), e("100644", "a")].concat(), "order");
+        bad([e("100644", "a"), e("100644", "a.b"), e("40000", "a")].concat(), "repeat");
         // git's order: the folder `a` sorts as `a/`, after the file `a.b`
         assert!(parse_tree(&[e("100644", "a.b"), e("40000", "a")].concat()).is_ok());
         bad([e("40000", "a"), e("100644", "a.b")].concat(), "order");
         bad(e("100644", "a")[..10].to_vec(), "runs past");
         assert_eq!(parse_tree(&e("160000", "sub")).unwrap()[0].mode, Mode::Gitlink);
         assert!(commit_tree(b"tree 0123\n").is_err());
+    }
+
+    #[test]
+    fn overflowing_size_encodings_are_refused_before_truncation() {
+        let mut delta = vec![0x80; 9];
+        delta.push(2);
+        assert!(delta_size(&delta, &mut 0).unwrap_err().contains("does not fit"));
+        delta[9] = 1;
+        assert_eq!(delta_size(&delta, &mut 0).unwrap(), 1u64 << 63);
+        let s = Scratch::new("gitpack-size-overflow");
+        let mut p = b"PACK\0\0\0\x02\0\0\0\x01".to_vec();
+        p.push(0xb0); // blob, continued low four size bits
+        p.extend_from_slice(&[0x80; 8]);
+        p.push(0x10); // shift 60: this bit would truncate to zero
+        p.extend_from_slice(&zlib(b""));
+        let mut h = Sha1::default();
+        h.update(&p);
+        p.extend_from_slice(&h.finish());
+        let error = open(&s, "overflow.pack", &p, &lim()).err().expect("oversized header was accepted");
+        assert!(error.contains("does not fit"), "{error}");
     }
 
     #[test]
