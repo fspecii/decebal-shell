@@ -197,7 +197,7 @@ impl Source {
     }
 
     /// A `[branding] logo` image becomes its path inside the package (canonical, never outside it); a missing or escaping
-    /// file means the style's own logo.
+    /// file means the neutral logo, never the style's trademark one.
     fn package_logo(&self, id: &str, branding: &mut crate::panel::branding::Branding) {
         use crate::panel::branding::Logo;
         let Logo::File(rel) = &branding.logo else { return };
@@ -209,7 +209,7 @@ impl Source {
             let full = base.join(rel).canonicalize().ok()?;
             (full.starts_with(&base) && full.is_file()).then_some(full)
         })();
-        branding.logo = resolved.map_or(Logo::Style, Logo::File);
+        branding.logo = resolved.map_or(crate::panel::branding::NEUTRAL, Logo::File);
     }
 
     /// Package fonts are resolved outside painting and remain private to this process.
@@ -527,7 +527,7 @@ mod tests {
         assert_eq!(b.logo, crate::panel::branding::Logo::File(pkg.join("icons/logo.png").canonicalize().unwrap()));
         assert_eq!(b.desktop_label("Finder"), "Desktop");
         assert!(load("../../outside.png").unwrap_err().contains("escapes the package"), "a manifest pointing outside its package does not load");
-        assert_eq!(theme("icons/missing.png").logo, crate::panel::branding::Logo::Style);
+        assert_eq!(theme("icons/missing.png").logo, crate::panel::branding::NEUTRAL, "a missing image is the neutral logo, not the style's");
         assert_eq!(theme("icon:start-here").logo, crate::panel::branding::Logo::Icon("start-here".into()));
         let _ = std::fs::remove_dir_all(&dir);
     }

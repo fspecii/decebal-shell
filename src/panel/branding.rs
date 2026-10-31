@@ -10,6 +10,10 @@ use std::path::PathBuf;
 /// Glyphs Decebal draws itself. Trademarked shapes are drawn only by the styles that imitate their owner by default.
 pub const BUILTINS: &[&str] = &["apple", "windows", "os", "grid", "none"];
 
+/// What an explicit logo becomes when it cannot be had at run time (a missing icon, a missing or unreadable image, an
+/// invalid value that slipped past validation): a neutral glyph, never a style's trademark logo.
+pub const NEUTRAL: Logo = Logo::Builtin("grid");
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Logo {
     /// The renderer's own (no `[branding] logo`).
@@ -68,7 +72,11 @@ impl Branding {
     pub fn from_extra(extra: &serde_json::Map<String, Value>) -> Branding {
         let Some(b) = extra.get("branding") else { return Branding::default() };
         Branding {
-            logo: b.get("logo").and_then(Value::as_str).and_then(|s| parse_logo(s).ok()).unwrap_or(Logo::Style),
+            // absent: the style's own logo; present but unusable: the neutral one (the validator rejects it at install)
+            logo: match b.get("logo") {
+                None => Logo::Style,
+                Some(v) => v.as_str().and_then(|s| parse_logo(s).ok()).unwrap_or(NEUTRAL),
+            },
             tint: b.get("logo_tint").and_then(Value::as_bool).unwrap_or(false),
             launcher_label: label(b.get("launcher_label")),
             desktop_label: label(b.get("desktop_label")),
@@ -104,12 +112,13 @@ mod tests {
     }
 
     #[test]
-    fn absent_or_invalid_branding_keeps_the_style_default() {
+    fn only_an_absent_logo_keeps_the_style_default() {
         let none = serde_json::Map::new();
         assert_eq!(Branding::from_extra(&none), Branding::default());
-        let extra: serde_json::Map<String, Value> =
-            serde_json::from_value(json!({"branding": {"logo": "builtin:tux", "launcher_label": "", "desktop_label": "A label far too long to fit any bar"}})).unwrap();
-        assert_eq!(Branding::from_extra(&extra), Branding::default());
+        let extra: serde_json::Map<String, Value> = serde_json::from_value(json!({"branding": {"launcher_label": "", "desktop_label": "A label far too long to fit any bar"}})).unwrap();
+        assert_eq!(Branding::from_extra(&extra), Branding::default(), "no logo: the style's own");
+        let extra: serde_json::Map<String, Value> = serde_json::from_value(json!({"branding": {"logo": "builtin:tux"}})).unwrap();
+        assert_eq!(Branding::from_extra(&extra).logo, NEUTRAL, "an explicit logo never falls back to a style's trademark");
         let extra: serde_json::Map<String, Value> =
             serde_json::from_value(json!({"branding": {"logo": "icon:start-here", "logo_tint": true, "launcher_label": "Activities", "desktop_label": "Desktop"}})).unwrap();
         let b = Branding::from_extra(&extra);

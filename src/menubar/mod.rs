@@ -628,7 +628,7 @@ impl DecBar {
     }
 
     fn refresh_app_name(&mut self) -> bool {
-        let name = self.active.active_app_name().map(|id| active::display_name(&id)).unwrap_or_else(|| crate::theme::th().branding.desktop_label("Finder").to_string());
+        let name = self.active.active_app_name().map(|id| active::display_name(&id)).unwrap_or_else(|| applets::branding().desktop_label("Finder").to_string());
         let light = self.snapshot().light;
         if name != self.app_name || self.menus.is_empty() {
             self.app_name = name;
@@ -671,7 +671,7 @@ impl DecBar {
             Tray::Media => ICON_PX + 6.0 + measure(&self.dux_player().map(|p| p.meta.title).unwrap_or_default(), TEXT_PX, Weight::Regular).min(140.0) + 14.0,
             Tray::Cpu | Tray::Memory => measure("CPU 100%", 11.0, Weight::Regular) + 14.0,
             Tray::Logo => {
-                let b = crate::theme::th().branding.clone();
+                let b = applets::branding();
                 match &b.launcher_label {
                     Some(l) => measure(l, TEXT_PX, Weight::Medium) + 18.0 + if matches!(b.logo, crate::panel::branding::Logo::None) { 0.0 } else { ICON_PX + 5.0 },
                     None => BTN_W,
@@ -1382,8 +1382,8 @@ impl DecBar {
                     }
                 }
                 Tray::Logo => {
-                    let label = crate::theme::th().branding.launcher_label.clone();
-                    let has_logo = !matches!(crate::theme::th().branding.logo, crate::panel::branding::Logo::None);
+                    let label = applets::branding().launcher_label;
+                    let has_logo = !matches!(applets::branding().logo, crate::panel::branding::Logo::None);
                     let icon_x = if label.is_some() { s.x + 8.0 + ICON_PX / 2.0 } else { cx };
                     if has_logo && !self.draw_brand(pm, ICON_PX, icon_x, 12.5, ink()) {
                         self.symbol(pm, applets::classic_symbol(kind), ICON_PX - 1.0, icon_x, 12.5);

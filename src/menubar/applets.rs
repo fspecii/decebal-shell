@@ -1044,19 +1044,22 @@ impl DecBar {
     /// Draws the theme's `[branding] logo` centred on (`cx`, `cy`); false when the theme has none (the style draws its
     /// own) or it cannot be loaded.
     pub(super) fn draw_brand(&mut self, pm: &mut Pixmap, size: f32, cx: f32, cy: f32, ink: (u8, u8, u8)) -> bool {
-        let b = crate::theme::th().branding.clone();
+        let b = branding();
         if matches!(b.logo, crate::panel::branding::Logo::Style | crate::panel::branding::Logo::None) {
             return false;
         }
         let px = (size * 2.0).ceil() as u32;
         let key: LogoKey = (b.logo.clone(), px, ink, b.tint);
         if self.brand_cache.as_ref().is_none_or(|(k, _)| *k != key) {
-            let img = render_logo(&b.logo, px, ink, &mut self.symbols).map(|mut img| {
-                if b.tint {
-                    tint(&mut img, ink);
-                }
-                img
-            });
+            // an explicit logo that cannot be had (no such icon, a missing or corrupt image) is the neutral one
+            let img = render_logo(&b.logo, px, ink, &mut self.symbols)
+                .map(|mut img| {
+                    if b.tint {
+                        tint(&mut img, ink);
+                    }
+                    img
+                })
+                .or_else(|| render_logo(&crate::panel::branding::NEUTRAL, px, ink, &mut self.symbols));
             self.brand_cache = Some((key, img));
         }
         let Some((_, Some(img))) = &self.brand_cache else { return false };
@@ -1106,12 +1109,35 @@ fn tint(img: &mut Pixmap, ink: (u8, u8, u8)) {
 /// The theme's `[branding] logo` rendered `px` square in `ink` (tinted when the theme asks), for hosts that draw their
 /// own launcher button (the taskbar's Start). `None`: the theme has no logo, the host draws its own.
 pub fn theme_logo(px: u32, ink: (u8, u8, u8), symbols: &mut SymbolCache) -> Option<Pixmap> {
-    let b = crate::theme::th().branding.clone();
-    let mut img = render_logo(&b.logo, px, ink, symbols)?;
-    if b.tint {
-        tint(&mut img, ink);
+    let b = branding();
+    if b.logo == crate::panel::branding::Logo::Style {
+        return None;
     }
-    Some(img)
+    // `none` and anything that cannot be had: the neutral glyph, never the host's trademark logo
+    match render_logo(&b.logo, px, ink, symbols) {
+        Some(mut img) => {
+            if b.tint {
+                tint(&mut img, ink);
+            }
+            Some(img)
+        }
+        None => render_logo(&crate::panel::branding::NEUTRAL, px, ink, symbols),
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests set a theme's branding without publishing a process-wide theme.
+    pub(super) static TEST_BRANDING: std::cell::RefCell<Option<crate::panel::branding::Branding>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The theme's `[branding]`.
+pub(super) fn branding() -> crate::panel::branding::Branding {
+    #[cfg(test)]
+    if let Some(b) = TEST_BRANDING.with(|b| b.borrow().clone()) {
+        return b;
+    }
+    crate::theme::th().branding.clone()
 }
 
 /// The SF-style symbol of an item on the classic bar, the rail and the overflow list.
@@ -1594,6 +1620,39 @@ pub(super) mod tests {
         assert_eq!(bar.open, Open::Menu(2), "Right moves to the next menu");
         bar.nav_key(NavKey::Down);
         assert!(bar.hover_row.is_some());
+        reset();
+    }
+
+    #[test]
+    fn an_explicit_logo_that_cannot_be_had_is_the_neutral_glyph_never_a_trademark() {
+        use crate::panel::branding::{Branding, Logo, NEUTRAL};
+        let dir = std::env::temp_dir().join(format!("decebal-brand-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let corrupt = dir.join("corrupt.png");
+        std::fs::write(&corrupt, b"not a png at all").unwrap();
+        let ink = (230, 230, 230);
+        let mut symbols = SymbolCache::default();
+        let grid = render_logo(&NEUTRAL, 32, ink, &mut symbols).expect("the neutral glyph always renders");
+        for logo in [Logo::Icon("decebal-no-such-icon-anywhere".into()), Logo::File(dir.join("missing.png")), Logo::File(corrupt.clone())] {
+            TEST_BRANDING.with(|b| *b.borrow_mut() = Some(Branding { logo: logo.clone(), launcher_label: Some("Activities".into()), ..Branding::default() }));
+            // the taskbar's Start: the neutral glyph, not the four squares
+            let start = theme_logo(32, ink, &mut symbols).expect("a logo");
+            assert_eq!(start.data(), grid.data(), "{logo:?}: Start shows the neutral glyph");
+            // the bars: drawn (so the style's Apple / OS logo is not), with the theme's label kept
+            let mut bar = fixture(Renderer::MenuBar, Edge::Top, AppletSet::of(&[A::Launcher, A::AppMenu]), 1280);
+            let mut pm = Pixmap::new(64, 64).unwrap();
+            assert!(bar.draw_brand(&mut pm, 16.0, 32.0, 32.0, ink), "{logo:?}: drawn instead of the style's logo");
+            assert!(pm.data().chunks(4).any(|p| p[3] > 0), "{logo:?}: visible");
+            assert_eq!(branding().launcher_label.as_deref(), Some("Activities"));
+        }
+        // without [branding] logo the style keeps its own (Apple on the menu bar, the four squares on the taskbar)
+        TEST_BRANDING.with(|b| *b.borrow_mut() = Some(Branding::default()));
+        assert!(theme_logo(32, ink, &mut symbols).is_none());
+        let mut bar = fixture(Renderer::MenuBar, Edge::Top, AppletSet::of(&[A::AppMenu]), 1280);
+        let mut pm = Pixmap::new(64, 64).unwrap();
+        assert!(!bar.draw_brand(&mut pm, 16.0, 32.0, 32.0, ink));
+        TEST_BRANDING.with(|b| *b.borrow_mut() = None);
+        let _ = std::fs::remove_dir_all(&dir);
         reset();
     }
 

@@ -140,9 +140,12 @@ position = "bottom"       # this theme's default dock / taskbar edge: top | bott
   ```
 
   The logo replaces the menu bar's Apple menu glyph and launcher glyph, the rail's OS logo, the Dux launcher glyph and
-  the taskbar's Start squares. A package image must be inside the package (checked when installing and again when
-  loading: a path that leaves the package or is missing means the style's own logo); an icon name that the user's icon
-  theme lacks also falls back. Without `[branding]` nothing changes: the macOS bar keeps Apple and "Finder", the
+  the taskbar's Start squares. A package image must be inside the package (checked when installing; a manifest whose
+  path leaves the package does not load). Only an *absent* `logo` keeps the style's own logo. An explicit logo that
+  cannot be had at run time (an icon name the user's icon theme lacks, such as `icon:start-here-kde-symbolic` without
+  Breeze installed; a missing or corrupt image) is drawn as the neutral `builtin:grid` in every renderer, never as
+  Apple or the Windows squares, and the labels stay. `builtin:none` draws no logo (the label alone; the taskbar's
+  Start, which needs a target, shows the neutral grid). Without `[branding]` nothing changes: the macOS bar keeps Apple and "Finder", the
   taskbar its four squares, the rail the distribution logo.
 - Compatibility with older Decebal, checked against the 0.2.0 validator: it rejects unknown keys, so a package with
   `[bar] applets` fails to install there ("unknown key"). `[bar] position` and `[dock] position` are known keys there and
