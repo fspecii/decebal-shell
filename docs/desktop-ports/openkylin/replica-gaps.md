@@ -84,3 +84,18 @@ The `e5e3de4` production sources passed 17 focused tests, strict all-target Clip
 The expanded native matrix then passed 16 cases (320×240, 100/125%, light/dark, all four edges), but failed at 320×240, 200%, light/bottom. A 96-pixel explicit panel reservation was clamped by `resolve_anchor` to 80 pixels, so the expanded launcher painted 16 pixels over the reserved strip. Evidence: `/var/tmp/decebal-ukui-launcher-matrix-v2-evidence/`; the failure had clean process cleanup and no resource abort. The matrix is **failed**, not accepted.
 
 The source repair now preserves explicit thickness up to the output extent minus one pixel; pointer-inferred thickness retains its conservative one-third limit. A focused regression covers all four edges with a 96-pixel reservation at 320×240. This repair is **not compiled or tested yet**; a new launcher build and native matrix are required. Earlier artifacts do not contain it.
+
+
+### Root native launcher matrix accepted (development binary)
+
+The corrected self-contained fixture at `42b2283` passed all 72 combinations: 320×240, 400×300 and 1600×900;
+100/125/200%; light/dark; top/bottom/left/right. Keyboard expand/restore and search-to-launch passed with the
+same PID/XID, and the desktop-size cases exercised pointer expand/restore and a coloured fixture-app click.
+Evidence: `/var/tmp/decebal-ukui-launcher-matrix-v5-evidence/native-launcher.json`; guarded controller
+`/var/tmp/decebal-ukui-launcher-matrix-v5-control/result.json`. Binary SHA256
+`905fde5824358d8b7e511379f2f6154a2cafc2ca6bc31ffaae6cd5dd973c35c1` is the immutable development launcher
+built from production sources `555c37a`. No forced cleanup, rescued/leftover token processes or pressure abort.
+
+This qualifies the isolated launcher interactions and bounds. It does not qualify the main-branch integration,
+Start-button anchoring, compositor material/blur, upstream pixel fidelity, Control Center parser semantics,
+optimized release or physical hardware. Earlier failed/pressure-aborted runs remain recorded.
