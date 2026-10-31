@@ -1,4 +1,5 @@
 mod operation_ui;
+mod transfer_ui;
 use decfiles::{
     loader,
     model::{self, Entry, Intent, Model},
@@ -219,7 +220,8 @@ impl Ui {
         // Explicit opt-in fixture hook. Never enabled by default or written into shell config.
         if let Some(path) = &self.state_file {
             let model = self.model.borrow();
-            let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence()});
+            let value =
+                serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence(), "status":self.status.text().as_str()});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -326,9 +328,12 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     body.append(&horizontal);
     root.append(&body);
     let ops = operation_ui::Controls::new();
+    root.append(&ops.progress_row());
     root.append(&ops.bar());
     let status = gtk::Label::new(Some("Files preview"));
     status.set_xalign(0.0);
+    // Long transfer summaries must not widen the window; failures also use the wrapping error label.
+    status.set_ellipsize(gtk::pango::EllipsizeMode::End);
     status.set_margin_start(12);
     status.set_margin_top(8);
     status.set_margin_bottom(8);
@@ -423,6 +428,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         }
     });
     ui.connect_operations();
+    ui.connect_transfers();
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let weak = Rc::downgrade(&ui);
@@ -443,6 +449,17 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
             && gtk::prelude::RootExt::focus(&ui.window).is_some_and(|focus| focus.is_ancestor(&ui.content))
         {
             ui.trash_dialog();
+        } else if ctrl
+            && !alt
+            && [gtk::gdk::Key::c, gtk::gdk::Key::x, gtk::gdk::Key::v].contains(&key.to_lower())
+            && gtk::prelude::RootExt::focus(&ui.window).is_some_and(|focus| focus.is_ancestor(&ui.content))
+        {
+            // Only in the file list; the address entry keeps ordinary text clipboard keys.
+            match key.to_lower() {
+                gtk::gdk::Key::c => ui.clipboard_put(decfiles::transfer::Mode::Copy),
+                gtk::gdk::Key::x => ui.clipboard_put(decfiles::transfer::Mode::Move),
+                _ => ui.paste(),
+            }
         } else if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
             ui.window.close();
         } else if ctrl && (key == gtk::gdk::Key::l || key == gtk::gdk::Key::L) {

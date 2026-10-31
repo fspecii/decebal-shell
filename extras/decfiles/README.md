@@ -1,6 +1,6 @@
 # Decebal Files — optional preview
 
-This is a functional browser prototype with three single-item operations, **not a complete Explorer/Finder port**
+This is a functional browser prototype with create, rename, Trash, copy and move, **not a complete Explorer/Finder port**
 and not a production file manager. It uses one navigation model with two views:
 Windows-inspired details and macOS-inspired hierarchical columns. It does not
 copy either product's artwork or claim matching appearance. Nothing installs a
@@ -31,7 +31,8 @@ does not save preferences or read/write Decebal configuration.
   controls navigate actual folders. Ctrl+L focuses location, Alt+Left/Right/Up
   navigate, Ctrl+R refreshes and Ctrl+W closes the window. Ctrl+Shift+N creates a
   folder, F2 renames the selected item, and Delete from the file list asks to move
-  the selection to Trash.
+  the selection to Trash. In the file list, Ctrl+C, Ctrl+X and Ctrl+V copy, cut and
+  paste; the address entry keeps its ordinary text clipboard keys.
 - Details has real Name/Kind/Size columns and keyboard/pointer selection.
   Enter/double click opens a folder. Columns display parent and child contents;
   clicking a directory appends its contents. Choosing a sibling in an ancestor
@@ -98,6 +99,61 @@ therefore does not use that sequence or a check-then-rename workaround. Unsuppor
 Linux/filesystem atomic-rename support returns an error, with no overwriting or
 copy/delete fallback. There is no power-loss durability guarantee.
 
+## Copy, move and the clipboard
+
+The footer's Cut, Copy and Paste buttons (and Ctrl+X/C/V in the file list) are real.
+Cut and Copy only publish the selected item; nothing changes on disk until Paste.
+The clipboard uses GNOME Files' `x-special/gnome-copied-files` (`copy`/`cut`, then
+one file URI per line) plus RFC 2483 `text/uri-list` and plain text. Paste reads
+those formats asynchronously from any owner (at most 1 MiB, 4,096 local `file://`
+items; remote hosts and other schemes are refused). A plain URI list always means
+Copy. A completed cut is consumed, as in GNOME Files; a partial one stays. Names
+are encoded as URI bytes, so non-UTF8 names survive the round trip.
+
+Paste copies or moves into the current folder on one `decfiles-transfer` worker
+thread per operation (one operation at a time). The UI thread never touches the
+filesystem: it polls a latest-only snapshot every 50 ms for the progress row
+(current item, bytes and items) and answers conflict prompts. Copies are counted
+first and refused before any change above 100,000 items or 64 nested levels.
+
+All work is relative to owned directory FDs and never follows the selected leaf:
+
+- Files are written to an anonymous `O_TMPFILE`, checked, given the source
+  permission bits (set-user/group-ID dropped) and access/modification times, then
+  published with `linkat`, which fails rather than replace an existing name. A
+  cancelled, failed or source-changed copy publishes nothing. Without `O_TMPFILE`
+  the fallback is `O_CREAT|O_EXCL`, removing only its own inode-confirmed partial.
+- The source is opened `O_NOFOLLOW|O_NONBLOCK` and must remain the same regular
+  inode; size and modification time are compared after copying. Changes are
+  reported as failures, never published as a complete copy.
+- Folders use `mkdirat` (no merge), are populated, then receive their mode/times
+  last so read-only folders copy correctly. Symlinks are recreated with
+  `symlinkat`, keeping their exact target, including dangling links. Devices,
+  sockets and pipes are reported and never opened. Ownership, ACLs and extended
+  attributes are not copied. Hard links are copied as separate files.
+- Move uses `renameat2(RENAME_NOREPLACE)`, atomically, on one filesystem. On
+  `EXDEV` it copies as above, then removes each original only if it is still the
+  same unchanged item, and removes folders only when empty. Originals that cannot
+  be removed (for example inside a read-only folder) are kept and reported. There
+  is no Trash or permanent-delete fallback for failures. Moving into the same
+  folder is skipped; moving or copying a folder into itself is refused.
+
+A name conflict opens **Item already exists** with Stop, Skip (default) and Keep
+Both, plus "Apply to all remaining conflicts". Escape or closing it means Stop.
+Keep Both picks `name (copy).ext`, then `name (copy 2).ext`, each attempt still an
+atomic no-replace create. Pasting into the source folder duplicates that way
+without asking. There is **no Replace or Merge** choice yet. The early existence
+check only decides when to ask; the atomic create is the guarantee, so a
+destination created by another process during a copy is never overwritten.
+
+Errors are per item: the rest continues, and the result names the first failure
+and the count (at most 50 are retained). Cancellation stops between 256 KiB
+chunks; items already finished remain and the message says so, including a
+partially populated new folder. Cancel operation and the close confirmation work
+as for the other operations; cancel-and-close does not wait for the worker. An
+`O_TMPFILE` in progress then vanishes with the process. There is no undo, and no
+power-loss durability guarantee (no `fsync`).
+
 ## Validation and evidence
 
 Run from the shell repository root:
@@ -141,7 +197,48 @@ Current evidence is split by scope and build features:
   are pinned separately so the fixture build cannot replace the accepted normal
   binary. `result.json` in each native directory also records exact hashes.
 
-There are 14 Rust tests. The isolated operation test launches a fresh subprocess
+Copy/move evidence (default binary
+`04c7182fae2ac626ecc4ba0c1faf1aa5a32adda8b5d1c01681fcd7d519b39e65`, fixture binary
+`9741629367af6558d0a40c066a8bd6aaaaa73f9b99cf63762c15135c44e0b0e3`, both pinned with
+11 source hashes in `/var/tmp/decfiles-transfer-artifacts/{default,fixture-delay}/`):
+
+- `/var/tmp/decfiles-transfers-native-evidence/result.json` (`tests/transfers-native.py`):
+  feature-free binary, 10 actual-control cases. They cover the Copy button
+  publishing both clipboard formats (read back with `xclip` on the private X
+  server), Enter = Skip at a conflict, Keep Both with verified bytes, mode and
+  nanosecond mtime, keyboard folder copy with a relative symlink, non-UTF8 names,
+  Cut of a selected symlink (moved, target untouched, cut consumed), and an
+  external GNOME-format `cut` owner pasted as a move. An external `text/uri-list`
+  owner with Escape = Stop, a denied destination and same-folder duplication are
+  also covered. Captures: `conflict-dialog.png`, `denied-paste.png`,
+  `duplicate-selected.png`.
+- The same binary passed the earlier 13 operation and eight navigation cases:
+  `/var/tmp/decfiles-transfer-{operations,navigation}-evidence/result.json`.
+- `/var/tmp/decfiles-transfers-cancel-native-evidence/result.json`
+  (`tests/transfers-cancel-native.py`, fixture binary only): a 150 ms delay per
+  256 KiB chunk (`DECFILES_FIXTURE_TRANSFER_DELAY_MS`, capped at 5 s). It covers byte
+  progress and the actual Cancel operation mid-file with nothing published, close
+  confirmation Keep Open with the copy then completing verified, an appended
+  source mid-copy reported with no destination file, and cancel-and-close exiting
+  in about 0.26 s with no partial file. The earlier four close cases also pass
+  on this binary: `/var/tmp/decfiles-transfer-close-native-evidence/result.json`.
+
+The new harnesses accept a private Xvfb only after it answers, because other
+sessions' Xvfb servers can make `-displayfd` fail ("Cannot write display number");
+the older scripts may need a rerun when that happens.
+
+There are 19 Rust tests. The five transfer tests run on private `/var/tmp` trees,
+with a private `/dev/shm` folder as a real second filesystem for cross-device
+moves. They check bytes, modes, nanosecond mtimes, relative/absolute/dangling and
+selected symlinks, non-UTF8 names and read-only folders. Skip, Keep Both, Stop,
+apply-to-all and cancellation while a prompt waits are exercised through the
+public poll/answer interface. Also covered: denied sources and destinations,
+FIFOs, mid-file cancellation, cancellation inside a folder, a source appended
+mid-copy, and a destination created by another writer mid-copy (never
+overwritten). Further tests cover kept originals in a read-only source folder,
+Keep Both names and clipboard encoding/decoding.
+
+Of the original 14 tests, the isolated operation test launches a fresh subprocess
 with private HOME/XDG **before GLib initializes its cached Trash paths**, verifies
 bytes/metadata/permissions, dangling and selected symlinks, non-UTF8 paths and
 cancellation before start. Thirty-two pairs of simultaneous rename contenders
@@ -167,7 +264,19 @@ DECFILES_FIXTURE_BIN=/path/to/pinned/fixture/decfiles \
 DECFILES_BIN=/path/to/pinned/normal/decfiles \
   DECFILES_OPERATIONS_EVIDENCE=/var/tmp/decfiles-operations-native-evidence \
   python3 extras/decfiles/tests/operations-native.py
+DECFILES_BIN=/path/to/pinned/normal/decfiles \
+  DECFILES_TRANSFERS_EVIDENCE=/var/tmp/decfiles-transfers-native-evidence \
+  python3 extras/decfiles/tests/transfers-native.py
+DECFILES_FIXTURE_BIN=/path/to/pinned/fixture/decfiles \
+  DECFILES_TRANSFERS_CANCEL_EVIDENCE=/var/tmp/decfiles-transfers-cancel-native-evidence \
+  python3 extras/decfiles/tests/transfers-cancel-native.py
+# Pin a built binary with its exact source hashes (add feature names if any):
+python3 extras/decfiles/tests/pin.py BINARY OUT_DIR [fixture-delay]
 ```
+
+Run Cargo with an isolated environment: private HOME/XDG directories, no
+`DISPLAY`/`WAYLAND_DISPLAY`/`XAUTHORITY`/session variables, invalid session and
+system bus addresses, and an explicit `CARGO_HOME`. The unit tests need no display.
 
 GTK reported software-Xvfb DRI3/frame-timing warnings during the fixture; these
 are retained in `app.log`. No physical GPU/frame-rate claim is made. An early
@@ -177,8 +286,9 @@ exit status 0.
 
 ## Remaining work before a real file manager
 
-No general copy/move, permanent delete, restore, undo, overwrite/merge choices,
-clipboard file formats, drag/drop, tabs, icon view, Finder gallery, Explorer
+Copy/move/paste work on one selected item at a time (pasted clipboards may hold
+many). There is no multi-selection, Replace/Merge conflict choice, Copy to/Move to
+picker, permanent delete, restore, undo, drag/drop, tabs, icon view, Finder gallery, Explorer
 command bar, bookmarks, mounts, remote backends, monitoring, search, opening or
 open-with exists yet. There are no decorative buttons pretending to do these.
 Sorting is fixed rather than header-driven. Profile styling, palette/icons,
