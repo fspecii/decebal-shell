@@ -9,7 +9,6 @@ shared Decebal panel framework (`min_shell_version = "0.3.0"`).
   Settings → Panels; the package only supplies defaults and never overwrites your choices.
 * **Window decoration:** the measured native `openkylin` / `openkylin-dark` rdwm styles (38 px header, 30 px buttons, radius 12) when your running window manager lists them,
   otherwise an honest fallback with a persistent warning (see the port documentation).
-* **Branding:** the start button is `icon:kylin-startmenu` from your icon theme; without a UKUI icon pack it shows the
-  neutral grid.
+* **Branding:** the start button is UKUI's own `kylin-startmenu` mark (the default pack's artwork, bundled as `icons/kylin-startmenu.png`, see ATTRIBUTION.md); it does not depend on an installed icon pack.
 * **Suggested separately (never forced):** icons `ukui-icon-theme-default`, cursor `dark-sense`, photographs from the Wallpaper → For this theme list.
 * **Fonts:** `Noto Sans CJK SC` then `Noto Sans` (your system fonts; none is bundled).

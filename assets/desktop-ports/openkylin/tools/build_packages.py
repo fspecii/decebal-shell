@@ -14,19 +14,19 @@ tokens = root / "assets/desktop-ports/openkylin/derived"
 CLASSIC_APPLETS = ["launcher", "search", "tasks", "tray", "volume", "network", "bluetooth", "battery", "control_center", "clock", "show_desktop"]
 ISLAND_APPLETS = ["launcher", "tasks", "search", "tray", "volume", "network", "bluetooth", "battery", "control_center", "clock"]
 PKGS = [
- dict(id="openkylin", name="openKylin (UKUI v11)", theme="v11", radius=12, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin", logo="default", name="openKylin (UKUI v11)", theme="v11", radius=12, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "taskbar", "blue"],
       desc="openKylin's UKUI v11 global theme: daybreak-blue light/dark palettes, the classic UKUI taskbar and 12 px window corners."),
- dict(id="openkylin-islands", name="openKylin (UKUI islands)", theme="v11", radius=12, blur_alpha=0.65, mode="islands",
+ dict(id="openkylin-islands", logo="default", name="openKylin (UKUI islands)", theme="v11", radius=12, blur_alpha=0.65, mode="islands",
       tags=["openkylin", "ukui", "islands", "floating"],
       desc="The v11 palettes with UKUI's three-island floating taskbar: data, application and settings islands along the bottom edge."),
- dict(id="openkylin-light-seeking", name="openKylin (Light-Seeking 寻光)", theme="Light-Seeking", radius=12, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin-light-seeking", logo="default", name="openKylin (Light-Seeking 寻光)", theme="Light-Seeking", radius=12, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "azure", "light-seeking"],
       desc="UKUI's Light-Seeking (寻光) global theme: the azure #3790FA brand, opaque grey menus and the default icon pack as its suggestion."),
- dict(id="openkylin-heyin", name="openKylin (HeYin)", theme="HeYin", radius=12, blur_alpha=0.75, mode="classic",
+ dict(id="openkylin-heyin", logo="fashion", name="openKylin (HeYin)", theme="HeYin", radius=12, blur_alpha=0.75, mode="classic",
       tags=["openkylin", "ukui", "purple", "fashion"],
       desc="UKUI's HeYin (和印) global theme: jam-purple accent, fashion widget style and the fashion icon pack as its suggestion."),
- dict(id="openkylin-classic", name="openKylin (Classic)", theme="Classic", radius=0, blur_alpha=0.65, mode="classic",
+ dict(id="openkylin-classic", logo="classical", name="openKylin (Classic)", theme="Classic", radius=0, blur_alpha=0.65, mode="classic",
       tags=["openkylin", "ukui", "square", "classic"],
       desc="UKUI's Classic (启典) global theme: zero radii everywhere, flat solid accents and the classical icon pack as its suggestion."),
 ]
@@ -83,7 +83,7 @@ fallback_style_light = "adwaita-light"
 fallback_style_dark = "adwaita"{rad}
 
 [branding]
-logo = "icon:kylin-startmenu"
+logo = "icons/kylin-startmenu.png"
 logo_tint = false
 
 # ukui-sidebar's shortcut panel (396 wide, 4-column icon shortcuts, progress rows) and ukui-menu's start menu (766 x 688, three columns), as native styles
@@ -200,6 +200,12 @@ bad = 0
 for p in PKGS:
     d = root / "themes" / p["id"]; d.mkdir(parents=True, exist_ok=True)
     text = build(p); f = d / "theme.toml"
+    # the start button's artwork: the pinned `kylin-startmenu` of the pack the package suggests (see ATTRIBUTION.md)
+    src_logo = root / f"assets/desktop-ports/openkylin/logo/kylin-startmenu-{p['logo']}.png"; t = d / "icons/kylin-startmenu.png"
+    if check:
+        if not t.exists() or t.read_bytes() != src_logo.read_bytes(): print("DRIFT", t); bad += 1
+    else:
+        t.parent.mkdir(exist_ok=True); t.write_bytes(src_logo.read_bytes())
     for w in sorted((root / "assets/desktop-ports/openkylin/widgets").glob("*.toml")):
         t = d / "widgets" / w.name
         if check:

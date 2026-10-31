@@ -81,11 +81,13 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     let cols = ((f.favourites.w / cell.0).floor() as usize).max(1);
     let area = Rect { x: f.favourites.x + (f.favourites.w - cols as f32 * cell.0) / 2.0, w: cols as f32 * cell.0, ..f.favourites };
     let fav = Zone::grid("fav", favs, area, cell, false, true);
-    // the plugin tabs: width = max(56, text + 2 x 12)
+    // the plugin tabs: width = max(56, text + 2 x 12); a narrow card squeezes them to the strip instead of spilling out of the card
+    let widths: Vec<f32> = [View::Favorites, View::Recent].map(|v| ((Model::view_title(v).chars().count() as f32 * 8.0 + 24.0) * s).max(56.0 * s)).to_vec();
+    let squeeze = (f.tabs.w / widths.iter().sum::<f32>()).min(1.0);
     let mut x = f.tabs.x;
     let mut tabs = Vec::new();
-    for v in [View::Favorites, View::Recent] {
-        let w = ((Model::view_title(v).chars().count() as f32 * 8.0 + 24.0) * s).max(56.0 * s);
+    for (v, w) in [View::Favorites, View::Recent].into_iter().zip(widths) {
+        let w = w * squeeze;
         tabs.push((Target::View(v), Rect { x, y: f.tabs.y, w, h: f.tabs.h }));
         x += w;
     }
@@ -188,4 +190,58 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
         p.text_center("No matches", f.list.x + f.list.w / 2.0, f.list.y + 40.0 * s, 14.0 * s, Weight::Regular, sub, f.list.w - 24.0 * s);
     }
     let _ = f.widgets;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::styled;
+    use super::*;
+    use crate::launcher::style::LauncherStyle;
+
+    fn card(s: f32) -> Rect {
+        Rect { x: 0.0, y: 0.0, w: 766.0 * s, h: 688.0 * s }
+    }
+
+    #[test]
+    fn the_three_columns_are_312_396_and_56_at_the_original_size() {
+        for s in [1.0, 1.25, 2.0] {
+            let f = frame(card(s), s);
+            assert_eq!(f.page.w, 312.0 * s);
+            assert_eq!(f.sidebar.w, 56.0 * s);
+            assert_eq!(f.widgets.w, 396.0 * s, "766 = 312 + 1 + 396 + 1 + 56 at x{s}");
+            assert_eq!(f.search.h, 40.0 * s);
+            assert_eq!(f.search.x - f.page.x, 16.0 * s);
+            assert_eq!(f.header.h, 48.0 * s);
+            assert_eq!(f.tabs.h, 32.0 * s);
+        }
+    }
+
+    #[test]
+    fn the_sidebar_buttons_are_36_px_squares_four_apart_with_power_at_the_bottom() {
+        let f = frame(card(1.0), 1.0);
+        let b = sidebar_buttons(&f, 1.0);
+        assert!(b.iter().all(|r| r.w == 36.0 && r.h == 36.0));
+        assert_eq!(b[0].y, 12.0);
+        assert_eq!(f.sidebar.bottom() - b[4].bottom(), 12.0);
+        for pair in b[1..].windows(2) {
+            assert_eq!(pair[1].y - pair[0].bottom(), 4.0);
+        }
+    }
+
+    #[test]
+    fn the_app_list_has_40_px_rows_and_favourites_88_by_100_cells() {
+        let mut st = styled(LauncherStyle::Ukui, 40);
+        st.full = true;
+        st.scale = 1.0;
+        st.resize(1920, 1080);
+        assert_eq!((st.card.w, st.card.h), (766.0, 688.0));
+        let apps = st.zones.iter().find(|z| z.id == "apps").unwrap();
+        let (a, b) = (apps.rect(0, 0).unwrap(), apps.rect(1, 0).unwrap());
+        assert_eq!(a.h, 40.0);
+        assert_eq!(b.y - a.y, 40.0);
+        let fav = st.zones.iter().find(|z| z.id == "fav").unwrap();
+        let c = fav.rect(0, 0).unwrap();
+        assert_eq!((c.w, c.h), (88.0, 100.0));
+        assert_eq!(fav.items.len(), 9);
+    }
 }

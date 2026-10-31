@@ -5,7 +5,7 @@ use crate::apps::AppEntry;
 use crate::fuzzy::History;
 use crate::launcher::placement::{Anchor, Edge};
 
-pub(crate) const STYLES: [LauncherStyle; 5] = [LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry];
+pub(crate) const STYLES: [LauncherStyle; 6] = [LauncherStyle::Windows, LauncherStyle::Gnome, LauncherStyle::Kde, LauncherStyle::Xfce, LauncherStyle::BlackBerry, LauncherStyle::Ukui];
 const CATS: [&str; 6] = ["Network;WebBrowser;", "System;TerminalEmulator;", "Graphics;", "Development;IDE;", "AudioVideo;Player;", "Utility;"];
 
 pub(crate) fn fixture_apps(n: usize) -> Vec<AppEntry> {

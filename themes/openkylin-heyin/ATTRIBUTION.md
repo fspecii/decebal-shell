@@ -1,7 +1,11 @@
 # Attribution: openKylin (HeYin 和印)
 
-This package contains only `theme.toml` (colour values, metrics and panel choices), two small widget definitions, this note and the licence.
-No upstream code, icon, cursor, wallpaper, font or other asset is copied into it.
+This package contains `theme.toml` (colour values, metrics and panel choices), two small widget definitions, this note, the licence and **one upstream image**:
+`icons/kylin-startmenu.png` (128 x 128), the UKUI start button's artwork (`kylin-startmenu`, the icon the `ukui-menu-starter` widget draws), copied unchanged from
+`icons/ukui-icon-theme-fashion/128x128/apps/kylin-startmenu.png` of <https://github.com/openkylin/openkylin-theme> at commit `3c78d714aa8fac723c9a5360bd54484789a647ab`
+(git blob `4dfa94880821aa60e3ecd9860eb9a6dbeda431cd`, verified by `tests/openkylin_port.py`). Declared licence of that repository: GPL-3 (`debian/copyright`); the icon index says part of the artwork is "from moka":
+that provenance is **unresolved** (not researched, not assumed). The openKylin mark is also a brand of its owners: it is shown only as the identity of the replicated desktop.
+It is bundled so the start button is the real mark without an icon pack; the pack itself is never bundled. No other upstream code, icon, cursor, wallpaper, font or asset is copied.
 
 ## Where the design comes from
 

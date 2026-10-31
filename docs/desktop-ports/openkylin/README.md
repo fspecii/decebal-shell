@@ -166,7 +166,7 @@ at build time, so treat the binaries as "0.3.0 panel framework, hashes as record
 * **Window decoration:** the native frame on a mapped client window is the decorations owner's to capture; engines without the window-style contract reject these packages (needs the lingmo lane's commits).
 * No UKUI start menu / greeter source on the mirror (`ukui-menu`, `ukui-greeter` empty); no task-view or IDM applet.
 * Classic's 70 %-wash highlight is replaced by the solid brand colour for accents (documented in palette.md).
-* `kylin-startmenu` is drawn from the user's icon pack; without a UKUI pack the neutral grid shows.
+* `kylin-startmenu` is bundled (one 128 px PNG per package, the pack the package suggests; pinned blob ids in each ATTRIBUTION.md, verified by the test), so the start button is the real mark with or without an icon pack; the user's icon pack still decides every other icon.
 * Cursors: DMZ-White has no CSS-name aliases (the catalogue format has no alias hook for prebuilt packs); the icon packs' `from moka` provenance is **unresolved** (not researched, not assumed); the licence blobs (`debian/copyright`) are pinned with `license_oids`, so the install reports them verified (a GitHub archive itself is not byte-stable, so no `archive_sha256`).
 * No broad green claim: two unit tests failed in an earlier private scratch merge with and without these packages (historical, see `registration-notes.md`).
 * X11 only; Wayland not exercised. The wallpaper candidates' authorship and licence are unverified; nothing is bundled.

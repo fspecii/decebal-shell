@@ -9,6 +9,9 @@ import hashlib, importlib.util, json, os, pathlib, re, struct, subprocess, sys, 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 A = ROOT / "assets/desktop-ports/openkylin"
 IDS = ["openkylin", "openkylin-islands", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"]
+# git blob ids of icons/ukui-icon-theme-{default,fashion,classical}/128x128/apps/kylin-startmenu.png at openkylin-theme 3c78d71
+_D, _F, _C = "adbe8bd46bcb314dd8eaff1e1ec198409b27b856", "4dfa94880821aa60e3ecd9860eb9a6dbeda431cd", "379a20c9cd81c6e5ff929b6523401e1986c80cb8"
+LOGO_BLOBS = {"openkylin": _D, "openkylin-islands": _D, "openkylin-light-seeking": _D, "openkylin-heyin": _F, "openkylin-classic": _C}
 
 
 def load(name, path):
@@ -47,7 +50,7 @@ class Packages(unittest.TestCase):
                 self.assertNotIn(k, t, f"{i}: {k} must stay a separate user choice")
             self.assertTrue({"layouts", "mfact", "nmaster", "smart_gaps"}.isdisjoint(t.get("rdwm", {})), f"{i}: global tiling settings are not the theme's")
             self.assertTrue(t["bar"].get("applets"), f"{i}: explicit default applets")
-            self.assertEqual(t["branding"]["logo"], "icon:kylin-startmenu")
+            self.assertEqual(t["branding"]["logo"], "icons/kylin-startmenu.png", "the real UKUI start button, never the neutral grid")
             d = t["decoration"]
             self.assertEqual((d["style_light"], d["style_dark"]), ("openkylin", "openkylin-dark"), "the measured pair, in both modes, not a Windows style")
             self.assertEqual((d["fallback_style_light"], d["fallback_style_dark"], d["style"]), ("adwaita-light", "adwaita", "adwaita"))
@@ -55,7 +58,10 @@ class Packages(unittest.TestCase):
             self.assertEqual(d.get("radius"), 0 if i == "openkylin-classic" else None, "only Classic (window-radius 0) overrides the native 12 px")
             self.assertEqual((t["control_center"]["style"], t["launcher"]["style"]), ("ukui", "ukui"))
             d = ROOT / "themes" / i
-            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "README.md", "theme.toml", "widgets"], f"{i}: no bundled upstream asset")
+            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "README.md", "icons", "theme.toml", "widgets"], f"{i}: only the pinned start-button logo is bundled")
+            self.assertEqual([p.name for p in (d / "icons").iterdir()], ["kylin-startmenu.png"])
+            data = (d / "icons/kylin-startmenu.png").read_bytes()
+            self.assertEqual(hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(), LOGO_BLOBS[i], f"{i}: the logo is the pinned openkylin-theme 3c78d71 blob")
             self.assertEqual(sorted(p.name for p in (d / "widgets").iterdir()), ["ukui-time-12.toml", "ukui-time-24.toml"])
             # the only widget placement is the saved-but-off UKUI time widget: a theme apply must not switch user widgets on or replace them
             self.assertEqual([(w["use"], w["enabled"]) for w in t["widgets"]], [("ukui-time-24", False)], i)
@@ -250,7 +256,7 @@ class Provenance(unittest.TestCase):
             self.assertIsNone(v["license"]["identifier"]); self.assertIsNone(v["uploader"]["is_author"]); self.assertIsNone(v["author"]["name"])
             self.assertTrue(v["full_url"].startswith("https://w.wallhaven.cc/full/"))
         self.check_catalogue_state(w, ROOT / "data/wallhaven-curated.json")
-        self.assertFalse([p for p in (ROOT / "themes").glob("openkylin*/**/*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")], "no image in packages")
+        self.assertFalse([p for p in (ROOT / "themes").glob("openkylin*/**/*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and p.name != "kylin-startmenu.png"], "no image in packages but the start-button logo")
 
 
 class CursorData(unittest.TestCase):

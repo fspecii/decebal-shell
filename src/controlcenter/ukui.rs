@@ -77,3 +77,66 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
     // ShortcuPanel: `height: panelLayout.height + 38` = 14 top + content + 24 bottom
     (out, y - ROW_GAP + 24.0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot() -> Snapshot {
+        Snapshot {
+            user: None,
+            net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: "Wired".into() }),
+            bluetooth: Some(sys::Bluetooth { powered: true, connected: 1 }),
+            volume: Some(sys::Volume { level: 0.5, muted: false }),
+            sink: "Headset".into(),
+            brightness: Some(40),
+            night_shift: Some(false),
+            dnd: Some(false),
+            media: None,
+            awake: false,
+            light: false,
+            battery: None,
+            util: Some(sys::Utils::default()),
+            lock: false,
+            power: false,
+        }
+    }
+
+    fn shortcut_cells(items: &[Item]) -> Vec<&Item> {
+        items.iter().filter(|i| matches!(i.draw, Draw::SmallTile { .. }) && i.r.w == CELL.0).collect()
+    }
+
+    #[test]
+    fn the_shortcuts_are_a_four_column_grid_of_80_by_72_cells() {
+        let (items, _) = layout(&snapshot(), &Tiles::ALL);
+        let cells = shortcut_cells(&items);
+        assert_eq!(cells.len(), 8);
+        for (i, c) in cells.iter().enumerate() {
+            assert_eq!((c.r.w, c.r.h), (80.0, 72.0));
+            assert_eq!(c.r.x, SIDE + (i % 4) as f32 * 92.0, "column {i}");
+        }
+        assert_eq!(cells[4].r.y - cells[0].r.y, 72.0 + 16.0, "rows are 16 apart");
+    }
+
+    #[test]
+    fn the_volume_and_brightness_bars_are_356_by_56_and_the_panel_is_396_wide() {
+        let (items, h) = layout(&snapshot(), &Tiles::ALL);
+        let bars: Vec<_> = items.iter().filter(|i| matches!(i.draw, Draw::Tile)).collect();
+        assert_eq!(bars.len(), 2);
+        assert!(bars.iter().all(|b| b.r.w == 356.0 && b.r.h == 56.0));
+        assert_eq!(bars[1].r.y - bars[0].r.y, 56.0 + 16.0);
+        assert_eq!(PANEL_W, SIDE * 2.0 + BAR.0, "20 px side padding around the 356 px rows");
+        assert_eq!(h, bars[1].r.y + 56.0 + 24.0, "24 px below the last row");
+        for i in &items {
+            assert!(i.r.x >= 0.0 && i.r.x + i.r.w <= PANEL_W + 0.01, "{:?} leaves the panel", i.r);
+        }
+    }
+
+    #[test]
+    fn the_settings_button_is_in_the_header_and_every_shortcut_has_a_target() {
+        let (items, _) = layout(&snapshot(), &Tiles::ALL);
+        let settings = items.iter().find(|i| i.target == Some(Target::Settings)).unwrap();
+        assert_eq!((settings.r.w, settings.r.h, settings.r.y), (32.0, 32.0, 14.0));
+        assert!(shortcut_cells(&items).iter().all(|c| c.target.is_some()));
+    }
+}

@@ -39,7 +39,7 @@ fallback_style_dark = "adwaita"
 radius = 0
 
 [branding]
-logo = "icon:kylin-startmenu"
+logo = "icons/kylin-startmenu.png"
 logo_tint = false
 
 # ukui-sidebar's shortcut panel (396 wide, 4-column icon shortcuts, progress rows) and ukui-menu's start menu (766 x 688, three columns), as native styles

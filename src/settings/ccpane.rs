@@ -117,7 +117,8 @@ mod tests {
         assert_eq!(title("top-right"), "Top Right");
         assert_eq!(title("auto"), "Auto");
         assert_eq!(title("gnome"), "GNOME");
-        assert_eq!(choices(&crate::controlcenter::settings::STYLE_NAMES).last().unwrap().0, "GNOME");
+        assert_eq!(choices(&crate::controlcenter::settings::STYLE_NAMES).last().unwrap().0, "UKUI");
+        assert!(choices(&crate::controlcenter::settings::STYLE_NAMES).iter().any(|c| c.0 == "GNOME"));
         assert_eq!(choices(&["fluent"]), vec![("Fluent".to_string(), "fluent".to_string())]);
     }
 
