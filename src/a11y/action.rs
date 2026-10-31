@@ -9,7 +9,7 @@ use super::tree::{Node, NodeId, Role, State, Tree};
 use std::fmt;
 
 /// What an assistive technology asked a node to do.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Op {
     /// Action interface: run the named action (`click`, `toggle`, `press`, `activate`, `increment`, ...).
     Action(&'static str),
@@ -35,6 +35,25 @@ pub enum Op {
     CopyText { start: usize, end: usize },
     /// EditableText.PasteText at a character offset.
     PasteText { offset: usize },
+}
+
+impl fmt::Debug for Op {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Action(_) => "Action",
+            Self::SetValue(_) => "SetValue",
+            Self::Focus => "Focus",
+            Self::ScrollTo => "ScrollTo",
+            Self::SelectChild(_) => "SelectChild",
+            Self::SetCaret(_) => "SetCaret",
+            Self::SetSelection(_) => "SetSelection",
+            Self::SetText(_) => "SetText(<redacted>)",
+            Self::InsertText { .. } => "InsertText(<redacted>)",
+            Self::DeleteText { .. } => "DeleteText",
+            Self::CopyText { .. } => "CopyText",
+            Self::PasteText { .. } => "PasteText",
+        })
+    }
 }
 
 impl Op {

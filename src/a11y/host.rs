@@ -187,7 +187,7 @@ impl Host {
                 continue;
             }
             let result = validate(tree, &req).and_then(|target| app.a11y_action(&target));
-            crate::log_debug!("a11y: request {} {:?} on {:?} (rev {} vs {}): {:?}", req.id, req.op, req.node, req.revision, tree.revision, result.as_ref().map(|_| ()));
+            crate::log_debug!("a11y: request {} {:?} on {:?} (rev {} vs {}): accepted={}", req.id, req.op, req.node, req.revision, tree.revision, result.is_ok());
             match result {
                 Ok(r) => {
                     resp.redraw = true;

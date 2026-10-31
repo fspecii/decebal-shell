@@ -300,7 +300,7 @@ impl Worker {
         if self.cfg.mode == Mode::Off {
             return;
         }
-        if let Some(addr) = self.cfg.session_address.clone().filter(|_| self.cfg.mode == Mode::Auto) {
+        if let Some(addr) = self.cfg.session_address.clone() {
             match self.connect(&addr) {
                 Ok(c) => {
                     self.session = Some(c);

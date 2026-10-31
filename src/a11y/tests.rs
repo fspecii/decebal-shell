@@ -24,8 +24,18 @@ struct Peer {
 
 impl Peer {
     fn accept(l: &UnixListener) -> Peer {
-        l.set_nonblocking(false).unwrap();
-        let (mut s, _) = l.accept().unwrap();
+        l.set_nonblocking(true).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let (mut s, _) = loop {
+            match l.accept() {
+                Ok(connection) => break connection,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline, "bridge did not connect to private bus");
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(e) => panic!("private bus accept: {e}"),
+            }
+        };
         s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
         let mut line = Vec::new();
         let mut b = [0u8; 1];
@@ -241,6 +251,57 @@ fn int(v: u32) -> Vec<u8> {
     let mut w = Writer::default();
     w.u32(v);
     w.buf
+}
+
+#[test]
+fn forced_mode_discovers_the_bus_even_when_status_is_disabled() {
+    let dir = std::env::temp_dir().join(format!("decebal-a11y-forced-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let session_path = dir.join("session");
+    let a11y_path = dir.join("a11y");
+    let session = UnixListener::bind(&session_path).unwrap();
+    let a11y = UnixListener::bind(&a11y_path).unwrap();
+    let bridge = super::bridge::Bridge::start(
+        Config {
+            app_name: "Forced test".into(),
+            session_address: Some(format!("unix:path={}", session_path.display())),
+            explicit_address: None,
+            mode: Mode::On,
+            locale: "C".into(),
+            toolkit_version: "test".into(),
+            queue: 4,
+            reply_timeout: Duration::from_secs(2),
+        },
+        Arc::new(|| {}),
+    )
+    .unwrap();
+    let mut bus = Peer::accept(&session);
+    let status = bus.expect(|m| m.member == "Get");
+    let mut w = Writer::default();
+    w.sig("b");
+    w.u32(0);
+    bus.reply(&status, "v", w.buf);
+    let get_address = bus.expect(|m| m.member == "GetAddress");
+    let mut w = Writer::default();
+    w.string(&format!("unix:path={}", a11y_path.display()));
+    bus.reply(&get_address, "s", w.buf);
+    let _accessibility_bus = Peer::accept(&a11y);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !bridge.wants_tree() {
+        assert!(Instant::now() < deadline, "forced mode did not connect: {:?}", bridge.status());
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    drop(bridge);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn action_debug_output_never_contains_edited_text() {
+    for op in [Op::SetText("private-password-123".into()), Op::InsertText { offset: 3, text: "private-password-123".into() }] {
+        let debug = format!("{op:?}");
+        assert!(debug.contains("redacted"));
+        assert!(!debug.contains("private-password-123"));
+    }
 }
 
 fn wait_phase(host: &Host, p: Phase) {
