@@ -49,3 +49,28 @@ Lightweight regression checks (no Cargo, desktop or network):
 ```sh
 python3 tests/desktop-job.py
 ```
+
+## Read-only pressure observation
+
+When a guarded job stops, collect a finite, low-priority observation before deciding whether to resume:
+
+```sh
+python3 tools/dev/desktop_observe.py --seconds 10 --out /absolute/fresh-report.json
+python3 tests/desktop-observe.py
+```
+
+This tool sets **its own** CPU priority to nice 19 and I/O priority to idle. It does not stress the disk,
+start/stop developer jobs, remove the queue pause, signal other processes or change desktop configuration.
+Reports are new 0600 files; existing files and final-component symlinks are refused. It reads Linux I/O PSI
+and same-UID process `stat`, `comm` and `io` metadata, never arguments, environments or open-file paths.
+CPU percentages are relative to one core and use the measured interval. PID reuse and decreasing counters
+are excluded from process deltas. Observation is limited to 60 seconds; default sampling is once per second.
+
+Global PSI is **not** per-job attribution. Only processes present at both sample boundaries have deltas;
+short-lived processes and kernel writeback can be missing. A quiet sample is not proof the intermittent
+problem is solved, and a pressure spike is not a disk-health diagnosis. Keep the failed gate's evidence.
+
+Initial checkpoint: five synthetic identity/counter/privacy/output tests passed, then a ten-second live
+observation completed with a maximum measured full stall of 0.026%. The preceding quiet-period sample had
+contained a 44.921% one-second spike, so heavy jobs remain coordinated rather than broadly resumed.
+Evidence: `/var/tmp/decebal-observer-first-baseline.json`.
