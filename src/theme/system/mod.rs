@@ -1225,19 +1225,29 @@ fn spawn_ctl_checked(args: &[&str]) -> Result<(), String> {
 /// only if it is still the newest for that configuration (see the protocol above).
 pub fn run_debounced(src: &Source, nonce: &str) -> Result<Option<Report>, String> {
     let env = Env::discover();
-    let shell_json = src.shell_json.as_path();
     std::thread::sleep(Duration::from_millis(700));
-    if !with_queue(&env, shell_json, |q| q.is_pending(nonce))? {
+    run_debounced_in(src, nonce, &env)
+}
+
+fn run_debounced_in(src: &Source, nonce: &str, env: &Env) -> Result<Option<Report>, String> {
+    let shell_json = src.shell_json.as_path();
+    if !with_queue(env, shell_json, |q| q.is_pending(nonce))? {
         return Ok(None);
     }
     let _apply = lock(&env.state_dir)?;
-    let Some(intent) = with_queue(&env, shell_json, |q| q.claim(nonce, Worker::current()))? else { return Ok(None) };
+    let Some(intent) = with_queue(env, shell_json, |q| q.claim(nonce, Worker::current()))? else { return Ok(None) };
+    // A queued request may have been dispatched after the user switched integration off.
+    // Explicit apply-system remains available; automatic workers must honor the latest opt-out.
+    if !Config::load(shell_json).enabled {
+        with_queue(env, shell_json, |q| q.finish(nonce))?;
+        return Ok(None);
+    }
     // Everything is read from here on: a change made after this point has queued a newer ticket.
     let result = match intent {
         Intent::Full => apply_now_inner(src, &Opts::default(), true),
-        Intent::Assets => publish_assets_locked(&env, &effective_config(shell_json)).inspect_err(|e| record_failure(&env, e)),
+        Intent::Assets => publish_assets_locked(env, &effective_config(shell_json)).inspect_err(|e| record_failure(env, e)),
     };
-    let _ = with_queue(&env, shell_json, |q| q.finish(nonce));
+    let _ = with_queue(env, shell_json, |q| q.finish(nonce));
     result.map(Some)
 }
 
@@ -1392,6 +1402,23 @@ mod tests {
         assert!(!completion(&env).pending);
         assert!(completion(&env).error.is_none());
         assert_eq!(completion(&env).warnings, ["reopen GTK apps"]);
+    }
+
+    #[test]
+    fn queued_full_apply_respects_an_opt_out_saved_before_the_worker_claims() {
+        let d = tmp("queued-opt-out");
+        let (env, fake) = env(&d, &["gsettings"]);
+        let config = d.join("alternate config.json");
+        std::fs::write(&config, r#"{"system":{"enabled":false},"theme":{"name":"deliberately-invalid"}}"#).unwrap();
+        let before = std::fs::read(&config).unwrap();
+        with_queue(&env, &config, |q| q.enqueue("late-full", Intent::Full)).unwrap();
+        let src = Source { shell_json: config.clone(), themes_dir: d.join("no-themes") };
+        assert!(run_debounced_in(&src, "late-full", &env).unwrap().is_none());
+        assert!(!Queue::load(&env, &config).busy());
+        assert_eq!(std::fs::read(&config).unwrap(), before);
+        assert!(fake.calls.borrow().is_empty(), "an opted-out worker must not run external helpers");
+        assert!(!env.config_home.join("gtk-4.0/gtk.css").exists());
+        assert!(!env.state_dir.join("manifest.json").exists());
     }
 
     #[test]
