@@ -1012,6 +1012,30 @@ y = -30
     }
 
     #[test]
+    fn panel_choices_survive_palette_mode_and_theme_changes() {
+        let (dir, src, paths) = sandbox("panel-user-keys");
+        install_sunset_manifest(&src, SUNSET);
+        let user = json!({"edge": "right", "split": false, "applets": {"weather": false, "media": true}});
+        let previous = json!({"theme":{"name":"sunset","mode":"dark"},"bar": {"edge": "right", "split": false, "applets": {"weather": false, "media": true}, "position": "left"}});
+        std::fs::write(paths.shell_json(), previous.to_string()).unwrap();
+        std::fs::write(paths.dock_settings(), r#"{"style": "mac", "edge": "left"}"#).unwrap();
+        let check = |planned: &Plan, what: &str| {
+            let after: Value = planned.writes.iter().find(|w| w.path == paths.shell_json()).map(|w| serde_json::from_str(&w.new).unwrap()).unwrap_or_else(|| previous.clone());
+            for key in ["edge", "split", "applets"] {
+                assert_eq!(after["bar"][key], user[key], "{what} changed bar.{key}");
+            }
+            if let Some(w) = planned.writes.iter().find(|w| w.path == paths.dock_settings()) {
+                assert_eq!(serde_json::from_str::<Value>(&w.new).unwrap()["edge"], "left", "{what} changed the dock edge");
+            }
+        };
+        let palette = Selection { name: "sunset".into(), mode: crate::theme::Mode::Light, palette: Some("nord".into()), sync_rdwm: false, ..Selection::default() };
+        check(&plan_selection(&src, &paths, &palette).unwrap(), "a palette and mode change");
+        check(&plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "applying the theme again");
+        check(&plan(&src, &paths, "nord", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "switching theme");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn apply_sets_every_file_the_theme_owns() {
         let (d, src, paths) = sandbox("all");
         std::fs::write(&paths.rdwm_config, "# mine\n[general]\ntags = [\"a\"]\n").unwrap();

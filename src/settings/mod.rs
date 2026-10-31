@@ -17,6 +17,7 @@ pub mod navigation;
 pub mod packages;
 #[cfg(test)]
 mod packages_tests;
+pub mod panelpane;
 pub mod panes;
 pub mod schema;
 pub mod system;

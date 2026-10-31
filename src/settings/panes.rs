@@ -724,7 +724,8 @@ impl Model {
         }
         let choices: Vec<Opt> = self.apps.as_ref().map(|a| a.iter().filter(|x| !pins.contains(&x.0)).map(|x| (x.1.clone(), x.0.clone())).collect()).unwrap_or_default();
         rows.push(Row::new("Add an app").ctl(Ctl::new("p:add", Kind::Popup(choices, None))));
-        let mut out = vec![
+        let mut out = super::panelpane::items(self);
+        out.extend([
             Item::Header("Dock".into()),
             Item::Card(dock),
             Item::Header("Menu bar".into()),
@@ -737,7 +738,7 @@ impl Model {
             Item::Header("Pinned apps".into()),
             Item::Card(rows),
             Item::Note { text: "Settings are stored in the omarchy config folder next to dock-settings.json; unknown keys in those files are left alone.".into(), warn: false },
-        ];
+        ]);
         out.extend(super::ccpane::items(self));
         out
     }
@@ -1278,6 +1279,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if matches!(parts.as_slice(), ["cc", ..]) {
         return super::ccpane::apply(m, &parts, v);
+    }
+    if matches!(parts.as_slice(), ["pn", ..]) {
+        return super::panelpane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);
