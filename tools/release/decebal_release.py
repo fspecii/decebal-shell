@@ -5,8 +5,8 @@
   plan    ARTIFACT --dest DIR [--dest DIR ...] [--only NAME ...] [--out FILE]
           read-only per-file dry run for exact binary folders, plus the runtime handoff plan
   publish --plan FILE --private-root DIR --journal NEWDIR --lock FILE
-          per-file journaled install into destinations inside a 0700 private root; live folders are refused
-  rollback --journal DIR --lock FILE                        roll back an interrupted, failed or committed publish
+          journaled install inside a 0700 private root; --managed-runtime explicitly enables the two managed binary slots
+  rollback --journal DIR --lock FILE [--managed-runtime]    roll back an interrupted, failed or committed publish
 
 verify and plan never write outside --out, never execute artifact binaries, never send signals and never change config.
 Diagnostics carry paths, digests, identities and environment variable *names* only; no values, no credentials.
@@ -14,6 +14,7 @@ Diagnostics carry paths, digests, identities and environment variable *names* on
 from __future__ import annotations
 
 import argparse
+import calendar
 import contextlib
 import ctypes
 import fcntl
@@ -46,9 +47,11 @@ MAX_TOTAL = 1 << 30
 MAX_ASSETS = 20000
 MAX_ASSET = 64 << 20
 MAX_PLAN = 4 << 20
+MANAGED_MAX_AGE = 15 * 60
+SHIPPED_BINARIES = frozenset('decbar decclip decdash decdock decexpose dechaven dechot dechud declaunch declock decmon decnotes decnotify decsession decsettings decspot decswitch decthemectl dectimer decutil decwall decwidgets decwm'.split())
 
 HOME = Path.home()
-# User-local slots the shell actually runs from; publish refuses these (and anything inside or above them) in this increment.
+# User-local slots the shell runs from. Private publication always refuses these and their ancestors/children.
 LIVE_DIRS = (HOME / '.local/share/rdwm-decebal/bin', HOME / '.local/share/rdwm-macshell/bin')
 LIVE_FORBIDDEN_ROOTS = LIVE_DIRS + (HOME / '.local/bin', HOME / '.config', Path('/usr'), Path('/etc'), Path('/opt'))
 
@@ -372,7 +375,7 @@ def config_fingerprint(paths):
     return out
 
 
-def plan(art, dests, only=None, expect_commit=None, proc='/proc', runtime_dir=None, config_watch=None):
+def plan(art, dests, only=None, expect_commit=None, proc='/proc', runtime_dir=None, config_watch=None, managed_runtime=False):
     rep = verify(art, expect_commit=expect_commit)
     if not rep['ok']:
         raise ReleaseError('manifest verification failed: ' + '; '.join(rep['problems']))
@@ -417,6 +420,21 @@ def plan(art, dests, only=None, expect_commit=None, proc='/proc', runtime_dir=No
         'handoff': handoff(dests, names, {n: bins[n]['sha256'] for n in names}, proc=proc, runtime_dir=runtime_dir),
         'summary': {a: sum(f['action'] == a for f in files) for a in ('create', 'replace', 'unchanged')},
     }
+    if managed_runtime:
+        if config_watch is not None:
+            raise ReleaseError('managed plans require the standard config watch')
+        _managed_manifest(rep)
+        if not set(names) <= SHIPPED_BINARIES:
+            raise ReleaseError('managed plans allow only shipped runtime binary names')
+        dirs = {}
+        for d in dests:
+            fd = _managed_dest(d)
+            try:
+                dirs[str(d)] = _dir_ident(fd)
+            finally:
+                os.close(fd)
+        body['managed_runtime'] = {'home': str(HOME), 'home_identity': _managed_home(),
+                                   'dest_dirs': dirs, 'config_identity': _managed_configs()}
     body['plan_sha256'] = _canon_sha(body)
     return body
 
@@ -622,10 +640,85 @@ def _pin_dest(pins, d, expect=None):
     return fd
 
 
+def _managed_home():
+    fd = _open_abs_dir(HOME, 'managed HOME')
+    try:
+        st = os.fstat(fd)
+        if st.st_uid != os.getuid() or st.st_mode & 0o022:
+            raise ReleaseError('managed HOME must be owned and not group/other writable')
+        return _dir_ident(fd)
+    finally:
+        os.close(fd)
+
+
+def _managed_dest(d, expect=None):
+    # Deliberately independent of the private-root guard: no parent/child paths are eligible.
+    if str(d) not in {str(HOME / '.local/share/rdwm-decebal/bin'),
+                      str(HOME / '.local/share/rdwm-macshell/bin')}:
+        raise ReleaseError(f'{d}: not an exact managed runtime destination')
+    _managed_home()
+    _dest_dir_check(Path(d))
+    fd = _open_abs_dir(d, 'managed destination')
+    st = os.fstat(fd)
+    if st.st_uid != os.getuid() or st.st_mode & 0o022 or (expect is not None and _dir_ident(fd) != expect):
+        os.close(fd)
+        raise ReleaseError(f'{d}: managed destination ownership or identity changed')
+    return fd
+
+
+def _managed_configs():
+    out = {}
+    for path in CONFIG_WATCH:
+        # Validate existing ancestors even when the config itself is absent.
+        parent = Path(path).parent
+        while not parent.exists():
+            parent = parent.parent
+        fd = _open_abs_dir(parent, 'managed config parent')
+        os.close(fd)
+        try:
+            digest, st = hash_path(path, MAX_RECORD)
+            out[str(path)] = dict(identity(st), sha256=digest)
+        except FileNotFoundError:
+            out[str(path)] = None
+    return out
+
+
+def _managed_manifest(rep):
+    if set(rep['binaries']) != SHIPPED_BINARIES | {'examples/launchapp'}:
+        raise ReleaseError('managed publication requires the sealed standard shipped binary set')
+
+
+def _managed_plan(p):
+    m = p.get('managed_runtime')
+    if not isinstance(m, dict) or set(m) != {'home', 'home_identity', 'dest_dirs', 'config_identity'}:
+        raise ReleaseError('managed publication requires a managed-runtime plan')
+    if m['home'] != str(HOME) or m['home_identity'] != _managed_home():
+        raise ReleaseError('managed HOME identity changed')
+    try:
+        age = time.time() - calendar.timegm(time.strptime(p['created_utc'], '%Y-%m-%dT%H:%M:%SZ'))
+    except (ValueError, TypeError):
+        raise ReleaseError('invalid managed plan timestamp')
+    if not 0 <= age <= MANAGED_MAX_AGE:
+        raise ReleaseError('managed plan is stale or future dated; make a fresh plan')
+    if set(p['config_watch']) != set(map(str, CONFIG_WATCH)) or m['config_identity'] != _managed_configs():
+        raise ReleaseError('managed config identity changed since planning')
+    if set(m['dest_dirs']) != {f['dest_dir'] for f in p['files']}:
+        raise ReleaseError('managed plan destination set disagrees with files')
+    return m
+
+
+def _private_parent(pins, path):
+    parts, root = _parts(path), _parts(pins.root_path)
+    if len(parts) <= len(root) or parts[:len(root)] != root:
+        raise ReleaseError('managed journal and lock must be strictly below the private root')
+    return pins.keep(_walk(pins.root_fd, parts[len(root):-1], 'managed private parent'))
+
+
 def _moved(pins):
     """Planned paths that no longer lead (symlink-free, from '/') to the pinned folders."""
     out = []
-    for path, ident in [(str(pins.root_path), pins.root_ident)] + [(p, i) for p, (_, i) in pins.dest.items()]:
+    paths = [(str(pins.root_path), pins.root_ident)] + [(p, i) for p, (_, i) in pins.dest.items()]
+    for path, ident in paths + getattr(pins, 'extra_paths', []):
         try:
             fd = _open_abs_dir(path, path)
         except ReleaseError:
@@ -735,8 +828,8 @@ class Journal:
         self.save()
 
 
-def _lock(path):
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+def _lock(path, parent_fd=None):
+    fd = os.open(Path(path).name if parent_fd is not None else path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -758,7 +851,7 @@ def _busy(dest_dirs, proc='/proc'):
 
 def load_plan(path):
     p, _ = load_json(path, MAX_PLAN)
-    if not isinstance(p, dict) or set(p) != PLAN_KEYS or p['schema'] != PLAN_SCHEMA:
+    if not isinstance(p, dict) or set(p) not in (PLAN_KEYS, PLAN_KEYS | {'managed_runtime'}) or p['schema'] != PLAN_SCHEMA:
         raise ReleaseError('plan has unknown or missing keys / schema')
     if p['plan_sha256'] != _canon_sha(p):
         raise ReleaseError('plan_sha256 does not match plan body (edited plan)')
@@ -777,8 +870,11 @@ def load_plan(path):
     return p
 
 
-def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc'):
+def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc', managed_runtime=False):
     p = load_plan(plan_path)
+    if 'managed_runtime' in p and not managed_runtime:
+        raise ReleaseError('managed-runtime plan requires explicit --managed-runtime')
+    managed = _managed_plan(p) if managed_runtime else None
     jd = Path(journal_dir)
     jparts = _parts(jd)
     pins = _pin_root(private_root)
@@ -786,22 +882,40 @@ def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc'):
         rep = verify(p['artifact_dir'])
         if not rep['ok'] or rep['manifest_sha256'] != p['manifest_sha256']:
             raise ReleaseError('artifact no longer verifies or its manifest changed since planning: ' + '; '.join(rep['problems']))
+        if managed_runtime:
+            _managed_manifest(rep)
+            if p['commit'] != rep['commit']:
+                raise ReleaseError('managed plan commit differs from manifest')
+            if not _is_within(jd, pins.root_path) or not _is_within(Path(lock_path), pins.root_path):
+                raise ReleaseError('managed journal and lock must be inside the private root')
+            # Validate the lock parent through no-follow descriptors before opening the lock.
+            lock_parent = _private_parent(pins, lock_path)
+            home_fd = pins.keep(_open_abs_dir(HOME, 'managed HOME'))
+            if _dir_ident(home_fd) != managed['home_identity']:
+                raise ReleaseError('managed HOME changed during preflight')
+            pins.extra_paths = [(str(HOME), managed['home_identity'])]
         dest_dirs = sorted({f['dest_dir'] for f in p['files']})
         for d in dest_dirs:
-            _pin_dest(pins, d)
+            if managed_runtime:
+                fd = pins.keep(_managed_dest(d, managed['dest_dirs'][d]))
+                pins.dest[d] = (fd, _dir_ident(fd))
+            else:
+                _pin_dest(pins, d)
         for f in p['files']:
             b = rep['binaries'].get(f['name'])
-            if b is None or b['sha256'] != f['new_sha256'] or f['source'] != str(Path(p['artifact_dir']) / 'bin' / f['name']):
+            if b is None or b['sha256'] != f['new_sha256'] or b['size'] != f['new_size'] or f['source'] != str(Path(p['artifact_dir']) / 'bin' / f['name']):
                 raise ReleaseError(f'{f["name"]}: plan digest/source disagrees with the verified manifest')
         if is_live(jd) or jd == pins.root_path or any(_is_within(jd, Path(d)) or _is_within(Path(d), jd) for d in dest_dirs):
             raise ReleaseError('journal must be a new folder outside every destination and live folder')
-        busy = _busy(dest_dirs, proc)
+        busy = [] if managed_runtime else _busy(dest_dirs, proc)
         if busy:
             raise ReleaseError(f'destination executables are in use: {busy}')
         art_fd = pins.keep(_open_abs_dir(Path(p['artifact_dir']) / 'bin', 'artifact bin/'))
-        jparent = pins.keep(_open_abs_dir('/' + '/'.join(jparts[:-1]), 'journal parent') if len(jparts) > 1 else os.open('/', DIR_FLAGS))
-        lock = _lock(lock_path)
+        jparent = _private_parent(pins, jd) if managed_runtime else pins.keep(_open_abs_dir('/' + '/'.join(jparts[:-1]), 'journal parent') if len(jparts) > 1 else os.open('/', DIR_FLAGS))
+        lock = _lock(lock_path, lock_parent if managed_runtime else None)
         try:
+            if managed_runtime:
+                _managed_plan(p)
             os.mkdir(jparts[-1], 0o700, dir_fd=jparent)
             jfd = pins.keep(os.open(jparts[-1], DIR_FLAGS, dir_fd=jparent))
             os.mkdir('backups', 0o700, dir_fd=jfd)
@@ -815,9 +929,13 @@ def publish(plan_path, private_root, journal_dir, lock_path, proc='/proc'):
                 'files': [{'path': f['path'], 'dest_dir': f['dest_dir'], 'name': f['name'], 'action': f['action'],
                            'before': f['before'], 'after': f['new_sha256'], 'backup': None, 'staged': None,
                            'staged_identity': None, 'committed_identity': None, 'state': 'pending'} for f in p['files']]})
+            if managed_runtime:
+                j.data['managed_runtime'] = {'home': str(HOME), 'home_identity': managed['home_identity']}
             j.save()
             # Stale-destination and config preflight for every file before the first change.
             drift = sorted(k for k, v in config_fingerprint(p['config_watch']).items() if v != p['config_watch'][k])
+            if managed_runtime and _managed_configs() != managed['config_identity']:
+                drift = drift or ['managed config identity']
             for f in p['files']:
                 stale = f'config changed since planning: {drift}' if drift else _stale(f, pins.dest[f['dest_dir']][0])
                 if stale:
@@ -1030,7 +1148,7 @@ def _read_journal(jfd):
         os.close(fd)
 
 
-def rollback(journal_dir, lock_path):
+def rollback(journal_dir, lock_path, managed_runtime=False):
     jd = Path(journal_dir)
     if is_live(jd):
         raise ReleaseError(f'journal {jd} is inside a live folder')
@@ -1043,21 +1161,40 @@ def rollback(journal_dir, lock_path):
         data = _read_journal(jfd)
         if not isinstance(data, dict) or data.get('schema') != JOURNAL_SCHEMA:
             raise ReleaseError('not a decebal-release journal')
+        managed = data.get('managed_runtime')
+        if managed is not None:
+            if not managed_runtime:
+                raise ReleaseError('managed rollback requires explicit --managed-runtime')
+            if managed != {'home': str(HOME), 'home_identity': _managed_home()}:
+                raise ReleaseError('managed journal HOME identity invalid')
+        elif managed_runtime:
+            raise ReleaseError('private journal cannot authorize managed rollback')
         pins = _pin_root(data.get('private_root'))
+        if managed is not None and (not _is_within(jd, pins.root_path) or not _is_within(Path(lock_path), pins.root_path)):
+            raise ReleaseError('managed journal and lock must be inside the private root')
         dests = data.get('dest_dirs')
         if not isinstance(dests, dict) or not dests:
             raise ReleaseError('journal records no pinned destination folders')
         for d, ident in dests.items():
-            _pin_dest(pins, d, expect=ident if isinstance(ident, dict) else {})
+            if managed is not None:
+                fd = pins.keep(_managed_dest(d, ident if isinstance(ident, dict) else {}))
+                pins.dest[d] = (fd, _dir_ident(fd))
+            else:
+                _pin_dest(pins, d, expect=ident if isinstance(ident, dict) else {})
+        if managed is not None:
+            _private_parent(pins, jd)
         for f in data['files']:
             _check_name(f.get('name'), FLAT_RE, 'journal file name')
+            if managed is not None and f['name'] not in SHIPPED_BINARIES:
+                raise ReleaseError('journal file is not a shipped managed binary')
             if f.get('dest_dir') not in dests or f.get('path') != f'{f["dest_dir"]}/{f["name"]}':
                 raise ReleaseError(f'journal path {f.get("path")!r} is not one of its pinned folders + name')
             for key, regex in (('staged', AUX_RE), ('restore', AUX_RE), ('backup', BACKUP_RE)):
                 if f.get(key) is not None:
                     _check_name(f[key], regex, f'journal {key} entry')
         pins.backups = pins.keep(os.open('backups', DIR_FLAGS, dir_fd=jfd))
-        lock = _lock(lock_path)
+        lock_parent = _private_parent(pins, lock_path) if managed is not None else None
+        lock = _lock(lock_path, lock_parent)
         try:
             j = Journal(jfd, jd, data)
             if data['state'] in ('rolled_back', 'aborted_before_changes'):
@@ -1136,14 +1273,17 @@ def main(argv=None):
     p.add_argument('--only', action='append')
     p.add_argument('--expect-commit')
     p.add_argument('--out')
+    p.add_argument('--managed-runtime', action='store_true')
     u = sub.add_parser('publish')
     u.add_argument('--plan', required=True)
     u.add_argument('--private-root', required=True)
     u.add_argument('--journal', required=True)
     u.add_argument('--lock', required=True)
+    u.add_argument('--managed-runtime', action='store_true')
     r = sub.add_parser('rollback')
     r.add_argument('--journal', required=True)
     r.add_argument('--lock', required=True)
+    r.add_argument('--managed-runtime', action='store_true')
     a = ap.parse_args(argv)
     try:
         if a.cmd == 'verify':
@@ -1151,12 +1291,12 @@ def main(argv=None):
             _emit(rep)
             return 0 if rep['ok'] else 1
         if a.cmd == 'plan':
-            _emit(plan(a.artifact, a.dest, a.only, a.expect_commit), a.out)
+            _emit(plan(a.artifact, a.dest, a.only, a.expect_commit, managed_runtime=a.managed_runtime), a.out)
             return 0
         if a.cmd == 'publish':
-            res = publish(a.plan, a.private_root, a.journal, a.lock)
+            res = publish(a.plan, a.private_root, a.journal, a.lock, managed_runtime=a.managed_runtime)
         else:
-            res = rollback(a.journal, a.lock)
+            res = rollback(a.journal, a.lock, managed_runtime=a.managed_runtime)
         _emit({k: res.get(k) for k in ('state', 'error', 'unresolved', 'commit', 'plan_sha256')} | {'journal': a.journal})
         return 0 if res['state'] in ('committed', 'rolled_back') else 1
     except (ReleaseError, OSError, ValueError) as e:

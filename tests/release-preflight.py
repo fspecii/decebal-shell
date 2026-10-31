@@ -793,6 +793,168 @@ class ContainmentTests(PublishFixture):
             R.rollback(self.journal, self.lock)
 
 
+class ManagedRuntimeTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.home = self.root / 'home'
+        self.home.mkdir(mode=0o700)
+        for key, val in (
+            ('HOME', self.home),
+            ('LIVE_DIRS', tuple(self.home / f'.local/share/{n}/bin' for n in ('rdwm-decebal', 'rdwm-macshell'))),
+            ('LIVE_FORBIDDEN_ROOTS', tuple(self.home / p for p in ('.local/share/rdwm-decebal/bin', '.local/share/rdwm-macshell/bin', '.local/bin', '.config')) + (Path('/usr'), Path('/etc'), Path('/opt'))),
+            ('CONFIG_WATCH', (self.home / '.config/rdwm/config.toml',)),
+        ):
+            self.addCleanup(setattr, R, key, getattr(R, key))
+            setattr(R, key, val)
+        R.CONFIG_WATCH[0].parent.mkdir(parents=True)
+        R.CONFIG_WATCH[0].write_text('config')
+        self.dests = list(R.LIVE_DIRS)
+        for d in self.dests:
+            d.mkdir(parents=True)
+            (d / 'decbar').write_bytes(b'old')
+            (d / 'decbar').chmod(0o755)
+            (d / 'rdwm').write_bytes(b'foreign')
+        self.art = make_bundle(self.root, {n: b'new-' + n.encode() for n in R.SHIPPED_BINARIES | {'examples/launchapp'}})
+        self.priv = self.root / 'private'
+        self.priv.mkdir(mode=0o700)
+        self.journal = self.priv / 'journal'
+        self.lock = self.priv / 'lock'
+
+    def make_plan(self, **kw):
+        opts = dict(only=['decbar'], proc=self.root / 'noproc', runtime_dir=self.root / 'run', managed_runtime=True)
+        opts.update(kw)
+        p = R.plan(self.art, list(map(str, self.dests)), **opts)
+        self.plan_path = self.root / 'plan.json'
+        self.plan_path.write_text(json.dumps(p))
+        return p
+
+    def publish(self, **kw):
+        return R.publish(self.plan_path, self.priv, self.journal, self.lock, managed_runtime=True, **kw)
+
+    def edit_plan(self, p):
+        p['plan_sha256'] = R._canon_sha(p)
+        self.plan_path.write_text(json.dumps(p))
+
+    def test_publish_and_explicit_rollback_preserve_foreign_entries(self):
+        self.make_plan()
+        busy = R._busy
+        R._busy = lambda *a: self.fail('managed publish must not require idle processes')
+        self.addCleanup(setattr, R, '_busy', busy)
+        self.assertEqual(self.publish()['state'], 'committed')
+        for d in self.dests:
+            self.assertEqual((d / 'decbar').read_bytes(), b'new-decbar')
+            self.assertEqual((d / 'rdwm').read_bytes(), b'foreign')
+        with self.assertRaisesRegex(R.ReleaseError, 'explicit'):
+            R.rollback(self.journal, self.lock)
+        self.assertEqual(R.rollback(self.journal, self.lock, managed_runtime=True)['state'], 'rolled_back')
+        for d in self.dests:
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+
+    def test_open_old_inode_keeps_content_and_folder_during_atomic_publish(self):
+        self.make_plan()
+        fd = os.open(self.dests[0] / 'decbar', os.O_RDONLY)
+        try:
+            old = os.fstat(fd)
+            self.assertEqual(self.publish()['state'], 'committed')
+            self.assertEqual(os.read(fd, 100), b'old')
+            self.assertEqual(os.fstat(fd).st_ino, old.st_ino)
+            self.assertEqual(Path(os.readlink(f'/proc/self/fd/{fd}')).parent, self.dests[0])
+        finally:
+            os.close(fd)
+
+    def test_failure_rolls_back_both_managed_folders(self):
+        self.make_plan()
+        def fail(index, **kw):
+            if index == 1:
+                raise R.ReleaseError('fixture failure')
+        R.FAULTS['after_commit'] = fail
+        self.assertEqual(self.publish()['state'], 'rolled_back')
+        for d in self.dests:
+            self.assertEqual((d / 'decbar').read_bytes(), b'old')
+
+    def test_default_publish_still_refuses_live_and_managed_plan(self):
+        self.make_plan()
+        with self.assertRaisesRegex(R.ReleaseError, 'explicit'):
+            R.publish(self.plan_path, self.priv, self.journal, self.lock)
+        with self.assertRaises(R.ReleaseError):
+            R._private_root_check(self.home)
+
+    def test_allowlist_exact_and_symlink_free(self):
+        self.make_plan()
+        for d in (self.home, self.home / '.config', self.dests[0].parent, self.dests[0] / 'nested', self.home / '.local/bin'):
+            with self.assertRaises(R.ReleaseError):
+                R._managed_dest(d)
+        self.dests[0].rename(self.dests[0].with_name('old-bin'))
+        self.dests[0].symlink_to(self.dests[0].with_name('old-bin'))
+        with self.assertRaises(R.ReleaseError):
+            self.publish()
+
+    def test_nonstandard_manifest_and_qa_name_refused(self):
+        with self.assertRaises(R.ReleaseError):
+            self.make_plan(only=['examples/launchapp'])
+        other = self.root / 'other'
+        other.mkdir()
+        self.art = make_bundle(other)
+        with self.assertRaisesRegex(R.ReleaseError, 'standard'):
+            self.make_plan()
+
+    def test_stale_plan_refused(self):
+        p = self.make_plan()
+        p['created_utc'] = '2000-01-01T00:00:00Z'
+        self.edit_plan(p)
+        with self.assertRaisesRegex(R.ReleaseError, 'stale'):
+            self.publish()
+        self.assertFalse(self.journal.exists())
+
+    def test_config_same_content_replaced_inode_refused(self):
+        self.make_plan()
+        cfg = R.CONFIG_WATCH[0]
+        replacement = cfg.with_suffix('.new')
+        replacement.write_bytes(cfg.read_bytes())
+        replacement.replace(cfg)
+        with self.assertRaisesRegex(R.ReleaseError, 'config identity'):
+            self.publish()
+
+    def test_destination_replaced_inode_refused(self):
+        self.make_plan()
+        self.dests[0].rename(self.dests[0].with_name('old-bin'))
+        self.dests[0].mkdir()
+        with self.assertRaisesRegex(R.ReleaseError, 'identity changed'):
+            self.publish()
+
+    def test_stale_file_refused_before_changes(self):
+        self.make_plan()
+        (self.dests[1] / 'decbar').write_bytes(b'foreign-change')
+        self.assertEqual(self.publish()['state'], 'aborted_before_changes')
+        self.assertEqual((self.dests[0] / 'decbar').read_bytes(), b'old')
+        self.assertEqual((self.dests[1] / 'decbar').read_bytes(), b'foreign-change')
+
+    def test_modified_foreign_file_survives_rollback(self):
+        self.make_plan()
+        self.publish()
+        (self.dests[0] / 'decbar').write_bytes(b'foreign-change')
+        res = R.rollback(self.journal, self.lock, managed_runtime=True)
+        self.assertEqual(res['state'], 'rollback_incomplete')
+        self.assertEqual((self.dests[0] / 'decbar').read_bytes(), b'foreign-change')
+
+    def test_forged_journal_destination_flag_cannot_authorize_arbitrary_path(self):
+        self.make_plan()
+        self.publish()
+        path = self.journal / 'journal.json'
+        data = json.loads(path.read_text())
+        data['dest_dirs'][str(self.home / '.config')] = next(iter(data['dest_dirs'].values()))
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(R.ReleaseError, 'exact managed'):
+            R.rollback(self.journal, self.lock, managed_runtime=True)
+
+    def test_journal_and_lock_must_be_inside_private_root(self):
+        self.make_plan()
+        self.lock = self.home / 'forbidden-lock'
+        with self.assertRaisesRegex(R.ReleaseError, 'private root'):
+            self.publish()
+        self.assertFalse(self.lock.exists())
+
+
 class RunExactTests(Base):
     def script(self, body):
         p = self.root / 'tool'

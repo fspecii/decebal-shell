@@ -1,4 +1,4 @@
-# Release preflight and private publish
+# Release preflight and controlled binary publication
 
 `tools/release/decebal_release.py` (Python stdlib only) checks one sealed frozen-build bundle
 (`decebal-frozen-release-manifest/1`, written by the release-engineering lane's `manifest.py`) and plans, publishes and
@@ -46,7 +46,7 @@ no process names, and proposes nothing for `decwm` (never restarted) or `decsett
 closed). Theme *data* is reloaded by the running components' `theme::live` watcher; only binary changes need a new
 process, and starting one is root's separately authorized step.
 
-## publish (private destinations only in this increment)
+## publish (private by default)
 
 **Pinned folders.** Every mutation goes through directory descriptors opened up front: the private root from `/` one
 component at a time with `O_NOFOLLOW` (a symlink anywhere in its path is refused), each destination from that root
@@ -78,6 +78,36 @@ digests are re-checked; any drift ends as `aborted_before_changes` with nothing 
 The journal (`journal.json`, schema `decebal-release-journal/1`) is rewritten whole in the pinned journal folder after
 every step. It records `dest_dirs` (path → dev/ino of the pinned folder) and per file `path`, `dest_dir`, `name`, and
 `staged`/`restore`/`backup` as **names** only.
+
+## Explicit managed runtime publication
+
+`--managed-runtime` is required independently on `plan`, `publish`, and `rollback`. The default private root guards
+remain in force. Managed publication accepts **only** the exact owned, symlink-free directories
+`~/.local/share/rdwm-decebal/bin` and `~/.local/share/rdwm-macshell/bin`, never their parents or children. It requires
+the sealed standard manifest containing the 23 explicitly enumerated runtime binaries and `examples/launchapp`.
+The example is never published; `--only` may select a runtime subset. Adding a new runtime name requires a deliberate
+tool inventory update. `rdwm`, `rdwmctl`, and all other unselected entries remain untouched.
+
+```sh
+python3 -I $T plan $A --managed-runtime --dest "$HOME/.local/share/rdwm-decebal/bin" \
+  --dest "$HOME/.local/share/rdwm-macshell/bin" --out managed-plan.json
+python3 -I $T publish --managed-runtime --plan managed-plan.json --private-root ROOT \
+  --journal ROOT/new-journal --lock ROOT/release.lock
+python3 -I $T rollback --managed-runtime --journal ROOT/new-journal --lock ROOT/release.lock
+```
+
+The plan must be at most 15 minutes old (UTC), hash intact, and records HOME, destination folder identities and the
+standard config watch's file identities plus hashes. Changed config, destination replacement, stale files, unknown
+names or a different manifest refuse publication. Managed journal and lock paths must be strictly inside the separately
+pinned owned 0700 private root; they cannot be config or live paths. The same held destination descriptors, backups,
+atomic exchange, claims, foreign-file preservation and automatic rollback described above apply. Existing executables
+may be in use: publication keeps the displaced inode in its original directory until unlink, so a running program's
+sibling-directory lookup does not move to the journal. No process is executed, signalled, restarted or closed.
+
+Managed journals require explicit rollback opt-in and revalidate the exact destination allowlist, HOME and recorded
+folder identities, private root, journal and lock confinement, runtime names and all auxiliary entry names. A journal's
+managed flag alone grants no authority. Existing private journals remain compatible and use the unchanged private
+folder validation; `--managed-runtime` refuses a private journal.
 
 ## rollback
 
@@ -119,7 +149,7 @@ form. Files are then handled in reverse order through the pinned descriptors, de
 * Durability depends on fsync of files and directories; a crash between a rename and the following journal write is
   recovered by the identity rules above (fixture-tested by injecting a process death right after the swap), not by the
   journal alone. A crash during a restore can leave a hidden `.<name>.decebal-restore-*` file (its name is journaled).
-* No live folder publishing or rollback exists in this tool; that requires root's integration and authorization.
+* Managed publication only replaces binary directory entries. Running processes keep their old executable inode and adopt no new code until a separately initiated process start.
 
 ## Exact child helper
 
