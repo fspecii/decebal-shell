@@ -130,6 +130,14 @@ overlay its corner's room. `controlcenter::layout_fitted(snapshot, tiles, style,
 `DECBAR_DEBUG_PANEL=file` reports, from every host, the panel rectangle, zoom, scroll and each control where it is drawn
 now (surface coordinates, logical pixels), plus the keyboard focus and the pointer's hover.
 
+Native evidence (source cfc54ce, debug decbar `f7d06a7d…`, decdock `83ded85b…`):
+`/var/tmp/decebal-panel-evidence/cfc54ce-ccfit` — 66 cases on private Xvfb, 1280x520 and 1024x480 outputs: GNOME in the
+summoned overlay at every display and text scale (100/125/200 %), and card, fluent, Dux and GNOME in the menu bar (top,
+bottom), the rail (left, bottom) and the taskbar (bottom, left) at 1024x480 200/200 % and 1280x520 125/125 %. In each the
+panel stays inside the output, Down walks every control in order inside the visible panel, and the pointer reaches the last
+control after the scroll and the first after the wheel scrolled back. 66 of 66 after the harness correction its SUMMARY.md
+states.
+
 ### Keyboard
 
 `decbar --focus` (bind it to a key, as KDE binds "focus the panel") puts the running bar into keyboard mode: a focus
