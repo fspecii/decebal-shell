@@ -3,7 +3,7 @@
 //! Everything here is testable headless.
 
 use super::io::{self, Ev, External, Paths, Queue, Runtime, Store};
-use super::persist::{Done, Job, Outcome, Persister, Refused, Submitted, ThemeJob, ThemeRequest, TomlPatch};
+use super::persist::{self, Done, Job, Outcome, Persister, Refused, Submitted, ThemeJob, ThemeRequest, TomlPatch};
 use super::schema::{KeyMeta, Schema};
 use super::tomlcfg::{Cfg, Val};
 use super::ui::{parse_hex, Ctl, Kind, Opt, Row};
@@ -27,12 +27,29 @@ pub enum CtlVal {
 /// What the toast says while accepted changes wait for the disk.
 pub const SAVING: &str = "Saving…";
 
+/// What a pane does with its task's result, back on the UI thread.
+pub type TaskDone = Box<dyn FnOnce(&mut Model, Result<Value, String>)>;
+/// Runs on the UI thread once a JSON change is on disk.
+pub type AfterSave = Box<dyn FnOnce(&mut Model)>;
+
 /// An accepted change the persistence worker has not finished, keyed by its ticket in [`Model::pending`].
-#[derive(Debug, Clone)]
 pub enum Pending {
     Toml(TomlPatch),
-    Json { file: &'static str, key: String, value: Option<Value>, said: Option<String> },
+    Json { file: &'static str, key: String, value: Option<Value>, said: Option<String>, then: Option<AfterSave> },
     Theme { selection: Value, done: ThemeDone },
+    /// A pane's owner transaction; `files` it writes are re-read when it finished.
+    Task { label: &'static str, files: bool, done: TaskDone },
+}
+
+impl std::fmt::Debug for Pending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Pending::Toml(p) => f.debug_tuple("Toml").field(p).finish(),
+            Pending::Json { file, key, .. } => f.debug_struct("Json").field("file", file).field("key", key).finish_non_exhaustive(),
+            Pending::Theme { done, .. } => f.debug_struct("Theme").field("done", done).finish_non_exhaustive(),
+            Pending::Task { label, .. } => f.debug_struct("Task").field("label", label).finish_non_exhaustive(),
+        }
+    }
 }
 
 /// The message a finished theme transaction shows.
@@ -127,6 +144,8 @@ pub struct Model {
     reload_due: bool,
     /// How often rdwm was asked to reload (diagnostics and tests).
     pub reload_requests: u64,
+    /// The next TOML job is a wallpaper change (see `Job::Toml::cancel_follow`).
+    cancel_follow: bool,
 }
 
 pub fn cap(s: &str) -> String {
@@ -171,7 +190,10 @@ impl Model {
             recheck_files: false,
             reload_due: false,
             reload_requests: 0,
+            cancel_follow: false,
         };
+        // The System panes save their files through the same ordered worker.
+        *m.sys.sh.persist.lock().unwrap() = m.persist.handle();
         m.rt = io::poll_runtime(&m.paths.socket);
         m.refresh_wallpaper_follow_notice();
         m
@@ -335,7 +357,8 @@ impl Model {
                 return false;
             }
         };
-        let job = Job::Toml { path: self.store.path.clone(), rdwmctl: self.store.rdwmctl.clone(), patch: patch.clone(), epoch: self.store.epoch, base: self.store.saved_stamp() };
+        let cancel_follow = std::mem::take(&mut self.cancel_follow).then(|| self.paths.clone());
+        let job = Job::Toml { path: self.store.path.clone(), rdwmctl: self.store.rdwmctl.clone(), patch: patch.clone(), epoch: self.store.epoch, base: self.store.saved_stamp(), cancel_follow };
         let Some(seq) = self.submit(job, Pending::Toml(patch)) else { return false };
         if self.pending.contains_key(&seq) {
             self.store.cfg = cfg;
@@ -356,14 +379,20 @@ impl Model {
 
     /// The value of a top-level JSON key that new edits start from: the shown one while a change to that file is
     /// pending, else the file as it is now (for panes that compute from the file rather than the shown copy).
-    pub fn json_value_now(&mut self, file: &str, key: &str) -> Option<Value> {
+    pub fn json_value_now(&self, file: &str, key: &str) -> Option<Value> {
         let pending = self.pending.values().any(|p| match p {
             Pending::Json { file: f, .. } => *f == file,
             Pending::Theme { .. } => file != "pinned",
+            Pending::Task { files, .. } => *files,
             Pending::Toml(_) => false,
         });
         if pending {
-            return self.json_mut(file).get(key).cloned();
+            let shown = match file {
+                "dock" => &self.dock,
+                "pinned" => &self.pinned,
+                _ => &self.shell,
+            };
+            return shown.get(key).cloned();
         }
         let path = match file {
             "dock" => self.paths.dock_settings(),
@@ -375,13 +404,18 @@ impl Model {
 
     /// Sets a key whose new value was derived from `base` (the key's value it started from; `None`: absent).
     pub fn edit_json_from(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, said: Option<String>) {
+        self.edit_json_then(file, key, v, base, said, None)
+    }
+
+    /// [`Model::edit_json_from`]; `then` runs on the UI thread once the value is on disk (not when it failed).
+    pub fn edit_json_then(&mut self, file: &str, key: &str, v: Option<Value>, base: Option<Value>, said: Option<String>, then: Option<AfterSave>) {
         let (file, path) = match file {
             "dock" => ("dock", self.paths.dock_settings()),
             "pinned" => ("pinned", self.paths.dock_pinned()),
             _ => ("shell", self.paths.shell_json()),
         };
         let job = Job::Json { path, key: key.to_string(), value: v.clone(), base, reconcile: Some(self.paths.shell_json()) };
-        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone(), said }).is_some_and(|seq| self.pending.contains_key(&seq)) {
+        if self.submit(job, Pending::Json { file, key: key.to_string(), value: v.clone(), said, then }).is_some_and(|seq| self.pending.contains_key(&seq)) {
             set_key(self.json_mut(file), key, v);
         }
         self.dirty = true;
@@ -412,6 +446,36 @@ impl Model {
         }
     }
 
+    /// Runs a pane's owner transaction on the persistence worker, after every change accepted before it. `writes`:
+    /// the Settings files it may change (re-read afterwards, on top of what is still pending). `done` gets the result
+    /// on the UI thread and shows it. False when the queue refused it (the notice says why; nothing ran).
+    pub fn run_task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static, done: impl FnOnce(&mut Model, Result<Value, String>) + 'static) -> bool {
+        let files = !writes.is_empty();
+        self.submit(Job::Task(persist::Task { label, writes, run: Box::new(run), reply: None }), Pending::Task { label, files, done: Box::new(done) }).is_some()
+    }
+
+    /// [`Model::run_task`] for housekeeping the user did not ask for (an offline cache): no "Saving…" toast.
+    pub fn run_task_quiet(&mut self, label: &'static str, run: impl FnOnce() -> Result<Value, String> + Send + 'static) -> bool {
+        let shown = self.notice.clone();
+        let ok = self.run_task(label, Vec::new(), run, |_, r| {
+            if let Err(e) = r {
+                crate::log_warn!("{e}");
+            }
+        });
+        if ok {
+            self.notice = shown;
+        }
+        ok
+    }
+
+    /// Re-reads the saved files after a task wrote them; edits still pending stay on top.
+    pub fn reload_saved(&mut self) {
+        self.store = Store::load(&self.store.path, &self.store.rdwmctl.clone());
+        self.file_error = None;
+        self.rebuild_cfg();
+        self.reload_json_shown();
+    }
+
     /// Accepted changes are still on their way to the disk.
     pub fn saving(&self) -> bool {
         !self.pending.is_empty()
@@ -421,6 +485,7 @@ impl Model {
     pub fn persist_inline(&mut self) {
         debug_assert!(self.pending.is_empty());
         self.persist = Persister::inline();
+        *self.sys.sh.persist.lock().unwrap() = self.persist.handle();
     }
 
     /// The ticket of an accepted job (its result may already have been handled in inline mode).
@@ -499,7 +564,7 @@ impl Model {
             return;
         };
         let idle = self.pending.is_empty();
-        let toml_left = self.pending.values().any(|p| matches!(p, Pending::Toml(_) | Pending::Theme { .. }));
+        let toml_left = self.pending.values().any(|p| matches!(p, Pending::Toml(_) | Pending::Theme { .. } | Pending::Task { files: true, .. }));
         self.dirty = true;
         match (p, d.outcome) {
             (_, Outcome::Toml(Ok(saved))) => {
@@ -522,12 +587,17 @@ impl Model {
                 }
                 self.say(format!("Not saved: {}", f.message), true);
             }
-            (Pending::Json { file, said, .. }, Outcome::Json(r)) => {
+            (Pending::Json { file, said, then, .. }, Outcome::Json(r)) => {
                 let saved = match &r {
                     Ok(doc) => doc.clone(),
                     Err(_) => io::json_load(&d.path),
                 };
                 *self.json_mut(file) = self.json_shown(file, saved);
+                if r.is_ok() {
+                    if let Some(then) = then {
+                        then(self);
+                    }
+                }
                 match r {
                     Ok(_) if idle && self.notice.as_ref().is_none_or(|n| !n.error) => self.say(said.unwrap_or_else(|| "Saved".into()), false),
                     Ok(_) => {}
@@ -576,6 +646,12 @@ impl Model {
                     Err(e) => self.say(format!("Not applied: {e}"), true),
                 }
             }
+            (Pending::Task { files, done, .. }, Outcome::Task(r)) => {
+                if files {
+                    self.reload_saved();
+                }
+                done(self, r);
+            }
             (p, o) => crate::log_warn!("persist: mismatched result {o:?} for {p:?}"),
         }
         // rdwm reads the file once everything for it committed, whatever the last result was.
@@ -592,6 +668,7 @@ impl Model {
     pub fn use_worker_with_sync_hook(&mut self, hook: io::fault::SyncHook) {
         assert!(self.pending.is_empty());
         self.persist = Persister::spawn_with_sync_hook(self.queue.clone(), self.wake.clone(), hook);
+        *self.sys.sh.persist.lock().unwrap() = self.persist.handle();
     }
 
     /// Tests: waits until the worker finished everything submitted and handles the results.
@@ -735,12 +812,13 @@ impl Model {
     }
 
     fn apply_key(&mut self, sec: &str, key: &str, v: CtlVal) {
-        if sec == "wallpaper" {
-            if let Err(error) = crate::theme::wallpaper_follow::cancel(&self.paths) {
-                self.say(error, true);
-                return;
-            }
-        }
+        // the worker stops a pending "match wallpaper" photo before writing; a failure writes nothing
+        self.cancel_follow = sec == "wallpaper";
+        self.apply_key_inner(sec, key, v);
+        self.cancel_follow = false;
+    }
+
+    fn apply_key_inner(&mut self, sec: &str, key: &str, v: CtlVal) {
         let Some(m) = self.schema.get(sec, key).cloned() else {
             self.say(format!("Unknown setting {sec}.{key}"), true);
             return;

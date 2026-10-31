@@ -215,8 +215,28 @@ pub struct ThemeJob {
     pub style: Option<Style>,
 }
 
+/// One owner transaction of a pane (a preset apply, saving an editor buffer, the Wallhaven key…): everything it
+/// needs is moved into `run`, which runs on the worker in order with every other job. Its result must not carry
+/// secrets; `Debug` and the log show only `label`.
+pub struct Task {
+    pub label: &'static str,
+    /// Files it may write: afterwards they count as this process's own writes for the jobs queued behind it.
+    pub writes: Vec<PathBuf>,
+    pub run: Box<dyn FnOnce() -> Result<Value, String> + Send>,
+    /// Submitted through a [`Handle`]: the result goes here (on the worker thread) instead of the window's queue.
+    pub reply: Option<Reply>,
+}
+
+pub type Reply = Box<dyn FnOnce(Result<Value, String>) + Send>;
+
+impl std::fmt::Debug for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Task").field("label", &self.label).field("writes", &self.writes.len()).finish_non_exhaustive()
+    }
+}
+
 /// One immutable unit of work. Everything it needs is inside it; the worker never looks at the window's state.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Job {
     Toml {
         path: PathBuf,
@@ -225,6 +245,9 @@ pub enum Job {
         /// The window's [`io::Store::epoch`] and saved stamp when it computed the patch.
         epoch: u64,
         base: Stamp,
+        /// A wallpaper change: first stop a pending "match wallpaper" photo (whose late commit would override
+        /// this); if that fails nothing is written.
+        cancel_follow: Option<Paths>,
     },
     Json {
         path: PathBuf,
@@ -237,14 +260,15 @@ pub enum Job {
         reconcile: Option<PathBuf>,
     },
     Theme(Box<ThemeJob>),
+    Task(Task),
 }
 
 impl Job {
     fn touches(&self, p: &Path) -> bool {
         match self {
             Job::Toml { path, .. } | Job::Json { path, .. } => path == p,
-            // A package transaction may write any of the files Settings owns.
-            Job::Theme(_) => true,
+            // A package transaction or a pane's task may write any of the files Settings owns.
+            Job::Theme(_) | Job::Task(_) => true,
         }
     }
 }
@@ -270,6 +294,8 @@ pub enum Outcome {
     /// The committed JSON document.
     Json(Result<Value, Failure>),
     Theme(Result<Applied, String>),
+    /// A task's own result (never a secret).
+    Task(Result<Value, String>),
 }
 
 /// A finished job. `seq` is the ticket [`Persister::submit`] returned (the newest one for coalesced JSON sets).
@@ -282,6 +308,8 @@ pub struct Done {
     pub outcome: Outcome,
     /// Time the job spent in the worker (validation, writes, fsyncs).
     pub took: Duration,
+    /// Submitted through a [`Handle`]: already answered, not the window's.
+    pub detached: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,6 +335,39 @@ pub enum Refused {
     Closed,
 }
 
+// ---------------------------------------------------------------- handles for other owners
+
+/// Submits tasks to the window's persistence worker from an owner's own thread. `Default` (no worker: headless tests
+/// and tools) runs them right away on the calling thread.
+#[derive(Clone, Default)]
+pub struct Handle {
+    shared: Option<Arc<Shared>>,
+}
+
+impl Handle {
+    /// Queues `run` behind every job submitted before; `then` gets the result on the worker thread.
+    pub fn run_then(&self, label: &'static str, writes: Vec<PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static, then: impl FnOnce(Result<Value, String>) + Send + 'static) -> Result<(), Refused> {
+        let Some(shared) = &self.shared else {
+            then(run());
+            return Ok(());
+        };
+        Persister::enqueue(shared, Job::Task(Task { label, writes, run: Box::new(run), reply: Some(Box::new(then)) })).map(|_| ())
+    }
+
+    /// [`Handle::run_then`], waiting for the result. Only for an owner's worker thread, never the UI thread.
+    pub fn run_wait(&self, label: &'static str, writes: Vec<PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static) -> Result<Value, String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.run_then(label, writes, run, move |r| {
+            let _ = tx.send(r);
+        })
+        .map_err(|e| match e {
+            Refused::Full => "earlier changes are still being written to disk".to_string(),
+            Refused::Closed => "Settings is closing".to_string(),
+        })?;
+        rx.recv().map_err(|_| "Settings closed before this was saved".to_string())?
+    }
+}
+
 // ---------------------------------------------------------------- the worker
 
 #[derive(Default)]
@@ -327,19 +388,35 @@ struct Runner {
 impl Runner {
     fn run(&mut self, seq: u64, job: Job) -> Done {
         let t0 = Instant::now();
+        let mut detached = false;
         let (path, key, style) = match &job {
             Job::Toml { path, .. } => (path.clone(), None, None),
             Job::Json { path, key, .. } => (path.clone(), Some(key.clone()), None),
             Job::Theme(t) => (t.paths.shell_json(), None, t.style),
+            Job::Task(t) => (PathBuf::from(t.label), None, None),
         };
         let outcome = match job {
-            Job::Toml { path, rdwmctl, patch, epoch, base } => Outcome::Toml(self.toml(&path, &rdwmctl, &patch, epoch, base)),
+            Job::Toml { path, rdwmctl, patch, epoch, base, cancel_follow } => Outcome::Toml(match cancel_follow.map(|p| crate::theme::wallpaper_follow::cancel(&p)) {
+                Some(Err(message)) => Err(Failure { conflict: false, message }),
+                _ => self.toml(&path, &rdwmctl, &patch, epoch, base),
+            }),
             Job::Json { path, key, value, base, reconcile: rec } => Outcome::Json(self.json(&path, &key, value, base, rec.as_deref())),
             Job::Theme(t) => Outcome::Theme(self.theme(*t)),
+            Job::Task(t) => {
+                let r = (t.run)();
+                for w in &t.writes {
+                    self.files.entry(w.clone()).or_default().known = Some(io::stamp(w));
+                }
+                if let Some(reply) = t.reply {
+                    reply(r.clone());
+                    detached = true;
+                }
+                Outcome::Task(r)
+            }
         };
         let took = t0.elapsed();
         crate::log_debug!("persist #{seq} {} done in {} ms: {}", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), took.as_millis(), summary(&outcome));
-        Done { seq, path, key, style, outcome, took }
+        Done { seq, path, key, style, outcome, took, detached }
     }
 
     fn toml(&mut self, path: &Path, rdwmctl: &Path, patch: &TomlPatch, epoch: u64, base: Stamp) -> Result<TomlSaved, Failure> {
@@ -447,9 +524,9 @@ impl Runner {
 fn summary(o: &Outcome) -> String {
     match o {
         Outcome::Toml(Ok(s)) => (if s.changed { "saved" } else { "unchanged" }).into(),
-        Outcome::Json(Ok(_)) | Outcome::Theme(Ok(_)) => "saved".into(),
+        Outcome::Json(Ok(_)) | Outcome::Theme(Ok(_)) | Outcome::Task(Ok(_)) => "saved".into(),
         Outcome::Toml(Err(f)) => format!("failed ({})", if f.conflict { "conflict" } else { "error" }),
-        Outcome::Json(Err(_)) | Outcome::Theme(Err(_)) => "failed".into(),
+        Outcome::Json(Err(_)) | Outcome::Theme(Err(_)) | Outcome::Task(Err(_)) => "failed".into(),
     }
 }
 
@@ -545,8 +622,10 @@ impl Persister {
                         }
                     };
                     let done = runner.run(seq, job);
-                    queue.lock().unwrap().push_back(Ev::Persisted(Box::new(done)));
-                    wake();
+                    if !done.detached {
+                        queue.lock().unwrap().push_back(Ev::Persisted(Box::new(done)));
+                        wake();
+                    }
                     s.state.lock().unwrap().running = false;
                     s.cv.notify_all();
                 }
@@ -570,40 +649,53 @@ impl Persister {
             Mode::Inline { runner, next, done } => {
                 let seq = *next;
                 *next += 1;
-                done.push(runner.run(seq, job));
+                let d = runner.run(seq, job);
+                if !d.detached {
+                    done.push(d);
+                }
                 Ok(Submitted::Queued(seq))
             }
-            Mode::Thread { shared, .. } => {
-                let mut st = shared.state.lock().unwrap();
-                if st.closing {
-                    return Err(Refused::Closed);
-                }
-                let seq = st.next;
-                if let Job::Json { path, key, value, reconcile, .. } = &job {
-                    // Equivalent only when no other job for this file sits between the two sets.
-                    let last = st.jobs.iter().rposition(|(_, j)| j.touches(path));
-                    if let Some((old_seq, Job::Json { key: k, value: v, reconcile: r, .. })) = last.map(|i| &mut st.jobs[i]) {
-                        if k == key {
-                            let replaced = *old_seq;
-                            *old_seq = seq;
-                            *v = value.clone();
-                            if r.is_none() {
-                                *r = reconcile.clone();
-                            }
-                            st.next += 1;
-                            return Ok(Submitted::Merged { seq, replaced });
-                        }
+            Mode::Thread { shared, .. } => Self::enqueue(shared, job),
+        }
+    }
+
+    /// For owners with their own threads (the System panes' command runner): the same ordered queue.
+    pub fn handle(&self) -> Handle {
+        match &self.mode {
+            Mode::Thread { shared, .. } => Handle { shared: Some(shared.clone()) },
+            Mode::Inline { .. } => Handle::default(),
+        }
+    }
+
+    fn enqueue(shared: &Shared, job: Job) -> Result<Submitted, Refused> {
+        let mut st = shared.state.lock().unwrap();
+        if st.closing {
+            return Err(Refused::Closed);
+        }
+        let seq = st.next;
+        if let Job::Json { path, key, value, reconcile, .. } = &job {
+            // Equivalent only when no other job for this file sits between the two sets.
+            let last = st.jobs.iter().rposition(|(_, j)| j.touches(path));
+            if let Some((old_seq, Job::Json { key: k, value: v, reconcile: r, .. })) = last.map(|i| &mut st.jobs[i]) {
+                if k == key {
+                    let replaced = *old_seq;
+                    *old_seq = seq;
+                    *v = value.clone();
+                    if r.is_none() {
+                        *r = reconcile.clone();
                     }
+                    st.next += 1;
+                    return Ok(Submitted::Merged { seq, replaced });
                 }
-                if st.jobs.len() >= CAPACITY {
-                    return Err(Refused::Full);
-                }
-                st.next += 1;
-                st.jobs.push_back((seq, job));
-                shared.cv.notify_all();
-                Ok(Submitted::Queued(seq))
             }
         }
+        if st.jobs.len() >= CAPACITY {
+            return Err(Refused::Full);
+        }
+        st.next += 1;
+        st.jobs.push_back((seq, job));
+        shared.cv.notify_all();
+        Ok(Submitted::Queued(seq))
     }
 
     /// Inline mode: the results of the jobs run since the last call.
@@ -771,7 +863,7 @@ mod tests {
 
     fn toml_job(path: &Path, from: &str, f: impl FnOnce(&mut Cfg), epoch: u64) -> Job {
         let (_, patch) = edited(from, f);
-        Job::Toml { path: path.into(), rdwmctl: "/nonexistent/rdwmctl".into(), patch, epoch, base: io::stamp(path) }
+        Job::Toml { path: path.into(), rdwmctl: "/nonexistent/rdwmctl".into(), patch, epoch, base: io::stamp(path), cancel_follow: None }
     }
 
     #[test]
@@ -878,7 +970,7 @@ mod tests {
         let mut shown = String::new();
         for v in 1..=5 {
             let (after, patch) = edited(&shown, |c| c.set("general", "border_px", &Val::Int(v)).unwrap());
-            p.submit(Job::Toml { path: cfg.clone(), rdwmctl: "/nonexistent".into(), patch, epoch: 3, base: io::stamp(&cfg) }).unwrap();
+            p.submit(Job::Toml { path: cfg.clone(), rdwmctl: "/nonexistent".into(), patch, epoch: 3, base: io::stamp(&cfg), cancel_follow: None }).unwrap();
             shown = after;
         }
         let g = gate.clone();
@@ -916,7 +1008,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         std::fs::write(&cfg, "[general]\nborder_px = 9\n").unwrap();
         let (_, patch) = edited(shown, |c| c.set("general", "gap_inner", &Val::Int(3)).unwrap());
-        let job = |epoch, base| Job::Toml { path: cfg.clone(), rdwmctl: "/nonexistent".into(), patch: patch.clone(), epoch, base };
+        let job = |epoch, base| Job::Toml { path: cfg.clone(), rdwmctl: "/nonexistent".into(), patch: patch.clone(), epoch, base, cancel_follow: None };
         let base = io::stamp(&cfg);
         assert!(matches!(r.run(2, job(10, base)).outcome, Outcome::Toml(Err(Failure { conflict: true, .. }))));
         assert!(matches!(r.run(3, job(10, base)).outcome, Outcome::Toml(Err(Failure { conflict: true, .. }))), "queued before the reload: still a conflict");
@@ -942,7 +1034,7 @@ mod tests {
         std::fs::write(&ctl, "#!/bin/sh\necho 'config error: border_px out of range' >&2\nexit 1\n").unwrap();
         std::fs::set_permissions(&ctl, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let (_, patch) = edited(orig, |c| c.set("general", "border_px", &Val::Int(400)).unwrap());
-        p.submit(Job::Toml { path: cfg.clone(), rdwmctl: ctl, patch, epoch: 20, base: io::stamp(&cfg) }).unwrap();
+        p.submit(Job::Toml { path: cfg.clone(), rdwmctl: ctl, patch, epoch: 20, base: io::stamp(&cfg), cancel_follow: None }).unwrap();
         assert!(p.wait_idle(Duration::from_secs(10)));
         let all = done(&q);
         match &all[0].outcome {
@@ -1347,7 +1439,7 @@ mod model_tests {
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
         let before = m.store.cfg.text();
-        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err(Failure { conflict: false, message: "late".into() })), took: Duration::ZERO });
+        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err(Failure { conflict: false, message: "late".into() })), took: Duration::ZERO, detached: false });
         assert_eq!(m.store.cfg.text(), before);
         assert!(m.notice.is_none());
     }

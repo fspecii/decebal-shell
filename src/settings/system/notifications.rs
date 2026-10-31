@@ -173,7 +173,16 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
             }
             _ => return Err("Unsupported notification change".into()),
         }
-        n.save(&h.sh.dir)?;
+        // Saved in order on the persistence worker; shown at once, taken back if the write fails.
+        let (snap, dir, sh) = (n.clone(), h.sh.dir.clone(), h.sh.clone());
+        let persist = h.sh.persist.lock().unwrap().clone();
+        persist
+            .run_then("notifications-save", vec![dir.join(FILE)], move || snap.save(&dir).map(|()| serde_json::Value::Null), move |r| {
+                if let Err(e) = r {
+                    sh.push(super::Done { msg: Some((format!("Notifications not saved: {e}"), true)), notif_reload: true, ..super::Done::default() });
+                }
+            })
+            .map_err(|e| format!("Not saved: {e:?}"))?;
         h.notif = n;
         h.dirty = true;
         // Check only on the explicit enable action, never while building/painting rows.

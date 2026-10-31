@@ -20,6 +20,7 @@ use crate::preset::store::{self, CaptureOpts, Env, Plan, Preset, Status};
 use crate::preset::validate::{self, Diag, FileKind};
 use crate::window_app::{Key, KeyEvent, Response};
 use std::collections::{HashMap, VecDeque};
+use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -1052,9 +1053,9 @@ fn save_tab(m: &mut Model) {
     let tab = m.cfg.tab;
     let (Some(kind), Some(path)) = (tab.kind(), m.cfg.path_of(tab)) else { return };
     ensure_buf(m);
-    let (text, modified, changed_on_disk, read_only) = {
+    let (text, modified, expect, overwrite, read_only) = {
         let b = &m.cfg.bufs[&tab];
-        (b.ed.text(), b.ed.is_modified(), b.stamp != io::stamp(&path), b.ed.read_only)
+        (b.ed.text(), b.ed.is_modified(), b.stamp, b.disk_changed, b.ed.read_only)
     };
     if read_only {
         return m.say("This file cannot be edited here", true);
@@ -1062,43 +1063,62 @@ fn save_tab(m: &mut Model) {
     if !modified {
         return m.say("Nothing to save", false);
     }
-    if changed_on_disk && !m.cfg.bufs[&tab].disk_changed {
-        if let Some(b) = m.cfg.bufs.get_mut(&tab) {
-            b.disk_changed = true;
-        }
+    // Validation (rdwmctl check-config) and the write both run on the persistence worker, after every change
+    // accepted before; the buffer stays editable meanwhile.
+    let rdwmctl = m.cfg.env.rdwmctl.clone();
+    let (p, t) = (path.clone(), text.clone());
+    let run = move || -> Result<serde_json::Value, String> {
+        io::with_file_lock(&p, |_| {
+            if !overwrite && io::stamp(&p) != expect {
+                return Ok(json!({"changed": true}));
+            }
+            let diags = validate::validate(kind, &t, &rdwmctl, &p);
+            if !diags.is_empty() {
+                return Ok(json!({"diags": diags.iter().map(|d| json!([d.line, d.col, d.msg])).collect::<Vec<_>>()}));
+            }
+            let bak = fsx::save_with_backup(&p, &t)?;
+            Ok(json!({"stamp": io::stamp(&p).to_value(), "backup": bak.and_then(|b| b.file_name().map(|n| n.to_string_lossy().into_owned()))}))
+        })
+    };
+    m.run_task("config-save", vec![path], run, move |m, r| saved_tab(m, tab, &text, r));
+}
+
+fn saved_tab(m: &mut Model, tab: Tab, sent: &str, r: Result<serde_json::Value, String>) {
+    let v = match r {
+        Ok(v) => v,
+        Err(e) => return m.say(format!("Not saved: {e}"), true),
+    };
+    let Some(b) = m.cfg.bufs.get_mut(&tab) else { return };
+    if v["changed"] == true {
+        b.disk_changed = true;
+        return m.say("Not saved: the file changed on disk. Reload it, or save again to overwrite it.", true);
     }
-    let diags = validate::validate(kind, &text, &m.cfg.env.rdwmctl, &path);
-    if !diags.is_empty() {
-        let first = validate::describe(&diags[0]);
-        if let Some(b) = m.cfg.bufs.get_mut(&tab) {
-            b.errors = diags;
-            b.note = None;
-        }
+    if let Some(diags) = v["diags"].as_array() {
+        b.errors = diags
+            .iter()
+            .map(|d| Diag { line: d[0].as_u64().map(|n| n as usize), col: d[1].as_u64().map(|n| n as usize), msg: d[2].as_str().unwrap_or_default().to_string() })
+            .collect();
+        b.note = None;
+        let first = validate::describe(&b.errors[0]);
         // jump to the first marked line
-        if let Some(l) = m.cfg.bufs[&tab].errors.iter().find_map(|d| d.line) {
-            let b = m.cfg.bufs.get_mut(&tab).expect("loaded");
+        if let Some(l) = b.errors.iter().find_map(|d| d.line) {
             b.ed.set_cursor(Pos::new(l.saturating_sub(1), 0), false);
         }
         return m.say(format!("Not saved: {first}"), true);
     }
-    match fsx::save_with_backup(&path, &text) {
-        Ok(bak) => {
-            let stamp = io::stamp(&path);
-            if let Some(b) = m.cfg.bufs.get_mut(&tab) {
-                b.ed.mark_saved();
-                b.stamp = stamp;
-                b.errors.clear();
-                b.disk_changed = false;
-                b.note = Some(match &bak {
-                    Some(p) => format!("Saved. The previous version is kept as {}.", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
-                    None => "Saved.".to_string(),
-                });
-            }
-            applied_live(m, tab);
-            m.say("Saved", false);
-        }
-        Err(e) => m.say(format!("Not saved: {e}"), true),
+    // Typing that went on while it was saved stays a modification of its own.
+    if b.ed.text() == sent {
+        b.ed.mark_saved();
     }
+    b.stamp = io::Stamp::from_value(&v["stamp"]);
+    b.errors.clear();
+    b.disk_changed = false;
+    b.note = Some(match v["backup"].as_str() {
+        Some(n) => format!("Saved. The previous version is kept as {n}."),
+        None => "Saved.".to_string(),
+    });
+    applied_live(m, tab);
+    m.say("Saved", false);
 }
 
 /// After a file was written: tell the running programs.
@@ -1119,17 +1139,17 @@ fn reload_tab(m: &mut Model) {
 fn revert_tab(m: &mut Model) {
     let tab = m.cfg.tab;
     let Some(path) = m.cfg.path_of(tab) else { return };
-    if let Some(kind) = tab.kind() {
-        let _ = kind;
-    }
-    match fsx::revert_latest(&path) {
+    let p = path.clone();
+    let run = move || io::with_file_lock(&p, |_| fsx::revert_latest(&p)).map(|from| json!(from.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+    m.run_task("config-revert", vec![path], run, move |m, r| match r {
         Ok(from) => {
+            m.cfg.tab = tab;
             reload_tab(m);
             applied_live(m, tab);
-            m.say(format!("Reverted to {}", from.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()), false);
+            m.say(format!("Reverted to {}", from.as_str().unwrap_or_default()), false);
         }
         Err(e) => m.say(format!("Not reverted: {e}"), true),
-    }
+    });
 }
 
 fn format_tab(m: &mut Model) {
@@ -1203,22 +1223,27 @@ fn begin_import(m: &mut Model, preset: Preset, source: String) {
 fn finish_import(m: &mut Model, then_apply: bool) {
     let Some(imp) = m.cfg.import.take() else { return };
     let strip = !imp.keep_commands && !imp.preset.commands().is_empty();
-    match store::install(&m.cfg.env, imp.preset, strip) {
-        Ok(p) => {
+    let env = m.cfg.env.clone();
+    let preset = imp.preset.clone();
+    let run = move || store::install(&env, preset, strip).map(|p| json!([p.id, p.manifest.name]));
+    m.run_task("preset-import", Vec::new(), run, move |m, r| match r {
+        Ok(v) => {
+            let (id, name) = (v[0].as_str().unwrap_or_default().to_string(), v[1].as_str().unwrap_or_default().to_string());
             m.cfg.forget_listing();
-            m.cfg.selected = Some(p.id.clone());
-            m.say(format!("Imported \"{}\"{}", p.manifest.name, if strip { " without its commands" } else { "" }), false);
+            m.cfg.selected = Some(id.clone());
+            m.say(format!("Imported \"{name}\"{}", if strip { " without its commands" } else { "" }), false);
             if then_apply {
-                begin_apply(m, &p.id.clone());
+                begin_apply(m, &id);
             } else {
                 m.cfg.screen = Screen::Presets;
             }
         }
         Err(e) => {
+            m.cfg.import = Some(imp);
             m.cfg.screen = Screen::Import;
             m.say(format!("Not imported: {e}"), true);
         }
-    }
+    });
 }
 
 fn begin_apply(m: &mut Model, id: &str) {
@@ -1229,28 +1254,47 @@ fn begin_apply(m: &mut Model, id: &str) {
     m.cfg.screen = Screen::Apply;
 }
 
+/// Every Settings file a preset apply may write.
+fn preset_files(m: &Model) -> Vec<PathBuf> {
+    vec![m.paths.rdwm_config.clone(), m.paths.shell_json(), m.paths.dock_settings(), m.paths.dock_pinned()]
+}
+
+fn applied_value(r: &store::Applied) -> serde_json::Value {
+    json!({"restore_point": r.restore_point, "rdwm_changed": r.rdwm_changed, "warnings": r.warnings})
+}
+
+/// After a preset apply or undo committed: the editor buffers and the running programs follow.
+fn preset_applied(m: &mut Model, v: &serde_json::Value) {
+    m.cfg.forget_listing();
+    for b in m.cfg.bufs.values_mut() {
+        b.stamp = Stamp::default(); // forces a reload of unmodified buffers
+    }
+    m.on_files_changed();
+    if v["rdwm_changed"] == true {
+        m.reload_rdwm();
+    }
+}
+
 fn do_apply(m: &mut Model) {
     let Some(a) = m.cfg.apply.take() else { return };
-    match store::apply(&m.cfg.env, &a.preset, !a.preset.is_backup()) {
-        Ok(r) => {
-            m.cfg.forget_listing();
-            m.cfg.last_applied = r.restore_point.clone().map(|id| (a.preset.manifest.name.clone(), id));
-            m.cfg.screen = Screen::Presets;
-            for b in m.cfg.bufs.values_mut() {
-                b.stamp = Stamp::default(); // forces a reload of unmodified buffers
-            }
-            m.on_files_changed();
-            if r.rdwm_changed {
-                m.reload_rdwm();
-            }
-            let w = if r.warnings.is_empty() { String::new() } else { format!(" ({})", r.warnings.join("; ")) };
+    let (env, preset) = (m.cfg.env.clone(), a.preset.clone());
+    let run = move || store::apply(&env, &preset, !preset.is_backup()).map(|r| applied_value(&r));
+    m.cfg.screen = Screen::Presets;
+    let writes = preset_files(m);
+    m.run_task("preset-apply", writes, run, move |m, r| match r {
+        Ok(v) => {
+            m.cfg.last_applied = v["restore_point"].as_str().map(|id| (a.preset.manifest.name.clone(), id.to_string()));
+            preset_applied(m, &v);
+            let w: Vec<&str> = v["warnings"].as_array().map(|w| w.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+            let w = if w.is_empty() { String::new() } else { format!(" ({})", w.join("; ")) };
             m.say(format!("Applied \"{}\"{w}", a.preset.manifest.name), false);
         }
         Err(e) => {
             m.cfg.apply = Some(a);
+            m.cfg.screen = Screen::Apply;
             m.say(format!("Not applied: {e}"), true);
         }
-    }
+    });
 }
 
 fn export_file(m: &mut Model) {
@@ -1266,10 +1310,11 @@ fn export_file(m: &mut Model) {
     if path.exists() && !path.is_file() {
         return m.say("That is not a file", true);
     }
-    match store::export_to(&p, &path) {
-        Ok(n) => m.say(format!("Exported {} ({})", path.display(), human_size(n)), false),
+    let shown = path.display().to_string();
+    m.run_task("preset-export", Vec::new(), move || store::export_to(&p, &path).map(|n| json!(n)), move |m, r| match r {
+        Ok(n) => m.say(format!("Exported {shown} ({})", human_size(n.as_u64().unwrap_or(0) as usize)), false),
         Err(e) => m.say(format!("Not exported: {e}"), true),
-    }
+    });
 }
 
 fn copy_preset(m: &mut Model) {
@@ -1293,15 +1338,18 @@ fn save_form(m: &mut Model) {
     if m.cfg.env.presets_dir.join(manifest::slug(&opts.name)).exists() {
         return m.say(format!("A preset called \"{}\" already exists", opts.name), true);
     }
-    match store::capture(&m.cfg.env, &opts).and_then(|(p, notes)| store::save(&m.cfg.env, &p, false).map(|()| (p, notes))) {
-        Ok((p, notes)) => {
+    // Captured in the worker: the preset holds every change accepted before it, saved or not yet.
+    let env = m.cfg.env.clone();
+    let run = move || store::capture(&env, &opts).and_then(|(p, notes)| store::save(&env, &p, false).map(|()| json!([p.id, p.manifest.name, notes.first()])));
+    m.run_task("preset-save", Vec::new(), run, |m, r| match r {
+        Ok(v) => {
             m.cfg.forget_listing();
-            m.cfg.selected = Some(p.id.clone());
+            m.cfg.selected = v[0].as_str().map(String::from);
             m.cfg.screen = Screen::Presets;
-            m.say(format!("Saved preset \"{}\"{}", p.manifest.name, notes.first().map(|n| format!(" ({n})")).unwrap_or_default()), false);
+            m.say(format!("Saved preset \"{}\"{}", v[1].as_str().unwrap_or_default(), v[2].as_str().map(|n| format!(" ({n})")).unwrap_or_default()), false);
         }
         Err(e) => m.say(format!("Not saved: {e}"), true),
-    }
+    });
 }
 
 /// Control events of the pane (`cfg:...` ids).
@@ -1387,62 +1435,63 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             if let Some((_, rp)) = m.cfg.last_applied.clone() {
                 m.cfg.forget_listing();
                 match m.cfg.presets().0.iter().find(|p| p.id == rp).cloned() {
-                    Some(p) => match store::apply(&m.cfg.env, &p, false) {
-                        Ok(r) => {
-                            m.cfg.last_applied = None;
-                            m.cfg.forget_listing();
-                            m.on_files_changed();
-                            if r.rdwm_changed {
-                                m.reload_rdwm();
+                    Some(p) => {
+                        let env = m.cfg.env.clone();
+                        let writes = preset_files(m);
+                        m.run_task("preset-undo", writes, move || store::apply(&env, &p, false).map(|r| applied_value(&r)), |m, r| match r {
+                            Ok(v) => {
+                                m.cfg.last_applied = None;
+                                preset_applied(m, &v);
+                                m.say("Put everything back", false);
                             }
-                            for b in m.cfg.bufs.values_mut() {
-                                b.stamp = Stamp::default();
-                            }
-                            m.say("Put everything back", false);
-                        }
-                        Err(e) => m.say(format!("Not undone: {e}"), true),
-                    },
+                            Err(e) => m.say(format!("Not undone: {e}"), true),
+                        });
+                    }
                     None => m.say("The restore point is gone", true),
                 }
             }
         }
         "dup" => {
             if let Some(p) = m.cfg.selected_preset() {
-                match store::duplicate(&m.cfg.env, &p.id, None) {
-                    Ok(n) => {
+                let env = m.cfg.env.clone();
+                m.run_task("preset-duplicate", Vec::new(), move || store::duplicate(&env, &p.id, None).map(|n| json!([n.id, n.manifest.name])), |m, r| match r {
+                    Ok(v) => {
                         m.cfg.forget_listing();
-                        m.cfg.selected = Some(n.id);
-                        m.say(format!("Created \"{}\"", n.manifest.name), false);
+                        m.cfg.selected = v[0].as_str().map(String::from);
+                        m.say(format!("Created \"{}\"", v[1].as_str().unwrap_or_default()), false);
                     }
                     Err(e) => m.say(e, true),
-                }
+                });
             }
         }
         "rename-text" => m.cfg.rename_text = s,
         "rename" => {
             let name = m.cfg.rename_text.clone();
             if let Some(p) = m.cfg.selected_preset() {
-                match store::rename(&m.cfg.env, &p.id, &name) {
-                    Ok(n) => {
+                let env = m.cfg.env.clone();
+                m.run_task("preset-rename", Vec::new(), move || store::rename(&env, &p.id, &name).map(|n| json!(n.id)), |m, r| match r {
+                    Ok(id) => {
                         m.cfg.forget_listing();
-                        m.cfg.selected = Some(n.id);
+                        m.cfg.selected = id.as_str().map(String::from);
                         m.cfg.rename_text.clear();
                         m.say("Renamed", false);
                     }
                     Err(e) => m.say(e, true),
-                }
+                });
             }
         }
         "delete" => {
             if let Some(p) = m.cfg.selected_preset() {
-                match store::delete(&m.cfg.env, &p.id) {
-                    Ok(()) => {
+                let env = m.cfg.env.clone();
+                let name = p.manifest.name.clone();
+                m.run_task("preset-delete", Vec::new(), move || store::delete(&env, &p.id).map(|()| serde_json::Value::Null), move |m, r| match r {
+                    Ok(_) => {
                         m.cfg.forget_listing();
                         m.cfg.selected = None;
-                        m.say(format!("Deleted \"{}\"", p.manifest.name), false);
+                        m.say(format!("Deleted \"{name}\""), false);
                     }
                     Err(e) => m.say(e, true),
-                }
+                });
             }
         }
         "export-path" => m.cfg.export_path = s,

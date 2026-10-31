@@ -178,13 +178,9 @@ pub fn q(v: &str) -> String {
     format!("'{}'", v.replace('\'', "'\\''"))
 }
 
+/// The shared Settings write (`io::write_atomic`: per-file lock, unique temp, fsync, identity check at commit).
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("{}: {e}", path.display())
-    })
+    crate::settings::io::write_atomic(path, text)
 }
 
 #[cfg(test)]

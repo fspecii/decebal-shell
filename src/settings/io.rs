@@ -4,7 +4,7 @@ use super::tomlcfg::Cfg;
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -65,6 +65,27 @@ impl Paths {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Stamp(pub Option<(SystemTime, u64, u64)>);
 
+impl Stamp {
+    /// For task results that cross the worker boundary.
+    pub fn to_value(&self) -> Value {
+        match self.0 {
+            Some((t, len, ino)) => {
+                let d = t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
+                serde_json::json!([d.as_secs(), d.subsec_nanos(), len, ino])
+            }
+            None => Value::Null,
+        }
+    }
+
+    pub fn from_value(v: &Value) -> Stamp {
+        let n = |i: usize| v.get(i).and_then(Value::as_u64);
+        match (n(0), n(1), n(2), n(3)) {
+            (Some(s), Some(ns), Some(len), Some(ino)) => Stamp(Some((SystemTime::UNIX_EPOCH + Duration::new(s, ns as u32), len, ino))),
+            _ => Stamp(None),
+        }
+    }
+}
+
 pub fn stamp(path: &Path) -> Stamp {
     use std::os::unix::fs::MetadataExt;
     Stamp(std::fs::metadata(path).ok().and_then(|m| Some((m.modified().ok()?, m.len(), m.ino()))))
@@ -92,10 +113,25 @@ fn target_of(path: &Path) -> PathBuf {
 /// Runs `f` (with the real target) while no other writer in this process touches the file: every writer in `io`
 /// (the persistence worker, the theme engine, the remaining synchronous panes) takes this lock from its read to its
 /// rename. Writers in other processes are caught by the identity check right before the rename instead.
+/// Re-entrant on one thread, so a transaction holding the lock can call helpers that write the same file.
 pub fn with_file_lock<T>(path: &Path, f: impl FnOnce(&Path) -> T) -> T {
+    thread_local! {
+        static HELD: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
     let target = target_of(path);
+    if HELD.with(|h| h.borrow().contains(&target)) {
+        return f(&target);
+    }
     let lock = file_lock(&target);
     let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
+    HELD.with(|h| h.borrow_mut().push(target.clone()));
+    struct Release(PathBuf);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            HELD.with(|h| h.borrow_mut().retain(|p| p != &self.0));
+        }
+    }
+    let _release = Release(target.clone());
     f(&target)
 }
 
@@ -112,8 +148,18 @@ pub fn write_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<(), 
     with_file_lock(path, |t| write_locked(t, text, expect))
 }
 
+/// A private file (a secret, a cache): the same protocol, created with `mode` from the start (never readable by
+/// others, not even briefly), and no `.bak-decsettings` copy.
+pub fn write_private(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
+    with_file_lock(path, |t| write_with(t, bytes, stamp(t), Some(mode), false))
+}
+
 /// The caller holds the file lock of `target`.
 fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<(), String> {
+    write_with(target, text.as_bytes(), expect, None, true)
+}
+
+fn write_with(target: &Path, text: &[u8], expect: Stamp, mode: Option<u32>, backup: bool) -> Result<(), String> {
     static TMP: AtomicU64 = AtomicU64::new(0);
     let changed = || {
         crate::log_warn!("{} changed on disk while saving; not overwriting", target.display());
@@ -125,7 +171,7 @@ fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<(), String> 
     let dir = target.parent().ok_or("config path has no directory")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    if target.exists() {
+    if backup && target.exists() {
         let bak = dir.join(format!("{name}.{BACKUP_SUFFIX}"));
         if !bak.exists() {
             std::fs::copy(target, &bak).map_err(|e| format!("backup {}: {e}", bak.display()))?;
@@ -134,12 +180,17 @@ fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<(), String> 
     // Unique per write: two writers never share (truncate or rename) one another's temp file.
     let tmp = dir.join(format!(".{name}.decsettings-{}-{}.tmp", std::process::id(), TMP.fetch_add(1, Ordering::Relaxed)));
     let res = (|| -> std::io::Result<bool> {
-        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
-        f.write_all(text.as_bytes())?;
+        let mut f = match mode {
+            Some(m) => std::fs::OpenOptions::new().write(true).create_new(true).mode(m).open(&tmp)?,
+            None => std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?,
+        };
+        f.write_all(text)?;
         fault::before_sync(target)?;
         f.sync_all()?;
-        if let Ok(m) = std::fs::metadata(target) {
-            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
+        if mode.is_none() {
+            if let Ok(m) = std::fs::metadata(target) {
+                let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
+            }
         }
         // At commit: the file must still be what the caller read (the fsync above may have taken seconds).
         if stamp(target) != expect {
@@ -322,16 +373,22 @@ impl Store {
     }
 
     pub fn restore_backup(&mut self) -> Result<(), String> {
-        let bak = self.path.with_file_name(format!("{}.{BACKUP_SUFFIX}", self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
-        let text = std::fs::read_to_string(&bak).map_err(|e| format!("{}: {e}", bak.display()))?;
-        let cfg = Cfg::parse(&text)?;
-        validate(&self.rdwmctl, &self.path, &text)?;
-        write_atomic(&self.path, &text)?;
-        self.cfg = cfg;
+        let text = restore_backup(&self.path, &self.rdwmctl)?;
+        self.cfg = Cfg::parse(&text)?;
         self.text = text;
         self.stamp = stamp(&self.path);
         Ok(())
     }
+}
+
+/// Puts the one-time `config.toml.bak-decsettings` back (validated like any other change); returns its text.
+pub fn restore_backup(path: &Path, rdwmctl: &Path) -> Result<String, String> {
+    let bak = path.with_file_name(format!("{}.{BACKUP_SUFFIX}", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+    let text = std::fs::read_to_string(&bak).map_err(|e| format!("{}: {e}", bak.display()))?;
+    Cfg::parse(&text)?;
+    validate(rdwmctl, path, &text)?;
+    write_atomic(path, &text)?;
+    Ok(text)
 }
 
 /// Runs `rdwmctl check-config` on a scratch copy; without rdwmctl only the TOML syntax is checked.

@@ -7,8 +7,13 @@ use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row};
 use crate::theme::system::{self, Config, Env};
 
+/// The settings new changes start from: the shown ones while a change is pending, else the file.
+fn current(m: &Model) -> Config {
+    Config::from_json(&m.json_value_now("shell", "system").unwrap_or_default())
+}
+
 pub fn items(m: &Model) -> Vec<Item> {
-    let cfg = Config::load(&m.paths.shell_json());
+    let cfg = current(m);
     let env = Env::discover();
     let st = system::status(&env, &cfg);
     let applied = system::applied_theme(&env);
@@ -86,74 +91,76 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-fn save(m: &mut Model, cfg: &Config) -> bool {
-    match cfg.save(&m.paths.shell_json()) {
-        Ok(()) => {
-            m.shell = super::io::json_load(&m.paths.shell_json());
-            m.dirty = true;
-            true
-        }
-        Err(e) => {
-            m.say(format!("Not saved: {e}"), true);
-            false
-        }
+/// Saves `"system"` through the persistence worker (keys this version does not know are kept); `then` runs once it
+/// is on disk (asking for an apply reads the file).
+fn save_then(m: &mut Model, cfg: &Config, then: impl FnOnce(&mut Model) + 'static) {
+    let base = m.json_value_now("shell", "system");
+    let mut obj = base.as_ref().and_then(|v| v.as_object()).cloned().unwrap_or_default();
+    // the keys Config owns are replaced (a cleared one is absent from to_json); every other key is kept
+    for k in ["enabled", "fileManagerStyle", "targets", "iconTheme", "cursorTheme", "signals", "options"] {
+        obj.shift_remove(k);
     }
+    if let serde_json::Value::Object(known) = cfg.to_json() {
+        obj.extend(known);
+    }
+    m.edit_json_then("shell", "system", Some(serde_json::Value::Object(obj)), base, None, Some(Box::new(then)));
+}
+
+fn request(m: &mut Model) {
+    system::request(&m.paths.shell_json());
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
-    let mut cfg = Config::load(&m.paths.shell_json());
+    let mut cfg = current(m);
     match (parts, v) {
         (["sy", "on"], CtlVal::Bool(on)) => {
             // Save first, then queue one observable apply; opt-out restores the original app settings.
+            let then = move |m: &mut Model| {
+                if on {
+                    request(m);
+                } else {
+                    system::spawn_ctl(&["system", "off"]);
+                }
+                m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
+            };
             if cfg.enabled != on {
                 cfg.enabled = on;
-                if !save(m, &cfg) {
-                    return;
-                }
-            }
-            if on {
-                system::request(&m.paths.shell_json());
+                save_then(m, &cfg, then);
             } else {
-                system::spawn_ctl(&["system", "off"]);
+                then(m);
             }
-            m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
         }
         (["sy", "t", id], CtlVal::Bool(b)) => {
             if !system::targets().iter().any(|t| t.id() == *id) {
                 return;
             }
             cfg.targets.insert((*id).to_string(), b);
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "o", key], CtlVal::Bool(b)) => {
             if !system::OPTIONS.iter().any(|o| o.0 == *key) {
                 return;
             }
             cfg.set_option(key, b);
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "files"], CtlVal::Str(s)) => {
             let Some(style) = system::file_manager::Style::parse(&s) else { return };
             cfg.file_manager_style = style;
-            if save(m, &cfg) && cfg.enabled {
-                system::request(&m.paths.shell_json());
-            }
+            let enabled = cfg.enabled;
+            save_then(m, &cfg, move |m| {
+                if enabled {
+                    request(m);
+                }
+            });
         }
         (["sy", "icon"], CtlVal::Str(s)) => {
             cfg.icon_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "now"], CtlVal::Click) => {
             if cfg.enabled {

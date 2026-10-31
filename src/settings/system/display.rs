@@ -503,7 +503,7 @@ impl Hub {
                 let _ = std::fs::write(f, b"kept");
             }
             // persist the layout as it is now
-            let dir = self.sh.dir.clone();
+            let (dir, sh) = (self.sh.dir.clone(), self.sh.clone());
             let before = self.session.clone();
             self.sh.spawn(move |r| {
                 let st = load(r);
@@ -511,7 +511,8 @@ impl Hub {
                 if st.available {
                     let mut s = before;
                     s.xrandr = layout_args(&st);
-                    match s.save(&dir) {
+                    let persist = sh.persist.lock().unwrap().clone();
+                    match super::save_session_kept(&persist, &dir, &sh.session, s.clone()) {
                         Ok(()) => {
                             d.session = Some(s);
                             d.msg = Some(("Display settings kept".into(), false));
