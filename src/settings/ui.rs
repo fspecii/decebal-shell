@@ -560,17 +560,24 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
         Kind::Slider { v, min, max, unit, step } => {
             let shown = it.drag.as_ref().filter(|(id, _)| id == &c.id).map_or(*v, |(_, d)| *d);
             let label = format!("{}{}", format_num(shown, *step), unit);
-            let lw = u(58.0).max(p.measure(&label, u(12.5), Weight::Regular));
-            p.text_right(pm, &label, x + lw, cy, u(12.5), Weight::Regular, a(pal::sub()));
-            let tx = x + lw + u(12.0);
-            let tw = (right - tx).max(u(20.0));
+            let natural_lw = u(58.0).max(p.measure(&label, u(12.5), Weight::Regular));
+            // Keep ordinary rows unchanged. In a squeezed row, the old minimum label + track
+            // widths pushed the pointer target beyond the window; budget the target padding too.
+            let squeezed = natural_lw + u(12.0) + u(20.0) > w;
+            let pad = if squeezed { u(8.0).min(w / 4.0) } else { u(8.0) };
+            let gap = if squeezed { u(12.0).min(w / 8.0) } else { u(12.0) };
+            let lw = if squeezed { (w - gap - pad - u(20.0).min(w / 2.0)).max(0.0) } else { natural_lw };
+            let visible_label = if squeezed { p.fit(&label, lw, u(12.5), Weight::Regular) } else { label };
+            p.text_right(pm, &visible_label, x + lw, cy, u(12.5), Weight::Regular, a(pal::sub()));
+            let tx = x + lw + gap;
+            let tw = if squeezed { (right - pad - tx).max(0.0) } else { (right - tx).max(u(20.0)) };
             let t = if max > min { ((shown - min) / (max - min)).clamp(0.0, 1.0) as f32 } else { 0.0 };
             fill_rounded(pm, tx, cy - u(2.0), tw, u(4.0), u(2.0), a(crate::theme::th().ink(0.18)));
             fill_rounded(pm, tx, cy - u(2.0), tw * t, u(4.0), u(2.0), a(pal::accent()));
             let kx = tx + tw * t;
-            fill_circle(pm, kx, cy + u(1.0), u(9.0), color(0, 0, 0, 0.3 * dim));
-            fill_circle(pm, kx, cy, u(8.5), a(color(250, 250, 250, 1.0)));
-            rect = (tx - u(8.0), cy - u(12.0), tw + u(16.0), u(24.0));
+            fill_circle(pm, kx, cy + u(1.0), if squeezed { u(9.0).min(pad) } else { u(9.0) }, color(0, 0, 0, 0.3 * dim));
+            fill_circle(pm, kx, cy, if squeezed { u(8.5).min(pad) } else { u(8.5) }, a(color(250, 250, 250, 1.0)));
+            rect = (tx - pad, cy - u(12.0), tw + 2.0 * pad, u(24.0));
             parts.push((tx, cy - u(12.0), tw, u(24.0)));
         }
         Kind::Stepper { v, step, unit, .. } => {
@@ -1307,6 +1314,37 @@ pub fn part_at(parts: &[Rect], x: f32, y: f32) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn squeezed_slider_keeps_its_entire_pointer_range_inside_the_budget() {
+        for scale in [1.0, 2.0] {
+            for width in [24.0, 40.0, 64.0, 96.0, 128.0] {
+                let mut pm = Pixmap::new(800, 200).unwrap();
+                let mut p = Painter { fonts: None, s: scale };
+                let c = Ctl::new("travel", Kind::Slider { v: 120.0, min: 40.0, max: 2000.0, step: 1.0, unit: " logical pixels of travel".into() });
+                let right = 700.0;
+                let available = width * scale;
+                let placed = draw_ctl(&mut pm, &mut p, &c, right, 100.0, &Interact::default(), (right - available, 0.0, available, 200.0), available);
+                assert!(placed.rect.0 >= right - available - 0.01, "left: scale {scale}, width {width}");
+                assert!(placed.rect.0 + placed.rect.2 <= right + 0.01, "right: scale {scale}, width {width}");
+                let track = placed.parts[0];
+                assert!(track.2 > 0.0 && track.0 >= placed.rect.0 && track.0 + track.2 <= placed.rect.0 + placed.rect.2);
+                assert_eq!(slider_value(track.0, track, 40.0, 2000.0, 1.0), 40.0);
+                assert_eq!(slider_value(track.0 + track.2, track, 40.0, 2000.0, 1.0), 2000.0);
+                assert!(matches!(&placed.ctl.kind, Kind::Slider { v, unit, .. } if *v == 120.0 && unit == " logical pixels of travel"));
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_slider_retains_its_existing_track_geometry() {
+        let mut pm = Pixmap::new(500, 200).unwrap();
+        let mut p = Painter { fonts: None, s: 1.0 };
+        let c = Ctl::new("level", Kind::Slider { v: 1.0, min: 0.0, max: 10.0, step: 1.0, unit: String::new() });
+        let placed = draw_ctl(&mut pm, &mut p, &c, 400.0, 100.0, &Interact::default(), (0.0, 0.0, 500.0, 200.0), 230.0);
+        assert_eq!(placed.parts[0], (240.0, 88.0, 160.0, 24.0));
+        assert_eq!(placed.rect, (232.0, 88.0, 176.0, 24.0));
+    }
 
     // Use isolated processes because live font preferences are process-wide atomics.
     #[test]
