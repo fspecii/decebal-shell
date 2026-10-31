@@ -67,7 +67,7 @@ pub const PANES: &[PaneDef] = &[
     PaneDef { id: "network", title: "Network", glyph: Glyph::Sys(glyphs::WIFI), color: (10, 132, 255), keywords: "wifi wi-fi wireless ethernet vpn internet ip dns networkmanager nmcli" },
     PaneDef { id: "bluetooth", title: "Bluetooth", glyph: Glyph::Sys(glyphs::BLUETOOTH), color: (10, 132, 255), keywords: "pair devices headset mouse keyboard discoverable bluez" },
     PaneDef { id: "notifications", title: "Notifications", glyph: Glyph::Sys(glyphs::BELL), color: (255, 59, 48), keywords: "do not disturb dnd banner mute alerts decnotify" },
-    PaneDef { id: "inputdev", title: "Keyboard & Input", glyph: Glyph::Sys(glyphs::MOUSE), color: (99, 99, 102), keywords: "layout repeat caps lock pointer mouse touchpad scrolling tap speed xkb" },
+    PaneDef { id: "inputdev", title: "Keyboard & Input", glyph: Glyph::Sys(glyphs::MOUSE), color: (99, 99, 102), keywords: "layout repeat caps lock pointer mouse touchpad scrolling tap speed xkb swipe gesture" },
     PaneDef { id: "power", title: "Power & Battery", glyph: Glyph::Sys(glyphs::BATTERY), color: (48, 209, 88), keywords: "battery profile performance saver screen blank sleep dpms lid suspend" },
     PaneDef { id: "defaults", title: "Default Apps", glyph: Glyph::Sys(glyphs::APPS), color: (255, 159, 10), keywords: "browser mail terminal file manager media player editor pdf xdg" },
     PaneDef { id: "datetime", title: "Date & Time", glyph: Glyph::Sys(glyphs::CLOCK), color: (142, 142, 147), keywords: "timezone clock 24 hour ntp format menu bar" },

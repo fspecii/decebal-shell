@@ -1321,7 +1321,7 @@ fn pane_context(id: &str) -> &'static str {
         "network" => "Wi-Fi, wired connections and VPN.",
         "bluetooth" => "Pair and manage Bluetooth devices.",
         "notifications" => "Banners, Do Not Disturb and notification history.",
-        "inputdev" => "Keyboard layout, key repeat, mouse and touchpad.",
+        "inputdev" => "Keyboard layout, key repeat, mouse, touchpad and trackpad swipes.",
         "power" => "Power profile, screen blanking, sleep and the lid.",
         "defaults" => "The apps that open web links, mail, files and media.",
         "datetime" => "Time zone, clock format and network time.",

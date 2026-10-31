@@ -712,7 +712,11 @@ impl Model {
             "sound" => sound::items(h),
             "network" => network::items(h),
             "bluetooth" => bluetooth::items(h),
-            "inputdev" => input::items(h),
+            "inputdev" => {
+                let mut v = input::items(h);
+                v.extend(super::gestures::items(self));
+                v
+            }
             "power" => power::items(h),
             "defaults" => defaults::items(h),
             "notifications" => notifications::items(h),

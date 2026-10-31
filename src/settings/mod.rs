@@ -8,6 +8,7 @@ pub mod configpane;
 pub mod decorations;
 pub mod editor;
 pub mod fontpane;
+pub mod gestures;
 pub mod icons;
 pub mod iconspane;
 pub mod io;
