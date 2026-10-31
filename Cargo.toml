@@ -66,7 +66,7 @@ path = "src/bin/decsettings.rs"
 [[bin]]
 name = "decnotify"
 path = "src/bin/decnotify.rs"
-required-features = ["x11"]
+# Builds with either display backend (or neither: the daemon then reports that it has no display to draw on).
 
 [[bin]]
 name = "decwm"
