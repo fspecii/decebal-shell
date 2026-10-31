@@ -1,6 +1,6 @@
-# Kickoff Places: how the answer reaches the screen, and the one hook the shared launcher host still needs
+# Kickoff Places: asynchronous delivery through the shared launcher host
 
-Status: source written, **not built or run** (no Cargo allowed in this pass). Root runs the tests.
+Status: root wired the shared hook; 36 focused tests passed, with 2 existing ignores. Formatting and strict all-target lint pass after root test-only cleanup. Native launcher and package acceptance remain pending.
 
 ## What Kickoff's Places tab does now (all in `src/launcher/styled/kde/places.rs` and `kde.rs`)
 
@@ -19,14 +19,11 @@ Status: source written, **not built or run** (no Cargo allowed in this pass). Ro
   512 KiB from each end, 400 bookmarks, 120 existence checks, 40 documents, 16 devices; private items (`<bookmark:private/>`) are skipped; entities, percent
   encoding, calendar fields and timestamp arithmetic are validated or checked.
 
-## What is missing: waking the event loop (needs a shared edit, not made here)
+## Shared event-loop hook (now wired)
 
-`places.rs` calls the host's waker when the worker finishes (`kde::set_waker`) and `kde::tick()` takes the answer in and says whether to redraw, but the shared
-engine does not forward either yet: `Launcher::set_waker` only starts the theme watcher and `Launcher::tick` only reacts to theme changes. Without the hook the
-answer is shown at the next input event (a pointer move or a key), which in practice is immediate while the user is working, but an idle launcher shows the note
-until it is touched. The theme watcher cannot be borrowed for this: it wakes only on a real theme or icon change.
+`Launcher::set_waker` now forwards the callback through `Styled` to the Places store. `Launcher::tick` asks the style to harvest completed work and redraws it without another input event. The regression uses channels to finish a held worker, receives its wake-up, then verifies the shared style tick changes its visible rows and requests exactly one redraw.
 
-Required hook, two shared files, about ten lines (not applied):
+The implemented hook is:
 
 ```rust
 // src/launcher/styled.rs
@@ -71,7 +68,7 @@ fn tick(&mut self) -> Response {
 
 Other styles (Deepin, UKUI) can use the same two entry points for their own workers; a style that has none returns `Nothing` / `NONE`.
 
-## Tests (written, unrun)
+## Tests and evidence
 
 `kde/places.rs`: one thread however many `request`/`cancel` cycles; the waker handshake and the answer landing in the store only; cancel stops the worker and
 drops its answer, then exactly one new worker may start; coming back keeps the answer; a panicking worker frees the flight; a reader is never asked for more than
@@ -81,3 +78,6 @@ private items, malformed and oversized bookmarks, 50 000 distinct paths); timest
 Enter opens Home while the rest is unread; 300 open/close cycles add no thread; a late answer changes the store and not the page, the query, the focus or the
 zones; leaving Places discards the answer and the next opening starts one new worker. All handshakes use channels (the worker is released by the test, the
 waker signals back); timeouts exist only to turn a hang into a failure.
+
+
+Root evidence: `/var/tmp/decebal-kde-places-root-gate-v3/result.json` (36 passed, 2 ignored; the subsequent lint phase found a redundant closure) and `/var/tmp/decebal-kde-places-root-lint-final-v2/result.json` (strict all-target lint and formatting pass at `9aaff89`). Earlier failed fixture assertions and lint logs are retained. Root's first new wake-up assertion incorrectly assumed loaded data preceded the fixed Show KRunner row; it was corrected to verify delivery without changing that product order. No native capture, installation or full Plasma-package acceptance is implied. The shared heavy-job pause was restored after each run.
