@@ -298,6 +298,9 @@ pub struct DecBar {
     // Control Center
     cc_items: Vec<controlcenter::Item>,
     cc_height: f32,
+    /// Content width of the laid-out panel (before the viewport's zoom), and the host room it was laid out for.
+    cc_w: f32,
+    cc_room: f32,
     cc_viewport: ccviewport::Viewport,
     cc_hover: Option<Target>,
     cc_drag: Option<Target>,
@@ -429,6 +432,8 @@ impl DecBar {
             waker: None,
             cc_items: Vec::new(),
             cc_height: 0.0,
+            cc_w: 0.0,
+            cc_room: 0.0,
             cc_viewport: ccviewport::Viewport::default(),
             cc_hover: None,
             cc_drag: None,
@@ -983,12 +988,9 @@ impl DecBar {
     }
 
     fn open_control(&mut self) {
-        let snap = self.snapshot();
-        let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
-        self.cc_items = items;
-        self.cc_height = h;
         self.cc_viewport = ccviewport::Viewport::default();
         self.open = Open::Control;
+        self.relayout_control();
         self.last_full_refresh = Instant::now();
         self.spawn_snapshot(true);
     }
@@ -999,21 +1001,23 @@ impl DecBar {
     }
 
     /// Writes the `DECBAR_DEBUG_PANEL` report for the open Control Center (nothing without the variable).
-    fn debug_control_panel(&mut self, surface_w: u32, surface_h: u32) {
+    pub(super) fn debug_control_panel(&mut self, surface_w: u32, surface_h: u32) {
         if self.debug_panel.is_none() {
             return;
         }
         let (ox, oy) = self.panel_origin();
-        let scroll = if self.cc_clipped() { self.cc_viewport.scroll } else { 0.0 };
-        let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\n", ox, oy, self.cc_width(), self.cc_visible_height(), surface_w, surface_h, scroll, self.cc_height);
+        let (scroll, z) = (self.cc_viewport.scroll, self.cc_zoom());
+        // surface coordinates (logical pixels of this surface): where each control is drawn now, after the scroll and the zoom
+        let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\nzoom {} width {}\n", ox, oy, self.cc_width(), self.cc_visible_height(), surface_w, surface_h, scroll, self.cc_height, z, self.cc_w);
         let mut seen = Vec::new();
         for item in &self.cc_items {
             if let Some(target) = item.target.filter(|t| !seen.contains(t)) {
                 seen.push(target);
-                text += &format!("target {target:?} {} {} {} {}\n", ox + item.r.x, oy + item.r.y - scroll, item.r.w, item.r.h);
+                text += &format!("target {target:?} {} {} {} {}\n", ox + item.r.x * z, oy + (item.r.y - scroll) * z, item.r.w * z, item.r.h * z);
             }
         }
         text += &format!("focus {}\n", self.cc_viewport.focus.map_or("none".to_string(), |t| format!("{t:?}")));
+        text += &format!("hover {}\n", self.cc_hover.map_or("none".to_string(), |t| format!("{t:?}")));
         if let Some((path, last)) = self.debug_panel.as_mut() {
             if *last != text {
                 let _ = std::fs::write(&*path, &text);
@@ -1022,55 +1026,88 @@ impl DecBar {
         }
     }
 
-    /// Whether the open panel is clipped to the room it has and scrolls (the looks that scroll), in every host: the
-    /// menu bar, the overlay, the rail styles and the taskbar's engine.
+    /// Whether the open panel is clipped to the room it has and scrolls: every look, in every host (the menu bar, the
+    /// overlay, the rail styles and the taskbar's engine).
     fn cc_clipped(&self) -> bool {
         self.cc_style().scrolls()
     }
-    fn cc_visible_height(&self) -> f32 {
-        if self.cc_clipped() && self.embedded {
-            return self.cc_height.min(self.embed_room(self.embed.edge, self.embed.up, self.embed.screen_w).max(0.0));
+    /// Width the panel may have in this host (logical pixels; infinite when the host does not know yet).
+    pub(super) fn cc_room_w(&self) -> f32 {
+        if self.embedded {
+            return self.embed_room_w();
         }
-        if self.cc_clipped() && self.pill_bar() {
-            return self.cc_height.min(self.v_cc_room().max(0.0));
+        if self.pill_bar() {
+            return self.v_cc_room_w();
         }
-        if self.cc_clipped() && self.bottom() {
-            return self.cc_height.min((self.strip_top() - PANEL_GAP - BOTTOM_MARGIN).max(0.0));
-        }
-        if self.cc_clipped() {
-            ccviewport::height(self.cc_height, self.panel_origin().1, self.height as f32)
+        if self.width > 0 {
+            self.width as f32 - 2.0 * BOTTOM_MARGIN
         } else {
-            self.cc_height
+            f32::INFINITY
         }
+    }
+    fn cc_zoom(&self) -> f32 {
+        self.cc_viewport.z()
+    }
+    /// Height of the visible panel on the surface (logical pixels, after the zoom).
+    fn cc_visible_height(&self) -> f32 {
+        let full = self.cc_height * self.cc_zoom();
+        if !self.cc_clipped() {
+            return full;
+        }
+        if self.embedded {
+            return full.min(self.embed_room(self.embed.edge, self.embed.up, self.embed.screen_w).max(0.0));
+        }
+        if self.pill_bar() {
+            return full.min(self.v_cc_room().max(0.0));
+        }
+        if self.bottom() {
+            return full.min((self.strip_top() - PANEL_GAP - BOTTOM_MARGIN).max(0.0));
+        }
+        if self.height as f32 <= self.panel_origin().1 + 1.0 {
+            // the surface has not grown for the panel yet (the backend's resize follows the open): nothing to clip to
+            return full;
+        }
+        ccviewport::height(full, self.panel_origin().1, self.height as f32)
+    }
+    /// The visible height in the panel's own units (before the zoom): what scrolling and revealing work in.
+    fn cc_view_height(&self) -> f32 {
+        self.cc_visible_height() / self.cc_zoom()
     }
     fn cc_point(&self, x: f32, y: f32) -> Option<(f32, f32)> {
-        let origin = self.panel_origin();
-        if self.cc_clipped() {
-            self.cc_viewport.point(x, y, origin, self.cc_width(), self.cc_visible_height())
-        } else {
-            Some((x - origin.0, y - origin.1))
-        }
+        self.cc_viewport.point(x, y, self.panel_origin(), self.cc_width(), self.cc_visible_height())
     }
+    /// Keeps the open panel fitted to its host: laid out again when the room changed (a resize, another edge), the scroll
+    /// clamped, the keyboard focus in view.
     fn cc_sync_viewport(&mut self) {
-        if !self.cc_clipped() {
+        if self.open == Open::Control && (self.cc_room_w() - self.cc_room).abs() > 0.5 {
+            self.relayout_control();
             return;
         }
-        self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
+        self.cc_viewport.clamp(self.cc_height, self.cc_view_height());
         if let Some((_, rect)) = ccviewport::targets(&self.cc_items).into_iter().find(|(target, _)| Some(*target) == self.cc_viewport.focus) {
-            self.cc_viewport.reveal(rect, self.cc_height, self.cc_visible_height());
+            self.cc_viewport.reveal(rect, self.cc_height, self.cc_view_height());
         }
     }
 
+    /// Width of the panel on the surface (after the zoom).
     fn cc_width(&self) -> f32 {
-        controlcenter::panel_width(self.cc_style())
+        let w = if self.cc_w > 0.0 { self.cc_w } else { controlcenter::panel_width(self.cc_style()) };
+        w * self.cc_zoom()
     }
 
     fn relayout_control(&mut self) {
         let snap = self.snapshot();
-        let (items, h) = controlcenter::layout_styled(&snap, &crate::theme::th().control_center.tiles, self.cc_style());
-        self.cc_items = items;
-        self.cc_height = h;
-        self.cc_sync_viewport();
+        let room = self.cc_room_w();
+        let f = controlcenter::layout_fitted(&snap, &crate::theme::th().control_center.tiles, self.cc_style(), room);
+        self.cc_items = f.items;
+        self.cc_height = f.height;
+        self.cc_w = f.width;
+        self.cc_viewport.zoom = f.zoom;
+        self.cc_room = room;
+        self.cc_viewport.clamp(self.cc_height, self.cc_view_height());
+        if let Some((_, rect)) = ccviewport::targets(&self.cc_items).into_iter().find(|(target, _)| Some(*target) == self.cc_viewport.focus) {
+            self.cc_viewport.reveal(rect, self.cc_height, self.cc_view_height());
+        }
     }
 
     // ------------------------------------------------------------- actions
@@ -1761,7 +1798,7 @@ impl App for DecBar {
             let (ox, _) = self.panel_origin();
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                 let (rx, rw) = (it.r.x, it.r.w);
-                self.slide(t, rx, rw, x - ox, false);
+                self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), false);
                 return true;
             }
         }
@@ -1956,7 +1993,7 @@ impl App for DecBar {
             let (ox, _) = self.panel_origin();
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                 let (rx, rw) = (it.r.x, it.r.w);
-                self.slide(t, rx, rw, x - ox, true);
+                self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), true);
             }
             return true;
         }
@@ -2002,7 +2039,7 @@ impl App for DecBar {
                 self.cc_viewport.focus = Some(target);
                 self.cc_hover = Some(target);
                 if self.cc_clipped() {
-                    self.cc_viewport.reveal(rect, self.cc_height, self.cc_visible_height());
+                    self.cc_viewport.reveal(rect, self.cc_height, self.cc_view_height());
                 }
                 true
             }
@@ -2016,7 +2053,22 @@ impl App for DecBar {
                 self.activate(target, rect.x, rect.w, rect.x + rect.w / 2.0);
                 true
             }
-            crate::app::NavKey::Left | crate::app::NavKey::Right => false,
+            crate::app::NavKey::Left | crate::app::NavKey::Right => {
+                // a focused slider steps by 5 %, as the wheel does; nothing else takes Left/Right
+                let Some(index) = current else { return false };
+                let (target, rect) = targets[index];
+                if !matches!(target, Target::Volume | Target::Brightness) {
+                    return false;
+                }
+                let snap = self.snapshot();
+                let cur = match target {
+                    Target::Brightness => snap.brightness.unwrap_or(0) as f32 / 100.0,
+                    _ => snap.volume.map(|v| v.level).unwrap_or(0.0),
+                };
+                let step = if key == crate::app::NavKey::Right { 0.05 } else { -0.05 };
+                self.slide(target, rect.x, rect.w, rect.x + (cur + step).clamp(0.0, 1.0) * rect.w, true);
+                true
+            }
         }
     }
 
@@ -2173,7 +2225,7 @@ impl DecBar {
             let old = self.cc_viewport.scroll;
             self.cc_viewport.focus = None;
             self.cc_viewport.scroll += dy * ccviewport::SCROLL_STEP;
-            self.cc_viewport.clamp(self.cc_height, self.cc_visible_height());
+            self.cc_viewport.clamp(self.cc_height, self.cc_view_height());
             return old != self.cc_viewport.scroll || cleared_highlight;
         }
         let Some((t @ (Target::Brightness | Target::Volume), r)) = hit else { return cleared_highlight };
@@ -2283,6 +2335,8 @@ impl DecBar {
 
 #[cfg(test)]
 mod gnome_cc_tests;
+#[cfg(test)]
+mod cc_fit_tests;
 
 #[cfg(test)]
 mod tests {

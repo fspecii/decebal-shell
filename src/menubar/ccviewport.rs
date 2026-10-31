@@ -9,7 +9,10 @@ pub(super) const SCROLL_STEP: f32 = 40.0;
 
 #[derive(Default)]
 pub(super) struct Viewport {
+    /// Scroll offset in content units (the panel's own, before `zoom`).
     pub scroll: f32,
+    /// What the host draws the panel at (see [`crate::controlcenter::Fitted::zoom`]); 0 is 1.
+    pub zoom: f32,
     pub focus: Option<Target>,
     buffer: Option<Pixmap>,
     mask: Option<Mask>,
@@ -38,6 +41,14 @@ pub(super) fn height(content: f32, origin_y: f32, surface_height: f32) -> f32 {
 }
 
 impl Viewport {
+    /// The zoom, 1 when unset.
+    pub fn z(&self) -> f32 {
+        if self.zoom > 0.0 {
+            self.zoom
+        } else {
+            1.0
+        }
+    }
     pub fn clamp(&mut self, content: f32, height: f32) {
         self.scroll = self.scroll.clamp(0.0, (content - height).max(0.0));
     }
@@ -49,12 +60,17 @@ impl Viewport {
         }
         self.clamp(content, height);
     }
+    /// The content point under surface point (`x`, `y`) of a viewport at `origin`, `width` x `height` surface units.
     pub fn point(&self, x: f32, y: f32, origin: (f32, f32), width: f32, height: f32) -> Option<(f32, f32)> {
-        (x >= origin.0 && x < origin.0 + width && y >= origin.1 && y < origin.1 + height).then_some((x - origin.0, y - origin.1 + self.scroll))
+        let z = self.z();
+        (x >= origin.0 && x < origin.0 + width && y >= origin.1 && y < origin.1 + height).then_some(((x - origin.0) / z, (y - origin.1) / z + self.scroll))
     }
     #[allow(clippy::too_many_arguments)]
     pub fn draw(&mut self, pm: &mut Pixmap, origin: (f32, f32), width: f32, height: f32, items: &[Item], hover: Option<Target>, style: Style, fonts: &mut Fonts, symbols: &mut SymbolCache) {
         let (width, height) = (width.ceil().max(1.0) as u32, height.ceil().max(1.0) as u32);
+        let z = self.z();
+        // the content's visible height in its own units
+        let view = height as f32 / z;
         // the buffer is in surface pixels (the panel is laid out and scrolled in logical ones): at a display scale the
         // controls are drawn at that scale into it and blitted 1:1, not drawn small and stretched
         let k = crate::gfx::render_scale();
@@ -68,12 +84,12 @@ impl Viewport {
                 Some(mask)
             });
         }
-        if self.source != items || self.stamp != (self.scroll, height) {
+        if self.source != items || self.stamp != (self.scroll, height) || self.style != Some(style) {
             self.source.clear();
             self.source.extend_from_slice(items);
             self.translated.clear();
             let scale = crate::theme::live::font_scale().max(1.0);
-            self.translated.extend(items.iter().filter(|item| item.r.y + item.r.h * scale >= self.scroll && item.r.y <= self.scroll + height as f32).cloned().map(|mut item| {
+            self.translated.extend(items.iter().filter(|item| item.r.y + item.r.h * scale >= self.scroll && item.r.y <= self.scroll + view).cloned().map(|mut item| {
                 item.r.y -= self.scroll;
                 item
             }));
@@ -81,14 +97,19 @@ impl Viewport {
         }
         let Some(buffer) = self.buffer.as_mut() else { return };
         crate::gfx::clear(buffer);
-        // the focus ring is drawn with the translated items, so a control scrolled out of view gets none
-        controlcenter::draw_focused(buffer, &controlcenter::View { origin: (0.0, 0.0), items: &self.translated, height: height as f32, hover, style }, self.focus, fonts, symbols);
+        // the focus ring is drawn with the translated items, so a control scrolled out of view gets none; a zoomed panel is drawn
+        // at the render scale times the zoom (sharp, not stretched)
+        let k = crate::gfx::render_scale();
+        let (translated, focus) = (&self.translated, self.focus);
+        crate::gfx::with_render_scale(k * z, || {
+            controlcenter::draw_focused(buffer, &controlcenter::View { origin: (0.0, 0.0), items: translated, height: view, hover, style }, focus, fonts, symbols);
+        });
         if !items.is_empty() && height as f32 > 32.0 {
             let content = items.iter().map(|item| item.r.y + item.r.h).fold(0.0f32, f32::max) + 16.0;
-            if content > height as f32 {
+            if content > view {
                 let track = height as f32 - 32.0;
-                let thumb = (track * height as f32 / content).max(24.0);
-                let y = 16.0 + (track - thumb) * self.scroll / (content - height as f32);
+                let thumb = (track * view / content).max(24.0);
+                let y = 16.0 + (track - thumb) * self.scroll / (content - view);
                 crate::gfx::fill_rounded(buffer, width as f32 - 7.0, y, 3.0, thumb, 1.5, crate::theme::th().text_secondary.color(0.5));
             }
         }

@@ -214,11 +214,15 @@ fn control_center(verb: &str, corner: Option<decebal::controlcenter::settings::C
         eprintln!("decbar: the Control Center is turned off (control_center.enabled in decebal.json)");
         return;
     }
-    let host = Host::detect(&decebal::config::shell_settings(), &decebal::config::dock_settings(), decebal::theme::th().pill_bar(), backend::ui_scale());
-    let placement = place(&host, corner.unwrap_or(cc.position));
+    let scale = backend::ui_scale();
+    let host = Host::detect(&decebal::config::shell_settings(), &decebal::config::dock_settings(), decebal::theme::th().pill_bar(), scale);
+    // the host's clearances are surface pixels; the overlay draws at the display scale like the bars, in logical ones
+    let k = backend::surface_scale(scale);
+    let p = place(&host, corner.unwrap_or(cc.position));
+    let placement = decebal::controlcenter::settings::Placement { inset_x: p.inset_x / k, inset_y: p.inset_y / k, ..p };
     let overlay = Overlay::new(placement, host.is_taskbar());
     let spec = Overlay::spec(&placement);
-    if let Err(e) = backend::run(overlay, spec) {
+    if let Err(e) = backend::run_scaled(overlay, spec, scale) {
         eprintln!("decbar: {e}");
         std::process::exit(1);
     }

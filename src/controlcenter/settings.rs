@@ -164,9 +164,10 @@ impl Style {
     }
 
     /// The looks the hosts give a clipped scrolling viewport and keyboard focus (Up/Down/Enter, a focus ring, wheel scrolling on a short
-    /// screen): Dux and GNOME. The macOS/Windows looks are short enough to need neither.
+    /// screen): every look. A small output at a large display or text scale has too little room for any of them, card and
+    /// fluent included.
     pub fn scrolls(self) -> bool {
-        matches!(self, Style::Dux | Style::Gnome)
+        true
     }
 
     /// `auto` resolved for a panel that hangs from a Windows-style taskbar (or not).

@@ -484,7 +484,8 @@ fn keyboard_focus_is_a_distinct_accent_ring_around_the_control_not_a_hover_fill(
     let view = View { origin: (20.0, 20.0), items: &partial, height: h, hover: None, style: Style::Gnome };
     let mut pm = Pixmap::new(panel_width_at(1.0) as u32 + 40, h as u32 + 40).unwrap();
     draw_focused(&mut pm, &view, Some(Target::MediaNext), &mut fonts, &mut symbols);
-    assert!(Style::Gnome.scrolls() && Style::Dux.scrolls() && !Style::Card.scrolls() && !Style::Fluent.scrolls() && !Style::Auto.scrolls());
+    // every look clips and scrolls in a short host (card and fluent too, since the responsive viewport)
+    assert!(Style::Gnome.scrolls() && Style::Dux.scrolls() && Style::Card.scrolls() && Style::Fluent.scrolls() && Style::Auto.scrolls());
     assert_eq!(targets_in_order(&items).len(), 22);
 }
 

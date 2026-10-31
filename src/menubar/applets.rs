@@ -1766,7 +1766,7 @@ pub(super) mod tests {
                     ..Snapshot::default()
                 }
             });
-            bar.status_set_surface_height(480.0);
+            bar.status_set_surface_size(1600.0, 480.0);
             assert!(bar.status_toggle(Tray::Control, if vertical { 400.0 } else { 1500.0 }));
             if vertical {
                 bar.status_place_side(48.0, false, 460.0);

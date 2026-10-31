@@ -37,6 +37,10 @@ pub struct Place {
     pub(super) scale: f32,
     /// Height of the host's surface (logical; 0 = unknown), what a panel opening downwards from a top strip may use.
     pub(super) surface_h: f32,
+    /// Width of the host's surface (logical; 0 = unknown), what a panel beside a side strip may use.
+    pub(super) surface_w: f32,
+    /// The room an overlay host gives a pinned panel (logical width and height; 0 = none set).
+    pub(super) room: (f32, f32),
 }
 
 impl DecBar {
@@ -137,10 +141,20 @@ impl DecBar {
         self.status_size_l().map(|(w, h)| (w * k, h * k))
     }
 
-    /// The host surface's height (surface pixels): bounds a Control Center that opens downwards, which is clipped and
-    /// scrolls when taller (the looks that scroll).
-    pub fn status_set_surface_height(&mut self, h: f32) {
-        self.embed.surface_h = h / self.ek();
+    /// The host surface's size (surface pixels): bounds the Control Center's width beside a side strip and its height below
+    /// a top one; the panel is fitted to it (GNOME reflows, any look is clipped, scrolls and if need be zoomed).
+    pub fn status_set_surface_size(&mut self, w: f32, h: f32) {
+        let k = self.ek();
+        self.embed.surface_w = w / k;
+        self.embed.surface_h = h / k;
+        self.cc_sync_viewport();
+    }
+
+    /// An overlay host's room for its pinned panel (surface pixels): the panel is fitted to `w` x `h`.
+    pub fn status_set_room(&mut self, w: f32, h: f32) {
+        let k = self.ek();
+        self.embed.room = (w / k, h / k);
+        self.cc_sync_viewport();
     }
 
     pub fn status_place(&mut self, edge: f32, up: bool, screen_w: f32) {
@@ -402,7 +416,7 @@ impl DecBar {
     /// Extent of the open popup: (width, height), or None when none is open.
     fn status_size_l(&self) -> Option<(f32, f32)> {
         if self.open == Open::Control {
-            return Some((self.cc_width(), self.cc_height));
+            return Some((self.cc_width(), self.cc_height * self.cc_zoom()));
         }
         self.popup.as_ref().map(|p| (p.w, p.h)).or(self.calendar.as_ref().map(|_| (Calendar::W, Calendar::H)))
     }
@@ -425,6 +439,8 @@ impl DecBar {
         self.embed.edge = edge;
         self.embed.up = up;
         self.embed.screen_w = screen_w;
+        // fitted to this room first (a new edge or surface can reflow or zoom it), then placed
+        self.cc_sync_viewport();
         let Some((x, y, _, _)) = self.popup_geometry(edge, up, screen_w) else { return };
         self.embed.origin = (x, y);
         self.cc_sync_viewport();
@@ -442,12 +458,32 @@ impl DecBar {
     /// Height a Control Center opened against `edge` can have: the strip's length less margins beside a side strip,
     /// the room above a bottom strip, the rest of the surface below a top one.
     pub(super) fn embed_room(&self, edge: f32, up: bool, screen_w: f32) -> f32 {
+        if self.embed.pinned.is_some() && self.embed.room.1 > 0.0 {
+            return self.embed.room.1;
+        }
         if self.embed.vertical {
             screen_w - 8.0
         } else if up {
             edge - GAP - 4.0
         } else if self.embed.surface_h > 0.0 {
             self.embed.surface_h - edge - GAP - 4.0
+        } else {
+            f32::INFINITY
+        }
+    }
+
+    /// Width a Control Center can have: the overlay's room, beside a side strip the rest of the surface on the panel's side,
+    /// along a top or bottom strip the strip's length less margins.
+    pub(super) fn embed_room_w(&self) -> f32 {
+        if self.embed.pinned.is_some() && self.embed.room.0 > 0.0 {
+            return self.embed.room.0;
+        }
+        if self.embed.vertical {
+            let room = if self.embed.up { self.embed.edge - GAP - 4.0 } else if self.embed.surface_w > 0.0 { self.embed.surface_w - self.embed.edge - GAP - 4.0 } else { f32::INFINITY };
+            return room.max(1.0);
+        }
+        if self.embed.screen_w > 0.0 {
+            (self.embed.screen_w - 8.0).max(1.0)
         } else {
             f32::INFINITY
         }
@@ -520,6 +556,11 @@ impl DecBar {
 
     fn status_draw_l(&mut self, pm: &mut Pixmap) {
         if self.open == Open::Control {
+            // the host's surface in this engine's logical pixels (the overlay writes its own report)
+            if self.embed.pinned.is_none() {
+                let k = self.ek();
+                self.debug_control_panel((pm.width() as f32 / k) as u32, (pm.height() as f32 / k) as u32);
+            }
             let style = self.cc_style();
             let (origin, clipped, width, height) = (self.embed.origin, self.cc_clipped(), self.cc_width(), self.cc_visible_height());
             if let Some(f) = self.fonts.as_mut() {
@@ -550,7 +591,7 @@ impl DecBar {
             if let Some(t) = self.cc_drag {
                 if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                     let (rx, rw) = (it.r.x, it.r.w);
-                    self.slide(t, rx, rw, x - ox, false);
+                    self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), false);
                     return true;
                 }
             }
@@ -598,7 +639,7 @@ impl DecBar {
             let (ox, _) = self.embed.origin;
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                 let (rx, rw) = (it.r.x, it.r.w);
-                self.slide(t, rx, rw, x - ox, true);
+                self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), true);
             }
             return true;
         }

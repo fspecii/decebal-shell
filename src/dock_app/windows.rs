@@ -392,13 +392,13 @@ impl DockApp {
             let layout = self.win_layout()?;
             layout.rect_of(Hit::Tray(kind)).or_else(|| layout.rect_of(Hit::Tray(Tray::Indicators))).map(|r| r.cx())
         });
-        let surface_h = self.surface.1 as f32;
+        let surface = (self.surface.0 as f32, self.surface.1 as f32);
         if let Some(w) = self.win.as_mut() {
             if let Some(x) = indicator_anchor {
                 w.status.status_indicator_anchor(x);
             }
             // a panel opening down from a top taskbar has the rest of the surface (the backend keeps it on the output)
-            w.status.status_set_surface_height(surface_h);
+            w.status.status_set_surface_size(surface.0, surface.1);
             if vertical {
                 w.status.status_place_side(edge, up, width);
             } else {

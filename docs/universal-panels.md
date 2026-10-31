@@ -22,8 +22,9 @@ Known limits:
   (`Host::Panel` for a bottom or side bar and a side taskbar; `auto` opens at the tray end, clear of the strip at the
   display scale). On X11 it shares the panels' monitor (RandR primary); under Wayland the compositor picks the output
   of each layer surface, so with several outputs it can open on another output than the bar.
-- The Control Center clips and scrolls (wheel, keyboard reveal, pointer through the scroll) in every host for the looks that
-  scroll (Dux, GNOME); `card` and `fluent` are drawn whole as before, so on a very short screen at 200 % they can reach past it.
+- The responsive Control Center (below) zooms a look that has no narrower layout (Dux 600, card/fluent 340 logical px) when
+  the host's room is narrower; the zoomed panel is smaller to read. Under Wayland the compositor decides a surface's size, so
+  a side surface asking for more than the output is not bounded by Decebal there.
 - Applet order inside a renderer is fixed (the renderer's own reading order).
 - Native evidence is X11 (private Xvfb without a window manager: strut hints are checked as values, not as a work area
   a WM honoured). Wayland layer-shell anchoring is unit-tested only. Latest runs (source 9336240, debug binaries decbar
@@ -111,6 +112,23 @@ Default sets (when neither the user nor the theme says otherwise):
 Each renderer places applets in its own reading order (the menu bar keeps menus at the start and status items at the
 end; the rail keeps head, window and tail pills; Dux keeps its three layout groups, and an applet enabled outside the Dux lists
 joins the group it belongs to (launcher/menus/workspaces/window/tasks start, media/clock/weather centre, the rest end); the taskbar keeps Start/search/tasks then tray/clock). Applet order is not configurable yet.
+
+### Responsive Control Center
+
+Every host gives the Control Center the room it has: the menu bar the output's width, a rail the rest of its surface on the
+screen side (side rails ask for the look's natural width; the X11 backend never makes a surface larger than its monitor and
+tells the app the size it got), the taskbar's engine the strip's length or the surface beside a side strip, the summoned
+overlay its corner's room. `controlcenter::layout_fitted(snapshot, tiles, style, room)` lays the look out for that room:
+
+- GNOME: two `12em` columns when they fit, else one column (toggles stacked; the battery readout and the Now Playing controls
+  on lines of their own). Every control stays.
+- Any look still wider than the room (Dux's 600 px grid, card/fluent 340 px, GNOME's one column at a large text scale) is
+  drawn at a zoom `room / width`: sharp (drawn at render scale × zoom), and hit-tested through the same zoom.
+- Every look is clipped to the height it has and scrolls (wheel; keyboard focus reveals the control; a scroll thumb shows
+  the position). Up/Down walk every control, Enter runs it, Left/Right step a focused volume or brightness slider by 5 %.
+
+`DECBAR_DEBUG_PANEL=file` reports, from every host, the panel rectangle, zoom, scroll and each control where it is drawn
+now (surface coordinates, logical pixels), plus the keyboard focus and the pointer's hover.
 
 ### Keyboard
 

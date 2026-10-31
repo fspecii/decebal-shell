@@ -990,7 +990,8 @@ impl DecBar {
         if !p.edge.is_side() {
             return (w, h);
         }
-        let need = (p.thickness() + POP_GAP + self.cc_width() + POP_MARGIN).ceil() as u32;
+        // the look's natural width; on a narrower output the backend gives less and the panel is fitted to what it got
+        let need = (p.thickness() + POP_GAP + controlcenter::panel_width(self.cc_style()) + POP_MARGIN).ceil() as u32;
         (w.max(need), h)
     }
 
@@ -1001,6 +1002,19 @@ impl DecBar {
         match geo.edge {
             Anchor::Left | Anchor::Right => geo.h - 2.0 * POP_MARGIN,
             Anchor::Top | Anchor::Bottom => geo.h - geo.thickness() - POP_GAP - POP_MARGIN,
+        }
+    }
+
+    /// Width the Control Center can have beside the rail: the rest of the surface on the screen side of a side rail (the
+    /// backend keeps the surface on its output), the surface's length less margins along a top or bottom rail.
+    pub(super) fn v_cc_room_w(&self) -> f32 {
+        let geo = self.v_geo();
+        if geo.w <= 0.0 {
+            return f32::INFINITY;
+        }
+        match geo.edge {
+            Anchor::Left | Anchor::Right => (geo.w - geo.thick - POP_GAP - POP_MARGIN).max(1.0),
+            Anchor::Top | Anchor::Bottom => (geo.w - 2.0 * POP_MARGIN).max(1.0),
         }
     }
 
@@ -1122,7 +1136,7 @@ impl DecBar {
             let (ox, _) = self.v_panel_origin();
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                 let (rx, rw) = (it.r.x, it.r.w);
-                self.slide(t, rx, rw, x - ox, false);
+                self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), false);
                 return true;
             }
         }
@@ -1616,6 +1630,7 @@ impl DecBar {
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
+                self.debug_control_panel(self.width, self.height);
                 let style = self.cc_style();
                 let (clipped, width, height) = (self.cc_clipped(), self.cc_width(), self.cc_visible_height());
                 if let Some(f) = self.fonts.as_mut() {

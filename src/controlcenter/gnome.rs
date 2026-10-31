@@ -87,6 +87,31 @@ pub fn panel_width_at(k: f32) -> f32 {
     2.0 * toggle_w(k) + GRID_GAP + 2.0 * PANEL_PAD
 }
 
+/// The panel's inner width with `columns` (2, or 1 when two do not fit the host): one column is one toggle wide, but never
+/// narrower than the system row's buttons.
+fn inner_at(k: f32, columns: u8) -> f32 {
+    if columns >= 2 {
+        2.0 * toggle_w(k) + GRID_GAP
+    } else {
+        toggle_w(k).max(4.0 * button_d(k) + 3.0 * GRID_GAP)
+    }
+}
+
+/// Panel width with `columns` at text scale `k`.
+pub fn panel_width_cols(k: f32, columns: u8) -> f32 {
+    inner_at(k, columns) + 2.0 * PANEL_PAD
+}
+
+/// Columns the grid gets in a room `room` wide at text scale `k`: two when they fit, else one (a narrower screen, a larger
+/// text or display scale). What still does not fit is zoomed by the host's viewport.
+pub fn columns_for(room: f32, k: f32) -> u8 {
+    if panel_width_at(k) <= room + 0.5 {
+        2
+    } else {
+        1
+    }
+}
+
 pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
     layout_at(s, tiles, scale())
 }
@@ -117,10 +142,18 @@ fn label(x: f32, y: f32, w: f32, t: &str, size: f32, weight: Weight, ink: Ink, k
 
 /// Builds the display list at text scale `k`. The panel's top-left is the origin; the second value is its height.
 pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
+    layout_cols(s, tiles, k, 2)
+}
+
+/// [`layout_at`] with `columns` grid columns (2 as the Shell has them; 1 for a narrow host). One column keeps every control:
+/// the toggles stack, the battery readout takes its own line above the buttons, and the Now Playing controls a line of
+/// their own under the title.
+pub fn layout_cols(s: &Snapshot, tiles: &Tiles, k: f32, columns: u8) -> (Vec<Item>, f32) {
     let mut out = Vec::new();
-    let tw = toggle_w(k);
+    let one = columns < 2;
+    let tw = if one { inner_at(k, 1) } else { toggle_w(k) };
     let th = toggle_h(k);
-    let inner = 2.0 * tw + GRID_GAP;
+    let inner = inner_at(k, columns);
     let mut y = PANEL_PAD;
     let mut sections = 0;
     let gap = |y: &mut f32, sections: &mut i32| {
@@ -145,7 +178,7 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
             tail.push(("system-shutdown-symbolic", Target::Power));
         }
         let right_edge = PANEL_PAD + inner;
-        let place = |out: &mut Vec<Item>, list: &[(&'static str, Target)], from_right: bool, start: f32| {
+        let place = |out: &mut Vec<Item>, list: &[(&'static str, Target)], from_right: bool, start: f32, y: f32| {
             let total = list.len() as f32 * d + (list.len().max(1) - 1) as f32 * GRID_GAP;
             let mut bx = if from_right { right_edge - total } else { start };
             for (icon, target) in list {
@@ -157,19 +190,24 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
             let icon = battery_icon(b);
             out.push(sized(PANEL_PAD, y + (d - icon_px(k)) / 2.0, icon_px(k), icon_px(k), Draw::Glyph { icon, size: icon_px(k), ink: Ink::Primary }, None));
             let text = format!("{} %", b.percent);
+            let readout_w = if one { inner - icon_px(k) - 6.0 } else { 110.0 * k };
             out.push(sized(
                 PANEL_PAD + icon_px(k) + 6.0,
                 y + (d - line(HEADING_PX, k)) / 2.0,
-                110.0 * k,
+                readout_w,
                 line(HEADING_PX, k),
                 Draw::Text { text, size: HEADING_PX, weight: Weight::Bold, ink: Ink::Primary, align: Align::Left },
                 None,
             ));
+            if one {
+                // a narrow panel: the readout alone on its line, the buttons right-aligned under it
+                y += d + GRID_GAP;
+            }
             buttons.extend(tail);
-            place(&mut out, &buttons, true, 0.0);
+            place(&mut out, &buttons, true, 0.0, y);
         } else {
-            place(&mut out, &buttons, false, PANEL_PAD);
-            place(&mut out, &tail, true, 0.0);
+            place(&mut out, &buttons, false, PANEL_PAD, y);
+            place(&mut out, &tail, true, 0.0, y);
         }
         y += d;
     }
@@ -271,13 +309,14 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
     }
     if !grid.is_empty() {
         gap(&mut y, &mut sections);
+        let per_row = if one { 1 } else { 2 };
         for (i, t) in grid.iter().enumerate() {
-            let (col, row) = ((i % 2) as f32, (i / 2) as f32);
+            let (col, row) = ((i % per_row) as f32, (i / per_row) as f32);
             let x = PANEL_PAD + col * (tw + GRID_GAP);
             let ty = y + row * (th + GRID_GAP);
             push_tile(&mut out, t, x, ty, tw, th, k);
         }
-        let rows = grid.len().div_ceil(2) as f32;
+        let rows = grid.len().div_ceil(per_row) as f32;
         y += rows * th + (rows - 1.0) * GRID_GAP;
     }
 
@@ -285,17 +324,19 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
     if let Some(m) = s.media.as_ref().filter(|_| tiles.media) {
         gap(&mut y, &mut sections);
         let art = 48.0 * k;
-        let h = art + 24.0;
-        out.push(sized(PANEL_PAD, y, inner, h, Draw::Tile, None));
-        out.push(sized(PANEL_PAD + 12.0, y + 12.0, art, art, Draw::SmallTile { on: false }, None));
         let btn = button_d(k) - 9.0; // a flat 16 px icon button with 6 px padding (28 px)
         let controls_w = 3.0 * btn + 2.0 * 4.0;
+        // a narrow panel puts the controls on a line of their own under the title, so the title keeps its room
+        let h = if one { art + 24.0 + btn + 8.0 } else { art + 24.0 };
+        out.push(sized(PANEL_PAD, y, inner, h, Draw::Tile, None));
+        out.push(sized(PANEL_PAD + 12.0, y + 12.0, art, art, Draw::SmallTile { on: false }, None));
         let controls_x = PANEL_PAD + inner - 12.0 - controls_w;
         let text_x = PANEL_PAD + 12.0 + art + 12.0;
-        let text_w = controls_x - text_x - 8.0;
+        let text_w = if one { PANEL_PAD + inner - 12.0 - text_x } else { controls_x - text_x - 8.0 };
         let title = if m.title.is_empty() { "Not Playing" } else { m.title.as_str() };
         let block = line(HEADING_PX, k) + if m.artist.is_empty() { 0.0 } else { line(CAPTION_PX, k) };
-        let ty = y + (h - block) / 2.0;
+        let ty = y + (art + 24.0 - block) / 2.0;
+        let controls_y = if one { y + art + 24.0 } else { y + (h - btn) / 2.0 };
         out.push(label(text_x, ty, text_w, title, HEADING_PX, Weight::Bold, Ink::Primary, k));
         if !m.artist.is_empty() {
             out.push(label(text_x, ty + line(HEADING_PX, k), text_w, &m.artist, CAPTION_PX, Weight::Regular, Ink::Secondary, k));
@@ -303,14 +344,14 @@ pub fn layout_at(s: &Snapshot, tiles: &Tiles, k: f32) -> (Vec<Item>, f32) {
         let icons = ["media-skip-backward-symbolic", if m.playing { "media-playback-pause-symbolic" } else { "media-playback-start-symbolic" }, "media-skip-forward-symbolic"];
         for (i, (icon, t)) in icons.into_iter().zip([Target::MediaPrev, Target::MediaToggle, Target::MediaNext]).enumerate() {
             let bx = controls_x + i as f32 * (btn + 4.0);
-            out.push(sized(bx, y + (h - btn) / 2.0, btn, btn, Draw::Glyph { icon, size: icon_px(k), ink: Ink::Primary }, Some(t)));
+            out.push(sized(bx, controls_y, btn, btn, Draw::Glyph { icon, size: icon_px(k), ink: Ink::Primary }, Some(t)));
         }
         y += h;
     }
 
     if out.is_empty() && *tiles != Tiles::ALL {
         // every chosen group is unavailable on this machine: never show an empty box (the common layouts do the same)
-        return layout_at(s, &Tiles::ALL, k);
+        return layout_cols(s, &Tiles::ALL, k, columns);
     }
     (out, y + PANEL_PAD)
 }

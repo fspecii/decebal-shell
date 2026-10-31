@@ -391,12 +391,14 @@ substitution: that tree predates the GNOME look, so `style = "gnome"` was swappe
 * **Per-toggle menus.** GNOME's network list, Bluetooth devices and power-profile menus do not exist; the Wi-Fi arrow opens the network editor and Power opens Decebal's session menu
   (`decsession`) rather than the Shell's inline power submenu (Suspend, Restart…, Power Off…, Log Out…, Switch User…).
 * **Not in the common model:** Power Mode, Airplane Mode, the microphone slider, remote access and the other conditional Shell toggles have no controller state to drive.
-* **Slider keyboard adjustment.** Up/Down/Enter focus and activate; there is no Left/Right in the shared `NavKey`, so a slider is changed by pointer or wheel only and Enter on it does nothing (verified).
-* **Pill-bar and embedded hosts.** Since the universal-panel integration every host clips and scrolls the panel (looks that scroll: Dux, GNOME): the menu bar, the overlay,
-  the rail styles on any edge (`v_cc_room`; a side rail's surface also grows to the panel's width, 752 px at 200 %) and the Windows-taskbar engine (`embed_room`, the host passes
-  its surface height). Wheel, keyboard reveal and pointer mapping go through the same `cc_visible_height` / `cc_point` / `cc_scroll`.
-* **Panel wider than the screen.** The panel is `352·k + 48` px wide: below 400 px at 100 % (or 752 px at 200 %) the surface is narrower than the panel; it is placed inside the screen
-  but its right part cannot be reached. Not exercised by a scenario (no such supported display).
+* **Slider keyboard adjustment.** Up/Down/Enter focus and activate; since the universal-panel integration `NavKey` has Left/Right and they step a focused volume or brightness
+  slider by 5 % (as the wheel does). Enter on a slider still does nothing (no arbitrary midpoint value).
+* **Every host, every look.** Since the universal-panel integration every host fits, clips and scrolls the panel, every look included: the menu bar, the overlay (now drawn at the
+  display scale and routed through the same engine), the rail styles on any edge and the Windows-taskbar engine. See the responsive Control Center contract in
+  `docs/universal-panels.md`.
+* **Panel wider than the screen.** Resolved by the responsive layout: two `12em` columns (`352·k + 48` px) when they fit the host's room, one column (the toggles stacked, the
+  battery readout and the Now Playing controls on lines of their own) when they do not, and only when even one column is wider than the room (text 200 % on a 512 px wide
+  logical output beside a rail) a zoom of the whole panel. Every control stays reachable by keyboard and pointer.
 * **Look only.** No drop shadow, pointer-arrow box, transitions or translucency; the panel is a rounded rectangle with the 1 px border.
 * **No source-runtime comparison.** `gnome-shell` is not installed here, so there is no pixel diff against a real quick-settings menu; the geometry is measured from the pinned
   source, and the evidence above is the native painter and real-window behaviour. It is not a pixel replica.

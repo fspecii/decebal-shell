@@ -4,7 +4,7 @@
 //! `hit` maps pointer positions back to [`Target`]s, so drawing and input share one layout.
 
 mod dux;
-mod gnome;
+pub(crate) mod gnome;
 pub mod settings;
 pub mod sys;
 
@@ -24,6 +24,40 @@ pub fn panel_width(style: Style) -> f32 {
         Style::Gnome => gnome::panel_width(),
         _ => PANEL_W,
     }
+}
+
+/// A panel laid out for the room its host has (see [`layout_fitted`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fitted {
+    pub items: Vec<Item>,
+    /// Content height (the panel's own units, before `zoom`).
+    pub height: f32,
+    /// Content width (before `zoom`).
+    pub width: f32,
+    /// What the host draws the panel at, `<= 1`: below 1 only when even the narrowest layout of the look is wider than the
+    /// room (a small output at a large display or text scale). Every control stays; the host's viewport also clips and
+    /// scrolls the height.
+    pub zoom: f32,
+}
+
+/// The panel for a room `room` wide (host logical pixels; infinite or 0 = no limit): the GNOME look reflows its grid to one
+/// column when two do not fit; any look still wider than the room is zoomed to fit it.
+pub fn layout_fitted(s: &Snapshot, tiles: &Tiles, style: Style, room: f32) -> Fitted {
+    let room = if room.is_finite() && room > 0.0 { room } else { f32::INFINITY };
+    let (items, height, width) = match style {
+        Style::Gnome => {
+            let k = gnome::scale();
+            let columns = gnome::columns_for(room, k);
+            let (items, height) = gnome::layout_cols(s, tiles, k, columns);
+            (items, height, gnome::panel_width_cols(k, columns))
+        }
+        _ => {
+            let (items, height) = layout_styled(s, tiles, style);
+            (items, height, panel_width(style))
+        }
+    };
+    let zoom = if width > room { (room / width).max(0.25) } else { 1.0 };
+    Fitted { items, height, width, zoom }
 }
 
 /// Native style composition; callers use the same item list for painting and input.
