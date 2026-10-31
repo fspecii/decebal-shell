@@ -776,6 +776,13 @@ pub(crate) mod tests {
         r2.spec = r.spec.clone();
         r2.pins.tree = Some(tree_of(&clash, "top/sense"));
         assert!(install(&r2, &Limits::default()).unwrap_err().contains("both shipped"));
+        let mut alias_clash = entries.clone();
+        alias_clash.push(E::file("top/sense/cursors/top_left_arrow", &xcursor(24)));
+        let c = s.write("alias-clash.tgz", &targz(&alias_clash, Some(COMMIT)));
+        let mut r3 = request(&s.path().join("icons3"), &c, &dummy);
+        r3.spec = r.spec.clone();
+        r3.pins.tree = Some(tree_of(&alias_clash, "top/sense"));
+        assert!(install(&r3, &Limits::default()).unwrap_err().contains("`top_left_arrow` is both shipped"), "an alias is not silently replaced by a shipped file");
     }
 
     #[test]

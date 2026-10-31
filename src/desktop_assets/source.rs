@@ -339,6 +339,8 @@ pub fn from_tar(r: impl Read, fmt: tar::Format, dir: PathBuf, filter: Filter, li
 
 /// Reads a folder (a clone or an unpacked archive) into `dir`. Links are read, never followed; `.git` is skipped.
 pub fn from_dir(root: &Path, dir: PathBuf, filter: Filter, lim: &Limits, keep: Keep) -> Result<Staged, String> {
+    // the folder the user named may itself be reached through a link; nothing below it is followed
+    let root = &std::fs::canonicalize(root).map_err(|e| format!("{}: {e}", root.display()))?;
     let meta = std::fs::symlink_metadata(root).map_err(|e| format!("{}: {e}", root.display()))?;
     if !meta.is_dir() {
         return Err(format!("{} is not a folder", root.display()));

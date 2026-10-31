@@ -6,6 +6,25 @@ use super::{cursor, install, Provides};
 use crate::settings::model::{CtlVal, Model};
 use crate::settings::ui::{Ctl, Item, Kind, Row};
 
+type Listing = (Vec<(String, std::path::PathBuf)>, Vec<(std::path::PathBuf, install::Provenance)>);
+type ListingCache = Option<(Vec<crate::config::Stamp>, Listing)>;
+static LISTING: std::sync::Mutex<ListingCache> = std::sync::Mutex::new(None);
+
+/// Installed cursor themes and decebal packs, rescanned only when an icon folder changed (like the icon theme list).
+fn listing(root: &std::path::Path, roots: &crate::icons::resolve::Roots) -> Listing {
+    let mut stamps = roots.stamps();
+    stamps.push(crate::config::Stamp::of(root));
+    let mut g = LISTING.lock().unwrap_or_else(|e| e.into_inner());
+    match g.as_ref() {
+        Some((s, l)) if *s == stamps => l.clone(),
+        _ => {
+            let l = (cursor::list_themes(roots), install::installed(root));
+            *g = Some((stamps, l.clone()));
+            l
+        }
+    }
+}
+
 fn owner_detail(o: &Owner) -> &'static str {
     match o {
         Owner::User => "your choice: kept when you change themes",
@@ -23,7 +42,7 @@ pub fn items(m: &Model) -> Vec<Item> {
 
     out.push(Item::Header("Cursor theme".into()));
     let cur = policy::current(&doc, Provides::Cursors);
-    let themes = cursor::list_themes(&roots);
+    let (themes, packs) = listing(&root, &roots);
     let mut opts: Vec<(String, String)> = vec![("Not set".into(), "auto".into())];
     opts.extend(themes.iter().map(|(id, _)| (id.clone(), id.clone())));
     if let Some(c) = &cur {
@@ -52,7 +71,6 @@ pub fn items(m: &Model) -> Vec<Item> {
         }
     }
 
-    let packs = install::installed(&root);
     if !packs.is_empty() {
         out.push(Item::Header("Installed asset packs".into()));
         out.push(Item::Card(

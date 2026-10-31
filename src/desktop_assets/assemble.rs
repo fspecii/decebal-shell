@@ -181,9 +181,11 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
     let mut consumed: std::collections::BTreeSet<String> = Default::default();
     if !spec.xcursors.is_empty() {
         for c in &spec.xcursors {
-            let shipped = if spec.path == "." { format!("cursors/{}", c.name) } else { format!("{}/cursors/{}", spec.path, c.name) };
-            if st.nodes.contains_key(&shipped) {
-                return Err(format!("cursor `{}` is both shipped in cursors/ and built from PNGs", c.name));
+            for n in std::iter::once(&c.name).chain(&c.aliases) {
+                let shipped = if spec.path == "." { format!("cursors/{n}") } else { format!("{}/cursors/{n}", spec.path) };
+                if st.nodes.contains_key(&shipped) {
+                    return Err(format!("cursor `{n}` is both shipped in cursors/ and built from PNGs"));
+                }
             }
         }
         let full = |rel: &str| if spec.path == "." { rel.to_string() } else { format!("{}/{rel}", spec.path) };
