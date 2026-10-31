@@ -792,6 +792,90 @@ fn recheck(m: &mut Model) {
     }
 }
 
+/// Accessibility: edits the open buffer the way typing would (same buffer, undo history and re-check). Offsets are
+/// characters of the text joined with `\n`. Saving stays an explicit action (the Save button or Ctrl+S).
+pub fn a11y_edit(m: &mut Model, op: &crate::a11y::Op) -> Result<(), String> {
+    use crate::a11y::Op;
+    if m.cfg.screen != Screen::Edit {
+        return Err("the editor is not open".into());
+    }
+    let b = buf_mut(m);
+    let e = &mut b.ed;
+    let mutates = !matches!(op, Op::SetCaret(_) | Op::SetSelection(_) | Op::CopyText { .. } | Op::Focus | Op::ScrollTo);
+    if mutates && e.read_only {
+        return Err("this file is read-only here".into());
+    }
+    let pos = |e: &super::editor::Editor, off: usize| {
+        let mut left = off;
+        for i in 0..e.line_count() {
+            let n = e.line(i).chars().count();
+            if left <= n {
+                return super::editor::Pos::new(i, left);
+            }
+            left -= n + 1;
+        }
+        let last = e.line_count().saturating_sub(1);
+        super::editor::Pos::new(last, e.line(last).chars().count())
+    };
+    let select = |e: &mut super::editor::Editor, a: usize, z: usize| {
+        let (pa, pz) = (pos(e, a), pos(e, z));
+        e.set_cursor(pa, false);
+        e.set_cursor(pz, true);
+    };
+    match op {
+        Op::SetCaret(o) => {
+            let p = pos(e, *o);
+            e.set_cursor(p, false);
+        }
+        Op::SetSelection(Some((a, z))) => select(e, *a, *z),
+        Op::SetSelection(None) => {
+            let c = e.cursor;
+            e.set_cursor(c, false);
+        }
+        Op::SetText(t) => {
+            e.select_all();
+            e.insert_str(t);
+        }
+        Op::InsertText { offset, text } => {
+            let p = pos(e, *offset);
+            e.set_cursor(p, false);
+            e.insert_str(text);
+        }
+        Op::DeleteText { start, end, cut } => {
+            if start == end {
+                return Ok(());
+            }
+            select(e, *start, *end);
+            if *cut {
+                if let Some(t) = e.cut() {
+                    e.clip = t.clone();
+                    crate::clipboard::copy(&t);
+                }
+            } else {
+                e.backspace();
+            }
+        }
+        Op::CopyText { start, end } => {
+            select(e, *start, *end);
+            if let Some(t) = e.selected_text() {
+                e.clip = t.clone();
+                crate::clipboard::copy(&t);
+            }
+        }
+        Op::PasteText { offset } => {
+            let p = pos(e, *offset);
+            e.set_cursor(p, false);
+            let t = system_clipboard().filter(|t| !t.is_empty()).unwrap_or_else(|| e.clip.clone());
+            e.paste(&t);
+        }
+        _ => return Err("not a text operation".into()),
+    }
+    if mutates {
+        recheck(m);
+    }
+    Ok(())
+}
+
 /// A key while the editor has the focus. Always handled (Esc leaves the editor).
 pub fn editor_key(m: &mut Model, ev: &KeyEvent) -> Response {
     ensure_buf(m);

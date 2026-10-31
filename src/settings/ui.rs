@@ -394,6 +394,8 @@ pub struct Interact {
     pub drag: Option<(String, f64)>,
     /// Text control being edited: id, text, cursor (chars).
     pub edit: Option<(String, String, usize)>,
+    /// Selected range (chars) of the text being edited, if any.
+    pub edit_sel: Option<(usize, usize)>,
     /// Key recorder: id and the modifier chips toggled so far.
     pub recording: Option<(String, Vec<&'static str>)>,
     /// Show the keyboard focus ring (only after keyboard use).
@@ -425,6 +427,10 @@ pub struct Frame {
     pub rows: Vec<(Rect, String)>,
     /// Text editors on screen: control rect and what the painter measured.
     pub editors: Vec<(Rect, super::editor::Geo)>,
+    /// Per drawn item, in order: its area and the range of `placed` entries it produced (the accessibility tree).
+    pub spans: Vec<(Rect, std::ops::Range<usize>)>,
+    /// The page title's area.
+    pub head: Rect,
 }
 
 impl Frame {
@@ -651,6 +657,13 @@ fn draw_ctl(pm: &mut Pixmap, p: &mut Painter, c: &Ctl, right: f32, cy: f32, it: 
                 }
                 let vis: String = chars[start..].iter().collect();
                 let vis = p.fit(&vis, inner, u(12.5), Weight::Regular);
+                if let Some((a, b)) = it.edit_sel.filter(|(a, b)| a < b) {
+                    let at = |i: usize| x + u(8.0) + p.measure(&chars[start..i.clamp(start, chars.len())].iter().collect::<String>(), u(12.5), Weight::Regular);
+                    let (sx, ex) = (at(a), at(b).min(x + w - u(8.0)));
+                    if ex > sx {
+                        fill_px(pm, sx, cy - u(9.0), ex - sx, u(18.0), crate::theme::th().accent.color(0.35));
+                    }
+                }
                 p.text(pm, &vis, x + u(8.0), cy, u(12.5), Weight::Regular, pal::text());
                 let cx = x + u(8.0) + p.measure(&chars[start..cur].iter().collect::<String>(), u(12.5), Weight::Regular);
                 fill_px(pm, cx, cy - u(8.0), u(1.2), u(16.0), pal::accent());
@@ -763,6 +776,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
     }
     let title_extra = title_lh * (title_lines.len() - 1) as f32;
     let page_top = y;
+    fr.head = (x0, y, cw, title_lh * title_lines.len() as f32 + u(8.0));
     y += u(62.0 + metrics.extra(30.0)) + title_extra;
     if !head.context.is_empty() {
         // One quiet line of orientation under the title; it wraps rather than truncates.
@@ -775,6 +789,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
         y = y.max(first + lh * (lines.len() as f32 - 0.5) + u(16.0));
     }
     for item in items {
+        let (span_y, span_p) = (y, fr.placed.len());
         match item {
             Item::Space(h) => y += u(*h),
             Item::WidgetPreview { toml, caption } => y = super::widgetbuilder::draw_preview(pm, p, toml, caption, x0, y, cw),
@@ -1140,6 +1155,7 @@ pub fn draw_items(pm: &mut Pixmap, p: &mut Painter, head: Head, items: &[Item], 
                 y = yy + row_h + u(6.0);
             }
         }
+        fr.spans.push(((x0, span_y, cw, (y - span_y).max(0.0)), span_p..fr.placed.len()));
     }
     fr.height = y + scroll + u(24.0);
     fr

@@ -21,6 +21,8 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use tiny_skia::Pixmap;
 
+mod a11y;
+
 const SIDEBAR_W: f32 = 236.0;
 const MAX_THUMB_ENTRIES: usize = 512;
 const MAX_THUMB_BYTES: usize = 32 * 1024 * 1024;
@@ -673,6 +675,7 @@ impl SettingsApp {
         let head = Head { title, context: &context };
         // sync interaction state
         self.it.edit = self.edit.as_ref().map(|(id, f)| (id.clone(), f.text().to_string(), f.cursor()));
+        self.it.edit_sel = self.edit.as_ref().and_then(|(_, f)| f.selection());
         self.it.recording = self.m.sel.recording.as_ref().map(|r| (if r == "new" { "k:new:keys".to_string() } else { r.clone() }, self.m.sel.rec_mods.clone()));
         let max_scroll = (self.frame.height - h).max(0.0);
         self.scroll = self.scroll.clamp(0.0, max_scroll);
@@ -1113,6 +1116,10 @@ impl SettingsApp {
                 self.commit_edit();
                 self.move_focus(if ev.shift { -1 } else { 1 });
             }
+            Key::Left if ev.shift => f.extend(f.cursor().saturating_sub(1)),
+            Key::Right if ev.shift => f.extend(f.cursor() + 1),
+            Key::Home if ev.shift => f.extend(0),
+            Key::End if ev.shift => f.extend(usize::MAX),
             Key::Left => f.left(),
             Key::Right => f.right(),
             Key::Home => f.home(),
@@ -1735,6 +1742,18 @@ impl WindowApp for SettingsApp {
             self.reuse_items = false; // something other than the pointer or the wheel changed: rebuild the page
         }
         Response { redraw, action: navigate.then_some(Action::Activate) }
+    }
+
+    fn a11y_name(&self) -> Option<String> {
+        Some("System Settings".into())
+    }
+
+    fn a11y_tree(&mut self, tree: &mut crate::a11y::TreeBuilder) {
+        a11y::tree(self, tree);
+    }
+
+    fn a11y_action(&mut self, target: &crate::a11y::Target) -> Result<Response, crate::a11y::ActionError> {
+        a11y::act(self, target)
     }
 }
 

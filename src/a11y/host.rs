@@ -25,8 +25,9 @@ pub struct Host {
     window: WindowInfo,
     /// Requests that arrived while an accepted action still waits for its repaint.
     queued: VecDeque<Request>,
-    /// Accepted actions whose reply goes out after the next published tree.
-    awaiting: Vec<u64>,
+    /// Dispatched actions whose reply goes out after the next published tree (a refusal too: its error notice
+    /// is part of what the AT should find when it reads again).
+    awaiting: Vec<(u64, Result<(), ActionError>)>,
     waker: Option<Waker>,
 }
 
@@ -124,8 +125,8 @@ impl Host {
             bridge.publish(Arc::new(t.clone()));
         }
         self.current = Some(t);
-        for id in std::mem::take(&mut self.awaiting) {
-            bridge.reply(id, Ok(()));
+        for (id, result) in std::mem::take(&mut self.awaiting) {
+            bridge.reply(id, result);
         }
     }
 
@@ -146,7 +147,7 @@ impl Host {
 
     fn fail_all(&mut self) {
         let Some(bridge) = &self.bridge else { return };
-        for id in self.awaiting.drain(..) {
+        for (id, _) in self.awaiting.drain(..) {
             bridge.reply(id, Err(ActionError::Gone));
         }
         for r in self.queued.drain(..) {
@@ -190,7 +191,11 @@ impl Host {
                     if r.action.is_some() {
                         resp.action = r.action;
                     }
-                    self.awaiting.push(req.id);
+                    self.awaiting.push((req.id, Ok(())));
+                }
+                Err(e @ ActionError::Refused(_)) => {
+                    resp.redraw = true;
+                    self.awaiting.push((req.id, Err(e)));
                 }
                 Err(e) => bridge.reply(req.id, Err(e)),
             }
