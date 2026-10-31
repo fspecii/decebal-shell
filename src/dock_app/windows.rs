@@ -212,6 +212,8 @@ impl DockApp {
         let scale = *self.scale.get_or_insert(1.0);
         let Some(w) = self.win.as_mut() else { return };
         w.m = Metrics::new(scale, s.windows_align).themed(&crate::theme::th());
+        // the tray's popups, calendar and quick settings at the taskbar's scale
+        w.status.status_set_scale(w.m.scale);
         // auto follows the active theme's mode; dark/light force that mode
         w.colors = match s.windows_theme {
             WinTheme::Auto => Colors::from_theme(&crate::theme::th()),

@@ -385,8 +385,10 @@ impl DecBar {
     /// global pixels and the panel's thickness.
     pub(super) fn anchor_of(&self, r: (f32, f32, f32, f32)) -> crate::panel::frame::LaunchAnchor {
         let edge = self.panel().edge;
-        let thickness = crate::theme::th().bar_thickness(edge);
-        crate::panel::frame::LaunchAnchor { edge, x: self.indicator_origin.0 as f32 + r.0 + r.2 / 2.0, y: self.indicator_origin.1 as f32 + r.1 + r.3 / 2.0, thickness }
+        // the contract is in surface (root) pixels: the logical rectangle times the render scale
+        let k = crate::gfx::render_scale();
+        let thickness = crate::theme::th().bar_thickness(edge) * k;
+        crate::panel::frame::LaunchAnchor { edge, x: self.indicator_origin.0 as f32 + (r.0 + r.2 / 2.0) * k, y: self.indicator_origin.1 as f32 + (r.1 + r.3 / 2.0) * k, thickness }
     }
 
     /// What a press on a bar item does, for every renderer. `r` is the item's rectangle on the surface. Items whose
@@ -1679,6 +1681,39 @@ pub(super) mod tests {
         assert!(!bar.draw_brand(&mut pm, 16.0, 32.0, 32.0, ink));
         TEST_BRANDING.with(|b| *b.borrow_mut() = None);
         let _ = std::fs::remove_dir_all(&dir);
+        reset();
+    }
+
+    #[test]
+    fn every_style_and_edge_works_at_125_and_200_percent() {
+        use crate::app::App;
+        for scale in [1.25f32, 2.0] {
+            for style in STYLES {
+                for edge in Edge::ALL {
+                    let bar = fixture(style, edge, AppletSet::all(), 1280);
+                    let (lw, lh) = (bar.width, bar.height);
+                    let logical: Vec<_> = items(&bar);
+                    let spec = bar.surface_spec().unwrap();
+                    let mut sc = crate::backend::scaled::Scaled::new(bar, scale);
+                    let (pw, ph) = (((lw as f32) * scale).round() as u32, ((lh as f32) * scale).round() as u32);
+                    sc.resized(pw, ph);
+                    let sspec = sc.surface_spec().unwrap();
+                    assert_eq!(sspec.reserve, (spec.reserve as f32 * scale).ceil() as i32, "{} {} {scale}: the strut scales", style.key(), edge.as_str());
+                    let mut pm = Pixmap::new(pw, ph).unwrap();
+                    sc.draw(&mut pm);
+                    assert!(pm.data().chunks(4).any(|p| p[3] > 0));
+                    // the sound applet, pressed where the surface shows it, opens its popup
+                    let (_, r) = logical.iter().find(|(k, _)| *k == Tray::Audio).copied().expect("sound");
+                    sc.pointer_button((r.0 + r.2 / 2.0) * scale, (r.1 + r.3 / 2.0) * scale, Button::Left);
+                    assert_eq!(sc.inner().open, Open::Popup(Tray::Audio), "{} {} {scale}", style.key(), edge.as_str());
+                    // the input region covers the popup in surface pixels
+                    let p = sc.inner().popup.clone().unwrap();
+                    let (cx, cy) = ((p.x + p.w / 2.0) * scale, (p.y + p.h / 2.0) * scale);
+                    assert!(sc.input_rects().iter().any(|i| cx >= i.x as f32 && cx < (i.x + i.w) as f32 && cy >= i.y as f32 && cy < (i.y + i.h) as f32));
+                    sc.draw(&mut pm);
+                }
+            }
+        }
         reset();
     }
 

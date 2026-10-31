@@ -58,7 +58,7 @@ impl Viewport {
             self.buffer = Pixmap::new(width, height);
             self.mask = Mask::new(width, height).and_then(|mut mask| {
                 let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, 28.0)?;
-                mask.fill_path(&path, tiny_skia::FillRule::Winding, true, tiny_skia::Transform::identity());
+                mask.fill_path(&path, tiny_skia::FillRule::Winding, true, crate::gfx::transform());
                 Some(mask)
             });
         }

@@ -7,7 +7,7 @@ use crate::controlcenter;
 use crate::gfx::{color, fill_circle, fill_rect, fill_rounded, stroke_rounded};
 use crate::menubar::symbols::SymbolCache;
 use crate::text::{Fonts, Weight};
-use tiny_skia::{Paint, PathBuilder, Pixmap, Stroke, Transform};
+use tiny_skia::{Paint, PathBuilder, Pixmap, Stroke};
 
 const TEXT_PX: f32 = 12.0;
 const PAD: f32 = 5.0;
@@ -291,7 +291,7 @@ fn draw_check(pm: &mut Pixmap, cx: f32, cy: f32, rgb: (u8, u8, u8)) {
     paint.set_color_rgba8(rgb.0, rgb.1, rgb.2, 255);
     paint.anti_alias = true;
     let stroke = Stroke { width: 1.8, line_cap: tiny_skia::LineCap::Round, line_join: tiny_skia::LineJoin::Round, ..Stroke::default() };
-    pm.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    pm.stroke_path(&path, &paint, &stroke, crate::gfx::transform(), None);
 }
 
 /// Draws the wireframe of layout `name` in the box (x, y, w, h).

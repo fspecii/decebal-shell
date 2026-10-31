@@ -33,6 +33,8 @@ pub struct Place {
     pub(super) pinned: Option<(f32, f32)>,
     /// The host is the Windows-style taskbar: `control_center.style = "auto"` paints the Windows flyout look.
     pub(super) taskbar: bool,
+    /// The host's scale (see [`DecBar::status_set_scale`]); 0 = 1.
+    pub(super) scale: f32,
 }
 
 impl DecBar {
@@ -61,7 +63,7 @@ impl DecBar {
 
     /// What a press on a tray item that is not a popup does (launchers, toggles); true when handled. `r` is the item's
     /// rectangle on the host surface.
-    pub fn status_activate(&mut self, kind: Tray, r: (f32, f32, f32, f32), button: Button) -> bool {
+    fn status_activate_l(&mut self, kind: Tray, r: (f32, f32, f32, f32), button: Button) -> bool {
         let done = self.applet_press(kind, r, button);
         if self.open != Open::None {
             self.status_replace();
@@ -72,9 +74,9 @@ impl DecBar {
     /// Re-places what is open with the last placement parameters.
     fn status_replace(&mut self) {
         if self.embed.vertical {
-            self.status_place_side(self.embed.edge, self.embed.up, self.embed.screen_w);
+            self.status_place_side_l(self.embed.edge, self.embed.up, self.embed.screen_w);
         } else {
-            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+            self.status_place_l(self.embed.edge, self.embed.up, self.embed.screen_w);
         }
     }
 
@@ -98,6 +100,101 @@ impl DecBar {
                 | Tray::More
                 | Tray::Indicators
         )
+    }
+
+    /// The host's scale (its taskbar is drawn `scale` times larger): the engine's popups, calendar and Control Center are
+    /// drawn and hit at the same scale; every `status_*` coordinate is the host's surface pixels.
+    pub fn status_set_scale(&mut self, scale: f32) {
+        self.embed.scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    }
+
+    fn ek(&self) -> f32 {
+        if self.embed.scale > 0.0 {
+            self.embed.scale
+        } else {
+            1.0
+        }
+    }
+
+    fn up_rect(&self, r: InputRect) -> InputRect {
+        let k = self.ek();
+        let (x0, y0) = ((r.x as f32 * k).floor() as i32, (r.y as f32 * k).floor() as i32);
+        let (x1, y1) = (((r.x + r.w) as f32 * k).ceil() as i32, ((r.y + r.h) as f32 * k).ceil() as i32);
+        InputRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+    }
+
+    /// Opens (or closes) the popup of `kind` anchored at `x` along the strip (surface pixels).
+    pub fn status_toggle(&mut self, kind: Tray, x: f32) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_toggle_l(kind, x / k))
+    }
+
+    /// Extent of the open popup in surface pixels.
+    pub fn status_size(&self) -> Option<(f32, f32)> {
+        let k = self.ek();
+        self.status_size_l().map(|(w, h)| (w * k, h * k))
+    }
+
+    pub fn status_place(&mut self, edge: f32, up: bool, screen_w: f32) {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_place_l(edge / k, up, screen_w / k))
+    }
+
+    pub fn status_place_side(&mut self, edge: f32, left: bool, screen_h: f32) {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_place_side_l(edge / k, left, screen_h / k))
+    }
+
+    pub fn status_rect_at(&self, edge: f32, up: bool, screen_w: f32) -> Option<InputRect> {
+        let k = self.ek();
+        self.status_rect_at_l(edge / k, up, screen_w / k).map(|r| self.up_rect(r))
+    }
+
+    /// Input area the open popup needs (surface pixels).
+    pub fn status_rect(&self) -> Option<InputRect> {
+        self.status_rect_l().map(|r| self.up_rect(r))
+    }
+
+    pub fn status_draw(&mut self, pm: &mut Pixmap) {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_draw_l(pm))
+    }
+
+    pub fn status_motion(&mut self, x: f32, y: f32) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_motion_l(x / k, y / k))
+    }
+
+    pub fn status_press(&mut self, x: f32, y: f32) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_press_l(x / k, y / k))
+    }
+
+    pub fn status_release(&mut self, x: f32) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_release_l(x / k))
+    }
+
+    pub fn status_wheel(&mut self, x: f32, y: f32, dy: f32) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_wheel_l(x / k, y / k, dy))
+    }
+
+    /// What a press on a tray item that is not a popup does; `r` is the item's rectangle in surface pixels.
+    pub fn status_activate(&mut self, kind: Tray, r: (f32, f32, f32, f32), button: Button) -> bool {
+        let k = self.ek();
+        crate::gfx::with_render_scale(k, || self.status_activate_l(kind, (r.0 / k, r.1 / k, r.2 / k, r.3 / k), button))
+    }
+
+    pub fn status_indicator_anchor(&mut self, x: f32) {
+        let k = self.ek();
+        self.status_indicator_anchor_l(x / k)
+    }
+
+    /// The engine's glass regions (its popups and panel) in surface pixels.
+    pub fn status_glass_regions(&self) -> Vec<crate::glass::Region> {
+        let k = self.ek();
+        self.glass_regions().into_iter().map(|r| crate::glass::Region { x: r.x * k, y: r.y * k, w: r.w * k, h: r.h * k, radius: r.radius * k }).collect()
     }
 
     /// Starts the data sources; `waker` makes the host's loop call [`DecBar::status_tick`].
@@ -188,7 +285,7 @@ impl DecBar {
 
     /// Keep an open application menu attached as other tray items appear, vanish
     /// or move into overflow. Does not reopen/reload the menu or change its path.
-    pub fn status_indicator_anchor(&mut self, x: f32) {
+    fn status_indicator_anchor_l(&mut self, x: f32) {
         if matches!(self.open, Open::Popup(Tray::Indicator(_) | Tray::Indicators)) {
             self.embed.x = x;
         }
@@ -253,7 +350,7 @@ impl DecBar {
 
     /// Opens (or, when already open, closes) the popup for `kind`, anchored on the item centred at `x`
     /// (the calendar hangs from its right edge instead). Returns false when there is nothing to show.
-    pub fn status_toggle(&mut self, kind: Tray, x: f32) -> bool {
+    fn status_toggle_l(&mut self, kind: Tray, x: f32) -> bool {
         if self.open == Open::Popup(kind) || (kind == Tray::Control && self.open == Open::Control) {
             self.close();
             return true;
@@ -290,7 +387,7 @@ impl DecBar {
     }
 
     /// Extent of the open popup: (width, height), or None when none is open.
-    pub fn status_size(&self) -> Option<(f32, f32)> {
+    fn status_size_l(&self) -> Option<(f32, f32)> {
         if self.open == Open::Control {
             return Some((self.cc_width(), self.cc_height));
         }
@@ -299,14 +396,14 @@ impl DecBar {
 
     /// Positions the open popup against the strip edge at `edge` (`up`: the strip is at the bottom and the
     /// popup opens above it) inside a surface `screen_w` wide. Call before drawing or hit-testing.
-    pub fn status_place(&mut self, edge: f32, up: bool, screen_w: f32) {
+    fn status_place_l(&mut self, edge: f32, up: bool, screen_w: f32) {
         self.embed.vertical = false;
         self.place_embedded(edge, up, screen_w);
     }
 
     /// [`DecBar::status_place`] for a strip down a side edge: `edge` is the strip's inner x, `left` opens the popup
     /// leftwards (a right-edge strip), `screen_h` is the strip's length; items are anchored by their centre y.
-    pub fn status_place_side(&mut self, edge: f32, left: bool, screen_h: f32) {
+    fn status_place_side_l(&mut self, edge: f32, left: bool, screen_h: f32) {
         self.embed.vertical = true;
         self.place_embedded(edge, left, screen_h);
     }
@@ -329,7 +426,7 @@ impl DecBar {
 
     /// (x, y, w, h) the open popup gets for these placement parameters.
     fn popup_geometry(&self, edge: f32, up: bool, screen_w: f32) -> Option<(f32, f32, f32, f32)> {
-        let (w, h) = self.status_size()?;
+        let (w, h) = self.status_size_l()?;
         if self.open == Open::Control {
             if let Some((x, y)) = self.embed.pinned {
                 return Some((x, y, w, h));
@@ -354,7 +451,7 @@ impl DecBar {
     }
 
     /// Input area of the open popup for these placement parameters, without moving it.
-    pub fn status_rect_at(&self, edge: f32, up: bool, screen_w: f32) -> Option<InputRect> {
+    fn status_rect_at_l(&self, edge: f32, up: bool, screen_w: f32) -> Option<InputRect> {
         let (x, y, w, h) = self.popup_geometry(edge, up, screen_w)?;
         Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: w.ceil() as i32, h: h.ceil() as i32 })
     }
@@ -364,17 +461,17 @@ impl DecBar {
     }
 
     /// Input area the open popup needs (surface coordinates).
-    pub fn status_rect(&self) -> Option<InputRect> {
+    fn status_rect_l(&self) -> Option<InputRect> {
         if self.open == Open::Control {
             let (x, y) = self.embed.origin;
             return Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: self.cc_width().ceil() as i32, h: self.cc_height.ceil() as i32 });
         }
         let (x, y) = self.popup.as_ref().map(|p| (p.x, p.y)).or(self.calendar.as_ref().map(|c| (c.x, c.y)))?;
-        let (w, h) = self.status_size()?;
+        let (w, h) = self.status_size_l()?;
         Some(InputRect { x: x.floor() as i32, y: y.floor() as i32, w: w.ceil() as i32, h: h.ceil() as i32 })
     }
 
-    pub fn status_draw(&mut self, pm: &mut Pixmap) {
+    fn status_draw_l(&mut self, pm: &mut Pixmap) {
         if self.open == Open::Control {
             let style = self.cc_style();
             let view = controlcenter::View { origin: self.embed.origin, items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
@@ -395,7 +492,7 @@ impl DecBar {
     }
 
     /// Pointer moved over the surface; true when the popup needs a redraw.
-    pub fn status_motion(&mut self, x: f32, y: f32) -> bool {
+    fn status_motion_l(&mut self, x: f32, y: f32) -> bool {
         if self.open == Open::Control {
             let (ox, oy) = self.embed.origin;
             if let Some(t) = self.cc_drag {
@@ -421,8 +518,8 @@ impl DecBar {
     }
 
     /// Left press inside the popup; true when it handled the press.
-    pub fn status_press(&mut self, x: f32, y: f32) -> bool {
-        let inside = self.status_rect().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
+    fn status_press_l(&mut self, x: f32, y: f32) -> bool {
+        let inside = self.status_rect_l().is_some_and(|r| x >= r.x as f32 && x < (r.x + r.w) as f32 && y >= r.y as f32 && y < (r.y + r.h) as f32);
         if !inside {
             return false;
         }
@@ -439,7 +536,7 @@ impl DecBar {
     }
 
     /// Left release (ends a slider drag); true when a redraw is needed.
-    pub fn status_release(&mut self, x: f32) -> bool {
+    fn status_release_l(&mut self, x: f32) -> bool {
         if let Some(t) = self.cc_drag.take() {
             let (ox, _) = self.embed.origin;
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
@@ -463,7 +560,7 @@ impl DecBar {
     }
 
     /// Wheel over the open Control Center panel: the display and sound sliders move in steps of 5%.
-    pub fn status_wheel(&mut self, x: f32, y: f32, dy: f32) -> bool {
+    fn status_wheel_l(&mut self, x: f32, y: f32, dy: f32) -> bool {
         if self.indicator_menu_scroll(x, y, dy) {
             self.status_replace();
             return true;

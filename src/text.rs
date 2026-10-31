@@ -301,6 +301,17 @@ impl Fonts {
     /// [`Self::draw`] in the font of `role`.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_as(&mut self, role: Role, pm: &mut Pixmap, text: &str, x: f32, y: f32, px: f32, weight: Weight, color: Color) -> f32 {
+        // at a render scale the glyphs are rasterised at the surface size (sharp), positions and the result stay logical
+        let k = crate::gfx::render_scale();
+        if k != 1.0 {
+            return self.draw_pixels(role, pm, text, x * k, y * k, px * k, weight, color) / k;
+        }
+        self.draw_pixels(role, pm, text, x, y, px, weight, color)
+    }
+
+    /// [`Self::draw_as`] in surface pixels.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_pixels(&mut self, role: Role, pm: &mut Pixmap, text: &str, x: f32, y: f32, px: f32, weight: Weight, color: Color) -> f32 {
         let baseline = y + self.ascent_as(role, px, weight);
         let (cr, cg, cb, ca) = (color.red(), color.green(), color.blue(), color.alpha());
         let mut pen = x;

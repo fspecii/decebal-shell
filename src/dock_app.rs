@@ -577,7 +577,7 @@ impl App for DockApp {
             let r = self.win_strip_rect();
             regions.push(crate::glass::Region { x: r.0, y: r.1, w: r.2, h: r.3, radius: 0.0 });
             let _ = w;
-            regions.extend(self.win.as_ref().map(|w| w.status.glass_regions()).unwrap_or_default());
+            regions.extend(self.win.as_ref().map(|w| w.status.status_glass_regions()).unwrap_or_default());
         } else {
             regions.push(self.dock.glass_region(self.surface.0 as f32, self.surface.1 as f32));
         }

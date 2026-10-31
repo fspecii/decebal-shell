@@ -176,7 +176,7 @@ fn main() {
         }
         let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" };
         let spec = App::surface_spec(&bar).unwrap_or(fallback);
-        if let Err(e) = backend::run(bar, spec) {
+        if let Err(e) = backend::run_scaled(bar, spec, backend::ui_scale()) {
             decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);

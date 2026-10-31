@@ -1224,7 +1224,7 @@ impl DecBar {
             self.dux_draw(pm);
             return;
         }
-        let w = pm.width() as f32;
+        let w = self.width as f32;
         if floating() {
             let th = crate::theme::th();
             let (x, y, pw, ph) = (PILL_MARGIN_X, PILL_MARGIN_Y, w - 2.0 * PILL_MARGIN_X, BAR_HEIGHT - 2.0 * PILL_MARGIN_Y);
@@ -1560,15 +1560,15 @@ impl App for DecBar {
             self.heap_rechecked = false;
             return;
         }
-        self.width = pm.width();
-        self.height = pm.height();
+        (self.width, self.height) = crate::gfx::logical_size(pm);
         self.cc_sync_viewport();
         let top = self.strip_top();
         if top > 0.0 {
             // a bottom bar: the strip is drawn as it is on top, then put on the last rows of the surface
-            if let Some(mut strip) = Pixmap::new(pm.width(), self.bar_bottom().ceil().max(1.0) as u32) {
+            let k = crate::gfx::render_scale();
+            if let Some(mut strip) = Pixmap::new(pm.width(), (self.bar_bottom() * k).ceil().max(1.0) as u32) {
                 self.draw_bar(&mut strip);
-                pm.draw_pixmap(0, top.round() as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+                pm.draw_pixmap(0, (top * k).round() as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
             }
         } else {
             self.draw_bar(pm);

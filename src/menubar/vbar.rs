@@ -1388,8 +1388,7 @@ impl DecBar {
 
     pub(super) fn v_draw(&mut self, pm: &mut Pixmap) {
         let th = crate::theme::th();
-        self.width = pm.width();
-        self.height = pm.height();
+        (self.width, self.height) = crate::gfx::logical_size(pm);
         let geo = self.v_geo();
         let horiz = geo.horizontal();
         let strip = geo.strip();
