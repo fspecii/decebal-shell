@@ -86,18 +86,70 @@ Run 2026-10-31, `~/.cache/decebal-settings-io-evidence/`:
 
 No hardware, Wayland-compositor or Orca claims: this is Xvfb + libatspi 2.62.
 
-## Not yet routed through the worker (still synchronous on the UI thread)
+## One write protocol for every writer (`io`)
 
-`ccpane` (control_center JSON), `configpane` save/presets, `panes` "Restore original"/create file, `packages`
-duplicate/export/delete/install/snapshot, `system::session` and `system::notifications` files, `system` display scale,
-`wallhaven::store` (prefs, API key with mode 0600, favourites), `wallpapercolors` engine writes,
-`wallpaper_follow::cancel`, `Source::write_selection` callers. They remain correct (the worker detects their writes as
-external changes and never overwrites them) but can still block under disk load. Next step: a `Job::Run` variant for
-these owners, keeping the wallhaven credential file's 0600 mode and redaction.
+* **Per-file lock**, process wide and re-entrant per thread (`io::with_file_lock`): the worker, the theme engine
+  (`io::write_atomic`), preset `fsx`, the System panes and the Wallhaven store all take it from their read to their
+  rename, so two writers in this process never interleave on one file.
+* **Unique temp file** per write (`.<name>.decsettings-<pid>-<n>.tmp`, `create_new`); the old per-PID name let two
+  writers truncate or rename each other's temp.
+* **Identity check at commit**, right before the rename and after the (possibly seconds-long) fsync: a file saved by
+  another process meanwhile is never replaced (`io::CHANGED_ON_DISK`). TOML jobs then fail ("changed on disk", the
+  window reloads their version); `io::json_update` reads the file again and re-applies its one key, so their keys and
+  ours both survive, and refuses when someone else changed that same key (the window's `base` value differs and the
+  file is not exactly as our own last write left it). A file that is not a JSON object is never overwritten.
+* `io::write_private`: the same for secrets and caches, created 0600 from the start, no `.bak-decsettings` copy.
+* rdwm reload: any committed config.toml change marks a reload due; it is sent once no TOML/theme/task job is left,
+  whatever the last result was.
+
+## Families (all through the one worker)
+
+| Family | Job | Notes |
+| --- | --- | --- |
+| Controls on rdwm `config.toml` | `Toml` key patch | wallpaper changes stop a pending "match wallpaper" photo first, in the same job |
+| `dock-settings.json`, `decebal.json`, pinned | `Json` one key, per-key base | Control Center and "Apply to all apps" merge into their objects (unknown keys kept); the apply request runs after the commit |
+| Theme packages (selection, card, widget answer, reset, style) | `Theme` (planned in the worker) | shown selection = `ThemeRequest::planned_selection`, pinned to the planner by a test |
+| Theme cards: duplicate, export, delete, install, snapshot, timed preview | `Task` | preview applies and puts back as one job |
+| Config & Presets editor save / revert | `Task` | rdwmctl validation in the worker; typing during a save stays unsaved; a changed file is refused once, the next save overwrites |
+| Presets apply / undo / save / import / duplicate / rename / delete / export | `Task` | the store's restore point and rollback are the transaction |
+| General: Restore original, create file before Open | `Task` | |
+| System panes: session-settings (display scale, keep layout, input, accessibility) | `Handle` from the runner thread | snapshot + enqueue under the `latest` lock: the newest snapshot is written last |
+| notifications.toml | `Handle` + callback | shown at once, taken back with an error if the write fails |
+| Wallhaven API key, key removal, favourites, filters, offline search cache | `Task` | the key moves in as a `Secret` (redacted Debug), 0600, no backup, never in a result or log line; cache writes are quiet |
+| Match wallpaper: save as palette | `Task`, then a `Theme` job | |
+
+`Model::run_task(label, writes, run, done)` is the API for owners (also for the asset lane's async downloads:
+download on their own thread, then hand the durable install step to `run_task`, or use `persist::Handle` from that
+thread). `run` gets owned, validated input; its `Value` result must not carry secrets; `done` shows the outcome.
+
+Left on their own threads by design: Wallhaven thumbnail cache (download worker; now on the shared protocol),
+theme `wallpaper_follow` photo commits (its own process and lock), and the panel pane's new writes (root adapts them
+after merge, as agreed).
+
+## Accessibility and visible state
+
+* An action's reply means *accepted* (validated and queued, shown pending), never *durable*. A synchronous refusal
+  (invalid value, full queue) is still the action's error.
+* While a window job is pending the toast says "Saving…" and is `busy`; only the commit says "Saved"/"Theme: …".
+  A later failure is an alert on the page, the control shows the saved value again, newer accepted edits stay.
+* System pane actions (commands plus session file) report when they finish, as before ("Saved" or the error); the
+  control shows the new state at once.
+
+## Native evidence, every family (`settings_slow_disk.py`, candidate `379c618`+tests, 2026-10-31)
+
+All 54 checks pass on the candidate (`~/.cache/decebal-settings-io-evidence/full-candidate2/results.json`). Replies
+while every fsync is held: JSON value 196 ms, TOML toggle 118 ms, theme mode 513 ms (tab switch included), editor
+Save 175 ms, preset Apply 173 ms, Restore 110 ms, session toggle 77 ms, notifications toggle 87 ms, Wallhaven key
+177 ms. Their file saved during our held fsync: both keys kept (JSON) / their file kept and the change refused
+visibly (TOML, same JSON key). Injected EIO: the preset apply rolls every file back byte for byte; notifications are
+taken back with an alert. Close with the disk never returning: window gone in 2.3 ms, the process gives up after the
+30 s drain limit (30.06 s) and logs the change as not written. The same family run on the baseline
+(7f4faf0 + hook) stops at the first held write: the AT request is handled on the UI thread, which sits in the held
+fsync (`full-baseline3/root/apps/json-merge/logs`), the client times out and libatspi 2.62 aborts on that timeout.
 
 ## Coordination notes
 
-Files outside `src/settings/io*` / `persist.rs` changed narrowly: `model.rs` (persistence hooks), `themepane.rs`,
+Files outside `src/settings/io*` / `persist.rs` changed narrowly (first round): `model.rs` (persistence hooks), `themepane.rs`,
 `packages.rs`, `widgetchoice.rs`, `appearance.rs` (route theme transactions to `Model::apply_theme`),
 `wallhaven/cli.rs` (headless inline writes), `tomlcfg.rs` (`array_move` fix), `app/a11y.rs` (toast `Busy` state and
 one test), `Cargo.toml` (`settings-io-fault` feature). Pre-existing, unrelated: clippy lints in `a11y/atspi.rs` and

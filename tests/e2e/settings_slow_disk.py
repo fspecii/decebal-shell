@@ -62,7 +62,7 @@ def outer(a):
         DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(root / "no-system-bus"),
         LANG="C.UTF-8",
     )
-    cmd = ["dbus-run-session", "--", sys.executable, "-I", str(HERE), "--inner", "--bin", str(Path(a.bin).resolve()), "--evidence", str(ev), "--label", a.label]
+    cmd = ["dbus-run-session", "--", sys.executable, "-I", str(HERE), "--inner", "--bin", str(Path(a.bin).resolve()), "--evidence", str(ev), "--label", a.label] + (["--only", a.only] if a.only else [])
     log = open(ev / "session.log", "w")
     t0 = time.time()
     r = subprocess.run(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=a.timeout)
@@ -233,7 +233,7 @@ def inner(a):
     gate = root / "fsync-gate"
 
     class Settings:
-        def __init__(self, name, pane="general", fail=None, extra_files=None):
+        def __init__(self, name, pane="general", fail=None, extra_files=None, env_extra=None):
             self.name = name
             self.dir = root / "apps" / name
             for d in ["home", "cfg", "decebal", "logs"]:
@@ -260,6 +260,7 @@ def inner(a):
             )
             if fail:
                 env["DECSETTINGS_FAULT_SYNC_FAIL"] = fail
+            env.update(env_extra or {})
             self.p = subprocess.Popen([a.bin, "--config", str(self.config), pane], env=env, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
             owned.append(self.p)
             self.wid = wait(lambda: x("search", "--onlyvisible", "--class", "DecSettings", check_rc=False).split("\n")[0], "decsettings window")
@@ -360,7 +361,12 @@ def inner(a):
         scall("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set", GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))))
         start_registry()
 
+        def want(name):
+            return not a.only or name in a.only.split(",")
+
         # ======================================================== 1. blocked disk: everything still answers
+        if not want("base"):
+            raise StopIteration
         s = Settings("blocked")
         app = find_app(s.p.pid)
         ix = wait(lambda: (lambda i: i if "ctl:r:general:default_binds" in i else None)(index(app)), "tree with the general pane")
@@ -490,6 +496,17 @@ def inner(a):
         check("process exited by itself after the disk came back (exit 0)", s.p.returncode == 0, s.p.returncode)
         check("the edit made just before closing is on disk", s.config.read_text() != before and "default_binds = " in s.config.read_text(), s.config.read_text())
         s.close()
+    except StopIteration:
+        pass
+    except Exception as e:  # noqa: BLE001 - record any harness or app failure, then clean up
+        passed = check(f"scenario aborted: {type(e).__name__}: {e}", False)
+        if s is not None and s.p.poll() is None:
+            results["threads_on_failure"] = threads(s.p.pid)
+        if s is not None:
+            s.close()
+    s = None
+    try:
+        families(a, Settings, find_app, index, states, do_action, alerts, toast, check, wait, pump, timed, threads, x, gate, lat, results, Atspi)
     except Exception as e:  # noqa: BLE001 - record any harness or app failure, then clean up
         passed = check(f"scenario aborted: {type(e).__name__}: {e}", False)
         if s is not None and s.p.poll() is None:
@@ -514,12 +531,277 @@ def inner(a):
     return 0 if results["passed"] else 1
 
 
+
+# ---------------------------------------------------------------- one representative per write family
+
+
+def families(a, Settings, find_app, index, states, do_action, alerts, toast, check, wait, pump, timed, threads, x, gate, lat, results, Atspi):
+    """Every family: the action answers while every fsync is held, nothing is written yet, the newest state lands
+    exactly once the disk is back, and failures (injected EIO, external edits during the held fsync) are refused
+    visibly without losing anyone's data."""
+    import json as _json
+
+    want = lambda name: not a.only or name in a.only.split(",")  # noqa: E731
+
+    def hold(secs):
+        gate.write_text("held\n")
+        t0 = time.time()
+
+        def release():
+            gate.unlink(missing_ok=True)
+            results.setdefault("gate_releases", []).append(round(time.time() - t0, 2))
+
+        t = threading.Timer(secs, release)
+        t.daemon = True
+        t.start()
+        return t, t0
+
+    def node(app, key, t=10.0):
+        return wait(lambda: index(app).get(key), f"node {key}", t)
+
+    def held_for(t0, secs):
+        return time.time() - t0 < secs - 0.3
+
+    def quick(name, ms):
+        lat[name] = ms
+        return ms is not None and ms < 1000
+
+    def set_value(n, v):
+        t0 = time.time()
+        r = Atspi.Value.set_current_value(n, v)
+        return round((time.time() - t0) * 1000, 1), r
+
+    started = []
+
+    class Tracked(Settings):
+        def __init__(self, *args, **kw):
+            super().__init__(*args, **kw)
+            started.append(self)
+
+    def scenario(name, fn):
+        if not want(name):
+            return
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 - one family failing must not hide the others
+            check(f"{name}: aborted: {type(e).__name__}: {e}", False)
+        finally:
+            gate.unlink(missing_ok=True)
+            while started:
+                started.pop().close()
+
+    def external_write(path, text):
+        """An editor in another process: temp file + rename, no lock (like most editors)."""
+        tmp = path.with_name(f".{path.name}.editor.tmp")
+        tmp.write_text(text)
+        os.replace(tmp, path)
+
+    # ---- JSON: a worker write held in fsync, someone else saves another key meanwhile -> both survive
+    def json_merge():
+        s = Tracked("json-merge", pane="appearance/dock", extra_files={"decebal/dock-settings.json": "{\n  \"appSpacing\": 3\n}\n"})
+        app = find_app(s.p.pid)
+        n = node(app, "ctl:j:dock:appSpacing")
+        dock = s.dir / "decebal" / "dock-settings.json"
+        t, t0 = hold(4.0)
+        ms, r = set_value(n, 9.0)
+        check("json: the AT value change answers while the disk is held", quick("json_set_value_reply", ms) and r is True and held_for(t0, 4.0), [ms, r])
+        time.sleep(0.4)
+        external_write(dock, "{\n  \"appSpacing\": 3,\n  \"editor\": \"theirs\"\n}\n")
+        wait(lambda: not gate.exists() and _json.loads(dock.read_text()).get("appSpacing") == 9, "committed", 15)
+        got = _json.loads(dock.read_text())
+        check("json: their key saved during our held fsync and ours are both on disk", got.get("editor") == "theirs" and got.get("appSpacing") == 9, got)
+        return s
+
+    # ---- JSON: someone else changes the same key while ours is held -> refused, theirs kept
+    def json_same_key():
+        s = Tracked("json-same-key", pane="appearance/dock", extra_files={"decebal/dock-settings.json": "{\n  \"appSpacing\": 3\n}\n"})
+        app = find_app(s.p.pid)
+        n = node(app, "ctl:j:dock:appSpacing")
+        dock = s.dir / "decebal" / "dock-settings.json"
+        t, t0 = hold(3.0)
+        set_value(n, 9.0)
+        time.sleep(0.4)
+        theirs = "{\n  \"appSpacing\": 20,\n  \"x\": 1\n}\n"
+        external_write(dock, theirs)
+        got = wait(lambda: [m for m in alerts(app) if "changed on disk" in m] or None, "conflict alert", 15)
+        check("json: the same key changed behind our back is refused visibly", bool(got), got)
+        check("json: their value is kept byte for byte", dock.read_text() == theirs)
+        return s
+
+    # ---- TOML: an editor saves config.toml while our write is held -> refused, theirs kept
+    def toml_external():
+        s = Tracked("toml-external")
+        app = find_app(s.p.pid)
+        sw = node(app, "ctl:r:general:default_binds")
+        t, t0 = hold(3.0)
+        ms, r = do_action(sw, "toggle")
+        check("toml: the AT toggle answers while the disk is held", quick("toml_toggle_reply", ms) and r is True, [ms, r])
+        time.sleep(0.4)
+        theirs = "# saved by hand while Settings was writing\n[general]\nborder_px = 7\n"
+        external_write(s.config, theirs)
+        got = wait(lambda: [m for m in alerts(app) if "changed on disk" in m] or None, "conflict alert", 15)
+        check("toml: refused at commit with a visible error", bool(got), got)
+        check("toml: the hand-saved file is kept byte for byte", s.config.read_text() == theirs)
+        return s
+
+    # ---- theme: custom palette, a new package picked and then a mode change while held -> new design's colours
+    def theme_palette():
+        base = {"theme": {"name": "nord", "mode": "dark", "palette": "catppuccin", "accent": "#ff9f0a"}, "future": {"kept": True}}
+        s = Tracked("theme-palette", pane="appearance", extra_files={"decebal/decebal.json": _json.dumps(base, indent=2) + "\n"})
+        wait(lambda: s.ctl("l:tcard:apply:macos"), "macOS card", 10)
+        t, t0 = hold(5.0)
+        s.click("l:tcard:apply:macos")
+        app = find_app(s.p.pid)
+        tabs = wait(lambda: next((n for k, n in index(app).items() if k and k.endswith("ap:tab")), None), "appearance tabs", 5)
+        pal = next(i for i in range(tabs.get_child_count()) if "alette" in (tabs.get_child_at_index(i).get_name() or ""))
+        Atspi.Selection.select_child(tabs, pal)
+        mode = wait(lambda: index(app).get("ctl:th:mode"), "mode control", 5)
+        tm = time.time()
+        r = Atspi.Selection.select_child(mode, 0)  # Light
+        lat["theme_mode_select_reply"] = round((time.time() - tm) * 1000, 1)
+        check("theme: the mode change answers while the package is still being saved", r is True and held_for(t0, 5.0) and lat["theme_mode_select_reply"] < 1000, [r, lat["theme_mode_select_reply"]])
+        shell = s.dir / "decebal" / "decebal.json"
+        wait(lambda: not gate.exists() and _json.loads(shell.read_text())["theme"].get("mode") == "light", "mode committed", 20)
+        th = _json.loads(shell.read_text())["theme"]
+        check("theme: the new design keeps its own colours (old palette and accent did not come back)", th.get("name") == "macos" and th.get("mode") == "light" and "palette" not in th and "accent" not in th, th)
+        check("theme: unknown keys survived", _json.loads(shell.read_text()).get("future") == {"kept": True})
+        return s
+
+    # ---- Config & Presets editor: save while held, typing meanwhile stays unsaved
+    def editor():
+        s = Tracked("editor", pane="config")
+        app = find_app(s.p.pid)
+        ed = wait(lambda: next((n for n in index(app).values() if n.get_role() == Atspi.Role.TEXT and "editable" in states(n)), None), "editor", 10)
+        # the editor opens decebal.json; valid JSON that keeps the unknown key
+        target = s.dir / "decebal" / "decebal.json"
+        text = '{\n  "theme": {"name": "nord", "mode": "dark"},\n  "future": {"kept": true},\n  "edited": 1\n}\n'
+        Atspi.EditableText.set_text_contents(ed, text)
+        save = node(app, "ctl:cfg:save")
+        t, t0 = hold(4.0)
+        ms, r = do_action(save, "click")
+        check("editor: Save answers while the disk is held (validation and write run in the worker)", quick("editor_save_reply", ms) and r is True, [ms, r])
+        Atspi.EditableText.insert_text(ed, len(text), "late", -1)
+        check("editor: nothing written while held", "edited" not in target.read_text())
+        wait(lambda: not gate.exists() and target.read_text() == text, "saved", 15)
+        check("editor: exactly the saved text is on disk", target.read_text() == text, target.read_text())
+        pump(0.5)
+        check("editor: typing done during the save is still unsaved (Save stays enabled)", "enabled" in states(node(app, "ctl:cfg:save")) and "late" not in target.read_text())
+        return s
+
+    # ---- presets: an apply failing on config.toml rolls every file back; one held answers at once
+    def preset():
+        s = Tracked("preset", pane="config", fail="config.toml")
+        app = find_app(s.p.pid)
+        Atspi.Selection.select_child(node(app, "ctl:cfg:view"), 1)
+        wait(lambda: s.ctl("cfg:apply:builtin/macos"), "the preset list", 10)
+        s.click("cfg:apply:builtin/macos")
+        files = [s.config, s.dir / "decebal" / "decebal.json"]
+        sums = [sha256(f) for f in files]
+        go = node(app, "ctl:cfg:apply-do")
+        t, t0 = hold(3.0)
+        ms, r = do_action(go, "click")
+        check("preset: Apply answers while the disk is held", quick("preset_apply_reply", ms) and r is True, [ms, r])
+        got = wait(lambda: [m for m in alerts(app) if "Not applied" in m] or None, "preset failure alert", 20)
+        check("preset: the failing apply is reported", bool(got), got)
+        check("preset: every file is byte-identical after the rollback", [sha256(f) for f in files] == sums)
+        return s
+
+    # ---- General > Restore original, held
+    def restore():
+        orig = "# the original\n[general]\nborder_px = 1\n"
+        s = Tracked("restore", extra_files={"cfg/config.toml.bak-decsettings": orig})
+        app = find_app(s.p.pid)
+        b = node(app, "ctl:a:restore")
+        t, t0 = hold(3.0)
+        ms, r = do_action(b, "click")
+        check("restore: answers while the disk is held", quick("restore_reply", ms) and r is True and s.config.read_text() != orig, [ms, r])
+        wait(lambda: not gate.exists() and s.config.read_text() == orig, "restored", 15)
+        check("restore: the original is back exactly", s.config.read_text() == orig)
+        return s
+
+    # ---- session settings (Accessibility > Reduce motion), held; then a failing write is taken back
+    def session():
+        s = Tracked("session", pane="accessibility")
+        app = find_app(s.p.pid)
+        sw = node(app, "ctl:s:acc:motion:")
+        sess = s.dir / "cfg" / "decebal" / "session-settings.json"
+        t, t0 = hold(3.0)
+        ms, r = do_action(sw, "toggle")
+        check("session: the toggle answers while the disk is held", quick("session_toggle_reply", ms) and r is True, [ms, r])
+        check("session: nothing written while held", not sess.exists() or "\"reduce_motion\": true" not in sess.read_text())
+        script = s.dir / "cfg" / "decebal" / "session-settings.sh"
+        wait(lambda: not gate.exists() and script.exists() and sess.exists() and _json.loads(sess.read_text()).get("reduce_motion") is True, "session saved", 15)
+        sh = (s.dir / "cfg" / "decebal" / "session-settings.sh").read_text()
+        check("session: json and login script both carry the newest value", "DECEBAL_REDUCE_MOTION=1" in sh)
+        return s
+
+    # ---- notifications.toml, failing write: shown at once, taken back with an error
+    def notifications():
+        s = Tracked("notifications", pane="notifications", fail="notifications.toml")
+        app = find_app(s.p.pid)
+        sw = node(app, "ctl:s:not:dnd:")
+        ms, r = do_action(sw, "toggle")
+        check("notifications: the toggle answers", quick("notifications_toggle_reply", ms) and r is True, [ms, r])
+        got = wait(lambda: [m for m in alerts(app) if "not saved" in m.lower()] or None, "notifications failure alert", 15)
+        check("notifications: the failed write is reported", bool(got), got)
+        wait(lambda: "checked" not in states(node(app, "ctl:s:not:dnd:")), "toggle taken back", 5)
+        check("notifications: the switch shows the saved value again", True)
+        f = s.dir / "cfg" / "decebal" / "notifications.toml"
+        check("notifications: no file was written", not f.exists() or "dnd = true" not in f.read_text())
+        return s
+
+    # ---- the Wallhaven API key: held, private from creation, never in any log
+    def wallhaven_key():
+        key = "AbCdEfGh12345678AbCdEfGh12345678"
+        # every request goes to a closed local port: nothing leaves the machine
+        s = Tracked("wallhaven-key", pane="wallhaven", env_extra={"WALLHAVEN_API_BASE": "http://127.0.0.1:9"})
+        app = find_app(s.p.pid)
+        Atspi.Selection.select_child(node(app, "ctl:wh:tab"), 1)
+        do_action(node(app, "ctl:wh:filters"), "click")
+        f = wait(lambda: index(app).get("ctl:wh:key:secret"), "key field", 15)
+        Atspi.EditableText.set_text_contents(f, key)
+        t, t0 = hold(3.0)
+        ms, r = do_action(f, "activate")
+        check("wallhaven: saving the key answers while the disk is held", quick("wallhaven_key_reply", ms) and r is True, [ms, r])
+        kf = s.dir / "cfg" / "decebal" / "wallhaven.key"
+        wait(lambda: not gate.exists() and kf.exists(), "key saved", 15)
+        check("wallhaven: key file 0600 from creation, no backup or temp copy", (kf.stat().st_mode & 0o777) == 0o600 and sorted(p.name for p in kf.parent.iterdir() if "wallhaven" in p.name and p.name != "wallhaven.json") == ["wallhaven.key"], sorted(p.name for p in kf.parent.iterdir()))
+        logs = "".join(p.read_text(errors="replace") for p in (s.dir / "logs").rglob("*") if p.is_file()) + (s.dir / "decsettings.out").read_text(errors="replace")
+        check("wallhaven: the key appears in no log line", key not in logs and "AbCdEfGh" not in logs)
+        return s
+
+    # ---- close while the disk never comes back: the window goes at once, the process gives up after the limit
+    def close_limit():
+        s = Tracked("close-limit")
+        before = s.config.read_text()
+        gate.write_text("held\n")
+        s.click("r:general:default_binds")
+        pump(0.5)
+        x("windowfocus", "--sync", s.wid, check_rc=False)
+        t0 = time.time()
+        x("key", "ctrl+w")
+        timed("close_limit_window_gone", lambda: not x("search", "--onlyvisible", "--class", "DecSettings", check_rc=False), "window unmapped", 10)
+        try:
+            s.p.wait(45)
+        except subprocess.TimeoutExpired:
+            pass
+        lat["close_limit_exit"] = round((time.time() - t0) * 1000, 1)
+        gate.unlink(missing_ok=True)
+        logs = "".join(p.read_text(errors="replace") for p in (s.dir / "logs").rglob("*") if p.is_file())
+        check("close limit: the process exits by itself after the drain limit (~30 s)", s.p.returncode is not None and 28_000 < lat["close_limit_exit"] < 40_000, [s.p.returncode, lat["close_limit_exit"]])
+        check("close limit: the lost change is logged as not written, the file untouched", "were not written within 30 s" in logs and s.config.read_text() == before)
+        return s
+
+    for name, fn in [("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
+        scenario(name, fn)
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", required=True)
     ap.add_argument("--evidence", required=True)
     ap.add_argument("--label", default="candidate")
     ap.add_argument("--inner", action="store_true")
+    ap.add_argument("--only", help="comma list: base and/or family scenario names")
     ap.add_argument("--timeout", type=int, default=600)
     a = ap.parse_args()
     sys.exit(inner(a) if a.inner else outer(a))
