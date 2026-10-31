@@ -164,6 +164,14 @@ enum SbRow {
     Hit(usize, String),
 }
 
+/// The sidebar's width: a third of the window between a minimum and a maximum that grow with the UI and text scale,
+/// but never more than half the window, so the page keeps room however small the window and large the scale
+/// (156 px x 200 % x 200 % used to take 624 of 640 px and leave the page a negative width).
+fn sidebar_width(window_w: f32, ui: f32, text: f32) -> f32 {
+    let grow = ui * text.max(1.0);
+    (window_w * 0.34).clamp(156.0 * grow, SIDEBAR_W * grow).min(window_w * 0.5).max(0.0)
+}
+
 fn pane_index(id: &str) -> usize {
     PANES.iter().position(|p| p.id == id).unwrap_or(0)
 }
@@ -318,7 +326,7 @@ impl SettingsApp {
     }
 
     fn sb(&self) -> f32 {
-        (self.size.0 as f32 * 0.34).clamp(156.0 * self.s * crate::theme::live::font_scale().max(1.0), SIDEBAR_W * self.s * crate::theme::live::font_scale().max(1.0))
+        sidebar_width(self.size.0 as f32, self.s, crate::theme::live::font_scale())
     }
 
     /// Search hits for the current query (recomputed only when the query changes).
@@ -1874,6 +1882,38 @@ mod tests {
 #[cfg(test)]
 mod key_tests {
     use super::*;
+
+    #[test]
+    fn the_page_keeps_room_in_tiny_windows_at_large_scales() {
+        // exact failing case: 640 px wide at 200 % UI and 200 % text
+        assert!(640.0 - sidebar_width(640.0, 2.0, 2.0) >= 320.0);
+        for w in [160.0, 320.0, 480.0, 640.0, 800.0, 940.0, 1280.0, 1880.0, 2560.0] {
+            for ui in [0.5, 1.0, 1.25, 2.0, 4.0] {
+                for text in [0.8, 1.0, 1.25, 2.0] {
+                    let sb = sidebar_width(w, ui, text);
+                    assert!(sb >= 0.0 && w - sb >= w * 0.5 - 0.01, "{w} {ui} {text}: sidebar {sb}");
+                }
+            }
+        }
+        // ordinary sizes are unchanged: a third of the window within the scaled limits
+        assert_eq!(sidebar_width(940.0, 1.0, 1.0), (940.0f32 * 0.34).clamp(156.0, SIDEBAR_W));
+        assert_eq!(sidebar_width(1880.0, 2.0, 1.0), (1880.0f32 * 0.34).clamp(312.0, SIDEBAR_W * 2.0));
+    }
+
+    #[test]
+    fn settings_draws_in_tiny_and_narrow_windows_at_200_percent() {
+        for pane in ["general", "inputdev", "appearance"] {
+            let mut a = app();
+            a.s = 2.0;
+            a.m.sel.pane = PANES.iter().position(|p| p.id == pane).unwrap();
+            for (w, h) in [(640, 540), (320, 240), (200, 150), (96, 64), (1000, 120), (120, 1000)] {
+                a.resize(w, h);
+                let mut pm = Pixmap::new(w, h).unwrap();
+                a.reuse_items = false;
+                a.draw(&mut pm); // used to panic in gfx::rounded_rect via ui::draw_items
+            }
+        }
+    }
 
     fn app() -> SettingsApp {
         let d = std::env::temp_dir().join(format!("decsettings-app-{}-{:?}", std::process::id(), std::thread::current().id()));

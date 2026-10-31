@@ -54,9 +54,13 @@ fn paint(c: Color) -> Paint<'static> {
     p
 }
 
-/// Rounded rectangle path; `r` is clamped to half the shorter side.
+/// Rounded rectangle path; `r` is clamped to half the shorter side. A rectangle without area (zero, negative or
+/// non-finite size, as a layout squeezed below its minimum can produce) has nothing to draw: `None`.
 pub fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<Path> {
-    let r = r.clamp(0.0, w.min(h) / 2.0);
+    if !(w > 0.0 && h > 0.0 && x.is_finite() && y.is_finite() && w.is_finite() && h.is_finite()) {
+        return None;
+    }
+    let r = if r.is_finite() { r.clamp(0.0, w.min(h) / 2.0) } else { 0.0 };
     let k = 0.552_284_8 * r; // cubic approximation of a quarter circle
     let mut pb = PathBuilder::new();
     pb.move_to(x + r, y);
@@ -150,5 +154,27 @@ mod tests {
         fill_rounded(&mut pm, 2.0, 2.0, 16.0, 16.0, 4.0, color(255, 0, 0, 1.0));
         assert!(pm.pixel(10, 10).unwrap().alpha() == 255);
         assert_eq!(pm.pixel(0, 0).unwrap().alpha(), 0);
+    }
+}
+
+#[cfg(test)]
+mod rounded_rect_tests {
+    use super::rounded_rect;
+
+    #[test]
+    fn degenerate_rectangles_draw_nothing_instead_of_panicking() {
+        // the 640x540 window at 200 % UI and text scale produced a -48 px wide card: clamp(0, -24) panicked
+        for (w, h) in [(-48.0, 30.0), (30.0, -48.0), (0.0, 30.0), (30.0, 0.0), (f32::NAN, 30.0), (f32::INFINITY, 30.0)] {
+            assert!(rounded_rect(0.0, 0.0, w, h, 12.0).is_none(), "{w}x{h}");
+        }
+        assert!(rounded_rect(f32::NAN, 0.0, 10.0, 10.0, 2.0).is_none());
+    }
+
+    #[test]
+    fn rounding_is_kept_and_limited_to_half_the_shorter_side() {
+        let p = rounded_rect(0.0, 0.0, 40.0, 10.0, 99.0).expect("drawn");
+        let b = p.bounds();
+        assert_eq!((b.width(), b.height()), (40.0, 10.0));
+        assert!(rounded_rect(0.0, 0.0, 40.0, 10.0, -5.0).is_some() && rounded_rect(0.0, 0.0, 1.0, 1.0, f32::NAN).is_some());
     }
 }
