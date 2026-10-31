@@ -436,8 +436,9 @@ fn fixed_len(geo: &Geo, part: Part, c: &Content) -> f32 {
     len
 }
 
-/// Moves what does not fit into the overflow cell: task buttons first, then optional detail, then controls. The
-/// workspaces, the clock, power, quick settings and the overflow cell itself always stay. Returns what moved.
+/// Moves what does not fit into the overflow cell: task buttons first, then optional detail, then controls; on a rail too
+/// short even for those, power, the clock, the window, the workspaces and the logo too. Quick settings and the overflow
+/// cell itself always stay. Returns what moved.
 pub fn fit_overflow(geo: &Geo, part: Part, c: &mut Content) -> Vec<Tray> {
     let mut hidden = Vec::new();
     let order = [
@@ -460,6 +461,13 @@ pub fn fit_overflow(geo: &Geo, part: Part, c: &mut Content) -> Vec<Tray> {
         Tray::Audio,
         Tray::Awake,
         Tray::Battery,
+        // a rail too short even for its essentials (a 1024 x 480 output at 200 % is 240 px tall): they move into the overflow
+        // cell too rather than overlap; the Control Center and the overflow cell itself always stay
+        Tray::Power,
+        Tray::Clock,
+        Tray::Window,
+        Tray::Workspaces,
+        Tray::Logo,
     ];
     let fits = |c: &Content| fixed_len(geo, part, c) <= geo.len();
     if fits(c) {
@@ -475,6 +483,12 @@ pub fn fit_overflow(geo: &Geo, part: Part, c: &mut Content) -> Vec<Tray> {
     for victim in order {
         if fits(c) {
             break;
+        }
+        if victim == Tray::Workspaces && c.workspaces > 0 {
+            // the workspace pill is a count, not an entry of the lists below
+            c.workspaces = 0;
+            hidden.push(Tray::Workspaces);
+            continue;
         }
         for list in [&mut c.tray, &mut c.status, &mut c.head, &mut c.tail] {
             if let Some(i) = list.iter().position(|k| *k == victim) {
@@ -868,7 +882,7 @@ impl DecBar {
     }
 
     /// The rail's content from the enabled applets, and what moved into the overflow cell.
-    fn v_fit(&self) -> (Content, Vec<Tray>) {
+    pub(super) fn v_fit(&self) -> (Content, Vec<Tray>) {
         use super::applets::{RAIL_HEAD, RAIL_STATUS, RAIL_TAIL, RAIL_TRAY};
         use crate::panel::AppletId as A;
         let geo = self.v_geo();

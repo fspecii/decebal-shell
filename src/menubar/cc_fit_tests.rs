@@ -231,3 +231,24 @@ fn the_summoned_overlay_fits_the_panel_on_short_outputs_at_every_scale() {
         }
     }
 }
+
+#[test]
+fn a_rail_too_short_for_its_essentials_folds_them_instead_of_overlapping() {
+    // a 1024 x 480 output at 200 % leaves a side rail 240 logical pixels
+    for style in [Renderer::Pill, Renderer::MenuBar, Renderer::Floating, Renderer::Dux] {
+        for edge in [Edge::Left, Edge::Right] {
+            let bar = fixture(style, edge, AppletSet::all(), 240);
+            let layout = bar.v_layout();
+            let pills: Vec<_> = layout.pills.iter().map(|(_, r)| *r).collect();
+            for (i, a) in pills.iter().enumerate() {
+                assert!(a.y >= -0.5 && a.y + a.h <= 240.5, "{style:?} {edge:?}: pill {a:?} on the rail");
+                for b in &pills[i + 1..] {
+                    let overlap = a.y + 0.5 < b.y + b.h && b.y + 0.5 < a.y + a.h && a.x + 0.5 < b.x + b.w && b.x + 0.5 < a.x + a.w;
+                    assert!(!overlap, "{style:?} {edge:?}: {a:?} overlaps {b:?}");
+                }
+            }
+            assert!(layout.items.iter().any(|(k, _)| *k == Tray::Control), "{style:?} {edge:?}: the Control Center stays");
+        }
+    }
+    reset();
+}
