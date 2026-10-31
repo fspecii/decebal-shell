@@ -32,6 +32,9 @@ pub struct Pack {
     pub license: Option<String>,
     pub license_files: Vec<String>,
     pub link_sources: Vec<String>,
+    /// `git rev-parse <commit>:<folder>` of each `link_sources` folder, same order (optional when `archive_sha256` pins
+    /// the whole archive; required otherwise for an install that uses them).
+    pub link_source_trees: Vec<String>,
     /// Source files that, concatenated, become the theme's `index.theme` when its folder has none (Adwaita keeps it
     /// in the repository root, Breeze in two `.theme.in` files), each pinned by its git blob id in `index_oids`.
     pub index: Vec<String>,
@@ -303,7 +306,11 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
     let mut packs = Vec::new();
     for (i, t) in cx.tables(root, "pack") {
         let sc = format!("pack[{i}].");
-        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "index", "index_oids", "xcursor", "description"]);
+        cx.known(
+            t,
+            &sc,
+            &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "link_source_trees", "index", "index_oids", "xcursor", "description"],
+        );
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
             cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
@@ -346,6 +353,17 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         let link_sources = cx.list(t, &sc, "link_sources");
         for f in &link_sources {
             cx.rel(t, &sc, "link_sources", f, false);
+            let inside = |a: &str, b: &str| b == "." || a == b || a.starts_with(&format!("{b}/"));
+            if !path.is_empty() && (inside(f, &path) || inside(&path, f)) {
+                cx.errors.push(format!("`{sc}link_sources`: `{f}` overlaps the pack's path `{path}`"));
+            }
+        }
+        let link_source_trees = cx.list(t, &sc, "link_source_trees");
+        if !link_source_trees.is_empty() && link_source_trees.len() != link_sources.len() {
+            cx.errors.push(format!("`{sc}link_source_trees` must pin every `link_sources` folder, in the same order"));
+        }
+        if link_source_trees.iter().any(|o| !is_hex(o, 40)) {
+            cx.errors.push(format!("`{sc}link_source_trees` are 40 lower-case hex digits (git rev-parse <commit>:<folder>)"));
         }
         let index = match t.get("index").map(|i| (i, i.as_str())) {
             Some((_, Some(s))) => vec![s.to_string()],
@@ -385,7 +403,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
             cx.errors.push(format!("`{sc}xcursor` builds cursors: add \"cursors\" to provides"));
         }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
-        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, index, index_oids, xcursor, description });
+        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, link_source_trees, index, index_oids, xcursor, description });
     }
 
     let mut recommends = Vec::new();
@@ -658,6 +676,18 @@ cursors = "deepin-bloom"
         let icons_only = GOOD.replace("provides = [\"icons\", \"cursors\"]", "provides = [\"icons\"]").replace("cursors = \"deepin-bloom\"\n", "");
         let e = parse(&icons_only.replacen("[[recommend]]", x, 1), "t").unwrap_err();
         assert!(e.iter().any(|e| e.contains("add \"cursors\" to provides")), "{e:?}");
+    }
+
+    #[test]
+    fn link_source_trees_pin_each_folder_and_folders_do_not_overlap() {
+        let with = |extra: &str| GOOD.replace("path = \"bloom\"", &format!("path = \"bloom-dark\"\n{extra}"));
+        let c = parse(&with("link_sources = [\"bloom\"]\nlink_source_trees = [\"9baca758b5bb6a8b8423d32ce3f83da07b95af6e\"]"), "t").unwrap();
+        assert_eq!(c.packs[0].link_source_trees.len(), 1);
+        assert!(parse(&with("link_sources = [\"bloom\"]"), "t").is_ok(), "optional: an archive_sha256 may cover it");
+        assert!(parse(&with("link_sources = [\"bloom\", \"x\"]\nlink_source_trees = [\"9baca758b5bb6a8b8423d32ce3f83da07b95af6e\"]"), "t").unwrap_err().iter().any(|e| e.contains("every")));
+        assert!(parse(&with("link_sources = [\"bloom\"]\nlink_source_trees = [\"nothex\"]"), "t").unwrap_err().iter().any(|e| e.contains("hex")));
+        assert!(parse(&with("link_sources = [\"bloom-dark/sub\"]"), "t").unwrap_err().iter().any(|e| e.contains("overlaps")));
+        assert!(parse(&GOOD.replace("path = \"bloom\"", "path = \"a/b\"\nlink_sources = [\"a\"]"), "t").unwrap_err().iter().any(|e| e.contains("overlaps")));
     }
 
     #[test]

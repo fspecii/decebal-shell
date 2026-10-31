@@ -93,6 +93,8 @@ pub struct Staged {
     pub nodes: BTreeMap<String, Node>,
     /// `git rev-parse <commit>:<path>` of what was read; `None` when `path` held no file.
     pub tree: Option<String>,
+    /// The git tree id of every `link_sources` folder, read from the same stream (`None`: it held no file).
+    pub link_trees: BTreeMap<String, Option<String>>,
     /// The pax global comment of a git archive (its commit id).
     pub commit: Option<String>,
     /// Entries looked at, and bytes read from files.
@@ -113,6 +115,7 @@ struct Builder<'a> {
     lim: &'a Limits,
     keep: Keep<'a>,
     tree: TreeBuilder,
+    link_trees: BTreeMap<String, TreeBuilder>,
 }
 
 /// `parent(p)` joined with a relative link target, lexically; `None` when it climbs out of the source.
@@ -136,7 +139,14 @@ pub fn join_link(p: &str, target: &str) -> Option<String> {
 
 impl<'a> Builder<'a> {
     fn new(dir: PathBuf, filter: Filter, lim: &'a Limits, keep: Keep<'a>) -> Builder<'a> {
-        Builder { st: Staged { dir, filter, nodes: BTreeMap::new(), tree: None, commit: None, entries: 0, bytes: 0, warnings: Vec::new() }, lim, keep, tree: TreeBuilder::default() }
+        let link_trees = filter.link_sources.iter().map(|d| (d.clone(), TreeBuilder::default())).collect();
+        Builder {
+            st: Staged { dir, filter, nodes: BTreeMap::new(), tree: None, link_trees: BTreeMap::new(), commit: None, entries: 0, bytes: 0, warnings: Vec::new() },
+            lim,
+            keep,
+            tree: TreeBuilder::default(),
+            link_trees,
+        }
     }
 
     /// Refuses `p` when an ancestor is a file or link, or when `p` exists already.
@@ -159,6 +169,15 @@ impl<'a> Builder<'a> {
             Some(_) => Err(format!("`{p}` appears twice")),
             None if !is_dir && self.st.nodes.range(format!("{p}/")..).next().is_some_and(|(k, _)| k.starts_with(&format!("{p}/"))) => Err(format!("`{p}` is both a folder and a file")),
             None => Ok(()),
+        }
+    }
+
+    /// Adds an entry to the tree of the `link_sources` folder it lies in (if any).
+    fn link_tree_add(&mut self, p: &str, mode: Mode, oid: [u8; 20]) {
+        for (d, t) in self.link_trees.iter_mut() {
+            if let Some(rel) = under(p, d).filter(|r| !r.is_empty()) {
+                t.add(rel, mode, oid);
+            }
         }
     }
 
@@ -196,6 +215,8 @@ impl<'a> Builder<'a> {
         self.check_place(p, false)?;
         if let Want::Theme(rel) = &want {
             self.tree.add(rel, Mode::Link, gitoid::blob_oid(target.as_bytes()));
+        } else {
+            self.link_tree_add(p, Mode::Link, gitoid::blob_oid(target.as_bytes()));
         }
         self.st.nodes.insert(p.to_string(), Node::Link(target.to_string()));
         Ok(())
@@ -229,6 +250,8 @@ impl<'a> Builder<'a> {
         }
         if let Some(r) = rel {
             self.tree.add(&r, Self::mode_of(exec), oid);
+        } else {
+            self.link_tree_add(p, Self::mode_of(exec), oid);
         }
         self.st.nodes.insert(p.to_string(), Node::File { exec, size, staged: stage, oid, sha256 });
         Ok(())
@@ -282,6 +305,8 @@ impl<'a> Builder<'a> {
         let oid = blob.finish();
         if let Some(r) = rel {
             self.tree.add(&r, Self::mode_of(exec), oid);
+        } else {
+            self.link_tree_add(p, Self::mode_of(exec), oid);
         }
         self.st.nodes.insert(p.to_string(), Node::File { exec, size, staged: stage, oid, sha256: sha.finish() });
         Ok(())
@@ -289,6 +314,7 @@ impl<'a> Builder<'a> {
 
     fn done(mut self) -> Staged {
         self.st.tree = self.tree.oid();
+        self.st.link_trees = self.link_trees.iter().map(|(d, t)| (d.clone(), t.oid())).collect();
         self.st
     }
 }

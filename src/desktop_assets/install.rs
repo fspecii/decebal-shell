@@ -217,24 +217,36 @@ fn lock_within(staging: &Path, wait: std::time::Duration) -> Result<Lock, String
     Ok(Lock(f))
 }
 
-/// The private job folder; removed on drop (with whatever the job left in it).
+/// The private job folder; removed on drop (with whatever the job left in it) unless `retain` was set because it holds
+/// the only copy of a previous version.
 struct Job {
     dir: PathBuf,
+    retain: bool,
 }
 
 impl Drop for Job {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
+        if !self.retain {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
     }
 }
+
+/// Where a previous version goes when putting it back failed: never cleaned up automatically.
+pub const RECOVERY: &str = ".decebal-recovery";
 
 fn staging_dir(root: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(root).map_err(|e| format!("{}: {e}", root.display()))?;
     let s = root.join(STAGING);
+    // two installs may create it at once: whoever loses the race just uses it
+    if let Err(e) = std::fs::create_dir(&s) {
+        if e.kind() != std::io::ErrorKind::AlreadyExists {
+            return Err(format!("{}: {e}", s.display()));
+        }
+    }
     match std::fs::symlink_metadata(&s) {
         Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {}
-        Ok(_) => return Err(format!("{} is not a folder", s.display())),
-        Err(_) => std::fs::create_dir(&s).map_err(|e| format!("{}: {e}", s.display()))?,
+        _ => return Err(format!("{} is not a folder", s.display())),
     }
     std::fs::set_permissions(&s, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
     Ok(s)
@@ -251,7 +263,7 @@ fn new_job(staging: &Path, name: &str) -> Result<Job, String> {
             for sub in ["src", "out"] {
                 std::fs::create_dir(d.join(sub)).map_err(|e| e.to_string())?;
             }
-            return Ok(Job { dir: d });
+            return Ok(Job { dir: d, retain: false });
         }
     }
     Err("could not create a staging folder".into())
@@ -267,6 +279,10 @@ fn rename2(from: &Path, to: &Path, flags: libc::c_uint) -> Result<(), Option<std
     if tests::NO_RENAME2.with(|c| c.get()) {
         return Err(None);
     }
+    #[cfg(test)]
+    if flags == libc::RENAME_EXCHANGE && tests::FAIL.with(|c| c.borrow().contains(&Step::Exchange)) {
+        return Err(Some(std::io::Error::other("injected exchange failure")));
+    }
     let (a, b) = (cstring(from), cstring(to));
     // SAFETY: two valid NUL-terminated paths; the syscall does not keep them.
     let r = unsafe { libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, a.as_ptr(), libc::AT_FDCWD, b.as_ptr(), flags) };
@@ -280,22 +296,42 @@ fn rename2(from: &Path, to: &Path, flags: libc::c_uint) -> Result<(), Option<std
     }
 }
 
-#[cfg(test)]
-fn second_rename(from: &Path, to: &Path) -> std::io::Result<()> {
-    if tests::FAIL_SECOND_RENAME.with(|c| c.get()) {
-        return Err(std::io::Error::other("injected failure"));
+/// One step of a placement, so tests can make any of them fail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// Moving the installed version aside (two-rename fallback).
+    Aside,
+    /// Moving the new version into place (two-rename fallback).
+    Into,
+    /// Putting the previous version back after `Into` failed.
+    Restore,
+    /// Moving the previous version to the recovery folder after `Restore` failed.
+    Recover,
+    /// The atomic `RENAME_EXCHANGE` (tests only make it fail).
+    #[cfg_attr(not(test), allow(dead_code))]
+    Exchange,
+}
+
+fn step_rename(step: Step, from: &Path, to: &Path) -> std::io::Result<()> {
+    #[cfg(test)]
+    if tests::FAIL.with(|c| c.borrow().contains(&step)) {
+        return Err(std::io::Error::other(format!("injected failure at {step:?}")));
     }
+    let _ = step;
     std::fs::rename(from, to)
 }
 
-#[cfg(not(test))]
-fn second_rename(from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::rename(from, to)
+/// Is `dir` the decebal pack we decided to replace (same pack and content hash as observed under the lock)?
+fn is_expected(dir: &Path, expect: &Provenance) -> bool {
+    Provenance::read(dir).is_some_and(|p| p.pack == expect.pack && p.content_hash == expect.content_hash)
 }
 
-/// Puts `new` at `target`. `replace`: `target` is an older decebal pack, which ends up at `old` (inside the job).
-fn place(new: &Path, target: &Path, replace: bool, old: &Path) -> Result<(), String> {
-    if !replace {
+/// Puts `new` at `target`. `replace`: `target` holds `expect` (observed under the install lock); it ends up at `old`
+/// inside the job. If putting the previous version back fails, it is moved to `<root>/.decebal-recovery/` (or, failing
+/// that, the job folder is kept) and the error names where it is: a previous version is never deleted by an error path.
+fn place(job: &mut Job, root: &Path, new: &Path, target: &Path, replace: Option<&Provenance>) -> Result<(), String> {
+    let old = job.dir.join("old");
+    let Some(expect) = replace else {
         return match rename2(new, target, libc::RENAME_NOREPLACE) {
             Ok(()) => Ok(()),
             Err(Some(e)) => Err(format!("{}: {e}", target.display())),
@@ -306,24 +342,60 @@ fn place(new: &Path, target: &Path, replace: bool, old: &Path) -> Result<(), Str
                 std::fs::rename(new, target).map_err(|e| format!("{}: {e}", target.display()))
             }
         };
-    }
+    };
     match rename2(new, target, libc::RENAME_EXCHANGE) {
         Ok(()) => {
-            // the new pack is live; `new` holds the old one now and is removed with the job folder either way
-            let _ = std::fs::rename(new, old);
+            // `new` now holds what was at the target: it must be what we decided to replace
+            if !is_expected(new, expect) {
+                return match rename2(new, target, libc::RENAME_EXCHANGE) {
+                    Ok(()) => Err(format!("{} changed while installing; nothing was replaced", target.display())),
+                    Err(e) => {
+                        job.retain = true;
+                        Err(format!(
+                            "{} changed while installing and swapping back failed ({}): the other version is kept in {}",
+                            target.display(),
+                            e.map_or("unsupported".to_string(), |e| e.to_string()),
+                            new.display()
+                        ))
+                    }
+                };
+            }
+            // the new pack is live; the old one goes with the job folder
+            let _ = std::fs::rename(new, &old);
             Ok(())
         }
-        Err(Some(e)) => Err(format!("{}: {e}", target.display())),
+        Err(Some(e)) => Err(format!("{}: {e} (nothing was replaced)", target.display())),
         Err(None) => {
-            std::fs::rename(target, old).map_err(|e| format!("{}: {e}", target.display()))?;
-            if let Err(e) = second_rename(new, target) {
-                // roll back: the old theme goes back where it was
-                return match std::fs::rename(old, target) {
+            step_rename(Step::Aside, target, &old).map_err(|e| format!("{}: {e} (nothing was replaced)", target.display()))?;
+            if !is_expected(&old, expect) {
+                return match step_rename(Step::Restore, &old, target) {
+                    Ok(()) => Err(format!("{} changed while installing; nothing was replaced", target.display())),
+                    Err(e2) => Err(keep_previous(job, root, target, &old, &e2.to_string())),
+                };
+            }
+            if let Err(e) = step_rename(Step::Into, new, target) {
+                return match step_rename(Step::Restore, &old, target) {
                     Ok(()) => Err(format!("{}: {e} (the previous version was put back)", target.display())),
-                    Err(e2) => Err(format!("{}: {e}; restoring the previous version failed too: {e2} (it is in {})", target.display(), old.display())),
+                    Err(e2) => Err(format!("{}: {e}; {}", target.display(), keep_previous(job, root, target, &old, &e2.to_string()))),
                 };
             }
             Ok(())
+        }
+    }
+}
+
+/// The previous version could not be put back: move it somewhere no cleanup touches.
+fn keep_previous(job: &mut Job, root: &Path, target: &Path, old: &Path, why: &str) -> String {
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let rec_dir = root.join(RECOVERY);
+    let dest = rec_dir.join(format!("{name}.{}.{nanos}", std::process::id()));
+    let moved = std::fs::create_dir_all(&rec_dir).and_then(|_| std::fs::set_permissions(&rec_dir, std::fs::Permissions::from_mode(0o700))).and_then(|_| step_rename(Step::Recover, old, &dest));
+    match moved {
+        Ok(()) => format!("putting the previous version back failed ({why}): it is kept in {}", dest.display()),
+        Err(e) => {
+            job.retain = true;
+            format!("putting the previous version back failed ({why}) and so did moving it to {} ({e}): it is kept in {}", rec_dir.display(), old.display())
         }
     }
 }
@@ -363,17 +435,12 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         return Err(format!("`{name}` is not a usable theme folder name"));
     }
     let target = req.root.join(name);
-    let before = existing(&req.root, name);
-    match &before {
-        Existing::Foreign => return Err(format!("{} exists and was not installed by decebal: it is left alone (remove it yourself, or install under another --name)", target.display())),
-        Existing::Ours(p) if p.pack != req.pack && !req.force => {
-            return Err(format!("{} holds the pack `{}`; --force replaces it with `{}`", target.display(), p.pack, req.pack));
-        }
-        _ => {}
-    }
+    // the lock is held for the whole transaction: every observation of the target below is made under it
     let staging = staging_dir(&req.root)?;
     let _lock = lock(&staging)?;
-    let job = new_job(&staging, name)?;
+    // refuse early (foreign folder, another pack without --force) before any work
+    decide(&existing(&req.root, name), req, &target, None)?;
+    let mut job = new_job(&staging, name)?;
     let (src_dir, out) = (job.dir.join("src"), job.dir.join("out"));
     let files = req.spec.license_files.iter().chain(req.spec.index_files.iter().map(|(p, _)| p)).cloned().collect();
     let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files, link_sources: req.link_sources.clone() };
@@ -455,25 +522,11 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         installed_by: concat!("decebal ", env!("CARGO_PKG_VERSION")).into(),
     };
     let report = |action| Report { target: target.clone(), action, built: built.clone(), provenance: prov.clone(), shadows: shadows.clone(), missing_parents: missing_parents.clone() };
-    if let Existing::Ours(p) = &before {
-        // compare with what is on disk now, not with the record: a modified install is not "unchanged"
-        let on_disk = assemble::content_hash(&target).map(|h| h.0).unwrap_or_default();
-        if p.pack == req.pack && on_disk == prov.content_hash && !req.force {
-            return Ok(report(Action::Unchanged));
-        }
-        if !req.force && !req.dry_run && p.pack == req.pack && p.content_hash == prov.content_hash {
-            return Err(format!("{} was modified since it was installed (decthemectl assets verify): --force restores it", target.display()));
-        }
-        if !req.force && !req.dry_run {
-            return Err(format!(
-                "{} holds `{}` from {} ({}); this one is {}: --force replaces it",
-                target.display(),
-                p.pack,
-                p.source.commit.as_deref().map_or("an unknown revision".to_string(), |c| c[..12.min(c.len())].to_string()),
-                p.content_hash,
-                prov.content_hash
-            ));
-        }
+    // decide from a fresh observation (still under the lock), with the full policy, right before committing
+    let now = existing(&req.root, name);
+    let plan = decide(&now, req, &target, Some(&prov.content_hash))?;
+    if plan == Plan::Unchanged {
+        return Ok(report(Action::Unchanged));
     }
     if req.dry_run {
         return Ok(report(Action::DryRun));
@@ -481,14 +534,50 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     let text = serde_json::to_string_pretty(&prov).map_err(|e| e.to_string())? + "\n";
     std::fs::write(out.join(PROVENANCE), text).map_err(|e| e.to_string())?;
     std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
-    // the target may have changed while we worked: decide again under the lock
-    let replace = match existing(&req.root, name) {
-        Existing::Absent => false,
-        Existing::Ours(_) => true,
-        Existing::Foreign => return Err(format!("{} appeared while installing and was not installed by decebal", target.display())),
+    let expect = match &now {
+        Existing::Ours(p) => Some(p.as_ref()),
+        _ => None,
     };
-    place(&out, &target, replace, &job.dir.join("old"))?;
-    Ok(report(if replace { Action::Replaced } else { Action::Installed }))
+    place(&mut job, &req.root, &out, &target, expect)?;
+    Ok(report(if expect.is_some() { Action::Replaced } else { Action::Installed }))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Plan {
+    New,
+    Replace,
+    Unchanged,
+}
+
+/// The overwrite policy for what is at the target now. `new_hash`: the content hash of the built pack (`None` for the
+/// early check, before it is built).
+fn decide(now: &Existing, req: &Request, target: &Path, new_hash: Option<&str>) -> Result<Plan, String> {
+    match now {
+        Existing::Absent => Ok(Plan::New),
+        Existing::Foreign => Err(format!("{} exists and was not installed by decebal: it is left alone (remove it yourself, or install under another --name)", target.display())),
+        Existing::Ours(p) if p.pack != req.pack && !req.force => Err(format!("{} holds the pack `{}`; --force replaces it with `{}`", target.display(), p.pack, req.pack)),
+        Existing::Ours(p) => {
+            let Some(new_hash) = new_hash else { return Ok(Plan::Replace) };
+            // compare with what is on disk now, not with the record: a modified install is not "unchanged"
+            let on_disk = assemble::content_hash(target).map(|h| h.0).unwrap_or_default();
+            if req.force || req.dry_run {
+                return Ok(if p.pack == req.pack && on_disk == new_hash && !req.force { Plan::Unchanged } else { Plan::Replace });
+            }
+            if p.pack == req.pack && on_disk == new_hash {
+                return Ok(Plan::Unchanged);
+            }
+            if p.pack == req.pack && p.content_hash == new_hash {
+                return Err(format!("{} was modified since it was installed (decthemectl assets verify): --force restores it", target.display()));
+            }
+            Err(format!(
+                "{} holds `{}` from {} ({}); this one is {new_hash}: --force replaces it",
+                target.display(),
+                p.pack,
+                p.source.commit.as_deref().map_or("an unknown revision".to_string(), |c| c[..12.min(c.len())].to_string()),
+                p.content_hash
+            ))
+        }
+    }
 }
 
 /// Every decebal pack installed in `root`.
@@ -517,21 +606,35 @@ pub fn verify(dir: &Path) -> Result<(Provenance, Integrity), String> {
     Ok(if now == p.content_hash { (p, Integrity::Ok) } else { (p.clone(), Integrity::Modified { recorded: p.content_hash, now }) })
 }
 
-/// Removes a decebal pack: it is renamed into the staging folder first, so no half-deleted theme is ever visible.
-pub fn remove(root: &Path, name: &str) -> Result<PathBuf, String> {
+/// Removes a decebal pack. Everything is decided under the install lock: what is there, and (unless `force`) whether
+/// `in_use` says the theme is selected. The folder is renamed into the job first and checked to be the pack that was
+/// observed, so no half-deleted theme is visible and nothing that appeared meanwhile is deleted.
+pub fn remove(root: &Path, name: &str, force: bool, in_use: &dyn Fn(&str) -> Option<String>) -> Result<PathBuf, String> {
     if !super::safe_theme_name(name) {
         return Err(format!("`{name}` is not a theme folder name"));
     }
     let target = root.join(name);
-    match existing(root, name) {
-        Existing::Absent => return Err(format!("{} does not exist", target.display())),
-        Existing::Foreign => return Err(format!("{} was not installed by decebal: it is left alone", target.display())),
-        Existing::Ours(_) => {}
-    }
     let staging = staging_dir(root)?;
     let _lock = lock(&staging)?;
-    let job = new_job(&staging, name)?;
-    std::fs::rename(&target, job.dir.join("old")).map_err(|e| format!("{}: {e}", target.display()))?;
+    let expect = match existing(root, name) {
+        Existing::Absent => return Err(format!("{} does not exist", target.display())),
+        Existing::Foreign => return Err(format!("{} was not installed by decebal: it is left alone", target.display())),
+        Existing::Ours(p) => p,
+    };
+    if !force {
+        if let Some(what) = in_use(name) {
+            return Err(format!("`{name}` is the {what} theme in use: choose another first, or --force"));
+        }
+    }
+    let mut job = new_job(&staging, name)?;
+    let old = job.dir.join("old");
+    step_rename(Step::Aside, &target, &old).map_err(|e| format!("{}: {e} (nothing was removed)", target.display()))?;
+    if !is_expected(&old, &expect) {
+        return match step_rename(Step::Restore, &old, &target) {
+            Ok(()) => Err(format!("{} changed while removing; nothing was removed", target.display())),
+            Err(e) => Err(keep_previous(&mut job, root, &target, &old, &e.to_string())),
+        };
+    }
     drop(job);
     Ok(target)
 }
@@ -544,7 +647,7 @@ pub(crate) mod tests {
 
     thread_local! {
         pub static NO_RENAME2: Cell<bool> = const { Cell::new(false) };
-        pub static FAIL_SECOND_RENAME: Cell<bool> = const { Cell::new(false) };
+        pub static FAIL: std::cell::RefCell<Vec<Step>> = const { std::cell::RefCell::new(Vec::new()) };
     }
 
     pub const COMMIT: &str = "5d11ba4e4013a4d1e1c601265d55c66b95184922";
@@ -610,9 +713,9 @@ pub(crate) mod tests {
         assert_eq!(install(&req, &Limits::default()).unwrap().action, Action::Replaced);
         assert_eq!(verify(&t).unwrap().1, Integrity::Ok, "repaired");
         assert_eq!(installed(&root).len(), 1);
-        remove(&root, "bloom").unwrap();
+        remove(&root, "bloom", false, &|_| None).unwrap();
         assert!(!t.exists() && staging_is_clean(&root));
-        assert!(remove(&root, "bloom").is_err());
+        assert!(remove(&root, "bloom", false, &|_| None).is_err());
     }
 
     #[test]
@@ -626,7 +729,7 @@ pub(crate) mod tests {
         let e = install(&req, &Limits::default()).unwrap_err();
         assert!(e.contains("not installed by decebal"), "{e}");
         assert_eq!(std::fs::read_to_string(root.join("bloom/index.theme")).unwrap(), "[Icon Theme]\nName=mine\n", "untouched, even with --force");
-        assert!(remove(&root, "bloom").unwrap_err().contains("left alone"));
+        assert!(remove(&root, "bloom", false, &|_| None).unwrap_err().contains("left alone"));
         std::fs::remove_dir_all(root.join("bloom")).unwrap();
         std::os::unix::fs::symlink("/usr/share/icons/Adwaita", root.join("bloom")).unwrap();
         assert!(install(&req, &Limits::default()).unwrap_err().contains("not installed by decebal"), "a link is foreign too");
@@ -715,15 +818,166 @@ pub(crate) mod tests {
         let mut r = request(&root, &b, &entries2);
         r.force = true;
         NO_RENAME2.with(|c| c.set(true));
-        FAIL_SECOND_RENAME.with(|c| c.set(true));
+        fail(&[Step::Into]);
         let e = install(&r, &Limits::default()).unwrap_err();
-        FAIL_SECOND_RENAME.with(|c| c.set(false));
+        fail(&[]);
         assert!(e.contains("previous version was put back"), "{e}");
         assert_eq!(Provenance::read(&root.join("bloom")).unwrap().content_hash, before);
         assert!(staging_is_clean(&root));
         assert_eq!(install(&r, &Limits::default()).unwrap().action, Action::Replaced, "the fallback path works");
         NO_RENAME2.with(|c| c.set(false));
         assert!(root.join("bloom/apps/48/new.svg").exists());
+    }
+
+    fn fail(steps: &[Step]) {
+        FAIL.with(|c| *c.borrow_mut() = steps.to_vec());
+    }
+
+    /// An installed `bloom` and a forced request for a different build of it.
+    fn replace_setup(tag: &str) -> (Scratch, PathBuf, String, Request) {
+        let s = Scratch::new(tag);
+        let root = s.path().join("icons");
+        let (a, entries) = fixture(&s, vec![], "a.tgz");
+        install(&request(&root, &a, &entries), &Limits::default()).unwrap();
+        let before = Provenance::read(&root.join("bloom")).unwrap().content_hash;
+        let (b, entries2) = fixture(&s, vec![E::file("top/bloom/apps/48/new.svg", SVG)], "b.tgz");
+        let mut r = request(&root, &b, &entries2);
+        r.force = true;
+        (s, root, before, r)
+    }
+
+    #[test]
+    fn a_failed_exchange_changes_nothing() {
+        let (_s, root, before, r) = replace_setup("xchg");
+        fail(&[Step::Exchange]);
+        let e = install(&r, &Limits::default()).unwrap_err();
+        fail(&[]);
+        assert!(e.contains("nothing was replaced"), "{e}");
+        assert_eq!(Provenance::read(&root.join("bloom")).unwrap().content_hash, before);
+        assert!(staging_is_clean(&root));
+    }
+
+    #[test]
+    fn a_previous_version_that_cannot_be_put_back_is_kept_for_recovery() {
+        let (_s, root, before, r) = replace_setup("recover");
+        NO_RENAME2.with(|c| c.set(true));
+        fail(&[Step::Into, Step::Restore]);
+        let e = install(&r, &Limits::default()).unwrap_err();
+        assert!(e.contains("it is kept in") && e.contains(RECOVERY), "{e}");
+        let kept: Vec<PathBuf> = std::fs::read_dir(root.join(RECOVERY)).unwrap().flatten().map(|e| e.path()).collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(Provenance::read(&kept[0]).unwrap().content_hash, before, "the previous version survives intact");
+        assert_eq!(verify(&kept[0]).unwrap().1, Integrity::Ok);
+        assert!(staging_is_clean(&root), "the job itself is cleaned up: the copy is outside it");
+        // and when even the recovery folder cannot take it, the job folder is kept instead of deleted
+        std::fs::rename(&kept[0], root.join("bloom")).unwrap();
+        std::fs::remove_dir_all(root.join(RECOVERY)).unwrap();
+        fail(&[Step::Into, Step::Restore, Step::Recover]);
+        let e = install(&r, &Limits::default()).unwrap_err();
+        fail(&[]);
+        NO_RENAME2.with(|c| c.set(false));
+        let at = e.rsplit("it is kept in ").next().unwrap().trim();
+        assert!(Path::new(at).is_dir() && at.contains(STAGING), "{e}");
+        assert_eq!(Provenance::read(Path::new(at)).unwrap().content_hash, before, "retained, not deleted with the job");
+    }
+
+    #[test]
+    fn a_foreign_folder_swapped_in_before_the_commit_is_put_back_untouched() {
+        let (_s, root, _before, r) = replace_setup("swap");
+        // decide() observed our pack; simulate a foreign folder appearing in its place just before place()
+        let staging = staging_dir(&root).unwrap();
+        let mut job = new_job(&staging, "bloom").unwrap();
+        let expect = Provenance::read(&root.join("bloom")).unwrap();
+        std::fs::rename(root.join("bloom"), job.dir.join("theirs-moved")).unwrap();
+        std::fs::create_dir(root.join("bloom")).unwrap();
+        std::fs::write(root.join("bloom/index.theme"), "[Icon Theme]\nName=Theirs\n").unwrap();
+        let newdir = job.dir.join("out");
+        std::fs::write(newdir.join("marker"), "new").unwrap();
+        for no_rename2 in [false, true] {
+            NO_RENAME2.with(|c| c.set(no_rename2));
+            let e = place(&mut job, &root, &newdir, &root.join("bloom"), Some(&expect)).unwrap_err();
+            assert!(e.contains("changed while installing"), "{e}");
+            assert_eq!(std::fs::read_to_string(root.join("bloom/index.theme")).unwrap(), "[Icon Theme]\nName=Theirs\n", "the foreign folder is back in place");
+        }
+        NO_RENAME2.with(|c| c.set(false));
+        let _ = r;
+    }
+
+    #[test]
+    fn concurrent_installs_of_two_packs_never_overwrite_without_force() {
+        for round in 0..4 {
+            let s = Scratch::new("race");
+            let root = s.path().join("icons");
+            let (a, entries) = fixture(&s, vec![], "a.tgz");
+            let (b, entries2) = fixture(&s, vec![E::file("top/bloom/apps/48/other.svg", SVG)], "b.tgz");
+            let r1 = request(&root, &a, &entries);
+            let mut r2 = request(&root, &b, &entries2);
+            r2.pack = "another-bloom".into();
+            let gate = std::sync::Arc::new(std::sync::Barrier::new(2));
+            let (g1, g2) = (gate.clone(), gate);
+            let t1 = std::thread::spawn(move || {
+                g1.wait();
+                install(&r1, &Limits::default())
+            });
+            let t2 = std::thread::spawn(move || {
+                g2.wait();
+                install(&r2, &Limits::default())
+            });
+            let (o1, o2) = (t1.join().unwrap(), t2.join().unwrap());
+            assert!(o1.is_ok() != o2.is_ok(), "round {round}: exactly one wins: {:?} / {:?}", o1.as_ref().err(), o2.as_ref().err());
+            let loser = o1.as_ref().err().or(o2.as_ref().err()).unwrap();
+            assert!(loser.contains("holds the pack"), "round {round}: {loser}");
+            let winner = if o1.is_ok() { "fixture-bloom" } else { "another-bloom" };
+            let p = Provenance::read(&root.join("bloom")).unwrap();
+            assert_eq!(p.pack, winner);
+            assert_eq!(verify(&root.join("bloom")).unwrap().1, Integrity::Ok);
+            assert!(staging_is_clean(&root));
+        }
+    }
+
+    #[test]
+    fn concurrent_install_and_remove_leave_a_consistent_target() {
+        for round in 0..4 {
+            let (s, root, _before, mut r) = replace_setup("race-rm");
+            r.force = false;
+            r.pack = "fixture-bloom".into();
+            let gate = std::sync::Arc::new(std::sync::Barrier::new(2));
+            let (g1, g2) = (gate.clone(), gate);
+            let root2 = root.clone();
+            let t1 = std::thread::spawn(move || {
+                g1.wait();
+                install(&r, &Limits::default())
+            });
+            let t2 = std::thread::spawn(move || {
+                g2.wait();
+                remove(&root2, "bloom", false, &|_| None)
+            });
+            let (o1, o2) = (t1.join().unwrap(), t2.join().unwrap());
+            match existing(&root, "bloom") {
+                Existing::Absent => assert!(o2.is_ok(), "round {round}: gone only through remove"),
+                Existing::Ours(p) => {
+                    assert_eq!(verify(&root.join("bloom")).unwrap().1, Integrity::Ok, "round {round}");
+                    assert!(o1.is_ok() && p.pack == "fixture-bloom", "round {round}: present only through a successful install");
+                }
+                Existing::Foreign => panic!("round {round}: a half-written folder"),
+            }
+            assert!(o1.is_ok() || o1.as_ref().unwrap_err().contains("--force"), "round {round}: {o1:?}");
+            assert!(staging_is_clean(&root));
+            drop(s);
+        }
+    }
+
+    #[test]
+    fn remove_decides_in_use_under_the_lock() {
+        let s = Scratch::new("rm-use");
+        let root = s.path().join("icons");
+        let (a, entries) = fixture(&s, vec![], "a.tgz");
+        install(&request(&root, &a, &entries), &Limits::default()).unwrap();
+        let e = remove(&root, "bloom", false, &|n| (n == "bloom").then(|| "icon".to_string())).unwrap_err();
+        assert!(e.contains("in use"), "{e}");
+        assert!(root.join("bloom/index.theme").exists());
+        remove(&root, "bloom", true, &|_| Some("icon".into())).unwrap();
+        assert!(!root.join("bloom").exists());
     }
 
     #[test]

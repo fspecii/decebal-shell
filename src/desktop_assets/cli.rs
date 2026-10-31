@@ -120,12 +120,13 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
         Some("verify") => verify(ctx, &rest, json),
         Some("remove") => {
             let name = rest.first().ok_or("remove needs a theme name")?;
-            let doc = crate::settings::io::json_load(&ctx.shell_json);
-            let used: Vec<&str> = [Provides::Icons, Provides::Cursors].into_iter().filter(|k| policy::current(&doc, *k).as_deref() == Some(*name)).map(Provides::id).collect();
-            if !used.is_empty() && !a.flag("--force") {
-                return Err(format!("`{name}` is the {} theme in use: choose another first, or --force", used.join(" and ")));
-            }
-            let p = install::remove(&ctx.root, name)?;
+            // read under the install lock, right before removing
+            let in_use = |n: &str| {
+                let doc = crate::settings::io::json_load(&ctx.shell_json);
+                let used: Vec<&str> = [Provides::Icons, Provides::Cursors].into_iter().filter(|k| policy::current(&doc, *k).as_deref() == Some(n)).map(Provides::id).collect();
+                (!used.is_empty()).then(|| used.join(" and "))
+            };
+            let p = install::remove(&ctx.root, name, a.flag("--force"), &in_use)?;
             Ok(format!("removed {}", p.display()))
         }
         Some("use") => {
