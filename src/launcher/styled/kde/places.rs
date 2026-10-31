@@ -675,7 +675,7 @@ mod tests {
         // many distinct paths: still at most MAX_STATS existence checks, and at most MAX_DOCUMENTS rows
         let many: String = (0..50_000).map(|i| format!("<bookmark href=\"file:///d/{i}.txt\" modified=\"2026-10-01T00:00:{:02}Z\"/>", i % 60)).collect();
         let counted = std::cell::Cell::new(0usize);
-        let none = documents_from(&[many.clone()], home, &|_| {
+        let none = documents_from(std::slice::from_ref(&many), home, &|_| {
             counted.set(counted.get() + 1);
             false
         });

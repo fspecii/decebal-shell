@@ -426,7 +426,7 @@ fn on_small_physical_screens_at_every_scale_and_edge_every_footer_control_fits_h
                 let button = rects[session];
                 let area = menu.area();
                 assert!(inside_card(&st, &area) && area.bottom() <= button.y + 0.5, "menu rows {area:?} are not above the button {button:?} inside the card: {ctx}");
-                assert!(menu.visible(0).len() >= 1 && menu.items.len() == 6, "{ctx}");
+                assert!(!menu.visible(0).is_empty() && menu.items.len() == 6, "{ctx}");
                 for k in 0..menu.items.len() {
                     assert_eq!(st.m.sel("menu"), k, "{ctx}");
                     let shown = zone(&st, "menu");
