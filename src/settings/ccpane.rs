@@ -21,6 +21,9 @@ fn title(word: &str) -> String {
     if word == "gnome" {
         return "GNOME".into();
     }
+    if word == "ukui" {
+        return "UKUI".into();
+    }
     let mut c = word.split('-').map(|w| {
         let mut ch = w.chars();
         ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()

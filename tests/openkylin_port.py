@@ -53,7 +53,7 @@ class Packages(unittest.TestCase):
             self.assertEqual((d["fallback_style_light"], d["fallback_style_dark"], d["style"]), ("adwaita-light", "adwaita", "adwaita"))
             self.assertNotIn("height", d, "UKUI's native 38 px header comes from the style")
             self.assertEqual(d.get("radius"), 0 if i == "openkylin-classic" else None, "only Classic (window-radius 0) overrides the native 12 px")
-            self.assertEqual(t["control_center"]["style"], "fluent")
+            self.assertEqual((t["control_center"]["style"], t["launcher"]["style"]), ("ukui", "ukui"))
             d = ROOT / "themes" / i
             self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "README.md", "theme.toml", "widgets"], f"{i}: no bundled upstream asset")
             self.assertEqual(sorted(p.name for p in (d / "widgets").iterdir()), ["ukui-time-12.toml", "ukui-time-24.toml"])

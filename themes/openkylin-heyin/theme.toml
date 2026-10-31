@@ -41,9 +41,12 @@ fallback_style_dark = "adwaita"
 logo = "icon:kylin-startmenu"
 logo_tint = false
 
-# ukui-sidebar: a 400 px side panel of 6-8 px-radius shortcut tiles (not the big rounded macOS-style cards): the theme-radius flyout is closest
+# ukui-sidebar's shortcut panel (396 wide, 4-column icon shortcuts, progress rows) and ukui-menu's start menu (766 x 688, three columns), as native styles
 [control_center]
-style = "fluent"
+style = "ukui"
+
+[launcher]
+style = "ukui"
 
 [dock]
 enabled = true

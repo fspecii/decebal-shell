@@ -157,6 +157,8 @@ fn natural(style: LauncherStyle) -> Natural {
         LauncherStyle::Kde => Natural { size: (620.0, 560.0), gap: 4.0, fallback: Some((Edge::Bottom, 44.0)) },
         // Xfce: Whisker Menu's default menu-width 450 x menu-height 500, under the top panel's Applications button.
         LauncherStyle::Xfce => Natural { size: (450.0, 500.0), gap: 2.0, fallback: Some((Edge::Top, 28.0)) },
+        // UKUI: ukui-menu's 766 x 688 window (settings.cpp MENU_WIDTH/HEIGHT) 8 px from the panel (MENU_MARGIN), above a 48 px classic panel.
+        LauncherStyle::Ukui => Natural { size: (766.0, 688.0), gap: 8.0, fallback: Some((Edge::Bottom, 48.0)) },
         LauncherStyle::Dux => Natural { size: (620.0, 620.0), gap: 0.0, fallback: None },
         LauncherStyle::Default | LauncherStyle::Gnome | LauncherStyle::BlackBerry => Natural { size: (1100.0, 720.0), gap: 0.0, fallback: None },
     }

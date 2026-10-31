@@ -19,6 +19,7 @@ use tiny_skia::Pixmap;
 mod blackberry;
 mod gnome;
 mod kde;
+mod ukui;
 pub(super) mod paint;
 mod windows;
 mod xfce;
@@ -369,6 +370,7 @@ impl Styled {
             LauncherStyle::Windows => windows::layout(&self.m, self.card, s),
             LauncherStyle::Gnome => gnome::layout(&self.m, self.card, s),
             LauncherStyle::Kde => kde::layout(&self.m, self.card, s),
+            LauncherStyle::Ukui => ukui::layout(&self.m, self.card, s),
             LauncherStyle::Xfce => xfce::layout(&self.m, self.card, s),
             LauncherStyle::BlackBerry => blackberry::layout(&self.m, self.card, s),
             LauncherStyle::Default | LauncherStyle::Dux => Vec::new(),
@@ -796,6 +798,7 @@ impl Styled {
             LauncherStyle::Windows => windows::paint(&self.m, &self.zones, self.card, &mut p),
             LauncherStyle::Gnome => gnome::paint(&self.m, &self.zones, self.card, &mut p),
             LauncherStyle::Kde => kde::paint(&self.m, &self.zones, self.card, &mut p),
+            LauncherStyle::Ukui => ukui::paint(&self.m, &self.zones, self.card, &mut p),
             LauncherStyle::Xfce => xfce::paint(&self.m, &self.zones, self.card, &mut p),
             LauncherStyle::BlackBerry => blackberry::paint(&self.m, &self.zones, self.card, &mut p),
             LauncherStyle::Default | LauncherStyle::Dux => {}

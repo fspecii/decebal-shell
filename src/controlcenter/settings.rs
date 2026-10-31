@@ -17,7 +17,7 @@ pub const TILE_NAMES: [&str; 7] = ["connectivity", "focus", "display", "sound", 
 /// Values of `position`.
 pub const POSITION_NAMES: [&str; 5] = ["auto", "top-right", "top-left", "bottom-right", "bottom-left"];
 /// Values of `style`.
-pub const STYLE_NAMES: [&str; 5] = ["auto", "card", "fluent", "dux", "gnome"];
+pub const STYLE_NAMES: [&str; 6] = ["auto", "card", "fluent", "dux", "gnome", "ukui"];
 
 /// Which tile groups the panel shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +139,8 @@ pub enum Style {
     /// GNOME Shell 51.1 quick settings: pill toggles in two columns, slider rows and an icon-button system row (`gnome.rs`).
     /// Selectable under any theme; the content and actions are the common controller's.
     Gnome,
+    /// The UKUI sidebar's shortcut panel: 396 wide, 4-column icon shortcuts and progress-bar rows.
+    Ukui,
 }
 
 impl Style {
@@ -149,6 +151,7 @@ impl Style {
             "fluent" => Style::Fluent,
             "dux" => Style::Dux,
             "gnome" => Style::Gnome,
+            "ukui" => Style::Ukui,
             _ => return None,
         })
     }
@@ -160,6 +163,7 @@ impl Style {
             Style::Fluent => "fluent",
             Style::Dux => "dux",
             Style::Gnome => "gnome",
+            Style::Ukui => "ukui",
         }
     }
 

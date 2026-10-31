@@ -4,6 +4,7 @@
 //! `hit` maps pointer positions back to [`Target`]s, so drawing and input share one layout.
 
 mod dux;
+mod ukui;
 pub(crate) mod gnome;
 pub mod settings;
 pub mod sys;
@@ -21,6 +22,7 @@ pub const PANEL_W: f32 = 340.0;
 pub fn panel_width(style: Style) -> f32 {
     match style {
         Style::Dux => 600.0,
+        Style::Ukui => ukui::PANEL_W,
         Style::Gnome => gnome::panel_width(),
         _ => PANEL_W,
     }
@@ -64,6 +66,7 @@ pub fn layout_fitted(s: &Snapshot, tiles: &Tiles, style: Style, room: f32) -> Fi
 pub fn layout_styled(s: &Snapshot, tiles: &Tiles, style: Style) -> (Vec<Item>, f32) {
     match style {
         Style::Dux => dux::layout(s, tiles),
+        Style::Ukui => ukui::layout(s, tiles),
         Style::Gnome => gnome::layout(s, tiles),
         _ => layout_with(s, tiles),
     }
@@ -647,6 +650,8 @@ pub fn look(style: Style) -> (f32, f32, bool) {
     match style {
         Style::Dux => (28.0, 12.0, true),
         Style::Gnome => (gnome::PANEL_RADIUS, 16.0, false),
+        // UKUI: panel `kRadiusWindow` 12, shortcut buttons and progress bars `kRadiusMax` 8
+        Style::Ukui => (12.0, 8.0, false),
         Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
         _ => (th.r(2.0), 16.0, false),
     }
