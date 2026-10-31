@@ -11,11 +11,13 @@ use tiny_skia::Pixmap;
 pub struct Scaled<A> {
     app: A,
     base: f32,
+    physical_output: Option<(u32, u32)>,
+    output_scale: f32,
 }
 
 impl<A: App> Scaled<A> {
     pub fn new(app: A, scale: f32) -> Scaled<A> {
-        Scaled { app, base: if scale.is_finite() { scale.clamp(0.75, 4.0) } else { 1.0 } }
+        Scaled { app, base: if scale.is_finite() { scale.clamp(0.75, 4.0) } else { 1.0 }, physical_output: None, output_scale: 1.0 }
     }
     pub fn inner(&self) -> &A {
         &self.app
@@ -29,6 +31,19 @@ impl<A: App> Scaled<A> {
             self.base
         } else {
             1.0
+        }
+    }
+    fn refresh_output(&mut self) {
+        let s = self.scale();
+        if let Some((w, h)) = self.physical_output {
+            let floor = |v: u32| (v as f32 / s).floor() as u32;
+            crate::gfx::with_render_scale(s, || self.app.output_size(floor(w), floor(h)));
+        }
+        self.output_scale = s;
+    }
+    fn refresh_changed_scale(&mut self) {
+        if self.output_scale != self.scale() {
+            self.refresh_output();
         }
     }
     fn up(&self, v: u32) -> u32 {
@@ -111,9 +126,8 @@ impl<A: App> App for Scaled<A> {
         self.app.backend_scaled()
     }
     fn output_size(&mut self, w: u32, h: u32) {
-        let s = self.scale();
-        let floor = |v: u32| (v as f32 / s).floor() as u32; // never larger than the output
-        crate::gfx::with_render_scale(s, || self.app.output_size(floor(w), floor(h)))
+        self.physical_output = Some((w, h));
+        self.refresh_output();
     }
     fn wants_pointer_grab(&self) -> bool {
         self.app.wants_pointer_grab()
@@ -140,14 +154,18 @@ impl<A: App> App for Scaled<A> {
     }
     fn idle(&mut self) -> Option<Duration> {
         let s = self.scale();
-        crate::gfx::with_render_scale(s, || self.app.idle())
+        let next = crate::gfx::with_render_scale(s, || self.app.idle());
+        self.refresh_changed_scale();
+        next
     }
     fn tick_in(&self) -> Option<Duration> {
         self.app.tick_in()
     }
     fn tick(&mut self) -> Tick {
         let s = self.scale();
-        crate::gfx::with_render_scale(s, || self.app.tick())
+        let tick = crate::gfx::with_render_scale(s, || self.app.tick());
+        self.refresh_changed_scale();
+        tick
     }
 }
 

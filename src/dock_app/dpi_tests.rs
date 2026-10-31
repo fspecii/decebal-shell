@@ -262,6 +262,27 @@ fn the_taskbar_keeps_scaling_itself_and_the_dock_takes_the_backend_scale_only_in
 }
 
 #[test]
+fn switching_from_a_taskbar_to_a_mac_dock_reconverts_the_cached_physical_output() {
+    for edge in EDGES {
+        let (app, _log, dir) = parts("dpi-output-switch", edge, &APPS, vec![], false);
+        let _g = Guard(dir.clone());
+        let mut a = Scaled::new(app, 2.0);
+        std::fs::write(dir.join("settings.json"), r#"{"style":"windows"}"#).unwrap();
+        a.tick();
+        a.output_size(640, 480);
+        assert_eq!(a.inner().dock.output, Some((640.0, 480.0)));
+        std::fs::write(dir.join("settings.json"), r#"{"style":"mac"}"#).unwrap();
+        a.tick();
+        assert_eq!(a.inner().dock.output, Some((320.0, 240.0)), "{edge:?}: cached physical output must be translated after a style change without a RandR event");
+        let size = a.size();
+        assert!(size.0 <= 640 && size.1 <= 480, "{edge:?}: requested dock {size:?} fits, without backend cropping");
+        std::fs::write(dir.join("settings.json"), r#"{"style":"windows"}"#).unwrap();
+        a.tick();
+        assert_eq!(a.inner().dock.output, Some((640.0, 480.0)), "{edge:?}: the reverse transition restores physical dimensions");
+    }
+}
+
+#[test]
 fn menu_text_is_measured_at_the_surface_size_so_rows_fit_the_drawn_glyphs() {
     let Some(f) = Fonts::load() else { return };
     for k in [1.0f32, 1.25, 2.0] {
