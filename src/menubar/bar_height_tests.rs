@@ -14,7 +14,9 @@ fn fractional_declared_height_reserves_the_same_bottom_inset_as_its_surface() {
     let _t = themed(Some(32.5), 1.0);
     let bar = fixture(Renderer::MenuBar, Edge::Bottom, AppletSet::all(), 1280);
     assert_eq!(bar.surface_spec().unwrap().reserve, 33);
-    assert_eq!(crate::theme::th().bar_insets().bottom, 33);
+    let mut theme = crate::theme::th();
+    theme.panel_user.edge = Some(Edge::Bottom);
+    assert_eq!(theme.bar_insets().bottom, 33);
     reset();
 }
 
