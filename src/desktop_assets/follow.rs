@@ -248,10 +248,19 @@ pub trait Spawner {
 
 /// The real worker: `decthemectl assets follow-theme --generation G --job TOKEN`, detached from the caller (it must
 /// outlive a `decthemectl theme apply`) in its own process group, reaped by a thread when the caller lives on.
-pub struct Worker;
+pub struct Worker(PathBuf);
 
 fn program() -> PathBuf {
     std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.is_file()).unwrap_or_else(|| "decthemectl".into())
+}
+
+impl Worker {
+    fn command(&self, token: &str, generation: u64) -> std::process::Command {
+        let mut command = std::process::Command::new(program());
+        command.args(["assets", "follow-theme", "--generation", &generation.to_string(), "--job", token, "--shell-json"]);
+        command.arg(&self.0);
+        command
+    }
 }
 
 impl Spawner for Worker {
@@ -261,8 +270,8 @@ impl Spawner for Worker {
             return Err("no workers are started in unit tests".into());
         }
         let log2 = log.try_clone().map_err(|e| e.to_string())?;
-        let mut child = std::process::Command::new(program())
-            .args(["assets", "follow-theme", "--generation", &generation.to_string(), "--job", token])
+        let mut child = self
+            .command(token, generation)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::from(log))
             .stderr(std::process::Stdio::from(log2))
@@ -285,7 +294,7 @@ impl Spawner for Worker {
 /// Called after a theme apply (and after "Follow theme" in Icons) has written `decebal.json`: starts the background
 /// job when a following slot needs a pack that is missing and downloads are automatic. Returns a note for the report.
 pub fn request(shell_json: &Path) -> Option<String> {
-    request_in(shell_json, &job_dir(shell_json), &Worker)
+    request_in(shell_json, &job_dir(shell_json), &Worker(shell_json.to_path_buf()))
 }
 
 pub fn request_in(shell_json: &Path, dir: &Path, spawner: &dyn Spawner) -> Option<String> {
@@ -655,6 +664,19 @@ mod tests {
         let st = status_at(dir).unwrap();
         assert_eq!((st.pid, st.start), me(), "the worker's identity is recorded with the claim");
         st.token
+    }
+
+    #[test]
+    fn worker_receives_the_claimed_configuration_as_one_literal_argument() {
+        use std::ffi::OsStr;
+        let path = PathBuf::from("/tmp/alternate profile/custom settings.json");
+        let worker = Worker(path.clone());
+        let command = worker.command("7-123-456", 7);
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [OsStr::new("assets"), OsStr::new("follow-theme"), OsStr::new("--generation"), OsStr::new("7"), OsStr::new("--job"), OsStr::new("7-123-456"), OsStr::new("--shell-json"), path.as_os_str()]
+        );
     }
 
     #[test]

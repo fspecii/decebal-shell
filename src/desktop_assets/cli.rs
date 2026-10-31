@@ -54,6 +54,7 @@ struct Args {
 }
 
 const VALUED: &[&str] = &[
+    "--shell-json",
     "--generation",
     "--job",
     "--index",
@@ -108,6 +109,15 @@ impl Args {
 /// Runs one subcommand (`args` without the leading `assets`); the text to print or an error.
 pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
     let a = parse(args)?;
+    if let Some(path) = a.opt("--shell-json") {
+        if a.pos.first().map(String::as_str) != Some("follow-theme") {
+            return Err("--shell-json is only for the follow-theme worker".into());
+        }
+        if path.is_empty() {
+            return Err("--shell-json needs a file path".into());
+        }
+        ctx.shell_json = PathBuf::from(path);
+    }
     if let Some(r) = a.opt("--root") {
         ctx.root = PathBuf::from(r);
     }
@@ -724,6 +734,17 @@ mod tests {
             tree_of(entries, "top/bloom"),
             archive.display()
         )
+    }
+
+    #[test]
+    fn follow_worker_uses_its_explicit_configuration_without_changing_other_commands() {
+        let s = Scratch::new("worker-config");
+        let mut c = ctx(&s, None);
+        let intended = s.path().join("other profile/custom.json");
+        let intended_text = intended.to_str().unwrap();
+        assert!(go(&mut c, &["follow-theme", "--shell-json", intended_text, "--status"]).is_ok());
+        assert_eq!(c.shell_json, intended);
+        assert!(go(&mut c, &["list", "--shell-json", intended_text]).unwrap_err().contains("only for"));
     }
 
     #[test]
