@@ -74,3 +74,10 @@ Initial checkpoint: five synthetic identity/counter/privacy/output tests passed,
 observation completed with a maximum measured full stall of 0.026%. The preceding quiet-period sample had
 contained a 44.921% one-second spike, so heavy jobs remain coordinated rather than broadly resumed.
 Evidence: `/var/tmp/decebal-observer-first-baseline.json`.
+
+Cancellation gives the direct fixture up to ten seconds to finish its own
+cleanup before forcing the command group down. Both machine slots remain held
+through that interval. Multi-phase drivers must also handle SIGTERM and wait
+for their active fixture; an immediately exiting driver cannot preserve a
+fixture's cleanup window. Detached private compositors still require their
+fixture's owned-handle shutdown and must not be killed by process name.

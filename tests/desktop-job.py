@@ -150,6 +150,21 @@ class DesktopJobTests(unittest.TestCase):
                 p.kill()
                 p.wait()
 
+    def test_cancel_allows_fixture_to_finish_owned_cleanup_and_write_evidence(self):
+        module = self.module()
+        module.directory(self.slots)
+        finished = self.root / 'cleanup-finished'
+        code = (
+            'import signal,time;from pathlib import Path;'
+            f'finished=Path({str(finished)!r});'
+            'signal.signal(signal.SIGTERM,lambda s,f:(time.sleep(2.4),finished.touch(),exit(0)));'
+            'time.sleep(60)'
+        )
+        with patch.object(module.Pressure, 'check', return_value=None):
+            result = module.run([sys.executable, '-c', code], self.slots, .5)
+        self.assertEqual(result, 124)
+        self.assertTrue(finished.exists(), 'cancellation killed the fixture before its cleanup evidence')
+
     def test_execution_deadline_ends_non_detached_grandchild(self):
         pidfile = self.root / 'grandchild'
         code = f'import subprocess,time;from pathlib import Path;p=subprocess.Popen(["/usr/bin/sleep","60"]);Path({str(pidfile)!r}).write_text(str(p.pid));time.sleep(60)'

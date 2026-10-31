@@ -173,7 +173,10 @@ def run(command, slots, timeout, max_io_stall=10):
             time.sleep(0.05)
         signal_group(child, signal.SIGTERM)
         if reason:
-            grace = time.monotonic() + 2
+            # Native fixtures may need to stop a detached private compositor,
+            # flush their evidence and reap owned helpers. Keep both slots
+            # held during bounded cleanup instead of killing them after 2s.
+            grace = time.monotonic() + 10
             while not exited(child) and time.monotonic() < grace:
                 time.sleep(0.05)
         # Clear remaining non-detached children before releasing either slot.
