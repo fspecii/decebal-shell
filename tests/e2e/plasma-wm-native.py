@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gnome_xvfb  # noqa: E402
 
 W, H = 1920, 1080
+ICON = 28  # drawn icon size, px at scale 1
 THICKNESS, GAP = 44, 8  # the declared [taskbar] numbers of themes/plasma-breeze, px at scale 1
 
 
@@ -242,10 +243,16 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
                 x, y, _ = tasks()[app]
                 return round(s["X"] + x), round(s["Y"] + y)
 
-            def button_box(app, half=None):
+            def button_box(app):
+                """A small patch of the task cell between its icon and the cell's edge along the strip: it shows the cell's fill and none of the
+                (constant) icon. The cell pitch comes from the dock's own dump (50 px at scale 1 along a horizontal strip, less on a side strip)."""
                 cx, cy = at(app)
-                half = half or max(6, round(10 * scale))
-                return (cx - half, cy - half, cx + half, cy + half)
+                k = 0 if horizontal else 1
+                pitch = abs(tasks()["plasmafakeb"][k] - tasks()["plasmafakea"][k])
+                gap = pitch / 2 - ICON * scale / 2  # icon edge to cell edge
+                off, half = round(ICON * scale / 2 + gap / 2), max(1, round(gap * 0.3))
+                px, py = (cx - off, cy) if horizontal else (cx, cy - off)
+                return (px - half, py - half, px + half, py + half)
 
             def click(x, y):
                 run("xdotool", "mousemove", x, y)
@@ -339,7 +346,7 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             assert apart(mean(back, cell_box(0)), mean(back, cell_box(5))) > 10, f"{tag}: the pager cell of the busy workspace looks like an empty one"
             step("pager_windows", busy_vs_empty=apart(mean(back, cell_box(0)), mean(back, cell_box(5))))
 
-            # ---- geometry only: a layout change re-tiles every window (ConfigureNotify, no property change, no focus change, no pointer move);
+            # ---- geometry only: switching the layout (tile -> monocle -> tile) re-sizes every window (ConfigureNotify, no property change, no focus change, no pointer move);
             # the pager must follow it without any other event to piggy-back on
             pitch = abs(float(layout()["pagercell"][1][1]) - float(layout()["pagercell"][0][1]))
             region = lambda i: (lambda x, y: (round(x - ((pitch - 1) / 2 if horizontal else ICON * scale / 2)), round(y - (ICON * scale / 2 if horizontal else (pitch - 1) / 2)), round(x + ((pitch - 1) / 2 if horizontal else ICON * scale / 2)), round(y + (ICON * scale / 2 if horizontal else (pitch - 1) / 2))))(*cell_xy(i))
@@ -349,11 +356,11 @@ def run_one(bin_dir, themes, rdwm_dir, evidence, mode, edge, scale, report):
             time.sleep(0.6)
             before_layout = shot("pager-layout-a").crop(region(0))
             rects_before = [geometry_of(w) for w in wins]
-            ctl("action", "cyclelayout")
+            ctl("action", "setlayout", "monocle")
             wait(lambda: [geometry_of(w) for w in wins] != rects_before, f"{tag}: rdwm re-tiled the windows")
             wait(lambda: ink_distance(shot("pager-layout-b").crop(region(0)), before_layout) > 300 * scale, f"{tag}: the pager did not follow a geometry-only change")
             moved = ink_distance(shot("pager-layout-b").crop(region(0)), before_layout)
-            ctl("action", "cyclelayout_back")
+            ctl("action", "setlayout", "tile")
             wait(lambda: [geometry_of(w) for w in wins] == rects_before, f"{tag}: rdwm restored the layout")
             wait(lambda: ink_distance(shot("pager-layout-c").crop(region(0)), before_layout) < 0.1 * moved, f"{tag}: the pager did not follow the layout back")
             step("pager_geometry_only", changed_ink=moved, restored=True)
