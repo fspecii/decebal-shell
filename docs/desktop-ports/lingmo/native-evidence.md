@@ -97,15 +97,27 @@ under `flock --close …/slot1.lock nice -n 10 cargo -j2` with the usual isolati
 
 ## Asset catalogue against the shared installer (2026-10-31)
 
-`decthemectl` built from this branch at merge `07b732c` (`src/` identical to root `de2db55`), sha256 `a8e0fa40ab60253d1fef666c8ded14b1527d5f556327f62019a85a4ced16f82d`, private HOME, a fresh private
-root, `DECEBAL_ASSET_CATALOGS` pointing at `assets/desktop-ports/lingmo/asset-packs.toml`, nothing downloaded and nothing installed (`--dry-run`, source = my local clone at the pinned commit):
+Two installers were used, each from a committed tree exported with `git archive`, built by this port into a separate private target (`flock --close …/slot1.lock nice -n 10 cargo build -j2 --bin decthemectl`, private HOME,
+display and session variables cleared), each with a private HOME, a fresh private root and `DECEBAL_ASSET_CATALOGS` pointing at `assets/desktop-ports/lingmo/asset-packs.toml`. The source was my local clone at the pinned
+commit; nothing was downloaded.
 
-* `assets catalog check`: **ok (1 sources, 1 packs, 1 recommendations)**. (An earlier revision was *rejected* by this validator: its description was 644 characters, the limit is 400.)
-* `assets install lingmo-icons --source-dir <clone> --dry-run`: 10,397 files, 0 links, 32 icon directories; `verified: tree yes` (`19ae416…`); licence `GPL-3.0-or-later`;
-  after pinning `license_oids` (`LICENSE` blob `e62ec04c…`): `outside the pack folder: licences verified (blob); complete: yes`.
-* **DEGRADED, as disclosed:** only 32 of the 96 directories listed in `index.theme` exist. The other 64 are `@2x`/`@3x` directories that upstream creates as symlinks in its cmake script, which the installer never runs.
-  The installer marks the pack DEGRADED (it refuses only below a quarter) and the catalogue says so.
-* **Text aliases, not claimed:** `links/` is 14,137 regular git blobs (0 symlinks anywhere in `src/` or `links/`, checked with `git ls-tree`); the contract's `link_sources` / `link_source_trees` expand git symlinks only, so no
-  `link_sources` is declared and the aliases are a disclosed fallback (alias-only names fall back to breeze / hicolor).
-* The installer left only its own staging lock in the private root; no theme folder was created.
+| installer | build | sha256 of `decthemectl` |
+|---|---|---|
+| root `de2db55` (merge `07b732c`, `src/` identical) | `~/.cache/decebal-lingmo-target/debug` | `a8e0fa40ab60253d1fef666c8ded14b1527d5f556327f62019a85a4ced16f82d` |
+| asset-pack owner `69d6107` (declared text aliases and folder aliases) | export `asset-69d6107`, source digest in `asset-69d6107.inputs` | `894196d53d31975159bf7658a2b1c87fa387820672c05c378b5ed9f72f4ca21d` |
+
+**Without the alias tables** (previous catalogue, root `de2db55`): `catalog check` ok; 10,397 files, 0 links, 32 of 96 directories (DEGRADED, as then disclosed); `complete: yes` after pinning `license_oids`.
+(An even earlier revision was rejected by the validator: a 644-character description, the limit is 400.)
+
+**With the owner's `[[pack.text_links]]` + 16 `[[pack.dir_alias]]` tables** (`69d6107`), adopted after checking their research independently on the pinned tree: 15 names exist in both `src/` and `links/`; every `links/` text is UTF-8,
+without a newline, at most 75 bytes, none absolute, none leaving the theme; 14,104 resolve and 33 dangle (my count of those resolving through another alias is 3,002, theirs 3,016: a definition difference, not used here):
+
+* `assets catalog check`: **ok** (the previous catalogue also still checks ok with this installer);
+* dry run, then a **real install into a private root**: 10,382 files, **14,118 links**, 2 left out, **96 of 96** icon directories (no longer DEGRADED); `outside the pack folder: text_links verified (tree), licences verified (blob); complete: yes`;
+  `declared aliases: 14137 text links (15 replacing pack files), 16 folder aliases`; 33 dangling aliases dropped with a total warning; **0 dangling symlinks** in the installed theme (`find -xtype l`);
+* `assets verify`: **ok**; `assets preview Lingmo`: **16 of 16** sample icons resolved from the pack (chain Lingmo > hicolor > breeze);
+* left out by the installer's allowlist (no icon extension): `actions/24/media-album-cover`, `apps/scalable/cinnamon-virtual-keyboard`;
+* the installer created only the theme folder and its own staging lock in the private root.
+
+Dependency: a validator without `69d6107` rejects `text_links` / `dir_alias`, so root must land that installer before this catalogue.
 

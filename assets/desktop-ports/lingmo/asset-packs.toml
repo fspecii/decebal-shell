@@ -1,5 +1,6 @@
-# Lingmo icon pack for the shared asset installer (contract: docs/desktop-asset-packs.md, commit 76b9285 of feat/claude-desktop-asset-packs).
-# Data only. No link_sources / link_source_trees: src/ contains no symlinks, and the links/ overlay is plain text that the contract does not interpret (see the description).
+# Lingmo icon pack for the shared asset installer (contract: docs/desktop-asset-packs.md; the declared aliases below need the installer of commit 69d6107 of feat/claude-desktop-asset-packs).
+# Data only. src/ holds the real artwork; upstream's cmake then copies links/ over it (14137 plain-text alias files) and adds <ctx>@2x / <ctx>@3x folder links. Both are DECLARED below, tree-pinned, and the installer applies them;
+# nothing is run and nothing undeclared is guessed. No link_sources: neither src/ nor links/ contains a git symlink.
 # The cursor themes are deliberately NOT catalogued: their repository names no licence file (the contract requires one per pack, and
 # a template debian/copyright is not a grant). A user can still bring them in with `decthemectl assets import` and their own licence statement;
 # the evidence is in docs/desktop-ports/lingmo/reference-recipes.toml and sources.json.
@@ -27,13 +28,80 @@ source = "lingmo-icon-theme"
 path = "src"                          # the theme folder (index.theme says Name=Cutefish, Inherits=hicolor,breeze); users select it as `Lingmo`
 tree = "19ae41643ae10b340a88c6530c58e9d74e440ac9"    # git rev-parse 0b6a4ba:src
 install_name = "Lingmo"
-# DISCLOSED FALLBACK, in full: the upstream links/ overlay is 14137 REGULAR git blobs (mode 100644; there are 0 symlinks in src/ and in links/), each holding a target path as text.
-# The contract's link_sources / link_source_trees expand git symlinks only and no text alias is read, so none of them is installed. An icon name that exists only as such an alias is
-# absent from the installed theme and falls back to the inherited breeze or hicolor icon (14104 would resolve if the overlay were converted; 33 dangle upstream).
-# Also DISCLOSED: index.theme lists 96 icon directories and only 32 exist in src/. The other 64 are the @2x / @3x scaled directories, which upstream creates as symlinks in its
-# cmake install script (never run by the installer, and absent from git). The installer therefore reports this pack as DEGRADED (fewer than half present; it refuses only below a
-# quarter), which is accurate: 1x lookups use the real files, scaled lookups find no @2x/@3x directory.
-description = "Lingmo OS icon theme (Colloid derivative) with the multicolour systemlogo mark. DISCLOSED: the upstream links/ overlay (14137 plain-text aliases, not git symlinks) and the @2x/@3x directories (made by upstream's cmake) are not installed, so the pack reports DEGRADED and alias-only icon names fall back to breeze or hicolor."
+description = "Lingmo OS icon theme (Colloid derivative) with the multicolour systemlogo mark, installed with upstream's links/ aliases (14137 plain-text files, tree-pinned) and its @2x/@3x folder links. DISCLOSED: 33 upstream aliases dangle and are dropped; 2 alias names without an icon extension are left out by the installer's allowlist."
+
+# Upstream's cmake/install-theme.cmake.in (read as text, never run): it copies src/<ctx>/ for 8 contexts, then copies links/<ctx>/ over the same folders (a links/ file wins over a src/ file of the same name: 15 names
+# collide, hence replace = true), then creates <ctx>@2x -> <ctx> and <ctx>@3x -> <ctx>. Every links/ file is a regular blob (git mode 100644) whose text is a relative target: UTF-8, no newline, at most 75 bytes, none absolute,
+# none leaving the theme (checked on the pinned tree). 14104 aliases resolve (some through another alias) and 33 dangle upstream; the installer drops the dangling ones with a warning.
+[[pack.text_links]]
+from = "links"
+tree = "09d28c3591d256643c992999dc742b60336e6fc6"   # git rev-parse 0b6a4ba:links
+replace = true                                      # upstream copies links/ over src/
+
+[[pack.dir_alias]]
+name = "actions@2x"
+target = "actions"
+
+[[pack.dir_alias]]
+name = "actions@3x"
+target = "actions"
+
+[[pack.dir_alias]]
+name = "apps@2x"
+target = "apps"
+
+[[pack.dir_alias]]
+name = "apps@3x"
+target = "apps"
+
+[[pack.dir_alias]]
+name = "categories@2x"
+target = "categories"
+
+[[pack.dir_alias]]
+name = "categories@3x"
+target = "categories"
+
+[[pack.dir_alias]]
+name = "devices@2x"
+target = "devices"
+
+[[pack.dir_alias]]
+name = "devices@3x"
+target = "devices"
+
+[[pack.dir_alias]]
+name = "emblems@2x"
+target = "emblems"
+
+[[pack.dir_alias]]
+name = "emblems@3x"
+target = "emblems"
+
+[[pack.dir_alias]]
+name = "mimetypes@2x"
+target = "mimetypes"
+
+[[pack.dir_alias]]
+name = "mimetypes@3x"
+target = "mimetypes"
+
+[[pack.dir_alias]]
+name = "places@2x"
+target = "places"
+
+[[pack.dir_alias]]
+name = "places@3x"
+target = "places"
+
+[[pack.dir_alias]]
+name = "status@2x"
+target = "status"
+
+[[pack.dir_alias]]
+name = "status@3x"
+target = "status"
+
 
 [[recommend]]
 theme = "lingmo"

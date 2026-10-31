@@ -244,3 +244,6 @@ from package metadata and assets. Manual screenshots are optional evidence;
 new themes and edits regenerate through the same isolated cache path.
 
 The openKylin family adds `openkylin`, `openkylin-islands`, `openkylin-light-seeking`, `openkylin-heyin` and `openkylin-classic`, with matching light/dark native decoration requests, independent icon/cursor recommendations and reviewed Wallhaven photo pairs. These use the shared panel renderers; the [port notes](desktop-ports/openkylin/README.md) distinguish source-derived geometry from remaining UKUI differences.
+
+
+Lingmo adds a light/dark native package, source-backed decoration requests, independently selectable optional icon assets and two reviewed Wallhaven recommendations. The installer reproduces declared, pinned alias data without running upstream build scripts. Cursors are not offered because redistribution licensing has not been established. The [port notes](desktop-ports/lingmo/README.md) distinguish shared-shell approximations and historical native evidence from a full upstream replica.

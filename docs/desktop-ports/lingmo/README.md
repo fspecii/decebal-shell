@@ -146,10 +146,12 @@ pack, with a pinned GitHub archive (sha256 `c5cbd4fa…4043`) and tree OID, plus
 files to take. Rules the installer must follow: fetch by commit over HTTPS into an empty temporary directory, verify the git tree
 hash, never run upstream `cmake`/install scripts; install the single `Lingmo` icon theme exactly as `reference-recipes.toml` restates
 upstream's script (`src/` then `links/`, `@2x`/`@3x` symlinks; upstream never installs `dark/`). **`links/` is 14,137 regular files
-(git mode 100644, not symlinks) that each hold a relative target path as text; 14,104 resolve and 33 dangle.** The published asset contract's `link_sources` / `link_source_trees` expand
-real git symlinks only and do not read text aliases, so the catalogue does **not** claim them: they are a disclosed fallback (alias-only icon names fall back to the inherited
-breeze / hicolor icons). Supporting them would be a new, explicit installer feature (read a one-line target, keep it relative and inside the theme, drop dangling ones).
-`docs/desktop-ports/lingmo/reference-tools/verify-icon-recipe.py` is a verification script, not an installer. Requires `breeze` icons for inheritance; install the
+(git mode 100644, not symlinks) that each hold a relative target path as text; 14,104 resolve and 33 dangle.** The installer of commit `69d6107` (asset-pack branch) supports exactly this through
+declared, tree-pinned `[[pack.text_links]]` and `[[pack.dir_alias]]` tables, so the catalogue now declares upstream's own build step as data: `links/` copied over `src/` (15 names collide, hence `replace = true`)
+and the 16 `<ctx>@2x` / `<ctx>@3x` folder links. Nothing is run. Real result with that installer (private root): 14,137 aliases applied, 96 of 96 icon directories (no longer DEGRADED), 14,118 links
+installed, `verify: ok`, 16 of 16 sample icons resolved, `complete: yes`. Still disclosed: the 33 aliases that dangle upstream are dropped, and 2 alias names without an icon extension
+(`actions/24/media-album-cover`, `apps/scalable/cinnamon-virtual-keyboard`) are left out by the installer's allowlist. **Dependency:** a validator without that installer rejects these keys, so this catalogue
+must land after it. `docs/desktop-ports/lingmo/reference-tools/verify-icon-recipe.py` is a verification script, not an installer. Requires `breeze` icons for inheritance; install the
 cursor themes under `~/.local/share/icons/<name>/` and set them only when the user chooses (`decthemectl system set cursor-theme NAME`; icons: `decthemectl icons set Lingmo`). Both verification scripts in `docs/desktop-ports/lingmo/reference-tools/` pass against the pinned upstream commits. Icons and cursors stay
 independently selectable in Settings even when a theme suggests them. The cursor pack's licence is **not granted in the
 repository** (see `sources.json`), so it is user-initiated and shows that uncertainty.
@@ -172,7 +174,7 @@ repository** (see `sources.json`), so it is user-initiated and shows that uncert
 * **Panel/dock owner:** scale the mac dock with `DECEBAL_SCALE` (it is 82 × 401 px at every scale); a theme key for the mac dock's icon gap (16 upstream); per-surface glass parameters (dock lens 36, popup 20, bar blur-only sigma 20); a way for the bar's ink to follow the wallpaper; a real AppMenu consumer for `app_menu`. (The flat bar's declared `[bar] height` is now consumed: see native-evidence.md.)
   bar's ink to follow the wallpaper; a real AppMenu consumer for `app_menu`.
 * **Decorations owner:** section 4. A native `lingmo` style with continuous corners, the 26 px wash, close-outermost order and no coloured close state.
-* **Asset installer owner:** `asset-packs.toml` is validated by the shared catalogue validator (`decthemectl assets catalog check`). The 14,137 text aliases of the icon pack are *not* converted by the current installer and are disclosed in the catalogue as a fallback; if a text-alias feature is added it must keep targets relative and inside the theme and drop the 33 dangling ones. Cursors stay out of the catalogue (the repository has no licence file); never run upstream scripts; keep icon and cursor choices separate from theme apply.
+* **Asset installer owner:** `asset-packs.toml` is validated by the shared catalogue validator of `69d6107` (`decthemectl assets catalog check`: ok) and installs completely with it (see section 5). It needs that installer: root should land `69d6107` before this catalogue, or the catalogue test of the current validator rejects the `text_links` / `dir_alias` keys. Cursors stay out of the catalogue (the repository has no licence file); never run upstream scripts; keep icon and cursor choices separate from theme apply.
   never bundle the cursors (licence not granted upstream), never run upstream scripts, keep icon and cursor choices separate from theme apply.
 * **Integration owner:** merge `wallhaven-lingmo-records.json` (`images{}` plus a `themes{}` entry light `mldor9` / dark `l8pe5r`) into `data/wallhaven-curated.json` if accepted.
 

@@ -429,7 +429,7 @@ fn wallhaven_records_are_honest_distinct_and_legible_and_no_image_ships() {
     let shared: Value = serde_json::from_str(&fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("data/wallhaven-curated.json")).unwrap()).unwrap();
     let hex64 = |s: &str| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
     for (id, i) in images {
-        assert!(shared["images"].get(id).is_none() || shared["images"][id] == *i, "{id} duplicates a shared catalogue image with different content");
+        assert!(shared["images"].get(id).is_none() || shared["images"][id] == *i, "{id} differs from its integrated catalogue record");
         assert_eq!(i["purity"], "sfw");
         assert_eq!(i["ai_review"]["flagged_ai"], false);
         assert!(i["license"]["status"].as_str().unwrap().starts_with("unknown"), "{id}: licence must stay unknown");
@@ -503,18 +503,30 @@ fn asset_pack_catalogue_follows_the_documented_contract_and_matches_the_pins() {
         let name = p["install_name"].as_str().unwrap();
         assert!(name.len() <= 64 && name.as_bytes()[0].is_ascii_alphanumeric() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._+-".contains(&b)));
     }
-    // the remaining fallback is disclosed in the catalogue itself, and no link source is claimed for text aliases the installer cannot read
-    let description = packs.iter().find(|p| p["id"] == "lingmo-icons").unwrap()["description"].as_str().unwrap();
-    let raw_catalogue = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/desktop-ports/lingmo/asset-packs.toml")).unwrap();
-    assert!(
-        raw_catalogue.contains("14137 REGULAR git blobs") && raw_catalogue.contains("0 symlinks") && raw_catalogue.contains("only 32 exist"),
-        "the full disclosure sits in the catalogue's comments"
-    );
+    // the declared aliases: upstream's links/ overlay (plain-text files, tree-pinned, replacing src/ files as upstream's cmake does) and the 16 scaled folder links
+    let pack = packs.iter().find(|p| p["id"] == "lingmo-icons").unwrap();
+    let links = pack["text_links"].as_array().unwrap();
+    assert_eq!(links.len(), 1);
+    assert_eq!((links[0]["from"].as_str(), links[0]["tree"].as_str(), &links[0]["replace"]), (Some("links"), Some("09d28c3591d256643c992999dc742b60336e6fc6"), &Value::from(true)));
+    let aliases: Vec<(&str, &str)> = pack["dir_alias"].as_array().unwrap().iter().map(|a| (a["name"].as_str().unwrap(), a["target"].as_str().unwrap())).collect();
+    assert_eq!(aliases.len(), 16);
+    for ctx in ["actions", "apps", "categories", "devices", "emblems", "mimetypes", "places", "status"] {
+        for scale in ["@2x", "@3x"] {
+            assert!(aliases.contains(&(format!("{ctx}{scale}").as_str(), ctx)), "{ctx}{scale}");
+        }
+    }
+    // what stays disclosed after the aliases are installed: the dangling ones and the names the icon allowlist leaves out
+    let description = pack["description"].as_str().unwrap();
     assert!(description.len() <= 400, "the shared validator limits descriptions to 400 characters");
-    for must in ["DISCLOSED", "links/", "not git symlinks", "@2x/@3x", "DEGRADED", "fall back to breeze or hicolor"] {
+    for must in ["DISCLOSED", "33 upstream aliases dangle", "2 alias names without an icon extension"] {
         assert!(description.contains(must), "the description must say: {must}");
     }
-    assert!(packs.iter().all(|p| p.get("link_sources").is_none() && p.get("link_source_trees").is_none()), "text aliases are not git symlinks");
+    assert!(packs.iter().all(|p| p.get("link_sources").is_none() && p.get("link_source_trees").is_none()), "there is no git symlink to expand");
+    let raw_catalogue = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/desktop-ports/lingmo/asset-packs.toml")).unwrap();
+    assert!(
+        raw_catalogue.contains("15 names") && raw_catalogue.contains("replace = true") && raw_catalogue.contains("never run"),
+        "the research behind the declaration sits in the catalogue's comments"
+    );
     // the cursor pack is deliberately absent: its repository names no licence file, which the contract requires
     assert!(!packs.iter().any(|p| p["provides"].as_array().unwrap().iter().any(|k| k == "cursors")));
     // every recommendation names an existing theme package and a pack that provides what it is recommended for
@@ -530,6 +542,7 @@ fn asset_pack_catalogue_follows_the_documented_contract_and_matches_the_pins() {
     let icons = recipe.as_array().unwrap().iter().find(|p| p["id"] == "lingmo-icons").unwrap();
     assert_eq!(icons["commit"], sources[0]["commit"]);
     assert_eq!(icons["source_trees"]["src"], packs[0]["tree"]);
+    assert_eq!(icons["source_trees"]["links"], packs[0]["text_links"][0]["tree"], "the alias folder's tree pin is the one in the recipe");
 }
 
 // ---------------------------------------------------------------- mode-specific window styles against fake window managers
