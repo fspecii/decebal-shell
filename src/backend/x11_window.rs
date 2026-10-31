@@ -34,6 +34,35 @@ fn err<E: fmt::Display>(e: E) -> Error {
     Error(e.to_string())
 }
 
+/// Glass must not change a passive surface's click-through contract. Disabling it restores the server's
+/// default (size-following) bounds, so subsequent resizes cannot retain the old painted mask.
+fn sync_glass_shape(conn: &RustConnection, win: Window, passive: bool, enabled: bool, size: (u32, u32), pm: &Pixmap, cache: &mut Option<Vec<(i16, i16, u16, u16)>>) -> Result<(), Error> {
+    if enabled {
+        let rects = super::x11::visible_rects(pm);
+        let key: Vec<_> = rects.iter().map(|r| (r.x, r.y, r.width, r.height)).collect();
+        if cache.as_ref() != Some(&key) {
+            if cache.is_none() {
+                super::x11::set_glass_hint(conn, win, true).map_err(err)?;
+            }
+            conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &rects).map_err(err)?;
+            if !passive {
+                conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]).map_err(err)?;
+            }
+            conn.flush().map_err(err)?;
+            *cache = Some(key);
+        }
+    } else if cache.is_some() {
+        super::x11::set_glass_hint(conn, win, false).map_err(err)?;
+        conn.shape_mask(shape::SO::SET, shape::SK::BOUNDING, win, 0, 0, x11rb::NONE).map_err(err)?;
+        if !passive {
+            conn.shape_mask(shape::SO::SET, shape::SK::INPUT, win, 0, 0, x11rb::NONE).map_err(err)?;
+        }
+        conn.flush().map_err(err)?;
+        *cache = None;
+    }
+    Ok(())
+}
+
 struct Atoms {
     wm_protocols: Atom,
     wm_delete: Atom,
@@ -282,18 +311,8 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             app.draw(&mut pm);
             present(&conn, win, gc, &pm, depth, argb.is_some(), max_bytes)?;
             a11y.after_draw(&mut app);
-            if argb.is_some() && crate::theme::th().blur > 0.0 {
-                let rects = super::x11::visible_rects(&pm);
-                let key: Vec<_> = rects.iter().map(|r| (r.x, r.y, r.width, r.height)).collect();
-                if glass_shape.as_ref() != Some(&key) {
-                    if glass_shape.is_none() {
-                        let _ = super::x11::set_glass_hint(&conn, win, true);
-                    }
-                    conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &rects).map_err(err)?;
-                    conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]).map_err(err)?;
-                    conn.flush().map_err(err)?;
-                    glass_shape = Some(key);
-                }
+            if argb.is_some() {
+                sync_glass_shape(&conn, win, passive, crate::theme::th().blur > 0.0, size, &pm, &mut glass_shape)?;
             }
             // Unpainted areas (a resize in flight, a window being dragged) show the window background:
             // follow the app's own backdrop instead of black.
@@ -575,6 +594,47 @@ pub(crate) fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pix
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires the owned private-Xvfb glass-shape harness"]
+    fn glass_preserves_passive_input_and_disabling_restores_resize_bounds() {
+        let display = std::env::var("DISPLAY").unwrap();
+        assert_eq!(std::env::var("DECEBAL_GLASS_SHAPE_TEST_DISPLAY").unwrap(), display);
+        let number: u32 = display.strip_prefix(':').unwrap().parse().unwrap();
+        assert!(number >= 700);
+        let server_pid: u32 = std::env::var("DECEBAL_TEST_OWNED_XVFB_PID").unwrap().parse().unwrap();
+        assert_eq!(std::fs::read_to_string(format!("/tmp/.X{number}-lock")).unwrap().trim().parse::<u32>().unwrap(), server_pid);
+        let (conn, screen) = x11rb::connect(Some(&display)).unwrap();
+        let root = conn.setup().roots[screen].root;
+        let mut pm = Pixmap::new(20, 20).unwrap();
+        pm.fill(tiny_skia::Color::WHITE);
+        for passive in [true, false] {
+            let win = conn.generate_id().unwrap();
+            conn.create_window(x11rb::COPY_DEPTH_FROM_PARENT, win, root, 0, 0, 20, 20, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+            if passive {
+                conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[]).unwrap().check().unwrap();
+            }
+            let mut cache = None;
+            sync_glass_shape(&conn, win, passive, true, (20, 20), &pm, &mut cache).unwrap();
+            let input = conn.shape_get_rectangles(win, shape::SK::INPUT).unwrap().reply().unwrap().rectangles;
+            assert_eq!(input.is_empty(), passive, "glass must preserve click-through input");
+            conn.configure_window(win, &ConfigureWindowAux::new().width(40).height(40)).unwrap().check().unwrap();
+            sync_glass_shape(&conn, win, passive, false, (40, 40), &pm, &mut cache).unwrap();
+            assert!(cache.is_none());
+            let bounds = conn.shape_get_rectangles(win, shape::SK::BOUNDING).unwrap().reply().unwrap().rectangles;
+            let tuples = |rects: &[Rectangle]| rects.iter().map(|r| (r.x, r.y, r.width, r.height)).collect::<Vec<_>>();
+            assert_eq!(tuples(&bounds), vec![(0, 0, 40, 40)], "old glass mask must not clip a resized window");
+            let input = conn.shape_get_rectangles(win, shape::SK::INPUT).unwrap().reply().unwrap().rectangles;
+            if passive {
+                assert!(input.is_empty());
+            } else {
+                assert_eq!(tuples(&input), tuples(&bounds));
+            }
+            let atom = conn.intern_atom(false, b"_DECEBAL_BLUR").unwrap().reply().unwrap().atom;
+            assert_eq!(conn.get_property(false, win, atom, AtomEnum::CARDINAL, 0, 1).unwrap().reply().unwrap().value32().unwrap().next(), Some(0));
+            conn.destroy_window(win).unwrap().check().unwrap();
+        }
+    }
 
     #[test]
     fn wm_class_from_app_id() {
