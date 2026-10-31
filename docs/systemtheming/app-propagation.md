@@ -69,8 +69,9 @@ Boundaries:
 
 * GTK does not theme Qt or DTK (Deepin) applications. Those go through qt5ct/qt6ct or a platform theme. Deepin's legacy
   `deepin-gtk-theme` colours are not used; GTK follows the theme package tokens.
-* GDK shows `:backdrop` only under a window manager advertising `_NET_WM_STATE_FOCUSED`. rdwm's X11 backend does not list it
-  (checked in its `_NET_SUPPORTED`), so GTK windows under rdwm on X11 never look inactive. Wayland compositors signal activation
+* GDK shows `:backdrop` only under a window manager advertising `_NET_WM_STATE_FOCUSED`. rdwm's X11 backend gained it in rdwm
+  ba28454 / 0b2cc71, which are proved by rdwm's own tests. Older rdwm builds never make GTK windows look inactive. Wayland
+  compositors signal activation
   through xdg-shell.
 
 ## Icon and cursor publication (contract with the asset workflow)
@@ -145,21 +146,52 @@ Modern libadwaita uses native CSS properties such as `--window-bg-color` and `--
 
 ## Runtime verification
 
-`DECTHEMECTL=/path/to/decthemectl python3 tests/systemtheming/gtk-native.py OUT_DIR [--themes all] [--modes dark,light] [--scales 1,2] [--states]`
+`DECTHEMECTL=/path/to/decthemectl python3 tests/systemtheming/gtk-native.py OUT_DIR [--themes all] [--modes dark,light] [--scales 1,2] [--states] [--live | --strict-live gtk3,adw]`
 applies through the real binary and launches the probe apps (`tests/systemtheming/gtk_probe.py`, same controls in GTK 3, plain
-GTK 4 and libadwaita) and Nautilus. It runs privately:
+GTK 4 and libadwaita) and Nautilus.
 
-* HOME/XDG under `OUT_DIR`, GSettings in a keyfile backend and a private bus with no activatable services;
-* an owned Xvfb on a display of 700 or above, whose lock pid and both sockets are verified before every input burst;
-* a minimal `_NET_WM_STATE_FOCUSED` helper (`ewmh_focus.py`), so backdrop is real GTK state.
+**Privacy and cleanup.**
 
-Checks are on captured pixels against `decthemectl system palette --json`:
+* HOME/XDG live under `OUT_DIR`; GSettings uses a keyfile backend; the private bus has no activatable services.
+* Xvfb runs on an owned display of 700 or above. Its lock pid and both sockets are verified before every input burst.
+* Every child leads its own process group and carries a private run token. Cleanup signals only token-carrying members of those
+  groups, proved from `/proc`, never matched by name.
+* Bus, Xvfb and helper startup run inside the same `try/finally` as the cases. Helper reads and startup waits are bounded.
+
+**Backdrop is synthetic.** With no window manager, `ewmh_focus.py` advertises and toggles `_NET_WM_STATE_FOCUSED` itself. That
+proves the themes' `:backdrop` styles, not rdwm.
+
+**Checks** are on captured pixels against `decthemectl system palette --json`:
 
 * role surfaces;
 * text contrast measured from glyph pixels;
 * hover, disabled, focus ring and backdrop;
 * real clicks and toggles arriving in the app.
 
+`--live` starts the apps on theme A, applies theme B while they keep running, and classifies each app against B's window colour.
+
+| Outcome | Meaning |
+| --- | --- |
+| `live` | Changed to B in place |
+| `stale` | Still showing A |
+| `other` | Neither A nor B |
+| `indistinguishable` | A and B share a window colour, so nothing can be concluded |
+| `invalid` | Not the same process and window, or not on A before the change |
+
+* Only `live` counts as a live change. `--strict-live KITS` fails unless those kits reach it.
+* A reopened process is checked separately. That proves new processes get B, never that running ones changed.
+* This fixture states its expectation up front, and `results.json` records it next to each outcome:
+  - GTK 3 / GTK 4: `stale`, because no XSETTINGS daemon delivers the new theme name.
+  - libadwaita and Files: dark/light at most, because user CSS is read only at startup.
+* Proving live GTK 3 / GTK 4 reloads needs a session that delivers `gtk-theme` changes: the Wayland settings portal or an
+  XSETTINGS daemon.
+
+`python3 tests/systemtheming/gtk-native.py --self-test` runs the harness's own failure paths with no X server, GTK or decthemectl:
+
+* bounded helper reads;
+* group + token cleanup of descendants;
+* a process without the token left alone;
+* cleanup after a startup failure.
 
 Run `DECTHEMECTL=/path/to/decthemectl python3 tests/systemtheming/apps-runtime.py`. The test creates its own HOME/config/state/runtime directories **before** starting its private D-Bus activation environment, Xvfb and rdwm. It launches actual Nautilus and the installed unpatched st, applies Nord, captures the running windows and checks exact palette pixels. It confirms existing st changes live, new st Bash sessions load the palette from their guarded startup hook, existing Files follows dark mode, and a separately launched Files process adopts the custom palette without closing the first instance. st replaces HOME from the passwd database internally, so the test explicitly restores the private HOME in its child command before launching Bash.
 

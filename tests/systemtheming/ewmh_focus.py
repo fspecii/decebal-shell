@@ -7,7 +7,8 @@ This helper claims just that on the display in $DISPLAY (which the harness has p
 
     focus XID   sets _NET_WM_STATE_FOCUSED on XID (and clears it on the previously focused window)
     blur XID    clears it on XID
-It answers "ok" per command. It never manages, moves or maps client windows.
+It answers "ok" per command. It never manages, moves or maps client windows. This is a synthetic stand-in for a window manager:
+it proves the GTK themes' :backdrop styles, never a real window manager's focus handling (rdwm's support is proved by rdwm).
 """
 import sys
 

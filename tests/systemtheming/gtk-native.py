@@ -17,13 +17,19 @@ checked against the palette `decthemectl system palette --json` reports:
   * --states: hover changes the normal button, a disabled button is distinct but not invisible, keyboard focus draws an
     accent ring on the entry, clicks/toggles arrive in the app (event log) and change the switch, and backdrop (focus
     moved to another window) shows the inactive header bar;
-  * --live: a theme change while the apps keep running (what is live, what needs a new process) is recorded, not assumed.
+  * --live: apps started on theme A keep running while theme B is applied; each is classified against B's roles as live / stale /
+    other (same pid and window proven, started on A), and a reopened process is checked separately (that proves the new palette
+    reaches new processes, never a live change). --strict-live gtk3,adw,... fails unless those kits change live.
+  * --self-test: failure-path regressions of the harness itself (bounded helper reads, group + token cleanup), no X or GTK.
+Every child is its own process-group leader carrying a private run token; cleanup signals only token-carrying members of those
+groups, and startup of the bus, Xvfb and focus helper runs inside the same try/finally as the cases.
 Results go to OUT_DIR/results.json; screenshots per case to OUT_DIR/<case>/.
 """
 import argparse
 import json
 import os
 import pathlib
+import select
 import signal
 import subprocess
 import sys
@@ -38,16 +44,139 @@ import gnome_xvfb  # noqa: E402
 
 ALL_THEMES = sorted(p.name for p in (ROOT / "themes").iterdir() if p.is_dir())
 
+RUN_TOKEN_KEY = "DECEBAL_GTK_QA_RUN"
+
+
+def bounded_readline(proc, timeout):
+    """One line from a child's stdout, or None after `timeout` seconds (a helper that never answers cannot hang the run)."""
+    ready, _, _ = select.select([proc.stdout], [], [], timeout)
+    if not ready:
+        return None
+    line = proc.stdout.readline()
+    return line if line else None
+
+
+def group_members(pgid, token):
+    """Live processes in process group `pgid` that carry this run's private token in their environment. Membership is proved
+    from /proc (group id and environment), never guessed from process names."""
+    found = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            stat = pathlib.Path(f"/proc/{entry}/stat").read_text()
+            if int(stat[stat.rfind(")") + 2 :].split()[2]) != pgid:
+                continue
+            if f"{RUN_TOKEN_KEY}={token}".encode() in pathlib.Path(f"/proc/{entry}/environ").read_bytes().split(b"\0"):
+                found.append(int(entry))
+        except (OSError, ValueError, IndexError):
+            continue
+    return found
+
+
+class Session:
+    """Every process this run starts: each is a session/group leader (start_new_session) carrying a private token, so cleanup can stop
+    it and its descendants without touching anything else."""
+
+    def __init__(self, env):
+        self.token = f"{os.getpid()}-{time.time_ns()}"
+        self.env = dict(env, **{RUN_TOKEN_KEY: self.token})
+        self.owned = []
+
+    def spawn(self, argv, log, extra=None, pipes=False):
+        e = dict(self.env, **(extra or {}))
+        io = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) if pipes else dict(stdout=open(log, "w"))
+        p = subprocess.Popen(argv, env=e, stderr=open(log, "a") if pipes else subprocess.STDOUT, start_new_session=True, **io)
+        self.owned.append(p)
+        return p
+
+    def stop(self, p, grace=4.0):
+        """SIGTERM then SIGKILL to the token-carrying members of `p`'s own group (p included), each wait bounded."""
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            members = group_members(p.pid, self.token)
+            if not members and p.poll() is not None:
+                break
+            for pid in members:
+                try:
+                    os.kill(pid, sig)
+                except ProcessLookupError:
+                    pass
+            deadline = time.monotonic() + grace
+            while time.monotonic() < deadline and (p.poll() is None or group_members(p.pid, self.token)):
+                time.sleep(0.05)
+        try:
+            p.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            pass
+        if p in self.owned:
+            self.owned.remove(p)
+
+    def cleanup(self):
+        for p in reversed(list(self.owned)):
+            self.stop(p)
+
+    def leftovers(self):
+        return [pid for p in self.owned for pid in group_members(p.pid, self.token)]
+
+
+def self_test():
+    """Failure-path regressions with no X server, GTK or decthemectl: bounded helper reads, descendant cleanup by group + token,
+    foreign processes left alone, startup failure after the first child still cleans up."""
+    problems = []
+    base = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG")}
+    s = Session(base)
+    tmp = pathlib.Path(os.environ.get("TMPDIR", "/var/tmp"))
+    log = tmp / f"gtk-native-selftest-{s.token}.log"
+    silent = s.spawn([sys.executable, "-I", "-c", "import time; time.sleep(30)"], log, pipes=True)
+    t0 = time.monotonic()
+    if bounded_readline(silent, 0.5) is not None or time.monotonic() - t0 > 3:
+        problems.append("bounded_readline did not time out")
+    tree = s.spawn(["sh", "-c", "sleep 30 & sleep 30 & wait"], log)
+    time.sleep(0.3)
+    if len(group_members(tree.pid, s.token)) < 3:
+        problems.append(f"group members not found: {group_members(tree.pid, s.token)}")
+    foreign = subprocess.Popen(["sleep", "30"], env=base, start_new_session=True)  # no token: must survive cleanup
+    try:
+        try:
+            raise RuntimeError("simulated helper startup failure after the first child")
+        except RuntimeError:
+            pass
+        finally:
+            s.cleanup()
+        if s.leftovers() or group_members(tree.pid, s.token) or group_members(silent.pid, s.token):
+            problems.append("owned descendants survived cleanup")
+        if foreign.poll() is not None:
+            problems.append("a process without the run token was signalled")
+    finally:
+        foreign.kill()
+        foreign.wait()
+    try:
+        log.unlink()
+    except OSError:
+        pass
+    print("self-test:", "PASS" if not problems else "FAIL " + "; ".join(problems))
+    return 1 if problems else 0
+
+
 ap = argparse.ArgumentParser()
-ap.add_argument("out")
+ap.add_argument("out", nargs="?")
 ap.add_argument("--themes", default="nord,macos,windows11,high-contrast,solarized,synthwave")
 ap.add_argument("--modes", default="dark,light")
 ap.add_argument("--scales", default="1")
 ap.add_argument("--kits", default="gtk3,gtk4,adw,files")
 ap.add_argument("--states", action="store_true")
-ap.add_argument("--live", action="store_true")
+ap.add_argument("--live", action="store_true", help="keep apps running across a theme change and classify what each one does")
+ap.add_argument("--strict-live", default="", help="comma list of kits that must change live (fails otherwise); implies --live")
 ap.add_argument("--keep-going", action="store_true", help="record failures and continue")
+ap.add_argument("--self-test", action="store_true", help="failure-path regressions only (no X, GTK or decthemectl)")
 args = ap.parse_args()
+if args.self_test:
+    sys.exit(self_test())
+if not args.out:
+    ap.error("OUT_DIR is required")
+strict_live = [k for k in args.strict_live.split(",") if k]
+if strict_live:
+    args.live = True
 
 out = pathlib.Path(args.out)
 if out.exists():
@@ -70,8 +199,8 @@ for n in ("Alpha report.txt", "Budget.ods", "Notes.md"):
     (priv / "home/Files QA" / n).write_text("decebal gtk qa\n")
 (priv / "home/Files QA/Projects").mkdir()
 
-env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME", "SHELL")}
-env.update(
+base_env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME", "SHELL")}
+base_env.update(
     HOME=str(priv / "home"), XDG_CONFIG_HOME=str(priv / "cfg"), XDG_DATA_HOME=str(priv / "data"), XDG_STATE_HOME=str(priv / "state"),
     XDG_CACHE_HOME=str(priv / "cache"), XDG_RUNTIME_DIR=str(priv / "run"), DECEBAL_CONFIG=str(priv / "cfg/decebal"),
     GSETTINGS_BACKEND="keyfile", GDK_BACKEND="x11", GSK_RENDERER="cairo", NO_AT_BRIDGE="1", GTK_A11Y="none",
@@ -79,65 +208,66 @@ env.update(
     RDWMCTL="/bin/false", DECEBAL_BACKEND="x11",
 )
 (priv / "cfg/decebal").mkdir()
-owned = []
+S = Session(base_env)
+env = S.env  # every child, and every helper command, carries the run token
+xvfb = display = wm = None
 
 
-def spawn(argv, log, extra=None, **kw):
-    e = dict(env, **(extra or {}))
-    p = subprocess.Popen(argv, env=e, stdout=open(log, "w"), stderr=subprocess.STDOUT, start_new_session=True, **kw)
-    owned.append(p)
-    return p
+def spawn(argv, log, extra=None):
+    return S.spawn(argv, log, extra)
 
 
 def stop(p):
-    if p.poll() is None:
-        p.terminate()
-        try:
-            p.wait(timeout=4)
-        except subprocess.TimeoutExpired:
-            p.kill()
-            p.wait()
+    S.stop(p)
 
 
 def cleanup(*_):
-    for p in reversed(owned):
-        stop(p)
+    S.cleanup()
 
 
-signal.signal(signal.SIGTERM, lambda *a: (cleanup(), sys.exit(143)))
+def _terminated(signum, _frame):
+    raise SystemExit(128 + signum)  # unwinds through the main try/finally, which cleans up
 
-conf = priv / "bus.conf"
-conf.write_text(f"""<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+
+signal.signal(signal.SIGTERM, _terminated)
+signal.signal(signal.SIGINT, _terminated)
+
+
+def start_session():
+    """Bus, owned Xvfb and the focus-hint helper. Called inside the main try: any failure here still cleans up what started."""
+    global xvfb, display, wm
+    conf = priv / "bus.conf"
+    conf.write_text(f"""<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:path={priv}/run/bus</listen><auth>EXTERNAL</auth><servicedir>{priv}/bus-services</servicedir>
 <policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
 """)
-bus = spawn(["dbus-daemon", "--nofork", "--config-file", str(conf)], out / "bus.log")
-for _ in range(100):
-    if (priv / "run/bus").is_socket():
-        break
-    time.sleep(0.05)
-env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={priv}/run/bus"
-
-screen = "2400x1600x24" if max(scales) > 1 else "1400x1000x24"
-display = gnome_xvfb.reserve_display()
-xvfb = spawn(["Xvfb", display, "-screen", "0", screen, "-nolisten", "tcp", "-noreset"], out / "xvfb.log")
-proof = gnome_xvfb.verify_owned(xvfb, display)
-env["DISPLAY"] = display
-(out / "display-proof.json").write_text(json.dumps(proof))
-
-
-# GDK reports :backdrop only under a window manager advertising _NET_WM_STATE_FOCUSED (rdwm's X11 backend does not): a tiny helper
-# claims exactly that hint on the owned display and toggles it per window.
-wm = subprocess.Popen([sys.executable, "-I", str(HERE / "ewmh_focus.py")], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(out / "ewmh.log", "w"), text=True, start_new_session=True)
-owned.append(wm)
-if wm.stdout.readline().strip() != "ready":
-    sys.exit("EWMH focus helper failed; see ewmh.log")
+    bus = spawn(["dbus-daemon", "--nofork", "--config-file", str(conf)], out / "bus.log")
+    deadline = time.monotonic() + 5
+    while not (priv / "run/bus").is_socket():
+        if bus.poll() is not None or time.monotonic() > deadline:
+            raise RuntimeError("private dbus-daemon did not start; see bus.log")
+        time.sleep(0.05)
+    env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={priv}/run/bus"
+    screen = "2400x1600x24" if max(scales) > 1 else "1400x1000x24"
+    display = gnome_xvfb.reserve_display()
+    xvfb = spawn(["Xvfb", display, "-screen", "0", screen, "-nolisten", "tcp", "-noreset"], out / "xvfb.log")
+    proof = gnome_xvfb.verify_owned(xvfb, display)
+    env["DISPLAY"] = display
+    (out / "display-proof.json").write_text(json.dumps(proof))
+    # GDK reports :backdrop only under a window manager advertising _NET_WM_STATE_FOCUSED. This fixture has no window manager, so a
+    # tiny helper claims exactly that hint on the owned display and toggles it per window. That is a synthetic stand-in: it proves
+    # the GTK themes' :backdrop styles, not any window manager's focus handling (rdwm's own support is proved by rdwm's tests).
+    wm = S.spawn([sys.executable, "-I", str(HERE / "ewmh_focus.py")], out / "ewmh.log", pipes=True)
+    if (bounded_readline(wm, 10) or "").strip() != "ready":
+        raise RuntimeError("EWMH focus helper did not become ready; see ewmh.log")
 
 
 def hint(cmd, xid):
     wm.stdin.write(f"{cmd} {xid}\n")
     wm.stdin.flush()
-    assert wm.stdout.readline().strip() == "ok"
+    answer = bounded_readline(wm, 5)
+    if (answer or "").strip() != "ok":
+        raise RuntimeError(f"EWMH focus helper did not acknowledge {cmd} {xid}: {answer!r}")
 
 
 def verify_display():
@@ -412,8 +542,100 @@ def files_checks(case_id, img, pal):
     check(case_id, ratio >= 4.5, "Files sidebar labels readable", {"ratio": round(ratio, 2), "bg": "#%02x%02x%02x" % bg})
 
 
+# ---------------------------------------------------------------- live acceptance
+live = []
+
+# What this fixture can deliver to a running process, so a stale result is reported against a stated expectation, never hidden.
+# GTK 3 / GTK 4 on X11 learn a new gtk-theme-name only through XSETTINGS (none runs here; settings.ini is read at startup).
+# libadwaita reads color-scheme from GSettings live (ADW_DISABLE_PORTAL: the keyfile backend notifies) but never re-reads user CSS.
+LIVE_EXPECTATION = {
+    "gtk3": "stale: no XSETTINGS daemon in this fixture, so the new theme name is not delivered to running GTK 3 apps",
+    "gtk4": "stale: no XSETTINGS daemon in this fixture, so the new theme name is not delivered to running GTK 4 apps",
+    "adw": "mode only at most: libadwaita follows color-scheme live but loads the user gtk.css palette only at startup",
+    "files": "mode only at most: Files is libadwaita (same limit)",
+}
+
+
+def window_bg(kit, img, info):
+    if kit == "files":
+        return mode_colour(img.crop((img.width // 3, img.height // 3, img.width - 20, img.height - 20)))
+    return mode_colour(crop(img, info["boxes"]["label"], info["scale"], 0))
+
+
+def identity(kit, p, info):
+    """The same process and window as before the change: our child is still running and its X window still exists."""
+    if p.poll() is not None:
+        return False, "process exited"
+    if kit != "files" and info.get("pid") != p.pid:
+        return False, f"probe pid {info.get('pid')} != child {p.pid}"
+    r = run(["xdotool", "getwindowgeometry", str(info["xid"])])
+    return (r.returncode == 0, "window exists" if r.returncode == 0 else "window gone")
+
+
+def live_case(scale, a, b):
+    """Apply theme A, start the apps, apply theme B while they run; classify each app against B's roles (live / stale / other) and
+    separately prove a reopened process adopts B. Only `live` counts as a live change; strict kits must reach it."""
+    case_id = f"live-{a[0]}-{a[1]}-to-{b[0]}-{b[1]}-x{scale}"
+    case = out / case_id
+    case.mkdir()
+    _, pa = apply(*a)
+    running = []
+    try:
+        for kit in kits:
+            p, info = launch(kit, f"Decebal GTK QA {kit}", case, scale)
+            img = shot(info, case / f"{kit}-before.png")
+            running.append((kit, p, info, window_bg(kit, img, info)))
+        _, pb = apply(*b)
+        (case / "palettes.json").write_text(json.dumps({"before": pa, "after": pb}, indent=1))
+        A, B = hexrgb(pa["bg"]), hexrgb(pb["bg"])
+        time.sleep(3)
+        for kit, p, info, before in running:
+            same, why = identity(kit, p, info)
+            img = shot(info, case / f"{kit}-after-live.png") if same else None
+            after = window_bg(kit, img, info) if img else None
+            if not same:
+                outcome = "invalid"
+            elif near(A, B, 10):
+                outcome = "indistinguishable"
+            elif not near(before, A, 10):
+                outcome = "invalid"  # the app was not showing theme A to begin with: nothing to compare
+            elif near(after, B, 8):
+                outcome = "live"
+            elif near(after, A, 8):
+                outcome = "stale"
+            else:
+                outcome = "other"
+            rec = {"case": case_id, "kit": kit, "outcome": outcome, "identity": why, "pid": p.pid, "xid": info["xid"], "before": "#%02x%02x%02x" % before, "after": after and "#%02x%02x%02x" % after, "want": pb["bg"], "fixture_expectation": LIVE_EXPECTATION.get(kit)}
+            live.append(rec)
+            print(f"live {case_id}/{kit}: {outcome} ({rec['before']} -> {rec['after']}, want {pb['bg']})", flush=True)
+            if kit in strict_live:
+                check(f"{case_id}/{kit}", outcome == "live", "running app changed live to the new theme (strict)", rec)
+            check(f"{case_id}/{kit}", outcome != "invalid", "live comparison is valid (same process and window, started on theme A)", rec)
+    finally:
+        for _, p, _, _ in running:
+            stop(p)
+    # Reopening proves the new palette reaches new processes; it is recorded as such and never counted as a live change.
+    for kit in kits:
+        p, info = launch(kit, f"Decebal GTK QA {kit}", case, scale)
+        try:
+            bg = window_bg(kit, shot(info, case / f"{kit}-reopened.png"), info)
+            check(f"{case_id}/{kit}", near(bg, hexrgb(pb["bg"]), 8), "a reopened process adopts the new theme (not a live change)", {"got": "#%02x%02x%02x" % bg, "want": pb["bg"]})
+        finally:
+            stop(p)
+
+
+def live_pairs():
+    """Consecutive themes in the first mode, then a mode flip of the first theme: each pair changes the window colour."""
+    m = modes[0]
+    pairs = [((themes[i], m), (themes[i + 1], m)) for i in range(len(themes) - 1)]
+    if len(modes) > 1:
+        pairs.append(((themes[0], modes[0]), (themes[0], modes[1])))
+    return pairs
+
+
 # ---------------------------------------------------------------- main loop
 try:
+    start_session()
     for scale in scales:
         for theme in themes:
             for mode in modes:
@@ -442,9 +664,19 @@ try:
                     check(case_id, False, "case ran", f"{type(e).__name__}: {e}")
                 if failures and not args.keep_going:
                     raise SystemExit(1)
+        if args.live:
+            for a, b in live_pairs():
+                try:
+                    live_case(scale, a, b)
+                except Exception as e:  # noqa: BLE001
+                    check(f"live-{a}-{b}", False, "live case ran", f"{type(e).__name__}: {e}")
+                if failures and not args.keep_going:
+                    raise SystemExit(1)
 finally:
     cleanup()
-    (out / "results.json").write_text(json.dumps({"failures": failures, "results": results}, indent=1))
+    leftovers = S.leftovers()
+    (out / "results.json").write_text(json.dumps({"failures": failures, "results": results, "live": live, "strict_live": strict_live, "leftover_pids": leftovers}, indent=1))
     ok = sum(r["ok"] for r in results)
-    print(f"{ok}/{len(results)} checks passed; {len(failures)} failures; evidence {out}")
+    counts = {o: sum(1 for r in live if r["outcome"] == o) for o in ("live", "stale", "other", "indistinguishable", "invalid")}
+    print(f"{ok}/{len(results)} checks passed; {len(failures)} failures; live outcomes {counts if live else 'not requested'}; evidence {out}")
 sys.exit(1 if failures else 0)
