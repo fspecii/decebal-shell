@@ -1,10 +1,38 @@
 # Desktop readiness audit — current checkpoint
 
-Refreshed 2026-10-31 after the coordinated 0.2.1 shell rollout. Evidence is
+Current checkpoint: 2026-10-31, after the ten-hour 0.3 desktop sprint. Evidence is
 scoped to the workflow tested; this does not establish KDE/GNOME parity or
-physical hardware readiness.
+physical hardware readiness. Older checkpoints below are retained as history,
+not descriptions of the currently installed binaries.
 
-## Latest accepted iteration — 0.2.1
+## Current accepted iteration — 0.3
+
+The [sprint handoff](desktop-sprint-2026-10-31.md) records the exact artifacts,
+original failures, native qualification and remaining requirements. The standard
+23-bin release is `7837e1b`; the installed Settings-only follow-up is `0b8da82`
+(SHA-256 `5bf4a43914b2cd717a82982f5ee8787a0b51bc77d74c0decd851d89d88567133`).
+The other 22 binaries and example remain the standard release. Both managed user
+locations have been updated, with matching 44-theme assets. Bar, HUD and dock
+were refreshed without changing configuration, applications, workspace or focus.
+
+The existing Settings process was preserved for its drafts; close and reopen it
+to use the installed binary. The old live WM remains in place because it cannot
+export a complete compatible layout. The updated WM and capability-gated
+Super+arrow migration require a safe fresh session. The privileged system session
+wrapper was not replaced.
+
+The high-scale Settings crash and slider pointer-target overflow have optimized
+private-X11 proofs. Extreme long-word wrapping, physical and screen-reader
+acceptance, Wayland hardware paths, complete theme fidelity and desktop-wide
+performance qualification remain open. KDE Breeze/Layan packages are still held;
+their native pager fixture is not a shipped theme.
+
+The full final library run recorded 2,173 passes, one schema cross-check failure
+against a legacy system CLI, and 19 ignored tests. The same cross-check passed
+separately against the pinned current CLI, without source changes. It is not
+reported as a single clean full-suite run.
+
+## Earlier accepted iteration — 0.2.1
 
 - All 23 shell binaries were built from `bbe508f` with source/package fingerprint
   `995efd025ff4d9d06c3368967203a067cb98ec153084903d15eeccefd329f710`.
@@ -44,7 +72,7 @@ physical hardware readiness.
   Their new packages are not accepted as complete ports until authentic rendering,
   four-edge placement and every selectable applet work together.
 
-## Current installed Settings — bounded disappearance check
+## Earlier installed Settings — bounded disappearance check
 
 The installed optimized Settings SHA
 `8cac883d022a6de398d410717db470ecd42b0cdf31ec75b4eae6570a9e9cc02a`
