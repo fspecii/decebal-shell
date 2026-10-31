@@ -78,6 +78,8 @@ impl Layout {
 /// monitors remove optional wide content first, retaining both left and right controls.
 /// `cluster` = Some((gap between group faces, padding inside a face)): the groups are placed adjacent, in order, as ONE run centred on the bar and sized by
 /// its content (the three-island taskbar of UKUI's panel); `None` keeps the stock start / centre / end placement.
+// Six independent geometry values plus content and the optional cluster contract.
+#[allow(clippy::too_many_arguments)]
 fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, mut groups: [Vec<(Kind, f32)>; 3], cluster: Option<(f32, f32)>) -> Layout {
     let available = (width - margin * 2.0).max(0.0);
     // Reserve an overflow target before decorative padding on very short outputs.
