@@ -1,0 +1,558 @@
+//! Companion metadata of the desktop ports: `assets/desktop-ports/<family>/asset-packs.toml` (see
+//! `docs/desktop-asset-packs.md` for the format). Data only; every error names the line and the key.
+
+use super::Provides;
+use std::path::{Path, PathBuf};
+use toml_edit::{Document, Item, Table};
+
+pub const FORMAT: i64 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Source {
+    pub id: String,
+    pub repo: String,
+    pub revision: String,
+    pub commit: String,
+    pub license: String,
+    pub license_files: Vec<String>,
+    pub archive_url: Option<String>,
+    pub archive_sha256: Option<String>,
+    pub strip: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pack {
+    pub id: String,
+    pub name: String,
+    pub provides: Vec<Provides>,
+    pub source: String,
+    pub path: String,
+    pub tree: String,
+    pub install_name: String,
+    pub license: Option<String>,
+    pub license_files: Vec<String>,
+    pub link_sources: Vec<String>,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recommend {
+    pub theme: String,
+    pub icons: Option<String>,
+    pub cursors: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Catalog {
+    pub family: String,
+    /// The file it came from, or `builtin:<family>`.
+    pub origin: String,
+    pub sources: Vec<Source>,
+    pub packs: Vec<Pack>,
+    pub recommends: Vec<Recommend>,
+}
+
+impl Pack {
+    pub fn provides(&self, k: Provides) -> bool {
+        self.provides.contains(&k)
+    }
+}
+
+/// A pack with what it is cut from.
+#[derive(Debug, Clone, Copy)]
+pub struct Entry<'a> {
+    pub catalog: &'a Catalog,
+    pub pack: &'a Pack,
+    pub source: &'a Source,
+}
+
+impl Entry<'_> {
+    pub fn license(&self) -> &str {
+        self.pack.license.as_deref().unwrap_or(&self.source.license)
+    }
+
+    /// Source-relative licence files: the source's, then the pack's own.
+    pub fn license_files(&self) -> Vec<String> {
+        let mut v = self.source.license_files.clone();
+        for f in &self.pack.license_files {
+            if !v.contains(f) {
+                v.push(f.clone());
+            }
+        }
+        v
+    }
+}
+
+// ---------------------------------------------------------------- parsing
+
+struct Cx<'t> {
+    text: &'t str,
+    errors: Vec<String>,
+}
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            cur.push((prev[j] + usize::from(ca != cb)).min(prev[j + 1] + 1).min(cur[j] + 1));
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+fn is_hex(s: &str, n: usize) -> bool {
+    s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+pub fn is_id(s: &str) -> bool {
+    let mut c = s.chars();
+    !s.is_empty() && s.len() <= 64 && c.next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) && c.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn https(s: &str) -> bool {
+    s.strip_prefix("https://").is_some_and(|r| !r.is_empty() && !r.starts_with('/') && !r.chars().any(|c| c.is_whitespace() || c.is_control()))
+}
+
+impl Cx<'_> {
+    fn line_of(&self, item: &Item) -> usize {
+        item.span().map(|s| self.text[..s.start.min(self.text.len())].matches('\n').count() + 1).unwrap_or(0)
+    }
+
+    fn err(&mut self, item: &Item, key: &str, msg: impl AsRef<str>) {
+        let l = self.line_of(item);
+        self.errors.push(if l > 0 { format!("line {l}: `{key}`: {}", msg.as_ref()) } else { format!("`{key}`: {}", msg.as_ref()) });
+    }
+
+    fn known(&mut self, t: &Table, scope: &str, keys: &[&str]) {
+        for (k, item) in t.iter() {
+            if !keys.contains(&k) {
+                let hint = keys.iter().filter(|c| edit_distance(k, c) <= 2.max(k.len() / 4)).min_by_key(|c| edit_distance(k, c)).map(|c| format!(" (did you mean `{c}`?)")).unwrap_or_default();
+                self.err(item, &format!("{scope}{k}"), format!("unknown key{hint}"));
+            }
+        }
+    }
+
+    fn text(&mut self, t: &Table, scope: &str, key: &str, required: bool, max: usize) -> Option<String> {
+        let Some(item) = t.get(key) else {
+            if required {
+                self.errors.push(format!("`{scope}{key}` is required"));
+            }
+            return None;
+        };
+        match item.as_str() {
+            Some(s) if s.chars().count() > max => {
+                self.err(item, &format!("{scope}{key}"), format!("is longer than {max} characters"));
+                None
+            }
+            Some(s) if s.chars().any(char::is_control) => {
+                self.err(item, &format!("{scope}{key}"), "contains a control character");
+                None
+            }
+            Some(s) if required && s.trim().is_empty() => {
+                self.err(item, &format!("{scope}{key}"), "must not be empty");
+                None
+            }
+            Some(s) => Some(s.to_string()),
+            None => {
+                self.err(item, &format!("{scope}{key}"), "must be a string");
+                None
+            }
+        }
+    }
+
+    fn list(&mut self, t: &Table, scope: &str, key: &str) -> Vec<String> {
+        let Some(item) = t.get(key) else { return Vec::new() };
+        let Some(a) = item.as_array() else {
+            self.err(item, &format!("{scope}{key}"), "must be a list of strings");
+            return Vec::new();
+        };
+        if a.len() > 32 {
+            self.err(item, &format!("{scope}{key}"), "has more than 32 entries");
+        }
+        let v: Vec<String> = a.iter().filter_map(|x| x.as_str().map(String::from)).collect();
+        if v.len() != a.len() {
+            self.err(item, &format!("{scope}{key}"), "must be a list of strings");
+        }
+        v
+    }
+
+    fn rel(&mut self, t: &Table, scope: &str, key: &str, p: &str, dot_ok: bool) {
+        if dot_ok && p == "." {
+            return;
+        }
+        if let Err(e) = super::safe_rel(p) {
+            let item = t.get(key).cloned().unwrap_or(Item::None);
+            self.err(&item, &format!("{scope}{key}"), e);
+        }
+    }
+
+    fn tables<'d>(&mut self, root: &'d Table, key: &str) -> Vec<(usize, &'d Table)> {
+        match root.get(key) {
+            None => Vec::new(),
+            Some(item) => match item.as_array_of_tables() {
+                Some(a) => a.iter().enumerate().collect(),
+                None => {
+                    self.err(item, key, format!("must be an array of tables ([[{key}]])"));
+                    Vec::new()
+                }
+            },
+        }
+    }
+}
+
+/// Parses and validates one catalogue. `origin` is only used in messages and kept in the result.
+pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
+    let doc = match Document::parse(text.to_string()) {
+        Ok(d) => d,
+        Err(e) => {
+            let line = e.span().map(|s| text[..s.start.min(text.len())].matches('\n').count() + 1).unwrap_or(0);
+            return Err(vec![format!("line {line}: {}", e.message())]);
+        }
+    };
+    let root = doc.as_table();
+    let mut cx = Cx { text, errors: Vec::new() };
+    cx.known(root, "", &["format", "family", "source", "pack", "recommend"]);
+    match root.get("format").map(|i| (i, i.as_integer())) {
+        Some((_, Some(FORMAT))) => {}
+        Some((i, _)) => cx.err(i, "format", format!("must be {FORMAT} (this decebal reads format {FORMAT})")),
+        None => cx.errors.push("`format` is required (format = 1)".into()),
+    }
+    let family = cx.text(root, "", "family", true, 32).unwrap_or_default();
+    if !family.is_empty() && !is_id(&family) {
+        cx.errors.push(format!("`family`: `{family}` must be lower-case letters, digits and dashes"));
+    }
+
+    let mut sources = Vec::new();
+    for (i, t) in cx.tables(root, "source") {
+        let sc = format!("source[{i}].");
+        cx.known(t, &sc, &["id", "repo", "revision", "commit", "license", "license_files", "archive_url", "archive_sha256", "strip_components"]);
+        let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
+        if !id.is_empty() && !is_id(&id) {
+            cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
+        }
+        let repo = cx.text(t, &sc, "repo", true, 300).unwrap_or_default();
+        if !repo.is_empty() && !https(&repo) {
+            cx.errors.push(format!("`{sc}repo` must be an https:// URL"));
+        }
+        let revision = cx.text(t, &sc, "revision", true, 120).unwrap_or_default();
+        let commit = cx.text(t, &sc, "commit", true, 40).unwrap_or_default();
+        if !commit.is_empty() && !is_hex(&commit, 40) {
+            cx.errors.push(format!("`{sc}commit` must be 40 lower-case hex digits"));
+        }
+        let license = cx.text(t, &sc, "license", true, 200).unwrap_or_default();
+        let license_files = cx.list(t, &sc, "license_files");
+        for f in &license_files {
+            cx.rel(t, &sc, "license_files", f, false);
+        }
+        let archive_url = cx.text(t, &sc, "archive_url", false, 400);
+        if archive_url.as_deref().is_some_and(|u| !https(u)) {
+            cx.errors.push(format!("`{sc}archive_url` must be an https:// URL"));
+        }
+        let archive_sha256 = cx.text(t, &sc, "archive_sha256", false, 64);
+        if archive_sha256.as_deref().is_some_and(|h| !is_hex(h, 64)) {
+            cx.errors.push(format!("`{sc}archive_sha256` must be 64 lower-case hex digits"));
+        }
+        if archive_url.is_some() != archive_sha256.is_some() {
+            cx.errors.push(format!("`{sc}archive_url` and `{sc}archive_sha256` go together"));
+        }
+        let strip = match t.get("strip_components") {
+            None => 0,
+            Some(item) => match item.as_integer() {
+                Some(n @ 0..=4) => n as usize,
+                _ => {
+                    cx.err(item, &format!("{sc}strip_components"), "must be a whole number 0..4");
+                    0
+                }
+            },
+        };
+        sources.push(Source { id, repo, revision, commit, license, license_files, archive_url, archive_sha256, strip });
+    }
+
+    let mut packs = Vec::new();
+    for (i, t) in cx.tables(root, "pack") {
+        let sc = format!("pack[{i}].");
+        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "description"]);
+        let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
+        if !id.is_empty() && !is_id(&id) {
+            cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
+        }
+        let name = cx.text(t, &sc, "name", true, 80).unwrap_or_default();
+        let mut provides = Vec::new();
+        let raw = cx.list(t, &sc, "provides");
+        if raw.is_empty() {
+            cx.errors.push(format!("`{sc}provides` must list \"icons\", \"cursors\" or both"));
+        }
+        for p in raw {
+            match Provides::parse(&p) {
+                Some(k) if !provides.contains(&k) => provides.push(k),
+                Some(_) => {}
+                None => cx.errors.push(format!("`{sc}provides`: `{p}` is not icons or cursors")),
+            }
+        }
+        provides.sort();
+        let source = cx.text(t, &sc, "source", true, 64).unwrap_or_default();
+        let path = cx.text(t, &sc, "path", true, 200).unwrap_or_default();
+        if !path.is_empty() {
+            cx.rel(t, &sc, "path", &path, true);
+        }
+        let tree = cx.text(t, &sc, "tree", true, 40).unwrap_or_default();
+        if !tree.is_empty() && !is_hex(&tree, 40) {
+            cx.errors.push(format!("`{sc}tree` must be 40 lower-case hex digits (git rev-parse <commit>:<path>)"));
+        }
+        let install_name = match cx.text(t, &sc, "install_name", false, 64) {
+            Some(n) => n,
+            None => path.rsplit('/').next().filter(|s| *s != ".").unwrap_or(&id).to_string(),
+        };
+        if !super::safe_theme_name(&install_name) {
+            cx.errors.push(format!("`{sc}install_name`: `{install_name}` is not a usable theme folder name"));
+        }
+        let license = cx.text(t, &sc, "license", false, 200).filter(|s| !s.trim().is_empty());
+        let license_files = cx.list(t, &sc, "license_files");
+        for f in &license_files {
+            cx.rel(t, &sc, "license_files", f, false);
+        }
+        let link_sources = cx.list(t, &sc, "link_sources");
+        for f in &link_sources {
+            cx.rel(t, &sc, "link_sources", f, false);
+        }
+        let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
+        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, description });
+    }
+
+    let mut recommends = Vec::new();
+    for (i, t) in cx.tables(root, "recommend") {
+        let sc = format!("recommend[{i}].");
+        cx.known(t, &sc, &["theme", "icons", "cursors"]);
+        let theme = cx.text(t, &sc, "theme", true, 64).unwrap_or_default();
+        let icons = cx.text(t, &sc, "icons", false, 64);
+        let cursors = cx.text(t, &sc, "cursors", false, 64);
+        if icons.is_none() && cursors.is_none() {
+            cx.errors.push(format!("`{sc}` recommends nothing (icons or cursors)"));
+        }
+        recommends.push(Recommend { theme, icons, cursors });
+    }
+
+    // references and uniqueness
+    let mut errs = std::mem::take(&mut cx.errors);
+    let dup = |what: &str, ids: Vec<&str>, errs: &mut Vec<String>| {
+        let mut seen: Vec<&str> = Vec::new();
+        for id in ids {
+            if seen.contains(&id) {
+                errs.push(format!("{what} id `{id}` is used twice"));
+            }
+            seen.push(id);
+        }
+    };
+    dup("source", sources.iter().map(|s| s.id.as_str()).collect(), &mut errs);
+    dup("pack", packs.iter().map(|s| s.id.as_str()).collect(), &mut errs);
+    dup("recommend theme", recommends.iter().map(|s| s.theme.as_str()).collect(), &mut errs);
+    let mut names: Vec<&str> = Vec::new();
+    for p in &packs {
+        if names.contains(&p.install_name.as_str()) {
+            errs.push(format!("install_name `{}` is used by two packs", p.install_name));
+        }
+        names.push(&p.install_name);
+        match sources.iter().find(|s| s.id == p.source) {
+            None => errs.push(format!("pack `{}`: source `{}` is not a [[source]] of this file", p.id, p.source)),
+            Some(s) => {
+                if s.license_files.is_empty() && p.license_files.is_empty() {
+                    errs.push(format!("pack `{}`: no licence file (license_files of the source or the pack)", p.id));
+                }
+                if s.license.trim().is_empty() && p.license.is_none() {
+                    errs.push(format!("pack `{}`: no licence", p.id));
+                }
+            }
+        }
+    }
+    for r in &recommends {
+        for (k, v) in [(Provides::Icons, &r.icons), (Provides::Cursors, &r.cursors)] {
+            let Some(v) = v else { continue };
+            match packs.iter().find(|p| &p.id == v) {
+                None => errs.push(format!("recommend `{}`: no pack `{v}` in this file", r.theme)),
+                Some(p) if !p.provides(k) => errs.push(format!("recommend `{}`: pack `{v}` does not provide {}", r.theme, k.id())),
+                _ => {}
+            }
+        }
+    }
+    if errs.is_empty() {
+        Ok(Catalog { family, origin: origin.to_string(), sources, packs, recommends })
+    } else {
+        Err(errs.into_iter().map(|e| format!("{origin}: {e}")).collect())
+    }
+}
+
+// ---------------------------------------------------------------- the set of catalogues
+
+#[derive(Debug, Clone, Default)]
+pub struct Set {
+    pub catalogs: Vec<Catalog>,
+    /// Catalogues that did not load (shown by `assets list` and the pane, never fatal).
+    pub problems: Vec<String>,
+}
+
+impl Set {
+    /// Adds a catalogue unless a pack id or a theme recommendation is already taken (the first one wins).
+    pub fn push(&mut self, c: Catalog) {
+        for p in &c.packs {
+            if self.entries().any(|e| e.pack.id == p.id) {
+                self.problems.push(format!("{}: pack id `{}` is already defined by another catalogue, file ignored", c.origin, p.id));
+                return;
+            }
+        }
+        self.catalogs.push(c);
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = Entry<'_>> {
+        self.catalogs.iter().flat_map(|c| c.packs.iter().filter_map(move |p| c.sources.iter().find(|s| s.id == p.source).map(|s| Entry { catalog: c, pack: p, source: s })))
+    }
+
+    pub fn find(&self, id: &str) -> Option<Entry<'_>> {
+        self.entries().find(|e| e.pack.id == id).or_else(|| self.entries().find(|e| e.pack.install_name == id))
+    }
+
+    /// What the theme `theme_id` recommends, from the first catalogue that says something about it.
+    pub fn recommendation(&self, theme_id: &str) -> Option<&Recommend> {
+        self.catalogs.iter().flat_map(|c| c.recommends.iter()).find(|r| r.theme == theme_id)
+    }
+
+    /// The compiled-in catalogues and the ones found at run time (see [`runtime_files`]).
+    pub fn load() -> Set {
+        let mut s = Set::default();
+        for (family, text) in super::builtin::CATALOGS {
+            match parse(text, &format!("builtin:{family}")) {
+                Ok(c) => s.push(c),
+                Err(e) => s.problems.extend(e),
+            }
+        }
+        for f in runtime_files() {
+            match std::fs::read_to_string(&f) {
+                Ok(t) if t.len() <= 256 << 10 => match parse(&t, &f.display().to_string()) {
+                    Ok(c) => s.push(c),
+                    Err(e) => s.problems.extend(e),
+                },
+                Ok(_) => s.problems.push(format!("{}: larger than 256 KiB, ignored", f.display())),
+                Err(e) => s.problems.push(format!("{}: {e}", f.display())),
+            }
+        }
+        s
+    }
+}
+
+/// `$DECEBAL_ASSET_CATALOGS` (files or folders, `:`-separated), `~/.config/decebal/asset-packs/*.toml`,
+/// `$XDG_DATA_DIRS/decebal/asset-packs/*.toml`.
+pub fn runtime_files() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    let mut out: Vec<PathBuf> = Vec::new();
+    if let Ok(v) = std::env::var("DECEBAL_ASSET_CATALOGS") {
+        for p in v.split(':').filter(|s| !s.is_empty()) {
+            let p = PathBuf::from(p);
+            if p.is_dir() {
+                dirs.push(p);
+            } else {
+                out.push(p);
+            }
+        }
+    }
+    let cfg = std::env::var_os("XDG_CONFIG_HOME").filter(|s| !s.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
+    if let Some(c) = cfg {
+        dirs.push(c.join("decebal/asset-packs"));
+    }
+    let data = std::env::var("XDG_DATA_DIRS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    for d in data.split(':').filter(|s| !s.is_empty()) {
+        dirs.push(Path::new(d).join("decebal/asset-packs"));
+    }
+    for d in dirs {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let mut v: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "toml")).collect();
+        v.sort();
+        out.extend(v);
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub const GOOD: &str = r#"format = 1
+family = "deepin"
+
+[[source]]
+id = "deepin-icon-theme"
+repo = "https://github.com/linuxdeepin/deepin-icon-theme"
+revision = "master"
+commit = "5d11ba4e4013a4d1e1c601265d55c66b95184922"
+license = "GPL-3.0-or-later"
+license_files = ["COPYING"]
+archive_url = "https://github.com/linuxdeepin/deepin-icon-theme/archive/5d11ba4e4013a4d1e1c601265d55c66b95184922.tar.gz"
+archive_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+strip_components = 1
+
+[[pack]]
+id = "deepin-bloom"
+name = "Bloom"
+provides = ["icons", "cursors"]
+source = "deepin-icon-theme"
+path = "bloom"
+tree = "0000000000000000000000000000000000000000"
+
+[[recommend]]
+theme = "deepin"
+icons = "deepin-bloom"
+cursors = "deepin-bloom"
+"#;
+
+    #[test]
+    fn a_good_catalogue_parses_with_defaults() {
+        let c = parse(GOOD, "t").unwrap();
+        assert_eq!(c.family, "deepin");
+        let p = &c.packs[0];
+        assert_eq!((p.install_name.as_str(), p.provides.as_slice()), ("bloom", &[Provides::Icons, Provides::Cursors][..]));
+        assert_eq!(c.sources[0].strip, 1);
+        let mut s = Set::default();
+        s.push(c);
+        let e = s.find("deepin-bloom").unwrap();
+        assert_eq!((e.license(), e.license_files()), ("GPL-3.0-or-later", vec!["COPYING".to_string()]));
+        assert!(s.find("bloom").is_some(), "found by install name too");
+        assert_eq!(s.recommendation("deepin").unwrap().cursors.as_deref(), Some("deepin-bloom"));
+        assert!(s.recommendation("nord").is_none());
+    }
+
+    #[test]
+    fn errors_name_the_line_and_suggest_keys() {
+        let bad = GOOD.replace("provides = [", "provide = [");
+        let e = parse(&bad, "t").unwrap_err();
+        assert!(e.iter().any(|x| x.contains("line 18") && x.contains("did you mean `provides`")), "{e:?}");
+        for (from, to, want) in [
+            ("format = 1", "format = 2", "must be 1"),
+            ("https://github.com/linuxdeepin/deepin-icon-theme\"", "http://github.com/x\"", "https"),
+            ("commit = \"5d11", "commit = \"XYZ", "40 lower-case hex"),
+            ("path = \"bloom\"", "path = \"../bloom\"", "escapes"),
+            ("license_files = [\"COPYING\"]", "license_files = []", "no licence file"),
+            ("license = \"GPL-3.0-or-later\"", "license = \"\"", "must not be empty"),
+            ("icons = \"deepin-bloom\"", "icons = \"nope\"", "no pack `nope`"),
+            ("source = \"deepin-icon-theme\"", "source = \"other\"", "not a [[source]]"),
+            ("archive_sha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n", "", "go together"),
+            ("tree = \"0000000000000000000000000000000000000000\"", "tree = \"abc\"", "git rev-parse"),
+        ] {
+            assert!(GOOD.contains(from), "{from}");
+            let e = parse(&GOOD.replacen(from, to, 1), "t").unwrap_err();
+            assert!(e.iter().any(|x| x.contains(want)), "{from} -> {to}: {e:?}");
+        }
+        let e = parse(&GOOD.replace("provides = [\"icons\", \"cursors\"]", "provides = [\"cursors\"]"), "t").unwrap_err();
+        assert!(e.iter().any(|x| x.contains("does not provide icons")), "{e:?}");
+        assert!(parse("not toml = = =", "t").unwrap_err()[0].contains("line 1"));
+    }
+
+    #[test]
+    fn the_first_catalogue_owns_a_pack_id() {
+        let mut s = Set::default();
+        s.push(parse(GOOD, "a").unwrap());
+        s.push(parse(GOOD, "b").unwrap());
+        assert_eq!(s.catalogs.len(), 1);
+        assert!(s.problems[0].contains("already defined"));
+    }
+}

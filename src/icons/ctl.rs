@@ -37,6 +37,7 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
                 cfg.theme = id;
             }
             cfg.write(file)?;
+            crate::desktop_assets::policy::mark_user(file, crate::desktop_assets::Provides::Icons)?;
             Ok(format!("icon theme: {}", if cfg.is_auto() { "auto".to_string() } else { cfg.theme.clone() }))
         }
         Some("reset") => {

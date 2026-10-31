@@ -152,6 +152,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
             if save(m, &cfg) {
+                let _ = crate::desktop_assets::policy::mark_user(&m.paths.shell_json(), crate::desktop_assets::Provides::Cursors);
                 system::request(&m.paths.shell_json());
             }
         }

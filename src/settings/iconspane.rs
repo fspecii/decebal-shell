@@ -153,6 +153,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         Row::new("Fallback theme").detail("Tried after the theme, its parents and hicolor, for icons they lack").ctl(Ctl::new("ic:fallback", Kind::Popup(fb_opts, fb_sel))),
         Row::new("Reset to default").detail("Automatic theme, full size, no tint").ctl(Ctl::new("ic:reset", Kind::Button { label: "Reset".into(), danger: false })),
     ]));
+    out.extend(crate::desktop_assets::pane::items(m));
     out.push(Item::Note {
         text: "Icon themes are read from ~/.local/share/icons, ~/.icons and the system's icons folders (see docs/icons.md for Arch packages such as papirus-icon-theme). decthemectl icons list, set and status do the same from a terminal.".into(),
         warn: false,
@@ -172,6 +173,9 @@ fn write(m: &mut Model, cfg: &IconConfig, msg: String) {
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
+    if crate::desktop_assets::pane::apply(m, parts, &v) {
+        return;
+    }
     let path = cfg_path(m);
     let mut cfg = IconConfig::read(&path);
     match (parts, v) {
@@ -193,6 +197,8 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             }
             let msg = format!("Icon theme: {}", if cfg.is_auto() { "Auto" } else { &cfg.theme });
             write(m, &cfg, msg);
+            // an explicit choice: applying a theme keeps it (docs/desktop-asset-packs.md)
+            let _ = crate::desktop_assets::policy::mark_user(&path, crate::desktop_assets::Provides::Icons);
         }
         (["ic", "scale"], CtlVal::Num(n)) => {
             cfg.size_scale = (n / 100.0).clamp(f64::from(SCALE_MIN), f64::from(SCALE_MAX)) as f32;

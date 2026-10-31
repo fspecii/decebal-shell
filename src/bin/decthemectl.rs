@@ -53,6 +53,8 @@ decthemectl font PRESET|list|families|status|set ROLE FAMILY[,FALLBACK...]|scale
                                  fonts per role (ui title mono display) with fallback chains; PRESET is inter, segoe,
                                  cantarell, rubik, jetbrains, ibm-plex, fira, noto, monospace-ui or system (decthemectl font list)
 decthemectl icons list|set NAME|status|reset|scale N|tint on|off|fallback NAME   icon theme settings (decthemectl icons help)
+decthemectl assets list|info|install|import|verify|remove|use|status|preview   icon and cursor packs from pinned upstream
+                                 sources, verified, with their licences (decthemectl assets help, docs/desktop-asset-packs.md)
 decthemectl wallpaper follow on|off|retry|status [--json]   automatically match curated photos to themes (off by default)
 decthemectl wallpaper live set VIDEO | off | status | search WORDS | download ID
                                  Muted video wallpapers, paused behind fullscreen apps (see docs/live-wallpapers.md)
@@ -670,6 +672,10 @@ fn main() {
             decebal::settings::wallhaven::cli::run(&args[1..])
         } {
             Ok(line) => println!("{line}"),
+            Err(e) => die(&e),
+        },
+        Some("assets") => match decebal::desktop_assets::cli::run(&args[1..], &mut decebal::desktop_assets::cli::Ctx::from_env()) {
+            Ok(out) => println!("{out}"),
             Err(e) => die(&e),
         },
         Some("icons") => match decebal::icons::ctl::run(&decebal::icons::config::shell_json(), &decebal::icons::resolve::Roots::from_env(), &args[1..]) {

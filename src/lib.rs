@@ -17,6 +17,7 @@ pub mod config;
 pub mod controlcenter;
 pub mod dash;
 pub mod dbus;
+pub mod desktop_assets;
 pub mod dlog;
 pub mod dock;
 pub mod dock_app;

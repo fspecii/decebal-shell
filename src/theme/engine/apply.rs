@@ -325,9 +325,16 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     if let Some(Value::Object(cc)) = extra.get("control_center") {
         obj_mut(&mut shell, "control_center").extend(cc.clone());
     }
+    // `icons.theme` (and the cursor theme) are suggestions: an explicit user choice survives (docs/desktop-asset-packs.md)
+    let mut suggested_icons = None;
     if let Some(Value::Object(ic)) = extra.get("icons") {
-        obj_mut(&mut shell, "icons").extend(ic.clone());
+        let mut ic = ic.clone();
+        suggested_icons = ic.remove("theme").and_then(|v| v.as_str().map(String::from));
+        if !ic.is_empty() {
+            obj_mut(&mut shell, "icons").extend(ic);
+        }
     }
+    notes.extend(crate::desktop_assets::policy::on_theme_apply(&mut shell, &id, suggested_icons.as_deref()));
     if reset_colors || !same_theme || shell.get("widgets").is_none() {
         let previous_widgets = shell.get("widgets").cloned().unwrap_or_else(|| json!({}));
         let custom = custom_widgets(&previous_widgets);
