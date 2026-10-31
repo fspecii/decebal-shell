@@ -17,6 +17,7 @@ pub mod builtin;
 pub mod catalog;
 pub mod cli;
 pub mod cursor;
+pub mod dci;
 pub mod fetch;
 pub mod gitoid;
 pub mod install;

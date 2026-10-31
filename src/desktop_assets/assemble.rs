@@ -39,6 +39,8 @@ pub struct Spec {
     /// Declared alias folders and folder links (see [`super::aliases`]); applied to the staged source before building.
     pub text_links: Vec<super::aliases::TextLinks>,
     pub dir_aliases: Vec<super::aliases::DirAlias>,
+    /// Convert the pack folder's DSG icon containers (see [`super::dci`]).
+    pub dci: Option<super::dci::Convert>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -58,6 +60,8 @@ pub struct Built {
     pub cursors: usize,
     /// Cursors built from PNGs.
     pub cursors_built: usize,
+    /// What a DCI conversion did (converted, linked, refused icons).
+    pub dci: Option<super::dci::Outcome>,
     /// Folder links into `link_sources` expanded into real folders, the files and bytes they brought, and the folder
     /// links that became links to an already expanded copy.
     pub expanded_dirs: usize,
@@ -261,9 +265,20 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
         b.cursor_outside_inputs = outside.get();
         b.cursors_built = spec.xcursors.len();
     }
+    // DSG icon containers converted natively into <size>/<icon>.png; the containers (and the links between them) are inputs,
+    // not installed and not counted as left out
+    let mut dci_used: std::collections::BTreeSet<String> = Default::default();
+    if let Some(plan) = &spec.dci {
+        let (o, used) = super::dci::build(st, &spec.path, &spec.display_name, plan, out, lim.max_total)?;
+        dci_used.extend(used);
+        b.dci = Some(o);
+    }
     let mut links: Vec<(String, String)> = Vec::new();
     for (p, node) in &st.nodes {
         let Some(rel) = under(p, &spec.path) else { continue };
+        if dci_used.contains(rel) {
+            continue;
+        }
         if consumed.contains(rel) {
             skip(&mut b, rel, Some("built into cursors/".into()));
             continue;
@@ -738,6 +753,7 @@ mod tests {
             xcursors: vec![],
             text_links: vec![],
             dir_aliases: vec![],
+            dci: None,
         }
     }
 

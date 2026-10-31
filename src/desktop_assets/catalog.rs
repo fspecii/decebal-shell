@@ -49,6 +49,8 @@ pub struct Pack {
     /// an upstream build would create; see [`super::aliases`].
     pub text_links: Vec<super::aliases::TextLinks>,
     pub dir_aliases: Vec<super::aliases::DirAlias>,
+    /// Convert the pack folder's DSG icon containers (`[pack.dci_convert]`, see [`super::dci`]).
+    pub dci: Option<super::dci::Convert>,
     pub description: String,
 }
 
@@ -347,6 +349,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
                 "xcursor",
                 "text_links",
                 "dir_alias",
+                "dci_convert",
                 "description",
             ],
         );
@@ -500,6 +503,41 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         if dir_aliases.len() > super::aliases::MAX_DIR_ALIASES {
             cx.errors.push(format!("`{sc}dir_alias`: more than {} folder aliases", super::aliases::MAX_DIR_ALIASES));
         }
+        let dci = match t.get("dci_convert") {
+            None => None,
+            Some(item) => match item.as_table() {
+                None => {
+                    cx.err(item, &format!("{sc}dci_convert"), "must be a table ([pack.dci_convert])");
+                    None
+                }
+                Some(x) => {
+                    let xs = format!("{sc}dci_convert.");
+                    cx.known(x, &xs, &["size", "inherits"]);
+                    let size = match x.get("size").map(|i| (i, i.as_integer())) {
+                        Some((_, Some(n))) if super::dci::SIZES.iter().any(|s| i64::from(*s) == n) => n as u32,
+                        Some((i, _)) => {
+                            cx.err(i, &format!("{xs}size"), format!("must be one of {:?}", super::dci::SIZES));
+                            128
+                        }
+                        None => {
+                            cx.errors.push(format!("`{xs}size` is required"));
+                            128
+                        }
+                    };
+                    let inherits = cx.list(x, &xs, "inherits");
+                    if inherits.is_empty() || inherits.len() > 8 || inherits.iter().any(|n| !super::safe_theme_name(n)) {
+                        cx.errors.push(format!("`{xs}inherits` lists 1 to 8 theme names"));
+                    }
+                    if provides != [Provides::Icons] {
+                        cx.errors.push(format!("`{xs}` converts icons: provides must be [\"icons\"]"));
+                    }
+                    Some(super::dci::Convert { size, inherits, attribution: String::new() })
+                }
+            },
+        };
+        if dci.is_some() && (!xcursor.is_empty() || !text_links.is_empty() || !dir_aliases.is_empty() || !index.is_empty()) {
+            cx.errors.push(format!("`{sc}dci_convert` does not combine with xcursor, text_links, dir_alias or index"));
+        }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
         packs.push(Pack {
             id,
@@ -519,6 +557,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
             xcursor,
             text_links,
             dir_aliases,
+            dci,
             description,
         });
     }
@@ -824,6 +863,23 @@ cursors = "deepin-bloom"
         assert!(bad("target = \"apps\"", "target = \"/apps\"").iter().any(|e| e.contains("absolute")));
         assert!(bad("replace = true", "replace = true\nfollow = true").iter().any(|e| e.contains("unknown key")));
         assert!(bad("tree = \"09d28c3591d256643c992999dc742b60336e6fc6\"\n", "").iter().any(|e| e.contains("required")), "the pin is mandatory");
+    }
+
+    #[test]
+    fn dci_conversion_is_one_typed_table() {
+        let x = "[pack.dci_convert]\nsize = 128\ninherits = [\"bloom\"]\n\n[[recommend]]";
+        let icons_only = GOOD.replace("provides = [\"icons\", \"cursors\"]", "provides = [\"icons\"]").replace("cursors = \"deepin-bloom\"\n", "");
+        let c = parse(&icons_only.replacen("[[recommend]]", x, 1), "t").unwrap();
+        assert_eq!(c.packs[0].dci.as_ref().map(|d| (d.size, d.inherits.clone())), Some((128, vec!["bloom".to_string()])));
+        assert!(parse(GOOD, "t").unwrap().packs[0].dci.is_none(), "existing manifests are unchanged");
+        let bad = |from: &str, to: &str| parse(&icons_only.replacen("[[recommend]]", &x.replace(from, to), 1), "t").unwrap_err();
+        assert!(bad("size = 128", "size = 100").iter().any(|e| e.contains("must be one of")));
+        assert!(bad("size = 128\n", "").iter().any(|e| e.contains("required")));
+        assert!(bad("[\"bloom\"]", "[\"../etc\"]").iter().any(|e| e.contains("theme names")));
+        assert!(bad("size = 128", "size = 128\nformat = \"png\"").iter().any(|e| e.contains("unknown key")));
+        assert!(bad("[pack.dci_convert]", "[[pack.dci_convert]]").iter().any(|e| e.contains("must be a table")));
+        let e = parse(&GOOD.replacen("[[recommend]]", x, 1), "t").unwrap_err();
+        assert!(e.iter().any(|e| e.contains("provides must be")), "{e:?}");
     }
 
     #[test]

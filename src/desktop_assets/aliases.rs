@@ -301,6 +301,7 @@ mod tests {
             xcursors: vec![],
             text_links: vec![TextLinks { from: "links".into(), tree: String::new(), onto: ".".into(), replace }],
             dir_aliases: dirs,
+            dci: None,
         }
     }
 

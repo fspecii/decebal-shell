@@ -89,6 +89,9 @@ pub struct Provenance {
     /// Declared aliases applied: text links, pack files they replaced, folder aliases.
     #[serde(default)]
     pub aliases: (usize, usize, usize),
+    /// A DCI conversion: icons converted, links to converted icons, icons refused (CONVERSION.json has each reason).
+    #[serde(default)]
+    pub dci: Option<(usize, usize, usize)>,
     pub files: usize,
     pub symlinks: usize,
     pub skipped: usize,
@@ -177,6 +180,12 @@ impl Request {
                 xcursors: e.pack.xcursor.clone(),
                 text_links: e.pack.text_links.clone(),
                 dir_aliases: e.pack.dir_aliases.clone(),
+                // the notice names the source as the catalogue does; nothing is added to it
+                dci: e.pack.dci.clone().map(|mut d| {
+                    d.attribution =
+                        format!("{} icon theme from {} at {}, folder {}; licence {} (the licence texts are in LICENSES/).", e.pack.name, e.source.repo, e.source.commit, e.pack.path, e.license());
+                    d
+                }),
             },
             strip: if archive { e.source.strip } else { 0 },
             link_sources: e.pack.link_sources.clone(),
@@ -514,10 +523,13 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
     let files = req.spec.license_files.iter().chain(req.spec.index_files.iter().map(|(p, _)| p)).cloned().collect();
     let filter = Filter { strip: req.strip, path: req.spec.path.clone(), files, link_sources: req.link_sources.clone(), text_links: req.spec.text_links.iter().map(|t| t.from.clone()).collect() };
     let mut rec = req.source.clone();
+    // a pack that converts DSG icon containers needs its *.dci files staged (only those directly in its folder)
+    let dci = req.spec.dci.is_some();
+    let keep = |r: &str| assemble::keep(r) || (dci && !r.contains('/') && r.ends_with(".dci"));
     let (mut staged, archive_sha) = match &req.input {
         Input::Dir(d) => {
             rec.fetched_from = "directory".into();
-            (source::from_dir(d, src_dir, filter, lim, &assemble::keep)?, None)
+            (source::from_dir(d, src_dir, filter, lim, &keep)?, None)
         }
         Input::Archive(_) | Input::Download(_) => {
             // the archive that is hashed is the archive that is read: an external file is copied into this private job
@@ -562,10 +574,18 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
             };
             let fmt = tar::sniff(&head[..n])?;
             let f = std::fs::File::open(&file).map_err(|e| e.to_string())?;
-            (source::from_tar(std::io::BufReader::new(f), fmt, src_dir, filter, lim, &assemble::keep)?, Some(sha))
+            (source::from_tar(std::io::BufReader::new(f), fmt, src_dir, filter, lim, &keep)?, Some(sha))
         }
     };
     let verified = verify_pins(req, &staged, archive_sha.as_deref())?;
+    // licence texts are checked against their pinned blob ids now too, before anything is converted or built from the source
+    for (f, want) in &req.spec.license_oids {
+        match staged.nodes.get(f) {
+            Some(source::Node::File { oid, .. }) if super::gitoid::hex(oid) == *want => {}
+            Some(source::Node::File { oid, .. }) => return Err(format!("licence file `{f}`: pinned blob {want}, read {}", super::gitoid::hex(oid))),
+            _ => return Err(format!("licence file `{f}` is missing from the source")),
+        }
+    }
     // declared aliases become link nodes only now, after their folders' tree ids were verified
     let aliases = super::aliases::apply(&mut staged, &req.spec.path, &req.spec.text_links, &req.spec.dir_aliases)?;
     // and no folder links of the pack (declared or ordinary) may form a cycle with its real folders
@@ -619,6 +639,7 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
         icon_dirs: (built.icon_dirs_declared > 0).then_some((built.icon_dirs, built.icon_dirs_declared)),
         degraded,
         aliases: (aliases.text_links, aliases.replaced, aliases.dir_aliases),
+        dci: built.dci.as_ref().map(|o| (o.icons.len(), o.links.len(), o.refused.len())),
         files,
         symlinks: links,
         skipped: built.skipped,
@@ -846,6 +867,7 @@ pub(crate) mod tests {
                 xcursors: vec![],
                 text_links: vec![],
                 dir_aliases: vec![],
+                dci: None,
             },
             strip: 1,
             link_sources: vec![],
@@ -1202,6 +1224,7 @@ pub(crate) mod tests {
             }],
             text_links: vec![],
             dir_aliases: vec![],
+            dci: None,
         };
         let rep = install(&r, &Limits::default()).unwrap();
         let t = s.path().join("icons/sense");
@@ -1363,6 +1386,7 @@ pub(crate) mod tests {
             xcursors: vec![super::super::xcursor::Cursor { name: "left_ptr".into(), images: super::super::xcursor::parse_config("24 1 1 24x24/left_ptr.png").unwrap(), aliases: vec![] }],
             text_links: vec![],
             dir_aliases: vec![],
+            dci: None,
         };
         r
     }
@@ -1475,6 +1499,55 @@ pub(crate) mod tests {
         r3.pins.link_trees.clear();
         assert!(install(&r3, &Limits::default()).unwrap_err().contains("text_links folder `links` is not pinned"));
         assert!(!s.path().join("i2/t").exists() && !s.path().join("i3/t").exists());
+    }
+
+    #[test]
+    fn a_dci_pack_is_verified_before_it_is_converted() {
+        use crate::desktop_assets::dci::tests::icon;
+        let v = vec![
+            E::dir("top/"),
+            E::file("top/LICENSES/CC-BY-4.0.txt", b"Attribution 4.0 International\n"),
+            E::file("top/icons/good.dci", &icon(96)),
+            E::link("top/icons/alias.dci", "good.dci"),
+            E::file("top/icons/palette.dci", &crate::desktop_assets::dci::tests::icon_with("1.0.webp", &crate::desktop_assets::dci::tests::webp(8, 8))),
+        ];
+        let s = Scratch::new("dci-install");
+        let a = s.write("d.tgz", &targz(&v, Some(COMMIT)));
+        let dummy = icon_source("bloom", vec![]);
+        let mut r = request(&s.path().join("i1"), &a, &dummy);
+        r.pins = Pins { tree: Some(tree_of(&v, "top/icons")), archive_sha256: None, commit: Some(COMMIT.into()), link_trees: vec![] };
+        r.spec.path = "icons".into();
+        r.spec.install_name = "conv".into();
+        r.spec.provides = vec![Provides::Icons];
+        r.spec.license_files = vec!["LICENSES/CC-BY-4.0.txt".into()];
+        r.spec.license_oids = [("LICENSES/CC-BY-4.0.txt".to_string(), crate::desktop_assets::gitoid::hex(&crate::desktop_assets::gitoid::blob_oid(b"Attribution 4.0 International\n")))].into();
+        r.spec.dci = Some(crate::desktop_assets::dci::Convert { size: 64, inherits: vec!["bloom".into()], attribution: "fixture, CC-BY-4.0".into() });
+        let rep = install(&r, &Limits::default()).unwrap();
+        let p = &rep.provenance;
+        assert_eq!((p.dci, p.verified.complete, p.verified.tree), (Some((1, 1, 1)), true, true));
+        let t = s.path().join("i1/conv");
+        assert!(t.join("64/good.png").is_file() && t.join("LICENSES/CC-BY-4.0.txt").is_file() && t.join("NOTICE.txt").is_file());
+        assert!(!t.join("good.dci").exists() && !t.join("alias.dci").exists(), "containers are inputs, not installed");
+        assert_eq!(rep.built.skipped, 0, "converted inputs are not reported as left out");
+        assert_eq!(verify(&t).unwrap().1, Integrity::Ok);
+        // a changed container: the tree pin refuses it before anything is converted
+        let mut v2 = v.clone();
+        v2[2] = E::file("top/icons/good.dci", &icon(97));
+        let b = s.write("d2.tgz", &targz(&v2, Some(COMMIT)));
+        let mut r2 = r.clone();
+        r2.input = Input::Archive(b);
+        r2.root = s.path().join("i2");
+        assert!(install(&r2, &Limits::default()).unwrap_err().contains("tree mismatch"));
+        // a changed licence text with an unchanged pack: refused before conversion, nothing published
+        let mut v3 = v.clone();
+        v3[1] = E::file("top/LICENSES/CC-BY-4.0.txt", b"Attribution 4.0 International (edited)\n");
+        let c = s.write("d3.tgz", &targz(&v3, Some(COMMIT)));
+        let mut r3 = r.clone();
+        r3.input = Input::Archive(c);
+        r3.root = s.path().join("i3");
+        assert!(install(&r3, &Limits::default()).unwrap_err().contains("licence file `LICENSES/CC-BY-4.0.txt`: pinned blob"));
+        assert!(!s.path().join("i2/conv").exists() && !s.path().join("i3/conv").exists());
+        assert!(staging_is_clean(&s.path().join("i3")));
     }
 
     #[test]

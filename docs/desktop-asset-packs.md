@@ -180,9 +180,15 @@ What the installer does, natively (no subprocess, no new dependency: `image` alr
   its reason, and every link. The install report and the provenance record the converted / refused counts: an install
   with refused icons is reported as such, not as complete.
 
-Real pinned input (deepin-desktop-theme a0c79e3, tree fb56b39d: 668 containers and 771 links): the maintainer recipe
-`assets/desktop-ports/deepin/tools/build_nirvana.py` converts 1 435 and refuses 4; the native conversion must reproduce
-the same 1 435 source pins and the same 4 refusals (three palette layers `1.0.webp`, one truncated container).
+Real pinned input (deepin-desktop-theme a0c79e3, tree fb56b39d: 668 containers and 771 links), through
+`decthemectl assets install deepin-nirvana --source-dir <clean sparse clone>` into a private root: 1 435 of 1 439 icons
+(664 converted, 771 links to them), the same 4 refusals as the maintainer recipe
+`assets/desktop-ports/deepin/tools/build_nirvana.py` with identical reasons (three palette layers `1.0.webp`, and
+`deepin-xdgicon-convert`: "entry '256' declares 31888 bytes but only 21522 remain"), 0 differences from its
+`MANIFEST.json` in source git blob, source sha256, layer and source pixels, tree and licence blobs verified before
+conversion, `verify` ok, no link leaving the theme, PNGs at most 128 px. Two installs into different roots gave the same
+content hash. A debug build takes about four minutes. The PNG bytes differ from the recipe's (a different encoder); the
+source pins are the stable proof.
 
 ### Example catalogues
 

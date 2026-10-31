@@ -346,6 +346,23 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
             r.built.expanded_links
         ));
     }
+    if let Some(o) = &r.built.dci {
+        let total = o.icons.len() + o.links.len() + o.refused.len();
+        out.push_str(&format!(
+            "\n  DCI conversion: {} of {} icons ({} converted, {} links to them), {} REFUSED (CONVERSION.json lists every reason)",
+            o.icons.len() + o.links.len(),
+            total,
+            o.icons.len(),
+            o.links.len(),
+            o.refused.len()
+        ));
+        for (n, why) in o.refused.iter().take(8) {
+            out.push_str(&format!("\n    refused {n}: {why}"));
+        }
+        if o.refused.len() > 8 {
+            out.push_str(&format!("\n    ... {} more refused", o.refused.len() - 8));
+        }
+    }
     if p.aliases != (0, 0, 0) {
         out.push_str(&format!("\n  declared aliases: {} text links ({} replacing pack files), {} folder aliases", p.aliases.0, p.aliases.1, p.aliases.2));
     }
@@ -438,6 +455,7 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
             xcursors: vec![],
             text_links: vec![],
             dir_aliases: vec![],
+            dci: None,
         },
         strip: if is_dir { 0 } else { strip },
         link_sources: a.all("--link-source"),
