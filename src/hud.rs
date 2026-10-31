@@ -1,6 +1,6 @@
 //! `dechud`: the macOS-style on-screen display shown when volume, mute, brightness or the microphone change.
 //!
-//! A small rounded card (icon, label, 16-segment bar) in an override-redirect X11 popup that takes no input at
+//! A small rounded card (icon, label, 16-segment bar) in a popup (an override-redirect window on X11, a layer-shell surface on Wayland) that takes no input at
 //! all (see [`WindowApp::popup_passive`]) and goes away after [`TIMEOUT`]. The binary reads the current value itself
 //! (`wpctl` / `pactl`, `brightnessctl` / sysfs); a second launch while the card is up leaves its reading in a small
 //! mailbox file in `$XDG_RUNTIME_DIR` and signals the running one, which redraws and extends its timer.

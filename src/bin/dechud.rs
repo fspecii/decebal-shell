@@ -1,4 +1,4 @@
-//! On-screen display for volume, brightness and microphone changes (X11).
+//! On-screen display for volume, brightness and microphone changes (Wayland and X11).
 
 use decebal::hud::{self, Hud, Kind};
 
@@ -50,7 +50,7 @@ fn main() {
         return;
     };
     hud::clear_post();
-    if let Err(e) = decebal::backend::x11_window::run(Hud::new(reading)) {
+    if let Err(e) = decebal::window_app::run_window(Hud::new(reading)) {
         decebal::log_error!("fatal: {e}");
         eprintln!("dechud: {e}");
         std::process::exit(1);

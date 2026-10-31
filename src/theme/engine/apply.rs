@@ -613,7 +613,6 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
     crate::theme::system::request(&paths.shell_json()); // "Apply to all apps", when the user switched it on
                                                         // the theme's matching icon / cursor packs that are not installed: downloaded, verified and applied in the background
     applied.notes.extend(crate::desktop_assets::follow::request(&paths.shell_json()));
-    #[cfg(feature = "x11")]
     {
         let cfg = crate::widgets::config::WidgetsConfig::load(&paths.shell_json());
         if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == crate::widgets::config::Place::Desktop) {

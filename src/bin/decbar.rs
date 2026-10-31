@@ -141,7 +141,6 @@ fn main() {
     // bottom-role invocation that immediately has nothing to display.
     decebal::theme::frame::publish_startup(&decebal::theme::th());
 
-    #[cfg(feature = "x11")]
     if gated && role == Process::Main {
         let cfg = decebal::widgets::config::WidgetsConfig::load(&decebal::theme::live::Source::discover().shell_json);
         if cfg.enabled && cfg.items.iter().any(|i| i.enabled && i.place == decebal::widgets::config::Place::Desktop) {

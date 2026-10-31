@@ -8,7 +8,7 @@ use std::path::PathBuf;
 const HELP: &str = "decwidgets - declarative desktop widgets
 
 Usage:
-  decwidgets autostart             start the shared watcher on X11; quietly skip Wayland/headless sessions
+  decwidgets autostart             start the shared host for this session (Wayland or X11); quietly skip headless sessions
   decwidgets [daemon]              run the widgets listed in decebal.json (\"widgets\" -> \"items\") on the desktop
   decwidgets status [--json]        host readiness, saved desktop widgets and definition errors
   decwidgets list                  shipped samples, your widgets, and what is placed
@@ -44,11 +44,7 @@ fn main() {
     match args.first().map(String::as_str) {
         None | Some("daemon") => daemon(&src),
         Some("autostart") => {
-            let session = std::env::var("XDG_SESSION_TYPE").ok();
-            let backend = std::env::var("DECEBAL_BACKEND").ok();
-            let display = std::env::var("DISPLAY").is_ok_and(|s| !s.is_empty());
-            let wayland = std::env::var("WAYLAND_DISPLAY").is_ok_and(|s| !s.is_empty());
-            if autostart_allowed(session.as_deref(), backend.as_deref(), display, wayland) {
+            if decebal::widgets::host::mode().is_some() {
                 daemon(&src);
             }
         }
@@ -100,10 +96,6 @@ fn main() {
     }
 }
 
-fn autostart_allowed(session: Option<&str>, backend: Option<&str>, display: bool, wayland: bool) -> bool {
-    display && session != Some("wayland") && backend != Some("wayland") && (!wayland || session == Some("x11"))
-}
-
 fn daemon(src: &Source) {
     decebal::mem::limit_arenas();
     let Some(_guard) = decebal::single::hold("decwidgets") else { return };
@@ -123,14 +115,11 @@ fn status(src: &Source, json: bool) {
             serde_json::json!({"use":i.use_,"enabled":i.enabled,"source":i.source,"error":problem})
         })
         .collect();
-    #[cfg(feature = "x11")]
     let running = decebal::widgets::host::is_running();
-    #[cfg(not(feature = "x11"))]
-    let running = false;
     if json {
         println!("{}", serde_json::json!({"running":running,"enabled":cfg.enabled,"config":src.shell_json,"items":instances}));
     } else {
-        println!("Desktop host: {}", if running { "ready" } else { "not running on this display" });
+        println!("Desktop host: {}", if running { "ready" } else { "not running in this session" });
         println!("Visibility: {}", if cfg.enabled { "shown" } else { "hidden" });
         println!("Configuration: {}", src.shell_json.display());
         if instances.is_empty() {
@@ -317,17 +306,6 @@ fn upsert(items: &mut Vec<serde_json::Value>, inst: &Instance, overrides: serde_
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn autostart_skips_wayland_xwayland_and_headless_sessions() {
-        assert!(autostart_allowed(Some("x11"), None, true, false));
-        assert!(autostart_allowed(None, Some("x11"), true, false));
-        assert!(!autostart_allowed(Some("wayland"), None, true, true));
-        assert!(!autostart_allowed(Some("wayland"), Some("x11"), true, true));
-        assert!(!autostart_allowed(None, None, true, true));
-        assert!(!autostart_allowed(None, None, false, false));
-        assert!(!autostart_allowed(Some("x11"), Some("wayland"), true, false));
-    }
 
     #[test]
     fn add_preserves_matching_raw_options_and_only_overrides_explicit_position() {

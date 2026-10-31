@@ -185,6 +185,12 @@ pub trait WindowApp {
     fn popup_fullscreen(&self) -> bool {
         false
     }
+    /// An overlay that is only a card (anchored under a bar, a passive indicator, or sitting above the bottom edge)
+    /// rather than a full-screen overlay. Wayland draws these as a card on a transparent layer surface; the
+    /// full-screen overlays (Spotlight, the switcher, ...) never match.
+    fn wants_compact_popup(&self) -> bool {
+        self.overlay() && !self.popup_fullscreen() && (self.popup_passive() || self.popup_anchor().is_some() || self.popup_bottom_margin().is_some())
+    }
     /// Popup mode: the card has translucent pixels. The backend uses a 32-bit visual when a compositor runs
     /// and tells the app through [`WindowApp::set_popup_alpha`]; without one the app must paint opaque.
     fn popup_translucent(&self) -> bool {
@@ -257,8 +263,11 @@ pub trait WindowApp {
 /// otherwise X11. Set `DECEBAL_BACKEND=x11` or `wayland` to force one.
 pub fn run_window<A: WindowApp + 'static>(app: A) -> Result<(), String> {
     let forced = std::env::var("DECEBAL_BACKEND").ok();
+    // A card or HUD needs layer-shell; as a plain xdg window it would be a stray, decorated window.
     #[cfg(feature = "wayland")]
-    if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && crate::backend::wayland_window::supported() {
+    let wayland_ok = crate::backend::wayland_window::supported() && (!app.wants_compact_popup() || crate::backend::wayland_window::overlay_supported());
+    #[cfg(feature = "wayland")]
+    if forced.as_deref() != Some("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some() && wayland_ok {
         return crate::backend::wayland_window::run(app).map_err(|e| e.to_string());
     }
     #[cfg(feature = "x11")]
