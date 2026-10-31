@@ -206,3 +206,23 @@ backup/undo transaction. Ordinary user CSS elsewhere retains managed-block
 semantics. Explicit system icon overrides win; otherwise application GTK icons
 follow the theme's `icons.theme` setting. Already-open GTK apps need reopening
 to load a full custom palette; no automatic process termination is performed.
+
+
+## Root native acceptance checkpoint — 2026-10-31
+
+The integrated production source at `b674ba3` built as a private dev-profile CLI
+(debug info disabled), SHA-256 `aa6f830eeff6357d0a001e1267251f8194d532401b139a248c2916b6751d4906`.
+The real GTK fixture passed 316/316 checks for Nord and Windows 11, dark/light,
+GTK3, GTK4 and libadwaita at 100%. It checked role colours, text contrast, hover,
+disabled controls, keyboard focus, real clicks and synthetic EWMH backdrop state.
+The root reviewed the Windows 11 dark GTK4 capture visually. No leftover processes
+were reported. The controller verified stable source, no pressure abort and a
+restored shared build pause.
+
+Evidence: `/var/tmp/decebal-gtk-native-acceptance-control/result.json` and
+`/var/tmp/decebal-gtk-native-acceptance-pixels/results.json`, with per-case PNGs.
+The X display was an owned Xvfb; the backdrop hint came from the synthetic fixture,
+not rdwm. This is not optimized-artifact, actual-rdwm, Qt, Files, high-DPI,
+all-theme or already-running-application acceptance. Those remain separate gates.
+The corrected harness self-test also passed, including partial helper replies and
+PIDFD-targeted cleanup. No live desktop configuration or installed binary changed.
