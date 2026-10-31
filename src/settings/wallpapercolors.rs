@@ -143,14 +143,23 @@ pub fn apply(m: &mut Model, sel: &Selection, id: &str, v: CtlVal) -> Result<Opti
             })?;
             let d = derived.dynamic.clone().ok_or("No wallpaper colours available")?;
             // The palette file is written on the persistence worker; selecting it follows in order once it exists.
-            let (name, base) = (m.wallpaper_palette_name.clone(), sel.clone());
-            m.run_task("palette-save", Vec::new(), move || crate::theme::palette::save_wallpaper(&name, &d, &crate::theme::palette::user_dir()).map(serde_json::Value::String), move |m, r| match r {
-                Ok(id) => {
-                    let mut next = crate::theme::palette::select(&base, id.as_str());
-                    next.accent = None;
-                    super::themepane::commit(m, next);
+            let name = m.wallpaper_palette_name.clone();
+            let asked = m.theme_selection();
+            m.run_task("palette-save", Vec::new(), move || crate::theme::palette::save_wallpaper(&name, &d, &crate::theme::palette::user_dir()).map(serde_json::Value::String), move |m, r| {
+                let now = m.theme_selection();
+                match r {
+                    // another theme or palette picked while the file was being saved is newer intent: keep it
+                    Ok(id) if now.name != asked.name || now.palette != asked.palette => {
+                        m.say(format!("Palette saved as {}; not selected, because another theme or palette was chosen meanwhile", id.as_str().unwrap_or_default()), false)
+                    }
+                    // otherwise the palette goes on top of the newest selection (a mode change made meanwhile stays)
+                    Ok(id) => {
+                        let mut next = crate::theme::palette::select(&now, id.as_str());
+                        next.accent = None;
+                        super::themepane::commit(m, next);
+                    }
+                    Err(e) => m.say(format!("Not applied: {e}"), true),
                 }
-                Err(e) => m.say(format!("Not applied: {e}"), true),
             });
             Ok(None)
         }

@@ -106,8 +106,14 @@ fn save_then(m: &mut Model, cfg: &Config, then: impl FnOnce(&mut Model) + 'stati
     m.edit_json_then("shell", "system", Some(serde_json::Value::Object(obj)), base, None, Some(Box::new(then)));
 }
 
+/// Asks for an apply on the persistence worker, after the save (`request` reads the file and writes the pending
+/// marker; with DECEBAL_SYSTEM_SYNC=1 it applies inline): never on the UI thread.
 fn request(m: &mut Model) {
-    system::request(&m.paths.shell_json());
+    let shell = m.paths.shell_json();
+    m.run_task_quiet("system-apply-request", move || {
+        system::request(&shell);
+        Ok(serde_json::Value::Null)
+    });
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
@@ -119,7 +125,10 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 if on {
                     request(m);
                 } else {
-                    system::spawn_ctl(&["system", "off"]);
+                    m.run_task_quiet("system-off", || {
+                        system::spawn_ctl(&["system", "off"]);
+                        Ok(serde_json::Value::Null)
+                    });
                 }
                 m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
             };
@@ -164,7 +173,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         (["sy", "now"], CtlVal::Click) => {
             if cfg.enabled {
-                system::request(&m.paths.shell_json());
+                request(m);
                 m.say("Applying the theme to all apps", false);
             } else {
                 m.say("Turn on Apply to all apps first", true);

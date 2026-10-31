@@ -121,15 +121,20 @@ pub struct Done {
     pub clear_undo: bool,
     /// The session file now holds this (display layout kept).
     pub session: Option<Session>,
-    /// An action failed before the session file was written: reload it from disk.
+    /// An action failed before the session file was written: reload it from disk (unless a newer session change
+    /// was made since; see `session_gen`).
     pub session_reload: bool,
-    /// Saving notifications.toml failed: show the file's values again.
-    pub notif_reload: bool,
+    /// The session change this result belongs to (`Hub::session_gen` when it was made).
+    pub session_gen: u64,
+    /// Saving notifications.toml of change `n` failed: show the file's values again, unless a newer change is pending.
+    pub notif_failed: Option<u64>,
 }
 
 /// A change to run: commands (stop at the first failure), an optional session-file update, how to undo.
 #[derive(Debug, Clone, Default)]
 pub struct Action {
+    /// The session change it carries (see `Done::session_gen`).
+    pub session_gen: u64,
     pub dom: Option<Dom>,
     pub label: String,
     pub ok_msg: Option<String>,
@@ -208,7 +213,7 @@ pub fn exec_action_with(r: &dyn Runner, dir: &std::path::Path, latest: &Mutex<Se
 
 /// Runs an action on a runner thread; the session file goes through `persist`.
 pub fn exec_action_in(r: &dyn Runner, persist: &persist::Handle, dir: &std::path::Path, latest: &Mutex<Session>, a: &Action) -> Done {
-    let mut d = Done { refresh: a.dom.filter(|d| a.refresh && d.has_data()), ..Done::default() };
+    let mut d = Done { refresh: a.dom.filter(|d| a.refresh && d.has_data()), session_gen: a.session_gen, ..Done::default() };
     for c in &a.cmds {
         let out = r.run(c);
         if !out.ok {
@@ -328,6 +333,9 @@ impl<T> Default for Slot<T> {
 
 pub struct Hub {
     pub sh: Arc<Shared>,
+    /// Generation of the newest session change / notifications change made in the window.
+    pub session_gen: u64,
+    pub notif_gen: u64,
     pub sound: Slot<sound::State>,
     pub net: Slot<network::State>,
     pub bt: Slot<bluetooth::State>,
@@ -388,6 +396,8 @@ impl Hub {
             users: Slot::default(),
             storage: Slot::default(),
             notif: notifications::NotifCfg::load(&dir),
+            session_gen: 0,
+            notif_gen: 0,
             session,
             undo: None,
             dirty: false,
@@ -468,6 +478,8 @@ impl Hub {
 
     /// Like `run`, and also persists `s` as the new session settings (applied again at login).
     pub fn run_session(&mut self, mut a: Action, s: Session) {
+        self.session_gen += 1;
+        a.session_gen = self.session_gen;
         a.session_before = Some(self.session.clone());
         a.session = Some(s.clone());
         *self.sh.session.lock().unwrap() = s.clone();
@@ -570,10 +582,12 @@ impl Hub {
                 *self.sh.session.lock().unwrap() = s.clone();
                 self.session = s;
             }
-            if d.notif_reload {
+            // A failed save only takes the shown state back when nothing newer was changed since: a newer change
+            // carries the full state and is still on its way (it reports for itself).
+            if d.notif_failed.is_some_and(|g| g == self.notif_gen) {
                 self.notif = notifications::NotifCfg::load(&self.sh.dir);
             }
-            if d.session_reload {
+            if d.session_reload && d.session_gen == self.session_gen {
                 self.session = Session::load(&self.sh.dir);
                 *self.sh.session.lock().unwrap() = self.session.clone();
             }

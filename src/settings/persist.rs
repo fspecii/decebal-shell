@@ -1636,6 +1636,104 @@ mod model_tests {
         assert!(m.notice.as_ref().is_some_and(|n| !n.error && n.text.starts_with("Launcher style: Xfce")), "{:?}", m.notice);
     }
 
+    /// Handles the window's queued results one at a time (as the event loop would), returning how many.
+    fn step(m: &mut Model) -> Option<()> {
+        let ev = m.queue.lock().unwrap().pop_front()?;
+        m.on_event(ev);
+        Some(())
+    }
+
+    #[test]
+    fn a_failure_stays_the_notice_of_its_batch_and_a_newer_edit_survives_it() {
+        let (mut m, cfg) = model_with("[general]\n");
+        let disk = Disk::attach(&mut m, Some(1));
+        m.apply("r:general:gap_inner", CtlVal::Num(3.0)); // A: its fsync fails
+        disk.blocked();
+        m.apply("r:general:smart_gaps", CtlVal::Bool(true)); // B: held behind A
+        disk.open();
+        assert!(m.persist.wait_idle(Duration::from_secs(10)));
+        step(&mut m).unwrap(); // A's result
+        let n = m.notice.clone().unwrap();
+        assert!(n.error && n.text.contains("Not saved"), "A's failure shows at once: {n:?}");
+        assert!(m.flag("general", "smart_gaps"), "B is still shown");
+        assert!(!m.store.cfg.has("general", "gap_inner"), "only A is taken back");
+        assert!(m.saving());
+        step(&mut m).unwrap(); // B's result
+        let n = m.notice.clone().unwrap();
+        assert!(n.error && n.text.contains("Not saved"), "B's success does not hide A's error: {n:?}");
+        assert_eq!(file(&cfg), "[general]\nsmart_gaps = true\n");
+        while step(&mut m).is_some() {}
+        // C: a new batch
+        m.apply("r:general:border_px", CtlVal::Num(4.0));
+        m.settle();
+        let n = m.notice.clone().unwrap();
+        assert!(!n.error && n.text.starts_with("Saved"), "{n:?}");
+        assert_eq!(file(&cfg), "[general]\nsmart_gaps = true\nborder_px = 4\n");
+    }
+
+    #[test]
+    fn success_is_not_announced_while_newer_work_is_still_pending() {
+        let (mut m, _) = model_with("[general]\n");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(3.0));
+        disk.blocked();
+        m.apply("j:dock:appSpacing", CtlVal::Num(5.0));
+        disk.open();
+        assert!(m.persist.wait_idle(Duration::from_secs(10)));
+        step(&mut m).unwrap();
+        assert_eq!(m.notice.as_ref().map(|n| n.text.as_str()), Some(SAVING), "the TOML commit does not claim everything is saved");
+        step(&mut m).unwrap();
+        assert_eq!(m.notice.as_ref().map(|n| n.text.as_str()), Some("Saved"));
+    }
+
+    fn with_wallpaper_colours(m: &mut Model, name: &str) -> PathBuf {
+        let img = std::env::temp_dir().join(format!("decebal-persist-wall-{name}-{}.png", std::process::id()));
+        image::RgbImage::from_pixel(32, 20, image::Rgb([30, 150, 90])).save(&img).unwrap();
+        std::fs::write(&m.paths.rdwm_config, format!("[wallpaper]\nimage = \"{}\"\n", img.display())).unwrap();
+        m.store = io::Store::load(&m.paths.rdwm_config, &m.paths.rdwmctl);
+        m.apply("l:theme:windows11", CtlVal::Click);
+        m.apply("th:dynamic", CtlVal::Bool(true));
+        m.wallpaper_palette_name = format!("Late {name} {}", std::process::id());
+        img
+    }
+
+    #[test]
+    fn a_palette_saved_while_another_theme_is_picked_does_not_override_it() {
+        let (mut m, _) = model_with("[general]\n");
+        let img = with_wallpaper_colours(&mut m, "theme");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(2.0)); // holds the queue
+        disk.blocked();
+        m.apply("th:dyn-palette-save", CtlVal::Click);
+        m.apply("l:theme:nord", CtlVal::Click); // newer intent
+        disk.open();
+        m.settle();
+        m.settle();
+        let sel = crate::settings::themepane::source(&m).selection();
+        assert_eq!(sel.name, "nord");
+        assert!(sel.palette.is_none(), "the late palette did not override the newer theme: {sel:?}");
+        assert!(m.notice.as_ref().is_some_and(|n| !n.error), "{:?}", m.notice);
+        let _ = std::fs::remove_file(img);
+    }
+
+    #[test]
+    fn a_palette_saved_while_the_mode_changes_is_applied_on_top_of_the_new_mode() {
+        let (mut m, _) = model_with("[general]\n");
+        let img = with_wallpaper_colours(&mut m, "mode");
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(2.0));
+        disk.blocked();
+        m.apply("th:dyn-palette-save", CtlVal::Click);
+        m.apply("th:mode", CtlVal::Str("light".into()));
+        disk.open();
+        m.settle();
+        m.settle();
+        let sel = crate::settings::themepane::source(&m).selection();
+        assert_eq!((sel.name.as_str(), sel.mode), ("windows11", crate::theme::model::Mode::Light), "the newer mode survives");
+        assert!(sel.palette.as_deref().is_some_and(|p| p.contains("late")), "and the palette is selected: {sel:?}");
+        let _ = std::fs::remove_file(img);
+    }
+
     #[test]
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");

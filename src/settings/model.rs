@@ -38,7 +38,7 @@ pub enum Pending {
     Json { file: &'static str, key: String, value: Option<Value>, said: Option<String>, then: Option<AfterSave> },
     Theme { selection: Value, done: ThemeDone },
     /// A pane's owner transaction; `files` it writes are re-read when it finished.
-    Task { label: &'static str, files: bool, done: TaskDone },
+    Task { label: &'static str, files: bool, quiet: bool, done: TaskDone },
 }
 
 impl std::fmt::Debug for Pending {
@@ -144,6 +144,11 @@ pub struct Model {
     reload_due: bool,
     /// How often rdwm was asked to reload (diagnostics and tests).
     pub reload_requests: u64,
+    /// A completion of the current batch of pending work failed: its error stays the notice until the batch ends.
+    batch_error: bool,
+    /// Messages are coming from a completion (see `say`).
+    in_completion: bool,
+
     /// The next TOML job is a wallpaper change (see `Job::Toml::cancel_follow`).
     cancel_follow: bool,
 }
@@ -190,6 +195,9 @@ impl Model {
             recheck_files: false,
             reload_due: false,
             reload_requests: 0,
+            batch_error: false,
+            in_completion: false,
+
             cancel_follow: false,
         };
         // The System panes save their files through the same ordered worker.
@@ -221,6 +229,15 @@ impl Model {
 
     pub fn say(&mut self, text: impl Into<String>, error: bool) {
         let text = text.into();
+        // A completion's message follows the batch (idle -> idle): an error always shows and marks the batch; a
+        // success only once nothing is pending and the batch had no error. Until then "Saving…" (or the error) stays.
+        if self.in_completion && !error && (self.batch_error || self.saving()) {
+            crate::log_info!("notice (held while saving): {text}");
+            return;
+        }
+        if self.in_completion && error {
+            self.batch_error = true;
+        }
         if error {
             crate::log_warn!("notice (error): {text}");
         } else {
@@ -450,18 +467,28 @@ impl Model {
     /// the Settings files it may change (re-read afterwards, on top of what is still pending). `done` gets the result
     /// on the UI thread and shows it. False when the queue refused it (the notice says why; nothing ran).
     pub fn run_task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static, done: impl FnOnce(&mut Model, Result<Value, String>) + 'static) -> bool {
+        self.task(label, writes, false, Box::new(run), Box::new(done))
+    }
+
+    fn task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, quiet: bool, run: Box<dyn FnOnce() -> Result<Value, String> + Send>, done: TaskDone) -> bool {
         let files = !writes.is_empty();
-        self.submit(Job::Task(persist::Task { label, writes, run: Box::new(run), reply: None }), Pending::Task { label, files, done: Box::new(done) }).is_some()
+        self.submit(Job::Task(persist::Task { label, writes, run, reply: None }), Pending::Task { label, files, quiet, done }).is_some()
     }
 
     /// [`Model::run_task`] for housekeeping the user did not ask for (an offline cache): no "Saving…" toast.
     pub fn run_task_quiet(&mut self, label: &'static str, run: impl FnOnce() -> Result<Value, String> + Send + 'static) -> bool {
         let shown = self.notice.clone();
-        let ok = self.run_task(label, Vec::new(), run, |_, r| {
-            if let Err(e) = r {
-                crate::log_warn!("{e}");
-            }
-        });
+        let ok = self.task(
+            label,
+            Vec::new(),
+            true,
+            Box::new(run),
+            Box::new(|_, r| {
+                if let Err(e) = r {
+                    crate::log_warn!("{e}");
+                }
+            }),
+        );
         if ok {
             self.notice = shown;
         }
@@ -476,9 +503,9 @@ impl Model {
         self.reload_json_shown();
     }
 
-    /// Accepted changes are still on their way to the disk.
+    /// Accepted changes are still on their way to the disk (housekeeping the user did not ask for not counted).
     pub fn saving(&self) -> bool {
-        !self.pending.is_empty()
+        self.pending.values().any(|p| !matches!(p, Pending::Task { quiet: true, .. }))
     }
 
     /// Headless tools (no event loop): run the writes on the calling thread as they are submitted.
@@ -496,7 +523,10 @@ impl Model {
                     self.pending.remove(&replaced);
                 }
                 self.pending.insert(s.seq(), pending);
-                self.notice = Some(Notice { text: SAVING.into(), error: false, at: Instant::now() });
+                // an error of the batch in progress stays visible; otherwise the toast says work is pending
+                if !self.batch_error && !matches!(self.pending.get(&s.seq()), Some(Pending::Task { quiet: true, .. })) {
+                    self.notice = Some(Notice { text: SAVING.into(), error: false, at: Instant::now() });
+                }
                 self.dirty = true;
                 for d in self.persist.take_inline() {
                     self.on_persisted(d);
@@ -559,6 +589,15 @@ impl Model {
 
     /// A persistence job finished (results arrive in submission order).
     pub fn on_persisted(&mut self, d: Done) {
+        let outer = std::mem::replace(&mut self.in_completion, true);
+        self.handle_persisted(d);
+        self.in_completion = outer;
+        if !self.saving() {
+            self.batch_error = false; // the batch is over; its last word (success or error) stays shown
+        }
+    }
+
+    fn handle_persisted(&mut self, d: Done) {
         let Some(p) = self.pending.remove(&d.seq) else {
             crate::log_warn!("persist: result for unknown change #{}", d.seq);
             return;
@@ -572,9 +611,7 @@ impl Model {
                 self.rebuild_cfg();
                 self.file_error = None;
                 self.reload_due |= saved.changed;
-                if idle && self.notice.as_ref().is_none_or(|n| !n.error) {
-                    self.say(if self.rt.running { "Saved and applied" } else { "Saved (rdwm is not running)" }, false);
-                }
+                self.say(if self.rt.running { "Saved and applied" } else { "Saved (rdwm is not running)" }, false);
             }
             (_, Outcome::Toml(Err(f))) => {
                 self.rebuild_cfg();
@@ -599,8 +636,7 @@ impl Model {
                     }
                 }
                 match r {
-                    Ok(_) if idle && self.notice.as_ref().is_none_or(|n| !n.error) => self.say(said.unwrap_or_else(|| "Saved".into()), false),
-                    Ok(_) => {}
+                    Ok(_) => self.say(said.unwrap_or_else(|| "Saved".into()), false),
                     Err(f) => {
                         if f.conflict {
                             self.recheck_files = true;
@@ -639,9 +675,7 @@ impl Model {
                             (Some(st), ThemeDone::Selection) => format!("Shell style: {}", st.title()),
                             _ => text,
                         };
-                        if idle || !self.notice.as_ref().is_some_and(|n| n.error) {
-                            self.say(text, false);
-                        }
+                        self.say(text, false);
                     }
                     Err(e) => self.say(format!("Not applied: {e}"), true),
                 }

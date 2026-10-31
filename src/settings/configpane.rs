@@ -1145,14 +1145,28 @@ fn reload_tab(m: &mut Model) {
 fn revert_tab(m: &mut Model) {
     let tab = m.cfg.tab;
     let Some(path) = m.cfg.path_of(tab) else { return };
+    ensure_buf(m);
+    let sent = m.cfg.bufs.get(&tab).map(|b| b.ed.text());
     let p = path.clone();
     let run = move || io::with_file_lock(&p, |_| fsx::revert_latest(&p)).map(|from| json!(from.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
     m.run_task("config-revert", vec![path], run, move |m, r| match r {
         Ok(from) => {
-            m.cfg.tab = tab;
-            reload_tab(m);
-            applied_live(m, tab);
-            m.say(format!("Reverted to {}", from.as_str().unwrap_or_default()), false);
+            let from = from.as_str().unwrap_or_default().to_string();
+            let typed = m.cfg.bufs.get(&tab).map(|b| b.ed.text()) != sent;
+            if typed {
+                // typing done while the revert was written is newer intent: it stays in the editor, marked as
+                // differing from the file (saving it overwrites the reverted file)
+                if let Some(b) = m.cfg.bufs.get_mut(&tab) {
+                    b.disk_changed = true;
+                }
+                applied_live(m, tab);
+                m.say(format!("Reverted the file to {from}; your newer edits are kept in the editor"), false);
+            } else {
+                let fresh = load_buf(m, tab);
+                m.cfg.bufs.insert(tab, fresh);
+                applied_live(m, tab);
+                m.say(format!("Reverted to {from}"), false);
+            }
         }
         Err(e) => m.say(format!("Not reverted: {e}"), true),
     });
@@ -1649,6 +1663,33 @@ mod tests {
         assert!(buf_mut(&mut m).ed.is_modified(), "our edit stays in the editor");
         let backups: Vec<_> = std::fs::read_dir(cfg.parent().unwrap()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".bak.")).collect();
         assert!(backups.is_empty(), "no backup is left for a write that did not happen");
+    }
+
+    #[test]
+    fn typing_while_a_revert_is_written_stays_in_the_editor() {
+        use std::sync::atomic::Ordering;
+        let mut m = model("revert-typing");
+        let shell = m.paths.shell_json();
+        std::fs::write(&shell, "{\"v\": 1}\n").unwrap();
+        m.cfg.tab = Tab::Shell;
+        prepare(&mut m);
+        m.cfg.active = true;
+        editor_key(&mut m, &key(Key::End, None, false));
+        type_text(&mut m, " ");
+        apply(&mut m, "cfg:save", CtlVal::Click); // inline: a backup of {"v": 1} exists now
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\"v\": 1} \n");
+        let (open, calls) = held_worker(&mut m);
+        apply(&mut m, "cfg:revert", CtlVal::Click);
+        while calls.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        type_text(&mut m, "x"); // newer intent, typed while the revert is held
+        open.store(true, Ordering::SeqCst);
+        m.settle();
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\"v\": 1}\n", "the file is reverted");
+        assert!(buf_mut(&mut m).ed.text().contains("x"), "the typing is not thrown away");
+        assert!(buf_mut(&mut m).disk_changed, "and it is marked as differing from the file");
+        assert!(m.notice.as_ref().is_some_and(|n| n.text.contains("newer edits are kept")), "{:?}", m.notice);
     }
 
     #[test]

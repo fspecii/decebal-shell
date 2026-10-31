@@ -175,11 +175,13 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
         }
         // Saved in order on the persistence worker; shown at once, taken back if the write fails.
         let (snap, dir, sh) = (n.clone(), h.sh.dir.clone(), h.sh.clone());
+        h.notif_gen += 1;
+        let gen = h.notif_gen;
         let persist = h.sh.persist.lock().unwrap().clone();
         persist
             .run_then("notifications-save", vec![dir.join(FILE)], move || snap.save(&dir).map(|()| serde_json::Value::Null), move |r| {
                 if let Err(e) = r {
-                    sh.push(super::Done { msg: Some((format!("Notifications not saved: {e}"), true)), notif_reload: true, ..super::Done::default() });
+                    sh.push(super::Done { msg: Some((format!("Notifications not saved: {e}"), true)), notif_failed: Some(gen), ..super::Done::default() });
                 }
             })
             .map_err(|e| format!("Not saved: {e:?}"))?;
@@ -198,6 +200,47 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_failed_save_does_not_take_back_a_newer_pending_change() {
+        use crate::settings::persist::Persister;
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        let dir = std::env::temp_dir().join(format!("decebal-notif-gen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut h = super::super::Hub::with(Arc::new(crate::settings::system::run::FakeRunner::default()), dir.clone(), Arc::new(|| {}));
+        let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
+        let (g, c) = (gate.clone(), calls.clone());
+        let p = Persister::spawn_with_sync_hook(
+            Arc::new(Mutex::new(Default::default())),
+            Arc::new(|| {}),
+            Arc::new(move |_| {
+                let n = c.fetch_add(1, Ordering::SeqCst);
+                while g.load(Ordering::SeqCst) {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                if n == 0 {
+                    return Err(std::io::Error::from_raw_os_error(5));
+                }
+                Ok(())
+            }),
+        );
+        *h.sh.persist.lock().unwrap() = p.handle();
+        apply(&mut h, "dnd", "", CtlVal::Bool(true)); // A: fails
+        while calls.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        apply(&mut h, "sounds", "", CtlVal::Bool(true)); // B: held, carries dnd too
+        gate.store(false, Ordering::SeqCst);
+        assert!(p.wait_idle(std::time::Duration::from_secs(10)));
+        let (_, msgs) = h.drain();
+        assert!(msgs.iter().any(|(t, e)| *e && t.contains("not saved")), "{msgs:?}");
+        assert!(h.notif.dnd && h.notif.sounds, "A's failure did not reset the newer B");
+        let on_disk = NotifCfg::load(&dir);
+        assert!(on_disk.dnd && on_disk.sounds, "B saved the whole newest state");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use super::*;
     use crate::settings::system::run::FakeRunner;
     use std::sync::Arc;
