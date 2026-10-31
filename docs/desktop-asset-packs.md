@@ -348,33 +348,75 @@ Real result (pinned deepin-desktop-theme a0c79e3, tree fb56b39d, private HOME an
 
 ## Selection and theme recommendations
 
+Applying a theme applies its matching icons (and cursors, where it has some): **Follow theme** is the default for both
+slots; **Custom** is the explicit override, made in Settings > Icons.
+
 * The icon theme is `decebal.json` `icons.theme` (unchanged, `docs/icons.md`); the cursor theme is `system.cursorTheme`,
   which "Apply to all apps" writes to GTK `settings.ini`, gsettings and `Xcursor.theme` (unchanged).
-* Who chose them is kept in `decebal.json` `asset_packs`:
+* Who decides them is kept in `decebal.json` `asset_packs`:
 
 ```json
 "asset_packs": {
-  "icons":   {"user": true},
-  "cursors": {"theme": "deepin", "applied": "bloom", "baseline": null},
-  "recommended": {"theme": "deepin", "icons": "bloom", "cursors": "bloom", "missing": []}
+  "icons":   {"mode": "follow", "theme": "nextkde", "applied": "breeze", "baseline": "Papirus", "restore": "Papirus"},
+  "cursors": {"mode": "custom"},
+  "recommended": {"theme": "nextkde", "icons": "breeze", "cursors": null, "missing": ["decebal-breeze-cursors"],
+                  "icons_pack": "decebal-breeze", "cursors_pack": "decebal-breeze-cursors",
+                  "basis": "coverage:upstream (KDE Plasma's own Breeze icons and cursors)"},
+  "generation": 42,
+  "downloads": "ask"
 }
 ```
 
-* `decthemectl assets use`, the Icons pane and a hand edit of `icons.theme` / `system.cursorTheme` (the value no longer
-  equals `applied`) make the choice **explicit** (`user: true`): applying a theme never changes it again; the
-  recommendation is still shown. `use ... theme` (or the pane's *Use the theme's suggestion*) clears it.
-* Otherwise `theme apply` sets the slot to the theme's recommendation, remembering the previous value as `baseline`;
-  a later theme that recommends nothing puts `baseline` back. A recommendation counts only when the pack is installed;
-  otherwise it is listed in `recommended.missing` and the pane offers to install it.
-* Recommendation sources, first wins: the companion `[[recommend]]` entry for the theme id, then the theme's own
-  `[icons] theme` (icons only; existing behaviour). The other `[icons]` keys (scale, tint, fallback) merge as before.
+* **Follow** (default, also when there is no record): `theme apply` sets the slot to the theme's matching pack,
+  remembering the previous value as `baseline` (put back when a later theme matches nothing). When the pack is not
+  installed, the slot keeps its current value (no flash to something else) and the pack is downloaded, verified and
+  applied in the background (below).
+* **Custom**: the Icons pane's theme list (*Use this theme*), its *Custom* switch, `decthemectl assets use icons|cursors
+  NAME|auto`, `decthemectl icons set` and a hand edit of the value (it no longer equals `applied`). Applying a theme never
+  changes a custom slot; the report says what the theme would have applied. Choosing *Follow theme* again keeps the
+  custom value as `restore`: *Restore X* in the pane (`assets use ... restore`) makes it custom again.
+* A record written before slot modes existed (`{"user": true}`) is a manual choice and stays **custom**: no theme and no
+  late background install overrides it; *Follow theme* in Icons hands it back to the theme (its value kept in `restore`).
+* `generation` is bumped by every theme apply and every slot choice; `downloads: "ask"` (the pane's *Download matching
+  packs* switch, `assets downloads auto|ask`) turns automatic downloads off: missing packs are then only offered with
+  an *Install* button. The default is automatic: the user authorised downloading the matching packs of the themes they
+  apply.
+* **Matching pack**, first found wins: the port catalogue's `[[recommend]]` for the theme id; the theme's own
+  `[icons] theme` when that theme is installed or a catalogue has a pack of that name; decebal's coverage table
+  (`src/desktop_assets/coverage/themes.toml`). Every theme in `themes/` is covered (a test fails otherwise). Each
+  coverage entry says its basis: `upstream` (the icons of the desktop the theme recreates: Adwaita for the GNOME themes,
+  Breeze icons and cursors for nextkde), `manifest` (what the theme names, as a pinned pack) or `fallback` (no free
+  matching set exists or is pinned: macOS, Windows 11 and Nothing OS icons are not redistributable, palettes such as Nord
+  or Dracula publish no freedesktop icon theme), with its reason. Fallbacks keep their upstream name and licence
+  (Papirus-Dark stays Papirus-Dark); nothing is relabelled as a theme's own icons. The coverage packs that no port
+  provides (Adwaita, Breeze, Breeze cursors) are in `src/desktop_assets/coverage/packs.toml`, fetched with `git_url`;
+  every pack a theme can apply by itself has a download. Without a cursor match the cursor slot is not changed.
+
+**Background workflow.** After `theme apply` has written its files (Settings and the CLI alike), and after *Follow theme*
+or *Retry* in the pane, `follow::request` starts one job, `decthemectl assets follow-theme --generation G`: fixed
+arguments, no shell, its own process group, detached from the caller, output to a fresh 0600 log in
+`$XDG_STATE_HOME/decebal/assets/` (0700), an older job for an earlier generation is stopped first. The job installs each
+missing pack once (the verified installer: pins, licences, nothing from the pack run, atomic publication), then applies
+in **one** `json_update_doc` transaction only if `generation` is still `G`, the recommendation is still that theme's and
+the slot still follows it with the value it had; otherwise it records `superseded` and changes nothing, so a completion
+can never override a later theme or a manual choice. After applying it hands the change to app integration through one
+routing point, `desktop_assets::publish::selection_changed` (the GTK lane owns the toolkit side). The contract is that
+publishing a Follow-theme slot's icon and cursor theme does not depend on the unrelated "Apply to all apps" opt-in; until
+the GTK lane provides that entry point the routing point uses the existing request, which publishes only with "Apply to
+all apps" on, and the job's outcome says so. The shell itself uses the new icons at once. The whole job is stopped after 30 minutes; `follow.json` holds the
+phase (`starting`, `installing`, `applied`, `superseded`, `failed`, `stopped`), the pack being installed, the error and
+the log path. The pane shows it with *Stop* (`assets follow-theme --stop`, which signals the job's process group only
+after checking its PID's start time) and *Retry*; `assets follow-theme --status` and `assets status` print it. A failure
+keeps the current icons and names `--archive` / `--source-dir` as the way that still works.
+
 * Wallpaper and widget policies are not touched.
 
 **Icons pane** (System Settings -> Icons): besides the icon themes, a *Cursor theme* menu (installed cursor themes,
-independent of the icon theme; choosing one is explicit), the current theme's suggestion with *Use the theme's
-suggestion*, an *Install* button for each suggested pack that is missing and has a download (it runs
-`decthemectl assets install ID` in the background, never through a shell, and shows the outcome), and the installed
-packs with licence, source and revision.
+independent of the icon theme; choosing one makes the cursor custom), *Theme matching* with *Follow theme* / *Custom*
+for icons and for the cursor (and *Restore X* while following), *Download matching packs*, the background download with
+*Stop* / *Retry* and its outcome, an *Install* button for each matching pack that is missing when downloads are set to
+ask (it runs `decthemectl assets install ID` in the background, never through a shell, and shows the outcome), and the
+installed packs with licence, source and revision.
 
 ## Installed provenance
 

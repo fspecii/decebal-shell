@@ -16,15 +16,18 @@ pub mod assemble;
 pub mod builtin;
 pub mod catalog;
 pub mod cli;
+pub mod coverage;
 pub mod cursor;
 pub mod dci;
 pub mod fetch;
+pub mod follow;
 pub mod gitoid;
 pub mod gitpack;
 pub mod install;
 pub mod pane;
 pub mod policy;
 pub mod preview;
+pub mod publish;
 pub mod source;
 pub mod tar;
 pub mod xcursor;
@@ -92,6 +95,52 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Limits { max_entries: 120_000, max_file: 16 << 20, max_total: 1 << 30, max_stream: 4 << 30, max_archive: 512 << 20, max_text: 1 << 20 }
+    }
+}
+
+static CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A stop was requested (SIGTERM to an install or a background job): downloads, archive and tree reading and DCI
+/// conversion end with an error at their next step, so the install takes its normal error path (its staging folder
+/// removed, the target untouched). Placement itself is never interrupted.
+pub fn cancelled() -> bool {
+    #[cfg(test)]
+    return TEST_CANCEL.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    CANCEL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+// tests run in parallel threads: a cancellation test stops only its own thread's work
+#[cfg(test)]
+thread_local! {
+    pub static TEST_CANCEL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn check_cancel() -> Result<(), String> {
+    if cancelled() {
+        Err("stopped on request".into())
+    } else {
+        Ok(())
+    }
+}
+
+pub fn cancel() {
+    #[cfg(test)]
+    TEST_CANCEL.with(|c| c.set(true));
+    CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+extern "C" fn on_term(_: libc::c_int) {
+    // async-signal-safe: one atomic store
+    CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `decthemectl assets install` and `follow-theme` stop cooperatively on SIGTERM (the Settings supervisor and
+/// `follow-theme --stop` send it; SIGKILL after the grace still ends a stuck process).
+pub fn cancel_on_sigterm() {
+    // SAFETY: installs a handler that performs a single atomic store.
+    unsafe {
+        libc::signal(libc::SIGTERM, on_term as extern "C" fn(libc::c_int) as libc::sighandler_t);
     }
 }
 

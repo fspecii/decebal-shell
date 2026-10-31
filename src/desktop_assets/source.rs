@@ -343,6 +343,7 @@ pub fn from_tar(r: impl Read, fmt: tar::Format, dir: PathBuf, filter: Filter, li
     let n = filter.strip;
     let mut b = Builder::new(dir, filter, lim, keep);
     while let Some(h) = rd.next_entry()? {
+        super::check_cancel()?;
         b.st.entries += 1;
         let Some(p) = strip(&h.path, n) else {
             if h.kind == Kind::Dir {
@@ -399,6 +400,7 @@ fn walk(root: &Path, rel: &str, depth: usize, b: &mut Builder) -> Result<(), Str
     names.sort();
     b.pending += names.len();
     for n in names {
+        super::check_cancel()?;
         b.pending -= 1;
         if n == ".git" {
             continue;
@@ -499,6 +501,7 @@ fn git_tree(pack: &super::gitpack::Pack, oid: &[u8; 20], rel: &str, depth: usize
     }
     b.pending += entries.len();
     for e in entries {
+        super::check_cancel()?;
         b.pending -= 1;
         let p = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
         super::safe_rel(&p)?;

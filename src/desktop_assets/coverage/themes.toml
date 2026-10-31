@@ -1,0 +1,232 @@
+# Which icon (and cursor) pack a theme applies when its port catalogue has no [[recommend]] for it and the theme's own
+# `[icons] theme` is not available. Every theme in themes/ is covered (a test fails otherwise); a port catalogue's
+# [[recommend]] always wins over this table.
+#
+# basis = "upstream": the icons of the desktop the theme recreates.
+# basis = "manifest": the icon theme the theme's own manifest names, as a pinned pack.
+# basis = "fallback": no free matching set exists or is pinned yet; a coherent, honestly named pack instead. Fallbacks
+#                     are never relabelled as the theme's own icons: the pack keeps its upstream name and licence.
+format = 1
+
+[[cover]]
+theme = "aster"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "brutalist"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "no icon set of its own; flat high-contrast Papirus-Dark suits black and signal yellow"
+
+[[cover]]
+theme = "caelestia"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "caelestia-shell ships no icon theme; Papirus-Dark is the usual pairing"
+
+[[cover]]
+theme = "caelestia-mocha"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Catppuccin publishes no freedesktop icon theme; Papirus-Dark is the usual Catppuccin pairing"
+
+[[cover]]
+theme = "dracula"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Dracula's own icon set is not a pinned freedesktop pack here; Papirus-Dark"
+
+[[cover]]
+theme = "dux-lavender"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "everforest"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "frutiger-aero"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "glyph-rice"
+icons = "gnome-papirus"
+basis = "manifest"
+reason = "the theme names Papirus"
+
+[[cover]]
+theme = "gnome-adwaita"
+icons = "decebal-adwaita"
+basis = "upstream"
+reason = "GNOME's own icon theme"
+
+[[cover]]
+theme = "gnome-adwaita-like"
+icons = "decebal-adwaita"
+basis = "upstream"
+reason = "GNOME's own icon theme"
+
+[[cover]]
+theme = "gnome-catppuccin-dock"
+icons = "gnome-papirus-dark"
+basis = "manifest"
+reason = "the theme names Papirus-Dark (the GNOME catalogue recommends it too)"
+
+[[cover]]
+theme = "graphite"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "macOS icons are Apple's and not redistributable; Adwaita's quiet monochrome style"
+
+[[cover]]
+theme = "gruvbox-dark"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "high-contrast"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "GNOME's HighContrast icons are retired and not pinned; Adwaita's symbolic icons follow the text colour"
+
+[[cover]]
+theme = "kanagawa"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Kanagawa publishes no icon theme; Papirus-Dark (the manifest's Adwaita is only its fallback)"
+
+[[cover]]
+theme = "kiln-court"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "an original design without its own icons; Adwaita's warm neutral set"
+
+[[cover]]
+theme = "macos"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "macOS icons are Apple's and not redistributable; Adwaita"
+
+[[cover]]
+theme = "material-you-dynamic"
+icons = "gnome-papirus"
+basis = "fallback"
+reason = "Material icons are not a freedesktop theme; flat colourful Papirus"
+
+[[cover]]
+theme = "moss-atlas"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "an original design without its own icons; Adwaita"
+
+[[cover]]
+theme = "mountain-neon-dot"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "an original dark design without its own icons; Papirus-Dark"
+
+[[cover]]
+theme = "nextkde"
+icons = "decebal-breeze"
+cursors = "decebal-breeze-cursors"
+basis = "upstream"
+reason = "KDE Plasma's own Breeze icons and cursors"
+
+[[cover]]
+theme = "nord"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Nord publishes no icon theme; Papirus-Dark"
+
+[[cover]]
+theme = "nothing-dot"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Nothing OS icons are not redistributable; Papirus-Dark"
+
+[[cover]]
+theme = "nothing-light"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "Nothing OS icons are not redistributable; Adwaita for the light paper look"
+
+[[cover]]
+theme = "orbit-glass"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "an original dark design without its own icons; Papirus-Dark"
+
+[[cover]]
+theme = "paper-signal"
+icons = "decebal-adwaita"
+basis = "fallback"
+reason = "an original editorial design without its own icons; Adwaita"
+
+[[cover]]
+theme = "rose-pine"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Rose Pine's icon work is not a pinned freedesktop pack here; Papirus-Dark"
+
+[[cover]]
+theme = "signal-deck"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "an original dark design without its own icons; Papirus-Dark"
+
+[[cover]]
+theme = "solarized"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Solarized publishes no icon theme; Papirus-Dark"
+
+[[cover]]
+theme = "sweeteh"
+icons = "decebal-adwaita"
+basis = "manifest"
+reason = "the theme names Adwaita"
+
+[[cover]]
+theme = "synthwave"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "the theme names Yaru-purple-dark, which is built by Yaru's meson step and not pinned here; Papirus-Dark when it is not installed"
+
+[[cover]]
+theme = "terminal-amber"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "a terminal look without icons of its own; Papirus-Dark"
+
+[[cover]]
+theme = "terminal-minimal"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "a terminal look without icons of its own; Papirus-Dark"
+
+[[cover]]
+theme = "tidal-loom"
+icons = "decebal-breeze"
+basis = "fallback"
+reason = "an original design with Breeze window captions; the matching Breeze icons"
+
+[[cover]]
+theme = "tokyo-night"
+icons = "gnome-papirus-dark"
+basis = "fallback"
+reason = "Tokyo Night publishes no icon theme; Papirus-Dark"
+
+[[cover]]
+theme = "windows11"
+icons = "gnome-papirus"
+basis = "fallback"
+reason = "Windows 11 (Fluent) icons are Microsoft's and not redistributable; flat colourful Papirus"

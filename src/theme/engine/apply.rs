@@ -347,7 +347,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     if let Some(Value::Object(cc)) = extra.get("control_center") {
         obj_mut(&mut shell, "control_center").extend(cc.clone());
     }
-    // `icons.theme` (and the cursor theme) are suggestions: an explicit user choice survives (docs/desktop-asset-packs.md)
+    // `icons.theme` and the cursor theme follow the theme unless the user chose a custom one (docs/desktop-asset-packs.md)
     let mut suggested_icons = None;
     if let Some(Value::Object(ic)) = extra.get("icons") {
         let mut ic = ic.clone();
@@ -574,6 +574,7 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
             crate::log_warn!("dock: {e}");
         }
         crate::theme::system::request(&paths.shell_json());
+        applied.notes.extend(crate::desktop_assets::follow::request(&paths.shell_json()));
         follow_wallpaper(paths, &plan, &mut applied);
         crate::theme::frame::publish_committed(src, plan.dark);
         return Ok(applied);
@@ -610,6 +611,8 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
         crate::log_warn!("dock: {e}");
     }
     crate::theme::system::request(&paths.shell_json()); // "Apply to all apps", when the user switched it on
+                                                        // the theme's matching icon / cursor packs that are not installed: downloaded, verified and applied in the background
+    applied.notes.extend(crate::desktop_assets::follow::request(&paths.shell_json()));
     #[cfg(feature = "x11")]
     {
         let cfg = crate::widgets::config::WidgetsConfig::load(&paths.shell_json());
@@ -1215,7 +1218,10 @@ y = -30
         assert_eq!(shell["workspaces"], "off");
         assert_eq!((shell["bar"]["x"].clone(), shell["bar"]["left"][0].clone()), (json!(1), json!("workspaces")), "bar keys merge");
         assert_eq!((shell["hot_corners"]["top_left"].clone(), shell["hot_corners"]["top_right"].clone(), shell["hot_corners"]["dwell_ms"].clone()), (json!("dashboard"), json!("lock"), json!(300)));
-        assert_eq!(shell["icons"]["theme"], "Papirus");
+        // the theme names Papirus: applied when installed, else its pinned pack is fetched in the background first
+        let rec = &shell["asset_packs"]["recommended"];
+        assert!(shell["icons"]["theme"] == "Papirus" || (rec["icons_pack"] == "gnome-papirus" && rec["missing"][0] == "gnome-papirus"), "{shell}");
+        assert_eq!(shell["asset_packs"]["icons"]["theme"], "sunset", "the icon slot follows the theme");
         assert!(shell.get("control_center").is_none(), "a theme without the section leaves the shell default (present everywhere)");
         let items = shell["widgets"]["items"].as_array().unwrap();
         assert_eq!(items.len(), 2);

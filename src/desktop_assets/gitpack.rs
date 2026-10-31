@@ -227,6 +227,7 @@ pub struct Capped<R> {
 
 impl<R: Read> Read for Capped<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        super::check_cancel().map_err(std::io::Error::other)?;
         let k = self.inner.read(buf)?;
         self.n += k as u64;
         if self.n > self.cap {

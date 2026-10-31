@@ -699,6 +699,11 @@ impl Set {
                 Err(e) => s.problems.extend(e),
             }
         }
+        // decebal's coverage packs come after the port catalogues: a port that provides a pack itself wins
+        match parse(super::coverage::PACKS, "builtin:decebal-coverage") {
+            Ok(c) => s.push(c),
+            Err(e) => s.problems.extend(e),
+        }
         for f in runtime_files() {
             match std::fs::read_to_string(&f) {
                 Ok(t) if t.len() <= 256 << 10 => match parse(&t, &f.display().to_string()) {

@@ -323,6 +323,7 @@ pub fn build_within(st: &Staged, pack: &str, display_name: &str, plan: &Convert,
     let mut links: Vec<(String, String, String)> = Vec::new(); // (icon, source path, target source path)
     let (mut pixels, mut output, mut input) = (0u64, 0u64, 0u64);
     for (k, icon) in &containers {
+        super::check_cancel()?;
         consumed.push(under(k).expect("inside"));
         if !icon_name_ok(icon) {
             o.refused.insert(icon.clone(), "icon name has characters outside [A-Za-z0-9._+-] or is too long".into());

@@ -1681,6 +1681,20 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_stopped_install_takes_the_error_path_and_leaves_no_staging() {
+        let s = Scratch::new("cancel");
+        let root = s.path().join("icons");
+        let (a, entries) = fixture(&s, vec![], "a.tgz");
+        let r = request(&root, &a, &entries);
+        crate::desktop_assets::TEST_CANCEL.with(|c| c.set(true));
+        let e = install(&r, &Limits::default()).unwrap_err();
+        crate::desktop_assets::TEST_CANCEL.with(|c| c.set(false));
+        assert!(e.contains("stopped on request"), "{e}");
+        assert!(!root.join("bloom").exists() && staging_is_clean(&root), "nothing published, nothing left");
+        assert!(install(&r, &Limits::default()).is_ok(), "and the next install works");
+    }
+
+    #[test]
     fn a_second_install_waits_for_the_lock() {
         let s = Scratch::new("lock");
         let staging = staging_dir(&s.path().join("icons")).unwrap();

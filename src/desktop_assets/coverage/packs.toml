@@ -1,0 +1,72 @@
+# decebal's own companion catalogue: the upstream icon / cursor packs the coverage table (themes.toml) needs that no
+# port catalogue provides. Pins from `git rev-parse` on 2026-10-31 (the same pins as docs/desktop-asset-packs/examples);
+# fetched with `git_url` (only the pinned objects). A port owner who wants to own one of these packs adds it to their
+# catalogue under its own id and points the coverage entry at it.
+format = 1
+family = "decebal"
+
+[[source]]
+id = "adwaita-icon-theme"
+repo = "https://gitlab.gnome.org/GNOME/adwaita-icon-theme"
+revision = "master"
+commit = "75a7cc2fbfc43226f82bbca6edf74ba5ebba211f"
+license = "LGPL-3.0-only OR CC-BY-SA-3.0"     # COPYING: "either the GNU LGPL v3 or Creative Commons BY-SA 3.0 United States"
+license_files = ["COPYING", "COPYING_LGPL", "COPYING_CCBYSA3"]
+license_oids = ["c2e01685a8c0cdf01f0e7577115691e0dbfabc48", "65c5ca88a67c30becee01c5a8816d964b03862f9", "fc45d7818de3fa905de9636154d6413ad61d84f2"]
+strip_components = 1
+git_url = "https://gitlab.gnome.org/GNOME/adwaita-icon-theme.git"
+
+[[source]]
+id = "breeze-icons"
+repo = "https://invent.kde.org/frameworks/breeze-icons"
+revision = "master"
+commit = "e3c7154b4f243413b0cb9028484977f3c37de15c"
+license = "LGPL-3.0-or-later"                 # COPYING-ICONS: "The Breeze Icon Theme in icons/"
+license_files = ["COPYING-ICONS"]
+license_oids = ["63d73657ce416e625bbaedf549fb2d9981616640"]
+strip_components = 1
+git_url = "https://invent.kde.org/frameworks/breeze-icons.git"
+
+[[source]]
+id = "breeze"
+repo = "https://invent.kde.org/plasma/breeze"
+revision = "master"
+commit = "75561b7f32f3121603a0f2c8ea929b20a0d6c311"
+license = "LGPL-3.0-or-later"                 # cursors/Breeze/COPYING-ICONS
+license_files = ["cursors/Breeze/COPYING-ICONS"]
+license_oids = ["9b426e7643491fb934e6309d6dc9efdeb7715a95"]
+strip_components = 1
+git_url = "https://invent.kde.org/plasma/breeze.git"
+
+[[pack]]
+id = "decebal-adwaita"
+name = "Adwaita"
+provides = ["icons"]
+source = "adwaita-icon-theme"
+path = "Adwaita"
+tree = "d872c164385fc81bec9e533b0cc74cb8f599d235"
+index = ["index.theme"]                       # meson installs the repository-root index.theme into Adwaita/
+index_oids = ["9e21cb977f3c28f5440234d2bc4618d22c14d32d"]
+description = "GNOME's icon theme (adwaita-icon-theme), as GNOME ships it."
+
+[[pack]]
+id = "decebal-breeze"
+name = "Breeze"
+provides = ["icons"]
+source = "breeze-icons"
+path = "icons"
+tree = "a075dff16ef66a3a356abec39e502f0dbc4a4564"
+install_name = "breeze"
+index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]
+index_oids = ["1ca7213bfb3c4655f42877764e42da3a2af5f0e6", "ece3248f3057db17ca841f14e6ecf3bd0699346e"]
+description = "KDE's Breeze icons (light), as Plasma ships them."
+
+[[pack]]
+id = "decebal-breeze-cursors"
+name = "Breeze cursors"
+provides = ["cursors"]
+source = "breeze"
+path = "cursors/Breeze/Breeze"
+tree = "ac0e5396057e0a7864d75fad624e81722b9c497d"
+install_name = "breeze_cursors"               # the name Plasma uses
+description = "KDE's Breeze cursors."

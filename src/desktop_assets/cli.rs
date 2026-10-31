@@ -18,8 +18,11 @@ decthemectl assets import PATH --provides icons[,cursors] --license SPDX --licen
                                                  install an archive (.tar, .tar.gz) or folder that is not in a catalogue
 decthemectl assets verify [NAME...] [--json]     re-hash installed packs against their provenance
 decthemectl assets remove NAME [--force]         delete a pack decebal installed (--force: also when it is in use)
-decthemectl assets use icons|cursors NAME|auto   choose explicitly (kept when themes change)
-decthemectl assets use icons|cursors theme       follow the theme's suggestion again
+decthemectl assets use icons|cursors theme       follow the theme (the default): applying a theme applies its matching pack
+decthemectl assets use icons|cursors NAME|auto   custom: kept when themes change, until `use ... theme`
+decthemectl assets use icons|cursors restore     custom again with the value kept when the slot went back to the theme
+decthemectl assets downloads auto|ask            download a theme's missing matching packs by themselves (default) or only offer them
+decthemectl assets follow-theme [--status | --stop]   the background download of the current theme's matching packs
 decthemectl assets status [--json]               icon and cursor selection, who chose it, the theme's suggestion
 decthemectl assets preview NAME [--png OUT] [--json]   which common icons / cursors resolve in a pack
 decthemectl assets catalog check FILE...         validate companion metadata (asset-packs.toml)
@@ -50,7 +53,8 @@ struct Args {
     opts: Vec<(String, String)>,
 }
 
-const VALUED: &[&str] = &["--index", "--root", "--archive", "--source-dir", "--provides", "--license", "--license-file", "--name", "--path", "--strip", "--tree", "--sha256", "--png", "--link-source"];
+const VALUED: &[&str] =
+    &["--generation", "--index", "--root", "--archive", "--source-dir", "--provides", "--license", "--license-file", "--name", "--path", "--strip", "--tree", "--sha256", "--png", "--link-source"];
 
 fn parse(args: &[String]) -> Result<Args, String> {
     let mut a = Args { pos: vec![], flags: vec![], opts: vec![] };
@@ -62,7 +66,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         } else if let Some((k, v)) = x.split_once('=').filter(|(k, _)| VALUED.contains(k)) {
             a.opts.push((k.to_string(), v.to_string()));
         } else if x.starts_with("--") {
-            if !["--json", "--force", "--dry-run", "--allow-degraded"].contains(&x.as_str()) {
+            if !["--json", "--force", "--dry-run", "--allow-degraded", "--git", "--status", "--stop"].contains(&x.as_str()) {
                 return Err(format!("unknown option {x}"));
             }
             a.flags.push(x.clone());
@@ -117,6 +121,9 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
             req.force = a.flag("--force");
             req.dry_run = a.flag("--dry-run");
             req.allow_degraded = a.flag("--allow-degraded");
+            if !cfg!(test) {
+                super::cancel_on_sigterm();
+            }
             report(&install::install(&req, &ctx.limits)?, json)
         }
         Some("import") => import(ctx, &a, rest.first().ok_or("import needs an archive or folder")?, json),
@@ -138,6 +145,13 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
             let c = match *v {
                 "auto" | "none" => Choice::Auto,
                 "theme" => Choice::Theme,
+                "restore" => {
+                    let doc = crate::settings::io::json_load(&ctx.shell_json);
+                    if policy::state(&doc, k).restore.is_none() {
+                        return Err(format!("no earlier custom {} to restore", k.id().trim_end_matches('s')));
+                    }
+                    Choice::Restore
+                }
                 n => {
                     if !policy::is_installed(&ctx.roots(), k, n) {
                         return Err(format!("no installed {} theme `{n}`", k.id().trim_end_matches('s')));
@@ -146,14 +160,67 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
                 }
             };
             policy::choose_in_file(&ctx.shell_json, k, &c)?;
+            let note = if c == Choice::Theme { super::follow::request(&ctx.shell_json) } else { None };
             let doc = crate::settings::io::json_load(&ctx.shell_json);
-            let mut out = format!("{} theme: {} ({})", k.id().trim_end_matches('s'), policy::current(&doc, k).as_deref().unwrap_or("auto"), owner_text(&policy::owner(&doc, k)));
+            let mode = if policy::owner(&doc, k) == Owner::User { "custom, kept when themes change".to_string() } else { "follows the theme".to_string() };
+            let mut out = format!("{} theme: {} ({mode})", k.id().trim_end_matches('s'), policy::current(&doc, k).as_deref().unwrap_or("auto"));
+            if let Some(n) = note {
+                out.push_str(&format!("\n{n}"));
+            }
             if k == Provides::Cursors {
                 out.push_str("\nnote: applications pick the cursor up through \"Apply to all apps\" (decthemectl apply-system) and new sessions");
             }
             Ok(out)
         }
         Some("status") => Ok(status(ctx, json)),
+        Some("downloads") => {
+            let auto = match rest.first().copied() {
+                Some("auto") => true,
+                Some("ask") => false,
+                _ => return Err("downloads needs auto or ask".into()),
+            };
+            crate::settings::io::json_update_doc(&ctx.shell_json, |d| {
+                policy::set_downloads(d, auto);
+                Ok(())
+            })?;
+            Ok(if auto {
+                "matching packs of a theme are downloaded and verified by themselves".into()
+            } else {
+                "matching packs of a theme are only offered (Settings > Icons, decthemectl assets install ID)".into()
+            })
+        }
+        Some("follow-theme") => {
+            if a.flag("--stop") {
+                return super::follow::stop();
+            }
+            if a.flag("--status") {
+                return Ok(match super::follow::status() {
+                    None => "no background download yet".into(),
+                    Some(s) if json => serde_json::to_string_pretty(&s).unwrap_or_default(),
+                    Some(s) => format!("{} for {} (generation {}): {}{}", s.phase, s.theme, s.generation, s.detail, if s.log.is_empty() { String::new() } else { format!("\nlog: {}", s.log) }),
+                });
+            }
+            let g = a.opt("--generation").and_then(|g| g.parse::<u64>().ok()).ok_or("follow-theme needs --generation N (it is started by theme apply), --status or --stop")?;
+            // the whole job is bounded: past the deadline it records the failure and exits (no pack is half-installed:
+            // installs publish atomically, an unfinished one leaves only its staging folder)
+            let dir = super::follow::state_dir();
+            let d2 = dir.clone();
+            super::cancel_on_sigterm();
+            // past the deadline the job is cancelled like a stop; one that does not end within a minute more is ended
+            std::thread::spawn(move || {
+                std::thread::sleep(super::follow::DEADLINE);
+                super::cancel();
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                if let Some(mut s) = super::follow::status_at(&d2) {
+                    s.phase = "failed".into();
+                    s.detail = format!("did not finish within {} minutes and was ended; nothing was applied", super::follow::DEADLINE.as_secs() / 60 + 1);
+                    let _ = super::follow::write_status(&d2, &s);
+                }
+                std::process::exit(3);
+            });
+            let inst = super::follow::install_pack(&ctx.root, &ctx.limits);
+            super::follow::run(&ctx.shell_json, &ctx.set, &dir, g, &inst)
+        }
         Some("preview") => preview_cmd(ctx, rest.first().ok_or("preview needs a theme name")?, a.opt("--png"), json),
         Some("catalog") => match rest.first().copied() {
             Some("check") if rest.len() > 1 => {
@@ -180,6 +247,7 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
 
 fn owner_text(o: &Owner) -> String {
     match o {
+        // the JSON `owner` values are a contract (scripts, tests): the mode is reported separately
         Owner::User => "your choice".into(),
         Owner::Theme(t) => format!("suggested by the theme {t}"),
         Owner::Default => "not chosen".into(),
@@ -539,16 +607,44 @@ fn status(ctx: &Ctx, json: bool) -> String {
     let (ic, co) = (slot(Provides::Icons), slot(Provides::Cursors));
     if json {
         let j = |s: &(Option<String>, Owner, bool)| json!({"theme": s.0, "owner": owner_text(&s.1), "installed": s.2});
-        return serde_json::to_string_pretty(&json!({"icons": j(&ic), "cursors": j(&co), "recommended": rec.as_ref().map(|r| json!({"theme": r.theme, "icons": r.icons, "cursors": r.cursors, "missing": r.missing})), "root": ctx.root}))
+        let mode = |k: Provides| {
+            let st = policy::state(&doc, k);
+            json!({"mode": if st.is_custom() { "custom" } else { "follow" }, "restore": st.restore})
+        };
+        return serde_json::to_string_pretty(&json!({"icons": j(&ic), "cursors": j(&co), "modes": {"icons": mode(Provides::Icons), "cursors": mode(Provides::Cursors)},
+            "downloads": if policy::downloads_auto(&doc) { "auto" } else { "ask" }, "follow": super::follow::status(),
+            "recommended": rec.as_ref().map(|r| json!({"theme": r.theme, "icons": r.icons, "cursors": r.cursors, "missing": r.missing, "icons_pack": r.icons_pack, "cursors_pack": r.cursors_pack, "basis": r.basis})), "root": ctx.root}))
             .unwrap_or_default();
     }
-    let line = |label: &str, s: &(Option<String>, Owner, bool)| format!("{label}{} ({}){}", s.0.as_deref().unwrap_or("auto"), owner_text(&s.1), if s.2 { "" } else { " - NOT INSTALLED" });
-    let mut out = format!("{}\n{}", line("icons:   ", &ic), line("cursors: ", &co));
+    let line = |label: &str, k: Provides, s: &(Option<String>, Owner, bool)| {
+        let restore =
+            policy::state(&doc, k).restore.filter(|_| !policy::state(&doc, k).is_custom()).map(|r| format!("; your earlier `{r}` can be restored (use {} restore)", k.id())).unwrap_or_default();
+        let mode = match &s.1 {
+            Owner::User => "custom, your choice".to_string(),
+            Owner::Theme(t) => format!("follows the theme {t}"),
+            Owner::Default => "follows the theme".to_string(),
+        };
+        format!("{label}{} ({mode}{restore}){}", s.0.as_deref().unwrap_or("auto"), if s.2 { "" } else { " - NOT INSTALLED" })
+    };
+    let mut out = format!("{}\n{}", line("icons:   ", Provides::Icons, &ic), line("cursors: ", Provides::Cursors, &co));
+    let auto = policy::downloads_auto(&doc);
     if let Some(r) = rec {
-        out.push_str(&format!("\ntheme {} suggests: icons {}, cursors {}", r.theme, r.icons.as_deref().unwrap_or("-"), r.cursors.as_deref().unwrap_or("-")));
+        out.push_str(&format!(
+            "\ntheme {} matches: icons {}, cursors {}{}",
+            r.theme,
+            r.icons.as_deref().or(r.icons_pack.as_deref()).unwrap_or("-"),
+            r.cursors.as_deref().or(r.cursors_pack.as_deref()).unwrap_or("-"),
+            r.basis.as_deref().map(|b| format!(" [{b}]")).unwrap_or_default()
+        ));
         for m in r.missing {
-            out.push_str(&format!("\n  not installed: {m} (decthemectl assets install {m})"));
+            out.push_str(&format!(
+                "\n  not installed: {m} ({})",
+                if auto { "downloaded by itself; decthemectl assets follow-theme --status" } else { "downloads are set to ask: decthemectl assets install ID" }
+            ));
         }
+    }
+    if let Some(f) = super::follow::status() {
+        out.push_str(&format!("\nbackground download for {}: {} - {}", f.theme, f.phase, f.detail));
     }
     out
 }
@@ -646,7 +742,7 @@ mod tests {
         go(&mut c, &["use", "icons", "bloom"]).unwrap();
         go(&mut c, &["use", "cursors", "bloom"]).unwrap();
         let st = go(&mut c, &["status"]).unwrap();
-        assert!(st.contains("icons:   bloom (your choice)") && st.contains("cursors: bloom (your choice)"), "{st}");
+        assert!(st.contains("icons:   bloom (custom, your choice)") && st.contains("cursors: bloom (custom, your choice)"), "{st}");
         assert!(go(&mut c, &["use", "icons", "nope"]).is_err());
         assert!(go(&mut c, &["remove", "bloom"]).unwrap_err().contains("in use"));
         go(&mut c, &["use", "icons", "auto"]).unwrap();

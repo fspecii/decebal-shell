@@ -14,6 +14,7 @@ pub fn copy_hashed(mut r: impl Read, out: &Path, cap: u64) -> Result<(String, u6
     let mut n = 0u64;
     let mut buf = vec![0u8; 64 << 10];
     loop {
+        super::check_cancel()?;
         let k = r.read(&mut buf).map_err(|e| format!("download: {e}"))?;
         if k == 0 {
             break;

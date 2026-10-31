@@ -444,9 +444,16 @@ fn installing() -> bool {
 
 fn owner_detail(o: &Owner) -> &'static str {
     match o {
-        Owner::User => "your choice: kept when you change themes",
-        Owner::Theme(_) => "suggested by the theme: follows the next theme",
-        Owner::Default => "not chosen: the toolkit default",
+        Owner::User => "custom: kept when you change themes",
+        Owner::Theme(_) => "follows the theme",
+        Owner::Default => "follows the theme (it sets none yet)",
+    }
+}
+
+fn slot_label(k: Provides) -> &'static str {
+    match k {
+        Provides::Icons => "Icons",
+        Provides::Cursors => "Cursor",
     }
 }
 
@@ -475,13 +482,66 @@ pub fn items(m: &Model) -> Vec<Item> {
     let rec = policy::Recommendation::from_doc(&doc);
     if let Some(r) = &rec {
         let follows = [Provides::Icons, Provides::Cursors].iter().all(|k| r.get(*k).is_none() || policy::current(&doc, *k).as_deref() == r.get(*k));
-        let mut c = Ctl::new("ic:follow-theme", Kind::Button { label: "Use the theme's suggestion".into(), danger: false });
+        let mut c = Ctl::new("ic:follow-theme", Kind::Button { label: "Follow the theme".into(), danger: false });
         c.enabled = !follows && (r.icons.is_some() || r.cursors.is_some());
-        rows.push(Row::new(format!("Suggested by {}", r.theme)).detail(format!("Icons {}, cursors {}", r.icons.as_deref().unwrap_or("-"), r.cursors.as_deref().unwrap_or("-"))).ctl(c));
+        rows.push(
+            Row::new(format!("Matching {}", r.theme))
+                .detail(format!("Icons {}, cursors {}", r.icons.as_deref().or(r.icons_pack.as_deref()).unwrap_or("-"), r.cursors.as_deref().or(r.cursors_pack.as_deref()).unwrap_or("-")))
+                .ctl(c),
+        );
     }
     out.push(Item::Card(rows));
-    let running = installing();
-    if let Some(r) = rec.as_ref().filter(|r| !r.missing.is_empty()) {
+
+    // Follow theme (the default) or a custom choice, per slot; the custom one is kept for restoring
+    out.push(Item::Header("Theme matching".into()));
+    let auto = policy::downloads_auto(&doc);
+    let job = super::follow::status();
+    let fetching = job.as_ref().is_some_and(super::follow::Status::running);
+    let mut mrows = Vec::new();
+    for k in [Provides::Icons, Provides::Cursors] {
+        let st = policy::state(&doc, k);
+        let custom = policy::owner(&doc, k) == Owner::User;
+        let now = policy::current(&doc, k);
+        let detail = if custom {
+            format!("Custom: {} is kept when you change themes", now.as_deref().unwrap_or("not set"))
+        } else {
+            match rec.as_ref().map(|r| (r, r.get(k), r.pack(k))) {
+                Some((r, Some(n), _)) => {
+                    format!("{n}, matching {}{}", r.theme, r.basis.as_deref().filter(|b| b.starts_with("coverage:fallback")).map(|_| " (a fallback: the theme has no icons of its own)").unwrap_or(""))
+                }
+                Some((r, None, Some(p))) if fetching => format!("{p} for {} is being downloaded and verified", r.theme),
+                Some((r, None, Some(p))) => format!("{p} for {} is not installed yet", r.theme),
+                Some((r, None, None)) => format!("{} sets none: the desktop default", r.theme),
+                None => format!("Applying a theme sets its matching {}", slot_label(k).to_lowercase()),
+            }
+        };
+        let opts = vec![("Follow theme".to_string(), "follow".to_string()), ("Custom".to_string(), "custom".to_string())];
+        let mut row = Row::new(slot_label(k)).detail(detail).ctl(Ctl::new(format!("ic:mode:{}", k.id()), Kind::Seg(opts, Some(usize::from(custom)))));
+        if let Some(r) = st.restore.as_ref().filter(|_| !custom) {
+            row = row.ctl(Ctl::new(format!("ic:restore:{}", k.id()), Kind::Button { label: format!("Restore {}", if r == "auto" { "not set" } else { r }), danger: false }));
+        }
+        mrows.push(row);
+    }
+    mrows.push(
+        Row::new("Download matching packs")
+            .detail("A theme's missing icons and cursors are downloaded from their pinned sources, verified with their licences and applied in the background")
+            .ctl(Ctl::new("ic:downloads", Kind::Toggle(auto))),
+    );
+    out.push(Item::Card(mrows));
+    if let Some(f) = &job {
+        if fetching {
+            out.push(Item::Card(vec![Row::new(format!("Downloading for {}", f.theme)).detail(f.detail.clone()).ctl(Ctl::new("ic:follow-stop", Kind::Button { label: "Stop".into(), danger: true }))]));
+        } else if f.phase == "failed" || f.phase == "stopped" {
+            out.push(Item::Note { text: format!("The matching packs for {} were not installed: {}", f.theme, f.detail), warn: true });
+            if auto && rec.as_ref().is_some_and(|r| r.theme == f.theme && !r.missing.is_empty()) {
+                out.push(Item::Card(vec![Row::new("Try again").detail(f.log.clone()).ctl(Ctl::new("ic:follow-retry", Kind::Button { label: "Retry".into(), danger: false }))]));
+            }
+        } else if f.phase == "applied" && rec.as_ref().is_some_and(|r| r.theme == f.theme) {
+            out.push(Item::Note { text: format!("{}: {}", f.theme, f.detail), warn: false });
+        }
+    }
+    let running = installing() || fetching;
+    if let Some(r) = rec.as_ref().filter(|r| !r.missing.is_empty() && !fetching) {
         let set = catalogs();
         let mut install_rows = Vec::new();
         for miss in &r.missing {
@@ -551,7 +611,16 @@ pub fn items(m: &Model) -> Vec<Item> {
 /// `ic:cursor` and `ic:follow-theme`; `true` when handled.
 pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
     // A choice changes the value and who owns it (`asset_packs`) in one atomic write on the persistence worker.
+    // following the theme again may need a download: started once the choice is saved
     let choose = |m: &mut Model, slots: Vec<(Provides, Choice)>, said: String| {
+        let follow = slots.iter().any(|(_, c)| *c == Choice::Theme);
+        let after: Option<crate::settings::model::AfterSave> = follow.then(|| {
+            Box::new(|m: &mut Model| {
+                if let Some(n) = super::follow::request(&m.paths.shell_json()) {
+                    m.say(n, false);
+                }
+            }) as crate::settings::model::AfterSave
+        });
         m.edit_shell_doc(
             "asset-choice",
             move |doc| {
@@ -560,7 +629,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 }
             },
             said,
-            None,
+            after,
         );
     };
     let res = match (parts, v) {
@@ -580,6 +649,38 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 Some(_) => start_install(id, m.queue.clone(), m.wake.clone()).map(|_| format!("Installing {id}")),
             }
         }
+        (["ic", "mode", slot], CtlVal::Str(v)) => {
+            let Some(k) = Provides::parse(slot) else { return false };
+            let c = if v == "follow" {
+                Choice::Theme
+            } else {
+                // Custom keeps what is shown now, as the user's own choice
+                let doc = crate::settings::io::json_load(&m.paths.shell_json());
+                policy::current(&doc, k).map_or(Choice::Auto, Choice::Name)
+            };
+            let said = format!("{}: {}", slot_label(k), if c == Choice::Theme { "follow the theme" } else { "custom" });
+            choose(m, vec![(k, c)], said);
+            return true;
+        }
+        (["ic", "restore", slot], CtlVal::Click) => {
+            let Some(k) = Provides::parse(slot) else { return false };
+            choose(m, vec![(k, Choice::Restore)], format!("{}: your earlier choice restored", slot_label(k)));
+            return true;
+        }
+        (["ic", "downloads"], CtlVal::Bool(b)) => {
+            let b = *b;
+            let after: crate::settings::model::AfterSave = Box::new(move |m: &mut Model| {
+                if b {
+                    if let Some(n) = super::follow::request(&m.paths.shell_json()) {
+                        m.say(n, false);
+                    }
+                }
+            });
+            m.edit_shell_doc("asset-downloads", move |doc| policy::set_downloads(doc, b), format!("Download matching packs: {}", if b { "on" } else { "off" }), Some(after));
+            return true;
+        }
+        (["ic", "follow-stop"], CtlVal::Click) => super::follow::stop(),
+        (["ic", "follow-retry"], CtlVal::Click) => super::follow::request(&m.paths.shell_json()).ok_or_else(|| "nothing to download (downloads off, or the packs are installed)".to_string()),
         (["ic", "follow-theme"], CtlVal::Click) => {
             choose(m, vec![(Provides::Icons, Choice::Theme), (Provides::Cursors, Choice::Theme)], "Icons and cursor follow the theme".into());
             return true;
@@ -629,7 +730,7 @@ mod tests {
         let mut doc = crate::settings::io::json_load(&path);
         policy::apply_theme(
             &mut doc,
-            &policy::Recommendation { theme: "fixture-desktop".into(), icons: Some("bloom".into()), cursors: Some("bloom".into()), missing: vec!["fixture-bloom-dark".into()] },
+            &policy::Recommendation { theme: "fixture-desktop".into(), icons: Some("bloom".into()), cursors: Some("bloom".into()), missing: vec!["fixture-bloom-dark".into()], ..Default::default() },
         );
         crate::settings::io::json_set(&path, policy::KEY, doc.get(policy::KEY).cloned()).unwrap();
         crate::settings::io::json_set(&path, "icons", doc.get("icons").cloned()).unwrap();
@@ -645,6 +746,42 @@ mod tests {
 
         m.apply("ic:cursor", CtlVal::Reset);
         assert_eq!(policy::current(&crate::settings::io::json_load(&path), Provides::Cursors), None);
+    }
+
+    #[test]
+    fn each_slot_follows_the_theme_or_keeps_a_custom_choice_that_can_be_restored() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut m, _) = model_with("");
+        let path = m.paths.shell_json();
+        let mut doc = crate::settings::io::json_load(&path);
+        doc["icons"] = serde_json::json!({"theme": "Papirus"});
+        policy::apply_theme(&mut doc, &policy::Recommendation { theme: "deepin".into(), icons: Some("bloom".into()), ..Default::default() });
+        crate::settings::io::json_set(&path, policy::KEY, doc.get(policy::KEY).cloned()).unwrap();
+        crate::settings::io::json_set(&path, "icons", doc.get("icons").cloned()).unwrap();
+        let seg = |its: &[Item], id: &str| match ctl(its, id).map(|c| &c.kind) {
+            Some(Kind::Seg(_, sel)) => *sel,
+            _ => panic!("no {id}"),
+        };
+        let its = items(&m);
+        assert_eq!((seg(&its, "ic:mode:icons"), seg(&its, "ic:mode:cursors")), (Some(0), Some(0)), "Follow theme is the default");
+        assert!(matches!(ctl(&its, "ic:downloads").map(|c| &c.kind), Some(Kind::Toggle(true))), "matching downloads are on by default");
+        m.apply("ic:mode:icons", CtlVal::Str("custom".into()));
+        let doc = crate::settings::io::json_load(&path);
+        assert_eq!((policy::current(&doc, Provides::Icons).as_deref(), policy::owner(&doc, Provides::Icons)), (Some("bloom"), Owner::User), "Custom keeps what is shown");
+        assert_eq!(seg(&items(&m), "ic:mode:icons"), Some(1));
+        // a custom pick, then back to the theme: the pick is offered for restoring
+        policy::choose_in_file(&path, Provides::Icons, &Choice::Name("Papirus".into())).unwrap();
+        m.apply("ic:mode:icons", CtlVal::Str("follow".into()));
+        let doc = crate::settings::io::json_load(&path);
+        assert_eq!((policy::current(&doc, Provides::Icons).as_deref(), policy::owner(&doc, Provides::Icons)), (Some("bloom"), Owner::Theme("deepin".into())));
+        let its = items(&m);
+        assert!(matches!(ctl(&its, "ic:restore:icons").map(|c| &c.kind), Some(Kind::Button { label, .. }) if label == "Restore Papirus"));
+        m.apply("ic:restore:icons", CtlVal::Click);
+        assert_eq!(policy::current(&crate::settings::io::json_load(&path), Provides::Icons).as_deref(), Some("Papirus"));
+        // the explicit opt-out of downloads is kept in the file
+        m.apply("ic:downloads", CtlVal::Bool(false));
+        assert!(!policy::downloads_auto(&crate::settings::io::json_load(&path)));
+        assert!(matches!(ctl(&items(&m), "ic:downloads").map(|c| &c.kind), Some(Kind::Toggle(false))));
     }
 
     #[test]
