@@ -25,6 +25,75 @@ fn listing(root: &std::path::Path, roots: &crate::icons::resolve::Roots) -> List
     }
 }
 
+/// The one background install the pane may run, and the outcome of the last one.
+struct Job {
+    pack: String,
+    child: std::process::Child,
+    log: std::path::PathBuf,
+}
+
+static JOB: std::sync::Mutex<Option<Job>> = std::sync::Mutex::new(None);
+static LAST: std::sync::Mutex<Option<(String, bool, String)>> = std::sync::Mutex::new(None);
+#[cfg(test)]
+static PROGRAM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+#[cfg(test)]
+static CATALOGS: std::sync::Mutex<Option<super::catalog::Set>> = std::sync::Mutex::new(None);
+
+fn catalogs() -> super::catalog::Set {
+    #[cfg(test)]
+    if let Some(s) = CATALOGS.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return s;
+    }
+    super::catalog::Set::load()
+}
+
+/// `decthemectl` next to the running program, else from `PATH`.
+fn program() -> String {
+    #[cfg(test)]
+    if let Some(p) = PROGRAM.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return p;
+    }
+    std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("decthemectl"))).filter(|p| p.is_file()).map_or_else(|| "decthemectl".into(), |p| p.display().to_string())
+}
+
+/// Starts `decthemectl assets install ID` (fixed arguments, no shell) with its output in a log file.
+fn start_install(pack: &str) -> Result<(), String> {
+    let mut g = JOB.lock().unwrap_or_else(|e| e.into_inner());
+    if g.is_some() {
+        return Err("another pack is being installed".into());
+    }
+    let log = std::env::temp_dir().join(format!("decebal-asset-install-{}.log", std::process::id()));
+    let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
+    let err = out.try_clone().map_err(|e| e.to_string())?;
+    let child = std::process::Command::new(program())
+        .args(["assets", "install", pack])
+        .stdin(std::process::Stdio::null())
+        .stdout(out)
+        .stderr(err)
+        .spawn()
+        .map_err(|e| format!("could not start decthemectl: {e}"))?;
+    *g = Some(Job { pack: pack.to_string(), child, log });
+    Ok(())
+}
+
+/// Collects a finished install; `true` while one is running.
+fn poll_install() -> bool {
+    let mut g = JOB.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(j) = g.as_mut() else { return false };
+    match j.child.try_wait() {
+        Ok(None) => true,
+        res => {
+            let ok = matches!(res, Ok(Some(s)) if s.success());
+            let text = std::fs::read_to_string(&j.log).unwrap_or_default();
+            let line = text.lines().find(|l| l.starts_with("installed") || l.starts_with("already") || l.starts_with("replaced") || l.starts_with("decthemectl:")).unwrap_or("").trim().to_string();
+            let _ = std::fs::remove_file(&j.log);
+            *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((j.pack.clone(), ok, line));
+            *g = None;
+            false
+        }
+    }
+}
+
 fn owner_detail(o: &Owner) -> &'static str {
     match o {
         Owner::User => "your choice: kept when you change themes",
@@ -62,13 +131,42 @@ pub fn items(m: &Model) -> Vec<Item> {
         rows.push(Row::new(format!("Suggested by {}", r.theme)).detail(format!("Icons {}, cursors {}", r.icons.as_deref().unwrap_or("-"), r.cursors.as_deref().unwrap_or("-"))).ctl(c));
     }
     out.push(Item::Card(rows));
-    if let Some(r) = &rec {
+    let running = poll_install();
+    if let Some(r) = rec.as_ref().filter(|r| !r.missing.is_empty()) {
+        let set = catalogs();
+        let mut install_rows = Vec::new();
         for miss in &r.missing {
-            out.push(Item::Note {
-                text: format!("The theme suggests the asset pack {miss}, which is not installed: decthemectl assets install {miss} (it downloads a pinned, verified upstream copy with its licence)."),
-                warn: false,
-            });
+            match set.find(miss).filter(|e| e.source.archive_url.is_some()) {
+                Some(e) => {
+                    let mut c = Ctl::new(format!("ic:install:{}", e.pack.id), Kind::Button { label: "Install".into(), danger: false });
+                    c.enabled = !running;
+                    install_rows.push(
+                        Row::new(format!("Install {}", e.pack.name))
+                            .detail(format!(
+                                "Suggested by {}: {} at {}, checked against its pinned tree, with its licence ({})",
+                                r.theme,
+                                e.source.repo,
+                                &e.source.commit[..12.min(e.source.commit.len())],
+                                e.license()
+                            ))
+                            .ctl(c),
+                    );
+                }
+                None => out.push(Item::Note {
+                    text: format!("The theme suggests the asset pack {miss}, which is not installed and has no download: decthemectl assets install {miss} --archive FILE (or --source-dir DIR)."),
+                    warn: false,
+                }),
+            }
         }
+        if !install_rows.is_empty() {
+            out.push(Item::Card(install_rows));
+        }
+    }
+    let job = JOB.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|j| j.pack.clone());
+    if let Some(p) = job {
+        out.push(Item::Note { text: format!("Installing {p}: downloading and verifying, this can take a minute."), warn: false });
+    } else if let Some((p, ok, line)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        out.push(Item::Note { text: if ok { format!("{p}: {line}") } else { format!("{p} was not installed: {}", line.trim_start_matches("decthemectl: ")) }, warn: !ok });
     }
 
     if !packs.is_empty() {
@@ -102,6 +200,13 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             policy::choose_in_file(&path, Provides::Cursors, &c).map(|_| format!("Cursor theme: {}", if s == "auto" { "not set" } else { s }))
         }
         (["ic", "cursor"], CtlVal::Reset) => policy::choose_in_file(&path, Provides::Cursors, &Choice::Auto).map(|_| "Cursor theme: not set".to_string()),
+        (["ic", "install", id], CtlVal::Click) => {
+            let set = catalogs();
+            match set.find(id).filter(|e| e.pack.id == *id && e.source.archive_url.is_some()) {
+                None => Err(format!("no downloadable asset pack `{id}`")),
+                Some(_) => start_install(id).map(|_| format!("Installing {id}")),
+            }
+        }
         (["ic", "follow-theme"], CtlVal::Click) => policy::choose_in_file(&path, Provides::Icons, &Choice::Theme)
             .and_then(|_| policy::choose_in_file(&path, Provides::Cursors, &Choice::Theme))
             .map(|_| "Icons and cursor follow the theme".to_string()),
@@ -122,12 +227,16 @@ mod tests {
     use super::*;
     use crate::settings::model::tests_support::model_with;
 
+    // the pane keeps its install job in process-wide slots: its tests take turns
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn ctl<'a>(items: &'a [Item], id: &str) -> Option<&'a Ctl> {
         items.iter().find_map(|i| if let Item::Card(rows) = i { rows.iter().flat_map(|r| r.ctls.iter()).find(|c| c.id == id) } else { None })
     }
 
     #[test]
     fn cursor_choice_and_following_the_theme_go_through_the_pane() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
         let (mut m, _) = model_with("");
         let path = m.paths.shell_json();
         let its = items(&m);
@@ -159,5 +268,38 @@ mod tests {
 
         m.apply("ic:cursor", CtlVal::Reset);
         assert_eq!(policy::current(&crate::settings::io::json_load(&path), Provides::Cursors), None);
+    }
+
+    #[test]
+    fn a_suggested_pack_installs_in_the_background_with_its_outcome_shown() {
+        let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+        use std::os::unix::fs::PermissionsExt;
+        let s = crate::desktop_assets::testkit::Scratch::new("pane-install");
+        let fake = s.write(
+            "fake-decthemectl",
+            b"#!/bin/sh\n[ \"$1 $2 $3\" = \"assets install deepin-bloom\" ] || { echo \"decthemectl: bad args $*\"; exit 1; }\necho \"installed: deepin-bloom -> /x/bloom\"\n",
+        );
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut set = crate::desktop_assets::catalog::Set::default();
+        set.push(crate::desktop_assets::catalog::parse(crate::desktop_assets::catalog::tests::GOOD, "t").unwrap());
+        *CATALOGS.lock().unwrap() = Some(set);
+        *PROGRAM.lock().unwrap() = Some(fake.display().to_string());
+        let (mut m, _) = model_with("");
+        let path = m.paths.shell_json();
+        let mut doc = crate::settings::io::json_load(&path);
+        policy::apply_theme(&mut doc, &policy::Recommendation { theme: "deepin".into(), missing: vec!["deepin-bloom".into()], ..Default::default() });
+        crate::settings::io::json_set(&path, policy::KEY, doc.get(policy::KEY).cloned()).unwrap();
+        assert!(ctl(&items(&m), "ic:install:deepin-bloom").is_some_and(|c| c.enabled));
+        m.apply("ic:install:nope", CtlVal::Click);
+        assert!(JOB.lock().unwrap().is_none(), "unknown ids start nothing");
+        m.apply("ic:install:deepin-bloom", CtlVal::Click);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while poll_install() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let its = items(&m);
+        assert!(its.iter().any(|i| matches!(i, Item::Note { text, warn: false } if text.contains("installed: deepin-bloom"))), "the outcome is shown");
+        *PROGRAM.lock().unwrap() = None;
+        *CATALOGS.lock().unwrap() = None;
     }
 }

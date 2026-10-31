@@ -182,11 +182,12 @@ fn owner_text(o: &Owner) -> String {
     }
 }
 
-fn state_of(ctx: &Ctx, name: &str, pack: &str) -> &'static str {
-    match install::existing(&ctx.root, name) {
+fn state_of(ctx: &Ctx, e: &catalog::Entry) -> &'static str {
+    match install::existing(&ctx.root, &e.pack.install_name) {
         Existing::Absent => "not installed",
         Existing::Foreign => "name taken by a theme decebal did not install",
-        Existing::Ours(p) if p.pack != pack => "name taken by another pack",
+        Existing::Ours(p) if p.pack != e.pack.id => "name taken by another pack",
+        Existing::Ours(p) if p.source.tree.as_deref() != Some(e.pack.tree.as_str()) => "installed, the catalogue pins a newer revision (install --force)",
         Existing::Ours(_) => "installed",
     }
 }
@@ -200,7 +201,7 @@ fn list(ctx: &Ctx, json: bool) -> String {
             .map(|e| {
                 json!({"id": e.pack.id, "name": e.pack.name, "family": e.catalog.family, "provides": e.pack.provides.iter().map(|p| p.id()).collect::<Vec<_>>(),
                        "install_name": e.pack.install_name, "license": e.license(), "commit": e.source.commit, "tree": e.pack.tree,
-                       "downloadable": e.source.archive_url.is_some(), "state": state_of(ctx, &e.pack.install_name, &e.pack.id)})
+                       "downloadable": e.source.archive_url.is_some(), "state": state_of(ctx, &e)})
             })
             .collect();
         let inst: Vec<_> =
@@ -213,7 +214,7 @@ fn list(ctx: &Ctx, json: bool) -> String {
     }
     for e in ctx.set.entries() {
         let kinds: Vec<&str> = e.pack.provides.iter().map(|p| p.id()).collect();
-        out.push_str(&format!("{:<28} {:<22} {:<16} {:<18} {}\n", e.pack.id, e.pack.install_name, kinds.join("+"), e.license(), state_of(ctx, &e.pack.install_name, &e.pack.id)));
+        out.push_str(&format!("{:<28} {:<22} {:<16} {:<18} {}\n", e.pack.id, e.pack.install_name, kinds.join("+"), e.license(), state_of(ctx, &e)));
     }
     if !installed.is_empty() {
         out.push_str(&format!("installed in {}:\n", ctx.root.display()));
@@ -553,7 +554,9 @@ mod tests {
         assert!(go(&mut c, &["install", "fixture-bloom"]).unwrap_err().contains("--archive"), "no archive_url: told how");
         let out = go(&mut c, &["install", "fixture-bloom", "--archive", a.to_str().unwrap()]).unwrap();
         assert!(out.starts_with("installed: fixture-bloom") && out.contains("verified: tree yes sha256 no commit yes"), "{out}");
-        assert!(go(&mut c, &["list"]).unwrap().contains("installed"));
+        assert!(go(&mut c, &["list"]).unwrap().lines().any(|l| l.starts_with("fixture-bloom") && l.ends_with(" installed")));
+        let mut moved = ctx(&s, Some(catalog_for(&entries, &a).replace(&tree_of(&entries, "top/bloom"), &"a".repeat(40))));
+        assert!(go(&mut moved, &["list"]).unwrap().contains("newer revision"), "a new pin is shown as an update");
         let info: serde_json::Value = serde_json::from_str(&go(&mut c, &["info", "bloom", "--json"]).unwrap()).unwrap();
         assert_eq!(info["installed"]["license"], "GPL-3.0-or-later");
         assert_eq!(info["recommended_by"][0], "fixture-theme");
