@@ -1,6 +1,8 @@
 # Example companion catalogue for an openKylin (UKUI) port. Pins from `git rev-parse` on 2026-10-31.
-# openKylin's own dark-sense / blue-crystal cursors are PNGs built by a shell script (icons/cursors/*/cursors.sh);
-# they are not importable until the port transcribes their hotspots as data, so DMZ (what openKylin ships) is used.
+# openKylin's own dark-sense cursors are PNGs that upstream turns into Xcursor files with a shell script
+# (icons/cursors/dark-sense/cursors.sh). Their hotspots and aliases are below as data ([[pack.xcursor]], produced from
+# the script's text by docs/desktop-asset-packs/xcursorgen2toml.py; the script is never run); decebal builds the
+# cursors natively. DMZ (also shipped by openKylin) stays available.
 format = 1
 family = "openkylin"
 
@@ -57,4 +59,667 @@ tree = "d4dc970813dc6060b2553cd172d76ceef57221d8"
 [[recommend]]
 theme = "openkylin"
 icons = "openkylin-ukui-default"
-cursors = "openkylin-dmz-white"
+cursors = "openkylin-dark-sense"
+
+[[pack]]
+id = "openkylin-dark-sense"
+name = "Dark Sense"
+provides = ["cursors"]
+source = "openkylin-theme"
+path = "icons/cursors/dark-sense"
+tree = "b38ba3ab123cbdc5418fa43daf5beba11e4c9138"
+
+[[pack.xcursor]]
+name = "all-scroll"
+config = """
+24 11 11 24x24/all-scroll.png
+32 15 15 32x32/all-scroll.png
+48 22 22 48x48/all-scroll.png
+64 30 30 64x64/all-scroll.png
+96 46 46 96x96/all-scroll.png
+"""
+
+[[pack.xcursor]]
+name = "bd_double_arrow"
+config = """
+24 11 11 24x24/bd_double_arrow.png
+32 15 15 32x32/bd_double_arrow.png
+48 22 22 48x48/bd_double_arrow.png
+64 30 30 64x64/bd_double_arrow.png
+96 46 46 96x96/bd_double_arrow.png
+"""
+aliases = ["c7088f0f3e6c8088236ef8e1e3e70000"]
+
+[[pack.xcursor]]
+name = "bottom_left_corner"
+config = """
+24 2 20 24x24/bottom_left_corner.png
+32 2 30 32x32/bottom_left_corner.png
+48 4 40 48x48/bottom_left_corner.png
+64 4 56 64x64/bottom_left_corner.png
+96 8 82 96x96/bottom_left_corner.png
+"""
+
+[[pack.xcursor]]
+name = "bottom_right_corner"
+config = """
+24 20 20 24x24/bottom_right_corner.png
+32 28 28 32x32/bottom_right_corner.png
+48 40 40 48x48/bottom_right_corner.png
+64 56 56 64x64/bottom_right_corner.png
+96 82 82 96x96/bottom_right_corner.png
+"""
+
+[[pack.xcursor]]
+name = "bottom_side"
+config = """
+24 11 20 24x24/bottom_side.png
+32 15 26 32x32/bottom_side.png
+48 22 40 48x48/bottom_side.png
+64 30 56 64x64/bottom_side.png
+96 44 82 96x96/bottom_side.png
+"""
+
+[[pack.xcursor]]
+name = "bottom_tee"
+config = """
+24 11 20 24x24/bottom_tee.png
+32 15 26 32x32/bottom_tee.png
+48 22 40 48x48/bottom_tee.png
+64 30 40 64x64/bottom_tee.png
+96 44 82 96x96/bottom_tee.png
+"""
+
+[[pack.xcursor]]
+name = "circle"
+config = """
+24 11 11 24x24/circle.png
+32 15 15 32x32/circle.png
+48 22 22 48x48/circle.png
+64 30 30 64x64/circle.png
+96 46 46 96x96/circle.png
+"""
+
+[[pack.xcursor]]
+name = "color-picker"
+config = """
+24 4 19 24x24/color-picker.png
+32 6 26 32x32/color-picker.png
+48 10 38 48x48/color-picker.png
+64 10 38 64x64/color-picker.png
+96 10 38 96x96/color-picker.png
+"""
+
+[[pack.xcursor]]
+name = "copy"
+config = """
+24 4 0 24x24/copy.png
+32 5 0 32x32/copy.png
+48 10 1 48x48/copy.png
+64 10 1 64x64/copy.png
+96 20 1 96x96/copy.png
+"""
+aliases = ["6407b0e94181790501fd1e167b474872", "1081e37283d90000800003c07f3ef6bf"]
+
+[[pack.xcursor]]
+name = "cross"
+config = """
+24 11 11 24x24/cross.png
+32 15 15 32x32/cross.png
+48 22 22 48x48/cross.png
+64 30 30 64x64/cross.png
+96 46 46 96x96/cross.png
+"""
+aliases = ["cross_reverse", "diamond_cross"]
+
+[[pack.xcursor]]
+name = "crossed_circle"
+config = """
+24 11 11 24x24/crossed_circle.png
+32 15 15 32x32/crossed_circle.png
+48 22 22 48x48/crossed_circle.png
+64 30 30 64x64/crossed_circle.png
+96 46 46 96x96/crossed_circle.png
+"""
+aliases = ["03b6e0fcb3499374a867c041f52298f0"]
+
+[[pack.xcursor]]
+name = "crosshair"
+config = """
+24 11 11 24x24/crosshair.png
+32 15 15 32x32/crosshair.png
+48 22 22 48x48/crosshair.png
+64 30 30 64x64/crosshair.png
+96 46 46 96x96/crosshair.png
+"""
+
+[[pack.xcursor]]
+name = "dnd-ask"
+config = """
+24 9 9 24x24/dnd-ask.png
+32 13 13 32x32/dnd-ask.png
+48 18 18 48x48/dnd-ask.png
+64 28 28 64x64/dnd-ask.png
+96 44 44 96x96/dnd-ask.png
+"""
+
+[[pack.xcursor]]
+name = "dnd-copy"
+config = """
+24 4 0 24x24/dnd-copy.png
+32 5 0 32x32/dnd-copy.png
+48 10 1 48x48/dnd-copy.png
+64 10 1 64x64/dnd-copy.png
+96 20 1 96x96/dnd-copy.png
+"""
+
+[[pack.xcursor]]
+name = "dnd-link"
+config = """
+24 9 9 24x24/dnd-link.png
+32 13 13 32x32/dnd-link.png
+48 18 18 48x48/dnd-link.png
+64 28 28 64x64/dnd-link.png
+96 44 44 96x96/dnd-link.png
+"""
+
+[[pack.xcursor]]
+name = "dnd-move"
+config = """
+24 4 0 24x24/dnd-move.png
+32 9 2 32x32/dnd-move.png
+48 9 3 48x48/dnd-move.png
+64 9 3 64x64/dnd-move.png
+96 17 3 96x96/dnd-move.png
+"""
+
+[[pack.xcursor]]
+name = "dnd-none"
+config = """
+24 11 11 24x24/dnd-none.png
+32 15 15 32x32/dnd-none.png
+48 22 22 48x48/dnd-none.png
+64 30 30 64x64/dnd-none.png
+96 46 46 96x96/dnd-none.png
+"""
+
+[[pack.xcursor]]
+name = "kylin-move"
+config = """
+24 11 11 24x24/kylin-move.png
+32 15 15 32x32/kylin-move.png
+48 22 22 48x48/kylin-move.png
+64 30 30 64x64/kylin-move.png
+96 46 46 96x96/kylin-move.png
+"""
+
+[[pack.xcursor]]
+name = "dotbox"
+config = """
+24 11 11 24x24/dotbox.png
+32 15 15 32x32/dotbox.png
+48 22 22 48x48/dotbox.png
+64 30 30 64x64/dotbox.png
+96 46 46 96x96/dotbox.png
+"""
+aliases = ["dot_box_mask", "draped_box", "icon", "target"]
+
+[[pack.xcursor]]
+name = "fd_double_arrow"
+config = """
+24 11 11 24x24/fd_double_arrow.png
+32 15 15 32x32/fd_double_arrow.png
+48 22 22 48x48/fd_double_arrow.png
+64 30 30 64x64/fd_double_arrow.png
+96 46 46 96x96/fd_double_arrow.png
+"""
+aliases = ["fcf1c3c7cd4491d801f1e1c78f100000"]
+
+[[pack.xcursor]]
+name = "grabbing"
+config = """
+24 4 0 24x24/grabbing.png
+32 9 2 32x32/grabbing.png
+48 9 3 48x48/grabbing.png
+64 9 3 64x64/grabbing.png
+96 17 3 96x96/grabbing.png
+"""
+aliases = ["fleur"]
+
+[[pack.xcursor]]
+name = "hand2"
+config = """
+24 8 2 24x24/hand2.png
+32 9 2 32x32/hand2.png
+48 16 3 48x48/hand2.png
+64 20 3 64x64/hand2.png
+96 32 6 96x96/hand2.png
+"""
+aliases = ["hand1", "e29285e634086352946a0e7090d73106", "9d800788f1b08800ae810202380a0822", "hand"]
+
+[[pack.xcursor]]
+name = "left_ptr_watch"
+config = """
+24 3 0 24x24/left_ptr_watch_1.png 50
+24 3 0 24x24/left_ptr_watch_2.png 50
+24 3 0 24x24/left_ptr_watch_3.png 50
+24 3 0 24x24/left_ptr_watch_4.png 50
+24 3 0 24x24/left_ptr_watch_5.png 50
+32 3 0 32x32/left_ptr_watch_1.png 50
+32 3 0 32x32/left_ptr_watch_2.png 50
+32 3 0 32x32/left_ptr_watch_3.png 50
+32 3 0 32x32/left_ptr_watch_4.png 50
+32 3 0 32x32/left_ptr_watch_5.png 50
+48 10 2 48x48/left_ptr_watch_1.png 50
+48 10 2 48x48/left_ptr_watch_2.png 50
+48 10 2 48x48/left_ptr_watch_3.png 50
+48 10 2 48x48/left_ptr_watch_4.png 50
+48 10 2 48x48/left_ptr_watch_5.png 50
+64 10 2 64x64/left_ptr_watch_1.png 50
+64 10 2 64x64/left_ptr_watch_2.png 50
+64 10 2 64x64/left_ptr_watch_3.png 50
+64 10 2 64x64/left_ptr_watch_4.png 50
+64 10 2 64x64/left_ptr_watch_5.png 50
+96 20 2 96x96/left_ptr_watch_1.png 50
+96 20 2 96x96/left_ptr_watch_2.png 50
+96 20 2 96x96/left_ptr_watch_3.png 50
+96 20 2 96x96/left_ptr_watch_4.png 50
+96 20 2 96x96/left_ptr_watch_5.png 50
+"""
+aliases = ["3ecb610c1bf2410f44200f48c40d3599", "08e8e1c95fe2fc01f976f1e063a24ccd"]
+
+[[pack.xcursor]]
+name = "left_ptr"
+config = """
+24 4 0 24x24/left_ptr.png
+32 4 0 32x32/left_ptr.png
+48 9 3 48x48/left_ptr.png
+64 9 3 64x64/left_ptr.png
+96 17 3 96x96/left_ptr.png
+"""
+aliases = ["arrow", "top_left_arrow"]
+
+[[pack.xcursor]]
+name = "left_side"
+config = """
+24 2 11 24x24/left_side.png
+32 2 16 32x32/left_side.png
+48 4 26 48x48/left_side.png
+64 4 30 64x64/left_side.png
+96 6 44 96x96/left_side.png
+"""
+
+[[pack.xcursor]]
+name = "left_tee"
+config = """
+24 7 13 24x24/left_tee.png
+32 10 20 32x32/left_tee.png
+48 14 26 48x48/left_tee.png
+64 4 30 64x64/left_tee.png
+96 6 44 96x96/left_tee.png
+"""
+
+[[pack.xcursor]]
+name = "link"
+config = """
+24 4 5 24x24/link.png
+32 6 8 32x32/link.png
+48 8 10 48x48/link.png
+64 8 10 64x64/link.png
+96 8 10 96x96/link.png
+"""
+aliases = ["640fb0e74195791501fd1ed57b41487f", "3085a0e285430894940527032f8b26df"]
+
+[[pack.xcursor]]
+name = "ll_angle"
+config = """
+24 2 20 24x24/ll_angle.png
+32 2 30 32x32/ll_angle.png
+48 8 40 48x48/ll_angle.png
+64 4 56 64x64/ll_angle.png
+96 8 82 96x96/ll_angle.png
+"""
+
+[[pack.xcursor]]
+name = "lr_angle"
+config = """
+24 20 20 24x24/lr_angle.png
+32 28 28 32x32/lr_angle.png
+48 40 40 48x48/lr_angle.png
+64 56 56 64x64/lr_angle.png
+96 82 82 96x96/lr_angle.png
+"""
+
+[[pack.xcursor]]
+name = "move"
+config = """
+24 11 11 24x24/move.png
+32 15 15 32x32/move.png
+48 22 22 48x48/move.png
+64 30 30 64x64/move.png
+96 46 46 96x96/move.png
+"""
+aliases = ["9081237383d90e509aa00f00170e968f", "4498f0e0c1937ffe01fd06f973665830"]
+
+[[pack.xcursor]]
+name = "pencil"
+config = """
+24 7 23 24x24/pencil.png
+32 9 31 32x32/pencil.png
+48 14 46 48x48/pencil.png
+64 14 46 64x64/pencil.png
+96 14 46 96x96/pencil.png
+"""
+
+[[pack.xcursor]]
+name = "plus"
+config = """
+24 11 11 24x24/plus.png
+32 15 15 32x32/plus.png
+48 22 22 48x48/plus.png
+64 30 30 64x64/plus.png
+96 46 46 96x96/plus.png
+"""
+
+[[pack.xcursor]]
+name = "question_arrow"
+config = """
+24 4 0 24x24/question_arrow.png
+32 4 0 32x32/question_arrow.png
+48 9 0 48x48/question_arrow.png
+64 9 0 64x64/question_arrow.png
+96 20 0 96x96/question_arrow.png
+"""
+aliases = ["d9ce0ab605698f320427677b458ad60b", "5c6cd98b3f3ebcb1f9c7f1c204630408", "help", "left_ptr_help"]
+
+[[pack.xcursor]]
+name = "right_ptr"
+config = """
+24 17 4 24x24/right_ptr.png
+32 24 6 32x32/right_ptr.png
+48 34 8 48x48/right_ptr.png
+64 34 8 64x64/right_ptr.png
+96 34 8 96x96/right_ptr.png
+"""
+aliases = ["draft_large", "draft_small"]
+
+[[pack.xcursor]]
+name = "right_side"
+config = """
+24 20 13 24x24/right_side.png
+32 30 19 32x32/right_side.png
+48 40 26 48x48/right_side.png
+64 56 32 64x64/right_side.png
+96 80 46 96x96/right_side.png
+"""
+
+[[pack.xcursor]]
+name = "right_tee"
+config = """
+24 20 12 24x24/right_tee.png
+32 30 19 32x32/right_tee.png
+48 40 24 48x48/right_tee.png
+64 56 32 64x64/right_tee.png
+96 80 46 96x96/right_tee.png
+"""
+
+[[pack.xcursor]]
+name = "sb_down_arrow"
+config = """
+24 11 18 24x24/sb_down_arrow.png
+32 15 20 32x32/sb_down_arrow.png
+48 22 36 48x48/sb_down_arrow.png
+64 22 36 64x64/sb_down_arrow.png
+96 44 36 96x96/sb_down_arrow.png
+"""
+
+[[pack.xcursor]]
+name = "sb_h_double_arrow"
+config = """
+24 11 11 24x24/sb_h_double_arrow.png
+32 15 15 32x32/sb_h_double_arrow.png
+48 22 22 48x48/sb_h_double_arrow.png
+64 30 30 64x64/sb_h_double_arrow.png
+96 46 46 96x96/sb_h_double_arrow.png
+"""
+aliases = ["14fef782d02440884392942c11205230"]
+
+[[pack.xcursor]]
+name = "h_double_arrow"
+config = """
+24 11 11 24x24/h_double_arrow.png
+32 15 15 32x32/h_double_arrow.png
+48 22 22 48x48/h_double_arrow.png
+64 30 30 64x64/h_double_arrow.png
+96 46 46 96x96/h_double_arrow.png
+"""
+aliases = ["028006030e0e7ebffc7f7070c0600140"]
+
+[[pack.xcursor]]
+name = "sb_left_arrow"
+config = """
+24 7 13 24x24/sb_left_arrow.png
+32 10 20 32x32/sb_left_arrow.png
+48 14 26 48x48/sb_left_arrow.png
+64 14 32 64x64/sb_left_arrow.png
+96 14 44 96x96/sb_left_arrow.png
+"""
+
+[[pack.xcursor]]
+name = "sb_right_arrow"
+config = """
+24 20 13 24x24/sb_right_arrow.png
+32 30 19 32x32/sb_right_arrow.png
+48 40 26 48x48/sb_right_arrow.png
+64 40 32 64x64/sb_right_arrow.png
+96 60 44 96x96/sb_right_arrow.png
+"""
+
+[[pack.xcursor]]
+name = "sb_up_arrow"
+config = """
+24 12 4 24x24/sb_up_arrow.png
+32 18 6 32x32/sb_up_arrow.png
+48 24 8 48x48/sb_up_arrow.png
+64 24 8 64x64/sb_up_arrow.png
+96 44 8 96x96/sb_up_arrow.png
+"""
+
+[[pack.xcursor]]
+name = "sb_v_double_arrow"
+config = """
+24 11 11 24x24/sb_v_double_arrow.png
+32 15 15 32x32/sb_v_double_arrow.png
+48 22 22 48x48/sb_v_double_arrow.png
+64 30 30 64x64/sb_v_double_arrow.png
+96 46 46 96x96/sb_v_double_arrow.png
+"""
+aliases = ["2870a09082c103050810ffdffffe0204", "double_arrow"]
+
+[[pack.xcursor]]
+name = "v_double_arrow"
+config = """
+24 11 11 24x24/v_double_arrow.png
+32 15 15 32x32/v_double_arrow.png
+48 22 22 48x48/v_double_arrow.png
+64 30 30 64x64/v_double_arrow.png
+96 46 46 96x96/v_double_arrow.png
+"""
+aliases = ["00008160000006810000408080010102"]
+
+[[pack.xcursor]]
+name = "vertical_text"
+config = """
+24 11 11 24x24/vertical_text.png
+32 15 15 32x32/vertical_text.png
+48 22 22 48x48/vertical_text.png
+64 30 30 64x64/vertical_text.png
+96 46 46 96x96/vertical_text.png
+"""
+
+[[pack.xcursor]]
+name = "tcross"
+config = """
+24 11 11 24x24/tcross.png
+32 15 15 32x32/tcross.png
+48 22 22 48x48/tcross.png
+64 30 30 64x64/tcross.png
+96 46 46 96x96/tcross.png
+"""
+
+[[pack.xcursor]]
+name = "top_left_corner"
+config = """
+24 2 2 24x24/top_left_corner.png
+32 3 3 32x32/top_left_corner.png
+48 4 4 48x48/top_left_corner.png
+64 4 4 64x64/top_left_corner.png
+96 6 6 96x96/top_left_corner.png
+"""
+
+[[pack.xcursor]]
+name = "top_right_corner"
+config = """
+24 21 2 24x24/top_right_corner.png
+32 27 3 32x32/top_right_corner.png
+48 40 5 48x48/top_right_corner.png
+64 56 5 64x64/top_right_corner.png
+96 86 6 96x96/top_right_corner.png
+"""
+
+[[pack.xcursor]]
+name = "top_side"
+config = """
+24 12 3 24x24/top_side.png
+32 15 3 32x32/top_side.png
+48 24 5 48x48/top_side.png
+64 30 5 64x64/top_side.png
+96 46 6 96x96/top_side.png
+"""
+
+[[pack.xcursor]]
+name = "top_tee"
+config = """
+24 12 5 24x24/top_tee.png
+32 18 8 32x32/top_tee.png
+48 24 5 48x48/top_tee.png
+64 30 5 64x64/top_tee.png
+96 46 6 96x96/top_tee.png
+"""
+
+[[pack.xcursor]]
+name = "ul_angle"
+config = """
+24 5 5 24x24/ul_angle.png
+32 8 8 32x32/ul_angle.png
+48 4 4 48x48/ul_angle.png
+64 4 4 64x64/ul_angle.png
+96 6 6 96x96/ul_angle.png
+"""
+
+[[pack.xcursor]]
+name = "ur_angle"
+config = """
+24 18 5 24x24/ur_angle.png
+32 26 8 32x32/ur_angle.png
+48 40 5 48x48/ur_angle.png
+64 56 5 64x64/ur_angle.png
+96 86 6 96x96/ur_angle.png
+"""
+
+[[pack.xcursor]]
+name = "watch"
+config = """
+24 12 12 24x24/watch_1.png 50
+24 12 12 24x24/watch_2.png 50
+24 12 12 24x24/watch_3.png 50
+24 12 12 24x24/watch_4.png 50
+24 12 12 24x24/watch_5.png 50
+24 12 12 24x24/watch_6.png 50
+24 12 12 24x24/watch_7.png 50
+24 12 12 24x24/watch_8.png 50
+24 12 12 24x24/watch_9.png 50
+24 12 12 24x24/watch_10.png 50
+32 18 18 32x32/watch_1.png 50
+32 18 18 32x32/watch_2.png 50
+32 18 18 32x32/watch_3.png 50
+32 18 18 32x32/watch_4.png 50
+32 18 18 32x32/watch_5.png 50
+32 18 18 32x32/watch_6.png 50
+32 18 18 32x32/watch_7.png 50
+32 18 18 32x32/watch_8.png 50
+32 18 18 32x32/watch_9.png 50
+32 18 18 32x32/watch_10.png 50
+48 24 24 48x48/watch_1.png 50
+48 24 24 48x48/watch_2.png 50
+48 24 24 48x48/watch_3.png 50
+48 24 24 48x48/watch_4.png 50
+48 24 24 48x48/watch_5.png 50
+48 24 24 48x48/watch_6.png 50
+48 24 24 48x48/watch_7.png 50
+48 24 24 48x48/watch_8.png 50
+48 24 24 48x48/watch_9.png 50
+48 24 24 48x48/watch_10.png 50
+64 32 32 64x64/watch_1.png 50
+64 32 32 64x64/watch_2.png 50
+64 32 32 64x64/watch_3.png 50
+64 32 32 64x64/watch_4.png 50
+64 32 32 64x64/watch_5.png 50
+64 32 32 64x64/watch_6.png 50
+64 32 32 64x64/watch_7.png 50
+64 32 32 64x64/watch_8.png 50
+64 32 32 64x64/watch_9.png 50
+64 32 32 64x64/watch_10.png 50
+96 48 48 96x96/watch_1.png 50
+96 48 48 96x96/watch_2.png 50
+96 48 48 96x96/watch_3.png 50
+96 48 48 96x96/watch_4.png 50
+96 48 48 96x96/watch_5.png 50
+96 48 48 96x96/watch_6.png 50
+96 48 48 96x96/watch_7.png 50
+96 48 48 96x96/watch_8.png 50
+96 48 48 96x96/watch_9.png 50
+96 48 48 96x96/watch_10.png 50
+"""
+
+[[pack.xcursor]]
+name = "X_cursor"
+config = """
+24 11 11 24x24/X_cursor.png
+32 15 15 32x32/X_cursor.png
+48 22 22 48x48/X_cursor.png
+64 30 30 64x64/X_cursor.png
+96 46 46 96x96/X_cursor.png
+"""
+aliases = ["pirate"]
+
+[[pack.xcursor]]
+name = "xterm"
+config = """
+24 11 11 24x24/xterm.png
+32 15 15 32x32/xterm.png
+48 22 22 48x48/xterm.png
+64 30 30 64x64/xterm.png
+96 46 46 96x96/xterm.png
+"""
+
+[[pack.xcursor]]
+name = "zoom-in"
+config = """
+24 11 11 24x24/zoom-in.png
+32 15 15 32x32/zoom-in.png
+48 22 22 48x48/zoom-in.png
+64 30 30 64x64/zoom-in.png
+96 46 46 96x96/zoom-in.png
+"""
+
+[[pack.xcursor]]
+name = "zoom-out"
+config = """
+24 11 11 24x24/zoom-out.png
+32 15 15 32x32/zoom-out.png
+48 22 22 48x48/zoom-out.png
+64 30 30 64x64/zoom-out.png
+96 46 46 96x96/zoom-out.png
+"""
+

@@ -57,6 +57,14 @@ index = ["icons/breeze.theme.in", "icons/commonthemeinfo.theme.in"]   # optional
 index_oids = ["<40 hex>", "<40 hex>"]   # required with index: `git rev-parse <commit>:<file>` of each, same order
 description = "..."             # optional
 
+[[pack.xcursor]]                # optional, repeatable: a cursor built from PNGs of the pack (needs "cursors" in provides)
+name = "left_ptr"               # the file in cursors/
+config = """                    # xcursorgen's own line format: size xhot yhot file.png [delay_ms], files relative to `path`
+24 4 0 24x24/left_ptr.png
+32 4 0 32x32/left_ptr.png
+"""
+aliases = ["arrow", "top_left_arrow"]   # links to it in cursors/
+
 [[recommend]]                   # optional: which packs a theme of the port suggests
 theme = "deepin"                # required: a theme id (themes/<id>/theme.toml)
 icons = "deepin-bloom"          # optional: a pack id providing icons
@@ -100,9 +108,11 @@ They recommend packs for the theme ids `deepin`, `deepin-dark`, `openkylin`, `li
 
 What did not fit the format, found while pinning them (the port owners decide):
 
-* openKylin's own cursors (`icons/cursors/dark-sense`, `blue-crystal`) are PNGs whose hotspots live in a shell script
-  (`cursors.sh` runs `xcursorgen`); they are not importable until the hotspots exist as data. DMZ (also shipped by
-  openKylin) is used instead.
+* openKylin's own cursors (`icons/cursors/dark-sense`) are PNGs whose hotspots live in a shell script (`cursors.sh`
+  runs `xcursorgen`). `docs/desktop-asset-packs/xcursorgen2toml.py SCRIPT` reads such a script **as text** (regular
+  expressions over its `echo ... > NAME.in`, `xcursorgen` and `ln -s` lines; it never runs it) and prints the
+  `[[pack.xcursor]]` tables; `openkylin.toml` carries the result for dark-sense (57 cursors, 36 aliases). A port
+  owner should review the output against the script before shipping it.
 * `lingmo-cursor-themes` states no licence (its `debian/copyright` is the unfilled template), so it is left out;
   Lingmo's `ocean` folder carries its own cursors.
 * Breeze Dark icons are generated at build time (no `icons-dark/` in the repository).
@@ -142,13 +152,17 @@ What did not fit the format, found while pinning them (the port owners decide):
    Everything else (build files, scripts, `Makefile`, `CMakeLists.txt`, `icon-theme.cache`, ...) is left out and counted.
    Files are written 0644, folders 0755: executable bits never survive. Internal symlinks are kept (relative);
    links into `link_sources` become copies; links to nothing are dropped with a warning.
-5. **Validate**: a theme folder without `index.theme` gets the concatenated `index` files (each checked against its
+5. **Build cursors** declared with `[[pack.xcursor]]`: each PNG (read from the verified source, at most 256 px a side)
+   becomes a premultiplied ARGB image of an Xcursor file with its hotspot (which must lie inside the image) and delay;
+   aliases become links. A cursor both shipped in `cursors/` and declared is an error. The PNGs are not installed, and
+   a cursor-only pack leaves out images outside `cursors/` and `cursors_scalable/`.
+6. **Validate**: a theme folder without `index.theme` gets the concatenated `index` files (each checked against its
    `index_oids` blob id; they are read, not installed). Icons need an `index.theme` with `[Icon Theme]` and existing `Directories`; cursors need `cursors/`
    with a core pointer (`left_ptr` or `default`). `Inherits=` names must be plain names; a theme inheriting itself (DMZ's
    `cursor.theme`) is fine, missing parents are warnings. A cursor-only pack without `index.theme` gets a two-line one.
-6. **Licence**: every licence file is copied to `<theme>/LICENSES/`; a missing one stops the install.
-7. **Provenance**: `<theme>/.decebal-asset.json` (below) with the content hash of the result.
-8. **Install** atomically. The target `<root>/<install_name>`:
+7. **Licence**: every licence file is copied to `<theme>/LICENSES/`; a missing one stops the install.
+8. **Provenance**: `<theme>/.decebal-asset.json` (below) with the content hash of the result.
+9. **Install** atomically. The target `<root>/<install_name>`:
    * absent: `rename` the staged folder into place;
    * a theme decebal did not install (no provenance file): **refused**, always (remove it yourself, or `--name`);
    * the same pack with the same content: nothing to do;
@@ -228,6 +242,9 @@ the real `decthemectl` against `git archive` tarballs and a clone of the pinned 
   a duplicate, a 64 MiB entry, a missing licence, a wrong `--sha256`, a wrong `--tree`, the wrong archive for a pack;
   nothing was written outside the icon root; a foreign theme folder survived `--force` and `remove`;
 * a tampered install is reported by `verify` and repaired only with `--force`;
+* openKylin dark-sense, from the 137 MB `openkylin-theme` archive with the catalogue data of `openkylin.toml`: 57 Xcursor
+  files built natively (5 sizes each, `watch` 10 frames x 5 sizes), 36 alias links, the PNG sources and `cursors.sh`
+  not installed; 10 of 10 sample cursors resolved and decoded;
 * explicit icon and cursor choices survived applying `deepin`, `nextkde` and `gnome-adwaita-like`; theme-owned slots
   followed and went back to their baseline.
 
@@ -238,8 +255,9 @@ Upstream symlinks that dangle in the pinned commit itself (e.g. Lingmo `ocean-da
 
 * Formats: `.tar`, `.tar.gz`, folders. `.tar.xz`, `.zip` and `.7z` are refused with a message (no decoder in the
   dependency set); unpack them yourself and `import` the folder.
-* Packs that need a build step (SVG cursors rendered by `inkscape` + `xcursorgen`) are importable only from their
-  prebuilt output; the installer does not render or compile anything.
+* Packs that need a build step beyond "PNG + hotspot -> Xcursor" (SVG cursors rendered by `inkscape`, generated icon
+  variants such as Breeze Dark) are importable only from their prebuilt output; the installer renders no SVG and runs
+  no tool.
 * `git archive` honours `export-ignore` / `export-subst`; an upstream using them gives a different tree OID for the
   archive than for the clone. Pin what you verify.
 * decebal's own surfaces do not load Xcursor themes themselves; the cursor theme reaches applications through

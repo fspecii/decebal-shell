@@ -138,6 +138,7 @@ impl Request {
                 display_name: e.pack.name.clone(),
                 license_files: e.license_files(),
                 index_files: e.pack.index.iter().cloned().zip(e.pack.index_oids.iter().cloned().map(Some)).collect(),
+                xcursors: e.pack.xcursor.clone(),
             },
             strip: if archive { e.source.strip } else { 0 },
             link_sources: e.pack.link_sources.clone(),
@@ -557,6 +558,7 @@ pub(crate) mod tests {
                 display_name: "Bloom".into(),
                 license_files: vec!["COPYING".into()],
                 index_files: vec![],
+                xcursors: vec![],
             },
             strip: 1,
             link_sources: vec![],
@@ -718,6 +720,62 @@ pub(crate) mod tests {
         assert_eq!(install(&r, &Limits::default()).unwrap().action, Action::Replaced, "the fallback path works");
         NO_RENAME2.with(|c| c.set(false));
         assert!(root.join("bloom/apps/48/new.svg").exists());
+    }
+
+    #[test]
+    fn cursors_are_built_from_pngs_and_declared_hotspots() {
+        let png = |w: u32| {
+            let mut out = Vec::new();
+            image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(w, w, image::Rgba([20, 20, 20, 255]))).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
+            out
+        };
+        let entries = vec![
+            E::dir("top/"),
+            E::file("top/debian/copyright", b"License: GPL-3\n"),
+            E::exec("top/sense/cursors.sh", b"#!/bin/bash\nmkdir cursors\n"),
+            E::file("top/sense/index.theme", b"[Icon Theme]\nName=Sense\n"),
+            E::file("top/sense/24x24/left_ptr.png", &png(24)),
+            E::file("top/sense/32x32/left_ptr.png", &png(32)),
+            E::link("top/sense/24x24/default.png", "left_ptr.png"),
+            E::file("top/sense/24x24/unused.png", &png(24)),
+            E::file("top/sense/cursors_scalable/left_ptr/left_ptr.svg", crate::desktop_assets::testkit::SVG),
+        ];
+        let s = Scratch::new("xcur-install");
+        let a = s.write("sense.tgz", &targz(&entries, Some(COMMIT)));
+        let dummy = icon_source("bloom", vec![]); // `request` derives a bloom pin; replaced below
+        let mut r = request(&s.path().join("icons"), &a, &dummy);
+        r.pins.tree = Some(tree_of(&entries, "top/sense"));
+        r.spec = Spec {
+            provides: vec![Provides::Cursors],
+            path: "sense".into(),
+            install_name: "sense".into(),
+            display_name: "Sense".into(),
+            license_files: vec!["debian/copyright".into()],
+            index_files: vec![],
+            xcursors: vec![super::super::xcursor::Cursor {
+                name: "left_ptr".into(),
+                images: super::super::xcursor::parse_config("24 4 0 24x24/left_ptr.png\n32 5 0 32x32/left_ptr.png").unwrap(),
+                aliases: vec!["default".into(), "top_left_arrow".into()],
+            }],
+        };
+        let rep = install(&r, &Limits::default()).unwrap();
+        let t = s.path().join("icons/sense");
+        assert_eq!(rep.built.cursors_built, 1);
+        let im = crate::desktop_assets::cursor::images(&std::fs::read(t.join("cursors/left_ptr")).unwrap()).unwrap();
+        assert_eq!(im.iter().map(|i| (i.nominal, i.xhot)).collect::<Vec<_>>(), [(24, 4), (32, 5)]);
+        assert_eq!(std::fs::read_link(t.join("cursors/default")).unwrap().to_str(), Some("left_ptr"));
+        assert!(!t.join("24x24").exists() && !t.join("cursors.sh").exists(), "sources, unused images and the script are not installed");
+        assert!(t.join("cursors_scalable/left_ptr/left_ptr.svg").is_file(), "Plasma's scalable cursors stay");
+        assert!(t.join("LICENSES/copyright").is_file());
+        assert_eq!(verify(&t).unwrap().1, Integrity::Ok);
+        // a cursor shipped in cursors/ and built as well is a conflict, not an overwrite
+        let mut clash = entries.clone();
+        clash.push(E::file("top/sense/cursors/left_ptr", &xcursor(24)));
+        let b = s.write("clash.tgz", &targz(&clash, Some(COMMIT)));
+        let mut r2 = request(&s.path().join("icons2"), &b, &dummy);
+        r2.spec = r.spec.clone();
+        r2.pins.tree = Some(tree_of(&clash, "top/sense"));
+        assert!(install(&r2, &Limits::default()).unwrap_err().contains("both shipped"));
     }
 
     #[test]

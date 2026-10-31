@@ -310,7 +310,7 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
     };
     let p = &r.provenance;
     let mut out = format!(
-        "{what}: {} -> {}\n  {} files, {} links ({} copied from link sources), {} left out; {} icon directories, {} cursors\n  verified: tree {} sha256 {} commit {}\n  licence: {} [{}]\n  content: {}",
+        "{what}: {} -> {}\n  {} files, {} links ({} copied from link sources), {} left out; {} icon directories, {} cursors ({} built from PNGs)\n  verified: tree {} sha256 {} commit {}\n  licence: {} [{}]\n  content: {}",
         p.pack,
         r.target.display(),
         p.files,
@@ -319,6 +319,7 @@ fn report(r: &install::Report, json: bool) -> Result<String, String> {
         r.built.skipped,
         r.built.icon_dirs,
         r.built.cursors,
+        r.built.cursors_built,
         yes(p.verified.tree),
         yes(p.verified.archive_sha256),
         yes(p.verified.commit),
@@ -398,6 +399,7 @@ fn import(ctx: &Ctx, a: &Args, path: &str, json: bool) -> Result<String, String>
             display_name: name.clone(),
             license_files,
             index_files: a.all("--index").into_iter().map(|p| (p, None)).collect(),
+            xcursors: vec![],
         },
         strip: if is_dir { 0 } else { strip },
         link_sources: a.all("--link-source"),

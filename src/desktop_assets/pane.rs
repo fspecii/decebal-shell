@@ -98,3 +98,48 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
     }
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::model::tests_support::model_with;
+
+    fn ctl<'a>(items: &'a [Item], id: &str) -> Option<&'a Ctl> {
+        items.iter().find_map(|i| if let Item::Card(rows) = i { rows.iter().flat_map(|r| r.ctls.iter()).find(|c| c.id == id) } else { None })
+    }
+
+    #[test]
+    fn cursor_choice_and_following_the_theme_go_through_the_pane() {
+        let (mut m, _) = model_with("");
+        let path = m.paths.shell_json();
+        let its = items(&m);
+        let Some(Ctl { kind: Kind::Popup(opts, sel), .. }) = ctl(&its, "ic:cursor") else { panic!("no cursor popup") };
+        assert_eq!((opts[0].1.as_str(), *sel), ("auto", Some(0)), "not set by default");
+        assert!(ctl(&its, "ic:follow-theme").is_none(), "no suggestion recorded yet");
+
+        m.apply("ic:cursor", CtlVal::Str("DMZ-White".into()));
+        let doc = crate::settings::io::json_load(&path);
+        assert_eq!(policy::current(&doc, Provides::Cursors).as_deref(), Some("DMZ-White"));
+        assert_eq!(policy::owner(&doc, Provides::Cursors), Owner::User);
+        let its = items(&m);
+        let Some(Ctl { kind: Kind::Popup(opts, sel), .. }) = ctl(&its, "ic:cursor") else { panic!() };
+        assert_eq!(sel.map(|i| opts[i].1.as_str()), Some("DMZ-White"), "an uninstalled choice is still shown");
+
+        let mut doc = crate::settings::io::json_load(&path);
+        policy::apply_theme(&mut doc, &policy::Recommendation { theme: "deepin".into(), icons: Some("bloom".into()), cursors: Some("bloom".into()), missing: vec!["deepin-bloom-dark".into()] });
+        crate::settings::io::json_set(&path, policy::KEY, doc.get(policy::KEY).cloned()).unwrap();
+        crate::settings::io::json_set(&path, "icons", doc.get("icons").cloned()).unwrap();
+        let its = items(&m);
+        assert!(ctl(&its, "ic:follow-theme").is_some_and(|c| c.enabled), "the cursor is the user's: following the theme changes something");
+        assert!(its.iter().any(|i| matches!(i, Item::Note { text, .. } if text.contains("assets install deepin-bloom-dark"))));
+
+        m.apply("ic:follow-theme", CtlVal::Click);
+        let doc = crate::settings::io::json_load(&path);
+        assert_eq!((policy::current(&doc, Provides::Icons).as_deref(), policy::current(&doc, Provides::Cursors).as_deref()), (Some("bloom"), Some("bloom")));
+        assert_eq!(policy::owner(&doc, Provides::Cursors), Owner::Theme("deepin".into()));
+        assert!(!ctl(&items(&m), "ic:follow-theme").unwrap().enabled, "already following");
+
+        m.apply("ic:cursor", CtlVal::Reset);
+        assert_eq!(policy::current(&crate::settings::io::json_load(&path), Provides::Cursors), None);
+    }
+}

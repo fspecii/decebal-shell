@@ -27,6 +27,8 @@ pub struct Spec {
     pub license_files: Vec<String>,
     /// Source files concatenated into `index.theme` when the theme folder has none, with their pinned blob ids.
     pub index_files: Vec<(String, Option<String>)>,
+    /// Cursors to build from PNGs of the pack (see [`super::xcursor`]).
+    pub xcursors: Vec<super::xcursor::Cursor>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -44,6 +46,8 @@ pub struct Built {
     pub licenses: Vec<String>,
     pub icon_dirs: usize,
     pub cursors: usize,
+    /// Cursors built from PNGs.
+    pub cursors_built: usize,
     pub inherits: Vec<String>,
     pub content_hash: String,
 }
@@ -55,6 +59,11 @@ fn hidden(rel: &str) -> bool {
 fn is_text_name(name: &str) -> bool {
     let l = name.to_ascii_lowercase();
     ["readme", "copying", "license", "licence", "authors", "credits", "copyright"].iter().any(|p| l.starts_with(p)) || l.ends_with(".md") || l.ends_with(".txt")
+}
+
+fn is_image(rel: &str) -> bool {
+    let l = rel.to_ascii_lowercase();
+    [".svg", ".png", ".xpm"].iter().any(|e| l.ends_with(e))
 }
 
 /// Can the theme use a file of this name (relative to the theme folder)? Content is checked later.
@@ -168,9 +177,42 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
             });
         }
     };
+    // cursors built from PNGs first: their sources are read from the staging folder and not installed themselves
+    let mut consumed: std::collections::BTreeSet<String> = Default::default();
+    if !spec.xcursors.is_empty() {
+        for c in &spec.xcursors {
+            let shipped = if spec.path == "." { format!("cursors/{}", c.name) } else { format!("{}/cursors/{}", spec.path, c.name) };
+            if st.nodes.contains_key(&shipped) {
+                return Err(format!("cursor `{}` is both shipped in cursors/ and built from PNGs", c.name));
+            }
+        }
+        let full = |rel: &str| if spec.path == "." { rel.to_string() } else { format!("{}/{rel}", spec.path) };
+        let read = |rel: &str| -> Result<Vec<u8>, String> {
+            match st.nodes.get(&full(rel)) {
+                Some(Node::File { staged: true, size, .. }) if *size <= lim.max_file => std::fs::read(st.file_path(&full(rel))).map_err(|e| e.to_string()),
+                Some(Node::Link(_)) => match st.resolve(&full(rel)) {
+                    Resolved::File(t) => std::fs::read(st.file_path(&t)).map_err(|e| e.to_string()),
+                    _ => Err(format!("cursor image `{rel}` is a link to nothing")),
+                },
+                _ => Err(format!("cursor image `{rel}` is not in the pack")),
+            }
+        };
+        for u in super::xcursor::build(&spec.xcursors, out, &read)? {
+            consumed.insert(u);
+        }
+        b.cursors_built = spec.xcursors.len();
+    }
     let mut links: Vec<(String, String)> = Vec::new();
     for (p, node) in &st.nodes {
         let Some(rel) = under(p, &spec.path) else { continue };
+        if consumed.contains(rel) {
+            skip(&mut b, rel, Some("built into cursors/".into()));
+            continue;
+        }
+        if !spec.provides.contains(&Provides::Icons) && is_image(rel) && !rel.starts_with("cursors/") && !rel.starts_with("cursors_scalable/") {
+            skip(&mut b, rel, Some("an image a cursor theme does not use".into()));
+            continue;
+        }
         match node {
             Node::Dir => {}
             Node::Link(_) => links.push((p.clone(), rel.to_string())),
@@ -452,6 +494,7 @@ mod tests {
             display_name: "Fixture".into(),
             license_files: lic.iter().map(|s| s.to_string()).collect(),
             index_files: vec![],
+            xcursors: vec![],
         }
     }
 

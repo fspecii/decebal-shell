@@ -36,6 +36,9 @@ pub struct Pack {
     /// in the repository root, Breeze in two `.theme.in` files), each pinned by its git blob id in `index_oids`.
     pub index: Vec<String>,
     pub index_oids: Vec<String>,
+    /// Cursors built natively from PNGs and declared hotspots (`[[pack.xcursor]]`), for sources that only ship a
+    /// build script (openKylin's dark-sense).
+    pub xcursor: Vec<super::xcursor::Cursor>,
     pub description: String,
 }
 
@@ -167,6 +170,27 @@ impl Cx<'_> {
         }
     }
 
+    /// A required string that may span lines (no other control characters).
+    fn text_multiline(&mut self, t: &Table, scope: &str, key: &str) -> String {
+        match t.get(key) {
+            None => {
+                self.errors.push(format!("`{scope}{key}` is required"));
+                String::new()
+            }
+            Some(item) => match item.as_str() {
+                Some(s) if s.len() <= 16 << 10 && !s.chars().any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r') => s.to_string(),
+                Some(_) => {
+                    self.err(item, &format!("{scope}{key}"), "is longer than 16 KiB or contains control characters");
+                    String::new()
+                }
+                None => {
+                    self.err(item, &format!("{scope}{key}"), "must be a string");
+                    String::new()
+                }
+            },
+        }
+    }
+
     fn list(&mut self, t: &Table, scope: &str, key: &str) -> Vec<String> {
         let Some(item) = t.get(key) else { return Vec::new() };
         let Some(a) = item.as_array() else {
@@ -279,7 +303,7 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
     let mut packs = Vec::new();
     for (i, t) in cx.tables(root, "pack") {
         let sc = format!("pack[{i}].");
-        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "index", "index_oids", "description"]);
+        cx.known(t, &sc, &["id", "name", "provides", "source", "path", "tree", "install_name", "license", "license_files", "link_sources", "index", "index_oids", "xcursor", "description"]);
         let id = cx.text(t, &sc, "id", true, 64).unwrap_or_default();
         if !id.is_empty() && !is_id(&id) {
             cx.errors.push(format!("`{sc}id`: `{id}` must be lower-case letters, digits and dashes"));
@@ -337,8 +361,31 @@ pub fn parse(text: &str, origin: &str) -> Result<Catalog, Vec<String>> {
         if index_oids.iter().any(|o| !is_hex(o, 40)) {
             cx.errors.push(format!("`{sc}index_oids` are 40 lower-case hex digits"));
         }
+        let mut xcursor = Vec::new();
+        for (j, x) in cx.tables(t, "xcursor") {
+            let xs = format!("{sc}xcursor[{j}].");
+            cx.known(x, &xs, &["name", "config", "aliases"]);
+            let name = cx.text(x, &xs, "name", true, 64).unwrap_or_default();
+            let config = cx.text_multiline(x, &xs, "config");
+            let aliases = cx.list(x, &xs, "aliases");
+            for n in std::iter::once(&name).chain(&aliases) {
+                if !n.is_empty() && !super::xcursor::safe_name(n) {
+                    cx.errors.push(format!("`{xs}`: `{n}` is not a cursor file name"));
+                }
+            }
+            match super::xcursor::parse_config(&config) {
+                Ok(images) => xcursor.push(super::xcursor::Cursor { name, images, aliases }),
+                Err(e) => cx.errors.push(format!("`{xs}config`: {e}")),
+            }
+        }
+        if xcursor.len() > super::xcursor::MAX_CURSORS {
+            cx.errors.push(format!("`{sc}xcursor`: more than {} cursors", super::xcursor::MAX_CURSORS));
+        }
+        if !xcursor.is_empty() && !provides.contains(&Provides::Cursors) {
+            cx.errors.push(format!("`{sc}xcursor` builds cursors: add \"cursors\" to provides"));
+        }
         let description = cx.text(t, &sc, "description", false, 400).unwrap_or_default();
-        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, index, index_oids, description });
+        packs.push(Pack { id, name, provides, source, path, tree, install_name, license, license_files, link_sources, index, index_oids, xcursor, description });
     }
 
     let mut recommends = Vec::new();
@@ -596,6 +643,21 @@ cursors = "deepin-bloom"
         assert!(parse(&with("index = \"index.theme\""), "t").unwrap_err().iter().any(|e| e.contains("must pin every")));
         assert!(parse(&with("index = \"../index.theme\"\nindex_oids = [\"9e21cb977f3c28f5440234d2bc4618d22c14d32d\"]"), "t").is_err());
         assert!(parse(&with("index = \"index.theme\"\nindex_oids = [\"xyz\"]"), "t").unwrap_err().iter().any(|e| e.contains("hex")));
+    }
+
+    #[test]
+    fn xcursor_tables_parse_and_are_checked() {
+        let x = "[[pack.xcursor]]\nname = \"left_ptr\"\nconfig = \"\"\"\n24 4 0 24x24/left_ptr.png\n32 5 0 32x32/left_ptr.png\n\"\"\"\naliases = [\"default\", \"arrow\"]\n\n[[recommend]]";
+        let c = parse(&GOOD.replacen("[[recommend]]", x, 1), "t").unwrap();
+        let xc = &c.packs[0].xcursor;
+        assert_eq!((xc.len(), xc[0].images.len(), xc[0].aliases.len()), (1, 2, 2));
+        let bad = |from: &str, to: &str| parse(&GOOD.replacen("[[recommend]]", &x.replace(from, to), 1), "t").unwrap_err();
+        assert!(bad("24 4 0 24x24", "24 4 0 ../24x24").iter().any(|e| e.contains("escapes")));
+        assert!(bad("\"arrow\"", "\"../arrow\"").iter().any(|e| e.contains("not a cursor file name")));
+        assert!(bad("aliases", "alias").iter().any(|e| e.contains("did you mean `aliases`")));
+        let icons_only = GOOD.replace("provides = [\"icons\", \"cursors\"]", "provides = [\"icons\"]").replace("cursors = \"deepin-bloom\"\n", "");
+        let e = parse(&icons_only.replacen("[[recommend]]", x, 1), "t").unwrap_err();
+        assert!(e.iter().any(|e| e.contains("add \"cursors\" to provides")), "{e:?}");
     }
 
     #[test]

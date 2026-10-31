@@ -24,6 +24,7 @@ pub mod policy;
 pub mod preview;
 pub mod source;
 pub mod tar;
+pub mod xcursor;
 
 #[cfg(test)]
 pub mod testkit;
