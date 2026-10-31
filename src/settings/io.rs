@@ -148,6 +148,11 @@ pub fn write_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<(), 
     with_file_lock(path, |t| write_locked(t, text, expect))
 }
 
+/// [`write_atomic`] without the one-time `.bak-decsettings` copy, for files other programs also write.
+pub fn write_shared(path: &Path, text: &str) -> Result<(), String> {
+    with_file_lock(path, |t| write_with(t, text.as_bytes(), stamp(t), None, false))
+}
+
 /// A private file (a secret, a cache): the same protocol, created with `mode` from the start (never readable by
 /// others, not even briefly), and no `.bak-decsettings` copy.
 pub fn write_private(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
