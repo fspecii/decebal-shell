@@ -540,6 +540,8 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Customise, Section::Icons, "Tint symbolic icons", "monochrome text colour"),
     (Tab::Customise, Section::Icons, "Fallback theme", "hicolor missing icons"),
     (Tab::Customise, Section::Icons, "Cursor theme", "mouse pointer cursor bibata adwaita"),
+    (Tab::Customise, Section::Icons, "Theme matching", "follow theme custom icons cursors restore matching pack"),
+    (Tab::Customise, Section::Icons, "Download matching packs", "automatic downloads icons cursors verified asset packs install retry stop"),
     // Wallpaper
     (Tab::Wallpaper, Section::Colours, "For this theme", "curated recommended photography wallhaven dark light wallpaper"),
     (Tab::Wallpaper, Section::Colours, "Wallpaper", "background picture image desktop wallhaven"),
