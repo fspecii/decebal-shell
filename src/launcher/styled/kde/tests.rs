@@ -1,4 +1,5 @@
-//! The Kickoff footer and Places tab: geometry against the identified original capture, and every control by pointer and keyboard.
+//! The Kickoff header, sidebar, footer and Places tab: geometry against the identified original capture, and every control by pointer and keyboard.
+//! The header/sidebar tests (the section at the end, marked UNRUN in the commit that added it) were written without a build.
 
 use super::super::tests::{fixture_apps, styled};
 use super::system::{Sys, RAN};
@@ -710,4 +711,137 @@ fn shared_host_waker_and_tick_deliver_places_without_further_input() {
     assert!(computer_rows().iter().any(|entry| entry.name == "Ready without pointer motion"));
     assert_eq!(zone(&st, "apps").items.len(), computer_rows().len());
     assert_eq!(st.tick(), crate::window_app::Response::NONE);
+}
+
+// ----------------------------------------------------------------------------------------------------------- header and sidebar (UNRUN when added)
+
+fn typed(c: char) -> KeyEvent {
+    KeyEvent { key: Key::Char, text: c.to_string(), ch: Some(c), ctrl: false, shift: false, alt: false }
+}
+
+#[test]
+fn the_header_and_sidebar_match_the_original_capture() {
+    let st = kde(30);
+    let f = frame(st.card, 1.0);
+    let near = |a: f32, b: f32| (a - b).abs() <= 2.5;
+    let (cx, cy) = (st.card.x, st.card.y);
+    // original (655 x 516 card), logical px relative to the card: header 46 px, avatar 28 px centred on x=23 / y=23, the search field at x=239 of
+    // 338 x 30 (y=8), the configure button centred 57 px from the right edge, the sidebar's frame at x=4 / y=52 and 208 wide, content from x=235
+    assert!(near(f.header.h, 46.0), "{:?}", f.header);
+    assert!(near(f.avatar.x + f.avatar.w / 2.0 - cx, 23.0) && near(f.avatar.y + f.avatar.h / 2.0 - cy, 23.0) && near(f.avatar.w, 28.0), "{:?}", f.avatar);
+    assert!(near(f.search.x - cx, 239.0) && near(f.search.y - cy, 8.0) && near(f.search.w, 338.0) && near(f.search.h, 30.0), "{:?}", f.search);
+    assert!(near(f.card.right() - (f.configure.x + f.configure.w / 2.0), 57.0), "{:?}", f.configure);
+    assert!(near(f.sidebar.x - cx, 4.0) && near(f.sidebar.y - cy, 52.0) && near(f.sidebar.w, 208.0), "{:?}", f.sidebar);
+    assert!(near(f.content.x - cx, 235.0), "{:?}", f.content);
+    // rows 35 px apart
+    let cats = zone(&st, "cats");
+    let (a, b) = (cats.rect(0, 0).unwrap(), cats.rect(1, 0).unwrap());
+    assert!(near(b.y - a.y, 35.0) && near(a.h, 35.0), "{a:?} {b:?}");
+}
+
+#[test]
+fn the_sidebar_lists_favorites_and_all_applications_then_the_categories_alphabetically() {
+    let st = kde(30);
+    let items = &zone(&st, "cats").items;
+    assert!(items.len() > 2 && items.iter().all(|t| matches!(t, Target::View(_))), "no separator row, nothing but views: {items:?}");
+    assert_eq!(items[0], Target::View(View::Favorites));
+    assert_eq!(items[1], Target::View(View::All));
+    let titles: Vec<&str> = items[2..]
+        .iter()
+        .map(|t| match t {
+            Target::View(v) => Model::view_title(*v),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    let mut sorted = titles.clone();
+    sorted.sort_unstable();
+    assert_eq!(titles, sorted, "categories alphabetical");
+    // every focusable row can be reached by the keyboard
+    assert!(items.iter().all(|t| t.focusable()));
+}
+
+#[test]
+fn the_current_sidebar_row_is_painted_accent_tinted_and_the_others_are_not() {
+    let mut st = kde(30);
+    let current = zone(&st, "cats").items.iter().position(|t| *t == Target::View(shown(&st.m))).expect("the shown view has a row");
+    let other = zone(&st, "cats").visible(0).end - 1;
+    assert_ne!(current, other);
+    let mut pm = tiny_skia::Pixmap::new(655, 516).unwrap();
+    st.draw(&mut pm);
+    let z = zone(&st, "cats");
+    // 2 px inside the frame's left edge, left of the icon box (which starts 7 px in)
+    let sample = |i: usize| {
+        let r = z.rect(i, 0).unwrap();
+        let px = pm.pixel((r.x + 2.0) as u32, (r.y + r.h / 2.0) as u32).expect("inside the pixmap");
+        [px.red(), px.green(), px.blue()]
+    };
+    let (c, o) = (sample(current), sample(other));
+    assert!(c.iter().zip(&o).any(|(a, b)| a.abs_diff(*b) >= 4), "the current row {c:?} looks like an ordinary one {o:?}");
+}
+
+#[test]
+fn the_header_has_the_avatar_and_configure_and_only_those_that_work() {
+    let mut st = kde(30);
+    assert_eq!(zone(&st, "actions").items, [Target::Style(HEAD, 0), Target::Style(HEAD, 1)], "no pin button, no inert control");
+    let r = click(&mut st, "actions", Target::Style(HEAD, 0));
+    assert!(closes(&r));
+    let opened = OPENED.with(|o| o.borrow().clone());
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0].last().map(String::as_str), Some("users"), "the avatar opens the account settings");
+    let mut st = kde(30);
+    let r = click(&mut st, "actions", Target::Style(HEAD, 1));
+    assert!(closes(&r));
+    let opened = OPENED.with(|o| o.borrow().clone());
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0].last().map(String::as_str), Some("launcher"), "configure opens the launcher's settings");
+}
+
+#[test]
+fn the_header_buttons_are_reached_and_run_from_the_keyboard() {
+    let mut st = kde(30);
+    st.m.zone = "actions";
+    st.m.sel.insert("actions", 0);
+    assert_eq!(st.current(), Some(Target::Style(HEAD, 0)));
+    st.key(&key(Key::Right));
+    assert_eq!(st.current(), Some(Target::Style(HEAD, 1)));
+    let r = st.key(&key(Key::Enter));
+    assert!(closes(&r));
+    assert_eq!(OPENED.with(|o| o.borrow().last().and_then(|a| a.last().cloned())).as_deref(), Some("launcher"));
+}
+
+#[test]
+fn the_search_field_has_a_clear_button_only_while_there_is_a_query() {
+    let mut st = kde(30);
+    assert!(!zone(&st, "actions").items.contains(&Target::Clear));
+    st.key(&typed('f'));
+    assert!(st.m.searching());
+    assert!(zone(&st, "actions").items.contains(&Target::Clear), "{:?}", zone(&st, "actions").items);
+    click(&mut st, "actions", Target::Clear);
+    assert!(!st.m.searching(), "the clear button empties the query");
+    assert!(!zone(&st, "actions").items.contains(&Target::Clear));
+}
+
+#[test]
+fn every_header_control_fits_hits_and_never_overlaps_on_small_physical_screens() {
+    for screen in [(320u32, 240u32), (400, 300)] {
+        for scale in [1.0f32, 1.25, 2.0] {
+            for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+                let ctx = format!("{screen:?} @{scale} {edge:?}");
+                let mut st = physical(screen, scale, edge);
+                st.key(&typed('a'));
+                let head = zone(&st, "actions").clone();
+                let rects: Vec<Rect> = (0..head.items.len()).map(|i| head.rect(i, 0).unwrap()).collect();
+                assert!(head.items.contains(&Target::Style(HEAD, 0)) && head.items.contains(&Target::Style(HEAD, 1)), "{ctx}");
+                for (i, r) in rects.iter().enumerate() {
+                    assert!(inside_card(&st, r) && r.w >= 1.0 && r.h >= 1.0, "header item {i} {r:?} leaves the card {:?}: {ctx}", st.card);
+                    for (j, o) in rects.iter().enumerate().skip(i + 1) {
+                        assert!(r.right() <= o.x + 0.5 || o.right() <= r.x + 0.5, "header items {i} and {j} overlap: {r:?} {o:?} {ctx}");
+                    }
+                    assert_eq!(st.hit(r.x + r.w / 2.0, r.y + r.h / 2.0).map(|h| (h.0, h.1)), Some(("actions", i)), "the pointer misses header item {i}: {ctx}");
+                }
+                let f = frame(st.card, st.scale);
+                assert!(f.search.right() <= f.configure.x + 0.5 && f.search.x >= f.avatar.right() - 0.5 || f.search.w <= 1.0, "the search field {:?} runs into the buttons: {ctx}", f.search);
+            }
+        }
+    }
 }

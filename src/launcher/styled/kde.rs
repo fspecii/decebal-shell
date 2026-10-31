@@ -26,10 +26,22 @@ const SESSION: u8 = 3;
 const MENU: u8 = 4;
 /// A row of the Places sidebar.
 const PLACE: u8 = 5;
+/// A header button: 0 = the avatar (the user's account settings), 1 = configure (the launcher's settings).
+const HEAD: u8 = 8;
 /// A row of the Computer list (index into [`computer_rows`]).
 const COMPUTER_ROW: u8 = 6;
 /// A row of the History list that is a document (index into [`document_rows`]).
 const DOCUMENT_ROW: u8 = 7;
+
+// The header and sidebar, in logical pixels, measured on the same capture (docs/plasma-theme-ports/kickoff-fidelity.md, "Header and sidebar"):
+// a 46 px header band (separator on row 45), the avatar button 28 px at x=9, the user's name at x=42, the search field at x=239 (4 px right of the
+// sidebar's divider at 235), 338 x 30, the configure button centred 57 px from the right edge (the Keep Open slot to its right is left empty, see
+// the document), sidebar rows 35 px apart inside a frame that starts 4 px from the left and is 208 px wide, the icon box at x=11 and the caption at x=44.
+// Breeze's Frame_FrameRadius is 5 px (docs/plasma-theme-ports.md, "Geometry").
+const HEADER_H: f32 = 46.0;
+const SIDE_W: f32 = 235.0;
+const ROW_PITCH: f32 = 35.0;
+const ROW_RADIUS: f32 = 5.0;
 
 // The footer, in logical pixels, measured on the identified original capture (docs/plasma-theme-ports/kickoff-fidelity.md).
 const FOOTER_H: f32 = 45.0;
@@ -45,42 +57,53 @@ const MENU_W: f32 = 168.0;
 struct Frame {
     card: Rect,
     header: Rect,
+    /// The header's own scale: its parts shrink together when the card is too short for them.
+    hs: f32,
+    avatar: Rect,
     search: Rect,
+    clear: Rect,
+    configure: Rect,
+    side_w: f32,
     sidebar: Rect,
     content: Rect,
     footer: Rect,
 }
 
 fn frame(r: Rect, s: f32) -> Frame {
-    let header = Rect { h: (56.0 * s).min(r.h / 5.0), ..r };
+    let header = Rect { h: (HEADER_H * s).min(r.h / 5.0), ..r };
+    let hs = (header.h / HEADER_H).min(s).max(0.01);
     let footer_h = (FOOTER_H * s).min(r.h / 6.0);
     let footer = Rect { y: r.bottom() - footer_h, h: footer_h, ..r };
-    let side_w = (r.w * 0.34).clamp((120.0 * s).min(r.w / 2.0), 220.0 * s);
+    let side_w = (SIDE_W * s).min(r.w * 0.4);
     let body = Rect { y: header.bottom(), h: (footer.y - header.bottom()).max(1.0), ..r };
-    let sidebar = Rect { x: r.x + 6.0 * s, y: body.y + 6.0 * s, w: side_w - 12.0 * s, h: body.h - 12.0 * s };
-    let content = Rect { x: r.x + side_w, y: body.y + 6.0 * s, w: r.w - side_w - 6.0 * s, h: body.h - 12.0 * s };
-    let gear = 32.0 * s;
-    let search = Rect { x: content.x, y: header.y + (header.h - 32.0 * s) / 2.0, w: (content.w - gear - 8.0 * s).max(1.0), h: 32.0 * s };
-    Frame { card: r, header, search, sidebar, content, footer }
+    let sidebar = Rect { x: r.x + 4.0 * s, y: body.y + 6.0 * s, w: (side_w - 27.0 * s).max(side_w * 0.6), h: (body.h - 12.0 * s).max(1.0) };
+    let content = Rect { x: r.x + side_w, y: body.y + 6.0 * s, w: r.w - side_w - 6.0 * s, h: (body.h - 12.0 * s).max(1.0) };
+    let avatar = Rect { x: r.x + 9.0 * hs, y: header.y + (header.h - 28.0 * hs) / 2.0, w: 28.0 * hs, h: 28.0 * hs };
+    // the original has room for two buttons; a card too narrow for that moves the one it has into the right-hand slot
+    let b = 32.0 * hs;
+    let cx = r.right() - (if r.w >= 480.0 * hs { 57.0 } else { 22.0 }) * hs;
+    let configure = Rect { x: cx - b / 2.0, y: header.y + (header.h - b) / 2.0, w: b, h: b };
+    let sx = r.x + side_w + 4.0 * hs;
+    let search = Rect { x: sx, y: header.y + 8.0 * hs, w: (configure.x - 5.0 * hs - sx).max(1.0), h: 30.0 * hs };
+    let c = 24.0 * hs;
+    let clear = Rect { x: search.right() - c - 2.0 * hs, y: search.y + (search.h - c) / 2.0, w: c, h: c };
+    Frame { card: r, header, hs, avatar, search, clear, configure, side_w, sidebar, content, footer }
 }
 
-/// The Applications sidebar: Favorites, All Applications, a separator, then the menu categories. Recent applications are not here any more: Kickoff
-/// moved them to Places -> History (`showRecentApps: false` in main.qml's root model).
+/// The Applications sidebar: Favorites, All Applications, then the menu categories in alphabetical order, as the original lists them (Development,
+/// Education, Games, Graphics, ... Utilities). Recent applications are not here any more: Kickoff moved them to Places -> History (`showRecentApps:
+/// false` in main.qml's root model). The divider the original draws after All Applications is painted on the boundary of the second and third row
+/// (the shared lists have one row height, so the original's extra 9 px of spacing is not reproduced).
 pub fn views(m: &Model) -> Vec<View> {
+    let mut categories = m.category_views();
+    categories.sort_by_key(|v| Model::view_title(*v));
     let mut v = vec![View::Favorites, View::All];
-    v.extend(m.category_views());
+    v.extend(categories);
     v
 }
 
-/// A divider row of the sidebar (a non-focusable `Letter` with this sentinel).
-const SEPARATOR: char = '\0';
-
 fn sidebar_targets(m: &Model) -> Vec<Target> {
-    let mut out: Vec<Target> = views(m).into_iter().map(Target::View).collect();
-    if out.len() > 2 {
-        out.insert(2, Target::Letter(SEPARATOR));
-    }
-    out
+    views(m).into_iter().map(Target::View).collect()
 }
 
 /// The view the content shows (Home is Favorites in Kickoff).
@@ -304,9 +327,9 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     let f = frame(r, s);
     let places = tab(m) == 1;
     let cats = if places {
-        Zone::columns("cats", (0..places::SIDEBAR.len()).map(|i| Target::Style(PLACE, i as u16)).collect(), f.sidebar, 1, 36.0 * s, false)
+        Zone::columns("cats", (0..places::SIDEBAR.len()).map(|i| Target::Style(PLACE, i as u16)).collect(), f.sidebar, 1, ROW_PITCH * s, false)
     } else {
-        Zone::columns("cats", sidebar_targets(m), f.sidebar, 1, 36.0 * s, false)
+        Zone::columns("cats", sidebar_targets(m), f.sidebar, 1, ROW_PITCH * s, false)
     };
     let content = if m.searching() {
         Zone::columns("results", Model::app_targets(&m.results), f.content, 1, 44.0 * s, false)
@@ -319,8 +342,13 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
             v => Zone::columns("apps", Model::app_targets(&m.apps_of(v)), f.content, 1, 44.0 * s, false),
         }
     };
-    let b = (32.0 * s).min(f.header.h - 4.0 * s).max(1.0);
-    let settings = Rect { x: f.header.right() - 8.0 * s - b, y: f.header.y + (f.header.h - b) / 2.0, w: b, h: b };
+    // the header's buttons, left to right: the avatar (account settings), the search field's clear button while there is a query, configure; the Keep
+    // Open (pin) button is deliberately absent, see docs/plasma-theme-ports/kickoff-fidelity.md
+    let mut head: Vec<(Target, Rect)> = vec![(Target::Style(HEAD, 0), f.avatar)];
+    if m.searching() && f.search.w >= 60.0 * f.hs {
+        head.push((Target::Clear, f.clear));
+    }
+    head.push((Target::Style(HEAD, 1), f.configure));
     let fo = footer(m, &f, s);
     let mut row: Vec<(Target, Rect)> = vec![(Target::Style(TAB, 0), fo.tabs[0]), (Target::Style(TAB, 1), fo.tabs[1])];
     row.extend(fo.buttons.iter().map(|(sys, rect)| (Target::Style(SYS, sys_index(*sys)), *rect)));
@@ -330,7 +358,7 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     if let Some((_, inner, row)) = fo.popup {
         zones.push(Zone::columns("menu", fo.menu_items.iter().map(|sys| Target::Style(MENU, sys_index(*sys))).collect(), inner, 1, row, false));
     }
-    zones.extend([content, cats, Zone::fixed("footer", row), Zone::fixed("actions", vec![(Target::Settings, settings)])]);
+    zones.extend([content, cats, Zone::fixed("footer", row), Zone::fixed("actions", head)]);
     zones
 }
 
@@ -412,6 +440,13 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
             }
             outcome
         }
+        HEAD => {
+            // Header.qml: the avatar opens the user's account settings (`KCMLauncher.openSystemSettings("kcm_users")`), the configure button the applet's
+            // configuration; here those are Decebal Settings' Users & Login and Launcher panes
+            let pane = if i == 0 { "users" } else { "launcher" };
+            spawn(&[crate::launch::sibling_or_path("decsettings"), pane.to_string()]);
+            Outcome::Close
+        }
         PLACE => {
             m.ui.insert("kde.place", (i as usize).min(places::SIDEBAR.len() - 1));
             for id in ["apps", "results"] {
@@ -468,6 +503,18 @@ fn tinted(p: &mut Painter, name: &str, x: f32, y: f32, size: f32, ink: crate::th
     crate::gfx::blit_scaled(p.pm, icon, x.round(), y.round(), px as f32, px as f32, 1.0);
 }
 
+/// A thin scrollbar at `x` for a list that has more rows than show (the original's sidebar has one beside its frame).
+fn scrollbar(p: &mut Painter, z: &Zone, offset: usize, x: f32, w: f32, track: tiny_skia::Color, thumb: tiny_skia::Color) {
+    let shown = z.visible(offset).len();
+    if z.items.len() <= shown {
+        return;
+    }
+    let (a, n) = (z.area(), z.items.len() as f32);
+    let bar = Rect { x, y: a.y, w, h: a.h };
+    p.fill(bar, w / 2.0, track);
+    p.fill(Rect { y: a.y + a.h * (z.first(offset) as f32 / n), h: (a.h * shown as f32 / n).max(4.0), ..bar }, w / 2.0, thumb);
+}
+
 pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let th = crate::theme::th();
     let s = p.s;
@@ -495,15 +542,29 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
         }
     };
 
-    // Header: avatar and name over the sidebar, search over the content.
-    let cy = f.header.y + f.header.h / 2.0;
-    p.avatar(&m.user, f.header.x + 28.0 * s, cy, 16.0 * s);
-    p.text(&m.user, f.header.x + 52.0 * s, cy, 13.0 * s, Weight::SemiBold, ink, f.sidebar.w - 50.0 * s);
-    p.fill(f.search, 3.0 * s, th.background.color(1.0));
-    p.stroke(f.search, 3.0 * s, if m.searching() { th.accent.color(1.0) } else { th.ink(0.2) }, 1.0);
+    // Header (Header.qml): the avatar and the name over the sidebar, the search field over the content, a divider between the two columns.
+    let hs = f.hs;
+    let hcy = f.header.y + f.header.h / 2.0;
+    p.avatar(&m.user, f.avatar.x + f.avatar.w / 2.0, f.avatar.y + f.avatar.h / 2.0, f.avatar.w / 2.0);
+    p.text(&m.user, r.x + 42.0 * hs, hcy, 14.0 * hs, Weight::Regular, ink, (f.side_w - 46.0 * hs).max(1.0));
+    p.fill(Rect { x: r.x + f.side_w - 1.0, y: f.header.bottom() + 1.0, w: 1.0, h: (f.footer.y - f.header.bottom() - 1.0).max(0.0) }, 0.0, th.ink(0.12));
+    p.fill(f.search, ROW_RADIUS * hs, th.background.color(1.0));
+    p.stroke(f.search, ROW_RADIUS * hs, if m.searching() { th.accent.color(1.0) } else { th.ink(0.2) }, 1.0);
     let scy = f.search.y + f.search.h / 2.0;
-    p.glyph(Glyph::Search, f.search.x + 16.0 * s, scy, 13.0 * s, sub);
-    p.query(m.query(), m.field.before_cursor(), "Search…", f.search.x + 32.0 * s, scy, 13.0 * s, ink, th.faint(), f.search.w - 40.0 * s);
+    p.glyph(Glyph::Search, f.search.x + 15.0 * hs, scy, 13.0 * hs, sub);
+    p.query(m.query(), m.field.before_cursor(), "Search…", f.search.x + 29.0 * hs, scy, 13.0 * hs, ink, th.faint(), (f.search.w - 29.0 * hs - 30.0 * hs).max(1.0));
+    // the sidebar's rows: Breeze's list highlight, measured on the original as the accent at about 0.17 over the card with a lighter accent outline;
+    // the current row and the hovered one look alike, the keyboard focus gets the accent ring
+    let sidebar_frame = |p: &mut Painter, rect: Rect, focused: bool, current: bool| {
+        if focused || current {
+            p.fill(rect, ROW_RADIUS * s, th.accent.color(0.17));
+            if focused && m.keyboard {
+                p.stroke(rect, ROW_RADIUS * s, th.accent.color(1.0), 2.0 * s);
+            } else {
+                p.stroke(rect, ROW_RADIUS * s, th.accent.color(0.55), 1.0);
+            }
+        }
+    };
 
     let list_row = |p: &mut Painter, rect: Rect, focused: bool, icon: &str, name: &str, detail: &str| {
         let cy = rect.y + rect.h / 2.0;
@@ -526,27 +587,34 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             match (z.id, z.items[i]) {
                 ("cats", Target::View(v)) => {
                     let current = !m.searching() && v == shown(m);
-                    let row = Rect { x: rect.x, y: rect.y + 1.0 * s, w: rect.w, h: rect.h - 2.0 * s };
-                    hl(p, row, focused, current);
-                    let icon = 22.0 * s;
+                    let row = Rect { x: rect.x, y: rect.y + 0.5 * s, w: rect.w, h: rect.h - 1.0 * s };
+                    sidebar_frame(p, row, focused, current);
+                    let icon = (22.0 * s).min(rect.h);
+                    let (ix, iy) = (rect.x + 7.0 * s, cy - icon / 2.0);
+                    // the semantic icons of the source: `bookmarks`, `applications-all-symbolic` (RootModel's group entries) and the menu's own
+                    // `applications-*` category icons, recoloured to the text colour like KIconLoader does
                     match v {
-                        View::Favorites | View::Home => p.glyph(Glyph::Star, rect.x + 8.0 * s + icon / 2.0, cy, icon * 0.8, th.accent_c()),
-                        View::All => p.glyph(Glyph::Apps, rect.x + 8.0 * s + icon / 2.0, cy, icon * 0.7, ink),
-                        View::Recent => p.glyph(Glyph::Clock, rect.x + 8.0 * s + icon / 2.0, cy, icon * 0.8, ink),
-                        View::Category(c) => p.category(c, m.themed.contains(&c), rect.x + 8.0 * s, cy - icon / 2.0, icon),
+                        View::Favorites | View::Home => tinted(p, "bookmarks", ix, iy, icon, th.text),
+                        View::All => {
+                            tinted(p, "applications-all-symbolic", ix, iy, icon, th.text);
+                            // the original's divider after All Applications, on the boundary of the next row
+                            if z.items.len() > 2 {
+                                p.fill(Rect { x: rect.x + 4.0 * s, y: rect.bottom() - 0.5 * s, w: (rect.w - 8.0 * s).max(0.0), h: 1.0 }, 0.0, th.ink(0.12));
+                            }
+                        }
+                        View::Recent => p.glyph(Glyph::Clock, ix + icon / 2.0, cy, icon * 0.8, ink),
+                        View::Category(c) if m.themed.contains(&c) => tinted(p, c.icon(), ix, iy, icon, th.text),
+                        View::Category(c) => p.category(c, false, ix, iy, icon),
                     }
-                    p.text(Model::view_title(v), rect.x + 16.0 * s + icon, cy, 13.0 * s, Weight::Regular, ink, rect.w - 24.0 * s - icon);
-                }
-                ("cats", Target::Letter(SEPARATOR)) => {
-                    p.fill(Rect { x: rect.x + 8.0 * s, y: cy, w: rect.w - 16.0 * s, h: 1.0 }, 0.0, th.ink(0.12));
+                    p.text(Model::view_title(v), rect.x + 40.0 * s, cy, 13.0 * s, Weight::Regular, ink, (rect.w - 44.0 * s).max(1.0));
                 }
                 ("cats", Target::Style(PLACE, k)) => {
                     let (title, icon_name) = places::SIDEBAR[(k as usize).min(places::SIDEBAR.len() - 1)];
-                    let row = Rect { x: rect.x, y: rect.y + 1.0 * s, w: rect.w, h: rect.h - 2.0 * s };
-                    hl(p, row, focused, !m.searching() && k as usize == place(m));
-                    let icon = 22.0 * s;
-                    tinted(p, icon_name, rect.x + 8.0 * s, cy - icon / 2.0, icon, th.text);
-                    p.text(title, rect.x + 16.0 * s + icon, cy, 13.0 * s, Weight::Regular, ink, rect.w - 24.0 * s - icon);
+                    let row = Rect { x: rect.x, y: rect.y + 0.5 * s, w: rect.w, h: rect.h - 1.0 * s };
+                    sidebar_frame(p, row, focused, !m.searching() && k as usize == place(m));
+                    let icon = (22.0 * s).min(rect.h);
+                    tinted(p, icon_name, rect.x + 7.0 * s, cy - icon / 2.0, icon, th.text);
+                    p.text(title, rect.x + 40.0 * s, cy, 13.0 * s, Weight::Regular, ink, (rect.w - 44.0 * s).max(1.0));
                 }
                 ("apps", Target::App(a)) if z.cols() > 1 => {
                     let cell = Rect { x: rect.x + 3.0 * s, y: rect.y + 3.0 * s, w: rect.w - 6.0 * s, h: rect.h - 6.0 * s };
@@ -571,9 +639,17 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
                         list_row(p, rect, focused, &e.icon, &e.name, &e.detail);
                     }
                 }
-                ("actions", _) => {
+                ("actions", Target::Style(HEAD, k)) => {
+                    // the avatar itself was drawn with the header; only its frame belongs to the control
                     hl(p, rect, focused, false);
-                    p.glyph(Glyph::Gear, rect.x + rect.w / 2.0, cy, 16.0 * s, ink);
+                    if k == 1 {
+                        let icon = (22.0 * hs).min(rect.w).min(rect.h);
+                        tinted(p, "configure", rect.x + (rect.w - icon) / 2.0, rect.y + (rect.h - icon) / 2.0, icon, th.text);
+                    }
+                }
+                ("actions", Target::Clear) => {
+                    hl(p, rect, focused, false);
+                    p.glyph(Glyph::Close, rect.x + rect.w / 2.0, rect.y + rect.h / 2.0, 10.0 * hs, sub);
                 }
                 ("footer", Target::Style(TAB, k)) => {
                     let (title, icon_name) = if k == 0 { ("Applications", "applications-all-symbolic") } else { ("Places", "compass") };
@@ -628,6 +704,10 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             "Nothing here yet: right-click an app to add it to Favorites"
         };
         p.text_center(msg, f.content.x + f.content.w / 2.0, f.content.y + 40.0 * s, 13.0 * s, Weight::Regular, sub, f.content.w - 24.0 * s);
+    }
+
+    if let Some(z) = zones.iter().find(|z| z.id == "cats") {
+        scrollbar(p, z, m.offset("cats"), z.area().right() + 10.0 * s, 4.0 * s, th.ink(0.12), th.ink(0.45));
     }
 
     // The Session menu, over everything else: the rows the zone shows, a scrollbar when there are more.

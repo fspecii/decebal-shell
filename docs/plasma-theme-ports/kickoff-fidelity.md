@@ -60,11 +60,53 @@ orders applications and recent documents by time, Frequently Used by launch coun
 
 **Real window, real window manager** (`tests/e2e/plasma-packages-native.py --cases kickoff`; `native/kickoff/real-window-matrix-report.json`, `.log`, `real-bottom-100-kickoff-*.png`): the real `declaunch` (kde style) opened from the taskbar's Start under the pinned rdwm `ab1b588` on an owned private Xvfb, with root's immutable `decdock` `ec0106d5…` (Start-anchor fix `fbddaf8`); `systemctl`, `loginctl`, `rdwm-lock`, `poweroff` and `reboot` are recording stand-ins first on `PATH`, so nothing reaches the host. Per case: Places tab click moves the accent line to the Places tab and changes the page, Applications brings it back; Sleep runs `systemctl suspend` and closes Kickoff; Restart's first press runs nothing, Escape keeps Kickoff open and takes the arming back, two presses run `systemctl reboot` and close; Shut Down two presses run `systemctl poweroff`; the Session button opens a menu, Escape closes the menu and not Kickoff, Lock runs (`rdwm-lock`). **24 / 24 pass** (4 edges x 100 / 125 / 200 % x dark / light). An earlier run of the same gate had 8 failures at 200 % (a fixed delay shorter than the debug build's repaint of the larger card); the harness now polls, and that run's log is kept (`real-window-matrix-run1-8-timing-failures.log`). Log Out and Hibernate were not exercised natively (Log Out runs `rdwmctl action quit`, Hibernate depends on the host's `/sys/power/state`); both are covered by the unit tests.
 
+## Section 2: header and sidebar (source-only, UNRUN)
+
+Written without a build (no Cargo, no GUI, no native run was allowed for this increment): `rustfmt --check` is clean, nothing has been compiled, and the
+regressions below have **not been run**. The packages stay NOT READY. The source/date discrepancy of the Identity section still applies (capture dated
+30 Sep 2025, pinned source from Oct 2026, depth-1 clones): measurements come from the capture, behaviour from the pinned QML.
+
+**Measured on the capture** (655 x 516 card at 100 %, logical px relative to the card; the original screenshot is not in the repo, only its path/sha256 in Identity):
+
+| Part | Original | Native (`kde.rs` `frame()`) |
+| --- | --- | --- |
+| header band | 46 px, separator on row 45 | `HEADER_H = 46` |
+| avatar button | 28 px, centre (23, 23) | 28 x 28 at x = 9, vertically centred |
+| user name | x = 42, regular, 14 px | same, `hs`-scaled |
+| column divider | x = 235 (the sidebar's right edge) | 1 px at `side_w - 1`, from the header to the footer |
+| search field | x = 239, y = 8, 338 x 30 | `side_w + 4`, y + 8, ends 5 px before the configure button |
+| configure button | centre 57 px from the right edge (the Keep Open slot sits right of it) | centre `w - 57`; a card narrower than 480 px moves it into the right-hand slot (`w - 22`) |
+| sidebar frame | x = 4, y = 52, 208 wide | `side_w - 27` wide at x + 4 |
+| sidebar rows | 35 px pitch, icon box at x = 11, caption at x = 44 | `ROW_PITCH = 35`, icon at row x + 7, caption at row x + 40 |
+| row shape | Breeze frame radius 5 | `ROW_RADIUS = 5`; current/hovered row: accent 0.17 fill with a 0.55 accent outline; keyboard focus: 2 px accent ring |
+
+**Behaviour taken from the pinned plasma-desktop `Header.qml`/`main.qml`/`rootmodel.cpp`** (c68d33a9… / dec158c0…): the avatar button opens the user's account
+settings (`KCMLauncher.openSystemSettings("kcm_users")`), the configure button the applet configuration; here they run `decsettings users` and
+`decsettings launcher` (Decebal Settings' Users & Login and Launcher panes) and close the launcher. Both are real controls (pointer and keyboard Right/Enter);
+the search field gets a clear button while there is a query (the QML SearchField's clear action). Sidebar: Favorites (`bookmarks`), All Applications
+(`applications-all-symbolic`), then the menu categories sorted by their title as the root model does, with the themed `applications-*` icon when the icon
+theme has one. The old separator row is gone (it was a non-focusable fake item); the divider is painted on the boundary under All Applications.
+
+**Deliberately not done (deferred, no decorative inert control was added):**
+
+* **Keep Open (pin) button.** It binds `hideOnWindowDeactivate`; Decebal's launcher closes on focus loss in the shared window host, so a working pin needs a
+  host option (not in this module). The slot is left empty rather than drawing a dead button.
+* The name's hover swap to `login@host`, the avatar's face image (`~/.face`; an initial is drawn), tooltips on the header buttons.
+* The extra 9 px of spacing around the original's separator (the shared lists have one row height), Help category, the original's scrollbar style (a thin
+  neutral bar is drawn beside the sidebar when it scrolls), exact icon artwork (icons come from the user's icon theme, no artwork is copied).
+* The category set still differs (native adds Settings, Science, Other; the original lists Development, Education, Games, Graphics, Help, Internet,
+  Multimedia, Office, System, Utilities).
+
+**Tests added, all UNRUN** (`src/launcher/styled/kde/tests.rs`, last section): geometry against the numbers above (±2.5 px); sidebar contents/order/no separator;
+current row painted accent-tinted by pixel sampling; header items are exactly avatar + configure (no pin) and each runs its `decsettings` pane and closes;
+keyboard Right/Enter on the header; clear button only while searching and it clears; header controls inside the card, non-overlapping and hit-testable on
+320 x 240 and 400 x 300 screens at 100 / 125 / 200 % on all four edges.
+
 ## Full port gap list (still open; the packages stay NOT READY)
 
 1. **Card size.** The native card now opens at the original's 655 x 516 (`placement.rs`, one shared line, the natural size of the Kde style); in the original the size comes from Kickoff's implicit-size rules (grid units, scrollbar presence), which are not reproduced, so a different font size or panel would size it differently there.
-2. **Header.** Avatar image (the user's face, `~/.face`) instead of an initial; the search field's geometry; the configure (sliders) and pin buttons (pin keeps the popup open when another window activates; the gear here opens Decebal Settings).
-3. **Sidebar.** Row style (the current row has Breeze's accent-outlined frame; the original hover/focus frames), Breeze category icons (`applications-development`... not the freedesktop menu icons), the category list and order (the original shows Development, Education, Games, Graphics, Help, Internet, Multimedia, Office, System, Utilities; native adds Settings, Science, Other), the thin scrollbar, hover-to-switch-category (off by default).
+2. **Header.** Geometry and the avatar/configure/clear controls are Section 2 (source-only, UNRUN). Still open: avatar image (the user's face, `~/.face`) instead of an initial, the Keep Open (pin) button (needs a host option), name hover swap, tooltips.
+3. **Sidebar.** Row geometry, order (alphabetical) and semantic icons are Section 2 (source-only, UNRUN). Still open: the category set (the original shows Development, Education, Games, Graphics, Help, Internet, Multimedia, Office, System, Utilities; native adds Settings, Science, Other), the original's separator spacing and scrollbar style, hover-to-switch-category (off by default), exact icon fidelity per theme.
 4. **Content.** Grid cell size and label wrapping (favourites at 64 px icons with centred two-line labels), the list delegate (name / description layout, compact mode), All Applications with section headers and the separator rows, drag and drop to reorder favourites, the per-application context menu (add/remove favourite, "Add to Panel", "Show in menu editor"), alphabetical sort setting.
 5. **Search.** KRunner's runner results and categories (applications, files, bookmarks, recent documents, system settings) and their keyboard behaviour; native searches installed applications only.
 6. **Material.** Plasma's dialog frame (`dialogs/background` SVG with its corner radius and shadow, translucency and blur), focus rings of Breeze controls, animations (page transitions, the footer height change).
