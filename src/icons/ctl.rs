@@ -15,6 +15,29 @@ decthemectl icons tint on|off            repaint symbolic icons in the theme's t
 decthemectl icons fallback NAME|none     theme tried after the chosen one, its parents and hicolor
 Stored in decebal.json under \"icons\"; running programs follow within half a second.";
 
+/// Hands the persisted icon selection of `file` (decebal.json) to app integration: the narrow icon / cursor publication
+/// (`theme::system::publish_assets`: GTK `settings.ini` icon / cursor keys, gsettings, qt5ct / qt6ct `icon_theme`, and the
+/// X11 settings manager), never a theme, colour or font apply. Call it only after the selection was written. It never blocks:
+/// the request goes to the system queue's dispatcher, and explicit opt-outs (`system.enabled = false`, the GTK and Qt
+/// targets off) answer "not published". Returns one line for the user.
+pub fn publish_selection(file: &Path) -> String {
+    #[cfg(test)]
+    PUBLISHED.lock().unwrap_or_else(|e| e.into_inner()).push(file.to_path_buf());
+    match crate::theme::system::publish_assets(file) {
+        crate::theme::system::Publication::Requested => "apps: GTK / Qt icon publication queued".into(),
+        crate::theme::system::Publication::Off(why) => format!("apps: not published ({why})"),
+    }
+}
+
+/// Test record of the `decebal.json` files handed to [`publish_selection`] (tests check their own sandbox path).
+#[cfg(test)]
+pub static PUBLISHED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub fn was_published(file: &Path) -> usize {
+    PUBLISHED.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|p| p.as_path() == file).count()
+}
+
 /// Runs one subcommand against `file` (decebal.json) and `roots`; the text to print, or an error message.
 pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String> {
     let json = args.iter().any(|a| a == "--json");
@@ -38,11 +61,12 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
             }
             cfg.write(file)?;
             crate::desktop_assets::policy::mark_user(file, crate::desktop_assets::Provides::Icons)?;
-            Ok(format!("icon theme: {}", if cfg.is_auto() { "auto".to_string() } else { cfg.theme.clone() }))
+            // only once the choice and its ownership record are on disk
+            Ok(format!("icon theme: {}\n{}", if cfg.is_auto() { "auto".to_string() } else { cfg.theme.clone() }, publish_selection(file)))
         }
         Some("reset") => {
             IconConfig::reset(file)?;
-            Ok("icon settings reset".into())
+            Ok(format!("icon settings reset\n{}", publish_selection(file)))
         }
         Some("scale") => {
             let v: f32 = args.get(1).and_then(|v| v.parse().ok()).ok_or("scale needs a number")?;
@@ -146,7 +170,7 @@ mod tests {
     #[test]
     fn set_status_reset_cycle() {
         let (t, f) = setup();
-        assert_eq!(go(&t, &f, &["set", "tela blue"]).unwrap(), "icon theme: Tela");
+        assert_eq!(go(&t, &f, &["set", "tela blue"]).unwrap().lines().next(), Some("icon theme: Tela"));
         assert_eq!(IconConfig::read(&f).theme, "Tela");
         let st = go(&t, &f, &["status"]).unwrap();
         assert!(st.contains("theme:      Tela") && st.contains("Tela > hicolor > Adwaita"), "{st}");
@@ -163,6 +187,26 @@ mod tests {
         assert_eq!(IconConfig::read(&f).size_scale, 0.9, "the other settings stay");
         go(&t, &f, &["reset"]).unwrap();
         assert_eq!(IconConfig::read(&f), IconConfig::default());
+    }
+
+    /// A persisted manual choice (a named theme, auto) and a reset are handed to the narrow app publication; size, tint and
+    /// fallback (shell-only) and refused commands are not. Unit tests never queue real work: the answer says why.
+    #[test]
+    fn manual_choices_and_reset_are_published_after_they_are_written() {
+        let (t, f) = setup();
+        let out = go(&t, &f, &["set", "Tela"]).unwrap();
+        assert_eq!(was_published(&f), 1);
+        assert!(out.ends_with("apps: not published (automatic app integration is suppressed in this process)"), "{out}");
+        assert_eq!(IconConfig::read(&f).theme, "Tela", "written before publication");
+        go(&t, &f, &["scale", "0.9"]).unwrap();
+        go(&t, &f, &["tint", "on"]).unwrap();
+        go(&t, &f, &["fallback", "none"]).unwrap();
+        assert_eq!(was_published(&f), 1, "shell-only settings are not app publications");
+        assert!(go(&t, &f, &["set", "Nope"]).is_err() && go(&t, &f, &["set", "Mono"]).is_err());
+        assert_eq!(was_published(&f), 1, "a refused choice publishes nothing");
+        go(&t, &f, &["set", "auto"]).unwrap();
+        go(&t, &f, &["reset"]).unwrap();
+        assert_eq!(was_published(&f), 3);
     }
 
     #[test]

@@ -155,18 +155,48 @@ theme apply.
   it.
 * The decision is recorded in the report (`Report::xsettings`).
 
-Native scenario for this path (UNRUN):
+**Producers.** Manual icon choices are real producers of that publication, not only the asset follow job.
 
-1. Use an owned private Xvfb with no XSETTINGS owner, a fresh private HOME (no prior full apply), the `gtk` target on and
-   `DECEBAL_XSETTINGS` unset.
-2. Start a GTK 3 and a GTK 4 probe.
-3. Publish an installed icon theme through the Assets intent: `decthemectl apply-system --debounced NONCE --shell-json PATH`, after
-   queueing an Assets ticket.
-4. Expect:
-   - `system xsettings status` shows Decebal's manager;
-   - both probes' `gtk-icon-theme-name` changes live (icon pixels change in place);
-   - no `gtk-theme-name`, colour or font keys were written by this step.
-5. Repeat with `gtk.xsettings` off: Decebal's manager stops and a foreign owner stays.
+* `decthemectl icons set NAME|auto` and `decthemectl icons reset` call `icons::ctl::publish_selection` once the choice, and its
+  ownership record for `set`, is on disk. The command prints the outcome as a second line: `apps: GTK / Qt icon publication
+  queued` or `apps: not published (reason)`.
+* The Icons pane's "Use" and "Reset" do the same as a quiet `icons-publish` task on the settings persistence worker. That task
+  is queued from the after-save hook, so it runs ordered after the save and never on the UI thread.
+* Size, tint and fallback are shell-only and do not publish.
+* `auto` (and a reset) names no theme, so it publishes no icon key. GTK keeps what it has, matching the shell's "follow the
+  desktop" meaning.
+
+Native scenario for this path (UNRUN; real CLI producer, no injected ticket):
+
+```sh
+# Private session: owned Xvfb on :7xx (lock pid + both sockets verified), private HOME/XDG_* and bus, keyfile GSettings,
+# DECEBAL_SYSTEM_AUTOMATIC and DECEBAL_XSETTINGS unset (either =0 suppresses), no XSETTINGS owner on that display,
+# no earlier full apply in this HOME.
+# 1. Two fixture icon themes with one distinctive icon each (solid colour squares are enough):
+for t in QA-Red:ff0000 QA-Blue:0000ff; do n=${t%%:*}; c=${t##*:}
+  mkdir -p "$XDG_DATA_HOME/icons/$n/scalable/places"
+  printf '[Icon Theme]\nName=%s\nDirectories=scalable/places\n[scalable/places]\nSize=48\nType=Scalable\nMinSize=8\nMaxSize=512\n' "$n" > "$XDG_DATA_HOME/icons/$n/index.theme"
+  printf '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#%s"/></svg>' "$c" > "$XDG_DATA_HOME/icons/$n/scalable/places/folder.svg"
+done
+# 2. Open Files on a folder with a subfolder (folder icons visible), and a GTK 3 window showing "folder".
+# 3. The real producer:
+decthemectl icons set QA-Red          # line 2: "apps: GTK / Qt icon publication queued"
+# 4. Wait until the queue is idle: no state/decebal/system/requests-*.json; last-result.json intent "assets", no error.
+# Expect:
+#   gtk-3.0/settings.ini and gtk-4.0/settings.ini gain gtk-icon-theme-name=QA-Red and nothing else (no theme, colour or font key);
+#   gsettings get org.gnome.desktop.interface icon-theme  -> 'QA-Red'
+#   decthemectl system xsettings status  -> Decebal's manager, pid shown
+#   the open GTK 3 window's folder icon turns red in place (XSETTINGS Net/IconThemeName);
+#   Files (libadwaita, GTK 4) follows when its process reads the setting.
+decthemectl icons set QA-Blue         # the same windows turn blue without reopening
+decthemectl icons reset               # "apps: ..." line; no icon key changes (auto names nothing)
+# 5. Opt-outs: `decthemectl system target gtk off` (and qt off or absent), then `icons set QA-Red` prints
+#    "apps: not published (the GTK and Qt app targets are switched off)"; with "Live GTK settings on X11" off
+#    (system set: option gtk.xsettings), a publication stops Decebal's manager and leaves a foreign one alone.
+```
+
+The same steps through the Settings Icons pane (pick, Use, then Reset) must give the same files, gsettings value and
+manager state.
 
 **Acceptance commands (individual evidence below; ownership runtime checks remain outstanding):**
 

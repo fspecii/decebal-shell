@@ -750,7 +750,9 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
 fn effective_config(shell_json: &Path) -> Config {
     let mut cfg = Config::load(shell_json);
     if cfg.icon_theme.is_none() {
-        cfg.icon_theme = crate::settings::io::json_load(shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
+        // "auto" follows the desktop's own setting: no named theme to publish.
+        cfg.icon_theme =
+            crate::settings::io::json_load(shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("auto")).map(String::from);
     }
     cfg
 }

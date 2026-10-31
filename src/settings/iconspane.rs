@@ -166,12 +166,15 @@ pub fn items(m: &Model) -> Vec<Item> {
 /// file at commit (other keys, and keys of the object this version does not know, are kept). `chosen`: the theme was
 /// picked by the user, so its ownership record (`asset_packs`) changes in the same atomic write.
 fn write(m: &mut Model, change: impl Fn(&mut IconConfig) + Send + Sync + 'static, chosen: bool, msg: String) {
-    let after: crate::settings::model::AfterSave = Box::new(|m: &mut Model| {
+    let after: crate::settings::model::AfterSave = Box::new(move |m: &mut Model| {
         // the icon cache follows the file; reading it is the worker's job, not the UI's
         m.run_task_quiet("icons-poll", || {
             live::poll_now();
             Ok(serde_json::Value::Null)
         });
+        if chosen {
+            publish_after_save(m);
+        }
     });
     m.edit_shell_doc(
         "icons",
@@ -195,6 +198,13 @@ fn write(m: &mut Model, change: impl Fn(&mut IconConfig) + Send + Sync + 'static
         msg,
         Some(after),
     );
+}
+
+/// After a saved theme choice or reset: the narrow icon / cursor app publication, as a quiet task on the settings persistence
+/// worker (ordered after the save, never on the UI thread). Size, tint and fallback are shell-only and do not publish.
+fn publish_after_save(m: &mut Model) {
+    let file = cfg_path(m);
+    m.run_task_quiet("icons-publish", move || Ok(serde_json::Value::String(crate::icons::ctl::publish_selection(&file))));
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
@@ -239,6 +249,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                     live::poll_now();
                     Ok(serde_json::Value::Null)
                 });
+                publish_after_save(m);
             });
             m.edit_shell_doc(
                 "icons-reset",
@@ -387,6 +398,26 @@ mod tests {
         assert_eq!(IconConfig::read(&path), IconConfig::default());
         let doc = crate::settings::io::json_load(&path);
         assert!(doc.get("icons").is_none());
+    }
+
+    /// The pane's theme choice and reset are published after their save (on the persistence worker); shell-only controls are not.
+    #[test]
+    fn saved_choices_and_reset_publish_but_size_tint_and_fallback_do_not() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut m, _) = model_with(""); // tests persist inline: after-save hooks and their tasks run before apply returns
+        let path = m.paths.shell_json();
+        let before = crate::icons::ctl::was_published(&path);
+        m.apply("ic:scale", CtlVal::Num(90.0));
+        m.apply("ic:tint", CtlVal::Bool(true));
+        m.apply("ic:fallback", CtlVal::Str("none".into()));
+        assert_eq!(crate::icons::ctl::was_published(&path), before, "shell-only settings");
+        *HIGHLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = Some(AUTO.to_string());
+        m.apply("ic:use", CtlVal::Click);
+        assert_eq!(IconConfig::read(&path).theme, AUTO, "saved first");
+        assert_eq!(crate::icons::ctl::was_published(&path), before + 1, "a saved choice is published");
+        m.apply("ic:reset", CtlVal::Click);
+        assert_eq!(crate::icons::ctl::was_published(&path), before + 2, "and so is a reset");
+        assert!(crate::settings::io::json_load(&path).get("icons").is_none());
     }
 
     #[test]
