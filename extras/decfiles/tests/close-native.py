@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Only fixture-delay binary: deterministic pre-dispatch cancellation/close UI."""
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0,str(Path(__file__).resolve().parent))
+import xserver
 import hashlib,json,os,select,subprocess,tempfile,time
 binary=Path(os.environ.get('DECFILES_FIXTURE_BIN','/var/tmp/decfiles-operations-artifacts/fixture-delay/decfiles')).resolve()
 root=Path(tempfile.mkdtemp(prefix='decfiles-close-native-',dir='/var/tmp'));root.chmod(0o700)
@@ -36,8 +39,7 @@ def create(name):
 def close_prompt():
  focus(window);key('ctrl+w');dialog=wait(lambda:find('^Close Files during an operation[?]$'),'close confirmation absent')[0];focus(dialog);return dialog
 try:
- r,w=os.pipe();xlog=(out/'xvfb.log').open('w');logs.append(xlog)
- x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=env,pass_fds=(w,),stdout=xlog,stderr=subprocess.STDOUT);owned.append(x);os.close(w);assert select.select([r],[],[],5)[0];env['DISPLAY']=':'+os.read(r,32).decode().strip();os.close(r)
+ xserver.start(env,lambda name:(lambda f:(logs.append(f),f)[1])((out/(name+'.log')).open('w')),owned)  # reserved high display, owned in both socket namespaces
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
  log=(out/'app.log').open('w');logs.append(log);app=subprocess.Popen([str(binary),str(base)],env=env,stdout=log,stderr=subprocess.STDOUT);owned.append(app)
  wait(lambda:state().get('model',{}).get('columns') and state()['model'].get('pending') is None,'initial folder missing');window=wait(lambda:find('^Decebal Files'),'window missing')[0]

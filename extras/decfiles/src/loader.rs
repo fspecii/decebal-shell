@@ -16,7 +16,7 @@ pub fn load(path: &std::path::Path, cancel: &gio::Cancellable, done: impl FnOnce
     let file = gio::File::for_path(path);
     let cancel_owned = cancel.clone();
     file.enumerate_children_async(
-        "standard::name,standard::display-name,standard::type,standard::size,time::modified",
+        "standard::name,standard::display-name,standard::type,standard::size,time::modified,standard::fast-content-type,standard::is-symlink",
         gio::FileQueryInfoFlags::NONE,
         glib::Priority::DEFAULT,
         Some(cancel),
@@ -55,6 +55,8 @@ fn next(job: Rc<Job>) {
                         directory: info.file_type() == gio::FileType::Directory,
                         size: info.size().max(0) as u64,
                         modified: info.attribute_uint64("time::modified"),
+                        content_type: info.attribute_string("standard::fast-content-type").map(|value| value.to_string()).unwrap_or_default(),
+                        symlink: info.is_symlink(),
                     });
                 }
             }

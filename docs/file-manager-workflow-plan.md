@@ -151,7 +151,7 @@ request. The README records the physical-symlink policy and blocked-system-call
 limit.
 
 Standard GTK controls supply semantics but do not establish screen-reader
-acceptance. General copy/move, undo/restore, permanent delete, tabs, search, clipboard,
+acceptance. Undo/restore, permanent delete, multi-selection, tabs, search,
 drag/drop, remote/mount integration, palette/icons, familiar visual styling, actual Wayland and the
 remaining release gates below stay open. This increment proves navigation, not
 a complete Explorer/Finder replica or a premium finished appearance.
@@ -177,6 +177,44 @@ A default-off fixture-only build separately passes four cancel/close cases,
 including Keep Open and explicit cancel-and-close without joining the worker.
 Those pre-dispatch delay tests are not proof of physical blocked-filesystem
 cancellation or rollback. See the component README for exact semantics.
+
+Copy and move checkpoint: Cut/Copy/Paste buttons and Ctrl+X/C/V publish and read
+GNOME Files' `x-special/gnome-copied-files` and `text/uri-list` clipboard formats.
+Paste runs one bounded worker thread with byte/item progress, Cancel, and an
+**Item already exists** dialog offering Stop, Skip (default) and Keep Both, with
+apply-to-all. Files are published atomically (`O_TMPFILE` + `linkat`), folders
+use `mkdirat`, symlinks are recreated exactly, and same-filesystem moves use
+`renameat2(RENAME_NOREPLACE)`. Cross-filesystem moves remove only unchanged,
+fully copied originals and keep the rest. There is no overwrite, Replace/Merge,
+undo or Trash/delete fallback. Nineteen Rust tests and two new private-Xvfb suites
+pass: 10 actual-control cases on feature-free binary `04c7182f…`, plus four
+fixture-delay cases for mid-copy Cancel, Keep Open, an external source change and
+cancel-and-close. The same binary still passes the 13 operation and eight
+navigation cases; the fixture binary passes the four close cases. See the
+[component README](../extras/decfiles/README.md#copy-move-and-the-clipboard).
+Clipboard interoperability was proven with private X clipboard owners, not yet
+with a running Nautilus process. After review, every item is now staged privately
+(`O_TMPFILE` or a verified hidden `0700` folder) and published with atomic
+no-replace calls whose result is re-verified by inode. Cross-filesystem moves
+remove an original only after verifying the published copy, atomically claiming
+the original under a private name and checking that it is the same unchanged
+inode; otherwise it is restored and kept. Pasting blocks navigation during a
+5-second-bounded clipboard read, and only our own still-owned cut is cleared.
+Deterministic test-only race hooks and fixture-only native races cover these
+paths. The component README states the exact concurrency contract. Multi-selection, drag/drop and restore remain open.
+
+Later checkpoints in the component README add sortable columns, folder monitoring,
+tabs, cancellable search, and live palette/profile following.
+
+- **Palette and profile:** they come from the shell's generated
+  `gtk-4.0/gtk.css` marker. The default layout follows the profile, but an
+  explicit layout always survives. A unit test pins the shell's marker contract.
+- **Evidence:** every checkpoint ran all native suites on reserved high private
+  displays against separately pinned default and fixture binaries.
+- **Not yet done, so this is not yet Explorer/Finder:** multi-selection,
+  Replace/Merge, drag/drop, undo/restore, icon/gallery views, mounts/remote
+  locations, opening/open-with, Orca and Wayland acceptance, and
+  default-handler opt-in.
 
 Trash must never fall back to permanent deletion. A no-overwrite check must remain true when a
 destination appears concurrently, not only when it exists before clicking.

@@ -5,13 +5,16 @@ pub const MAX_ENTRIES: usize = 8192;
 pub const MAX_COLUMNS: usize = 16;
 pub const MAX_HISTORY: usize = 64;
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Serialize, PartialEq, Eq)]
 pub struct Entry {
     pub path: PathBuf,
     pub name: String,
     pub directory: bool,
     pub size: u64,
     pub modified: u64,
+    /// Extension-based GIO type; no file contents are sniffed while listing.
+    pub content_type: String,
+    pub symlink: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -140,7 +143,7 @@ impl Model {
                     .map(|entry| {
                         serde_json::json!({
                             "path":path_text(&entry.path), "path_bytes":entry.path.as_os_str().as_bytes(),
-                            "name":entry.name, "directory":entry.directory, "size":entry.size
+                            "name":entry.name, "directory":entry.directory, "size":entry.size, "content_type":entry.content_type
                         })
                     })
                     .collect();
@@ -187,7 +190,7 @@ pub fn location(text: &str, current: &Path, home: &Path) -> Result<PathBuf, Stri
 mod tests {
     use super::*;
     fn entries(parent: &str) -> Vec<Entry> {
-        vec![Entry { path: Path::new(parent).join("child"), name: "child".into(), directory: true, size: 0, modified: 0 }]
+        vec![Entry { path: Path::new(parent).join("child"), name: "child".into(), directory: true, ..Default::default() }]
     }
     fn visit(model: &mut Model, path: &str) {
         let request = model.request(path.into(), Intent::Visit);
@@ -244,7 +247,7 @@ mod tests {
         let mut model = Model::default();
         let first = model.request("/base".into(), Intent::Visit);
         let mut root_entries = entries("/base");
-        root_entries.push(Entry { path: "/base/other".into(), name: "other".into(), directory: true, size: 0, modified: 0 });
+        root_entries.push(Entry { path: "/base/other".into(), name: "other".into(), directory: true, ..Default::default() });
         model.complete(&first, Ok(root_entries));
         visit(&mut model, "/base/child");
         visit(&mut model, "/base/child/child");
@@ -278,7 +281,7 @@ mod tests {
         let path = PathBuf::from(std::ffi::OsString::from_vec(b"/base/\xff".to_vec()));
         let mut model = Model::default();
         let request = model.request("/base".into(), Intent::Visit);
-        model.complete(&request, Ok(vec![Entry { path: path.clone(), name: "display".into(), directory: false, size: 0, modified: 0 }]));
+        model.complete(&request, Ok(vec![Entry { path: path.clone(), name: "display".into(), ..Default::default() }]));
         model.select(0, Some(path.clone()));
         let snapshot = model.evidence();
         assert_eq!(snapshot["columns"][0]["selected_bytes"], serde_json::json!(path.as_os_str().as_bytes()));

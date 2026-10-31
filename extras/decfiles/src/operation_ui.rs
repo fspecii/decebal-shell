@@ -1,3 +1,6 @@
+// GtkDialog is deprecated since GTK 4.10 but remains in GTK 4; the tested default-response
+// semantics of these confirmations depend on it until a reviewed AlertDialog migration.
+#![allow(deprecated)]
 use super::Ui;
 use decfiles::{
     model::Intent,
@@ -16,18 +19,33 @@ pub struct Controls {
     pub rename: gtk::Button,
     pub trash: gtk::Button,
     pub cancel: gtk::Button,
+    pub cut: gtk::Button,
+    pub copy: gtk::Button,
+    pub paste: gtk::Button,
+    pub progress_row: gtk::Box,
+    pub progress: gtk::ProgressBar,
+    pub progress_label: gtk::Label,
     pub active: RefCell<Option<PathBuf>>,
-    running: RefCell<Option<Running>>,
-    dialog: RefCell<Option<gtk::Dialog>>,
-    next_id: Cell<u64>,
-    select_after_refresh: RefCell<Option<PathBuf>>,
-    notice: RefCell<Option<String>>,
-    last_result: RefCell<Option<serde_json::Value>>,
+    pub(crate) running: RefCell<Option<Running>>,
+    pub(crate) dialog: RefCell<Option<gtk::Dialog>>,
+    pub(crate) next_id: Cell<u64>,
+    pub(crate) select_after_refresh: RefCell<Option<PathBuf>>,
+    pub(crate) error_after_refresh: RefCell<Option<String>>,
+    pub(crate) notice: RefCell<Option<String>>,
+    pub(crate) last_result: RefCell<Option<serde_json::Value>>,
+    pub(crate) transfer_state: RefCell<Option<serde_json::Value>>,
+    pub(crate) clipboard_state: RefCell<Option<serde_json::Value>>,
+    pub(crate) paste_reading: Cell<bool>,
+    /// The provider we published; ownership is compared by object identity.
+    pub(crate) clipboard_provider: RefCell<Option<gtk::gdk::ContentProvider>>,
     allow_close: Cell<bool>,
 }
-struct Running {
-    id: u64,
-    cancel: gio::Cancellable,
+pub(crate) struct Running {
+    pub id: u64,
+    pub cancel: gio::Cancellable,
+    pub transfer: Option<std::rc::Rc<decfiles::transfer::Transfer>>,
+    /// Our own cut provider read by this paste; cleared on success only if still the owner.
+    pub consumed_cut: Option<gtk::gdk::ContentProvider>,
 }
 
 impl Controls {
@@ -37,15 +55,45 @@ impl Controls {
             rename: gtk::Button::with_label("Rename"),
             trash: gtk::Button::with_label("Move to Trash"),
             cancel: gtk::Button::with_label("Cancel operation"),
+            cut: gtk::Button::with_label("Cut"),
+            copy: gtk::Button::with_label("Copy"),
+            paste: gtk::Button::with_label("Paste"),
+            progress_row: gtk::Box::new(gtk::Orientation::Horizontal, 12),
+            progress: gtk::ProgressBar::new(),
+            progress_label: gtk::Label::new(None),
             active: RefCell::new(None),
             running: RefCell::new(None),
             dialog: RefCell::new(None),
             next_id: Cell::new(0),
             select_after_refresh: RefCell::new(None),
+            error_after_refresh: RefCell::new(None),
             notice: RefCell::new(None),
             last_result: RefCell::new(None),
+            transfer_state: RefCell::new(None),
+            clipboard_state: RefCell::new(None),
+            paste_reading: Cell::new(false),
+            clipboard_provider: RefCell::new(None),
             allow_close: Cell::new(false),
         }
+    }
+    /// Shown only while a copy/move runs, above the operation bar so the bar keeps its place.
+    pub fn progress_row(&self) -> gtk::Box {
+        let row = &self.progress_row;
+        row.set_margin_top(8);
+        row.set_margin_start(12);
+        row.set_margin_end(12);
+        self.progress_label.set_xalign(0.0);
+        self.progress_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+        self.progress_label.set_width_chars(36);
+        self.progress_label.set_max_width_chars(48);
+        self.progress.set_hexpand(true);
+        self.progress.set_valign(gtk::Align::Center);
+        self.progress.set_show_text(true);
+        self.progress.update_property(&[gtk::accessible::Property::Label("Transfer progress")]);
+        row.append(&self.progress_label);
+        row.append(&self.progress);
+        row.set_visible(false);
+        row.clone()
     }
     pub fn bar(&self) -> gtk::Box {
         let bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -53,6 +101,14 @@ impl Controls {
         bar.set_margin_start(12);
         bar.set_margin_end(12);
         for button in [&self.create, &self.rename, &self.trash, &self.cancel] {
+            bar.append(button);
+        }
+        // Clipboard actions follow the original controls so their positions stay stable.
+        let separator = gtk::Separator::new(gtk::Orientation::Vertical);
+        separator.set_margin_start(6);
+        separator.set_margin_end(6);
+        bar.append(&separator);
+        for button in [&self.cut, &self.copy, &self.paste] {
             bar.append(button);
         }
         self.cancel.set_visible(false);
@@ -66,7 +122,8 @@ impl Controls {
             "dialog":self.dialog.borrow().as_ref().and_then(|dialog|dialog.title()).map(|title|title.to_string()),
             "selected":self.active.borrow().as_ref().map(|path|path.to_string_lossy().into_owned()),
             "selected_bytes":self.active.borrow().as_ref().map(|path|path.as_os_str().as_bytes().to_vec()),
-            "last_result":&*self.last_result.borrow()})
+            "last_result":&*self.last_result.borrow(), "transfer":&*self.transfer_state.borrow(),
+            "clipboard":&*self.clipboard_state.borrow(), "paste_reading":self.paste_reading.get()})
     }
     pub fn is_busy(&self) -> bool {
         self.running.borrow().is_some()
@@ -182,6 +239,10 @@ impl Ui {
         if self.ops.dialog.borrow().is_some() {
             return false;
         }
+        if self.ops.paste_reading.get() {
+            self.status.set_text("Reading the clipboard… Navigation resumes when the paste starts or fails.");
+            return false;
+        }
         self.ops.notice.borrow_mut().take();
         true
     }
@@ -191,10 +252,15 @@ impl Ui {
         let selected =
             self.ops.active.borrow().as_ref().is_some_and(|path| model.columns.iter().any(|column| column.selected.as_ref() == Some(path) && column.entries.iter().any(|entry| &entry.path == path)));
         let running = self.ops.running.borrow();
-        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && model.pending.is_none();
+        // Search results are not the folder model: file operations wait for a revealed result.
+        // A quiet background refresh is superseded by any action, so it must not disable them.
+        let idle = running.is_none() && self.ops.dialog.borrow().is_none() && (model.pending.is_none() || self.pending_is_quiet()) && !self.is_searching();
         self.ops.create.set_sensitive(idle && model.current().is_some());
         self.ops.rename.set_sensitive(idle && selected);
         self.ops.trash.set_sensitive(idle && selected);
+        self.ops.cut.set_sensitive(idle && selected);
+        self.ops.copy.set_sensitive(idle && selected);
+        self.ops.paste.set_sensitive(idle && model.current().is_some() && !self.ops.paste_reading.get());
         self.ops.cancel.set_visible(running.is_some());
         self.ops.cancel.set_sensitive(running.as_ref().is_some_and(|run| !run.cancel.is_cancelled()));
         self.back.set_sensitive(running.is_none() && model.can_back());
@@ -214,6 +280,12 @@ impl Ui {
     }
 
     pub fn operation_refreshed(&self) {
+        if let Some(error) = self.ops.error_after_refresh.borrow_mut().take() {
+            let mut model = self.model.borrow_mut();
+            if model.error.is_none() {
+                model.error = Some(error);
+            }
+        }
         if let Some(path) = self.ops.select_after_refresh.borrow_mut().take() {
             let mut model = self.model.borrow_mut();
             if model.error.is_none() {
@@ -225,11 +297,12 @@ impl Ui {
         }
     }
 
-    fn can_start_dialog(&self) -> bool {
-        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none()
+    pub(crate) fn can_start_dialog(&self) -> bool {
+        self.ops.running.borrow().is_none() && self.ops.dialog.borrow().is_none() && self.model.borrow().pending.is_none() && !self.ops.paste_reading.get() && !self.is_searching()
     }
 
     pub fn name_dialog(self: &Rc<Self>, rename: bool) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() {
             return;
         }
@@ -318,6 +391,7 @@ impl Ui {
     }
 
     pub fn trash_dialog(self: &Rc<Self>) {
+        self.drop_quiet_refresh();
         if !self.can_start_dialog() {
             return;
         }
@@ -376,7 +450,7 @@ impl Ui {
         let id = self.ops.next_id.get().wrapping_add(1);
         self.ops.next_id.set(id);
         let cancel = gio::Cancellable::new();
-        self.ops.running.replace(Some(Running { id, cancel: cancel.clone() }));
+        self.ops.running.replace(Some(Running { id, cancel: cancel.clone(), transfer: None, consumed_cut: None }));
         self.ops.notice.borrow_mut().take();
         self.model.borrow_mut().error = None;
         self.error.set_visible(false);
@@ -420,7 +494,7 @@ impl Ui {
         }
     }
 
-    fn refresh_operation(self: &Rc<Self>, parent: PathBuf, selected: Option<PathBuf>, notice: String) {
+    pub(crate) fn refresh_operation(self: &Rc<Self>, parent: PathBuf, selected: Option<PathBuf>, notice: String) {
         let same_folder = self.model.borrow().current() == Some(parent.as_path());
         self.ops.select_after_refresh.replace(selected);
         self.navigate(parent, if same_folder { Intent::Refresh } else { Intent::Visit });

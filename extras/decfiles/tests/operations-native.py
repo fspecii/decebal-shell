@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Real create/rename/trash controls, isolated Xvfb/bus/HOME/XDG fixtures only."""
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0,str(Path(__file__).resolve().parent))
+import xserver
 import hashlib,json,os,select,subprocess,tempfile,time,urllib.parse
 binary=Path(os.environ.get('DECFILES_BIN',str(Path.home()/'.cache/decebal-files-target/debug/decfiles'))).resolve()
 root=Path(tempfile.mkdtemp(prefix='decfiles-ops-native-',dir='/var/tmp'));root.chmod(0o700)
@@ -68,8 +71,7 @@ def trash_confirm():
 def address(path):
  focus(window);key('ctrl+l');run(['xdotool','type','--clearmodifiers','--delay','1',str(path)]);key('Return');wait(lambda:at(path),'address did not load')
 try:
- r,w=os.pipe();f=(out/'xvfb.log').open('w');logs.append(f)
- x=subprocess.Popen(['Xvfb','-displayfd',str(w),'-screen','0','1400x900x24','-noreset','-nolisten','tcp'],env=env,pass_fds=(w,),stdout=f,stderr=subprocess.STDOUT);owned.append(x);os.close(w);assert select.select([r],[],[],5)[0];env['DISPLAY']=':'+os.read(r,32).decode().strip();os.close(r)
+ xserver.start(env,lambda name:(lambda f:(logs.append(f),f)[1])((out/(name+'.log')).open('w')),owned)  # reserved high display, owned in both socket namespaces
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
  app=start([str(binary),str(base)],'app');wait(lambda:at(base),'initial folder missing');window=wait(lambda:find_window('^Decebal Files'),'main window missing')[0];focus(window)
  # Invalid input never dispatches an operation; Cancel/Escape does not mutate.
