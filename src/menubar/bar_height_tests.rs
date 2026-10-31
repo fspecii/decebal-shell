@@ -11,9 +11,8 @@ const SCALES: [f32; 3] = [1.0, 1.25, 2.0];
 
 #[test]
 fn fractional_declared_height_reserves_the_same_bottom_inset_as_its_surface() {
-    let _guard = crate::config::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _t = themed(Some(32.5), 1.0);
-    let bar = fixture(Renderer::Flat, Edge::Bottom, AppletSet::all(), 1280);
+    let bar = fixture(Renderer::MenuBar, Edge::Bottom, AppletSet::all(), 1280);
     assert_eq!(bar.surface_spec().unwrap().reserve, 33);
     assert_eq!(crate::theme::th().bar_insets().bottom, 33);
     reset();
