@@ -1,0 +1,57 @@
+{
+ "openkylin": {
+  "light": [
+   "m3lme1",
+   "Alaska fjord with cirrus: bright blue sky and still water keep the light panel legible."
+  ],
+  "dark": [
+   "4vwjr3",
+   "Frozen-lake salt polygons at blue dusk: deep blue and near-black give the dark taskbar a calm backdrop."
+  ],
+  "why": "Cool blue fjord/lake reflection echoes UKUI's daybreak-blue brand without an illustrated gradient."
+ },
+ "openkylin-islands": {
+  "light": [
+   "wq2dwr",
+   "Lake Wakatipu road and cirrus: blue, saturated, clear sky area above the bottom islands."
+  ],
+  "dark": [
+   "o5p21m",
+   "Starlit snow peaks with mist: dark foreground under the islands keeps them readable."
+  ],
+  "why": "Floating island taskbar over saturated, high-clarity scenery."
+ },
+ "openkylin-heyin": {
+  "light": [
+   "28v3mm",
+   "Mount Cook at lavender-pink alpenglow: soft violet sky, bright snow peak, low-key foreground."
+  ],
+  "dark": [
+   "kxy19m",
+   "Rose-violet dusk over dark peaks; low-key lower half suits the dark fashion theme."
+  ],
+  "why": "HeYin's purple accent set against rose/violet dusk light."
+ },
+ "openkylin-classic": {
+  "light": [
+   "3ld9wv",
+   "Hazy teal lake and islands: low contrast, flat surfaces for the square Classic chrome."
+  ],
+  "dark": [
+   "pokqd3",
+   "Long-exposure slate lake under heavy cloud: neutral and quiet."
+  ],
+  "why": "Classic (启典) ships a water wallpaper; calm photographic water continues that role."
+ },
+ "openkylin-light-seeking": {
+  "light": [
+   "7p92ov",
+   "Pukaki-blue river at dawn: azure water matches the #3790FA brand."
+  ],
+  "dark": [
+   "1k9vjw",
+   "Starry snow slope in deep blue: the dark taskbar sits over a quiet foreground."
+  ],
+  "why": "Light-Seeking (寻光) is the azure brand colour; blue water and night sky photography."
+ }
+}

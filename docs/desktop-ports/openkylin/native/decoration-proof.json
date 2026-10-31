@@ -1,0 +1,142 @@
+{
+ "decthemectl": {
+  "path": "/home/ambsd/.cache/decebal-openkylin-work/bins.QO7wS9/decthemectl",
+  "sha256": "d01e46c0bf72f79b85bd0b15ec974b763437145557af5eff8eaad31f3f6ac046"
+ },
+ "rdwm_new": {
+  "dir": "/var/tmp/rdwm-layout-decorations-release-artifacts/release",
+  "rdwm": "d7a49344a9f7db98ccf3207c43b144a6a794d568d7a41f79a1503346c38b762d",
+  "rdwmctl": "061313cb81972def843e3d35dc1c53b0799f0a0c452c4d32ddd52b15c051876f"
+ },
+ "rdwm_old": {
+  "dir": "/usr/bin",
+  "rdwm": "5d62d8126e3a2898b518d08d06af43ba8e835a95182539bc09bf838ae07351c6",
+  "rdwmctl": "18909a4ddb93ad9012c65dbf4ba82e9b90e3be35e6fe65e90aa866b21eb34bce"
+ },
+ "results": [
+  {
+   "package": "openkylin",
+   "mode": "light",
+   "wm": "new",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin (light); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  undo with: decthemectl theme undo",
+   "config_style": "openkylin",
+   "config_radius": "12",
+   "wm_lists_styles": 24,
+   "wm_reports_style": "openkylin",
+   "record": null
+  },
+  {
+   "package": "openkylin",
+   "mode": "light",
+   "wm": "old",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin (light); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  note: Window style `openkylin` needs a newer rdwm: the running rdwm does not list it, so `adwaita-light` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again.\n  note: Window shadows require a supporting rdwm session; current configuration retained\n  undo with: ",
+   "config_style": "adwaita-light",
+   "config_radius": "12",
+   "wm_lists_styles": 15,
+   "wm_reports_style": "adwaita-light",
+   "record": {
+    "theme": "openkylin",
+    "mode": "light",
+    "desired": "openkylin",
+    "applied": "adwaita-light",
+    "proof": "running",
+    "message": "Window style `openkylin` needs a newer rdwm: the running rdwm does not list it, so `adwaita-light` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again."
+   }
+  },
+  {
+   "package": "openkylin",
+   "mode": "dark",
+   "wm": "new",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin (dark); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  undo with: decthemectl theme undo",
+   "config_style": "openkylin-dark",
+   "config_radius": "12",
+   "wm_lists_styles": 24,
+   "wm_reports_style": "openkylin-dark",
+   "record": null
+  },
+  {
+   "package": "openkylin",
+   "mode": "dark",
+   "wm": "old",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin (dark); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  note: Window style `openkylin-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again.\n  note: Window shadows require a supporting rdwm session; current configuration retained\n  undo with: de",
+   "config_style": "adwaita",
+   "config_radius": "12",
+   "wm_lists_styles": 15,
+   "wm_reports_style": "adwaita",
+   "record": {
+    "theme": "openkylin",
+    "mode": "dark",
+    "desired": "openkylin-dark",
+    "applied": "adwaita",
+    "proof": "running",
+    "message": "Window style `openkylin-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again."
+   }
+  },
+  {
+   "package": "openkylin-classic",
+   "mode": "light",
+   "wm": "new",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin-classic (light); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  undo with: decthemectl theme undo",
+   "config_style": "openkylin",
+   "config_radius": "0",
+   "wm_lists_styles": 24,
+   "wm_reports_style": "openkylin",
+   "record": null
+  },
+  {
+   "package": "openkylin-classic",
+   "mode": "light",
+   "wm": "old",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin-classic (light); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  note: Window style `openkylin` needs a newer rdwm: the running rdwm does not list it, so `adwaita-light` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again.\n  note: Window shadows require a supporting rdwm session; current configuration retained\n  und",
+   "config_style": "adwaita-light",
+   "config_radius": "0",
+   "wm_lists_styles": 15,
+   "wm_reports_style": "adwaita-light",
+   "record": {
+    "theme": "openkylin-classic",
+    "mode": "light",
+    "desired": "openkylin",
+    "applied": "adwaita-light",
+    "proof": "running",
+    "message": "Window style `openkylin` needs a newer rdwm: the running rdwm does not list it, so `adwaita-light` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again."
+   }
+  },
+  {
+   "package": "openkylin-classic",
+   "mode": "dark",
+   "wm": "new",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin-classic (dark); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  undo with: decthemectl theme undo",
+   "config_style": "openkylin-dark",
+   "config_radius": "0",
+   "wm_lists_styles": 24,
+   "wm_reports_style": "openkylin-dark",
+   "record": null
+  },
+  {
+   "package": "openkylin-classic",
+   "mode": "dark",
+   "wm": "old",
+   "apply_exit": 0,
+   "apply_message": "applied openkylin-classic (dark); changed: decebal.json, dock-settings.json, config.toml; rdwm reloaded\n  note: Window style `openkylin-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again.\n  note: Window shadows require a supporting rdwm session; current configuration retained\n  undo ",
+   "config_style": "adwaita",
+   "config_radius": "0",
+   "wm_lists_styles": 15,
+   "wm_reports_style": "adwaita",
+   "record": {
+    "theme": "openkylin-classic",
+    "mode": "dark",
+    "desired": "openkylin-dark",
+    "applied": "adwaita",
+    "proof": "running",
+    "message": "Window style `openkylin-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now. Upgrade rdwm and log in again (or restart rdwm), then apply the theme again."
+   }
+  }
+ ]
+}

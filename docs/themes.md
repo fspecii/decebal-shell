@@ -236,3 +236,5 @@ captures. Theme ownership/backlog: [Theme Specialist](theme-specialist.md).
 The gallery now [generates native previews automatically](theme-previews.md)
 from package metadata and assets. Manual screenshots are optional evidence;
 new themes and edits regenerate through the same isolated cache path.
+
+The openKylin family adds `openkylin`, `openkylin-islands`, `openkylin-light-seeking`, `openkylin-heyin` and `openkylin-classic`, with matching light/dark native decoration requests, independent icon/cursor recommendations and reviewed Wallhaven photo pairs. These use the shared panel renderers; the [port notes](desktop-ports/openkylin/README.md) distinguish source-derived geometry from remaining UKUI differences.

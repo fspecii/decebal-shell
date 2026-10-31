@@ -1,0 +1,233 @@
+{
+ "source_revision": "83cb8ff8f113e4002681401ac9da97997f440968",
+ "themes": {
+  "Classic": {
+   "conf": {
+    "color-schemes": {
+     "defaultLightDarkMode": "light",
+     "supportLightDarkMode": "true"
+    },
+    "effect": {
+     "animationDuration": "150",
+     "blurEnabled": "true",
+     "supportAnimation": "true",
+     "supportBlur": "true",
+     "supportTransparency": "true",
+     "transparencyBlur": "65",
+     "transparencyNoBlur": "90",
+     "windowRadius": "0"
+    },
+    "generic": {
+     "Name[bo_CN]": "གསུང་རབ།",
+     "Name[mn_MN]": "ᠰᠤᠩᠭᠤᠳᠠᠭ ᠰᠤᠩᠭᠤᠳᠠᠭ",
+     "Name[ug_CN]": "كلاسسىك",
+     "Name[zh_CN]": "启典",
+     "Name[zh_HK]": "啓典"
+    },
+    "gtk": {
+     "accent": "#3790FA",
+     "darkThemeName": "ukui-black",
+     "lightThemeName": "ukui-white",
+     "themeName": "ukui-white"
+    },
+    "qt": {
+     "accentRole": "daybreakBlue",
+     "darkThemeName": "ukui-dark",
+     "lightThemeName": "ukui-light",
+     "widgetThemeName": "classical"
+    },
+    "wallpaper": {
+     "wallPaperPath": "/usr/share/backgrounds/water.jpg"
+    },
+    "xdg": {
+     "cursorThemeName": "dark-sense",
+     "iconThemeName": "ukui-icon-theme-classical",
+     "soundThemeName": "Classic"
+    }
+   },
+   "css": {
+    "dark": {
+     "file": "globaltheme/Classic/kclassical-dark.css",
+     "sha256": "041a36c21e455de05873d19867df1f8885afe66fa1d270482fb6c673cff56e1b",
+     "tokens": 183
+    },
+    "light": {
+     "file": "globaltheme/Classic/kclassical-light.css",
+     "sha256": "463d32a25b1a54caf29e5f1ef160c9c6f1d1a963bc9ce198dc93b3ba1a9a09ae",
+     "tokens": 183
+    }
+   }
+  },
+  "HeYin": {
+   "conf": {
+    "color-schemes": {
+     "defaultLightDarkMode": "dark",
+     "supportLightDarkMode": "true"
+    },
+    "effect": {
+     "animationDuration": "150",
+     "blurEnabled": "true",
+     "supportAnimation": "true",
+     "supportBlur": "true",
+     "supportTransparency": "true",
+     "transparencyBlur": "75",
+     "transparencyNoBlur": "90",
+     "windowRadius": "12"
+    },
+    "generic": {
+     "Name[bo_CN]": "ཧའེ་དབྱིན།",
+     "Name[mn_MN]": "ᠲᠠᠮᠠᠭᠠ",
+     "Name[ug_CN]": "ئىز",
+     "Name[zh_CN]": "和印",
+     "Name[zh_HK]": "和印"
+    },
+    "gtk": {
+     "accent": "#6A287E",
+     "darkThemeName": "ukui-black",
+     "lightThemeName": "ukui-white",
+     "themeName": "ukui-white"
+    },
+    "qt": {
+     "accentRole": "jamPurple",
+     "darkThemeName": "ukui-dark",
+     "lightThemeName": "ukui-light",
+     "widgetThemeName": "fashion"
+    },
+    "wallpaper": {
+     "wallPaperPath": "/usr/share/backgrounds/heyin.png"
+    },
+    "xdg": {
+     "cursorThemeName": "DMZ-White",
+     "iconThemeName": "ukui-icon-theme-fashion",
+     "soundThemeName": "HeYin"
+    }
+   },
+   "css": {
+    "dark": {
+     "file": "globaltheme/HeYin/kfashion-dark.css",
+     "sha256": "acf386aa737e0cb5616d01decd58000bcfceb5f8ca74bc7d1a174ce7a06bbc2f",
+     "tokens": 195
+    },
+    "light": {
+     "file": "globaltheme/HeYin/kfashion-light.css",
+     "sha256": "0cf1ef508c53281753cb3c3dab9b70a072ff8b419de07ce118a31ef44e8c52e3",
+     "tokens": 195
+    }
+   }
+  },
+  "Light-Seeking": {
+   "conf": {
+    "color-schemes": {
+     "defaultLightDarkMode": "light",
+     "supportLightDarkMode": "true"
+    },
+    "effect": {
+     "animationDuration": "150",
+     "blurEnabled": "true",
+     "supportAnimation": "true",
+     "supportBlur": "true",
+     "supportTransparency": "true",
+     "transparencyBlur": "65",
+     "transparencyNoBlur": "90",
+     "windowRadius": "12"
+    },
+    "generic": {
+     "Name[bo_CN]": "འོད་ཟེར་འཚོལ་བ།",
+     "Name[mn_MN]": "ᠭᠡᠷᠡᠯ ᠡᠷᠢᠬᠦ",
+     "Name[ug_CN]": "نۇر",
+     "Name[zh_CN]": "寻光",
+     "Name[zh_HK]": "尋光"
+    },
+    "gtk": {
+     "accent": "#3790FA",
+     "darkThemeName": "ukui-black",
+     "lightThemeName": "ukui-white",
+     "themeName": "ukui-white"
+    },
+    "qt": {
+     "accentRole": "daybreakBlue",
+     "darkThemeName": "ukui-dark",
+     "lightThemeName": "ukui-light",
+     "widgetThemeName": "default"
+    },
+    "wallpaper": {
+     "wallPaperPath": "/usr/share/backgrounds/1-openkylin.jpg"
+    },
+    "xdg": {
+     "cursorThemeName": "dark-sense",
+     "iconThemeName": "ukui-icon-theme-default",
+     "soundThemeName": "Light-Seeking"
+    }
+   },
+   "css": {
+    "dark": {
+     "file": "globaltheme/Light-Seeking/kdefault-dark.css",
+     "sha256": "c34793ddf668cd49be141e1afe1df543ee459be2f871222dd206cee556dbebf1",
+     "tokens": 195
+    },
+    "light": {
+     "file": "globaltheme/Light-Seeking/kdefault-light.css",
+     "sha256": "c39f9165dfe96ca2958ae7c2d5a4de1270bca0eaecc7c5f64225f43f23dbe8d0",
+     "tokens": 195
+    }
+   }
+  },
+  "v11": {
+   "conf": {
+    "color-schemes": {
+     "defaultLightDarkMode": "light",
+     "supportLightDarkMode": "true"
+    },
+    "effect": {
+     "animationDuration": "150",
+     "blurEnabled": "true",
+     "supportAnimation": "true",
+     "supportBlur": "true",
+     "supportTransparency": "true",
+     "transparencyBlur": "65",
+     "transparencyNoBlur": "90",
+     "windowRadius": "12"
+    },
+    "generic": {
+     "Name[bo_CN]": "v11",
+     "Name[mn_MN]": "v11",
+     "Name[ug_CN]": "v11",
+     "Name[zh_CN]": "v11",
+     "Name[zh_HK]": "v11"
+    },
+    "gtk": {
+     "accent": "#3790FA",
+     "darkThemeName": "ukui-black",
+     "lightThemeName": "ukui-white",
+     "themeName": "ukui-white"
+    },
+    "qt": {
+     "accentRole": "daybreakBlue",
+     "darkThemeName": "ukui-dark",
+     "lightThemeName": "ukui-light",
+     "widgetThemeName": "v11"
+    },
+    "wallpaper": {
+     "wallPaperPath": "/usr/share/backgrounds/1-openkylin.jpg"
+    },
+    "xdg": {
+     "cursorThemeName": "dark-sense",
+     "iconThemeName": "ukui-icon-theme-default",
+     "soundThemeName": "Light-Seeking"
+    }
+   },
+   "css": {
+    "dark": {
+     "file": "globaltheme/v11/kv11-dark.css",
+     "sha256": "a6bff9f85e24f49db28407a6217025294b748587d8a902100d64ee04e6f9d574",
+     "tokens": 222
+    },
+    "light": {
+     "file": "globaltheme/v11/kv11-light.css",
+     "sha256": "0328da5166de4b0b331621df1eaaf66b2dc0ea7a4f1b4c07795068df8d32d6ed",
+     "tokens": 222
+    }
+   }
+  }
+ }
+}

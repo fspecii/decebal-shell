@@ -1,0 +1,600 @@
+{
+ "organisation": "https://github.com/openkylin",
+ "mirror_note": "GitHub org is a read-only mirror last pushed 2025-04; UKUI development continues on gitee.com/openkylin (not reachable via the task's entry point).",
+ "repos": [
+  {
+   "repo": "https://github.com/openkylin/ukui-panel",
+   "branch": "openkylin/huanghe",
+   "commit": "3429618a48b7049e87b1a1857599534cc0ae76ab",
+   "commit_date": "2025-04-18",
+   "role": "taskbar: classic panel, island panel, top bar, task manager, tray, calendar",
+   "licence_declared_in_debian_copyright": [
+    "Expat",
+    "GPL-3.0+"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "debian/copyright": "8e3f427865a3858fa803fa7218bec989d421431d"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-globaltheme",
+   "branch": "openkylin/huanghe",
+   "commit": "83cb8ff8f113e4002681401ac9da97997f440968",
+   "commit_date": "2025-04-08",
+   "role": "global themes v11, Light-Seeking, HeYin, Classic: theme.conf + light/dark CSS token tables",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3.0+"
+   ],
+   "licence_files_at_root": [],
+   "licence_blobs": {
+    "debian/copyright": "62fe5fb3698bb3e75231eab6f5413e94b563dce2"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-themes",
+   "branch": "debian/unstable",
+   "commit": "80972fa6605356dfc86dca814a96e9b25f0c4174",
+   "commit_date": "2024-02-26",
+   "role": "icon packs (default/classical/fashion), cursor themes dark-sense + blue-crystal with hotspot tables, GTK ukui-white/black",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+    "debian/copyright": "66eea61613c7be299aafca8da3fa16aa7d1615d6"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/openkylin-theme",
+   "branch": "openkylin/nile",
+   "commit": "3c78d714aa8fac723c9a5360bd54484789a647ab",
+   "commit_date": "2025-03-31",
+   "role": "newer snapshot of the same icon packs and cursors (nile)",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3"
+   ],
+   "licence_files_at_root": [],
+   "licence_blobs": {
+    "debian/copyright": "0558d3ef9a8e18f6d442f58751d0c8b7902a0796"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/dmz-cursor-theme",
+   "branch": "openkylin/yangtze",
+   "commit": "54eb2bd971b033af69f1cea9881bc2a676aee943",
+   "commit_date": "2022-08-22",
+   "role": "DMZ-White / DMZ-Black cursors used by the HeYin global theme",
+   "licence_declared_in_debian_copyright": [],
+   "licence_files_at_root": [],
+   "licence_blobs": {
+    "debian/copyright": "84660fb0874b89bd5fe1429b3b19e7f1e6f9bf8a"
+   },
+   "note_on_licence": "debian/copyright states CC-BY-SA-3.0 for the theme (Novell/Jakub Steiner lineage) and GPL-2+ for renderpngs.py"
+  },
+  {
+   "repo": "https://github.com/openkylin/qt5-ukui-platformtheme",
+   "branch": "openkylin/huanghe",
+   "commit": "d1c0fdd5209e34441cf0424325948cbe0f38655e",
+   "commit_date": "2025-04-15",
+   "role": "Qt style/platform theme: widget parameters, style helper",
+   "licence_declared_in_debian_copyright": [
+    "GPL-2+",
+    "GPL-3+",
+    "LGPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "0a041280bd00a9d068f503b8ee7ce35214bd24a1",
+    "debian/copyright": "d376628595b8c24c881f2c90755be50c745a745f"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-control-center",
+   "branch": "openkylin/huanghe",
+   "commit": "6e59d9d25d6184dcfd00f568112222e9f430adf4",
+   "commit_date": "2025-04-15",
+   "role": "Settings app: client-side titlebar and window button metrics",
+   "licence_declared_in_debian_copyright": [
+    "GPL-2+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "fb0f924859df1c445136a2758ee9d653390c1ba8",
+    "debian/copyright": "d6d60930ccbce3d19472edaaf5947bc4ecbe73ad"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/kwin",
+   "branch": "openkylin/nile",
+   "commit": "01bf91445b61470fce0c7ac6b0f47daa2f8dc9d0",
+   "commit_date": "2025-04-16",
+   "role": "the real UKUI window decoration: kwin `src/plugins/kdecorations/ukui` (38 px header, 30 px buttons, radius 12) and its ukui-base icons",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "Expat",
+    "GFDL-1.2+",
+    "GPL",
+    "GPL-2+",
+    "GPL-2+3+KDEeV",
+    "GPL-3+",
+    "GPL-3_or_LGPL-2.1-QTexception-1.1",
+    "LGPL-2",
+    "LGPL-2+",
+    "LGPL-2.1+3+KDEeV"
+   ],
+   "licence_files_at_root": [
+    "LICENSES"
+   ],
+   "licence_blobs": {
+    "LICENSES": "6d4d9bdcbd03a4e3f1bd1701c7243a56c3bbf4ae",
+    "debian/copyright": "8c58c774b3cea436a2777ca13f4e7f0de3b7d1dc"
+   },
+   "note_on_licence": "plugin LICENSE is LGPL-3; kwin debian/copyright mixes GPL-2+/LGPL-2.1+3"
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-kwin",
+   "branch": "debian/unstable",
+   "commit": "05de18a4978d59a36805fc0163134693b9419f48",
+   "commit_date": "2024-02-05",
+   "role": "KWin fork: window manager, Aurorae decoration plugin",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "GFDL-NIV-1.2+",
+    "GPL-2+",
+    "GPL-2+3+KDEeV",
+    "LGPL-2+",
+    "LGPL-2.1+3+KDEeV",
+    "LGPL-2.1+3+KDEeV-translations"
+   ],
+   "licence_files_at_root": [
+    "LICENSES"
+   ],
+   "licence_blobs": {
+    "LICENSES": "2d0cacc9c7477c98df6aa6a65dfffadb1ce61103",
+    "debian/copyright": "0dccae48d74d84ba3bc751448ad8f84c274b152c"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-kwin-effects",
+   "branch": "openkylin/yangtze",
+   "commit": "f7d929d04cf1a3237d7d01e15117993c94cf3805",
+   "commit_date": "2022-06-13",
+   "role": "task view / window switcher effects",
+   "licence_declared_in_debian_copyright": [
+    "GPL-2+"
+   ],
+   "licence_files_at_root": [],
+   "licence_blobs": {
+    "debian/copyright": "d2b430caa8cb9822d3b397fd912a2531e0a77ce7"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-window-switch",
+   "branch": "debian/unstable",
+   "commit": "81f00cf9e3cc3181bebc94eab4d8f4b0fd313c07",
+   "commit_date": "2024-02-04",
+   "role": "alt-tab window switcher",
+   "licence_declared_in_debian_copyright": [
+    "LGPL-2+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "5bc8fb2c8f757e34a0d8f4644f589d57609e213f",
+    "debian/copyright": "2df97c903f1bd25ae808efe9786088c29cd46a45"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-sidebar",
+   "branch": "4.10-dev",
+   "commit": "05a900e5bcb21924abb30b5cab773675e3ed206f",
+   "commit_date": "2024-04-03",
+   "role": "notification centre / sidebar",
+   "licence_declared_in_debian_copyright": [],
+   "licence_files_at_root": [
+    "COPYING",
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "COPYING": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+    "LICENSE": "818433ecc0e094a4db1023c68b33f24344643ad8"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-notification-daemon",
+   "branch": "debian/unstable",
+   "commit": "4b63694402101a7d71da18ee43e28022067adfb2",
+   "commit_date": "2024-02-01",
+   "role": "notification popups",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "818433ecc0e094a4db1023c68b33f24344643ad8",
+    "debian/copyright": "cdd436df419744afa0a7cf192559dc7e8ebc60fc"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-search",
+   "branch": "openkylin/huanghe",
+   "commit": "1b331d7a304ee70d778141126694843bf12823ff",
+   "commit_date": "2025-04-15",
+   "role": "global search UI",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "GPL-2+",
+    "GPL-3+",
+    "NTP"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "debian/copyright": "26d6a6b293f4d5c0c30007f999bdad36faf3e717"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-session-manager",
+   "branch": "openkylin/huanghe",
+   "commit": "96b775d8f7b2cc74105850d92a705282504a7620",
+   "commit_date": "2025-04-16",
+   "role": "session / logout dialog",
+   "licence_declared_in_debian_copyright": [
+    "GPL-2+",
+    "GPL-3+",
+    "LGPL-2.1+"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "20fb9c7da21cb5a29e10f614a03661a935181652",
+    "debian/copyright": "614c98ede3b85e46d59e1106eecd0dde55a5ba7d"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-power-manager",
+   "branch": "openkylin/huanghe",
+   "commit": "b072d4dafba8bb10c38a82ce19dc1229275763cf",
+   "commit_date": "2025-02-10",
+   "role": "power / battery",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+    "debian/copyright": "bb30a3c973bd0b192348b1a475c7e366584bcfa6"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-system-monitor",
+   "branch": "openkylin/huanghe",
+   "commit": "44e14a533ec8b5dd258dbc8beacee063a76522d6",
+   "commit_date": "2025-03-11",
+   "role": "process monitor",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "GPL-2+",
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "debian/copyright": "d3ec3f0331f1ffbea1e2d03c3b4bad208c6e2cf1"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-screensaver",
+   "branch": "debian/unstable",
+   "commit": "526a633b61a007bbbacd8b6310edd9cb9affef82",
+   "commit_date": "2024-02-23",
+   "role": "lock screen",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+    "debian/copyright": "e04913179b71b4afbfd189ecbed02cd1abaedab6"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-settings-daemon",
+   "branch": "openkylin/huanghe",
+   "commit": "ad8a899fbabdd61dbe583d4e72fedf24d5c2813d",
+   "commit_date": "2025-04-17",
+   "role": "theme/font/cursor gsettings plumbing",
+   "licence_declared_in_debian_copyright": [
+    "GPL-2+",
+    "GPL-3.0+",
+    "NTP",
+    "NTP~disclaimer"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "debian/copyright": "6e52d8741d51b569d6da87df2248536b0eddbb71"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-system-appwidget",
+   "branch": "debian/unstable",
+   "commit": "059a328736edd8556bd4b1d6b3f21b9394dcdda9",
+   "commit_date": "2023-08-08",
+   "role": "the only desktop widget UKUI ships: the time appwidget (448 x 162)",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "818433ecc0e094a4db1023c68b33f24344643ad8",
+    "debian/copyright": "e818b4eaddfdc376be89bb5ae32ab00070dde58d"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-quick-widgets",
+   "branch": "debian/unstable",
+   "commit": "ef8811d09215c70824580c883f50ef7810af6e8d",
+   "commit_date": "2025-01-09",
+   "role": "panel/sidebar widgets: calendar, digital clock, netspeed (reference only)",
+   "licence_declared_in_debian_copyright": [],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "3877ae0a7ff6f94ac222fd704e112723db776114"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-quick",
+   "branch": "ai-test",
+   "commit": "ab84f0a4712d8b94d8a25420cd6369cba3284c96",
+   "commit_date": "2024-09-19",
+   "role": "QML widget framework used by the panel",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "818433ecc0e094a4db1023c68b33f24344643ad8",
+    "debian/copyright": "ceb5039ba738a0a35ae83e8ed3c543c9d8a6b121"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/kylin-nm",
+   "branch": "0519",
+   "commit": "74e356588cb8ca07235d523f5843b116ccd4c90b",
+   "commit_date": "2023-05-19",
+   "role": "network manager applet",
+   "licence_declared_in_debian_copyright": [
+    "GPL-3+"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+    "debian/copyright": "ab540d0e560e53186d176b139af19fc3f6d14f10"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/peony",
+   "branch": "3.20.x.x",
+   "commit": "3e9045386b38112f9a59b98e53c6d3ac8ca1fa78",
+   "commit_date": "2023-07-03",
+   "role": "file manager",
+   "licence_declared_in_debian_copyright": [],
+   "licence_files_at_root": [
+    "COPYING",
+    "COPYING.LIB"
+   ],
+   "licence_blobs": {
+    "COPYING": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "COPYING.LIB": "0a041280bd00a9d068f503b8ee7ce35214bd24a1"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-clock",
+   "branch": "openkylin/nile",
+   "commit": "8e6b3c908501537cd38f8113d6c98db9f1845ef8",
+   "commit_date": "2025-03-18",
+   "role": "clock app",
+   "licence_declared_in_debian_copyright": [
+    "BSD-3-clause",
+    "GPL-3+",
+    "MIT"
+   ],
+   "licence_files_at_root": [
+    "LICENSE"
+   ],
+   "licence_blobs": {
+    "LICENSE": "818433ecc0e094a4db1023c68b33f24344643ad8",
+    "debian/copyright": "feae37820073ffdbd1eced8ce2859a12bce9860e"
+   },
+   "note_on_licence": ""
+  },
+  {
+   "repo": "https://github.com/openkylin/openkylin-wallpapers",
+   "branch": "openkylin/nile",
+   "commit": "39eae14ad41238c535192c39869f929ccf0201d1",
+   "commit_date": "2024-12-17",
+   "role": "upstream wallpapers (CC-BY-SA-3.0); inspected only, NOT shipped (policy: Wallhaven candidates)",
+   "licence_declared_in_debian_copyright": [
+    "CC-BY-SA-3.0"
+   ],
+   "licence_files_at_root": [],
+   "licence_blobs": {
+    "debian/copyright": "6bf6d8ca8d7e209f1374641368a0c6d9c8264e7f"
+   },
+   "note_on_licence": "CC-BY-SA-3.0 declared for all files; attribution/share-alike apply; not shipped here"
+  },
+  {
+   "repo": "https://github.com/openkylin/ukui-wallpapers",
+   "branch": "develop",
+   "commit": "cd53079fb61e8e9bffa0c517630f868b836a219f",
+   "commit_date": "2023-12-19",
+   "role": "more upstream wallpapers (licence NOASSERTION on GitHub); inspected only, NOT shipped",
+   "licence_declared_in_debian_copyright": [
+    "CC-BY-SA-3.0"
+   ],
+   "licence_files_at_root": [
+    "COPYING"
+   ],
+   "licence_blobs": {
+    "COPYING": "61da765596601e1401e89885783074755e65b89e",
+    "debian/copyright": "71c4c9fd28b36dc70693af56654d6df9859248f6"
+   },
+   "note_on_licence": "CC-BY-SA-3.0 declared; per-image authorship not verified; not shipped here"
+  },
+  {
+   "repo": "https://github.com/openkylin/kdecoration",
+   "branch": "openkylin/yangtze",
+   "commit": "c68659a3dbc1d1629a77bbe7d7b59cee32c5e9e5",
+   "commit_date": "2022-08-22",
+   "role": "KDE KDecoration API fork (no UKUI-specific decoration found)",
+   "licence_declared_in_debian_copyright": [
+    "LGPL-2+",
+    "LGPL-2.1+3+KDEeV"
+   ],
+   "licence_files_at_root": [
+    "LICENSES"
+   ],
+   "licence_blobs": {
+    "LICENSES": "ae806d9614793dc4b6a0c7132752e7a04985d538",
+    "debian/copyright": "775d229aff88543d933e9903b9d84e549db04a29"
+   },
+   "note_on_licence": ""
+  }
+ ],
+ "unresolved_provenance": [
+  {
+   "what": "UKUI icon packs (ukui-icon-theme-default/classical/fashion)",
+   "evidence": "index.theme: `Comment=Icon theme for UKUI ,from moka.`",
+   "status": "UNRESOLVED: part of the artwork may descend from the Moka icon theme; its licence and whether openkylin-theme may relicense it were neither researched nor assumed. The GPL-3 above is what debian/copyright declares, not a verification."
+  }
+ ],
+ "verified_trees": {
+  "kwin:src/plugins/kdecorations/ukui": {
+   "git_tree": "f0c2cf3380c076ea5603a66af9f4dc28f7bff06b",
+   "files": 162,
+   "bytes": 237217
+  },
+  "openkylin-theme:icons/cursors/dark-sense": {
+   "git_tree": "b38ba3ab123cbdc5418fa43daf5beba11e4c9138",
+   "files": 359,
+   "bytes": 466946
+  },
+  "openkylin-theme:icons/cursors/blue-crystal": {
+   "git_tree": "42e4fe05dbfefcf26b6c274be624c97468f3e79e",
+   "files": 362,
+   "bytes": 654068
+  },
+  "ukui-themes:icons/cursors/dark-sense": {
+   "git_tree": "b38ba3ab123cbdc5418fa43daf5beba11e4c9138",
+   "files": 359,
+   "bytes": 466946
+  },
+  "ukui-themes:icons/cursors/blue-crystal": {
+   "git_tree": "42e4fe05dbfefcf26b6c274be624c97468f3e79e",
+   "files": 362,
+   "bytes": 654068
+  },
+  "ukui-themes:icons/ukui-icon-theme-default": {
+   "git_tree": "b3320a05008e133d792f7d41d44885092a0697df",
+   "files": 14587,
+   "bytes": 59022164
+  },
+  "ukui-themes:icons/ukui-icon-theme-classical": {
+   "git_tree": "61731c06aaa9a3bbc98bdf685e4f7440bece611e",
+   "files": 14911,
+   "bytes": 50704391
+  },
+  "ukui-themes:icons/ukui-icon-theme-fashion": {
+   "git_tree": "c93b63f19128059e38647caac785c22ae128c75d",
+   "files": 7582,
+   "bytes": 65281353
+  },
+  "openkylin-theme:icons/ukui-icon-theme-default": {
+   "git_tree": "7e3d3ab0f27ed72665119ef56c296fdf177c23a2",
+   "files": 16123,
+   "bytes": 60446849
+  },
+  "openkylin-theme:icons/ukui-icon-theme-classical": {
+   "git_tree": "7960b5318b46f6e167c7c7bec432b627d3998483",
+   "files": 14924,
+   "bytes": 50892219
+  },
+  "openkylin-theme:icons/ukui-icon-theme-fashion": {
+   "git_tree": "dd8111a4d5244e9117933545d67a9039e86928ed",
+   "files": 8633,
+   "bytes": 49115096
+  },
+  "dmz-cursor-theme:DMZ-White": {
+   "git_tree": "d34002d297472690a5adb753d4b0160d5744d9cc",
+   "files": 95,
+   "bytes": 5047117
+  },
+  "dmz-cursor-theme:DMZ-Black": {
+   "git_tree": "d4dc970813dc6060b2553cd172d76ceef57221d8",
+   "files": 397,
+   "bytes": 853484
+  },
+  "ukui-globaltheme:globaltheme": {
+   "git_tree": "711b46f8e043136972446a47bc244975fecf898e",
+   "files": 26,
+   "bytes": 5387729
+  }
+ }
+}

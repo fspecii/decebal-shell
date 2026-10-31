@@ -1,0 +1,1155 @@
+{
+ "format": 1,
+ "curated_on": "2026-10-31",
+ "provider": "https://wallhaven.cc",
+ "images": {
+  "m3lme1": {
+   "id": "m3lme1",
+   "subject": "Alaska fjord with cirrus: bright blue sky and still water keep the light panel legible.",
+   "page_url": "https://wallhaven.cc/w/m3lme1",
+   "api_url": "https://wallhaven.cc/api/v1/w/m3lme1",
+   "full_url": "https://w.wallhaven.cc/full/m3/wallhaven-m3lme1.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/m3/m3lme1.jpg",
+   "resolution": [
+    3840,
+    2160
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2023-02-18 16:28:44",
+   "uploader": {
+    "username": "Ivayla",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Trey Ratcliff",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 23252,
+     "name": "Alaska"
+    },
+    {
+     "id": 9472,
+     "name": "fjord"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 465,
+     "name": "hills"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 638,
+     "name": "reflection"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 3667,
+     "name": "Trey Ratcliff"
+    },
+    {
+     "id": 4679,
+     "name": "USA"
+    },
+    {
+     "id": 65348,
+     "name": "4K"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "cbaa09e6cd78f63fef7f2d49184fb2d1c16de09dee8132f2bd0ef78dd39f5881",
+    "thumbnail_sha256": "4239183d4624717794f75cf47a9236d13283bbbfa406108ebaccc8dd34cb0d60"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "b33471fb6fee4fc3f98a6f713b31a1f97fadcc41da55754e58050654b43c21a4",
+    "bytes": 3761322,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "3840x2160 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "4vwjr3": {
+   "id": "4vwjr3",
+   "subject": "Frozen-lake salt polygons at blue dusk: deep blue and near-black give the dark taskbar a calm backdrop.",
+   "page_url": "https://wallhaven.cc/w/4vwjr3",
+   "api_url": "https://wallhaven.cc/api/v1/w/4vwjr3",
+   "full_url": "https://w.wallhaven.cc/full/4v/wallhaven-4vwjr3.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/4v/4vwjr3.jpg",
+   "resolution": [
+    2560,
+    1440
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2016-01-06 22:27:54",
+   "uploader": {
+    "username": "vfgx",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": null,
+    "candidate_basis": null
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 282,
+     "name": "blue"
+    },
+    {
+     "id": 3021,
+     "name": "calm"
+    },
+    {
+     "id": 4802,
+     "name": "dusk"
+    },
+    {
+     "id": 31540,
+     "name": "low light"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "1fb2b92f909460f9f73eb4d5065bfe5ab91b5456e7a6cc70460bc7b76cb24dd9",
+    "thumbnail_sha256": "94199ee682229df9b701760ff6f562bebd56364bbb9e2200627743635c51ae88"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "408cdc8d5eea1cec456e427405ea546082fa0a2c34d81052111614439f8c2894",
+    "bytes": 385961,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "2560x1440 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "wq2dwr": {
+   "id": "wq2dwr",
+   "subject": "Lake Wakatipu road and cirrus: blue, saturated, clear sky area above the bottom islands.",
+   "page_url": "https://wallhaven.cc/w/wq2dwr",
+   "api_url": "https://wallhaven.cc/api/v1/w/wq2dwr",
+   "full_url": "https://w.wallhaven.cc/full/wq/wallhaven-wq2dwr.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/wq/wq2dwr.jpg",
+   "resolution": [
+    7680,
+    4320
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2022-08-17 02:35:19",
+   "uploader": {
+    "username": "Ivayla",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Trey Ratcliff",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 3667,
+     "name": "Trey Ratcliff"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 349,
+     "name": "road"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 135163,
+     "name": "Glenorchy"
+    },
+    {
+     "id": 7079,
+     "name": "Queenstown"
+    },
+    {
+     "id": 7080,
+     "name": "New Zealand"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "374265a975bfe49fcb5571176998f6cda586d4d96045a868bf52c3d0be85f3e4",
+    "thumbnail_sha256": "370a9bcf34957dc7583af73e5a3b3b1b422a9ba9599ee2ce821f000349192c35"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "e2c8c13cc54f2a3ccd6dda424f166429220d5f960d4dc203e2049cea837717bf",
+    "bytes": 8539238,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "7680x4320 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "o5p21m": {
+   "id": "o5p21m",
+   "subject": "Starlit snow peaks with mist: dark foreground under the islands keeps them readable.",
+   "page_url": "https://wallhaven.cc/w/o5p21m",
+   "api_url": "https://wallhaven.cc/api/v1/w/o5p21m",
+   "full_url": "https://w.wallhaven.cc/full/o5/wallhaven-o5p21m.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/o5/o5p21m.jpg",
+   "resolution": [
+    5478,
+    3081
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2024-10-22 13:09:04",
+   "uploader": {
+    "username": "jrmnt",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": null,
+    "candidate_basis": null
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 338,
+     "name": "night"
+    },
+    {
+     "id": 45706,
+     "name": "nightscape"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 2428,
+     "name": "mist"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 245,
+     "name": "stars"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 1713,
+     "name": "environment"
+    },
+    {
+     "id": 70220,
+     "name": "starred sky"
+    },
+    {
+     "id": 31540,
+     "name": "low light"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "afd66cf7d86554320433c67503ef7901e52a911355dfb29436be7f658b3f9a86",
+    "thumbnail_sha256": "07df3fb82ab3a82b61732cd18c99394600c2e7326a5cb8ec384764e55a90edc3"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "7156c0d9f18ad8468a80da7b76c95c411f0797b95c80dc961e16b3788b0bffa7",
+    "bytes": 10158561,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "5478x3081 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "28v3mm": {
+   "id": "28v3mm",
+   "subject": "Mount Cook at lavender-pink alpenglow: soft violet sky, bright snow peak, low-key foreground.",
+   "page_url": "https://wallhaven.cc/w/28v3mm",
+   "api_url": "https://wallhaven.cc/api/v1/w/28v3mm",
+   "full_url": "https://w.wallhaven.cc/full/28/wallhaven-28v3mm.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/28/28v3mm.jpg",
+   "resolution": [
+    5120,
+    2880
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2022-05-21 13:33:59",
+   "uploader": {
+    "username": "jrmnt",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": null,
+    "candidate_basis": null
+   },
+   "source_url": "https://www.instagram.com/rachstewartnz/",
+   "source_verification": "source link as reported by Wallhaven; not independently verified",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 36510,
+     "name": "Mount Cook"
+    },
+    {
+     "id": 7080,
+     "name": "New Zealand"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 40932,
+     "name": "peak"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 64,
+     "name": "sunset"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "c34df828fe4bd535fecda46ee6e9925bdb2d6e90fb5a18ce5192cb08a505baf8",
+    "thumbnail_sha256": "1da92dad1f4fc5809711cd4927c2a7182ed295cc53f83212d9a261c4f275cf8c"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "fcabd1c689d3d1bd093bde74da0c5c83251f44cbb9ded7e22c28614cdabf71c6",
+    "bytes": 6611315,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "5120x2880 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "kxy19m": {
+   "id": "kxy19m",
+   "subject": "Rose-violet dusk over dark peaks; low-key lower half suits the dark fashion theme.",
+   "page_url": "https://wallhaven.cc/w/kxy19m",
+   "api_url": "https://wallhaven.cc/api/v1/w/kxy19m",
+   "full_url": "https://w.wallhaven.cc/full/kx/wallhaven-kxy19m.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/kx/kxy19m.jpg",
+   "resolution": [
+    3840,
+    2160
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2024-12-09 11:08:54",
+   "uploader": {
+    "username": "jrmnt",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Marek Piwnicki",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 65348,
+     "name": "4K"
+    },
+    {
+     "id": 2428,
+     "name": "mist"
+    },
+    {
+     "id": 64,
+     "name": "sunset"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 114989,
+     "name": "Marek Piwnicki"
+    },
+    {
+     "id": 31540,
+     "name": "low light"
+    },
+    {
+     "id": 120922,
+     "name": "sunset glow"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "030d6a3a850a8ca32807a7ca0674a54711d09bc76b8a3d53e6a242b30d8a430d",
+    "thumbnail_sha256": "267e3f1aa1f6aaac508d582461efaa37f965b19c7e0ab0992d0ab42dab2fb451"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "abba7c84234957bb7335ebb8a933edc6abfc7934fdb2b597103edcfc53c89892",
+    "bytes": 4480303,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "3840x2160 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "3ld9wv": {
+   "id": "3ld9wv",
+   "subject": "Hazy teal lake and islands: low contrast, flat surfaces for the square Classic chrome.",
+   "page_url": "https://wallhaven.cc/w/3ld9wv",
+   "api_url": "https://wallhaven.cc/api/v1/w/3ld9wv",
+   "full_url": "https://w.wallhaven.cc/full/3l/wallhaven-3ld9wv.png",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/3l/3ld9wv.jpg",
+   "resolution": [
+    3840,
+    2160
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2025-01-17 15:28:36",
+   "uploader": {
+    "username": "Pc7",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": null,
+    "candidate_basis": null
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 1362,
+     "name": "building"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 10630,
+     "name": "aerial view"
+    },
+    {
+     "id": 69246,
+     "name": "drone photo"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 11345,
+     "name": "Taiwan"
+    },
+    {
+     "id": 1466,
+     "name": "long exposure"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 122,
+     "name": "sunlight"
+    },
+    {
+     "id": 161793,
+     "name": "Sun Moon Lake"
+    },
+    {
+     "id": 162704,
+     "name": "songmatin"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "820194535e8e956fc16684b5e322dc4c8418327fcbc124fa269d475423c9757f",
+    "thumbnail_sha256": "b6486795819be6b54dbf2b7671b9888b22c721718747d0c34d177bab676f4086"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "292cc37e67801d2f86e4cf80deea1dacc592e6b1a529be86aae96efeabade7d1",
+    "bytes": 13694949,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "3840x2160 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "pokqd3": {
+   "id": "pokqd3",
+   "subject": "Long-exposure slate lake under heavy cloud: neutral and quiet.",
+   "page_url": "https://wallhaven.cc/w/pokqd3",
+   "api_url": "https://wallhaven.cc/api/v1/w/pokqd3",
+   "full_url": "https://w.wallhaven.cc/full/po/wallhaven-pokqd3.png",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/po/pokqd3.jpg",
+   "resolution": [
+    6144,
+    3456
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2025-09-14 14:01:27",
+   "uploader": {
+    "username": "Pc7",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Darkcloud Photography",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 115,
+     "name": "trees"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 870,
+     "name": "grass"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 1466,
+     "name": "long exposure"
+    },
+    {
+     "id": 5259,
+     "name": "Canada"
+    },
+    {
+     "id": 163512,
+     "name": "Darkcloud Photography"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "9f1da36c5d023d29ae155f5d51e9e2b02e231d257b5080c406abcd643f751871",
+    "thumbnail_sha256": "d953ea9a62d85b906abe8ebe2b73c97e0f149b832d7abdbb25a47396f820c8f2"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "d9092c143181b610e628299e9b08cd3ea6ec591f3b51d217ccf494e706a268e1",
+    "bytes": 15361464,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "6144x3456 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "7p92ov": {
+   "id": "7p92ov",
+   "subject": "Pukaki-blue river at dawn: azure water matches the #3790FA brand.",
+   "page_url": "https://wallhaven.cc/w/7p92ov",
+   "api_url": "https://wallhaven.cc/api/v1/w/7p92ov",
+   "full_url": "https://w.wallhaven.cc/full/7p/wallhaven-7p92ov.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/7p/7p92ov.jpg",
+   "resolution": [
+    3840,
+    2160
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2023-03-06 12:25:01",
+   "uploader": {
+    "username": "Ivayla",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Trey Ratcliff",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 3667,
+     "name": "Trey Ratcliff"
+    },
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 398,
+     "name": "lake"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 115,
+     "name": "trees"
+    },
+    {
+     "id": 39917,
+     "name": "shore"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 638,
+     "name": "reflection"
+    },
+    {
+     "id": 51304,
+     "name": "cropped"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "34cff8603ac6c888e87640efa0cd36fa53d44fcdbf5dca1884617f0536b79fb6",
+    "thumbnail_sha256": "db297218f740b863974c097246d1ea4b277350c145c6886c580fd9abe10e3e3b"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "2ec777158e9f10c2a7e983a9e74c57cda22114c6798ada0cfb743b2f9e1b2864",
+    "bytes": 3223151,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "3840x2160 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  },
+  "1k9vjw": {
+   "id": "1k9vjw",
+   "subject": "Starry snow slope in deep blue: the dark taskbar sits over a quiet foreground.",
+   "page_url": "https://wallhaven.cc/w/1k9vjw",
+   "api_url": "https://wallhaven.cc/api/v1/w/1k9vjw",
+   "full_url": "https://w.wallhaven.cc/full/1k/wallhaven-1k9vjw.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/1k/1k9vjw.jpg",
+   "resolution": [
+    7680,
+    4320
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2022-08-23 01:55:18",
+   "uploader": {
+    "username": "Ivayla",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Trey Ratcliff",
+    "candidate_basis": "Wallhaven detail tags only"
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 3667,
+     "name": "Trey Ratcliff"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 327,
+     "name": "winter"
+    },
+    {
+     "id": 338,
+     "name": "night"
+    },
+    {
+     "id": 245,
+     "name": "stars"
+    },
+    {
+     "id": 118,
+     "name": "lights"
+    },
+    {
+     "id": 7080,
+     "name": "New Zealand"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance; provenance is not proof of capture method",
+    "inspected": "contact-sheet thumbnail and 640x360 downsample of the full-resolution original"
+   },
+   "evidence": {
+    "detail_sha256": "cc51e9779cc5d73e4f8cff7a5c73e95e65146703e3cfa8bea00b4ef78efe2111",
+    "thumbnail_sha256": "738219d8bbcaf98d80d56626af9ed6cd68bc875d03cd44404ff0639e414c366a"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "15fdc28270a70ec9379f70ce53c6d345d3f4a9a77ddd254abc02c6f3e8713ef6",
+    "bytes": 14636464,
+    "dimensions_verified": true,
+    "assessment": "usable with stated crop/readability cautions",
+    "notes": "7680x4320 (1.778:1); photographic appearance with colour grading; authorship, licence and capture method unverified.",
+    "provenance_limit": "Photographic appearance and Wallhaven tags only; authorship, licence and capture method unverified. Uploader is not author."
+   }
+  }
+ },
+ "themes": {
+  "openkylin": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "Cool blue fjord/lake reflection echoes UKUI's daybreak-blue brand without an illustrated gradient.",
+   "dark": {
+    "image_id": "4vwjr3",
+    "rationale": "Frozen-lake salt polygons at blue dusk: deep blue and near-black give the dark taskbar a calm backdrop."
+   },
+   "light": {
+    "image_id": "m3lme1",
+    "rationale": "Alaska fjord with cirrus: bright blue sky and still water keep the light panel legible."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "All images are native 16:9: centre-fill crops nothing at 16:9; verify ultrawide/portrait separately.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  },
+  "openkylin-islands": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "Floating island taskbar over saturated, high-clarity scenery.",
+   "dark": {
+    "image_id": "o5p21m",
+    "rationale": "Starlit snow peaks with mist: dark foreground under the islands keeps them readable."
+   },
+   "light": {
+    "image_id": "wq2dwr",
+    "rationale": "Lake Wakatipu road and cirrus: blue, saturated, clear sky area above the bottom islands."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "All images are native 16:9: centre-fill crops nothing at 16:9; verify ultrawide/portrait separately.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  },
+  "openkylin-heyin": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "HeYin's purple accent set against rose/violet dusk light.",
+   "dark": {
+    "image_id": "kxy19m",
+    "rationale": "Rose-violet dusk over dark peaks; low-key lower half suits the dark fashion theme."
+   },
+   "light": {
+    "image_id": "28v3mm",
+    "rationale": "Mount Cook at lavender-pink alpenglow: soft violet sky, bright snow peak, low-key foreground."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "All images are native 16:9: centre-fill crops nothing at 16:9; verify ultrawide/portrait separately.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  },
+  "openkylin-classic": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "Classic (启典) ships a water wallpaper; calm photographic water continues that role.",
+   "dark": {
+    "image_id": "pokqd3",
+    "rationale": "Long-exposure slate lake under heavy cloud: neutral and quiet."
+   },
+   "light": {
+    "image_id": "3ld9wv",
+    "rationale": "Hazy teal lake and islands: low contrast, flat surfaces for the square Classic chrome."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "All images are native 16:9: centre-fill crops nothing at 16:9; verify ultrawide/portrait separately.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  },
+  "openkylin-light-seeking": {
+   "status": "candidate_live_checked_on_download",
+   "rationale": "Light-Seeking (寻光) is the azure brand colour; blue water and night sky photography.",
+   "dark": {
+    "image_id": "1k9vjw",
+    "rationale": "Starry snow slope in deep blue: the dark taskbar sits over a quiet foreground."
+   },
+   "light": {
+    "image_id": "7p92ov",
+    "rationale": "Pukaki-blue river at dawn: azure water matches the #3790FA brand."
+   },
+   "same_image_both_modes": false,
+   "recommended_mode": "fill",
+   "placement": "All images are native 16:9: centre-fill crops nothing at 16:9; verify ultrawide/portrait separately.",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch"
+  }
+ },
+ "policy": {
+  "purity": "sfw",
+  "category": "general",
+  "min_resolution": "2560x1440",
+  "ratio": "16x9",
+  "ai_filter": "rejected AI-art tag 133451 and AI-generator tag names on each detail response; absence of a tag is not proof of non-AI origin",
+  "copyright": "Images remain the property of their owners. This file stores links, hashes and metadata only; no image is redistributed in the package.",
+  "runtime": "Belongs to Wallpaper → For this theme. Packages set no wallpaper; apply never downloads.",
+  "distinct_from": "data/wallhaven-curated.json (42 ids); all ids here are distinct from it and from each other"
+ }
+}

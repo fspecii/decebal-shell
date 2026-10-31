@@ -1,0 +1,49 @@
+format = 1
+id = "ukui-time-12"
+name = "UKUI time (12 h)"
+description = "UKUI's desktop time widget, 12-hour layout: a 112 px time beside AM/PM, then weekday and date at 28 px, white on the wallpaper, no card."
+size = [448, 162]
+refresh = 1000
+
+# Measured from ukui-system-appwidget (time.qml @ 059a328): 448 x 162; time 112 px in a 244 x 112 box, 16 px gap, a 137 x 96 column: AM/PM 40 px,
+# then weekday and date at 28 px; text #FAFAFA, no background. Independent implementation, not the QML.
+
+[root]
+type = "row"
+gap = 16
+align = "center"
+justify = "center"
+on_click = "open dashboard"
+
+[[root.children]]
+type = "text"
+text = "{clock:%I:%M}"
+size = 112
+color = "#fafafa"
+
+[[root.children]]
+type = "col"
+align = "start"
+justify = "center"
+
+[[root.children.children]]
+type = "text"
+text = "{clock:%p}"
+size = 40
+color = "#fafafa"
+
+[[root.children.children]]
+type = "row"
+gap = 6
+
+[[root.children.children.children]]
+type = "text"
+text = "{clock:%a}"
+size = 28
+color = "#fafafa"
+
+[[root.children.children.children]]
+type = "text"
+text = "{clock:%m/%d}"
+size = 28
+color = "#fafafa"

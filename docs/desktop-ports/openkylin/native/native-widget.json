@@ -1,0 +1,152 @@
+{
+ "binaries": {
+  "decthemectl": "d01e46c0bf72f79b85bd0b15ec974b763437145557af5eff8eaad31f3f6ac046",
+  "decwidgets": "fcaa2216754bde0df9354ce544de654229ccef5d984323d28584f390842b472d"
+ },
+ "results": [
+  {
+   "theme": "openkylin",
+   "mode": "light",
+   "scale": 1,
+   "geometry": "1920x1080",
+   "edge": "theme default",
+   "windows": {
+    "decebal-dock": {
+     "x": 0,
+     "y": 1032,
+     "w": 1920,
+     "h": 48
+    }
+   },
+   "other_windows": {
+    "decwidgets: UKUI time (24 h)": "448x162",
+    "picom": "1x1",
+    "decebal-dock": "1920x48"
+   },
+   "screenshot": "widget-ukui-time-24-light-100.png",
+   "wallpaper": false,
+   "panel_pixel": [
+    222,
+    226,
+    232
+   ],
+   "panel_expected": [
+    222,
+    226,
+    232
+   ],
+   "panel_delta": 0,
+   "taskbar_thickness": 48,
+   "taskbar_thickness_expected": 48,
+   "widget_text_pixels": 7262
+  },
+  {
+   "theme": "openkylin",
+   "mode": "light",
+   "scale": 2,
+   "geometry": "1920x1080",
+   "edge": "theme default",
+   "windows": {
+    "decebal-dock": {
+     "x": 0,
+     "y": 984,
+     "w": 1920,
+     "h": 96
+    }
+   },
+   "other_windows": {
+    "decwidgets: UKUI time (24 h)": "448x162",
+    "picom": "1x1",
+    "decebal-dock": "1920x96"
+   },
+   "screenshot": "widget-ukui-time-24-light-200.png",
+   "wallpaper": false,
+   "panel_pixel": [
+    222,
+    226,
+    232
+   ],
+   "panel_expected": [
+    222,
+    226,
+    232
+   ],
+   "panel_delta": 0,
+   "taskbar_thickness": 96,
+   "taskbar_thickness_expected": 96,
+   "widget_text_pixels": 6691
+  },
+  {
+   "theme": "openkylin",
+   "mode": "dark",
+   "scale": 1,
+   "geometry": "1920x1080",
+   "edge": "theme default",
+   "windows": {
+    "decebal-dock": {
+     "x": 0,
+     "y": 1032,
+     "w": 1920,
+     "h": 48
+    }
+   },
+   "other_windows": {
+    "decwidgets: UKUI time (24 h)": "448x162",
+    "picom": "1x1",
+    "decebal-dock": "1920x48"
+   },
+   "screenshot": "widget-ukui-time-24-dark-100.png",
+   "wallpaper": false,
+   "panel_pixel": [
+    50,
+    52,
+    57
+   ],
+   "panel_expected": [
+    50,
+    52,
+    56
+   ],
+   "panel_delta": 1,
+   "taskbar_thickness": 48,
+   "taskbar_thickness_expected": 48,
+   "widget_text_pixels": 6562
+  },
+  {
+   "theme": "openkylin",
+   "mode": "dark",
+   "scale": 2,
+   "geometry": "1920x1080",
+   "edge": "theme default",
+   "windows": {
+    "decebal-dock": {
+     "x": 0,
+     "y": 984,
+     "w": 1920,
+     "h": 96
+    }
+   },
+   "other_windows": {
+    "decwidgets: UKUI time (24 h)": "448x162",
+    "picom": "1x1",
+    "decebal-dock": "1920x96"
+   },
+   "screenshot": "widget-ukui-time-24-dark-200.png",
+   "wallpaper": false,
+   "panel_pixel": [
+    50,
+    52,
+    57
+   ],
+   "panel_expected": [
+    50,
+    52,
+    56
+   ],
+   "panel_delta": 1,
+   "taskbar_thickness": 96,
+   "taskbar_thickness_expected": 96,
+   "widget_text_pixels": 6562
+  }
+ ]
+}

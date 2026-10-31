@@ -20,7 +20,7 @@ fn legacy_def(id: &str) -> Def {
 /// The original eight themes, frozen in `tests/fixtures/legacy-builtin`.
 const LEGACY: [&str; 8] = ["macos", "graphite", "nord", "dracula", "solarized", "windows11", "caelestia", "high-contrast"];
 /// Themes added after the engine: they have no legacy fixture, so they are checked as packages instead (see `new_themes_are_valid_packages`).
-const NEW: [&str; 22] = [
+const NEW: [&str; 27] = [
     "caelestia-mocha",
     "rose-pine",
     "tokyo-night",
@@ -43,6 +43,11 @@ const NEW: [&str; 22] = [
     "tidal-loom",
     "gnome-adwaita",
     "gnome-catppuccin-dock",
+    "openkylin",
+    "openkylin-islands",
+    "openkylin-light-seeking",
+    "openkylin-heyin",
+    "openkylin-classic",
 ];
 
 fn selections() -> Vec<Selection> {
@@ -151,7 +156,15 @@ fn new_themes_are_valid_packages_and_apply() {
         let def = builtin::def(id).unwrap();
         assert!(def.has_dark() || def.has_light(), "{id}");
         // Installed privately; packages without wallpaper metadata must preserve the user selection.
-        let (d, src, paths) = sandbox(&format!("new-{id}"));
+        let (d, src, mut paths) = sandbox(&format!("new-{id}"));
+        // The target is explicitly offline. Prove every family against the complete
+        // bundled WM schema, rather than borrowing the developer's running WM.
+        let ctl = d.join("rdwmctl");
+        let schema = include_str!("../../settings/rdwm-schema.json");
+        std::fs::write(&ctl, format!("#!/bin/sh\nif [ \"$1\" = schema ]; then cat <<'SCHEMA'\n{schema}\nSCHEMA\nelse exit 0; fi\n")).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
+        paths.rdwmctl = ctl;
         package::install_entries(&entries, &src.themes_dir, true, &Limits::default()).unwrap_or_else(|e| panic!("{id}: install: {e}"));
         std::fs::write(&paths.rdwm_config, "[general]\n[wallpaper]\nimage = \"/private/selected-photo.jpg\"\nmode = \"fit\"\n").unwrap();
         let out = apply::apply(&src, &paths, id, &Selection::default()).unwrap_or_else(|e| panic!("{id}: {e}"));

@@ -6,7 +6,8 @@
 //! ("deepin", include_str!("../../assets/desktop-ports/deepin/asset-packs.toml")),
 //! ```
 
-pub const CATALOGS: &[(&str, &str)] = &[("gnome", include_str!("../../assets/desktop-ports/gnome/asset-packs.toml"))];
+pub const CATALOGS: &[(&str, &str)] =
+    &[("gnome", include_str!("../../assets/desktop-ports/gnome/asset-packs.toml")), ("openkylin", include_str!("../../assets/desktop-ports/openkylin/asset-packs.toml"))];
 
 #[cfg(test)]
 mod tests {
