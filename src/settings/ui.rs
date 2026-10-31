@@ -1382,6 +1382,26 @@ mod tests {
         }
     }
 
+    /// The swipe detail exactly as Settings lays it out at 640x540 with 200 % interface and 200 % text, real fonts:
+    /// sidebar 320 (half the window), content 320, side margin u(16), card cw = 320 - 64 = 256, the row stacked, so
+    /// the detail column is cw - 2 x CARD_PAD; text u(11) at 200 % text = 44 px (Fonts multiplies by the text scale).
+    #[test]
+    fn at_640x540_200_percent_the_swipe_detail_lines_fit_their_real_column() {
+        let Some(mut fonts) = crate::text::Fonts::load() else { return };
+        let p = Painter { fonts: Some(&mut fonts), s: 2.0 };
+        let width = 320.0;
+        let cw = (width - 2.0 * p.u(16.0)).min(p.u(700.0));
+        let avail = (cw - p.u(2.0 * CARD_PAD)).max(p.u(80.0));
+        let px = p.u(11.0) * 2.0;
+        let text = "Three- and four-finger trackpad swipes run window-manager actions";
+        let lines = p.wrap(text, avail, px, Weight::Regular);
+        for l in &lines {
+            let w = p.measure(l, px, Weight::Regular);
+            assert!(w <= avail, "{l:?} is {w:.1} px in a {avail:.1} px column: {lines:?}");
+        }
+        assert_eq!(lines.iter().flat_map(|l| l.split_whitespace()).collect::<Vec<_>>().concat(), text.split_whitespace().collect::<Vec<_>>().concat());
+    }
+
     #[test]
     fn long_tokens_break_at_punctuation_or_whole_clusters() {
         let p = plain();

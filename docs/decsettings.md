@@ -260,5 +260,6 @@ breaks between characters. No character is dropped or elided and the text size i
 * Limits: without a full Unicode segmentation table, clusters are recognised for the common combining ranges only;
   a single character wider than the column is put on a line of its own and still overflows it (nothing narrower
   exists to draw); runs of spaces inside a line collapse to one, as before. Wrapping does not hyphenate words.
-* Keyboard focus: when rows above the focused control load later (the Keyboard & Input data arrives
-  asynchronously), the view does not follow the control; Tab again reveals it.
+* Keyboard focus: while focus was last moved with the keyboard, a layout that moves the focused control out of view
+  (rows above it loading later, as the Keyboard & Input data does) scrolls it back in the same frame; scrolling with
+  the wheel or clicking hands the view back to the user.

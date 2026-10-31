@@ -153,6 +153,9 @@ pub struct SettingsApp {
     /// (building them reads theme folders, fonts and icon themes: ~27 ms for the Theme pane, per wheel notch).
     items_cache: Option<(usize, Vec<Item>)>,
     reuse_items: bool,
+    /// Keyboard focus moved here last (not the wheel or the pointer): keep the focused control in view when the
+    /// page above it changes (rows that load later push it down).
+    follow_focus: bool,
     /// Reveal a new persistent error once, without preventing later scrolling.
     last_error_notice: Option<std::time::Instant>,
 }
@@ -229,6 +232,7 @@ impl SettingsApp {
             stats: (0, 0, 0),
             items_cache: None,
             reuse_items: false,
+            follow_focus: false,
             last_error_notice: None,
         }
     }
@@ -1014,6 +1018,15 @@ impl SettingsApp {
         }
     }
 
+    /// After a layout: when keyboard focus is being followed and the focused row is no longer in view (the page above
+    /// it changed), scrolls to it. True when the scroll changed.
+    fn reveal_focus(&mut self) -> bool {
+        let Some(id) = self.it.focus.clone().filter(|_| self.follow_focus && self.zone == Zone::Content) else { return false };
+        let before = self.scroll;
+        self.ensure_visible(&id);
+        (self.scroll - before).abs() > 0.5
+    }
+
     fn move_focus(&mut self, dir: i32) {
         let order = self.frame.focus_order();
         if order.is_empty() {
@@ -1032,6 +1045,7 @@ impl SettingsApp {
                 self.zone = Zone::Content;
                 self.it.focus = Some(order[i].clone());
                 let id = order[i].clone();
+                self.follow_focus = true;
                 self.ensure_visible(&id);
             }
             None => {
@@ -1433,6 +1447,12 @@ impl WindowApp for SettingsApp {
         pm.fill(pal::window());
         self.size = (pm.width(), pm.height());
         self.draw_content(pm);
+        if self.reveal_focus() {
+            // the layout moved the focused control out of view: lay the page out again at the corrected scroll
+            pm.fill(pal::window());
+            self.reuse_items = false;
+            self.draw_content(pm);
+        }
         self.draw_sidebar(pm);
         self.write_dump();
         self.draw_toast(pm);
@@ -1506,6 +1526,7 @@ impl WindowApp for SettingsApp {
     fn pointer_button(&mut self, x: f32, y: f32, button: Button, pressed: bool) -> Response {
         self.reuse_items = false;
         self.it.ring = false;
+        self.follow_focus = false;
         if !pressed {
             super::configpane::pointer_release(&mut self.m);
             if let Some((id, v)) = self.it.drag.take() {
@@ -1619,6 +1640,7 @@ impl WindowApp for SettingsApp {
     }
 
     fn scroll(&mut self, x: f32, y: f32, dy: f32) -> Response {
+        self.follow_focus = false; // the user scrolls away on purpose
         if let Some(pp) = self.popup.as_mut() {
             let n = pp.opts.len();
             let d = if dy > 0.0 { 3 } else { -3 };
@@ -1882,6 +1904,41 @@ mod tests {
 #[cfg(test)]
 mod key_tests {
     use super::*;
+
+    #[test]
+    fn keyboard_focus_stays_in_view_when_the_layout_moves_it_but_the_wheel_wins() {
+        let (w, h) = (940u32, 680u32);
+        // a pane whose last control lies below the first screen
+        let mut found = None;
+        for pane in ["tiling", "windows", "general", "appearance", "inputdev"] {
+            let mut a = app();
+            a.m.sel.pane = PANES.iter().position(|p| p.id == pane).unwrap();
+            a.resize(w, h);
+            let mut pm = Pixmap::new(w, h).unwrap();
+            a.draw(&mut pm);
+            if let Some(last) = a.frame.focus_order().last().cloned() {
+                if a.frame.find(&last).is_some_and(|p| p.row_rect.1 > a.content_h()) {
+                    found = Some((a, pm, last));
+                    break;
+                }
+            }
+        }
+        let (mut a, mut pm, id) = found.expect("a pane taller than one screen");
+        let in_view = |a: &SettingsApp| a.frame.find(&id).is_some_and(|p| p.row_rect.1 >= 0.0 && p.row_rect.1 + p.row_rect.3 <= a.content_h());
+        // keyboard focus is on it, and the layout has just left it below the view (as rows loading above do)
+        a.zone = Zone::Content;
+        a.it.focus = Some(id.clone());
+        a.follow_focus = true;
+        a.scroll = 0.0;
+        a.draw(&mut pm);
+        assert!(in_view(&a), "the focused control is brought back into view in the same draw");
+        // the user scrolls away with the wheel: the view is theirs, focus no longer pulls it back
+        let at = a.scroll;
+        a.scroll(400.0, 300.0, -5.0);
+        a.draw(&mut pm);
+        assert!(!a.follow_focus && a.scroll < at, "{} -> {}", at, a.scroll);
+    }
+
 
     #[test]
     fn the_page_keeps_room_in_tiny_windows_at_large_scales() {
