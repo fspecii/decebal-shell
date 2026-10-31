@@ -250,3 +250,29 @@ scale-aware header sampling with the configured roles, raises the owned window
 before capture, bounds capture waits, and gives every probe fresh metadata/logs.
 The interrupted run's remaining private bus and X server were stopped through
 run-token-checked pidfds; the corrected run needed no outer cleanup rescue.
+
+
+### Native Qt6 palette and icon checkpoint
+
+`tests/systemtheming/qt-native.py` and `qt_probe.cpp` exercise a real Qt6 widget
+application through qt6ct in a private offscreen session. On Qt 6.12.0, all 40
+checks passed for Nord/Windows 11, dark/light: active window/base/button/text,
+highlight and selected text, disabled text, selected fixture icon theme and icon
+resolution, loaded platform-plugin mapping, and painted window background.
+The Windows 11 dark capture was also inspected visually. The initial check used
+Qt debug logs to prove plugin loading; that build emitted no logs, so the corrected
+probe checks its own memory mappings instead. No palette check was relaxed.
+
+The host has no qt6ct installed. A private unpacked Arch qt6ct 0.11-9 package was
+verified with the installed Arch keyring (Antonio Rojas signature). Archive SHA-256:
+`28432106949664ba59a0aa6614356a28bf60b6c3d5ec0476a97773c1a0d9920c`.
+Only the private fixture uses its libraries; nothing was installed system-wide.
+Evidence: `/var/tmp/decebal-qt-native-control-v2/result.json` and
+`/var/tmp/decebal-qt-native-pixels-v2/result.json`. The Qt widget probe is compiled
+with the installed Qt6Widgets development files, under the shared low-priority
+job runner. Set `QT_PROBE`, `QT6CT_ROOT` (an unpacked package root), and
+`DECTHEMECTL`, then run `python3 tests/systemtheming/qt-native.py FRESH_OUT_DIR`.
+
+This covers newly opened Qt widgets through qt6ct, not GTK's platform plugin,
+KDE/KColorScheme applications, DTK, live updates, physical displays or the release
+artifact. The runtime still requires an available and selected Qt platform theme.
