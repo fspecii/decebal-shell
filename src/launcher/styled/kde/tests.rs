@@ -690,3 +690,22 @@ fn leaving_places_stops_the_worker_and_discards_its_answer_and_the_next_opening_
     click(&mut st, "footer", Target::Style(TAB, 1));
     assert_eq!(places::spawned(), 2);
 }
+
+#[test]
+fn shared_host_waker_and_tick_deliver_places_without_further_input() {
+    let mut st = kde(10);
+    let (wake, woken) = std::sync::mpsc::channel();
+    st.set_waker(std::sync::Arc::new(move || {
+        let _ = wake.send(());
+    }));
+    let (release, started, worker) = held("Ready without pointer motion", false);
+    places::request(worker);
+    started.recv_timeout(LONG).unwrap();
+    click(&mut st, "footer", Target::Style(TAB, 1));
+    release.send(()).unwrap();
+    woken.recv_timeout(LONG).unwrap();
+    assert_eq!(st.tick(), crate::window_app::Response::REDRAW);
+    assert_eq!(computer_rows()[0].name, "Ready without pointer motion");
+    assert_eq!(zone(&st, "apps").items.len(), computer_rows().len());
+    assert_eq!(st.tick(), crate::window_app::Response::NONE);
+}

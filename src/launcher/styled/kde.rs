@@ -120,14 +120,11 @@ fn document_rows() -> Vec<Entry> {
 }
 
 /// Where the launcher host tells the style how to wake the event loop: called once with the host's waker (see docs/plasma-theme-ports/kickoff-places-hook.md).
-/// Not wired by the shared engine yet; until it is, a finished worker is noticed at the next input event.
-#[allow(dead_code)] // the shared engine does not forward the host's waker yet (docs/plasma-theme-ports/kickoff-places-hook.md); the tests use it
 pub fn set_waker(w: crate::window_app::Waker) {
     places::set_waker(w);
 }
 
 /// Takes a finished Places answer in; true when the host should redraw. The host calls it from its `tick` once the waker fired.
-#[allow(dead_code)] // as above: the host's `tick` calls it once the hook exists
 pub fn tick() -> bool {
     places::poll()
 }

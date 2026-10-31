@@ -390,6 +390,20 @@ impl Styled {
     }
 
     /// The window size wanted when the launcher is a plain window (no layer shell): the card alone.
+    pub fn set_waker(&mut self, waker: crate::window_app::Waker) {
+        if self.style == LauncherStyle::Kde {
+            kde::set_waker(waker);
+        }
+    }
+
+    pub fn tick(&mut self) -> Response {
+        if self.style == LauncherStyle::Kde && kde::tick() {
+            self.relayout();
+            return Response::REDRAW;
+        }
+        Response::NONE
+    }
+
     pub fn natural_size(&self, screen: (u32, u32)) -> (u32, u32) {
         let screen = if screen.0 == 0 || screen.1 == 0 { (1280.0, 800.0) } else { (screen.0 as f32, screen.1 as f32) };
         let r = placement(self.style, None, screen, self.scale);
