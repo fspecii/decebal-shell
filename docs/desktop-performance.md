@@ -43,7 +43,7 @@ PIDs are not discovered by scanning `/proc`. A pid that is not on the command li
 (delta utime + delta stime) / CLK_TCK / elapsed_seconds * 100
 ```
 
-`elapsed_seconds` is the actual monotonic interval, not the requested period. `utime` and `stime` come from `/proc/<pid>/stat` and already sum the process's threads. A process using two cores can read about 200. The recorder does not divide by the number of online CPUs. Online CPU count is stored as `online_cpus` with role `informational_only_not_a_divisor`. `machine_share_percent` is always JSON `null` and its status is `not_reported`.
+`elapsed_seconds` is the actual monotonic interval, not the requested period. Each pid is timestamped at its own accepted counter read, after that pid's fd and PSS collection. A slow scan is part of that pid's elapsed time. It is not one stamp applied to every pid in the sweep. `utime` and `stime` come from `/proc/<pid>/stat` and already sum the process's threads. A process using two cores can read about 200. The recorder does not divide by the number of online CPUs. Online CPU count is stored as `online_cpus` with role `informational_only_not_a_divisor`. `machine_share_percent` is always JSON `null` and its status is `not_reported`.
 
 Worked example, `CLK_TCK = 100`:
 
@@ -68,12 +68,14 @@ For each nominated pid, and only while that pid is still the same task:
 | `/proc/sys/kernel/random/boot_id` | boot identity |
 | `/proc/<pid>/stat` | state, comm fallback, utime, stime, threads, starttime, rss |
 | `/proc/<pid>/comm` | comm, at most 64 bytes, when the file is readable |
-| `/proc/<pid>/fd` | how many names are in the directory |
+| `/proc/<pid>/fd` | how many names are in the directory. Counting stops after 65536 names plus one |
 | `/proc/<pid>/smaps_rollup` | the `Pss:` line, in bytes (`kB * 1024`), when permitted |
 
 Final path components are opened with `O_NOFOLLOW`. Descriptor targets are not read. `Pss_Dirty` is not treated as `Pss`.
 
 Not read: `cmdline`, `environ`, `cwd`, `exe`, `root`, `mem`, `maps`, `smaps`, `io`, and the caller's other files. The recorder does not send signals, attach, read the clipboard, run a shell, or query a desktop backend. `git rev-parse HEAD` is attempted once so the recording can name its source commit; if that fails the hash is JSON `null` and the status is `unavailable`.
+
+If a file or the fd directory disappears or becomes unreadable after it was opened, that read is `missing`, `denied`, or `unsupported`. Metrics from the failed read stay null. The other nominated pids are still published.
 
 Comm from the `comm` file wins. If that file is unreadable, the comm already parsed from `stat` is kept and marked `fallback_stat`. Nothing else is used as a name.
 
@@ -86,7 +88,7 @@ A task is `(boot_id, pid, starttime)` plus a pidfd when the kernel provides one.
 - If pidfd is unavailable, later snapshots still have to match `starttime`. A mismatch is `reused`.
 - State `Z` is `zombie`. Zombie samples do not carry CPU, RSS, thread, fd, or PSS numbers.
 - After `missing`, `exited`, `reused`, `zombie`, `denied`, or `malformed`, later observations repeat that status and do not open the pid again. A recycled pid cannot attach to the rest of the window.
-- The confirming `stat` read after fd and PSS collection has to match. If it does not, those extras are dropped.
+- The confirming `stat` read after fd and PSS collection has to match. If it does not, those extras are dropped. The sample's monotonic timestamp is the time of that accepted read.
 
 `pidfd` can be `open`, `unsupported`, `denied`, `missing`, or `skipped` (fixture mode). Unsupported is reported. It is not described as a successful pin.
 
@@ -96,7 +98,7 @@ Process `outcome` is `measured` only when at least one interval has status `ok`.
 
 Interval status is `ok`, `not_alive`, `counter_regressed`, `elapsed_too_small`, `unsupported_clock`, or `malformed`.
 
-PSS and fd summaries use `ok`, `partial`, `denied`, `unsupported`, `malformed`, `capped`, `symlink`, or `no_measurement`. `capped` means the fd directory was larger than 65536 names; the count is null rather than a short count presented as exact. A missing `smaps_rollup` is `unsupported` (older kernels), not zero.
+PSS and fd summaries use `ok`, `partial`, `denied`, `unsupported`, `malformed`, `capped`, `symlink`, or `no_measurement`. `capped` means the fd scan saw more than 65536 names, stopped at the next name, and left the count null rather than a short count presented as exact. A missing `smaps_rollup` is `unsupported` (older kernels), not zero.
 
 ## Output
 
@@ -106,9 +108,9 @@ PSS and fd summaries use `ok`, `partial`, `denied`, `unsupported`, `malformed`, 
 - a directory, fifo, or other non-regular node
 - an existing regular file, unless `--force`
 
-The bytes are written to a temporary file in the same directory, fsynced, then published. Without `--force` the publish is `link`, which fails if the name now exists. With `--force`, `rename` replaces a regular file. A failed replace leaves the previous regular file in place. The mode is `0600`.
+The bytes are written to a temporary file in the same directory, fsynced, then published. Without `--force` the publish is `link`, which fails if the name now exists. With `--force`, `rename` replaces a regular file. A failed replace leaves the previous regular file in place. The mode is `0600`. Permission, space, fsync, link, and replace failures exit 3 with one line, `output write failed: ...`. The temporary file is removed. The previous regular file is kept when the replace itself fails.
 
-`--compare` reads one existing regular JSON file, at most 8 MiB, and not a symlink. It has to be a different path from `--output`. If the file is not this tool's schema, or the duration or period differs, `matched_run` is false, `processes` is empty, and no per-process deltas are printed. A missing CPU or RSS value on one side has delta `null` and status `not_measured`. It is not compared as zero. The comparison object always has `"desktop_environment_benchmark": false`.
+`--compare` reads one existing regular JSON file, at most 8 MiB, and not a symlink. It has to be a different path from `--output`. If the file is not this tool's schema, or the duration or period differs, `matched_run` is false, `processes` is empty, and no per-process deltas are printed. When `identity`, `summary`, `summary.cpu`, or `summary.rss_bytes` is present it has to be an object, and CPU and RSS numbers have to be finite. A nested list, a non-finite number, or any other comparison error is incomparable: `processes` is empty, and the current recording is still written. A missing CPU or RSS value on one side has delta `null` and status `not_measured`. It is not compared as zero. The comparison object always has `"desktop_environment_benchmark": false`.
 
 ## Cancel and exit
 
@@ -118,7 +120,7 @@ SIGINT and SIGTERM set a flag. The sampler stops on the next check (sleeps are a
 | --- | --- |
 | 0 | every nominated pid has a measured interval |
 | 2 | the request is outside the bounds |
-| 3 | the output or comparison path cannot be used |
+| 3 | the output or comparison path cannot be used, including a filesystem error while publishing |
 | 4 | cancelled; a JSON file was still published when the path was accepted |
 | 5 | the window finished, but at least one pid was not measured |
 
@@ -130,7 +132,7 @@ Exit 5 is a finished recording with an honest per-pid outcome, not a failed file
 python3 tests/desktop_performance.py
 ```
 
-The fixture tests parse `stat` (including the awkward comm used by the Activity Monitor parser), reject malformed and over-wide numbers, refuse to invent RSS, check one-core rates and actual elapsed time, reject counter regression, enforce the pid/duration/period/600-observation limits, and walk a private proc tree through reuse, zombies, permission errors, symlink refusal, PSS zero versus denial, fd-count caps, and output boundaries.
+The fixture tests parse `stat` (including the awkward comm used by the Activity Monitor parser), reject malformed and over-wide numbers, refuse to invent RSS, check one-core rates and actual elapsed time, reject counter regression, enforce the pid/duration/period/600-observation limits, and walk a private proc tree through reuse, zombies, permission errors, symlink refusal, PSS zero versus denial, fd-count caps, and output boundaries. They also inject post-open read failures, check CPU timestamps against collection delay and pid order, stop fd enumeration at the cap plus one, reject nested comparison values without dropping the current sample, and map publish failures to exit 3.
 
 `Procfs(allow_pidfd=False)` does not call `pidfd_open`. Fixture pid numbers are not live process reads.
 

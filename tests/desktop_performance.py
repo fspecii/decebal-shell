@@ -9,6 +9,7 @@ those PIDs, and reap them on failure, SIGTERM, and timeout.
 from __future__ import annotations
 
 import ast
+import errno
 import importlib.util
 import io
 import json
@@ -484,7 +485,7 @@ class IdentityTests(TempCase):
             "pss_bytes": 12345,
             "pss_status": "ok",
         }})
-        sample = tool.observe_once(proc, pin, tool.Units(100, 4096))
+        sample = tool.observe_once(proc, pin, tool.Units(100, 4096), ManualClock())
         self.assertEqual(sample["status"], "reused")
         self.assertIsNone(sample["fd_count"])
         self.assertIsNone(sample["pss_bytes"])
@@ -737,19 +738,27 @@ class OutputTests(TempCase):
 
     def test_force_replaces_regular_file_and_failed_replace_keeps_it(self):
         path = self.tmp / "out.json"
-        path.write_bytes(b"ORIGINAL\n")
+        path.write_text("ORIGINAL")
+        tool.record_live = lambda request, _cancel, _clock: _measured_document(request)
         original_replace = tool.os.replace
 
-        def boom(src, dst):
-            raise OSError("simulated replace failure")
+        def boom(_src, _dst):
+            raise OSError(errno.ENOSPC, "No space left on device")
 
         tool.os.replace = boom
         try:
-            with self.assertRaises(OSError):
-                tool.publish_bytes(path, b'{"complete": true}\n', force=True)
+            code, stdout, stderr = self.run_main([
+                "--pid", "7", "--duration", "1", "--period-ms", "500",
+                "--output", str(path), "--force",
+            ])
         finally:
             tool.os.replace = original_replace
-        self.assertEqual(path.read_bytes(), b"ORIGINAL\n")
+        self.assertEqual(code, tool.EXIT_OUTPUT)
+        self.assertIn("output write failed", stderr)
+        self.assertIn("No space left on device", stderr)
+        self.assertNotIn("Traceback", stderr)
+        self.assertEqual(stdout, "")
+        self.assertEqual(path.read_text(), "ORIGINAL")
         self.assertEqual(list(self.tmp.glob(".*tmp")), [])
         tool.publish_bytes(path, b'{"complete": true}\n', force=True)
         self.assertEqual(json.loads(path.read_text()), {"complete": True})
@@ -870,6 +879,420 @@ class CompareTests(TempCase):
         self.assertEqual(pair["cpu_percent_one_core"]["status"], "not_measured")
         self.assertIsNone(pair["rss_bytes_last"]["delta"])
         self.assertNotEqual(pair["cpu_percent_one_core"]["delta"], 80.0)
+
+
+def _measured_document(request):
+    """A finished recording used when a test must not read a live process."""
+    return {
+        "schema": tool.SCHEMA,
+        "tool": tool.TOOL_NAME,
+        "cpu_semantics": tool.CPU_SEMANTICS,
+        "recording": {
+            "duration_requested_s": request.duration_s,
+            "period_requested_ms": request.period_ms,
+            "observations_taken": 2,
+            "cancelled": False,
+            "cancel_reason": None,
+            "online_cpus": None,
+        },
+        "processes": [{
+            "pid": request.pids[0],
+            "comm": "helper",
+            "outcome": "measured",
+            "identity": {"boot_id": "boot", "starttime_ticks": 10, "pidfd_status": "skipped"},
+            "summary": {
+                "cpu": {
+                    "status": "ok",
+                    "cpu_percent_one_core": 10.0,
+                    "cpu_percent_one_core_min": 10.0,
+                    "cpu_percent_one_core_max": 10.0,
+                },
+                "rss_bytes": {"status": "ok", "last": 4096},
+                "pss_bytes": {"status": "ok", "last": 4096},
+            },
+        }],
+        "comparison": None,
+        "warnings": [],
+    }
+
+
+class DelayProc(QueueProc):
+    """Advances the clock while extras are collected, after the first stat read."""
+
+    def __init__(self, clock, extra_delays, stats):
+        super().__init__(stats)
+        self.clock = clock
+        self.extra_delays = {pid: list(delays) for pid, delays in extra_delays.items()}
+        self.confirm_ns = {}
+        self._stat_n = {}
+
+    def read_stat(self, pin):
+        result = super().read_stat(pin)
+        seen = self._stat_n.get(pin.pid, 0)
+        if seen % 2 == 1:
+            self.confirm_ns.setdefault(pin.pid, []).append(self.clock.monotonic_ns())
+        self._stat_n[pin.pid] = seen + 1
+        return result
+
+    def read_extras(self, pid):
+        result = super().read_extras(pid)
+        delays = self.extra_delays.get(pid) or []
+        if delays:
+            delay = delays.pop(0)
+            self.clock.mono += delay
+            self.clock.wall += delay
+        return result
+
+
+class ReviewFixTests(TempCase):
+    def write_pid(self, root, pid):
+        base = root / str(pid)
+        base.mkdir(parents=True)
+        (base / "stat").write_text(stat_line(pid, "worker", "S", 0, 0, 50))
+        (base / "comm").write_text("worker\n")
+        fd_dir = base / "fd"
+        fd_dir.mkdir()
+        os.symlink("/dev/null", fd_dir / "0")
+        os.symlink("/dev/null", fd_dir / "1")
+        (base / "smaps_rollup").write_text("Pss:                   4 kB\n")
+        boot = root / "sys" / "kernel" / "random"
+        boot.mkdir(parents=True, exist_ok=True)
+        (boot / "boot_id").write_text("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n")
+        return base
+
+    def record(self, proc, pids):
+        return tool.record(
+            tool.Request(pids, 1, 1000, self.tmp / "out.json", False, None),
+            proc,
+            ManualClock(),
+            tool.CancelFlag(),
+            tool.Units(100, 4096),
+            (None, "unavailable"),
+            4,
+        )
+
+    def test_post_open_proc_errors_publish_the_other_pid(self):
+        root = self.tmp / "proc"
+        dead = 4_000_011
+        live = 4_000_012
+        denied = 4_000_013
+        for pid in (dead, live, denied):
+            self.write_pid(root, pid)
+        proc = tool.Procfs(root, allow_pidfd=False)
+        real_read = tool.os.read
+
+        def raise_esrch(_fd, _size):
+            raise OSError(errno.ESRCH, "No such process")
+
+        def raise_eacces(_fd, _size):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        tool.os.read = raise_esrch
+        try:
+            data, status = proc._read_bytes(f"{dead}/stat", tool.STAT_MAX)
+        finally:
+            tool.os.read = real_read
+        self.assertIsNone(data)
+        self.assertEqual(status, "missing")
+        tool.os.read = raise_eacces
+        try:
+            data, status = proc._read_bytes(f"{dead}/stat", tool.STAT_MAX)
+        finally:
+            tool.os.read = real_read
+        self.assertIsNone(data)
+        self.assertEqual(status, "denied")
+
+        real_scan = tool.os.scandir
+
+        def scan_denied(_fd):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        def scan_missing(_fd):
+            raise OSError(errno.ESRCH, "No such process")
+
+        tool.os.scandir = scan_denied
+        try:
+            count, status = proc._count_fds(live)
+        finally:
+            tool.os.scandir = real_scan
+        self.assertIsNone(count)
+        self.assertEqual(status, "denied")
+        tool.os.scandir = scan_missing
+        try:
+            count, status = proc._count_fds(live)
+        finally:
+            tool.os.scandir = real_scan
+        self.assertIsNone(count)
+        self.assertEqual(status, "missing")
+
+        proc._post_open_faults.append((f"{dead}/stat", errno.ESRCH))
+        doc = self.record(proc, [dead, live])
+        gone = doc["processes"][0]
+        kept = doc["processes"][1]
+        self.assertEqual(gone["samples"][0]["status"], "missing")
+        self.assertIsNone(gone["samples"][0]["utime_ticks"])
+        self.assertIsNone(gone["samples"][0]["stime_ticks"])
+        self.assertIsNone(gone["samples"][0]["rss_bytes"])
+        self.assertIsNone(gone["samples"][0]["fd_count"])
+        self.assertEqual(gone["samples"][1]["status"], "missing")
+        self.assertEqual(gone["samples"][1]["detail"], "carried")
+        self.assertEqual(kept["outcome"], "measured")
+        self.assertEqual(kept["samples"][0]["status"], "alive")
+        self.assertEqual(kept["samples"][0]["utime_ticks"], 0)
+        self.assertEqual(kept["summary"]["cpu"]["cpu_percent_one_core"], 0.0)
+
+        other = tool.Procfs(root, allow_pidfd=False)
+        other._post_open_faults.append((f"{denied}/fd", errno.EACCES))
+        doc = self.record(other, [denied, live])
+        sample = doc["processes"][0]["samples"][0]
+        self.assertEqual(sample["status"], "alive")
+        self.assertEqual(sample["utime_ticks"], 0)
+        self.assertIsNotNone(sample["rss_bytes"])
+        self.assertIsNone(sample["fd_count"])
+        self.assertEqual(sample["fd_status"], "denied")
+        self.assertEqual(sample["pss_bytes"], 4096)
+        self.assertEqual(sample["pss_status"], "ok")
+        self.assertEqual(doc["processes"][1]["pid"], live)
+        self.assertEqual(doc["processes"][1]["outcome"], "measured")
+
+    def test_counter_timestamps_follow_collection_delay_and_pid_order(self):
+        slow = 4_000_021
+        fast = 4_000_022
+
+        def run(order):
+            clock = ManualClock()
+            stats = {
+                slow: pair(raw_alive(slow, 10, 0)) + pair(raw_alive(slow, 10, 0)),
+                fast: pair(raw_alive(fast, 20, 0)) + pair(raw_alive(fast, 20, 100)),
+            }
+            proc = DelayProc(
+                clock,
+                {slow: [400_000_000, 0], fast: [0, 0]},
+                stats,
+            )
+            doc = tool.record(
+                tool.Request(order, 1, 1000, self.tmp / "times.json", False, None),
+                proc,
+                clock,
+                tool.CancelFlag(),
+                tool.Units(100, 4096),
+                (None, "unavailable"),
+                24,
+            )
+            return doc, proc
+
+        def process(doc, pid):
+            return next(item for item in doc["processes"] if item["pid"] == pid)
+
+        slow_first, slow_proc = run([slow, fast])
+        fast_first, fast_proc = run([fast, slow])
+        delayed = process(slow_first, fast)
+        leading = process(fast_first, fast)
+        self.assertEqual(delayed["intervals"][0]["utime_ticks_delta"], 100)
+        self.assertEqual(leading["intervals"][0]["utime_ticks_delta"], 100)
+        self.assertEqual(delayed["intervals"][0]["elapsed_ns"], 600_000_000)
+        self.assertEqual(leading["intervals"][0]["elapsed_ns"], 1_000_000_000)
+        self.assertEqual(delayed["summary"]["cpu"]["cpu_percent_one_core"], 166.6667)
+        self.assertEqual(leading["summary"]["cpu"]["cpu_percent_one_core"], 100.0)
+        slow_sample = process(slow_first, slow)["samples"][0]
+        self.assertEqual(slow_sample["monotonic_ns"], 400_000_000)
+        self.assertEqual(slow_sample["index"], 0)
+        self.assertNotEqual(slow_sample["monotonic_ns"], slow_first["recording"]["started_monotonic_ns"])
+        self.assertEqual(slow_sample["monotonic_ns"], slow_proc.confirm_ns[slow][0])
+        self.assertEqual(delayed["samples"][0]["monotonic_ns"], slow_proc.confirm_ns[fast][0])
+        self.assertEqual(delayed["samples"][0]["monotonic_ns"], 400_000_000)
+        self.assertEqual(leading["samples"][0]["monotonic_ns"], fast_proc.confirm_ns[fast][0])
+        self.assertEqual(leading["samples"][0]["monotonic_ns"], 0)
+        self.assertEqual(process(slow_first, slow)["summary"]["cpu"]["cpu_percent_one_core"], 0.0)
+        self.assertEqual(process(fast_first, slow)["summary"]["cpu"]["cpu_percent_one_core"], 0.0)
+
+    def test_fd_enumeration_stops_at_cap_plus_one(self):
+        root = self.tmp / "proc"
+        pid = 4_000_031
+        fd_dir = root / str(pid) / "fd"
+        fd_dir.mkdir(parents=True)
+        os.symlink("/dev/null", fd_dir / "0")
+        yielded = {"n": 0}
+
+        class Bounded:
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                if yielded["n"] >= 50:
+                    raise StopIteration
+                yielded["n"] += 1
+                return object()
+
+            def close(self):
+                return None
+
+        real_scan = tool.os.scandir
+        original_cap = tool.FD_CAP
+        tool.os.scandir = lambda _fd: Bounded()
+        tool.FD_CAP = 4
+        try:
+            count, status = tool.Procfs(root, allow_pidfd=False)._count_fds(pid)
+        finally:
+            tool.os.scandir = real_scan
+            tool.FD_CAP = original_cap
+        self.assertEqual(yielded["n"], 5)
+        self.assertLess(yielded["n"], 50)
+        self.assertIsNone(count)
+        self.assertEqual(status, "capped")
+
+    def test_compare_rejects_nested_types_and_nonfinite_values(self):
+        def document(cpu, rss=10):
+            return {
+                "schema": tool.SCHEMA,
+                "recording": {"duration_requested_s": 1, "period_requested_ms": 500},
+                "processes": [{
+                    "pid": 5,
+                    "comm": "helper",
+                    "identity": {"boot_id": "boot", "starttime_ticks": 10},
+                    "summary": {
+                        "cpu": {"cpu_percent_one_core": cpu},
+                        "rss_bytes": {"last": rss},
+                    },
+                }],
+            }
+
+        current = document(80.0, 1000)
+        identity_list = document(20.0, 400)
+        identity_list["processes"][0]["identity"] = [1]
+        summary_list = document(20.0, 400)
+        summary_list["processes"][0]["summary"] = [1]
+        for previous in (identity_list, summary_list):
+            compared = tool.compare_recordings(current, previous)
+            self.assertFalse(compared["matched_run"])
+            self.assertEqual(compared["processes"], [])
+            self.assertIn("structure", compared["incomparable_reasons"])
+            self.assertFalse(compared["desktop_environment_benchmark"])
+            self.assertIn("Not a desktop-environment benchmark", compared["note"])
+        self.assertFalse(tool._same_identity(
+            {"pid": 5, "identity": [1]},
+            {"pid": 5, "identity": {"boot_id": "boot", "starttime_ticks": 10}},
+        ))
+        for bad in (float("nan"), float("inf")):
+            compared = tool.compare_recordings(current, document(bad))
+            self.assertFalse(compared["matched_run"])
+            self.assertEqual(compared["processes"], [])
+            self.assertIn("values", compared["incomparable_reasons"])
+            json.dumps(compared, allow_nan=False)
+        pair = tool._metric_pair(float("nan"), 1.0)
+        self.assertEqual(pair["status"], "not_measured")
+        self.assertIsNone(pair["current"])
+        self.assertIsNone(pair["delta"])
+        json.dumps(pair, allow_nan=False)
+
+    def test_comparison_error_still_publishes_the_current_sample(self):
+        output = self.tmp / "out.json"
+        previous = self.tmp / "previous.json"
+        previous.write_text(json.dumps({
+            "schema": tool.SCHEMA,
+            "recording": {"duration_requested_s": 1, "period_requested_ms": 500},
+            "processes": [{
+                "pid": 7,
+                "comm": "helper",
+                "identity": [1],
+                "summary": [1],
+            }],
+        }))
+        tool.record_live = lambda request, _cancel, _clock: _measured_document(request)
+        code, stdout, stderr = self.run_main([
+            "--pid", "7", "--duration", "1", "--period-ms", "500",
+            "--output", str(output), "--compare", str(previous),
+        ])
+        self.assertEqual(code, tool.EXIT_OK)
+        self.assertEqual(stderr, "")
+        self.assertNotIn("Traceback", stdout)
+        self.assertIn("incomparable", stdout)
+        self.assertNotIn("faster", stdout.lower())
+        saved = json.loads(output.read_text())
+        self.assertEqual(saved["processes"][0]["pid"], 7)
+        self.assertEqual(saved["processes"][0]["outcome"], "measured")
+        self.assertEqual(saved["processes"][0]["summary"]["cpu"]["cpu_percent_one_core"], 10.0)
+        self.assertFalse(saved["comparison"]["matched_run"])
+        self.assertEqual(saved["comparison"]["processes"], [])
+        self.assertIn("structure", saved["comparison"]["incomparable_reasons"])
+        self.assertFalse(saved["comparison"]["desktop_environment_benchmark"])
+
+        guard_output = self.tmp / "guard.json"
+        guard_previous = self.tmp / "guard-previous.json"
+        guard_previous.write_text('{"schema": "decebal.desktop-performance.v1"}')
+        real_compare = tool.compare_recordings
+
+        def explode(_current, _previous):
+            raise AttributeError("identity")
+
+        tool.compare_recordings = explode
+        try:
+            code, stdout, stderr = self.run_main([
+                "--pid", "7", "--duration", "1", "--period-ms", "500",
+                "--output", str(guard_output), "--compare", str(guard_previous),
+            ])
+        finally:
+            tool.compare_recordings = real_compare
+        self.assertEqual(code, tool.EXIT_OK)
+        self.assertNotIn("Traceback", stderr)
+        self.assertNotIn("Traceback", stdout)
+        saved = json.loads(guard_output.read_text())
+        self.assertEqual(saved["processes"][0]["outcome"], "measured")
+        self.assertEqual(saved["processes"][0]["summary"]["cpu"]["cpu_percent_one_core"], 10.0)
+        self.assertEqual(saved["comparison"]["incomparable_reasons"], ["comparison_error"])
+        self.assertEqual(saved["comparison"]["processes"], [])
+        self.assertFalse(saved["comparison"]["desktop_environment_benchmark"])
+        self.assertIn("comparison_error", saved["warnings"])
+
+    def test_publish_filesystem_errors_are_output_errors(self):
+        path = self.tmp / "out.json"
+        path.write_text("ORIGINAL")
+        real_fsync = tool.os.fsync
+
+        def fail_fsync(_fd):
+            raise OSError(errno.EIO, "Input/output error")
+
+        tool.os.fsync = fail_fsync
+        try:
+            with self.assertRaises(tool.OutputError) as caught:
+                tool.publish_bytes(path, b'{"a": 1}\n', force=True)
+        finally:
+            tool.os.fsync = real_fsync
+        self.assertIn("output write failed", str(caught.exception))
+        self.assertIn("Input/output error", str(caught.exception))
+        self.assertEqual(path.read_text(), "ORIGINAL")
+        self.assertEqual(list(self.tmp.glob(".*tmp")), [])
+
+        fresh = self.tmp / "fresh.json"
+        real_open = tool.os.open
+
+        def fail_open(*_args, **_kwargs):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        tool.os.open = fail_open
+        try:
+            with self.assertRaises(tool.OutputError) as caught:
+                tool.publish_bytes(fresh, b'{"a": 1}\n', force=False)
+        finally:
+            tool.os.open = real_open
+        self.assertIn("output write failed", str(caught.exception))
+        self.assertIn("Permission denied", str(caught.exception))
+        self.assertFalse(fresh.exists())
+        self.assertEqual(list(self.tmp.glob(".*tmp")), [])
+
+        real_stat = tool.os.stat
+
+        def fail_stat(*_args, **_kwargs):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        tool.os.stat = fail_stat
+        try:
+            with self.assertRaises(tool.OutputError) as caught:
+                tool.describe_output(self.tmp / "elsewhere.json", False)
+        finally:
+            tool.os.stat = real_stat
+        self.assertIn("output write failed", str(caught.exception))
+        self.assertIn("Permission denied", str(caught.exception))
 
 
 class SourceContractTests(unittest.TestCase):

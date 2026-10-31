@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import math
 import os
 import select
 import signal
@@ -21,6 +22,7 @@ import stat
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -423,16 +425,34 @@ def attach_extras(sample: dict, extras: dict) -> dict:
     return sample
 
 
-def observe_once(proc: object, pin: Pin, units: Units) -> dict:
+def _mark_time(sample: dict, clock: object) -> dict:
+    """Stamp one pid at the moment its counters were accepted."""
+    sample["monotonic_ns"] = clock.monotonic_ns()  # type: ignore[attr-defined]
+    sample["unix_ns"] = clock.time_ns()  # type: ignore[attr-defined]
+    return sample
+
+
+def _stamp(sample: dict, index: int, monotonic_ns: int, unix_ns: int) -> dict:
+    """Set times on a sample the caller already measured. The recorder does not use this."""
+    sample["index"] = index
+    sample["monotonic_ns"] = monotonic_ns
+    sample["unix_ns"] = unix_ns
+    return sample
+
+
+def observe_once(proc: object, pin: Pin, units: Units, clock: object) -> dict:
     raw = proc.read_stat(pin)  # type: ignore[attr-defined]
     sample = classify_stat(pin, raw, units)
     if sample["status"] != "alive":
-        return sample
+        return _mark_time(sample, clock)
     if pin.pidfd is not None and proc.pidfd_exited(pin.pidfd):  # type: ignore[attr-defined]
         sample = blank_sample("exited", "pidfd")
-        return sample
+        return _mark_time(sample, clock)
+    # FD and PSS work sits between the two stat reads. The rate uses the
+    # confirming read, so the timestamp has to be taken after that read.
     extras = proc.read_extras(pin.pid)  # type: ignore[attr-defined]
     confirmed = classify_stat(pin, proc.read_stat(pin), units)  # type: ignore[attr-defined]
+    _mark_time(confirmed, clock)
     if confirmed["status"] != "alive":
         return confirmed
     return attach_extras(confirmed, extras)
@@ -604,13 +624,6 @@ def build_process(pin: Pin, samples: list[dict], units: Units, cancelled: bool) 
     }
 
 
-def _stamp(sample: dict, index: int, monotonic_ns: int, unix_ns: int) -> dict:
-    sample["index"] = index
-    sample["monotonic_ns"] = monotonic_ns
-    sample["unix_ns"] = unix_ns
-    return sample
-
-
 def record(
     request: Request,
     proc: object,
@@ -647,16 +660,16 @@ def record(
             clock.sleep_until(start_mono + index * period_ns, cancel)  # type: ignore[attr-defined]
             if cancel.requested():
                 break
-            mono = clock.monotonic_ns()  # type: ignore[attr-defined]
-            unix = clock.time_ns()  # type: ignore[attr-defined]
             for slot, pin in enumerate(pins):
                 if pin.terminal is not None:
                     sample = blank_sample(pin.terminal, "carried")
+                    _mark_time(sample, clock)
                 else:
-                    sample = observe_once(proc, pin, units)
+                    sample = observe_once(proc, pin, units, clock)
                     if sample["status"] != "alive":
                         pin.terminal = sample["status"]
-                taken[slot].append(_stamp(sample, index, mono, unix))
+                sample["index"] = index
+                taken[slot].append(sample)
         end_mono = clock.monotonic_ns()  # type: ignore[attr-defined]
         end_unix = clock.time_ns()  # type: ignore[attr-defined]
         observations = len(taken[0]) if taken else 0
@@ -713,9 +726,64 @@ def record(
                 pin.pidfd = None
 
 
-def _same_identity(current: dict, previous: dict) -> bool:
-    left = current.get("identity") or {}
-    right = previous.get("identity") or {}
+def _finite_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _metric_issue(value: object) -> str | None:
+    """None means the field is absent. structure and values are comparison failures."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "structure"
+    if not math.isfinite(value):
+        return "values"
+    return None
+
+
+def _process_compare_problem(proc: object) -> str | None:
+    if not isinstance(proc, dict):
+        return "structure"
+    identity = proc.get("identity")
+    if identity is not None and not isinstance(identity, dict):
+        return "structure"
+    summary = proc.get("summary")
+    if summary is None:
+        return None
+    if not isinstance(summary, dict):
+        return "structure"
+    for key, field in (("cpu", "cpu_percent_one_core"), ("rss_bytes", "last")):
+        nested = summary.get(key)
+        if nested is None:
+            continue
+        if not isinstance(nested, dict):
+            return "structure"
+        issue = _metric_issue(nested.get(field))
+        if issue:
+            return issue
+    return None
+
+
+def _process_list_problems(processes: object) -> list[str]:
+    if processes is None:
+        return []
+    if not isinstance(processes, list):
+        return ["structure"]
+    found: set[str] = set()
+    for proc in processes:
+        problem = _process_compare_problem(proc)
+        if problem:
+            found.add(problem)
+    return [name for name in ("structure", "values") if name in found]
+
+
+def _same_identity(current: object, previous: object) -> bool:
+    if not isinstance(current, dict) or not isinstance(previous, dict):
+        return False
+    left = current.get("identity")
+    right = previous.get("identity")
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        return False
     return bool(
         left.get("boot_id")
         and left.get("boot_id") == right.get("boot_id")
@@ -725,13 +793,36 @@ def _same_identity(current: dict, previous: dict) -> bool:
     )
 
 
+def _dict_chain(value: object, *keys: str) -> object:
+    current = value
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
 def _metric_pair(current: object, previous: object) -> dict:
-    if isinstance(current, (int, float)) and not isinstance(current, bool) and isinstance(previous, (int, float)) and not isinstance(previous, bool):
-        return {"current": current, "previous": previous, "delta": _round(float(current) - float(previous)), "status": "ok"}
-    return {"current": current if isinstance(current, (int, float)) and not isinstance(current, bool) else None,
-            "previous": previous if isinstance(previous, (int, float)) and not isinstance(previous, bool) else None,
-            "delta": None,
-            "status": "not_measured"}
+    left = current if _finite_number(current) else None
+    right = previous if _finite_number(previous) else None
+    if left is None or right is None:
+        return {"current": left, "previous": right, "delta": None, "status": "not_measured"}
+    return {
+        "current": left,
+        "previous": right,
+        "delta": _round(float(left) - float(right)),
+        "status": "ok",
+    }
+
+
+def _incomparable(reasons: list[str]) -> dict:
+    return {
+        "desktop_environment_benchmark": False,
+        "note": NOT_A_BENCHMARK,
+        "matched_run": False,
+        "incomparable_reasons": reasons,
+        "processes": [],
+    }
 
 
 def compare_recordings(current: dict, previous: dict) -> dict:
@@ -739,7 +830,9 @@ def compare_recordings(current: dict, previous: dict) -> dict:
     if not isinstance(previous, dict) or previous.get("schema") != SCHEMA:
         reasons.append("schema")
     prev_rec = previous.get("recording") if isinstance(previous, dict) else None
-    cur_rec = current.get("recording") or {}
+    cur_rec = current.get("recording") if isinstance(current, dict) else None
+    if not isinstance(cur_rec, dict):
+        cur_rec = {}
     if not isinstance(prev_rec, dict):
         reasons.append("recording")
         prev_rec = {}
@@ -747,12 +840,22 @@ def compare_recordings(current: dict, previous: dict) -> dict:
         reasons.append("duration")
     if cur_rec.get("period_requested_ms") != prev_rec.get("period_requested_ms"):
         reasons.append("period")
+    if not reasons and isinstance(previous, dict) and isinstance(current, dict):
+        for problem in _process_list_problems(previous.get("processes")):
+            if problem not in reasons:
+                reasons.append(problem)
+        for problem in _process_list_problems(current.get("processes")):
+            if problem not in reasons:
+                reasons.append(problem)
     matched = not reasons
     pairs: list[dict] = []
-    if matched:
+    if matched and isinstance(previous, dict) and isinstance(current, dict):
         used: set[int] = set()
         previous_processes = previous.get("processes") if isinstance(previous.get("processes"), list) else []
-        for proc in current.get("processes") or []:
+        current_processes = current.get("processes") if isinstance(current.get("processes"), list) else []
+        for proc in current_processes:
+            if not isinstance(proc, dict):
+                continue
             match = None
             how = None
             for index, other in enumerate(previous_processes):
@@ -780,10 +883,10 @@ def compare_recordings(current: dict, previous: dict) -> dict:
                     "cpu_percent_one_core": _metric_pair(None, None),
                 })
                 continue
-            current_cpu = ((proc.get("summary") or {}).get("cpu") or {}).get("cpu_percent_one_core")
-            previous_cpu = ((match.get("summary") or {}).get("cpu") or {}).get("cpu_percent_one_core")
-            current_rss = ((proc.get("summary") or {}).get("rss_bytes") or {}).get("last")
-            previous_rss = ((match.get("summary") or {}).get("rss_bytes") or {}).get("last")
+            current_cpu = _dict_chain(proc, "summary", "cpu", "cpu_percent_one_core")
+            previous_cpu = _dict_chain(match, "summary", "cpu", "cpu_percent_one_core")
+            current_rss = _dict_chain(proc, "summary", "rss_bytes", "last")
+            previous_rss = _dict_chain(match, "summary", "rss_bytes", "last")
             pairs.append({
                 "pid": proc.get("pid"),
                 "previous_pid": match.get("pid"),
@@ -863,6 +966,11 @@ def dumps(doc: dict) -> bytes:
     return (json.dumps(doc, indent=2, ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
 
 
+def _output_oserror(exc: OSError) -> OutputError:
+    reason = exc.strerror or str(exc) or "filesystem error"
+    return OutputError(f"output write failed: {reason}")
+
+
 def _parent_dir(path: Path) -> Path:
     parent = path.parent
     if parent.as_posix() in ("", "."):
@@ -871,6 +979,8 @@ def _parent_dir(path: Path) -> Path:
         st = os.stat(parent)
     except FileNotFoundError as exc:
         raise OutputError("output directory does not exist") from exc
+    except OSError as exc:
+        raise _output_oserror(exc) from exc
     if not stat.S_ISDIR(st.st_mode):
         raise OutputError("output parent is not a directory")
     return parent
@@ -881,6 +991,8 @@ def _lstat_output(path: Path):
         return os.lstat(path)
     except FileNotFoundError:
         return None
+    except OSError as exc:
+        raise _output_oserror(exc) from exc
 
 
 def _unlink_quiet(path: Path) -> None:
@@ -888,6 +1000,13 @@ def _unlink_quiet(path: Path) -> None:
         os.unlink(path)
     except FileNotFoundError:
         pass
+    except OSError:
+        pass
+
+
+def _close_quiet(fd: int) -> None:
+    try:
+        os.close(fd)
     except OSError:
         pass
 
@@ -910,7 +1029,10 @@ def _write_temp(parent: Path, name: str, data: bytes) -> Path:
     token = os.urandom(8).hex()
     tmp = parent / f".{name}.{os.getpid()}.{token}.tmp"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(tmp, flags, 0o600)
+    try:
+        fd = os.open(tmp, flags, 0o600)
+    except OSError as exc:
+        raise _output_oserror(exc) from exc
     try:
         os.fchmod(fd, 0o600)
         view = memoryview(data)
@@ -920,14 +1042,18 @@ def _write_temp(parent: Path, name: str, data: bytes) -> Path:
                 raise OSError("short write")
             view = view[written:]
         os.fsync(fd)
-    except Exception:
         os.close(fd)
-        try:
-            os.unlink(tmp)
-        except FileNotFoundError:
-            pass
+        fd = -1
+    except OSError as exc:
+        if fd >= 0:
+            _close_quiet(fd)
+        _unlink_quiet(tmp)
+        raise _output_oserror(exc) from exc
+    except Exception:
+        if fd >= 0:
+            _close_quiet(fd)
+        _unlink_quiet(tmp)
         raise
-    os.close(fd)
     return tmp
 
 
@@ -966,6 +1092,12 @@ def publish_bytes(path: Path, data: bytes, force: bool) -> None:
         else:
             os.replace(tmp, path)
         _fsync_dir(parent)
+    except OutputError:
+        _unlink_quiet(tmp)
+        raise
+    except OSError as exc:
+        _unlink_quiet(tmp)
+        raise _output_oserror(exc) from exc
     except Exception:
         _unlink_quiet(tmp)
         raise
@@ -1049,11 +1181,29 @@ def git_hash(repo: Path) -> tuple[str | None, str]:
     return line, "ok"
 
 
-def _read_bounded(fd: int, limit: int) -> tuple[bytes | None, str]:
+def _proc_io_status(exc: OSError) -> str:
+    """Classify a failure that happens after the proc file or directory is open."""
+    if exc.errno in (errno.ESRCH, errno.ENOENT):
+        return "missing"
+    if exc.errno in (errno.EACCES, errno.EPERM):
+        return "denied"
+    return "unsupported"
+
+
+def _read_bounded(
+    fd: int,
+    limit: int,
+    before_read: Callable[[], None] | None = None,
+) -> tuple[bytes | None, str]:
     chunks = []
     total = 0
     while total <= limit:
-        block = os.read(fd, min(65536, limit - total + 1))
+        try:
+            if before_read is not None:
+                before_read()
+            block = os.read(fd, min(65536, limit - total + 1))
+        except OSError as exc:
+            return None, _proc_io_status(exc)
         if not block:
             break
         chunks.append(block)
@@ -1063,12 +1213,48 @@ def _read_bounded(fd: int, limit: int) -> tuple[bytes | None, str]:
     return b"".join(chunks), "ok"
 
 
+def _count_directory_entries(
+    fd: int,
+    cap: int,
+    before_entries: Callable[[], None] | None = None,
+) -> tuple[int | None, str]:
+    """Count names and stop at cap + 1. Do not stat or readlink the entries."""
+    try:
+        entries = os.scandir(fd)
+    except OSError as exc:
+        return None, _proc_io_status(exc)
+    try:
+        if before_entries is not None:
+            before_entries()
+        count = 0
+        for _ in entries:
+            count += 1
+            if count > cap:
+                return None, "capped"
+    except OSError as exc:
+        return None, _proc_io_status(exc)
+    finally:
+        try:
+            entries.close()
+        except OSError:
+            pass
+    return count, "ok"
+
+
 class Procfs:
     """Read-only view of an allowlisted proc tree. pidfd is off unless explicitly enabled."""
 
     def __init__(self, root: Path, allow_pidfd: bool) -> None:
         self.root = Path(root)
         self.allow_pidfd = allow_pidfd
+        # Tests inject one (relative path, errno) consumed after a successful open.
+        self._post_open_faults: list[tuple[str, int]] = []
+
+    def _raise_injected(self, rel: str) -> None:
+        for index, (wanted, err) in enumerate(self._post_open_faults):
+            if wanted == rel:
+                del self._post_open_faults[index]
+                raise OSError(err, os.strerror(err) or "proc read failed")
 
     def _path(self, rel: str) -> str:
         parts = rel.split("/")
@@ -1104,9 +1290,9 @@ class Procfs:
         if fd is None:
             return None, status
         try:
-            return _read_bounded(fd, limit)
+            return _read_bounded(fd, limit, before_read=lambda: self._raise_injected(rel))
         finally:
-            os.close(fd)
+            _close_quiet(fd)
 
     def boot(self) -> tuple[str | None, str]:
         data, status = self._read_bytes(BOOT_ID_REL, BOOT_ID_MAX)
@@ -1215,18 +1401,16 @@ class Procfs:
         return comm, "ok", truncated
 
     def _count_fds(self, pid: int) -> tuple[int | None, str]:
-        fd, status = self._open(f"{pid}/{FD_NAME}", directory=True)
+        rel = f"{pid}/{FD_NAME}"
+        fd, status = self._open(rel, directory=True)
         if fd is None:
             mapped = {"missing": "missing", "denied": "denied", "symlink": "symlink"}.get(status, "unsupported")
             return None, mapped
         try:
             # Names only. Do not readlink: descriptor targets can be paths or sockets.
-            names = os.listdir(fd)
+            return _count_directory_entries(fd, FD_CAP, before_entries=lambda: self._raise_injected(rel))
         finally:
-            os.close(fd)
-        if len(names) > FD_CAP:
-            return None, "capped"
-        return len(names), "ok"
+            _close_quiet(fd)
 
     def _read_pss(self, pid: int) -> tuple[int | None, str]:
         data, status = self._read_bytes(f"{pid}/{SMAPS_NAME}", SMAPS_MAX)
@@ -1325,13 +1509,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"desktop-performance: {exc}", file=sys.stderr)
             return EXIT_OUTPUT
         if request.compare_doc is not None:
-            doc["comparison"] = compare_recordings(doc, request.compare_doc)
-            if not doc["comparison"]["matched_run"]:
-                doc["warnings"].append("comparison_incomparable")
+            try:
+                doc["comparison"] = compare_recordings(doc, request.compare_doc)
+            except (TypeError, ValueError, AttributeError, ArithmeticError):
+                doc["comparison"] = _incomparable(["comparison_error"])
+                doc["warnings"].append("comparison_error")
+            else:
+                if not doc["comparison"]["matched_run"]:
+                    doc["warnings"].append("comparison_incomparable")
         try:
             publish_bytes(request.output, dumps(doc), request.force)
         except OutputError as exc:
             print(f"desktop-performance: {exc}", file=sys.stderr)
+            return EXIT_OUTPUT
+        except OSError as exc:
+            reason = exc.strerror or str(exc) or "filesystem error"
+            print(f"desktop-performance: output write failed: {reason}", file=sys.stderr)
             return EXIT_OUTPUT
     finally:
         cancel.restore()
