@@ -215,7 +215,7 @@ mod tests {
     }
 
     fn window(id: u64, app: &str, active: bool) -> Window {
-        Window { id, app_id: app.into(), title: format!("{app} window"), active, desktop: None }
+        Window { id, app_id: app.into(), title: format!("{app} window"), active, desktop: None, ..Default::default() }
     }
 
     /// A dock at `edge` with these pinned ids (plus the fixed Launchpad / Trash ends if asked), these windows and private files.
