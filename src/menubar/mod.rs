@@ -2484,6 +2484,8 @@ mod bar_height_tests;
 mod cc_fit_tests;
 #[cfg(test)]
 mod gnome_cc_tests;
+#[cfg(test)]
+mod ukui_cc_tests;
 
 #[cfg(test)]
 mod tests {

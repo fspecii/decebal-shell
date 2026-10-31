@@ -299,13 +299,20 @@ impl DockApp {
         (len as f32 - 2.0 * self.win_gap()).max(1.0)
     }
 
+    /// The dock setting's search form, except that a theme's `[taskbar] search = "button"` turns the default box into the button.
+    fn win_search_form(&self) -> config::WinSearch {
+        let form = self.dock.settings.windows_search;
+        let themed = self.win.as_ref().is_some_and(|w| w.m.search_form == crate::panel::plasma_style::SearchForm::Button);
+        if themed && form == config::WinSearch::Box { config::WinSearch::Button } else { form }
+    }
+
     pub(super) fn win_layout(&self) -> Option<Layout> {
         use crate::panel::AppletId as A;
         let w = self.win.as_ref()?;
         let s = &self.dock.settings;
         let vertical = self.win_vertical();
         // a side strip has icon-only buttons, a search button and a stacked clock
-        let search = match (w.status.status_shows(A::Search), vertical, s.windows_search) {
+        let search = match (w.status.status_shows(A::Search), vertical, self.win_search_form()) {
             (false, _, _) => config::WinSearch::None,
             (true, true, config::WinSearch::Box) => config::WinSearch::Button,
             (true, _, other) => other,
@@ -459,6 +466,7 @@ impl DockApp {
         let x0 = self.win_strip_x();
         let top = self.on_top();
         let (vertical, right) = (self.win_vertical(), self.on_right());
+        let search_form = self.win_search_form();
         let painted = if vertical { layout.transposed() } else { layout.clone() };
         let to_surface = |r: crate::taskbar::Rect| if vertical { (x0 + r.y + r.h / 2.0, y0 + r.x + r.w / 2.0) } else { (x0 + r.cx(), y0 + r.cy()) };
         // the theme's dock translucency; the Transparency setting shifts it around its 0.4 default
@@ -486,7 +494,7 @@ impl DockApp {
             layout_name: layout_name.as_deref(),
             time: &w.time,
             date: if vertical { &short } else { &w.date },
-            show_search_label: self.dock.settings.windows_search == config::WinSearch::Box && !vertical,
+            show_search_label: search_form == config::WinSearch::Box && !vertical,
             alpha,
             top,
             drag,

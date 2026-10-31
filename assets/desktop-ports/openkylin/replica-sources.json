@@ -1,0 +1,367 @@
+{
+ "note": "Source files the UKUI replica numbers were read from. The Gitee objects are NOT in ordinary clones of the GitHub mirror: use `local_checkout` (sparse checkouts on the author machine) or clone `url` and check out `commit`; every file is pinned by git blob id and sha256 of the blob content.",
+ "repos": [
+  {
+   "name": "ukui-menu",
+   "url": "https://gitee.com/openkylin/ukui-menu.git",
+   "branch": "openkylin/huanghe",
+   "commit": "6330250eb56bf218a0e7a6c369b2f95d3033d8b8",
+   "commit_date": "2026-10-26",
+   "tree": "7c37f194208afa96fa4b0e40883af56a5786e3a4",
+   "local_checkout": "/home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-menu",
+   "verify": "git -C /home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-menu show 6330250eb56bf218a0e7a6c369b2f95d3033d8b8:<path> | sha256sum   (or: git clone https://gitee.com/openkylin/ukui-menu.git && git checkout 6330250eb56bf218a0e7a6c369b2f95d3033d8b8)",
+   "files": [
+    {
+     "path": "qml/AppUI/NormalUI.qml",
+     "git_blob": "d86cf514bbf7551e53efd31db96d7540cd2bd114",
+     "sha256": "ba1b80a706f8525b9e0fe8b174ca43e9edcf58a67e1b0005f29a1fd8743ee850",
+     "bytes": 2793
+    },
+    {
+     "path": "qml/AppUI/AppPage.qml",
+     "git_blob": "cc65931ffb3b851598cc1de28c8b4a2e6f940f87",
+     "sha256": "83014b3f9722964a6d7c8249f5f265e5c07991a998928df4e080c1d2c4a50d79",
+     "bytes": 1739
+    },
+    {
+     "path": "qml/AppUI/SearchInputBar.qml",
+     "git_blob": "4cb62328ccac2a4982a900e358436ca434f4d248",
+     "sha256": "4e914fcfce03b7c05d31abed460058714fdc2affa9d40db04247a98cfe95c3f6",
+     "bytes": 5126
+    },
+    {
+     "path": "qml/AppUI/AppListHeader.qml",
+     "git_blob": "1bdfa1c762960a0f5f161d901d020b81c00e6793",
+     "sha256": "6e58584e8b6bf13ae41b2ada893e4d6b157598e7be1753c5c06bad808ca4ffe1",
+     "bytes": 2162
+    },
+    {
+     "path": "qml/AppUI/AppListView.qml",
+     "git_blob": "5475123c4a4b71934c6e15ee11cf3aeb5247c442",
+     "sha256": "678a06eb9206f2834bffc1feb0ac1e75541aae3cd481537f6d44ce75abf01d60",
+     "bytes": 7981
+    },
+    {
+     "path": "qml/AppUI/WidgetPage.qml",
+     "git_blob": "65e0467d472199c3c53bc8c418bd908bcb950f7e",
+     "sha256": "c9ac9a6d5c4ec05373d809096078a477529796d329781b5fbc3f7dd32cc67da0",
+     "bytes": 8651
+    },
+    {
+     "path": "qml/AppUI/Sidebar.qml",
+     "git_blob": "dd938931f3f8df8648d51f3cd2af9cf3fd5cf5b3",
+     "sha256": "eb20ffa65d14e585f185187eec38d5d569d45ae590b6bd36b33586eadade4111",
+     "bytes": 12411
+    },
+    {
+     "path": "qml/mainXcb.qml",
+     "git_blob": "2315574a9606bc05b936b4f4a327d4170fd6d233",
+     "sha256": "d1080e55b94707c8930b49326e005175ddce082f06fa9c750817fba5851dbae6",
+     "bytes": 9390
+    },
+    {
+     "path": "src/windows/menu-main-window.cpp",
+     "git_blob": "8679ac97f082a737398d258c2dfd041b925720fc",
+     "sha256": "7cd24dd491086c55184a50a0e9f51cc8261f9ca18d5134d8ebe50f2320391639",
+     "bytes": 19841
+    },
+    {
+     "path": "src/settings/settings.cpp",
+     "git_blob": "ff7ce2fdf444d7008fb2d6edf9ed4f9024dba0cc",
+     "sha256": "e8c2c68abfb9422e2f88471e746a34730bc2d77ee62c0d6da43e5413df438fed",
+     "bytes": 10492
+    },
+    {
+     "path": "src/utils/sidebar-button-utils.cpp",
+     "git_blob": "01f0fc320550f2018f3efc70278ec74e704434b2",
+     "sha256": "a19310b3105f984935e1177289e29de53c88c466ecc9d00310f22df0f332a980",
+     "bytes": 8464
+    },
+    {
+     "path": "debian/copyright",
+     "git_blob": "e46c9379921baed777c9f7a84afe028502c43762",
+     "sha256": "22cbd25e07595b93605d6929ded1fd316e850cf443dcbccafce5b765acc06874",
+     "bytes": 2747
+    },
+    {
+     "path": "qml/AppControls2/AppItem.qml",
+     "git_blob": "07c57bae1344692ec9bf307f3c7ac4265e6ae5be",
+     "sha256": "c74eaf73eee18221fb785038680263dc00a4cebff3257884d669f79b8a989271",
+     "bytes": 3091
+    },
+    {
+     "path": "qml/AppControls2/LabelItem.qml",
+     "git_blob": "e4a541b9f37a655aca760b597dc0efa2bfead53c",
+     "sha256": "0bb9463d39a5155651ae6eb24a7cc73b3d1349f91d2e7c405c48719d4fd5aae0",
+     "bytes": 3077
+    },
+    {
+     "path": "qml/extensions/FavoriteGridView.qml",
+     "git_blob": "a600fe208abde9670ef392e90c61293c501c9381",
+     "sha256": "d2a28d4593a59c3c14de85031eda97e231e5792c0941d7166eb773918f70fa15",
+     "bytes": 7739
+    },
+    {
+     "path": "qml/extensions/FavoriteDelegate.qml",
+     "git_blob": "b593b43f29194387cc30b55888e28cd2ec2e51b2",
+     "sha256": "6b45339a79be92e6dd12075f9acd17cfed0548dddac3b6ca16b2ba1c52274ff5",
+     "bytes": 13524
+    },
+    {
+     "path": "qml/extensions/FavoriteExtension.qml",
+     "git_blob": "d82b348092ff62982e7b8927e5dc85861bcad3ba",
+     "sha256": "070fef9ea9a19ec0bea2a58661b2065914da958893f68c2c675ead78030b0020",
+     "bytes": 9444
+    }
+   ]
+  },
+  {
+   "name": "ukui-sidebar",
+   "url": "https://gitee.com/openkylin/ukui-sidebar.git",
+   "branch": "openkylin/huanghe",
+   "commit": "59abed06255feed545c5c941f1596f2e83f4c19c",
+   "commit_date": "2026-10-29",
+   "tree": "aecc83376c5f39b5260e37e7c27ac40f6c234096",
+   "local_checkout": "/home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-sidebar",
+   "verify": "git -C /home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-sidebar show 59abed06255feed545c5c941f1596f2e83f4c19c:<path> | sha256sum   (or: git clone https://gitee.com/openkylin/ukui-sidebar.git && git checkout 59abed06255feed545c5c941f1596f2e83f4c19c)",
+   "files": [
+    {
+     "path": "qml/Shortcuts.qml",
+     "git_blob": "71ba21df83a1a1b4484c3ab693cd992ebad96fff",
+     "sha256": "4c2770e9c056e0756baee3517a737ed9893b655de285f2d1b73d87b084fd5694",
+     "bytes": 15535
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/ShortcuPanel.qml",
+     "git_blob": "044271792e802711134b78e8c4f9f2be67e4a682",
+     "sha256": "96be11a86ffa2c24ec463642d6bc3da9ac97246f7b5535e7a58306952c6ed3cf",
+     "bytes": 18320
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/IconButton.qml",
+     "git_blob": "c1f9d17ce9419c8c4ca7114e0c83e43274978630",
+     "sha256": "fbde8dec1db30417fce2965624a8341be64c11c393890538299b97c6b20a746a",
+     "bytes": 6179
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/ProgressBar.qml",
+     "git_blob": "aa8a6defd866db6816341d62dd04275b82d890a4",
+     "sha256": "f44c28a12ab78a9430e58b9ae230cf8d40ba8330cca2b2af036ec7385bca2324",
+     "bytes": 8449
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/BaseButton.qml",
+     "git_blob": "2aeed1fcbd8fec85d977333c4ee8fe411415283d",
+     "sha256": "bbef1b056965d0330ef841b661e02a422a5fcf4f5b4c0e0a1081ade51af154a1",
+     "bytes": 1052
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/BaseButtonView.qml",
+     "git_blob": "81f161f355b1dc72c719cb50072bdb5bbd834e17",
+     "sha256": "3df03570126d91fa0cdf948ada593cb35c4caf12ea181a8b7e19aec0e9e27d39",
+     "bytes": 4812
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/EditButtonView.qml",
+     "git_blob": "76d9828e82c03d9164542b87a22d8fa09a1d4578",
+     "sha256": "1a50db81d429b82de048fea7f1c05a0c4a279b7cf44374f486b1c5029ec8f811",
+     "bytes": 5378
+    },
+    {
+     "path": "qml/org/ukui/sidebar/ui/EditShortcutFlow.qml",
+     "git_blob": "750e778e844a80622aa9f706576ecf9ae05922b1",
+     "sha256": "46d17739233f098a75cb2b20e10c89b4fdb43938317c5d3e1e2a8146c776b68a",
+     "bytes": 9940
+    },
+    {
+     "path": "src/model/shortcut-config.cpp",
+     "git_blob": "e159528bbde4a4d8a9e15476ebfd05df2a2218ef",
+     "sha256": "8663db208aa603b3605f321ca973a3735b642700241b2fc8ffafdf61c9292477",
+     "bytes": 7171
+    },
+    {
+     "path": "debian/copyright",
+     "git_blob": "80a3a42f7440f4784336f10d6b6b11831d577e90",
+     "sha256": "2f103cbfbae273379f7b3f3a0516aedb0505b287605f915cadd19931cbd63e00",
+     "bytes": 37102
+    }
+   ]
+  },
+  {
+   "name": "ukui-panel",
+   "url": "https://gitee.com/openkylin/ukui-panel.git",
+   "branch": "openkylin/huanghe",
+   "commit": "7d8829d462e63683401ddd13bab5382297def134",
+   "commit_date": "2026-10-26",
+   "tree": "3e9895de15e942e4692f7527f4f6d1b71a9ddd4c",
+   "local_checkout": "/home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-panel",
+   "verify": "git -C /home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-panel show 7d8829d462e63683401ddd13bab5382297def134:<path> | sha256sum   (or: git clone https://gitee.com/openkylin/ukui-panel.git && git checkout 7d8829d462e63683401ddd13bab5382297def134)",
+   "files": [
+    {
+     "path": "panel/src/view/panel.cpp",
+     "git_blob": "a9a084f2f69bc69a5335e1edf217b5fd7750e564",
+     "sha256": "7e9d0bad18618e03bccb4ef095be1d7ee50e97da2490aee0edb888140d10fed9",
+     "bytes": 74597
+    },
+    {
+     "path": "panel/src/view/panel-next.cpp",
+     "git_blob": "51e91d374fe28e4d43a9b4d7bc5b55edfd4cf3ff",
+     "sha256": "b39f6a9c92ebfb2867ed9b09e74978b025240b5cec0ab7912674e5e165dfa21b",
+     "bytes": 46218
+    },
+    {
+     "path": "panel/qml/org.ukui.panel/ui/Container.qml",
+     "git_blob": "d0baec309b057303852fabc4a7f1781c013aad05",
+     "sha256": "d60af941c84c08325ee57ad85aa5f336fa592f13aa8d8f8fffe5ca26e737fb4b",
+     "bytes": 23454
+    },
+    {
+     "path": "panel/qml/org.ukui.panelNext/ui/MainContainer.qml",
+     "git_blob": "2b00703d752b757b5f8496b7aaa9699fbf68c5c0",
+     "sha256": "cc9adff6a222a9087c5681e16a703b6b9b79ef620a31a44e45b8b42e1193b0bb",
+     "bytes": 8391
+    },
+    {
+     "path": "panel/qml/org.ukui.appIsland/ui/ApplicationsIsland.qml",
+     "git_blob": "712e0af4ced6b5a499637f48384d7a4259a0f2fd",
+     "sha256": "8895ea8b846121419f1f704a2547902c7800ec86c91a6fed2e06364dbe283f76",
+     "bytes": 6301
+    },
+    {
+     "path": "panel/qml/org.ukui.dataIsland/ui/DataIsland.qml",
+     "git_blob": "1498ac42935e75c9f6b4db59ace1faa44465d62d",
+     "sha256": "f98fc68fd09eb1abaf7d8deb03a224dcca2f65310fea054617b4b424b1ede46e",
+     "bytes": 5916
+    },
+    {
+     "path": "panel/qml/org.ukui.settingsIsland/ui/SettingsIsland.qml",
+     "git_blob": "f08add6f58c30df5ad12cc61d524cafa398d989f",
+     "sha256": "1a0fb32f6fd498d1e2458de1b32b7571ae21bad7b8ae6cc1159e5b9977f42b12",
+     "bytes": 6515
+    },
+    {
+     "path": "widgets/ukui-menu-starter/widget/ui/main.qml",
+     "git_blob": "e8ad91f4d53b1ee0b56c8951fc2bc79fb817af0b",
+     "sha256": "a9d1d22a4e7cae99f91df431bb67efbf3c62eab876dda0df18a60b47a1e7b0b9",
+     "bytes": 6439
+    },
+    {
+     "path": "widgets/ukui-menu-starter/widget/metadata.json",
+     "git_blob": "bd0b198cb1bece9ee7dce1a6ca465437f04edbca",
+     "sha256": "63ed6b722dfeab9423c0cf8931f1698c9e17bce133ea60eeef82487f510054c2",
+     "bytes": 2019
+    },
+    {
+     "path": "widgets/ukui-panel-search/widget/ui/main.qml",
+     "git_blob": "9d4423ffe365dcae32362761b3df8a9bc1a629af",
+     "sha256": "7a84c7a8fd4df7cd9230bb950b946badbefb33ba686ba4b67f706087a6e9488f",
+     "bytes": 6146
+    },
+    {
+     "path": "debian/copyright",
+     "git_blob": "8e3f427865a3858fa803fa7218bec989d421431d",
+     "sha256": "7be5000ec9f8bf9039cc6e942e18c2813b15218df1f76b68930729a36c52a5bb",
+     "bytes": 2671
+    }
+   ]
+  },
+  {
+   "name": "ukui-globaltheme",
+   "url": "https://gitee.com/openkylin/ukui-globaltheme.git",
+   "branch": "openkylin/huanghe",
+   "commit": "5274c41a196d2bc7141b5cfead69368add9fc073",
+   "commit_date": "2026-09-18",
+   "tree": "57f1835c73e96d75706909f1a00aaac7fe4b79a1",
+   "local_checkout": "/home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-globaltheme",
+   "verify": "git -C /home/ambsd/.cache/decebal-upstreams/openkylin-gitee/ukui-globaltheme show 5274c41a196d2bc7141b5cfead69368add9fc073:<path> | sha256sum   (or: git clone https://gitee.com/openkylin/ukui-globaltheme.git && git checkout 5274c41a196d2bc7141b5cfead69368add9fc073)",
+   "files": [
+    {
+     "path": "globaltheme/Classic/theme.conf",
+     "git_blob": "b720ff125740c35a9c0d2f6b563ca668cfb9e1d1",
+     "sha256": "34d5f59c28c3d300834aa3c2ae8171ef8e559631c516307eb413aec037310bb0",
+     "bytes": 771
+    },
+    {
+     "path": "globaltheme/Classic/kclassical-light.css",
+     "git_blob": "8304d3c19a8cd60ad2a4e29b66a6f3cdcd54f8c8",
+     "sha256": "a90fc3c31d887439557acf2887e924d73e038dbf58c35634d8ce1b6f2cc14350",
+     "bytes": 9984
+    },
+    {
+     "path": "globaltheme/Classic/preview.png",
+     "git_blob": "6a90c972c46ea332544d938a8ac3eab314149e7b",
+     "sha256": "894abe66c985a4936dd6001e92d3668a7234eb3945eb83058eafca5aad63b6fd",
+     "bytes": 2498328
+    },
+    {
+     "path": "globaltheme/HeYin/theme.conf",
+     "git_blob": "d9f6db44bbad48cbc394e99e3ddd403925a64066",
+     "sha256": "495ce2710d6095b6f603b8e2054d3a707c4089a7ff1a189b4992c516be93757e",
+     "bytes": 728
+    },
+    {
+     "path": "globaltheme/HeYin/preview.png",
+     "git_blob": "bbc2f6205c3f08322a6859a2fd080ce85a12659d",
+     "sha256": "49227680ccb04330977e948515328cec096f97a10501834b8ffcad7e67ef1bde",
+     "bytes": 430252
+    },
+    {
+     "path": "globaltheme/Light-Seeking/theme.conf",
+     "git_blob": "d30ebcf7c5f8c670fd5d4c291cf6298beacca70c",
+     "sha256": "a6a91e753e93cb6db4dfc586b2690d6be262525852603d63c93f46adcd850380",
+     "bytes": 775
+    },
+    {
+     "path": "globaltheme/Light-Seeking/preview.png",
+     "git_blob": "022aea2ac5fc293742c2969a3256a4c5a979f8da",
+     "sha256": "416f1dbe86f7f34cbd43273dfd5a34d0a572e879c2c23938d432a5bbeffa2bc6",
+     "bytes": 1259928
+    },
+    {
+     "path": "globaltheme/DawnLight/theme.conf",
+     "git_blob": "e5d76e2a83745327c53f54e64230244ec501e216",
+     "sha256": "94d43a869010e88bf871c4312d4729af4df01f334b2810428045da6a8c85dc53",
+     "bytes": 670
+    },
+    {
+     "path": "globaltheme/DawnLight/preview.png",
+     "git_blob": "28187821f3756d0a58b099b8fbb04a1d1c261e45",
+     "sha256": "20828f919486abd8d64a818a6e1c530212e0c113dcd36dd19a64a89696cbe978",
+     "bytes": 951369
+    },
+    {
+     "path": "debian/copyright",
+     "git_blob": "62fe5fb3698bb3e75231eab6f5413e94b563dce2",
+     "sha256": "946c7629fe3b853a4273708fc2f704cac45cd2719b412a0620b22f47146eb227",
+     "bytes": 1038
+    }
+   ]
+  }
+ ],
+ "start_button_logo": {
+  "repo": "https://github.com/openkylin/openkylin-theme",
+  "commit": "3c78d714aa8fac723c9a5360bd54484789a647ab",
+  "local_checkout": "/home/ambsd/.cache/decebal-upstreams/openkylin/openkylin-theme",
+  "files": [
+   {
+    "path": "icons/ukui-icon-theme-default/128x128/apps/kylin-startmenu.png",
+    "git_blob": "adbe8bd46bcb314dd8eaff1e1ec198409b27b856",
+    "sha256": "ee6b23b4d2f0e8b84adda22fddee089a349c68b8f8fe9415b8958fd98ee3d3c4",
+    "bytes": 4222
+   },
+   {
+    "path": "icons/ukui-icon-theme-classical/128x128/apps/kylin-startmenu.png",
+    "git_blob": "379a20c9cd81c6e5ff929b6523401e1986c80cb8",
+    "sha256": "eaa2a1501053bce7caf26c5412c170a0a533b06e039f7df6cdf135fcc20f2c4d",
+    "bytes": 5145
+   },
+   {
+    "path": "icons/ukui-icon-theme-fashion/128x128/apps/kylin-startmenu.png",
+    "git_blob": "4dfa94880821aa60e3ecd9860eb9a6dbeda431cd",
+    "sha256": "bb7eade62b6ab0a7870669a459bb8aaa819d3928a5878c2e1f15a1b20938ad03",
+    "bytes": 4821
+   }
+  ],
+  "licence_declared": "GPL-3 (debian/copyright); Moka provenance of part of the art unresolved"
+ }
+}

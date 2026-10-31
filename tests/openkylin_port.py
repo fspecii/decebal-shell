@@ -79,7 +79,7 @@ class Packages(unittest.TestCase):
             t = self.theme(i)
             self.assertEqual((t["dock"]["style"], t["dock"]["position"], t["dock"]["align"], t["dock"]["size"]), ("windows", "bottom", "left", 32), i)  # 48 px panel, 4+4 px insets -> 32 px icon
             self.assertEqual(t["bar"]["enabled"], "auto")
-            self.assertEqual(t["taskbar"], {"thickness": 48, "icon_size": 32, "cell_width": 48, "gap": 0, "inset": 4}, f"{i}: UKUI classic panel geometry (48 px strip, 32 px icons)")
+            self.assertEqual(t["taskbar"], {"thickness": 48, "icon_size": 32, "cell_width": 48, "gap": 0, "inset": 4, "search": "button"}, f"{i}: UKUI classic panel geometry (48 px strip, 32 px icons, a search button not the Windows box)")
         t = self.theme("openkylin-islands")
         self.assertEqual((t["bar"]["style"], t["bar"]["background"], t["bar"]["position"], t["bar"]["height"], t["bar"]["margin"], t["bar"]["spacing"], t["bar"]["radius"]), ("dux", "islands", "bottom", 58, 7, 4, 12))
         # one content-sized centred run (generic bar.cluster): faces 48 px = height - 10, standing 12 px above the edge = margin + 5; 8 px between islands, 12 px padding

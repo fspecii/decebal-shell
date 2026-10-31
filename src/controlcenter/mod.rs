@@ -224,6 +224,10 @@ pub enum Draw {
         value: f32,
         icon: &'static str,
     },
+    /// A slider track with no icon inside (UKUI's `TouchSlider`: a pill, the filled part in the accent colour); the icon button beside it is a separate item.
+    Track {
+        value: f32,
+    },
     /// Square action tile background (accent when `on`).
     SmallTile {
         on: bool,
@@ -609,6 +613,12 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
                 };
                 fonts.draw(pm, &shown, tx, y, *size, *weight, color(r, g, b, a));
             }
+            Draw::Track { value } => {
+                let th = crate::theme::th();
+                fill_rounded(pm, x, y, w, h, h / 2.0, th.ink(0.14));
+                stroke_rounded(pm, x + 0.5, y + 0.5, w - 1.0, h - 1.0, (h / 2.0 - 0.5).max(0.0), th.ink(0.07), 1.0);
+                fill_rounded(pm, x, y, (w * value.clamp(0.0, 1.0)).max(h), h, h / 2.0, th.accent_c());
+            }
             Draw::Slider { value, icon } => {
                 // The item keeps the source's full-row pointer/wheel target;
                 // only the visible track is thin.
@@ -650,8 +660,8 @@ pub fn look(style: Style) -> (f32, f32, bool) {
     match style {
         Style::Dux => (28.0, 12.0, true),
         Style::Gnome => (gnome::PANEL_RADIUS, 16.0, false),
-        // UKUI: panel `kRadiusWindow` 12, shortcut buttons and progress bars `kRadiusMax` 8
-        Style::Ukui => (12.0, 8.0, false),
+        // UKUI: panel `kRadiusWindow` (the global theme's window radius: 12, Classic 0), shortcut buttons and progress bars `kRadiusMax` 8 (Classic: square, every kradius is 0px)
+        Style::Ukui => (th.radius, if th.radius > 0.0 { 8.0 } else { 0.0 }, false),
         Style::Fluent => (th.r(1.0), th.r(0.75).clamp(3.0, 12.0), true),
         _ => (th.r(2.0), 16.0, false),
     }

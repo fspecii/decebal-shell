@@ -36,6 +36,12 @@ pub enum Target {
     Power,
     /// Decebal Settings.
     Settings,
+    /// The account settings (UKUI's user button: "Change account settings"; the session menu behind [`Target::Power`] logs out).
+    Account,
+    /// The file manager on the computer view (UKUI's computer button: `peony computer:///`).
+    Computer,
+    /// UKUI's expand / restore button: the card fills the output (full-screen menu) and goes back.
+    Fullscreen,
     /// Pins or unpins the app (Windows' "Pin to Start").
     Pin(usize),
     /// Clears the search.
@@ -47,6 +53,36 @@ impl Target {
     pub fn focusable(self) -> bool {
         !matches!(self, Target::Letter(_))
     }
+}
+
+/// The program behind a sidebar target, `have` telling which tools exist: the session menu, Settings, Settings on the account pane, the file manager on the computer view
+/// (`peony computer:///` as in UKUI, else `gio open computer:///`, else `xdg-open /`; none: no command, and the Computer button is not drawn).
+pub fn sidebar_argv(t: Target, have: impl Fn(&str) -> bool) -> Option<Vec<String>> {
+    let own = |name: &str| crate::launch::sibling_or_path(name);
+    match t {
+        Target::Power => Some(vec![own("decsession")]),
+        Target::Settings => Some(vec![own("decsettings")]),
+        Target::Account => Some(vec![own("decsettings"), "users".into()]),
+        Target::Computer => {
+            let argv = |a: &[&str]| Some(a.iter().map(|s| s.to_string()).collect());
+            if have("peony") {
+                argv(&["peony", "computer:///"])
+            } else if have("gio") {
+                argv(&["gio", "open", "computer:///"])
+            } else if have("xdg-open") {
+                argv(&["xdg-open", "/"])
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether this machine has something to open the computer view with (decided once; unit tests assume it does).
+pub fn computer_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| cfg!(test) || sidebar_argv(Target::Computer, crate::controlcenter::sys::have).is_some())
 }
 
 /// Which list the content area shows while not searching.
@@ -217,6 +253,10 @@ pub struct Model {
     /// The focus moved by keyboard (draw a focus ring), not by hovering.
     pub keyboard: bool,
     pub user: String,
+    /// UKUI's full-screen menu is showing (the card fills the output).
+    pub expanded: bool,
+    /// The surface is a full-output one, so the card can grow to fill it (set by the layout pass; never in a plain window).
+    pub can_expand: bool,
     /// The categories whose freedesktop menu icon the icon theme has.
     pub themed: std::collections::HashSet<Category>,
 }
@@ -233,6 +273,8 @@ impl Model {
             offset: HashMap::new(),
             keyboard: false,
             user: String::new(),
+            expanded: false,
+            can_expand: false,
             themed: Default::default(),
         }
     }
@@ -360,12 +402,19 @@ impl Styled {
     pub fn resize(&mut self, w: u32, h: u32) {
         self.surface = (w.max(1), h.max(1));
         let size = (self.surface.0 as f32, self.surface.1 as f32);
-        self.card = if self.full { placement(self.style, self.anchor, size, self.scale) } else { Rect { x: 0.0, y: 0.0, w: size.0, h: size.1 } };
+        self.card = if !self.full {
+            Rect { x: 0.0, y: 0.0, w: size.0, h: size.1 }
+        } else if self.m.expanded && self.style == LauncherStyle::Ukui {
+            super::placement::free_area(self.anchor.as_ref(), size)
+        } else {
+            placement(self.style, self.anchor, size, self.scale)
+        };
         self.relayout();
     }
 
     pub fn relayout(&mut self) {
         let s = self.scale;
+        self.m.can_expand = self.full;
         self.zones = match self.style {
             LauncherStyle::Windows => windows::layout(&self.m, self.card, s),
             LauncherStyle::Gnome => gnome::layout(&self.m, self.card, s),
@@ -583,18 +632,22 @@ impl Styled {
                 }
                 Response::REDRAW
             }
-            Target::Power => {
-                // (unit tests never start the session menu)
-                if !cfg!(test) {
-                    crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decsession")]);
+            Target::Power | Target::Settings | Target::Account | Target::Computer => {
+                // (unit tests never start another program)
+                if let Some(argv) = sidebar_argv(t, crate::controlcenter::sys::have).filter(|_| !cfg!(test)) {
+                    crate::launch::spawn_argv(&argv);
                 }
                 Response::act(Action::Close)
             }
-            Target::Settings => {
-                if !cfg!(test) {
-                    crate::launch::spawn_argv(&[crate::launch::sibling_or_path("decsettings")]);
+            Target::Fullscreen => {
+                // the search text is kept; the grids start from the top
+                self.m.expanded = !self.m.expanded;
+                for id in ["apps", "results", "fav"] {
+                    self.m.sel.insert(id, 0);
+                    self.m.offset.insert(id, 0);
                 }
-                Response::act(Action::Close)
+                self.resize(self.surface.0, self.surface.1);
+                Response::REDRAW
             }
             Target::Pin(i) => {
                 self.m.cat.toggle_favorite(i);

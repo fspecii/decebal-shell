@@ -918,6 +918,7 @@ mod tests {
             indicator: Indicator::Frame,
             desktop: DesktopForm::Icon,
             workspaces: WorkspaceForm::Cells,
+            ..Default::default()
         }
     }
 

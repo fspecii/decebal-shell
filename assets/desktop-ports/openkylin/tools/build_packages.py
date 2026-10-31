@@ -104,13 +104,15 @@ size = 32
 roundness = 0.0
 
 # ukui-panel classic taskbar (panel.cpp, AppIcon.qml): a 48 px strip (size policy Small), square 48 px cells, a task plate inset 4 px (radius kRadiusNormal 6 =
-# theme radius / 2), and a 32 px icon (another 4 px inset). Generic typed `[taskbar]` keys; no theme id is involved.
+# theme radius / 2), and a 32 px icon (another 4 px inset). The search applet (ukui-panel-search main.qml) is a square `kylin-search` icon button, not a Windows box.
+# Generic typed `[taskbar]` keys; no theme id is involved.
 [taskbar]
 thickness = 48
 icon_size = 32
 cell_width = 48
 gap = 0
 inset = 4
+search = "button"
 
 [bar]
 enabled = "auto"

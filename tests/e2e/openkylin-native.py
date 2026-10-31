@@ -74,6 +74,15 @@ FIRST_DISPLAY, abstract_sockets, free_display, verify_owned = fixture.FIRST_DISP
 USED_DISPLAYS = set()
 
 
+def diff_bbox(base, shot, threshold=24):
+    """Bounding box (x0, y0, x1, y1) of what differs between two screenshots of the same private server (the opened card and its shadow), or None."""
+    a, b = Image.open(base).convert("RGB"), Image.open(shot).convert("RGB"); W, H = a.size; pa, pb = a.load(), b.load(); xs, ys = [], []
+    for y in range(0, H, 2):
+        for x in range(0, W, 2):
+            if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > threshold: xs.append(x); ys.append(y)
+    return (min(xs), min(ys), max(xs) + 2, max(ys) + 2) if xs else None
+
+
 def wait(fn, label, n=150):
     for _ in range(n):
         try:
@@ -84,7 +93,7 @@ def wait(fn, label, n=150):
     raise AssertionError(label)
 
 
-def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=None, extra=None):
+def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=None, extra=None, pre=None, post=None):
     with tempfile.TemporaryDirectory(prefix="okn-") as td:
         r = pathlib.Path(td)
         for d in ("home", "cfg", "cache", "state", "run", "data"): (r / d).mkdir(mode=0o700)
@@ -97,6 +106,10 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
         stub = r / "bin"; stub.mkdir()
         for app in ("curl", "nmcli", "pactl", "wpctl", "playerctl", "bluetoothctl", "brightnessctl", "rdwmctl"):
             (stub / app).write_text("#!/bin/sh\nexit 1\n"); (stub / app).chmod(0o755)
+        # programs the start menu's sidebar launches: recorded, never run (the case reads r/calls.log)
+        calls = r / "calls.log"; calls.write_text("")
+        for app in ("peony", "gio", "xdg-open", "decsession", "decsettings"):
+            (stub / app).write_text(f'#!/bin/sh\necho "{app} $*" >> {calls}\nexit 0\n'); (stub / app).chmod(0o755)
         env["PATH"] = f"{stub}:{env['PATH']}"
         (r / "cfg/decebal.json").write_text(json.dumps({"icons": {"theme": "ukui-icon-theme-default"}}))
         procs = []
@@ -124,8 +137,10 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 # DECEBAL_FONT_SCALE on the taskbar double-scales its text, so only the bar gets it.
                 benv = dict(env, **({"DECEBAL_FONT_SCALE": str(scale)} if b == "decbar" else {}))
                 procs.append(subprocess.Popen([str(BIN / b)], env=benv, stdout=(r / f"{b}.log").open("w"), stderr=subprocess.STDOUT))
+            before = pre(run, r, env) if pre else None   # e.g. a baseline screenshot of the panel alone
             if extra:   # one more shell process (e.g. the Control Center summoned by its key), started after the panel
                 time.sleep(1.0); procs.append(subprocess.Popen([str(BIN / extra[0]), *extra[1:]], env=env, stdout=(r / f"{extra[0]}.log").open("w"), stderr=subprocess.STDOUT)); time.sleep(2.5)
+            after = post(run, r, env, before) if post else None   # input sent to the opened window (xdotool on the private server) and what the stubs recorded
             wins = {}
             def find():
                 wins.clear()
@@ -154,7 +169,7 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
             for w in run("xdotool", "search", "--name", "").split():
                 nm = run("xdotool", "getwindowname", w)
                 if nm: others[nm] = run("xdotool", "getwindowgeometry", w).replace("\n", " ").split("Geometry:")[1].strip()
-            res = dict(theme=theme, mode=mode, scale=scale, geometry=geom, edge=edge or "theme default", windows=wins, other_windows=others, screenshot=shot, wallpaper=bool(wallpaper))
+            res = dict(theme=theme, mode=mode, scale=scale, geometry=geom, edge=edge or "theme default", windows=wins, other_windows=others, screenshot=shot, wallpaper=bool(wallpaper), post=after)
             panel = wins.get("decebal-dock") or wins.get("decebal-bar")
             if "decebal-bar" in wins and "decebal-dock" not in wins and not wallpaper:
                 # Dux islands: the window is a transparent canvas; the most common colour that is not the backdrop is the island face
@@ -180,7 +195,7 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 want = tuple(round(int(pc[1 + 2 * i:3 + 2 * i], 16) * al + BACKDROP[mode][i] * (1 - al)) for i in range(3))
                 W, H = im.size
                 # sample an empty stretch of the panel: the middle of the long axis
-                px = im.getpixel((min(W - 1, panel["x"] + panel["w"] // 2), min(H - 1, panel["y"] + 4 if panel["h"] > 12 else panel["y"])))
+                px = im.getpixel((min(W - 1, panel["x"] + (panel["w"] * 17 // 20 if extra else panel["w"] // 2)), min(H - 1, panel["y"] + 4 if panel["h"] > 12 else panel["y"])))   # with an extra window open (start menu at the left) sample right of its shadow
                 res.update(panel_pixel=list(px), panel_expected=list(want), panel_delta=max(abs(px[i] - want[i]) for i in range(3)))
             tb = t.get("taskbar")
             if tb and "decebal-dock" in wins:   # the generic [taskbar] keys: the strip thickness is the declared one times the scale
@@ -213,6 +228,158 @@ def main():
                     im = Image.open(OUT / name).convert("RGB"); W, H = im.size
                     im.crop((W - int(620 * sc), max(0, H - int(780 * sc)), W, H)).save(OUT / name); r["control_center_window"] = cc; results.append(r); print(name, cc)
         (OUT / "native-controlcenter.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decbar", "decdock")}, results=results), indent=1))
+        return
+    if MATRIX == "launcher":
+        # the UKUI start menu (`launcher.style = "ukui"`, 766 x 688 at 1x) opened from the first taskbar cell on the private fixture: the card on the bottom edge (bbox of what
+        # differs from the flat backdrop), then the card on every edge against a baseline of the panel alone, then real input
+        results = []
+        for t in ("openkylin", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"):
+            for m in ("light", "dark"):
+                for sc in (1, 1.25, 2):
+                    name = f"startmenu-{t}-{m}-{int(sc * 100)}.png"; thick = round(48 * sc)
+                    r = case(t, m, sc, "1920x1080", shot=name, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
+                    win = r["other_windows"].get("UKUI Menu"); assert win, f"{name}: the launcher did not open ({r['other_windows']})"
+                    im = Image.open(OUT / name).convert("RGB"); W, H = im.size; px = im.load(); bd = BACKDROP[m]
+                    xs, ys = [], []
+                    for y in range(0, H - thick, 2):
+                        for x in range(0, W, 2):
+                            if max(abs(px[x, y][i] - bd[i]) for i in range(3)) > 6: xs.append(x); ys.append(y)
+                    assert xs, f"{name}: no card pixels"
+                    x0, x1, y0, y1 = min(xs), max(xs) + 2, min(ys), max(ys) + 2; w, h = x1 - x0, y1 - y0
+                    want = (766 * sc, min(688 * sc, 1080 - thick - 8 * sc))
+                    # the bounding box includes the card's soft shadow (and the 8 px gap above the panel): at least the card, at most the card plus 2 x 18 px of shadow
+                    assert 0 <= w - want[0] <= 36 * sc and 0 <= h - want[1] <= 40 * sc, f"{name}: bbox {w}x{h} at {x0},{y0}, card {want}"
+                    r["launcher_window"] = win; r["card"] = dict(x=x0, y=y0, w=w, h=h, card_w=want[0], card_h=want[1], note="bbox of non-backdrop pixels = card + shadow"); results.append(r); print(name, r["card"])
+                    im.crop((0, max(0, H - int(740 * sc)), min(W, int(820 * sc)), H)).save(OUT / name)
+        # every edge, classic packages: the card never covers the panel strip (baseline diff), at 100 % and 200 %, light and dark
+        for t in ("openkylin", "openkylin-classic"):
+            for m in ("light", "dark"):
+                for sc in (1, 2):
+                    thick = round(48 * sc)
+                    for edge in ("bottom", "top", "left", "right"):
+                        name = f"startmenu-edge-{edge}-{t}-{m}-{int(sc * 100)}.png"
+                        point = {"bottom": (round(24 * sc), 1080 - thick // 2), "top": (round(24 * sc), thick // 2), "left": (thick // 2, round(24 * sc)), "right": (1920 - thick // 2, round(24 * sc))}[edge]
+                        def baseline(run, r, env, name=name):
+                            run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                        r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, extra=["declaunch", "open", "--edge", edge, "--anchor", f"{point[0]},{point[1]}", "--thickness", str(thick)])
+                        assert r["other_windows"].get("UKUI Menu"), f"{name}: the launcher did not open ({r['other_windows']})"
+                        a, b = Image.open(OUT / ("base-" + name)).convert("RGB"), Image.open(OUT / name).convert("RGB"); W, H = a.size; pa, pb = a.load(), b.load()
+                        xs, ys = [], []
+                        for y in range(0, H, 2):
+                            for x in range(0, W, 2):
+                                if max(abs(pa[x, y][i] - pb[x, y][i]) for i in range(3)) > 24: xs.append(x); ys.append(y)
+                        assert xs, f"{name}: the card did not change the picture"
+                        x0, x1, y0, y1 = min(xs), max(xs) + 2, min(ys), max(ys) + 2
+                        # the strip along the edge stays clear (a few px of soft shadow may reach it); the card is never larger than 766 x 688 at this scale
+                        slack = 12 * sc
+                        ok = {"bottom": y1 <= H - thick + slack, "top": y0 >= thick - slack, "left": x0 >= thick - slack, "right": x1 <= W - thick + slack}[edge]
+                        assert ok and (x1 - x0) <= 766 * sc + 40 * sc and (y1 - y0) <= 688 * sc + 40 * sc, f"{name}: the card changes {x0},{y0}..{x1},{y1}, covering the {edge} panel strip of {thick}"
+                        r["card_diff_bbox"] = dict(x0=x0, y0=y0, x1=x1, y1=y1, strip=thick, edge=edge); results.append(r); print(name, r["card_diff_bbox"])
+        (OUT / "native-launcher.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
+        return
+    if MATRIX == "start-click":
+        # the REAL taskbar Start cell is clicked (xdotool on the private server): the dock spawns declaunch with its own edge and anchor (needs root's fbddaf8); the card must open at the Start
+        # corner, clear of the panel strip, on every edge
+        results = []
+        for t in ("openkylin", "openkylin-classic"):
+            for m in ("light", "dark"):
+                for sc in (1, 2):
+                    thick = round(48 * sc)
+                    for edge in ("bottom", "top", "left", "right"):
+                        name = f"start-click-{edge}-{t}-{m}-{int(sc * 100)}.png"
+                        def baseline(run, r, env, name=name):
+                            run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                        def click_start(run, r, env, before, edge=edge, sc=sc):
+                            win = next((w for w in run("xdotool", "search", "--name", "decebal-dock").split()), None); assert win, "no dock window"
+                            g = run("xdotool", "getwindowgeometry", win).replace("\n", " ")
+                            x, y = (int(v) for v in g.split("Position:")[1].split("(")[0].strip().split(",")); w, h = (int(v) for v in g.split("Geometry:")[1].strip().split("x"))
+                            # the Start cell is the first 48 px cell along the strip, which is left/top aligned
+                            cx, cy = (x + w // 2, y + round(24 * sc)) if edge in ("left", "right") else (x + round(24 * sc), y + h // 2)
+                            run("xdotool", "mousemove", str(cx), str(cy)); time.sleep(0.3); run("xdotool", "click", "1")
+                            opened = False
+                            for _ in range(80):
+                                time.sleep(0.1)
+                                if any(run("xdotool", "getwindowname", w2) == "UKUI Menu" for w2 in run("xdotool", "search", "--onlyvisible", "--name", "UKUI Menu").split()): opened = True; time.sleep(1.5); break
+                            return dict(click=(cx, cy), dock=(x, y, w, h), opened=opened, calls=(r / "calls.log").read_text().strip().splitlines())
+                        r = case(t, m, sc, "1920x1080", edge=None if edge == "bottom" else edge, shot=name, pre=baseline, post=click_start)
+                        got = r["post"]; assert got["opened"], f"{name}: clicking Start did not open the launcher ({got})"
+                        box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: no card"
+                        x0, y0, x1, y1 = box; slack = 12 * sc
+                        clear = {"bottom": y1 <= 1080 - thick + slack, "top": y0 >= thick - slack, "left": x0 >= thick - slack, "right": x1 <= 1920 - thick + slack}[edge]
+                        # opened from the Start corner: the card hugs the panel's start end (within its 8 px margin plus shadow), not the middle of the screen
+                        near = {"bottom": x0 <= 24 * sc, "top": x0 <= 24 * sc, "left": y0 <= 24 * sc + 8 * sc, "right": y0 <= 24 * sc + 8 * sc}[edge]
+                        assert clear and near, f"{name}: card {box} for a {edge} strip of {thick} (clear {clear}, near Start {near})"
+                        r["card_diff_bbox"] = dict(x0=x0, y0=y0, x1=x1, y1=y1, strip=thick, edge=edge); results.append(r); print(name, got["click"], r["card_diff_bbox"])
+        (OUT / "native-start-click.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
+        return
+    if MATRIX == "launcher-expand":
+        # the expand button (sidebar, top) turns the card into the full-screen menu; the restore button (top right) brings the start menu back; the typed search survives
+        results = []
+        for m, sc in (("light", 1), ("dark", 2), ("light", 1.25)):
+            thick = round(48 * sc); H = 1080
+            card_bottom = H - thick - 8 * sc; card_h = min(688 * sc, card_bottom); right = 8 * sc + 766 * sc; b = min(36 * sc, 56 * sc)
+            expand = (right - 28 * sc, card_bottom - card_h + 12 * sc + b / 2)
+            top = max(round(48 * ((H - thick) / sc) / 1080), 8) * sc
+            restore = (1920 - 40 * sc - 18 * sc, top + 18 * sc)
+            for what in ("expanded", "restored"):
+                name = f"startmenu-{what}-{m}-{int(sc * 100)}.png"
+                def baseline(run, r, env, name=name):
+                    run("import", "-window", "root", str(OUT / ("base-" + name))); return None
+                def act(run, r, env, before, what=what, expand=expand, restore=restore):
+                    run("xdotool", "mousemove", "300", "300"); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "te"); time.sleep(0.5)
+                    run("xdotool", "mousemove", str(int(expand[0])), str(int(expand[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
+                    if what == "restored":
+                        run("xdotool", "mousemove", str(int(restore[0])), str(int(restore[1]))); time.sleep(0.3); run("xdotool", "click", "1"); time.sleep(1.2)
+                    return dict(expand=expand, restore=restore)
+                r = case("openkylin", m, sc, "1920x1080", shot=name, pre=baseline, post=act, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
+                box = diff_bbox(OUT / ("base-" + name), OUT / name); assert box, f"{name}: nothing is shown"
+                x0, y0, x1, y1 = box; w, h = x1 - x0, y1 - y0
+                if what == "expanded":
+                    assert x0 <= 4 and x1 >= 1916 and y0 <= 4 and abs(y1 - (H - thick)) <= 6 * sc, f"{name}: the full-screen menu covers {box}, not the whole free area (strip {thick})"
+                else:
+                    assert w <= 766 * sc + 40 * sc and h <= 688 * sc + 40 * sc, f"{name}: restore did not bring the start menu back ({box})"
+                r["bbox"] = dict(x0=x0, y0=y0, x1=x1, y1=y1); results.append(r); print(name, r["bbox"])
+        (OUT / "native-launcher-expand.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
+        return
+    if MATRIX == "launcher-input":
+        # real input on the start menu (private Xvfb, xdotool): typing searches, every sidebar button runs its program (recorded stubs: nothing is launched), Escape closes
+        results = []
+        def buttons(sc):
+            thick = round(48 * sc); bottom = 1080 - thick - 8 * sc; h = min(688 * sc, bottom); right = 8 * sc + 766 * sc; b = min(36 * sc, 56 * sc, (h - 24 * sc - 12 * sc) / 4)
+            cx = right - 28 * sc; ys = [bottom - 12 * sc - b / 2 - i * (b + 4 * sc) for i in range(4)]
+            return {"power": (cx, ys[0]), "settings": (cx, ys[1]), "computer": (cx, ys[2]), "account": (cx, ys[3])}, (8 * sc + 160 * sc, bottom - h + 32 * sc)
+        want = {"account": "decsettings users", "computer": "peony computer:///", "settings": "decsettings", "power": "decsession"}
+        for m, sc in (("light", 1), ("dark", 2)):
+            for what in ("search", "account", "computer", "settings", "power", "escape"):
+                name = f"startmenu-input-{what}-{m}-{int(sc * 100)}.png"; thick = round(48 * sc)
+                def act(run, r, env, before, what=what, sc=sc):
+                    btn, search = buttons(sc); out = {}
+                    if what == "search":
+                        run("xdotool", "mousemove", str(int(search[0])), str(int(search[1]))); run("xdotool", "click", "1"); run("xdotool", "type", "--delay", "80", "fire"); time.sleep(0.8)
+                    elif what == "escape":
+                        run("xdotool", "key", "Escape")
+                        for _ in range(60):
+                            time.sleep(0.1)
+                            if not any(run("xdotool", "getwindowname", w) == "UKUI Menu" for w in run("xdotool", "search", "--onlyvisible", "--name", "UKUI Menu").split()): break
+                    else:
+                        x, y = btn[what]; run("xdotool", "mousemove", str(int(x)), str(int(y))); time.sleep(0.2); run("xdotool", "click", "1")
+                        for _ in range(60):   # the launcher spawns the program asynchronously; the recording stub appends one line
+                            time.sleep(0.1)
+                            if (r / "calls.log").read_text().strip(): break
+                    out["calls"] = (r / "calls.log").read_text().strip().splitlines()
+                    out["launcher_open"] = any(run("xdotool", "getwindowname", w) == "UKUI Menu" for w in run("xdotool", "search", "--onlyvisible", "--name", "UKUI Menu").split())
+                    return out
+                r = case("openkylin", m, sc, "1920x1080", shot=name, post=act, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"{round(24 * sc)},{1080 - thick // 2}", "--thickness", str(thick)])
+                got = r["post"]
+                if what in want:
+                    assert any(c == want[what] or c.startswith(want[what] + " ") and want[what].count(" ") == c.count(" ") for c in got["calls"]), f"{name}: {what} ran {got['calls']}, want {want[what]}"
+                    assert not got["launcher_open"], f"{name}: the launcher stays open after {what}"
+                elif what == "escape":
+                    assert not got["launcher_open"], f"{name}: Escape did not close the launcher"
+                else:
+                    assert got["launcher_open"] and not got["calls"], f"{name}: typing must search, not launch ({got})"
+                results.append(r); print(name, got)
+        (OUT / "native-launcher-input.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
         return
     if MATRIX == "widget":
         results = []
