@@ -792,7 +792,63 @@ def families(a, Settings, find_app, index, states, do_action, alerts, toast, che
         check("close limit: the lost change is logged as not written, the file untouched", "were not written within 30 s" in logs and s.config.read_text() == before)
         return s
 
-    for name, fn in [("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
+    # ---- a theme package: someone saves config.toml while an earlier file of the transaction is in fsync
+    def theme_external():
+        s = Tracked("theme-external", pane="appearance", extra_files={"decebal/dock-settings.json": "{\n  \"appSpacing\": 3\n}\n"})
+        files = [s.config, s.dir / "decebal" / "decebal.json", s.dir / "decebal" / "dock-settings.json"]
+        before = [f.read_text() for f in files]
+        wait(lambda: s.ctl("l:tcard:apply:macos"), "the macOS card", 10)
+        t, t0 = hold(3.0)
+        s.click("l:tcard:apply:macos")
+        time.sleep(0.5)  # the transaction's first file is now held in fsync
+        theirs = "# saved by hand during the theme change\n[general]\nborder_px = 9\n"
+        external_write(s.config, theirs)
+        app = find_app(s.p.pid)
+        got = wait(lambda: [m for m in alerts(app) if "Not applied" in m] or None, "theme refusal", 20)
+        check("theme external: the transaction is refused visibly", bool(got), got)
+        check("theme external: the hand-saved config.toml is kept byte for byte", s.config.read_text() == theirs)
+        check("theme external: every other file is back byte for byte", [f.read_text() for f in files[1:]] == before[1:], [f.read_text() for f in files[1:]])
+        check("theme external: the error says nothing was changed (all of ours undone)", any("nothing was changed" in m for m in got), got)
+        return s
+
+    # ---- the launcher style, held
+    def launcher():
+        s = Tracked("launcher", pane="launcher", extra_files={"decebal/decebal.json": _json.dumps({"theme": {"name": "nord"}, "launcher": {"style": "theme", "future": 1}}) + "\n"})
+        app = find_app(s.p.pid)
+        menu = node(app, "ctl:ln:style/menu")
+        shell = s.dir / "decebal" / "decebal.json"
+        t, t0 = hold(3.0)
+        tm = time.time()
+        r = Atspi.Selection.select_child(menu, 1)
+        lat["launcher_select_reply"] = round((time.time() - tm) * 1000, 1)
+        check("launcher: choosing a style answers while the disk is held", r is True and lat["launcher_select_reply"] < 1000 and held_for(t0, 3.0), [r, lat["launcher_select_reply"]])
+        check("launcher: nothing written while held", _json.loads(shell.read_text())["launcher"]["style"] == "theme")
+        wait(lambda: not gate.exists() and _json.loads(shell.read_text())["launcher"]["style"] != "theme", "launcher saved", 15)
+        got = _json.loads(shell.read_text())["launcher"]
+        check("launcher: the style is saved and the object's other keys kept", got.get("future") == 1, got)
+        return s
+
+    # ---- the editor: someone saves config.toml during a slow check-config
+    def editor_validation():
+        ctl = gate.parent / "slow-rdwmctl"
+        s = Tracked("editor-validation", pane="config", env_extra={"RDWMCTL": str(ctl)})
+        theirs = "# saved by hand during validation\n[general]\nborder_px = 9\n"
+        ctl.write_text(f"#!/bin/sh\nsleep 0.3\nprintf '%s' '{theirs}' > '{s.config}'\nexit 0\n")
+        ctl.chmod(0o755)
+        app = find_app(s.p.pid)
+        tabs = node(app, "ctl:cfg:tab")
+        rd = next(i for i in range(tabs.get_child_count()) if "Window manager" in (tabs.get_child_at_index(i).get_name() or ""))
+        Atspi.Selection.select_child(tabs, rd)
+        ed = wait(lambda: next((n for n in index(app).values() if n.get_role() == Atspi.Role.TEXT and "editable" in states(n) and "[general]" in Atspi.Text.get_text(n, 0, -1)), None), "the config.toml buffer", 10)
+        Atspi.EditableText.set_text_contents(ed, "[general]\nborder_px = 3\n")
+        ms, r = do_action(node(app, "ctl:cfg:save"), "click")
+        check("editor validation: Save answers while check-config runs", quick("editor_validation_reply", ms) and r is True, [ms, r])
+        got = wait(lambda: [m for m in alerts(app) if "changed on disk" in m] or None, "refusal", 15)
+        check("editor validation: a save made during validation is refused visibly", bool(got), got)
+        check("editor validation: the hand-saved file is kept", s.config.read_text() == theirs, s.config.read_text())
+        return s
+
+    for name, fn in [("theme-external", theme_external), ("launcher", launcher), ("editor-validation", editor_validation), ("json-merge", json_merge), ("json-same-key", json_same_key), ("toml-external", toml_external), ("theme-palette", theme_palette), ("editor", editor), ("preset", preset), ("restore", restore), ("session", session), ("notifications", notifications), ("wallhaven-key", wallhaven_key), ("close-limit", close_limit)]:
         scenario(name, fn)
 
 if __name__ == "__main__":

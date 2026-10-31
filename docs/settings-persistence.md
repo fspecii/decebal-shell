@@ -126,14 +126,43 @@ Left on their own threads by design: Wallhaven thumbnail cache (download worker;
 theme `wallpaper_follow` photo commits (its own process and lock), and the panel pane's new writes (root adapts them
 after merge, as agreed).
 
+## Transactions and late results (second review round)
+
+* **Theme packages**: every planned file carries the identity captured when planning started, before anything was
+  read; each commits with `io::write_if_unchanged`. A file saved by someone else while an earlier file of the
+  transaction sat in fsync (or during its own fsync) fails the transaction. Rollback puts back, newest first, only
+  files still exactly as our write left them, conditionally; anything else is left as they saved it, the recovery
+  record is kept and the error names what was restored, what was not and where the previous contents are.
+  "nothing was changed" only when every file is back.
+* **Config & Presets editor**: the identity the buffer was loaded from (or the one seen when the user chose to
+  overwrite) holds through the slow `check-config` to `fsx::save_with_backup_if`, a conditional commit; no backup is
+  left for a write that did not happen. `io::validate` uses one owned scratch file per check.
+* **Launcher pane** and `config::write_setting` (other programs) use the worker / the shared protocol.
+* **Newer intent wins**: a palette saved while another theme or palette was chosen is saved, not selected (a mode
+  change meanwhile stays and the palette goes on top of it); session and notifications saves carry generations, so a
+  failed older save never resets a newer pending change; a revert does not replace typing done while it was written.
+* **Completions never block**: they update the model or enqueue work. "Apply to all apps" requests (`request` reads
+  the file and writes a marker; `DECEBAL_SYSTEM_SYNC=1` applies inline) run as quiet tasks on the worker.
+
 ## Accessibility and visible state
 
 * An action's reply means *accepted* (validated and queued, shown pending), never *durable*. A synchronous refusal
   (invalid value, full queue) is still the action's error.
-* While a window job is pending the toast says "Saving…" and is `busy`; only the commit says "Saved"/"Theme: …".
-  A later failure is an alert on the page, the control shows the saved value again, newer accepted edits stay.
+* Notices follow the batch (idle to idle). While a window job is pending the toast says "Saving…" and is `busy`; a
+  completion's error is shown at once (an alert on the page, the control shows the saved value again, newer accepted
+  edits stay) and remains the batch's notice: later successes in the same batch do not hide it, and new submissions
+  do not cover it with "Saving…". A success is announced only when nothing the user asked for is pending. Quiet
+  housekeeping (offline caches, apply requests) counts for neither.
 * System pane actions (commands plus session file) report when they finish, as before ("Saved" or the error); the
   control shows the new state at once.
+
+## Native evidence, concurrent cases (candidate `ffd8b40`, binary `8d6e25f8…`, 2026-10-31)
+
+All 64 checks pass (`~/.cache/decebal-settings-io-evidence/full-candidate3/results.json`), the 54 below plus: a
+package applied while decebal.json is held in fsync and config.toml is saved by hand meanwhile (the log shows
+decebal.json and dock-settings.json committed, config.toml refused, both put back newest first; the hand-saved file
+kept; "nothing was changed"), the launcher style answering in 114 ms while held (other `launcher` keys kept), and a
+config.toml save during a slow `check-config` refused with the hand-saved file kept.
 
 ## Native evidence, every family (`settings_slow_disk.py`, candidate `379c618`+tests, 2026-10-31)
 
