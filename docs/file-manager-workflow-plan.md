@@ -47,7 +47,7 @@ Implementation checkpoint: `src/reveal.rs` and `decutil reveal -- PATH` now
 provide this operation; Spotlight preserves the item path and launches the
 detached utility. Private typed-service and real Nautilus selection tests cover
 the implemented scope; see [run instructions and limits](file-manager-profiles.md).
-The native browser in later phases remains unimplemented.
+A separate optional read-only browser foundation now exists under `extras/decfiles`; the full browser in later phases remains incomplete.
 
 Preserve the exact selected path in `Act::Reveal`. Add one reusable reveal
 operation under `launch` (or a focused module called by it), and route ordinary
@@ -126,21 +126,35 @@ Theme selection may choose presentation defaults, never rewrite user bookmarks,
 view/sort choices, default app, file contents or clipboard state. Explicit layout
 choices stay fixed across palette changes.
 
-## Optional native foundation — implementation assigned
+## Optional native foundation — verified read-only increment
 
-A new standalone `extras/decfiles` crate is assigned for the first read-only
-browser foundation. Cached GTK4 0.10.3 and GIO/GLib 0.21.5 bindings were found on
-2026-10-31; dependency availability must still be confirmed by its actual offline
-build. It must not add GTK dependencies to the shell or change the default
-directory handler. The assigned first gate is functional asynchronous directory
-loading, history/address navigation and both details and hierarchical-column
-layouts against private fixture directories.
+[`extras/decfiles`](../extras/decfiles/README.md) is an independent Cargo workspace
+with pinned GTK4 0.10.3 and GIO/GLib 0.21.5. Its offline dev build, ten tests,
+strict all-target Clippy and formatting pass. It adds no GTK dependency to the
+shell and changes no default directory handler.
 
-This assignment is not acceptance evidence. Native controls, correct operation
-outcomes and cancellation/stale-result tests are required before integrating it.
-Standard GTK controls help supply semantics; they do not by themselves prove
-screen-reader acceptance. File operations, tabs, search, clipboard, drag/drop,
-remote/mount integration and the remaining release gates below stay open.
+Actual private-Xvfb controls passed eight cases: details activation,
+back/forward/up, invalid and unreadable location recovery, physical symlink-parent
+resolution, hierarchical columns, ancestor-column sibling selection, and
+lossless non-UTF8 file selection without execution. The native result records
+seven Rust/Cargo source hashes and binary SHA
+`b5b9f954277d4904f2adec21a01dfabadf01a3e2e64359f5045deaa1092b99a8`:
+`/var/tmp/decfiles-native-evidence/result.json`. Parent verified these hashes and
+reviewed the details and column captures. The foundation is source-integrated,
+not installed or offered as a production file manager.
+
+The shared model publishes only complete successful directory snapshots.
+Enumeration is asynchronous and cancellable, 128 entries per batch and 8,192
+entries per folder. A bounded background resolver handles physical path identity
+before GIO construction; stale navigation results cannot replace the current
+request. The README records the physical-symlink policy and blocked-system-call
+limit.
+
+Standard GTK controls supply semantics but do not establish screen-reader
+acceptance. File operations, tabs, search, clipboard, drag/drop, remote/mount
+integration, palette/icons, familiar visual styling, actual Wayland and the
+remaining release gates below stay open. This increment proves navigation, not
+a complete Explorer/Finder replica or a premium finished appearance.
 
 ## Phase 3: operational acceptance and release boundary
 
