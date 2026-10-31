@@ -135,10 +135,33 @@ pub fn save_cache(apps: &[AppEntry]) {
     }
     let text: String =
         apps.iter().map(|a| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&a.name), esc(&a.exec), esc(&a.icon), esc(&a.path), u8::from(a.terminal), esc(&a.try_exec), esc(&a.file))).collect();
-    let tmp = path.with_extension("tmp");
-    if std::fs::write(&tmp, text).is_ok() {
-        let _ = std::fs::rename(&tmp, &path);
+    let _ = publish_cache(&path, text.as_bytes());
+}
+
+// Each refresh owns its staging file: Launchpad and Spotlight can refresh together.
+// Readers see a whole old or new cache, never a file another writer is truncating.
+fn publish_cache(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let mut pending = None;
+    for _ in 0..32 {
+        let tmp = path.with_extension(format!("{}.{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => {
+                pending = Some((tmp, file));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
     }
+    let (tmp, mut file) = pending.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::AlreadyExists, "app cache staging files occupied"))?;
+    let result = file.write_all(bytes).and_then(|()| std::fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
 
 /// Indices of `apps` matching `query` (case-insensitive): name prefixes first, then other substrings.
@@ -166,6 +189,38 @@ mod tests {
 
     fn app(name: &str) -> AppEntry {
         AppEntry { name: name.into(), exec: "x".into(), ..Default::default() }
+    }
+
+    #[test]
+    fn concurrent_cache_refreshes_publish_complete_snapshots() {
+        use std::sync::{Arc, Barrier};
+        let dir = std::env::temp_dir().join(format!("decebal-app-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("apps.tsv");
+        let first = vec![b'0'; 262144];
+        publish_cache(&path, &first).unwrap();
+        let barrier = Arc::new(Barrier::new(9));
+        std::thread::scope(|scope| {
+            for i in 0..8u8 {
+                let barrier = barrier.clone();
+                let path = &path;
+                scope.spawn(move || {
+                    let bytes = vec![b'1' + i; 262144];
+                    barrier.wait();
+                    for _ in 0..16 {
+                        publish_cache(path, &bytes).unwrap();
+                    }
+                });
+            }
+            barrier.wait();
+            for _ in 0..128 {
+                let bytes = std::fs::read(&path).unwrap();
+                assert_eq!(bytes.len(), 262144);
+                assert!(bytes.iter().all(|b| *b == bytes[0]));
+            }
+        });
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
