@@ -29,6 +29,8 @@ bash tests/e2e/theme.sh      # needs Xvfb and an rdwm build (RDWM_BIN_DIR); set 
 
 Several unit tests draw text and expect Inter, DejaVu and a CJK font to be installed (CI installs `fonts-inter`, `fonts-dejavu-core`, `fonts-noto-cjk`).
 
+The app-menu and exported-menu tests start their own private `dbus-daemon`, so that program must be installed (the Debian package is `dbus`); they need no running session bus, display or compositor. The Agents applet tests expect the applet only where a Nerd Font is installed, and the live-wallpaper preview test is skipped when `ffmpeg` is missing, so the suite passes with or without them.
+
 Keep the daemons light: `notify.sh` fails if `decnotify` idles above 10 MB RSS. Themes are data only (no code in
 packages); see docs/theme-engine.md before changing the format, and bump `format` for incompatible changes.
 
