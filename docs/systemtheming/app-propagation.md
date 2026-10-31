@@ -8,7 +8,7 @@ For an isolated process or non-app desktop test, `DECEBAL_SYSTEM_AUTOMATIC=0` su
 
 | Target | Configuration | Running applications |
 | --- | --- | --- |
-| GTK 3 | Generated theme `$XDG_DATA_HOME/themes/Decebal[-Alt]/gtk-3.0/gtk.css` (imports GTK's own Adwaita, then recolours controls and states), selected by `settings.ini` and gsettings `gtk-theme`; named colours in a managed block of `gtk-3.0/gtk.css` | New processes get everything. Running apps reload the theme when `gtk-theme` changes and the session delivers that change (Wayland settings portal / gsettings, or an XSETTINGS daemon on X11) |
+| GTK 3 | Generated theme `$XDG_DATA_HOME/themes/Decebal[-Alt]/gtk-3.0/gtk.css` (imports GTK's own Adwaita, then recolours controls and states), selected by `settings.ini` and gsettings `gtk-theme`; managed `gtk-3.0/gtk.css` contains no palette definitions while the generated theme is selected | New processes get everything. Running apps reload the theme when `gtk-theme` changes and the session delivers that change (Wayland settings portal / gsettings, or an XSETTINGS daemon on X11) |
 | GTK 4 (plain) | Generated theme `.../gtk-4.0/gtk.css` (imports GTK's Default sheet), same selection | As GTK 3 |
 | libadwaita / Files | Managed `gtk-4.0/gtk.css`: libadwaita's named colours, `:root` variables, `--dim-opacity`, backdrop fade, Files profile | Existing apps follow light/dark; a new process reads the full palette. Existing processes cannot be forced to reload user CSS through a supported external API |
 | st / st-256color | Scoped OSC colour updates and a guarded managed Bash/Zsh startup hook | Same UID and DISPLAY only; ANSI, foreground, background and cursor update without signals or restarting. New Bash/Zsh st windows load the generated palette. Other shell startup systems need their own integration |
@@ -138,7 +138,7 @@ The manager is `decthemectl system xsettings serve --display D --ini PATH`, so t
     needs reopening there. Dark/light follows `color-scheme`.
   - Wayland GTK apps use the settings portal, not this manager.
 
-**Native gates (UNRUN):**
+**Acceptance commands (individual evidence below; ownership runtime checks remain outstanding):**
 
 ```sh
 # 1. unit: protocol layout, serials, ownership classification, grab-wrapped claim order and ungrab on every error
@@ -267,7 +267,7 @@ proves the themes' `:backdrop` styles, not rdwm.
 * Only `live` counts as a live change. `--strict-live KITS` fails unless those kits reach it.
 * A reopened process is checked separately. That proves new processes get B, never that running ones changed.
 * This fixture states its expectation up front, and `results.json` records it next to each outcome:
-  - GTK 3 / GTK 4: `stale`, because no XSETTINGS daemon delivers the new theme name.
+  - GTK 3 / GTK 4: live changes require an XSETTINGS provider; the product may start its own after apply (see the apply report).
   - libadwaita and Files: dark/light at most, because user CSS is read only at startup.
 * Proving live GTK 3 / GTK 4 reloads needs a session that delivers `gtk-theme` changes: the Wayland settings portal or an
   XSETTINGS daemon.
@@ -324,7 +324,7 @@ processes. Evidence: `/var/tmp/decebal-gtk-hidpi-live-control-v2/result.json` an
 
 **Live palette updates did not pass:** all eight running-app comparisons remained
 stale (four toolkits, theme change and dark/light change). Their identities stayed
-valid. This fixture has no XSETTINGS service; implementing the native X11
+valid. That historical fixture had no XSETTINGS service; implementing the native X11
 notification bridge is the next product task. Libadwaita user-CSS reload remains
 an independent limitation. The 348 successful fixture checks must not be cited as
 eight successful live updates.
@@ -362,3 +362,9 @@ job runner. Set `QT_PROBE`, `QT6CT_ROOT` (an unpacked package root), and
 This covers newly opened Qt widgets through qt6ct, not GTK's platform plugin,
 KDE/KColorScheme applications, DTK, live updates, physical displays or the release
 artifact. The runtime still requires an available and selected Qt platform theme.
+
+### X11 live palette correction: candidate acceptance
+
+Candidate `05d9b14` passed 93 focused system/appearance tests, formatting, strict all-target Clippy and a dev CLI build (`/var/tmp/decebal-xsettings-gtk3-correction-gate/result.json`). Its immutable dev artifact then passed 228/228 private-Xvfb checks. Both GTK3 and GTK4 changed in the same open process/window for Nord dark → Windows11 dark and Nord dark → Nord light: four live, zero stale/invalid. Reopened processes were checked separately. No fixture rescue/leftovers or I/O-pressure abort occurred. Evidence: `/var/tmp/decebal-xsettings-gtk3-corrected-live-control/result.json` and `/var/tmp/decebal-xsettings-gtk3-corrected-live-pixels/results.json`. The GTK3 after-live light capture was visually reviewed. This run used the root pixel harness before the additional theme-notify probe logging was integrated; it proves rendered colour changes, not those extra event records.
+
+This is candidate dev evidence, not final main/release or hardware acceptance. Main additionally installs the settings-file watch before the initial read, closing a startup replacement gap. Combined-source validation and native ownership checks remain required. libadwaita/Files live custom palettes, Wayland and physical display acceptance remain open.
