@@ -27,9 +27,9 @@ pub mod sound;
 
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row};
+use crate::settings::persist;
 use confirm::Confirm;
 use run::{Cmd, RealRunner, Runner};
-use crate::settings::persist;
 use session::Session;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
@@ -199,9 +199,14 @@ fn save_session_as(persist: &persist::Handle, dir: &std::path::Path, latest: &Mu
         let (snap, d) = (guard.clone(), dir.to_path_buf());
         let writes = vec![Session::json_path(dir), Session::sh_path(dir)];
         persist
-            .run_then("session-save", writes, move || snap.save(&d).map(|()| serde_json::Value::Null), move |r| {
-                let _ = tx.send(r);
-            })
+            .run_then(
+                "session-save",
+                writes,
+                move || snap.save(&d).map(|()| serde_json::Value::Null),
+                move |r| {
+                    let _ = tx.send(r);
+                },
+            )
             .map_err(|e| format!("{e:?}"))?;
     }
     rx.recv().map_err(|_| "Settings closed before this was saved".to_string())?.map(|_| ())

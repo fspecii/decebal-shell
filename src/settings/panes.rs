@@ -1352,13 +1352,18 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
         }
         ["a", "restore"] => {
             let (path, ctl) = (m.store.path.clone(), m.store.rdwmctl.clone());
-            m.run_task("config-restore", vec![path.clone()], move || super::io::restore_backup(&path, &ctl).map(|_| Value::Null), |m, r| match r {
-                Ok(_) => {
-                    m.say("Original configuration restored", false);
-                    m.reload_rdwm();
-                }
-                Err(e) => m.say(format!("Not restored: {e}"), true),
-            });
+            m.run_task(
+                "config-restore",
+                vec![path.clone()],
+                move || super::io::restore_backup(&path, &ctl).map(|_| Value::Null),
+                |m, r| match r {
+                    Ok(_) => {
+                        m.say("Original configuration restored", false);
+                        m.reload_rdwm();
+                    }
+                    Err(e) => m.say(format!("Not restored: {e}"), true),
+                },
+            );
         }
         ["hc", key] => apply_hot_corner(m, key, v),
         ["a", "restart-dock"] => {

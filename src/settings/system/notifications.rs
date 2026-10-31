@@ -175,18 +175,23 @@ pub fn apply(h: &mut Hub, act: &str, arg: &str, val: CtlVal) {
         }
         // Saved in order on the persistence worker; shown at once, taken back if the write fails.
         let (snap, dir, sh) = (n.clone(), h.sh.dir.clone(), h.sh.clone());
-        h.notif_gen += 1;
-        let gen = h.notif_gen;
+        let gen = h.notif_gen + 1;
         let persist = h.sh.persist.lock().unwrap().clone();
         let finished = h.notif_done.clone();
         persist
-            .run_then("notifications-save", vec![dir.join(FILE)], move || snap.save(&dir).map(|()| serde_json::Value::Null), move |r| {
-                finished.fetch_max(gen, std::sync::atomic::Ordering::SeqCst);
-                if let Err(e) = r {
-                    sh.push(super::Done { msg: Some((format!("Notifications not saved: {e}"), true)), notif_failed: Some(gen), ..super::Done::default() });
-                }
-            })
+            .run_then(
+                "notifications-save",
+                vec![dir.join(FILE)],
+                move || snap.save(&dir).map(|()| serde_json::Value::Null),
+                move |r| {
+                    finished.fetch_max(gen, std::sync::atomic::Ordering::SeqCst);
+                    if let Err(e) = r {
+                        sh.push(super::Done { msg: Some((format!("Notifications not saved: {e}"), true)), notif_failed: Some(gen), ..super::Done::default() });
+                    }
+                },
+            )
             .map_err(|e| format!("Not saved: {e:?}"))?;
+        h.notif_gen = gen;
         h.notif = n;
         h.dirty = true;
         // Check only on the explicit enable action, never while building/painting rows.
@@ -252,6 +257,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         let fr = Arc::new(FakeRunner::lenient().have("notify-send").have("canberra-gtk-play"));
         (Hub::with(fr.clone(), d.clone(), Arc::new(|| {})), d, fr)
+    }
+
+    #[test]
+    fn a_refused_save_does_not_leave_a_pending_generation() {
+        use crate::settings::persist::Persister;
+        use std::sync::Mutex;
+        let (mut h, d, _) = hub("refused-generation");
+        let mut p = Persister::spawn(Arc::new(Mutex::new(Default::default())), Arc::new(|| {}));
+        *h.sh.persist.lock().unwrap() = p.handle();
+        assert!(p.close(std::time::Duration::from_secs(5)));
+        let before = h.notif_gen;
+        apply(&mut h, "dnd", "", CtlVal::Bool(true));
+        assert_eq!(h.notif_gen, before, "no accepted work means no pending generation");
+        assert!(!h.notif.dnd, "the refused value is not shown as saved");
+        assert!(h.msgs.iter().any(|(m, bad)| *bad && m.contains("Not saved")));
+        let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]

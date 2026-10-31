@@ -19,8 +19,8 @@ use crate::preset::parts::{self, Part, PartSet};
 use crate::preset::store::{self, CaptureOpts, Env, Plan, Preset, Status};
 use crate::preset::validate::{self, Diag, FileKind};
 use crate::window_app::{Key, KeyEvent, Response};
-use std::collections::{HashMap, VecDeque};
 use serde_json::json;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -1100,10 +1100,7 @@ fn saved_tab(m: &mut Model, tab: Tab, sent: &str, r: Result<serde_json::Value, S
         return m.say("Not saved: the file changed on disk. Reload it, or save again to overwrite it.", true);
     }
     if let Some(diags) = v["diags"].as_array() {
-        b.errors = diags
-            .iter()
-            .map(|d| Diag { line: d[0].as_u64().map(|n| n as usize), col: d[1].as_u64().map(|n| n as usize), msg: d[2].as_str().unwrap_or_default().to_string() })
-            .collect();
+        b.errors = diags.iter().map(|d| Diag { line: d[0].as_u64().map(|n| n as usize), col: d[1].as_u64().map(|n| n as usize), msg: d[2].as_str().unwrap_or_default().to_string() }).collect();
         b.note = None;
         let first = validate::describe(&b.errors[0]);
         // jump to the first marked line
@@ -1343,10 +1340,15 @@ fn export_file(m: &mut Model) {
         return m.say("That is not a file", true);
     }
     let shown = path.display().to_string();
-    m.run_task("preset-export", Vec::new(), move || store::export_to(&p, &path).map(|n| json!(n)), move |m, r| match r {
-        Ok(n) => m.say(format!("Exported {shown} ({})", human_size(n.as_u64().unwrap_or(0) as usize)), false),
-        Err(e) => m.say(format!("Not exported: {e}"), true),
-    });
+    m.run_task(
+        "preset-export",
+        Vec::new(),
+        move || store::export_to(&p, &path).map(|n| json!(n)),
+        move |m, r| match r {
+            Ok(n) => m.say(format!("Exported {shown} ({})", human_size(n.as_u64().unwrap_or(0) as usize)), false),
+            Err(e) => m.say(format!("Not exported: {e}"), true),
+        },
+    );
 }
 
 fn copy_preset(m: &mut Model) {
@@ -1470,14 +1472,19 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
                     Some(p) => {
                         let env = m.cfg.env.clone();
                         let writes = preset_files(m);
-                        m.run_task("preset-undo", writes, move || store::apply(&env, &p, false).map(|r| applied_value(&r)), |m, r| match r {
-                            Ok(v) => {
-                                m.cfg.last_applied = None;
-                                preset_applied(m, &v);
-                                m.say("Put everything back", false);
-                            }
-                            Err(e) => m.say(format!("Not undone: {e}"), true),
-                        });
+                        m.run_task(
+                            "preset-undo",
+                            writes,
+                            move || store::apply(&env, &p, false).map(|r| applied_value(&r)),
+                            |m, r| match r {
+                                Ok(v) => {
+                                    m.cfg.last_applied = None;
+                                    preset_applied(m, &v);
+                                    m.say("Put everything back", false);
+                                }
+                                Err(e) => m.say(format!("Not undone: {e}"), true),
+                            },
+                        );
                     }
                     None => m.say("The restore point is gone", true),
                 }
@@ -1486,14 +1493,19 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
         "dup" => {
             if let Some(p) = m.cfg.selected_preset() {
                 let env = m.cfg.env.clone();
-                m.run_task("preset-duplicate", Vec::new(), move || store::duplicate(&env, &p.id, None).map(|n| json!([n.id, n.manifest.name])), |m, r| match r {
-                    Ok(v) => {
-                        m.cfg.forget_listing();
-                        m.cfg.selected = v[0].as_str().map(String::from);
-                        m.say(format!("Created \"{}\"", v[1].as_str().unwrap_or_default()), false);
-                    }
-                    Err(e) => m.say(e, true),
-                });
+                m.run_task(
+                    "preset-duplicate",
+                    Vec::new(),
+                    move || store::duplicate(&env, &p.id, None).map(|n| json!([n.id, n.manifest.name])),
+                    |m, r| match r {
+                        Ok(v) => {
+                            m.cfg.forget_listing();
+                            m.cfg.selected = v[0].as_str().map(String::from);
+                            m.say(format!("Created \"{}\"", v[1].as_str().unwrap_or_default()), false);
+                        }
+                        Err(e) => m.say(e, true),
+                    },
+                );
             }
         }
         "rename-text" => m.cfg.rename_text = s,
@@ -1501,29 +1513,39 @@ pub fn apply(m: &mut Model, id: &str, v: CtlVal) {
             let name = m.cfg.rename_text.clone();
             if let Some(p) = m.cfg.selected_preset() {
                 let env = m.cfg.env.clone();
-                m.run_task("preset-rename", Vec::new(), move || store::rename(&env, &p.id, &name).map(|n| json!(n.id)), |m, r| match r {
-                    Ok(id) => {
-                        m.cfg.forget_listing();
-                        m.cfg.selected = id.as_str().map(String::from);
-                        m.cfg.rename_text.clear();
-                        m.say("Renamed", false);
-                    }
-                    Err(e) => m.say(e, true),
-                });
+                m.run_task(
+                    "preset-rename",
+                    Vec::new(),
+                    move || store::rename(&env, &p.id, &name).map(|n| json!(n.id)),
+                    |m, r| match r {
+                        Ok(id) => {
+                            m.cfg.forget_listing();
+                            m.cfg.selected = id.as_str().map(String::from);
+                            m.cfg.rename_text.clear();
+                            m.say("Renamed", false);
+                        }
+                        Err(e) => m.say(e, true),
+                    },
+                );
             }
         }
         "delete" => {
             if let Some(p) = m.cfg.selected_preset() {
                 let env = m.cfg.env.clone();
                 let name = p.manifest.name.clone();
-                m.run_task("preset-delete", Vec::new(), move || store::delete(&env, &p.id).map(|()| serde_json::Value::Null), move |m, r| match r {
-                    Ok(_) => {
-                        m.cfg.forget_listing();
-                        m.cfg.selected = None;
-                        m.say(format!("Deleted \"{name}\""), false);
-                    }
-                    Err(e) => m.say(e, true),
-                });
+                m.run_task(
+                    "preset-delete",
+                    Vec::new(),
+                    move || store::delete(&env, &p.id).map(|()| serde_json::Value::Null),
+                    move |m, r| match r {
+                        Ok(_) => {
+                            m.cfg.forget_listing();
+                            m.cfg.selected = None;
+                            m.say(format!("Deleted \"{name}\""), false);
+                        }
+                        Err(e) => m.say(e, true),
+                    },
+                );
             }
         }
         "export-path" => m.cfg.export_path = s,
@@ -1937,7 +1959,7 @@ mod tests {
         editor_key(&mut m, &key(Key::End, None, false));
         type_text(&mut m, " ");
         apply(&mut m, "cfg:save", CtlVal::Click); // a backup to revert to
-        // navigation without typing: a selection from line 1 col 2 to line 2 col 1
+                                                  // navigation without typing: a selection from line 1 col 2 to line 2 col 1
         buf_mut(&mut m).ed.set_cursor(Pos::new(1, 2), false);
         buf_mut(&mut m).ed.set_cursor(Pos::new(2, 1), true);
         let (open, calls) = held_worker(&mut m);

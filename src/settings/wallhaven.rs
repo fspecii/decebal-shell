@@ -1139,23 +1139,33 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             let Some(key) = store::Secret::new(&s) else { return m.say(store::BAD_KEY, true) };
             // The key moves into the job as a Secret (redacted Debug); neither its result nor the log carries it.
             let (dirs, k) = (m.wh.dirs.clone(), key.clone());
-            m.run_task("wallhaven-key", Vec::new(), move || store::save_secret(&dirs, &k).map(|()| serde_json::Value::Null), move |m, r| match r {
-                Ok(_) => {
-                    m.wh.key = Some(key);
-                    rebuild_client(m);
-                    m.say("API key saved", false);
-                    m.wh.start_search();
-                }
-                Err(e) => m.say(format!("API key not saved: {e}"), true),
-            });
+            m.run_task(
+                "wallhaven-key",
+                Vec::new(),
+                move || store::save_secret(&dirs, &k).map(|()| serde_json::Value::Null),
+                move |m, r| match r {
+                    Ok(_) => {
+                        m.wh.key = Some(key);
+                        rebuild_client(m);
+                        m.say("API key saved", false);
+                        m.wh.start_search();
+                    }
+                    Err(e) => m.say(format!("API key not saved: {e}"), true),
+                },
+            );
             return;
         }
         (["wh", "keyrm"], _) => {
             let dirs = m.wh.dirs.clone();
-            m.run_task("wallhaven-key-remove", Vec::new(), move || {
-                store::remove_key(&dirs);
-                Ok(serde_json::Value::Null)
-            }, |_, _| {});
+            m.run_task(
+                "wallhaven-key-remove",
+                Vec::new(),
+                move || {
+                    store::remove_key(&dirs);
+                    Ok(serde_json::Value::Null)
+                },
+                |_, _| {},
+            );
             m.wh.key = None;
             m.wh.prefs.allow_mature = false;
             rebuild_client(m);
@@ -1194,15 +1204,20 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 let on = store::toggle_favourite(&mut m.wh.favs, &w);
                 // A snapshot of the whole list per change, in order: the newest list is the one left on disk.
                 let (dirs, list) = (m.wh.dirs.clone(), m.wh.favs.clone());
-                m.run_task("wallhaven-favourites", Vec::new(), move || store::save_favourites(&dirs, &list).map(|()| serde_json::Value::Null), move |m, r| match r {
-                    Ok(_) => m.say(if on { "Added to favourites" } else { "Removed from favourites" }, false),
-                    Err(e) => {
-                        if !m.saving() {
-                            m.wh.favs = store::load_favourites(&m.wh.dirs);
+                m.run_task(
+                    "wallhaven-favourites",
+                    Vec::new(),
+                    move || store::save_favourites(&dirs, &list).map(|()| serde_json::Value::Null),
+                    move |m, r| match r {
+                        Ok(_) => m.say(if on { "Added to favourites" } else { "Removed from favourites" }, false),
+                        Err(e) => {
+                            if !m.saving() {
+                                m.wh.favs = store::load_favourites(&m.wh.dirs);
+                            }
+                            m.say(format!("Favourites not saved: {e}"), true);
                         }
-                        m.say(format!("Favourites not saved: {e}"), true);
-                    }
-                });
+                    },
+                );
             }
             return;
         }
@@ -1220,11 +1235,16 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
     if changed_filters {
         // a snapshot per change, in order: the newest filters are the ones left on disk
         let (dirs, prefs) = (m.wh.dirs.clone(), m.wh.prefs.clone());
-        m.run_task("wallhaven-prefs", Vec::new(), move || store::save_prefs(&dirs, &prefs).map(|()| serde_json::Value::Null), |m, r| {
-            if let Err(e) = r {
-                m.say(format!("Filters not saved: {e}"), true);
-            }
-        });
+        m.run_task(
+            "wallhaven-prefs",
+            Vec::new(),
+            move || store::save_prefs(&dirs, &prefs).map(|()| serde_json::Value::Null),
+            |m, r| {
+                if let Err(e) = r {
+                    m.say(format!("Filters not saved: {e}"), true);
+                }
+            },
+        );
         if m.wh.view == View::Browse {
             m.wh.res.loading = false;
             m.wh.schedule_search(delay);

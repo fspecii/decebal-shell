@@ -316,7 +316,10 @@ pub struct Done {
 pub enum Submitted {
     Queued(u64),
     /// Replaced the queued set of the same JSON key `replaced`; its result is this ticket's.
-    Merged { seq: u64, replaced: u64 },
+    Merged {
+        seq: u64,
+        replaced: u64,
+    },
 }
 
 impl Submitted {
@@ -346,7 +349,13 @@ pub struct Handle {
 
 impl Handle {
     /// Queues `run` behind every job submitted before; `then` gets the result on the worker thread.
-    pub fn run_then(&self, label: &'static str, writes: Vec<PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static, then: impl FnOnce(Result<Value, String>) + Send + 'static) -> Result<(), Refused> {
+    pub fn run_then(
+        &self,
+        label: &'static str,
+        writes: Vec<PathBuf>,
+        run: impl FnOnce() -> Result<Value, String> + Send + 'static,
+        then: impl FnOnce(Result<Value, String>) + Send + 'static,
+    ) -> Result<(), Refused> {
         let Some(shared) = &self.shared else {
             then(run());
             return Ok(());
@@ -584,9 +593,16 @@ struct Shared {
 }
 
 enum Mode {
-    Thread { shared: Arc<Shared>, handle: Option<std::thread::JoinHandle<()>> },
+    Thread {
+        shared: Arc<Shared>,
+        handle: Option<std::thread::JoinHandle<()>>,
+    },
     /// Headless tests and tools: each job runs on the caller's thread as it is submitted.
-    Inline { runner: Runner, next: u64, done: Vec<Done> },
+    Inline {
+        runner: Runner,
+        next: u64,
+        done: Vec<Done>,
+    },
 }
 
 /// The window's handle on the persistence worker.
@@ -1198,13 +1214,8 @@ mod tests {
     fn the_shown_selection_follows_the_planner_exactly() {
         let (d, src, paths) = crate::theme::engine::apply::tests::sandbox("planned-selection");
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
-        let custom = Selection {
-            name: "nord".into(),
-            palette: Some("catppuccin".into()),
-            accent: crate::theme::model::Rgb::parse("#ff9f0a"),
-            mode: crate::theme::model::Mode::Light,
-            ..Selection::default()
-        };
+        let custom =
+            Selection { name: "nord".into(), palette: Some("catppuccin".into()), accent: crate::theme::model::Rgb::parse("#ff9f0a"), mode: crate::theme::model::Mode::Light, ..Selection::default() };
         std::fs::write(paths.shell_json(), serde_json::json!({"theme": custom.to_json()}).to_string()).unwrap();
         let mut names: Vec<String> = src.list().into_iter().filter(|e| e.error.is_none()).map(|e| e.id).collect();
         names.extend(["Nord".into(), "dracula-light".into(), "windows11-dark".into()]);
@@ -1885,7 +1896,15 @@ mod model_tests {
     fn results_for_unknown_or_old_tickets_change_nothing() {
         let (mut m, cfg) = model_with("[general]\nborder_px = 2\n");
         let before = m.store.cfg.text();
-        m.on_persisted(Done { seq: 999_999, path: cfg.clone(), key: None, style: None, outcome: Outcome::Json(Err(Failure { conflict: false, message: "late".into() })), took: Duration::ZERO, detached: false });
+        m.on_persisted(Done {
+            seq: 999_999,
+            path: cfg.clone(),
+            key: None,
+            style: None,
+            outcome: Outcome::Json(Err(Failure { conflict: false, message: "late".into() })),
+            took: Duration::ZERO,
+            detached: false,
+        });
         assert_eq!(m.store.cfg.text(), before);
         assert!(m.notice.is_none());
     }

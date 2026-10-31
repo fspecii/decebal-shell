@@ -179,31 +179,46 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                     let new = free_id(&src, &format!("{id}-copy"));
                     let (s2, id2, n2) = (src.clone(), id.to_string(), new.clone());
                     let dir = src.themes_dir.join(&new).display().to_string();
-                    m.run_task("theme-duplicate", Vec::new(), move || store::duplicate(&s2, &id2, &n2, None).map(|_| serde_json::Value::Null), move |m, r| match r {
-                        Ok(_) => m.say(format!("Created {new}; edit it in {dir}"), false),
-                        Err(e) => m.say(format!("Not duplicated: {e}"), true),
-                    });
+                    m.run_task(
+                        "theme-duplicate",
+                        Vec::new(),
+                        move || store::duplicate(&s2, &id2, &n2, None).map(|_| serde_json::Value::Null),
+                        move |m, r| match r {
+                            Ok(_) => m.say(format!("Created {new}; edit it in {dir}"), false),
+                            Err(e) => m.say(format!("Not duplicated: {e}"), true),
+                        },
+                    );
                 }
                 "export" => {
                     let out = downloads().join(format!("{id}.dtheme"));
                     let (s2, id2, o2) = (src.clone(), id.to_string(), out.clone());
-                    m.run_task("theme-export", Vec::new(), move || store::export(&s2, &id2, &o2).map(|_| serde_json::Value::Null), move |m, r| match r {
-                        Ok(_) => m.say(format!("Exported to {}", out.display()), false),
-                        Err(e) => m.say(format!("Not exported: {e}"), true),
-                    });
+                    m.run_task(
+                        "theme-export",
+                        Vec::new(),
+                        move || store::export(&s2, &id2, &o2).map(|_| serde_json::Value::Null),
+                        move |m, r| match r {
+                            Ok(_) => m.say(format!("Exported to {}", out.display()), false),
+                            Err(e) => m.say(format!("Not exported: {e}"), true),
+                        },
+                    );
                 }
                 "delete" => {
                     let armed = CONFIRM.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(id);
                     if armed {
                         set_confirm(None);
                         let (s2, id2) = (src.clone(), id.to_string());
-                        m.run_task("theme-delete", Vec::new(), move || store::uninstall(&s2, &id2).map(|p| serde_json::json!(p.display().to_string())), |m, r| match r {
-                            Ok(p) => {
-                                m.say(format!("Removed {}", p.as_str().unwrap_or_default()), false);
-                                m.dirty = true;
-                            }
-                            Err(e) => m.say(format!("Not removed: {e}"), true),
-                        });
+                        m.run_task(
+                            "theme-delete",
+                            Vec::new(),
+                            move || store::uninstall(&s2, &id2).map(|p| serde_json::json!(p.display().to_string())),
+                            |m, r| match r {
+                                Ok(p) => {
+                                    m.say(format!("Removed {}", p.as_str().unwrap_or_default()), false);
+                                    m.dirty = true;
+                                }
+                                Err(e) => m.say(format!("Not removed: {e}"), true),
+                            },
+                        );
                     } else {
                         set_confirm(Some(id));
                         m.say("Click Delete again to remove this theme", false);
@@ -231,7 +246,14 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             m.run_task("theme-snapshot", Vec::new(), run, move |m, r| match r {
                 Ok(v) => {
                     let notes = v[1].as_u64().unwrap_or(0);
-                    m.say(format!("Created theme {id} in {}{}", v[0].as_str().unwrap_or_default(), if notes == 0 { String::new() } else { format!(" ({notes} note{})", if notes == 1 { "" } else { "s" }) }), false);
+                    m.say(
+                        format!(
+                            "Created theme {id} in {}{}",
+                            v[0].as_str().unwrap_or_default(),
+                            if notes == 0 { String::new() } else { format!(" ({notes} note{})", if notes == 1 { "" } else { "s" }) }
+                        ),
+                        false,
+                    );
                     m.dirty = true;
                 }
                 Err(e) => m.say(format!("Not created: {e}"), true),

@@ -37,10 +37,25 @@ pub type ShellChange = Arc<dyn Fn(&mut Value) + Send + Sync>;
 /// An accepted change the persistence worker has not finished, keyed by its ticket in [`Model::pending`].
 pub enum Pending {
     Toml(TomlPatch),
-    Json { file: &'static str, key: String, value: Option<Value>, said: Option<String>, then: Option<AfterSave> },
-    Theme { selection: Value, done: ThemeDone },
+    Json {
+        file: &'static str,
+        key: String,
+        value: Option<Value>,
+        said: Option<String>,
+        then: Option<AfterSave>,
+    },
+    Theme {
+        selection: Value,
+        done: ThemeDone,
+    },
     /// A pane's owner transaction; `files` it writes are re-read when it finished.
-    Task { label: &'static str, files: bool, quiet: bool, done: TaskDone, shell: Option<ShellChange> },
+    Task {
+        label: &'static str,
+        files: bool,
+        quiet: bool,
+        done: TaskDone,
+        shell: Option<ShellChange>,
+    },
 }
 
 impl std::fmt::Debug for Pending {
@@ -473,7 +488,13 @@ impl Model {
     /// Runs a pane's owner transaction on the persistence worker, after every change accepted before it. `writes`:
     /// the Settings files it may change (re-read afterwards, on top of what is still pending). `done` gets the result
     /// on the UI thread and shows it. False when the queue refused it (the notice says why; nothing ran).
-    pub fn run_task(&mut self, label: &'static str, writes: Vec<std::path::PathBuf>, run: impl FnOnce() -> Result<Value, String> + Send + 'static, done: impl FnOnce(&mut Model, Result<Value, String>) + 'static) -> bool {
+    pub fn run_task(
+        &mut self,
+        label: &'static str,
+        writes: Vec<std::path::PathBuf>,
+        run: impl FnOnce() -> Result<Value, String> + Send + 'static,
+        done: impl FnOnce(&mut Model, Result<Value, String>) + 'static,
+    ) -> bool {
         self.task(label, writes, false, Box::new(run), Box::new(done))
     }
 

@@ -257,7 +257,13 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     }
     let mut notes: Vec<String> = Vec::new();
     // Identities first: every later read of these files is covered by the commit-time check.
-    let planned: std::collections::HashMap<PathBuf, io::Stamp> = [paths.shell_json(), paths.dock_settings(), paths.rdwm_config.clone()].into_iter().map(|p| { let s = io::stamp(&p); (p, s) }).collect();
+    let planned: std::collections::HashMap<PathBuf, io::Stamp> = [paths.shell_json(), paths.dock_settings(), paths.rdwm_config.clone()]
+        .into_iter()
+        .map(|p| {
+            let s = io::stamp(&p);
+            (p, s)
+        })
+        .collect();
     let def = src.load_def(&id)?;
     let extra = def.extra.clone();
 
@@ -763,7 +769,12 @@ pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, S
             rdwm_touched = true;
         }
         let expect = io::stamp(&path);
-        let w = Write { path, old: f["existed"].as_bool().unwrap_or(false).then(|| std::fs::read_to_string(rec.join(f["bak"].as_str().unwrap_or_default())).unwrap_or_default()), new: String::new(), expect };
+        let w = Write {
+            path,
+            old: f["existed"].as_bool().unwrap_or(false).then(|| std::fs::read_to_string(rec.join(f["bak"].as_str().unwrap_or_default())).unwrap_or_default()),
+            new: String::new(),
+            expect,
+        };
         restore_theme(&w, paths)?;
     }
     let theme = meta["theme"].as_str().unwrap_or("").to_string();
