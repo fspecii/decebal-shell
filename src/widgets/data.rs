@@ -150,10 +150,10 @@ pub const SOURCES: &[Source] = src! {
     "mem.used" "bytes" "RAM in use";
     "mem.total" "bytes" "installed RAM";
     "swap.usage" "fraction" "swap in use 0..1";
-    "disk.usage" "fraction" "root filesystem in use 0..1";
-    "disk.used" "bytes" "root filesystem used";
-    "disk.total" "bytes" "root filesystem size";
-    "disk.free" "bytes" "root filesystem free";
+    "disk.usage" "fraction" "disk in use 0..1 (the root filesystem; on an immutable system the one holding your home)";
+    "disk.used" "bytes" "disk used";
+    "disk.total" "bytes" "disk size";
+    "disk.free" "bytes" "disk free";
     "net.rx" "rate" "bytes/s received";
     "net.tx" "rate" "bytes/s sent";
     "net.rx_history" "series" "last 60 seconds of net.rx";
