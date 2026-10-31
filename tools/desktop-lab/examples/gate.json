@@ -1,0 +1,18 @@
+{
+  "name": "example-gate",
+  "source_root": ".",
+  "source_paths": ["docs/desktop-lab.md"],
+  "build": {
+    "argv": ["/usr/bin/true"],
+    "features": []
+  },
+  "tests": [
+    {
+      "name": "true",
+      "backend": "none",
+      "session_bus": false,
+      "timeout_s": 5,
+      "command": ["/usr/bin/true"]
+    }
+  ]
+}

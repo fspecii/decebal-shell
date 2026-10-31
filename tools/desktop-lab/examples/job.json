@@ -1,0 +1,7 @@
+{
+  "name": "example-true",
+  "backend": "none",
+  "session_bus": false,
+  "timeout_s": 5,
+  "command": ["/usr/bin/true"]
+}

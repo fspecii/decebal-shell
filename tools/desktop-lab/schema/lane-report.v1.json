@@ -1,0 +1,24 @@
+{
+  "schema": "decebal.sprint.lane-report.v1",
+  "lane": "debug",
+  "full_acceptance": false,
+  "required": ["schema", "lane", "deadline_utc", "full_acceptance", "coordination"],
+  "notes": [
+    "full_acceptance is always false in this lane",
+    "a JSON field named passed is not acceptance",
+    "process RSS/CPU/FD/thread samples are not hardware acceptance",
+    "the vm lane owns tests/vm; this lane starts no VM",
+    "ceilings: max 2 VMs, 2 vCPU, 1 GiB, and max 1 Xvfb here",
+    "a private XDG_RUNTIME_DIR alone is not isolation",
+    "build slots use flock --close or a CLOEXEC lock held by the parent until the contained tree is verified dead",
+    "lock opens use O_NOFOLLOW and require a private regular file with nlink 1 before flock or write",
+    "job and build commands run in a probed pid namespace; a marker scan is not complete cleanup",
+    "SIGKILL and exit 137 are an unknown cause unless coordinator provenance is present",
+    "private Xvfb uses an explicit display >= 700 and proves the filesystem socket and the abstract socket before input",
+    "both listening X socket inodes must be fds of the spawned server before input",
+    "bare -displayfd is unused; foreign X sockets and locks are not unlinked",
+    "an unverified drain does not release the build slot; a missing, truncated, or malformed drain is unverified, and an unknown namespace-init start keeps the lock; each contained track is pre-registered pending before spawn on an invocation-unique drain path and must be proven on its own; namespace_empty true from an earlier run is not that proof",
+    "coordinator SIGKILL cascades through parent-death while a guardian holds the lock until every contained track has its own invocation-bound verified drain or its own complete known-start init death; a completed build init does not cover a later command",
+    "full_acceptance stays false when another JSON file says passed"
+  ]
+}
