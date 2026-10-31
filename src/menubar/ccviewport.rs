@@ -55,10 +55,14 @@ impl Viewport {
     #[allow(clippy::too_many_arguments)]
     pub fn draw(&mut self, pm: &mut Pixmap, origin: (f32, f32), width: f32, height: f32, items: &[Item], hover: Option<Target>, style: Style, fonts: &mut Fonts, symbols: &mut SymbolCache) {
         let (width, height) = (width.ceil().max(1.0) as u32, height.ceil().max(1.0) as u32);
-        if self.buffer.as_ref().is_none_or(|buffer| buffer.width() != width || buffer.height() != height) || self.style != Some(style) {
+        // the buffer is in surface pixels (the panel is laid out and scrolled in logical ones): at a display scale the
+        // controls are drawn at that scale into it and blitted 1:1, not drawn small and stretched
+        let k = crate::gfx::render_scale();
+        let (bw, bh) = (((width as f32) * k).ceil().max(1.0) as u32, ((height as f32) * k).ceil().max(1.0) as u32);
+        if self.buffer.as_ref().is_none_or(|buffer| buffer.width() != bw || buffer.height() != bh) || self.style != Some(style) {
             self.style = Some(style);
-            self.buffer = Pixmap::new(width, height);
-            self.mask = Mask::new(width, height).and_then(|mut mask| {
+            self.buffer = Pixmap::new(bw, bh);
+            self.mask = Mask::new(bw, bh).and_then(|mut mask| {
                 let path = crate::gfx::rounded_rect(0.0, 0.0, width as f32, height as f32, controlcenter::look(style).0)?;
                 mask.fill_path(&path, tiny_skia::FillRule::Winding, true, crate::gfx::transform());
                 Some(mask)
@@ -110,6 +114,29 @@ mod tests {
         assert_eq!(view.focus, Some(Target::Settings));
         assert!(view.scroll > 0.0);
         assert!(view.point(20.0, 20.0, (0.0, 40.0), 600.0, 600.0).is_none());
+    }
+
+    #[test]
+    fn a_clipped_panel_at_a_display_scale_is_the_same_panel_twice_as_large() {
+        // one tile at (16, 16) 250 x 64 in a 300 x 120 viewport: at 2x it covers (32, 32) 500 x 128 surface pixels, not
+        // a magnified corner of it
+        let items = [Item { r: R { x: 16.0, y: 16.0, w: 250.0, h: 64.0 }, draw: controlcenter::Draw::Tile, target: Some(Target::DarkMode) }];
+        let Some(mut fonts) = Fonts::load() else { return };
+        let mut symbols = SymbolCache::default();
+        // colours at logical points inside the tile near its right end, just right of it, and in the panel below it
+        let sample = |k: f32, fonts: &mut Fonts, symbols: &mut SymbolCache| {
+            let mut pm = Pixmap::new((300.0 * k) as u32, (120.0 * k) as u32).unwrap();
+            let mut view = Viewport::default();
+            crate::gfx::with_render_scale(k, || view.draw(&mut pm, (0.0, 0.0), 300.0, 120.0, &items, None, Style::Gnome, fonts, symbols));
+            [(250.0, 48.0), (285.0, 48.0), (150.0, 104.0)].map(|(x, y): (f32, f32)| {
+                let p = pm.pixel((x * k) as u32, (y * k) as u32).unwrap();
+                (p.red(), p.green(), p.blue(), p.alpha())
+            })
+        };
+        let one = sample(1.0, &mut fonts, &mut symbols);
+        let two = sample(2.0, &mut fonts, &mut symbols);
+        assert_ne!(one[0], one[1], "the tile differs from the panel around it");
+        assert_eq!(one, two, "the same panel at both scales (inside the tile's corners and the panel's)");
     }
 
     #[test]
