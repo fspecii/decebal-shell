@@ -195,6 +195,9 @@ pub fn probe_workspace() -> Option<Reading> {
 /// Long-running: shows the card whenever rdwm changes the workspace. Blocks; reconnects when rdwm restarts.
 pub fn watch_workspaces() {
     use std::io::{BufRead, BufReader, Write};
+    // The session watcher is independent of the short-lived card. Keep this
+    // guard across reconnects, and leave an existing watcher running unchanged.
+    let Some(_watch_guard) = crate::single::hold("dechud-watch") else { return };
     let mut last: Option<usize> = None;
     loop {
         let conn = std::os::unix::net::UnixStream::connect(crate::menubar::rdwm::socket_path());
