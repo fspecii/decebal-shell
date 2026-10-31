@@ -59,8 +59,9 @@ pub fn run(file: &Path, roots: &Roots, args: &[String]) -> Result<String, String
                 }
                 cfg.theme = id;
             }
-            cfg.write(file)?;
-            crate::desktop_assets::policy::mark_user(file, crate::desktop_assets::Provides::Icons)?;
+            let choice = if cfg.is_auto() { crate::desktop_assets::policy::Choice::Auto } else { crate::desktop_assets::policy::Choice::Name(cfg.theme.clone()) };
+            // One commit: a background theme completion must never observe the new choice with the old ownership.
+            crate::desktop_assets::policy::choose_in_file(file, crate::desktop_assets::Provides::Icons, &choice)?;
             // only once the choice and its ownership record are on disk
             Ok(format!("icon theme: {}\n{}", if cfg.is_auto() { "auto".to_string() } else { cfg.theme.clone() }, publish_selection(file)))
         }
@@ -207,6 +208,39 @@ mod tests {
         go(&t, &f, &["set", "auto"]).unwrap();
         go(&t, &f, &["reset"]).unwrap();
         assert_eq!(was_published(&f), 3);
+    }
+
+    #[test]
+    fn manual_choice_and_ownership_are_published_in_one_commit_preserving_other_icon_keys() {
+        let (t, f) = setup();
+        let initial = json!({"icons": {"theme": "Adwaita", "size_scale": 0.9, "future": {"keep": 7}}, "asset_packs": {"generation": 5}, "foreign": true});
+        std::fs::write(&f, initial.to_string()).unwrap();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let snapshots = seen.clone();
+        let watched = f.clone();
+        struct ResetHook;
+        impl Drop for ResetHook {
+            fn drop(&mut self) {
+                crate::settings::io::fault::set_after_commit_hook(None);
+            }
+        }
+        let _reset = ResetHook;
+        crate::settings::io::fault::set_after_commit_hook(Some(std::sync::Arc::new(move |path| {
+            if path == watched {
+                snapshots.lock().unwrap().push(serde_json::from_slice(&std::fs::read(path)?)?);
+            }
+            Ok(())
+        })));
+        go(&t, &f, &["set", "Tela"]).unwrap();
+        let docs = seen.lock().unwrap();
+        assert_eq!(docs.len(), 1, "no intermediate choice with stale automatic ownership");
+        let doc = &docs[0];
+        assert_eq!(doc["icons"]["theme"], "Tela");
+        assert_eq!(doc["icons"]["size_scale"], 0.9);
+        assert_eq!(doc["icons"]["future"], initial["icons"]["future"]);
+        assert_eq!(doc["foreign"], true);
+        assert!(crate::desktop_assets::policy::state(doc, crate::desktop_assets::Provides::Icons).is_custom());
+        assert_eq!(crate::desktop_assets::policy::generation(doc), 6);
     }
 
     #[test]

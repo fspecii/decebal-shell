@@ -432,7 +432,7 @@ pub struct Report {
     pub unchanged: usize,
     pub notes: Vec<String>,
     pub warnings: Vec<String>,
-    /// What the GTK publication decided for the X11 XSETTINGS manager (`None`: no GTK publication ran).
+    /// Observed XSETTINGS post-publication decision (`None`: the publication returned before that decision).
     pub xsettings: Option<gtk::XsettingsAction>,
 }
 
