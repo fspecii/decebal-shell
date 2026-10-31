@@ -441,13 +441,13 @@ mod tests {
         let l = r.app.dock.layout(w as f32);
         let c = l.cells[0];
         let (x, y) = (c.x + c.w / 2.0, h as f32 - 20.0);
-        r.app.pointer_button(x, y, Button::Left);
+        assert!(r.app.pointer_button(x, y, Button::Left), "leaving keyboard mode requests a repaint to erase its ring");
         assert!(r.app.kb.is_none() && !r.app.wants_keyboard() && !r.app.wants_pointer_grab(), "the press ends the mode and its grabs");
         r.app.pointer_release(x, y, Button::Left);
         assert_eq!(r.log.lock().unwrap().activated, [7], "the click itself works");
         // a press elsewhere (a click outside while the pointer is grabbed) also ends it
         r.focus();
-        r.app.pointer_button(1.0, 1.0, Button::Left);
+        assert!(r.app.pointer_button(1.0, 1.0, Button::Left), "an outside press also repaints the settled dock");
         assert!(r.app.kb.is_none());
         // a menu opened by the keyboard is closed by a press outside, like a pointer menu
         r.focus();

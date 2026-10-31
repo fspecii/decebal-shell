@@ -761,16 +761,16 @@ impl App for DockApp {
             return self.win_button(x, y, button);
         }
         // the pointer ends keyboard mode
-        self.kb = None;
+        let left_keyboard = self.kb.take().is_some();
         let (w, h) = self.surface;
         let along = self.along(x, y);
         let placed = self.menu.as_ref().map(|m| self.mac_menu(&m.menu));
         if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if button == Button::Left && m.menu.press(&d, x, y) {
-                return false;
+                return left_keyboard;
             }
             if d.contains(x, y) {
-                return false; // other buttons on the menu do nothing
+                return left_keyboard; // other buttons on the menu do nothing
             }
             // A click anywhere else dismisses the menu; a right click on another icon opens its menu.
             self.close_menu();
@@ -782,7 +782,7 @@ impl App for DockApp {
             return true;
         }
         let hit = self.dock.hit_test(w as f32, h as f32, x, y);
-        match (button, hit) {
+        let changed = match (button, hit) {
             (Button::Left, Some(i)) => {
                 self.press = Some(Press { index: i, x: along });
                 false
@@ -807,7 +807,8 @@ impl App for DockApp {
                 false
             }
             _ => false,
-        }
+        };
+        left_keyboard || changed
     }
 
     fn pointer_release(&mut self, x: f32, y: f32, button: Button) -> bool {
