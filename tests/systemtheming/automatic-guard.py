@@ -10,7 +10,7 @@ if not binary:
     raise SystemExit('Set DECTHEMECTL to the built binary')
 with tempfile.TemporaryDirectory(prefix='decebal-automatic-guard-') as scratch:
     root=pathlib.Path(scratch)
-    for d in ['home','config/decebal','state','runtime','bin','outside']:(root/d).mkdir(parents=True,exist_ok=True)
+    for d in ['home','config/decebal','state','runtime','bin','outside','data','cache','datadirs','catalogs']:(root/d).mkdir(parents=True,exist_ok=True)
     os.chmod(root/'runtime',0o700)
     log=root/'outside/retints.log'
     fake=root/'bin/gsettings'
@@ -25,13 +25,13 @@ get) printf "'default'\\n" ;;
 esac
 ''')
     fake.chmod(0o755)
-    env=os.environ.copy()
-    env.update(HOME=str(root/'home'),XDG_CONFIG_HOME=str(root/'config'),XDG_STATE_HOME=str(root/'state'),XDG_RUNTIME_DIR=str(root/'runtime'),DECEBAL_CONFIG=str(root/'config/decebal'),RDWMCTL='/bin/false',GSETTINGS_BACKEND='memory',DBUS_SESSION_BUS_ADDRESS='unix:path='+str(root/'outside/session-bus'),PROBE_EXTERNAL_LOG=str(log),PATH=str(root/'bin')+os.pathsep+env['PATH'],DECEBAL_SYSTEM_AUTOMATIC='0')
+    env={k:v for k,v in os.environ.items() if k in ('PATH','LANG','LC_ALL')}
+    env.update(HOME=str(root/'home'),XDG_CONFIG_HOME=str(root/'config'),XDG_STATE_HOME=str(root/'state'),XDG_DATA_HOME=str(root/'data'),XDG_CACHE_HOME=str(root/'cache'),XDG_DATA_DIRS=str(root/'datadirs'),DECEBAL_ASSET_ROOT=str(root/'data/icons'),DECEBAL_ASSET_CATALOGS=str(root/'catalogs'),DECEBAL_ASSET_STATE=str(root/'state/assets'),XDG_RUNTIME_DIR=str(root/'runtime'),DECEBAL_CONFIG=str(root/'config/decebal'),RDWMCTL='/bin/false',GSETTINGS_BACKEND='memory',DBUS_SESSION_BUS_ADDRESS='unix:path='+str(root/'outside/session-bus'),PROBE_EXTERNAL_LOG=str(log),PATH=str(root/'bin')+os.pathsep+env['PATH'],DECEBAL_SYSTEM_AUTOMATIC='0')
     env.pop('RDWM_SOCK',None)
     # Only GTK is selected; other helpers can never run even if the guard fails.
-    config={'system':{'targets':{k:False for k in ['omarchy','browser','editors','hooks','qt','kvantum','x11','terminals']}}}
+    config={'asset_packs':{'downloads':'ask'},'system':{'targets':{k:False for k in ['omarchy','browser','editors','hooks','qt','kvantum','x11','terminals']}}}
     (root/'config/decebal/decebal.json').write_text(json.dumps(config))
-    def run(*args):return subprocess.check_output([binary,*args],env=env,text=True)
+    def run(*args):return subprocess.check_output([binary,*args],env=env,text=True,timeout=30)
     for sync in ['0','1']:
         env['DECEBAL_SYSTEM_SYNC']=sync
         run('apply','nord','--mode','dark','--no-rdwm')
