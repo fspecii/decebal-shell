@@ -269,6 +269,9 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
     }
     conn.map_window(win).map_err(err)?;
     conn.flush().map_err(err)?;
+    // Glass for a translucent window over a compositor: tag it so a scoped blur rule (`contrib/picom/decebal-glass.conf`) frosts what is behind it, and shape the
+    // window to the painted material so the transparent rest of a full-output surface is not blurred. The input region stays the whole window (click-outside keeps working).
+    let mut glass_shape: Option<Vec<(i16, i16, u16, u16)>> = None;
 
     loop {
         if dirty {
@@ -279,6 +282,19 @@ pub fn run<A: WindowApp + 'static>(mut app: A) -> Result<(), Error> {
             app.draw(&mut pm);
             present(&conn, win, gc, &pm, depth, argb.is_some(), max_bytes)?;
             a11y.after_draw(&mut app);
+            if argb.is_some() && crate::theme::th().blur > 0.0 {
+                let rects = super::x11::visible_rects(&pm);
+                let key: Vec<_> = rects.iter().map(|r| (r.x, r.y, r.width, r.height)).collect();
+                if glass_shape.as_ref() != Some(&key) {
+                    if glass_shape.is_none() {
+                        let _ = super::x11::set_glass_hint(&conn, win, true);
+                    }
+                    conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, win, 0, 0, &rects).map_err(err)?;
+                    conn.shape_rectangles(shape::SO::SET, shape::SK::INPUT, ClipOrdering::UNSORTED, win, 0, 0, &[Rectangle { x: 0, y: 0, width: size.0 as u16, height: size.1 as u16 }]).map_err(err)?;
+                    conn.flush().map_err(err)?;
+                    glass_shape = Some(key);
+                }
+            }
             // Unpainted areas (a resize in flight, a window being dragged) show the window background:
             // follow the app's own backdrop instead of black.
             if let Some(px) = backdrop(&pm).filter(|_| argb.is_none()) {

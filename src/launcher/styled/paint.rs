@@ -70,6 +70,8 @@ impl Painter<'_> {
     pub fn shadow(&mut self, r: Rect, radius: f32, strength: f32) {
         if self.alpha && strength > 0.0 {
             crate::gfx::soft_shadow(self.pm, r.x, r.y, r.w, r.h, radius, self.u(18.0), 0.28 * strength);
+            // the shadow stands outside the card: a translucent card must not be darkened by it (the compositor shows the backdrop through the card)
+            crate::gfx::clear_rounded(self.pm, r.x, r.y, r.w, r.h, radius);
         }
     }
 

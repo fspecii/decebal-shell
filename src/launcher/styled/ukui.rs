@@ -181,6 +181,15 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     vec![list, fav, Zone::fixed("tabs", tabs), Zone::fixed("actions", actions)]
 }
 
+/// The window material (`DtThemeBackground` default: the window colour at the style's transparency). Over a compositor that blurs (the shell asks for it when the theme's `blur` is on)
+/// the alpha is the theme's `transparencyBlur` (`panel_alpha`: 65 %, HeYin 75 %); with blur off it is `transparencyNoBlur` (90 % in every UKUI global theme); a surface without an
+/// alpha channel is opaque. Text, icons and controls are drawn on top at full opacity, so content stays readable whatever the backdrop.
+pub const NO_BLUR_ALPHA: f32 = 0.90;
+
+fn material(p: &Painter, th: &crate::theme::Theme) -> tiny_skia::Color {
+    p.base(th.overlay, if th.blur > 0.0 { th.panel_alpha } else { NO_BLUR_ALPHA })
+}
+
 pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let th = crate::theme::th();
     let s = p.s;
@@ -194,10 +203,10 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let e = expanded.then(|| expanded_frame(r, s));
     if expanded {
         // the full-screen menu is flat against the screen edges: no radius, no shadow
-        p.fill(r, 0.0, p.base(th.popup, th.popup_alpha.max(0.78)));
+        p.fill(r, 0.0, material(p, &th));
     } else {
         p.shadow(r, radius, 1.0);
-        p.fill(r, radius, p.base(th.popup, th.popup_alpha.max(0.78)));
+        p.fill(r, radius, material(p, &th));
         // `backgroundMask`: a 1 px border of `textActive` at alpha 0.15 (none in full-screen mode)
         p.stroke(r, radius, th.ink(0.15), 1.0);
         // the 1 px dividers between the three columns (`kDivider`)

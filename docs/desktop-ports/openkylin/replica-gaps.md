@@ -60,6 +60,8 @@ pinned git blob, see each `ATTRIBUTION.md`; provenance of the Moka part of the i
 | greeter, lock screen, IDM, task-view overview | not replicated | scope |
 | tests | six unrelated lib tests fail in the shared private environment (`settings::navigation` socket path length, `settings::wallhaven::store` equal XDG dirs, `settings::themepane` palette count, `dock_app` focus walk, `settings::schema` vs the host `rdwmctl`); five pass serially with a short private HOME, `settings::schema::snapshot_matches_installed_rdwmctl_if_any` fails against the installed `rdwmctl` (host state, unchanged) | preserved |
 
+See also [toolkit-contract.md](toolkit-contract.md): materials, Qt vs GTK, decoration states, icons (routed items marked).
+
 ## 4. Extensions that are disclosed, not source-matched
 
 * Island panel on the top, left and right edges (UKUI islands are bottom-only).

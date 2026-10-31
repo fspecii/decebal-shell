@@ -99,7 +99,7 @@ def wait(fn, label, n=150):
     raise AssertionError(label)
 
 
-def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=None, extra=None, pre=None, post=None):
+def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=None, extra=None, pre=None, post=None, blur=True):
     with tempfile.TemporaryDirectory(prefix="okn-") as td:
         r = pathlib.Path(td)
         for d in ("home", "cfg", "cache", "state", "run", "data"): (r / d).mkdir(mode=0o700)
@@ -136,7 +136,7 @@ def case(theme, mode, scale, geom, edge=None, wallpaper=None, shot=None, widget=
                 # picom reads the root pixmap property, which xsetroot -solid does not set; the flat image is a test fixture only
                 flat = r / "backdrop.png"; Image.new("RGB", (64, 64), BACKDROP[mode]).save(flat); set_root(env["DISPLAY"], flat)
             (r / "picom.conf").write_text('backend = "xrender"; use-damage = false; vsync = false;\nblur: { method = "gaussian"; size = 12; deviation = 5; };\n'
-                                         'rules = ( { blur-background = false; }, { match = "_DECEBAL_BLUR@ = 1"; blur-background = true; } );\n')
+                                         + ('rules = ( { blur-background = false; }, { match = "_DECEBAL_BLUR@ = 1"; blur-background = true; } );\n' if blur else 'rules = ( { blur-background = false; } );\n'))
             procs.append(subprocess.Popen(["picom", "--config", str(r / "picom.conf")], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)); time.sleep(0.8)
             for b in (("decdock", "decbar") + (("decwidgets",) if widget else ())):
                 # DECEBAL_SCALE (every process, `apply` included) sizes the taskbar; the bar also follows DECEBAL_FONT_SCALE.
@@ -343,6 +343,37 @@ def main():
                     assert w <= 766 * sc + 40 * sc and h <= 688 * sc + 40 * sc, f"{name}: restore did not bring the start menu back ({box})"
                 r["bbox"] = dict(x0=x0, y0=y0, x1=x1, y1=y1); results.append(r); print(name, r["bbox"])
         (OUT / "native-launcher-expand.json").write_text(json.dumps(dict(binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
+        return
+    if MATRIX == "material":
+        # The composited material of the start menu over a HIGH-CONTRAST SYNTHETIC backdrop (4 px black / 4 px white columns): not a UKUI screenshot and not original-application
+        # proof, a measurement of what this implementation composites. With compositor blur the empty card area must be window colour x panel_alpha + the backdrop mean, and smooth
+        # (the stripes blurred away); without blur the stripes show through at (1 - alpha); in both cases the text stays opaque ink.
+        results = []
+        wall = OUT / "stripes.png"
+        row = b"".join(b"\xff\xff\xff" if (x // 4) % 2 else b"\x00\x00\x00" for x in range(1920)); Image.frombytes("RGB", (1920, 1080), row * 1080).save(wall)   # 4 px black / 4 px white columns, exactly the screen size
+        import statistics
+        for t in ("openkylin", "openkylin-heyin", "openkylin-classic"):
+            for m in ("light", "dark"):
+                th = tomllib.loads((ROOT / "themes" / t / "theme.toml").read_text()); a = th["metrics"]["panel_alpha"]; win = th["colors"][m]["background"]; ink = th["colors"][m]["text"]
+                win = tuple(int(win[1 + 2 * i:3 + 2 * i], 16) for i in range(3)); ink = tuple(int(ink[1 + 2 * i:3 + 2 * i], 16) for i in range(3))
+                for blur in (True, False):
+                    sc = 1; thick = 48; name = f"material-{t}-{m}-{'blur' if blur else 'noblur'}.png"
+                    r = case(t, m, sc, "1920x1080", shot=name, wallpaper=wall, blur=blur, extra=["declaunch", "open", "--edge", "bottom", "--anchor", f"24,{1080 - thick // 2}", "--thickness", str(thick)])
+                    im = Image.open(OUT / name).convert("RGB"); card_x, card_y = 8, 1080 - thick - 8 - 688
+                    def patch(x0, y0, w=80, h=80): return [im.getpixel((card_x + x0 + i, card_y + y0 + j)) for i in range(w) for j in range(h)]
+                    px = patch(520, 420)   # the empty widget page below the favourites
+                    chan = lambda c: [p[c] for p in px]
+                    mean = [statistics.fmean(chan(c)) for c in range(3)]; sd = max(statistics.pstdev(chan(c)) for c in range(3))
+                    want = [a * win[c] + (1 - a) * 127.5 for c in range(3)]
+                    dev = max(abs(mean[c] - want[c]) for c in range(3))
+                    rows = patch(60, 160, 200, 40)   # the first app row: text pixels must reach the ink colour, whatever is behind the translucent card
+                    core = min(rows, key=lambda p: sum(abs(p[c] - ink[c]) for c in range(3))); ink_dev = max(abs(core[c] - ink[c]) for c in range(3))
+                    ok_blur = dev <= 8 and sd <= 14 if blur else dev <= 8 and sd >= 25
+                    r["material"] = dict(panel_alpha=a, window=win, expected_mean=[round(v, 1) for v in want], mean=[round(v, 1) for v in mean], max_mean_dev=round(dev, 1), stripe_stddev=round(sd, 1), blur=blur, text_core_pixel=core, ink=ink, text_ink_dev=ink_dev, backdrop="synthetic 4 px black/white columns")
+                    assert ok_blur, f"{name}: material {r['material']}"
+                    assert ink_dev <= 24, f"{name}: the text is not opaque ink ({core} vs {ink})"
+                    results.append(r); print(name, r["material"])
+        (OUT / "native-material.json").write_text(json.dumps(dict(note="synthetic stripe backdrop; measures this implementation's composited material, not an original UKUI application", binaries={b: sha(BIN / b) for b in ("decthemectl", "decdock", "decbar", "declaunch")}, results=results), indent=1))
         return
     if MATRIX == "launcher-input":
         # real input on the start menu (private Xvfb, xdotool): typing searches, every sidebar button runs its program (recorded stubs: nothing is launched), Escape closes

@@ -63,7 +63,7 @@ dock_roundness = {0.0 if p['mode'] == 'classic' else 0.4}
 dock_alpha = {p['blur_alpha']}
 bar_alpha = {p['blur_alpha']}
 popup_alpha = {popup_alpha}
-panel_alpha = 0.9
+panel_alpha = {p['blur_alpha']}
 blur = 0.6
 shadow = {1.0 if r else 0.5}
 outline = {0.25 if p['mode'] == 'islands' else 0.1}
@@ -170,7 +170,8 @@ composited over the role's own backdrop (`window-active`). Rules, in the order t
 | `titlebar_inactive` | `window-inactive` | as is |
 | `surface` | `base-active` | content/base area |
 | `sidebar` | light `kgray-3`; dark `kcontain-secondary-normal` over window | |
-| `popup`, `overlay` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `popup` | `kmenu` over window | v11 menus are 78 % (light) / 82 % (dark) translucent: `popup_alpha` 0.82; the other three themes' menus are opaque |
+| `overlay` | `window-active` | the start menu and the sidebar are windows: the window colour, drawn at `panel_alpha` = `transparencyBlur` of `theme.conf` (65 %, HeYin 75 %) when the compositor blurs, `transparencyNoBlur` 90 % otherwise (a constant of the UKUI styles) |
 | `border` | `kdivider` over window | |
 | `text`, `bar_text` | `kfont-primary` over window | |
 | `text_secondary` | `kfont-secondary` over window | nudged towards `text` only as far as needed to reach 4.5:1 |

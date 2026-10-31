@@ -74,6 +74,19 @@ class Packages(unittest.TestCase):
             if docs:
                 for k in self.theme(i)["bar"]["applets"]: self.assertIn(f"`{k}`", docs)
 
+    def test_window_material_is_the_window_colour_at_the_global_themes_blur_transparency(self):
+        # ukui-globaltheme (gitee, 5274c41) theme.conf: transparencyBlur 65 (HeYin 75), transparencyNoBlur 90; the start menu / sidebar are windows: window colour, not the menu colour
+        want = {"openkylin": 0.65, "openkylin-islands": 0.65, "openkylin-light-seeking": 0.65, "openkylin-heyin": 0.75, "openkylin-classic": 0.65}
+        for i, a in want.items():
+            t = self.theme(i)
+            self.assertEqual((t["metrics"]["panel_alpha"], t["metrics"]["dock_alpha"], t["metrics"]["bar_alpha"]), (a, a, a), i)
+            for mode in ("light", "dark"):
+                self.assertEqual(t["colors"][mode]["overlay"], t["colors"][mode]["background"], f"{i} {mode}: overlay = window-active")
+                self.assertEqual(t["colors"][mode]["titlebar"], t["colors"][mode]["background"], f"{i} {mode}: the active title bar is the window colour")
+                # window-inactive equals window-active in the source tables of Light-Seeking and HeYin (both modes): their inactive state is not a colour change
+                same = t["colors"][mode]["titlebar_inactive"] == t["colors"][mode]["titlebar"]
+                self.assertEqual(same, i in ("openkylin-light-seeking", "openkylin-heyin"), f"{i} {mode}")
+
     def test_panel_modes_follow_upstream(self):
         for i in ("openkylin", "openkylin-light-seeking", "openkylin-heyin", "openkylin-classic"):
             t = self.theme(i)

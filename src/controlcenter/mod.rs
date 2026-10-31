@@ -541,7 +541,7 @@ pub fn draw(pm: &mut Pixmap, view: &View, fonts: &mut Fonts, symbols: &mut Symbo
     let ((ox, oy), items, height, hover) = (view.origin, view.items, view.height, view.hover);
     let (panel_r, tile_r, fluent) = look(view.style);
     let dux = view.style == Style::Dux;
-    fill_rounded(pm, ox, oy, panel_width(view.style), height, panel_r, crate::theme::th().overlay.color(crate::theme::th().panel_alpha * if dux { 1.0 } else { 0.9 }));
+    fill_rounded(pm, ox, oy, panel_width(view.style), height, panel_r, crate::theme::th().overlay.color(ukui::panel_alpha(&crate::theme::th(), view.style).unwrap_or(crate::theme::th().panel_alpha * if dux { 1.0 } else { 0.9 })));
     if !dux || crate::theme::th().outline > 0.0 {
         stroke_rounded(pm, ox + 0.5, oy + 0.5, panel_width(view.style) - 1.0, height - 1.0, (panel_r - 0.5).max(0.0), crate::theme::th().outline_c(), 1.0);
     }

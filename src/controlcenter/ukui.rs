@@ -19,6 +19,15 @@ const COLUMN_GAP: f32 = 12.0;
 const ROW_GAP: f32 = 16.0;
 const BAR: (f32, f32) = (356.0, 56.0);
 
+/// The panel's alpha for the UKUI style: the sidebar is an ordinary window, the window colour at `transparencyBlur` (`panel_alpha`) when the compositor blurs, `transparencyNoBlur`
+/// otherwise (see `launcher::styled::ukui::material`); `None` for the other styles.
+/// `transparencyNoBlur` of every UKUI global theme (the same number as the launcher's).
+const NO_BLUR_ALPHA: f32 = 0.90;
+
+pub(super) fn panel_alpha(th: &crate::theme::Theme, style: Style) -> Option<f32> {
+    (style == Style::Ukui).then(|| if th.blur > 0.0 { th.panel_alpha } else { NO_BLUR_ALPHA })
+}
+
 /// One icon shortcut (`IconButton.qml`).
 struct Shortcut {
     icon: &'static str,

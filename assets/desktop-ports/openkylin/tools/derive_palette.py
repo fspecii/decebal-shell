@@ -64,7 +64,7 @@ def derive(T, mode, flat=False):
         "bar": window,
         "popup": menu,
         "dock": window,
-        "overlay": menu,
+        "overlay": window,   # the start menu and the sidebar are ordinary UKUI windows: window colour x transparency, not the menu colour
         "titlebar": window,
         "titlebar_inactive": g("window-inactive"),
         "border": over(g("kdivider"), window),

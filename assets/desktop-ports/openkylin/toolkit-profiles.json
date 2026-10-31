@@ -1,0 +1,241 @@
+{
+ "note": "Measured per-profile toolkit needs from the pinned UKUI sources. GTK applications and Qt applications (Peony is Qt) are themed by different mechanisms: a GTK theme does not style Qt applications.",
+ "profiles": {
+  "openkylin": {
+   "upstream_global_theme": "DawnLight",
+   "note": "`openkylin`/`-islands` carry the v11 token tables (GitHub mirror 83cb8ff). The current Gitee default global theme is DawnLight (org.ukui.globaltheme.yaml `default: DawnLight`); its accent #3676F5 and radius 12 match v11, the identity is an inference, not an upstream statement",
+   "default_mode_upstream": "light",
+   "effect": {
+    "window_radius": 12,
+    "blur_enabled": true,
+    "transparency_blur": 65,
+    "transparency_no_blur": 90,
+    "animation_ms": 150
+   },
+   "gtk": {
+    "theme_light": "ukui-white",
+    "theme_dark": "ukui-black",
+    "accent": "#3676F5"
+   },
+   "qt": {
+    "style_light": "ukui-light",
+    "style_dark": "ukui-dark",
+    "widget_theme": "dawnlight",
+    "accent_role": "54,118,245,1"
+   },
+   "xdg": {
+    "icon_theme": "ukui-icon-theme-dawnlight",
+    "cursor_theme": "dark-sense"
+   },
+   "source": {
+    "file": "globaltheme/DawnLight/theme.conf",
+    "sha256": "94d43a869010e88bf871c4312d4729af4df01f334b2810428045da6a8c85dc53",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+   }
+  },
+  "openkylin-islands": {
+   "upstream_global_theme": "DawnLight",
+   "note": "`openkylin`/`-islands` carry the v11 token tables (GitHub mirror 83cb8ff). The current Gitee default global theme is DawnLight (org.ukui.globaltheme.yaml `default: DawnLight`); its accent #3676F5 and radius 12 match v11, the identity is an inference, not an upstream statement",
+   "default_mode_upstream": "light",
+   "effect": {
+    "window_radius": 12,
+    "blur_enabled": true,
+    "transparency_blur": 65,
+    "transparency_no_blur": 90,
+    "animation_ms": 150
+   },
+   "gtk": {
+    "theme_light": "ukui-white",
+    "theme_dark": "ukui-black",
+    "accent": "#3676F5"
+   },
+   "qt": {
+    "style_light": "ukui-light",
+    "style_dark": "ukui-dark",
+    "widget_theme": "dawnlight",
+    "accent_role": "54,118,245,1"
+   },
+   "xdg": {
+    "icon_theme": "ukui-icon-theme-dawnlight",
+    "cursor_theme": "dark-sense"
+   },
+   "source": {
+    "file": "globaltheme/DawnLight/theme.conf",
+    "sha256": "94d43a869010e88bf871c4312d4729af4df01f334b2810428045da6a8c85dc53",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+   }
+  },
+  "openkylin-light-seeking": {
+   "upstream_global_theme": "Light-Seeking",
+   "note": null,
+   "default_mode_upstream": "light",
+   "effect": {
+    "window_radius": 12,
+    "blur_enabled": true,
+    "transparency_blur": 65,
+    "transparency_no_blur": 90,
+    "animation_ms": 150
+   },
+   "gtk": {
+    "theme_light": "ukui-white",
+    "theme_dark": "ukui-black",
+    "accent": "#3790FA"
+   },
+   "qt": {
+    "style_light": "ukui-light",
+    "style_dark": "ukui-dark",
+    "widget_theme": "default",
+    "accent_role": "daybreakBlue"
+   },
+   "xdg": {
+    "icon_theme": "ukui-icon-theme-default",
+    "cursor_theme": "dark-sense"
+   },
+   "source": {
+    "file": "globaltheme/Light-Seeking/theme.conf",
+    "sha256": "a6a91e753e93cb6db4dfc586b2690d6be262525852603d63c93f46adcd850380",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+   }
+  },
+  "openkylin-heyin": {
+   "upstream_global_theme": "HeYin",
+   "note": null,
+   "default_mode_upstream": "dark",
+   "effect": {
+    "window_radius": 12,
+    "blur_enabled": true,
+    "transparency_blur": 75,
+    "transparency_no_blur": 90,
+    "animation_ms": 150
+   },
+   "gtk": {
+    "theme_light": "ukui-white",
+    "theme_dark": "ukui-black",
+    "accent": "#6A287E"
+   },
+   "qt": {
+    "style_light": "ukui-light",
+    "style_dark": "ukui-dark",
+    "widget_theme": "fashion",
+    "accent_role": "jamPurple"
+   },
+   "xdg": {
+    "icon_theme": "ukui-icon-theme-fashion",
+    "cursor_theme": "DMZ-White"
+   },
+   "source": {
+    "file": "globaltheme/HeYin/theme.conf",
+    "sha256": "495ce2710d6095b6f603b8e2054d3a707c4089a7ff1a189b4992c516be93757e",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+   }
+  },
+  "openkylin-classic": {
+   "upstream_global_theme": "Classic",
+   "note": null,
+   "default_mode_upstream": "light",
+   "effect": {
+    "window_radius": 0,
+    "blur_enabled": true,
+    "transparency_blur": 65,
+    "transparency_no_blur": 90,
+    "animation_ms": 150
+   },
+   "gtk": {
+    "theme_light": "ukui-white",
+    "theme_dark": "ukui-black",
+    "accent": "#3790FA"
+   },
+   "qt": {
+    "style_light": "ukui-light",
+    "style_dark": "ukui-dark",
+    "widget_theme": "classical",
+    "accent_role": "daybreakBlue"
+   },
+   "xdg": {
+    "icon_theme": "ukui-icon-theme-classical",
+    "cursor_theme": "dark-sense"
+   },
+   "source": {
+    "file": "globaltheme/Classic/theme.conf",
+    "sha256": "34d5f59c28c3d300834aa3c2ae8171ef8e559631c516307eb413aec037310bb0",
+    "commit": "5274c41a196d2bc7141b5cfead69368add9fc073"
+   }
+  }
+ },
+ "qt_platform_theme": {
+  "repo": "qt5-ukui-platformtheme",
+  "commit": "d1c0fdd5209e34441cf0424325948cbe0f38655e",
+  "origin": "GitHub mirror (stale; the Gitee repository was not fetched)",
+  "loaded_by": "QT_QPA_PLATFORMTHEME=ukui (qt5-ukui-platform-theme.cpp returns the style key \"ukui\"; QQuickStyle \"org.ukui.style\")",
+  "gsettings_schema": "org.ukui.style",
+  "keys": {
+   "style-name": "ukui-light (ukui-light|ukui-dark|ukui-default)",
+   "icon-theme-name": "ukui-icon-theme-default",
+   "widget-theme-name": "default (default|classical|fashion)",
+   "system-font": "Noto Sans CJK SC",
+   "system-font-size": "11",
+   "enabled-global-blur": "true",
+   "menu-transparency": "72",
+   "peony-side-bar-transparency": "72",
+   "theme-color": "#3790FA",
+   "window-radius": "12",
+   "use-custom-highlight-color": "false",
+   "custom-highlight-color": "#3D6BE5"
+  }
+ },
+ "gtk_themes": {
+  "repo": "ukui-themes",
+  "commit": "80972fa6605356dfc86dca814a96e9b25f0c4174 (GitHub mirror); Gitee ddd06fee72fd43d7229a01adfba8a7d5c5499289",
+  "themes": [
+   "ukui-white",
+   "ukui-black"
+  ],
+  "form": "SCSS sources under themes/<name>/gtk-3.0 and gtk-2.0 (compiled by meson/sass at package build; not shipped as CSS): installing them from source needs a build step the asset installer does not run",
+  "colours_ukui_white": {
+   "bg": "#ffffff",
+   "fg": "#0C0C0D",
+   "hover/selected": "#3790FA",
+   "disabled_bg": "#E6E6E6",
+   "backdrop_bg": "#FCFCFC"
+  }
+ },
+ "decoration_kwin": {
+  "repo": "kwin",
+  "commit": "01bf91445b61470fce0c7ac6b0f47daa2f8dc9d0",
+  "file": "src/plugins/kdecorations/ukui/ukui-decoration.cpp",
+  "frame": {
+   "light": {
+    "active": "#ffffff",
+    "inactive": "#f5f5f5",
+    "font": "#262626",
+    "border": "black @ alpha 0.15"
+   },
+   "dark": {
+    "active": "#121212",
+    "inactive": "#1c1c1c",
+    "font": "#cfcfcf",
+    "border": "white @ alpha 0.15"
+   }
+  },
+  "shadow": {
+   "active": {
+    "size": 38,
+    "shift_y": 22,
+    "alpha": 0.6
+   },
+   "inactive": {
+    "size": 25,
+    "shift_y": 15,
+    "alpha": 0.4
+   }
+  },
+  "buttons": "icon set name gets an `-inactive` suffix when the window is inactive (button.cpp:140)",
+  "note": "These frame colours are hard-coded in the plugin and are NOT the global theme tokens (window-active #f5f5f5 / #2e2e2e): the decoration owner must confirm what the rdwm `openkylin` / `openkylin-dark` styles draw"
+ },
+ "gaps": [
+  "ukui-icon-theme-dawnlight (DawnLight / v11 icon theme) is in no repository that was reachable: not in gitee openkylin-theme 0f348e4 nor ukui-themes ddd06fe (only default, classical, fashion icon themes and dark-sense / blue-crystal cursors)",
+  "HeYin: GTK accent #6A287E differs from the shell token (kbrand-normal #8926EB); which one Qt `jamPurple` resolves to was not measured",
+  "upstream default mode: HeYin defaults to dark, the others to light; a package cannot express a default mode with colour variants (manifest `dark` is for flat colour files only)",
+  "Peony itself (the Qt file manager) was not inspected: the GitHub mirror clone is from 2023 and the active Gitee repository was not fetched"
+ ]
+}
