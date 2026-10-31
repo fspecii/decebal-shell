@@ -278,14 +278,26 @@ class CursorData(unittest.TestCase):
 class HarnessDisplays(unittest.TestCase):
     """The native harness must never touch :0 or a foreign X server (live display safety)."""
 
-    def harness(self):
+    def harness(self, out=None):
         src = (ROOT / "tests/e2e/openkylin-native.py").read_text().replace("\nmain()\n", "\n")
-        old = sys.argv; out = tempfile.mkdtemp(prefix="okn-harness-test-"); sys.argv = ["x", "/nonexistent", out, "--matrix", "none"]
+        if out is None:
+            scratch = tempfile.TemporaryDirectory(prefix="okn-harness-test-", dir="/var/tmp")
+            self.addCleanup(scratch.cleanup)
+            out = str(pathlib.Path(scratch.name) / "evidence")
+        old = sys.argv; sys.argv = ["x", "/nonexistent", out, "--matrix", "none"]
         try:
             ns = {"__file__": str(ROOT / "tests/e2e/openkylin-native.py"), "__name__": "harness"}
             exec(compile(src, "openkylin-native", "exec"), ns)
         finally: sys.argv = old
         return ns
+
+    def test_existing_evidence_is_refused_without_touching_it(self):
+        h = self.harness()
+        sentinel = h["OUT"] / "keep.txt"
+        sentinel.write_bytes(b"keep evidence\n")
+        with self.assertRaises(FileExistsError):
+            self.harness(str(h["OUT"]))
+        self.assertEqual(sentinel.read_bytes(), b"keep evidence\n")
 
     def test_reserved_high_range_and_refusals(self):
         h = self.harness(); taken = set(); n = h["free_display"](taken)
