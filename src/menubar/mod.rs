@@ -1008,7 +1008,19 @@ impl DecBar {
         let (ox, oy) = self.panel_origin();
         let (scroll, z) = (self.cc_viewport.scroll, self.cc_zoom());
         // surface coordinates (logical pixels of this surface): where each control is drawn now, after the scroll and the zoom
-        let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\nzoom {} width {}\n", ox, oy, self.cc_width(), self.cc_visible_height(), surface_w, surface_h, scroll, self.cc_height, z, self.cc_w);
+        let mut text = format!(
+            "panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\nzoom {} width {}\n",
+            ox,
+            oy,
+            self.cc_width(),
+            self.cc_visible_height(),
+            surface_w,
+            surface_h,
+            scroll,
+            self.cc_height,
+            z,
+            self.cc_w
+        );
         let mut seen = Vec::new();
         for item in &self.cc_items {
             if let Some(target) = item.target.filter(|t| !seen.contains(t)) {
@@ -2334,9 +2346,9 @@ impl DecBar {
 }
 
 #[cfg(test)]
-mod gnome_cc_tests;
-#[cfg(test)]
 mod cc_fit_tests;
+#[cfg(test)]
+mod gnome_cc_tests;
 
 #[cfg(test)]
 mod tests {

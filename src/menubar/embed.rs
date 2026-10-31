@@ -479,7 +479,13 @@ impl DecBar {
             return self.embed.room.0;
         }
         if self.embed.vertical {
-            let room = if self.embed.up { self.embed.edge - GAP - 4.0 } else if self.embed.surface_w > 0.0 { self.embed.surface_w - self.embed.edge - GAP - 4.0 } else { f32::INFINITY };
+            let room = if self.embed.up {
+                self.embed.edge - GAP - 4.0
+            } else if self.embed.surface_w > 0.0 {
+                self.embed.surface_w - self.embed.edge - GAP - 4.0
+            } else {
+                f32::INFINITY
+            };
             return room.max(1.0);
         }
         if self.embed.screen_w > 0.0 {

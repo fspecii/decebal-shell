@@ -212,7 +212,11 @@ fn the_summoned_overlay_fits_the_panel_on_short_outputs_at_every_scale() {
             for (ow, oh) in OUTPUTS {
                 for d in SCALES {
                     let (w, h) = (ow / d, oh / d);
-                    for (host, corner) in [(Host::Nothing, Corner::Auto), (Host::Panel { edge: Edge::Left, thickness: 40.0, taskbar: false }, Corner::Auto), (Host::Taskbar { top: false, thickness: 48.0 }, Corner::BottomLeft)] {
+                    for (host, corner) in [
+                        (Host::Nothing, Corner::Auto),
+                        (Host::Panel { edge: Edge::Left, thickness: 40.0, taskbar: false }, Corner::Auto),
+                        (Host::Taskbar { top: false, thickness: 48.0 }, Corner::BottomLeft),
+                    ] {
                         let p = place(&host, corner);
                         let mut o = overlay::Overlay::new(p, host.is_taskbar());
                         o.bar_mut().update_snapshot(|x| *x = snapshot());

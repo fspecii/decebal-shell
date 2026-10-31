@@ -143,7 +143,8 @@ impl App for Overlay {
         self.bar.status_draw(pm);
         if let (Some(r), Some((path, last))) = (self.viewport_rect(), self.debug.as_mut()) {
             let (scroll, z) = (self.bar.cc_viewport.scroll, self.bar.cc_zoom());
-            let mut text = format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\nzoom {} width {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height(), scroll, self.bar.cc_height, z, self.bar.cc_w);
+            let mut text =
+                format!("panel {} {} {} {}\nsurface {} {}\nscroll {} content {}\nzoom {} width {}\n", r.x, r.y, r.w, r.h, pm.width(), pm.height(), scroll, self.bar.cc_height, z, self.bar.cc_w);
             // every control once (its first rectangle) in surface coordinates, and the keyboard focus: what the native acceptance driver clicks
             let (ox, oy) = self.bar.embed.origin;
             let mut seen = Vec::new();
