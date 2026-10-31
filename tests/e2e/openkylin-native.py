@@ -15,7 +15,7 @@ from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 opt = lambda n, d=None: sys.argv[sys.argv.index(n) + 1] if n in sys.argv else d
-BIN, OUT = pathlib.Path(args[0]).resolve(), pathlib.Path(args[1]).resolve(); OUT.mkdir(parents=True, exist_ok=True)
+BIN, OUT = pathlib.Path(args[0]).resolve(), pathlib.Path(args[1]).resolve(); OUT.mkdir(parents=True, exist_ok=False)
 MATRIX = opt("--matrix", "quick"); WALLS = opt("--wallpapers"); ICONS = opt("--icons-prefix")
 BACKDROP = {"light": (0xb4, 0xc0, 0xd0), "dark": (0x38, 0x40, 0x4c)}
 PICKS = json.loads((ROOT / "assets/desktop-ports/openkylin/wallpapers.json").read_text())["themes"]
