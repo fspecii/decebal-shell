@@ -83,3 +83,32 @@ fn style_words_with_a_layout_set_theme_and_position_and_plain_caelestia_keeps_it
     let help = ctl(&d, &["--help"]).1;
     assert!(help.contains("decthemectl layout [left|right|top|bottom|split]") && help.contains("caelestia[-left|-right|-top|-bottom|-split]"), "{help}");
 }
+
+#[test]
+fn panel_choices_are_written_shown_and_reset_by_the_cli() {
+    let d = sandbox("panel");
+    let shell = d.join("cfg/omarchy/decebal.json");
+    std::fs::write(&shell, r#"{"theme": {"name": "nord"}, "bar": {"enabled": true, "left": ["clock"]}}"#).unwrap();
+    for args in [&["panel", "edge", "left"][..], &["panel", "applet", "weather", "off"], &["panel", "applet", "media", "on"], &["panel", "dock", "right"]] {
+        let (ok, out, err) = ctl(&d, args);
+        assert!(ok, "{args:?}: {out} {err}");
+    }
+    let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&shell).unwrap()).unwrap();
+    assert_eq!(doc["bar"]["edge"], "left");
+    assert_eq!(doc["bar"]["applets"], serde_json::json!({"weather": false, "media": true}));
+    let (ok, out, _) = ctl(&d, &["panel", "--json"]);
+    assert!(ok);
+    let status: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!((status["edge"].clone(), status["edge_from"].clone(), status["dock_edge"].clone()), ("left".into(), "your choice".into(), "right".into()));
+    assert_eq!(status["applets"]["weather"]["on"], false);
+    assert_eq!(status["applets"]["media"]["from"], "your choice");
+    assert_eq!(status["applets"]["clock"]["from"], "style default");
+    let (ok, _, err) = ctl(&d, &["panel", "applet", "nonsense", "on"]);
+    assert!(!ok && err.contains("unknown applet"));
+    let (ok, _, _) = ctl(&d, &["panel", "reset"]);
+    assert!(ok);
+    let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&shell).unwrap()).unwrap();
+    assert!(doc["bar"].get("edge").is_none() && doc["bar"].get("applets").is_none());
+    assert_eq!(doc["bar"]["left"], serde_json::json!(["clock"]), "other bar keys stay");
+    let _ = std::fs::remove_dir_all(&d);
+}
