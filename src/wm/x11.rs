@@ -74,7 +74,7 @@ pub fn desktop_size(raw: &[u32]) -> Option<(u32, u32)> {
 }
 
 /// Whether an event means the window list or something a task or the pager shows may have changed. Only managed clients get
-/// structure events (the root selects properties only), so any configure / map / unmap is one of them.
+/// structure events; root structure events also refresh the desktop-size fallback.
 pub fn event_refreshes(event: &Event, watched: &[Atom]) -> bool {
     match event {
         Event::PropertyNotify(e) => watched.contains(&e.atom),
@@ -99,8 +99,10 @@ pub const BURST_TIME: std::time::Duration = std::time::Duration::from_millis(25)
 pub enum Pass {
     /// Something relevant was seen: rebuild the snapshot.
     Refresh,
-    /// Nothing relevant was seen (or the budget ran out first): wait on the sockets again.
+    /// The queue is empty and nothing relevant was seen: wait on the sockets again.
     Idle,
+    /// The budget ran out: rescan the internal queue before waiting on sockets.
+    More,
     /// The last owner went away: end the thread.
     Stop,
     /// The connection failed: end the thread.
@@ -118,7 +120,7 @@ pub fn scan_events<E>(next: &mut impl FnMut() -> Result<Option<Event>, E>, stopp
             return Pass::Stop;
         }
         if seen >= max || start.elapsed() >= budget {
-            return if refresh { Pass::Refresh } else { Pass::Idle };
+            return if refresh { Pass::Refresh } else { Pass::More };
         }
         match next() {
             Err(_) => return Pass::Closed,
@@ -320,6 +322,7 @@ pub fn spawn(tracker: Tracker, notify: Notify) -> bool {
                     Pass::Refresh => break,
                     Pass::Stop | Pass::Closed => return,
                     Pass::Idle => {}
+                    Pass::More => continue,
                 }
                 match crate::backend::poll_readable(&[conn.stream().as_raw_fd(), stop.as_raw_fd()], None) {
                     Ok(ready) if !ready[1] => {}
@@ -427,8 +430,19 @@ mod tests {
         };
         // relevant events forever: a refresh after exactly the cap, not an endless drain
         assert_eq!(always(motion), (Pass::Refresh, BURST_EVENTS));
-        // irrelevant events forever: back to the sockets after exactly the cap
-        assert_eq!(always(noise), (Pass::Idle, BURST_EVENTS));
+        // Irrelevant events forever: yield to the stop check, then rescan the buffered queue.
+        assert_eq!(always(noise), (Pass::More, BURST_EVENTS));
+    }
+
+    #[test]
+    fn a_relevant_event_behind_a_buffered_noise_burst_is_not_stranded() {
+        let mut queue: std::collections::VecDeque<_> = (0..BURST_EVENTS).map(|_| noise()).chain(std::iter::once(motion())).collect();
+        let mut next = || Ok::<_, ()>(queue.pop_front());
+        let relevant = |ev: &Event| event_refreshes(ev, &[]);
+        let mut running = || false;
+        assert_eq!(scan_events(&mut next, &mut running, &relevant, BURST_EVENTS, BURST_TIME), Pass::More);
+        assert_eq!(scan_events(&mut next, &mut running, &relevant, BURST_EVENTS, BURST_TIME), Pass::Refresh);
+        assert_eq!(scan_events(&mut next, &mut running, &relevant, BURST_EVENTS, BURST_TIME), Pass::Idle);
     }
 
     #[test]
