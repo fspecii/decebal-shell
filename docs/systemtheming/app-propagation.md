@@ -438,3 +438,43 @@ Final integrated dev artifact (`384b74f` Rust source, native harness `e5d7dea`, 
 Main candidate `539c57b` (specialist `a2576fb`) passed 95 focused tests, formatting, strict all-target Clippy and a dev CLI build: `/var/tmp/decebal-icons-xsettings-hook-source-gate/result.json`. The immutable dev CLI passed 228 native GTK regression checks, four live recolouring cases and 11 XSETTINGS ownership checks, with zero stale/invalid windows, leftovers or fixture rescue: `/var/tmp/decebal-icons-hook-native-regression-control/result.json`. This proves the refactored full GTK path retains its accepted behaviour.
 
 The real first-manual-choice workflow remains unproven: inspection found that `icons set` and the Icons pane do not yet enqueue the narrow publication. The specialist is adding those post-commit producers in a separate source-only increment. No injected queue ticket is accepted as sole proof of that user workflow. Neither this hook nor the pending producer changes are installed; the running desktop remains on the qualified a82/b261 combination.
+
+
+### First manual icon choice: CLI and Settings native acceptance
+
+Candidate `29fd95c` wires both CLI and Settings selection producers after the
+persisted selection/ownership commit. It passed 91 focused tests; the first
+combined gate was interrupted by I/O pressure during lint, so that gate is not
+reported as a pass. A separate serialized gate passed formatting, strict
+all-target Clippy and dev builds of Settings and the CLI.
+
+`tests/systemtheming/icons-native.py` then passed 32 native checks against the
+immutable candidate binaries. Two real GTK3/GTK4 windows started with independent
+red icon preferences, before any Decebal theme apply or XSETTINGS owner. The real
+CLI selected Blue; real Settings Icons-pane row and Use clicks selected Red then
+Blue. Both existing processes/windows repainted their icons, with unchanged GTK
+theme/font, byte-preserved CSS and completed assets-only publication. Tests also
+cover the XSETTINGS opt-out, foreign owner preservation and master/GTK-target
+opt-outs. No leftover processes, cleanup rescue or resource abort occurred.
+The GTK4 Red icon capture was visually inspected. Evidence:
+`/var/tmp/decebal-manual-icons-native-gate-v6/result.json` and
+`/var/tmp/decebal-manual-icons-native-evidence-v6/result.json`.
+
+The same fixture against sealed release `b261c13` passed initial red rendering
+but failed at first manual manager startup, as expected for the missing producer:
+`/var/tmp/decebal-manual-icons-native-negative-evidence-v2/result.json`.
+Earlier fixture attempts are preserved: they failed before publication because
+isolated MIME/Glycin descriptors were missing, or because window identification
+required an unpublished PID property. Active GTK image-loader helpers are checked
+for leaks after their owning probes close, rather than while images remain open.
+
+Reproduce with system Python (GI GTK3/GTK4, python-xlib, Pillow, Xvfb and XTEST):
+`python3 tests/systemtheming/icons-native.py --bin-dir ABSOLUTE_BIN_DIR --out FRESH_OUTPUT_DIR`.
+The fixture uses an owned high-display Xvfb and private HOME/XDG paths, including
+private copies of system MIME and Glycin loader descriptors. Current Settings
+omits `_NET_WM_PID`; identification requires the one matching class on this owned
+server and a live fixture-owned Settings process, checking PID when available.
+
+This is dev-candidate X11 evidence. Optimized-build and physical-session acceptance,
+Qt live updates, Wayland, and reset restoring a prior external icon selection are
+not proven by this test. The installed desktop remains on a82/b261.
