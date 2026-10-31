@@ -7,6 +7,7 @@ pub mod awake;
 mod ccviewport;
 pub mod clock;
 mod embed;
+mod exported;
 pub mod gate;
 mod indicators;
 pub mod lock;
@@ -284,6 +285,8 @@ pub struct DecBar {
     runner: Runner,
     app_name: String,
     menus: Vec<Menu>,
+    /// The focused window's exported menu (see [`exported`]); started only in a live bar.
+    app_menu: exported::Exported,
     open: Open,
     hover_title: Option<usize>,
     hover_row: Option<usize>,
@@ -417,6 +420,7 @@ impl DecBar {
             runner: Runner::detect(),
             app_name: "Finder".into(),
             menus: Vec::new(),
+            app_menu: exported::Exported::default(),
             open: Open::None,
             hover_title: None,
             hover_row: None,
@@ -639,9 +643,24 @@ impl DecBar {
     fn refresh_app_name(&mut self) -> bool {
         let name = self.active.active_app_name().map(|id| active::display_name(&id)).unwrap_or_else(|| applets::branding().desktop_label("Finder").to_string());
         let light = self.snapshot().light;
-        if name != self.app_name || self.menus.is_empty() {
+        // The worker itself starts and stops with the app_menu applet (`sync_workers`).
+        self.app_menu.set_focus(self.active.active_focus());
+        let exported = self.app_menu.poll();
+        if name != self.app_name || self.menus.is_empty() || exported {
             self.app_name = name;
-            self.menus = menus::build(&self.app_name, light);
+            let open = if let Open::Menu(i) = self.open { Some((i, self.app_menu.identity(i))) } else { None };
+            let page = self.app_menu_page.map(|i| (i, self.app_menu.identity(i)));
+            self.menus = self.app_menu.compose(&self.app_name, light);
+            let gone = |bar: &Self, (i, was): (usize, _)| i >= bar.menus.len() || bar.app_menu.identity(i) != was;
+            if open.is_some_and(|o| gone(self, o)) {
+                // The open menu belonged to an application menu that changed hands or went away.
+                self.close();
+            }
+            if page.is_some_and(|p| gone(self, p)) {
+                self.menu_closed();
+                self.app_menu_page = None;
+            }
+            self.hover_row = None;
             return true;
         }
         false
@@ -957,6 +976,7 @@ impl DecBar {
 
     fn close(&mut self) -> bool {
         let was = self.open != Open::None;
+        self.menu_closed();
         self.open = Open::None;
         self.hover_row = None;
         self.confirm = None;
@@ -977,6 +997,7 @@ impl DecBar {
     }
 
     fn open_menu(&mut self, idx: usize) {
+        self.menu_opened(idx);
         self.open = Open::Menu(idx);
         self.hover_row = None;
         self.confirm = None;
@@ -1075,9 +1096,44 @@ impl DecBar {
 
     // ------------------------------------------------------------- actions
 
+    /// Menu `i` was shown (dropdown or the app_menu popup page): an exported one tells its app.
+    pub(super) fn menu_opened(&mut self, i: usize) {
+        self.app_menu.opened(i);
+    }
+
+    /// Whatever menu was shown is gone.
+    pub(super) fn menu_closed(&mut self) {
+        self.app_menu.closed();
+    }
+
+    /// Whether row `j` of menu `i` does something: exported rows by their own state, shell rows by the runner.
+    pub(super) fn menu_item_available(&self, i: usize, j: usize) -> bool {
+        self.app_menu.available(i, j).unwrap_or_else(|| self.menus.get(i).and_then(|m| m.items.get(j)).is_some_and(|it| !it.separator && !it.action.is_empty() && self.runner.available(it.action)))
+    }
+
+    /// The right-hand text of row `j` of menu `i` (an exported shortcut, `▸` for a submenu).
+    pub(super) fn menu_item_shortcut(&self, i: usize, j: usize) -> String {
+        self.app_menu.shortcut(i, j).unwrap_or_else(|| self.menus.get(i).and_then(|m| m.items.get(j)).map_or(String::new(), |it| it.shortcut.to_string()))
+    }
+
     fn run_menu_item(&mut self, menu: usize, item: usize) -> bool {
+        if let Some(click) = self.app_menu.click(menu, item, 0) {
+            return match click {
+                exported::Click::Sent => {
+                    self.close();
+                    true
+                }
+                exported::Click::Moved => {
+                    let light = self.snapshot().light;
+                    self.menus = self.app_menu.compose(&self.app_name, light);
+                    self.hover_row = None;
+                    true
+                }
+                exported::Click::Ignored => false,
+            };
+        }
         let Some(it) = self.menus.get(menu).and_then(|m| m.items.get(item)).cloned() else { return false };
-        if it.separator || !self.runner.available(it.action) {
+        if !self.menu_item_available(menu, item) {
             return false;
         }
         if self.runner.needs_confirm(it.action) && self.confirm != Some(it.action) {
@@ -1485,7 +1541,7 @@ impl DecBar {
                 crate::gfx::fill_rect(pm, d.x + PAD_SEP, row.y + row.h / 2.0, d.w - 2.0 * PAD_SEP, 1.0, crate::theme::th().ink(0.12));
                 continue;
             }
-            let available = self.runner.available(it.action);
+            let available = self.menu_item_available(idx, row.index);
             let hovered = self.hover_row == Some(row.index) && available;
             if hovered {
                 fill_rounded(pm, d.x + menus::PAD, row.y, d.w - 2.0 * menus::PAD, row.h, crate::theme::th().r(0.5), crate::theme::th().accent_c());
@@ -1501,12 +1557,13 @@ impl DecBar {
                 th.text.a(alpha)
             };
             let sub = if hovered { th.accent_text.a(1.0) } else { th.text.a(0.45 * alpha) };
+            let shortcut = self.menu_item_shortcut(idx, row.index);
             // Vertically centre in the 24px row.
             let Some(f) = self.fonts.as_mut() else { continue };
             let top = row.y + (row.h - TEXT_PX) / 2.0 - 1.0;
             f.draw(pm, &label, d.x + 12.0, top, TEXT_PX, Weight::Regular, color(main.0, main.1, main.2, main.3));
-            let sw = f.measure(it.shortcut, TEXT_PX, Weight::Regular);
-            f.draw(pm, it.shortcut, d.x + d.w - 12.0 - sw, top, TEXT_PX, Weight::Regular, color(sub.0, sub.1, sub.2, sub.3));
+            let sw = f.measure(&shortcut, TEXT_PX, Weight::Regular);
+            f.draw(pm, &shortcut, d.x + d.w - 12.0 - sw, top, TEXT_PX, Weight::Regular, color(sub.0, sub.1, sub.2, sub.3));
         }
     }
 }
@@ -2451,7 +2508,7 @@ mod tests {
     fn clicking_the_open_title_again_closes_it() {
         let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
-        let s = bar.spans()[4];
+        let s = bar.spans()[3];
         bar.pointer_button(s.x + 2.0, 10.0, Button::Left);
         bar.pointer_button(s.x + 2.0, 10.0, Button::Left);
         assert_eq!(bar.open, Open::None);
@@ -2473,7 +2530,7 @@ mod tests {
     fn dropdown_stays_on_screen() {
         let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 300;
-        let d = bar.dropdown(6).unwrap();
+        let d = bar.dropdown(bar.menus.len() - 1).unwrap();
         assert!(d.x + d.w <= 300.0 + 0.01 || d.x == 0.0);
     }
 
@@ -2687,10 +2744,10 @@ mod tests {
         let mut bar = DecBar::new(Box::new(active::NoActiveWindow));
         bar.width = 1920;
         bar.runner = Runner::without_helper();
-        let file = bar.spans()[2];
-        bar.pointer_button(file.x + 3.0, 10.0, Button::Left);
+        let window = bar.spans()[2];
+        bar.pointer_button(window.x + 3.0, 10.0, Button::Left);
         let d = bar.dropdown(2).unwrap();
-        // "New Window" has no portable fallback, so the click does nothing and the menu stays.
+        // "Minimize" needs rdwm's socket (absent here) and has no portable fallback: the click does nothing.
         assert!(!bar.pointer_button(d.x + 20.0, d.rows[0].y + 5.0, Button::Left));
         assert_eq!(bar.open, Open::Menu(2));
     }

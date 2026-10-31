@@ -32,6 +32,10 @@ pub trait ActiveWindow {
     fn activate_window(&self, _id: u64) {}
     fn minimize_window(&self, _id: u64) {}
     fn close_window(&self, _id: u64) {}
+    /// The focused window as input for exported application menus (X11 id or Wayland).
+    fn active_focus(&self) -> crate::appmenu::Focus {
+        crate::appmenu::Focus::None
+    }
 }
 
 /// The real source: the compositor/EWMH window tracker from [`crate::wm`].
@@ -102,6 +106,11 @@ impl ActiveWindow for WmActive {
             t.close(id);
         }
     }
+
+    fn active_focus(&self) -> crate::appmenu::Focus {
+        let Some(t) = &self.tracker else { return crate::appmenu::Focus::None };
+        crate::appmenu::Focus::from_window(t.snapshot().active(), crate::appmenu::tracker_protocol())
+    }
 }
 
 /// A host's own window tracker (the taskbar's): the embedded status engine reads it instead of starting another.
@@ -141,6 +150,9 @@ impl ActiveWindow for TrackerActive {
     }
     fn close_window(&self, id: u64) {
         self.0.close(id);
+    }
+    fn active_focus(&self) -> crate::appmenu::Focus {
+        crate::appmenu::Focus::from_window(self.0.snapshot().active(), crate::appmenu::tracker_protocol())
     }
 }
 

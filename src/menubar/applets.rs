@@ -640,7 +640,7 @@ impl DecBar {
                         continue;
                     }
                     let label = if self.confirm == Some(it.action) { format!("{}?", it.label.trim_end_matches('…')) } else { it.label.clone() };
-                    rows.push(Row::item(&label, Act::MenuRun(i, j)).detail(it.shortcut).enabled(self.runner.available(it.action)));
+                    rows.push(Row::item(&label, Act::MenuRun(i, j)).detail(&self.menu_item_shortcut(i, j)).enabled(self.menu_item_available(i, j)));
                 }
                 rows
             }
@@ -654,8 +654,14 @@ impl DecBar {
                 self.close();
                 self.v_switch_workspace(*i);
             }
-            Act::MenuOpen(i) => self.app_menu_page = Some(*i),
-            Act::MenuBack => self.app_menu_page = None,
+            Act::MenuOpen(i) => {
+                self.menu_opened(*i);
+                self.app_menu_page = Some(*i);
+            }
+            Act::MenuBack => {
+                self.menu_closed();
+                self.app_menu_page = None;
+            }
             Act::MenuRun(i, j) => {
                 let page = self.app_menu_page;
                 if self.run_menu_item(*i, *j) && self.confirm.is_some() {
@@ -750,6 +756,11 @@ impl DecBar {
                     w.wake();
                 }
             }));
+        }
+        // the focused window's exported menus: only while the app_menu applet is shown
+        if !cfg!(test) {
+            let w = waker.clone();
+            self.app_menu.set_enabled(p.shows(A::AppMenu), crate::appmenu::Config::session, || exported::notifier(Some(w)));
         }
         // rdwm's layout and tags: the layout applet and the rail's workspace pills
         let want_layout = (p.shows(A::Layout) || p.shows(A::Workspaces)) && !cfg!(test);
@@ -925,7 +936,7 @@ impl DecBar {
             Focus::Menu(i) => {
                 self.close();
                 self.open_menu(i);
-                self.hover_row = self.menus.get(i).and_then(|m| m.items.iter().position(|it| !it.separator && self.runner.available(it.action)));
+                self.hover_row = self.menus.get(i).and_then(|m| (0..m.items.len()).find(|&j| self.menu_item_available(i, j)));
                 true
             }
             Focus::Item(Tray::Workspaces) => {
