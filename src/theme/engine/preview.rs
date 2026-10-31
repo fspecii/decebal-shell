@@ -295,10 +295,12 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
             return Err("preview inheritance loop".into());
         }
         // `load_def` returns the merged theme, whose `inherit` is already consumed: the parent comes from this package's own manifest.
-        let own = if let Some(dir) = config::package_dir(&src.themes_dir, &id) {
-            hash_assets(&dir, &dir, 0, &mut 0, &mut 0, &mut hash)?;
-            fs::read_to_string(dir.join("theme.toml")).ok()
-        } else if let Ok(text) = fs::read(src.themes_dir.join(format!("{id}.toml"))) {
+        let file = src.user_file(&id);
+        let own = if file.file_name().is_some_and(|name| name == "theme.toml") && file.is_file() {
+            let dir = file.parent().expect("a package manifest has a parent");
+            hash_assets(dir, dir, 0, &mut 0, &mut 0, &mut hash)?;
+            fs::read_to_string(&file).ok()
+        } else if let Ok(text) = fs::read(&file) {
             hash.update(&text);
             Some(String::from_utf8_lossy(&text).into_owned())
         } else if let Some(text) = builtin::source(&id) {
@@ -774,6 +776,28 @@ mod performance_tests {
         // an override equal to the default changes nothing visible, but it is the user's choice: it is part of the key too
         assert_eq!(key(json!({"bar": {"edge": "left"}}), json!({})), moved, "stable for the same inputs");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_user_flat_theme_shadows_the_installed_manifest_when_fingerprinting() {
+        let dir = std::env::temp_dir().join(format!("preview-flat-shadow-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let (user, installed) = (dir.join("themes"), dir.join("installed"));
+        fs::create_dir_all(&user).unwrap();
+        fs::create_dir_all(installed.join("kid")).unwrap();
+        let _roots = super::super::store::test_roots(vec![installed.clone()]);
+        let manifest = |parent: &str| format!("format = 1\nid = \"kid\"\nname = \"Kid\"\nversion = \"1.0.0\"\nauthor = \"test\"\nlicense = \"MIT\"\nextends = \"{parent}\"\n");
+        fs::write(user.join("kid.toml"), manifest("nord")).unwrap();
+        fs::write(installed.join("kid/theme.toml"), manifest("absent")).unwrap();
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: user.clone() };
+        let sel = Selection { name: "kid".into(), mode: Mode::Dark, ..Default::default() };
+        src.load_def("kid").unwrap();
+        let first = fingerprint(&src, &sel).unwrap();
+        fs::write(installed.join("kid/theme.toml"), manifest("another-absent")).unwrap();
+        assert_eq!(fingerprint(&src, &sel).unwrap(), first, "shadowed files cannot affect the preview");
+        fs::write(user.join("kid.toml"), manifest("dracula")).unwrap();
+        assert_ne!(fingerprint(&src, &sel).unwrap(), first);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

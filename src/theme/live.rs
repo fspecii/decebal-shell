@@ -77,7 +77,7 @@ impl Source {
 
     /// The file a theme id is read from: `<id>/theme.toml` of a package (the user's folder, then each installed root in priority order),
     /// else the flat `<id>.toml`. Nothing installed ever outranks the user's package or flat file of the same id.
-    fn user_file(&self, id: &str) -> PathBuf {
+    pub(super) fn user_file(&self, id: &str) -> PathBuf {
         let pkg = self.themes_dir.join(id).join("theme.toml");
         if pkg.is_file() {
             return pkg;
