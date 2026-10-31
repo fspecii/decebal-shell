@@ -1,0 +1,137 @@
+# Screen readers and other assistive technologies (AT-SPI2)
+
+Decebal windows built on `WindowApp` can publish a semantic accessibility tree over AT-SPI2, the protocol Orca and
+other Linux assistive technologies use. System Settings (`decsettings`) is the first complete adapter: a screen
+reader can read, navigate and operate every page of it. Bars, docks and other `App` surfaces do not publish a tree
+yet; nothing here makes the whole desktop accessible.
+
+## Turning it on
+
+Nothing happens until accessibility is enabled for the session. Each window watches `org.a11y.Status.IsEnabled` on the
+session bus (set by Orca, by GNOME's accessibility switch, or with
+`busctl --user set-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled b true`) and connects the moment it
+becomes true; it disconnects again when it becomes false. It never starts the bus launcher itself.
+
+- `DECEBAL_A11Y=0` keeps the bridge off; `DECEBAL_A11Y=1` connects without waiting for `IsEnabled`.
+- `AT_SPI_BUS_ADDRESS` names the accessibility bus directly (instead of `org.a11y.Bus.GetAddress`); without a session
+  bus it also counts as "enabled".
+
+While no assistive technology listens, a window builds no tree; the only cost is one idle worker thread asleep in
+`poll`.
+
+## What Settings exposes
+
+| Part | Roles and interfaces |
+| --- | --- |
+| Window | `frame` (active while it has keyboard focus) in an `application` named "System Settings" |
+| Sidebar | `panel` with the search `entry` (Text, EditableText, caret, selection; "Clear search" button) and the page `list` (Selection; one `list item` per page with its section, or per search result) |
+| Page | `scroll pane` named after the page; `heading` (title, level 1; section headers, level 2); notes as `label`, errors as `alert` (announced) |
+| Cards | `panel` per card; a row with one control names the control after the row and describes it with the row's detail; a row with several controls is a `grouping` |
+| Toggle | `switch` (checkable, checked; action `toggle`) |
+| Slider / Stepper | `slider` / `spin button` with Value (min, max, step, current, text); actions `increment`, `decrement` |
+| Segmented choice | `grouping` of `radio button`s (Selection) |
+| Tabs and sections | `page tab list` of `page tab`s (Selection) |
+| List choice | `combo box` (has-popup, expanded/collapsed, action `press`) holding its `menu` of `menu item`s (Selection). While the list is open it is showing and modal, and keyboard focus moves through its items |
+| Colour | `button` (has-popup, colour attribute) that opens the modal colour `dialog`: swatch buttons, a hex `entry`, Default |
+| Text | `entry`, or `password text` for secrets; drafts until activated (attribute `draft=true`), exactly like typing then Enter |
+| Shortcut | `button` that starts recording (pressed while recording) |
+| Buttons, chips | `button` (destructive attribute for dangerous ones), `toggle button` |
+| Galleries | wallpapers, layouts, themes, accent swatches and icon themes as `list`s of selectable `list item`s |
+| Theme cards | `panel` per theme with its buttons; previews as `image` |
+| Widget layout choice | `dialog` holding the question and its three buttons |
+| Config & Presets editor | multi-line `text` (Text, EditableText, caret, selection; errors in the description, invalid-entry state) |
+| Toast | `notification` (announced) |
+
+Every control whose setting has a default also offers `reset` (the right-click "back to default").
+`AccessibleId` is a stable key (`ctl:<control id>`, `pane:<page>`, `search`, ...): it survives redraws, scrolling and
+rebuilds, and the numeric object paths do too for the life of the window.
+
+## How actions run
+
+Requests from the assistive technology are typed operations (an action name, a value, a focus or scroll request, a
+text edit, a child selection). They reach the window's own thread through a bounded queue and run through the same
+code as the keyboard: `Model::apply`, opening a list, starting and committing an edit, moving focus, scrolling into
+view. Nothing synthesises pointer or key events. A request is rejected with a D-Bus error that says why when:
+
+- the object no longer exists (`...Error.UnknownNode`),
+- it changed after the request was made, e.g. a second activation racing the first, or a file reload in between
+  (`...Error.Stale`),
+- the control is disabled (`...Error.Disabled`), or does not offer the operation (`...Error.Unsupported`),
+- the value or offsets are invalid (`org.freedesktop.DBus.Error.InvalidArgs`),
+- the settings model refused it (`...Error.Refused` with the same text as the error shown on the page),
+- a list or the colour dialog is open (modal) and the request is for something else (`...Refused`),
+- 32 requests are already waiting (`org.freedesktop.DBus.Error.LimitsExceeded`, at once),
+- the window did not get to it within 5 s (`...Error.Timeout`; the request is then dropped, never applied late;
+  `DECEBAL_A11Y_REPLY_TIMEOUT_MS` changes the deadline, 100 to 60000).
+
+Settings writes its files (with `fsync`) on its UI thread. Under heavy disk load one save can take seconds; while it
+runs, the window cannot answer, and an assistive technology with a short call timeout (libatspi's default is far below
+5 s) reports a missing reply even though the change is applied. Moving saves off the UI thread is outside the
+accessibility bridge.
+
+An accepted action is answered after the window has repainted and published the new tree, so a client that reads
+right after its call returns sees the result (state-change and value events are sent before the reply).
+
+Passwords: a secret field exposes one bullet per character, never its characters; it cannot be copied or cut.
+
+## Coordinates
+
+- **X11**: extents in screen coordinates are real root-window coordinates (the window's origin, tracked through
+  configure, map and focus events, plus the painted rectangle). Window and parent coordinates are also supported.
+  Hit-testing (`GetAccessibleAtPoint`) uses the same rectangles.
+- **Wayland**: a client cannot learn its global position, so screen coordinates are reported as window-relative
+  (screen = window coordinates, origin 0,0). Window activation follows `wl_keyboard` enter/leave; whether a window
+  can actually take focus (`GrabFocus` moves Settings' own keyboard focus, not the compositor's) is up to the
+  compositor. Magnifiers that need global positions cannot follow Decebal windows on Wayland.
+
+Rectangles are physical pixels at the window's UI scale. Text ranges and characters report the field's rectangle
+(glyph positions are not exported).
+
+## Protocol coverage
+
+Implemented from the at-spi2-core **2.62.1** interface XML (tag `2.62.1`; SHA-256 of the files used):
+
+| File | SHA-256 |
+| --- | --- |
+| Accessible.xml | `8099f87a97ee4086baa73fba2b0d8755a33e9216ede0aa12617b0db52c55e786` |
+| Application.xml | `e5ac0e3c197b9a657e8347c8d0b5e7cd73ae4ce5b0a409b3a875a3aa7476ec08` |
+| Action.xml | `ae8df12ef63c6c50284e172ecc904f74b6431e4d4b961cf6da9c9207480fb588` |
+| Cache.xml | `dd3b7429733cb896574183d05aa4862568d27c426016bc39b637db64d2ba0dc7` |
+| Component.xml | `ae87d87a4db76f0ab2f0aa8357a0392f71f1fa58b719990165cecb2bfa45d138` |
+| EditableText.xml | `2ea1b94822f19b0b00c80b918b89833cfb67d1eeef99d69b8421d0e6f40920ff` |
+| Event.xml | `d4661d2bbcf5c6d03ba7a5d6d81c481eae803421796e69acebe1a277bbb19948` |
+| Selection.xml | `63eb9c10977192bb7cfb3e17684680101132b26c0b6277b2246e21eba27b1f8b` |
+| Socket.xml | `70c3fe7dc29d65d9671ce96b183a65accd7bca5d1d2546a412f9b01921b63ee7` |
+| Text.xml | `5c2d5049d2e427d630ca1ae288d0abe321f39c683336cb8a1373f41c4414d614` |
+| Value.xml | `3fd8623364f0d8ac8bd2b7f5b23a055f74c35e8af0bb29076c8be10466f7a737` |
+| atspi-constants.h (role/state numbers) | `50e4604cef992f9a1bf6917d5548583a808e80405ef416cc87f3f9666f350501` |
+| bus/at-spi-bus-launcher.c (org.a11y.Bus / org.a11y.Status) | see `SHA256SUMS` in the evidence folder |
+
+- Accessible (all methods and properties), Application (Id set by the registry during `Embed`), Component (extents,
+  position, size, layer, hit-testing, contains, `GrabFocus`, `ScrollTo`; move/resize requests return false), Action,
+  Value (settable `CurrentValue`), Text (text, characters, words, sentences, lines, caret, one selection; empty
+  attribute runs), EditableText (set, insert, delete, cut, copy, paste), Selection (single choice: deselecting
+  returns false), Cache (`GetItems`), Properties, Introspectable, Peer.
+- Events: `PropertyChange` (name, description, value, role, parent), `StateChanged`, `ChildrenChanged`,
+  `TextChanged`, `TextCaretMoved`, `TextSelectionChanged`, `SelectionChanged`, `Announcement` (new alerts and
+  notifications), window `Activate`/`Deactivate`. Focus events go first; at most 1024 signals per change.
+- Not implemented: Collection, Table, Hypertext, Image, Document, `BoundsChanged`, Cache `AddAccessible`/
+  `RemoveAccessible`, peer-to-peer connections (`GetApplicationBusAddress` returns ""), the X root window `AT_SPI_BUS`
+  property as an address source, and listener-based event filtering (all events are sent).
+
+## Limits
+
+A tree holds at most 4096 objects (it says so when cut), strings 4 KiB, text 256 KiB; a list exports its first 500
+choices (the rest stay reachable by type-ahead in the open list).
+
+## Testing it privately
+
+`tests/e2e/a11y_settings.py` runs the real `decsettings` inside a private HOME/XDG tree, a private `dbus-run-session`
+(real `at-spi-bus-launcher`; the real `at-spi2-registryd` is started on the private accessibility bus because its
+dbus-broker would ask systemd to activate it), a private Xvfb and, when installed, a private headless sway, and drives
+it with GI Atspi and raw Gio calls:
+
+    cargo build --bin decsettings
+    python3 -I tests/e2e/a11y_settings.py --bin target/debug/decsettings --evidence ~/.cache/decebal-a11y-evidence/run
+
+It never touches the live session bus, display, input, configuration or processes.
