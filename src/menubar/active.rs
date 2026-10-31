@@ -29,6 +29,10 @@ pub trait ActiveWindow {
     fn windows(&self) -> Vec<crate::wm::Window> {
         Vec::new()
     }
+    /// Size of the desktop the windows' geometry is relative to, when the window manager reports it.
+    fn desktop_size(&self) -> Option<(u32, u32)> {
+        None
+    }
     fn activate_window(&self, _id: u64) {}
     fn minimize_window(&self, _id: u64) {}
     fn close_window(&self, _id: u64) {}
@@ -89,6 +93,10 @@ impl ActiveWindow for WmActive {
         self.tracker.as_ref().map(|t| t.snapshot().windows).unwrap_or_default()
     }
 
+    fn desktop_size(&self) -> Option<(u32, u32)> {
+        self.tracker.as_ref()?.snapshot().screen
+    }
+
     fn activate_window(&self, id: u64) {
         if let Some(t) = &self.tracker {
             t.activate(id);
@@ -141,6 +149,9 @@ impl ActiveWindow for TrackerActive {
     }
     fn windows(&self) -> Vec<crate::wm::Window> {
         self.0.snapshot().windows
+    }
+    fn desktop_size(&self) -> Option<(u32, u32)> {
+        self.0.snapshot().screen
     }
     fn activate_window(&self, id: u64) {
         self.0.activate(id);

@@ -313,7 +313,8 @@ impl DockApp {
         let builtin_count = w.status.status_kinds_with_limit(0).len();
         // a theme with `[taskbar] workspaces = "cells"` draws one cell per workspace: the pager takes more room than one tray cell
         let pager = if w.m.workspace_form == crate::panel::plasma_style::WorkspaceForm::Cells && w.status.status_shows(A::Workspaces) { w.status.status_workspace_count() } else { 0 };
-        let pager_extra = if pager > 0 { (crate::panel::plasma_style::pager_extent(pager, w.m.icon, vertical) + 2.0 * (4.0 * w.m.scale).round() - w.m.tray_w).max(0.0) } else { 0.0 };
+        let pager_shape = crate::panel::plasma_style::pager_shape(w.status.status_desktop_size());
+        let pager_extra = if pager > 0 { (crate::panel::plasma_style::pager_extent(pager, w.m.icon, vertical, pager_shape) + 2.0 * (4.0 * w.m.scale).round() - w.m.tray_w).max(0.0) } else { 0.0 };
         let slots = taskbar::indicator_capacity(&w.m, self.win_width(), search, buttons, builtin_count, clock_w, pager_extra);
         // how many tray cells fit beside Start, search, one task button and the clock
         let cells = taskbar::indicator_capacity(&w.m, self.win_width(), search, buttons, 0, clock_w, pager_extra);
@@ -333,6 +334,7 @@ impl DockApp {
                 clock: w.status.status_shows(A::Clock),
                 desktop: w.status.status_shows(A::ShowDesktop),
                 pager,
+                pager_shape,
                 vertical,
             },
         ))
@@ -524,7 +526,22 @@ impl DockApp {
         }
     }
 
+    /// `pagercell <index> <along>` lines: where each pager cell's centre is along the strip (the layout's own axis), for the native tests.
+    fn win_dump_pager(&self, l: &Layout) -> String {
+        let Some(w) = self.win.as_ref().filter(|w| w.m.workspace_form == crate::panel::plasma_style::WorkspaceForm::Cells) else { return String::new() };
+        let Some(r) = l.rect_of(Hit::Tray(Tray::Workspaces)) else { return String::new() };
+        let vertical = self.win_vertical();
+        let shape = crate::panel::plasma_style::pager_shape(w.status.status_desktop_size());
+        let cells = crate::panel::plasma_style::pager_cells(w.status.status_workspace_count(), shape.0, shape.1, r.w, w.m.icon, vertical);
+        cells
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("pagercell {i} {}\n", r.x + if vertical { c.y + c.h / 2.0 } else { c.x + c.w / 2.0 }))
+            .collect()
+    }
+
     fn win_dump(&mut self, l: &Layout, y0: f32) {
+        let pager_lines = self.win_dump_pager(l);
         let vertical = self.win_vertical();
         let edge = self.win_panel_edge().as_str();
         let x0 = self.win_strip_x();
@@ -544,6 +561,7 @@ impl DockApp {
                 t += &format!("tray {k:?} {cx} {}\n", r.cx());
             }
             t += &format!("clock {cx} {}\ndesktop {cx} {}\nstrut {}\n", l.clock.cx(), l.desktop.cx(), w.m.bar_h);
+            t += &pager_lines;
             if let Some((x, y, pw, ph)) = w.status.status_rect().map(|r| (r.x, r.y, r.w, r.h)) {
                 t += &format!("popup {x} {y} {pw} {ph}\n");
             }
@@ -565,6 +583,7 @@ impl DockApp {
             t += &format!("tray {k:?} {} {cy}\n", r.cx());
         }
         t += &format!("clock {} {cy}\ndesktop {} {cy}\nstrut {}\n", l.clock.cx(), l.desktop.cx(), w.m.bar_h);
+        t += &pager_lines;
         if let Some((x, y, pw, ph)) = w.status.status_rect().map(|r| (r.x, r.y, r.w, r.h)) {
             t += &format!("popup {x} {y} {pw} {ph}\n");
         }
@@ -825,7 +844,7 @@ impl DockApp {
         let vertical = self.win_vertical();
         let r = self.win_layout()?.rect_of(Hit::Tray(Tray::Workspaces))?;
         let n = w.status.status_workspace_count();
-        let (ps, rel) = (crate::panel::plasma_style::PAGER_SCREEN, along - r.x);
+        let (ps, rel) = (crate::panel::plasma_style::pager_shape(w.status.status_desktop_size()), along - r.x);
         let cells = crate::panel::plasma_style::pager_cells(n, ps.0, ps.1, r.w, w.m.icon, vertical);
         cells.iter().position(|c| {
             let (a, len) = if vertical { (c.y, c.h) } else { (c.x, c.w) };

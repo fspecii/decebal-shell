@@ -364,12 +364,19 @@ impl DecBar {
             cpu: perf.and_then(|p| p.0),
             memory: perf.and_then(|p| p.1),
             workspaces: ws.iter().map(|w| (w.active, w.occupied, w.urgent)).collect(),
+            pager_windows: crate::taskbar::draw::pager_windows(&self.active.windows(), self.active.desktop_size(), ws.len()),
+            desktop: self.active.desktop_size(),
             workspace: ws.iter().position(|w| w.active).map(|i| if ws[i].name.chars().count() <= 2 && !ws[i].name.is_empty() { ws[i].name.clone() } else { (i + 1).to_string() }),
             window_app: self.v_win.as_ref().map(|(id, _)| id.clone()),
             playing: self.dux_player().is_some_and(|p| p.status == crate::dash::mpris::Status::Playing),
             caps: self.locks.caps(),
             num: self.locks.num(),
         }
+    }
+
+    /// The desktop size the window geometry is relative to (None: the window manager does not report it).
+    pub fn status_desktop_size(&self) -> Option<(u32, u32)> {
+        self.active.desktop_size()
     }
 
     /// How many workspaces the bar knows (the pager's cells).

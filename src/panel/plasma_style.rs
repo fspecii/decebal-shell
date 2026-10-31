@@ -182,12 +182,21 @@ pub fn task_indicator(state: TaskState, panel_edge: Edge) -> Option<IndicatorSpe
 /// Spacing between pager cells (`pagerItemGrid.spacing`).
 pub const PAGER_SPACING: f32 = 1.0;
 
-/// The screen shape the pager's cells imitate. The backend does not expose the output size to the taskbar yet, so this is 16:9.
+/// The screen shape the pager's cells imitate when the window manager does not report the desktop size (Wayland's
+/// foreign-toplevel protocol does not): 16:9. A reported size always replaces it, see [`pager_shape`].
 pub const PAGER_SCREEN: (f32, f32) = (16.0, 9.0);
 
-/// Length the pager takes along a strip for `count` cells whose drawn height (width on a side strip) is `across`.
-pub fn pager_extent(count: usize, across: f32, vertical: bool) -> f32 {
-    let cells = pager_cells(count, PAGER_SCREEN.0, PAGER_SCREEN.1, 1.0e5, across, vertical);
+/// The shape the pager imitates: the real desktop size when the tracker knows it, else the [`PAGER_SCREEN`] assumption.
+pub fn pager_shape(desktop: Option<(u32, u32)>) -> (f32, f32) {
+    match desktop {
+        Some((w, h)) if w > 0 && h > 0 => (w as f32, h as f32),
+        _ => PAGER_SCREEN,
+    }
+}
+
+/// Length the pager takes along a strip for `count` cells of a `shape`d screen whose drawn height (width on a side strip) is `across`.
+pub fn pager_extent(count: usize, across: f32, vertical: bool, shape: (f32, f32)) -> f32 {
+    let cells = pager_cells(count, shape.0, shape.1, 1.0e5, across, vertical);
     match (cells.first(), cells.last()) {
         (Some(a), Some(b)) if vertical => b.y + b.h - a.y,
         (Some(a), Some(b)) => b.x + b.w - a.x,
@@ -293,6 +302,20 @@ mod tests {
         assert_eq!((h.tone, h.fill_alpha, h.strong_alpha), (Tone::Accent, 0.34, 0.0));
         assert_eq!(task_indicator(TaskState::Minimized, Edge::Left).unwrap().fill_alpha, 0.08);
         assert_eq!((task_indicator(TaskState::Attention, Edge::Left).unwrap().tone, task_indicator(TaskState::Attention, Edge::Left).unwrap().fill_alpha), (Tone::Warn, 0.35));
+    }
+
+    #[test]
+    fn the_pager_follows_the_real_desktop_shape_and_falls_back_to_16_9() {
+        assert_eq!(pager_shape(None), PAGER_SCREEN);
+        assert_eq!(pager_shape(Some((0, 1080))), PAGER_SCREEN);
+        assert_eq!(pager_shape(Some((3440, 1440))), (3440.0, 1440.0));
+        // an ultrawide desktop makes wider cells, a portrait one narrower, in the same strip height
+        let wide = pager_extent(4, 28.0, false, pager_shape(Some((3440, 1440))));
+        let normal = pager_extent(4, 28.0, false, pager_shape(None));
+        let tall = pager_extent(4, 28.0, false, pager_shape(Some((1080, 1920))));
+        assert!(wide > normal && normal > tall, "{wide} {normal} {tall}");
+        // the side strip is the transpose: the same shape needs the matching length
+        assert!(pager_extent(4, 28.0, true, pager_shape(Some((1080, 1920)))) > pager_extent(4, 28.0, true, pager_shape(None)));
     }
 
     #[test]

@@ -278,6 +278,8 @@ pub struct Inputs<'a> {
     pub desktop: bool,
     /// Workspace cells the pager shows (0: the workspace applet is the renderer's own single cell).
     pub pager: usize,
+    /// The shape of the screen the pager cells imitate ([`crate::panel::plasma_style::pager_shape`]).
+    pub pager_shape: (f32, f32),
     /// The strip runs down a side edge (its zones are laid out along y after the transposition).
     pub vertical: bool,
 }
@@ -310,7 +312,7 @@ pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: u
 /// Width along the strip of one tray cell: the pager takes room for its cells, everything else one `tray_w`.
 fn tray_cell_w(m: &Metrics, kind: Tray, i: &Inputs) -> f32 {
     if kind == Tray::Workspaces && i.pager > 0 {
-        (crate::panel::plasma_style::pager_extent(i.pager, m.icon, i.vertical) + 2.0 * (4.0 * m.scale).round()).max(m.tray_w)
+        (crate::panel::plasma_style::pager_extent(i.pager, m.icon, i.vertical, i.pager_shape) + 2.0 * (4.0 * m.scale).round()).max(m.tray_w)
     } else {
         m.tray_w
     }
@@ -473,6 +475,7 @@ mod tests {
                                 clock: true,
                                 desktop: true,
                                 pager: 0,
+                                pager_shape: crate::panel::plasma_style::PAGER_SCREEN,
                                 vertical: false,
                             },
                         );
@@ -508,6 +511,7 @@ mod tests {
             clock: true,
             desktop: true,
             pager: 0,
+            pager_shape: crate::panel::plasma_style::PAGER_SCREEN,
             vertical: false,
         }
     }

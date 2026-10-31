@@ -175,10 +175,45 @@ pub struct Extras {
     pub workspace: Option<String>,
     /// Every workspace as (current, has windows, wants attention), in order: the pager cells of a theme that asks for them.
     pub workspaces: Vec<(bool, bool, bool)>,
+    /// The windows of each workspace of `workspaces`, placed on the desktop; empty where the window manager reports no geometry.
+    pub pager_windows: Vec<Vec<PagerWindow>>,
+    /// The desktop size those windows are relative to (None: unknown, the pager imitates a 16:9 screen).
+    pub desktop: Option<(u32, u32)>,
     pub window_app: Option<String>,
     pub playing: bool,
     pub caps: bool,
     pub num: bool,
+}
+
+/// One window as the pager draws it: its rectangle as fractions of the desktop (0..=1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PagerWindow {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub active: bool,
+}
+
+/// The pager's windows per workspace. A window counts when it is mapped (not minimised), its geometry and the desktop size are
+/// known, and some of it lies on the desktop; a window on every workspace (`desktop: None`) is drawn on each. Without a
+/// desktop size nothing can be placed, so nothing is drawn.
+pub fn pager_windows(windows: &[crate::wm::Window], desktop: Option<(u32, u32)>, workspaces: usize) -> Vec<Vec<PagerWindow>> {
+    let mut out = vec![Vec::new(); workspaces];
+    let Some(desktop) = desktop else { return out };
+    for w in windows.iter().filter(|w| !w.minimized) {
+        let Some((x, y, fw, fh)) = w.geometry.and_then(|g| g.fractions(desktop)) else { continue };
+        let pw = PagerWindow { x, y, w: fw, h: fh, active: w.active };
+        match w.desktop {
+            Some(d) => {
+                if let Some(list) = out.get_mut(d as usize) {
+                    list.push(pw);
+                }
+            }
+            None => out.iter_mut().for_each(|list| list.push(pw)),
+        }
+    }
+    out
 }
 
 /// Symbol name for a status item in the current state.
@@ -533,16 +568,17 @@ impl Painter {
         }
     }
 
-    /// The pager: one miniature cell per workspace on the screen's aspect, the current one highlighted, an occupied one marked.
-    /// Window outlines need window geometry, which the tracker does not carry, so none are drawn.
+    /// The pager: one miniature cell per workspace on the desktop's shape, the current one highlighted, its windows drawn where
+    /// they are when the window manager reports their geometry, otherwise an occupied one marked with a plate.
     fn draw_pager(&mut self, pm: &mut Pixmap, f: &Frame, r: Rect) {
         let (m, c) = (f.m, f.c);
         let n = f.extras.workspaces.len();
         let across = (m.icon).min(if f.vertical { r.w } else { r.h });
         let along = if f.vertical { r.h } else { r.w };
-        let cells = crate::panel::plasma_style::pager_cells(n, PAGER_SCREEN.0, PAGER_SCREEN.1, along, across, f.vertical);
+        let shape = crate::panel::plasma_style::pager_shape(f.extras.desktop);
+        let cells = crate::panel::plasma_style::pager_cells(n, shape.0, shape.1, along, across, f.vertical);
         let (ox, oy) = if f.vertical { (r.x + (r.w - across) / 2.0, r.y) } else { (r.x, r.y + (r.h - across) / 2.0) };
-        for (cell, (active, occupied, urgent)) in cells.iter().zip(&f.extras.workspaces) {
+        for (i, (cell, (active, occupied, urgent))) in cells.iter().zip(&f.extras.workspaces).enumerate() {
             let (x, y) = (ox + cell.x, oy + cell.y);
             let rad = (m.corner * 0.6).max(1.0);
             fill_rounded(pm, x, y, cell.w, cell.h, rad, rgba(c.ink, 0.08));
@@ -552,8 +588,21 @@ impl Painter {
             } else if *urgent {
                 self.draw_frame_cell(pm, f, (x, y, cell.w, cell.h, rad), TaskState::Attention);
             }
-            if *occupied {
-                // "windows here": a small plate in the middle of the cell (no geometry is known)
+            let windows = f.extras.pager_windows.get(i).map(Vec::as_slice).unwrap_or(&[]);
+            if !windows.is_empty() {
+                for w in windows {
+                    let (wx, wy) = ((x + w.x * cell.w).round(), (y + w.y * cell.h).round());
+                    let (ww, wh) = ((w.w * cell.w).round().max(2.0), (w.h * cell.h).round().max(2.0));
+                    let (ww, wh) = (ww.min(x + cell.w - wx), wh.min(y + cell.h - wy));
+                    if ww <= 0.0 || wh <= 0.0 {
+                        continue;
+                    }
+                    let tone = if w.active { c.accent } else { c.ink };
+                    fill_rect(pm, wx, wy, ww, wh, rgba(tone, if w.active { 0.35 } else { 0.18 }));
+                    stroke_rounded(pm, wx + 0.5, wy + 0.5, (ww - 1.0).max(0.0), (wh - 1.0).max(0.0), 0.0, rgba(tone, if w.active { 0.9 } else { 0.55 }), 1.0);
+                }
+            } else if *occupied {
+                // "windows here" without placement: a small plate in the middle of the cell (the window manager gave no geometry)
                 let (pw, ph) = ((cell.w * 0.45).round().max(2.0), (cell.h * 0.45).round().max(2.0));
                 fill_rounded(pm, (x + (cell.w - pw) / 2.0).round(), (y + (cell.h - ph) / 2.0).round(), pw, ph, 1.0, rgba(c.ink, if *active { 0.75 } else { 0.5 }));
             }
@@ -747,6 +796,7 @@ mod tests {
                 clock: true,
                 desktop: true,
                 pager: 0,
+                pager_shape: PAGER_SCREEN,
                 vertical: false,
             },
         );
@@ -811,6 +861,7 @@ mod tests {
                 clock: true,
                 desktop: true,
                 pager: 0,
+                pager_shape: PAGER_SCREEN,
                 vertical: true,
             },
         )
@@ -891,6 +942,7 @@ mod tests {
                 clock: true,
                 desktop: true,
                 pager: 0,
+                pager_shape: PAGER_SCREEN,
                 vertical,
             },
         );
@@ -1059,6 +1111,7 @@ mod tests {
                 clock: true,
                 desktop: true,
                 pager: 0,
+                pager_shape: PAGER_SCREEN,
                 vertical: false,
             },
         );
@@ -1091,6 +1144,93 @@ mod tests {
         assert!(pm.pixel(200, 22).unwrap().alpha() > 250, "the plate is opaque inside");
     }
 
+    fn pager_strip(extras: &Extras, shape: (f32, f32)) -> (Pixmap, Rect, Metrics) {
+        let m = Metrics::new(1.0, WinAlign::Left).styled(&plasma_style());
+        let mut p = Painter::default();
+        let kinds = [Tray::Workspaces, Tray::Audio];
+        let l = layout(
+            &m,
+            &Inputs {
+                width: 700.0,
+                align: WinAlign::Left,
+                labels: WinLabels::Never,
+                search: WinSearch::None,
+                buttons: 0,
+                tray: &kinds,
+                clock_text_w: 60.0,
+                scroll: 0.0,
+                start: true,
+                clock: true,
+                desktop: true,
+                pager: extras.workspaces.len(),
+                pager_shape: shape,
+                vertical: false,
+            },
+        );
+        let rect = l.tray.iter().find(|(k, _)| *k == Tray::Workspaces).unwrap().1;
+        let (c, snap) = (Colors::dark(), Snapshot::default());
+        let f = Frame {
+            m: &m,
+            c: &c,
+            layout: &l,
+            buttons: &[],
+            hover: None,
+            pressed: None,
+            open: None,
+            tray: &snap,
+            weather: None,
+            layout_name: None,
+            time: "14:07",
+            date: "23/10",
+            show_search_label: false,
+            alpha: 1.0,
+            top: false,
+            drag: None,
+            vertical: false,
+            right: false,
+            extras,
+        };
+        (p.draw_strip(&f).unwrap(), rect, m)
+    }
+
+    #[test]
+    fn pager_windows_are_placed_by_real_geometry_and_never_invented() {
+        use crate::wm::{Geometry, Window};
+        let g = |x, y, w, h| Some(Geometry { x, y, w, h });
+        let win = |desktop, active, minimized, geometry| Window { id: 1, app_id: "a".into(), desktop, active, minimized, geometry, ..Window::default() };
+        let desk = Some((1000, 500));
+        let windows = [win(Some(0), true, false, g(0, 0, 500, 250)), win(Some(1), false, false, g(500, 250, 500, 250)), win(Some(1), false, true, g(0, 0, 10, 10)), win(None, false, false, g(0, 0, 1000, 50)), win(Some(0), false, false, None), win(Some(9), false, false, g(0, 0, 9, 9))];
+        let placed = pager_windows(&windows, desk, 2);
+        assert_eq!(placed.len(), 2);
+        assert_eq!(placed[0], vec![PagerWindow { x: 0.0, y: 0.0, w: 0.5, h: 0.5, active: true }, PagerWindow { x: 0.0, y: 0.0, w: 1.0, h: 0.1, active: false }]);
+        assert_eq!(placed[1].len(), 2, "its own window and the one on every workspace; the minimised one is hidden");
+        // a Wayland-style snapshot without a desktop size, or with no geometry, draws nothing
+        assert!(pager_windows(&windows, None, 2).iter().all(Vec::is_empty));
+        assert!(pager_windows(&[win(Some(0), true, false, None)], desk, 2).iter().all(Vec::is_empty));
+    }
+
+    #[test]
+    fn the_pager_draws_windows_at_their_real_place_on_the_real_desktop_shape() {
+        let ws = vec![(true, true, false), (false, true, false)];
+        let windows = vec![vec![PagerWindow { x: 0.5, y: 0.0, w: 0.5, h: 1.0, active: false }], vec![]];
+        let extras = Extras { workspaces: ws.clone(), pager_windows: windows, desktop: Some((3440, 1440)), ..Extras::default() };
+        let shape = crate::panel::plasma_style::pager_shape(extras.desktop);
+        let (pm, rect, m) = pager_strip(&extras, shape);
+        let cells = crate::panel::plasma_style::pager_cells(2, shape.0, shape.1, rect.w, m.icon, false);
+        // ultrawide cells, not 16:9 ones
+        assert!(cells[0].w / cells[0].h > 2.2, "{:?}", cells[0]);
+        let oy = (m.bar_h - m.icon) / 2.0;
+        let at = |cell: usize, fx: f32| {
+            let c = cells[cell];
+            let p = pm.pixel((rect.x + c.x + c.w * fx).round() as u32, (oy + c.y + c.h / 2.0).round() as u32).unwrap();
+            luma(p)
+        };
+        // the window covers the right half of the first cell: brighter there than on the left half
+        assert!(at(0, 0.75) > at(0, 0.25) + 6, "{} vs {}", at(0, 0.75), at(0, 0.25));
+        // the second workspace has windows but no placement: the middle plate marks it as occupied, as before
+        assert!(at(1, 0.5) > at(1, 0.1) + 6);
+    }
+
     #[test]
     fn the_pager_draws_one_cell_per_workspace_with_the_current_one_marked() {
         use crate::panel::plasma_style::WorkspaceForm;
@@ -1115,6 +1255,7 @@ mod tests {
                 clock: true,
                 desktop: true,
                 pager: ws.len(),
+                pager_shape: PAGER_SCREEN,
                 vertical: false,
             },
         );
