@@ -208,10 +208,10 @@ mod tests {
         let path = tmp.join("preview.png");
         std::fs::write(&path, b"broken PNG").unwrap();
         assert!(shot(&path).is_none());
-        let mut image = Pixmap::new(12, 8).unwrap();
+        let mut image = Pixmap::new(420, 280).unwrap();
         image.fill(tiny_skia::Color::WHITE);
         image.save_png(&path).unwrap();
-        assert_eq!(shot(&path).unwrap().data(), image.data());
+        assert!(shot(&path).unwrap().data() == image.data(), "the repaired PNG is decoded and painted");
     }
 
     #[test]
