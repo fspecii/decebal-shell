@@ -39,7 +39,8 @@ impl Colors {
     /// The palette of a theme: its dock colour as the bar, its text colours as ink, its accent for the
     /// start logo and running lines, hover/press overlays in the text colour.
     pub fn from_theme(t: &Theme) -> Colors {
-        let light = !t.dark;
+        // A dark panel can belong to a light desktop; control materials follow their own surface.
+        let light = t.dock.luminance() > 0.3;
         Colors {
             light,
             bg: t.dock.t(),
@@ -740,6 +741,10 @@ mod tests {
         let theme = def.resolve("gnome-adwaita", false, &Selection::default());
         assert!(crate::theme::model::contrast(theme.text, theme.dock) < 2.0, "the original GNOME light-window/dark-dash design is preserved");
         let colors = Colors::from_theme(&theme);
+        assert!(!colors.light, "the taskbar material follows the dark dock, not the light windows");
+        let (base, alpha) = colors.search_bg;
+        let search = crate::theme::Rgb(base.0, base.1, base.2).over(theme.dock, alpha);
+        assert!(crate::theme::model::contrast(crate::theme::Rgb(colors.search_ink.0, colors.search_ink.1, colors.search_ink.2), search) >= 4.5, "search remains readable on the dark panel");
         assert!(crate::theme::model::contrast(crate::theme::Rgb(colors.ink.0, colors.ink.1, colors.ink.2), theme.dock) >= 4.5);
         assert!(crate::theme::model::contrast(crate::theme::Rgb(colors.dim.0, colors.dim.1, colors.dim.2), theme.dock) >= 3.0);
     }
