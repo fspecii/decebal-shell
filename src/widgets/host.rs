@@ -256,14 +256,41 @@ fn classify_x11(owned: bool, holder: Option<i32>, rec: Option<&Record>, trusted:
 }
 
 /// The pid holding the flock on lock `name`. Read from `/proc/locks`, so the check never takes the lock itself (a host
-/// starting at that moment would otherwise be refused); without `/proc/locks` the lock file's pid when it is held.
+/// starting at that moment would otherwise be refused). A descriptor-level check handles filesystems whose
+/// stat device number differs from the lock table's superblock device number.
 fn lock_holder(name: &str) -> Option<i32> {
     let path = crate::single::runtime_file(&format!("{name}.lock"));
     let meta = std::fs::metadata(&path).ok()?;
-    match std::fs::read_to_string("/proc/locks") {
-        Ok(locks) => flock_holder(&locks, meta.dev(), meta.ino()),
-        Err(_) => crate::single::signal(name, 0).then(|| std::fs::read_to_string(&path).ok()?.trim().parse().ok()).flatten(),
+    if let Some(pid) = std::fs::read_to_string("/proc/locks").ok().and_then(|locks| flock_holder(&locks, meta.dev(), meta.ino())) {
+        return Some(pid);
     }
+    let pid = std::fs::read_to_string(&path).ok()?.trim().parse().ok()?;
+    descriptor_holds_lock(pid, &meta).then_some(pid)
+}
+
+fn descriptor_holds_lock(pid: i32, target: &std::fs::Metadata) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+    let process = PathBuf::from(format!("/proc/{pid}"));
+    if !std::fs::metadata(&process).is_ok_and(|m| m.uid() == target.uid()) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(process.join("fd")) else { return false };
+    entries.filter_map(Result::ok).any(|entry| {
+        // Compare the descriptor's real file identity before inspecting its kernel lock metadata.
+        if !std::fs::metadata(entry.path()).is_ok_and(|m| m.dev() == target.dev() && m.ino() == target.ino()) {
+            return false;
+        }
+        std::fs::read_to_string(process.join("fdinfo").join(entry.file_name())).is_ok_and(|info| fd_has_flock(&info, pid))
+    })
+}
+
+fn fd_has_flock(info: &str, pid: i32) -> bool {
+    info.lines().filter_map(|line| line.strip_prefix("lock:")).any(|line| {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        fields.get(1) == Some(&"FLOCK") && fields.get(3) == Some(&"WRITE") && fields.get(4).and_then(|v| v.parse::<i32>().ok()) == Some(pid)
+    })
 }
 
 /// The holder of an active (not waiting) FLOCK on the file `dev`/`ino` in the text of `/proc/locks`.
@@ -704,6 +731,35 @@ mod tests {
         assert_eq!(flock_holder(locks, 0x1a, 902), None, "not a flock");
         assert_eq!(flock_holder(locks, 0x1b, 900), None, "another device");
         assert_eq!(flock_holder(locks, 0x10302, 77), Some(558));
+    }
+
+    #[test]
+    fn descriptor_lock_identity_requires_a_real_exclusive_flock() {
+        use std::os::fd::AsRawFd;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("widget-lock-{}-{nonce}", std::process::id()));
+        let file = std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(&path).unwrap();
+        // The open descriptor remains usable; no temporary path can be left by a failed assertion.
+        std::fs::remove_file(&path).unwrap();
+        let meta = file.metadata().unwrap();
+        let pid = std::process::id() as i32;
+        assert!(!descriptor_holds_lock(pid, &meta), "an open file alone is not readiness");
+        // SAFETY: operate only on the private descriptor created by this test.
+        assert_eq!(unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }, 0);
+        assert!(descriptor_holds_lock(pid, &meta));
+        assert!(!descriptor_holds_lock(0, &meta));
+        // SAFETY: release that same private descriptor's lock.
+        assert_eq!(unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) }, 0);
+        assert!(!descriptor_holds_lock(pid, &meta), "a stale PID cannot establish ownership");
+    }
+
+    #[test]
+    fn descriptor_lock_parser_rejects_waiters_shared_and_foreign_locks() {
+        assert!(fd_has_flock("lock:\t1: FLOCK ADVISORY WRITE 555 00:23:900 0 EOF", 555));
+        assert!(!fd_has_flock("lock:\t1: -> FLOCK ADVISORY WRITE 555 00:23:900 0 EOF", 555));
+        assert!(!fd_has_flock("lock:\t1: FLOCK ADVISORY READ 555 00:23:900 0 EOF", 555));
+        assert!(!fd_has_flock("lock:\t1: FLOCK ADVISORY WRITE 556 00:23:900 0 EOF", 555));
+        assert!(!fd_has_flock("lock:\t1: POSIX ADVISORY WRITE 555 00:23:900 0 EOF", 555));
     }
 
     #[test]

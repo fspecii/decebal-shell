@@ -99,3 +99,15 @@ built from production sources `555c37a`. No forced cleanup, rescued/leftover tok
 This qualifies the isolated launcher interactions and bounds. It does not qualify the main-branch integration,
 Start-button anchoring, compositor material/blur, upstream pixel fidelity, Control Center parser semantics,
 optimized release or physical hardware. Earlier failed/pressure-aborted runs remain recorded.
+
+
+### Main-branch integration checkpoint
+
+Merge `3997411` preserves the current Wayland repairs, anchored launcher calls and explicit-disabled applet
+semantics. UKUI is now included in the common inert-empty-state regression. The merged snapshot passed 135
+focused tests (1 ignored), formatting, strict all-target Clippy and five development binary builds:
+`/var/tmp/decebal-ukui-main-integration-source-gate/result.json`. The integrated test artifact also passed the
+owned-Xvfb glass input/bounds check and eight private Control Center action checks:
+`/var/tmp/decebal-ukui-integrated-native-actions-gate/result.json`. These do not replace the pending integrated
+launcher matrix or optimized-release acceptance. The preceding 72-case launcher proof belongs to its explicitly
+recorded candidate binary.
