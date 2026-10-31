@@ -247,8 +247,6 @@ pub struct Model {
     pub themed: std::collections::HashSet<Category>,
     /// State a style keeps for itself (its current tab, an open menu): zone-like names, small integers.
     pub ui: HashMap<&'static str, usize>,
-    /// Lists a style fills once when it is built (never while painting), by name.
-    pub entries: HashMap<&'static str, Vec<Entry>>,
 }
 
 impl Model {
@@ -265,7 +263,6 @@ impl Model {
             user: String::new(),
             themed: Default::default(),
             ui: HashMap::new(),
-            entries: HashMap::new(),
         }
     }
 

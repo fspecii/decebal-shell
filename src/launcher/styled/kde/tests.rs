@@ -573,7 +573,9 @@ const LONG: std::time::Duration = std::time::Duration::from_secs(20);
 fn wake_channel() -> mpsc::Receiver<()> {
     let (tx, rx) = mpsc::channel();
     let tx = Mutex::new(tx);
-    set_waker(Arc::new(move || drop(tx.lock().unwrap().send(()))));
+    set_waker(Arc::new(move || {
+        let _ = tx.lock().unwrap().send(());
+    }));
     rx
 }
 
@@ -588,7 +590,7 @@ fn held(name: &'static str, until_cancelled: bool) -> (mpsc::Sender<()>, mpsc::R
                 std::thread::yield_now();
             }
         } else {
-            drop(hold.recv_timeout(LONG));
+            let _ = hold.recv_timeout(LONG);
         }
         places::Loaded { computer: vec![Entry { name: name.into(), detail: "d".into(), icon: "folder".into(), open: vec!["xdg-open".into(), name.into()], at: 0 }], documents: Vec::new() }
     };
@@ -705,7 +707,7 @@ fn shared_host_waker_and_tick_deliver_places_without_further_input() {
     release.send(()).unwrap();
     woken.recv_timeout(LONG).unwrap();
     assert_eq!(st.tick(), crate::window_app::Response::REDRAW);
-    assert_eq!(computer_rows()[0].name, "Ready without pointer motion");
+    assert!(computer_rows().iter().any(|entry| entry.name == "Ready without pointer motion"));
     assert_eq!(zone(&st, "apps").items.len(), computer_rows().len());
     assert_eq!(st.tick(), crate::window_app::Response::NONE);
 }

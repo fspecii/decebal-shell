@@ -18,8 +18,7 @@
 //! [`USER_DIRS_CAP`] bytes, `recently-used.xbel` at most [`XBEL_WINDOW`] bytes from each end, [`MAX_BOOKMARKS`] bookmarks looked at, [`MAX_STATS`]
 //! existence checks, [`MAX_MEDIA`] devices.
 //!
-//! The completion is announced through [`set_waker`], the hook the launcher host (`Launcher::set_waker` / `tick`) calls the style with; until the host
-//! forwards its waker (docs/plasma-theme-ports/kickoff-places-hook.md) the tab picks the answer up at the next input event instead of immediately.
+//! The completion is announced through [`set_waker`], forwarded by the shared launcher host, and harvested on its next tick without waiting for input.
 
 use super::super::Entry;
 use std::cell::RefCell;
@@ -741,7 +740,12 @@ mod tests {
     fn waker() -> (crate::window_app::Waker, mpsc::Receiver<()>) {
         let (tx, rx) = mpsc::channel();
         let tx = Mutex::new(tx);
-        (Arc::new(move || drop(tx.lock().unwrap().send(()))), rx)
+        (
+            Arc::new(move || {
+                let _ = tx.lock().unwrap().send(());
+            }),
+            rx,
+        )
     }
 
     fn named(n: &str) -> Loaded {
@@ -756,7 +760,7 @@ mod tests {
         let (release, held) = mpsc::channel::<()>();
         assert_eq!(
             request(move |_| {
-                drop(held.recv_timeout(LONG));
+                let _ = held.recv_timeout(LONG);
                 named("first")
             }),
             State::Loading
@@ -778,7 +782,7 @@ mod tests {
         set_waker(wake);
         let (release, held) = mpsc::channel::<()>();
         request(move |_| {
-            drop(held.recv_timeout(LONG));
+            let _ = held.recv_timeout(LONG);
             named("answer")
         });
         assert!(data().is_none() && state() == State::Loading, "nothing yet");
@@ -824,7 +828,7 @@ mod tests {
         set_waker(wake);
         let (release, held) = mpsc::channel::<()>();
         request(move |_| {
-            drop(held.recv_timeout(LONG));
+            let _ = held.recv_timeout(LONG);
             named("kept")
         });
         cancel();
