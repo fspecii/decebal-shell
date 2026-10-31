@@ -10,6 +10,7 @@ mod embed;
 pub mod gate;
 mod indicators;
 pub mod lock;
+pub use applets::{classic_symbol, theme_logo};
 pub use embed::GAP as STATUS_GAP;
 pub mod menus;
 pub mod overlay;
@@ -371,6 +372,8 @@ pub struct DecBar {
     more_target: Option<Tray>,
     /// The theme's logo, rendered once per size and colour.
     brand_cache: Option<(applets::LogoKey, Option<Pixmap>)>,
+    /// What an embedding host (the taskbar) had no room for: the overflow cell lists it.
+    embed_hidden: std::cell::RefCell<Vec<Tray>>,
 }
 
 impl DecBar {
@@ -467,6 +470,7 @@ impl DecBar {
             app_menu_page: None,
             more_target: None,
             brand_cache: None,
+            embed_hidden: std::cell::RefCell::new(Vec::new()),
         };
         if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
             bar.symbols.prepare_material();
@@ -739,6 +743,9 @@ impl DecBar {
 
     /// The applets the overflow cell lists, whatever the renderer.
     pub(super) fn hidden_items(&self) -> Vec<Tray> {
+        if self.embedded {
+            return self.embed_hidden.borrow().clone();
+        }
         if self.pill_bar() {
             return self.v_hidden();
         }

@@ -1280,7 +1280,7 @@ impl DecBar {
     }
 
     /// Views workspace `index`: rdwm's `view` over its IPC socket when it reports tags, else EWMH.
-    fn v_switch_workspace(&mut self, index: usize) {
+    pub(super) fn v_switch_workspace(&mut self, index: usize) {
         if self.layout_state().is_some_and(|l| !l.tags.is_empty()) {
             rdwm::send_action("view", &[&(index + 1).to_string()]);
         } else {

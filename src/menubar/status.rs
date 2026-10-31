@@ -413,7 +413,8 @@ impl DecBar {
             }
             Act::None | Act::VolumeSlider | Act::BrightnessSlider => {}
             // handled by run_applet_act above
-            Act::MenuOpen(_)
+            Act::Workspace(_)
+            | Act::MenuOpen(_)
             | Act::MenuBack
             | Act::MenuRun(..)
             | Act::MediaPrev

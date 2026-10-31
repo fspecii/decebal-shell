@@ -104,6 +104,46 @@ impl ActiveWindow for WmActive {
     }
 }
 
+/// A host's own window tracker (the taskbar's): the embedded status engine reads it instead of starting another.
+pub struct TrackerActive(pub Tracker);
+
+impl ActiveWindow for TrackerActive {
+    fn active_app_name(&self) -> Option<String> {
+        self.0.snapshot().active().map(|w| w.app_id.clone())
+    }
+    fn workspaces(&self) -> Vec<Workspace> {
+        self.0.workspaces()
+    }
+    fn switch_workspace(&self, index: usize) {
+        self.0.switch_workspace(index);
+    }
+    fn active_title(&self) -> Option<String> {
+        self.0.snapshot().active().map(|w| w.title.clone()).filter(|t| !t.is_empty())
+    }
+    fn close_active(&self) {
+        if let Some(w) = self.0.snapshot().active() {
+            self.0.close(w.id);
+        }
+    }
+    fn minimize_active(&self) {
+        if let Some(w) = self.0.snapshot().active() {
+            self.0.minimize(w.id);
+        }
+    }
+    fn windows(&self) -> Vec<crate::wm::Window> {
+        self.0.snapshot().windows
+    }
+    fn activate_window(&self, id: u64) {
+        self.0.activate(id);
+    }
+    fn minimize_window(&self, id: u64) {
+        self.0.minimize(id);
+    }
+    fn close_window(&self, id: u64) {
+        self.0.close(id);
+    }
+}
+
 /// Always reports no focused app, so the bar falls back to "Finder".
 pub struct NoActiveWindow;
 

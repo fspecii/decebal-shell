@@ -4,7 +4,7 @@
 //! dispatches to these methods when `dock.style` is `"windows"`.
 
 use super::*;
-use crate::config::{DockStyle, WinPosition, WinTheme};
+use crate::config::{DockStyle, WinTheme};
 use crate::menubar::clock;
 use crate::menubar::{DecBar, Tray};
 use crate::taskbar::draw::{Colors, Frame, Painter};
@@ -19,6 +19,8 @@ pub(super) struct WinState {
     pub painter: Painter,
     pub status: DecBar,
     pub status_started: bool,
+    /// The status engine reads the dock's tracker.
+    pub status_tracker: bool,
     pub m: Metrics,
     pub colors: Colors,
     pub buttons: Vec<TaskButton>,
@@ -48,6 +50,7 @@ impl WinState {
             painter,
             status: DecBar::status_engine(),
             status_started: false,
+            status_tracker: false,
             m,
             colors: Colors::dark(),
             buttons: Vec::new(),
@@ -72,6 +75,11 @@ pub fn clock_lines() -> (String, String) {
     (time, date)
 }
 
+/// The short date a side taskbar fits under the time: `27/10`.
+pub fn short_date(date: &str) -> String {
+    date.rsplit_once('/').map_or_else(|| date.to_string(), |(dm, _)| dm.to_string())
+}
+
 /// What opens when the search entry is clicked: `DECEBAL_SPOTLIGHT` or decspot.
 pub fn search_argv() -> Vec<String> {
     match std::env::var("DECEBAL_SPOTLIGHT") {
@@ -80,10 +88,15 @@ pub fn search_argv() -> Vec<String> {
     }
 }
 
+/// The taskbar's screen edge: the user's `edge`, the old `windowsPosition`, the theme's `[dock] position` (see
+/// [`crate::panel`]).
+pub fn taskbar_edge(s: &config::DockSettings) -> crate::panel::Edge {
+    crate::theme::th().taskbar_panel(s).edge
+}
+
 /// Surface spec of the taskbar for these settings and metrics.
 pub fn taskbar_spec(s: &config::DockSettings, m: &Metrics) -> SurfaceSpec {
-    let anchor = if s.windows_position == WinPosition::Top { Anchor::Top } else { Anchor::Bottom };
-    SurfaceSpec { anchor, margin: 0, reserve: m.bar_h.ceil() as i32, stretch: true, namespace: "decebal-dock" }
+    SurfaceSpec { anchor: taskbar_edge(s).anchor(), margin: 0, reserve: m.bar_h.ceil() as i32, stretch: true, namespace: "decebal-dock" }
 }
 
 /// y of an open menu's bottom edge: above a bottom strip, or below a top one.
@@ -100,8 +113,62 @@ impl DockApp {
         self.dock.settings.style == DockStyle::Windows
     }
 
+    fn win_panel_edge(&self) -> crate::panel::Edge {
+        taskbar_edge(&self.dock.settings)
+    }
+
     fn on_top(&self) -> bool {
-        self.dock.settings.windows_position == WinPosition::Top
+        self.win_panel_edge() == crate::panel::Edge::Top
+    }
+
+    /// The taskbar runs down a side edge (Windows 10 allowed it on the left and the right).
+    pub(super) fn win_vertical(&self) -> bool {
+        self.win_panel_edge().is_vertical()
+    }
+
+    fn on_right(&self) -> bool {
+        self.win_panel_edge() == crate::panel::Edge::Right
+    }
+
+    /// x of the strip's left edge in the surface (a right strip sits at the surface's right end).
+    fn win_strip_x(&self) -> f32 {
+        if self.on_right() {
+            (self.surface.0 as f32 - self.win_bar_h()).max(0.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// The strip on the surface: (x, y, w, h).
+    pub(super) fn win_strip_rect(&self) -> (f32, f32, f32, f32) {
+        if self.win_vertical() {
+            (self.win_strip_x(), 0.0, self.win_bar_h(), self.surface.1 as f32)
+        } else {
+            (0.0, self.win_strip_top(), self.surface.0 as f32, self.win_bar_h())
+        }
+    }
+
+    /// A surface point in the layout's frame: (along the strip, across it from the strip's own origin).
+    fn win_local(&self, x: f32, y: f32) -> (f32, f32) {
+        if self.win_vertical() {
+            (y, x - self.win_strip_x())
+        } else {
+            (x, y - self.win_strip_top())
+        }
+    }
+
+    /// The coordinate along the strip of a surface point.
+    fn win_along(&self, x: f32, y: f32) -> f32 {
+        self.win_local(x, y).0
+    }
+
+    /// A rectangle of the layout on the surface.
+    pub(super) fn win_to_surface(&self, r: crate::taskbar::Rect) -> (f32, f32, f32, f32) {
+        if self.win_vertical() {
+            (self.win_strip_x() + r.y, r.x, r.h, r.w)
+        } else {
+            (r.x, self.win_strip_top() + r.y, r.w, r.h)
+        }
     }
 
     /// Creates the taskbar state the first time the Windows style is needed and starts the status engine.
@@ -111,6 +178,13 @@ impl DockApp {
             self.win = Some(Box::new(WinState::new(&self.dock.settings, scale)));
             if let Some(win) = self.win.as_mut() {
                 win.status.status_surface_origin(self.surface_origin.0, self.surface_origin.1);
+            }
+        }
+        // the workspace, window and application-menu applets read the dock's own window tracker
+        if let (Some(w), Some(t)) = (self.win.as_mut(), self.tracker.clone()) {
+            if !w.status_tracker {
+                w.status_tracker = true;
+                w.status.status_set_active(Box::new(crate::menubar::active::TrackerActive(t)));
             }
         }
         self.win_apply_settings();
@@ -166,43 +240,70 @@ impl DockApp {
 
     /// y of the strip's top edge in the surface.
     pub(super) fn win_strip_top(&self) -> f32 {
-        if self.on_top() {
+        if self.on_top() || self.win_vertical() {
             0.0
         } else {
             (self.surface.1 as f32 - self.win_bar_h()).max(0.0)
         }
     }
 
-    /// Strip edge a popup hangs from (the side facing the desktop).
+    /// Strip edge a popup hangs from (the side facing the desktop): a y for a top/bottom strip, an x for a side one.
     fn win_edge(&self) -> f32 {
-        if self.on_top() {
+        if self.win_vertical() {
+            if self.on_right() {
+                self.win_strip_x()
+            } else {
+                self.win_bar_h()
+            }
+        } else if self.on_top() {
             self.win_bar_h()
         } else {
             self.win_strip_top()
         }
     }
 
+    /// Length of the strip (its layout's width).
     fn win_width(&self) -> f32 {
-        self.surface.0.max(1) as f32
+        if self.win_vertical() {
+            self.surface.1.max(1) as f32
+        } else {
+            self.surface.0.max(1) as f32
+        }
     }
 
     pub(super) fn win_layout(&self) -> Option<Layout> {
+        use crate::panel::AppletId as A;
         let w = self.win.as_ref()?;
         let s = &self.dock.settings;
+        let vertical = self.win_vertical();
+        // a side strip has icon-only buttons, a search button and a stacked clock
+        let search = match (w.status.status_shows(A::Search), vertical, s.windows_search) {
+            (false, _, _) => config::WinSearch::None,
+            (true, true, config::WinSearch::Box) => config::WinSearch::Button,
+            (true, _, other) => other,
+        };
+        let labels = if vertical { config::WinLabels::Never } else { s.windows_labels };
+        let buttons = if w.status.status_shows(A::Tasks) { w.buttons.len() } else { 0 };
+        let clock_w = if vertical { 2.0 * 15.0 * w.m.scale - 2.0 * w.m.clock_pad + 8.0 * w.m.scale } else { w.clock_w };
         let builtin_count = w.status.status_kinds_with_limit(0).len();
-        let slots = taskbar::indicator_capacity(&w.m, self.win_width(), s.windows_search, w.buttons.len(), builtin_count, w.clock_w);
-        let kinds = w.status.status_kinds_with_limit(slots);
+        let slots = taskbar::indicator_capacity(&w.m, self.win_width(), search, buttons, builtin_count, clock_w);
+        // how many tray cells fit beside Start, search, one task button and the clock
+        let cells = taskbar::indicator_capacity(&w.m, self.win_width(), search, buttons, 0, clock_w);
+        let kinds = w.status.status_kinds_fit(cells, slots);
         Some(taskbar::layout(
             &w.m,
             &Inputs {
                 width: self.win_width(),
                 align: s.windows_align,
-                labels: s.windows_labels,
-                search: s.windows_search,
-                buttons: w.buttons.len(),
+                labels,
+                search,
+                buttons,
                 tray: &kinds,
-                clock_text_w: w.clock_w,
+                clock_text_w: clock_w,
                 scroll: w.scroll,
+                start: w.status.status_shows(A::Launcher),
+                clock: w.status.status_shows(A::Clock),
+                desktop: w.status.status_shows(A::ShowDesktop),
             },
         ))
     }
@@ -226,14 +327,21 @@ impl DockApp {
 
     pub(super) fn win_size(&self) -> (u32, u32) {
         let bar = self.win_bar_h();
+        let vertical = self.win_vertical();
         let mut extra = 0.0f32;
         if let Some(m) = &self.menu {
-            extra = extra.max(m.menu.size().1 + MENU_GAP + POP_TOP);
+            let (mw, mh) = m.menu.size();
+            extra = extra.max(if vertical { mw } else { mh } + MENU_GAP + POP_TOP);
         }
-        if let Some((_, h)) = self.win.as_ref().and_then(|w| w.status.status_size()) {
-            extra = extra.max(h + crate::menubar::STATUS_GAP + POP_TOP);
+        if let Some((pw, ph)) = self.win.as_ref().and_then(|w| w.status.status_size()) {
+            extra = extra.max(if vertical { pw } else { ph } + crate::menubar::STATUS_GAP + POP_TOP);
         }
-        (0, (bar + extra).ceil() as u32)
+        // a side strip is as tall as the monitor and grows sideways; a top / bottom one as wide and grows up / down
+        if vertical {
+            ((bar + extra).ceil() as u32, 0)
+        } else {
+            (0, (bar + extra).ceil() as u32)
+        }
     }
 
     pub(super) fn win_spec(&self) -> Option<SurfaceSpec> {
@@ -245,9 +353,24 @@ impl DockApp {
         menu_bottom_at(self.on_top(), self.win_bar_h(), self.surface.1 as f32, menu_h)
     }
 
+    /// Where the open context menu is drawn: against the strip on the desktop side; beside a side strip, centred on
+    /// the item it belongs to along the strip.
+    pub(super) fn win_menu_dropdown(&self, m: &DockMenu) -> crate::menubar::menus::Dropdown {
+        if !self.win_vertical() {
+            return m.placed(self.surface.0 as f32, self.win_menu_bottom(m.size().1));
+        }
+        let mut d = m.placed(f32::MAX / 8.0, 0.0);
+        let len = self.surface.1 as f32;
+        d.x = if self.on_right() { self.win_strip_x() - MENU_GAP - d.w } else { self.win_bar_h() + MENU_GAP };
+        let y = (m.anchor_x - d.h / 2.0).clamp(4.0, (len - d.h - 4.0).max(4.0));
+        d.shift_y(y - d.y);
+        d
+    }
+
     /// Places the open status popup against the strip.
     fn win_place_popup(&mut self) {
-        let (edge, up, width) = (self.win_edge(), !self.on_top(), self.win_width());
+        let (edge, up, width) = (self.win_edge(), if self.win_vertical() { self.on_right() } else { !self.on_top() }, self.win_width());
+        let vertical = self.win_vertical();
         let indicator_anchor = self.win.as_ref().and_then(|w| w.status.status_open_kind()).and_then(|kind| {
             if !matches!(kind, Tray::Indicator(_) | Tray::Indicators) {
                 return None;
@@ -259,19 +382,28 @@ impl DockApp {
             if let Some(x) = indicator_anchor {
                 w.status.status_indicator_anchor(x);
             }
-            w.status.status_place(edge, up, width);
+            if vertical {
+                w.status.status_place_side(edge, up, width);
+            } else {
+                w.status.status_place(edge, up, width);
+            }
         }
     }
 
     pub(super) fn win_input_rects(&self) -> Vec<InputRect> {
         let (w, bar) = (self.surface.0 as i32, self.win_bar_h());
         let top = self.win_strip_top();
-        let mut rects = vec![InputRect { x: 0, y: top as i32, w, h: bar as i32 }];
+        let mut rects = if self.win_vertical() {
+            vec![InputRect { x: self.win_strip_x() as i32, y: 0, w: bar as i32, h: self.surface.1 as i32 }]
+        } else {
+            vec![InputRect { x: 0, y: top as i32, w, h: bar as i32 }]
+        };
         if let Some(m) = &self.menu {
-            let d = m.menu.placed(w as f32, self.win_menu_bottom(m.menu.size().1));
+            let d = self.win_menu_dropdown(&m.menu);
             rects.push(InputRect { x: d.x.floor() as i32, y: d.y.floor() as i32, w: d.w.ceil() as i32 + 1, h: d.h.ceil() as i32 });
         }
-        if let Some(r) = self.win.as_ref().and_then(|w| w.status.status_rect_at(self.win_edge(), !self.on_top(), self.win_width())) {
+        let up = if self.win_vertical() { self.on_right() } else { !self.on_top() };
+        if let Some(r) = self.win.as_ref().and_then(|w| w.status.status_rect_at(self.win_edge(), up, self.win_width())) {
             rects.push(r);
         }
         rects
@@ -284,11 +416,17 @@ impl DockApp {
         self.win_place_popup();
         let Some(layout) = self.win_layout() else { return };
         let y0 = self.win_strip_top();
+        let x0 = self.win_strip_x();
         let top = self.on_top();
+        let (vertical, right) = (self.win_vertical(), self.on_right());
+        let painted = if vertical { layout.transposed() } else { layout.clone() };
+        let to_surface = |r: crate::taskbar::Rect| if vertical { (x0 + r.y + r.h / 2.0, r.x + r.w / 2.0) } else { (r.cx(), y0 + r.cy()) };
         // the theme's dock translucency; the Transparency setting shifts it around its 0.4 default
         let alpha = (crate::theme::th().dock_alpha - (self.dock.settings.transparency - 0.4) * 0.25).clamp(0.0, 1.0);
         let Some(w) = self.win.as_mut() else { return };
         let snap = w.status.status_state();
+        let extras = w.status.status_extras();
+        let short = short_date(&w.date);
         let layout_name = w.status.status_layout();
         let weather = w.status.status_weather_symbol();
         let open = w.status.status_open_kind().map(|k| if k == Tray::Clock { Hit::Clock } else { Hit::Tray(k) });
@@ -298,7 +436,7 @@ impl DockApp {
         let frame = Frame {
             m: &w.m,
             c: &w.colors,
-            layout: &layout,
+            layout: &painted,
             buttons: &w.buttons,
             hover,
             pressed,
@@ -307,27 +445,38 @@ impl DockApp {
             weather,
             layout_name: layout_name.as_deref(),
             time: &w.time,
-            date: &w.date,
-            show_search_label: self.dock.settings.windows_search == config::WinSearch::Box,
+            date: if vertical { &short } else { &w.date },
+            show_search_label: self.dock.settings.windows_search == config::WinSearch::Box && !vertical,
             alpha,
             top,
             drag,
+            vertical,
+            right,
+            extras: &extras,
         };
         if let Some(strip) = w.painter.draw_strip(&frame) {
-            pm.draw_pixmap(0, y0 as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+            pm.draw_pixmap(x0 as i32, y0 as i32, strip.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
         }
         for (kind, r) in &layout.tray {
             if let Tray::Indicator(key) = kind {
-                w.status.status_draw_indicator(pm, *key, r.cx(), y0 + r.cy(), 18.0 * w.m.scale);
+                let (cx, cy) = to_surface(*r);
+                w.status.status_draw_indicator(pm, *key, cx, cy, 18.0 * w.m.scale);
             }
         }
         w.status.status_draw(pm);
-        let indicator_rects: Vec<_> = layout.tray.iter().map(|(kind, r)| (*kind, (r.x, y0 + r.y, r.w, r.h))).collect();
+        let indicator_rects: Vec<_> = layout
+            .tray
+            .iter()
+            .map(|(kind, r)| {
+                let (cx, cy) = to_surface(*r);
+                let (w_, h_) = if vertical { (r.h, r.w) } else { (r.w, r.h) };
+                (*kind, (cx - w_ / 2.0, cy - h_ / 2.0, w_, h_))
+            })
+            .collect();
         w.status.status_debug_indicators(&indicator_rects);
         self.win_dump(&layout, y0);
-        let bottom = self.menu.as_ref().map(|m| self.win_menu_bottom(m.menu.size().1));
-        if let (Some(m), Some(bottom)) = (&mut self.menu, bottom) {
-            let d = m.menu.placed(pm.width() as f32, bottom);
+        let placed = self.menu.as_ref().map(|m| self.win_menu_dropdown(&m.menu));
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if let Some(f) = &mut m.fonts {
                 m.menu.draw(pm, &d, f);
                 f.trim();
@@ -336,8 +485,34 @@ impl DockApp {
     }
 
     fn win_dump(&mut self, l: &Layout, y0: f32) {
+        let vertical = self.win_vertical();
+        let edge = self.win_panel_edge().as_str();
+        let x0 = self.win_strip_x();
         let Some(w) = self.win.as_mut() else { return };
         let Some((path, last)) = w.debug.as_mut() else { return };
+        if vertical {
+            // zone centres as surface points: the strip's middle across, the layout's position along
+            let cx = x0 + w.m.bar_h / 2.0;
+            let mut t = format!("edge {edge}\nbar {} {x0} {}\nstart {cx} {}\n", l.width, w.m.bar_h, l.start.cx());
+            if let Some(s) = l.search {
+                t += &format!("search {cx} {}\n", s.cx());
+            }
+            for (b, r) in w.buttons.iter().zip(&l.tasks) {
+                t += &format!("task {} {cx} {} {}\n", b.app_id, r.cx(), u8::from(b.active));
+            }
+            for (k, r) in &l.tray {
+                t += &format!("tray {k:?} {cx} {}\n", r.cx());
+            }
+            t += &format!("clock {cx} {}\ndesktop {cx} {}\nstrut {}\n", l.clock.cx(), l.desktop.cx(), w.m.bar_h);
+            if let Some((x, y, pw, ph)) = w.status.status_rect().map(|r| (r.x, r.y, r.w, r.h)) {
+                t += &format!("popup {x} {y} {pw} {ph}\n");
+            }
+            if *last != t {
+                let _ = std::fs::write(&*path, &t);
+                *last = t;
+            }
+            return;
+        }
         let cy = y0 + w.m.bar_h / 2.0;
         let mut t = format!("bar {} {} {}\nstart {} {cy}\n", l.width, y0, w.m.bar_h, l.start.cx());
         if let Some(s) = l.search {
@@ -399,14 +574,15 @@ impl DockApp {
 
     pub(super) fn win_hit(&self, x: f32, y: f32) -> Option<Hit> {
         let l = self.win_layout()?;
-        l.hit(x, y - self.win_strip_top(), self.win_bar_h())
+        let (a, c) = self.win_local(x, y);
+        l.hit(a, c, self.win_bar_h())
     }
 
     pub(super) fn win_motion(&mut self, x: f32, y: f32) -> bool {
         // A menu or popup being open takes precedence.
-        let (top, bar, sh) = (self.on_top(), self.win_bar_h(), self.surface.1 as f32);
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(self.surface.0 as f32, menu_bottom_at(top, bar, sh, m.menu.size().1));
+        let placed = self.menu.as_ref().map(|m| self.win_menu_dropdown(&m.menu));
+        let along = self.win_along(x, y);
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if d.contains(x, y) {
                 return m.menu.pointer_moved(&d, x, y);
             }
@@ -418,17 +594,17 @@ impl DockApp {
         let mut redraw = w.status.status_motion(x, y);
         if let Some((id, _)) = &w.drag {
             let id = id.clone();
-            w.drag = Some((id, x));
-            self.win_drag_over(x);
+            w.drag = Some((id, along));
+            self.win_drag_over(along);
             return true;
         }
         if let Some((Hit::Task(i), px)) = w.pressed {
-            let moved = (x - px).abs() > DRAG_THRESHOLD;
+            let moved = (along - px).abs() > DRAG_THRESHOLD;
             let app = w.buttons.get(i).map(|b| b.app_id.clone());
             if let (true, Some(app)) = (moved, app) {
                 if self.pinned.contains(&app) {
                     if let Some(w) = self.win.as_mut() {
-                        w.drag = Some((app, x));
+                        w.drag = Some((app, along));
                         w.hover = None;
                     }
                     return true;
@@ -491,10 +667,9 @@ impl DockApp {
     }
 
     pub(super) fn win_button(&mut self, x: f32, y: f32, button: Button) -> bool {
-        let (sw, _) = self.surface;
-        let (top, bar, sh) = (self.on_top(), self.win_bar_h(), self.surface.1 as f32);
-        if let Some(m) = &mut self.menu {
-            let d = m.menu.placed(sw as f32, menu_bottom_at(top, bar, sh, m.menu.size().1));
+        let placed = self.menu.as_ref().map(|m| self.win_menu_dropdown(&m.menu));
+        let along = self.win_along(x, y);
+        if let (Some(m), Some(d)) = (&mut self.menu, placed) {
             if button == Button::Left && m.menu.press(&d, x, y) {
                 return false;
             }
@@ -532,7 +707,7 @@ impl DockApp {
         match (button, hit) {
             (Button::Left, Some(h)) => {
                 if let Some(w) = self.win.as_mut() {
-                    w.pressed = Some((h, x));
+                    w.pressed = Some((h, along));
                 }
                 true
             }
@@ -548,12 +723,18 @@ impl DockApp {
                 handled
             }
             (Button::Middle, Some(Hit::Tray(Tray::Audio))) => self.win.as_mut().is_some_and(|w| w.status.status_mute()),
+            (Button::Right, Some(Hit::Tray(kind @ (Tray::Awake | Tray::Task(_))))) => {
+                let r = self.win_layout().and_then(|l| l.rect_of(Hit::Tray(kind))).map(|r| self.win_to_surface(r)).unwrap_or((x, y, 0.0, 0.0));
+                let handled = self.win.as_mut().is_some_and(|w| w.status.status_activate(kind, r, Button::Right));
+                self.win_place_popup();
+                handled
+            }
             (Button::Right, Some(Hit::Task(i))) => {
                 self.win_open_task_menu(i);
                 true
             }
             (Button::Right, None) => {
-                self.win_open_dock_menu(x);
+                self.win_open_dock_menu(along);
                 true
             }
             _ => false,
@@ -565,13 +746,10 @@ impl DockApp {
             return false;
         }
         if self.menu.is_some() {
-            let (top, bar, sh) = (self.on_top(), self.win_bar_h(), self.surface.1 as f32);
-            let out = match &mut self.menu {
-                Some(m) => {
-                    let d = m.menu.placed(self.surface.0 as f32, menu_bottom_at(top, bar, sh, m.menu.size().1));
-                    m.menu.release(&d, x, y)
-                }
-                None => Outcome::None,
+            let placed = self.menu.as_ref().map(|m| self.win_menu_dropdown(&m.menu));
+            let out = match (&mut self.menu, placed) {
+                (Some(m), Some(d)) => m.menu.release(&d, x, y),
+                _ => Outcome::None,
             };
             return self.finish_menu(out);
         }
@@ -586,7 +764,8 @@ impl DockApp {
         }
         let Some((down, _)) = self.win.as_mut().and_then(|w| w.pressed.take()) else { return false };
         if self.win_hit(x, y) == Some(down) {
-            self.win_click(down, x);
+            let along = self.win_along(x, y);
+            self.win_click(down, along);
         }
         true
     }
@@ -608,19 +787,24 @@ impl DockApp {
             Hit::Task(i) => self.win_click_task(i),
             Hit::Tray(kind) => {
                 self.win_place_popup();
-                let cx = self.win_layout().and_then(|l| l.rect_of(hit)).map(|r| r.cx());
+                let rect = self.win_layout().and_then(|l| l.rect_of(hit));
+                let cx = rect.map(|r| r.cx());
+                let surface = rect.map(|r| self.win_to_surface(r));
                 let cy = self.win_strip_top() + self.win_bar_h() / 2.0;
-                if let (Some(w), Some(cx)) = (self.win.as_mut(), cx) {
+                if let (Some(w), Some(cx), Some(sr)) = (self.win.as_mut(), cx, surface) {
                     if matches!(kind, Tray::Indicator(_) | Tray::Indicators) {
                         w.status.status_indicator_button(kind, Button::Left, x, cy);
-                    } else {
+                    } else if DecBar::status_has_popup(kind) {
                         w.status.status_toggle(kind, cx);
+                    } else {
+                        w.status.status_activate(kind, sr, Button::Left);
                     }
                 }
                 self.win_place_popup();
             }
             Hit::Clock => {
-                let right = self.win_layout().map(|l| l.clock.x + l.clock.w);
+                let vertical = self.win_vertical();
+                let right = self.win_layout().map(|l| if vertical { l.clock.cx() } else { l.clock.x + l.clock.w });
                 if let (Some(w), Some(right)) = (self.win.as_mut(), right) {
                     w.status.status_toggle(Tray::Clock, right);
                 }
@@ -732,7 +916,7 @@ impl DockApp {
             return false;
         }
         let old = std::mem::replace(&mut self.dock.settings, new);
-        let look = |s: &config::DockSettings| (s.style, s.windows_align, s.windows_labels, s.windows_search, s.windows_position, s.windows_theme);
+        let look = |s: &config::DockSettings| (s.style, s.windows_align, s.windows_labels, s.windows_search, s.windows_position, s.windows_theme, s.edge);
         if look(&old) != look(&self.dock.settings) {
             self.style_changed(&old);
             if self.is_windows() {

@@ -197,7 +197,7 @@ pub struct DockMenu {
     base: Dropdown,
     menu: Menu,
     /// Wanted horizontal centre (the clicked cell), before clamping into the canvas.
-    anchor_x: f32,
+    pub anchor_x: f32,
 }
 
 /// Cuts `s` to `max` pixels with an ellipsis, measuring with `w`.

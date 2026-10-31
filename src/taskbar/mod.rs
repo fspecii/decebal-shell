@@ -216,6 +216,10 @@ pub struct Inputs<'a> {
     /// Width of the widest clock line.
     pub clock_text_w: f32,
     pub scroll: f32,
+    /// The launcher (Start), clock and show-desktop applets are on.
+    pub start: bool,
+    pub clock: bool,
+    pub desktop: bool,
 }
 
 /// Number of application-indicator cells that leave the native Start/search,
@@ -244,11 +248,12 @@ pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: u
 
 pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
     let h = m.bar_h;
-    // Right edge: show-desktop sliver, clock, tray icons.
-    let desktop = Rect { x: i.width - m.desktop_w, y: 0.0, w: m.desktop_w, h };
-    let clock_w = (i.clock_text_w + 2.0 * m.clock_pad).ceil();
+    // Right edge: show-desktop sliver, clock, tray icons. A zone whose applet is off is empty (and never hit).
+    let desktop_w = if i.desktop { m.desktop_w } else { 0.0 };
+    let desktop = Rect { x: i.width - desktop_w, y: 0.0, w: desktop_w, h };
+    let clock_w = if i.clock { (i.clock_text_w + 2.0 * m.clock_pad).ceil() } else { 0.0 };
     let clock = Rect { x: desktop.x - clock_w, y: 0.0, w: clock_w, h };
-    let mut tx = clock.x - m.gap.max(4.0 * m.scale);
+    let mut tx = clock.x - if i.clock { m.gap.max(4.0 * m.scale) } else { 0.0 };
     let mut tray: Vec<(Tray, Rect)> = i
         .tray
         .iter()
@@ -269,7 +274,8 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
         WinSearch::Box => m.search_box_w,
     };
     let spacing = |w: f32| if w > 0.0 { m.gap } else { 0.0 };
-    let fixed = m.start_w + spacing(search_w) + search_w + if i.buttons > 0 { m.gap } else { 0.0 };
+    let start_w = if i.start { m.start_w } else { 0.0 };
+    let fixed = start_w + spacing(search_w) + search_w + if i.buttons > 0 { m.gap } else { 0.0 };
     let n = i.buttons as f32;
     let (max_w, min_w) = if i.labels == WinLabels::Always { (m.label_max, m.label_min) } else { (m.btn_w, m.icon_min) };
     let avail = (region_r - region_l - fixed).max(0.0);
@@ -281,7 +287,7 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
         WinAlign::Left => region_l,
         WinAlign::Center => ((i.width - group_w) / 2.0).round().clamp(region_l, (region_r - group_w).max(region_l)),
     };
-    let start = Rect { x: x0, y: 0.0, w: m.start_w, h };
+    let start = Rect { x: x0, y: 0.0, w: start_w, h };
     let mut x = start.x + start.w;
     let search = (search_w > 0.0).then(|| {
         x += m.gap;
@@ -300,7 +306,25 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
     Layout { width: i.width, start, search, tasks, clip: (area_l, area_l + area_w), scroll_max, task_w, tray, clock, desktop }
 }
 
+/// Swaps the axes of a rectangle: the layout written along x becomes one along y (a taskbar down a side edge).
+pub fn transpose(r: Rect) -> Rect {
+    Rect { x: r.y, y: r.x, w: r.h, h: r.w }
+}
+
 impl Layout {
+    /// The same layout for a strip down a side edge: every zone keeps its place along the strip, which runs down y.
+    pub fn transposed(&self) -> Layout {
+        Layout {
+            start: transpose(self.start),
+            search: self.search.map(transpose),
+            tasks: self.tasks.iter().map(|r| transpose(*r)).collect(),
+            tray: self.tray.iter().map(|(k, r)| (*k, transpose(*r))).collect(),
+            clock: transpose(self.clock),
+            desktop: transpose(self.desktop),
+            ..self.clone()
+        }
+    }
+
     pub fn hit(&self, x: f32, y: f32, bar_h: f32) -> Option<Hit> {
         if y < 0.0 || y >= bar_h || x < 0.0 || x >= self.width {
             return None;
@@ -363,7 +387,10 @@ mod tests {
                         let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale);
                         let mut kinds = vec![Tray::Audio, Tray::Network, Tray::Battery, Tray::Control];
                         kinds.extend((0..capacity).map(|key| Tray::Indicator(key as u64)));
-                        let l = layout(&m, &Inputs { width, align, labels: WinLabels::Never, search, buttons: 8, tray: &kinds, clock_text_w: 72.0 * scale, scroll: 0.0 });
+                        let l = layout(
+                            &m,
+                            &Inputs { width, align, labels: WinLabels::Never, search, buttons: 8, tray: &kinds, clock_text_w: 72.0 * scale, scroll: 0.0, start: true, clock: true, desktop: true },
+                        );
                         if capacity > 0 {
                             let left = l.tray.first().unwrap().1.x;
                             let fixed_right = l.search.map_or(l.start.x + l.start.w, |r| r.x + r.w);
@@ -383,7 +410,19 @@ mod tests {
     }
 
     fn inp(width: f32, align: WinAlign, buttons: usize) -> Inputs<'static> {
-        Inputs { width, align, labels: WinLabels::Never, search: WinSearch::Button, buttons, tray: &[Tray::Network, Tray::Audio, Tray::Battery], clock_text_w: 60.0, scroll: 0.0 }
+        Inputs {
+            width,
+            align,
+            labels: WinLabels::Never,
+            search: WinSearch::Button,
+            buttons,
+            tray: &[Tray::Network, Tray::Audio, Tray::Battery],
+            clock_text_w: 60.0,
+            scroll: 0.0,
+            start: true,
+            clock: true,
+            desktop: true,
+        }
     }
 
     fn win(id: u64, app: &str, title: &str, active: bool) -> Window {

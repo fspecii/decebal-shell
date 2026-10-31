@@ -499,22 +499,19 @@ impl App for DockApp {
     fn glass_regions(&self) -> Vec<crate::glass::Region> {
         let mut regions = Vec::new();
         if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
-            regions.push(crate::glass::Region { x: 0.0, y: self.win_strip_top(), w: self.surface.0 as f32, h: w.m.bar_h, radius: 0.0 });
-            regions.extend(w.status.glass_regions());
+            let r = self.win_strip_rect();
+            regions.push(crate::glass::Region { x: r.0, y: r.1, w: r.2, h: r.3, radius: 0.0 });
+            let _ = w;
+            regions.extend(self.win.as_ref().map(|w| w.status.glass_regions()).unwrap_or_default());
         } else {
             regions.push(self.dock.glass_region(self.surface.0 as f32, self.surface.1 as f32));
         }
         if let Some(menu) = &self.menu {
-            let bottom = if let Some(w) = self.win.as_ref().filter(|_| self.is_windows()) {
-                if self.dock.settings.windows_position == crate::config::WinPosition::Top {
-                    w.m.bar_h + MENU_GAP + menu.menu.size().1
-                } else {
-                    self.surface.1 as f32 - w.m.bar_h - MENU_GAP
-                }
+            let placed = if self.is_windows() && self.win.is_some() {
+                self.win_menu_dropdown(&menu.menu)
             } else {
-                menu_bottom(self.surface.1, self.dock.panel_height())
+                menu.menu.placed(self.surface.0 as f32, menu_bottom(self.surface.1, self.dock.panel_height()))
             };
-            let placed = menu.menu.placed(self.surface.0 as f32, bottom);
             regions.push(crate::glass::Region { x: placed.x, y: placed.y, w: placed.w, h: placed.h, radius: crate::theme::th().radius });
         }
         regions
@@ -1283,6 +1280,117 @@ mod tests {
         std::fs::remove_file(r.dir.join("settings.json")).unwrap();
         r.app.tick();
         assert!(!r.app.is_windows());
+    }
+
+    /// The taskbar on `edge` of a 1280 x 900 monitor with every applet's data.
+    fn edge_rig(name: &str, edge: crate::panel::Edge, applets: Option<crate::panel::AppletSet>) -> Rig {
+        crate::menubar::DecBar::status_test_applets(applets);
+        let mut r = win_rig(name, &["launchpad", "foot", "beta", "trash"], vec![active_win(1, "foot", "shell"), win(2, "mpv", "movie")]);
+        r.set_settings(&format!(r#"{{"style":"windows","edge":"{}"}}"#, edge.as_str()));
+        r.app.win.as_mut().unwrap().status.status_fill_for_tests();
+        let (w, h) = r.app.size();
+        r.app.surface = if edge.is_vertical() { (w.max(1), 900) } else { (1280, h.max(1)) };
+        r
+    }
+
+    fn overlaps(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> bool {
+        a.0 + 0.5 < b.0 + b.2 && b.0 + 0.5 < a.0 + a.2 && a.1 + 0.5 < b.1 + b.3 && b.1 + 0.5 < a.1 + a.3
+    }
+
+    #[test]
+    fn the_taskbar_draws_every_zone_on_every_edge_and_opens_popups_towards_the_desktop() {
+        use crate::panel::Edge;
+        use crate::taskbar::Hit;
+        for edge in Edge::ALL {
+            let mut r = edge_rig(&format!("edge-{}", edge.as_str()), edge, Some(crate::panel::AppletSet::all()));
+            let spec = r.app.surface_spec().unwrap();
+            assert_eq!((spec.anchor, spec.reserve), (edge.anchor(), 48), "{edge:?}");
+            let strip = r.app.win_strip_rect();
+            let touches = match edge {
+                Edge::Top => strip.1 == 0.0,
+                Edge::Bottom => (strip.1 + strip.3 - r.app.surface.1 as f32).abs() < 1.0,
+                Edge::Left => strip.0 == 0.0,
+                Edge::Right => (strip.0 + strip.2 - r.app.surface.0 as f32).abs() < 1.0,
+            };
+            assert!(touches, "{edge:?}: strip {strip:?} on {:?}", r.app.surface);
+            let l = r.app.win_layout().unwrap();
+            let mut zones: Vec<(Hit, crate::taskbar::Rect)> = vec![(Hit::Start, l.start), (Hit::Clock, l.clock), (Hit::Desktop, l.desktop)];
+            zones.extend(l.search.map(|s| (Hit::Search, s)));
+            // a crowded strip scrolls its task row: only the buttons inside the visible span are zones
+            zones.extend(l.tasks.iter().enumerate().filter(|(_, t)| t.x >= l.clip.0 - 0.5 && t.x + t.w <= l.clip.1 + 0.5).map(|(i, t)| (Hit::Task(i), *t)));
+            zones.extend(l.tray.iter().map(|(k, t)| (Hit::Tray(*k), *t)));
+            let surf: Vec<_> = zones.iter().map(|(h, z)| (*h, r.app.win_to_surface(*z))).collect();
+            for (i, (h, z)) in surf.iter().enumerate() {
+                assert!(z.0 >= strip.0 - 0.5 && z.1 >= strip.1 - 0.5 && z.0 + z.2 <= strip.0 + strip.2 + 0.5 && z.1 + z.3 <= strip.1 + strip.3 + 0.5, "{edge:?} {h:?} {z:?} outside {strip:?}");
+                // the pointer finds every zone where it is drawn
+                assert_eq!(r.app.win_hit(z.0 + z.2 / 2.0, z.1 + z.3 / 2.0), Some(*h), "{edge:?} {h:?}");
+                for (h2, z2) in &surf[i + 1..] {
+                    assert!(!overlaps(*z, *z2), "{edge:?}: {h:?} overlaps {h2:?}");
+                }
+            }
+            // every popup applet of the tray opens beside the strip, on the surface
+            for (kind, _) in l.tray.iter().filter(|(k, _)| crate::menubar::DecBar::status_has_popup(*k)).cloned().collect::<Vec<_>>() {
+                r.app.win.as_mut().unwrap().status.status_close();
+                let z = r.app.win_to_surface(r.app.win_layout().unwrap().rect_of(Hit::Tray(kind)).unwrap());
+                let (cx, cy) = (z.0 + z.2 / 2.0, z.1 + z.3 / 2.0);
+                r.app.pointer_button(cx, cy, Button::Left);
+                r.app.pointer_release(cx, cy, Button::Left);
+                let open = r.app.win.as_ref().unwrap().status.status_open_kind();
+                assert_eq!(open, Some(kind), "{edge:?}: {kind:?} opens");
+                let (w, h) = r.app.size();
+                r.app.surface = if edge.is_vertical() { (w.max(r.app.surface.0), 900) } else { (1280, h.max(r.app.surface.1)) };
+                let strip = r.app.win_strip_rect();
+                let rect = r.app.win_input_rects().into_iter().skip(1).last().expect("popup input region");
+                let p = (rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
+                assert!(!overlaps(p, strip), "{edge:?} {kind:?}: popup {p:?} covers the strip {strip:?}");
+                assert!(p.0 >= 0.0 && p.1 >= 0.0 && p.0 + p.2 <= r.app.surface.0 as f32 + 1.0 && p.1 + p.3 <= r.app.surface.1 as f32 + 1.0, "{edge:?} {kind:?}: {p:?} off {:?}", r.app.surface);
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn a_short_side_taskbar_moves_what_does_not_fit_into_its_overflow_list() {
+        use crate::menubar::Tray;
+        use crate::panel::Edge;
+        let mut r = edge_rig("short-side", Edge::Left, Some(crate::panel::AppletSet::all()));
+        r.app.surface = (r.app.surface.0, 600);
+        let l = r.app.win_layout().unwrap();
+        let kinds: Vec<Tray> = l.tray.iter().map(|(k, _)| *k).collect();
+        assert!(kinds.contains(&Tray::More) && kinds.contains(&Tray::Control), "{kinds:?}");
+        let mut zones = vec![l.start, l.clock, l.desktop];
+        zones.extend(l.search);
+        zones.extend(l.tray.iter().map(|(_, t)| *t));
+        for (i, a) in zones.iter().enumerate() {
+            assert!(a.x >= 0.0 && a.x + a.w <= 600.5, "{a:?} off the strip");
+            for b in &zones[i + 1..] {
+                assert!(!(a.x + 0.5 < b.x + b.w && b.x + 0.5 < a.x + a.w), "{a:?} overlaps {b:?}");
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn each_taskbar_applet_alone_is_its_own_zone() {
+        use crate::panel::{AppletId as A, AppletSet, Edge};
+        for edge in [Edge::Bottom, Edge::Left] {
+            for id in A::all() {
+                let r = edge_rig(&format!("alone-{}-{}", edge.as_str(), id.key()), edge, Some(AppletSet::of(&[id])));
+                let l = r.app.win_layout().unwrap();
+                let shown = match id {
+                    A::Launcher => l.start.w > 0.0,
+                    A::Search => l.search.is_some(),
+                    A::Tasks => !l.tasks.is_empty(),
+                    A::Clock => l.clock.w > 0.0,
+                    A::ShowDesktop => l.desktop.w > 0.0,
+                    _ => !l.tray.is_empty(),
+                };
+                assert!(shown, "{edge:?}: {} alone", id.key());
+                let others = (l.start.w > 0.0) as usize + l.search.is_some() as usize + (!l.tasks.is_empty()) as usize + (l.clock.w > 0.0) as usize + (l.desktop.w > 0.0) as usize + l.tray.len();
+                assert_eq!(others, if matches!(id, A::Tasks) { 1 } else { 1 }, "{edge:?}: {} alone shows only itself", id.key());
+            }
+        }
+        crate::menubar::DecBar::status_test_applets(None);
     }
 
     #[test]

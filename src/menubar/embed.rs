@@ -24,6 +24,9 @@ pub struct Place {
     pub(super) edge: f32,
     pub(super) up: bool,
     pub(super) screen_w: f32,
+    /// The host strip runs down a side edge: `edge` is its inner x, `up` means the popup opens leftwards (a right
+    /// strip), `x` is the item's centre along the strip (y) and `screen_w` the strip's length.
+    pub(super) vertical: bool,
     /// Top-left of the open Control Center panel (surface coordinates), set by [`DecBar::status_place`].
     pub(super) origin: (f32, f32),
     /// Where an overlay host wants the panel (top-left); when set it wins over the item it opened from.
@@ -40,6 +43,60 @@ impl DecBar {
         bar.embed.taskbar = true;
         bar.was_place = None;
         bar
+    }
+
+    /// The window manager source of the host (its own tracker): the workspace, window and application-menu applets of
+    /// the taskbar read it.
+    pub fn status_set_active(&mut self, active: Box<dyn active::ActiveWindow>) {
+        self.active = active;
+        self.show_workspaces = true;
+        self.refresh_app_name();
+    }
+
+    /// Whether the taskbar shows applet `id` (the shared registry and the user's choices).
+    pub fn status_shows(&self, id: crate::panel::AppletId) -> bool {
+        self.shows(id)
+    }
+
+    /// What a press on a tray item that is not a popup does (launchers, toggles); true when handled. `r` is the item's
+    /// rectangle on the host surface.
+    pub fn status_activate(&mut self, kind: Tray, r: (f32, f32, f32, f32), button: Button) -> bool {
+        let done = self.applet_press(kind, r, button);
+        if self.open != Open::None {
+            self.status_replace();
+        }
+        done
+    }
+
+    /// Re-places what is open with the last placement parameters.
+    fn status_replace(&mut self) {
+        if self.embed.vertical {
+            self.status_place_side(self.embed.edge, self.embed.up, self.embed.screen_w);
+        } else {
+            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+        }
+    }
+
+    /// Items that open a popup of their own on the taskbar (the others act at once, see [`DecBar::status_activate`]).
+    pub fn status_has_popup(kind: Tray) -> bool {
+        matches!(
+            kind,
+            Tray::Layout
+                | Tray::Weather
+                | Tray::Bluetooth
+                | Tray::Network
+                | Tray::Audio
+                | Tray::Battery
+                | Tray::Control
+                | Tray::Clock
+                | Tray::AppMenu
+                | Tray::Window
+                | Tray::Workspaces
+                | Tray::Media
+                | Tray::Brightness
+                | Tray::More
+                | Tray::Indicators
+        )
     }
 
     /// Starts the data sources; `waker` makes the host's loop call [`DecBar::status_tick`].
@@ -65,32 +122,61 @@ impl DecBar {
     /// Fit-aware form used by taskbar hosts; the shared selector reserves its
     /// own overflow cell when some applications do not fit.
     pub fn status_kinds_with_limit(&self, indicator_slots: usize) -> Vec<Tray> {
-        let snap = self.snapshot();
-        let mut out = Vec::new();
-        if self.layout_state().is_some() {
-            out.push(Tray::Layout);
+        // the taskbar's own order; the quick-settings button, like Windows 11's, last in the tray group, next to the clock
+        self.applet_items(super::applets::TASKBAR_TRAY, indicator_slots)
+    }
+
+    /// [`DecBar::status_kinds_with_limit`] for a host with room for only `cells` tray cells: what does not fit moves
+    /// into an overflow cell (before quick settings), whose popup lists it.
+    pub fn status_kinds_fit(&self, cells: usize, indicator_slots: usize) -> Vec<Tray> {
+        let mut kinds = self.status_kinds_with_limit(indicator_slots);
+        let mut hidden = Vec::new();
+        if kinds.len() > cells {
+            let victims = [
+                Tray::Media,
+                Tray::Cpu,
+                Tray::Memory,
+                Tray::Weather,
+                Tray::Clipboard,
+                Tray::Notifications,
+                Tray::Dash,
+                Tray::Agents,
+                Tray::Brightness,
+                Tray::Lock,
+                Tray::Window,
+                Tray::AppMenu,
+                Tray::Workspaces,
+                Tray::Layout,
+                Tray::Awake,
+                Tray::Power,
+                Tray::Bluetooth,
+                Tray::Battery,
+                Tray::Network,
+                Tray::Audio,
+            ];
+            for v in victims {
+                if kinds.len() < cells {
+                    break;
+                }
+                if let Some(i) = kinds.iter().position(|k| *k == v) {
+                    hidden.push(kinds.remove(i));
+                }
+            }
+            // application cells go last: the overflow list reaches them through its Applications row
+            while kinds.len() >= cells.max(1) {
+                let Some(i) = kinds.iter().rposition(|k| matches!(k, Tray::Indicator(_))) else { break };
+                kinds.remove(i);
+                if !hidden.contains(&Tray::Indicators) {
+                    hidden.push(Tray::Indicators);
+                }
+            }
+            if !hidden.is_empty() {
+                let at = kinds.iter().position(|k| *k == Tray::Control).unwrap_or(kinds.len());
+                kinds.insert(at, Tray::More);
+            }
         }
-        if self.shared.weather.lock().is_ok_and(|w| w.is_some()) {
-            out.push(Tray::Weather);
-        }
-        if snap.bluetooth.is_some() {
-            out.push(Tray::Bluetooth);
-        }
-        if snap.net.is_some() {
-            out.push(Tray::Network);
-        }
-        if snap.volume.is_some() {
-            out.push(Tray::Audio);
-        }
-        if snap.battery.is_some() {
-            out.push(Tray::Battery);
-        }
-        out.extend(self.indicator_kinds(indicator_slots));
-        // the quick-settings button, like Windows 11's: last in the tray group, next to the clock
-        if crate::theme::th().control_center.enabled {
-            out.push(Tray::Control);
-        }
-        out
+        *self.embed_hidden.borrow_mut() = hidden;
+        kinds
     }
 
     /// The backend reports root-space surface origin; native menus remain in
@@ -129,6 +215,22 @@ impl DecBar {
         self.indicator_debug(rects);
     }
 
+    /// What the taskbar's applet cells show beyond the snapshot: CPU / memory load, the current workspace, the focused
+    /// window's app, whether media plays, the lock keys.
+    pub fn status_extras(&self) -> crate::taskbar::draw::Extras {
+        let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+        let ws = self.bar_workspaces();
+        crate::taskbar::draw::Extras {
+            cpu: perf.and_then(|p| p.0),
+            memory: perf.and_then(|p| p.1),
+            workspace: ws.iter().position(|w| w.active).map(|i| if ws[i].name.chars().count() <= 2 && !ws[i].name.is_empty() { ws[i].name.clone() } else { (i + 1).to_string() }),
+            window_app: self.v_win.as_ref().map(|(id, _)| id.clone()),
+            playing: self.dux_player().is_some_and(|p| p.status == crate::dash::mpris::Status::Playing),
+            caps: self.locks.caps(),
+            num: self.locks.num(),
+        }
+    }
+
     /// Latest system data (volume, network, battery, light/dark theme).
     pub fn status_state(&self) -> Snapshot {
         self.snapshot()
@@ -162,7 +264,7 @@ impl DecBar {
                 return false;
             }
             self.open_control();
-            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+            self.status_replace();
             return true;
         }
         self.embed.right_aligned = kind == Tray::Clock;
@@ -182,7 +284,7 @@ impl DecBar {
             }
         }
         self.open = Open::Popup(kind);
-        self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+        self.status_replace();
         true
     }
 
@@ -197,6 +299,18 @@ impl DecBar {
     /// Positions the open popup against the strip edge at `edge` (`up`: the strip is at the bottom and the
     /// popup opens above it) inside a surface `screen_w` wide. Call before drawing or hit-testing.
     pub fn status_place(&mut self, edge: f32, up: bool, screen_w: f32) {
+        self.embed.vertical = false;
+        self.place_embedded(edge, up, screen_w);
+    }
+
+    /// [`DecBar::status_place`] for a strip down a side edge: `edge` is the strip's inner x, `left` opens the popup
+    /// leftwards (a right-edge strip), `screen_h` is the strip's length; items are anchored by their centre y.
+    pub fn status_place_side(&mut self, edge: f32, left: bool, screen_h: f32) {
+        self.embed.vertical = true;
+        self.place_embedded(edge, left, screen_h);
+    }
+
+    fn place_embedded(&mut self, edge: f32, up: bool, screen_w: f32) {
         self.embed.edge = edge;
         self.embed.up = up;
         self.embed.screen_w = screen_w;
@@ -219,6 +333,14 @@ impl DecBar {
             if let Some((x, y)) = self.embed.pinned {
                 return Some((x, y, w, h));
             }
+        }
+        if self.embed.vertical {
+            // beside the strip, centred on the item along it, kept on the surface
+            let y = (self.embed.x - h / 2.0).clamp(4.0, (screen_w - h - 4.0).max(4.0));
+            let x = if up { edge - GAP - w } else { edge + GAP };
+            return Some((x, y, w, h));
+        }
+        if self.open == Open::Control {
             // like Windows' quick settings: against the right screen edge when its button is in the right half
             let x = if self.embed.x > screen_w / 2.0 { screen_w - w - GAP } else { self.embed.x - w / 2.0 };
             let y = if up { edge - GAP - h } else { edge + GAP };
@@ -311,7 +433,7 @@ impl DecBar {
             return true;
         }
         self.popup_press(x, y);
-        self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+        self.status_replace();
         true
     }
 
@@ -342,7 +464,7 @@ impl DecBar {
     /// Wheel over the open Control Center panel: the display and sound sliders move in steps of 5%.
     pub fn status_wheel(&mut self, x: f32, y: f32, dy: f32) -> bool {
         if self.indicator_menu_scroll(x, y, dy) {
-            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+            self.status_replace();
             return true;
         }
         if self.open != Open::Control {
@@ -370,7 +492,7 @@ impl DecBar {
                 self.set_volume_now((cur - dy.signum() * 0.05).clamp(0.0, 1.0));
                 if matches!(self.open, Open::Popup(Tray::Audio)) {
                     self.rebuild_popup();
-                    self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+                    self.status_replace();
                 }
                 true
             }
@@ -395,13 +517,20 @@ impl DecBar {
     /// True when something visible changed. Call at least once a minute.
     pub fn status_tick(&mut self) -> bool {
         let mut redraw = self.shared.changed.swap(false, Ordering::SeqCst);
+        if self.shows(crate::panel::AppletId::WindowTitle) {
+            redraw |= self.v_refresh_window();
+        }
+        redraw |= self.refresh_workspaces();
+        redraw |= self.refresh_app_name();
+        redraw |= self.dux_tick();
+        self.sync_workers();
         redraw |= self.indicator_tick();
         redraw |= crate::theme::take_changed();
         if self.open == Open::Control {
             if redraw && self.cc_drag.is_none() {
                 if crate::theme::th().control_center.enabled {
                     self.relayout_control();
-                    self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+                    self.status_replace();
                 } else {
                     self.close();
                 }
@@ -413,7 +542,7 @@ impl DecBar {
         }
         if redraw && matches!(self.open, Open::Popup(_)) && self.popup_drag.is_none() {
             self.rebuild_popup();
-            self.status_place(self.embed.edge, self.embed.up, self.embed.screen_w);
+            self.status_replace();
         }
         self.refresh_open_popup();
         if let Some(tm) = clock::now() {
@@ -428,6 +557,53 @@ impl DecBar {
             }
         }
         redraw
+    }
+
+    /// Tests of hosts: every data source an applet can need, filled with sample data (no workers).
+    #[cfg(test)]
+    pub fn status_fill_for_tests(&mut self) {
+        self.update_snapshot(|s| {
+            *s = Snapshot {
+                net: Some(sys::Net { wifi_enabled: true, wifi_name: "Home".into(), wired_name: String::new() }),
+                bluetooth: Some(sys::Bluetooth { powered: true, connected: 1 }),
+                volume: Some(sys::Volume { level: 0.5, muted: false }),
+                battery: Some(sys::Battery { percent: 80, charging: false, status: "Discharging".into() }),
+                brightness: Some(60),
+                ..Snapshot::default()
+            }
+        });
+        *self.shared.weather.lock().unwrap() = Some(sample_weather());
+        *self.shared.layout.lock().unwrap() = Some(rdwm::LayoutState { name: "tile".into(), symbol: "[]=".into(), tags: Vec::new() });
+        *self.dux_perf.lock().unwrap() = Some((Some(0.25), Some(0.5)));
+        self.workspaces = (0..4).map(|i| Workspace { name: (i + 1).to_string(), active: i == 0, occupied: true, urgent: false }).collect();
+        self.show_workspaces = true;
+        self.v_win = Some(("foot".into(), "~/src".into()));
+        let mut player = crate::dash::mpris::Player::new("org.mpris.MediaPlayer2.fixture", Instant::now());
+        player.status = crate::dash::mpris::Status::Playing;
+        player.meta.title = "Track".into();
+        (player.can_control, player.can_next, player.can_prev) = (true, true, true);
+        super::applets::TEST_PLAYER.with(|p| *p.borrow_mut() = Some(player));
+        let mut pm = Pixmap::new(8, 8).unwrap();
+        pm.fill(tiny_skia::Color::from_rgba8(240, 60, 90, 255));
+        self.indicators.items = vec![crate::sni::Item {
+            key: 1,
+            title: "App".into(),
+            tooltip: String::new(),
+            status: crate::sni::Status::Active,
+            icon_name: String::new(),
+            icon: Some(std::sync::Arc::new(pm)),
+            item_is_menu: false,
+            menu: None,
+            menu_loading: false,
+            menu_error: None,
+        }];
+    }
+
+    /// Tests of hosts: shows exactly `applets` (thread-local, as the bar's own tests).
+    #[cfg(test)]
+    pub fn status_test_applets(applets: Option<crate::panel::AppletSet>) {
+        super::applets::TEST_APPLETS.with(|t| t.set(applets));
+        super::applets::TEST_EXPLICIT.with(|t| t.set(applets.unwrap_or_default()));
     }
 
     /// Calendar navigation helper for tests: the hit zone under a point.

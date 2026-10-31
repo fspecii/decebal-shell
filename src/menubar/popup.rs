@@ -63,6 +63,8 @@ pub enum Act {
     TaskFocus(u64),
     TaskMinimize(u64),
     TaskClose(u64),
+    /// View workspace `n` (0-based).
+    Workspace(usize),
     /// A row of the overflow list: does what pressing that applet does.
     OpenApplet(super::Tray),
 }

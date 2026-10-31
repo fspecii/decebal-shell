@@ -147,6 +147,33 @@ pub(super) const RAIL_TRAY: &[A] = &[A::Layout, A::Media, A::StayAwake, A::Agent
 pub(super) const RAIL_STATUS: &[A] = &[A::LockKeys, A::Weather, A::Cpu, A::Memory, A::Volume, A::Brightness, A::Network, A::Bluetooth, A::Battery];
 pub(super) const RAIL_TAIL: &[A] = &[A::Clock, A::Power, A::ShowDesktop];
 
+/// The taskbar's tray, left to right (Start, search, the task buttons, the clock and show desktop are its own zones).
+/// The items it always had keep their order.
+pub(super) const TASKBAR_TRAY: &[A] = &[
+    A::AppMenu,
+    A::WindowTitle,
+    A::Workspaces,
+    A::Layout,
+    A::Media,
+    A::Weather,
+    A::Cpu,
+    A::Memory,
+    A::StayAwake,
+    A::Agents,
+    A::LockKeys,
+    A::Clipboard,
+    A::Notifications,
+    A::Dashboard,
+    A::Bluetooth,
+    A::Network,
+    A::Volume,
+    A::Brightness,
+    A::Battery,
+    A::Tray,
+    A::ControlCenter,
+    A::Power,
+];
+
 /// The Dux group (0 start, 1 centre, 2 end) an applet joins when it is enabled but not in the theme's item lists.
 pub(super) fn dux_group(id: A) -> usize {
     match id {
@@ -542,6 +569,24 @@ impl DecBar {
                 rows.push(Row::item(if t.windows.len() > 1 { "Close window" } else { "Close" }, Act::TaskClose(first)));
                 Some((rows, 260.0, false))
             }
+            Tray::Workspaces => {
+                let ws = self.bar_workspaces();
+                if ws.is_empty() {
+                    return None;
+                }
+                let mut rows = vec![Row::header("Workspaces")];
+                for (i, w) in ws.iter().enumerate() {
+                    let name = if w.name.is_empty() { (i + 1).to_string() } else { w.name.clone() };
+                    rows.push(Row::item(&format!("Workspace {name}"), Act::Workspace(i)).checked(w.active).detail(if w.urgent {
+                        "!"
+                    } else if w.occupied {
+                        "•"
+                    } else {
+                        ""
+                    }));
+                }
+                Some((rows, 220.0, true))
+            }
             Tray::More => {
                 let mut rows = vec![Row::header("More")];
                 for k in &self.hidden_items() {
@@ -587,6 +632,10 @@ impl DecBar {
     /// Runs the popup actions added with the registry. True when handled.
     pub(super) fn run_applet_act(&mut self, act: &Act) -> bool {
         match act {
+            Act::Workspace(i) => {
+                self.close();
+                self.v_switch_workspace(*i);
+            }
             Act::MenuOpen(i) => self.app_menu_page = Some(*i),
             Act::MenuBack => self.app_menu_page = None,
             Act::MenuRun(i, j) => {
@@ -784,8 +833,19 @@ fn tint(img: &mut Pixmap, ink: (u8, u8, u8)) {
     }
 }
 
+/// The theme's `[branding] logo` rendered `px` square in `ink` (tinted when the theme asks), for hosts that draw their
+/// own launcher button (the taskbar's Start). `None`: the theme has no logo, the host draws its own.
+pub fn theme_logo(px: u32, ink: (u8, u8, u8), symbols: &mut SymbolCache) -> Option<Pixmap> {
+    let b = crate::theme::th().branding.clone();
+    let mut img = render_logo(&b.logo, px, ink, symbols)?;
+    if b.tint {
+        tint(&mut img, ink);
+    }
+    Some(img)
+}
+
 /// The SF-style symbol of an item on the classic bar, the rail and the overflow list.
-pub(super) fn classic_symbol(kind: Tray) -> &'static str {
+pub fn classic_symbol(kind: Tray) -> &'static str {
     match kind {
         Tray::Logo => "grid",
         Tray::AppMenu => "menu",
