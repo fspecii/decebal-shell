@@ -81,7 +81,20 @@ fn prune(path: &Path, keep: usize) {
 /// Writes `text` over `path` atomically. When the file exists and differs, its old content is first copied to a
 /// timestamped backup, whose path is returned. Nothing is written if the content is unchanged.
 pub fn save_with_backup(path: &Path, text: &str) -> Result<Option<PathBuf>, String> {
+    crate::settings::io::with_file_lock(path, |t| save_with_backup_if(path, text, crate::settings::io::stamp(t)))
+}
+
+/// [`save_with_backup`], only while the file is still `expect` (its identity when the caller read it): a save made
+/// by someone else since, even during the fsync, fails with `io::CHANGED_ON_DISK` and nothing is written.
+pub fn save_with_backup_if(path: &Path, text: &str, expect: crate::settings::io::Stamp) -> Result<Option<PathBuf>, String> {
+    crate::settings::io::with_file_lock(path, |_| save_locked(path, text, expect))
+}
+
+fn save_locked(path: &Path, text: &str, expect: crate::settings::io::Stamp) -> Result<Option<PathBuf>, String> {
     let target = real(path);
+    if crate::settings::io::stamp(&target) != expect {
+        return Err(format!("{}: {}", target.display(), crate::settings::io::CHANGED_ON_DISK));
+    }
     let old = std::fs::read(&target).ok();
     if old.as_deref() == Some(text.as_bytes()) {
         return Ok(None);
@@ -93,9 +106,14 @@ pub fn save_with_backup(path: &Path, text: &str) -> Result<Option<PathBuf>, Stri
         if let Ok(m) = std::fs::metadata(&target) {
             let _ = std::fs::set_permissions(&bak, m.permissions());
         }
-        made = Some(bak);
+        made = Some(bak.clone());
     }
-    write_atomic(path, text)?;
+    if let Err(e) = crate::settings::io::write_if_unchanged(path, text, expect) {
+        if let Some(b) = &made {
+            let _ = std::fs::remove_file(b);
+        }
+        return Err(e);
+    }
     prune(path, KEEP_BACKUPS);
     Ok(made)
 }

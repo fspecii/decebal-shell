@@ -396,8 +396,13 @@ pub fn validate(rdwmctl: &Path, target: &Path, text: &str) -> Result<(), String>
     Cfg::parse(text).map_err(|e| format!("invalid TOML: {e}"))?;
     let dir = std::fs::canonicalize(target).ok().and_then(|p| p.parent().map(Path::to_path_buf)).or_else(|| target.parent().map(Path::to_path_buf)).unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&dir);
-    let tmp = dir.join(format!(".decsettings-check-{}.toml", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    // One owned scratch file per check (create_new, private): two validators never read each other's text.
+    static CHECK: AtomicU64 = AtomicU64::new(0);
+    let tmp = dir.join(format!(".decsettings-check-{}-{}.toml", std::process::id(), CHECK.fetch_add(1, Ordering::Relaxed)));
+    std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp).and_then(|mut f| f.write_all(text.as_bytes())).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("{}: {e}", tmp.display())
+    })?;
     let out = Command::new(rdwmctl).arg("check-config").arg(&tmp).output();
     let _ = std::fs::remove_file(&tmp);
     match out {
@@ -872,6 +877,26 @@ mod tests {
         std::fs::write(&p, "[general]\nborder_px = 7\n").unwrap();
         assert_eq!(s.check_external(), External::Reloaded);
         assert_eq!(s.cfg.get("general", "border_px"), Some(super::super::tomlcfg::Val::Int(7)));
+    }
+
+    #[test]
+    fn simultaneous_validations_each_check_their_own_text() {
+        let d = tmpdir("validators");
+        let target = d.join("config.toml");
+        let ctl = d.join("rdwmctl");
+        std::fs::write(&ctl, "#!/bin/sh\nsleep 0.1\nif grep -q bad \"$2\"; then echo 'config error: bad value' >&2; exit 1; fi\nexit 0\n").unwrap();
+        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let run = |text: &'static str| {
+            let (c, t) = (ctl.clone(), target.clone());
+            std::thread::spawn(move || validate(&c, &t, text))
+        };
+        let threads: Vec<_> = (0..6).map(|i| (i % 2 == 0, run(if i % 2 == 0 { "bad = 1\n" } else { "good = 1\n" }))).collect();
+        for (bad, t) in threads {
+            let r = t.join().unwrap();
+            assert_eq!(r.is_err(), bad, "{r:?}");
+        }
+        let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains("check")).collect();
+        assert!(left.is_empty(), "{left:?}");
     }
 
     #[test]

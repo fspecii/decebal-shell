@@ -1069,15 +1069,21 @@ fn save_tab(m: &mut Model) {
     let (p, t) = (path.clone(), text.clone());
     let run = move || -> Result<serde_json::Value, String> {
         io::with_file_lock(&p, |_| {
-            if !overwrite && io::stamp(&p) != expect {
+            // The identity the buffer was loaded from (or, after "save again to overwrite", the one seen now) holds
+            // through validation, however slow, up to the final conditional commit.
+            let expect = if overwrite { io::stamp(&p) } else { expect };
+            if io::stamp(&p) != expect {
                 return Ok(json!({"changed": true}));
             }
             let diags = validate::validate(kind, &t, &rdwmctl, &p);
             if !diags.is_empty() {
                 return Ok(json!({"diags": diags.iter().map(|d| json!([d.line, d.col, d.msg])).collect::<Vec<_>>()}));
             }
-            let bak = fsx::save_with_backup(&p, &t)?;
-            Ok(json!({"stamp": io::stamp(&p).to_value(), "backup": bak.and_then(|b| b.file_name().map(|n| n.to_string_lossy().into_owned()))}))
+            match fsx::save_with_backup_if(&p, &t, expect) {
+                Ok(bak) => Ok(json!({"stamp": io::stamp(&p).to_value(), "backup": bak.and_then(|b| b.file_name().map(|n| n.to_string_lossy().into_owned()))})),
+                Err(e) if io::is_changed_on_disk(&e) => Ok(json!({"changed": true})),
+                Err(e) => Err(e),
+            }
         })
     };
     m.run_task("config-save", vec![path], run, move |m, r| saved_tab(m, tab, &text, r));
@@ -1619,6 +1625,30 @@ mod tests {
         assert!(buf_mut(&mut m).ed.is_modified(), "the late typing is not marked saved");
         assert!(buf_mut(&mut m).ed.text().contains("\"late\""));
         assert!(!m.notice.as_ref().unwrap().error);
+    }
+
+    #[test]
+    fn a_save_made_by_someone_else_during_validation_is_kept() {
+        let mut m = model("save-during-check");
+        let cfg = m.paths.rdwm_config.clone();
+        std::fs::write(&cfg, "[general]\nborder_px = 1\n").unwrap();
+        // a slow check-config, during which an editor saves the file
+        let ctl = cfg.with_file_name("slow-rdwmctl");
+        std::fs::write(&ctl, format!("#!/bin/sh\nsleep 0.1\nprintf '# saved by hand\\n[general]\\nborder_px = 9\\n' > '{}'\nexit 0\n", cfg.display())).unwrap();
+        std::fs::set_permissions(&ctl, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        m.cfg.env.rdwmctl = ctl;
+        m.cfg.tab = Tab::Rdwm;
+        prepare(&mut m);
+        m.cfg.active = true;
+        editor_key(&mut m, &key(Key::Down, None, false));
+        editor_key(&mut m, &key(Key::End, None, false));
+        type_text(&mut m, "0");
+        apply(&mut m, "cfg:save", CtlVal::Click);
+        assert_eq!(std::fs::read_to_string(&cfg).unwrap(), "# saved by hand\n[general]\nborder_px = 9\n", "the save made during validation survives");
+        assert!(m.notice.as_ref().is_some_and(|n| n.error && n.text.contains("changed on disk")), "{:?}", m.notice);
+        assert!(buf_mut(&mut m).ed.is_modified(), "our edit stays in the editor");
+        let backups: Vec<_> = std::fs::read_dir(cfg.parent().unwrap()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".bak.")).collect();
+        assert!(backups.is_empty(), "no backup is left for a write that did not happen");
     }
 
     #[test]
