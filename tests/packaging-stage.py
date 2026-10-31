@@ -488,6 +488,26 @@ class ConfinementTests(StageFixture):
         self.assertEqual(Path(kept[0]['kept_as']).read_bytes(), b'admin version A\n', 'moved file preserved, not deleted')
         self.assertTrue(Path(kept[0]['kept_as']).is_relative_to(self.dest / 'usr/local/bin'))
 
+    def test_replaced_inventory_preservation_is_reported(self):
+        self.installed()
+        rel = 'usr/local/share/decebal/install-inventory.json'
+
+        def before(path):
+            if path == '/' + rel:
+                self.replace_at(rel, b'admin inventory A\n')
+
+        def after(path):
+            if path == '/' + rel:
+                (self.dest / rel).write_bytes(b'admin inventory B\n')
+
+        S.FAULTS['before_quarantine'] = before
+        S.FAULTS['after_quarantine'] = after
+        report = S.uninstall('/usr/local', str(self.dest))
+        self.assertEqual((self.dest / rel).read_bytes(), b'admin inventory B\n')
+        kept = [entry for entry in report['preserved'] if entry['path'] == '/' + rel]
+        self.assertEqual(len(kept), 1, 'preserved inventory must appear in the report')
+        self.assertEqual(Path(kept[0]['kept_as']).read_bytes(), b'admin inventory A\n')
+
     def test_removal_never_follows_a_symlink_swapped_in_for_the_file(self):
         self.installed()
         target = self.outside / 'precious'

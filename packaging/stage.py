@@ -577,7 +577,7 @@ def uninstall(prefix, destdir):
     _remove_if_unchanged(dest, old['files'], report)
     raw = dest.read_regular(f'{prefix}/{INVENTORY_REL}', MAX_INVENTORY)
     if raw is not None:
-        dest.remove_if(f'{prefix}/{INVENTORY_REL}', hashlib.sha256(raw).hexdigest())
+        _remove_if_unchanged(dest, {f'{prefix}/{INVENTORY_REL}': hashlib.sha256(raw).hexdigest()}, report)
     for top in (f'{prefix}/share/decebal', f'{prefix}/share/doc/decebal', f'{prefix}/share/licenses/decebal'):
         dest.prune(top)
     return report

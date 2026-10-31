@@ -44,9 +44,10 @@ one file list:
   `renameat2(RENAME_NOREPLACE)` (ext4, btrfs, xfs, tmpfs); elsewhere removal refuses.
 * `make install` also writes `$PREFIX/share/decebal/install-inventory.json` (every installed path with its sha256 and
   the build's commit). It is read only as a bounded regular file reached without symlinks, only for the exact
-  requested `PREFIX`, and every path in it must be in this package's own namespace (`$PREFIX/bin/{dec,mac}*`,
-  `$PREFIX/lib/systemd/user/decebal-*.service`, `/etc/xdg/autostart/decebal-*.desktop`,
-  `$PREFIX/share/applications/dec*.desktop`, `$PREFIX/share/{decebal,doc/decebal,licenses/decebal}/...`); anything
+  requested `PREFIX`, and shared-directory paths must use the exact shipped binary, compatibility-wrapper,
+  application, service and autostart names from `BINS`, `NO_COMPAT`, `APPLICATIONS` and `UNITS`. Names merely
+  beginning with `dec`, `mac` or `decebal-` do not establish ownership. Arbitrary asset names are allowed only below
+  `$PREFIX/share/{decebal,doc/decebal,licenses/decebal}/...`; anything
   else makes install and uninstall refuse. On reinstall, files the new version no longer ships are removed only if
   still regular and unchanged; `make uninstall` removes only unchanged inventory files and keeps (and reports) edited
   ones. Without an inventory, `make uninstall` removes nothing.
