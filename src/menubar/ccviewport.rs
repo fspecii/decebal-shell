@@ -18,7 +18,7 @@ pub(super) struct Viewport {
     mask: Option<Mask>,
     source: Vec<Item>,
     translated: Vec<Item>,
-    stamp: (f32, u32),
+    stamp: (f32, u32, f32, f32),
     style: Option<Style>,
 }
 
@@ -84,16 +84,17 @@ impl Viewport {
                 Some(mask)
             });
         }
-        if self.source != items || self.stamp != (self.scroll, height) || self.style != Some(style) {
+        let scale = crate::theme::live::font_scale().max(1.0);
+        let stamp = (self.scroll, height, z, scale);
+        if self.source != items || self.stamp != stamp || self.style != Some(style) {
             self.source.clear();
             self.source.extend_from_slice(items);
             self.translated.clear();
-            let scale = crate::theme::live::font_scale().max(1.0);
             self.translated.extend(items.iter().filter(|item| item.r.y + item.r.h * scale >= self.scroll && item.r.y <= self.scroll + view).cloned().map(|mut item| {
                 item.r.y -= self.scroll;
                 item
             }));
-            self.stamp = (self.scroll, height);
+            self.stamp = stamp;
         }
         let Some(buffer) = self.buffer.as_mut() else { return };
         crate::gfx::clear(buffer);
@@ -123,6 +124,21 @@ impl Viewport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn narrowing_a_panel_repaints_controls_revealed_by_zoom() {
+        let Some(mut fonts) = Fonts::load() else { return };
+        let mut symbols = SymbolCache::default();
+        let items = [Item { r: R { x: 16.0, y: 150.0, w: 64.0, h: 40.0 }, draw: controlcenter::Draw::Tile, target: Some(Target::DarkMode) }];
+        let mut viewport = Viewport::default();
+        let mut pm = Pixmap::new(200, 100).unwrap();
+        viewport.draw(&mut pm, (0.0, 0.0), 200.0, 100.0, &items, None, Style::Gnome, &mut fonts, &mut symbols);
+        assert!(viewport.translated.is_empty(), "the lower control is outside the original viewport");
+        viewport.zoom = 0.5;
+        viewport.draw(&mut pm, (0.0, 0.0), 100.0, 100.0, &items, None, Style::Gnome, &mut fonts, &mut symbols);
+        assert_eq!(viewport.translated.len(), 1, "same scroll and height, but the narrower panel now reveals the lower control");
+        assert_eq!(viewport.point(20.0, 85.0, (0.0, 0.0), 100.0, 100.0), Some((40.0, 170.0)));
+        assert_ne!(pm.pixel(20, 85), pm.pixel(48, 85), "the revealed tile is painted where its pointer target appears");
+    }
     #[test]
     fn repeated_tile_and_icon_targets_are_one_keyboard_stop() {
         let make = |target, y| Item { r: R { x: 16.0, y, w: 250.0, h: 64.0 }, draw: controlcenter::Draw::Tile, target: Some(target) };
