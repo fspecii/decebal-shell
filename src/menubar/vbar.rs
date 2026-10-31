@@ -1450,6 +1450,7 @@ impl DecBar {
             }
             let (cx, cy) = (r.cx(), r.cy());
             match kind {
+                Tray::Logo if self.draw_brand(pm, if skin == Skin::Pill { 22.0 } else { 18.0 }, cx, cy, if skin == Skin::Pill { th.accent.t() } else { text }) => {}
                 Tray::Logo if skin != Skin::Pill => self.rail_symbol(pm, skin, *kind, 18.0, cx, cy, text),
                 Tray::Logo => {
                     let name = self.logo_symbol.clone();

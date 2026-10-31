@@ -290,7 +290,10 @@ impl DecBar {
         let snap = self.snapshot();
         let p = self.panel();
         let item = match id {
-            A::Launcher => (Kind::Tray(Tray::Logo), cell),
+            A::Launcher => match &th.branding.launcher_label {
+                Some(l) => (Kind::Tray(Tray::Logo), self.dux_measure(l, 12.0) + 14.0 * scale + if matches!(th.branding.logo, crate::panel::branding::Logo::None) { 0.0 } else { 18.0 }),
+                None => (Kind::Tray(Tray::Logo), cell),
+            },
             A::Workspaces if !self.workspaces.is_empty() && self.show_workspaces => (Kind::Tray(Tray::Workspaces), self.dux_workspace_width()),
             A::WindowTitle if self.v_win.is_some() => (Kind::Tray(Tray::Window), self.dux_measure(self.dux_window_title(), 12.0).min(160.0 * scale) + 14.0 * scale),
             A::Media if self.dux_player().is_some() => {
@@ -491,6 +494,17 @@ impl DecBar {
                 Kind::Tray(Tray::More) => {
                     for offset in [-5.0, 0.0, 5.0] {
                         fill_rounded(pm, item.x + item.w / 2.0 + offset - 1.5, item.y + item.h / 2.0 - 1.5, 3.0, 3.0, 1.5, th.bar_text.color(0.85));
+                    }
+                }
+                Kind::Tray(Tray::Logo) if th.branding.launcher_label.is_some() || !matches!(th.branding.logo, crate::panel::branding::Logo::Style) => {
+                    let label = th.branding.launcher_label.clone();
+                    let icon_cx = if label.is_some() { item.x + 7.0 + 7.0 } else { item.x + item.w / 2.0 };
+                    let drawn = !matches!(th.branding.logo, crate::panel::branding::Logo::None) && self.draw_brand(pm, 14.0 * scale, icon_cx, item.y + item.h / 2.0, th.bar_text.t());
+                    if let Some(l) = label {
+                        let x = if drawn { item.x + 18.0 } else { item.x };
+                        self.dux_text(pm, &l, Item { x, w: item.w - (x - item.x), ..item }, false);
+                    } else if !drawn {
+                        self.dux_symbol(pm, "apps", item, false);
                     }
                 }
                 Kind::Tray(Tray::Lock) => {

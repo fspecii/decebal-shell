@@ -53,6 +53,8 @@ pub enum Ty {
     Chain,
     /// A safe hot-corner / widget action word (checked against the allowlist).
     Action,
+    /// A panel logo: a package image, `icon:<name>` or `builtin:<name>`.
+    Logo,
 }
 
 /// Whether the shell acts on the key today.
@@ -166,6 +168,10 @@ pub const FIELDS: &[Field] = &[
     Field { path: "bar.spacing", ty: Ty::Int(0, 24), desc: "Dux item gap in logical pixels", status: Wired },
     Field { path: "bar.band_radius", ty: Ty::Int(0, 48), desc: "Dux background band radius (source windowRadius L16); independent of widget pill radius", status: Wired },
     Field { path: "bar.radius", ty: Ty::Int(0, 48), desc: "Dux island corner radius in logical pixels", status: Wired },
+    Field { path: "branding.logo", ty: Ty::Logo, desc: "the panels' logo (launcher, system menu, Start button, rail): a package image, `icon:<name>` from the user's icon theme, or `builtin:apple|windows|os|grid|none`; absent = each style's own", status: Wired },
+    Field { path: "branding.logo_tint", ty: Ty::Bool, desc: "repaint the logo in the bar's text colour (symbolic logos)", status: Wired },
+    Field { path: "branding.launcher_label", ty: Ty::Text(24), desc: "text on the launcher button of horizontal bars, e.g. `Activities`; side rails show the logo", status: Wired },
+    Field { path: "branding.desktop_label", ty: Ty::Text(24), desc: "the name the menu bar shows when no window is focused (default `Finder`)", status: Wired },
     Field { path: "desktop.widgets", ty: Ty::Choice(&["none"]), desc: "explicit empty desktop profile; custom layouts require Ask/Keep/Replace confirmation", status: Wired },
     Field { path: "launcher.style", ty: Ty::Choice(&["default", "dux"]), desc: "native launcher composition; Dux full compact applications-list profile", status: Wired },
     Field { path: "dashboard.profile", ty: Ty::Choice(&["readme"]), desc: "configured README-era clock/calendar/user/resource/media profile, not current upstream dashboard defaults", status: Wired },
@@ -242,6 +248,7 @@ fn ty_text(t: &Ty) -> String {
         Ty::List(Elem::Choice(c), n) => format!("list of {} (<= {n})", c.join("|")),
         Ty::Chain => "family, or list of families (<= 8)".into(),
         Ty::Action => "safe action".into(),
+        Ty::Logo => "image file (png/jpg/webp), icon:<name> or builtin:<apple|windows|os|grid|none>".into(),
     }
 }
 
@@ -266,7 +273,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

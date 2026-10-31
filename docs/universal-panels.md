@@ -119,10 +119,26 @@ position = "bottom"       # this theme's default dock / taskbar edge: top | bott
 - `applets` is the full default set: keys not listed are off by default (the user can turn them on). Leave it out to
   keep the renderer's default set. Unknown *applet keys inside the list* are ignored by this engine, so a package that
   names an applet from a later release still loads here.
+- `[branding]` (optional, data only) gives every renderer the theme's own identity instead of the style's:
+
+  ```toml
+  [branding]
+  logo = "icons/plasma.png"      # a package image (png/jpg/webp), or "icon:start-here-kde" (the user's icon theme),
+                                 # or "builtin:apple|windows|os|grid|none"
+  logo_tint = true               # repaint it in the bar's text colour (symbolic logos)
+  launcher_label = "Activities"  # text on the launcher of horizontal bars (rails show the logo)
+  desktop_label = "Desktop"      # what the menu bar names when no window is focused (default "Finder")
+  ```
+
+  The logo replaces the menu bar's Apple menu glyph and launcher glyph, the rail's OS logo, the Dux launcher glyph and
+  the taskbar's Start squares. A package image must be inside the package (checked when installing and again when
+  loading: a path that leaves the package or is missing means the style's own logo); an icon name that the user's icon
+  theme lacks also falls back. Without `[branding]` nothing changes: the macOS bar keeps Apple and "Finder", the
+  taskbar its four squares, the rail the distribution logo.
 - Compatibility with older Decebal, checked against the 0.2.0 validator: it rejects unknown keys, so a package with
   `[bar] applets` fails to install there ("unknown key"). `[bar] position` and `[dock] position` are known keys there and
   validate, but 0.2.0 draws the menu bar and Dux bar only on top and the taskbar only top/bottom (a left/right dock
-  position is left out with a note). A package that uses `[bar] applets`, or relies on a non-top edge for a non-rail bar or
+  position is left out with a note). A package that uses `[bar] applets` or `[branding]`, or relies on a non-top edge for a non-rail bar or
   a side dock, must declare `min_shell_version` as the first release that ships this framework. The parent assigns
   that number at integration (`crate::panel::SINCE`); `decthemectl theme pack`/export writes it automatically for such
   packages. Older packages and configurations keep loading unchanged.

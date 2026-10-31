@@ -718,6 +718,72 @@ impl DecBar {
     }
 }
 
+/// What a rendered logo depends on.
+pub(super) type LogoKey = (crate::panel::branding::Logo, u32, (u8, u8, u8), bool);
+
+impl DecBar {
+    /// Draws the theme's `[branding] logo` centred on (`cx`, `cy`); false when the theme has none (the style draws its
+    /// own) or it cannot be loaded.
+    pub(super) fn draw_brand(&mut self, pm: &mut Pixmap, size: f32, cx: f32, cy: f32, ink: (u8, u8, u8)) -> bool {
+        let b = crate::theme::th().branding.clone();
+        if matches!(b.logo, crate::panel::branding::Logo::Style | crate::panel::branding::Logo::None) {
+            return false;
+        }
+        let px = (size * 2.0).ceil() as u32;
+        let key: LogoKey = (b.logo.clone(), px, ink, b.tint);
+        if self.brand_cache.as_ref().is_none_or(|(k, _)| *k != key) {
+            let img = render_logo(&b.logo, px, ink, &mut self.symbols).map(|mut img| {
+                if b.tint {
+                    tint(&mut img, ink);
+                }
+                img
+            });
+            self.brand_cache = Some((key, img));
+        }
+        let Some((_, Some(img))) = &self.brand_cache else { return false };
+        crate::gfx::blit_scaled(pm, img, (cx - size / 2.0).round(), (cy - size / 2.0).round(), size, size, 1.0);
+        true
+    }
+}
+
+/// Renders a logo `px` square (`None` when it cannot be had: a missing icon, an unreadable image).
+pub(super) fn render_logo(logo: &crate::panel::branding::Logo, px: u32, ink: (u8, u8, u8), symbols: &mut SymbolCache) -> Option<Pixmap> {
+    use crate::panel::branding::Logo;
+    match logo {
+        Logo::Style | Logo::None => None,
+        Logo::Builtin("windows") => {
+            // four squares, as the taskbar's Start button
+            let mut pm = Pixmap::new(px, px)?;
+            let q = px as f32 * 0.44;
+            let g = px as f32 * 0.08;
+            for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                crate::gfx::fill_rect(&mut pm, px as f32 * 0.02 + dx * (q + g), px as f32 * 0.02 + dy * (q + g), q, q, color(ink.0, ink.1, ink.2, 1.0));
+            }
+            Some(pm)
+        }
+        Logo::Builtin("os") => symbols.get(&vbar::logo_symbol(), ink, px).cloned(),
+        Logo::Builtin(name) => symbols.get(name, ink, px).cloned(),
+        Logo::Icon(name) => crate::icons::load_named(name, px),
+        Logo::File(path) => {
+            let (w, h) = image::image_dimensions(path).ok()?;
+            if w == 0 || h == 0 || w > 4096 || h > 4096 {
+                return None;
+            }
+            Some(crate::dash::info::square_pixmap(&image::open(path).ok()?.to_rgba8(), px))
+        }
+    }
+}
+
+/// Repaints a premultiplied image in `ink`, keeping its coverage.
+fn tint(img: &mut Pixmap, ink: (u8, u8, u8)) {
+    for p in img.data_mut().chunks_exact_mut(4) {
+        let a = p[3] as u16;
+        p[0] = (ink.0 as u16 * a / 255) as u8;
+        p[1] = (ink.1 as u16 * a / 255) as u8;
+        p[2] = (ink.2 as u16 * a / 255) as u8;
+    }
+}
+
 /// The SF-style symbol of an item on the classic bar, the rail and the overflow list.
 pub(super) fn classic_symbol(kind: Tray) -> &'static str {
     match kind {

@@ -14,6 +14,7 @@
 //! User values are never written by a theme or palette change; Settings' "Use theme default" removes them.
 
 pub mod applets;
+pub mod branding;
 pub mod frame;
 
 /// The first release with this framework: packages that use `[bar] applets`, a non-top edge for a non-rail bar or a side
@@ -27,7 +28,7 @@ pub fn needs_framework(extra: &serde_json::Map<String, Value>) -> bool {
     let style = bar.and_then(|b| b.get("style")).and_then(Value::as_str).unwrap_or("flat");
     let edge = bar.and_then(|b| b.get("position")).and_then(Value::as_str).and_then(Edge::parse);
     let dock = extra.get("dock").and_then(|d| d.get("position")).and_then(Value::as_str).and_then(Edge::parse);
-    bar.is_some_and(|b| b.get("applets").is_some()) || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top)) || dock.is_some_and(Edge::is_vertical)
+    extra.contains_key("branding") || bar.is_some_and(|b| b.get("applets").is_some()) || (style != "vertical" && edge.is_some_and(|e| e != Edge::Top)) || dock.is_some_and(Edge::is_vertical)
 }
 
 pub use applets::{AppletId, AppletSet, Cap, Need, Worker, REGISTRY};

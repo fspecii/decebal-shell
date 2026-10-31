@@ -189,10 +189,27 @@ impl Source {
     pub fn theme_for(&self, id: &str, sel: &Selection, system_dark: bool) -> Result<Theme, String> {
         let def = self.load_def(id)?;
         let mut theme = resolve_with(&def, id, sel, system_dark);
+        self.package_logo(id, &mut theme.branding);
         self.package_font_files(id, 0, &mut theme.fonts.files);
         theme.fonts.file_versions = theme.fonts.files.iter().map(|file| super::fontdb::package_file_version(file)).collect();
         theme.fonts.package_faces = super::fontdb::FontDb::read_package_faces_versioned(&theme.fonts.files, &theme.fonts.file_versions);
         Ok(theme)
+    }
+
+    /// A `[branding] logo` image becomes its path inside the package (canonical, never outside it); a missing or escaping
+    /// file means the style's own logo.
+    fn package_logo(&self, id: &str, branding: &mut crate::panel::branding::Branding) {
+        use crate::panel::branding::Logo;
+        let Logo::File(rel) = &branding.logo else { return };
+        let path = self.user_file(id);
+        let resolved = (|| {
+            let rel = rel.to_str()?;
+            engine::archive::safe_rel_path(rel).ok()?;
+            let base = path.parent()?.canonicalize().ok()?;
+            let full = base.join(rel).canonicalize().ok()?;
+            (full.starts_with(&base) && full.is_file()).then_some(full)
+        })();
+        branding.logo = resolved.map_or(Logo::Style, Logo::File);
     }
 
     /// Package fonts are resolved outside painting and remain private to this process.
@@ -492,6 +509,27 @@ mod tests {
         std::fs::create_dir_all(d.join("themes")).unwrap();
         let src = Source { shell_json: d.join("decebal.json"), themes_dir: d.join("themes") };
         (d, src)
+    }
+
+    #[test]
+    fn a_package_logo_resolves_inside_its_package_and_never_outside() {
+        let (dir, src) = sandbox("brand-logo");
+        let pkg = dir.join("themes/brandy");
+        std::fs::create_dir_all(pkg.join("icons")).unwrap();
+        tiny_skia::Pixmap::new(4, 4).unwrap().save_png(pkg.join("icons/logo.png")).unwrap();
+        std::fs::write(dir.join("outside.png"), b"x").unwrap();
+        let load = |logo: &str| {
+            std::fs::write(pkg.join("theme.toml"), format!("format = 1\nid = \"brandy\"\nname = \"Brandy\"\n[branding]\nlogo = \"{logo}\"\ndesktop_label = \"Desktop\"\n")).unwrap();
+            src.theme_for("brandy", &Selection::default(), true).map(|t| t.branding)
+        };
+        let theme = |logo: &str| load(logo).unwrap();
+        let b = theme("icons/logo.png");
+        assert_eq!(b.logo, crate::panel::branding::Logo::File(pkg.join("icons/logo.png").canonicalize().unwrap()));
+        assert_eq!(b.desktop_label("Finder"), "Desktop");
+        assert!(load("../../outside.png").unwrap_err().contains("escapes the package"), "a manifest pointing outside its package does not load");
+        assert_eq!(theme("icons/missing.png").logo, crate::panel::branding::Logo::Style);
+        assert_eq!(theme("icon:start-here").logo, crate::panel::branding::Logo::Icon("start-here".into()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

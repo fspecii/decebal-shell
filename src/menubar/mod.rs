@@ -369,6 +369,8 @@ pub struct DecBar {
     app_menu_page: Option<usize>,
     /// An applet opened from the overflow list (its popup hangs from the overflow cell).
     more_target: Option<Tray>,
+    /// The theme's logo, rendered once per size and colour.
+    brand_cache: Option<(applets::LogoKey, Option<Pixmap>)>,
 }
 
 impl DecBar {
@@ -464,6 +466,7 @@ impl DecBar {
             desk_hidden: Vec::new(),
             app_menu_page: None,
             more_target: None,
+            brand_cache: None,
         };
         if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
             bar.symbols.prepare_material();
@@ -612,7 +615,7 @@ impl DecBar {
     }
 
     fn refresh_app_name(&mut self) -> bool {
-        let name = self.active.active_app_name().map(|id| active::display_name(&id)).unwrap_or_else(|| "Finder".to_string());
+        let name = self.active.active_app_name().map(|id| active::display_name(&id)).unwrap_or_else(|| crate::theme::th().branding.desktop_label("Finder").to_string());
         let light = self.snapshot().light;
         if name != self.app_name || self.menus.is_empty() {
             self.app_name = name;
@@ -634,7 +637,7 @@ impl DecBar {
         if self.dux() || !self.shows(crate::panel::AppletId::AppMenu) {
             return Vec::new();
         }
-        let dx = inset() + if self.shows(crate::panel::AppletId::Launcher) { BTN_W } else { 0.0 };
+        let dx = inset() + self.left_items().last().map_or(0.0, |(_, s)| s.x + s.w - LEFT_PAD - inset());
         let mut spans = title_spans(&self.menus, |m| self.label_w(m));
         if dx > 0.0 {
             spans.iter_mut().for_each(|s| s.x += dx);
@@ -654,6 +657,13 @@ impl DecBar {
             Tray::Window => measure(&self.v_window_text(), TEXT_PX, Weight::Medium).min(220.0) + 16.0,
             Tray::Media => ICON_PX + 6.0 + measure(&self.dux_player().map(|p| p.meta.title).unwrap_or_default(), TEXT_PX, Weight::Regular).min(140.0) + 14.0,
             Tray::Cpu | Tray::Memory => measure("CPU 100%", 11.0, Weight::Regular) + 14.0,
+            Tray::Logo => {
+                let b = crate::theme::th().branding.clone();
+                match &b.launcher_label {
+                    Some(l) => measure(l, TEXT_PX, Weight::Medium) + 18.0 + if matches!(b.logo, crate::panel::branding::Logo::None) { 0.0 } else { ICON_PX + 5.0 },
+                    None => BTN_W,
+                }
+            }
             _ => BTN_W,
         }
     }
@@ -743,7 +753,8 @@ impl DecBar {
         if self.dux() || !self.shows(crate::panel::AppletId::Launcher) {
             return Vec::new();
         }
-        vec![(Tray::Logo, Span { x: LEFT_PAD + inset() - 2.0, w: BTN_W })]
+        let snap = self.snapshot();
+        vec![(Tray::Logo, Span { x: LEFT_PAD + inset() - 2.0, w: self.classic_width(Tray::Logo, &snap, None) })]
     }
 
     fn tray(&self) -> Vec<(Tray, Span)> {
@@ -1226,7 +1237,9 @@ impl DecBar {
                 fill_rounded(pm, s.x, 3.0, s.w, BAR_HEIGHT - 6.0, item_radius(), crate::theme::th().ink(alpha));
             }
             if m.icon {
-                self.symbol(pm, "apple", 12.0, s.x + s.w / 2.0, 11.5);
+                if !self.draw_brand(pm, 14.0, s.x + s.w / 2.0, 12.5, ink()) {
+                    self.symbol(pm, "apple", 12.0, s.x + s.w / 2.0, 11.5);
+                }
             } else {
                 let weight = if m.bold { Weight::Bold } else { Weight::Medium };
                 self.text(pm, &m.title, s.x + 9.0, TEXT_PX, weight, (ink().0, ink().1, ink().2, 1.0));
@@ -1352,7 +1365,18 @@ impl DecBar {
                         fill_rounded(pm, cx - 4.0, 22.0, 8.0, 2.0, 1.0, crate::theme::th().bar_text.color(0.9));
                     }
                 }
-                Tray::Logo => self.symbol(pm, applets::classic_symbol(kind), ICON_PX - 1.0, cx, 12.5),
+                Tray::Logo => {
+                    let label = crate::theme::th().branding.launcher_label.clone();
+                    let has_logo = !matches!(crate::theme::th().branding.logo, crate::panel::branding::Logo::None);
+                    let icon_x = if label.is_some() { s.x + 8.0 + ICON_PX / 2.0 } else { cx };
+                    if has_logo && !self.draw_brand(pm, ICON_PX, icon_x, 12.5, ink()) {
+                        self.symbol(pm, applets::classic_symbol(kind), ICON_PX - 1.0, icon_x, 12.5);
+                    }
+                    if let Some(l) = label {
+                        let x = if has_logo { s.x + 8.0 + ICON_PX + 5.0 } else { s.x + 9.0 };
+                        self.text(pm, &l, x, TEXT_PX, Weight::Medium, (ink().0, ink().1, ink().2, 1.0));
+                    }
+                }
                 Tray::AppMenu | Tray::Power | Tray::Notifications | Tray::Clipboard | Tray::Brightness | Tray::ShowDesktop | Tray::More => {
                     let name = if kind == Tray::More { "chevron-left" } else { applets::classic_symbol(kind) };
                     self.symbol(pm, name, ICON_PX, cx, 12.5)
