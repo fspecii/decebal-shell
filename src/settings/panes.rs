@@ -578,7 +578,7 @@ impl Model {
     pub(super) fn window_style_items(&self) -> Vec<Item> {
         let mut deco = Vec::new();
         deco.extend(self.r_toggle("decoration", "enabled", "Window title bars", "Show a title bar with close, minimise and zoom buttons on every window"));
-        let designs = super::decorations::choices(&self.schema);
+        let designs = super::decorations::choices_for(&self.schema, &self.rt);
         deco.extend(self.r_popup(
             "decoration",
             "style",
@@ -625,7 +625,13 @@ impl Model {
         cols.extend(self.r_color("decoration", "focused_fg", "Focused title text", ""));
         cols.extend(self.r_color("decoration", "unfocused_bg", "Unfocused title bar", ""));
         cols.extend(self.r_color("decoration", "unfocused_fg", "Unfocused title text", ""));
-        let mut out = vec![Item::Header("Title bars".into()), Item::Card(deco)];
+        let mut out = vec![Item::Header("Title bars".into())];
+        // A fallback in use (the theme's wanted window style is newer than the running rdwm): stays visible until the wanted style applies.
+        // Read from the model's snapshot of decebal.json (reloaded with the watcher's events), never from the file while the controls are built.
+        if let Some(text) = crate::theme::engine::decoration_compat::warning(&self.shell) {
+            out.push(Item::Note { text, warn: true });
+        }
+        out.push(Item::Card(deco));
         out.extend(self.window_shadow_items(window_shadow_wayland_session()));
         out.extend([
             Item::Header("Borders".into()),
@@ -732,7 +738,8 @@ impl Model {
         }
         let choices: Vec<Opt> = self.apps.as_ref().map(|a| a.iter().filter(|x| !pins.contains(&x.0)).map(|x| (x.1.clone(), x.0.clone())).collect()).unwrap_or_default();
         rows.push(Row::new("Add an app").ctl(Ctl::new("p:add", Kind::Popup(choices, None))));
-        let mut out = vec![
+        let mut out = super::panelpane::items(self);
+        out.extend([
             Item::Header("Dock".into()),
             Item::Card(dock),
             Item::Header("Menu bar".into()),
@@ -745,7 +752,7 @@ impl Model {
             Item::Header("Pinned apps".into()),
             Item::Card(rows),
             Item::Note { text: "Settings are stored in the omarchy config folder next to dock-settings.json; unknown keys in those files are left alone.".into(), warn: false },
-        ];
+        ]);
         out.extend(super::ccpane::items(self));
         out
     }
@@ -1286,6 +1293,9 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
     }
     if matches!(parts.as_slice(), ["cc", ..]) {
         return super::ccpane::apply(m, &parts, v);
+    }
+    if matches!(parts.as_slice(), ["pn", ..]) {
+        return super::panelpane::apply(m, &parts, v);
     }
     if id.starts_with("cfg:") {
         return super::configpane::apply(m, id, v);

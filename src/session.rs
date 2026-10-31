@@ -693,9 +693,11 @@ mod tests {
         s.draw(&mut pm);
         assert!(pm.data().chunks_exact(4).all(|p| p[3] == 255), "opaque scrim");
         let corner = &pm.data()[0..4];
-        assert!(corner[0] < 40 && corner[1] < 40 && corner[2] < 40, "dark corner {corner:?}");
+        // Light themes use a darkened light background, rather than the near-black
+        // background of a dark theme. Both must dim it and keep buttons distinct.
+        assert!(corner[..3].iter().all(|v| *v < 200), "undimmed corner {corner:?}");
         let c = s.cells()[0];
         let i = (((c.y + c.s / 2.0) as usize) * 640 + (c.x + 4.0) as usize) * 4;
-        assert!(pm.data()[i] > corner[0] + 30, "button is lighter than the scrim");
+        assert!(pm.data()[i] > corner[0] + 10, "button is lighter than the scrim");
     }
 }

@@ -138,6 +138,13 @@ fn check(ty: &Ty, item: &Item) -> Result<Value, String> {
             schema::parse_version(s).ok_or_else(|| format!("`{s}` is not a version (MAJOR.MINOR.PATCH)"))?;
             Ok(json!(s))
         }
+        Ty::Logo => {
+            let s = v.as_str().ok_or("must be a string")?;
+            if let crate::panel::branding::Logo::File(_) = crate::panel::branding::parse_logo(s)? {
+                check_asset(s, AssetKind::Image)?;
+            }
+            Ok(json!(s))
+        }
         Ty::Asset(kind) => {
             let s = v.as_str().ok_or("must be a file path inside the package")?;
             check_asset(s, *kind)?;
@@ -230,7 +237,8 @@ fn token_value(kind: &Kind, item: &Item) -> Result<V, String> {
 }
 
 /// Sections whose keys are all listed in [`schema::FIELDS`].
-const SECTIONS: &[&str] = &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"];
+const SECTIONS: &[&str] =
+    &["integrity", "metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "taskbar", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"];
 
 const LEGACY: &[(&str, &str)] = &[
     ("inherit", "use `extends`"),
@@ -719,6 +727,19 @@ format = "%H:%M"
         let e = errs("format = 1\nname = \n");
         assert!(e[0].contains("toml") && e[0].contains("line 2"), "{e:?}");
         assert!(errs("format = 2\nname = \"x\"\n")[0].contains("format"));
+    }
+
+    #[test]
+    fn panel_and_branding_keys_validate() {
+        let ok = format!("{GOOD}\n[branding]\nlogo = \"icons/kde.png\"\nlogo_tint = true\nlauncher_label = \"Activities\"\ndesktop_label = \"Desktop\"\n");
+        let a = analyze(&ok);
+        assert!(!a.diags.iter().any(|d| d.level == Level::Error && d.key.starts_with("branding")), "{:?}", a.diags);
+        for (bad, why) in [("logo = \"builtin:tux\"", "built-in"), ("logo = \"icon:../x\"", "icon name"), ("logo = \"../escape.png\"", ""), ("logo = \"run.sh\"", "png")] {
+            let a = analyze(&format!("{GOOD}\n[branding]\n{bad}\n"));
+            assert!(a.diags.iter().any(|d| d.level == Level::Error && d.key == "branding.logo" && d.msg.contains(why)), "{bad}: {:?}", a.diags);
+        }
+        let a = analyze(&format!("{GOOD}\n[branding]\nlauncher_label = \"A label far too long for any panel\"\n"));
+        assert!(a.diags.iter().any(|d| d.level == Level::Error && d.key == "branding.launcher_label"));
     }
 
     #[test]

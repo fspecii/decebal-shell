@@ -100,14 +100,14 @@ pub fn ensure_running() -> Result<(), String> {
 
 /// True only once the host on this X display has completed its first render.
 pub fn is_running() -> bool {
-    let Ok((conn, screen)) = x11rb::connect(None) else { return false };
+    let Ok((conn, screen)) = crate::x11_connection::connect(None) else { return false };
     let name = format!("_DECEBAL_WIDGET_HOST_S{screen}");
     let Some(atom) = conn.intern_atom(true, name.as_bytes()).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0) else { return false };
     conn.get_selection_owner(atom).ok().and_then(|c| c.reply().ok()).is_some_and(|r| r.owner != 0)
 }
 
 pub fn run(paths: Paths) -> Result<(), String> {
-    let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
+    let (conn, screen_num) = crate::x11_connection::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let root = screen.root;
     conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::SUBSTRUCTURE_NOTIFY | EventMask::PROPERTY_CHANGE)).map_err(err)?;

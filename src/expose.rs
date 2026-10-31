@@ -1018,7 +1018,7 @@ pub mod capture {
 
     /// Connects, learns the monitor size and fills in every item's client size.
     pub fn probe(items: &mut [Item]) -> Option<Probe> {
-        let (conn, num) = x11rb::connect(None).ok()?;
+        let (conn, num) = crate::x11_connection::connect(None).ok()?;
         let root = conn.setup().roots[num].root;
         let (sw, sh) = (u32::from(conn.setup().roots[num].width_in_pixels), u32::from(conn.setup().roots[num].height_in_pixels));
         let mon = crate::backend::x11::panel_monitor(&conn, root, (sw as i32, sh as i32));
@@ -1073,7 +1073,7 @@ pub mod capture {
     /// window under the pointer would otherwise take the focus back as soon as the overlay is gone. Waits a moment for
     /// the window to be mapped (its workspace may just have been switched to).
     pub fn warp_into(id: u32) {
-        let Ok((conn, num)) = x11rb::connect(None) else { return };
+        let Ok((conn, num)) = crate::x11_connection::connect(None) else { return };
         let root = conn.setup().roots[num].root;
         for _ in 0..40 {
             let viewable = conn.get_window_attributes(id).ok().and_then(|c| c.reply().ok()).is_some_and(|a| a.map_state == MapState::VIEWABLE);

@@ -1,0 +1,50 @@
+# GNOME port: pinned icon sources for the shared desktop asset-pack contract (docs/desktop-asset-packs.md, asset-owner branch
+# feat/claude-desktop-asset-packs). Data only. The contract's installer (src/desktop_assets/) and `decthemectl assets catalog check` are not in this
+# tree, so this file was checked by hand against the published rules and with tests/e2e/gnome-asset-receipts.py (emulates the documented checks:
+# git tree OIDs from the archive bytes, pax comment == commit, archive sha256, licence file present, symlinks resolve inside the source).
+#
+# Not here, on purpose (see docs/gnome-theme-ports.md "Icon and cursor assets"):
+#  * Adwaita icons and cursors: adwaita-icon-theme only installs through meson (the repository tree is not an installable theme), the contract installs
+#    prebuilt trees only. They ship in the distribution package adwaita-icon-theme (Arch: extra/adwaita-icon-theme, Debian: adwaita-icon-theme) and
+#    are the toolkit default, so the gnome-adwaita theme recommends nothing and relies on the system copy.
+#  * Catppuccin cursors: the repository holds SVG sources (built with a justfile); the releases are .zip, which the installer refuses.
+#  * Bibata cursors: the releases are .tar.xz, which the installer refuses.
+#  Use `decthemectl assets import` on a folder you unpacked yourself for those.
+format = 1
+family = "gnome"
+
+[[source]]
+id = "papirus-icon-theme"
+repo = "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme"
+revision = "20260801"
+commit = "5f8b701d7521e27b4859d7e4f9b0da4c423c036c"
+license = "GPL-3.0-only"
+license_files = ["LICENSE"]
+archive_url = "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/archive/5f8b701d7521e27b4859d7e4f9b0da4c423c036c.tar.gz"
+archive_sha256 = "d57b247be05c92cb7473680138e84741665be7abeca0fcad983ac58494195ea7"
+strip_components = 1
+
+[[pack]]
+id = "gnome-papirus"
+name = "Papirus"
+provides = ["icons"]
+source = "papirus-icon-theme"
+path = "Papirus"
+tree = "56b5312ea7155940eb5501e1ac75c34db6b01596"
+install_name = "Papirus"
+description = "Papirus icon theme, light-panel variant (the base the other variants link into)."
+
+[[pack]]
+id = "gnome-papirus-dark"
+name = "Papirus Dark"
+provides = ["icons"]
+source = "papirus-icon-theme"
+path = "Papirus-Dark"
+tree = "f59bf656fdaaafbaf70c1b7c2ded29ae4e626f3d"
+install_name = "Papirus-Dark"
+link_sources = ["Papirus"]
+description = "Papirus Dark: light glyphs for dark panels. Most files are relative symlinks into ../Papirus, which become copies."
+
+[[recommend]]
+theme = "gnome-catppuccin-dock"
+icons = "gnome-papirus-dark"

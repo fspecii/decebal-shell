@@ -10,7 +10,10 @@ use decebal::theme::BAR_HEIGHT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-const USAGE: &str = "decbar --control-center [toggle|open|close] [--corner auto|top-right|top-left|bottom-right|bottom-left]\n\
+const USAGE: &str = "decbar --focus [--role main|bottom]\n\
+Keyboard mode of the running bar: arrows move between applets, Enter or Space opens one, arrows walk its popup or menu,\n\
+Escape leaves.\n\
+decbar --control-center [toggle|open|close] [--corner auto|top-right|top-left|bottom-right|bottom-left]\n\
 Opens the Control Center on its own (any theme, with or without a bar; a second `toggle` closes it): under the menu bar, above the\n\
 Windows taskbar, beside the pill bar or in a screen corner, as the theme's `control_center` settings say. Bind it to a key or a hot corner.\n\
 decbar [--dry-run] [--app ID] [--role main|bottom] [--position POS] [--png FILE [--width N] [--height N] [--open KEY|control]]\n\
@@ -37,6 +40,7 @@ fn main() {
     let mut position: Option<BarPosition> = None;
     let mut panel: Option<String> = None;
     let mut corner: Option<decebal::controlcenter::settings::Corner> = None;
+    let mut focus = false;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -80,6 +84,7 @@ fn main() {
                 position = Some(args.get(i).and_then(|v| BarPosition::parse(v)).unwrap_or_else(|| usage_error("--position is left, right, top, bottom or split")));
             }
             "--dry-run" => decebal::controlcenter::sys::set_dry_run(true),
+            "--focus" => focus = true,
             "--open" => {
                 i += 1;
                 open = args.get(i).cloned();
@@ -97,7 +102,16 @@ fn main() {
         control_center(&verb, corner);
         return;
     }
-    let show_workspaces = decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm());
+    if focus {
+        // keyboard mode of the running bar (bind it to a key, like KDE's "focus the panel" shortcut)
+        if !decebal::single::signal(role.lock_name(), libc::SIGUSR2) {
+            eprintln!("decbar: no bar is running");
+            std::process::exit(1);
+        }
+        return;
+    }
+    // the workspaces applet (and the old `workspaces` switch, which it reads) decides whether they show
+    let show_workspaces = true;
     if let Some(path) = png {
         let mut bar = DecBar::new(make_active(app_id.clone())).with_workspaces(show_workspaces).with_height(height).with_process(role).with_position(position);
         if let Err(e) = bar.render_png(&path, width, open.as_deref()) {
@@ -120,6 +134,8 @@ fn main() {
     } else {
         None
     };
+    // before any other thread starts: `decbar --focus` arrives as a signal this thread mask holds for its collector
+    DecBar::init_focus_signal();
 
     // Runs after offscreen/Control Center exits, including when a hidden bar
     // waits without creating a surface. Bounded acknowledgement also covers a
@@ -151,11 +167,7 @@ fn main() {
             }
         }
         let closed = Arc::new(AtomicBool::new(false));
-        let mut bar = DecBar::new(make_active(app_id.clone()))
-            .with_frame_publisher()
-            .with_workspaces(decebal::config::shell_settings().workspaces.resolve(decebal::wm::is_rdwm()))
-            .with_process(role)
-            .with_position(position);
+        let mut bar = DecBar::new(make_active(app_id.clone())).with_focus_signal().with_frame_publisher().with_workspaces(show_workspaces).with_process(role).with_position(position);
         if gated {
             bar = bar.with_gate(closed.clone());
             if role == Process::Main {
@@ -164,7 +176,7 @@ fn main() {
         }
         let fallback = SurfaceSpec { anchor: Anchor::Top, margin: 0, reserve: BAR_HEIGHT as i32, stretch: true, namespace: "decebal-bar" };
         let spec = App::surface_spec(&bar).unwrap_or(fallback);
-        if let Err(e) = backend::run(bar, spec) {
+        if let Err(e) = backend::run_scaled(bar, spec, backend::ui_scale()) {
             decebal::log_error!("fatal: {e}");
             eprintln!("decbar: {e}");
             std::process::exit(1);
@@ -202,11 +214,15 @@ fn control_center(verb: &str, corner: Option<decebal::controlcenter::settings::C
         eprintln!("decbar: the Control Center is turned off (control_center.enabled in decebal.json)");
         return;
     }
-    let host = Host::detect(&decebal::config::shell_settings(), &decebal::config::dock_settings(), decebal::theme::th().pill_bar(), backend::ui_scale());
-    let placement = place(&host, corner.unwrap_or(cc.position));
+    let scale = backend::ui_scale();
+    let host = Host::detect(&decebal::config::shell_settings(), &decebal::config::dock_settings(), decebal::theme::th().pill_bar(), scale);
+    // the host's clearances are surface pixels; the overlay draws at the display scale like the bars, in logical ones
+    let k = backend::surface_scale(scale);
+    let p = place(&host, corner.unwrap_or(cc.position));
+    let placement = decebal::controlcenter::settings::Placement { inset_x: p.inset_x / k, inset_y: p.inset_y / k, ..p };
     let overlay = Overlay::new(placement, host.is_taskbar());
     let spec = Overlay::spec(&placement);
-    if let Err(e) = backend::run(overlay, spec) {
+    if let Err(e) = backend::run_scaled(overlay, spec, scale) {
         eprintln!("decbar: {e}");
         std::process::exit(1);
     }

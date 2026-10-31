@@ -479,7 +479,7 @@ fn present(conn: &RustConnection, win: Window, gc: Gcontext, pm: &Pixmap, depth:
 
 impl Ui {
     pub fn connect() -> Result<Ui, String> {
-        let (conn, num) = x11rb::connect(None).map_err(cerr)?;
+        let (conn, num) = crate::x11_connection::connect(None).map_err(cerr)?;
         let screen = conn.setup().roots[num].clone();
         let root = screen.root;
         let gc = conn.generate_id().map_err(cerr)?;

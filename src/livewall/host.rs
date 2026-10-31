@@ -137,7 +137,7 @@ mod x11 {
     }
     impl Desktop {
         pub fn new() -> Result<Self, String> {
-            let (conn, n) = x11rb::connect(None).map_err(e)?;
+            let (conn, n) = crate::x11_connection::connect(None).map_err(e)?;
             let root = conn.setup().roots[n].root;
             Ok(Self { conn, root })
         }

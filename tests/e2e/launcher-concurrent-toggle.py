@@ -5,6 +5,10 @@ A stopped owned holder models delayed shutdown; no live input or IPC is used.
 """
 from pathlib import Path
 import fcntl, hashlib, json, os, signal, subprocess, tempfile, time
+# -I omits the script directory; import only this trusted fixture directory.
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb
 repo=Path(__file__).resolve().parents[2]
 bins=Path(os.environ.get('LAUNCHER_BIN_DIR',repo/'target/debug')).resolve()
 root=Path(tempfile.mkdtemp(prefix='launcher-concurrent-',dir='/var/tmp'));root.chmod(0o700)
@@ -33,9 +37,8 @@ def holder(name):
     text=f.read().strip();return int(text) if text.isdigit() else None
  except FileNotFoundError:return None
 try:
- rd,wr=os.pipe();server=start(['Xvfb','-displayfd',wr,'-screen','0','1280x800x24','-nolisten','tcp'],'xvfb',(wr,));os.close(wr)
- with os.fdopen(rd) as f:display=f.readline().strip()
- assert display.isdigit() and server.poll() is None;env['DISPLAY']=':'+display
+ log=(root/'xvfb.log').open('w');logs.append(log)
+ server,env['DISPLAY']=start_private_xvfb(env=env,log=log);owned.append(server)
  expected_old=os.environ.get('EXPECT_COALESCING')=='1'
  for name in ['declaunch','decspot']:
   app=bins/name

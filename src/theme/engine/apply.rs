@@ -125,14 +125,18 @@ fn to_val(v: &Value, c: Conv) -> Option<Val> {
 }
 
 /// Edits rdwm's config in memory from the theme's sections. Unknown keys / values rdwm would reject go to `notes`.
-fn rdwm_extras(cfg: &mut Cfg, extra: &Map<String, Value>, schema: &Schema, notes: &mut Vec<String>) -> Result<(), String> {
+///
+/// `proven_style` is a titlebar style that [`super::decoration_compat`] already proved the window manager supports (running rdwm, or the explicit
+/// target CLI while none runs): the installed CLI's offline table, which can be older than the running window manager, must not veto it.
+fn rdwm_extras(cfg: &mut Cfg, extra: &Map<String, Value>, schema: &Schema, proven_style: Option<&str>, notes: &mut Vec<String>) -> Result<(), String> {
     let set = |cfg: &mut Cfg, sec: &str, key: &str, v: Val, label: &str, notes: &mut Vec<String>| -> Result<(), String> {
         match schema.get(sec, key) {
             None => notes.push(format!("{label}: this rdwm has no `[{sec}] {key}` yet, left out")),
             Some(m) => {
                 // a bundled snapshot of the key table can be older than the installed rdwm: for the titlebar style only the
                 // real `rdwmctl check-config` decides (a rejected style is dropped below)
-                let stale_style = !schema.live && sec == "decoration" && key == "style";
+                let proven = sec == "decoration" && key == "style" && matches!((&v, proven_style), (Val::Str(a), Some(b)) if a == b);
+                let stale_style = proven || (!schema.live && sec == "decoration" && key == "style");
                 if let (Val::Str(s), false, false) = (&v, m.choices.is_empty(), stale_style) {
                     if !m.choices.contains(s) {
                         notes.push(format!("{label}: this rdwm does not know `{s}` (it has {}), left out", m.choices.join(", ")));
@@ -274,6 +278,12 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     if let Some(p) = problem {
         return Err(p);
     }
+    // Mode-specific window style: decided against what the window manager that will draw it can do, before anything is written. An unproven
+    // style without a proven fallback stops the whole apply here (nothing changed).
+    let deco = if sel.sync_rdwm { super::decoration_compat::prepare(&extra, theme.dark, paths)? } else { None };
+    if let Some(r) = &deco {
+        notes.extend(r.note.iter().chain(r.warning.iter()).cloned());
+    }
 
     let mut writes: Vec<Write> = Vec::new();
     fn add(writes: &mut Vec<Write>, path: &Path, new: String) {
@@ -402,6 +412,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         }
         w.insert("theme_source".into(), json!(id));
     }
+    super::decoration_compat::record(&mut shell, &id, theme.dark, deco.as_ref());
     add(&mut writes, &paths.shell_json(), text_of(&shell));
 
     // ---- dock-settings.json
@@ -418,8 +429,13 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             Some(p @ ("top" | "bottom")) => {
                 o.insert("windowsPosition".into(), json!(p));
             }
-            Some(p) => notes.push(format!("dock.position = {p}: only top and bottom are supported by the dock today, left out")),
-            None => {}
+            // A previous theme may have written top. It must not outrank a new package's side edge.
+            // Explicit user positions live in `edge` and remain untouched.
+            Some("left" | "right") if apply_bar_layout => {
+                o.shift_remove("windowsPosition");
+                o.shift_remove("windows_position");
+            }
+            Some(_) | None => {}
         }
         if let Some(m) = dock.get("magnification") {
             o.insert("magnification".into(), m.clone());
@@ -448,6 +464,10 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
             notes.push("Window shadows require a supporting rdwm session; current configuration retained".into());
         }
         let mut attempt = extra.clone();
+        if let Some(r) = &deco {
+            super::decoration_compat::rewrite(&mut attempt, r);
+        }
+        let proven = deco.as_ref().map(|r| r.style.clone());
         if let Some(radius) = sel.radius {
             if let Some(Value::Object(d)) = attempt.get_mut("decoration") {
                 d.insert("radius".into(), json!(radius));
@@ -464,7 +484,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         let mut text;
         loop {
             let mut c = cfg.clone();
-            rdwm_extras(&mut c, &attempt, &schema, &mut notes)?;
+            rdwm_extras(&mut c, &attempt, &schema, proven.as_deref(), &mut notes)?;
             if let Some(radius) = rdwm::clamp_decoration_radius(&mut c)? {
                 let note = format!("Window corner radius limited to the {radius}px titlebar; your saved radius preference is unchanged");
                 if !notes.contains(&note) {
@@ -480,6 +500,12 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
                 Err(e) => {
                     // an rdwm older than the theme may not know its titlebar style: keep the rest, say so
                     let style = attempt.get("decoration").and_then(|d| d.get("style")).and_then(Value::as_str).map(String::from);
+                    // a style the window manager was proven to list is never dropped silently: the check disagreeing is an error, nothing is written
+                    if let (Some(st), Some(p)) = (&style, &proven) {
+                        if st == p {
+                            return Err(format!("Window style `{p}` is listed by the window manager but `rdwmctl check-config` rejected the configuration ({e}). Nothing was changed; update rdwmctl to the same build as rdwm."));
+                        }
+                    }
                     match style {
                         Some(st) => {
                             notes.push(format!("decoration.style `{st}`: rdwm rejected it ({e}), left out"));
@@ -1052,6 +1078,50 @@ y = -30
         let shell: crate::config::ShellSettings = serde_json::from_value(io::json_load(&paths.shell_json())).unwrap();
         assert_eq!(shell.launcher.style, "", "a malformed launcher key reads as 'follow the theme'");
         assert_eq!(src.build(&src.selection(), true).0.launcher_style, "default");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_side_taskbar_theme_does_not_inherit_an_old_top_position() {
+        let (dir, src, paths) = sandbox("side-taskbar-legacy");
+        install_sunset_manifest(&src, &SUNSET.replace("position = \"top\"", "position = \"left\""));
+        let original = json!({"style": "windows", "windowsPosition": "top", "edge": "right", "extra": 42});
+        std::fs::write(paths.dock_settings(), original.to_string()).unwrap();
+        let plan = plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap();
+        let next: Value = serde_json::from_str(&plan.writes.iter().find(|w| w.path == paths.dock_settings()).unwrap().new).unwrap();
+        assert!(next.get("windowsPosition").is_none());
+        assert_eq!(next["edge"], "right", "explicit user edge survives");
+        assert_eq!(next["extra"], 42);
+        let mut dock: crate::config::DockSettings = serde_json::from_value(next).unwrap();
+        let theme = src.theme_for("sunset", &Selection::default(), true).unwrap();
+        assert_eq!(theme.taskbar_panel(&dock).edge, crate::panel::Edge::Right);
+        dock.edge = None;
+        assert_eq!(theme.taskbar_panel(&dock).edge, crate::panel::Edge::Left);
+        assert_eq!(io::json_load(&paths.dock_settings()), original, "planning is read-only");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn panel_choices_survive_palette_mode_and_theme_changes() {
+        let (dir, src, paths) = sandbox("panel-user-keys");
+        install_sunset_manifest(&src, SUNSET);
+        let user = json!({"edge": "right", "split": false, "applets": {"weather": false, "media": true}});
+        let previous = json!({"theme":{"name":"sunset","mode":"dark"},"bar": {"edge": "right", "split": false, "applets": {"weather": false, "media": true}, "position": "left"}});
+        std::fs::write(paths.shell_json(), previous.to_string()).unwrap();
+        std::fs::write(paths.dock_settings(), r#"{"style": "mac", "edge": "left"}"#).unwrap();
+        let check = |planned: &Plan, what: &str| {
+            let after: Value = planned.writes.iter().find(|w| w.path == paths.shell_json()).map(|w| serde_json::from_str(&w.new).unwrap()).unwrap_or_else(|| previous.clone());
+            for key in ["edge", "split", "applets"] {
+                assert_eq!(after["bar"][key], user[key], "{what} changed bar.{key}");
+            }
+            if let Some(w) = planned.writes.iter().find(|w| w.path == paths.dock_settings()) {
+                assert_eq!(serde_json::from_str::<Value>(&w.new).unwrap()["edge"], "left", "{what} changed the dock edge");
+            }
+        };
+        let palette = Selection { name: "sunset".into(), mode: crate::theme::Mode::Light, palette: Some("nord".into()), sync_rdwm: false, ..Selection::default() };
+        check(&plan_selection(&src, &paths, &palette).unwrap(), "a palette and mode change");
+        check(&plan(&src, &paths, "sunset", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "applying the theme again");
+        check(&plan(&src, &paths, "nord", &Selection { sync_rdwm: false, ..Selection::default() }).unwrap(), "switching theme");
         let _ = std::fs::remove_dir_all(dir);
     }
 

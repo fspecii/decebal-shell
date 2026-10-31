@@ -24,6 +24,9 @@ const KEYCODE_RETURN: u8 = 36;
 const KEYCODE_KP_ENTER: u8 = 104;
 const KEYCODE_UP: u8 = 111;
 const KEYCODE_DOWN: u8 = 116;
+const KEYCODE_LEFT: u8 = 113;
+const KEYCODE_RIGHT: u8 = 114;
+const KEYCODE_SPACE: u8 = 65;
 
 #[derive(Debug)]
 pub struct Error(String);
@@ -57,14 +60,18 @@ pub(crate) struct Rect {
 pub(crate) fn place(spec: &SurfaceSpec, (w, h): (u32, u32), mon: Rect) -> (i32, i32, u32, u32) {
     if spec.anchor.is_side() {
         // A vertical panel: flush with the monitor's left (or right) edge, as tall as the monitor when it asks for 0.
-        let height = if h == 0 { mon.h.max(1) as u32 } else { h };
-        let w = w.max(1);
+        // never larger than the monitor: a side panel's surface also holds its popouts, which may ask for more than it has
+        // (the app is told the real size and fits its popouts to it)
+        let height = if h == 0 { mon.h.max(1) as u32 } else { h.min(mon.h.max(1) as u32) };
+        let w = w.max(1).min(mon.w.max(1) as u32);
         let x = if spec.anchor == Anchor::Right { mon.x + mon.w - w as i32 - spec.margin } else { mon.x + spec.margin };
-        return (x, mon.y, w, height);
+        // a side dock (not stretched) is centred along the edge, as layer-shell centres it
+        let y = if h == 0 || spec.stretch { mon.y } else { mon.y + ((mon.h - height as i32) / 2).max(0) };
+        return (x, y, w, height);
     }
-    let width = if w == 0 { mon.w.max(1) as u32 } else { w };
+    let width = if w == 0 { mon.w.max(1) as u32 } else { w.min(mon.w.max(1) as u32) };
     // never taller than the monitor: a pill bar's surface also holds the popouts, which may ask for more than a small screen has
-    let h = if spec.stretch { h.min(mon.h.max(1) as u32) } else { h };
+    let h = h.min(mon.h.max(1) as u32);
     let x = mon.x + ((mon.w - width as i32) / 2).max(0);
     let y = match spec.anchor {
         Anchor::Bottom => mon.y + mon.h - h as i32 - spec.margin,
@@ -274,7 +281,7 @@ fn set_input_shape(conn: &RustConnection, win: Window, rects: &[InputRect], size
 
 /// `Xft.dpi / 96` of the default display (1.0 when unset or unreachable).
 pub fn xft_scale_of_display() -> f32 {
-    match x11rb::connect(None) {
+    match crate::x11_connection::connect(None) {
         Ok((conn, n)) => super::x11_window::xft_scale(&conn, conn.setup().roots[n].root),
         Err(_) => 1.0,
     }
@@ -282,7 +289,7 @@ pub fn xft_scale_of_display() -> f32 {
 
 pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
     let mut spec = app.surface_spec().unwrap_or(spec);
-    let (conn, screen_num) = x11rb::connect(None).map_err(err)?;
+    let (conn, screen_num) = crate::x11_connection::connect(None).map_err(err)?;
     let screen = conn.setup().roots[screen_num].clone();
     let visual = argb_visual(&screen).ok_or_else(|| Error("no 32-bit ARGB visual".into()))?;
     let mut screen_size = (screen.width_in_pixels as i32, screen.height_in_pixels as i32);
@@ -477,6 +484,9 @@ pub fn run<A: App>(mut app: A, spec: SurfaceSpec) -> Result<(), Error> {
                 Event::KeyPress(k) if k.detail == KEYCODE_UP => dirty |= app.nav_key(NavKey::Up),
                 Event::KeyPress(k) if k.detail == KEYCODE_DOWN => dirty |= app.nav_key(NavKey::Down),
                 Event::KeyPress(k) if k.detail == KEYCODE_RETURN || k.detail == KEYCODE_KP_ENTER => dirty |= app.nav_key(NavKey::Enter),
+                Event::KeyPress(k) if k.detail == KEYCODE_LEFT => dirty |= app.nav_key(NavKey::Left),
+                Event::KeyPress(k) if k.detail == KEYCODE_RIGHT => dirty |= app.nav_key(NavKey::Right),
+                Event::KeyPress(k) if k.detail == KEYCODE_SPACE && app.wants_keyboard() => dirty |= app.nav_key(NavKey::Enter),
                 Event::RandrScreenChangeNotify(_) => {
                     // Re-read the screen and monitor; the placement check at the top of the loop moves
                     // the window and republishes the strut.
@@ -590,6 +600,20 @@ mod tests {
 
     fn mon(x: i32, y: i32, w: i32, h: i32) -> Rect {
         Rect { x, y, w, h }
+    }
+
+    #[test]
+    fn a_side_dock_is_centred_along_its_edge_and_a_side_bar_spans_it() {
+        let m = mon(0, 0, 1600, 900);
+        assert_eq!(place(&spec(Anchor::Left, 13, false), (80, 400), m), (13, 250, 80, 400));
+        assert_eq!(place(&spec(Anchor::Right, 13, false), (80, 400), m), (1600 - 80 - 13, 250, 80, 400));
+        assert_eq!(place(&spec(Anchor::Left, 0, true), (52, 0), m), (0, 0, 52, 900), "a rail is as tall as the monitor");
+        // a request larger than the monitor (a side rail whose popout room asks for a wide panel at 200 %) is bounded by it
+        let small = mon(100, 0, 640, 360);
+        assert_eq!(place(&spec(Anchor::Left, 0, true), (900, 0), small), (100, 0, 640, 360));
+        assert_eq!(place(&spec(Anchor::Right, 0, true), (900, 0), small), (100, 0, 640, 360));
+        assert_eq!(place(&spec(Anchor::Bottom, 0, false), (2000, 900), small).2, 640);
+        assert_eq!(place(&spec(Anchor::Bottom, 0, false), (2000, 900), small).3, 360);
     }
 
     #[test]

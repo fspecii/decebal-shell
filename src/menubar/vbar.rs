@@ -30,7 +30,6 @@ use super::*;
 use crate::backend::Anchor;
 use crate::config::BarPosition;
 use crate::menubar::rdwm::TagState;
-use tiny_skia::{FilterQuality, PixmapPaint, Transform};
 
 /// Thickness of the bar strip, and of the strut it reserves.
 pub const THICK: f32 = crate::theme::PILL_BAR_THICKNESS;
@@ -115,12 +114,86 @@ impl VRect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pill {
     Logo,
+    AppMenu,
     Workspaces,
+    Tasks,
     Window,
     Tray,
     Status,
     Clock,
     Power,
+    ShowDesktop,
+}
+
+/// The pill of a single-item head or tail applet.
+fn single_pill(kind: Tray) -> Pill {
+    match kind {
+        Tray::AppMenu => Pill::AppMenu,
+        Tray::Clock => Pill::Clock,
+        Tray::Power => Pill::Power,
+        Tray::ShowDesktop => Pill::ShowDesktop,
+        _ => Pill::Logo,
+    }
+}
+
+/// How a rail is painted: the Caelestia pills, or another bar style turned onto a side edge in its own look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Skin {
+    #[default]
+    Pill,
+    /// The classic menu bar: a flat strip in the bar colour, no pill backgrounds.
+    Classic,
+    /// The floating bar: one rounded strip held off the screen edge.
+    Floating,
+    /// The Dux band with a face per item.
+    Dux,
+}
+
+impl Skin {
+    pub fn of(r: crate::panel::Renderer) -> Skin {
+        use crate::panel::Renderer as R;
+        match r {
+            R::Pill => Skin::Pill,
+            R::Floating => Skin::Floating,
+            R::Dux => Skin::Dux,
+            R::MenuBar | R::Taskbar => Skin::Classic,
+        }
+    }
+    /// Thickness of the strip on a side (`vertical`) or a top/bottom edge.
+    pub fn thickness(self, vertical: bool) -> f32 {
+        match self {
+            Skin::Pill => {
+                if vertical {
+                    THICK
+                } else {
+                    HORIZONTAL_THICK
+                }
+            }
+            Skin::Classic | Skin::Floating => crate::theme::CLASSIC_RAIL_THICKNESS,
+            Skin::Dux => {
+                let th = crate::theme::th();
+                th.bar_height + 2.0 * th.bar_layout.margin
+            }
+        }
+    }
+    /// Distance from the strip's sides to the item cells.
+    pub fn inset(self, vertical: bool) -> f32 {
+        match self {
+            Skin::Pill => {
+                if vertical {
+                    PILL_X
+                } else {
+                    4.0
+                }
+            }
+            Skin::Classic => 3.0,
+            Skin::Floating => 5.0,
+            Skin::Dux => {
+                let th = crate::theme::th();
+                (th.bar_layout.margin + 5.0).min(self.thickness(vertical) / 2.0 - 8.0).max(2.0)
+            }
+        }
+    }
 }
 
 /// Which pills a bar surface shows.
@@ -165,6 +238,7 @@ impl Process {
 pub struct Place {
     pub edge: Anchor,
     pub part: Part,
+    pub skin: Skin,
 }
 
 impl Place {
@@ -179,13 +253,20 @@ impl Place {
             (BarPosition::Split, Process::Bottom) => (Anchor::Bottom, Part::Tail),
             (_, Process::Bottom) => return None,
         };
-        Some(Place { edge, part })
+        Some(Place { edge, part, skin: Skin::Pill })
+    }
+    pub fn with_skin(self, skin: Skin) -> Place {
+        Place { skin, ..self }
     }
     pub fn thickness(self) -> f32 {
+        self.skin.thickness(self.edge.is_side())
+    }
+    /// The surface: the strip plus room for popouts on its screen side.
+    pub fn surface_size(self) -> (u32, u32) {
         if self.edge.is_side() {
-            THICK
+            ((self.thickness() + POPOUT_W) as u32, 0)
         } else {
-            HORIZONTAL_THICK
+            (0, (self.thickness() + POPOUT_H) as u32)
         }
     }
     /// Window name of the surface (what `xdotool search --name` finds).
@@ -217,29 +298,28 @@ pub struct Geo {
     /// Surface size.
     pub w: f32,
     pub h: f32,
+    /// The strip's thickness and the inset of its cells (the skin's).
+    pub thick: f32,
+    pub inset: f32,
 }
 
 impl Geo {
+    /// The pill rail's geometry.
     pub fn new(edge: Anchor, w: f32, h: f32) -> Geo {
-        Geo { edge, w, h }
+        Geo::skinned(edge, w, h, Skin::Pill)
+    }
+    pub fn skinned(edge: Anchor, w: f32, h: f32, skin: Skin) -> Geo {
+        Geo { edge, w, h, thick: skin.thickness(edge.is_side()), inset: skin.inset(edge.is_side()) }
     }
     /// The bar runs along the top or bottom edge.
     pub fn horizontal(&self) -> bool {
         !self.edge.is_side()
     }
     pub fn thickness(&self) -> f32 {
-        if self.horizontal() {
-            HORIZONTAL_THICK
-        } else {
-            THICK
-        }
+        self.thick
     }
     fn pill_inset(&self) -> f32 {
-        if self.horizontal() {
-            4.0
-        } else {
-            PILL_X
-        }
+        self.inset
     }
     pub(super) fn pill_width(&self) -> f32 {
         self.thickness() - 2.0 * self.pill_inset()
@@ -264,7 +344,7 @@ impl Geo {
     fn base(&self) -> f32 {
         match self.edge {
             Anchor::Left | Anchor::Top => 0.0,
-            Anchor::Right => self.w - THICK,
+            Anchor::Right => self.w - self.thick,
             Anchor::Bottom => self.h - self.thickness(),
         }
     }
@@ -273,7 +353,7 @@ impl Geo {
         if self.horizontal() {
             VRect { x: 0.0, y: self.base(), w: self.w, h: self.thickness() }
         } else {
-            VRect { x: self.base(), y: 0.0, w: THICK, h: self.h }
+            VRect { x: self.base(), y: 0.0, w: self.thick, h: self.h }
         }
     }
     /// A rectangle of the layout frame (x across the bar from its outer edge, y along it) on the surface.
@@ -288,8 +368,8 @@ impl Geo {
     /// the bar, kept on the surface.
     pub fn popout_origin(&self, item: VRect, pw: f32, ph: f32) -> (f32, f32) {
         match self.edge {
-            Anchor::Left => (THICK + POP_GAP, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
-            Anchor::Right => (self.w - THICK - POP_GAP - pw, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
+            Anchor::Left => (self.thick + POP_GAP, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
+            Anchor::Right => (self.w - self.thick - POP_GAP - pw, clamp_in(item.cy() - ph / 2.0, ph, self.h)),
             Anchor::Top => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.thickness() + POP_GAP),
             Anchor::Bottom => (clamp_in(item.cx() - pw / 2.0, pw, self.w), self.h - self.thickness() - POP_GAP - ph),
         }
@@ -308,13 +388,115 @@ impl Geo {
 }
 
 /// What the bar shows on this machine right now.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Content {
+    /// Single pills at the start (the launcher, the folded application menu).
+    pub head: Vec<Tray>,
     pub workspaces: usize,
+    /// Task button cells (their own pill after the workspaces).
+    pub tasks: Vec<Tray>,
     /// Length the window pill would like; 0 = no focused window.
     pub window: f32,
     pub tray: Vec<Tray>,
     pub status: Vec<Tray>,
+    /// Single pills at the end, in reading order (the clock, power, show desktop).
+    pub tail: Vec<Tray>,
+}
+
+impl Default for Content {
+    /// The rail as it always was: the OS icon first, the clock and power last.
+    fn default() -> Self {
+        Content { head: vec![Tray::Logo], workspaces: 0, tasks: Vec::new(), window: 0.0, tray: Vec::new(), status: Vec::new(), tail: vec![Tray::Clock, Tray::Power] }
+    }
+}
+
+/// Length along the bar of the fixed pills (everything but the window pill), gaps and edges included.
+fn fixed_len(geo: &Geo, part: Part, c: &Content) -> f32 {
+    let d = Dim::of(geo.horizontal());
+    let mut len = 2.0 * EDGE;
+    if part != Part::Tail {
+        len += c.head.len() as f32 * (geo.pill_width() + GAP);
+        if c.workspaces > 0 {
+            len += workspaces_len(c.workspaces, geo.horizontal()) + GAP;
+        }
+        if !c.tasks.is_empty() {
+            len += group_len(&c.tasks, geo.horizontal()) + GAP;
+        }
+    }
+    if part != Part::Head {
+        for k in &c.tail {
+            len += if *k == Tray::Clock { d.clock_len } else { geo.pill_width() } + GAP;
+        }
+        for kinds in [&c.tray, &c.status] {
+            if !kinds.is_empty() {
+                len += group_len(kinds, geo.horizontal()) + GAP;
+            }
+        }
+    }
+    len
+}
+
+/// Moves what does not fit into the overflow cell: task buttons first, then optional detail, then controls; on a rail too
+/// short even for those, power, the clock, the window, the workspaces and the logo too. Quick settings and the overflow
+/// cell itself always stay. Returns what moved.
+pub fn fit_overflow(geo: &Geo, part: Part, c: &mut Content) -> Vec<Tray> {
+    let mut hidden = Vec::new();
+    let order = [
+        Tray::Media,
+        Tray::Cpu,
+        Tray::Memory,
+        Tray::Weather,
+        Tray::Clipboard,
+        Tray::Notifications,
+        Tray::Spotlight,
+        Tray::Dash,
+        Tray::Brightness,
+        Tray::Agents,
+        Tray::Lock,
+        Tray::Layout,
+        Tray::ShowDesktop,
+        Tray::AppMenu,
+        Tray::Bluetooth,
+        Tray::Network,
+        Tray::Audio,
+        Tray::Awake,
+        Tray::Battery,
+        // a rail too short even for its essentials (a 1024 x 480 output at 200 % is 240 px tall): they move into the overflow
+        // cell too rather than overlap; the Control Center and the overflow cell itself always stay
+        Tray::Power,
+        Tray::Clock,
+        Tray::Window,
+        Tray::Workspaces,
+        Tray::Logo,
+    ];
+    let fits = |c: &Content| fixed_len(geo, part, c) <= geo.len();
+    if fits(c) {
+        return hidden;
+    }
+    let more = |c: &mut Content| {
+        if !c.status.contains(&Tray::More) {
+            c.status.push(Tray::More);
+        }
+    };
+    hidden.append(&mut c.tasks);
+    more(c);
+    for victim in order {
+        if fits(c) {
+            break;
+        }
+        if victim == Tray::Workspaces && c.workspaces > 0 {
+            // the workspace pill is a count, not an entry of the lists below
+            c.workspaces = 0;
+            hidden.push(Tray::Workspaces);
+            continue;
+        }
+        for list in [&mut c.tray, &mut c.status, &mut c.head, &mut c.tail] {
+            if let Some(i) = list.iter().position(|k| *k == victim) {
+                hidden.push(list.remove(i));
+            }
+        }
+    }
+    hidden
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -331,16 +513,8 @@ fn indicator_capacity(geo: &Geo, part: Part, c: &Content) -> usize {
     if part == Part::Head {
         return 0;
     }
-    let d = Dim::of(geo.horizontal());
-    let head = if part == Part::All { EDGE + geo.pill_width() + GAP + if c.workspaces > 0 { workspaces_len(c.workspaces, geo.horizontal()) + GAP } else { 0.0 } } else { EDGE };
-    let mut tail = EDGE + geo.pill_width() + GAP + d.clock_len + GAP;
-    for kinds in [&c.tray, &c.status] {
-        if !kinds.is_empty() {
-            tail += group_len(kinds, geo.horizontal()) + GAP;
-        }
-    }
     let overhead = if c.status.is_empty() { 2.0 * CELL_PAD + GAP } else { 0.0 };
-    ((geo.len() - head - tail - overhead).max(0.0) / ICON_CELL).floor().min(32.0) as usize
+    ((geo.len() - fixed_len(geo, part, c) - overhead).max(0.0) / ICON_CELL).floor().min(32.0) as usize
 }
 
 /// A short rail prefers one reachable app-overflow target to duplicate shortcuts.
@@ -391,7 +565,7 @@ impl Layout {
 }
 
 fn cell_len(kind: Tray, d: &Dim) -> f32 {
-    if kind == Tray::Battery {
+    if matches!(kind, Tray::Battery | Tray::Cpu | Tray::Memory) {
         d.batt_cell
     } else {
         ICON_CELL
@@ -426,14 +600,26 @@ pub fn layout(geo: &Geo, part: Part, c: &Content) -> Layout {
 
     let mut top = EDGE;
     if head {
-        let logo = pill(top, pill_width);
-        pills.push((Pill::Logo, logo));
-        items.push((Tray::Logo, logo));
-        top += pill_width + GAP;
+        for kind in &c.head {
+            let r = pill(top, pill_width);
+            pills.push((single_pill(*kind), r));
+            items.push((*kind, r));
+            top += pill_width + GAP;
+        }
         if c.workspaces > 0 {
             let r = pill(top, workspaces_len(c.workspaces, horiz));
             pills.push((Pill::Workspaces, r));
             items.push((Tray::Workspaces, r));
+            top += r.h + GAP;
+        }
+        if !c.tasks.is_empty() {
+            let r = pill(top, group_len(&c.tasks, horiz));
+            pills.push((Pill::Tasks, r));
+            let mut u = r.y + CELL_PAD;
+            for k in &c.tasks {
+                items.push((*k, pill(u, ICON_CELL)));
+                u += ICON_CELL;
+            }
             top += r.h + GAP;
         }
     }
@@ -449,10 +635,10 @@ pub fn layout(geo: &Geo, part: Part, c: &Content) -> Layout {
             *bot = r.y - GAP;
             r
         };
-        let power = stand(Pill::Power, pill_width, &mut bot);
-        tail_items.push((Tray::Power, power));
-        let clock = stand(Pill::Clock, d.clock_len, &mut bot);
-        tail_items.push((Tray::Clock, clock));
+        for kind in c.tail.iter().rev() {
+            let r = stand(single_pill(*kind), if *kind == Tray::Clock { d.clock_len } else { pill_width }, &mut bot);
+            tail_items.push((*kind, r));
+        }
         for (kind, trays) in [(Pill::Status, &c.status), (Pill::Tray, &c.tray)] {
             if trays.is_empty() {
                 continue;
@@ -532,7 +718,7 @@ pub fn click_for(kind: Tray, workspace: Option<usize>) -> Click {
 
 /// Items that open a popup when hovered or clicked.
 pub fn popout(kind: Tray) -> bool {
-    matches!(kind, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery | Tray::Window | Tray::Layout | Tray::Weather)
+    matches!(kind, Tray::Audio | Tray::Network | Tray::Bluetooth | Tray::Battery | Tray::Window | Tray::Layout | Tray::Weather | Tray::Media | Tray::Brightness)
 }
 
 /// The rdwm request that views workspace `index` (0-based; rdwm tags are numbered from 1).
@@ -615,11 +801,14 @@ impl DecBar {
         if self.embedded {
             return None;
         }
-        #[cfg(test)]
-        let theme_says = TEST_VERTICAL.with(|f| f.get()).then(|| TEST_POSITION.with(|p| p.get()));
-        #[cfg(not(test))]
-        let theme_says = crate::theme::th().pill_bar();
-        place_for(theme_says, self.position_override, self.process)
+        let p = self.panel();
+        let skin = Skin::of(p.renderer);
+        // the pill rail is always a rail; another bar becomes one on a side edge (on top / bottom it is its own strip)
+        if skin != Skin::Pill && !p.edge.is_vertical() {
+            return None;
+        }
+        let position = if p.split { BarPosition::Split } else { p.edge.position() };
+        Place::of(position, self.process).map(|place| place.with_skin(skin))
     }
 
     /// True when this bar draws the pill layout.
@@ -629,22 +818,31 @@ impl DecBar {
 
     /// The surface on its edge (the left edge before there is a place).
     pub(super) fn v_geo(&self) -> Geo {
-        Geo::new(self.place().map_or(Anchor::Left, |p| p.edge), self.width as f32, self.height as f32)
+        let place = self.place();
+        Geo::skinned(place.map_or(Anchor::Left, |p| p.edge), self.width as f32, self.height as f32, place.map_or(Skin::Pill, |p| p.skin))
+    }
+
+    pub(super) fn v_skin(&self) -> Skin {
+        self.place().map_or(Skin::Pill, |p| p.skin)
     }
 
     fn v_part(&self) -> Part {
         self.place().map_or(Part::All, |p| p.part)
     }
 
-    /// Starts the Caps / Num Lock watcher once, when the pill bar is (about to be) on screen and a waker exists.
+    /// Keeps the Caps / Num Lock watcher running exactly while the lock-keys applet is on.
     pub(super) fn ensure_lock_watcher(&mut self) {
-        if self.lock_watcher || self.embedded || !self.pill_bar() {
+        let wanted = self.shows(crate::panel::AppletId::LockKeys);
+        if !wanted {
+            self.lock_watcher = None;
+            return;
+        }
+        if self.lock_watcher.is_some() || cfg!(test) {
             return;
         }
         let Some(waker) = self.waker.clone() else { return };
-        self.lock_watcher = true;
         let changed = Arc::clone(&self.shared);
-        lock::spawn_watcher(self.locks.clone(), move || {
+        self.lock_watcher = lock::spawn_watcher(self.locks.clone(), move || {
             changed.changed.store(true, Ordering::SeqCst);
             waker.wake();
         });
@@ -683,48 +881,75 @@ impl DecBar {
         }
     }
 
-    fn v_content(&self) -> Content {
-        let snap = self.snapshot();
-        let mut tray = Vec::new();
-        if self.layout_state().is_some() {
-            tray.push(Tray::Layout);
-        }
-        if snap.awake {
-            tray.push(Tray::Awake);
-        }
-        if symbols::agents_available() {
-            tray.push(Tray::Agents);
-        }
-        if crate::theme::th().control_center.enabled {
-            tray.push(Tray::Control);
-        }
-        let mut status = Vec::new();
-        if self.locks.caps() || self.locks.num() {
-            status.push(Tray::Lock);
-        }
-        if self.shared.weather.lock().is_ok_and(|w| w.is_some()) {
-            status.push(Tray::Weather);
-        }
-        if snap.volume.is_some() {
-            status.push(Tray::Audio);
-        }
-        if snap.net.is_some() {
-            status.push(Tray::Network);
-        }
-        if snap.bluetooth.is_some() {
-            status.push(Tray::Bluetooth);
-        }
-        if snap.battery.is_some() {
-            status.push(Tray::Battery);
-        }
-        let text_max = Dim::of(self.v_geo().horizontal()).win_text_max;
-        let window = if self.v_win.is_some() { (2.0 * 8.0 + WIN_ICON + 8.0 + self.v_win_len.min(text_max)).ceil() } else { 0.0 };
-        let mut content = Content { workspaces: self.v_workspaces().len(), window, tray, status };
+    /// The rail's content from the enabled applets, and what moved into the overflow cell.
+    pub(super) fn v_fit(&self) -> (Content, Vec<Tray>) {
+        use super::applets::{RAIL_HEAD, RAIL_STATUS, RAIL_TAIL, RAIL_TRAY};
+        use crate::panel::AppletId as A;
+        let geo = self.v_geo();
+        let horiz = geo.horizontal();
+        let text_max = Dim::of(horiz).win_text_max;
+        let window = if self.shows(A::WindowTitle) && self.v_win.is_some() {
+            if horiz {
+                (2.0 * 8.0 + WIN_ICON + 8.0 + self.v_win_len.min(text_max)).ceil()
+            } else {
+                // upright: the icon and a short label under it
+                8.0 + WIN_ICON + 6.0 + 12.0 + 8.0
+            }
+        } else {
+            0.0
+        };
+        let workspaces = if self.shows(A::Workspaces) { self.v_workspaces().len() } else { 0 };
+        let mut content = Content {
+            head: self.applet_items(RAIL_HEAD, 0),
+            workspaces,
+            tasks: if self.shows(A::Tasks) { self.tasks.iter().map(|t| Tray::Task(t.key())).collect() } else { Vec::new() },
+            window,
+            tray: self.applet_items(RAIL_TRAY, 0),
+            status: self.applet_items(RAIL_STATUS, 0),
+            tail: self.applet_items(RAIL_TAIL, 0),
+        };
         let controls = crate::theme::th().control_center;
-        let active = self.indicators.items.iter().any(|item| item.status != crate::sni::Status::Passive);
-        let capacity = fit_indicator_content(&self.v_geo(), self.v_part(), &mut content, active, controls.enabled.then_some(controls.tiles));
-        content.status.extend(self.indicator_kinds(capacity));
-        content
+        let active = self.shows(A::Tray) && self.indicators.items.iter().any(|item| item.status != crate::sni::Status::Passive);
+        let part = self.v_part();
+        let mut hidden = fit_overflow(&geo, part, &mut content);
+        if active {
+            let before: Vec<Tray> = content.tray.iter().chain(&content.status).copied().collect();
+            let capacity = fit_indicator_content(&geo, part, &mut content, true, controls.enabled.then_some(controls.tiles));
+            // what gave way for the application cells stays reachable from the overflow cell
+            let folded: Vec<Tray> = before.into_iter().filter(|k| !content.tray.contains(k) && !content.status.contains(k)).collect();
+            if !folded.is_empty() {
+                hidden.extend(folded);
+                if !content.status.contains(&Tray::More) {
+                    content.status.push(Tray::More);
+                }
+            }
+            let room = capacity.saturating_sub(usize::from(!hidden.is_empty() && !content.status.contains(&Tray::More)));
+            if room == 0 {
+                // no cell left for applications: the overflow list carries them
+                hidden.push(Tray::Indicators);
+                if !content.status.contains(&Tray::More) {
+                    content.status.push(Tray::More);
+                }
+            } else {
+                content.status.extend(self.indicator_kinds(room));
+            }
+        }
+        // the window pill gives way to everything else; then it is in the list too
+        if content.window > 0.0 && part != Part::Tail && geo.len() - fixed_len(&geo, part, &content) < Dim::of(horiz).win_min {
+            hidden.push(Tray::Window);
+            if !content.status.contains(&Tray::More) && part != Part::Head {
+                content.status.push(Tray::More);
+            }
+        }
+        (content, hidden)
+    }
+
+    fn v_content(&self) -> Content {
+        self.v_fit().0
+    }
+
+    pub(super) fn v_hidden(&self) -> Vec<Tray> {
+        self.v_fit().1
     }
 
     pub(super) fn v_layout(&self) -> Layout {
@@ -751,7 +976,7 @@ impl DecBar {
     }
 
     /// Title run of the window pill: the title, else the app's display name.
-    fn v_window_text(&self) -> String {
+    pub(super) fn v_window_text(&self) -> String {
         match &self.v_win {
             Some((id, t)) if t.is_empty() => active::display_name(id),
             Some((_, t)) => t.clone(),
@@ -769,7 +994,42 @@ impl DecBar {
     pub(super) fn v_panel_origin(&self) -> (f32, f32) {
         let geo = self.v_geo();
         let tile = self.v_layout().item(Tray::Control).unwrap_or(VRect { x: geo.w / 2.0, y: geo.h / 2.0, w: 0.0, h: 0.0 });
-        geo.popout_origin(tile, controlcenter::PANEL_W, self.cc_height)
+        geo.popout_origin(tile, self.cc_width(), self.cc_visible_height())
+    }
+
+    /// The surface of the rail at `p`: [`Place::surface_size`], wide enough beside a side strip for the Control Center,
+    /// whose width follows its look and the text scale (GNOME's at 200 % is wider than the usual popout room).
+    pub(super) fn v_surface_size(&self, p: Place) -> (u32, u32) {
+        let (w, h) = p.surface_size();
+        if !p.edge.is_side() {
+            return (w, h);
+        }
+        // the look's natural width; on a narrower output the backend gives less and the panel is fitted to what it got
+        let need = (p.thickness() + POP_GAP + controlcenter::panel_width(self.cc_style()) + POP_MARGIN).ceil() as u32;
+        (w.max(need), h)
+    }
+
+    /// Height the Control Center can have beside the rail: the surface's length less the margins (a side rail), or the
+    /// room the surface keeps for popouts (a top or bottom rail). A taller panel is clipped and scrolls.
+    pub(super) fn v_cc_room(&self) -> f32 {
+        let geo = self.v_geo();
+        match geo.edge {
+            Anchor::Left | Anchor::Right => geo.h - 2.0 * POP_MARGIN,
+            Anchor::Top | Anchor::Bottom => geo.h - geo.thickness() - POP_GAP - POP_MARGIN,
+        }
+    }
+
+    /// Width the Control Center can have beside the rail: the rest of the surface on the screen side of a side rail (the
+    /// backend keeps the surface on its output), the surface's length less margins along a top or bottom rail.
+    pub(super) fn v_cc_room_w(&self) -> f32 {
+        let geo = self.v_geo();
+        if geo.w <= 0.0 {
+            return f32::INFINITY;
+        }
+        match geo.edge {
+            Anchor::Left | Anchor::Right => (geo.w - geo.thick - POP_GAP - POP_MARGIN).max(1.0),
+            Anchor::Top | Anchor::Bottom => (geo.w - 2.0 * POP_MARGIN).max(1.0),
+        }
     }
 
     pub(super) fn v_input_rects(&self) -> Vec<InputRect> {
@@ -779,11 +1039,13 @@ impl DecBar {
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
-                rects.push(geo.reach(ox, oy, controlcenter::PANEL_W, self.cc_height));
+                rects.push(geo.reach(ox, oy, self.cc_width(), self.cc_visible_height()));
             }
             Open::Popup(_) => {
                 if let Some(p) = &self.popup {
                     rects.push(geo.reach(p.x, p.y, p.w, p.h));
+                } else if let Some(c) = &self.calendar {
+                    rects.push(geo.reach(c.x, c.y, popup::Calendar::W, popup::Calendar::H));
                 }
             }
             Open::Menu(_) | Open::None => {}
@@ -795,7 +1057,14 @@ impl DecBar {
     pub(super) fn v_open_popup(&mut self, kind: Tray) {
         self.close();
         let layout = self.v_layout();
-        let Some(item) = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten()) else { return };
+        let Some(item) = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten()).or_else(|| layout.item(Tray::More)) else { return };
+        if kind == Tray::Clock {
+            let Some(today) = clock::today() else { return };
+            let (x, y) = self.v_geo().popout_origin(item, popup::Calendar::W, popup::Calendar::H);
+            self.calendar = Some(popup::Calendar::new(x, y, today));
+            self.open = Open::Popup(kind);
+            return;
+        }
         let Some((rows, w, compact)) = self.build_popup(kind) else { return };
         let mut p = Popup::layout(rows, 0.0, 0.0, w, compact);
         (p.x, p.y) = self.v_geo().popout_origin(item, p.w, p.h);
@@ -815,7 +1084,7 @@ impl DecBar {
     pub(super) fn v_clamp_popup(&mut self) {
         let Open::Popup(kind) = self.open else { return };
         let layout = self.v_layout();
-        let item = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten());
+        let item = layout.item(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| layout.item(Tray::Indicators)).flatten()).or_else(|| layout.item(Tray::More));
         let geo = self.v_geo();
         if let (Some(p), Some(item)) = (self.popup.as_mut(), item) {
             (p.x, p.y) = geo.popout_origin(item, p.w, p.h);
@@ -826,11 +1095,12 @@ impl DecBar {
     /// side bar, at `width` for a top / bottom one. `open` is `control` or the name of a popup (`audio`, `network`, `bluetooth`,
     /// `battery`, `window`, `layout`, `weather`).
     pub(super) fn v_render_png(&mut self, path: &str, width: u32, open: Option<&str>) -> Result<(), String> {
+        let (sw, sh) = self.place().map_or((SURFACE_W, SURFACE_H), |p| self.v_surface_size(p));
         if self.v_geo().horizontal() {
             self.width = width.max(1);
-            self.height = SURFACE_H;
+            self.height = sh;
         } else {
-            self.width = SURFACE_W;
+            self.width = sw;
             if self.height == 0 {
                 self.height = 900;
             }
@@ -880,7 +1150,7 @@ impl DecBar {
             let (ox, _) = self.v_panel_origin();
             if let Some(it) = self.cc_items.iter().find(|i| i.target == Some(t)) {
                 let (rx, rw) = (it.r.x, it.r.w);
-                self.slide(t, rx, rw, x - ox, false);
+                self.slide(t, rx, rw, (x - ox) / self.cc_zoom(), false);
                 return true;
             }
         }
@@ -902,16 +1172,19 @@ impl DecBar {
             self.v_hover_ws = ws;
             redraw = true;
             self.v_hover_open = None;
-            if let Some(kind) = hover.filter(|k| popout(*k) || *k == Tray::Awake) {
+            let pill = self.v_skin() == Skin::Pill;
+            if let Some(kind) = hover.filter(|k| popout(*k) || (pill && *k == Tray::Awake) || (!pill && matches!(k, Tray::Clock | Tray::AppMenu | Tray::Indicators))) {
                 match self.open {
                     // sliding from one icon to the next switches at once, like sliding along the macOS menu bar
                     Open::Popup(cur) if cur != kind => {
                         self.v_open_popup(kind);
                     }
-                    Open::None => self.v_hover_open = Some((kind, Instant::now())),
+                    // Caelestia opens popouts on hover; the other styles on a click
+                    Open::None if pill => self.v_hover_open = Some((kind, Instant::now())),
                     _ => {}
                 }
-            } else if hover.is_some_and(|kind| self.open != Open::Popup(kind) && !(kind == Tray::Indicators && matches!(self.open, Open::Popup(Tray::Indicator(_)))))
+            } else if pill
+                && hover.is_some_and(|kind| self.open != Open::Popup(kind) && !(kind == Tray::Indicators && matches!(self.open, Open::Popup(Tray::Indicator(_)))))
                 && matches!(self.open, Open::Popup(_))
             {
                 // onto an item without a popup of its own: the popup was a hover and goes away
@@ -920,8 +1193,7 @@ impl DecBar {
         }
         match self.open {
             Open::Control => {
-                let (ox, oy) = self.v_panel_origin();
-                let hover = controlcenter::hit(&self.cc_items, x - ox, y - oy).map(|h| h.0);
+                let hover = self.cc_point(x, y).and_then(|(px, py)| controlcenter::hit(&self.cc_items, px, py)).map(|h| h.0);
                 if hover != self.cc_hover {
                     self.cc_hover = hover;
                     redraw = true;
@@ -937,6 +1209,63 @@ impl DecBar {
             Open::Menu(_) | Open::None => {}
         }
         redraw
+    }
+
+    /// A press on a rail item other than the workspaces, the indicators and the special buttons.
+    pub(super) fn v_press(&mut self, kind: Tray, ws: Option<usize>, x: f32, y: f32) -> bool {
+        let skin = self.v_skin();
+        let r = self.v_layout().item(kind).map_or((x, y, 0.0, 0.0), |r| (r.x, r.y, r.w, r.h));
+        if skin != Skin::Pill {
+            if let Some(i) = ws.filter(|_| kind == Tray::Workspaces) {
+                self.close();
+                self.v_switch_workspace(i);
+                return true;
+            }
+            return self.applet_press(kind, r, Button::Left);
+        }
+        match click_for(kind, ws) {
+            Click::Launcher => {
+                self.close();
+                self.spotlight();
+            }
+            Click::Workspace(i) => {
+                self.close();
+                self.v_switch_workspace(i);
+            }
+            Click::Popout(k) => {
+                if self.open != Open::Popup(k) {
+                    self.v_open_popup(k);
+                }
+            }
+            Click::Control => {
+                let was = self.open == Open::Control;
+                self.close();
+                if !was {
+                    self.open_control();
+                }
+            }
+            Click::Dashboard => {
+                self.close();
+                launch_ui(clock_dash_argv(self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All, skin: Skin::Pill })));
+            }
+            Click::Session => {
+                self.close();
+                launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
+            }
+            Click::StayAwakeOff => {
+                self.close();
+                self.awake_off();
+            }
+            Click::Monitor => {
+                self.close();
+                let place = self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All, skin: Skin::Pill });
+                self.process_monitor(monitor_placement(place, x, y));
+            }
+            // the items added with the registry behave alike in every style
+            Click::Nothing if kind != Tray::Workspaces => return self.applet_press(kind, r, Button::Left),
+            Click::Nothing => return self.close(),
+        }
+        true
     }
 
     pub(super) fn v_button(&mut self, x: f32, y: f32, button: Button) -> bool {
@@ -970,9 +1299,11 @@ impl DecBar {
             }
             return false;
         }
-        if button == Button::Right && matches!(target, Some((Tray::Awake, _))) {
-            self.v_open_popup(Tray::Awake);
-            return true;
+        if button == Button::Right {
+            if let Some((kind @ (Tray::Awake | Tray::Task(_)), _)) = target {
+                self.v_open_popup(kind);
+                return true;
+            }
         }
         if button != Button::Left {
             return false;
@@ -980,56 +1311,16 @@ impl DecBar {
         if self.v_geo().strip().contains(x, y) {
             let Some((kind, ws)) = target else { return self.close() };
             self.v_hover_open = None;
-            match click_for(kind, ws) {
-                Click::Launcher => {
-                    self.close();
-                    self.spotlight();
-                }
-                Click::Workspace(i) => {
-                    self.close();
-                    self.v_switch_workspace(i);
-                }
-                Click::Popout(k) => {
-                    if self.open != Open::Popup(k) {
-                        self.v_open_popup(k);
-                    }
-                }
-                Click::Control => {
-                    let was = self.open == Open::Control;
-                    self.close();
-                    if !was {
-                        self.open_control();
-                    }
-                }
-                Click::Dashboard => {
-                    self.close();
-                    launch_ui(clock_dash_argv(self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All })));
-                }
-                Click::Session => {
-                    self.close();
-                    launch_ui(vec![crate::launch::sibling_or_path("decsession")]);
-                }
-                Click::StayAwakeOff => {
-                    self.close();
-                    self.awake_off();
-                }
-                Click::Monitor => {
-                    self.close();
-                    let place = self.place().unwrap_or(Place { edge: Anchor::Left, part: Part::All });
-                    self.process_monitor(monitor_placement(place, x, y));
-                }
-                Click::Nothing => {
-                    return self.close();
-                }
-            }
-            return true;
+            return self.v_press(kind, ws, x, y);
         }
         match self.open {
             Open::Control => {
-                let (ox, oy) = self.v_panel_origin();
-                if let Some((t, r)) = controlcenter::hit(&self.cc_items, x - ox, y - oy) {
-                    self.activate(t, r.x, r.w, x - ox);
-                    return true;
+                if let Some((px, py)) = self.cc_point(x, y) {
+                    if let Some((t, r)) = controlcenter::hit(&self.cc_items, px, py) {
+                        self.cc_viewport.focus = None;
+                        self.activate(t, r.x, r.w, px);
+                        return true;
+                    }
                 }
                 false
             }
@@ -1039,7 +1330,7 @@ impl DecBar {
     }
 
     /// Views workspace `index`: rdwm's `view` over its IPC socket when it reports tags, else EWMH.
-    fn v_switch_workspace(&mut self, index: usize) {
+    pub(super) fn v_switch_workspace(&mut self, index: usize) {
         if self.layout_state().is_some_and(|l| !l.tags.is_empty()) {
             rdwm::send_action("view", &[&(index + 1).to_string()]);
         } else {
@@ -1057,6 +1348,10 @@ impl DecBar {
         let target = self.v_target(x, y).map(|t| t.0);
         if let Some(Tray::Indicator(key)) = target {
             return self.indicator_scroll(key, dy);
+        }
+        // the other styles change what is under the pointer; Caelestia's whole strip is a volume / brightness wheel
+        if self.v_skin() != Skin::Pill || matches!(target, Some(Tray::Brightness | Tray::Layout)) {
+            return target.is_some_and(|k| self.applet_scroll(k, dy));
         }
         if target == Some(Tray::Workspaces) {
             rdwm::send_action(if dy > 0.0 { "viewnext" } else { "viewprev" }, &[]);
@@ -1121,38 +1416,67 @@ impl DecBar {
         }
     }
 
-    /// `s` turned 90 degrees clockwise (reading downward), its glyph bodies centred on `cx`, starting at `top`.
+    /// An item's symbol in the rail's style: Material outlines on the Dux band (the SF-style symbol when the package font
+    /// is missing), SF-style symbols otherwise.
     #[allow(clippy::too_many_arguments)]
-    fn v_rotated_text(&mut self, pm: &mut Pixmap, s: &str, cx: f32, top: f32, px: f32, weight: Weight, rgb: (u8, u8, u8)) {
-        let Some(f) = self.fonts.as_mut() else { return };
-        let line = (px * crate::theme::live::font_scale() * 1.5).ceil();
-        let Some(mut tmp) = crate::gfx::pixmap(f.measure(s, px, weight).ceil() as u32 + 2, line as u32) else { return };
-        f.draw(&mut tmp, s, 0.0, 0.0, px, weight, color(rgb.0, rgb.1, rgb.2, 1.0));
-        let body = f.ascent(px, weight) - 0.36 * px * crate::theme::live::font_scale();
-        let paint = PixmapPaint { quality: FilterQuality::Nearest, ..PixmapPaint::default() };
-        let tx = (cx + body).round();
-        pm.draw_pixmap(0, 0, tmp.as_ref(), &paint, Transform::from_row(0.0, 1.0, -1.0, 0.0, tx, top.round()), None);
+    fn rail_symbol(&mut self, pm: &mut Pixmap, skin: Skin, kind: Tray, size: f32, cx: f32, cy: f32, rgb: (u8, u8, u8)) {
+        if skin == Skin::Dux {
+            self.dux_rail_symbol(pm, super::applets::material_symbol(kind), size, cx, cy, rgb);
+        } else {
+            self.v_symbol(pm, super::applets::classic_symbol(kind), size, cx, cy, rgb);
+        }
+    }
+
+    fn dux_rail_symbol(&mut self, pm: &mut Pixmap, name: &str, size: f32, cx: f32, cy: f32, rgb: (u8, u8, u8)) {
+        let px = size.round() as u32;
+        if let Some(icon) = self.symbols.get_material(name, rgb, px) {
+            crate::gfx::blit_scaled(pm, icon, (cx - size / 2.0).round(), (cy - size / 2.0).round(), size, size, 1.0);
+        } else {
+            self.v_symbol(pm, name, size, cx, cy, rgb);
+        }
     }
 
     pub(super) fn v_draw(&mut self, pm: &mut Pixmap) {
         let th = crate::theme::th();
-        self.width = pm.width();
-        self.height = pm.height();
+        (self.width, self.height) = crate::gfx::logical_size(pm);
         let geo = self.v_geo();
         let horiz = geo.horizontal();
         let strip = geo.strip();
+        let skin = self.v_skin();
         let native_glass = th.glass_refraction > 0.0;
-        if !native_glass {
-            crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.background.color(th.bar_alpha));
-        }
         let lay = self.v_layout();
         let snap = self.snapshot();
-        let text = th.text.t();
+        // ink of text and symbols: the pill rail paints on its own pills, the other styles on the bar colour
+        let text = if skin == Skin::Pill { th.text.t() } else { th.bar_text.t() };
         let radius = geo.pill_width() / 2.0;
-        for (_, r) in &lay.pills {
-            let rad = radius.min(r.w.min(r.h) / 2.0);
-            fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(if native_glass { th.bar_alpha } else { 1.0 }));
-            stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, rad - 0.5, th.outline_c(), 1.0);
+        match skin {
+            Skin::Pill => {
+                if !native_glass {
+                    crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.background.color(th.bar_alpha));
+                }
+                for (_, r) in &lay.pills {
+                    let rad = radius.min(r.w.min(r.h) / 2.0);
+                    fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar.color(if native_glass { th.bar_alpha } else { 1.0 }));
+                    stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, rad - 0.5, th.outline_c(), 1.0);
+                }
+            }
+            Skin::Classic => crate::gfx::fill_rect(pm, strip.x, strip.y, strip.w, strip.h, th.bar_c()),
+            Skin::Floating => {
+                let r = rail_body(&geo, 2.0);
+                let rad = r.w.min(r.h) / 2.0;
+                fill_rounded(pm, r.x, r.y, r.w, r.h, rad, th.bar_c());
+                stroke_rounded(pm, r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0, rad - 0.5, th.outline_c(), 1.0);
+            }
+            Skin::Dux => {
+                // one rounded band with a tonal face per item, the Dux bar turned onto the side
+                let band = rail_body(&geo, th.bar_layout.margin);
+                if th.bar_layout.background == "band" {
+                    fill_rounded(pm, band.x, band.y, band.w, band.h, th.bar_layout.band_radius.min(band.w.min(band.h) / 2.0), th.background.color(1.0));
+                }
+                for (_, r) in &lay.pills {
+                    fill_rounded(pm, r.x, r.y, r.w, r.h, th.bar_layout.radius.min(r.w.min(r.h) / 2.0), th.bar_c());
+                }
+            }
         }
 
         for (kind, r) in &lay.items {
@@ -1160,8 +1484,12 @@ impl DecBar {
             let hovered = self.v_hover == Some(*kind) && *kind != Tray::Workspaces;
             if open || hovered {
                 let a = if open { 0.18 } else { 0.10 };
-                let single = matches!(kind, Tray::Logo | Tray::Window | Tray::Clock | Tray::Power);
-                if single {
+                let single = matches!(kind, Tray::Logo | Tray::Window | Tray::Clock | Tray::Power | Tray::AppMenu | Tray::ShowDesktop);
+                if skin != Skin::Pill {
+                    let ink = if skin == Skin::Pill { th.ink(a) } else { th.bar_text.color(a * 0.8) };
+                    let rad = if skin == Skin::Dux { th.bar_layout.radius.min(r.w.min(r.h) / 2.0) } else { 5.0 };
+                    fill_rounded(pm, r.x + 1.0, r.y + 1.0, r.w - 2.0, r.h - 2.0, rad, ink);
+                } else if single {
                     fill_rounded(pm, r.x, r.y, r.w, r.h, radius.min(r.w.min(r.h) / 2.0), th.ink(a));
                 } else if horiz {
                     fill_rounded(pm, r.x + 1.0, r.y + 2.0, r.w - 2.0, r.h - 4.0, 12.0, th.ink(a));
@@ -1171,9 +1499,52 @@ impl DecBar {
             }
             let (cx, cy) = (r.cx(), r.cy());
             match kind {
+                Tray::Logo if self.draw_brand(pm, if skin == Skin::Pill { 22.0 } else { 18.0 }, cx, cy, if skin == Skin::Pill { th.accent.t() } else { text }) => {}
+                Tray::Logo if skin != Skin::Pill => self.rail_symbol(pm, skin, *kind, 18.0, cx, cy, text),
                 Tray::Logo => {
                     let name = self.logo_symbol.clone();
                     self.v_symbol(pm, &name, 22.0, cx, cy, th.accent.t());
+                }
+                Tray::AppMenu | Tray::Notifications | Tray::Clipboard | Tray::Brightness | Tray::ShowDesktop | Tray::Spotlight | Tray::Dash => self.rail_symbol(pm, skin, *kind, 17.0, cx, cy, text),
+                Tray::Media => {
+                    let playing = self.dux_player().is_some_and(|p| p.status == crate::dash::mpris::Status::Playing);
+                    let name = if playing { "pause" } else { "play" };
+                    if skin == Skin::Dux {
+                        self.dux_rail_symbol(pm, name, 17.0, cx, cy, text);
+                    } else {
+                        self.v_symbol(pm, name, 17.0, cx, cy, text);
+                    }
+                }
+                Tray::Cpu | Tray::Memory => {
+                    let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+                    let value = perf.and_then(|p| if *kind == Tray::Cpu { p.0 } else { p.1 });
+                    let label = if *kind == Tray::Cpu { "CPU" } else { "MEM" };
+                    let pct = value.map_or_else(|| "—".to_string(), |v| format!("{:.0}", v * 100.0));
+                    if horiz {
+                        let lw = self.v_text_width(label, 9.0, Weight::Medium);
+                        let vw = self.v_text_width(&pct, 11.0, Weight::Medium);
+                        let x0 = cx - (lw + 3.0 + vw) / 2.0;
+                        self.v_text(pm, label, x0 + lw / 2.0, cy, 9.0, Weight::Medium, text, 0.6);
+                        self.v_text(pm, &pct, x0 + lw + 3.0 + vw / 2.0, cy, 11.0, Weight::Medium, text, 1.0);
+                    } else {
+                        self.v_text(pm, label, cx, cy - 8.0, 9.0, Weight::Medium, text, 0.6);
+                        self.v_text(pm, &pct, cx, cy + 7.0, 11.0, Weight::Medium, text, 1.0);
+                    }
+                }
+                Tray::Task(key) => {
+                    let Some(t) = self.task(*key).cloned() else { continue };
+                    let icon = self.v_icons.get(&t.app_id, 40).clone();
+                    crate::gfx::blit_scaled(pm, &icon, cx - 10.0, cy - 10.0, 20.0, 20.0, 1.0);
+                    if t.active() {
+                        let (dx, dy, dw, dh) = if horiz { (cx - 4.0, r.bottom() - 4.0, 8.0, 2.0) } else { (r.x + 2.0, cy - 4.0, 2.0, 8.0) };
+                        fill_rounded(pm, dx, dy, dw, dh, 1.0, th.accent.color(1.0));
+                    }
+                }
+                Tray::More => {
+                    for offset in [-5.0, 0.0, 5.0] {
+                        let (dx, dy) = if horiz { (cx + offset, cy) } else { (cx, cy + offset) };
+                        fill_rounded(pm, dx - 1.5, dy - 1.5, 3.0, 3.0, 1.5, color(text.0, text.1, text.2, 0.8));
+                    }
                 }
                 Tray::Workspaces => self.v_draw_workspaces(pm, *r, horiz),
                 Tray::Window => self.v_draw_window(pm, *r, horiz),
@@ -1182,17 +1553,28 @@ impl DecBar {
                         popup::draw_layout_icon(pm, l.canonical(), cx - 11.0, cy - 7.0, 22.0, 14.0, (text.0, text.1, text.2, 0.95));
                     }
                 }
-                Tray::Awake => self.v_symbol(pm, "awake", 16.0, cx, cy, th.accent.t()),
+                Tray::Awake => {
+                    let on = snap.awake;
+                    self.v_symbol(pm, "awake", 16.0, cx, cy, if on { th.accent.t() } else { text });
+                }
                 Tray::Agents => self.v_symbol(pm, "agents", 16.0, cx, cy, text),
-                Tray::Control => self.v_symbol(pm, "switches", 16.0, cx, cy, text),
+                Tray::Control => self.rail_symbol(pm, skin, *kind, 16.0, cx, cy, text),
                 Tray::Lock => {
+                    let on = self.locks.caps() || self.locks.num();
                     let label = match (self.locks.caps(), self.locks.num()) {
                         (true, true) => "A1",
                         (true, false) => "A",
-                        _ => "1",
+                        (false, true) => "1",
+                        // turned on explicitly while both are off: the inactive key
+                        _ => "A",
                     };
-                    fill_rounded(pm, cx - 10.0, cy - 8.0, 20.0, 16.0, 5.0, th.accent.color(1.0));
-                    self.v_text(pm, label, cx, cy, 10.0, Weight::Bold, th.accent_text.t(), 1.0);
+                    if on {
+                        fill_rounded(pm, cx - 10.0, cy - 8.0, 20.0, 16.0, 5.0, th.accent.color(1.0));
+                        self.v_text(pm, label, cx, cy, 10.0, Weight::Bold, th.accent_text.t(), 1.0);
+                    } else {
+                        stroke_rounded(pm, cx - 9.5, cy - 7.5, 19.0, 15.0, 5.0, color(text.0, text.1, text.2, 0.45), 1.0);
+                        self.v_text(pm, label, cx, cy, 10.0, Weight::Bold, text, 0.55);
+                    }
                 }
                 Tray::Audio => {
                     let icon = snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-2");
@@ -1222,6 +1604,12 @@ impl DecBar {
                         self.v_draw_battery(pm, *r, b, horiz);
                     }
                 }
+                Tray::Clock if skin != Skin::Pill => {
+                    // the other styles' clock: their own weight and colour, upright digits stacked on a side edge
+                    let (hh, mm) = self.v_clock();
+                    self.v_text(pm, &hh, cx, cy - 8.0, 13.0, Weight::Medium, text, 1.0);
+                    self.v_text(pm, &mm, cx, cy + 8.0, 13.0, Weight::Regular, text, 1.0);
+                }
                 Tray::Clock => {
                     let (hh, mm) = self.v_clock();
                     if horiz {
@@ -1236,6 +1624,7 @@ impl DecBar {
                         self.v_text(pm, &mm, cx, cy + 11.0, 15.0, Weight::Medium, text, 1.0);
                     }
                 }
+                Tray::Power if skin != Skin::Pill => self.rail_symbol(pm, skin, *kind, 17.0, cx, cy, text),
                 Tray::Power => self.v_symbol(pm, "power", 18.0, cx, cy, th.danger.t()),
                 Tray::Weather => {
                     let wx = self.shared.weather.lock().ok().and_then(|w| w.clone());
@@ -1249,22 +1638,31 @@ impl DecBar {
                         fill_rounded(pm, cx + offset - 1.5, cy - 1.5, 3.0, 3.0, 1.5, th.text.color(1.0));
                     }
                 }
-                Tray::Dash | Tray::Spotlight => {}
             }
         }
 
         match self.open {
             Open::Control => {
                 let (ox, oy) = self.v_panel_origin();
+                self.debug_control_panel(self.width, self.height);
                 let style = self.cc_style();
+                let (clipped, width, height) = (self.cc_clipped(), self.cc_width(), self.cc_visible_height());
                 if let Some(f) = self.fonts.as_mut() {
-                    let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
-                    controlcenter::draw(pm, &view, f, &mut self.symbols);
+                    if clipped {
+                        self.cc_viewport.draw(pm, (ox, oy), width, height, &self.cc_items, self.cc_hover, style, f, &mut self.symbols);
+                    } else {
+                        let view = controlcenter::View { origin: (ox, oy), items: &self.cc_items, height: self.cc_height, hover: self.cc_hover, style };
+                        controlcenter::draw_focused(pm, &view, self.cc_viewport.focus, f, &mut self.symbols);
+                    }
                 }
             }
             Open::Popup(_) => {
-                if let (Some(f), Some(p)) = (self.fonts.as_mut(), &self.popup) {
-                    p.draw(pm, f, &mut self.symbols, self.popup_hover);
+                if let Some(f) = self.fonts.as_mut() {
+                    if let Some(p) = &self.popup {
+                        p.draw(pm, f, &mut self.symbols, self.popup_hover);
+                    } else if let Some(c) = &self.calendar {
+                        c.draw(pm, f);
+                    }
                 }
             }
             Open::Menu(_) | Open::None => {}
@@ -1333,14 +1731,15 @@ impl DecBar {
             self.v_text_from(pm, &shown, left, r.cy(), TEXT_PX, Weight::Medium, th.text.t());
             return;
         }
+        // a side bar keeps text upright: the icon, and under it as much of the app's name as the width takes
         crate::gfx::blit_scaled(pm, &icon, r.cx() - WIN_ICON / 2.0, r.y + 8.0, WIN_ICON, WIN_ICON, 1.0);
-        let top = r.y + 8.0 + WIN_ICON + 8.0;
-        let room = (r.bottom() - 8.0 - top).max(0.0);
+        let label = active::display_name(&id);
         let shown = match &self.fonts {
-            Some(f) => controlcenter::fit(&self.v_window_text(), room, TEXT_PX, Weight::Medium, f),
+            Some(f) => controlcenter::fit(&label, r.w - 4.0, 10.0, Weight::Medium, f),
             None => return,
         };
-        self.v_rotated_text(pm, &shown, r.cx(), top, TEXT_PX, Weight::Medium, th.text.t());
+        let ink = if self.v_skin() == Skin::Pill { th.text.t() } else { th.bar_text.t() };
+        self.v_text(pm, &shown, r.cx(), r.y + 8.0 + WIN_ICON + 6.0 + 6.0, 10.0, Weight::Medium, ink, 0.9);
     }
 
     fn v_draw_battery(&mut self, pm: &mut Pixmap, r: VRect, b: &sys::Battery, horiz: bool) {
@@ -1378,6 +1777,12 @@ impl DecBar {
     }
 }
 
+/// The strip less `margin` on every side: the floating rail's pill and the Dux band.
+fn rail_body(geo: &Geo, margin: f32) -> VRect {
+    let s = geo.strip();
+    VRect { x: s.x + margin, y: s.y + margin, w: (s.w - 2.0 * margin).max(0.0), h: (s.h - 2.0 * margin).max(0.0) }
+}
+
 /// Top y (or x) that keeps a box `size` long inside a screen `screen` long, `POP_MARGIN` from the edges (the margin wins on a short screen).
 pub fn clamp_in(pos: f32, size: f32, screen: f32) -> f32 {
     pos.min(screen - size - POP_MARGIN).max(POP_MARGIN)
@@ -1407,8 +1812,19 @@ fn clock_dash_argv(place: Place) -> Vec<String> {
     vec![crate::launch::sibling_or_path("decdash"), "--top".into(), top.to_string()]
 }
 
+#[cfg(test)]
+thread_local! {
+    /// What a test's presses started (unit tests never start programs).
+    pub(super) static LAUNCHED: std::cell::RefCell<Vec<Vec<String>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// Starts a UI program (dashboard, session menu). In dry-run mode (tests) the command is only recorded.
 pub(super) fn launch_ui(argv: Vec<String>) {
+    #[cfg(test)]
+    LAUNCHED.with(|l| l.borrow_mut().push(argv.clone()));
+    if cfg!(test) && !sys::is_dry_run() {
+        return;
+    }
     if sys::is_dry_run() {
         let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         sys::spawn(&refs);
@@ -1422,7 +1838,7 @@ mod tests {
     use super::*;
 
     fn full() -> Content {
-        Content { workspaces: 9, window: 140.0, tray: vec![Tray::Layout, Tray::Control], status: vec![Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery] }
+        Content { workspaces: 9, window: 140.0, tray: vec![Tray::Layout, Tray::Control], status: vec![Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery], ..Content::default() }
     }
 
     /// The surface the backend gives a bar on `edge` of a 1600 x 900 monitor.
@@ -1456,7 +1872,7 @@ mod tests {
 
     #[test]
     fn the_process_manager_hangs_from_the_bars_own_edge() {
-        let args = |edge, x, y| monitor_placement(Place { edge, part: Part::All }, x, y).join(" ");
+        let args = |edge, x, y| monitor_placement(Place { edge, part: Part::All, skin: Skin::Pill }, x, y).join(" ");
         let gap = HORIZONTAL_THICK as i32 + 10;
         assert_eq!(args(Anchor::Bottom, 900.0, 1400.0), format!("--edge bottom --top {gap} --x 900"));
         assert_eq!(args(Anchor::Top, 900.0, 20.0), format!("--edge top --top {gap} --x 900"));
@@ -1883,6 +2299,7 @@ mod tests {
                 window: 200.0,
                 tray: vec![Tray::Layout, Tray::Awake, Tray::Agents, Tray::Control],
                 status: vec![Tray::Lock, Tray::Weather, Tray::Audio, Tray::Network, Tray::Bluetooth, Tray::Battery],
+                ..Content::default()
             };
             assert_eq!(indicator_capacity(&geo, Part::All, &base), 0);
             let mut content = base.clone();

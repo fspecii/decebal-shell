@@ -13,6 +13,8 @@ LAUNCHER_BIN_DIR selects declaunch (default: $CARGO_TARGET_DIR or target, debug 
 from pathlib import Path
 import hashlib, json, os, shutil, signal, subprocess, sys, tempfile, time
 from PIL import Image
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb
 
 repo = Path(__file__).resolve().parents[2]
 target = Path(os.environ.get("CARGO_TARGET_DIR", repo / "target"))
@@ -153,12 +155,9 @@ def actions(img):
 
 
 try:
-    rd, wr = os.pipe()
-    x = subprocess.Popen(["Xvfb", "-displayfd", str(wr), "-screen", "0", "800x480x24", "-noreset", "-nolisten", "tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, pass_fds=(wr,))
-    os.close(wr)
+    with (root / "xvfb.log").open("w") as log:
+        x, env["DISPLAY"] = start_private_xvfb(env=env, log=log, screen="800x480x24")
     owned.append(x)
-    with os.fdopen(rd) as f:
-        env["DISPLAY"] = ":" + f.readline().strip()
     subprocess.run(["xrdb", "-merge"], input="Xft.dpi: 192\n", env=env, text=True, check=True)
     desk = Image.new("RGB", (800, 480), (0x5A, 0x6A, 0x7A))
     desk.paste((0x1E, 0x22, 0x28), (0, 0, 800, 64))

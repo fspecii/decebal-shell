@@ -40,7 +40,7 @@ fn catalogue_covers_shipped_designs_with_reviewed_sfw_provenance() {
         })
         .collect();
     assert_eq!(themes.keys().cloned().collect::<BTreeSet<_>>(), shipped);
-    assert_eq!(themes.len(), 22);
+    assert!(themes.len() >= 24, "the shipped GNOME designs must have recommendations too");
     assert!(catalogue["scope"]["uncovered_theme_ids"].as_array().unwrap().is_empty());
     let mut used = BTreeSet::new();
     for (theme, record) in themes {

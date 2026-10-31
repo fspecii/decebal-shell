@@ -45,6 +45,8 @@ pub struct Metrics {
     pub btn_h: f32,
     pub gap: f32,
     pub icon: f32,
+    /// Explicit or thickness-derived Start icon size; absent keeps the original Windows glyph.
+    pub start_icon: Option<f32>,
     pub pad: f32,
     pub start_w: f32,
     pub search_box_w: f32,
@@ -59,6 +61,14 @@ pub struct Metrics {
     pub icon_min: f32,
     /// Corner radius of a button's plate.
     pub corner: f32,
+    /// How far a plate stays inside the strip across it, when the theme's `[taskbar]` sets one (else the style's own).
+    pub inset: Option<f32>,
+    /// Gap between the strip and the screen edge and its two ends (a floating panel); 0 = flush.
+    pub float_gap: f32,
+    /// The theme's `[taskbar] indicator`, `desktop` and `workspaces` choices (see [`crate::panel::plasma_style`]).
+    pub indicator: crate::panel::plasma_style::Indicator,
+    pub desktop_form: crate::panel::plasma_style::DesktopForm,
+    pub workspace_form: crate::panel::plasma_style::WorkspaceForm,
 }
 
 impl Metrics {
@@ -75,6 +85,7 @@ impl Metrics {
             btn_h: r(if classic { 44.0 } else { 40.0 }),
             gap: r(if classic { 0.0 } else { 4.0 }),
             icon: r(24.0),
+            start_icon: None,
             pad: r(12.0),
             start_w: r(if classic { 48.0 } else { 44.0 }),
             search_box_w: r(if classic { 236.0 } else { 184.0 }),
@@ -86,12 +97,53 @@ impl Metrics {
             label_min: r(64.0),
             icon_min: r(32.0),
             corner: 4.0 * s,
+            inset: None,
+            float_gap: 0.0,
+            indicator: Default::default(),
+            desktop_form: Default::default(),
+            workspace_form: Default::default(),
         }
     }
 
-    /// Takes the plate corner from the theme's radius (8 gives the Windows 11 default of 4).
+    /// Takes the plate corner from the theme's radius (8 gives the Windows 11 default of 4), then applies the theme's `[taskbar]`
+    /// style on top: only the values it sets change, so a theme without the section keeps the Windows numbers.
     pub fn themed(mut self, t: &crate::theme::Theme) -> Metrics {
         self.corner = (t.radius * 0.5).clamp(2.0, 8.0) * self.scale;
+        self.styled(&t.taskbar)
+    }
+
+    /// Applies a [`crate::panel::plasma_style::TaskbarStyle`] (pixels at scale 1.0) to these metrics.
+    pub fn styled(mut self, st: &crate::panel::plasma_style::TaskbarStyle) -> Metrics {
+        let sc = self.scale;
+        let r = move |v: f32| (v * sc).round();
+        if let Some(v) = st.thickness {
+            self.bar_h = r(v);
+            // the plate follows the strip unless an inset says otherwise
+            self.btn_h = self.bar_h;
+        }
+        if let Some(v) = st.icon_px() {
+            self.icon = r(v);
+            self.start_icon = Some(self.icon);
+        }
+        if let Some(v) = st.cell_width {
+            self.btn_w = r(v);
+            self.start_w = r(v);
+            self.search_btn_w = r(v);
+        }
+        if let Some(v) = st.gap {
+            self.gap = r(v);
+        }
+        if let Some(v) = st.inset {
+            self.inset = Some(r(v));
+            self.btn_h = (self.bar_h - 2.0 * r(v)).max(1.0);
+        }
+        if st.desktop == crate::panel::plasma_style::DesktopForm::Icon {
+            self.desktop_w = self.btn_w.max(self.bar_h);
+        }
+        self.float_gap = r(st.float_gap);
+        self.indicator = st.indicator;
+        self.desktop_form = st.desktop;
+        self.workspace_form = st.workspaces;
         self
     }
 }
@@ -216,12 +268,20 @@ pub struct Inputs<'a> {
     /// Width of the widest clock line.
     pub clock_text_w: f32,
     pub scroll: f32,
+    /// The launcher (Start), clock and show-desktop applets are on.
+    pub start: bool,
+    pub clock: bool,
+    pub desktop: bool,
+    /// Workspace cells the pager shows (0: the workspace applet is the renderer's own single cell).
+    pub pager: usize,
+    /// The strip runs down a side edge (its zones are laid out along y after the transposition).
+    pub vertical: bool,
 }
 
 /// Number of application-indicator cells that leave the native Start/search,
 /// clock, builtin tray and at least one task target unobscured. Overflow is a
 /// normal cell, selected by the shared status engine inside this same budget.
-pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: usize, builtins: usize, clock_text_w: f32) -> usize {
+pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: usize, builtins: usize, clock_text_w: f32, extra_w: f32) -> usize {
     let search_w = match search {
         WinSearch::None => 0.0,
         WinSearch::Button => m.search_btn_w,
@@ -235,27 +295,39 @@ pub fn indicator_capacity(m: &Metrics, width: f32, search: WinSearch, buttons: u
         + m.desktop_w
         + (clock_text_w + 2.0 * m.clock_pad).ceil()
         + m.gap.max(4.0 * m.scale)
-        + builtins as f32 * m.tray_w;
+        + builtins as f32 * m.tray_w
+        + extra_w;
     if !width.is_finite() {
         return 0;
     }
     ((width - fixed).max(0.0) / m.tray_w).floor().min(32.0) as usize
 }
 
+/// Width along the strip of one tray cell: the pager takes room for its cells, everything else one `tray_w`.
+fn tray_cell_w(m: &Metrics, kind: Tray, i: &Inputs) -> f32 {
+    if kind == Tray::Workspaces && i.pager > 0 {
+        (crate::panel::plasma_style::pager_extent(i.pager, m.icon, i.vertical) + 2.0 * (4.0 * m.scale).round()).max(m.tray_w)
+    } else {
+        m.tray_w
+    }
+}
+
 pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
     let h = m.bar_h;
-    // Right edge: show-desktop sliver, clock, tray icons.
-    let desktop = Rect { x: i.width - m.desktop_w, y: 0.0, w: m.desktop_w, h };
-    let clock_w = (i.clock_text_w + 2.0 * m.clock_pad).ceil();
+    // Right edge: show-desktop sliver, clock, tray icons. A zone whose applet is off is empty (and never hit).
+    let desktop_w = if i.desktop { m.desktop_w } else { 0.0 };
+    let desktop = Rect { x: i.width - desktop_w, y: 0.0, w: desktop_w, h };
+    let clock_w = if i.clock { (i.clock_text_w + 2.0 * m.clock_pad).ceil() } else { 0.0 };
     let clock = Rect { x: desktop.x - clock_w, y: 0.0, w: clock_w, h };
-    let mut tx = clock.x - m.gap.max(4.0 * m.scale);
+    let mut tx = clock.x - if i.clock { m.gap.max(4.0 * m.scale) } else { 0.0 };
     let mut tray: Vec<(Tray, Rect)> = i
         .tray
         .iter()
         .rev()
         .map(|&k| {
-            tx -= m.tray_w;
-            (k, Rect { x: tx, y: 0.0, w: m.tray_w, h })
+            let w = tray_cell_w(m, k, i);
+            tx -= w;
+            (k, Rect { x: tx, y: 0.0, w, h })
         })
         .collect();
     tray.reverse();
@@ -269,7 +341,8 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
         WinSearch::Box => m.search_box_w,
     };
     let spacing = |w: f32| if w > 0.0 { m.gap } else { 0.0 };
-    let fixed = m.start_w + spacing(search_w) + search_w + if i.buttons > 0 { m.gap } else { 0.0 };
+    let start_w = if i.start { m.start_w } else { 0.0 };
+    let fixed = start_w + spacing(search_w) + search_w + if i.buttons > 0 { m.gap } else { 0.0 };
     let n = i.buttons as f32;
     let (max_w, min_w) = if i.labels == WinLabels::Always { (m.label_max, m.label_min) } else { (m.btn_w, m.icon_min) };
     let avail = (region_r - region_l - fixed).max(0.0);
@@ -281,7 +354,7 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
         WinAlign::Left => region_l,
         WinAlign::Center => ((i.width - group_w) / 2.0).round().clamp(region_l, (region_r - group_w).max(region_l)),
     };
-    let start = Rect { x: x0, y: 0.0, w: m.start_w, h };
+    let start = Rect { x: x0, y: 0.0, w: start_w, h };
     let mut x = start.x + start.w;
     let search = (search_w > 0.0).then(|| {
         x += m.gap;
@@ -300,7 +373,25 @@ pub fn layout(m: &Metrics, i: &Inputs) -> Layout {
     Layout { width: i.width, start, search, tasks, clip: (area_l, area_l + area_w), scroll_max, task_w, tray, clock, desktop }
 }
 
+/// Swaps the axes of a rectangle: the layout written along x becomes one along y (a taskbar down a side edge).
+pub fn transpose(r: Rect) -> Rect {
+    Rect { x: r.y, y: r.x, w: r.h, h: r.w }
+}
+
 impl Layout {
+    /// The same layout for a strip down a side edge: every zone keeps its place along the strip, which runs down y.
+    pub fn transposed(&self) -> Layout {
+        Layout {
+            start: transpose(self.start),
+            search: self.search.map(transpose),
+            tasks: self.tasks.iter().map(|r| transpose(*r)).collect(),
+            tray: self.tray.iter().map(|(k, r)| (*k, transpose(*r))).collect(),
+            clock: transpose(self.clock),
+            desktop: transpose(self.desktop),
+            ..self.clone()
+        }
+    }
+
     pub fn hit(&self, x: f32, y: f32, bar_h: f32) -> Option<Hit> {
         if y < 0.0 || y >= bar_h || x < 0.0 || x >= self.width {
             return None;
@@ -360,10 +451,27 @@ mod tests {
                 for scale in [0.75, 1.0, 2.0] {
                     let m = Metrics::new(scale, align);
                     for width in [640.0, 1280.0, 3440.0] {
-                        let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale);
+                        let capacity = indicator_capacity(&m, width, search, 8, 4, 72.0 * scale, 0.0);
                         let mut kinds = vec![Tray::Audio, Tray::Network, Tray::Battery, Tray::Control];
                         kinds.extend((0..capacity).map(|key| Tray::Indicator(key as u64)));
-                        let l = layout(&m, &Inputs { width, align, labels: WinLabels::Never, search, buttons: 8, tray: &kinds, clock_text_w: 72.0 * scale, scroll: 0.0 });
+                        let l = layout(
+                            &m,
+                            &Inputs {
+                                width,
+                                align,
+                                labels: WinLabels::Never,
+                                search,
+                                buttons: 8,
+                                tray: &kinds,
+                                clock_text_w: 72.0 * scale,
+                                scroll: 0.0,
+                                start: true,
+                                clock: true,
+                                desktop: true,
+                                pager: 0,
+                                vertical: false,
+                            },
+                        );
                         if capacity > 0 {
                             let left = l.tray.first().unwrap().1.x;
                             let fixed_right = l.search.map_or(l.start.x + l.start.w, |r| r.x + r.w);
@@ -375,7 +483,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(indicator_capacity(&Metrics::new(1.0, WinAlign::Center), f32::NAN, WinSearch::None, 0, 0, 0.0), 0);
+        assert_eq!(indicator_capacity(&Metrics::new(1.0, WinAlign::Center), f32::NAN, WinSearch::None, 0, 0, 0.0, 0.0), 0);
     }
 
     fn m() -> Metrics {
@@ -383,7 +491,21 @@ mod tests {
     }
 
     fn inp(width: f32, align: WinAlign, buttons: usize) -> Inputs<'static> {
-        Inputs { width, align, labels: WinLabels::Never, search: WinSearch::Button, buttons, tray: &[Tray::Network, Tray::Audio, Tray::Battery], clock_text_w: 60.0, scroll: 0.0 }
+        Inputs {
+            width,
+            align,
+            labels: WinLabels::Never,
+            search: WinSearch::Button,
+            buttons,
+            tray: &[Tray::Network, Tray::Audio, Tray::Battery],
+            clock_text_w: 60.0,
+            scroll: 0.0,
+            start: true,
+            clock: true,
+            desktop: true,
+            pager: 0,
+            vertical: false,
+        }
     }
 
     fn win(id: u64, app: &str, title: &str, active: bool) -> Window {
@@ -398,6 +520,19 @@ mod tests {
         assert!(Metrics::new(1.0, WinAlign::Left).classic && !m().classic);
         assert_eq!(Metrics::new(f32::NAN, WinAlign::Center).scale, 1.0);
         assert_eq!(Metrics::new(50.0, WinAlign::Center).scale, 4.0);
+    }
+
+    #[test]
+    fn start_icon_size_does_not_depend_on_an_unrelated_plate_inset() {
+        use crate::panel::plasma_style::TaskbarStyle;
+        let original = Metrics::new(1.0, WinAlign::Center);
+        assert_eq!(original.start_icon, None, "the Windows glyph keeps its existing size");
+        let explicit = original.styled(&TaskbarStyle { icon: Some(32.0), ..Default::default() });
+        assert_eq!(explicit.inset, None);
+        assert_eq!((explicit.start_icon, explicit.icon), (Some(32.0), 32.0));
+        let derived = Metrics::new(2.0, WinAlign::Center).styled(&TaskbarStyle { thickness: Some(44.0), ..Default::default() });
+        assert_eq!(derived.start_icon, Some(derived.icon));
+        assert_eq!(derived.inset, None);
     }
 
     #[test]

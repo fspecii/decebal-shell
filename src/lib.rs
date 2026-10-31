@@ -37,6 +37,7 @@ pub mod lock;
 pub mod mem;
 pub mod menubar;
 pub mod notify;
+pub mod panel;
 pub mod preset;
 pub mod procmon;
 pub mod reveal;
@@ -63,3 +64,6 @@ pub mod a11y;
 pub mod accessibility;
 
 pub mod sni;
+
+#[cfg(feature = "x11")]
+pub mod x11_connection;

@@ -165,7 +165,7 @@ fn wait_readable(fd: RawFd, timeout: Option<Duration>) {
 
 impl Daemon {
     fn new() -> Result<Daemon, String> {
-        let (conn, n) = x11rb::connect(None).map_err(err)?;
+        let (conn, n) = crate::x11_connection::connect(None).map_err(err)?;
         let root = conn.setup().roots[n].root;
         conn.xfixes_query_version(5, 0).map_err(err)?.reply().map_err(|_| "the XFIXES extension is missing")?;
         let atoms = SelAtoms::intern(&conn)?;
@@ -486,7 +486,7 @@ pub struct Link {
 impl Link {
     /// Connects to the running daemon of this X display (`None` when there is none).
     pub fn connect() -> Option<Link> {
-        let (conn, n) = x11rb::connect(None).ok()?;
+        let (conn, n) = crate::x11_connection::connect(None).ok()?;
         let root = conn.setup().roots[n].root;
         let root_prop = conn.intern_atom(true, ROOT_PROP.as_bytes()).ok()?.reply().ok()?.atom;
         if root_prop == 0 {
@@ -533,7 +533,7 @@ impl Link {
 /// until someone else copies. True once the helper is the owner.
 pub fn serve_detached(text: &str) -> bool {
     use std::io::Write;
-    let Ok((conn, _)) = x11rb::connect(None) else { return false };
+    let Ok((conn, _)) = crate::x11_connection::connect(None) else { return false };
     let Some(clipboard) = conn.intern_atom(false, b"CLIPBOARD").ok().and_then(|c| c.reply().ok()).map(|r| r.atom) else { return false };
     let owner = |c: &RustConnection| c.get_selection_owner(clipboard).ok().and_then(|c| c.reply().ok()).map_or(0, |r| r.owner);
     let before = owner(&conn);

@@ -18,19 +18,12 @@ impl DecBar {
         self.update_snapshot(|s| s.awake = false);
     }
 
-    /// Right click on the coffee cup of the horizontal bar: the options popup. True when it was over the cup.
-    pub(super) fn awake_options(&mut self, x: f32) -> bool {
-        if !self.tray_span(Tray::Awake).is_some_and(|s| x >= s.x && x < s.x + s.w) {
-            return false;
-        }
-        self.open_popup(Tray::Awake);
-        true
-    }
-
     /// Opens the process manager popup (`decmon --popup`, a toggle) with `placement` arguments (`--x` / `--top`).
     pub(super) fn process_monitor(&self, placement: Vec<String>) {
         let mut argv = vec![crate::launch::sibling_or_path("decmon"), "--popup".to_string()];
         argv.extend(placement);
+        #[cfg(test)]
+        vbar::LAUNCHED.with(|l| l.borrow_mut().push(argv.clone()));
         if sys::is_dry_run() {
             let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
             sys::spawn(&refs);
@@ -205,7 +198,7 @@ impl DecBar {
                 let b = snap.battery.as_ref()?;
                 Some((vec![Row::header("Battery").detail(&format!("{}%", b.percent)), Row::text(if b.status.is_empty() { "Unknown" } else { &b.status })], 220.0, false))
             }
-            _ => None,
+            other => self.applet_rows(other),
         }
     }
 
@@ -213,21 +206,25 @@ impl DecBar {
         if self.pill_bar() {
             return self.v_open_popup(kind);
         }
+        let page = self.app_menu_page;
         self.close();
-        let Some(span) = self.tray_span(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| self.tray_span(Tray::Indicators)).flatten()) else { return };
-        let y = self.bar_bottom() + MENU_GAP;
+        self.app_menu_page = page;
+        let span = self.tray_span(kind).or_else(|| matches!(kind, Tray::Indicator(_)).then(|| self.tray_span(Tray::Indicators)).flatten()).or_else(|| self.tray_span(Tray::More));
+        let Some(span) = span else { return };
         let width = self.width as f32;
         if kind == Tray::Clock {
             let Some(today) = clock::today() else { return };
             let x = (span.x + span.w - Calendar::W).clamp(4.0, (width - Calendar::W - 4.0).max(4.0));
-            self.calendar = Some(Calendar::new(x, y, today));
+            self.calendar = Some(Calendar::new(x, self.open_y(Calendar::H, MENU_GAP), today));
             self.open = Open::Popup(kind);
             return;
         }
         let Some((rows, w, compact)) = self.build_popup(kind) else { return };
         let x = if kind == Tray::Layout { span.x - 4.0 } else { span.x + span.w / 2.0 - w / 2.0 };
         let x = x.clamp(4.0, (width - w - 4.0).max(4.0));
-        self.popup = Some(Popup::layout(rows, x, y, w, compact));
+        let mut p = Popup::layout(rows, x, 0.0, w, compact);
+        p.y = self.open_y(p.h, MENU_GAP);
+        self.popup = Some(p);
         self.open = Open::Popup(kind);
         self.last_full_refresh = Instant::now();
         match kind {
@@ -245,7 +242,12 @@ impl DecBar {
         let Some(old) = self.popup.as_ref().map(|p| (p.x, p.y)) else { return };
         match self.build_popup(kind) {
             Some((rows, w, compact)) => {
-                self.popup = Some(Popup::layout(rows, old.0, old.1, w, compact));
+                let mut p = Popup::layout(rows, old.0, old.1, w, compact);
+                if self.bottom() {
+                    // it grows upwards from the strip
+                    p.y = self.open_y(p.h, MENU_GAP);
+                }
+                self.popup = Some(p);
                 if self.pill_bar() {
                     self.v_clamp_popup();
                 }
@@ -330,23 +332,11 @@ impl DecBar {
     /// Wheel over a status item. Returns true when something changed.
     pub(super) fn tray_scroll(&mut self, x: f32, dy: f32) -> bool {
         let Some((kind, _)) = self.tray().into_iter().find(|(_, s)| x >= s.x && x < s.x + s.w) else { return false };
-        match kind {
-            Tray::Indicator(key) => self.indicator_scroll(key, dy),
-            Tray::Audio => {
-                let Some(v) = self.snapshot().volume else { return false };
-                let cur = if v.muted { 0.0 } else { v.level };
-                self.set_volume_now((cur - dy.signum() * 0.05).clamp(0.0, 1.0));
-                if matches!(self.open, Open::Popup(Tray::Audio)) {
-                    self.rebuild_popup();
-                }
-                true
-            }
-            Tray::Layout => {
-                rdwm::send_action(if dy > 0.0 { "cyclelayout" } else { "cyclelayout_back" }, &[]);
-                false
-            }
-            _ => false,
+        // the classic menu bar never stepped workspaces with the wheel
+        if kind == Tray::Workspaces {
+            return false;
         }
+        self.applet_scroll(kind, dy)
     }
 
     /// Pointer press inside the open popup/calendar.
@@ -408,6 +398,12 @@ impl DecBar {
     }
 
     pub(super) fn run_act(&mut self, act: Act) {
+        if self.run_applet_act(&act) {
+            if self.open != Open::None {
+                self.rebuild_popup();
+            }
+            return;
+        }
         match act {
             a @ (Act::IndicatorOpen(_) | Act::IndicatorActivate(_) | Act::IndicatorEvent { .. } | Act::IndicatorSubmenu(_) | Act::IndicatorBack | Act::IndicatorPage(_)) => {
                 self.indicator_action(&a);
@@ -416,6 +412,19 @@ impl DecBar {
                 }
             }
             Act::None | Act::VolumeSlider | Act::BrightnessSlider => {}
+            // handled by run_applet_act above
+            Act::Workspace(_)
+            | Act::MenuOpen(_)
+            | Act::MenuBack
+            | Act::MenuRun(..)
+            | Act::MediaPrev
+            | Act::MediaToggle
+            | Act::MediaNext
+            | Act::MediaOpen
+            | Act::TaskFocus(_)
+            | Act::TaskMinimize(_)
+            | Act::TaskClose(_)
+            | Act::OpenApplet(_) => {}
             Act::AwakeOff => {
                 self.close();
                 self.awake_off();

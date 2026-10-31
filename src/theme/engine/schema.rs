@@ -53,6 +53,8 @@ pub enum Ty {
     Chain,
     /// A safe hot-corner / widget action word (checked against the allowlist).
     Action,
+    /// A panel logo: a package image, `icon:<name>` or `builtin:<name>`.
+    Logo,
 }
 
 /// Whether the shell acts on the key today.
@@ -147,14 +149,20 @@ pub const FIELDS: &[Field] = &[
     Field { path: "wallpaper.surfaces", ty: Ty::Choice(&["accent", "tint", "full"]), desc: "with match_colors: only the accent, tinted surfaces, or the whole palette", status: Wired },
     Field { path: "wallpaper.strength", ty: Ty::Num(0.0, 1.0), desc: "with match_colors: how far surfaces move towards the wallpaper", status: Wired },
     Field { path: "wallpaper.follow_mode", ty: Ty::Bool, desc: "with match_colors: light or dark follows the picture's brightness", status: Wired },
-    Field { path: "decoration.style", ty: Ty::Ident, desc: "rdwm titlebar style by name: macos, macos-light, classic, windows, windows-light, adwaita, adwaita-light, breeze, arc, materia, nord, gruvbox, dracula, minimal, borderonly (`rdwmctl styles`); the style also decides the side of the window buttons", status: Wired },
+    Field { path: "decoration.style", ty: Ty::Ident, desc: "rdwm titlebar style by name: macos, macos-light, classic, windows, windows-light, adwaita, adwaita-light, breeze, arc, materia, nord, gruvbox, dracula, minimal, borderonly, xfce-default, xfce-daloa, xfce-kokodi, openkylin, openkylin-dark, deepin, deepin-dark, lingmo, lingmo-dark (what the running rdwm lists, `rdwmctl styles`); the style also decides the side of the window buttons. Used in a mode that has no `style_<mode>`", status: Wired },
+    Field { path: "decoration.style_light", ty: Ty::Ident, desc: "titlebar style wanted in light mode; applied only if the running rdwm lists it (else the fallback, with a persistent warning, else the apply stops before writing); needs min_shell_version 0.3.0", status: Wired },
+    Field { path: "decoration.style_dark", ty: Ty::Ident, desc: "titlebar style wanted in dark mode (see style_light)", status: Wired },
+    Field { path: "decoration.fallback_style", ty: Ty::Ident, desc: "style used in either mode when the wanted one is not supported by the running rdwm; must itself be listed by it", status: Wired },
+    Field { path: "decoration.fallback_style_light", ty: Ty::Ident, desc: "fallback for light mode (before fallback_style)", status: Wired },
+    Field { path: "decoration.fallback_style_dark", ty: Ty::Ident, desc: "fallback for dark mode (before fallback_style)", status: Wired },
     Field { path: "decoration.height", ty: Ty::Int(16, 60), desc: "titlebar height in px", status: Wired },
     Field { path: "decoration.radius", ty: Ty::Int(0, 24), desc: "window corner radius in px (default: the theme's radius)", status: Wired },
     Field { path: "decoration.title_align", ty: Ty::Choice(&["center", "left"]), desc: "title text alignment", status: Wired },
     Field { path: "decoration.buttons", ty: Ty::Choice(&["left", "right", "none"]), desc: "`none` hides the window buttons; left/right is a hint, the decoration style decides the side", status: Pending("rdwm has no separate button-side key: the style decides; `none` is applied") },
     Field { path: "decoration.button_order", ty: Ty::List(Elem::Choice(BUTTON_NAMES), 3), desc: "order of the buttons from the outer edge in", status: Pending("rdwm has no button-order key: the style decides") },
     Field { path: "bar.enabled", ty: Ty::Tri, desc: "show the menu bar (`auto` = hidden while the taskbar-style dock is up)", status: Wired },
-    Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "which screen edge the Caelestia pill bar sits on (with bar.style = \"vertical\"); `split` is a top and a bottom bar", status: Wired },
+    Field { path: "bar.position", ty: Ty::Choice(POSITIONS), desc: "the theme's default screen edge for the bar, every bar style (`split`, a top and a bottom bar, needs bar.style = \"vertical\"); the user's Settings choice wins, see docs/universal-panels.md", status: Wired },
+    Field { path: "bar.applets", ty: Ty::List(Elem::Ident, 32), desc: "the theme's default applets (keys from docs/universal-panels.md: clock, volume, weather, tray, launcher, tasks...); unlisted ones start off, unknown keys are ignored; the user's Settings choices win", status: Wired },
     Field { path: "bar.style", ty: Ty::Choice(&["flat", "floating", "vertical", "dux"]), desc: "flat strip, floating pill, vertical rail or three independent Dux islands", status: Wired },
     Field { path: "bar.height", ty: Ty::Int(20, 80), desc: "bar height (width when vertical) in px", status: Wired },
     Field { path: "bar.left", ty: Ty::List(Elem::Ident, 24), desc: "native items in the left Dux island; other bar styles retain their existing layout", status: Wired },
@@ -165,20 +173,33 @@ pub const FIELDS: &[Field] = &[
     Field { path: "bar.spacing", ty: Ty::Int(0, 24), desc: "Dux item gap in logical pixels", status: Wired },
     Field { path: "bar.band_radius", ty: Ty::Int(0, 48), desc: "Dux background band radius (source windowRadius L16); independent of widget pill radius", status: Wired },
     Field { path: "bar.radius", ty: Ty::Int(0, 48), desc: "Dux island corner radius in logical pixels", status: Wired },
+    Field { path: "branding.logo", ty: Ty::Logo, desc: "the panels' logo (launcher, system menu, Start button, rail): a package image, `icon:<name>` from the user's icon theme, or `builtin:apple|windows|os|grid|none`; absent = each style's own", status: Wired },
+    Field { path: "branding.logo_tint", ty: Ty::Bool, desc: "repaint the logo in the bar's text colour (symbolic logos)", status: Wired },
+    Field { path: "branding.launcher_label", ty: Ty::Text(24), desc: "text on the launcher button of horizontal bars, e.g. `Activities`; side rails show the logo", status: Wired },
+    Field { path: "branding.desktop_label", ty: Ty::Text(24), desc: "the name the menu bar shows when no window is focused (default `Finder`)", status: Wired },
     Field { path: "desktop.widgets", ty: Ty::Choice(&["none"]), desc: "explicit empty desktop profile; custom layouts require Ask/Keep/Replace confirmation", status: Wired },
     Field { path: "launcher.style", ty: Ty::Choice(crate::launcher::style::KEYS), desc: "native launcher composition: default, dux, windows, gnome, kde, xfce or blackberry; the user's Settings choice overrides it", status: Wired },
     Field { path: "dashboard.profile", ty: Ty::Choice(&["readme"]), desc: "configured README-era clock/calendar/user/resource/media profile, not current upstream dashboard defaults", status: Wired },
     Field { path: "dashboard.style", ty: Ty::Choice(&["default", "dux"]), desc: "native dashboard composition; default preserves the existing dashboard", status: Wired },
     Field { path: "dock.enabled", ty: Ty::Tri, desc: "show the dock (`auto` = hidden under a vertical bar)", status: Wired },
     Field { path: "dock.style", ty: Ty::Choice(&["mac", "windows"]), desc: "macOS floating dock or the Windows 11 taskbar", status: Wired },
-    Field { path: "dock.position", ty: Ty::Choice(&["bottom", "top", "left", "right"]), desc: "screen edge of the dock", status: Pending("only bottom/top are wired (windows taskbar); left/right need the dock layouts work") },
+    Field { path: "dock.position", ty: Ty::Choice(&["bottom", "top", "left", "right"]), desc: "the theme's default screen edge of the dock or the taskbar; the user's Settings choice (dock-settings.json `edge`) wins", status: Wired },
     Field { path: "dock.size", ty: Ty::Int(24, 128), desc: "icon size in px", status: Wired },
     Field { path: "dock.align", ty: Ty::Choice(&["center", "left"]), desc: "Windows taskbar icon alignment", status: Wired },
     Field { path: "dock.roundness", ty: Ty::Num(0.0, 1.0), desc: "0 square .. 1 pill", status: Wired },
     Field { path: "dock.magnification", ty: Ty::Num(1.0, 2.5), desc: "hover magnification of the macOS dock", status: Wired },
+    Field { path: "taskbar.thickness", ty: Ty::Int(24, 96), desc: "thickness of the Windows-style taskbar strip in px at scale 1 (height of a top/bottom strip, width of a side strip); absent = the renderer's own", status: Wired },
+    Field { path: "taskbar.icon_size", ty: Ty::Int(12, 64), desc: "drawn size of task and Start icons in px; absent with a thickness = thickness minus two paddings (Plasma's rule)", status: Wired },
+    Field { path: "taskbar.cell_width", ty: Ty::Int(24, 120), desc: "width of a task or Start cell along the strip", status: Wired },
+    Field { path: "taskbar.gap", ty: Ty::Int(0, 16), desc: "space between cells along the strip", status: Wired },
+    Field { path: "taskbar.inset", ty: Ty::Int(0, 16), desc: "how far a cell's plate stays inside the strip across it (0: the cell fills the strip)", status: Wired },
+    Field { path: "taskbar.float_gap", ty: Ty::Int(0, 32), desc: "distance between the strip and the screen edge and both its ends, a floating panel (0: flush)", status: Wired },
+    Field { path: "taskbar.indicator", ty: Ty::Choice(&["default", "frame"]), desc: "task state marking: the renderer's own, or a tinted cell with a strong line on the side facing the desktop (focus, hover)", status: Wired },
+    Field { path: "taskbar.desktop", ty: Ty::Choice(&["sliver", "icon"]), desc: "show-desktop applet: a thin sliver or a square icon cell", status: Wired },
+    Field { path: "taskbar.workspaces", ty: Ty::Choice(&["name", "cells"]), desc: "workspace applet: the current workspace's name, or one miniature cell per workspace", status: Wired },
     Field { path: "control_center.enabled", ty: Ty::Bool, desc: "the Control Center (quick settings): its button in the menu bar, pill bar and taskbar, `decutil control-center` and the hot-corner action (default true: every theme has it)", status: Wired },
     Field { path: "control_center.position", ty: Ty::Choice(&crate::controlcenter::settings::POSITION_NAMES), desc: "corner the panel opens in when summoned by a key or hot corner; `auto` = beside the bar's own button (under the menu bar, above the taskbar, next to the pill bar)", status: Wired },
-    Field { path: "control_center.style", ty: Ty::Choice(&crate::controlcenter::settings::STYLE_NAMES), desc: "`card` (big rounded tiles, macOS / Caelestia), `fluent` (the theme's radius as it is, Windows 11 flyout) or `auto` (fluent under the Windows taskbar)", status: Wired },
+    Field { path: "control_center.style", ty: Ty::Choice(&crate::controlcenter::settings::STYLE_NAMES), desc: "`card` (big rounded tiles, macOS / Caelestia), `fluent` (the theme's radius as it is, Windows 11 flyout), `dux`, `gnome` (GNOME Shell 51.1 quick settings: pill toggles, slider rows, icon-button row; needs a release that knows it) or `auto` (fluent under the Windows taskbar)", status: Wired },
     Field { path: "control_center.tiles", ty: Ty::List(Elem::Choice(&crate::controlcenter::settings::TILE_NAMES), 7), desc: "tile groups to show, in panel order (default: all); a group without hardware on the machine is hidden anyway", status: Wired },
     Field { path: "icons.theme", ty: Ty::Text(80), desc: "icon theme name (e.g. Papirus, WhiteSur-dark), or `auto` to follow the desktop", status: Wired },
     Field { path: "icons.size_scale", ty: Ty::Num(0.6, 1.25), desc: "size of the artwork inside its square", status: Wired },
@@ -241,6 +262,7 @@ fn ty_text(t: &Ty) -> String {
         Ty::List(Elem::Choice(c), n) => format!("list of {} (<= {n})", c.join("|")),
         Ty::Chain => "family, or list of families (<= 8)".into(),
         Ty::Action => "safe action".into(),
+        Ty::Logo => "image file (png/jpg/webp), icon:<name> or builtin:<apple|windows|os|grid|none>".into(),
     }
 }
 
@@ -265,7 +287,7 @@ pub fn rows() -> Vec<Row> {
             push(format!("metrics.{k}"), ty_text(&Ty::Num(*a, *b)), desc, Wired);
         }
     }
-    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
+    for section in ["metrics", "font", "wallpaper", "decoration", "bar", "dock", "branding", "taskbar", "icons", "hot_corners", "control_center", "dashboard", "desktop", "launcher", "rdwm"] {
         for f in FIELDS.iter().filter(|f| f.path.starts_with(&format!("{section}."))) {
             push(f.path.into(), ty_text(&f.ty), f.desc, f.status);
         }

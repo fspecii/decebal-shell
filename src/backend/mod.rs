@@ -2,6 +2,7 @@
 
 #[cfg(feature = "x11")]
 pub(crate) mod glass;
+pub mod scaled;
 #[cfg(feature = "wayland")]
 pub mod wayland;
 #[cfg(feature = "wayland")]
@@ -74,6 +75,30 @@ pub fn run<A: App + 'static>(app: A, spec: SurfaceSpec) -> Result<(), String> {
     }
     let _ = (app, spec, forced);
     Err("no usable display: need a Wayland compositor with wlr-layer-shell, or an X11 DISPLAY".into())
+}
+
+/// Surface pixels per logical pixel of a panel [`run_scaled`] at `scale`: `scale` on X11, 1 under a Wayland compositor
+/// (which scales every surface alike). What an unscaled surface beside the panel, like the summoned Control Center,
+/// multiplies the panel's logical thickness by.
+pub fn surface_scale(scale: f32) -> f32 {
+    let wayland = cfg!(feature = "wayland") && std::env::var("DECEBAL_BACKEND").as_deref() != Ok("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some();
+    if wayland {
+        1.0
+    } else {
+        scale
+    }
+}
+
+/// [`run`] for a panel drawn at `scale` (`ui_scale()`): on X11 the surface, strut, input region and drawing are
+/// `scale` times the app's logical pixels (see [`scaled::Scaled`]); a Wayland compositor scales surfaces itself, so
+/// there the app runs as it is.
+pub fn run_scaled<A: App + 'static>(app: A, spec: SurfaceSpec, scale: f32) -> Result<(), String> {
+    let scale = surface_scale(scale);
+    if (scale - 1.0).abs() < 0.01 {
+        return run(app, spec);
+    }
+    let spec = SurfaceSpec { margin: (spec.margin as f32 * scale).round() as i32, reserve: (spec.reserve as f32 * scale).ceil() as i32, ..spec };
+    run(scaled::Scaled::new(app, scale), spec)
 }
 
 /// Self-pipe used to wake the event loop: the read end goes into `poll`, the [`Waker`] writes.

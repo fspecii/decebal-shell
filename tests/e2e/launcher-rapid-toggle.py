@@ -18,6 +18,10 @@ bins = Path(os.environ.get("LAUNCHER_BIN_DIR", target / "debug"))
 helper = Path(os.environ.get("LAUNCHAPP_BIN", bins / "examples/launchapp"))
 evidence = Path(os.environ.get("LAUNCHER_RAPID_EVIDENCE", "/var/tmp/launcher-rapid-evidence"))
 evidence.mkdir(parents=True, exist_ok=True)
+# -I omits the script directory; import only this trusted fixture directory.
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb
 root = Path(tempfile.mkdtemp(prefix="decebal-launcher-rapid-", dir=os.environ.get("LAUNCHER_RAPID_WORK", "/var/tmp")))
 root.chmod(0o700)
 env = dict(os.environ)
@@ -29,8 +33,7 @@ for k, v in {"HOME": "home", "XDG_CONFIG_HOME": "cfg", "XDG_CONFIG_DIRS": "nocfg
     env[k] = str(root / v)
     Path(env[k]).mkdir(parents=True, exist_ok=True)
 os.chmod(env["XDG_RUNTIME_DIR"], 0o700)
-num = next(n for n in range(520, 560) if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists())
-env.update(DISPLAY=f":{num}", DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(root / "no-system-bus"))
+env.update(DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(root / "no-system-bus"))
 notice = root / "notify.sh"
 notice.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$XDG_STATE_HOME/notices"\n')
 notice.chmod(0o755)
@@ -118,8 +121,8 @@ def launchlog():
 
 
 try:
-    xvfb = start(["Xvfb", env["DISPLAY"], "-screen", "0", "1280x800x24", "-nolisten", "tcp"], "xvfb")
-    wait(lambda: Path(f"/tmp/.X11-unix/X{num}").exists(), "private Xvfb")
+    log = (root / "xvfb.log").open("w"); logs.append(log)
+    xvfb, env["DISPLAY"] = start_private_xvfb(env=env, log=log); owned.append(xvfb)
     panel = ["toggle", "--edge", "bottom", "--anchor", "640,782", "--thickness", "36"]
     rounds = []
     # A: bursts of N toggles, each one fired as soon as the previous has exited or taken the lock.

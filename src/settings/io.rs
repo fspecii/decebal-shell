@@ -549,6 +549,8 @@ pub struct Runtime {
     pub error: Option<String>,
     pub version: Option<String>,
     pub effects: Option<Effects>,
+    /// The `decoration.style` names the running rdwm itself listed in its `schema` reply; `None` when it is not running or could not say (an older rdwm).
+    pub decoration_styles: Option<Vec<String>>,
     /// Monotonic request start. Excluded from equality so idle polls do not repaint.
     pub observed: u64,
 }
@@ -562,6 +564,7 @@ impl PartialEq for Runtime {
             && self.error == other.error
             && self.version == other.version
             && self.effects == other.effects
+            && self.decoration_styles == other.decoration_styles
     }
 }
 
@@ -583,6 +586,9 @@ fn poll_runtime_for(sock: &Path, wayland: bool) -> Runtime {
     // never from a paint or input handler. Older compositors failing this probe
     // are normal; do not emit a warning every second.
     let effects = if wayland { ipc_call_inner(sock, &serde_json::json!({"cmd":"output_query"}), false).ok().as_ref().and_then(Effects::from_reply) } else { None };
+    // What the RUNNING rdwm can draw, from its own answer (the installed rdwmctl's offline table can describe a different build).
+    let decoration_styles =
+        ipc_call_inner(sock, &serde_json::json!({"cmd":"schema"}), false).ok().as_ref().and_then(crate::theme::engine::decoration_compat::styles_of).map(|set| set.into_iter().collect::<Vec<_>>());
     // A replacement socket cannot combine one compositor's config with another's effects.
     if before.0.is_none() || stamp(sock) != before {
         return offline();
@@ -595,6 +601,7 @@ fn poll_runtime_for(sock: &Path, wayland: bool) -> Runtime {
         config: config["config"].clone(),
         binds: binds["binds"].clone(),
         effects,
+        decoration_styles,
         observed,
     }
 }

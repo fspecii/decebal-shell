@@ -104,7 +104,7 @@ fn write_x11(colour: Rgb) -> bool {
         wrapper::ConnectionExt as _,
     };
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let (conn, screen) = x11rb::connect(None)?;
+        let (conn, screen) = crate::x11_connection::connect(None)?;
         let root = conn.setup().roots[screen].root;
         let atom = conn.intern_atom(false, ATOM.as_bytes())?.reply()?.atom;
         let words = [1, (u32::from(colour.0) << 16) | (u32::from(colour.1) << 8) | u32::from(colour.2)];

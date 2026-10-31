@@ -1,0 +1,382 @@
+{
+  "accent_inputs": {
+    "-st-accent-color": "#3584e4",
+    "-st-accent-fg-color": "#ffffff"
+  },
+  "colour_expressions": {
+    "dark": {
+      "button/active/background-color": "st-lighten(st-mix(#ffffff, #36363a, 9%), 9%)",
+      "button/active/color": "#ffffff",
+      "button/checked/background-color": "st-lighten(st-mix(#ffffff, #36363a, 9%), 8%)",
+      "button/checked/color": "#ffffff",
+      "button/hover/background-color": "st-lighten(st-mix(#ffffff, #36363a, 9%), 4%)",
+      "button/hover/color": "#ffffff",
+      "button/insensitive/background-color": "st-darken(st-mix(#ffffff, #36363a, 9%), 3%)",
+      "button/insensitive/color": "st-transparentize(#ffffff, 0.5)",
+      "button/normal/background-color": "st-mix(#ffffff, #36363a, 9%)",
+      "button/normal/color": "#ffffff",
+      "focus/box-shadow": "inset 0 0 0 2px st-transparentize(st-mix(-st-accent-color, #ffffff, 60%), 0.2) !important",
+      "menu-button/active/background-color": "st-lighten(st-mix(#ffffff, #4a4a4f, 9%), 9%)",
+      "menu-button/active/color": "#ffffff",
+      "menu-button/checked/background-color": "st-mix(-st-accent-color, #ffffff, 85%)",
+      "menu-button/checked/color": "-st-accent-fg-color",
+      "menu-button/hover/background-color": "st-lighten(st-mix(#ffffff, #4a4a4f, 9%), 4%)",
+      "menu-button/hover/color": "#ffffff",
+      "menu-button/normal/background-color": "st-mix(#ffffff, #4a4a4f, 9%)",
+      "menu-button/normal/color": "#ffffff",
+      "message-card/active/background-color": "st-lighten(#47474c, 9%)",
+      "message-card/active/color": "#ffffff",
+      "message-card/hover/background-color": "st-lighten(#47474c, 4%)",
+      "message-card/hover/color": "#ffffff",
+      "message-card/insensitive/background-color": "st-darken(#47474c, 3%)",
+      "message-card/insensitive/color": "st-transparentize(#ffffff, 0.5)",
+      "message-card/normal/background-color": "#54545a",
+      "message-card/normal/color": "#ffffff",
+      "panel/background-color": "#36363a",
+      "panel/border": "1px solid #424247",
+      "separator": "rgba(255, 255, 255, 0.25)",
+      "separator-checked": "st-mix(-st-accent-fg-color, -st-accent-color, 30%)",
+      "toggle/checked-active/background-color": "st-lighten(-st-accent-color, 9%)",
+      "toggle/checked-active/color": "-st-accent-fg-color",
+      "toggle/checked-hover/background-color": "st-lighten(-st-accent-color, 4%)",
+      "toggle/checked-hover/color": "-st-accent-fg-color",
+      "toggle/checked/background-color": "-st-accent-color",
+      "toggle/checked/color": "-st-accent-fg-color"
+    },
+    "light": {
+      "button/active/background-color": "st-darken(st-mix(#222226, #fafafb, 12%), 9%)",
+      "button/active/color": "#222226",
+      "button/checked/background-color": "st-darken(st-mix(#222226, #fafafb, 12%), 8%)",
+      "button/checked/color": "#222226",
+      "button/hover/background-color": "st-darken(st-mix(#222226, #fafafb, 12%), 4%)",
+      "button/hover/color": "#222226",
+      "button/insensitive/background-color": "st-lighten(st-mix(#222226, #fafafb, 12%), 3%)",
+      "button/insensitive/color": "st-transparentize(#222226, 0.6)",
+      "button/normal/background-color": "st-mix(#222226, #fafafb, 12%)",
+      "button/normal/color": "#222226",
+      "focus/box-shadow": "inset 0 0 0 2px st-transparentize(-st-accent-color, 0.2) !important",
+      "menu-button/active/background-color": "st-darken(st-mix(#222226, #ececf0, 12%), 9%)",
+      "menu-button/active/color": "#222226",
+      "menu-button/checked/background-color": "st-mix(-st-accent-color, #222226, 92%)",
+      "menu-button/checked/color": "-st-accent-fg-color",
+      "menu-button/hover/background-color": "st-darken(st-mix(#222226, #ececf0, 12%), 4%)",
+      "menu-button/hover/color": "#222226",
+      "menu-button/normal/background-color": "st-mix(#222226, #ececf0, 12%)",
+      "menu-button/normal/color": "#222226",
+      "message-card/active/background-color": "st-darken(#ffffff, 9%)",
+      "message-card/active/color": "#222226",
+      "message-card/hover/background-color": "st-darken(#ffffff, 4%)",
+      "message-card/hover/color": "#222226",
+      "message-card/insensitive/background-color": "st-lighten(#ffffff, 3%)",
+      "message-card/insensitive/color": "st-transparentize(#222226, 0.6)",
+      "message-card/normal/background-color": "#ffffff",
+      "message-card/normal/color": "#222226",
+      "panel/background-color": "#fafafb",
+      "panel/border": "1px solid #e6e6eb",
+      "separator": "rgba(34, 34, 38, 0.25)",
+      "separator-checked": "st-mix(-st-accent-fg-color, -st-accent-color, 20%)",
+      "toggle/checked-active/background-color": "st-darken(-st-accent-color, 9%)",
+      "toggle/checked-active/color": "-st-accent-fg-color",
+      "toggle/checked-hover/background-color": "st-darken(-st-accent-color, 4%)",
+      "toggle/checked-hover/color": "-st-accent-fg-color",
+      "toggle/checked/background-color": "-st-accent-color",
+      "toggle/checked/color": "-st-accent-fg-color"
+    }
+  },
+  "colours": {
+    "dark": {
+      "button/active/background-color": "#5e5e62",
+      "button/active/color": "#ffffff",
+      "button/checked/background-color": "#5c5c60",
+      "button/checked/color": "#ffffff",
+      "button/hover/background-color": "#525255",
+      "button/hover/color": "#ffffff",
+      "button/insensitive/background-color": "#414143",
+      "button/normal/background-color": "#48484b",
+      "button/normal/color": "#ffffff",
+      "menu-button/active/background-color": "#707075",
+      "menu-button/active/color": "#ffffff",
+      "menu-button/checked/background-color": "#5396e8",
+      "menu-button/checked/color": "#ffffff",
+      "menu-button/hover/background-color": "#646468",
+      "menu-button/hover/color": "#ffffff",
+      "menu-button/normal/background-color": "#5a5a5e",
+      "menu-button/normal/color": "#ffffff",
+      "message-card/active/background-color": "#5d5d64",
+      "message-card/active/color": "#ffffff",
+      "message-card/hover/background-color": "#515157",
+      "message-card/hover/color": "#ffffff",
+      "message-card/insensitive/background-color": "#404044",
+      "message-card/normal/background-color": "#54545a",
+      "message-card/normal/color": "#ffffff",
+      "toggle/checked-active/background-color": "#5d9de9",
+      "toggle/checked-active/color": "#ffffff",
+      "toggle/checked-hover/background-color": "#478fe6",
+      "toggle/checked-hover/color": "#ffffff",
+      "toggle/checked/background-color": "#3584e4",
+      "toggle/checked/color": "#ffffff"
+    },
+    "light": {
+      "button/active/background-color": "#c9c9ca",
+      "button/active/color": "#222226",
+      "button/checked/background-color": "#cbcbcd",
+      "button/checked/color": "#222226",
+      "button/hover/background-color": "#d6d6d7",
+      "button/hover/color": "#222226",
+      "button/insensitive/background-color": "#e8e8e9",
+      "button/normal/background-color": "#e0e0e1",
+      "button/normal/color": "#222226",
+      "menu-button/active/background-color": "#bbbbc1",
+      "menu-button/active/color": "#222226",
+      "menu-button/checked/background-color": "#337cd4",
+      "menu-button/checked/color": "#ffffff",
+      "menu-button/hover/background-color": "#c8c8cd",
+      "menu-button/hover/color": "#222226",
+      "menu-button/normal/background-color": "#d3d3d7",
+      "menu-button/normal/color": "#222226",
+      "message-card/active/background-color": "#e8e8e8",
+      "message-card/active/color": "#222226",
+      "message-card/hover/background-color": "#f5f5f5",
+      "message-card/hover/color": "#222226",
+      "message-card/insensitive/background-color": "#ffffff",
+      "message-card/normal/background-color": "#ffffff",
+      "message-card/normal/color": "#222226",
+      "toggle/checked-active/background-color": "#1c6dcf",
+      "toggle/checked-active/color": "#ffffff",
+      "toggle/checked-hover/background-color": "#2379e2",
+      "toggle/checked-hover/color": "#ffffff",
+      "toggle/checked/background-color": "#3584e4",
+      "toggle/checked/color": "#ffffff"
+    }
+  },
+  "format": 1,
+  "lengths": {
+    ".icon-button": {
+      "border-radius": {
+        "css": "999px",
+        "px": 999.0
+      },
+      "min-height": {
+        "css": "1.091em",
+        "px": 16.0013
+      },
+      "padding": {
+        "css": "0.818em",
+        "px": 11.9973
+      }
+    },
+    ".message": {
+      "border-radius": {
+        "css": "16px",
+        "px": 16.0
+      },
+      "padding": {
+        "css": "6px",
+        "px": 6.0
+      }
+    },
+    ".popup-menu-content": {
+      "border-radius": {
+        "css": "20px",
+        "px": 20.0
+      },
+      "padding": {
+        "css": "6px",
+        "px": 6.0
+      }
+    },
+    ".quick-settings": {
+      "border-radius": {
+        "css": "36px",
+        "px": 36.0
+      },
+      "padding": {
+        "css": "18px",
+        "px": 18.0
+      }
+    },
+    ".quick-settings .icon-button": {
+      "padding": {
+        "css": "10.5px",
+        "px": 10.5
+      }
+    },
+    ".quick-settings-grid": {
+      "spacing-columns": {
+        "css": "12px",
+        "px": 12.0
+      },
+      "spacing-rows": {
+        "css": "12px",
+        "px": 12.0
+      }
+    },
+    ".quick-settings-system-item > StBoxLayout": {
+      "spacing": {
+        "css": "12px",
+        "px": 12.0
+      }
+    },
+    ".quick-slider .icon-button": {
+      "padding": {
+        "css": "6px",
+        "px": 6.0
+      }
+    },
+    ".quick-slider .slider-bin": {
+      "border-radius": {
+        "css": "999px",
+        "px": 999.0
+      },
+      "padding": {
+        "css": "6px",
+        "px": 6.0
+      }
+    },
+    ".quick-slider > StBoxLayout": {
+      "spacing": {
+        "css": "6px",
+        "px": 6.0
+      }
+    },
+    ".quick-toggle": {
+      "border-radius": {
+        "css": "999px",
+        "px": 999.0
+      },
+      "max-width": {
+        "css": "12em",
+        "px": 176.0
+      },
+      "min-height": {
+        "css": "3.273em",
+        "px": 48.004
+      },
+      "min-width": {
+        "css": "12em",
+        "px": 176.0
+      }
+    },
+    ".quick-toggle .quick-toggle-icon": {
+      "icon-size": {
+        "css": "1.091em",
+        "px": 16.0013
+      }
+    },
+    ".quick-toggle .quick-toggle-subtitle": {
+      "font-size": {
+        "css": "0.818em",
+        "px": 11.9973
+      },
+      "font-weight": {
+        "css": "normal",
+        "px": "normal"
+      }
+    },
+    ".quick-toggle .quick-toggle-title": {
+      "font-size": {
+        "css": "1em",
+        "px": 14.6667
+      },
+      "font-weight": {
+        "css": "700",
+        "px": "700"
+      }
+    },
+    ".quick-toggle > StBoxLayout": {
+      "padding": {
+        "css": "0 12px",
+        "px": [
+          "0",
+          12.0
+        ]
+      },
+      "spacing": {
+        "css": "9px",
+        "px": 9.0
+      }
+    },
+    ".quick-toggle-has-menu .quick-toggle-menu-button": {
+      "padding": {
+        "css": "0.409em 0.71575em",
+        "px": [
+          5.9987,
+          10.4977
+        ]
+      }
+    },
+    ".quick-toggle-has-menu .quick-toggle-menu-button:ltr": {
+      "border-radius": {
+        "css": "0 999px 999px 0",
+        "px": [
+          "0",
+          999.0,
+          999.0,
+          "0"
+        ]
+      }
+    },
+    ".quick-toggle-has-menu .quick-toggle-separator": {
+      "width": {
+        "css": "1px",
+        "px": 1.0
+      }
+    },
+    ".quick-toggle-has-menu .quick-toggle:ltr": {
+      "border-radius": {
+        "css": "999px 0 0 999px",
+        "px": [
+          999.0,
+          "0",
+          "0",
+          999.0
+        ]
+      }
+    },
+    ".quick-toggle-has-menu .quick-toggle:ltr > StBoxLayout": {
+      "padding-right": {
+        "css": "0.6135em",
+        "px": 8.998
+      }
+    },
+    ".quick-toggle:ltr > StBoxLayout": {
+      "padding-left": {
+        "css": "15px",
+        "px": 15.0
+      }
+    },
+    ".slider": {
+      "-barlevel-height": {
+        "css": "4px",
+        "px": 4.0
+      },
+      "-slider-handle-radius": {
+        "css": "0.5455em",
+        "px": 8.0007
+      }
+    }
+  },
+  "provenance": {
+    "compiler": "sassc 3.6.2-5 with libsass 3.6.6-2 (Arch Linux extra); the compiler gnome-shell's data/theme/meson.build invokes (`sassc -a`)",
+    "css_sha256": {
+      "dark": "64db095e7b49ee42422a49f56bf839d4fcbd4281202db0868d588c8d54df9b8a",
+      "light": "dd3ca821eb0f290b1d6747b40975a75c5416332c09f93d2245192f296c7234a3"
+    },
+    "gnome_shell_commit": "33da06854e229c256afd5872fedd83c28cbfa176",
+    "gnome_shell_tag": "51.1",
+    "how_run": "extracted into a private directory (never installed, no root), LD_LIBRARY_PATH to the extracted libsass, `sassc -a gnome-shell-{dark,light}.scss out.css`, no network or display",
+    "package_verification": "identical SHA-256 from geo.mirror.pkgbuild.com and stable-mirror.omarchy.org; detached .sig files verify (gpg --verify, Good signature) against the public keys in /usr/share/pacman/keyrings/archlinux.gpg imported into a private GNUPGHOME: Christian Heusel (gromit packager key) for libsass, Caleb Maclennan (alerque) for sassc; no web-of-trust path was established (trust 'unknown')",
+    "packages": {
+      "libsass-3.6.6-2-x86_64.pkg.tar.zst": "bf54ece7ffa74e4a18e1bd2f9e7c492d7091f1038c7a0dcf3722b8723efb7787",
+      "sassc-3.6.2-5-x86_64.pkg.tar.zst": "c6be90fd2178d0ccda09bf64f6723d8a08e5376b28e72c5b5125f6e879af3518"
+    },
+    "reviewed_on": "2026-10-31",
+    "source_archive": "https://gitlab.gnome.org/GNOME/gnome-shell/-/archive/33da06854e229c256afd5872fedd83c28cbfa176/gnome-shell-33da06854e229c256afd5872fedd83c28cbfa176.tar.gz?path=data/theme",
+    "source_archive_sha256": "22c1503ae4d6a43244951ddaa93dc05547e15dbd7944503d9c05b1c83821f203"
+  },
+  "units": {
+    "em_px": 14.666666666666666,
+    "note": "1em = 11 pt at 96 dpi; lengths below are px at 100 % text scale"
+  },
+  "what": "gnome-shell 51.1 quick-settings facts from the pinned stylesheet compiled by sassc/libsass"
+}

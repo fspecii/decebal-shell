@@ -473,6 +473,41 @@ pub const INDEX: &[(Tab, Section, &str, &str)] = &[
     (Tab::Customise, Section::WindowStyle, "Unfocused title text", "titlebar foreground colour inactive"),
     // Customise > Dock & Bar
     (Tab::Customise, Section::DockBar, "Dock style", "macos windows taskbar floating dock"),
+    (Tab::Customise, Section::DockBar, "Menu bar position", "panel edge top bottom left right placement"),
+    (Tab::Customise, Section::DockBar, "Floating bar position", "panel edge top bottom left right placement"),
+    (Tab::Customise, Section::DockBar, "Pill rail position", "caelestia panel edge top bottom left right split"),
+    (Tab::Customise, Section::DockBar, "Dux bar position", "panel edge top bottom left right placement"),
+    (Tab::Customise, Section::DockBar, "Taskbar position", "windows panel edge top bottom left right"),
+    (Tab::Customise, Section::DockBar, "Dock position", "dock edge top bottom left right"),
+    (Tab::Customise, Section::DockBar, "Show the bar", "bar enabled panel on off"),
+    (Tab::Customise, Section::DockBar, "Theme defaults", "reset panel applets position theme default"),
+    (Tab::Customise, Section::DockBar, "Applet: Launcher", "panel applet launcher show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Application menu", "panel applet app menu show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Workspaces", "panel applet workspaces show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Window title", "panel applet window title show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Task buttons", "panel applet tasks show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Window layout", "panel applet layout show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Media", "panel applet media show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Clock and date", "panel applet clock show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Weather", "panel applet weather show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: System tray", "panel applet tray show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Clipboard history", "panel applet clipboard show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: CPU usage", "panel applet cpu show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Memory usage", "panel applet memory show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Notifications", "panel applet notifications show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Stay Awake", "panel applet stay awake show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Process monitor", "panel applet agents show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Caps / Num Lock", "panel applet lock keys show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Volume", "panel applet volume show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Network", "panel applet network show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Bluetooth", "panel applet bluetooth show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Battery", "panel applet battery show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Brightness", "panel applet brightness show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Search", "panel applet search show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Dashboard", "panel applet dashboard show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Control Center", "panel applet control center show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Power", "panel applet power show hide enable disable"),
+    (Tab::Customise, Section::DockBar, "Applet: Show desktop", "panel applet show desktop show hide enable disable"),
     (Tab::Customise, Section::DockBar, "Icon spacing", "dock gap app spacing"),
     (Tab::Customise, Section::DockBar, "Magnification", "dock zoom hover grow"),
     (Tab::Customise, Section::DockBar, "Transparency", "dock translucent opacity"),
@@ -694,6 +729,22 @@ mod tests {
             assert!(values.iter().any(|v| v == id), "{id} not offered: {values:?}");
         }
         assert!(!values.iter().any(|v| v == "borderonly"));
+    }
+
+    #[test]
+    fn a_window_style_fallback_warning_comes_from_the_model_snapshot_and_stays_until_cleared() {
+        let (mut m, _) = model_with("[decoration]\nenabled = true\n");
+        m.sel.tab = Tab::Customise;
+        m.sel.section = Section::WindowStyle;
+        let notes = |m: &Model| -> Vec<String> { items(m).into_iter().filter_map(|i| if let Item::Note { text, warn: true } = i { Some(text) } else { None }).collect() };
+        assert!(!notes(&m).iter().any(|t| t.contains("needs a newer rdwm")));
+        // the snapshot of decebal.json decides; nothing is read from disk while the controls are built
+        let _ = std::fs::remove_file(m.paths.shell_json());
+        m.shell = serde_json::json!({"decoration_compat": {"theme": "x", "mode": "dark", "desired": "lingmo-dark", "applied": "adwaita", "proof": "running",
+            "message": "Window style `lingmo-dark` needs a newer rdwm: the running rdwm does not list it, so `adwaita` is used for now."}});
+        assert!(notes(&m).iter().any(|t| t.contains("needs a newer rdwm")), "{:?}", notes(&m));
+        m.shell = serde_json::json!({});
+        assert!(!notes(&m).iter().any(|t| t.contains("needs a newer rdwm")));
     }
 
     #[test]

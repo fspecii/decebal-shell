@@ -272,6 +272,13 @@ fn xfce_keeps_whiskers_order_on_any_panel_and_gnome_pages() {
 #[test]
 fn light_and_dark_themes_both_paint_readable_cards() {
     use crate::theme::{builtin, model::Selection};
+    struct RestoreTheme(std::sync::Arc<crate::theme::Theme>);
+    impl Drop for RestoreTheme {
+        fn drop(&mut self) {
+            crate::theme::live::publish_theme((*self.0).clone());
+        }
+    }
+    let _restore = RestoreTheme(crate::theme::th());
     for dark in [true, false] {
         crate::theme::live::publish_theme(builtin::def("macos").unwrap().resolve("macos", dark, &Selection::default()));
         for style in STYLES {

@@ -17,6 +17,10 @@ const TILE_LABELS: [(&str, &str, &str); 7] = [
 ];
 
 fn title(word: &str) -> String {
+    // acronyms keep their capitals
+    if word == "gnome" {
+        return "GNOME".into();
+    }
     let mut c = word.split('-').map(|w| {
         let mut ch = w.chars();
         ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()
@@ -41,7 +45,7 @@ pub fn items(m: &Model) -> Vec<Item> {
         Row::new("Show the Control Center").detail("Its button in the bar or taskbar, `decutil control-center` and the hot-corner action").ctl(Ctl::new("cc:enabled", Kind::Toggle(s.enabled))),
         Row::new("Opens in").detail("Where a key or hot corner opens it. Auto: beside the bar's own button").ctl(Ctl::new("cc:position", Kind::Popup(choices(&POSITION_NAMES), pos))),
         Row::new("Look")
-            .detail("Auto follows the desktop theme. Dux uses package Material icons when available, otherwise standard symbols.")
+            .detail("Auto follows the desktop theme. GNOME draws GNOME Shell's quick settings (pill toggles, slider rows) with Adwaita symbolic icons when installed. Dux uses package Material icons when available, otherwise standard symbols.")
             .ctl(Ctl::new("cc:style", Kind::Popup(choices(&STYLE_NAMES), style))),
     ];
     for (name, label, detail) in TILE_LABELS {
@@ -109,6 +113,8 @@ mod tests {
     fn titles_read_well() {
         assert_eq!(title("top-right"), "Top Right");
         assert_eq!(title("auto"), "Auto");
+        assert_eq!(title("gnome"), "GNOME");
+        assert_eq!(choices(&crate::controlcenter::settings::STYLE_NAMES).last().unwrap().0, "GNOME");
         assert_eq!(choices(&["fluent"]), vec![("Fluent".to_string(), "fluent".to_string())]);
     }
 

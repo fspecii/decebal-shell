@@ -1,0 +1,29 @@
+
+running 24 tests
+test controlcenter::gnome::tests::authentic_adwaita_icons_load_from_the_installed_theme_and_are_recoloured_else_builtin_glyphs_are_used ... ok
+test controlcenter::gnome::tests::colours_follow_the_shell_button_formulas ... ok
+test controlcenter::gnome::tests::disabled_groups_remove_exactly_their_controls ... ok
+test controlcenter::gnome::tests::distinct_icons_per_function ... ok
+test controlcenter::gnome::tests::every_common_control_is_reachable_and_nothing_is_a_placeholder ... ok
+test controlcenter::gnome::tests::evidence_matrix_renders_every_scale_and_mode ... ok
+test controlcenter::gnome::tests::hover_and_unavailable_states_change_pixels ... ok
+test controlcenter::gnome::tests::keyboard_focus_is_a_distinct_accent_ring_around_the_control_not_a_hover_fill ... ok
+test controlcenter::gnome::tests::keyboard_order_visits_each_control_once_top_to_bottom_left_to_right ... ok
+test controlcenter::gnome::tests::layout_is_responsive_at_every_text_scale ... ok
+test controlcenter::gnome::tests::long_labels_stay_inside_their_pill_at_200_percent ... ok
+test controlcenter::gnome::tests::metrics_are_the_pinned_gnome_shell_51_1_values_at_100_percent ... ok
+test controlcenter::gnome::tests::missing_providers_are_hidden_or_marked_unavailable_never_invented ... ok
+test controlcenter::gnome::tests::painter_draws_real_pill_toggles_sliders_and_text_in_light_and_dark ... ok
+test controlcenter::gnome::tests::slider_hit_areas_cover_the_row_and_map_like_the_common_controller ... ok
+test controlcenter::gnome::tests::state_changes_text_icons_and_order ... ok
+test menubar::gnome_cc_tests::common_actions_run_through_the_dry_run_hook_from_the_gnome_panel ... ok
+test menubar::gnome_cc_tests::disabled_groups_leave_the_gnome_panel_without_their_controls ... ok
+test menubar::gnome_cc_tests::keyboard_walks_every_control_with_a_ring_and_scrolls_the_clipped_panel ... ok
+test menubar::gnome_cc_tests::probe_dependent_actions_run_against_private_fake_services_only ... ok
+test menubar::gnome_cc_tests::the_bar_opens_the_gnome_panel_at_gnome_width_with_every_control ... ok
+test menubar::gnome_cc_tests::the_panel_follows_the_text_scale_and_stays_inside_the_surface_width ... ok
+test menubar::gnome_cc_tests::volume_slider_drags_and_wheel_work_in_the_gnome_look ... ok
+test menubar::gnome_cc_tests::wheel_scrolls_the_clipped_panel_and_a_point_below_it_reaches_nothing ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 1720 filtered out; finished in 9.29s
+

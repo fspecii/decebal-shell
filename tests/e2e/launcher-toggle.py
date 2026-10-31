@@ -5,6 +5,10 @@ EXPECT_TOGGLE_FAILURE=1 proves the regression against an old installed binary.
 """
 from pathlib import Path
 import fcntl, hashlib, json, os, shutil, signal, subprocess, tempfile, time
+# -I omits the script directory; import only this trusted fixture directory.
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from private_x11 import start_private_xvfb
 repo=Path(__file__).resolve().parents[2]
 bins=Path(os.environ.get('LAUNCHER_BIN_DIR',repo/'target/debug'))
 helper=Path(os.environ.get('LAUNCHAPP_BIN',repo/'target/debug/examples/launchapp'))
@@ -16,8 +20,7 @@ for k in list(env):
 for k,v in {'HOME':'home','XDG_CONFIG_HOME':'cfg','XDG_CONFIG_DIRS':'nocfg','XDG_DATA_HOME':'data','XDG_DATA_DIRS':'nodata','XDG_CACHE_HOME':'cache','XDG_STATE_HOME':'state','XDG_RUNTIME_DIR':'run','DECEBAL_CONFIG':'shell','DECEBAL_THEMES':'themes','DECEBAL_SYSTEM_THEMES':'systemthemes'}.items():
     env[k]=str(root/v);Path(env[k]).mkdir(parents=True,exist_ok=True)
 os.chmod(env['XDG_RUNTIME_DIR'],0o700)
-number=next(n for n in range(440,470) if not Path(f'/tmp/.X11-unix/X{n}').exists() and not Path(f'/tmp/.X{n}-lock').exists())
-env.update(DISPLAY=f':{number}',DECEBAL_BACKEND='x11',DBUS_SESSION_BUS_ADDRESS='unix:path='+str(root/'none-bus'),DBUS_SYSTEM_BUS_ADDRESS='unix:path='+str(root/'none-system'))
+env.update(DECEBAL_BACKEND='x11',DBUS_SESSION_BUS_ADDRESS='unix:path='+str(root/'none-bus'),DBUS_SYSTEM_BUS_ADDRESS='unix:path='+str(root/'none-system'))
 notice=root/'notify.sh';notice.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$XDG_STATE_HOME/notices"\n');notice.chmod(0o755);env['DECEBAL_NOTIFY']=str(notice)
 applications=Path(env['XDG_DATA_HOME'])/'applications';applications.mkdir()
 owned=[];logs=[];known=set()
@@ -44,8 +47,8 @@ def launchlog():
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 records=[]
 try:
-    xvfb=start(['Xvfb',env['DISPLAY'],'-screen','0','1280x800x24','-nolisten','tcp'],'xvfb')
-    wait(lambda:Path(f'/tmp/.X11-unix/X{number}').exists(),'private Xvfb did not start')
+    log=(root/'xvfb.log').open('w');logs.append(log)
+    xvfb,env['DISPLAY']=start_private_xvfb(env=env,log=log);owned.append(xvfb)
     for name in ['declaunch','decspot']:
         binary=bins/name
         entry=applications/(name+'-toggle.desktop');entry.write_text('[Desktop Entry]\nType=Application\nName=Toggle fixture\nExec='+str(binary)+'\n')

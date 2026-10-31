@@ -22,7 +22,7 @@ use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -728,21 +728,16 @@ impl Worker {
     }
 
     fn take_replies(&mut self) {
-        loop {
-            match self.replies.try_recv() {
-                Ok((id, result)) => {
-                    let Some(p) = self.pending.remove(&id) else { continue };
-                    if p.call.flags & crate::dbus::NO_REPLY_EXPECTED != 0 {
-                        continue;
-                    }
-                    let msg = match result {
-                        Ok(()) => atspi::deferred_ok(&p.call, p.kind),
-                        Err(e) => atspi::action_error(&p.call, &e),
-                    };
-                    self.send(&msg);
-                }
-                Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
+        while let Ok((id, result)) = self.replies.try_recv() {
+            let Some(p) = self.pending.remove(&id) else { continue };
+            if p.call.flags & crate::dbus::NO_REPLY_EXPECTED != 0 {
+                continue;
             }
+            let msg = match result {
+                Ok(()) => atspi::deferred_ok(&p.call, p.kind),
+                Err(e) => atspi::action_error(&p.call, &e),
+            };
+            self.send(&msg);
         }
     }
 

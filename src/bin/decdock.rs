@@ -28,6 +28,14 @@ fn main() {
             "--wanted" => {
                 std::process::exit(if decebal::menubar::gate::dock_visible_now() { 0 } else { 1 });
             }
+            "--focus" => {
+                // keyboard mode of the running taskbar (bind it to a key, like decbar --focus for the bar)
+                if !decebal::single::signal("decdock", libc::SIGUSR2) {
+                    eprintln!("decdock: no dock is running");
+                    std::process::exit(1);
+                }
+                return;
+            }
             "--png" => {
                 i += 1;
                 png = args.get(i).cloned();
@@ -41,7 +49,7 @@ fn main() {
                 running = args.get(i).map(|v| v.split(',').map(String::from).collect()).unwrap_or_default();
             }
             "-h" | "--help" => {
-                println!("decdock [--png FILE] [--hover X] [--running id,id] [--wanted | --reconcile]\nWithout --png it runs the active theme dock.");
+                println!("decdock [--png FILE] [--hover X] [--running id,id] [--wanted | --reconcile | --focus]\nWithout --png it runs the active theme dock.");
                 return;
             }
             other => {
@@ -57,7 +65,11 @@ fn main() {
             return;
         }
         match decebal::single::hold("decdock") {
-            Some(g) => Some(g),
+            Some(g) => {
+                // before any other thread starts: `decdock --focus` arrives as a signal this thread mask holds for its collector
+                decebal::menubar::DecBar::init_focus_signal();
+                Some(g)
+            }
             None => return,
         }
     } else {
@@ -88,7 +100,7 @@ fn main() {
             let closed = Arc::new(AtomicBool::new(false));
             let mut dock = Dock::new(dock_items(&running), config::dock_settings());
             dock.hover_x = hover;
-            let app = DockApp::new(dock).with_scale(scale).track_windows().watch_config().with_gate(closed);
+            let app = DockApp::new(dock).with_scale(scale).track_windows().watch_config().with_gate(closed).with_focus_signal();
             if let Err(e) = backend::run(app, spec) {
                 decebal::log_error!("fatal: {e}");
                 eprintln!("decdock: {e}");

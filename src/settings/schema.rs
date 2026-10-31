@@ -96,8 +96,8 @@ mod tests {
         assert!(s.keys.len() > 60 && s.layouts.len() >= 20 && s.actions.contains(&"spawn".to_string()));
         let m = s.get("general", "mfact").unwrap();
         assert_eq!((m.min, m.max), (Some(0.05), Some(0.95)));
-        assert_eq!(s.get("decoration", "style").unwrap().choices.len(), 18);
-        for id in ["adwaita", "xfce-default", "xfce-daloa", "xfce-kokodi"] {
+        assert_eq!(s.get("decoration", "style").unwrap().choices.len(), 24);
+        for id in ["adwaita", "xfce-default", "xfce-daloa", "xfce-kokodi", "openkylin", "openkylin-dark", "deepin", "deepin-dark", "lingmo", "lingmo-dark"] {
             assert!(s.get("decoration", "style").unwrap().choices.contains(&id.to_string()), "{id}");
         }
     }

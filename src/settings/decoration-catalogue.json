@@ -286,5 +286,101 @@
     "look": "Ghost",
     "shape": "Circle",
     "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 4,
+      "button_margin": 4,
+      "button_size": 30,
+      "height": 38,
+      "radius": 12,
+      "title_align": "left"
+    },
+    "description": "openKylin UKUI light: white 38px header, left title, 30px rounded plates, red close (measured port)",
+    "id": "openkylin",
+    "look": "Plate",
+    "shape": "Square",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 4,
+      "button_margin": 4,
+      "button_size": 30,
+      "height": 38,
+      "radius": 12,
+      "title_align": "left"
+    },
+    "description": "openKylin UKUI dark: near-black 38px header, left title, 30px rounded plates (measured port)",
+    "id": "openkylin-dark",
+    "look": "Plate",
+    "shape": "Square",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 50,
+      "height": 50,
+      "radius": 8,
+      "title_align": "center"
+    },
+    "description": "Deepin Chameleon light: 50px header, centred title, 50px caption cells, blue held glyph (measured port)",
+    "id": "deepin",
+    "look": "Plate",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 1,
+      "button_gap": 0,
+      "button_margin": 0,
+      "button_size": 50,
+      "height": 50,
+      "radius": 8,
+      "title_align": "center"
+    },
+    "description": "Deepin Chameleon dark: 50px header, centred title, 50px caption cells, blue held glyph (measured port)",
+    "id": "deepin-dark",
+    "look": "Plate",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 0,
+      "button_gap": 8,
+      "button_margin": 2,
+      "button_size": 30,
+      "height": 30,
+      "radius": 11,
+      "title_align": "center"
+    },
+    "description": "LingmoOS light: rounded 30px header, centred title, round hover plates (measured port)",
+    "id": "lingmo",
+    "look": "Plate",
+    "shape": "Cell",
+    "side": "Right"
+  },
+  {
+    "defaults": {
+      "border_px": 0,
+      "button_gap": 8,
+      "button_margin": 2,
+      "button_size": 30,
+      "height": 30,
+      "radius": 11,
+      "title_align": "center"
+    },
+    "description": "LingmoOS dark: rounded 30px header, centred title, round hover plates (measured port)",
+    "id": "lingmo-dark",
+    "look": "Plate",
+    "shape": "Cell",
+    "side": "Right"
   }
 ]

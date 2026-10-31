@@ -39,6 +39,8 @@ pub(super) struct Group {
 pub(super) struct Layout {
     pub items: Vec<Item>,
     pub groups: Vec<Group>,
+    /// What did not fit (the overflow cell lists it).
+    pub hidden: Vec<Kind>,
 }
 impl Layout {
     pub fn faces(&self) -> Vec<Group> {
@@ -73,31 +75,65 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
     let pad = 0.0;
     let size = |v: &Vec<(Kind, f32)>| if v.is_empty() { 0.0 } else { v.iter().map(|(_, w)| w).sum::<f32>() + gap * v.len().saturating_sub(1) as f32 + 2.0 * pad };
     let available = (width - margin * 2.0).max(0.0);
+    let mut hidden: Vec<Kind> = Vec::new();
     // Remove detail before interaction. Never paint/hit overlapping groups.
-    for optional in [Kind::Tray(Tray::Window), Kind::Media, Kind::Tray(Tray::Weather), Kind::Cpu, Kind::Memory, Kind::Clipboard, Kind::Previous, Kind::Next, Kind::Tray(Tray::Battery)] {
+    for optional in [
+        Kind::Tray(Tray::Window),
+        Kind::Media,
+        Kind::Tray(Tray::Weather),
+        Kind::Cpu,
+        Kind::Memory,
+        Kind::Clipboard,
+        Kind::Previous,
+        Kind::Next,
+        Kind::Tray(Tray::Battery),
+        Kind::Tray(Tray::Brightness),
+        Kind::Tray(Tray::Agents),
+        Kind::Tray(Tray::Spotlight),
+        Kind::Tray(Tray::Dash),
+        Kind::Notifications,
+        Kind::Tray(Tray::ShowDesktop),
+        Kind::Tray(Tray::Lock),
+        Kind::Tray(Tray::AppMenu),
+    ] {
         let total = groups.iter().map(size).sum::<f32>() + 2.0 * gap;
         let side = size(&groups[0]).max(size(&groups[2]));
         if total <= available && side * 2.0 + size(&groups[1]) + 2.0 * gap <= available {
             break;
         }
         for group in &mut groups {
-            group.retain(|(kind, _)| *kind != optional);
+            group.retain(|(kind, _)| {
+                let gone = *kind == optional || (optional == Kind::Tray(Tray::Window) && matches!(kind, Kind::Tray(Tray::Task(_))));
+                if gone {
+                    hidden.push(*kind);
+                }
+                !gone
+            });
         }
     }
+    let drop_where = |group: &mut Vec<(Kind, f32)>, keep: &dyn Fn(Kind) -> bool, hidden: &mut Vec<Kind>| {
+        group.retain(|(kind, _)| {
+            let ok = keep(*kind);
+            if !ok {
+                hidden.push(*kind);
+            }
+            ok
+        });
+    };
     // At extreme widths an omitted group is preferable to inaccessible painted overlap.
     if groups.iter().map(size).sum::<f32>() + 2.0 * gap > available {
-        groups[1].clear();
+        drop_where(&mut groups[1], &|_| false, &mut hidden);
     }
     let lw = size(&groups[0]);
     let rw = size(&groups[2]);
     if lw + rw + gap > available {
-        groups[0].retain(|(kind, _)| *kind == Kind::Tray(Tray::Logo));
+        drop_where(&mut groups[0], &|kind| kind == Kind::Tray(Tray::Logo), &mut hidden);
     }
     if size(&groups[0]) + size(&groups[2]) + gap > available {
-        groups[0].clear();
+        drop_where(&mut groups[0], &|_| false, &mut hidden);
     }
     if size(&groups[2]) > available {
-        groups[2].retain(|(kind, _)| *kind == Kind::Tray(Tray::Control));
+        drop_where(&mut groups[2], &|kind| matches!(kind, Kind::Tray(Tray::Control | Tray::More)), &mut hidden);
     }
     let sizes = groups.each_ref().map(size);
     // Upstream CenterLayout's default index centering keeps the configured
@@ -112,11 +148,13 @@ fn place(width: f32, margin: f32, gap: f32, height: f32, top: f32, radius: f32, 
     let cx = centered_start(&groups[1]);
     let center_fits = cx >= margin + sizes[0] + gap && cx + sizes[1] <= width - margin - sizes[2] - gap;
     if !center_fits {
-        groups[1].clear();
+        hidden.extend(groups[1].drain(..).map(|(kind, _)| kind));
     }
     let sizes = groups.each_ref().map(size);
     let starts = [margin, centered_start(&groups[1]), width - margin - sizes[2]];
-    let mut result = Layout::default();
+    // the transport buttons are part of the media item, not applets of their own
+    hidden.retain(|kind| !matches!(kind, Kind::Previous | Kind::Toggle | Kind::Next));
+    let mut result = Layout { hidden, ..Layout::default() };
     for (index, contents) in groups.into_iter().enumerate() {
         if contents.is_empty() || starts[index] < 0.0 || sizes[index] > available {
             continue;
@@ -168,12 +206,20 @@ impl DecBar {
         }
     }
     pub(super) fn dux(&self) -> bool {
+        #[cfg(test)]
+        if super::applets::TEST_DUX.with(|f| f.get()) {
+            return !self.embedded;
+        }
         !self.embedded && crate::theme::th().bar_style == "dux"
     }
     pub(super) fn bar_bottom(&self) -> f32 {
         crate::theme::bar_bottom_for(&crate::theme::th(), true)
     }
-    fn dux_player(&self) -> Option<mpris::Player> {
+    pub(super) fn dux_player(&self) -> Option<mpris::Player> {
+        #[cfg(test)]
+        if let Some(p) = super::applets::TEST_PLAYER.with(|p| p.borrow().clone()) {
+            return Some(p);
+        }
         let snap = self.dux_mpris.as_ref()?.snapshot();
         mpris::pick_active(&snap.players, None).cloned()
     }
@@ -213,52 +259,136 @@ impl DecBar {
             self.dux_layout().faces().into_iter().map(|g| crate::glass::Region { x: g.x, y: g.y, w: g.w, h: g.h, radius: g.radius }).collect()
         }
     }
+    /// The applets of each Dux group: the theme's item lists in their order (only those that are on), then the other
+    /// enabled applets in the group they belong to.
+    pub(super) fn dux_groups(&self) -> [Vec<crate::panel::AppletId>; 3] {
+        use crate::panel::AppletId as A;
+        let th = crate::theme::th();
+        let settings = &th.bar_layout;
+        let p = self.panel();
+        let mut groups: [Vec<A>; 3] = Default::default();
+        for (out, ids) in groups.iter_mut().zip([&settings.left, &settings.center, &settings.right]) {
+            for id in ids.iter().filter_map(|k| A::parse(k)) {
+                if p.shows(id) && !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        for id in p.applets.iter() {
+            if !groups.iter().any(|g| g.contains(&id)) {
+                groups[super::applets::dux_group(id)].push(id);
+            }
+        }
+        groups
+    }
+
+    fn dux_items_of(&self, id: crate::panel::AppletId, out: &mut Vec<(Kind, f32)>) {
+        use crate::panel::AppletId as A;
+        let th = crate::theme::th();
+        let scale = 1.0;
+        let cell = 28.0 * scale;
+        let snap = self.snapshot();
+        let p = self.panel();
+        let item = match id {
+            A::Launcher => match &th.branding.launcher_label {
+                Some(l) => (Kind::Tray(Tray::Logo), self.dux_measure(l, 12.0) + 14.0 * scale + if matches!(th.branding.logo, crate::panel::branding::Logo::None) { 0.0 } else { 18.0 }),
+                None => (Kind::Tray(Tray::Logo), cell),
+            },
+            A::Workspaces if !self.workspaces.is_empty() && self.show_workspaces => (Kind::Tray(Tray::Workspaces), self.dux_workspace_width()),
+            A::WindowTitle if self.v_win.is_some() => (Kind::Tray(Tray::Window), self.dux_measure(self.dux_window_title(), 12.0).min(160.0 * scale) + 14.0 * scale),
+            A::Media if self.dux_player().is_some() => {
+                out.extend([(Kind::Previous, cell), (Kind::Toggle, cell), (Kind::Next, cell)]);
+                (Kind::Media, 114.0 * scale)
+            }
+            A::Clock => (Kind::Tray(Tray::Clock), self.dux_measure(&self.clock_text, 12.0) + 14.0 * scale),
+            A::Weather => {
+                let weather = self.shared.weather.lock().ok().and_then(|v| v.clone());
+                (Kind::Tray(Tray::Weather), weather.as_ref().map_or(self.dux_measure("--°C", 12.0) + 32.0 * scale, |w| self.dux_measure(&format!("{}°C", w.temp_c), 12.0) + 32.0 * scale))
+            }
+            A::Battery if snap.battery.is_some() => (Kind::Tray(Tray::Battery), 64.0 * scale),
+            A::Tray => {
+                out.extend(self.indicator_kinds(6).into_iter().map(|k| (Kind::Tray(k), cell)));
+                return;
+            }
+            A::Tasks => {
+                out.extend(self.tasks.iter().map(|t| (Kind::Tray(Tray::Task(t.key())), cell)));
+                return;
+            }
+            A::Clipboard => (Kind::Clipboard, cell),
+            A::Cpu | A::Memory => {
+                let perf = self.dux_perf.lock().ok().and_then(|p| *p);
+                let has = perf.and_then(|p| if id == A::Cpu { p.0 } else { p.1 }).is_some();
+                if !has {
+                    return;
+                }
+                (if id == A::Cpu { Kind::Cpu } else { Kind::Memory }, self.dux_measure("100%", 12.0) + 32.0 * scale)
+            }
+            A::Notifications => (Kind::Notifications, cell),
+            A::ControlCenter if th.control_center.enabled => (Kind::Tray(Tray::Control), cell),
+            // the Dux bar always shows its network and audio items, as upstream
+            A::Network => (Kind::Tray(Tray::Network), cell),
+            A::Volume => (Kind::Tray(Tray::Audio), cell),
+            A::Bluetooth if snap.bluetooth.is_some() => (Kind::Tray(Tray::Bluetooth), cell),
+            A::Dashboard => (Kind::Tray(Tray::Dash), cell),
+            A::Power => (Kind::Tray(Tray::Power), cell),
+            A::Layout => (Kind::Tray(Tray::Layout), cell),
+            other => {
+                // the applets added with the registry: one face each, while their need is met
+                if !self.applet_ready(other, &p, &snap) {
+                    return;
+                }
+                let Some(kind) = super::applets::single(other) else { return };
+                (Kind::Tray(kind), cell)
+            }
+        };
+        out.push(item);
+    }
+
     pub(super) fn dux_layout(&self) -> Layout {
         let th = crate::theme::th();
         let settings = &th.bar_layout;
         let scale = 1.0;
-        let cell = 28.0 * scale;
-        let snap = self.snapshot();
-        let weather = self.shared.weather.lock().ok().and_then(|v| v.clone());
-        let player = self.dux_player();
-        let perf = self.dux_perf.lock().ok().and_then(|p| *p);
         let mut groups: [Vec<(Kind, f32)>; 3] = Default::default();
-        for (out, ids) in groups.iter_mut().zip([&settings.left, &settings.center, &settings.right]) {
+        for (out, ids) in groups.iter_mut().zip(self.dux_groups()) {
             for id in ids {
-                let item = match id.as_str() {
-                    "launcherButton" => (Kind::Tray(Tray::Logo), cell),
-                    "workspaceSwitcher" if !self.workspaces.is_empty() => (Kind::Tray(Tray::Workspaces), self.dux_workspace_width()),
-                    "focusedWindow" if self.v_win.is_some() => (Kind::Tray(Tray::Window), self.dux_measure(self.dux_window_title(), 12.0).min(160.0 * scale) + 14.0 * scale),
-                    "music" if player.is_some() => {
-                        out.extend([(Kind::Previous, cell), (Kind::Toggle, cell), (Kind::Next, cell)]);
-                        (Kind::Media, 114.0 * scale)
-                    }
-                    "clock" => (Kind::Tray(Tray::Clock), self.dux_measure(&self.clock_text, 12.0) + 14.0 * scale),
-                    "weather" => {
-                        (Kind::Tray(Tray::Weather), weather.as_ref().map_or(self.dux_measure("--°C", 12.0) + 32.0 * scale, |w| self.dux_measure(&format!("{}°C", w.temp_c), 12.0) + 32.0 * scale))
-                    }
-                    "battery" if snap.battery.is_some() => (Kind::Tray(Tray::Battery), 64.0 * scale),
-                    "systemTray" => {
-                        out.extend(self.indicator_kinds(6).into_iter().map(|k| (Kind::Tray(k), cell)));
-                        continue;
-                    }
-                    "clipboard" => (Kind::Clipboard, cell),
-                    "cpuUsage" if perf.and_then(|p| p.0).is_some() => (Kind::Cpu, self.dux_measure("100%", 12.0) + 32.0 * scale),
-                    "memUsage" if perf.and_then(|p| p.1).is_some() => (Kind::Memory, self.dux_measure("100%", 12.0) + 32.0 * scale),
-                    "notificationButton" => (Kind::Notifications, cell),
-                    "controlCenterButton" if th.control_center.enabled => (Kind::Tray(Tray::Control), cell),
-                    "network" => (Kind::Tray(Tray::Network), cell),
-                    "audio" => (Kind::Tray(Tray::Audio), cell),
-                    "bluetooth" if snap.bluetooth.is_some() => (Kind::Tray(Tray::Bluetooth), cell),
-                    "dashboard" => (Kind::Tray(Tray::Dash), cell),
-                    "power" => (Kind::Tray(Tray::Power), cell),
-                    "layout" => (Kind::Tray(Tray::Layout), cell),
-                    _ => continue,
-                };
-                out.push(item);
+                self.dux_items_of(id, out);
             }
         }
-        place(self.width as f32, (settings.margin + 4.0) * scale, settings.spacing * scale, (th.bar_height - 10.0).max(16.0) * scale, (settings.margin + 5.0) * scale, settings.radius * scale, groups)
+        let fit = |groups: [Vec<(Kind, f32)>; 3]| {
+            place(
+                self.width as f32,
+                (settings.margin + 4.0) * scale,
+                settings.spacing * scale,
+                (th.bar_height - 10.0).max(16.0) * scale,
+                (settings.margin + 5.0) * scale,
+                settings.radius * scale,
+                groups,
+            )
+        };
+        let first = fit(groups.clone());
+        if first.hidden.is_empty() {
+            return first;
+        }
+        // something gave way: the overflow cell keeps it reachable
+        groups[2].push((Kind::Tray(Tray::More), 28.0 * scale));
+        fit(groups)
+    }
+
+    /// The applets the Dux overflow cell lists.
+    pub(super) fn dux_hidden(&self) -> Vec<Tray> {
+        self.dux_layout()
+            .hidden
+            .into_iter()
+            .filter_map(|k| match k {
+                Kind::Tray(t) => Some(t),
+                Kind::Media => Some(Tray::Media),
+                Kind::Notifications => Some(Tray::Notifications),
+                Kind::Clipboard => Some(Tray::Clipboard),
+                Kind::Cpu => Some(Tray::Cpu),
+                Kind::Memory => Some(Tray::Memory),
+                Kind::Previous | Kind::Toggle | Kind::Next => None,
+            })
+            .collect()
     }
     fn dux_text(&mut self, pm: &mut Pixmap, text: &str, item: Item, secondary: bool) {
         let Some(fonts) = self.fonts.as_mut() else { return };
@@ -352,6 +482,36 @@ impl DecBar {
                         );
                     }
                 }
+                Kind::Tray(Tray::Task(key)) => {
+                    if let Some(t) = self.task(key).cloned() {
+                        let icon = self.v_icons.get(&t.app_id, 32).clone();
+                        crate::gfx::blit_scaled(pm, &icon, item.x + (item.w - 16.0) / 2.0, item.y + (item.h - 16.0) / 2.0, 16.0, 16.0, 1.0);
+                        if t.active() {
+                            fill_rounded(pm, item.x + item.w / 2.0 - 4.0, item.y + item.h - 4.0, 8.0, 2.0, 1.0, th.accent.color(1.0));
+                        }
+                    }
+                }
+                Kind::Tray(Tray::More) => {
+                    for offset in [-5.0, 0.0, 5.0] {
+                        fill_rounded(pm, item.x + item.w / 2.0 + offset - 1.5, item.y + item.h / 2.0 - 1.5, 3.0, 3.0, 1.5, th.bar_text.color(0.85));
+                    }
+                }
+                Kind::Tray(Tray::Logo) if th.branding.launcher_label.is_some() || !matches!(th.branding.logo, crate::panel::branding::Logo::Style) => {
+                    let label = th.branding.launcher_label.clone();
+                    let icon_cx = if label.is_some() { item.x + 7.0 + 7.0 } else { item.x + item.w / 2.0 };
+                    let drawn = !matches!(th.branding.logo, crate::panel::branding::Logo::None) && self.draw_brand(pm, 14.0 * scale, icon_cx, item.y + item.h / 2.0, th.bar_text.t());
+                    if let Some(l) = label {
+                        let x = if drawn { item.x + 18.0 } else { item.x };
+                        self.dux_text(pm, &l, Item { x, w: item.w - (x - item.x), ..item }, false);
+                    } else if !drawn {
+                        self.dux_symbol(pm, "apps", item, false);
+                    }
+                }
+                Kind::Tray(Tray::Lock) => {
+                    let on = self.locks.caps() || self.locks.num();
+                    self.dux_symbol(pm, "lock", item, on);
+                }
+                Kind::Tray(Tray::Awake) => self.dux_symbol(pm, "cup", item, snap.awake),
                 Kind::Tray(Tray::Indicator(key)) => self.indicator_draw(pm, key, item.x + item.w / 2.0, item.y + item.h / 2.0, 14.0 * scale),
                 Kind::Tray(Tray::Indicators) => self.indicator_overflow_draw(pm, item.x + item.w / 2.0, item.y + item.h / 2.0, 14.0 * scale),
                 Kind::Tray(kind) => self.dux_symbol(
@@ -370,7 +530,7 @@ impl DecBar {
                         Tray::Audio => snap.volume.as_ref().map(controlcenter::speaker_icon).unwrap_or("speaker-2"),
                         Tray::Bluetooth => "bluetooth",
                         Tray::Layout => "layout",
-                        _ => "chart",
+                        other => super::applets::material_symbol(other),
                     },
                     item,
                     self.open == Open::Control && kind == Tray::Control,
@@ -397,8 +557,10 @@ impl DecBar {
         }
         match kind {
             Some(Kind::Tray(Tray::Logo)) => {
+                let item = layout.hit(x, y).copied().expect("hit");
                 self.close();
-                crate::launch::spawn_argv(&[crate::launch::sibling_or_path("declaunch")]);
+                let at = self.anchor_of((item.x, item.y + self.strip_top(), item.w, item.h));
+                self.open_launcher(Some(at));
                 true
             }
             Some(Kind::Tray(Tray::Clock)) => {
@@ -419,25 +581,21 @@ impl DecBar {
                 true
             }
             Some(Kind::Notifications) => {
-                self.close();
-                sys::spawn_application(&["decnotify", "history"]);
-                true
+                let item = layout.hit(x, y).copied().expect("hit");
+                self.applet_press(Tray::Notifications, (item.x, item.y, item.w, item.h), Button::Left)
             }
             Some(Kind::Clipboard) => {
-                self.close();
-                sys::spawn_application(&["decclip"]);
-                true
+                let item = layout.hit(x, y).copied().expect("hit");
+                self.applet_press(Tray::Clipboard, (item.x, item.y, item.w, item.h), Button::Left)
             }
             Some(Kind::Media) => {
                 self.close();
-                let argv = vec![crate::launch::sibling_or_path("decdash"), "media".into()];
-                crate::launch::spawn_argv(&argv);
+                vbar::launch_ui(vec![crate::launch::sibling_or_path("decdash"), "media".into()]);
                 true
             }
-            Some(Kind::Cpu | Kind::Memory) => {
-                self.close();
-                self.process_monitor(Vec::new());
-                true
+            Some(k @ (Kind::Cpu | Kind::Memory)) => {
+                let item = layout.hit(x, y).copied().expect("hit");
+                self.applet_press(if k == Kind::Cpu { Tray::Cpu } else { Tray::Memory }, (item.x, item.y + self.strip_top(), item.w, item.h), Button::Left)
             }
             _ => false,
         }
@@ -448,20 +606,17 @@ impl DecBar {
             self.symbols.prepare_material();
             self.dux_material_generation = generation;
         }
-        if !self.dux() {
-            self.dux_mpris = None;
-            return false;
-        }
-        let redraw = self.v_refresh_window();
+        use crate::panel::AppletId as A;
+        let p = self.panel();
+        // the pill rail follows the focused window itself (see tick_inner)
+        let redraw = if !self.pill_bar() && (self.dux() || p.shows(A::WindowTitle)) { self.v_refresh_window() } else { false };
         if cfg!(test) {
             return redraw;
         }
-        let settings = &crate::theme::th().bar_layout;
-        let configured = |id: &str| settings.left.iter().chain(&settings.center).chain(&settings.right).any(|name| name == id);
-        if !configured("music") {
+        if !p.shows(A::Media) {
             self.dux_mpris = None;
         }
-        if configured("music") && self.dux_mpris.is_none() {
+        if p.shows(A::Media) && self.dux_mpris.is_none() && self.waker.is_some() {
             let shared = self.shared.clone();
             let wake = self.waker.clone();
             self.dux_mpris = Some(mpris::Mpris::start(Arc::new(move || {
@@ -471,7 +626,7 @@ impl DecBar {
                 }
             })));
         }
-        if !configured("cpuUsage") && !configured("memUsage") {
+        if !p.shows(A::Cpu) && !p.shows(A::Memory) {
             return redraw;
         }
         if self.dux_refresh.elapsed() < Duration::from_secs(2) || self.dux_busy.swap(true, Ordering::SeqCst) {
@@ -507,10 +662,8 @@ impl DecBar {
     }
 
     pub(super) fn dux_samples_resources(&self) -> bool {
-        self.dux() && {
-            let layout = &crate::theme::th().bar_layout;
-            layout.left.iter().chain(&layout.center).chain(&layout.right).any(|id| matches!(id.as_str(), "cpuUsage" | "memUsage"))
-        }
+        let p = self.panel();
+        p.shows(crate::panel::AppletId::Cpu) || p.shows(crate::panel::AppletId::Memory)
     }
 }
 

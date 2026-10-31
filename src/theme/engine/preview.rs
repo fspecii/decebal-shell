@@ -25,7 +25,7 @@ use std::{
 };
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-pub const VERSION: &str = "native-theme-preview-3";
+pub const VERSION: &str = "native-theme-preview-7";
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -138,6 +138,47 @@ struct Job {
     font_dirs: Vec<PathBuf>,
     #[serde(default)]
     wallpaper: Option<PathBuf>,
+    /// The user's own panel choices (`bar.edge` / `split` / `applets`, the dock's `edge`): a preview shows the theme the
+    /// way it would look with them applied.
+    #[serde(default)]
+    panel: serde_json::Value,
+}
+
+/// The user's panel keys from the real configuration next to `decebal.json` (see docs/universal-panels.md).
+fn user_panel(src: &Source) -> serde_json::Value {
+    let shell = crate::settings::io::json_load(&src.shell_json);
+    let mut bar = serde_json::Map::new();
+    for k in ["edge", "split", "applets"] {
+        if let Some(v) = shell.get("bar").and_then(|b| b.get(k)) {
+            bar.insert(k.into(), v.clone());
+        }
+    }
+    let dock = src.shell_json.parent().map(|d| crate::settings::io::json_load(&d.join(crate::config::SETTINGS_FILE))).unwrap_or_default();
+    json!({"bar": bar, "dock_edge": dock.get("edge").cloned().unwrap_or(serde_json::Value::Null)})
+}
+
+/// What the preview's panels depend on: the previewed theme's renderer, edge, split and applets after the user's
+/// choices, and the dock's edge. The cache key changes exactly when one of them does.
+fn panel_fingerprint(src: &Source, selection: &Selection, def: &crate::theme::model::Def) -> String {
+    let user_keys = user_panel(src);
+    let user = crate::panel::UserPanel::from_bar_json(&user_keys["bar"]);
+    let theme = crate::panel::ThemePanel::from_extra(&def.extra);
+    let style = def.extra.get("bar").and_then(|b| b.get("style")).and_then(|v| v.as_str()).map(str::to_string).unwrap_or_else(|| def.resolve(&selection.name, true, selection).bar_style);
+    let dux = crate::config::BarLayout::from_json(def.extra.get("bar").unwrap_or(&serde_json::Value::Null));
+    let i = crate::panel::Inputs {
+        renderer: crate::panel::Renderer::for_bar_style(&style),
+        user: &user,
+        theme: &theme,
+        legacy_position: None,
+        legacy_workspaces: None,
+        dux: Some(&dux),
+        dock_user_edge: None,
+    };
+    let user_dock = user_keys["dock_edge"].as_str().and_then(crate::panel::Edge::parse);
+    let dock_edge = user_dock.or(theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom);
+    // the taskbar has applets of its own (Start, search, task buttons, show desktop) with their own defaults
+    let taskbar = crate::panel::resolve(&crate::panel::Inputs { renderer: crate::panel::Renderer::Taskbar, legacy_workspaces: None, dux: None, dock_user_edge: user_dock, ..i });
+    format!("{}/dock:{}/taskbar:{}", crate::panel::resolve(&i).fingerprint(), dock_edge.as_str(), taskbar.fingerprint())
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -263,6 +304,7 @@ pub fn fingerprint(src: &Source, selection: &Selection) -> Result<String, String
     }
     let def = src.load_def(&selection.name)?;
     hash.update(writer::def_to_manifest(&def, &writer::Header { id: selection.name.clone(), name: def.name.clone(), ..Default::default() }).as_bytes());
+    hash.update(panel_fingerprint(src, selection, &def).as_bytes());
     if let Some(id) = &selection.palette {
         if let Some(p) = crate::theme::palette::load(id) {
             hash.update(writer::def_to_manifest(&p, &writer::Header { id: id.clone(), name: p.name.clone(), ..Default::default() }).as_bytes());
@@ -321,6 +363,7 @@ fn job(src: &Source, selection: &Selection, output: PathBuf) -> Job {
         work,
         deco: deco_renderer(),
         wallpaper: preview_wallpaper(src, selection),
+        panel: user_panel(src),
         font_dirs: std::env::var_os("HOME").map(PathBuf::from).into_iter().flat_map(|p| [p.join(".local/share/fonts"), p.join(".fonts")]).collect(),
     }
 }
@@ -361,6 +404,8 @@ fn run(j: &Job) -> Result<(), String> {
             .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
             .env("DECEBAL_SYSTEM_AUTOMATIC", "0")
             .env("DECEBAL_SCALE", "1")
+            // the preview draws the wanted window style with its own decoration helper and never talks to a window manager
+            .env(super::decoration_compat::PREVIEW_ENV, "preview")
             // Candidate previews are deterministic theme samples, not session overrides.
             .env_remove("DECEBAL_FONT_SCALE")
             .env_remove("DECEBAL_HIGH_CONTRAST")
@@ -506,6 +551,20 @@ pub fn worker(file: &Path) -> Result<(), String> {
         }
         fs::write(&write.path, &write.new).map_err(|e| e.to_string())?;
     }
+    // the user's panel choices, into the private copy only
+    if let Some(user) = j.panel.get("bar").and_then(|b| b.as_object()).filter(|b| !b.is_empty()) {
+        let mut shell = crate::settings::io::json_load(&src.shell_json);
+        if !shell["bar"].is_object() {
+            shell["bar"] = json!({});
+        }
+        for (k, v) in user {
+            shell["bar"][k] = v.clone();
+        }
+        crate::settings::io::json_set(&src.shell_json, "bar", Some(shell["bar"].clone()))?;
+    }
+    if let Some(edge) = j.panel.get("dock_edge").and_then(|e| e.as_str()) {
+        crate::settings::io::json_set(&paths.dock_settings(), "edge", Some(json!(edge)))?;
+    }
     if let Some(wallpaper) = &j.wallpaper {
         let mut config = crate::settings::tomlcfg::Cfg::parse(&fs::read_to_string(&paths.rdwm_config).unwrap_or_default())?;
         config.set("wallpaper", "image", &crate::settings::tomlcfg::Val::Str(wallpaper.display().to_string()))?;
@@ -594,23 +653,26 @@ pub fn worker(file: &Path) -> Result<(), String> {
         }
     }
     let shell = crate::config::shell_settings();
+    // the bar and the dock on their effective edges (each draws itself on a desktop-sized canvas)
     if shell.bar_visible(crate::config::dock_settings().style) {
         let bar = crate::menubar::DecBar::preview_frame(WIDTH, HEIGHT, false)?;
         composite(&mut canvas, &bar, 0, 0);
-        if th.bar_position == crate::config::BarPosition::Split {
+        if th.bar_panel().split && th.bar_vertical() {
             let bar = crate::menubar::DecBar::preview_frame(WIDTH, HEIGHT, true)?;
             composite(&mut canvas, &bar, 0, 0);
         }
     }
     if shell.dock_visible(th.bar_vertical()) {
-        let dock = crate::dock_app::DockApp::preview_frame(WIDTH)?;
-        let y = if crate::config::dock_settings().windows_position == crate::config::WinPosition::Top {
-            0
-        } else {
-            HEIGHT as i32 - dock.height() as i32 - if crate::config::dock_settings().style == crate::config::DockStyle::Windows { 0 } else { 13 }
-        };
-        composite(&mut canvas, &dock, (WIDTH as i32 - dock.width() as i32) / 2, y);
+        let dock = crate::dock_app::DockApp::preview_desktop(WIDTH, HEIGHT)?;
+        composite(&mut canvas, &dock, 0, 0);
     }
+    let dock = crate::config::dock_settings();
+    let dock_panel = if dock.style == crate::config::DockStyle::Windows {
+        th.taskbar_panel(&dock).fingerprint()
+    } else {
+        format!("dock:{}", dock.edge.or(th.panel_theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom).as_str())
+    };
+    notes.push(format!("Panels: {} / {}", th.bar_panel().fingerprint(), dock_panel));
     crate::gfx::fill_rounded(&mut canvas, 0.0, HEIGHT as f32, WIDTH as f32, 120.0, 0.0, th.background.color(1.0));
     // Separate caption sample footer, not an invented window layout over the desktop.
     if let Some(helper) = j.deco {
@@ -662,6 +724,34 @@ mod performance_tests {
         listeners.notify();
         assert!(rx.try_recv().is_err(), "a closed window must not retain a callback");
         assert!(listeners.callbacks.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_cache_key_follows_the_effective_panel_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("panel-preview-key-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("themes")).unwrap();
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: dir.join("themes") };
+        let sel = Selection { name: "nord".into(), mode: Mode::Dark, ..Default::default() };
+        let key = |shell: serde_json::Value, dock: serde_json::Value| {
+            fs::write(&src.shell_json, shell.to_string()).unwrap();
+            fs::write(dir.join(crate::config::SETTINGS_FILE), dock.to_string()).unwrap();
+            fingerprint(&src, &sel).unwrap()
+        };
+        let base = key(json!({}), json!({}));
+        assert_eq!(key(json!({"bar": {"something_else": 1}, "clock_hour12": true}), json!({"magnification": 2.0})), base, "unrelated settings keep the cached image");
+        let moved = key(json!({"bar": {"edge": "left"}}), json!({}));
+        let fewer = key(json!({"bar": {"applets": {"clock": false}}}), json!({}));
+        let docked = key(json!({}), json!({"edge": "right"}));
+        assert!(base != moved && base != fewer && base != docked && moved != fewer, "edge, applets and dock edge each regenerate it");
+        // applets only the taskbar draws by default still change what a taskbar theme's preview shows
+        let no_tasks = key(json!({"bar": {"applets": {"tasks": false}}}), json!({}));
+        let no_desktop = key(json!({"bar": {"applets": {"show_desktop": false}}}), json!({}));
+        let no_start = key(json!({"bar": {"applets": {"launcher": false}}}), json!({}));
+        assert!(no_tasks != base && no_desktop != base && no_start != base && no_tasks != no_desktop, "taskbar-only applet choices regenerate it");
+        // an override equal to the default changes nothing visible, but it is the user's choice: it is part of the key too
+        assert_eq!(key(json!({"bar": {"edge": "left"}}), json!({})), moved, "stable for the same inputs");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
