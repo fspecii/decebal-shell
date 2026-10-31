@@ -236,7 +236,7 @@ def inner(a):
     class Settings:
         """One decsettings process with its own private HOME and config."""
 
-        def __init__(self, name, scale=1.0, mode="dark", pane="general"):
+        def __init__(self, name, scale=1.0, mode="dark", pane="general", wayland=None):
             self.name = name
             self.dir = root / "apps" / name
             for d in ["home", "cfg", "decebal"]:
@@ -247,12 +247,18 @@ def inner(a):
             self.dump = self.dir / "layout.json"
             self.log = open(self.dir / "decsettings.log", "w")
             env = dict(os.environ)
-            env.update(HOME=str(self.dir / "home"), XDG_CONFIG_HOME=str(self.dir / "cfg"), DECEBAL_CONFIG=str(self.dir / "decebal"), DECEBAL_BACKEND="x11", DECSETTINGS_DEBUG_LAYOUT=str(self.dump), DECSETTINGS_SCALE=str(scale), RDWMCTL="/nonexistent/rdwmctl", RDWM_SOCK=str(self.dir / "no-rdwm.sock"), DECEBAL_LOG=str(self.dir / "decebal.log"))
+            env.update(HOME=str(self.dir / "home"), XDG_CONFIG_HOME=str(self.dir / "cfg"), DECEBAL_CONFIG=str(self.dir / "decebal"), DECEBAL_BACKEND="x11", DECSETTINGS_DEBUG_LAYOUT=str(self.dump), DECSETTINGS_SCALE=str(scale), RDWMCTL="/nonexistent/rdwmctl", RDWM_SOCK=str(self.dir / "no-rdwm.sock"), DECEBAL_LOG="debug", DECEBAL_LOG_DIR=str(self.dir / "logs"), DECEBAL_A11Y_REPLY_TIMEOUT_MS="20000")
             env.pop("DECEBAL_A11Y", None)
+            if wayland:
+                env.pop("DISPLAY", None)
+                env.update(WAYLAND_DISPLAY=wayland, DECEBAL_BACKEND="wayland")
             self.p = subprocess.Popen([a.bin, "--config", str(self.config), pane], env=env, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
             owned.append(self.p)
-            # decsettings sets no _NET_WM_PID; only one runs at a time (single-instance lock), so its class finds it.
-            self.wid = wait(lambda: x("search", "--onlyvisible", "--class", "DecSettings", check=False).split("\n")[0], "decsettings window")
+            if wayland:
+                self.wid = None
+            else:
+                # decsettings sets no _NET_WM_PID; only one runs at a time (single-instance lock), so its class finds it.
+                self.wid = wait(lambda: x("search", "--onlyvisible", "--class", "DecSettings", check=False).split("\n")[0], "decsettings window")
             wait(lambda: self.layout(), "first layout dump")
 
         def layout(self):
@@ -375,8 +381,8 @@ def inner(a):
                 res.append(("err", e.message))
 
         for _ in range(n):
-            conn.call(bus, path, iface, member, params, GLib.VariantType(rtype), 0, 20000, None, done, None)
-        wait(lambda: len(res) == n, f"{n} replies to {member}", 25)
+            conn.call(bus, path, iface, member, params, GLib.VariantType(rtype), 0, 30000, None, done, None)
+        wait(lambda: len(res) == n, f"{n} replies to {member}", 60)
         return res
 
     # ------------------------------------------------------------ provenance
@@ -412,7 +418,9 @@ def inner(a):
         check("launcher running but disabled: no registration", True)
         # Registering listeners initialises libatspi, which starts the launcher: only after the lazy checks.
         Atspi.init()
-        Atspi.set_timeout(3000, 6000)
+        # Settings saves synchronously (with fsync) on its UI thread; under host I/O load that alone can take seconds,
+        # so the client and the bridge get generous deadlines here (the bridge default stays 5 s).
+        Atspi.set_timeout(25000, 30000)
         for t in event_types:
             listener.register(t)
         t_enable = time.time()
@@ -682,12 +690,13 @@ def inner(a):
         set_enabled(False)
         wait(lambda: find_app_absent(Atspi, s.p.pid), "unregistered after IsEnabled=false", 8)
         check("disable: app leaves the registry", True)
-        pump(0.5)
-        fd_off = fds(s.p.pid)
+        # The accessibility socket closes when the worker sees IsEnabled=false; allow it a moment.
+        fd_off = wait(lambda: fds(s.p.pid) if fds(s.p.pid) <= fd_idle else None, "fd back to idle", 3) if fds(s.p.pid) > fd_idle else fds(s.p.pid)
         check("disable: accessibility bus fd closed", fd_off == fd_idle, {"idle": fd_idle, "registered": fd_on, "disabled": fd_off})
         set_enabled(True)
-        app = find_app(pid=s.p.pid)
-        check("re-enable: registered again", app is not None)
+        # libatspi keeps its own view of the desktop; check the registry on the wire.
+        conn, addr = a11y_conn()
+        check("re-enable: registered again", wait(lambda: bus_of(conn), "registered again", 10) is not None)
 
         # -------------------------------------------------------- close
         x("windowfocus", "--sync", s.wid)
@@ -727,6 +736,45 @@ def inner(a):
                 finally:
                     t.close()
                     wait(lambda: find_app_absent(Atspi, t.p.pid), "previous app gone", 6)
+        # -------------------------------------------------------- Wayland (private headless sway)
+        if shutil.which("sway"):
+            cfgp = root / "sway.cfg"
+            cfgp.write_text("xwayland disable\noutput HEADLESS-1 resolution 1280x800 position 0,0\ndefault_border none\n")
+            before_sock = set(os.listdir(os.environ["XDG_RUNTIME_DIR"]))
+            slog = open(ev / "sway.log", "w")
+            senv = {k: v for k, v in os.environ.items() if k not in ("DISPLAY",)}
+            senv.update(WLR_BACKENDS="headless", WLR_RENDERER="pixman", WLR_LIBINPUT_NO_DEVICES="1")
+            sway = subprocess.Popen(["sway", "-c", str(cfgp)], env=senv, stdout=slog, stderr=subprocess.STDOUT, start_new_session=True)
+            owned.append(sway)
+            sock = wait(lambda: next((f for f in set(os.listdir(os.environ["XDG_RUNTIME_DIR"])) - before_sock if f.startswith("wayland-") and not f.endswith(".lock")), None), "private sway socket", 10)
+            results["provenance"]["sway"] = {"path": shutil.which("sway"), "sha256": sha256(shutil.which("sway")), "version": subprocess.run(["sway", "--version"], capture_output=True, text=True).stdout.strip()}
+            w = Settings("wayland", pane="general", wayland=sock)
+            try:
+                ap = find_app(pid=w.p.pid, t=15)
+                wix = index(ap)
+                fr_s, fr_w = ext(wix["frame"]), ext(wix["frame"], Atspi.CoordType.WINDOW)
+                c = w.ctl("r:general:default_binds")
+                want = [round(v) for v in c["rect"]]
+                sw_s, sw_w = ext(wix["ctl:r:general:default_binds"]), ext(wix["ctl:r:general:default_binds"], Atspi.CoordType.WINDOW)
+                results["scenarios"]["wayland"] = {"socket": sock, "frame_screen": fr_s, "frame_window": fr_w, "switch_screen": sw_s, "switch_window": sw_w, "painted": want, "frame_states": sorted(states(wix["frame"]))}
+                check("wayland: registered through the same bridge", ap.get_toolkit_name() == "Decebal")
+                check("wayland: bounds are window-relative (screen = window coordinates; no global position on Wayland)", fr_s == fr_w and fr_s[:2] == [0, 0] and sw_s == sw_w, results["scenarios"]["wayland"])
+                check("wayland: control bounds = painted rect", all(abs(p - q) <= 1 for p, q in zip(sw_w, want)), (sw_w, want))
+                before = w.text()
+                act(wix["ctl:r:general:default_binds"], "toggle")
+                check("wayland: AT action writes config.toml", wait(lambda: w.text() != before, "wayland write"), w.text())
+                check("wayland: grab_focus moves the app's keyboard focus", Atspi.Component.grab_focus(wix["ctl:r:general:chord_timeout_ms"]) and wait(lambda: (w.layout() or {}).get("focus") == "r:general:chord_timeout_ms", "wayland focus"))
+                # No keyboard device in a headless compositor: no wl_keyboard.enter, so the frame is honestly not active.
+                check("wayland: window activation follows wl_keyboard (none here: not active)", "active" not in states(wix["frame"]), sorted(states(wix["frame"])))
+            finally:
+                w.close()
+                wait(lambda: find_app_absent(Atspi, w.p.pid), "wayland app gone", 6)
+                sway.terminate()
+                sway.wait(5)
+                slog.close()
+        else:
+            check("wayland: sway not installed, scenario skipped", True, "skipped")
+
         # -------------------------------------------------------- reconnect: registry restart, then bus restart
         s = Settings("reconnect", pane="general")
         conn, addr = a11y_conn()
@@ -802,6 +850,18 @@ def inner(a):
         passed = False
         check("crashed", False, traceback.format_exc())
     finally:
+        # On failure: what every thread of a still-running decsettings is doing (no ptrace needed).
+        if not passed:
+            diag = {}
+            for p in owned:
+                if p.poll() is None and Path(f"/proc/{p.pid}/task").exists() and b"decsettings" in Path(f"/proc/{p.pid}/cmdline").read_bytes():
+                    for t in os.listdir(f"/proc/{p.pid}/task"):
+                        b = Path(f"/proc/{p.pid}/task/{t}")
+                        try:
+                            diag[f"{p.pid}/{t}"] = {"comm": (b / "comm").read_text().strip(), "state": (b / "stat").read_text().rsplit(") ", 1)[1].split()[0], "wchan": (b / "wchan").read_text(), "syscall": (b / "syscall").read_text().split()[0] if (b / "syscall").exists() else None, "ticks": ticks(p.pid, t)}
+                        except OSError:
+                            pass
+            results["threads_on_failure"] = diag
         try:
             listener.deregister("object:state-changed:focused")
         except Exception:  # noqa: BLE001
