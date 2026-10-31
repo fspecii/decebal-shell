@@ -586,10 +586,12 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
     // Each file commits only while it is as planning found it; `done` keeps the identity each of our writes left.
     let mut done: Vec<(&Write, io::Stamp)> = Vec::new();
     for w in &plan.writes {
-        if let Err(e) = io::write_if_unchanged(&w.path, &w.new, w.expect) {
-            return Err(roll_back(&rec, &done, &e));
+        // `ours` is the identity of the file this write put in place, from the write itself: someone replacing the
+        // path right after it is never taken for ours (and never overwritten by a rollback)
+        match io::commit_if_unchanged(&w.path, &w.new, w.expect) {
+            Ok(ours) => done.push((w, ours)),
+            Err(e) => return Err(roll_back(&rec, &done, &e)),
         }
-        done.push((w, io::stamp(&w.path)));
         applied.files.push(w.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
     }
     applied.undo_id = uid;

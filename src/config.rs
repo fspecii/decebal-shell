@@ -506,15 +506,17 @@ pub fn write_pinned(path: &std::path::Path, list: &[String]) -> std::io::Result<
 /// Sets one key of the JSON object in `path` (creating the file), keeping every other key. Atomic like
 /// [`write_pinned`].
 pub fn write_setting(path: &std::path::Path, key: &str, value: serde_json::Value) -> std::io::Result<()> {
-    let mut doc: serde_json::Value = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({}));
-    doc[key] = value;
-    let mut text = serde_json::to_string_pretty(&doc).map_err(std::io::Error::other)?;
-    text.push('\n');
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // The shared Settings write (per-file lock, unique temp, fsync, identity check at commit), no backup copy.
-    crate::settings::io::write_shared(path, &text).map_err(std::io::Error::other)
+    // Read, merge and write as one protocol update (per-file lock, compare-and-swap at commit, re-applied when someone
+    // saved meanwhile): a write between our read and our commit is never overwritten. No backup copy.
+    crate::settings::io::json_update_doc_shared(path, |doc| {
+        doc[key] = value.clone();
+        Ok(())
+    })
+    .map(|_| ())
+    .map_err(std::io::Error::other)
 }
 
 /// Pure list edits behind the dock menu and drag-and-drop.
@@ -788,5 +790,29 @@ mod tests {
         assert!(!parse(r#"{"workspaces": "off"}"#).resolve(true));
         assert!(parse(r#"{"workspaces": "auto"}"#).resolve(true));
         assert!(parse("{}").resolve(true));
+    }
+
+    #[test]
+    fn race_write_setting_keeps_a_save_made_between_its_read_and_commit() {
+        let d = std::env::temp_dir().join(format!("decebal-race-setting-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("decebal.json");
+        std::fs::write(&f, "{\"a\": 1}\n").unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let f2 = f.clone();
+        let other = std::thread::spawn(move || {
+            crate::settings::io::with_file_lock(&f2, |_| {
+                tx.send(()).unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                // another writer saves while write_setting may already have read the file
+                std::fs::write(&f2, "{\"a\": 1, \"theirs\": 2}\n").unwrap();
+            });
+        });
+        rx.recv().unwrap();
+        write_setting(&f, "ours", serde_json::json!(3)).unwrap();
+        other.join().unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!((v["theirs"].clone(), v["ours"].clone()), (serde_json::json!(2), serde_json::json!(3)), "{v}");
     }
 }

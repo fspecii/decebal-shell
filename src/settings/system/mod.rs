@@ -33,7 +33,7 @@ use crate::settings::persist;
 use session::Session;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -333,9 +333,12 @@ impl<T> Default for Slot<T> {
 
 pub struct Hub {
     pub sh: Arc<Shared>,
-    /// Generation of the newest session change / notifications change made in the window.
+    /// Generation of the newest session change / notifications change made in the window, and of the newest one
+    /// whose save finished (successfully or not).
     pub session_gen: u64,
     pub notif_gen: u64,
+    pub session_done: u64,
+    pub notif_done: Arc<AtomicU64>,
     pub sound: Slot<sound::State>,
     pub net: Slot<network::State>,
     pub bt: Slot<bluetooth::State>,
@@ -398,6 +401,8 @@ impl Hub {
             notif: notifications::NotifCfg::load(&dir),
             session_gen: 0,
             notif_gen: 0,
+            session_done: 0,
+            notif_done: Arc::new(AtomicU64::new(0)),
             session,
             undo: None,
             dirty: false,
@@ -419,11 +424,14 @@ impl Hub {
             *a = dom;
             c
         };
-        if changed && pane_id == "notifications" {
+        // Coming back to a pane re-reads its file, but never over a change of ours that is still being saved: the
+        // shown state is newer than the file then (and the next change snapshots it).
+        if changed && pane_id == "notifications" && self.notif_done.load(Ordering::SeqCst) >= self.notif_gen {
             self.notif = notifications::NotifCfg::load(&self.sh.dir);
         }
-        if changed && matches!(pane_id, "privacy" | "accessibility") {
+        if changed && matches!(pane_id, "privacy" | "accessibility") && self.session_done >= self.session_gen {
             self.session = Session::load(&self.sh.dir);
+            *self.sh.session.lock().unwrap() = self.session.clone();
         }
         let Some(dom) = dom else { return };
         if changed || self.slot_empty(dom) {
@@ -587,6 +595,7 @@ impl Hub {
             if d.notif_failed.is_some_and(|g| g == self.notif_gen) {
                 self.notif = notifications::NotifCfg::load(&self.sh.dir);
             }
+            self.session_done = self.session_done.max(d.session_gen);
             if d.session_reload && d.session_gen == self.session_gen {
                 self.session = Session::load(&self.sh.dir);
                 *self.sh.session.lock().unwrap() = self.session.clone();

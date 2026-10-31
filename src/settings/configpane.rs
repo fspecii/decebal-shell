@@ -1162,7 +1162,19 @@ fn revert_tab(m: &mut Model) {
                 applied_live(m, tab);
                 m.say(format!("Reverted the file to {from}; your newer edits are kept in the editor"), false);
             } else {
-                let fresh = load_buf(m, tab);
+                let mut fresh = load_buf(m, tab);
+                // where the user is in the buffer (cursor, selection, scroll) is kept, clamped to the reverted text
+                if let Some(old) = m.cfg.bufs.get(&tab) {
+                    match old.ed.anchor {
+                        Some(a) => {
+                            fresh.ed.set_cursor(a, false);
+                            fresh.ed.set_cursor(old.ed.cursor, true);
+                        }
+                        None => fresh.ed.set_cursor(old.ed.cursor, false),
+                    }
+                    fresh.ed.top = old.ed.top.min(fresh.ed.line_count().saturating_sub(1));
+                    fresh.ed.left = old.ed.left;
+                }
                 m.cfg.bufs.insert(tab, fresh);
                 applied_live(m, tab);
                 m.say(format!("Reverted to {from}"), false);
@@ -1911,5 +1923,34 @@ mod tests {
         let Item::Card(rows) = &it[1] else { panic!("tab card") };
         let Kind::Seg(opts, _) = &rows[0].ctls[0].kind else { panic!() };
         assert!(opts[0].0.ends_with('•'), "{opts:?}");
+    }
+
+    #[test]
+    fn race_a_revert_keeps_where_the_user_is_in_the_buffer() {
+        use std::sync::atomic::Ordering;
+        let mut m = model("race-revert-nav");
+        let shell = m.paths.shell_json();
+        std::fs::write(&shell, "{\n  \"a\": 1,\n  \"bb\": 2\n}\n").unwrap();
+        m.cfg.tab = Tab::Shell;
+        prepare(&mut m);
+        m.cfg.active = true;
+        editor_key(&mut m, &key(Key::End, None, false));
+        type_text(&mut m, " ");
+        apply(&mut m, "cfg:save", CtlVal::Click); // a backup to revert to
+        // navigation without typing: a selection from line 1 col 2 to line 2 col 1
+        buf_mut(&mut m).ed.set_cursor(Pos::new(1, 2), false);
+        buf_mut(&mut m).ed.set_cursor(Pos::new(2, 1), true);
+        let (open, calls) = held_worker(&mut m);
+        apply(&mut m, "cfg:revert", CtlVal::Click);
+        while calls.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        buf_mut(&mut m).ed.set_cursor(Pos::new(2, 3), true); // still moving while the revert is held
+        open.store(true, Ordering::SeqCst);
+        m.settle();
+        assert_eq!(std::fs::read_to_string(&shell).unwrap(), "{\n  \"a\": 1,\n  \"bb\": 2\n}\n", "reverted");
+        let b = buf_mut(&mut m);
+        assert_eq!((b.ed.cursor, b.ed.anchor), (Pos::new(2, 3), Some(Pos::new(1, 2))), "the cursor and selection stay");
+        assert!(!b.ed.is_modified());
     }
 }

@@ -150,6 +150,9 @@ pub struct Model {
     batch_error: bool,
     /// Messages are coming from a completion (see `say`).
     in_completion: bool,
+    /// Bumped by every accepted theme intent (design, mode, palette, accent, wallpaper colours...): a late result
+    /// compares generations, not values, so a newer intent wins even when it returns to the same value (A, B, A).
+    pub theme_intent: u64,
 
     /// The next TOML job is a wallpaper change (see `Job::Toml::cancel_follow`).
     cancel_follow: bool,
@@ -199,6 +202,7 @@ impl Model {
             reload_requests: 0,
             batch_error: false,
             in_completion: false,
+            theme_intent: 0,
 
             cancel_follow: false,
         };
@@ -445,6 +449,7 @@ impl Model {
     pub fn apply_theme(&mut self, src: crate::theme::live::Source, paths: Paths, request: ThemeRequest, style: Option<crate::theme::style::Style>, done: ThemeDone) -> bool {
         let selection = request.planned_selection(&src).to_json();
         let Some(seq) = self.submit(Job::Theme(Box::new(ThemeJob { src, paths, request, style })), Pending::Theme { selection: selection.clone(), done }) else { return false };
+        self.theme_intent += 1;
         if self.pending.contains_key(&seq) {
             set_key(&mut self.shell, "theme", Some(selection));
         }

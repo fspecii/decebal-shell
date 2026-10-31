@@ -401,12 +401,16 @@ impl Runner {
                 _ => self.toml(&path, &rdwmctl, &patch, epoch, base),
             }),
             Job::Json { path, key, value, base, reconcile: rec } => Outcome::Json(self.json(&path, &key, value, base, rec.as_deref())),
-            Job::Theme(t) => Outcome::Theme(self.theme(*t)),
+            Job::Theme(t) => {
+                io::commits::begin();
+                let r = self.theme(*t);
+                self.adopt_commits();
+                Outcome::Theme(r)
+            }
             Job::Task(t) => {
+                io::commits::begin();
                 let r = (t.run)();
-                for w in &t.writes {
-                    self.files.entry(w.clone()).or_default().known = Some(io::stamp(w));
-                }
+                self.adopt_commits();
                 if let Some(reply) = t.reply {
                     reply(r.clone());
                     detached = true;
@@ -454,17 +458,31 @@ impl Runner {
             return Err(fail(e));
         }
         // At commit: the file must still be the one checked above, however long validation and the fsync took.
-        if let Err(e) = io::write_if_unchanged(path, &text, now) {
-            if io::is_changed_on_disk(&e) {
+        let stamp = match io::commit_if_unchanged(path, &text, now) {
+            Ok(ours) => ours, // the identity of our write, not whatever is at the path a moment later
+            Err(e) if io::is_changed_on_disk(&e) => {
                 st.conflicted = true;
                 return Err(conflict());
             }
-            return Err(fail(e));
-        }
+            Err(e) => return Err(fail(e)),
+        };
         crate::log_info!("rdwm config saved: {}", path.display());
-        let stamp = io::stamp(path);
         st.known = Some(stamp);
         Ok(TomlSaved { text, stamp, changed: true })
+    }
+
+    /// The files the job just wrote count as this process's own, with the identity each of our writes put in place
+    /// (from the write itself): a save someone made right after ours stays an external edit for the jobs behind.
+    fn adopt_commits(&mut self) {
+        for (target, ours) in io::commits::take() {
+            // the log names the real file; a configured path may be a symlink to it
+            for (k, st) in self.files.iter_mut() {
+                if *k != target && std::fs::canonicalize(k).is_ok_and(|c| c == target) {
+                    st.known = Some(ours);
+                }
+            }
+            self.files.entry(target).or_default().known = Some(ours);
+        }
     }
 
     fn theme(&mut self, t: ThemeJob) -> Result<Applied, String> {
@@ -476,17 +494,10 @@ impl Runner {
             ThemeRequest::Widgets { selection, reset_colors: false, choice } => engine::plan_selection_with_widgets(&src, &paths, selection, *choice),
         }
         .inspect_err(|e| crate::log_warn!("theme not applied: {e}"))?;
-        let toml_written = plan.writes.iter().any(|w| w.path == paths.rdwm_config);
+        // the identities of its own writes are adopted from the commit log afterwards (see `adopt_commits`)
         let applied = engine::execute(&src, &paths, plan).inspect_err(|e| crate::log_error!("theme apply failed: {e}"))?;
-        if toml_written {
-            // Our own write: not an external edit for TOML jobs queued behind this one.
-            self.files.entry(paths.rdwm_config.clone()).or_default().known = Some(io::stamp(&paths.rdwm_config));
-        }
         if let Some(st) = style {
             apply_style(&paths, st).map_err(|e| format!("theme applied, shell style not saved: {e}"))?;
-        }
-        for p in [paths.shell_json(), paths.dock_settings()] {
-            self.files.entry(p.clone()).or_default().known = Some(io::stamp(&p));
         }
         crate::log_info!("theme `{}` applied: files {:?}, rdwm reloaded {}, undo `{}`", applied.theme_id, applied.files, applied.reloaded, applied.undo_id);
         Ok(applied)
@@ -766,6 +777,42 @@ impl Drop for Persister {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn race_a_writer_right_after_our_publish_is_never_rolled_back_over() {
+        let (d, src, paths, order, _) = theme_files("race-after-publish");
+        let (first, last) = (order[0].clone(), order[order.len() - 1].clone());
+        let theirs = if first == paths.rdwm_config { "# replaced right after our rename\n".to_string() } else { "{\"replaced\": \"right after our rename\"}\n".to_string() };
+        let (t, f) = (theirs.clone(), first.clone());
+        let (installed, fired) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let hook: io::fault::SyncHook = Arc::new(move |p: &Path| {
+            if !installed.swap(true, Ordering::SeqCst) {
+                // on the worker thread: another process replaces the first file the moment our rename published it
+                let (t, f, fired) = (t.clone(), f.clone(), fired.clone());
+                io::fault::set_after_commit_hook(Some(Arc::new(move |q: &Path| {
+                    if q == f && !fired.swap(true, Ordering::SeqCst) {
+                        std::fs::write(&f, &t).unwrap();
+                    }
+                    Ok(())
+                })));
+            }
+            if p == last {
+                return Err(std::io::Error::from_raw_os_error(5));
+            }
+            Ok(())
+        });
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hook);
+        p.submit(theme_job(&src, &paths)).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(20)));
+        let e = match &done(&q)[0].outcome {
+            Outcome::Theme(Err(e)) => e.clone(),
+            o => panic!("{o:?}"),
+        };
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), theirs, "the rollback must not overwrite a file someone replaced after our publish");
+        assert!(e.contains("partly undone"), "{e}");
+        let _ = std::fs::remove_dir_all(d);
+    }
     use crate::settings::tomlcfg::{Cfg, Val};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -1394,6 +1441,44 @@ mod tests {
 #[cfg(test)]
 mod model_tests {
     use super::*;
+
+    fn race_palette(case: &str, newer: &[(&str, CtlVal)]) -> crate::theme::model::Selection {
+        let (mut m, _) = model_with("[general]\n");
+        let img = with_wallpaper_colours(&mut m, case);
+        let disk = Disk::attach(&mut m, None);
+        m.apply("r:general:gap_inner", CtlVal::Num(2.0)); // holds the queue
+        disk.blocked();
+        m.apply("th:dyn-palette-save", CtlVal::Click);
+        for (id, v) in newer {
+            m.apply(id, v.clone());
+        }
+        disk.open();
+        m.settle();
+        m.settle();
+        let _ = std::fs::remove_file(img);
+        crate::settings::themepane::source(&m).selection()
+    }
+
+    #[test]
+    fn race_a_late_palette_does_not_clear_a_newer_accent() {
+        let sel = race_palette("accent", &[("l:accent:#ff9f0a", CtlVal::Click)]);
+        assert_eq!(sel.accent, crate::theme::model::Rgb::parse("#ff9f0a"), "{sel:?}");
+        assert!(sel.palette.is_none(), "{sel:?}");
+    }
+
+    #[test]
+    fn race_a_late_palette_does_not_undo_turning_wallpaper_colours_off() {
+        let sel = race_palette("dynamic", &[("th:dynamic", CtlVal::Bool(false))]);
+        assert!(sel.palette.is_none(), "{sel:?}");
+        assert!(!sel.dynamic.as_ref().is_some_and(|d| d.enabled), "{sel:?}");
+    }
+
+    #[test]
+    fn race_a_late_palette_loses_to_a_theme_that_went_away_and_came_back() {
+        let sel = race_palette("aba", &[("l:theme:nord", CtlVal::Click), ("l:theme:windows11", CtlVal::Click)]);
+        assert_eq!(sel.name, "windows11");
+        assert!(sel.palette.is_none(), "an A-B-A return is newer intent: {sel:?}");
+    }
     use crate::settings::model::{tests_support::model_with, CtlVal, Model, SAVING};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -1717,7 +1802,7 @@ mod model_tests {
     }
 
     #[test]
-    fn a_palette_saved_while_the_mode_changes_is_applied_on_top_of_the_new_mode() {
+    fn a_palette_saved_while_the_mode_changes_is_only_saved_and_the_new_mode_stays() {
         let (mut m, _) = model_with("[general]\n");
         let img = with_wallpaper_colours(&mut m, "mode");
         let disk = Disk::attach(&mut m, None);
@@ -1730,7 +1815,8 @@ mod model_tests {
         m.settle();
         let sel = crate::settings::themepane::source(&m).selection();
         assert_eq!((sel.name.as_str(), sel.mode), ("windows11", crate::theme::model::Mode::Light), "the newer mode survives");
-        assert!(sel.palette.as_deref().is_some_and(|p| p.contains("late")), "and the palette is selected: {sel:?}");
+        assert!(sel.palette.is_none(), "any newer theme intent wins; the late palette is only saved: {sel:?}");
+        assert!(m.notice.as_ref().is_some_and(|n| !n.error), "{:?}", m.notice);
         let _ = std::fs::remove_file(img);
     }
 

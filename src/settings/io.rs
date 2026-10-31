@@ -140,31 +140,87 @@ pub fn with_file_lock<T>(path: &Path, f: impl FnOnce(&Path) -> T) -> T {
 /// `<name>.bak-decsettings` of the original, and fsyncs before the rename. A file that changes while it is
 /// being written (an editor saving during a slow fsync) is not replaced: the write fails with [`CHANGED_ON_DISK`].
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    with_file_lock(path, |t| write_locked(t, text, stamp(t)))
+    with_file_lock(path, |t| write_locked(t, text, stamp(t))).map(|_| ())
 }
 
 /// [`write_atomic`], only while the file still has the identity `expect` it had when the caller read it.
 pub fn write_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<(), String> {
+    commit_if_unchanged(path, text, expect).map(|_| ())
+}
+
+/// [`write_if_unchanged`] returning the identity of the file it put in place (read from the written file itself, not
+/// by looking at the path afterwards, when someone else may already have replaced it).
+pub fn commit_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<Stamp, String> {
     with_file_lock(path, |t| write_locked(t, text, expect))
 }
 
 /// [`write_atomic`] without the one-time `.bak-decsettings` copy, for files other programs also write.
 pub fn write_shared(path: &Path, text: &str) -> Result<(), String> {
-    with_file_lock(path, |t| write_with(t, text.as_bytes(), stamp(t), None, false))
+    with_file_lock(path, |t| write_with(t, text.as_bytes(), stamp(t), None, false)).map(|_| ())
 }
 
 /// A private file (a secret, a cache): the same protocol, created with `mode` from the start (never readable by
 /// others, not even briefly), and no `.bak-decsettings` copy.
 pub fn write_private(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
-    with_file_lock(path, |t| write_with(t, bytes, stamp(t), Some(mode), false))
+    with_file_lock(path, |t| write_with(t, bytes, stamp(t), Some(mode), false)).map(|_| ())
 }
 
 /// The caller holds the file lock of `target`.
-fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<(), String> {
+fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<Stamp, String> {
     write_with(target, text.as_bytes(), expect, None, true)
 }
 
-fn write_with(target: &Path, text: &[u8], expect: Stamp, mode: Option<u32>, backup: bool) -> Result<(), String> {
+/// Creates a new file next to `base` named `.<stem>-<pid>-<n><suffix>` that nobody else owns: `create_new`, and on a
+/// collision (a stale file of a reused pid, another writer) the next number, never removing what is there.
+pub fn create_owned(dir: &Path, stem: &str, suffix: &str, mode: u32, counter: &AtomicU64) -> std::io::Result<(PathBuf, std::fs::File)> {
+    for _ in 0..1024 {
+        let p = dir.join(format!("{stem}-{}-{}{suffix}", std::process::id(), counter.fetch_add(1, Ordering::Relaxed)));
+        match std::fs::OpenOptions::new().write(true).create_new(true).mode(mode).open(&p) {
+            Ok(f) => return Ok((p, f)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "no free temporary file name"))
+}
+
+/// The identity of an open file (what `stamp` would report for its path while it is there).
+fn stamp_of(f: &std::fs::File) -> Stamp {
+    use std::os::unix::fs::MetadataExt;
+    Stamp(f.metadata().ok().and_then(|m| Some((m.modified().ok()?, m.len(), m.ino()))))
+}
+
+/// The writes this thread committed, with the identity of the file each one put in place (see [`commits`]).
+pub mod commits {
+    use super::Stamp;
+    use std::path::PathBuf;
+
+    thread_local! {
+        static LOG: std::cell::RefCell<Option<Vec<(PathBuf, Stamp)>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Starts recording this thread's commits (the persistence worker, around a theme or task job).
+    pub fn begin() {
+        LOG.with(|l| *l.borrow_mut() = Some(Vec::new()));
+    }
+
+    /// Stops recording; the commits in order (a file written twice appears twice, the last is current).
+    pub fn take() -> Vec<(PathBuf, Stamp)> {
+        LOG.with(|l| l.borrow_mut().take().unwrap_or_default())
+    }
+
+    pub(super) fn record(path: &std::path::Path, id: Stamp) {
+        LOG.with(|l| {
+            if let Some(v) = l.borrow_mut().as_mut() {
+                v.push((path.to_path_buf(), id));
+            }
+        });
+    }
+}
+
+/// Returns the identity of the file it committed, taken from the open temp file before the rename: a writer that
+/// replaces the path right after us is never mistaken for our write.
+fn write_with(target: &Path, text: &[u8], expect: Stamp, mode: Option<u32>, backup: bool) -> Result<Stamp, String> {
     static TMP: AtomicU64 = AtomicU64::new(0);
     let changed = || {
         crate::log_warn!("{} changed on disk while saving; not overwriting", target.display());
@@ -182,35 +238,37 @@ fn write_with(target: &Path, text: &[u8], expect: Stamp, mode: Option<u32>, back
             std::fs::copy(target, &bak).map_err(|e| format!("backup {}: {e}", bak.display()))?;
         }
     }
-    // Unique per write: two writers never share (truncate or rename) one another's temp file.
-    let tmp = dir.join(format!(".{name}.decsettings-{}-{}.tmp", std::process::id(), TMP.fetch_add(1, Ordering::Relaxed)));
-    let res = (|| -> std::io::Result<bool> {
-        let mut f = match mode {
-            Some(m) => std::fs::OpenOptions::new().write(true).create_new(true).mode(m).open(&tmp)?,
-            None => std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?,
-        };
+    // Owned and unique per write: two writers never share (truncate, rename or delete) one another's temp file.
+    let (tmp, mut f) = create_owned(dir, &format!(".{name}.decsettings"), ".tmp", mode.unwrap_or(0o666), &TMP).map_err(|e| {
+        crate::log_error!("write {} failed: {e}", target.display());
+        format!("{}: {e}", target.display())
+    })?;
+    let res = (|| -> std::io::Result<Option<Stamp>> {
         f.write_all(text)?;
         fault::before_sync(target)?;
         f.sync_all()?;
         if mode.is_none() {
             if let Ok(m) = std::fs::metadata(target) {
-                let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
+                f.set_permissions(std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777))?;
             }
         }
+        let ours = stamp_of(&f);
         // At commit: the file must still be what the caller read (the fsync above may have taken seconds).
         if stamp(target) != expect {
-            return Ok(false);
+            return Ok(None);
         }
         std::fs::rename(&tmp, target)?;
-        Ok(true)
+        fault::after_commit(target);
+        Ok(Some(ours))
     })();
     match res {
-        Ok(true) => {
+        Ok(Some(ours)) => {
             crate::log_debug!("wrote {} ({} bytes)", target.display(), text.len());
-            Ok(())
+            commits::record(target, ours);
+            Ok(ours)
         }
-        Ok(false) => {
-            let _ = std::fs::remove_file(&tmp);
+        Ok(None) => {
+            let _ = std::fs::remove_file(&tmp); // ours: created above
             changed()
         }
         Err(e) => {
@@ -239,6 +297,26 @@ pub mod fault {
     #[cfg(test)]
     pub fn set_thread_hook(hook: Option<SyncHook>) {
         HOOK.with(|h| *h.borrow_mut() = hook);
+    }
+
+    #[cfg(test)]
+    thread_local! {
+        static AFTER: std::cell::RefCell<Option<SyncHook>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Unit tests: runs `hook` right after each rename that publishes a write on the current thread (another writer
+    /// replacing the file at the worst moment).
+    #[cfg(test)]
+    pub fn set_after_commit_hook(hook: Option<SyncHook>) {
+        AFTER.with(|h| *h.borrow_mut() = hook);
+    }
+
+    #[allow(unused_variables)]
+    pub(super) fn after_commit(target: &Path) {
+        #[cfg(test)]
+        if let Some(hook) = AFTER.with(|h| h.borrow().clone()) {
+            let _ = hook(target);
+        }
     }
 
     #[allow(unused_variables)]
@@ -401,13 +479,15 @@ pub fn validate(rdwmctl: &Path, target: &Path, text: &str) -> Result<(), String>
     Cfg::parse(text).map_err(|e| format!("invalid TOML: {e}"))?;
     let dir = std::fs::canonicalize(target).ok().and_then(|p| p.parent().map(Path::to_path_buf)).or_else(|| target.parent().map(Path::to_path_buf)).unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&dir);
-    // One owned scratch file per check (create_new, private): two validators never read each other's text.
+    // One owned scratch file per check (create_new, private): two validators never read each other's text, and a
+    // name someone else holds is skipped, never removed.
     static CHECK: AtomicU64 = AtomicU64::new(0);
-    let tmp = dir.join(format!(".decsettings-check-{}-{}.toml", std::process::id(), CHECK.fetch_add(1, Ordering::Relaxed)));
-    std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp).and_then(|mut f| f.write_all(text.as_bytes())).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("{}: {e}", tmp.display())
-    })?;
+    let (tmp, mut f) = create_owned(&dir, ".decsettings-check", ".toml", 0o600, &CHECK).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if let Err(e) = f.write_all(text.as_bytes()) {
+        let _ = std::fs::remove_file(&tmp); // ours: created above
+        return Err(format!("{}: {e}", tmp.display()));
+    }
+    drop(f);
     let out = Command::new(rdwmctl).arg("check-config").arg(&tmp).output();
     let _ = std::fs::remove_file(&tmp);
     match out {
@@ -464,7 +544,7 @@ pub fn json_update(path: &Path, key: &str, v: Option<Value>, guard: impl Fn(&Val
             text.push('\n');
             crate::log_debug!("json set {name} key `{key}`");
             match write_locked(t, &text, before) {
-                Ok(()) => return Ok((doc, stamp(t))),
+                Ok(ours) => return Ok((doc, ours)),
                 Err(e) if is_changed_on_disk(&e) && attempt < 3 => {
                     attempt += 1;
                     crate::log_info!("{name} changed on disk while saving `{key}`; applying it again on top (attempt {attempt})");
@@ -480,6 +560,15 @@ pub fn json_update(path: &Path, key: &str, v: Option<Value>, guard: impl Fn(&Val
 /// read again and `change` applied on top of it). Keeps keys `change` does not touch; never overwrites a file that is
 /// not a JSON object. Returns the committed document.
 pub fn json_update_doc(path: &Path, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    json_update_doc_with(path, true, change)
+}
+
+/// [`json_update_doc`] without the one-time `.bak-decsettings` copy, for files other programs also write.
+pub fn json_update_doc_shared(path: &Path, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    json_update_doc_with(path, false, change)
+}
+
+fn json_update_doc_with(path: &Path, backup: bool, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
     with_file_lock(path, |t| {
         let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut attempt = 0;
@@ -494,8 +583,8 @@ pub fn json_update_doc(path: &Path, change: impl Fn(&mut Value) -> Result<(), St
             change(&mut doc)?;
             let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
             text.push('\n');
-            match write_locked(t, &text, before) {
-                Ok(()) => return Ok(doc),
+            match write_with(t, text.as_bytes(), before, None, backup) {
+                Ok(_) => return Ok(doc),
                 Err(e) if is_changed_on_disk(&e) && attempt < 3 => {
                     attempt += 1;
                     crate::log_info!("{name} changed on disk while saving; applying the change again on top (attempt {attempt})");
@@ -953,5 +1042,26 @@ mod tests {
         assert_eq!(v["alpha"]["x"], 1);
         json_set(&p, "zeta", None).unwrap();
         assert!(json_load(&p).get("zeta").is_none());
+    }
+
+    #[test]
+    fn race_colliding_temp_and_scratch_names_are_skipped_never_removed() {
+        let d = std::env::temp_dir().join(format!("decsettings-race-collide-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let pid = std::process::id();
+        let target = d.join("config.toml");
+        std::fs::write(&target, "a = 1\n").unwrap();
+        // files of a reused pid (or another writer) at the names the next writes would pick
+        for n in 0..300 {
+            std::fs::write(d.join(format!(".config.toml.decsettings-{pid}-{n}.tmp")), "sentinel").unwrap();
+            std::fs::write(d.join(format!(".decsettings-check-{pid}-{n}.toml")), "sentinel").unwrap();
+        }
+        let w = super::write_atomic(&target, "a = 2\n");
+        let v = super::validate(std::path::Path::new("/nonexistent/rdwmctl"), &target, "a = 3\n");
+        let kept = std::fs::read_dir(&d).unwrap().flatten().filter(|e| std::fs::read_to_string(e.path()).is_ok_and(|t| t == "sentinel")).count();
+        assert_eq!(kept, 600, "no file someone else owns was removed or overwritten");
+        assert!(w.is_ok() && v.is_ok(), "{w:?} {v:?}");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "a = 2\n");
     }
 }
