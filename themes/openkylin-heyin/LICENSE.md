@@ -15,5 +15,11 @@ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEM
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-What this licence does NOT cover: openKylin / UKUI artwork (icon packs, cursor themes), the openKylin and Wallhaven
-wallpapers, and the trademarks "openKylin", "UKUI" and "Kylin". None of those is inside this package. See ATTRIBUTION.md.
+Separate bundled artwork: `icons/kylin-startmenu.png` is copied unchanged from openkylin-theme at
+3c78d714aa8fac723c9a5360bd54484789a647ab. Copyright 2014 National University of Defense Technology (NUDT) & Kylin Ltd,
+as declared by that repository's debian/copyright. Its declared licence is GNU GPL version 3 only; the full text is in
+LICENSES/GPL-3.0-only.txt. The package SPDX expression is MIT AND GPL-3.0-only: MIT covers the independent manifest,
+widgets and documentation; GPL-3.0-only covers this image. This does not relicense the artwork under MIT.
+
+Other icon and cursor packs and wallpapers are separate, not bundled. Trademarks are not licensed by these copyright
+terms. The source icon index credits Moka for some artwork; that ancestry remains unresolved, as ATTRIBUTION.md states.

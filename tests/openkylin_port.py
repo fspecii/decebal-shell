@@ -45,7 +45,9 @@ class Packages(unittest.TestCase):
             t = self.theme(i)
             self.assertEqual(t["id"], i); self.assertEqual(t["format"], 1)
             self.assertEqual(t["min_shell_version"], "0.3.0", "new panel keys need the framework release")
-            self.assertEqual(t["license"], "MIT")
+            self.assertEqual(t["license"], "MIT AND GPL-3.0-only")
+            self.assertEqual((ROOT / "themes" / i / "LICENSES/GPL-3.0-only.txt").read_bytes(), (A / "LICENSES/GPL-3.0-only.txt").read_bytes())
+            self.assertIn("Separate bundled artwork", (ROOT / "themes" / i / "LICENSE.md").read_text())
             for k in ("wallpaper", "icons", "cursor", "desktop"):
                 self.assertNotIn(k, t, f"{i}: {k} must stay a separate user choice")
             self.assertTrue({"layouts", "mfact", "nmaster", "smart_gaps"}.isdisjoint(t.get("rdwm", {})), f"{i}: global tiling settings are not the theme's")
@@ -58,7 +60,7 @@ class Packages(unittest.TestCase):
             self.assertEqual(d.get("radius"), 0 if i == "openkylin-classic" else None, "only Classic (window-radius 0) overrides the native 12 px")
             self.assertEqual((t["control_center"]["style"], t["launcher"]["style"]), ("ukui", "ukui"))
             d = ROOT / "themes" / i
-            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "README.md", "icons", "theme.toml", "widgets"], f"{i}: only the pinned start-button logo is bundled")
+            self.assertEqual(sorted(p.name for p in d.iterdir()), ["ATTRIBUTION.md", "LICENSE.md", "LICENSES", "README.md", "icons", "theme.toml", "widgets"], f"{i}: only the pinned start-button logo is bundled")
             self.assertEqual([p.name for p in (d / "icons").iterdir()], ["kylin-startmenu.png"])
             data = (d / "icons/kylin-startmenu.png").read_bytes()
             self.assertEqual(hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(), LOGO_BLOBS[i], f"{i}: the logo is the pinned openkylin-theme 3c78d71 blob")
