@@ -162,3 +162,17 @@ clock captures remain historical component evidence, not proof of the current
 whole Dashboard. See docs/native-dux-clock.md for current geometry and source
 comparison limits. Hot text-size changes invalidate supporting-text coverage
 even below 100%, when the panel grid geometry remains clamped.
+
+
+## Integrated release acceptance
+
+Decebal 0.2.1 integrates the renderer as688128c and the supporting-text scale
+cache repair inbbe508f. Original font asset and activation are f6332f7/a8c8bda.
+The coordinated optimized artifact set contains23 binaries. Native optimized
+Dashboard/four-font checks are in /var/tmp/decebal-021-clock-native, with hashes
+in its provenance. The separate painter fixture passed20 source comparisons
+under /var/tmp/decebal-dux-clock-integrated-native/source-comparison.json.
+Hot1→0.8→0.9→1 changes at fixed grid geometry, including minute transitions,
+match fresh preparation. This remains X11/software evidence, not native
+Wayland-host or complete Dux replica acceptance. Dux1.3 is installed; selecting
+it remains the user's choice.

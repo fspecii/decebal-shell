@@ -1,10 +1,42 @@
 # Desktop readiness audit — current checkpoint
 
-Refreshed 2026-10-30 after the live shell/WM rollout from shell `f9a03b0`
-and rdwm helper `2f81eb8`. Evidence below is scoped to the workflow it exercises;
-it does not establish KDE/GNOME parity or physical hardware readiness.
+Refreshed 2026-10-31 after the coordinated 0.2.1 shell rollout. Evidence is
+scoped to the workflow tested; this does not establish KDE/GNOME parity or
+physical hardware readiness.
 
-## Latest accepted iteration
+## Latest accepted iteration — 0.2.1
+
+- All 23 shell binaries were built from `bbe508f` with source/package fingerprint
+  `995efd025ff4d9d06c3368967203a067cb98ec153084903d15eeccefd329f710`.
+  A targeted `dechud` build from `4bdb5b1` adds its independent watcher lock.
+- Source-backed Dux clock and Dux Lavender 1.3 passed the library gate
+  (1,705 passed, 17 ignored), strict affected-target Clippy, native optimized
+  Dashboard hosts and four-font compatibility. Twenty original-source component
+  comparisons pass; these use the separate painter test binary, not a claim of
+  pixel-identical optimized whole-Dashboard captures. Hot text-size regression
+  compares changed scales and minute transitions against fresh preparation.
+- Optimized launcher tests prove successful intentional toggles while genuine
+  SIGTERM failures remain reported. Notification icon-pack changes refresh
+  banners/history while preserving image hints, deadlines and stored history.
+- Workspace HUD watcher is single across concurrent starts and WM reconnects.
+  Native regression passes; four old live watchers were replaced by one.
+- Both user binary folders were updated with per-file atomic replacements and
+  backups. Dux 1.3 was installed without applying it. Live bar, dock, widgets,
+  notifier and HUD use the new code; config, notification history, managed app
+  IDs, workspace and focus were preserved. Clipboard ownership was untouched.
+  Deployment: `~/.local/state/decebal/deployments/coordinated-021-20261031-021902/`.
+- rdwm `d3ed26c` frame-surface reuse passed optimized fallback/GLX and real
+  Settings/widget/video gates. Installed, but the old `22eec653` WM remains live:
+  its hidden tile ratio cannot be safely exported by the normal state API.
+  Plugin-probe research was rejected after proving ownership stealing and timeout
+  geometry changes. No forced live handoff was attempted.
+- Wayland SSD shadows and capability-aware controls have nested software evidence;
+  physical DRM/GLES, client decorations and hardware frame times remain unproved.
+- Dedicated KDE/GNOME, universal-panel and launcher-style work remains in progress.
+  Their new packages are not accepted as complete ports until authentic rendering,
+  four-edge placement and every selectable applet work together.
+
+## Earlier accepted iteration
 
 - Combined follow-up: all-bin optimized build passed (9m 30s),1,643 library tests
   passed/0 failed/11 ignored, strict all-target Clippy and formatting passed.
@@ -157,6 +189,7 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
 
 | User workflow | Present implementation/evidence | Remaining limit or acceptance evidence |
 |---|---|---|
+| Choose panel edges, applets and launcher layouts across themes | Shared registry and distinct KDE/GNOME/launcher ports are being implemented in dedicated worktrees | Not yet deployed or complete: every renderer must support all four edges and each applet; renderer-based exclusions and hardcoded foreign desktop branding were rejected in contract review. |
 | Change a coherent desktop design | Transactional themes, independent palettes, reviewed widget replacement and visible validation errors; native Terminal Minimal preserves radius 24 while composing legal SSD 20/20; packaged and compiled clock Keep/Replace pass | Full desktop parity unproven. Wallpaper stays independent unless the user enables the separate curated-photo follow switch. |
 | Browse attractive wallpapers | Wallhaven browse/favourites and curated per-theme/mode photos; generation-guarded async follow worker; reviewed SHA+dimension cache import; 42 originals imported, three unknown entries skipped; post-photo Dynamic refresh preserves independent/fixed/disabled choices; [guide](wallpaper-follow.md) | Live API can return 403; failures and partial colour-refresh success remain visible. Reviewed hashes prove byte identity, not photographer identity, licence or absence of AI. Physical crop/readability checks remain. |
 | Live wallpaper with real preview and fullscreen savings | DesktopHut/Commons search, muted video preview; per-output player and pause on visible fullscreen, retained frame; `src/livewall/{pane,preview,host,mod}.rs`, `tests/e2e/live-wallpaper.py` | Runtime needs mpv/ffmpeg, Wayland mpvpaper; provider availability can change. Current full provider/hardware run not established by this audit; no zero-GPU-cost promise for a paused process. |
@@ -165,15 +198,15 @@ it does not establish KDE/GNOME parity or physical hardware readiness.
 | Create widgets and use small connected apps | No-code creator, shared Notes/Timer cards plus resource overview/focus hub, enlarged-text clock/media with unchanged 100% sizes, exact painter sample previews, private notes and conflict-safe saves; `settings/widgetbuilder.rs`, `notes/`, `timer.rs`; native release Notes/Timer log passed | Notes is local plaintext, not encrypted/synchronised. Headless login recovery is implemented and passed11unit/6realCLI checks; install its XDG entry to activate it. The crash-after-claim notification-loss tradeoff remains. Desktop widget host is X11-only. |
 | Familiar file management | Follow-theme preference is the default when absent: Windows11/Frutiger Aero → Explorer, macOS/Graphite → Finder, others Native; explicit choices remain fixed. Private native list/grid/navigation/create-folder checks include dark Windows11 with independent Nord; [limits](file-manager-profiles.md) | **Visual Nautilus profiles, not complete Explorer/Finder replicas.** No ribbon, Finder column view, replacement navigation or new file-operation model. Existing GTK windows may require reopening. |
 | Move, snap, tile and resize | rdwm implements Shift snapping, freely movable centred fullscreen exit, tiling formation; existing macOS/snap/resize suites and checkpoint evidence | User confirmed smoothness with Picom no-frame-pacing; repeatable NVIDIA first-drag/resize frame timing remains unproven. Do not infer 60fps from geometry or upload counters. |
-| Premium window effects | Unified SSD X11 shadow carrier with correct group stacking/input transparency and bounded peripheral uploads; native debug/release 45 checks | Native shadow controls use cached live-parser capability and reject stale unsupported events. Latest accepted WM is now running; hardware/mixed-DPI acceptance remains. CSD/undecorated windows and Wayland shadows absent. Mixed-DPI/resource/performance checks on real hardware remain. |
-| Notifications and history | Bounded private atomic persistence, recovery/error/Retry, failed-clear durability and typed status; optimized font/viewport/keyboard matrix above; live new daemon activated | Legacy in-memory-only history reset during the explicitly announced reload. Default-off optional sounds passed the private optimized policy/lifecycle gate above; real audible hardware acceptance remains. Cached notification app icons still need icon-pack generation refresh. No AT-SPI/native Wayland frontend. |
+| Premium window effects | Unified SSD X11 shadow carrier with correct group stacking/input transparency and bounded peripheral uploads; native debug/release 45 checks | Native shadow controls use cached live-parser capability and reject stale unsupported events. The current X11 WM retains accepted SSD shadows. New Wayland SSD shadows have nested software evidence; physical DRM/GLES and CSD/undecorated windows remain unproved. Mixed-DPI/resource/performance checks on real hardware remain. |
+| Notifications and history | Bounded private atomic persistence, recovery/error/Retry, failed-clear durability and typed status; optimized font/viewport/keyboard matrix above; live new daemon activated | Legacy in-memory-only history reset during the explicitly announced reload. Default-off optional sounds passed the private optimized policy/lifecycle gate above; real audible hardware acceptance remains. Icon-generation refresh is now implemented and passed optimized native banner/history checks. No AT-SPI/native Wayland frontend. |
 | Tray/background application controls | Bounded SNI/DBusMenu across bar/rail/taskbar, custom paths/overlays, dynamic submenus and typed input; actual OBS and private pixels/lifecycle tests pass. Worker refreshes icon/theme generations from cached sources without paint I/O or new GetAll/app NewIcon; A→B/tint/stable-key regression passed; [guide](app-indicators.md) | No XEmbed, attention movies, hover tooltips or menu-item icons. Wayland activation/global coordinates and native app matrix remain. Extremely short/custom rails can exhaust space. |
 | Network, audio and Bluetooth | Native settings backed by nmcli, pactl/wpctl and bluetoothctl; `settings/system/{network,sound,bluetooth}.rs`, fake-command fixtures | Depends on installed services/tools. Parser/fake-runner coverage does not establish real Wi-Fi auth, VPN credentials, device hotplug, headset profile switching or service restart recovery. |
 | Arrange displays and scale text | X11 xrandr workflow retained; native rdwm Wayland typed capability/query/apply/Keep/Revert, per-output scale/transform/position/modes/power where supported, stale epoch protection and persisted confirmation. Actual nested Wayland Settings and X11/forced-X11 release checks passed; [contract](wayland-displays.md) | Requires matching rdwm protocol v1. Nested host owns physical modes/power, so those controls are honestly disabled. Physical DRM enable/disable/mode, hotplug and mixed-DPI hardware matrix remain. |
 | Accessibility and readable settings | Runtime scale, high contrast, reduced dock motion; reset-to-theme text size; wrapped rows and 200% Settings tests; `accessibility.rs`, `settings/system/access.rs` | No AccessKit/AT-SPI integration found. Complex editors/widgets and keyboard-only end-to-end operation need verification. Next-login exports on this machine still need the updated system wrapper installed. |
 | Learn the desktop from inside the session | Spotlight Getting Started and Settings Welcome aliases/cards, same-instance deep links, draft preservation; `spotlight.rs`, `settings/panes.rs`, `bin/decsettings.rs` | Guide is reachable; no mandatory automatic first-login tour. Static shortcut labels can differ from custom bindings. Windows/macOS migration tasks are not all covered by geometry profiles. |
 | Install, upgrade and recover session | Explicit config validation, supervised components, default PAM lock, atomic user-binary rollout/backup; rdwm session sources bounded known exports | `/usr/bin/rdwm-decebal-session` remains older until administrator installation of prepared `session-preferences-5c58c1c` bundle. Source tests passing do not repair that installed wrapper. Bare system CLI may differ from user session binaries. |
-| Use Wayland as a complete daily desktop | rdwm Wayland backend and shell Wayland paths exist; live wallpaper uses mpvpaper | Native widgets unavailable; unified shadows X11-only; display management requires the tested rdwm protocol rather than arbitrary compositor support; focus tokens, screen capture/portals and complete app/toolkit workflow need private-compositor and hardware checks. X11 results do not establish Wayland readiness. |
+| Use Wayland as a complete daily desktop | rdwm Wayland backend and shell Wayland paths exist; live wallpaper uses mpvpaper | Native widgets unavailable; Wayland SSD shadows are implemented with nested software evidence; display management requires the tested rdwm protocol rather than arbitrary compositor support; focus tokens, screen capture/portals and complete app/toolkit workflow need private-compositor and hardware checks. X11 results do not establish Wayland readiness. |
 
 ## Original findings reconciled
 
