@@ -54,6 +54,7 @@ dependencies = [
  "gio",
  "glib",
  "gtk4",
+ "libc",
  "serde",
  "serde_json",
 ]

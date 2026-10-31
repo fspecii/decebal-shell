@@ -1,3 +1,4 @@
+mod operation_ui;
 use decfiles::{
     loader,
     model::{self, Entry, Intent, Model},
@@ -30,10 +31,14 @@ struct Ui {
     state_file: Option<PathBuf>,
     resolver: Resolver,
     resolver_source: RefCell<Option<glib::SourceId>>,
+    ops: operation_ui::Controls,
 }
 
 impl Ui {
     fn navigate(self: &Rc<Self>, path: PathBuf, intent: Intent) {
+        if !self.navigation_allowed() {
+            return;
+        }
         if let Some(old) = self.cancel.borrow_mut().take() {
             old.cancel();
         }
@@ -42,6 +47,7 @@ impl Ui {
         self.error.set_visible(false);
         self.dump();
         self.resolver.request(request);
+        self.update_operation_controls();
     }
 
     fn resolved(self: &Rc<Self>, mut resolved: decfiles::resolver::Resolved) {
@@ -70,6 +76,7 @@ impl Ui {
             let changed = ui.model.borrow_mut().complete(&resolved.request, result);
             if changed {
                 ui.cancel.borrow_mut().take();
+                ui.operation_refreshed();
                 ui.render();
             }
         });
@@ -105,9 +112,14 @@ impl Ui {
     fn selected(&self, column: usize, selection: &gtk::SingleSelection) {
         let path = selection.selected_item().and_downcast::<glib::BoxedAnyObject>().map(|object| object.borrow::<Entry>().path.clone());
         self.model.borrow_mut().select(column, path.clone());
-        if let Some(path) = path {
-            self.status.set_text(&format!("Selected: {} · Read-only prototype", path.file_name().unwrap_or_default().to_string_lossy()));
+        self.ops.active.replace(path.clone());
+        if !self.ops.is_busy() {
+            self.ops.clear_notice();
+            if let Some(path) = path {
+                self.status.set_text(&format!("Selected: {}", path.file_name().unwrap_or_default().to_string_lossy()));
+            }
         }
+        self.update_operation_controls();
         self.dump();
     }
 
@@ -119,11 +131,12 @@ impl Ui {
         if entry.directory {
             self.navigate(entry.path.clone(), Intent::Visit);
         } else {
-            self.status.set_text("File selected. Opening files and file operations are not implemented in this read-only prototype.");
+            self.status.set_text("File selected. Opening files is not implemented in this prototype.");
         }
     }
 
     fn render(self: &Rc<Self>) {
+        self.reconcile_operation_selection();
         while let Some(child) = self.content.first_child() {
             self.content.remove(&child);
         }
@@ -136,7 +149,7 @@ impl Ui {
         }
         self.error.set_text(model.error.as_deref().unwrap_or(""));
         self.error.set_visible(model.error.is_some());
-        self.status.set_text(&format!("{} items · Read-only prototype", model.columns.last().map_or(0, |column| column.entries.len())));
+        self.status.set_text(&format!("{} items", model.columns.last().map_or(0, |column| column.entries.len())));
         let shown: Vec<_> = if self.columns.get() { model.columns.iter().enumerate().collect() } else { model.columns.iter().enumerate().next_back().into_iter().collect() };
         for (index, column) in shown {
             let store = gio::ListStore::new::<glib::BoxedAnyObject>();
@@ -195,6 +208,10 @@ impl Ui {
             }
         }
         drop(model);
+        if let Some(notice) = self.ops.notice() {
+            self.status.set_text(&notice);
+        }
+        self.update_operation_controls();
         self.dump();
     }
 
@@ -202,7 +219,7 @@ impl Ui {
         // Explicit opt-in fixture hook. Never enabled by default or written into shell config.
         if let Some(path) = &self.state_file {
             let model = self.model.borrow();
-            let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence()});
+            let value = serde_json::json!({"layout":if self.columns.get() {"columns"} else {"details"}, "model":model.evidence(), "operation":self.ops.evidence()});
             if let Ok(bytes) = serde_json::to_vec_pretty(&value) {
                 let staging = path.with_extension("tmp");
                 if std::fs::write(&staging, bytes).is_ok() {
@@ -261,7 +278,7 @@ fn factory(kind: u8) -> gtk::SignalListItemFactory {
 }
 
 fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
-    let window = gtk::ApplicationWindow::builder().application(app).title("Decebal Files — Read-only preview").default_width(1080).default_height(700).build();
+    let window = gtk::ApplicationWindow::builder().application(app).title("Decebal Files — Preview").default_width(1080).default_height(700).build();
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     toolbar.set_margin_top(10);
@@ -308,7 +325,9 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
     horizontal.set_child(Some(&content));
     body.append(&horizontal);
     root.append(&body);
-    let status = gtk::Label::new(Some("Read-only prototype"));
+    let ops = operation_ui::Controls::new();
+    root.append(&ops.bar());
+    let status = gtk::Label::new(Some("Files preview"));
     status.set_xalign(0.0);
     status.set_margin_start(12);
     status.set_margin_top(8);
@@ -334,6 +353,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         state_file: std::env::var_os("DECFILES_EVIDENCE_STATE").map(PathBuf::from),
         resolver,
         resolver_source: RefCell::new(None),
+        ops,
     });
     let weak = Rc::downgrade(&ui);
     let source = glib::source::unix_fd_add_local(resolver_reader.as_raw_fd(), glib::IOCondition::IN | glib::IOCondition::HUP, move |_, condition| {
@@ -402,6 +422,7 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
             ui.render();
         }
     });
+    ui.connect_operations();
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let weak = Rc::downgrade(&ui);
@@ -411,7 +432,18 @@ fn build(app: &gtk::Application, initial: PathBuf, columns: bool) {
         };
         let alt = modifiers.contains(gtk::gdk::ModifierType::ALT_MASK);
         let ctrl = modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK);
-        if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
+        if ctrl && modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) && (key == gtk::gdk::Key::n || key == gtk::gdk::Key::N) {
+            ui.name_dialog(false);
+        } else if key == gtk::gdk::Key::F2 {
+            ui.name_dialog(true);
+        } else if key == gtk::gdk::Key::Delete
+            && !ctrl
+            && !alt
+            && !modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK)
+            && gtk::prelude::RootExt::focus(&ui.window).is_some_and(|focus| focus.is_ancestor(&ui.content))
+        {
+            ui.trash_dialog();
+        } else if ctrl && (key == gtk::gdk::Key::w || key == gtk::gdk::Key::W) {
             ui.window.close();
         } else if ctrl && (key == gtk::gdk::Key::l || key == gtk::gdk::Key::L) {
             ui.address.grab_focus();

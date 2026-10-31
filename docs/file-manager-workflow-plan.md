@@ -126,10 +126,10 @@ Theme selection may choose presentation defaults, never rewrite user bookmarks,
 view/sort choices, default app, file contents or clipboard state. Explicit layout
 choices stay fixed across palette changes.
 
-## Optional native foundation — verified read-only increment
+## Optional native foundation — verified navigation and basic operations
 
 [`extras/decfiles`](../extras/decfiles/README.md) is an independent Cargo workspace
-with pinned GTK4 0.10.3 and GIO/GLib 0.21.5. Its offline dev build, ten tests,
+with pinned GTK4 0.10.3 and GIO/GLib 0.21.5. Its initial offline dev build, ten tests,
 strict all-target Clippy and formatting pass. It adds no GTK dependency to the
 shell and changes no default directory handler.
 
@@ -137,10 +137,10 @@ Actual private-Xvfb controls passed eight cases: details activation,
 back/forward/up, invalid and unreadable location recovery, physical symlink-parent
 resolution, hierarchical columns, ancestor-column sibling selection, and
 lossless non-UTF8 file selection without execution. The native result records
-seven Rust/Cargo source hashes and binary SHA
+seven initial Rust/Cargo source hashes and binary SHA
 `b5b9f954277d4904f2adec21a01dfabadf01a3e2e64359f5045deaa1092b99a8`:
 `/var/tmp/decfiles-native-evidence/result.json`. Parent verified these hashes and
-reviewed the details and column captures. The foundation is source-integrated,
+reviewed the details and column captures. That initial foundation was source-integrated,
 not installed or offered as a production file manager.
 
 The shared model publishes only complete successful directory snapshots.
@@ -151,16 +151,34 @@ request. The README records the physical-symlink policy and blocked-system-call
 limit.
 
 Standard GTK controls supply semantics but do not establish screen-reader
-acceptance. File operations, tabs, search, clipboard, drag/drop, remote/mount
-integration, palette/icons, familiar visual styling, actual Wayland and the
+acceptance. General copy/move, undo/restore, permanent delete, tabs, search, clipboard,
+drag/drop, remote/mount integration, palette/icons, familiar visual styling, actual Wayland and the
 remaining release gates below stay open. This increment proves navigation, not
 a complete Explorer/Finder replica or a premium finished appearance.
 
 ## Phase 3: operational acceptance and release boundary
 
-The next assigned operation increment is Create folder, Rename and Move to Trash,
-with real native controls and private fixture outcomes. Trash must never fall
-back to permanent deletion. A no-overwrite check must remain true when a
+Create folder, Rename and Move to Trash are now implemented with real GTK
+controls and dialogs. Fourteen Rust tests pass, including 32 competing rename
+pairs with one winner and an intact losing source. The current feature-free
+binary `29ae23c3222fe04a302d56763825bd2fc22fcc44e5721ee898e5057bdf01a290`
+passes 13 native operation cases and eight navigation regressions. Parent checked
+nine source hashes against all native evidence and reviewed confirmation/conflict
+captures. Evidence is under `/var/tmp/decfiles-operations-native-evidence/`,
+`/var/tmp/decfiles-navigation-operations-evidence/` and the pinned manifests in
+`/var/tmp/decfiles-operations-artifacts/default/`. Strict all-target/all-feature
+Clippy and formatting pass; no install or default-handler change was made.
+
+Trash defaults to Cancel and never falls back to permanent deletion. Rename
+uses an atomic local Linux no-replace operation; selected symlink targets and
+non-UTF8 source identities remain intact. Success refreshes/selects the result;
+errors preserve the previous location and selection. One operation is in flight.
+A default-off fixture-only build separately passes four cancel/close cases,
+including Keep Open and explicit cancel-and-close without joining the worker.
+Those pre-dispatch delay tests are not proof of physical blocked-filesystem
+cancellation or rollback. See the component README for exact semantics.
+
+Trash must never fall back to permanent deletion. A no-overwrite check must remain true when a
 destination appears concurrently, not only when it exists before clicking.
 The installed [GLib 2.90.1 local backend](https://github.com/GNOME/glib/blob/2.90.1/gio/glocalfile.c)
 checks the destination before calling ordinary rename in both display-name

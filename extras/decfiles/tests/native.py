@@ -50,7 +50,7 @@ try:
  bus=subprocess.Popen(['dbus-daemon','--session','--nofork','--print-address=1'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);owned.append(bus);env['DBUS_SESSION_BUS_ADDRESS']=bus.stdout.readline().strip();assert env['DBUS_SESSION_BUS_ADDRESS'].startswith('unix:')
  app=start([str(binary),str(base)],'app')
  wait(lambda:at(base),'initial folder did not load')
- window=wait(lambda:run(['xdotool','search','--onlyvisible','--pid',str(app.pid),'--name','Decebal Files']).stdout.strip().splitlines(),'no Files window')[0]
+ window=wait(lambda:run(['xdotool','search','--all','--onlyvisible','--pid',str(app.pid),'--name','Decebal Files']).stdout.strip().splitlines(),'no Files window')[0]
  run(['xdotool','windowfocus','--sync',window]);snap('windows-details')
  assert len(state()['model']['columns'][-1]['entries'])==6
  # Real pointer selection and keyboard activation in the details view.
