@@ -370,6 +370,12 @@ pub struct DecBar {
     app_menu_page: Option<usize>,
     /// An applet opened from the overflow list (its popup hangs from the overflow cell).
     more_target: Option<Tray>,
+    /// Keyboard mode (`decbar --focus`): the applet with the focus ring, by its place in [`DecBar::focus_items`].
+    kb_focus: Option<usize>,
+    /// Set by the `--focus` signal; the tick turns it into keyboard mode.
+    focus_request: Arc<AtomicBool>,
+    /// How the signal thread wakes the loop (filled in once the loop has a waker).
+    focus_waker: Arc<Mutex<Option<Waker>>>,
     /// The theme's logo, rendered once per size and colour.
     brand_cache: Option<(applets::LogoKey, Option<Pixmap>)>,
     /// What an embedding host (the taskbar) had no room for: the overflow cell lists it.
@@ -470,6 +476,9 @@ impl DecBar {
             app_menu_page: None,
             more_target: None,
             brand_cache: None,
+            kb_focus: None,
+            focus_request: Arc::new(AtomicBool::new(false)),
+            focus_waker: Arc::new(Mutex::new(None)),
             embed_hidden: std::cell::RefCell::new(Vec::new()),
         };
         if bar.dux() || bar.cc_style() == controlcenter::settings::Style::Dux {
@@ -1510,6 +1519,7 @@ impl App for DecBar {
         crate::gfx::clear(pm);
         if self.pill_bar() {
             self.v_draw(pm);
+            self.draw_focus_ring(pm);
             if let Some(f) = &self.fonts {
                 f.trim();
             }
@@ -1585,6 +1595,7 @@ impl App for DecBar {
             }
             Open::None => {}
         }
+        self.draw_focus_ring(pm);
         if let Some(f) = &self.fonts {
             f.trim();
         }
@@ -1906,11 +1917,15 @@ impl App for DecBar {
 
     fn key(&mut self, key: Key) -> bool {
         match key {
-            Key::Escape => self.close(),
+            Key::Escape => self.close() || self.kb_focus.take().is_some(),
         }
     }
 
     fn nav_key(&mut self, key: crate::app::NavKey) -> bool {
+        // the panel's own keyboard mode (applets, popups, menus); the Control Center keeps its routing below
+        if let Some(handled) = self.panel_nav(key) {
+            return handled;
+        }
         if self.cc_style() != controlcenter::settings::Style::Dux || self.open != Open::Control {
             return false;
         }
@@ -1941,11 +1956,12 @@ impl App for DecBar {
                 self.activate(target, rect.x, rect.w, rect.x + rect.w / 2.0);
                 true
             }
+            crate::app::NavKey::Left | crate::app::NavKey::Right => false,
         }
     }
 
     fn wants_keyboard(&self) -> bool {
-        self.open != Open::None
+        self.open != Open::None || self.kb_focus.is_some()
     }
 
     /// While anything is open the pointer is grabbed (X11): the strip's shape has gaps (without a compositor
@@ -2032,6 +2048,9 @@ impl App for DecBar {
     }
 
     fn set_waker(&mut self, waker: Waker) {
+        if let Ok(mut slot) = self.focus_waker.lock() {
+            *slot = Some(waker.clone());
+        }
         self.active.set_waker(waker.clone());
         self.start_watchers(waker);
         // First data: weather (cached or fetched) and a light system snapshot.
@@ -2077,6 +2096,7 @@ impl DecBar {
             crate::theme::frame::publish(&crate::theme::th());
         }
         let mut redraw = self.dux_tick();
+        redraw |= self.take_focus_request();
         redraw |= self.shared.changed.swap(false, Ordering::SeqCst);
         redraw |= self.dux_animating();
         redraw |= self.indicator_tick();

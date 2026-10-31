@@ -10,7 +10,10 @@ use decebal::theme::BAR_HEIGHT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-const USAGE: &str = "decbar --control-center [toggle|open|close] [--corner auto|top-right|top-left|bottom-right|bottom-left]\n\
+const USAGE: &str = "decbar --focus [--role main|bottom]\n\
+Keyboard mode of the running bar: arrows move between applets, Enter or Space opens one, arrows walk its popup or menu,\n\
+Escape leaves.\n\
+decbar --control-center [toggle|open|close] [--corner auto|top-right|top-left|bottom-right|bottom-left]\n\
 Opens the Control Center on its own (any theme, with or without a bar; a second `toggle` closes it): under the menu bar, above the\n\
 Windows taskbar, beside the pill bar or in a screen corner, as the theme's `control_center` settings say. Bind it to a key or a hot corner.\n\
 decbar [--dry-run] [--app ID] [--role main|bottom] [--position POS] [--png FILE [--width N] [--height N] [--open KEY|control]]\n\
@@ -37,6 +40,7 @@ fn main() {
     let mut position: Option<BarPosition> = None;
     let mut panel: Option<String> = None;
     let mut corner: Option<decebal::controlcenter::settings::Corner> = None;
+    let mut focus = false;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -80,6 +84,7 @@ fn main() {
                 position = Some(args.get(i).and_then(|v| BarPosition::parse(v)).unwrap_or_else(|| usage_error("--position is left, right, top, bottom or split")));
             }
             "--dry-run" => decebal::controlcenter::sys::set_dry_run(true),
+            "--focus" => focus = true,
             "--open" => {
                 i += 1;
                 open = args.get(i).cloned();
@@ -95,6 +100,14 @@ fn main() {
 
     if let Some(verb) = panel {
         control_center(&verb, corner);
+        return;
+    }
+    if focus {
+        // keyboard mode of the running bar (bind it to a key, like KDE's "focus the panel" shortcut)
+        if !decebal::single::signal(role.lock_name(), libc::SIGUSR2) {
+            eprintln!("decbar: no bar is running");
+            std::process::exit(1);
+        }
         return;
     }
     // the workspaces applet (and the old `workspaces` switch, which it reads) decides whether they show
@@ -121,6 +134,8 @@ fn main() {
     } else {
         None
     };
+    // before any other thread starts: `decbar --focus` arrives as a signal this thread mask holds for its collector
+    DecBar::init_focus_signal();
 
     // Runs after offscreen/Control Center exits, including when a hidden bar
     // waits without creating a surface. Bounded acknowledgement also covers a
@@ -152,7 +167,7 @@ fn main() {
             }
         }
         let closed = Arc::new(AtomicBool::new(false));
-        let mut bar = DecBar::new(make_active(app_id.clone())).with_frame_publisher().with_workspaces(show_workspaces).with_process(role).with_position(position);
+        let mut bar = DecBar::new(make_active(app_id.clone())).with_focus_signal().with_frame_publisher().with_workspaces(show_workspaces).with_process(role).with_position(position);
         if gated {
             bar = bar.with_gate(closed.clone());
             if role == Process::Main {

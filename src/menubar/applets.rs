@@ -796,6 +796,247 @@ impl DecBar {
     }
 }
 
+/// Something the keyboard can focus on a panel: an applet's item, or one of the classic bar's menu titles.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Focus {
+    Item(Tray),
+    Menu(usize),
+}
+
+impl DecBar {
+    /// What the keyboard walks through, in reading order, with each item's rectangle on the surface.
+    pub(super) fn focus_items(&self) -> Vec<(Focus, (f32, f32, f32, f32))> {
+        if self.pill_bar() {
+            return self.v_layout().items.into_iter().map(|(k, r)| (Focus::Item(k), (r.x, r.y, r.w, r.h))).collect();
+        }
+        let top = self.strip_top();
+        if self.dux() {
+            return self
+                .dux_layout()
+                .items
+                .into_iter()
+                .filter_map(|i| {
+                    let k = match i.kind {
+                        segmented::Kind::Tray(t) => t,
+                        segmented::Kind::Media => Tray::Media,
+                        segmented::Kind::Notifications => Tray::Notifications,
+                        segmented::Kind::Clipboard => Tray::Clipboard,
+                        segmented::Kind::Cpu => Tray::Cpu,
+                        segmented::Kind::Memory => Tray::Memory,
+                        // the transport buttons are reached through the media popup
+                        _ => return None,
+                    };
+                    Some((Focus::Item(k), (i.x, i.y + top, i.w, i.h)))
+                })
+                .collect();
+        }
+        let h = self.bar_bottom();
+        let limit = self.right_start();
+        let mut out: Vec<(Focus, (f32, f32, f32, f32))> = self.left_items().into_iter().map(|(k, s)| (Focus::Item(k), (s.x, top, s.w, h))).collect();
+        out.extend(self.spans().into_iter().enumerate().filter(|(_, s)| s.x + s.w <= limit).map(|(i, s)| (Focus::Menu(i), (s.x, top, s.w, h))));
+        out.extend(self.tray().into_iter().filter(|(k, _)| *k != Tray::Logo).map(|(k, s)| (Focus::Item(k), (s.x, top, s.w, h))));
+        out
+    }
+
+    /// Keyboard mode starts when `decbar --focus` asked for it (the signal thread set the flag). True when it did.
+    pub(super) fn take_focus_request(&mut self) -> bool {
+        if !self.focus_request.swap(false, Ordering::SeqCst) {
+            return false;
+        }
+        self.close();
+        self.kb_focus = (!self.focus_items().is_empty()).then_some(0);
+        true
+    }
+
+    /// Lets `decbar --focus` (SIGUSR2 to this bar) start keyboard mode. Call before any other thread starts: the signal
+    /// is blocked here and collected by a thread of its own.
+    pub fn with_focus_signal(mut self) -> Self {
+        let (flag, waker) = Self::init_focus_signal();
+        self.focus_request = Arc::clone(flag);
+        self.focus_waker = Arc::clone(waker);
+        self
+    }
+
+    /// Blocks SIGUSR2 and starts its collector, once per process (the bar is built again each time it comes back on
+    /// screen). Call before other threads start.
+    pub fn init_focus_signal() -> &'static (Arc<AtomicBool>, Arc<Mutex<Option<Waker>>>) {
+        type Shared = (Arc<AtomicBool>, Arc<Mutex<Option<Waker>>>);
+        static SIGNAL: std::sync::OnceLock<Shared> = std::sync::OnceLock::new();
+        SIGNAL.get_or_init(|| {
+            crate::single::block_signals(&[libc::SIGUSR2]);
+            let shared: Shared = (Arc::new(AtomicBool::new(false)), Arc::new(Mutex::new(None)));
+            let (flag, waker) = (Arc::clone(&shared.0), Arc::clone(&shared.1));
+            let _ = std::thread::Builder::new().name("bar-focus".into()).spawn(move || {
+                while crate::single::wait_signal(&[libc::SIGUSR2]) == Some(libc::SIGUSR2) {
+                    flag.store(true, Ordering::SeqCst);
+                    if let Some(w) = waker.lock().ok().and_then(|w| w.clone()) {
+                        w.wake();
+                    }
+                }
+            });
+            shared
+        })
+    }
+
+    /// Starts keyboard mode directly (tests).
+    #[cfg(test)]
+    pub(super) fn focus_panel(&mut self) {
+        self.focus_request.store(true, Ordering::SeqCst);
+        self.take_focus_request();
+    }
+
+    /// Enter on a focused item does what a click on it does, through the same typed actions.
+    fn activate_focus(&mut self, f: Focus, r: (f32, f32, f32, f32)) -> bool {
+        let (cx, cy) = (r.0 + r.2 / 2.0, r.1 + r.3 / 2.0);
+        match f {
+            Focus::Menu(i) => {
+                self.close();
+                self.open_menu(i);
+                self.hover_row = self.menus.get(i).and_then(|m| m.items.iter().position(|it| !it.separator && self.runner.available(it.action)));
+                true
+            }
+            Focus::Item(Tray::Workspaces) => {
+                self.toggle_popup(Tray::Workspaces);
+                true
+            }
+            Focus::Item(Tray::Indicator(key)) => match self.indicator_press(key, Button::Left, cx.round() as i32, cy.round() as i32) {
+                indicators::IndicatorPress::Menu => {
+                    self.open_popup(Tray::Indicator(key));
+                    true
+                }
+                indicators::IndicatorPress::Handled => true,
+                indicators::IndicatorPress::Ignored => false,
+            },
+            Focus::Item(kind) if self.pill_bar() => self.v_press(kind, None, cx, cy),
+            Focus::Item(kind @ (Tray::Clock | Tray::Window)) if self.dux() => {
+                // the Dux clock and window open the dashboard, as their clicks do
+                self.close();
+                let _ = kind;
+                self.dashboard(Span { x: r.0, w: r.2 });
+                true
+            }
+            Focus::Item(kind) => self.applet_press(kind, r, Button::Left),
+        }
+    }
+
+    /// The panel's keyboard: arrows between applets, Enter to activate; inside a popup or menu the arrows move between
+    /// its rows (Left goes back in the application menu, Left/Right step a slider or the calendar). `None`: not the
+    /// panel's key (the Control Center routes its own).
+    pub(super) fn panel_nav(&mut self, key: crate::app::NavKey) -> Option<bool> {
+        use crate::app::NavKey as K;
+        match self.open {
+            Open::Control => None,
+            Open::Popup(kind) => {
+                if let Some(c) = self.calendar.as_mut() {
+                    return Some(match key {
+                        K::Left | K::Up => {
+                            c.shift(-1);
+                            true
+                        }
+                        K::Right | K::Down => {
+                            c.shift(1);
+                            true
+                        }
+                        K::Enter => false,
+                    });
+                }
+                let p = self.popup.as_ref()?;
+                let rows: Vec<usize> = (0..p.rows.len()).filter(|i| p.rows[*i].interactive()).collect();
+                if rows.is_empty() {
+                    return Some(false);
+                }
+                let at = self.popup_hover.and_then(|h| rows.iter().position(|r| *r == h));
+                let row = self.popup_hover.and_then(|h| p.rows.get(h)).cloned();
+                match key {
+                    K::Up | K::Down => {
+                        let step: i32 = if key == K::Up { -1 } else { 1 };
+                        let next = at.map_or(if step > 0 { 0 } else { rows.len() - 1 }, |i| (i as i32 + step).rem_euclid(rows.len() as i32) as usize);
+                        self.popup_hover = Some(rows[next]);
+                        Some(true)
+                    }
+                    K::Left | K::Right => {
+                        let up = if key == K::Right { -1.0 } else { 1.0 };
+                        match row.map(|r| r.act) {
+                            Some(Act::VolumeSlider) => Some(self.applet_scroll(Tray::Audio, up)),
+                            Some(Act::BrightnessSlider) => Some(self.applet_scroll(Tray::Brightness, up)),
+                            _ if kind == Tray::AppMenu && key == K::Left && self.app_menu_page.is_some() => {
+                                self.run_act(Act::MenuBack);
+                                Some(true)
+                            }
+                            _ => Some(false),
+                        }
+                    }
+                    K::Enter => {
+                        let Some(row) = row else { return Some(false) };
+                        if matches!(row.kind, popup::Kind::Slider(_)) {
+                            return Some(false);
+                        }
+                        self.run_act(row.act);
+                        // a new page (the application menu's): start on its first row
+                        if let Some(p) = self.popup.as_ref() {
+                            if self.popup_hover.is_none_or(|h| h >= p.rows.len() || !p.rows[h].interactive()) {
+                                self.popup_hover = (0..p.rows.len()).find(|i| p.rows[*i].interactive());
+                            }
+                        }
+                        Some(true)
+                    }
+                }
+            }
+            Open::Menu(i) => {
+                let Some(menu) = self.menus.get(i) else { return Some(false) };
+                let rows: Vec<usize> = (0..menu.items.len()).filter(|j| !menu.items[*j].separator).collect();
+                match key {
+                    K::Up | K::Down => {
+                        let at = self.hover_row.and_then(|h| rows.iter().position(|r| *r == h));
+                        let step: i32 = if key == K::Up { -1 } else { 1 };
+                        let next = at.map_or(0, |a| (a as i32 + step).rem_euclid(rows.len().max(1) as i32) as usize);
+                        self.hover_row = rows.get(next).copied();
+                        Some(true)
+                    }
+                    K::Left | K::Right => {
+                        let n = self.menus.len() as i32;
+                        let next = (i as i32 + if key == K::Left { -1 } else { 1 }).rem_euclid(n.max(1)) as usize;
+                        self.open_menu(next);
+                        self.hover_row = self.menus.get(next).and_then(|m| m.items.iter().position(|it| !it.separator));
+                        Some(true)
+                    }
+                    K::Enter => Some(self.hover_row.is_some_and(|row| self.run_menu_item(i, row))),
+                }
+            }
+            Open::None => {
+                let i = self.kb_focus?;
+                let items = self.focus_items();
+                if items.is_empty() {
+                    self.kb_focus = None;
+                    return Some(false);
+                }
+                let i = i.min(items.len() - 1);
+                match key {
+                    K::Left | K::Up => self.kb_focus = Some((i + items.len() - 1) % items.len()),
+                    K::Right | K::Down => self.kb_focus = Some((i + 1) % items.len()),
+                    K::Enter => {
+                        let (f, r) = items[i];
+                        let done = self.activate_focus(f, r);
+                        if let Some(p) = self.popup.as_ref() {
+                            self.popup_hover = (0..p.rows.len()).find(|j| p.rows[*j].interactive());
+                        }
+                        return Some(done);
+                    }
+                }
+                Some(true)
+            }
+        }
+    }
+
+    /// The focus ring around the focused item (the keyboard's place on the panel).
+    pub(super) fn draw_focus_ring(&mut self, pm: &mut Pixmap) {
+        let Some(i) = self.kb_focus else { return };
+        let Some((_, r)) = self.focus_items().get(i).copied() else { return };
+        let th = crate::theme::th();
+        stroke_rounded(pm, r.0 + 1.0, r.1 + 1.0, (r.2 - 2.0).max(1.0), (r.3 - 2.0).max(1.0), 6.0_f32.min(r.2.min(r.3) / 2.0), th.accent.color(1.0), 2.0);
+    }
+}
+
 /// What a rendered logo depends on.
 pub(super) type LogoKey = (crate::panel::branding::Logo, u32, (u8, u8, u8), bool);
 
@@ -1285,6 +1526,74 @@ pub(super) mod tests {
         let rows = bar.popup.clone().unwrap().rows;
         assert!(rows.iter().any(|r| r.act == popup::Act::MenuBack));
         assert!(rows.iter().any(|r| matches!(r.act, popup::Act::MenuRun(2, _))));
+        reset();
+    }
+
+    #[test]
+    fn the_keyboard_reaches_every_applet_and_walks_its_popup() {
+        use crate::app::{App, Key, NavKey};
+        for style in STYLES {
+            for edge in Edge::ALL {
+                let mut bar = fixture(style, edge, AppletSet::all(), 1600);
+                assert!(!bar.wants_keyboard(), "the bar never takes the keyboard by itself");
+                bar.focus_panel();
+                assert!(bar.wants_keyboard() && bar.kb_focus == Some(0), "{} {}", style.key(), edge.as_str());
+                let n = bar.focus_items().len();
+                assert!(n > 0);
+                let mut seen = AppletSet::EMPTY;
+                for i in 0..n {
+                    assert_eq!(bar.kb_focus, Some(i));
+                    match bar.focus_items()[i].0 {
+                        Focus::Item(k) => {
+                            if let Some(id) = applet_of(k) {
+                                seen.set(id, true);
+                            }
+                        }
+                        Focus::Menu(_) => seen.set(A::AppMenu, true),
+                    }
+                    bar.nav_key(NavKey::Right);
+                }
+                assert_eq!(bar.kb_focus, Some(0), "it wraps");
+                bar.nav_key(NavKey::Left);
+                assert_eq!(bar.kb_focus, Some(n - 1));
+                // every applet drawn is a keyboard stop (the overflow cell stands for the rest)
+                let drawn = items(&bar).iter().filter_map(|(k, _)| applet_of(*k)).fold(AppletSet::EMPTY, |s, id| s.with(id, true));
+                assert_eq!(seen.intersect(drawn), drawn, "{} {}", style.key(), edge.as_str());
+                // Enter on a popup applet opens it with the first row focused, the arrows walk it, Escape closes it and then leaves
+                let at = bar.focus_items().iter().position(|(f, _)| *f == Focus::Item(Tray::Audio)).expect("sound");
+                bar.kb_focus = Some(at);
+                assert!(bar.nav_key(NavKey::Enter));
+                assert_eq!(bar.open, Open::Popup(Tray::Audio), "{} {}", style.key(), edge.as_str());
+                let first = bar.popup_hover.expect("a row is focused");
+                bar.nav_key(NavKey::Down);
+                assert_ne!(bar.popup_hover, Some(first));
+                bar.nav_key(NavKey::Up);
+                assert_eq!(bar.popup_hover, Some(first));
+                assert!(bar.key(Key::Escape) && bar.open == Open::None && bar.kb_focus.is_some());
+                assert!(bar.key(Key::Escape) && bar.kb_focus.is_none() && !bar.wants_keyboard());
+                let mut pm = Pixmap::new(bar.width, bar.height.max(1)).unwrap();
+                bar.draw(&mut pm);
+            }
+        }
+        reset();
+    }
+
+    #[test]
+    fn the_keyboard_opens_menus_and_runs_their_items_on_the_classic_bar() {
+        use crate::app::{App, NavKey};
+        let mut bar = fixture(Renderer::MenuBar, Edge::Bottom, AppletSet::of(&[A::AppMenu, A::Clock]), 1600);
+        bar.focus_panel();
+        let at = bar.focus_items().iter().position(|(f, _)| matches!(f, Focus::Menu(1))).expect("the app menu title");
+        bar.kb_focus = Some(at);
+        bar.nav_key(NavKey::Enter);
+        assert_eq!(bar.open, Open::Menu(1));
+        assert!(bar.hover_row.is_some());
+        let d = bar.dropdown(1).unwrap();
+        assert!(d.y + d.h <= bar.strip_top() + 0.5, "a bottom bar's menu opens upwards");
+        bar.nav_key(NavKey::Right);
+        assert_eq!(bar.open, Open::Menu(2), "Right moves to the next menu");
+        bar.nav_key(NavKey::Down);
+        assert!(bar.hover_row.is_some());
         reset();
     }
 

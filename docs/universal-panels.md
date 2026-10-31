@@ -92,6 +92,15 @@ Each renderer places applets in its own reading order (the menu bar keeps menus 
 end; the rail keeps head, window and tail pills; Dux keeps its three layout groups, and an applet enabled outside the Dux lists
 joins the group it belongs to (launcher/menus/workspaces/window/tasks start, media/clock/weather centre, the rest end); the taskbar keeps Start/search/tasks then tray/clock). Applet order is not configurable yet.
 
+### Keyboard
+
+`decbar --focus` (bind it to a key, as KDE binds "focus the panel") puts the running bar into keyboard mode: a focus
+ring sits on the first applet, Left/Right (or Up/Down) move it in reading order, Enter or Space does what a click does
+(the same typed action, no synthesized pointer events), the arrows walk the opened popup's rows, Left/Right step its
+slider, the calendar's month or (in the application menu) back, and move between the classic bar's menus; Escape closes
+what is open, then leaves keyboard mode. The bar never takes the keyboard by itself. The Control Center keeps its own
+keyboard routing. The taskbar's own keyboard mode is not done yet (its popups and menus take Up/Down/Enter/Escape).
+
 ### Workers
 
 Turning an applet off stops the work only it needed: the weather fetch (`weather`), the MPRIS subscription

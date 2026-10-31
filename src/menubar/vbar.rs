@@ -1164,7 +1164,7 @@ impl DecBar {
     }
 
     /// A press on a rail item other than the workspaces, the indicators and the special buttons.
-    fn v_press(&mut self, kind: Tray, ws: Option<usize>, x: f32, y: f32) -> bool {
+    pub(super) fn v_press(&mut self, kind: Tray, ws: Option<usize>, x: f32, y: f32) -> bool {
         let skin = self.v_skin();
         let r = self.v_layout().item(kind).map_or((x, y, 0.0, 0.0), |r| (r.x, r.y, r.w, r.h));
         if skin != Skin::Pill {

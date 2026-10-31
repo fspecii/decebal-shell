@@ -325,6 +325,7 @@ impl App for Overlay {
                 self.sync();
                 true
             }
+            crate::app::NavKey::Left | crate::app::NavKey::Right => false,
         }
     }
 

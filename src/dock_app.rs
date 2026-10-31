@@ -812,7 +812,7 @@ impl App for DockApp {
             (Some(m), NavKey::Up) => return m.menu.step(-1),
             (Some(m), NavKey::Down) => return m.menu.step(1),
             (Some(m), NavKey::Enter) => m.menu.activate_hovered(),
-            (None, _) => return false,
+            (Some(_), NavKey::Left | NavKey::Right) | (None, _) => return false,
         };
         self.finish_menu(out)
     }

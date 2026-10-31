@@ -132,7 +132,7 @@ impl Row {
         self.enabled = on;
         self
     }
-    fn interactive(&self) -> bool {
+    pub(super) fn interactive(&self) -> bool {
         self.enabled && matches!(self.kind, Kind::Item | Kind::Slider(_)) && self.act != Act::None
     }
 }

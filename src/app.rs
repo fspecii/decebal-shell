@@ -25,6 +25,9 @@ pub enum NavKey {
     Up,
     Down,
     Enter,
+    /// Along a horizontal panel (or between menus).
+    Left,
+    Right,
 }
 
 /// A rectangle in surface coordinates that should receive pointer input.
