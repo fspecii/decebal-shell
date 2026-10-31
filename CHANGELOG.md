@@ -13,6 +13,7 @@
 
 ## Unreleased
 
+- Settings wraps long labels and URLs within narrow cards without reducing text size. Keyboard focus follows controls when content loads, while explicit scrolling stays under user control; oversized rows no longer oscillate between redraws.
 - Taskbar Start sends the clicked button's position and panel edge to the launcher, including side panels, fractional scale and floating gaps.
 - Icon asset packs can convert supported Deepin DSG/DCI containers natively into PNG themes with pinned source provenance and visible per-icon refusals. Conflicting source files are refused before conversion; palette/multilayer containers remain unsupported. This adds converter infrastructure, not an automatic Nirvana download (docs/desktop-asset-packs.md).
 - Installed theme packages (including their parents, logos and fonts) are found wherever `make install` or a package put them: `$XDG_DATA_HOME`, then `$XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`), after your own `~/.config/decebal/themes`. `PREFIX=/usr/local` and `PREFIX=$HOME/.local` installs used to be invisible; `DECEBAL_SYSTEM_THEMES` still names the one folder to use. Theme previews see the same folders as the shell (docs/theme-engine.md).
