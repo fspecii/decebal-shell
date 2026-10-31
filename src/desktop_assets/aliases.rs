@@ -191,11 +191,13 @@ pub fn check_dir_graph(st: &Staged, pack: &str) -> Result<usize, String> {
     id("", &mut index, &mut names);
     let mut edges: Vec<(usize, usize)> = Vec::new();
     let mut links = 0;
+    // Having a node ID does not mean its parent containment edge was emitted.
+    let mut connected = std::collections::HashSet::new();
     // every folder: the Dir nodes and the parents of every node, with their containment edges
     for (k, node) in st.nodes.iter() {
         let Some(rel) = under(k, pack).filter(|r| !r.is_empty()) else { continue };
         let mut d = if matches!(node, Node::Dir) { rel.to_string() } else { parent(rel) };
-        while !d.is_empty() && !index.contains_key(&d) {
+        while !d.is_empty() && connected.insert(d.clone()) {
             let (child, up) = (id(&d, &mut index, &mut names), parent(&d));
             let p = id(&up, &mut index, &mut names);
             edges.push((p, child));
@@ -466,6 +468,18 @@ mod tests {
         };
         let (r, _s) = run(&src, &sp, &Limits::default());
         assert!(r.map(|_| ()).unwrap_err().contains("folder links form a cycle"));
+    }
+
+    #[test]
+    fn deeply_implicit_parent_edges_are_included_in_folder_cycle_checks() {
+        // No archive directory entries: every ancestor is inferred from files.
+        let pairs = aliases(&[("a/x/y/to-b", "b"), ("b/to-a", "a")]);
+        let (r, scratch) = run(&real(&["a/x/y", "b"]), &no_text(pairs), &Limits::default());
+        assert!(r.map(|_| ()).unwrap_err().contains("folder links form a cycle"));
+        assert_eq!(std::fs::read_dir(scratch.path().join("out")).unwrap().count(), 0);
+        // The same implicit chain is valid when its return edge is removed.
+        let (r, _) = run(&real(&["a/x/y", "b"]), &no_text(aliases(&[("a/x/y/to-b", "b")])), &Limits::default());
+        r.unwrap();
     }
 
     #[test]
