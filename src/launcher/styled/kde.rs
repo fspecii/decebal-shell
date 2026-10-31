@@ -43,6 +43,7 @@ const ROW_H: f32 = 28.0;
 const MENU_W: f32 = 168.0;
 
 struct Frame {
+    card: Rect,
     header: Rect,
     search: Rect,
     sidebar: Rect,
@@ -60,7 +61,7 @@ fn frame(r: Rect, s: f32) -> Frame {
     let content = Rect { x: r.x + side_w, y: body.y + 6.0 * s, w: r.w - side_w - 6.0 * s, h: body.h - 12.0 * s };
     let gear = 32.0 * s;
     let search = Rect { x: content.x, y: header.y + (header.h - 32.0 * s) / 2.0, w: (content.w - gear - 8.0 * s).max(1.0), h: 32.0 * s };
-    Frame { header, search, sidebar, content, footer }
+    Frame { card: r, header, search, sidebar, content, footer }
 }
 
 /// The Applications sidebar: Favorites, All Applications, a separator, then the menu categories. Recent applications are not here any more: Kickoff
@@ -144,34 +145,55 @@ fn button_w(sys: Sys) -> f32 {
 
 struct Footer {
     tabs: [Rect; 2],
+    /// The tabs show only their icons (the card is too narrow for the captions).
+    tabs_icon_only: bool,
     buttons: Vec<(Sys, Rect)>,
     session: Option<Rect>,
-    menu: Vec<(Sys, Rect)>,
-    popup: Option<Rect>,
+    /// The actions in the Session menu, in order.
+    menu_items: Vec<Sys>,
+    /// The open Session menu: its frame, the rows' area inside it and the row height. Rows beyond the visible ones scroll.
+    popup: Option<(Rect, Rect, f32)>,
 }
 
 /// LeaveButtons.qml's layout: the configured actions as captioned buttons, the rest behind the Session button (icon only when the caption does not fit),
-/// everything behind it when even the icon-only layout does not fit.
+/// everything behind it when even the icon-only layout does not fit. Every size is bounded by the card it sits in, so a small physical screen at a high
+/// display scale never pushes a control outside it: the tabs lose their captions and then shrink, and the Session menu keeps to the room above its
+/// button and scrolls.
 fn footer(m: &Model, f: &Frame, s: f32) -> Footer {
     let ft = f.footer;
-    let tabs = [0.0, 1.0].map(|i| Rect { x: ft.x + (TAB_X + i * (TAB_W + TAB_GAP)) * s, y: ft.y, w: TAB_W * s, h: ft.h });
-    let avail = ft.right() - 4.0 * s - tabs[1].right() - TAB_GAP * s;
+    let left = (TAB_X * s).min(ft.w / 20.0);
+    let right_margin = (4.0 * s).min(ft.w / 40.0);
+    let gap = (TAB_GAP * s).min(ft.w / 40.0);
+    let session_w = (ICON_BTN_W * s).min(ft.w / 5.0).max(1.0);
+    // what is left for the tabs when the Session button is there
+    let room = (ft.w - left - right_margin - session_w - gap - gap).max(2.0);
+    let full = TAB_W * s;
+    let icon_only_w = 34.0 * s;
+    let (tab_w, tabs_icon_only) = if 2.0 * full + gap <= room {
+        (full, false)
+    } else if 2.0 * icon_only_w + gap <= room {
+        (icon_only_w, true)
+    } else {
+        (((room - gap) / 2.0).max(1.0), true)
+    };
+    let tabs = [0.0, 1.0].map(|i| Rect { x: ft.x + left + i * (tab_w + gap), y: ft.y, w: tab_w, h: ft.h });
+    let avail = ft.right() - right_margin - tabs[1].right() - gap;
     let primary: Vec<Sys> = system::BUTTONS.into_iter().filter(|x| sys_valid(m, *x)).collect();
     let rest: Vec<Sys> = system::ALL.into_iter().filter(|x| sys_valid(m, *x) && !system::BUTTONS.contains(x)).collect();
     let captioned: f32 = primary.iter().map(|b| button_w(*b)).sum::<f32>() * s;
-    let overflow_w = ICON_BTN_W * s;
-    let fits = if rest.is_empty() { captioned <= avail } else { captioned + overflow_w + OVERFLOW_GAP * s <= avail };
+    let overflow_gap = (OVERFLOW_GAP * s).min(ft.w / 40.0);
+    let fits = if rest.is_empty() { captioned <= avail } else { captioned + session_w + overflow_gap <= avail };
     let (buttons, in_menu) = if fits { (primary, rest) } else { (Vec::new(), system::ALL.into_iter().filter(|x| sys_valid(m, *x)).collect()) };
     let bh = (32.0 * s).min((ft.h - 4.0 * s).max(1.0));
     let by = ft.y + (ft.h - bh) / 2.0;
-    let mut right = ft.right() - 4.0 * s;
+    let mut right = ft.right() - right_margin;
     let session = (!in_menu.is_empty()).then(|| {
-        let r = Rect { x: right - overflow_w, y: by, w: overflow_w, h: bh };
-        right = r.x - OVERFLOW_GAP * s;
+        let r = Rect { x: right - session_w, y: by, w: session_w, h: bh };
+        right = r.x - overflow_gap;
         r
     });
     if session.is_none() {
-        right = ft.right() - 8.0 * s;
+        right = ft.right() - (8.0 * s).min(ft.w / 20.0);
     }
     let mut rects = Vec::new();
     for b in buttons.iter().rev() {
@@ -180,18 +202,24 @@ fn footer(m: &Model, f: &Frame, s: f32) -> Footer {
         right -= w;
     }
     rects.reverse();
-    // PlasmaExtras.Menu, top-posed and right-aligned to the Session button; it stays inside the card, which is the whole surface
-    let (mut menu, mut popup) = (Vec::new(), None);
+    // PlasmaExtras.Menu, top-posed and right-aligned to the Session button, inside the card
+    let mut popup = None;
     if let (Some(sr), true) = (session, menu_open(m)) {
-        let (w, row, pad) = (MENU_W * s, ROW_H * s, 4.0 * s);
-        let h = in_menu.len() as f32 * row + 2.0 * pad;
-        let pr = Rect { x: (sr.right() - w).max(f.footer.x + 4.0 * s), y: sr.y - h - 2.0 * s, w, h };
-        for (i, x) in in_menu.iter().enumerate() {
-            menu.push((*x, Rect { x: pr.x + pad, y: pr.y + pad + i as f32 * row, w: w - 2.0 * pad, h: row }));
-        }
-        popup = Some(pr);
+        let pad = (4.0 * s).min(f.card.w / 40.0);
+        let edge = (4.0 * s).min(f.card.w / 40.0);
+        let w = (MENU_W * s).min((f.card.w - 2.0 * edge).max(1.0));
+        let top = f.card.y + edge;
+        let room_h = (sr.y - 2.0 * s.min(2.0) - top).max(2.0 * pad + 1.0);
+        let want_row = ROW_H * s;
+        // as many rows as the room above the button holds (at least one, squeezed when not even one fits)
+        let rows = ((room_h - 2.0 * pad) / want_row).floor().clamp(1.0, in_menu.len() as f32);
+        let row = want_row.min((room_h - 2.0 * pad) / rows).max(1.0);
+        let h = rows * row + 2.0 * pad;
+        let x = (sr.right() - w).clamp(f.card.x + edge, (f.card.right() - edge - w).max(f.card.x + edge));
+        let pr = Rect { x, y: (sr.y - 2.0 * s.min(2.0) - h).max(top), w, h };
+        popup = Some((pr, Rect { x: pr.x + pad, y: pr.y + pad, w: pr.w - 2.0 * pad, h: rows * row }, row));
     }
-    Footer { tabs, buttons: rects, session, menu, popup }
+    Footer { tabs, tabs_icon_only, buttons: rects, session, menu_items: in_menu, popup }
 }
 
 /// The apps of the Places page behind a sidebar row, and its documents.
@@ -233,7 +261,7 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
         Zone::columns("apps", places_targets(m), f.content, 1, 44.0 * s, false)
     } else {
         match shown(m) {
-            View::Favorites => Zone::grid("apps", Model::app_targets(&m.cat.favorites), f.content, (110.0 * s, 104.0 * s), false, true),
+            View::Favorites => Zone::grid("apps", Model::app_targets(&m.cat.favorites), f.content, ((110.0 * s).min(f.content.w.max(1.0)), 104.0 * s), false, true),
             View::All => Zone::columns("apps", m.lettered(&m.cat.all()), f.content, 1, 44.0 * s, false),
             v => Zone::columns("apps", Model::app_targets(&m.apps_of(v)), f.content, 1, 44.0 * s, false),
         }
@@ -246,8 +274,8 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     row.extend(fo.session.map(|rect| (Target::Style(SESSION, 0), rect)));
     // an open Session menu is first so that the pointer finds it before the lists it covers
     let mut zones = Vec::new();
-    if !fo.menu.is_empty() {
-        zones.push(Zone::fixed("menu", fo.menu.iter().map(|(sys, rect)| (Target::Style(MENU, sys_index(*sys)), *rect)).collect()));
+    if let Some((_, inner, row)) = fo.popup {
+        zones.push(Zone::columns("menu", fo.menu_items.iter().map(|sys| Target::Style(MENU, sys_index(*sys))).collect(), inner, 1, row, false));
     }
     zones.extend([content, cats, Zone::fixed("footer", row), Zone::fixed("actions", vec![(Target::Settings, settings)])]);
     zones
@@ -311,6 +339,7 @@ pub fn activate(m: &mut Model, kind: u8, i: u16) -> Outcome {
             let open = !menu_open(m);
             m.ui.insert("kde.menu", open as usize);
             m.ui.insert("kde.confirm", 0);
+            m.offset.insert("menu", 0);
             if open {
                 m.zone = "menu";
                 m.sel.insert("menu", 0);
@@ -491,11 +520,15 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
                 ("footer", Target::Style(TAB, k)) => {
                     let (title, icon_name) = if k == 0 { ("Applications", "applications-all-symbolic") } else { ("Places", "compass") };
                     hl(p, rect, focused, false);
-                    let icon = 22.0 * s;
-                    let content = icon + 4.0 * s + p.measure(title, 13.0 * s, Weight::Regular);
-                    let x0 = rect.x + (rect.w - content) / 2.0;
-                    tinted(p, icon_name, x0, cy - icon / 2.0, icon, th.text);
-                    p.text(title, x0 + icon + 4.0 * s, cy, 13.0 * s, Weight::Regular, ink, rect.w);
+                    let icon = (22.0 * s).min(rect.w).min(rect.h);
+                    if fo.tabs_icon_only {
+                        tinted(p, icon_name, rect.x + (rect.w - icon) / 2.0, cy - icon / 2.0, icon, th.text);
+                    } else {
+                        let content = icon + 4.0 * s + p.measure(title, 13.0 * s, Weight::Regular);
+                        let x0 = rect.x + (rect.w - content) / 2.0;
+                        tinted(p, icon_name, x0, cy - icon / 2.0, icon, th.text);
+                        p.text(title, x0 + icon + 4.0 * s, cy, 13.0 * s, Weight::Regular, ink, rect.w);
+                    }
                     // TabBar.Footer: the active tab carries Breeze's accent line along the top of the footer
                     if tab(m) == k as usize {
                         p.fill(Rect { x: rect.x, y: f.footer.y - 1.0 * s, w: rect.w, h: 3.0 * s }, 0.0, th.accent_c());
@@ -535,22 +568,29 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
         p.text_center(msg, f.content.x + f.content.w / 2.0, f.content.y + 40.0 * s, 13.0 * s, Weight::Regular, sub, f.content.w - 24.0 * s);
     }
 
-    // The Session menu, over everything else.
-    if let Some(popup) = fo.popup {
+    // The Session menu, over everything else: the rows the zone shows, a scrollbar when there are more.
+    if let (Some((popup, _, _)), Some(z)) = (fo.popup, zones.iter().find(|z| z.id == "menu")) {
         p.shadow(popup, 4.0 * s, 0.6);
         p.fill(popup, 4.0 * s, p.base(th.popup, 1.0));
         p.stroke(popup, 4.0 * s, th.ink(0.2), 1.0);
-        if let Some(z) = zones.iter().find(|z| z.id == "menu") {
-            for (i, (sys, rect)) in fo.menu.iter().enumerate() {
-                let focused = m.focused("menu", i);
-                hl(p, *rect, focused, false);
-                let cy = rect.y + rect.h / 2.0;
-                let icon = 22.0 * s;
-                tinted(p, sys.icon(), rect.x + 6.0 * s, cy - icon / 2.0, icon, th.text);
-                let caption = if armed(m) == Some(*sys) { format!("{}?", sys.label()) } else { sys.label().to_string() };
-                p.text(&caption, rect.x + 8.0 * s + icon + 4.0 * s, cy, 13.0 * s, Weight::Regular, ink, rect.w - icon - 20.0 * s);
-            }
-            debug_assert_eq!(z.items.len(), fo.menu.len());
+        let offset = m.offset("menu");
+        for i in z.visible(offset) {
+            let (Some(rect), Target::Style(MENU, k)) = (z.rect(i, offset), z.items[i]) else { continue };
+            let Some(&sys) = system::ALL.get(k as usize) else { continue };
+            hl(p, rect, m.focused("menu", i), false);
+            let cy = rect.y + rect.h / 2.0;
+            let icon = (22.0 * s).min(rect.h);
+            tinted(p, sys.icon(), rect.x + 6.0 * s.min(rect.w / 12.0), cy - icon / 2.0, icon, th.text);
+            let caption = if armed(m) == Some(sys) { format!("{}?", sys.label()) } else { sys.label().to_string() };
+            let tx = rect.x + 10.0 * s.min(rect.w / 12.0) + icon;
+            p.text(&caption, tx, cy, 13.0 * s, Weight::Regular, ink, (rect.right() - tx - 4.0 * s).max(1.0));
+        }
+        if z.items.len() > z.visible(offset).len() {
+            let a = z.area();
+            let (n, shown) = (z.items.len() as f32, z.per_view() as f32);
+            let track = Rect { x: a.right() - 3.0 * s, y: a.y, w: 2.0 * s, h: a.h };
+            p.fill(track, s, th.ink(0.12));
+            p.fill(Rect { y: a.y + a.h * (z.first(offset) as f32 / n), h: (a.h * shown / n).max(4.0 * s), ..track }, s, th.ink(0.45));
         }
     }
 }

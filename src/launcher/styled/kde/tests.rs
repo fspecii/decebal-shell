@@ -345,3 +345,123 @@ fn capture(dark: bool) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------- physical small screens at high display scales
+
+use crate::launcher::placement::{Anchor, Edge};
+
+fn on_edge(edge: Edge, screen: (u32, u32), t: f32) -> Anchor {
+    let (w, h) = (screen.0 as f32, screen.1 as f32);
+    let point = match edge {
+        Edge::Top => (w * 0.1, t / 2.0),
+        Edge::Bottom => (w * 0.1, h - t / 2.0),
+        Edge::Left => (t / 2.0, h * 0.9),
+        Edge::Right => (w - t / 2.0, h * 0.9),
+    };
+    Anchor { edge, point: Some(point), thickness: t }
+}
+
+/// A launcher opened on a PHYSICAL screen of this size at this display scale (the card is placed and shrunk by `placement`, not scaled from a logical size).
+fn physical(screen: (u32, u32), scale: f32, edge: Edge) -> super::super::Styled {
+    let mut st = styled(LauncherStyle::Kde, 40);
+    st.full = true;
+    st.scale = scale;
+    st.anchor = Some(on_edge(edge, screen, 32.0 * scale));
+    st.m.ui.insert("kde.hibernate", 1);
+    st.resize(screen.0, screen.1);
+    st
+}
+
+fn inside_card(st: &super::super::Styled, r: &Rect) -> bool {
+    r.x >= st.card.x - 0.5 && r.y >= st.card.y - 0.5 && r.right() <= st.card.right() + 0.5 && r.bottom() <= st.card.bottom() + 0.5
+}
+
+#[test]
+fn on_small_physical_screens_at_every_scale_and_edge_every_footer_control_fits_hits_and_is_reachable() {
+    for screen in [(320u32, 240u32), (400, 300)] {
+        for scale in [1.0f32, 1.25, 2.0] {
+            for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+                let ctx = format!("{screen:?} @{scale} {edge:?}");
+                let mut st = physical(screen, scale, edge);
+                assert!(inside_card(&st, &Rect { x: 0.0, y: 0.0, w: screen.0 as f32, h: screen.1 as f32 }) || st.card.w > 0.0, "{ctx}");
+                assert!(st.card.right() <= screen.0 as f32 + 0.5 && st.card.bottom() <= screen.1 as f32 + 0.5 && st.card.x >= -0.5 && st.card.y >= -0.5, "card {:?} leaves the screen: {ctx}", st.card);
+                // the footer row: inside the card, no two controls overlap, and the pointer finds each where it is drawn
+                let footer = zone(&st, "footer").clone();
+                let rects: Vec<Rect> = (0..footer.items.len()).map(|i| footer.rect(i, 0).unwrap()).collect();
+                for (i, r) in rects.iter().enumerate() {
+                    assert!(inside_card(&st, r), "footer item {i} {r:?} leaves the card {:?}: {ctx}", st.card);
+                    assert!(r.w >= 1.0 && r.h >= 1.0, "footer item {i} has no area: {ctx}");
+                    for (j, o) in rects.iter().enumerate().skip(i + 1) {
+                        assert!(r.right() <= o.x + 0.5 || o.right() <= r.x + 0.5, "footer items {i} and {j} overlap: {r:?} {o:?} {ctx}");
+                    }
+                    let (x, y) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+                    assert_eq!(st.hit(x, y).map(|h| (h.0, h.1)), Some(("footer", i)), "the pointer misses footer item {i}: {ctx}");
+                }
+                // every zone's visible items stay inside the card
+                for z in &st.zones {
+                    for i in z.visible(st.m.offset(z.id)) {
+                        assert!(inside_card(&st, &z.rect(i, st.m.offset(z.id)).unwrap()), "{} item {i} leaves the card: {ctx}", z.id);
+                    }
+                }
+                // keyboard: Right walks the whole footer row, then Left comes back
+                st.m.zone = "footer";
+                st.m.sel.insert("footer", 0);
+                for k in 1..footer.items.len() {
+                    st.key(&key(Key::Right));
+                    assert_eq!(st.m.sel("footer"), k, "Right from {} does not reach the next footer item: {ctx}", k - 1);
+                }
+                // the Session menu: it keeps to the room above the button, scrolls, and every row can be reached and run
+                let session = footer.items.iter().position(|t| matches!(t, Target::Style(SESSION, _))).expect("a session button");
+                st.m.sel.insert("footer", session);
+                st.key(&key(Key::Enter));
+                let menu = zone(&st, "menu").clone();
+                let button = rects[session];
+                let area = menu.area();
+                assert!(inside_card(&st, &area) && area.bottom() <= button.y + 0.5, "menu rows {area:?} are not above the button {button:?} inside the card: {ctx}");
+                assert!(menu.visible(0).len() >= 1 && menu.items.len() == 6, "{ctx}");
+                for k in 0..menu.items.len() {
+                    assert_eq!(st.m.sel("menu"), k, "{ctx}");
+                    let shown = zone(&st, "menu");
+                    let r = shown.rect(k, st.m.offset("menu")).unwrap_or_else(|| panic!("menu row {k} is not visible after the focus reached it: {ctx}"));
+                    assert!(inside_card(&st, &r), "row {k} {r:?}: {ctx}");
+                    let (x, y) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+                    assert_eq!(st.hit(x, y).map(|h| h.0), Some("menu"), "the menu does not take its own row {k}: {ctx}");
+                    if k + 1 < menu.items.len() {
+                        st.key(&key(Key::Down));
+                    }
+                }
+                // a wheel notch over the menu scrolls it when it has more rows than room
+                let before = st.m.offset("menu");
+                if menu.visible(0).len() < menu.items.len() {
+                    let a = menu.area();
+                    st.m.offset.insert("menu", 0);
+                    st.scroll(a.x + a.w / 2.0, a.y + a.h / 2.0, 100.0);
+                    assert!(st.m.offset("menu") > 0 || before > 0, "the wheel does not scroll the menu: {ctx}");
+                }
+                // Escape closes the menu only
+                let r = st.key(&key(Key::Escape));
+                assert!(!closes(&r) && st.zones.iter().all(|z| z.id != "menu"), "{ctx}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_menu_row_that_scrolled_into_view_runs_its_action() {
+    let mut st = physical((320, 240), 2.0, Edge::Bottom);
+    let session = zone(&st, "footer").items.iter().position(|t| matches!(t, Target::Style(SESSION, _))).unwrap();
+    st.m.zone = "footer";
+    st.m.sel.insert("footer", session);
+    st.key(&key(Key::Enter));
+    let n = zone(&st, "menu").items.len();
+    assert!(zone(&st, "menu").visible(0).len() < n, "this card cannot show every row at once");
+    for _ in 0..n - 1 {
+        st.key(&key(Key::Down));
+    }
+    // the last row is Shut Down: it arms, a second Enter runs it
+    assert_eq!(st.current(), Some(Target::Style(MENU, sys_index(Sys::Shutdown))));
+    st.key(&key(Key::Enter));
+    assert!(ran().is_empty() && armed(&st.m) == Some(Sys::Shutdown));
+    let r = st.key(&key(Key::Enter));
+    assert!(closes(&r) && ran() == [Sys::Shutdown]);
+}
