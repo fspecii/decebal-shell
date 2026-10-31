@@ -167,3 +167,9 @@ path = "src/bin/decnotes.rs"
 [[bin]]
 name = "dectimer"
 path = "src/bin/dectimer.rs"
+
+# QA-only inert window; never part of --bins or installed output.
+[[example]]
+name = "qa_wayland_first_frame"
+path = "examples/qa_wayland_first_frame.rs"
+required-features = ["wayland"]

@@ -16,6 +16,9 @@ import hashlib
 import json
 import os
 import shutil
+import socket
+import stat
+import struct
 import subprocess
 import sys
 import time
@@ -31,6 +34,31 @@ def sha256(p):
         for b in iter(lambda: f.read(1 << 20), b""):
             h.update(b)
     return h.hexdigest()
+
+
+def sway_ipc(path, kind):
+    """Read only the explicitly owned private compositor's IPC socket; no inherited SWAYSOCK/CLI."""
+    st = path.lstat()
+    if not stat.S_ISSOCK(st.st_mode) or st.st_uid != os.getuid():
+        raise RuntimeError("private Sway IPC path is not an owned socket")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(1.0)
+        conn.connect(str(path))
+        conn.sendall(struct.pack("<6sII", b"i3-ipc", 0, kind))
+
+        def receive(n):
+            chunks = bytearray()
+            while len(chunks) < n:
+                part = conn.recv(n - len(chunks))
+                if not part:
+                    raise RuntimeError("private Sway IPC closed before its reply")
+                chunks.extend(part)
+            return bytes(chunks)
+
+        magic, length, reply = struct.unpack("<6sII", receive(14))
+        if magic != b"i3-ipc" or reply != kind or length > 4 * 1024 * 1024:
+            raise RuntimeError("invalid or oversized private Sway IPC reply")
+        return json.loads(receive(length))
 
 
 # ---------------------------------------------------------------- outer: private environment, then dbus-run-session
@@ -251,7 +279,7 @@ def inner(a):
             env.pop("DECEBAL_A11Y", None)
             if wayland:
                 env.pop("DISPLAY", None)
-                env.update(WAYLAND_DISPLAY=wayland, DECEBAL_BACKEND="wayland")
+                env.update(WAYLAND_DISPLAY=wayland, DECEBAL_BACKEND="wayland", WAYLAND_DEBUG="client")
             self.p = subprocess.Popen([a.bin, "--config", str(self.config), pane], env=env, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
             owned.append(self.p)
             if wayland:
@@ -744,10 +772,21 @@ def inner(a):
             slog = open(ev / "sway.log", "w")
             senv = {k: v for k, v in os.environ.items() if k not in ("DISPLAY",)}
             senv.update(WLR_BACKENDS="headless", WLR_RENDERER="pixman", WLR_LIBINPUT_NO_DEVICES="1")
-            sway = subprocess.Popen(["sway", "-c", str(cfgp)], env=senv, stdout=slog, stderr=subprocess.STDOUT, start_new_session=True)
+            sway = subprocess.Popen(["sway", "-d", "-c", str(cfgp)], env=senv, stdout=slog, stderr=subprocess.STDOUT, start_new_session=True)
             owned.append(sway)
             sock = wait(lambda: next((f for f in set(os.listdir(os.environ["XDG_RUNTIME_DIR"])) - before_sock if f.startswith("wayland-") and not f.endswith(".lock")), None), "private sway socket", 10)
             results["provenance"]["sway"] = {"path": shutil.which("sway"), "sha256": sha256(shutil.which("sway")), "version": subprocess.run(["sway", "--version"], capture_output=True, text=True).stdout.strip()}
+            # A display socket can precede output/configuration readiness. Ask only this
+            # owned compositor (PID-derived IPC socket), and keep evidence before launch.
+            ipc = Path(os.environ["XDG_RUNTIME_DIR"]) / f"sway-ipc.{os.getuid()}.{sway.pid}.sock"
+            def ready_outputs():
+                outputs = sway_ipc(ipc, 3)
+                return outputs if any(o.get("active") and o.get("name") == "HEADLESS-1" and o.get("rect", {}).get("width", 0) > 0 for o in outputs) else None
+            outputs = wait(ready_outputs, "private Sway IPC and active HEADLESS-1 output", 10)
+            tree = sway_ipc(ipc, 4)
+            (ev / "sway-outputs-before.json").write_text(json.dumps(outputs, indent=2))
+            (ev / "sway-tree-before.json").write_text(json.dumps(tree, indent=2))
+            results["scenarios"]["wayland_startup"] = {"compositor_pid": sway.pid, "ipc": str(ipc), "outputs": outputs}
             w = Settings("wayland", pane="general", wayland=sock)
             try:
                 ap = find_app(pid=w.p.pid, t=15)
