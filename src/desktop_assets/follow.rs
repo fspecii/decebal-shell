@@ -563,7 +563,10 @@ mod hooks {
     }
 
     #[cfg(test)]
-    fn call(h: &'static std::thread::LocalKey<std::cell::RefCell<Option<Box<dyn Fn()>>>>) {
+    type Hook = std::cell::RefCell<Option<Box<dyn Fn()>>>;
+
+    #[cfg(test)]
+    fn call(h: &'static std::thread::LocalKey<Hook>) {
         h.with(|h| {
             if let Some(f) = h.borrow().as_ref() {
                 f()
