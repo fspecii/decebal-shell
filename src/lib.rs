@@ -59,6 +59,7 @@ pub mod wm;
 pub mod notes;
 pub mod timer;
 
+pub mod a11y;
 pub mod accessibility;
 
 pub mod sni;

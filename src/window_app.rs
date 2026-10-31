@@ -238,6 +238,19 @@ pub trait WindowApp {
     }
     /// Called after the waker fired: drain results from worker threads here.
     fn tick(&mut self) -> Response;
+    /// Accessibility (AT-SPI2): the name of the application object when this window publishes a semantic tree.
+    /// `None` (the default) keeps the accessibility bridge off for this window.
+    fn a11y_name(&self) -> Option<String> {
+        None
+    }
+    /// Describe the window as it was last drawn: roles, names, states, values, text and window-relative bounds.
+    /// Called only while an assistive technology listens, right after [`WindowApp::draw`].
+    fn a11y_tree(&mut self, _tree: &mut crate::a11y::TreeBuilder) {}
+    /// Run one validated semantic action (the node still exists, is current, enabled and offers the operation).
+    /// Implementations apply the app's own typed model actions; they never synthesise pointer or key events.
+    fn a11y_action(&mut self, target: &crate::a11y::Target) -> Result<Response, crate::a11y::ActionError> {
+        Err(crate::a11y::ActionError::Unsupported(format!("{} has no accessibility actions", target.node.role.name())))
+    }
 }
 
 /// Runs `app` in a normal top-level window: Wayland (xdg-shell) when the compositor offers it,
