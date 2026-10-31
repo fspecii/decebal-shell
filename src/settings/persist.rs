@@ -1247,6 +1247,122 @@ mod tests {
         assert!(!format!("{secret:?}").contains(key));
     }
 
+    /// A theme sandbox whose package writes decebal.json, dock-settings.json and config.toml, plus their order.
+    fn theme_files(name: &str) -> (PathBuf, Source, Paths, Vec<PathBuf>, Vec<String>) {
+        let (d, src, mut paths) = crate::theme::engine::apply::tests::sandbox(name);
+        paths.rdwmctl = "/nonexistent/rdwmctl".into();
+        let originals = vec!["# mine\n[general]\nborder_px = 2\n".to_string(), "{\"theme\": {\"name\": \"nord\"}, \"future\": 1}\n".to_string(), "{\"appSpacing\": 3}\n".to_string()];
+        std::fs::write(&paths.rdwm_config, &originals[0]).unwrap();
+        std::fs::write(paths.shell_json(), &originals[1]).unwrap();
+        std::fs::write(paths.dock_settings(), &originals[2]).unwrap();
+        let order: Vec<PathBuf> = engine::plan(&src, &paths, "windows11", &Selection::default()).unwrap().writes.iter().map(|w| w.path.clone()).collect();
+        assert!(order.len() >= 2, "{order:?}");
+        (d, src, paths, order, originals)
+    }
+
+    fn theme_job(src: &Source, paths: &Paths) -> Job {
+        Job::Theme(Box::new(ThemeJob { src: src.clone(), paths: paths.clone(), request: ThemeRequest::Package { name: "windows11".into(), base: Selection::default() }, style: None }))
+    }
+
+    fn snapshot(paths: &Paths) -> Vec<String> {
+        [paths.rdwm_config.clone(), paths.shell_json(), paths.dock_settings()].iter().map(|p| std::fs::read_to_string(p).unwrap_or_default()).collect()
+    }
+
+    #[test]
+    fn a_later_theme_file_saved_while_an_earlier_one_is_in_fsync_is_never_overwritten() {
+        let (d, src, paths, order, originals) = theme_files("theme-later");
+        let (first, last) = (order[0].clone(), order[order.len() - 1].clone());
+        let theirs = if last == paths.rdwm_config { "# saved by hand\n[general]\nborder_px = 9\n".to_string() } else { "{\"saved\": \"by hand\"}\n".to_string() };
+        let (t, l) = (theirs.clone(), last.clone());
+        let fired = Arc::new(AtomicBool::new(false));
+        let f2 = fired.clone();
+        let hook: io::fault::SyncHook = Arc::new(move |p: &Path| {
+            // while the first file of the transaction sits in fsync, an editor saves the last one
+            if p == first && !f2.swap(true, Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(15));
+                std::fs::write(&l, &t).unwrap();
+            }
+            Ok(())
+        });
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hook);
+        p.submit(theme_job(&src, &paths)).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(20)));
+        match &done(&q)[0].outcome {
+            Outcome::Theme(Err(e)) => assert!(e.contains(io::CHANGED_ON_DISK) && e.contains("nothing was changed"), "{e}"),
+            o => panic!("{o:?}"),
+        }
+        assert_eq!(std::fs::read_to_string(&last).unwrap(), theirs, "their save survives");
+        let now = snapshot(&paths);
+        for (i, f) in [paths.rdwm_config.clone(), paths.shell_json(), paths.dock_settings()].iter().enumerate() {
+            if *f != last {
+                assert_eq!(now[i], originals[i], "{} restored byte for byte", f.display());
+            }
+        }
+        assert!(crate::theme::engine::apply::undo_ids(&paths).is_empty(), "no undo record for a transaction that changed nothing");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn a_theme_file_saved_during_its_own_fsync_is_kept() {
+        let (d, src, paths, order, originals) = theme_files("theme-same");
+        let first = order[0].clone();
+        let theirs = "{\"saved\": \"during our fsync\"}\n".to_string();
+        let (t, f) = (theirs.clone(), first.clone());
+        let fired = Arc::new(AtomicBool::new(false));
+        let f2 = fired.clone();
+        let hook: io::fault::SyncHook = Arc::new(move |p: &Path| {
+            if p == f && !f2.swap(true, Ordering::SeqCst) {
+                let text = if f.extension().is_some_and(|e| e == "toml") { "# by hand\n".to_string() } else { t.clone() };
+                std::fs::write(&f, text).unwrap();
+            }
+            Ok(())
+        });
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hook);
+        let before = snapshot(&paths);
+        p.submit(theme_job(&src, &paths)).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(20)));
+        assert!(matches!(&done(&q)[0].outcome, Outcome::Theme(Err(e)) if e.contains(io::CHANGED_ON_DISK)), "{:?}", done(&q));
+        let now = snapshot(&paths);
+        let changed: Vec<usize> = (0..3).filter(|i| now[*i] != before[*i]).collect();
+        assert_eq!(changed.len(), 1, "only their save changed anything: {now:?}");
+        let _ = (originals, std::fs::remove_dir_all(d));
+    }
+
+    #[test]
+    fn a_rollback_that_cannot_restore_keeps_their_file_and_the_recovery_record_and_says_so() {
+        let (d, src, paths, order, originals) = theme_files("theme-partial");
+        let (first, last) = (order[0].clone(), order[order.len() - 1].clone());
+        let theirs = if first == paths.rdwm_config { "# edited after our write\n".to_string() } else { "{\"edited\": \"after our write\"}\n".to_string() };
+        let (t, f) = (theirs.clone(), first.clone());
+        let hook: io::fault::SyncHook = Arc::new(move |p: &Path| {
+            if p == last {
+                // the first file is already committed; someone saves it, then our last write fails
+                std::fs::write(&f, &t).unwrap();
+                return Err(std::io::Error::from_raw_os_error(5));
+            }
+            Ok(())
+        });
+        let q: Recorded = Default::default();
+        let mut p = Persister::spawn_with_sync_hook(q.clone(), Arc::new(|| {}), hook);
+        p.submit(theme_job(&src, &paths)).unwrap();
+        assert!(p.wait_idle(Duration::from_secs(20)));
+        let e = match &done(&q)[0].outcome {
+            Outcome::Theme(Err(e)) => e.clone(),
+            o => panic!("{o:?}"),
+        };
+        assert!(e.contains("partly undone") && !e.contains("nothing was changed"), "{e}");
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), theirs, "their later save is not clobbered by the rollback");
+        let rec = crate::theme::engine::apply::undo_dir(&paths);
+        let kept: Vec<_> = std::fs::read_dir(&rec).unwrap().flatten().collect();
+        assert_eq!(kept.len(), 1, "the recovery record is kept");
+        assert!(e.contains(&kept[0].path().display().to_string()), "and named: {e}");
+        let meta = std::fs::read_to_string(kept[0].path().join("meta.json")).unwrap();
+        assert!(meta.contains(&first.display().to_string()));
+        let _ = (originals, std::fs::remove_dir_all(d));
+    }
+
     #[test]
     fn a_theme_transaction_that_fails_midway_restores_every_byte() {
         let (d, src, mut paths) = crate::theme::engine::apply::tests::sandbox("persist-rollback");
