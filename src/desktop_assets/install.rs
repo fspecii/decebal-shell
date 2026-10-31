@@ -308,7 +308,11 @@ fn place(new: &Path, target: &Path, replace: bool, old: &Path) -> Result<(), Str
         };
     }
     match rename2(new, target, libc::RENAME_EXCHANGE) {
-        Ok(()) => std::fs::rename(new, old).map_err(|e| e.to_string()), // `new` holds the old theme now
+        Ok(()) => {
+            // the new pack is live; `new` holds the old one now and is removed with the job folder either way
+            let _ = std::fs::rename(new, old);
+            Ok(())
+        }
         Err(Some(e)) => Err(format!("{}: {e}", target.display())),
         Err(None) => {
             std::fs::rename(target, old).map_err(|e| format!("{}: {e}", target.display()))?;
