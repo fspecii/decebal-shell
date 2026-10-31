@@ -192,7 +192,7 @@ def boxes(win):
 def report(win):
     xid, scale, b = boxes(win)
     settings = Gtk.Settings.get_default()
-    info = {"kit": kit, "xid": xid, "scale": scale, "boxes": b, "pid": os.getpid()}
+    info = {"kit": kit, "xid": xid, "scale": scale, "boxes": b, "pid": os.getpid(), "style": style_evidence(win)}
     for key in ("gtk-theme-name", "gtk-icon-theme-name", "gtk-font-name", "gtk-decoration-layout", "gtk-application-prefer-dark-theme"):
         try:
             info[key] = settings.get_property(key)
@@ -214,9 +214,36 @@ def report(win):
     return False
 
 
+def style_evidence(win):
+    """What the style system resolves now, separate from what was drawn: the received theme name and the named colours the
+    current cascade gives (GTK resolves @names across providers by priority, so a stale user-priority definition shows here)."""
+    ctx = win.get_style_context()
+    out = {"gtk-theme-name": Gtk.Settings.get_default().get_property("gtk-theme-name")}
+    for name in ("theme_bg_color", "decebal_accent", "window_bg_color"):
+        found, rgba = ctx.lookup_color(name)
+        out[name] = rgba.to_string() if found else None
+    if kit == "gtk3":
+        out["window background-color"] = ctx.get_background_color(Gtk.StateFlags.NORMAL).to_string()
+    return out
+
+
+def theme_changed(settings, _pspec, win):
+    # Logged at notification time and again once the reloaded theme has been applied, then the report is refreshed.
+    log("theme-notify:" + json.dumps(style_evidence(win), sort_keys=True))
+
+    def settled():
+        log("theme-settled:" + json.dumps(style_evidence(win), sort_keys=True))
+        report(win)
+        return False
+
+    GLib.timeout_add(800, settled)
+
+
 def shown(win):
     # Two seconds lets fonts, icons and the first frames settle; re-report on demand (SIGUSR1) after scale/theme changes.
     GLib.timeout_add(1500, report, win)
+    Gtk.Settings.get_default().connect("notify::gtk-theme-name", theme_changed, win)
+    log("theme-initial:" + json.dumps(style_evidence(win), sort_keys=True))
     import signal
 
     try:

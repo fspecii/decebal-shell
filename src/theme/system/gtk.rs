@@ -397,6 +397,23 @@ pub fn css_with_profile(p: &Palette, cfg: &Config, gtk4: bool) -> String {
     s
 }
 
+/// The GTK 3 managed block while the generated theme is selected: no colour definitions at all.
+pub const GTK3_THEME_BLOCK: &str = "/* Colours come from the generated Decebal GTK theme (gtk-theme-name), so open apps follow theme changes. */\n";
+
+/// The managed block of `gtk-{3,4}.0/gtk.css`.
+///
+/// GTK 3 resolves `@name` colour references across style providers by priority, and the user `gtk.css` (user priority, loaded once
+/// per process) outranks the theme. Named colours defined there would therefore keep pointing every rule of a theme reloaded live
+/// (through XSETTINGS) at the old palette. So while the generated theme is selected the GTK 3 block defines nothing and the theme
+/// carries the names itself. With the theme option off (the user keeps their own GTK theme) the block carries the named colours, as
+/// before. GTK 4's block holds only libadwaita's names, which the generated GTK 4 theme does not use, so it keeps them.
+pub fn user_css(p: &Palette, cfg: &Config, gtk4: bool, generated_theme: bool) -> String {
+    if !gtk4 && generated_theme {
+        return GTK3_THEME_BLOCK.to_string();
+    }
+    css_with_profile(p, cfg, gtk4)
+}
+
 /// The toolkit a generated theme is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kit {
@@ -698,11 +715,12 @@ impl Target for Gtk {
         });
         for (dir, gtk4) in [("gtk-3.0", false), ("gtk-4.0", true)] {
             let path = env.config_home.join(dir).join("gtk.css");
+            let text = user_css(p, cfg, gtk4, slot.is_some());
             if legacy_stylesheet(&path, env) {
                 // Detach the config entry; the shared stylepack is never our output file.
-                plan.edits.push(Edit::Detached { path, text: css_with_profile(p, cfg, gtk4) });
+                plan.edits.push(Edit::Detached { path, text });
             } else {
-                plan.edits.push(Edit::Block { path, comment: Comment::Css, text: css_with_profile(p, cfg, gtk4) });
+                plan.edits.push(Edit::Block { path, comment: Comment::Css, text });
             }
             plan.edits.push(Edit::Ini { path: env.config_home.join(dir).join("settings.ini"), sets: settings_for(p, cfg, font.as_deref(), slot, icon_ok, cursor_ok) });
         }
@@ -1147,6 +1165,38 @@ mod tests {
         assert_eq!(name(), "Decebal");
         super::super::off(&env, &cfg, &palette(true)).unwrap();
         assert!(!env.data_home.join("themes/Decebal").exists() && !env.data_home.join("themes/Decebal-Alt").exists(), "off removes both generated themes");
+    }
+
+    /// GTK 3 live reload: a user-priority `@define-color` would outrank the reloaded theme's own names, so with the generated theme
+    /// selected the GTK 3 block defines none; theme A and theme B leave the same block, the slot carries the palette, and `off`
+    /// gives the user's own CSS back byte for byte.
+    #[test]
+    fn the_gtk3_user_block_never_pins_the_palette_while_the_generated_theme_is_selected() {
+        let d = tmp("gtk3-live");
+        let (env, _) = env(&d, &[]);
+        let css3 = env.config_home.join("gtk-3.0/gtk.css");
+        std::fs::create_dir_all(css3.parent().unwrap()).unwrap();
+        let mine = "/* mine */\nlabel { font-weight: bold; }\n";
+        std::fs::write(&css3, mine).unwrap();
+        let cfg = Config::default();
+        let only = super::super::Opts { only: Some(vec!["gtk".into()]), ..Default::default() };
+        let (a, b) = (palette(true), palette(false));
+        super::super::apply(&env, &cfg, &a, &only).unwrap();
+        let after_a = std::fs::read_to_string(&css3).unwrap();
+        assert!(after_a.starts_with(mine) && after_a.contains(GTK3_THEME_BLOCK.trim_end()), "user CSS kept, our block added");
+        assert!(!after_a.contains("@define-color"), "no user-priority colour names");
+        super::super::apply(&env, &cfg, &b, &only).unwrap();
+        assert_eq!(std::fs::read_to_string(&css3).unwrap(), after_a, "theme B leaves the GTK 3 block as it was: nothing of A or B in it");
+        let slot = THEME_SLOTS[1];
+        assert!(std::fs::read_to_string(env.data_home.join("themes").join(slot).join("gtk-3.0/gtk.css")).unwrap().contains(&format!("@define-color theme_bg_color {};", b.bg.hex())));
+        let css4 = std::fs::read_to_string(env.config_home.join("gtk-4.0/gtk.css")).unwrap();
+        assert!(css4.contains(&format!("@define-color window_bg_color {};", b.bg.hex())) && !css4.contains("@define-color theme_bg_color"), "GTK 4 keeps libadwaita names only");
+        super::super::off(&env, &cfg, &b).unwrap();
+        assert_eq!(std::fs::read_to_string(&css3).unwrap(), mine, "off restores the user's own CSS");
+        // with the generated theme switched off, the user's own GTK theme gets the named colours as before
+        let mut own = Config::default();
+        own.set_option("gtk.theme", false);
+        assert!(user_css(&a, &own, false, false).contains(&format!("@define-color theme_bg_color {};", a.bg.hex())));
     }
 
     #[test]

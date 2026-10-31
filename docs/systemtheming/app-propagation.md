@@ -120,6 +120,19 @@ The manager is `decthemectl system xsettings serve --display D --ini PATH`, so t
   - `decthemectl system xsettings status|stop`, and turning GTK integration off, send `_DECEBAL_XSETTINGS_QUIT` with that pid and
     start time to the owner window.
   - The manager checks the pid and start time, releases the selection and exits. No process is signalled.
+* **GTK 3 user block:**
+  - GTK 3 resolves `@name` colour references across style providers by priority, and the user `gtk-3.0/gtk.css` (user priority,
+    loaded once per process) outranks the theme.
+  - In the private native run (f549151), GTK 4 changed live 2/2 while GTK 3 stayed on the old palette 2/2. The likely cause:
+    the old block's `@define-color` names kept a theme reloaded through XSETTINGS on the old values. This is a hypothesis, not
+    yet proved natively.
+  - So while the generated theme is selected, the GTK 3 managed block defines no colours (a comment only); the generated theme
+    carries `theme_*` / `decebal_*` itself.
+  - With "Theme GTK 3 and GTK 4 controls" off, the user keeps their own GTK theme and the block carries the named colours as
+    before. User CSS outside the block, the Files profile (GTK 4 block) and libadwaita names are unchanged.
+  - The probe now logs `theme-initial`, `theme-notify` and `theme-settled`. Each entry records the received `gtk-theme-name` and
+    the colours the cascade resolves (and, on GTK 3, the window background-color), so a run can tell "name received" from
+    "style changed".
 * **Limits:**
   - libadwaita apps (Files, ...) ignore GTK themes and read the user `gtk.css` palette only at startup, so a new palette still
     needs reopening there. Dark/light follows `color-scheme`.
@@ -133,7 +146,8 @@ cargo test --lib theme::system::xsettings
 # 2. private X11 live acceptance (owned Xvfb, private HOME/XDG; no other manager on that display): with the build's decthemectl
 #    and DECEBAL_XSETTINGS unset, run the native harness strict for plain GTK:
 DECTHEMECTL=target/debug/decthemectl python3 tests/systemtheming/gtk-native.py OUT --themes nord,macos --modes dark --kits gtk3,gtk4,adw --strict-live gtk3,gtk4
-#    expected: gtk3/gtk4 live, adw stale (palette) - recorded, not counted as live.
+#    expected: gtk3/gtk4 live, adw stale (palette) - recorded, not counted as live. The GTK 3 probe's events file must show
+#    theme-settled with the new gtk-theme-name AND theme_bg_color / window background-color of the new palette.
 # 3. ownership: start a foreign owner of _XSETTINGS_S0 first (any test client holding the selection) -> apply reports "another
 #    XSETTINGS manager", the foreign owner keeps it; then `decthemectl system off` -> Decebal's manager (if any) releases, the
 #    foreign one is untouched; `system xsettings status` before/after.

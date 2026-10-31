@@ -393,6 +393,7 @@ mod x {
     /// Makes sure Decebal's manager publishes `ini` on `display`, unless another manager owns it. Starting is observed: the new
     /// process must be seen owning the selection (marker = its pid and start time) within two seconds, else it is an error.
     pub fn ensure(display: &str, ini: &Path) -> R<Status> {
+        reap_finished();
         match probe(display)? {
             Owner::Ours { pid, .. } => return Ok(Status::Running { pid }),
             Owner::Foreign { .. } => return Ok(Status::Foreign),
@@ -433,6 +434,13 @@ mod x {
         Err("the XSETTINGS manager did not take the selection within 2 s; it was stopped".into())
     }
 
+    /// Serving children whose reaper thread could not be started; reaped by the next [`ensure`] once they have ended.
+    static UNREAPED: std::sync::Mutex<Vec<std::process::Child>> = std::sync::Mutex::new(Vec::new());
+
+    fn reap_finished() {
+        UNREAPED.lock().unwrap_or_else(|e| e.into_inner()).retain_mut(|c| c.try_wait().ok().flatten().is_none());
+    }
+
     /// The manager child [`ensure`] started. Dropped while still held, it gets two seconds to end by itself (it does when it finds
     /// another owner) and is then killed. Only this exact, not yet reaped child is signalled: its pid cannot have been reused.
     struct Launched(Option<std::process::Child>);
@@ -440,10 +448,20 @@ mod x {
     impl Launched {
         /// It serves: a thread waits for it, so it never lingers as a zombie of a long-lived caller.
         fn serve_on(&mut self) {
-            if let Some(mut child) = self.0.take() {
-                let _ = std::thread::Builder::new().name("decebal-xsettings-reaper".into()).spawn(move || {
+            let Some(child) = self.0.take() else { return };
+            let slot = std::sync::Arc::new(std::sync::Mutex::new(Some(child)));
+            let mine = slot.clone();
+            let spawned = std::thread::Builder::new().name("decebal-xsettings-reaper".into()).spawn(move || {
+                let child = mine.lock().unwrap_or_else(|e| e.into_inner()).take();
+                if let Some(mut child) = child {
                     let _ = child.wait();
-                });
+                }
+            });
+            if spawned.is_err() {
+                // No thread for it: keep the serving child (it must not be killed) where the next ensure() reaps it once it ends.
+                if let Some(child) = slot.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    UNREAPED.lock().unwrap_or_else(|e| e.into_inner()).push(child);
+                }
             }
         }
     }
