@@ -158,6 +158,18 @@ a complete Explorer/Finder replica or a premium finished appearance.
 
 ## Phase 3: operational acceptance and release boundary
 
+The next assigned operation increment is Create folder, Rename and Move to Trash,
+with real native controls and private fixture outcomes. Trash must never fall
+back to permanent deletion. A no-overwrite check must remain true when a
+destination appears concurrently, not only when it exists before clicking.
+The installed [GLib 2.90.1 local backend](https://github.com/GNOME/glib/blob/2.90.1/gio/glocalfile.c)
+checks the destination before calling ordinary rename in both display-name
+rename and move; the optional local-only component therefore needs an atomic
+no-replace primitive rather than treating that precheck as a guarantee.
+Cancellation before commit and cancellation racing a completed operation need
+distinct verified outcomes; never report an unchanged filesystem after a known
+successful mutation.
+
 Run destructive operations only on isolated fixture trees. Record before/after
 contents, selection, focus and operation outcome; screenshots alone do not prove
 correct file handling. Preserve current Nautilus profile regression coverage.
