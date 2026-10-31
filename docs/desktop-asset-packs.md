@@ -393,21 +393,40 @@ slots; **Custom** is the explicit override, made in Settings > Icons.
   every pack a theme can apply by itself has a download. Without a cursor match the cursor slot is not changed.
 
 **Background workflow.** After `theme apply` has written its files (Settings and the CLI alike), and after *Follow theme*
-or *Retry* in the pane, `follow::request` starts one job, `decthemectl assets follow-theme --generation G`: fixed
-arguments, no shell, its own process group, detached from the caller, output to a fresh 0600 log in
-`$XDG_STATE_HOME/decebal/assets/` (0700), an older job for an earlier generation is stopped first. The job installs each
-missing pack once (the verified installer: pins, licences, nothing from the pack run, atomic publication), then applies
-in **one** `json_update_doc` transaction only if `generation` is still `G`, the recommendation is still that theme's and
-the slot still follows it with the value it had; otherwise it records `superseded` and changes nothing, so a completion
-can never override a later theme or a manual choice. After applying it hands the change to app integration through one
-routing point, `desktop_assets::publish::selection_changed` (the GTK lane owns the toolkit side). The contract is that
-publishing a Follow-theme slot's icon and cursor theme does not depend on the unrelated "Apply to all apps" opt-in; until
-the GTK lane provides that entry point the routing point uses the existing request, which publishes only with "Apply to
-all apps" on, and the job's outcome says so. The shell itself uses the new icons at once. The whole job is stopped after 30 minutes; `follow.json` holds the
-phase (`starting`, `installing`, `applied`, `superseded`, `failed`, `stopped`), the pack being installed, the error and
-the log path. The pane shows it with *Stop* (`assets follow-theme --stop`, which signals the job's process group only
-after checking its PID's start time) and *Retry*; `assets follow-theme --status` and `assets status` print it. A failure
-keeps the current icons and names `--archive` / `--source-dir` as the way that still works.
+or *Retry* in the pane, `follow::request` starts at most one job per configuration and generation,
+`decthemectl assets follow-theme --generation G --job TOKEN`: fixed arguments, no shell, its own process group,
+detached from the caller, output to its own fresh 0600 log `job-<token>.log` (the newest five are kept). Its state is in
+`$XDG_STATE_HOME/decebal/assets/<first 16 hex of sha256(canonical decebal.json path)>/` (0700):
+
+* **Claim**: under that folder's `lock` (flock), `request` reuses a live job of the same generation (or one whose claim is
+  younger than 30 s and has no worker recorded yet), otherwise stops the older job, writes a claim with a new unique
+  token, starts the worker and records its PID and start time before releasing the lock. A concurrent caller waits and
+  then sees the claim. A claim whose requester died before recording a worker expires after the 30 s.
+* **Compare-and-set**: every progress, terminal, stop and watchdog write changes `follow.json` only while it still
+  carries the writer's token; a worker whose token is no longer current stops working and writes nothing. An old job,
+  its watchdog or an old stop therefore never overwrites the current job's status. A non-terminal job whose worker is
+  gone is shown as `interrupted`.
+* **Stop** (pane *Stop*, `assets follow-theme --stop`, and a newer claim) targets only the current job: its process is
+  pinned with a pidfd, the pinned process's start time checked, and SIGTERM sent through the pidfd to the worker itself
+  (never a bare PID or process group; no pidfd support means no signal). The worker cancels its install cooperatively
+  (the install takes its normal error path and removes its staging folder) and records `stopped`.
+* **Apply**: the job installs each missing pack once (the verified installer: pins, licences, nothing from the pack run,
+  atomic publication), then applies in **one** `json_update_doc` transaction only if `generation` is still `G`, the
+  recommendation is still that theme's, the **selected theme** (`theme.name`, the exact theme id) is still that theme, and
+  the slot still follows it with the value it had; otherwise it records `superseded` and changes nothing, so a completion
+  can never override a later theme, a direct edit of the theme or a manual choice. `generation` is external input: a
+  value that is not a u64 counts as 0, and the maximum wraps to 1 (only equality is compared).
+* **Deadline**: 30 minutes, then the job is cancelled like a stop; one that has not ended a minute later is ended and
+  marked failed (only while it is still the current job).
+
+After applying, the job hands the change to app integration through one routing point,
+`desktop_assets::publish::selection_changed` (the GTK lane owns the toolkit side); see the limits below: until the
+narrow icon/cursor publication is finished and proven with native apps, GTK and Qt apps follow only through "Apply to
+all apps" (on by default; an explicit `system.enabled = false` stays off). The shell itself uses the new icons at once.
+`follow.json` holds the phase (`starting`, `installing`, `stopping`; `applied`, `superseded`, `failed`, `stopped`), the
+pack being installed, the error and the log path. The pane shows it with *Stop* and *Retry*; `assets follow-theme
+--status` and `assets status` print it. A failure keeps the current icons and names `--archive` / `--source-dir` as the
+way that still works.
 
 * Wallpaper and widget policies are not touched.
 

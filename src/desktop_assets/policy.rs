@@ -193,13 +193,20 @@ fn put_state(doc: &mut Value, k: Provides, st: &SlotState) {
     }
 }
 
+/// The theme id `decebal.json` selects (`theme.name`, what `theme apply` writes with the slots).
+pub fn selected_theme(doc: &Value) -> Option<&str> {
+    doc.get("theme")?.get("name")?.as_str()
+}
+
 /// The counter every theme apply and every slot choice bumps: a background completion applies only when it is unchanged.
 pub fn generation(doc: &Value) -> u64 {
     doc.get(KEY).and_then(|a| a.get("generation")).and_then(Value::as_u64).unwrap_or(0)
 }
 
+/// The stored value is external input: anything but a u64 counts as 0, and the maximum wraps to 1 instead of panicking
+/// (only equality is ever compared, never order).
 fn bump(doc: &mut Value) -> u64 {
-    let g = generation(doc) + 1;
+    let g = generation(doc).checked_add(1).unwrap_or(1);
     obj(doc, KEY).insert("generation".into(), json!(g));
     g
 }
@@ -385,6 +392,13 @@ pub fn complete(doc: &mut Value, g: u64, theme: &str, installed: &[(Provides, St
     if rec.theme != theme {
         return Err(format!("superseded: the theme is now {}", rec.theme));
     }
+    // the theme actually selected, not only the recorded recommendation: a direct edit of `theme.name` that left the
+    // metadata as it was must not receive the old theme's pack (exact theme id; no alias or fallback resolution)
+    match selected_theme(doc) {
+        Some(t) if t == theme => {}
+        Some(t) => return Err(format!("superseded: the selected theme is now {t}")),
+        None => return Err("superseded: no theme is selected".into()),
+    }
     let mut done = Vec::new();
     for (k, name) in installed {
         let st = state(doc, *k);
@@ -550,8 +564,21 @@ mod tests {
     }
 
     #[test]
+    fn the_generation_is_external_input_and_never_panics() {
+        let mut d = json!({KEY: {"generation": u64::MAX}});
+        choose(&mut d, Provides::Icons, &Choice::Auto);
+        assert_eq!(generation(&d), 1, "the maximum wraps to 1");
+        for bad in [json!("7"), json!(-3), json!(1.5), json!(null), json!({"x": 1})] {
+            let mut d = json!({KEY: {"generation": bad}});
+            assert_eq!(generation(&d), 0);
+            apply_theme(&mut d, &rec("deepin", Some("bloom"), None));
+            assert_eq!(generation(&d), 1);
+        }
+    }
+
+    #[test]
     fn old_manual_choices_stay_custom_until_the_user_follows_the_theme() {
-        let mut d = json!({"icons": {"theme": "Papirus"}, KEY: {"icons": {"user": true}, "cursors": {"user": true}}});
+        let mut d = json!({"theme": {"name": "deepin"}, "icons": {"theme": "Papirus"}, KEY: {"icons": {"user": true}, "cursors": {"user": true}}});
         let notes = apply_theme(&mut d, &rec("deepin", Some("bloom"), Some("bloom")));
         assert_eq!((current(&d, Provides::Icons).as_deref(), current(&d, Provides::Cursors)), (Some("Papirus"), None), "a manual choice is never overridden");
         assert_eq!(owner(&d, Provides::Icons), Owner::User);
@@ -566,7 +593,7 @@ mod tests {
 
     #[test]
     fn a_missing_pack_keeps_the_shown_value_and_completes_only_for_its_generation() {
-        let mut d = json!({"icons": {"theme": "Adwaita"}});
+        let mut d = json!({"theme": {"name": "deepin"}, "icons": {"theme": "Adwaita"}});
         let r = Recommendation { theme: "deepin".into(), icons_pack: Some("deepin-bloom".into()), missing: vec!["deepin-bloom".into()], ..Default::default() };
         apply_theme(&mut d, &r);
         assert_eq!(current(&d, Provides::Icons).as_deref(), Some("Adwaita"), "no flash to something else meanwhile");
@@ -579,6 +606,13 @@ mod tests {
         let mut stale = d.clone();
         assert!(complete(&mut stale, g - 1, "deepin", &[(Provides::Icons, "bloom".into())]).unwrap_err().contains("superseded"));
         assert!(complete(&mut stale, g, "lingmo", &[(Provides::Icons, "bloom".into())]).unwrap_err().contains("the theme is now deepin"));
+        let mut edited = d.clone();
+        edited["theme"]["name"] = json!("nord");
+        assert!(complete(&mut edited, g, "deepin", &[(Provides::Icons, "bloom".into())]).unwrap_err().contains("selected theme is now nord"));
+        assert_eq!(current(&edited, Provides::Icons).as_deref(), Some("Adwaita"), "a direct theme edit gets nothing");
+        let mut unselected = d.clone();
+        unselected.as_object_mut().unwrap().remove("theme");
+        assert!(complete(&mut unselected, g, "deepin", &[(Provides::Icons, "bloom".into())]).unwrap_err().contains("no theme is selected"));
         assert_eq!(complete(&mut d, g, "deepin", &[(Provides::Icons, "bloom".into())]).unwrap(), vec![(Provides::Icons, "bloom".to_string())]);
         assert_eq!((current(&d, Provides::Icons).as_deref(), owner(&d, Provides::Icons)), (Some("bloom"), Owner::Theme("deepin".into())));
         assert!(Recommendation::from_doc(&d).unwrap().missing.is_empty());

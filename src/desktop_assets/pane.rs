@@ -495,7 +495,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     // Follow theme (the default) or a custom choice, per slot; the custom one is kept for restoring
     out.push(Item::Header("Theme matching".into()));
     let auto = policy::downloads_auto(&doc);
-    let job = super::follow::status();
+    let job = super::follow::status(&path);
     let fetching = job.as_ref().is_some_and(super::follow::Status::running);
     let mut mrows = Vec::new();
     for k in [Provides::Icons, Provides::Cursors] {
@@ -531,7 +531,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     if let Some(f) = &job {
         if fetching {
             out.push(Item::Card(vec![Row::new(format!("Downloading for {}", f.theme)).detail(f.detail.clone()).ctl(Ctl::new("ic:follow-stop", Kind::Button { label: "Stop".into(), danger: true }))]));
-        } else if f.phase == "failed" || f.phase == "stopped" {
+        } else if matches!(f.shown_phase(), "failed" | "stopped" | "interrupted") {
             out.push(Item::Note { text: format!("The matching packs for {} were not installed: {}", f.theme, f.detail), warn: true });
             if auto && rec.as_ref().is_some_and(|r| r.theme == f.theme && !r.missing.is_empty()) {
                 out.push(Item::Card(vec![Row::new("Try again").detail(f.log.clone()).ctl(Ctl::new("ic:follow-retry", Kind::Button { label: "Retry".into(), danger: false }))]));
@@ -679,7 +679,7 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             m.edit_shell_doc("asset-downloads", move |doc| policy::set_downloads(doc, b), format!("Download matching packs: {}", if b { "on" } else { "off" }), Some(after));
             return true;
         }
-        (["ic", "follow-stop"], CtlVal::Click) => super::follow::stop(),
+        (["ic", "follow-stop"], CtlVal::Click) => super::follow::stop(&m.paths.shell_json()),
         (["ic", "follow-retry"], CtlVal::Click) => super::follow::request(&m.paths.shell_json()).ok_or_else(|| "nothing to download (downloads off, or the packs are installed)".to_string()),
         (["ic", "follow-theme"], CtlVal::Click) => {
             choose(m, vec![(Provides::Icons, Choice::Theme), (Provides::Cursors, Choice::Theme)], "Icons and cursor follow the theme".into());

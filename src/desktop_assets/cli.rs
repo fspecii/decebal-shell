@@ -53,8 +53,24 @@ struct Args {
     opts: Vec<(String, String)>,
 }
 
-const VALUED: &[&str] =
-    &["--generation", "--index", "--root", "--archive", "--source-dir", "--provides", "--license", "--license-file", "--name", "--path", "--strip", "--tree", "--sha256", "--png", "--link-source"];
+const VALUED: &[&str] = &[
+    "--generation",
+    "--job",
+    "--index",
+    "--root",
+    "--archive",
+    "--source-dir",
+    "--provides",
+    "--license",
+    "--license-file",
+    "--name",
+    "--path",
+    "--strip",
+    "--tree",
+    "--sha256",
+    "--png",
+    "--link-source",
+];
 
 fn parse(args: &[String]) -> Result<Args, String> {
     let mut a = Args { pos: vec![], flags: vec![], opts: vec![] };
@@ -191,35 +207,24 @@ pub fn run(args: &[String], ctx: &mut Ctx) -> Result<String, String> {
         }
         Some("follow-theme") => {
             if a.flag("--stop") {
-                return super::follow::stop();
+                return super::follow::stop(&ctx.shell_json);
             }
             if a.flag("--status") {
-                return Ok(match super::follow::status() {
+                return Ok(match super::follow::status(&ctx.shell_json) {
                     None => "no background download yet".into(),
                     Some(s) if json => serde_json::to_string_pretty(&s).unwrap_or_default(),
-                    Some(s) => format!("{} for {} (generation {}): {}{}", s.phase, s.theme, s.generation, s.detail, if s.log.is_empty() { String::new() } else { format!("\nlog: {}", s.log) }),
+                    Some(s) => format!("{} for {} (generation {}): {}{}", s.shown_phase(), s.theme, s.generation, s.detail, if s.log.is_empty() { String::new() } else { format!("\nlog: {}", s.log) }),
                 });
             }
-            let g = a.opt("--generation").and_then(|g| g.parse::<u64>().ok()).ok_or("follow-theme needs --generation N (it is started by theme apply), --status or --stop")?;
-            // the whole job is bounded: past the deadline it records the failure and exits (no pack is half-installed:
-            // installs publish atomically, an unfinished one leaves only its staging folder)
-            let dir = super::follow::state_dir();
-            let d2 = dir.clone();
+            let g = a.opt("--generation").and_then(|g| g.parse::<u64>().ok()).ok_or("follow-theme needs --generation N and --job TOKEN (it is started by theme apply), --status or --stop")?;
+            let token = a.opt("--job").filter(|t| super::follow::token_ok(t)).ok_or("follow-theme needs --job TOKEN (it is started by theme apply)")?.to_string();
+            let dir = super::follow::job_dir(&ctx.shell_json);
             super::cancel_on_sigterm();
-            // past the deadline the job is cancelled like a stop; one that does not end within a minute more is ended
-            std::thread::spawn(move || {
-                std::thread::sleep(super::follow::DEADLINE);
-                super::cancel();
-                std::thread::sleep(std::time::Duration::from_secs(60));
-                if let Some(mut s) = super::follow::status_at(&d2) {
-                    s.phase = "failed".into();
-                    s.detail = format!("did not finish within {} minutes and was ended; nothing was applied", super::follow::DEADLINE.as_secs() / 60 + 1);
-                    let _ = super::follow::write_status(&d2, &s);
-                }
-                std::process::exit(3);
-            });
+            // bounded: past the deadline the job is cancelled like a stop; one that has not ended a minute later is ended,
+            // its status marked failed only while it is still the current job (installs publish atomically)
+            super::follow::watchdog(dir.clone(), token.clone(), super::follow::DEADLINE, super::follow::DEADLINE_GRACE, || std::process::exit(3));
             let inst = super::follow::install_pack(&ctx.root, &ctx.limits);
-            super::follow::run(&ctx.shell_json, &ctx.set, &dir, g, &inst)
+            super::follow::run(&ctx.shell_json, &ctx.set, &dir, &token, g, &inst)
         }
         Some("preview") => preview_cmd(ctx, rest.first().ok_or("preview needs a theme name")?, a.opt("--png"), json),
         Some("catalog") => match rest.first().copied() {
@@ -612,7 +617,7 @@ fn status(ctx: &Ctx, json: bool) -> String {
             json!({"mode": if st.is_custom() { "custom" } else { "follow" }, "restore": st.restore})
         };
         return serde_json::to_string_pretty(&json!({"icons": j(&ic), "cursors": j(&co), "modes": {"icons": mode(Provides::Icons), "cursors": mode(Provides::Cursors)},
-            "downloads": if policy::downloads_auto(&doc) { "auto" } else { "ask" }, "follow": super::follow::status(),
+            "downloads": if policy::downloads_auto(&doc) { "auto" } else { "ask" }, "follow": super::follow::status(&ctx.shell_json),
             "recommended": rec.as_ref().map(|r| json!({"theme": r.theme, "icons": r.icons, "cursors": r.cursors, "missing": r.missing, "icons_pack": r.icons_pack, "cursors_pack": r.cursors_pack, "basis": r.basis})), "root": ctx.root}))
             .unwrap_or_default();
     }
@@ -643,8 +648,8 @@ fn status(ctx: &Ctx, json: bool) -> String {
             ));
         }
     }
-    if let Some(f) = super::follow::status() {
-        out.push_str(&format!("\nbackground download for {}: {} - {}", f.theme, f.phase, f.detail));
+    if let Some(f) = super::follow::status(&ctx.shell_json) {
+        out.push_str(&format!("\nbackground download for {}: {} - {}", f.theme, f.shown_phase(), f.detail));
     }
     out
 }
