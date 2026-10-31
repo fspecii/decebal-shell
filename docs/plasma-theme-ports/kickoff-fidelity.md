@@ -1,6 +1,6 @@
 # Kickoff: native launcher against the original (KDE Plasma 6)
 
-Status: **section 1 of the Kickoff port is done (the footer and the Places tab); the rest of the card is still the earlier approximation.** The packages stay
+Status: **the footer/Places and header/sidebar increments have dev-native acceptance for the scope below; the full card replica remains incomplete.** The packages stay
 **NOT READY**. This follows `docs/desktop-ports/replica-acceptance.md` (root, `65d55ca`): original references, matching conditions, source measurements and
 original pixels kept apart, and no inert controls.
 
@@ -60,7 +60,7 @@ orders applications and recent documents by time, Frequently Used by launch coun
 
 **Real window, real window manager** (`tests/e2e/plasma-packages-native.py --cases kickoff`; `native/kickoff/real-window-matrix-report.json`, `.log`, `real-bottom-100-kickoff-*.png`): the real `declaunch` (kde style) opened from the taskbar's Start under the pinned rdwm `ab1b588` on an owned private Xvfb, with root's immutable `decdock` `ec0106d5…` (Start-anchor fix `fbddaf8`); `systemctl`, `loginctl`, `rdwm-lock`, `poweroff` and `reboot` are recording stand-ins first on `PATH`, so nothing reaches the host. Per case: Places tab click moves the accent line to the Places tab and changes the page, Applications brings it back; Sleep runs `systemctl suspend` and closes Kickoff; Restart's first press runs nothing, Escape keeps Kickoff open and takes the arming back, two presses run `systemctl reboot` and close; Shut Down two presses run `systemctl poweroff`; the Session button opens a menu, Escape closes the menu and not Kickoff, Lock runs (`rdwm-lock`). **24 / 24 pass** (4 edges x 100 / 125 / 200 % x dark / light). An earlier run of the same gate had 8 failures at 200 % (a fixed delay shorter than the debug build's repaint of the larger card); the harness now polls, and that run's log is kept (`real-window-matrix-run1-8-timing-failures.log`). Log Out and Hibernate were not exercised natively (Log Out runs `rdwmctl action quit`, Hibernate depends on the host's `/sys/power/state`); both are covered by the unit tests.
 
-## Section 2: header and sidebar (source-only, UNRUN)
+## Section 2: header and sidebar (dev-validated, full replica incomplete)
 
 Written without a build (no Cargo, no GUI, no native run was allowed for this increment): `rustfmt --check` is clean, nothing has been compiled, and the
 regressions below have **not been run**. The packages stay NOT READY. The source/date discrepancy of the Identity section still applies (capture dated
@@ -97,7 +97,7 @@ theme has one. The old separator row is gone (it was a non-focusable fake item);
 * The category set still differs (native adds Settings, Science, Other; the original lists Development, Education, Games, Graphics, Help, Internet,
   Multimedia, Office, System, Utilities).
 
-**Tests added, all UNRUN** (`src/launcher/styled/kde/tests.rs`, last section): geometry against the numbers above (±2.5 px); sidebar contents/order/no separator;
+**Tests added (now passed in the root gates below)** (`src/launcher/styled/kde/tests.rs`, last section): geometry against the numbers above (±2.5 px); sidebar contents/order/no separator;
 current row painted accent-tinted by pixel sampling; header items are exactly avatar + configure (no pin) and each runs its `decsettings` pane and closes;
 keyboard Right/Enter on the header; clear button only while searching and it clears; header controls inside the card, non-overlapping and hit-testable on
 320 x 240 and 400 x 300 screens at 100 / 125 / 200 % on all four edges.
@@ -105,8 +105,8 @@ keyboard Right/Enter on the header; clear button only while searching and it cle
 ## Full port gap list (still open; the packages stay NOT READY)
 
 1. **Card size.** The native card now opens at the original's 655 x 516 (`placement.rs`, one shared line, the natural size of the Kde style); in the original the size comes from Kickoff's implicit-size rules (grid units, scrollbar presence), which are not reproduced, so a different font size or panel would size it differently there.
-2. **Header.** Geometry and the avatar/configure/clear controls are Section 2 (source-only, UNRUN). Still open: avatar image (the user's face, `~/.face`) instead of an initial, the Keep Open (pin) button (needs a host option), name hover swap, tooltips.
-3. **Sidebar.** Row geometry, order (alphabetical) and semantic icons are Section 2 (source-only, UNRUN). Still open: the category set (the original shows Development, Education, Games, Graphics, Help, Internet, Multimedia, Office, System, Utilities; native adds Settings, Science, Other), the original's separator spacing and scrollbar style, hover-to-switch-category (off by default), exact icon fidelity per theme.
+2. **Header.** Geometry and the avatar/configure/clear controls are Section 2 (dev-validated). Still open: avatar image (the user's face, `~/.face`) instead of an initial, the Keep Open (pin) button (needs a host option), name hover swap, tooltips.
+3. **Sidebar.** Row geometry, order (alphabetical) and semantic icons are Section 2 (dev-validated). Still open: the category set (the original shows Development, Education, Games, Graphics, Help, Internet, Multimedia, Office, System, Utilities; native adds Settings, Science, Other), the original's separator spacing and scrollbar style, hover-to-switch-category (off by default), exact icon fidelity per theme.
 4. **Content.** Grid cell size and label wrapping (favourites at 64 px icons with centred two-line labels), the list delegate (name / description layout, compact mode), All Applications with section headers and the separator rows, drag and drop to reorder favourites, the per-application context menu (add/remove favourite, "Add to Panel", "Show in menu editor"), alphabetical sort setting.
 5. **Search.** KRunner's runner results and categories (applications, files, bookmarks, recent documents, system settings) and their keyboard behaviour; native searches installed applications only.
 6. **Material.** Plasma's dialog frame (`dialogs/background` SVG with its corner radius and shadow, translucency and blur), focus rings of Breeze controls, animations (page transitions, the footer height change).
@@ -126,3 +126,11 @@ The footer, session controls and asynchronous Places loader are integrated into 
 A missing icon pack now uses semantic session/navigation glyphs after exact theme lookup and before generic fallback (`a7b6ca8`). Fifteen icon-related tests, formatting and the dev launcher build passed: `/var/tmp/decebal-launcher-semantic-icons-gate/result.json`. This is a fallback, not bundled Breeze artwork.
 
 The immutable dev artifact was then exercised in private Xvfb: 40 captures over dark/light, 100/200% UI scale, all four panel edges and unanchored placement, two screen sizes, and four two-monitor placement cases. Keyboard launch, Escape, hover, outside-click and pointer launch passed; wheel scrolling was not established with the short fixture list. The dark 100% footer capture was visually inspected. Evidence: `/var/tmp/decebal-kickoff-native-control-icons/result.json` and `/var/tmp/decebal-kickoff-native-evidence-icons/manifest.json`; no rescued/leftover fixture processes and no I/O-pressure abort. Optimized artifact acceptance and live installation remain outstanding.
+
+## Header/sidebar main acceptance (2026-10-31)
+
+Main integration `4d82b4d` passed 113 focused launcher/fuzzy/icon/symbol tests (5 ignored), formatting, strict all-target Clippy and a dev launcher build. Evidence: `/var/tmp/decebal-kickoff-header-main-source-gate/result.json`. Visual review found a missing Configure icon when no icon pack was available; root added theme-first semantic Favorites and Configure fallbacks. Final `40e6e92` passed 48 focused KDE/icon/symbol tests (3 ignored), formatting, strict all-target Clippy and the launcher build: `/var/tmp/decebal-kickoff-header-configure-source-gate/result.json`. These test sets overlap and must not be summed as distinct coverage.
+
+The immutable final dev launcher passed 40 native captures plus keyboard/pointer, monitor placement and account/configuration/clear-query header actions. The two Settings actions invoked fixture siblings and closed the launcher; no real Settings window was opened. The clear-query check replaced an invalid search with Atlas and launched the expected fixture app. No leftover/rescued process or I/O-pressure abort: `/var/tmp/decebal-kickoff-header-native-control-v2/result.json`, `/var/tmp/decebal-kickoff-header-native-evidence-v2/manifest.json`. The dark 100% capture was visually inspected after the Configure fallback fix. Wheel scrolling remains unproved with the short fixture list.
+
+The matrix uses macOS palette tokens to exercise this launcher's independence from theme colour selection. It proves the measured geometry/behaviour, not a matched Breeze artwork/palette pixel replica. Exact original assets, the remaining header/sidebar gaps, full package acceptance, optimized artifacts and live installation remain open. The running desktop is unchanged by this increment.
