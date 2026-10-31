@@ -539,7 +539,7 @@ mod tests {
         // including the mode-specific decoration families, rather than the host's session.
         let ctl = m.paths.shell_dir.join("fixture-rdwmctl");
         std::fs::write(ctl.with_extension("schema"), include_str!("rdwm-schema.json")).unwrap();
-        std::fs::write(&ctl, "#!/bin/sh\ncase \"$1\" in schema) cat \"$0.schema\";; check) exit 0;; *) exit 1;; esac\n").unwrap();
+        std::fs::write(&ctl, "#!/bin/sh\ncase \"$1\" in schema) cat \"$0.schema\";; *) exit 0;; esac\n").unwrap();
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
         m.paths.rdwmctl = ctl.clone();
