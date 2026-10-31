@@ -116,6 +116,8 @@ struct Builder<'a> {
     keep: Keep<'a>,
     tree: TreeBuilder,
     link_trees: BTreeMap<String, TreeBuilder>,
+    /// Folder entries read but not processed yet, over the whole recursion (bounded with `entries`).
+    pending: usize,
 }
 
 /// `parent(p)` joined with a relative link target, lexically; `None` when it climbs out of the source.
@@ -146,6 +148,7 @@ impl<'a> Builder<'a> {
             keep,
             tree: TreeBuilder::default(),
             link_trees,
+            pending: 0,
         }
     }
 
@@ -384,11 +387,17 @@ fn walk(root: &Path, rel: &str, depth: usize, b: &mut Builder) -> Result<(), Str
     let mut names: Vec<String> = Vec::new();
     for e in std::fs::read_dir(&here).map_err(|e| format!("{}: {e}", here.display()))? {
         let e = e.map_err(|e| e.to_string())?;
+        // counted while the folder is read: a huge folder is refused before its names pile up in memory
+        if b.st.entries + b.pending + names.len() >= b.lim.max_entries {
+            return Err(format!("more than {} entries", b.lim.max_entries));
+        }
         let n = e.file_name().into_string().map_err(|n| format!("`{}` in {} is not UTF-8", n.to_string_lossy(), here.display()))?;
         names.push(n);
     }
     names.sort();
+    b.pending += names.len();
     for n in names {
+        b.pending -= 1;
         if n == ".git" {
             continue;
         }
@@ -443,7 +452,7 @@ fn walk(root: &Path, rel: &str, depth: usize, b: &mut Builder) -> Result<(), Str
 fn wanted_below(f: &Filter, dir: &str) -> bool {
     let pre = format!("{dir}/");
     let starts = |x: &str| x.starts_with(&pre);
-    f.path == "." || f.path == dir || starts(&f.path) || f.files.iter().any(|x| starts(x)) || f.link_sources.iter().any(|x| starts(x))
+    f.path == "." || f.path == dir || starts(&f.path) || f.files.iter().any(|x| starts(x)) || f.link_sources.iter().any(|x| x == dir || starts(x))
 }
 
 impl Staged {
@@ -575,6 +584,31 @@ mod tests {
         let s3 = Scratch::new("cap2");
         let lim = Limits { max_total: 300, ..Limits::default() };
         assert!(from_tar(&tgz[..], tar::Format::TarGz, s3.path().to_path_buf(), f, &lim, &keep_all).unwrap_err().contains("larger"));
+    }
+
+    #[test]
+    fn folder_reads_stop_at_the_entry_limit_while_enumerating() {
+        let d = Scratch::new("many");
+        for i in 0..10 {
+            d.write(&format!("t/f{i}.svg"), SVG);
+        }
+        let s = Scratch::new("many-src");
+        let f = Filter { strip: 0, path: "t".into(), ..Filter::default() };
+        let lim = Limits { max_entries: 5, ..Limits::default() };
+        assert!(from_dir(d.path(), s.path().to_path_buf(), f.clone(), &lim, &keep_all).unwrap_err().contains("more than 5 entries"));
+        // names waiting in an enclosing folder count too: a/ (3 files) and b/ (3 files) are 8 entries in all
+        let d2 = Scratch::new("many2");
+        for x in ["a", "b"] {
+            for i in 0..3 {
+                d2.write(&format!("t/{x}/f{i}.svg"), SVG);
+            }
+        }
+        let s2 = Scratch::new("many2-src");
+        let lim = Limits { max_entries: 7, ..Limits::default() };
+        assert!(from_dir(d2.path(), s2.path().to_path_buf(), f.clone(), &lim, &keep_all).is_err());
+        let s3 = Scratch::new("many3-src");
+        let lim = Limits { max_entries: 9, ..Limits::default() };
+        assert!(from_dir(d2.path(), s3.path().to_path_buf(), f, &lim, &keep_all).is_ok(), "t, a, b and six files fit in 9");
     }
 
     #[test]

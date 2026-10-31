@@ -27,6 +27,19 @@ pub struct Cursor {
 pub const MAX_CURSORS: usize = 512;
 pub const MAX_IMAGES: usize = 64;
 pub const MAX_SIDE: u32 = 256;
+/// All cursors of one pack together: bytes of the generated Xcursor files and images in them (dark-sense, the
+/// largest real recipe, makes ~6 MiB from 405 images).
+pub const MAX_GENERATED_BYTES: u64 = 64 << 20;
+pub const MAX_GENERATED_IMAGES: usize = 4096;
+
+/// Width and height from a PNG's IHDR, read before anything is decoded.
+pub fn png_dimensions(data: &[u8]) -> Result<(u32, u32), String> {
+    if data.len() < 24 || !data.starts_with(b"\x89PNG\r\n\x1a\n") || &data[12..16] != b"IHDR" {
+        return Err("not a PNG (no IHDR header)".into());
+    }
+    let be = |i: usize| u32::from_be_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
+    Ok((be(16), be(20)))
+}
 
 /// A cursor file name: `[A-Za-z0-9][A-Za-z0-9_.+-]*` (the X11, CSS and hash names all fit), at most 64.
 pub fn safe_name(n: &str) -> bool {
@@ -95,6 +108,10 @@ pub fn encode(images: &[(&Image, u32, u32, Vec<u32>)]) -> Vec<u8> {
 
 /// A PNG as premultiplied ARGB words, with its size.
 pub fn argb_from_png(data: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
+    let (w, h) = png_dimensions(data)?;
+    if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
+        return Err(format!("{w}x{h} pixels (cursor images are at most {MAX_SIDE} a side)"));
+    }
     let img = image::load_from_memory_with_format(data, image::ImageFormat::Png).map_err(|e| format!("not a readable PNG: {e}"))?.to_rgba8();
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
@@ -114,14 +131,35 @@ pub fn argb_from_png(data: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
 /// Builds every cursor into `out/cursors/` from PNGs read through `read` (pack-relative path -> bytes).
 /// Returns the pack-relative PNG paths that were used (they are not installed themselves).
 pub fn build(cursors: &[Cursor], out: &Path, read: &dyn Fn(&str) -> Result<Vec<u8>, String>) -> Result<Vec<String>, String> {
+    build_within(cursors, out, read, MAX_GENERATED_BYTES, MAX_GENERATED_IMAGES)
+}
+
+/// [`build`] with explicit limits on everything generated, across all cursors: each image's size comes from its PNG
+/// header and is charged before the PNG is decoded, so an oversized recipe is refused before memory is used for it.
+pub fn build_within(cursors: &[Cursor], out: &Path, read: &dyn Fn(&str) -> Result<Vec<u8>, String>, max_bytes: u64, max_images: usize) -> Result<Vec<String>, String> {
     use std::os::unix::fs::PermissionsExt;
+    let total_images: usize = cursors.iter().map(|c| c.images.len()).sum();
+    if total_images > max_images {
+        return Err(format!("the cursors declare {total_images} images; the limit is {max_images}"));
+    }
     let dir = out.join("cursors");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut used = Vec::new();
+    let mut generated: u64 = 0;
     for c in cursors {
         let mut imgs = Vec::new();
+        generated += 16;
         for im in &c.images {
-            let (w, h, px) = argb_from_png(&read(&im.file)?).map_err(|e| format!("cursor `{}`: {}: {e}", c.name, im.file))?;
+            let data = read(&im.file)?;
+            let (w, h) = png_dimensions(&data).map_err(|e| format!("cursor `{}`: {}: {e}", c.name, im.file))?;
+            if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
+                return Err(format!("cursor `{}`: {}: {w}x{h} pixels (cursor images are at most {MAX_SIDE} a side)", c.name, im.file));
+            }
+            generated += 12 + 36 + u64::from(w) * u64::from(h) * 4;
+            if generated > max_bytes {
+                return Err(format!("the cursors would make more than {} MiB of Xcursor data", max_bytes >> 20));
+            }
+            let (w, h, px) = argb_from_png(&data).map_err(|e| format!("cursor `{}`: {}: {e}", c.name, im.file))?;
             if im.xhot >= w || im.yhot >= h {
                 return Err(format!("cursor `{}`: hotspot {},{} lies outside the {w}x{h} image {}", c.name, im.xhot, im.yhot, im.file));
             }
@@ -193,6 +231,31 @@ mod tests {
         let roots = crate::icons::resolve::Roots { icon_dirs: vec![s.path().parent().unwrap().to_path_buf()], pixmaps: vec![] };
         let theme = s.path().file_name().unwrap().to_str().unwrap();
         assert!(crate::desktop_assets::cursor::find(&roots, theme, "arrow").is_some());
+    }
+
+    #[test]
+    fn sizes_come_from_the_header_and_one_budget_covers_every_recipe() {
+        let s = Scratch::new("xcur-budget");
+        // an IHDR claiming 70000 x 70000 with nothing decodable behind it: refused by its header, not by a decoder
+        let mut bomb = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        bomb.extend_from_slice(&70000u32.to_be_bytes());
+        bomb.extend_from_slice(&70000u32.to_be_bytes());
+        bomb.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        let small = png_rgba(32, 32, |_, _| [0, 0, 0, 255]);
+        let files = std::collections::HashMap::from([("bomb.png".to_string(), bomb), ("s.png".to_string(), small)]);
+        let read = |p: &str| files.get(p).cloned().ok_or_else(|| format!("{p} missing"));
+        let one = |name: &str, f: &str| Cursor { name: name.into(), images: parse_config(&format!("24 0 0 {f}")).unwrap(), aliases: vec![] };
+        let e = build(&[one("x", "bomb.png")], s.path(), &read).unwrap_err();
+        assert!(e.contains("70000x70000 pixels"), "{e}");
+        // 3 cursors of one 32x32 image make 3 * (16 + 12 + 36 + 4096) bytes: a budget just below that refuses the third
+        let three: Vec<Cursor> = (0..3).map(|i| one(&format!("c{i}"), "s.png")).collect();
+        let d = Scratch::new("xcur-budget2");
+        let e = build_within(&three, d.path(), &read, 3 * (16 + 12 + 36 + 4096) - 1, 100).unwrap_err();
+        assert!(e.contains("Xcursor data"), "{e}");
+        let d = Scratch::new("xcur-budget3");
+        assert!(build_within(&three, d.path(), &read, 1 << 20, 2).unwrap_err().contains("declare 3 images"), "counted across recipes before any work");
+        let d = Scratch::new("xcur-budget4");
+        assert_eq!(build_within(&three, d.path(), &read, 1 << 20, 3).unwrap().len(), 1, "one source file used");
     }
 
     #[test]

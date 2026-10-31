@@ -455,6 +455,18 @@ fn verify_pins(req: &Request, st: &Staged, archive_sha: Option<&str>) -> Result<
         }
         v.archive_sha256 = true;
     }
+    // link_sources of a catalogue pack must be pinned before anything is built from them (each folder's tree, or the
+    // whole archive's sha256)
+    if req.origin == "catalog" && !req.link_sources.is_empty() && !v.archive_sha256 {
+        let unpinned: Vec<&String> = req.link_sources.iter().filter(|d| !req.pins.link_trees.iter().any(|(p, _)| p == *d)).collect();
+        if !unpinned.is_empty() {
+            return Err(format!(
+                "link source{} {} not pinned: add link_source_trees (git rev-parse <commit>:<folder>) or install from an archive with a pinned archive_sha256",
+                if unpinned.len() == 1 { "" } else { "s" },
+                unpinned.iter().map(|d| format!("`{d}`")).collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
     for (d, want) in &req.pins.link_trees {
         match st.link_trees.get(d) {
             Some(Some(got)) if got == want => {}
@@ -497,26 +509,35 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
             (source::from_dir(d, src_dir, filter, lim, &assemble::keep)?, None)
         }
         Input::Archive(_) | Input::Download(_) => {
-            let file = match &req.input {
+            // the archive that is hashed is the archive that is read: an external file is copied into this private job
+            // while it is hashed (bytes capped as they stream), and only that owned snapshot is sniffed and staged
+            let (file, sha) = match &req.input {
                 Input::Archive(p) => {
                     rec.fetched_from = "archive".into();
-                    p.clone()
+                    let m = std::fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?;
+                    if !m.is_file() {
+                        return Err(format!("{} is not a file", p.display()));
+                    }
+                    let snap = job.dir.join("archive");
+                    let f = std::fs::File::open(p).map_err(|e| format!("{}: {e}", p.display()))?;
+                    let (sha, _) = fetch::copy_hashed(f, &snap, lim.max_archive)?;
+                    #[cfg(test)]
+                    tests::AFTER_SNAPSHOT.with(|h| {
+                        if let Some(f) = h.borrow().as_ref() {
+                            f(p)
+                        }
+                    });
+                    (snap, sha)
                 }
                 Input::Download(url) => {
                     rec.fetched_from = "download".into();
                     rec.url = Some(url.clone());
                     let f = job.dir.join("download");
                     let (sha, _) = fetch::download(url, &f, lim.max_archive)?;
-                    if let Some(want) = &req.pins.archive_sha256 {
-                        if *want != sha {
-                            return Err(format!("archive sha256 mismatch: pinned {want}, downloaded {sha}"));
-                        }
-                    }
-                    f
+                    (f, sha)
                 }
                 Input::Dir(_) => unreachable!(),
             };
-            let sha = fetch::hash_file(&file, lim.max_archive)?;
             if let Some(want) = &req.pins.archive_sha256 {
                 if *want != sha {
                     return Err(format!("archive sha256 mismatch: pinned {want}, file has {sha}"));
@@ -613,7 +634,7 @@ pub fn install(req: &Request, lim: &Limits) -> Result<Report, String> {
 fn outside_checks(req: &Request, built: &Built, v: &mut Verified) -> Result<(), String> {
     let by_archive = v.archive_sha256;
     let mut add = |what: &str, verified: bool, by: &str| v.outside.push(OutsideCheck { what: what.into(), verified, by: by.into() });
-    let used_links = built.copies + built.expanded_files + built.expanded_dirs > 0;
+    let used_links = built.copies + built.expanded_files + built.expanded_dirs + built.cursor_outside_inputs > 0;
     if used_links {
         let all_pinned = !req.link_sources.is_empty() && req.link_sources.iter().all(|d| req.pins.link_trees.iter().any(|(p, _)| p == d));
         let ok = all_pinned || by_archive;
@@ -777,9 +798,14 @@ pub(crate) mod tests {
     use super::*;
     use std::cell::Cell;
 
+    /// A test hook run with the original archive's path.
+    pub type PathHook = Option<Box<dyn Fn(&Path)>>;
+
     thread_local! {
         pub static NO_RENAME2: Cell<bool> = const { Cell::new(false) };
         pub static FAIL: std::cell::RefCell<Vec<Step>> = const { std::cell::RefCell::new(Vec::new()) };
+        /// Runs right after an external archive was copied and hashed (to mutate the original in tests).
+        pub static AFTER_SNAPSHOT: std::cell::RefCell<PathHook> = const { std::cell::RefCell::new(None) };
     }
 
     pub const COMMIT: &str = "5d11ba4e4013a4d1e1c601265d55c66b95184922";
@@ -1275,6 +1301,109 @@ pub(crate) mod tests {
         assert!(!s.path().join("i2/dark").exists());
         r.allow_degraded = true;
         assert!(install(&r, &Limits::default()).unwrap().provenance.degraded);
+    }
+
+    fn png(w: u32, rgb: [u8; 4]) -> Vec<u8> {
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(w, w, image::Rgba(rgb))).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
+        out
+    }
+
+    /// A clone-like folder: the cursor pack `sense` builds `left_ptr` from a PNG that is a link into the link source `lib`.
+    fn cursor_link_source(lib_png: &[u8]) -> Vec<E> {
+        vec![
+            E::dir("top/"),
+            E::file("top/COPYING", b"GPL\n"),
+            E::file("top/sense/index.theme", b"[Icon Theme]\nName=Sense\n"),
+            E::link("top/sense/24x24/left_ptr.png", "../../lib/left_ptr.png"),
+            E::file("top/lib/left_ptr.png", lib_png),
+        ]
+    }
+
+    fn cursor_request(root: &Path, dir: &Path, v: &[E]) -> Request {
+        let dummy = icon_source("bloom", vec![]);
+        let s = Scratch::new("dummy-arch");
+        let a = s.write("d.tgz", &targz(&dummy, None));
+        let mut r = request(root, &a, &dummy);
+        r.input = Input::Dir(dir.to_path_buf());
+        r.strip = 0;
+        r.pins = Pins { tree: Some(tree_of(v, "top/sense")), archive_sha256: None, commit: None, link_trees: vec![] };
+        r.link_sources = vec!["lib".into()];
+        r.spec = Spec {
+            provides: vec![Provides::Cursors],
+            path: "sense".into(),
+            install_name: "sense".into(),
+            display_name: "Sense".into(),
+            license_files: vec!["COPYING".into()],
+            license_oids: [("COPYING".to_string(), crate::desktop_assets::gitoid::hex(&crate::desktop_assets::gitoid::blob_oid(b"GPL\n")))].into(),
+            index_files: vec![],
+            xcursors: vec![super::super::xcursor::Cursor { name: "left_ptr".into(), images: super::super::xcursor::parse_config("24 1 1 24x24/left_ptr.png").unwrap(), aliases: vec![] }],
+        };
+        r
+    }
+
+    #[test]
+    fn cursor_pngs_read_from_link_sources_are_pinned_and_recorded() {
+        let s = Scratch::new("cur-outside");
+        let v = cursor_link_source(&png(24, [0, 0, 0, 255]));
+        let clone = s.path().join("clone");
+        write_tree(&v, &clone);
+        // no pin for `lib`: refused before anything is built
+        let r = cursor_request(&s.path().join("i1"), &clone, &v);
+        assert!(install(&r, &Limits::default()).unwrap_err().contains("link source `lib` not pinned"));
+        assert!(!s.path().join("i1/sense").exists());
+        // pinned: installed, the outside PNG is counted and the record is complete
+        let mut r = cursor_request(&s.path().join("i2"), &clone, &v);
+        r.pins.link_trees = vec![("lib".into(), tree_of(&v, "top/lib"))];
+        let rep = install(&r, &Limits::default()).unwrap();
+        assert_eq!(rep.built.cursor_outside_inputs, 1);
+        assert!(rep.provenance.verified.complete && rep.provenance.verified.outside.iter().any(|o| o.what == "link_sources" && o.by == "tree"), "{:?}", rep.provenance.verified);
+        // the external PNG changes, the pack's own tree does not: the link source pin catches it
+        let v2 = cursor_link_source(&png(24, [255, 0, 0, 255]));
+        assert_eq!(tree_of(&v2, "top/sense"), tree_of(&v, "top/sense"), "the pack folder itself is unchanged");
+        std::fs::write(clone.join("lib/left_ptr.png"), png(24, [255, 0, 0, 255])).unwrap();
+        let mut r3 = r.clone();
+        r3.root = s.path().join("i3");
+        assert!(install(&r3, &Limits::default()).unwrap_err().contains("tree mismatch for link source `lib`"));
+        // a local import without pins installs but does not claim to be complete
+        let mut r4 = r.clone();
+        r4.root = s.path().join("i4");
+        r4.origin = "local".into();
+        r4.pins.link_trees = vec![];
+        let p = install(&r4, &Limits::default()).unwrap().provenance;
+        assert!(!p.verified.complete && p.verified.outside.iter().any(|o| o.what == "link_sources" && !o.verified && o.by == "none"), "{:?}", p.verified);
+        // and a cursor PNG that resolves outside the pack and its link_sources is refused
+        let mut r5 = r.clone();
+        r5.root = s.path().join("i5");
+        r5.link_sources = vec![];
+        r5.pins.link_trees = vec![];
+        r5.origin = "local".into();
+        assert!(install(&r5, &Limits::default()).unwrap_err().contains("not in the pack"), "lib is not staged at all");
+        // staged, but only as a licence text, not as a link source: still refused for a cursor
+        let mut r6 = r5.clone();
+        r6.root = s.path().join("i6");
+        r6.spec.license_files.push("lib/left_ptr.png".into());
+        assert!(install(&r6, &Limits::default()).unwrap_err().contains("outside the pack and its link_sources"));
+        assert!(!s.path().join("i5/sense").exists() && !s.path().join("i6/sense").exists());
+    }
+
+    #[test]
+    fn the_archive_that_is_verified_is_the_archive_that_is_staged() {
+        let s = Scratch::new("snapshot");
+        let root = s.path().join("icons");
+        let (a, entries) = fixture(&s, vec![], "a.tgz");
+        let other = targz(&icon_source("bloom", vec![E::file("top/bloom/apps/48/evil.svg", SVG)]), Some(COMMIT));
+        let r = request(&root, &a, &entries);
+        let sha_a = r.pins.archive_sha256.clone().unwrap();
+        // the original is replaced right after it was copied and hashed: staging must not see the new bytes
+        AFTER_SNAPSHOT.with(|h| *h.borrow_mut() = Some(Box::new(move |p: &Path| std::fs::write(p, &other).unwrap())));
+        let rep = install(&r, &Limits::default());
+        AFTER_SNAPSHOT.with(|h| *h.borrow_mut() = None);
+        let rep = rep.unwrap();
+        assert_eq!(rep.provenance.source.archive_sha256.as_deref(), Some(sha_a.as_str()));
+        assert!(!root.join("bloom/apps/48/evil.svg").exists(), "only the verified snapshot was staged");
+        assert_ne!(fetch::hash_file(&a, 1 << 30).unwrap(), sha_a, "the original did change");
+        assert!(staging_is_clean(&root), "the snapshot went with the job");
     }
 
     #[test]

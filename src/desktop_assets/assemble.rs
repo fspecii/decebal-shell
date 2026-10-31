@@ -60,6 +60,8 @@ pub struct Built {
     pub expanded_files: usize,
     pub expanded_bytes: u64,
     pub expanded_links: usize,
+    /// Cursor PNGs read from `link_sources` (through links of the pack).
+    pub cursor_outside_inputs: usize,
     /// Licence files outside the pack folder whose blob id was pinned and matched.
     pub licences_pinned: usize,
     pub licences_outside: usize,
@@ -222,19 +224,30 @@ pub fn build(st: &Staged, spec: &Spec, out: &Path, lim: &Limits) -> Result<Built
             }
         }
         let full = |rel: &str| if spec.path == "." { rel.to_string() } else { format!("{}/{rel}", spec.path) };
+        // every PNG a cursor reads from outside the pack folder (through a link into a link source) is counted, so the
+        // install records and checks the link sources' pins for it
+        let outside = std::cell::Cell::new(0usize);
         let read = |rel: &str| -> Result<Vec<u8>, String> {
-            match st.nodes.get(&full(rel)) {
-                Some(Node::File { staged: true, size, .. }) if *size <= lim.max_file => std::fs::read(st.file_path(&full(rel))).map_err(|e| e.to_string()),
-                Some(Node::Link(_)) => match st.resolve(&full(rel)) {
-                    Resolved::File(t) => std::fs::read(st.file_path(&t)).map_err(|e| e.to_string()),
-                    _ => Err(format!("cursor image `{rel}` is a link to nothing")),
-                },
-                _ => Err(format!("cursor image `{rel}` is not in the pack")),
+            let t = match st.resolve(&full(rel)) {
+                Resolved::File(t) => t,
+                _ => return Err(format!("cursor image `{rel}` is not in the pack")),
+            };
+            let Some(Node::File { staged: true, size, .. }) = st.nodes.get(&t) else { return Err(format!("cursor image `{rel}` is not in the pack")) };
+            if *size > lim.max_file {
+                return Err(format!("cursor image `{rel}` is larger than {} MiB", lim.max_file >> 20));
             }
+            if under(&t, &spec.path).is_none() {
+                if !st.filter.link_sources.iter().any(|d| under(&t, d).is_some_and(|r| !r.is_empty())) {
+                    return Err(format!("cursor image `{rel}` resolves outside the pack and its link_sources (`{t}`)"));
+                }
+                outside.set(outside.get() + 1);
+            }
+            std::fs::read(st.file_path(&t)).map_err(|e| e.to_string())
         };
         for u in super::xcursor::build(&spec.xcursors, out, &read)? {
             consumed.insert(u);
         }
+        b.cursor_outside_inputs = outside.get();
         b.cursors_built = spec.xcursors.len();
     }
     let mut links: Vec<(String, String)> = Vec::new();

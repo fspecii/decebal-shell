@@ -41,10 +41,16 @@ pub fn hash_file(p: &Path, cap: u64) -> Result<String, String> {
     let mut f = std::fs::File::open(p).map_err(|e| e.to_string())?;
     let mut h = Sha256::default();
     let mut buf = vec![0u8; 64 << 10];
+    let mut n = 0u64;
     loop {
         let k = f.read(&mut buf).map_err(|e| e.to_string())?;
         if k == 0 {
             return Ok(sha256::hex(&h.finish()));
+        }
+        // the file may grow while it is read: the cap holds for the bytes actually hashed
+        n += k as u64;
+        if n > cap {
+            return Err(format!("{} is larger than {} MiB", p.display(), cap >> 20));
         }
         h.update(&buf[..k]);
     }
