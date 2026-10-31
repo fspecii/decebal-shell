@@ -737,5 +737,102 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------- accessibility
+
+/// A short stable word for a caption ("Shut Down" -> "shut-down").
+fn slug(s: &str) -> String {
+    let mapped: String = s.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect();
+    mapped.split('-').filter(|p| !p.is_empty()).collect::<Vec<_>>().join("-")
+}
+
+/// FNV-1a over the words of a command, to tell rows of the same name apart by what they open.
+fn fnv(parts: &[String]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for p in parts {
+        for b in p.bytes().chain([0u8]) {
+            h ^= u32::from(b);
+            h = h.wrapping_mul(0x0100_0193);
+        }
+    }
+    h
+}
+
+/// What a screen reader is told about the controls this style owns: the footer tabs and system buttons, the Session
+/// button and its menu rows, the Places sidebar and rows, and the header buttons. The captions are the ones painted;
+/// a leaving action waiting for its second press says so, as its caption does.
+pub fn describe(m: &Model, kind: u8, i: u16) -> Option<super::Semantics> {
+    use super::{Control, Semantics};
+    let make = |key: String, control: Control, name: &str, description: &str| Semantics {
+        key,
+        control,
+        name: name.to_string(),
+        description: description.to_string(),
+        enabled: true,
+        selected: false,
+        popup: None,
+    };
+    Some(match kind {
+        TAB => {
+            let (name, what) = if i == 0 { ("Applications", "Shows your applications") } else { ("Places", "Shows the computer, history and frequently used apps") };
+            Semantics { selected: tab(m) == i as usize, ..make(format!("tab:{}", slug(name)), Control::Tab, name, what) }
+        }
+        SYS | MENU => {
+            let sys = *system::ALL.get(i as usize)?;
+            let pending = armed(m) == Some(sys);
+            let name = if pending { format!("{}?", sys.label()) } else { sys.label().to_string() };
+            let what = if pending {
+                "Press again to confirm"
+            } else if sys.confirms() {
+                "Asks to confirm"
+            } else {
+                ""
+            };
+            let (prefix, control) = if kind == SYS { ("sys", Control::Button) } else { ("menu", Control::MenuItem) };
+            Semantics { enabled: sys_valid(m, sys), ..make(format!("{prefix}:{}", slug(sys.label())), control, &name, what) }
+        }
+        SESSION => Semantics { popup: Some(menu_open(m)), ..make("session".into(), Control::Button, "Session", "Shows more leave actions") },
+        PLACE => {
+            let (title, _) = *places::SIDEBAR.get(i as usize)?;
+            Semantics { selected: !m.searching() && i as usize == place(m), ..make(format!("place:{}", slug(title)), Control::Tab, title, "") }
+        }
+        HEAD if i == 0 => make("head:account".into(), Control::Button, "Account settings", "Opens the account settings"),
+        HEAD => make("head:configure".into(), Control::Button, "Configure launcher", "Opens the launcher settings"),
+        COMPUTER_ROW | DOCUMENT_ROW => {
+            let rows = if kind == COMPUTER_ROW { computer_rows() } else { document_rows() };
+            let e = rows.get(i as usize)?;
+            let prefix = if kind == COMPUTER_ROW { "computer" } else { "document" };
+            Semantics { enabled: !e.open.is_empty(), ..make(format!("{prefix}:{}-{:08x}", slug(&e.name), fnv(&e.open)), Control::Row, &e.name, &e.detail) }
+        }
+        _ => return None,
+    })
+}
+
+/// What the style is waiting for in the background: the worker that reads the Places lists.
+pub fn busy(m: &Model) -> Option<&'static str> {
+    (tab(m) == 1 && places::state() == places::State::Loading && !m.searching()).then_some("Reading places...")
+}
+
+#[cfg(test)]
+pub fn install_places(computer: Vec<Entry>, documents: Vec<Entry>) {
+    places::install(places::Loaded { computer, documents });
+}
+
+/// Starts the Places worker and keeps it busy until `gate` is closed or sent to.
+#[cfg(test)]
+pub fn hold_places(gate: std::sync::mpsc::Receiver<()>) {
+    places::request(move |_| {
+        let _ = gate.recv();
+        places::Loaded::default()
+    });
+}
+
+/// The commands the style "opened" and the system actions it "ran" since the last call (nothing really started).
+#[cfg(test)]
+pub fn effects() -> (Vec<Vec<String>>, Vec<&'static str>) {
+    let opened = OPENED.with(|o| std::mem::take(&mut *o.borrow_mut()));
+    let ran = system::RAN.with(|r| std::mem::take(&mut *r.borrow_mut()));
+    (opened, ran.iter().map(|s| s.id()).collect())
+}
+
 #[cfg(test)]
 mod tests;

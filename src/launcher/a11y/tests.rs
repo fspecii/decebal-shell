@@ -11,6 +11,7 @@ use crate::a11y::action::validate;
 use crate::a11y::tree::{stamp, Ids, Node, Tree, WindowInfo};
 use crate::a11y::Request;
 use crate::app::Button;
+use crate::launcher::styled;
 use crate::launcher::styled::tests as sty;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -295,28 +296,6 @@ fn a_request_older_than_the_items_last_change_is_stale() {
     assert!(matches!(validate(&r.tree, &rq), Err(ActionError::Stale { .. })), "the selection moved off it after it was read");
 }
 
-#[test]
-fn an_open_session_menu_gates_every_other_action() {
-    // narrow enough that every system action sits behind the Session button
-    let mut st = open(LauncherStyle::Kde, 40, (500, 600));
-    st.m.ui.insert("kde.menu", 1);
-    st.relayout();
-    assert!(has_menu(&st), "the Session menu is open");
-    let mut r = Rig::new(wrap(st));
-    let menu = r.node("menu");
-    assert!(menu.states.contains(State::Modal) && menu.role == Role::Menu);
-    assert_eq!(r.focus_key(), Some("menu"));
-    let item = list_items(&r).into_iter().next().map(|n| n.key.clone()).expect("an app is showing");
-    assert!(matches!(r.act(&item, Op::Action("activate")), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act("search", Op::SetText("x".into())), Err(ActionError::Refused(_))));
-    let st = r.l.styled.as_mut().unwrap();
-    st.m.ui.insert("kde.menu", 0);
-    st.relayout();
-    r.redraw();
-    assert!(r.find("menu").is_none());
-    assert!(r.act(&item, Op::Focus).is_ok(), "ordinary actions work again once it closes");
-}
-
 // ------------------------------------------------------------------------------------------------ the search field
 
 #[test]
@@ -457,7 +436,7 @@ fn zone_keys(l: &Launcher) -> (HashSet<String>, HashSet<String>) {
         let offset = st.m.offset(z.id);
         let shown = z.visible(offset);
         for (pos, &t) in z.items.iter().enumerate() {
-            let Some(k) = target_key(z.id, t, &ids) else { continue };
+            let Some(k) = target_key(z.id, t, &ids, Some(st)) else { continue };
             let on = matches!(z.shape, Shape::Fixed(_)) || shown.contains(&pos);
             if on {
                 visible.insert(k);
@@ -490,7 +469,7 @@ fn every_style_describes_the_zones_it_really_laid_out() {
             let ids = app_keys(&st.m.cat.apps);
             for z in &st.zones {
                 for (pos, &t) in z.items.iter().enumerate() {
-                    let (Some(k), Some(rect)) = (target_key(z.id, t, &ids), z.rect(pos, st.m.offset(z.id))) else { continue };
+                    let (Some(k), Some(rect)) = (target_key(z.id, t, &ids, Some(st)), z.rect(pos, st.m.offset(z.id))) else { continue };
                     let Some(n) = r.find(&k) else { continue };
                     assert_eq!(n.bounds, Some(prect(&rect)), "{ctx}: {k}");
                     let (x, y, w, h) = n.bounds.unwrap();
@@ -534,6 +513,8 @@ fn views_pages_and_buttons_act_like_a_click_on_them() {
     for style in sty::STYLES {
         for query in ["", "kilo"] {
             let setup = || {
+                // (Kickoff's Places data comes from here, never from the disk)
+                styled::kde_install_places(Vec::new(), Vec::new());
                 let mut st = open(style, 40, SCREEN);
                 type_into(&mut st, query);
                 st
@@ -545,24 +526,27 @@ fn views_pages_and_buttons_act_like_a_click_on_them() {
             // (apps are covered by the launch tests; they would start a process here)
             for e in es.iter().filter(|e| !matches!(e.target, Tgt::App(_) | Tgt::Letter(_))) {
                 let ctx = format!("{style:?} {query:?} {}", e.key);
-                let mut a = wrap(setup());
+                // Kickoff's "press again" arming is per thread: the real click goes first and the adapter's launcher is
+                // built after it, whose layout ends the arming, so each starts from the same unarmed state
                 let mut b = setup();
                 let (cx, cy) = (e.rect.0 as f32 + e.rect.2 as f32 / 2.0, e.rect.1 as f32 + e.rect.3 as f32 / 2.0);
                 assert_eq!(b.hit(cx, cy).map(|h| (h.0, h.1)), Some((e.zone, e.pos)), "{ctx}: a click at its centre reaches it");
                 let real = b.button(cx, cy, Button::Left, true);
+                let mut a = wrap(setup());
                 let ours = activate_entry(&mut a, e).unwrap_or_else(|err| panic!("{ctx}: {err}"));
                 assert_eq!(ours, real, "{ctx}: same response");
                 assert_eq!(snapshot(a.styled.as_ref().unwrap()), snapshot(&b), "{ctx}: same state");
                 tried += 1;
             }
-            assert!(tried > 0 || style == LauncherStyle::Kde, "{style:?} {query:?}: some control was compared");
+            assert!(tried > 0, "{style:?} {query:?}: some control was compared");
         }
     }
 }
 
 fn snapshot(st: &Styled) -> String {
-    let lists = ["apps", "results", "fav", "cats", "pages"].map(|id| (st.m.sel(id), st.m.offset(id)));
-    format!("{:?} {:?} {} {lists:?} {:?} {} {:?}", st.m.view, st.m.query(), st.m.zone, st.m.cat.favorites, st.m.expanded, st.m.results)
+    let lists = ["apps", "results", "fav", "cats", "pages", "menu", "footer"].map(|id| (st.m.sel(id), st.m.offset(id)));
+    let ui = ["kde.tab", "kde.menu", "kde.place"].map(|k| st.m.ui(k));
+    format!("{:?} {:?} {} {lists:?} {ui:?} {:?} {} {:?}", st.m.view, st.m.query(), st.m.zone, st.m.cat.favorites, st.m.expanded, st.m.results)
 }
 
 #[test]
@@ -648,4 +632,227 @@ fn launchpad_bounds_follow_the_overlay_card() {
     let (cx, cy, cw, ch) = r.l.cell_rect(0);
     assert_eq!(r.node("apps/app:app-000").bounds, Some(ints(cx + r.l.origin.0, cy + r.l.origin.1, cw, ch)));
     assert_eq!(r.node("frame").bounds, Some((0, 0, 3440, 1440)));
+}
+
+// ------------------------------------------------------------------------------------------------ Kickoff's own controls
+
+fn entry(name: &str, detail: &str, open: &[&str]) -> styled::Entry {
+    styled::Entry { name: name.into(), detail: detail.into(), icon: "folder".into(), open: open.iter().map(|s| s.to_string()).collect(), at: 0 }
+}
+
+/// Kickoff the size of the original capture, with fixture Places data (nothing is read from the disk).
+fn kickoff() -> Rig {
+    styled::kde_install_places(vec![entry("Home", "/home/t", &["xdg-open", "/home/t"]), entry("Nothing", "cannot open", &[])], vec![entry("notes.txt", "~/Documents", &["xdg-open", "/n"])]);
+    let mut st = sty::styled(LauncherStyle::Kde, 40);
+    st.full = false;
+    st.scale = 1.0;
+    st.resize(655, 516);
+    Rig::new(wrap(st))
+}
+
+fn kde_state(r: &Rig) -> &Styled {
+    r.l.styled.as_ref().unwrap()
+}
+
+fn click() -> Op {
+    Op::Action("click")
+}
+
+#[test]
+fn kickoffs_footer_tabs_system_buttons_and_session_button_are_described() {
+    let r = kickoff();
+    assert_eq!(r.node("zone:footer").role, Role::Panel);
+    assert_eq!(r.node("zone:footer/tabs").role, Role::PageTabList);
+    let apps = r.node("footer/tab:applications");
+    let places = r.node("footer/tab:places");
+    assert_eq!((apps.role, apps.name.as_str(), places.name.as_str()), (Role::PageTab, "Applications", "Places"));
+    assert!(apps.states.contains(State::Selected) && !places.states.contains(State::Selected), "Applications is the current tab");
+    for (key, name) in [("footer/sys:sleep", "Sleep"), ("footer/sys:restart", "Restart"), ("footer/sys:shut-down", "Shut Down")] {
+        let n = r.node(key);
+        assert_eq!((n.role, n.name.as_str()), (Role::PushButton, name), "{key}");
+        assert!(n.enabled() && n.actions.iter().any(|a| a.name == "click") && n.bounds.is_some(), "{key}");
+    }
+    assert_eq!(r.node("footer/sys:restart").description, "Asks to confirm");
+    let session = r.node("footer/session");
+    assert!(session.states.contains(State::HasPopup) && session.states.contains(State::Collapsed) && !session.states.contains(State::Expanded));
+    // the header: the avatar opens the account settings, the gear the launcher's settings
+    assert_eq!(r.node("actions/head:account").name, "Account settings");
+    assert_eq!(r.node("actions/head:configure").name, "Configure launcher");
+}
+
+#[test]
+fn kickoffs_tabs_switch_through_its_own_dispatcher_and_places_rows_open() {
+    let mut r = kickoff();
+    r.act("footer/tab:places", click()).unwrap();
+    assert_eq!(kde_state(&r).m.ui("kde.tab"), 1);
+    assert!(r.node("footer/tab:places").states.contains(State::Selected) && !r.node("footer/tab:applications").states.contains(State::Selected));
+    // the sidebar now lists the places as tabs, Computer current
+    assert_eq!(r.node("zone:cats").role, Role::PageTabList);
+    assert!(r.node("cats/place:computer").states.contains(State::Selected));
+    assert_eq!(r.node("cats/place:frequently-used").name, "Frequently Used");
+    assert_eq!(r.node("zone:apps").name, "Places");
+    // Computer: Show KRunner, Home, and a row that cannot open anything
+    let rows: Vec<(String, bool)> = list_items(&r).iter().map(|n| (n.name.clone(), n.enabled())).collect();
+    assert_eq!(rows, [("Show KRunner".to_string(), true), ("Home".to_string(), true), ("Nothing".to_string(), false)]);
+    let nothing = list_items(&r).into_iter().find(|n| n.name == "Nothing").unwrap().key.clone();
+    assert_eq!(r.act(&nothing, click()).unwrap_err(), ActionError::Disabled);
+    let home = list_items(&r).into_iter().find(|n| n.name == "Home").unwrap().key.clone();
+    assert_eq!(r.node(&home).description, "/home/t");
+    let out = r.act(&home, click()).unwrap();
+    assert_eq!(out.action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().0, [vec!["xdg-open".to_string(), "/home/t".to_string()]]);
+}
+
+#[test]
+fn kickoffs_places_sidebar_selects_through_the_tab_list_and_history_documents_open() {
+    let mut r = kickoff();
+    r.act("footer/tab:places", click()).unwrap();
+    let at = r.l.a11y.lists["zone:cats"].children.iter().position(|k| k == "cats/place:history").unwrap();
+    r.act("zone:cats", Op::SelectChild(at)).unwrap();
+    assert_eq!(kde_state(&r).m.ui("kde.place"), 1);
+    assert!(r.node("cats/place:history").states.contains(State::Selected) && !r.node("cats/place:computer").states.contains(State::Selected));
+    let doc = list_items(&r).into_iter().find(|n| n.name == "notes.txt").expect("the history lists the document").key.clone();
+    assert!(doc.starts_with("apps/document:notes-txt-"), "{doc}");
+    assert_eq!(r.node(&doc).description, "~/Documents");
+    assert_eq!(r.act(&doc, click()).unwrap().action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().0, [vec!["xdg-open".to_string(), "/n".to_string()]]);
+}
+
+#[test]
+fn kickoffs_header_buttons_start_the_settings_panes() {
+    let mut r = kickoff();
+    assert_eq!(r.act("actions/head:account", click()).unwrap().action, Some(Action::Close));
+    let mut r2 = kickoff();
+    assert_eq!(r2.act("actions/head:configure", click()).unwrap().action, Some(Action::Close));
+    let opened = styled::kde_effects().0;
+    assert_eq!(opened.iter().map(|c| c.last().cloned().unwrap_or_default()).collect::<Vec<_>>(), ["users", "launcher"]);
+}
+
+#[test]
+fn kickoffs_leaving_actions_run_through_its_dispatcher_with_the_second_press() {
+    let mut r = kickoff();
+    // Sleep acts at once
+    assert_eq!(r.act("footer/sys:sleep", click()).unwrap().action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().1, ["suspend"]);
+    // Restart asks first: the caption and the description say so, nothing ran
+    let mut r = kickoff();
+    let first = r.act("footer/sys:restart", click()).unwrap();
+    assert_eq!(first.action, None);
+    assert!(styled::kde_effects().1.is_empty());
+    let n = r.node("footer/sys:restart");
+    assert_eq!((n.name.as_str(), n.description.as_str()), ("Restart?", "Press again to confirm"));
+    assert_eq!(r.act("footer/sys:restart", click()).unwrap().action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().1, ["reboot"]);
+}
+
+#[test]
+fn kickoffs_session_menu_is_modal_exposes_its_rows_and_gates_everything_else() {
+    let mut r = kickoff();
+    r.act("footer/session", click()).unwrap();
+    assert!(has_menu(kde_state(&r)), "the Session menu is open");
+    let menu = r.node("zone:menu");
+    assert!(menu.role == Role::Menu && menu.states.contains(State::Modal) && menu.selection);
+    let rows: Vec<(&str, Role)> = menu.children.iter().map(|c| r.tree.get(*c).unwrap()).map(|n| (n.name.as_str(), n.role)).collect();
+    assert_eq!(rows, [("Lock", Role::MenuItem), ("Log Out", Role::MenuItem)], "the actions that do not fit the footer");
+    let session = r.node("footer/session");
+    assert!(session.states.contains(State::Expanded) && !session.states.contains(State::Collapsed));
+    assert_eq!(r.focus_key(), Some("menu/menu:lock"), "the first row has the keyboard");
+    // everything unrelated is refused while the menu is open
+    let app = list_items(&r).into_iter().find(|n| n.key.starts_with("apps/app:")).map(|n| n.key.clone()).expect("an app is showing");
+    assert!(matches!(r.act(&app, Op::Action("activate")), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act(&app, Op::Focus), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act("search", Op::SetText("x".into())), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act("footer/tab:places", click()), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act("footer/sys:sleep", click()), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act("zone:apps", Op::SelectChild(0)), Err(ActionError::Refused(_))));
+    assert!(styled::kde_effects().1.is_empty());
+    // its rows work: choosing one by the menu's selection, or clicking it
+    let out = r.act("menu/menu:lock", click()).unwrap();
+    assert_eq!(out.action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().1, ["lock-screen"]);
+}
+
+#[test]
+fn kickoffs_session_button_closes_its_menu_and_ordinary_actions_return() {
+    let mut r = kickoff();
+    r.act("footer/session", click()).unwrap();
+    r.act("footer/session", click()).unwrap();
+    assert!(!has_menu(kde_state(&r)) && r.find("zone:menu").is_none());
+    let app = list_items(&r).into_iter().find(|n| n.key.starts_with("apps/app:")).map(|n| n.key.clone()).unwrap();
+    assert!(r.act(&app, Op::Focus).is_ok());
+}
+
+#[test]
+fn kickoffs_menu_rows_confirm_leaving_actions_and_the_menu_selection_runs_them() {
+    let mut r = kickoff();
+    r.act("footer/session", click()).unwrap();
+    let at = r.l.a11y.lists["zone:menu"].children.iter().position(|k| k == "menu/menu:log-out").unwrap();
+    // choosing a row of the open menu is a click on it: Log Out asks first
+    assert_eq!(r.act("zone:menu", Op::SelectChild(at)).unwrap().action, None);
+    assert_eq!(r.node("menu/menu:log-out").name, "Log Out?");
+    assert!(styled::kde_effects().1.is_empty());
+    assert_eq!(r.act("zone:menu", Op::SelectChild(at)).unwrap().action, Some(Action::Close));
+    assert_eq!(styled::kde_effects().1, ["logout"]);
+}
+
+#[test]
+fn kickoffs_places_loading_is_a_busy_status_and_one_announcement() {
+    let (hold, gate) = std::sync::mpsc::channel::<()>();
+    let mut st = sty::styled(LauncherStyle::Kde, 40);
+    st.full = false;
+    st.scale = 1.0;
+    st.m.ui.insert("kde.tab", 1);
+    styled::kde_hold_places(gate);
+    st.resize(655, 516);
+    let mut r = Rig::new(wrap(st));
+    let status = r.node("status");
+    assert_eq!((status.role, status.name.as_str()), (Role::StatusBar, "Reading places..."));
+    assert!(status.states.contains(State::Busy));
+    assert_eq!(r.node("announce:loading").role, Role::Notification);
+    assert!(r.act("status", Op::Focus).is_err(), "a status line takes no action");
+    drop(hold);
+}
+
+/// Every control a style owns is described, whatever the style, query and tab: none is silently left out.
+#[test]
+fn no_style_owned_control_goes_undescribed_in_any_style() {
+    styled::kde_install_places(vec![entry("Home", "/home/t", &["xdg-open", "/home/t"])], vec![entry("notes.txt", "~/Documents", &["xdg-open", "/n"])]);
+    for style in sty::STYLES {
+        let mut scenarios: Vec<(String, Styled)> = Vec::new();
+        for query in ["", "kilo"] {
+            let mut st = open(style, 60, SCREEN);
+            type_into(&mut st, query);
+            scenarios.push((format!("{style:?} {query:?}"), st));
+        }
+        if style == LauncherStyle::Kde {
+            // the Places tab (each place), and a card narrow enough that every leaving action sits behind Session, menu open
+            for place in 0..3 {
+                let mut st = open(style, 60, SCREEN);
+                st.m.ui.insert("kde.tab", 1);
+                st.m.ui.insert("kde.place", place);
+                st.relayout();
+                scenarios.push((format!("Kde places {place}"), st));
+            }
+            let mut st = open(style, 60, (500, 600));
+            st.m.ui.insert("kde.menu", 1);
+            st.relayout();
+            scenarios.push(("Kde narrow with the menu".into(), st));
+        }
+        for (ctx, st) in scenarios {
+            let styles_in_zones: Vec<(&str, Tgt)> = st.zones.iter().flat_map(|z| z.items.iter().map(move |t| (z.id, *t))).filter(|(_, t)| matches!(t, Tgt::Style(..))).collect();
+            for (zone, t) in &styles_in_zones {
+                let sem = st.semantics(*t).unwrap_or_else(|| panic!("{ctx}: {t:?} in {zone} has no description: the adapter is incomplete for this style"));
+                assert!(!sem.name.is_empty() && !sem.key.is_empty(), "{ctx}: {t:?}");
+            }
+            let r = Rig::new(wrap(st));
+            let (visible, _) = zone_keys(&r.l);
+            let keys: HashSet<String> = r.tree.nodes().iter().map(|n| n.key.clone()).collect();
+            for k in &visible {
+                assert!(keys.contains(k), "{ctx}: {k} is in the tree");
+            }
+            if style == LauncherStyle::Kde {
+                assert!(!styles_in_zones.is_empty(), "{ctx}: Kickoff has controls of its own");
+            }
+        }
+    }
 }

@@ -64,7 +64,6 @@ or a list that is cut at the card has no node and so no action.
 | Letter headings | `heading` (level 2) in alphabetical lists |
 | Categories, views, widget tabs, page dots | `page tab list` of `page tab`s (Selection); the current view or page is Selected; action `click` shows it |
 | Buttons | `button`s for what the style draws: All apps / Back, Settings, Power, Account, Computer, Expand / Restore, Clear search, Close / Show Apps, and the best-match Open and Pin buttons (Windows) |
-| Session menu | an open Kickoff Session menu is a modal `menu`; everything else is refused while it is open |
 
 `AccessibleId`s are `search`, `status`, `zone:<zone>`, `<zone>/app:<desktop id>`, `<zone>/view:<view>`,
 `<zone>/page:<n>`, `detail/open:<desktop id>`, ...: apps are keyed by desktop-file id, never by list position, so
@@ -84,11 +83,29 @@ control and requires the same response and the same state. Editing the search te
 same results, selection and focus zone as typing it. A request that raced a keystroke (the app is no longer in the
 list, already pinned, ...) is refused, never applied to whatever moved into its place.
 
-Not exposed (they keep working with keyboard and pointer): the controls a style owns itself (Kickoff's footer tabs,
-system buttons, Session menu rows, header buttons and Places rows; every `Target::Style` item), because their names
-and effects live in that style's module. The items of an open Session menu are therefore not listed, only the menu.
-Loading state (Kickoff's Places) is not announced for the same reason. The extents of a styled launcher's search box
-are missing (see above). Bars and docks are not covered, and nothing here claims physical Orca acceptance.
+Style-owned controls: the controls a style draws itself (`Target::Style`) are described by the style
+(`Styled::semantics`: stable key, role, name, description, enabled, current) and activated by the style engine's own
+`activate`, so they do exactly what a click does. Kickoff (KDE) is the one style that has any:
+
+| Kickoff control | Role and behaviour |
+| --- | --- |
+| Footer tabs Applications / Places | `page tab`s in a `page tab list`; the current one is Selected; `click` switches (Places starts its background read) |
+| Places sidebar (Computer, History, Frequently Used) | `page tab`s in the sidebar's `page tab list` (Selection); the current place is Selected |
+| Places rows (Show KRunner, computer places, history documents) | `list item`s named and described by the row; `click` opens it (disabled when it has nothing to open) |
+| Footer system buttons (Sleep, Restart, Shut Down, ...) | `button`s; Restart, Shut Down and Log Out ask for a second `click`: the name becomes "Restart?" and the description "Press again to confirm", exactly as the caption does |
+| Session button | `button` with has-popup, Expanded / Collapsed; `click` opens and closes the menu |
+| Session menu | modal `menu` (Selection) of `menu item`s, operable by `click` or by choosing the row; while it is open every other request is refused except the Session button that closes it |
+| Header avatar and configure | `button`s (Account settings, Configure launcher) |
+
+While Kickoff reads its places in the background, the tree has a busy `status bar` "Reading places..." and one polite
+announcement; the lists fill in when the read finishes. A style that adds controls of its own must describe them in
+`Styled::semantics` (and may start `Styled::busy` work): the source tests fail for any style-owned control left
+undescribed, instead of leaving it out of the tree. Controls the engine draws but no style owns (Windows' All apps /
+Back and best-match buttons, GNOME's Show Apps, UKUI's sidebar) are described by the adapter as before.
+
+Still missing: the extents of a styled launcher's search box (the engine does not publish them, so the field is
+described without a rectangle; the Launchpad and Dux have exact extents). Bars and docks are not covered, and nothing
+here claims physical Orca acceptance.
 
 ## How actions run
 

@@ -523,7 +523,7 @@ impl Styled {
         self.m.offset.insert(id, o);
     }
 
-    fn focus(&mut self, zone: &'static str, i: usize) {
+    pub(super) fn focus(&mut self, zone: &'static str, i: usize) {
         self.m.zone = zone;
         self.m.sel.insert(zone, i);
         if let Some(z) = self.zone(zone) {
@@ -632,7 +632,7 @@ impl Styled {
         true
     }
 
-    fn refilter(&mut self) {
+    pub(super) fn refilter(&mut self) {
         self.m.results = self.m.cat.search(self.m.query());
         self.m.sel.insert("results", 0);
         self.m.offset.insert("results", 0);
@@ -642,7 +642,8 @@ impl Styled {
         }
     }
 
-    fn activate(&mut self, t: Target, from: &'static str) -> Response {
+    /// What a click, Enter or an accessibility `activate` on `t` (found in zone `from`) does.
+    pub(super) fn activate(&mut self, t: Target, from: &'static str) -> Response {
         // Detail actions (Windows' best-match pane) act on the result selected now, never on a stale layout.
         let t = match (from, t, self.m.results.get(self.m.sel("results")).copied()) {
             ("detail", Target::App(_), Some(cur)) => Target::App(cur),
@@ -940,6 +941,71 @@ impl Styled {
             f.trim();
         }
     }
+}
+
+/// How assistive technology treats a control a style owns itself ([`Target::Style`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    /// A tab or a sidebar choice: one of several, the current one is selected.
+    Tab,
+    Button,
+    /// A row of a menu the style opened.
+    MenuItem,
+    /// A row of a list the style fills itself; activating it opens it.
+    Row,
+}
+
+/// What a style says about one of its own controls, for assistive technology. Read only: it describes what the
+/// style draws and does, and changes neither.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Semantics {
+    /// Stable within a zone, from what the control is and never from its position (`tab:places`, `sys:shut-down`).
+    pub key: String,
+    pub control: Control,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    /// The current tab or choice.
+    pub selected: bool,
+    /// `Some(open)` for a button that opens a menu.
+    pub popup: Option<bool>,
+}
+
+impl Styled {
+    /// The accessible description of a style-owned control; `None` for anything else, and for a control whose style
+    /// does not describe it yet (the accessibility tests fail for every such control, so none goes unnoticed).
+    pub fn semantics(&self, t: Target) -> Option<Semantics> {
+        let Target::Style(kind, i) = t else { return None };
+        match self.style {
+            LauncherStyle::Kde => kde::describe(&self.m, kind, i),
+            _ => None,
+        }
+    }
+
+    /// Something the style is still loading in the background, in words (Kickoff's Places).
+    pub fn busy(&self) -> Option<&'static str> {
+        match self.style {
+            LauncherStyle::Kde => kde::busy(&self.m),
+            _ => None,
+        }
+    }
+}
+
+/// Test support for the accessibility tests: Places data for Kickoff, a Places worker that stays busy, and what the
+/// style's controls did since the last call (commands "opened", system actions "run"; nothing really starts).
+#[cfg(test)]
+pub(super) fn kde_install_places(computer: Vec<Entry>, documents: Vec<Entry>) {
+    kde::install_places(computer, documents)
+}
+
+#[cfg(test)]
+pub(super) fn kde_hold_places(gate: std::sync::mpsc::Receiver<()>) {
+    kde::hold_places(gate)
+}
+
+#[cfg(test)]
+pub(super) fn kde_effects() -> (Vec<Vec<String>>, Vec<&'static str>) {
+    kde::effects()
 }
 
 #[cfg(test)]

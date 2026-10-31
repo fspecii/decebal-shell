@@ -6,10 +6,11 @@
 //! Windows, GNOME, KDE, Xfce, BlackBerry and UKUI styles from the engine's [`Zone`]s, i.e. the geometry the style
 //! really laid out and painted, so a style that adds or moves a control is described without a change here.
 //!
-//! Keys (stable node ids): `frame`, `search`, `search:clear` (Dux), `status`, `announce:empty`, `menu`,
+//! Keys (stable node ids): `frame`, `search`, `search:clear` (Dux), `status`, `announce:empty`, `announce:loading`,
 //! `zone:<zone>` (a list, tab strip or group; `zone:<zone>/list` for the apps inside a mixed group) and, for the
 //! things inside a zone (`results` counts as `apps`: search results replace the list), `<zone>/app:<desktop id>`, `<zone>/letter:<c>`, `<zone>/view:<view>`, `<zone>/page:<n>`,
-//! `detail/open:<desktop id>`, `detail/pin:<desktop id>`, `<zone>/settings|power|account|computer|fullscreen|clear|close`.
+//! `detail/open:<desktop id>`, `detail/pin:<desktop id>`, `<zone>/settings|power|account|computer|fullscreen|clear|close`, and the style's own `<zone>/<semantic key>` (`footer/tab:places`,
+//! `footer/sys:shut-down`, `menu/menu:log-out`, `cats/place:history`, ...).
 //! Apps are always keyed by their desktop-file id (never by list position), so a key survives searching, reordering,
 //! pinning and scrolling; a second app with the same id gets a `#n` suffix in catalog order.
 //!
@@ -17,14 +18,16 @@
 //! action); every request is re-resolved against the live model before it acts, so one that raced a keystroke is
 //! refused instead of acting on whatever moved into its place.
 //!
-//! Not described: the controls a style owns itself (`Target::Style`, e.g. Kickoff's footer tabs, system buttons,
-//! Session menu and Places rows): their names and effects live inside that style's module. They keep working with
-//! keyboard and pointer; see `docs/accessibility.md`.
+//! The controls a style owns itself (`Target::Style`: Kickoff's footer tabs, system buttons, Session button and menu,
+//! header buttons, Places sidebar and rows) are described by the style (`Styled::semantics`: stable key, role, name,
+//! state) and run by the engine's own `Styled::activate`, like every other control; an open Session menu is a modal
+//! `menu` whose rows are operable while everything else is refused. A style that adds such controls must describe
+//! them in `Styled::semantics`: the tests fail for any `Target::Style` it leaves undescribed.
 
 use super::catalog::app_id;
 use super::placement::Rect as PRect;
 use super::style::LauncherStyle;
-use super::styled::{self, Model, Shape, Styled, Target as Tgt, View, Zone};
+use super::styled::{Control, Model, Shape, Styled, Target as Tgt, View, Zone};
 use super::{Launcher, CELL_H, CELL_W, GRID_Y, PAD, SEARCH_H, SEARCH_Y};
 use crate::a11y::{ActionDef, ActionError, NodeId, Op, Role, Spec, State, Target, TextInfo, TreeBuilder};
 use crate::apps::AppEntry;
@@ -200,7 +203,7 @@ struct Entry {
     rect: crate::a11y::Rect,
 }
 
-fn target_key(zone: &str, t: Tgt, ids: &[String]) -> Option<String> {
+fn target_key(zone: &str, t: Tgt, ids: &[String], style: Option<&Styled>) -> Option<String> {
     // an app is the same object in the list and in the results that replace it
     let zone = if zone == "results" { "apps" } else { zone };
     Some(match t {
@@ -216,8 +219,8 @@ fn target_key(zone: &str, t: Tgt, ids: &[String]) -> Option<String> {
         Tgt::Fullscreen => format!("{zone}/fullscreen"),
         Tgt::Clear => format!("{zone}/clear"),
         Tgt::Close => format!("{zone}/close"),
-        // owned by one style: only that style knows what it is called and does
-        Tgt::Style(..) => return None,
+        // owned by one style, which says what it is called
+        Tgt::Style(..) => format!("{zone}/{}", style?.semantics(t)?.key),
     })
 }
 
@@ -232,11 +235,20 @@ fn styled_entries(st: &Styled, ids: &[String]) -> Vec<Entry> {
         for pos in range {
             let (Some(r), Some(&t)) = (z.rect(pos, offset), z.items.get(pos)) else { continue };
             let rect = prect(&r);
-            let Some(key) = target_key(z.id, t, ids) else { continue };
+            let Some(key) = target_key(z.id, t, ids, Some(st)) else { continue };
             if rect.2 == 0 || rect.3 == 0 {
                 continue;
             }
             out.push(Entry { key, zone: z.id, pos, target: t, rect });
+        }
+    }
+    // two rows that read the same (equal Places entries) are told apart by order, as the tree builder would
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    for e in &mut out {
+        let n = seen.entry(e.key.clone()).or_insert(0);
+        *n += 1;
+        if *n > 1 {
+            e.key = format!("{}#{n}", e.key);
         }
     }
     out
@@ -336,7 +348,7 @@ fn status(b: &mut TreeBuilder, frame: NodeId, count: usize, searching: bool) {
 
 fn container(key: &str, role: Role, name: &str, bounds: Option<crate::a11y::Rect>) -> Spec {
     let spec = Spec::new(key, role, name).bounds(bounds).state(State::Showing, true);
-    if matches!(role, Role::List | Role::PageTabList) {
+    if matches!(role, Role::List | Role::PageTabList | Role::Menu) {
         spec.selection()
     } else {
         spec
@@ -432,6 +444,34 @@ fn zone_name(st: &Styled, id: &str) -> String {
     }
 }
 
+/// What an entry is, for the role and the container it gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    App,
+    Heading,
+    /// A row of a list the style fills itself.
+    Row,
+    Tab,
+    Button,
+    MenuItem,
+}
+
+fn kind_of(st: &Styled, e: &Entry) -> Kind {
+    match e.target {
+        Tgt::App(_) if e.zone != "detail" => Kind::App,
+        Tgt::Letter(_) => Kind::Heading,
+        Tgt::View(_) if e.zone != "nav" => Kind::Tab,
+        Tgt::Page(_) => Kind::Tab,
+        Tgt::Style(..) => match st.semantics(e.target).map(|s| s.control) {
+            Some(Control::Tab) => Kind::Tab,
+            Some(Control::MenuItem) => Kind::MenuItem,
+            Some(Control::Row) => Kind::Row,
+            _ => Kind::Button,
+        },
+        _ => Kind::Button,
+    }
+}
+
 /// The name and description of the controls that are not apps.
 fn target_label(st: &Styled, e: &Entry) -> (String, String) {
     let two = |a: &str, b: &str| (a.to_string(), b.to_string());
@@ -451,7 +491,8 @@ fn target_label(st: &Styled, e: &Entry) -> (String, String) {
         Tgt::Clear => two("Clear search", "Clears the search text"),
         Tgt::Close if st.style == LauncherStyle::Gnome => two("Show Apps", "Closes the application grid"),
         Tgt::Close => two("Close", ""),
-        Tgt::Letter(_) | Tgt::Style(..) => (String::new(), String::new()),
+        Tgt::Letter(_) => (String::new(), String::new()),
+        Tgt::Style(..) => st.semantics(e.target).map(|s| (s.name, s.description)).unwrap_or_default(),
     }
 }
 
@@ -460,53 +501,96 @@ fn tab_selected(st: &Styled, e: &Entry) -> bool {
         ("cats", Tgt::View(v)) => !st.m.searching() && v == current_view(st.style, &st.m),
         ("tabs", Tgt::View(v)) => v == current_view(st.style, &st.m),
         (_, Tgt::Page(p)) => p == st.m.offset("apps"),
+        (_, Tgt::Style(..)) => st.semantics(e.target).is_some_and(|s| s.selected),
         _ => false,
     }
 }
 
+/// Whether the engine's keyboard focus is on this entry (the highlighted app, the focused tab or button).
+fn focused_here(st: &Styled, e: &Entry) -> bool {
+    st.m.zone == e.zone && st.m.sel(e.zone) == e.pos
+}
+
 fn tab_spec(st: &Styled, e: &Entry) -> Spec {
     let (name, desc) = target_label(st, e);
-    Spec::new(e.key.as_str(), Role::PageTab, name)
+    let ok = st.semantics(e.target).is_none_or(|s| s.enabled);
+    let spec = Spec::new(e.key.as_str(), Role::PageTab, name)
         .description(desc)
         .bounds(Some(e.rect))
+        .enabled(ok)
         .state(State::Showing, true)
         .state(State::Focusable, true)
         .state(State::Selectable, true)
-        .state(State::Selected, tab_selected(st, e))
-        .action(ActionDef::new("click", "Show"))
+        .state(State::Selected, tab_selected(st, e));
+    if ok {
+        spec.action(ActionDef::new("click", "Show"))
+    } else {
+        spec
+    }
 }
 
 fn button_spec(st: &Styled, e: &Entry) -> Spec {
     let (name, desc) = target_label(st, e);
-    Spec::new(e.key.as_str(), Role::PushButton, name).description(desc).bounds(Some(e.rect)).state(State::Showing, true).state(State::Focusable, true).action(ActionDef::new("click", "Activate"))
+    let sem = st.semantics(e.target);
+    let ok = sem.as_ref().is_none_or(|s| s.enabled);
+    let mut spec = Spec::new(e.key.as_str(), Role::PushButton, name).description(desc).bounds(Some(e.rect)).enabled(ok).state(State::Showing, true).state(State::Focusable, true);
+    if let Some(open) = sem.and_then(|s| s.popup) {
+        spec = spec.state(State::HasPopup, true).state(State::Expandable, true).state(State::Expanded, open).state(State::Collapsed, !open);
+    }
+    if ok {
+        spec = spec.action(ActionDef::new("click", "Activate"));
+    }
+    spec
+}
+
+/// A row of a list or menu a style fills itself: opens something when activated.
+fn row_spec(st: &Styled, e: &Entry, role: Role) -> Spec {
+    let sem = st.semantics(e.target);
+    let ok = sem.as_ref().is_none_or(|s| s.enabled);
+    let (name, desc) = target_label(st, e);
+    let selected = focused_here(st, e);
+    let spec = Spec::new(e.key.as_str(), role, name)
+        .description(desc)
+        .bounds(Some(e.rect))
+        .enabled(ok)
+        .state(State::Showing, true)
+        .state(State::Focusable, true)
+        .state(State::Selectable, true)
+        .state(State::Selected, selected);
+    if ok {
+        spec.action(if selected { ActionDef::new("click", "Open").key("Return") } else { ActionDef::new("click", "Open") })
+    } else {
+        spec
+    }
 }
 
 fn styled_tree(st: &Styled, es: &[Entry], b: &mut TreeBuilder, frame: NodeId, lists: &mut Lists) {
     // the engine does not publish where a style puts its search box; the field is described without a rectangle
     b.add(frame, search_spec(&st.m.field, None, placeholder(st.style)));
-    status(b, frame, st.m.results.len(), st.m.searching());
+    match st.busy() {
+        // a style's background work (Kickoff reading its places) is a busy status and one polite announcement
+        Some(what) => {
+            b.add(frame, Spec::new("status", Role::StatusBar, what).state(State::Showing, true).state(State::Busy, true));
+            b.add(frame, Spec::new("announce:loading", Role::Notification, what));
+        }
+        None => status(b, frame, st.m.results.len(), st.m.searching()),
+    }
     let mut zones: Vec<&Zone> = st.zones.iter().collect();
     zones.sort_by_key(|z| ORDER.iter().position(|o| *o == z.id).unwrap_or(ORDER.len()));
     for z in zones {
-        if z.id == "menu" {
-            let a = z.area();
-            b.add(frame, Spec::new("menu", Role::Menu, "Session menu").description("Press Escape to close the menu").bounds(Some(prect(&a))).state(State::Showing, true).state(State::Modal, true));
-            continue;
-        }
         let mine: Vec<&Entry> = es.iter().filter(|e| e.zone == z.id).collect();
         zone_nodes(st, z, &mine, b, frame, lists);
     }
 }
 
 fn zone_nodes(st: &Styled, z: &Zone, mine: &[&Entry], b: &mut TreeBuilder, frame: NodeId, lists: &mut Lists) {
-    let in_list = |e: &Entry| z.id != "detail" && matches!(e.target, Tgt::App(_) | Tgt::Letter(_));
-    let n_list = mine.iter().filter(|e| in_list(e)).count();
-    let n_other = mine.len() - n_list;
+    let kinds: Vec<Kind> = mine.iter().map(|e| kind_of(st, e)).collect();
+    let count = |want: &[Kind]| kinds.iter().filter(|k| want.contains(k)).count();
+    let (n_list, n_tab, n_menu, n_button) = (count(&[Kind::App, Kind::Heading, Kind::Row]), count(&[Kind::Tab]), count(&[Kind::MenuItem]), count(&[Kind::Button]));
     let list_zone = matches!(z.id, "apps" | "results");
     if mine.is_empty() && !list_zone {
         return;
     }
-    let tabs = n_list == 0 && n_other > 0 && z.id != "nav" && mine.iter().all(|e| matches!(e.target, Tgt::View(_) | Tgt::Page(_)));
     let area = z.area();
     let bounds = (area.w >= 1.0 && area.h >= 1.0).then(|| prect(&area));
     let name = zone_name(st, z.id);
@@ -520,17 +604,17 @@ fn zone_nodes(st: &Styled, z: &Zone, mine: &[&Entry], b: &mut TreeBuilder, frame
             rank[i] = total;
         }
     }
+    let entries_of = |want: &[Kind]| mine.iter().zip(&kinds).filter(|(_, k)| want.contains(k)).map(|(e, _)| *e).collect::<Vec<&Entry>>();
     let items = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> {
         let mut kids = Vec::new();
-        for e in mine.iter().filter(|e| in_list(e)) {
+        for e in entries_of(&[Kind::App, Kind::Heading, Kind::Row]) {
             let spec = match e.target {
                 Tgt::Letter(c) => Spec::new(e.key.as_str(), Role::Heading, c.to_string()).bounds(Some(e.rect)).state(State::Showing, true).attr("level", "2"),
                 Tgt::App(i) => {
                     let Some(app) = st.m.cat.apps.get(i) else { continue };
-                    let selected = st.m.zone == z.id && st.m.sel(z.id) == e.pos;
-                    app_item(&e.key, app, e.rect, selected, (rank.get(e.pos).copied().unwrap_or(0), total), Some(st.m.cat.is_favorite(i)), !is_pin_list(st, z.id))
+                    app_item(&e.key, app, e.rect, focused_here(st, e), (rank.get(e.pos).copied().unwrap_or(0), total), Some(st.m.cat.is_favorite(i)), !is_pin_list(st, z.id))
                 }
-                _ => continue,
+                _ => row_spec(st, e, Role::ListItem),
             };
             if b.add(parent, spec).is_some() {
                 kids.push(e.key.clone());
@@ -538,24 +622,41 @@ fn zone_nodes(st: &Styled, z: &Zone, mine: &[&Entry], b: &mut TreeBuilder, frame
         }
         kids
     };
-    if tabs {
+    let tabs = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> { entries_of(&[Kind::Tab]).into_iter().filter_map(|e| b.add(parent, tab_spec(st, e)).map(|_| e.key.clone())).collect() };
+    let menu = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> {
+        entries_of(&[Kind::MenuItem]).into_iter().filter_map(|e| b.add(parent, row_spec(st, e, Role::MenuItem)).map(|_| e.key.clone())).collect()
+    };
+    let only = |n: usize| n == mine.len();
+    if only(n_tab) && n_tab > 0 {
         let Some(c) = b.add(frame, container(&key, Role::PageTabList, &name, bounds)) else { return };
-        let kids = mine.iter().filter_map(|e| b.add(c, tab_spec(st, e)).map(|_| e.key.clone())).collect();
-        lists.insert(key, Group { tabs: true, children: kids });
-    } else if n_other == 0 {
+        let children = tabs(b, c);
+        lists.insert(key, Group { tabs: true, children });
+    } else if only(n_menu) && n_menu > 0 {
+        // an open menu is modal: its rows are what can be operated
+        let Some(c) = b.add(frame, container(&key, Role::Menu, &name, bounds).description("Press Escape to close the menu").state(State::Modal, true)) else { return };
+        let children = menu(b, c);
+        lists.insert(key, Group { tabs: true, children });
+    } else if n_button + n_tab + n_menu == 0 {
         let Some(c) = b.add(frame, container(&key, Role::List, &name, bounds)) else { return };
-        let kids = items(b, c);
-        lists.insert(key, Group { tabs: false, children: kids });
+        let children = items(b, c);
+        lists.insert(key, Group { tabs: false, children });
     } else {
         let Some(c) = b.add(frame, container(&key, Role::Panel, &name, bounds)) else { return };
         if n_list > 0 {
             let inner = format!("{key}/list");
             if let Some(list) = b.add(c, container(&inner, Role::List, &name, bounds)) {
-                let kids = items(b, list);
-                lists.insert(inner, Group { tabs: false, children: kids });
+                let children = items(b, list);
+                lists.insert(inner, Group { tabs: false, children });
             }
         }
-        for e in mine.iter().filter(|e| !in_list(e)) {
+        if n_tab > 0 {
+            let inner = format!("{key}/tabs");
+            if let Some(strip) = b.add(c, container(&inner, Role::PageTabList, &name, bounds)) {
+                let children = tabs(b, strip);
+                lists.insert(inner, Group { tabs: true, children });
+            }
+        }
+        for e in entries_of(&[Kind::Button]) {
             b.add(c, button_spec(st, e));
         }
     }
@@ -563,10 +664,8 @@ fn zone_nodes(st: &Styled, z: &Zone, mine: &[&Entry], b: &mut TreeBuilder, frame
 
 /// The key of the node the keyboard acts on: the search field while typing, otherwise the selected item.
 fn focus_key(l: &Launcher, es: &[Entry]) -> String {
-    if l.styled.as_ref().is_some_and(has_menu) {
-        return "menu".into();
-    }
-    if l.a11y.area == Area::Search {
+    // an open menu holds the keyboard
+    if l.a11y.area == Area::Search && !l.styled.as_ref().is_some_and(has_menu) {
         return "search".into();
     }
     match &l.styled {
@@ -632,18 +731,6 @@ fn is_text_op(op: &Op) -> bool {
     matches!(op, Op::SetCaret(_) | Op::SetSelection(_) | Op::SetText(_) | Op::InsertText { .. } | Op::DeleteText { .. } | Op::CopyText { .. } | Op::PasteText { .. })
 }
 
-/// What typing a character does to the lists of a styled launcher (the engine's own refilter).
-fn refilter(st: &mut Styled) {
-    let found = st.m.cat.search(st.m.query());
-    st.m.results = found;
-    st.m.sel.insert("results", 0);
-    st.m.offset.insert("results", 0);
-    st.relayout();
-    if st.m.searching() && st.zones.iter().any(|z| z.id == "results") {
-        st.m.zone = "results";
-    }
-}
-
 /// Edits the search field; the lists follow when the text changed, like typing.
 fn edit(l: &mut Launcher, op: &Op) -> Result<(), ActionError> {
     l.a11y.area = Area::Search;
@@ -651,7 +738,7 @@ fn edit(l: &mut Launcher, op: &Op) -> Result<(), ActionError> {
         let before = st.m.field.text().to_string();
         text_op(&mut st.m.field, op)?;
         if st.m.field.text() != before {
-            refilter(st);
+            st.refilter();
         }
         return Ok(());
     }
@@ -695,12 +782,7 @@ fn launch_current(l: &mut Launcher) -> Result<Response, ActionError> {
 
 /// Moves a styled launcher's keyboard focus onto item `i` of `zone` (the engine's own focus).
 fn move_focus(st: &mut Styled, zone: &'static str, i: usize) {
-    st.m.zone = zone;
-    st.m.sel.insert(zone, i);
-    if let Some(z) = st.zones.iter().find(|z| z.id == zone) {
-        let o = z.reveal(i, st.m.offset(zone));
-        st.m.offset.insert(zone, o);
-    }
+    st.focus(zone, i);
     // layouts may depend on the selection (Windows' best-match pane)
     st.relayout();
 }
@@ -720,8 +802,10 @@ fn focus_entry(l: &mut Launcher, e: &Entry) {
     }
 }
 
-/// A styled launcher's activation of `t` found in zone `from`: the engine's own `activate`, arm by arm.
-fn run(st: &mut Styled, from: &str, t: Tgt) -> Result<Response, ActionError> {
+/// A styled launcher's activation of `t` found in zone `from`: the engine's own `activate` (so a view, a page, a pin,
+/// a footer button, a style's own tab or menu row all do exactly what a click on them does). Only starting an app is
+/// wrapped, to tell the person why it did not start.
+fn run(st: &mut Styled, from: &'static str, t: Tgt) -> Result<Response, ActionError> {
     // the best-match pane acts on the result selected now, never on a stale layout
     let t = match (from, t, st.m.results.get(st.m.sel("results")).copied()) {
         ("detail", Tgt::App(_), Some(cur)) => Tgt::App(cur),
@@ -742,61 +826,12 @@ fn run(st: &mut Styled, from: &str, t: Tgt) -> Result<Response, ActionError> {
             }
         }
         Tgt::Letter(_) => Err(ActionError::Unsupported("a letter heading has no action".into())),
-        Tgt::View(v) => {
-            st.m.view = v;
-            for id in ["apps", "results"] {
-                st.m.sel.insert(id, 0);
-                st.m.offset.insert(id, 0);
-            }
-            if !st.m.field.text().is_empty() {
-                st.m.field.clear();
-                st.m.results.clear();
-            }
-            st.relayout();
-            // a mode switch (Windows All apps / Back) hands the focus to the list it opened
-            if from == "nav" && st.zones.iter().any(|z| z.id == "apps") {
-                st.m.zone = "apps";
-                st.relayout();
-            }
-            Ok(Response::REDRAW)
-        }
-        Tgt::Page(p) => {
-            st.m.offset.insert("apps", p);
-            if let Some(z) = st.zones.iter().find(|z| z.id == "apps") {
-                let first = z.first(p);
-                st.m.sel.insert("apps", first.min(z.items.len().saturating_sub(1)));
-            }
-            Ok(Response::REDRAW)
-        }
-        Tgt::Power | Tgt::Settings | Tgt::Account | Tgt::Computer => {
-            // (unit tests never start another program)
-            if let Some(argv) = styled::sidebar_argv(t, crate::controlcenter::sys::have).filter(|_| !cfg!(test)) {
-                crate::launch::spawn_argv(&argv);
-            }
-            Ok(Response::act(Action::Close))
-        }
-        Tgt::Fullscreen => {
-            st.m.expanded = !st.m.expanded;
-            for id in ["apps", "results", "fav"] {
-                st.m.sel.insert(id, 0);
-                st.m.offset.insert(id, 0);
-            }
-            let (w, h) = st.surface;
-            st.resize(w, h);
-            Ok(Response::REDRAW)
-        }
-        Tgt::Pin(i) => {
-            st.m.cat.toggle_favorite(i);
-            st.relayout();
-            Ok(Response::REDRAW)
-        }
-        Tgt::Clear => {
-            st.m.field.clear();
-            refilter(st);
-            Ok(Response::REDRAW)
-        }
-        Tgt::Close => Ok(Response::act(Action::Close)),
-        Tgt::Style(..) => Err(ActionError::Unsupported("this control belongs to the launcher style and is not available to assistive technology".into())),
+        Tgt::Style(..) => match st.semantics(t) {
+            Some(s) if !s.enabled => Err(ActionError::Disabled),
+            Some(_) => Ok(st.activate(t, from)),
+            None => Err(ActionError::Unsupported("this launcher style does not describe the control".into())),
+        },
+        _ => Ok(st.activate(t, from)),
     }
 }
 
@@ -851,11 +886,13 @@ fn pin_entry(l: &mut Launcher, e: &Entry, want: bool) -> Result<Response, Action
 pub(super) fn act(l: &mut Launcher, t: &Target) -> Result<Response, ActionError> {
     let key = t.key().to_string();
     let op = t.op.clone();
-    // A modal menu is like a click outside it: nothing else may act while it is open.
-    if op != Op::ScrollTo && l.styled.as_ref().is_some_and(has_menu) {
-        return Err(refused("the session menu is open: close it with Escape first"));
-    }
+    // A modal menu is like a click outside it: only its rows and the button that opened it may act while it is open.
+    let modal = op != Op::ScrollTo && l.styled.as_ref().is_some_and(has_menu);
+    let modal_refusal = || refused("the session menu is open: choose one of its items or close it first");
     if key == "search" {
+        if modal {
+            return Err(modal_refusal());
+        }
         return match &op {
             Op::Focus => {
                 l.a11y.area = Area::Search;
@@ -874,6 +911,9 @@ pub(super) fn act(l: &mut Launcher, t: &Target) -> Result<Response, ActionError>
     let es = entries(l, &ids);
     let find = |k: &str| es.iter().find(|e| e.key == k).cloned();
     if key.starts_with("zone:") {
+        if modal && key != "zone:menu" {
+            return Err(modal_refusal());
+        }
         return match &op {
             Op::ScrollTo => Ok(Response::NONE),
             Op::SelectChild(i) => {
@@ -889,13 +929,19 @@ pub(super) fn act(l: &mut Launcher, t: &Target) -> Result<Response, ActionError>
             o => Err(ActionError::Unsupported(format!("{o:?} on a list"))),
         };
     }
-    if matches!(key.as_str(), "frame" | "status" | "announce:empty" | "menu") {
+    if matches!(key.as_str(), "frame" | "status" | "announce:empty" | "announce:loading") {
         return match &op {
             Op::ScrollTo => Ok(Response::NONE),
             o => Err(ActionError::Unsupported(format!("{o:?} on {key}"))),
         };
     }
     let e = find(&key).ok_or(ActionError::UnknownNode)?;
+    if modal {
+        let opens_menu = l.styled.as_ref().and_then(|st| st.semantics(e.target)).is_some_and(|s| s.popup.is_some());
+        if e.zone != "menu" && !opens_menu {
+            return Err(modal_refusal());
+        }
+    }
     match &op {
         Op::ScrollTo => Ok(Response::NONE),
         Op::Focus => {
