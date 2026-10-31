@@ -328,7 +328,7 @@ impl Dock {
         let th = crate::theme::th();
         let alpha = if self.high_contrast { 1.0 } else { ((1.0 - self.settings.transparency) * th.dock_alpha / 0.6).clamp(0.0, 1.0) };
         fill_rounded(pm, px0, py0, pw0, ph0, radius, th.dock.color(alpha));
-        stroke_rounded(pm, px0 + 0.5, py0 + 0.5, pw0 - 1.0, ph0 - 1.0, radius - 0.5, th.ink(th.outline * 0.35), 1.0);
+        stroke_rounded(pm, px0 + 0.5, py0 + 0.5, pw0 - 1.0, ph0 - 1.0, radius - 0.5, th.dock_ink(th.outline * 0.35), 1.0);
 
         // distance from the screen edge of the icons' base line (the bottom dock's `icon_bottom`) and of the dots
         let icon_size = self.dimensions().0;
@@ -337,7 +337,7 @@ impl Dock {
         let dragged = self.drag.map(|d| d.index);
         let dot_at = |pm: &mut Pixmap, cell: &Cell| {
             let (x, y, _, _) = self.map(cw, ch, cell.x + cell.w / 2.0, dot, 0.0, 0.0);
-            fill_circle(pm, x, y, DOT_RADIUS, crate::theme::th().ink(0.85));
+            fill_circle(pm, x, y, DOT_RADIUS, crate::theme::th().dock_ink(0.85));
         };
         let mut icons = Vec::new();
         for (i, (item, cell)) in self.items.iter().zip(&layout.cells).enumerate() {
@@ -361,7 +361,7 @@ impl Dock {
         }
         for (id, (x, y, w, h), alpha) in icons {
             let px = (w.ceil() as u32).max(1) * 2; // rasterise at 2x then scale down for crisp edges
-            let icon = self.icons.get(&id, px);
+            let icon = self.icons.get_for_surface(&id, px, th.dock_foreground().t());
             blit_scaled(pm, icon, x, y, w, h, alpha);
         }
     }

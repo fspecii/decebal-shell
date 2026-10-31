@@ -119,7 +119,7 @@ pub const CACHE_BYTES: usize = 10 << 20;
 /// generic application icon, then a neutral placeholder. The cache empties itself when the icon settings or the
 /// shell theme change (the tint follows the theme's text colour).
 pub struct IconCache {
-    lru: cache::Lru<(String, u32), Pixmap>,
+    lru: cache::Lru<(String, u32, Option<(u8, u8, u8)>), Pixmap>,
     gen: (u64, u64),
 }
 
@@ -131,14 +131,23 @@ impl Default for IconCache {
 
 impl IconCache {
     pub fn get(&mut self, id: &str, size: u32) -> &Pixmap {
+        self.get_with_tint(id, size, tint_colour(live::render_settings().1))
+    }
+
+    /// Surface-specific ink for symbolic icons; coloured artwork and the user's tint switch are preserved.
+    pub fn get_for_surface(&mut self, id: &str, size: u32, ink: (u8, u8, u8)) -> &Pixmap {
+        self.get_with_tint(id, size, live::render_settings().1.then_some(ink))
+    }
+
+    fn get_with_tint(&mut self, id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> &Pixmap {
         let gen = (live::generation(), crate::theme::generation());
         if gen != self.gen {
             self.lru.clear();
             self.gen = gen;
         }
-        let key = (id.to_string(), size);
+        let key = (id.to_string(), size, tint);
         if !self.lru.contains(&key) {
-            let pm = build(id, size);
+            let pm = build(id, size, tint);
             let bytes = pm.data().len();
             self.lru.put(key.clone(), pm, bytes);
         }
@@ -151,10 +160,10 @@ impl IconCache {
     }
 }
 
-fn build(id: &str, size: u32) -> Pixmap {
-    let (scale, tint) = live::render_settings();
+fn build(id: &str, size: u32, tint: Option<(u8, u8, u8)>) -> Pixmap {
+    let (scale, _) = live::render_settings();
     let content = content_px(size, scale);
-    let opts = raster::Opts { content, tint: tint_colour(tint) };
+    let opts = raster::Opts { content, tint };
     let pm = if id == "launchpad" {
         launchpad(size)
     } else if id.starts_with('/') {
@@ -178,6 +187,23 @@ fn placeholder(size: u32) -> Option<Pixmap> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_symbolic_icon_can_cache_distinct_surface_foregrounds() {
+        let dir = std::env::temp_dir().join(format!("decebal-symbolic-surface-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("foreground-symbolic.svg");
+        std::fs::write(&path, r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="black"/></svg>"#).unwrap();
+        let mut cache = IconCache::default();
+        let id = path.to_str().unwrap();
+        for tint in [(255, 255, 255), (0, 0, 0), (255, 255, 255)] {
+            let pm = cache.get_with_tint(id, 16, Some(tint));
+            let pixel = pm.pixel(8, 8).unwrap();
+            assert_eq!((pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()), (tint.0, tint.1, tint.2, 255));
+        }
+        assert_eq!(cache.usage().0, 2, "surface tint is part of the bounded cache key");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn launchpad_has_pixels() {

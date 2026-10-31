@@ -107,12 +107,13 @@ mod contrast_tests {
                 }
                 let t = d.resolve(id, dark, &Selection::default());
                 let tag = format!("{id} {}", if dark { "dark" } else { "light" });
-                for (what, bg) in [("background", t.background), ("sidebar", t.sidebar), ("surface", t.surface), ("popup", t.popup), ("dock", t.dock), ("overlay", t.overlay), ("titlebar", t.titlebar)]
-                {
+                for (what, bg) in [("background", t.background), ("sidebar", t.sidebar), ("surface", t.surface), ("popup", t.popup), ("overlay", t.overlay), ("titlebar", t.titlebar)] {
                     let c = contrast(t.text, bg);
                     assert!(c >= 4.5, "{tag}: text on {what} is {c:.2}:1");
                 }
                 assert!(contrast(t.bar_text, t.bar) >= 4.5, "{tag}: bar text");
+                assert!(contrast(t.dock_foreground(), t.dock) >= 4.5, "{tag}: dock text");
+                assert!(contrast(t.dock_secondary(), t.dock) >= 3.0, "{tag}: dock secondary text");
                 assert!(contrast(t.text_secondary, t.background) >= 3.0, "{tag}: secondary text {:.2}", contrast(t.text_secondary, t.background));
                 assert!(contrast(t.text_secondary, t.surface) >= 3.0, "{tag}: secondary text on surface");
                 assert!(contrast(t.accent_text, t.accent) >= 3.0, "{tag}: accent text {:.2}", contrast(t.accent_text, t.accent));

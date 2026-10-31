@@ -43,17 +43,17 @@ impl Colors {
         Colors {
             light,
             bg: t.dock.t(),
-            edge: (t.text.t(), t.outline.clamp(0.05, 0.14)),
-            ink: t.text.t(),
-            dim: t.text_secondary.t(),
-            overlay: t.text.t(),
+            edge: (t.dock_foreground().t(), t.outline.clamp(0.05, 0.14)),
+            ink: t.dock_foreground().t(),
+            dim: t.dock_secondary().t(),
+            overlay: t.dock_foreground().t(),
             hover_a: if light { 0.05 } else { 0.07 },
             press_a: if light { 0.03 } else { 0.04 },
             active_a: if light { 0.07 } else { 0.10 },
             accent: t.accent.t(),
-            search_bg: if light { (t.surface.t(), 0.75) } else { (t.text.t(), 0.07) },
-            search_ink: t.text_secondary.t(),
-            search_edge: (t.text.t(), 0.09),
+            search_bg: if light { (t.surface.t(), 0.75) } else { (t.dock_foreground().t(), 0.07) },
+            search_ink: t.dock_secondary().t(),
+            search_edge: (t.dock_foreground().t(), 0.09),
         }
     }
 
@@ -397,7 +397,7 @@ impl Painter {
         if f.vertical {
             // upright: the icon centred, the running mark on the side that faces the screen edge
             let size = m.icon;
-            let icon = self.icons.get(&b.app_id, (size.ceil() as u32).max(1) * 2);
+            let icon = self.icons.get_for_surface(&b.app_id, (size.ceil() as u32).max(1) * 2, c.ink);
             blit_scaled(tp, icon, (r.cx() - size / 2.0).round(), (r.cy() - size / 2.0).round(), size, size, if dragging { 0.85 } else { 1.0 });
             if b.running {
                 let t = (3.0 * m.scale).round().max(2.0);
@@ -413,7 +413,7 @@ impl Painter {
         let size = m.icon;
         let iy = ((m.bar_h - size) / 2.0 - if m.classic { 0.0 } else { 1.0 * m.scale }).round();
         let px_size = (size.ceil() as u32).max(1) * 2;
-        let icon = self.icons.get(&b.app_id, px_size);
+        let icon = self.icons.get_for_surface(&b.app_id, px_size, c.ink);
         blit_scaled(tp, icon, icon_x.round(), iy, size, size, if dragging { 0.85 } else { 1.0 });
         if show_label {
             let text = if b.title.trim().is_empty() { crate::wm::display_name(&b.app_id) } else { b.title.trim().to_string() };
@@ -487,7 +487,7 @@ impl Painter {
             Tray::Window => match f.extras.window_app.clone() {
                 Some(app) => {
                     let size = 18.0 * m.scale;
-                    let icon = self.icons.get(&app, (size.ceil() as u32) * 2);
+                    let icon = self.icons.get_for_surface(&app, (size.ceil() as u32) * 2, c.ink);
                     blit_scaled(pm, icon, (cx - size / 2.0).round(), (cy - size / 2.0).round(), size, size, 1.0);
                 }
                 None => self.symbol(pm, "apps", c.ink, 16.0 * m.scale, cx, cy),
@@ -732,6 +732,16 @@ mod tests {
         assert!(d.pixel(5, 20).unwrap().red() < l.pixel(5, 20).unwrap().red());
         let accent = Colors::dark().accent;
         assert!(d.data().chunks_exact(4).any(|p| p[2] > 200 && p[0].abs_diff(accent.0) < 12 && p[1].abs_diff(accent.1) < 12), "accent coloured squares exist");
+    }
+
+    #[test]
+    fn a_light_desktop_can_keep_a_dark_dock_without_losing_controls() {
+        let def = crate::theme::builtin::def("gnome-adwaita").unwrap();
+        let theme = def.resolve("gnome-adwaita", false, &Selection::default());
+        assert!(crate::theme::model::contrast(theme.text, theme.dock) < 2.0, "the original GNOME light-window/dark-dash design is preserved");
+        let colors = Colors::from_theme(&theme);
+        assert!(crate::theme::model::contrast(crate::theme::Rgb(colors.ink.0, colors.ink.1, colors.ink.2), theme.dock) >= 4.5);
+        assert!(crate::theme::model::contrast(crate::theme::Rgb(colors.dim.0, colors.dim.1, colors.dim.2), theme.dock) >= 3.0);
     }
 
     #[test]

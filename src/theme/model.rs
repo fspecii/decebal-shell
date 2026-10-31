@@ -178,6 +178,30 @@ impl Theme {
     pub fn hover(&self) -> Color {
         self.ink(0.10)
     }
+    /// A dock may deliberately remain dark in a light desktop (GNOME's dash).
+    /// Retain the palette foreground when readable, otherwise use the dock's contrasting ink.
+    pub fn dock_foreground(&self) -> Rgb {
+        if contrast(self.text, self.dock) >= 4.5 {
+            self.text
+        } else {
+            self.dock.readable_on()
+        }
+    }
+    pub fn dock_secondary(&self) -> Rgb {
+        if contrast(self.text_secondary, self.dock) >= 3.0 {
+            return self.text_secondary;
+        }
+        let ink = self.dock_foreground();
+        let soft = ink.over(self.dock, 0.75);
+        if contrast(soft, self.dock) >= 3.0 {
+            soft
+        } else {
+            ink
+        }
+    }
+    pub fn dock_ink(&self, alpha: f32) -> Color {
+        self.dock_foreground().color(alpha)
+    }
     pub fn outline_c(&self) -> Color {
         self.ink(self.outline)
     }
