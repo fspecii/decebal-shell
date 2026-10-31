@@ -75,7 +75,11 @@ class Packages(unittest.TestCase):
             self.assertEqual(t["bar"]["enabled"], "auto")
             self.assertEqual(t["taskbar"], {"thickness": 48, "icon_size": 32, "cell_width": 48, "gap": 0, "inset": 4}, f"{i}: UKUI classic panel geometry (48 px strip, 32 px icons)")
         t = self.theme("openkylin-islands")
-        self.assertEqual((t["bar"]["style"], t["bar"]["background"], t["bar"]["position"], t["bar"]["height"], t["bar"]["margin"], t["bar"]["spacing"], t["bar"]["radius"]), ("dux", "islands", "bottom", 56, 8, 8, 12))
+        self.assertEqual((t["bar"]["style"], t["bar"]["background"], t["bar"]["position"], t["bar"]["height"], t["bar"]["margin"], t["bar"]["spacing"], t["bar"]["radius"]), ("dux", "islands", "bottom", 58, 7, 4, 12))
+        # one content-sized centred run (generic bar.cluster): faces 48 px = height - 10, standing 12 px above the edge = margin + 5; 8 px between islands, 12 px padding
+        self.assertEqual((t["bar"]["cluster"], t["bar"]["group_gap"], t["bar"]["group_padding"]), (True, 8, 12))
+        self.assertEqual(t["bar"]["height"] - 10, 48); self.assertEqual(t["bar"]["margin"] + 5, 12)
+        self.assertEqual((t["bar"]["left"], t["bar"]["center"]), (["launcher"], ["tasks", "search"]))
         self.assertIs(t["dock"]["enabled"], False)
 
     def test_radii_follow_global_theme(self):

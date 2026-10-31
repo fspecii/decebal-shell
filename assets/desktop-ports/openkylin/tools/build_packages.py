@@ -118,20 +118,27 @@ applets = {json.dumps(CLASSIC_APPLETS)}
 [dock]
 enabled = false
 
+# ukui-panel island taskbar (panelNext): ONE content-sized run of three islands centred on the bottom edge. Source numbers (MainContainer.qml, ApplicationsIsland.qml,
+# panel-next.cpp): islands 48 px high (56 strip - 2 x 4), radius 12 (kRadiusWindow), 8 px between islands, 12 px padding inside the application island, 4 px between
+# items, and 12 px above the screen edge. Dux face = bar height - 10, face top = margin + 5, so height 58 / margin 7 give 48 px faces standing 12 px above the edge.
+# data island = start button; application island = tasks + search; settings island = tray, status applets, clock (the group lists use applet keys).
 [bar]
 enabled = true
 style = "dux"
 background = "islands"
+cluster = true
 position = "bottom"
-height = 56
-margin = 8
-spacing = 8
+height = 58
+margin = 7
+spacing = 4
 radius = 12
 band_radius = 12
+group_gap = 8
+group_padding = 12
 applets = {json.dumps(ISLAND_APPLETS)}
-left = ["launcherButton"]
-center = []
-right = ["systemTray", "battery", "controlCenterButton", "clock"]
+left = ["launcher"]
+center = ["tasks", "search"]
+right = ["tray", "volume", "network", "bluetooth", "battery", "control_center", "clock"]
 '''
     out += '''
 # UKUI's only desktop widget (the time appwidget), saved but switched off: UKUI's desktop has none by default. Turn it on in Settings -> Widgets.
