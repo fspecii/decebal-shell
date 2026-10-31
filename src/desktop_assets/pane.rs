@@ -100,7 +100,8 @@ fn owner_detail(o: &Owner) -> &'static str {
 
 pub fn items(m: &Model) -> Vec<Item> {
     let path = m.paths.shell_json();
-    let doc = crate::settings::io::json_load(&path);
+    // while a change is still being saved, the shown document (with it) rather than the file without it
+    let doc = if m.saving() { m.shell.clone() } else { crate::settings::io::json_load(&path) };
     let root = super::default_root();
     let roots = super::roots_with(&root);
     let mut out = Vec::new();
@@ -197,13 +198,29 @@ pub fn items(m: &Model) -> Vec<Item> {
 
 /// `ic:cursor` and `ic:follow-theme`; `true` when handled.
 pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
-    let path = m.paths.shell_json();
+    // A choice changes the value and who owns it (`asset_packs`) in one atomic write on the persistence worker.
+    let choose = |m: &mut Model, slots: Vec<(Provides, Choice)>, said: String| {
+        m.edit_shell_doc(
+            "asset-choice",
+            move |doc| {
+                for (k, c) in &slots {
+                    policy::choose(doc, *k, c);
+                }
+            },
+            said,
+            None,
+        );
+    };
     let res = match (parts, v) {
         (["ic", "cursor"], CtlVal::Str(s)) => {
             let c = if s == "auto" { Choice::Auto } else { Choice::Name(s.clone()) };
-            policy::choose_in_file(&path, Provides::Cursors, &c).map(|_| format!("Cursor theme: {}", if s == "auto" { "not set" } else { s }))
+            choose(m, vec![(Provides::Cursors, c)], format!("Cursor theme: {}", if s == "auto" { "not set" } else { s }));
+            return true;
         }
-        (["ic", "cursor"], CtlVal::Reset) => policy::choose_in_file(&path, Provides::Cursors, &Choice::Auto).map(|_| "Cursor theme: not set".to_string()),
+        (["ic", "cursor"], CtlVal::Reset) => {
+            choose(m, vec![(Provides::Cursors, Choice::Auto)], "Cursor theme: not set".into());
+            return true;
+        }
         (["ic", "install", id], CtlVal::Click) => {
             let set = catalogs();
             match set.find(id).filter(|e| e.pack.id == *id && e.source.archive_url.is_some()) {
@@ -211,9 +228,10 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 Some(_) => start_install(id, m.queue.clone(), m.wake.clone()).map(|_| format!("Installing {id}")),
             }
         }
-        (["ic", "follow-theme"], CtlVal::Click) => policy::choose_in_file(&path, Provides::Icons, &Choice::Theme)
-            .and_then(|_| policy::choose_in_file(&path, Provides::Cursors, &Choice::Theme))
-            .map(|_| "Icons and cursor follow the theme".to_string()),
+        (["ic", "follow-theme"], CtlVal::Click) => {
+            choose(m, vec![(Provides::Icons, Choice::Theme), (Provides::Cursors, Choice::Theme)], "Icons and cursor follow the theme".into());
+            return true;
+        }
         _ => return false,
     };
     match res {

@@ -635,8 +635,8 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-fn read_widgets(m: &Model) -> Result<Value, String> {
-    super::widgetspane::read_widgets(&m.paths.shell_json())
+fn read_widgets(m: &mut Model) -> Result<Value, String> {
+    super::widgetspane::read_widgets_now(m)
 }
 
 fn suggest(m: &mut Model) {

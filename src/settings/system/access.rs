@@ -322,4 +322,50 @@ mod tests {
         assert!(fr.lines().iter().any(|l| l.contains("xrdb")));
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    #[test]
+    fn race_returning_to_accessibility_while_a_session_save_is_held_keeps_the_newer_state() {
+        use crate::settings::persist::Persister;
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        let dir = std::env::temp_dir().join(format!("decebal-race-session-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut h = crate::settings::system::Hub::with(Arc::new(crate::settings::system::run::FakeRunner::default()), dir.clone(), Arc::new(|| {}));
+        let (gate, calls) = (Arc::new(AtomicBool::new(true)), Arc::new(AtomicUsize::new(0)));
+        let (g, c) = (gate.clone(), calls.clone());
+        let p = Persister::spawn_with_sync_hook(
+            Arc::new(Mutex::new(Default::default())),
+            Arc::new(|| {}),
+            Arc::new(move |_| {
+                c.fetch_add(1, Ordering::SeqCst);
+                while g.load(Ordering::SeqCst) {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                Ok(())
+            }),
+        );
+        *h.sh.persist.lock().unwrap() = p.handle();
+        access_apply(&mut h, "motion", crate::settings::model::CtlVal::Bool(true)); // its save is held
+        let t0 = std::time::Instant::now();
+        while calls.load(Ordering::SeqCst) == 0 && t0.elapsed() < std::time::Duration::from_secs(10) {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        h.activate("sound");
+        h.activate("accessibility");
+        access_apply(&mut h, "contrast", crate::settings::model::CtlVal::Bool(true));
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        gate.store(false, Ordering::SeqCst);
+        let t0 = std::time::Instant::now();
+        let saved = loop {
+            let _ = h.drain();
+            let s = crate::settings::system::session::Session::load(&dir);
+            if (s.high_contrast && p.backlog() == 0) || t0.elapsed() > std::time::Duration::from_secs(10) {
+                break s;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        assert!(saved.reduce_motion && saved.high_contrast, "reduce motion must not be clobbered: {saved:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

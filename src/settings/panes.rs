@@ -1329,21 +1329,42 @@ pub fn apply_special(m: &mut Model, id: &str, v: CtlVal) {
             m.say(if m.rt.running { "Reload requested" } else { "rdwm is not running" }, false);
         }
         ["a", "open"] => {
-            let p = m.store.path.display().to_string();
-            if !m.store.path.exists() {
-                let _ = super::io::write_atomic(&m.store.path, "");
+            let path = m.store.path.clone();
+            let open = |m: &mut Model, p: &std::path::Path| {
+                if !super::io::spawn_detached("xdg-open", &[&p.display().to_string()]) {
+                    m.say("Could not start xdg-open", true);
+                }
+            };
+            if path.exists() {
+                return open(m, &path);
             }
-            if !super::io::spawn_detached("xdg-open", &[&p]) {
-                m.say("Could not start xdg-open", true);
-            }
+            // an empty file to open, created in order with the other writes
+            let p = path.clone();
+            m.run_task(
+                "config-create",
+                vec![path.clone()],
+                move || if p.exists() { Ok(Value::Null) } else { super::io::write_if_unchanged(&p, "", super::io::Stamp::default()).map(|()| Value::Null) },
+                move |m, r| match r {
+                    Ok(_) => open(m, &path),
+                    Err(e) => m.say(format!("Could not create {}: {e}", path.display()), true),
+                },
+            );
         }
-        ["a", "restore"] => match m.store.restore_backup() {
-            Ok(()) => {
-                m.say("Original configuration restored", false);
-                m.reload_rdwm();
-            }
-            Err(e) => m.say(format!("Not restored: {e}"), true),
-        },
+        ["a", "restore"] => {
+            let (path, ctl) = (m.store.path.clone(), m.store.rdwmctl.clone());
+            m.run_task(
+                "config-restore",
+                vec![path.clone()],
+                move || super::io::restore_backup(&path, &ctl).map(|_| Value::Null),
+                |m, r| match r {
+                    Ok(_) => {
+                        m.say("Original configuration restored", false);
+                        m.reload_rdwm();
+                    }
+                    Err(e) => m.say(format!("Not restored: {e}"), true),
+                },
+            );
+        }
         ["hc", key] => apply_hot_corner(m, key, v),
         ["a", "restart-dock"] => {
             let ok = restart_process("decdock");

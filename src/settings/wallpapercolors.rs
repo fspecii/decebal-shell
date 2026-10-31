@@ -141,11 +141,27 @@ pub fn apply(m: &mut Model, sel: &Selection, id: &str, v: CtlVal) -> Result<Opti
                 d.enabled = true;
                 d.source = Origin::Wallpaper;
             })?;
-            let d = derived.dynamic.as_ref().ok_or("No wallpaper colours available")?;
-            let id = crate::theme::palette::save_wallpaper(&m.wallpaper_palette_name, d, &crate::theme::palette::user_dir())?;
-            let mut next = crate::theme::palette::select(sel, Some(&id));
-            next.accent = None;
-            Ok(Some(next))
+            let d = derived.dynamic.clone().ok_or("No wallpaper colours available")?;
+            // The palette file is written on the persistence worker; selecting it follows in order once it exists.
+            let name = m.wallpaper_palette_name.clone();
+            let asked = m.theme_intent;
+            m.run_task(
+                "palette-save",
+                Vec::new(),
+                move || crate::theme::palette::save_wallpaper(&name, &d, &crate::theme::palette::user_dir()).map(serde_json::Value::String),
+                move |m, r| match r {
+                    // any theme intent accepted while the file was being saved (design, mode, palette, accent, wallpaper
+                    // colours, even a return to the same value) is newer: keep it, the palette is only saved
+                    Ok(id) if m.theme_intent != asked => m.say(format!("Palette saved as {}; not selected, because the theme was changed meanwhile", id.as_str().unwrap_or_default()), false),
+                    Ok(id) => {
+                        let mut next = crate::theme::palette::select(&m.theme_selection(), id.as_str());
+                        next.accent = None;
+                        super::themepane::commit(m, next);
+                    }
+                    Err(e) => m.say(format!("Not applied: {e}"), true),
+                },
+            );
+            Ok(None)
         }
         ("dynamic", CtlVal::Bool(true)) => dynamic::enable(sel, &paths, wall.as_deref()).map(Some),
         ("dynamic", CtlVal::Bool(false)) => Ok(Some(dynamic::disable(sel))),
@@ -190,8 +206,8 @@ pub fn apply(m: &mut Model, sel: &Selection, id: &str, v: CtlVal) -> Result<Opti
 /// The wallpaper changed (chosen in the Wallpaper pane, or noticed in rdwm's state): re-read it when "match wallpaper"
 /// follows the wallpaper. Does nothing while the feature is off.
 pub fn follow(m: &mut Model, path: &str) {
-    let src = super::themepane::source(m);
-    let sel = src.selection();
+    // the newest accepted selection (a theme change may still be saving)
+    let sel = m.theme_selection();
     if !sel.dynamic.as_ref().is_some_and(|d| d.enabled && d.source == Origin::Wallpaper) {
         return;
     }

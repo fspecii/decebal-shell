@@ -27,12 +27,13 @@ pub mod sound;
 
 use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row};
+use crate::settings::persist;
 use confirm::Confirm;
 use run::{Cmd, RealRunner, Runner};
 use session::Session;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -120,13 +121,20 @@ pub struct Done {
     pub clear_undo: bool,
     /// The session file now holds this (display layout kept).
     pub session: Option<Session>,
-    /// An action failed before the session file was written: reload it from disk.
+    /// An action failed before the session file was written: reload it from disk (unless a newer session change
+    /// was made since; see `session_gen`).
     pub session_reload: bool,
+    /// The session change this result belongs to (`Hub::session_gen` when it was made).
+    pub session_gen: u64,
+    /// Saving notifications.toml of change `n` failed: show the file's values again, unless a newer change is pending.
+    pub notif_failed: Option<u64>,
 }
 
 /// A change to run: commands (stop at the first failure), an optional session-file update, how to undo.
 #[derive(Debug, Clone, Default)]
 pub struct Action {
+    /// The session change it carries (see `Done::session_gen`).
+    pub session_gen: u64,
     pub dom: Option<Dom>,
     pub label: String,
     pub ok_msg: Option<String>,
@@ -168,8 +176,49 @@ pub fn exec_action(r: &dyn Runner, dir: &std::path::Path, a: &Action) -> Done {
 
 /// The real executor. Session saves always write the *latest* in-memory session, so quick successive
 /// changes from different worker threads cannot overwrite each other with stale snapshots.
+/// Writes the newest session settings through the window's persistence worker (in order with every other Settings
+/// write) and waits for it on this runner thread. The snapshot is taken and queued under the `latest` lock, so the
+/// queue order is the snapshot order and the newest one is written last.
+pub fn save_session_ordered(persist: &persist::Handle, dir: &std::path::Path, latest: &Mutex<Session>) -> Result<(), String> {
+    save_session_as(persist, dir, latest, None)
+}
+
+/// The display layout was kept: `s` becomes the latest session settings and is saved in order.
+pub fn save_session_kept(persist: &persist::Handle, dir: &std::path::Path, latest: &Mutex<Session>, s: Session) -> Result<(), String> {
+    save_session_as(persist, dir, latest, Some(s))
+}
+
+/// [`save_session_ordered`] of `s` (which also becomes the latest) instead of the latest.
+fn save_session_as(persist: &persist::Handle, dir: &std::path::Path, latest: &Mutex<Session>, s: Option<Session>) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    {
+        let mut guard = latest.lock().unwrap();
+        if let Some(s) = s {
+            *guard = s;
+        }
+        let (snap, d) = (guard.clone(), dir.to_path_buf());
+        let writes = vec![Session::json_path(dir), Session::sh_path(dir)];
+        persist
+            .run_then(
+                "session-save",
+                writes,
+                move || snap.save(&d).map(|()| serde_json::Value::Null),
+                move |r| {
+                    let _ = tx.send(r);
+                },
+            )
+            .map_err(|e| format!("{e:?}"))?;
+    }
+    rx.recv().map_err(|_| "Settings closed before this was saved".to_string())?.map(|_| ())
+}
+
 pub fn exec_action_with(r: &dyn Runner, dir: &std::path::Path, latest: &Mutex<Session>, a: &Action) -> Done {
-    let mut d = Done { refresh: a.dom.filter(|d| a.refresh && d.has_data()), ..Done::default() };
+    exec_action_in(r, &persist::Handle::default(), dir, latest, a)
+}
+
+/// Runs an action on a runner thread; the session file goes through `persist`.
+pub fn exec_action_in(r: &dyn Runner, persist: &persist::Handle, dir: &std::path::Path, latest: &Mutex<Session>, a: &Action) -> Done {
+    let mut d = Done { refresh: a.dom.filter(|d| a.refresh && d.has_data()), session_gen: a.session_gen, ..Done::default() };
     for c in &a.cmds {
         let out = r.run(c);
         if !out.ok {
@@ -180,7 +229,7 @@ pub fn exec_action_with(r: &dyn Runner, dir: &std::path::Path, latest: &Mutex<Se
         }
     }
     if a.session.is_some() {
-        let res = latest.lock().unwrap().save(dir);
+        let res = save_session_ordered(persist, dir, latest);
         if let Err(e) = res {
             d.msg = Some((format!("{}: could not save for next login: {e}", a.label), true));
             d.session_reload = true;
@@ -208,10 +257,18 @@ pub struct Shared {
     pub wayland_pending: AtomicBool,
     /// Latest session settings (see `exec_action_with`).
     pub session: Mutex<Session>,
+    /// The window's persistence worker: every file this hub saves goes through it, in order.
+    pub persist: Mutex<persist::Handle>,
     poller: Mutex<Option<std::thread::Thread>>,
 }
 
 impl Shared {
+    /// A result produced off the runner threads (a persistence reply).
+    pub fn push(&self, d: Done) {
+        self.results.lock().unwrap().push_back(d);
+        (self.wake)();
+    }
+
     pub fn spawn(self: &Arc<Self>, f: impl FnOnce(&dyn Runner) -> Done + Send + 'static) {
         let _ = self.try_spawn(f);
     }
@@ -281,6 +338,12 @@ impl<T> Default for Slot<T> {
 
 pub struct Hub {
     pub sh: Arc<Shared>,
+    /// Generation of the newest session change / notifications change made in the window, and of the newest one
+    /// whose save finished (successfully or not).
+    pub session_gen: u64,
+    pub notif_gen: u64,
+    pub session_done: u64,
+    pub notif_done: Arc<AtomicU64>,
     pub sound: Slot<sound::State>,
     pub net: Slot<network::State>,
     pub bt: Slot<bluetooth::State>,
@@ -324,6 +387,7 @@ impl Hub {
             confirm: Mutex::new(Confirm::default()),
             wayland_pending: AtomicBool::new(false),
             session: Mutex::new(session.clone()),
+            persist: Mutex::new(persist::Handle::default()),
             poller: Mutex::new(None),
         });
         Hub {
@@ -340,6 +404,10 @@ impl Hub {
             users: Slot::default(),
             storage: Slot::default(),
             notif: notifications::NotifCfg::load(&dir),
+            session_gen: 0,
+            notif_gen: 0,
+            session_done: 0,
+            notif_done: Arc::new(AtomicU64::new(0)),
             session,
             undo: None,
             dirty: false,
@@ -361,11 +429,14 @@ impl Hub {
             *a = dom;
             c
         };
-        if changed && pane_id == "notifications" {
+        // Coming back to a pane re-reads its file, but never over a change of ours that is still being saved: the
+        // shown state is newer than the file then (and the next change snapshots it).
+        if changed && pane_id == "notifications" && self.notif_done.load(Ordering::SeqCst) >= self.notif_gen {
             self.notif = notifications::NotifCfg::load(&self.sh.dir);
         }
-        if changed && matches!(pane_id, "privacy" | "accessibility") {
+        if changed && matches!(pane_id, "privacy" | "accessibility") && self.session_done >= self.session_gen {
             self.session = Session::load(&self.sh.dir);
+            *self.sh.session.lock().unwrap() = self.session.clone();
         }
         let Some(dom) = dom else { return };
         if changed || self.slot_empty(dom) {
@@ -412,11 +483,16 @@ impl Hub {
 
     pub fn run(&mut self, a: Action) {
         let (dir, sh) = (self.sh.dir.clone(), self.sh.clone());
-        self.sh.spawn(move |r| exec_action_with(r, &dir, &sh.session, &a));
+        self.sh.spawn(move |r| {
+            let persist = sh.persist.lock().unwrap().clone();
+            exec_action_in(r, &persist, &dir, &sh.session, &a)
+        });
     }
 
     /// Like `run`, and also persists `s` as the new session settings (applied again at login).
     pub fn run_session(&mut self, mut a: Action, s: Session) {
+        self.session_gen += 1;
+        a.session_gen = self.session_gen;
         a.session_before = Some(self.session.clone());
         a.session = Some(s.clone());
         *self.sh.session.lock().unwrap() = s.clone();
@@ -519,7 +595,13 @@ impl Hub {
                 *self.sh.session.lock().unwrap() = s.clone();
                 self.session = s;
             }
-            if d.session_reload {
+            // A failed save only takes the shown state back when nothing newer was changed since: a newer change
+            // carries the full state and is still on its way (it reports for itself).
+            if d.notif_failed.is_some_and(|g| g == self.notif_gen) {
+                self.notif = notifications::NotifCfg::load(&self.sh.dir);
+            }
+            self.session_done = self.session_done.max(d.session_gen);
+            if d.session_reload && d.session_gen == self.session_gen {
                 self.session = Session::load(&self.sh.dir);
                 *self.sh.session.lock().unwrap() = self.session.clone();
             }

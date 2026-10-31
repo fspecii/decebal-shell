@@ -20,6 +20,7 @@ pub mod packages;
 mod packages_tests;
 pub mod panelpane;
 pub mod panes;
+pub mod persist;
 pub mod schema;
 pub mod system;
 pub mod systempane;

@@ -8,8 +8,7 @@
 
 use super::parse::{valid_id, Wall};
 use super::query::Prefs;
-use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 /// A string that must not leak: its `Debug` and `Display` never show the content.
@@ -78,27 +77,16 @@ impl Dirs {
     }
 }
 
-/// Writes `bytes` next to `path`, fsyncs and renames over it. The temp file is created with `mode` from the start
-/// (so a secret is never readable by others, not even briefly) and the directory is created 0700.
+/// Writes `bytes` next to `path`, fsyncs and renames over it (the shared Settings protocol: per-file lock, unique
+/// temp, identity check at commit). The temp file is created with `mode` from the start (so a secret is never
+/// readable by others, not even briefly), no backup copy is made, and the directory is created 0700.
 pub fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
     let dir = path.parent().ok_or("no directory")?;
     if !dir.exists() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
     }
-    let tmp = dir.join(format!(".{}.{}.tmp", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), std::process::id()));
-    let _ = std::fs::remove_file(&tmp);
-    let res = (|| {
-        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(mode).open(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        std::fs::rename(&tmp, path)
-    })();
-    if let Err(e) = res {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("{}: {e}", path.display()));
-    }
-    Ok(())
+    crate::settings::io::write_private(path, bytes, mode)
 }
 
 // ---------------------------------------------------------------- preferences
@@ -127,8 +115,15 @@ pub fn load_key(d: &Dirs) -> Option<Secret> {
 
 pub fn save_key(d: &Dirs, key: &str) -> Result<(), String> {
     let Some(k) = Secret::new(key) else {
-        return Err("That does not look like a wallhaven API key (letters and digits only)".into());
+        return Err(BAD_KEY.into());
     };
+    save_secret(d, &k)
+}
+
+pub const BAD_KEY: &str = "That does not look like a wallhaven API key (letters and digits only)";
+
+/// Writes an already checked key (mode 0600 from creation, no backup copy). Errors name the file, never the key.
+pub fn save_secret(d: &Dirs, k: &Secret) -> Result<(), String> {
     write_atomic(&d.key_file(), format!("{}\n", k.expose()).as_bytes(), 0o600)
 }
 

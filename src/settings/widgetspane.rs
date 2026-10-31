@@ -10,6 +10,16 @@ use std::path::Path;
 
 pub(super) const LIMIT: usize = 32;
 
+/// The `widgets` object new edits start from: the shown one while a change is still being saved, else the file.
+pub(super) fn read_widgets_now(m: &mut Model) -> Result<Value, String> {
+    if m.saving() {
+        if let Some(w) = m.json_value_now("shell", "widgets") {
+            return Ok(w);
+        }
+    }
+    read_widgets(&m.paths.shell_json())
+}
+
 pub(super) fn read_widgets(path: &Path) -> Result<Value, String> {
     let doc: Value = match std::fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text).map_err(|e| format!("The desktop settings file is not valid JSON: {e}"))?,
@@ -202,7 +212,7 @@ pub fn apply(m: &mut Model, parts: &[&str], value: CtlVal) {
     if let ["wg", "new", action] = parts {
         return super::widgetbuilder::apply(m, action, value);
     }
-    let mut widgets = match read_widgets(&m.paths.shell_json()) {
+    let mut widgets = match read_widgets_now(m) {
         Ok(w) => w,
         Err(e) => {
             m.say(e, true);
@@ -223,7 +233,9 @@ pub(super) fn save(m: &mut Model, mut widgets: Value, saved: &str) -> bool {
     if widgets["enabled"] == json!(true) {
         widgets.as_object_mut().unwrap().remove("theme_widgets_absent");
     }
-    m.edit_json("shell", "widgets", Some(widgets.clone()));
+    // derived from the widgets as they are now (the file, or the pending change it builds on)
+    let base = m.json_value_now("shell", "widgets");
+    m.edit_json_from("shell", "widgets", Some(widgets.clone()), base, None);
     if m.notice.as_ref().is_some_and(|n| n.error) || m.shell.get("widgets") != Some(&widgets) {
         return false;
     }

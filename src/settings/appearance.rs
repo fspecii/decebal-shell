@@ -391,8 +391,8 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
                 Ok(())
             });
             // the theme paints rdwm's colours again (when "Windows follow the theme" is on)
-            let src = super::themepane::source(m);
-            super::themepane::commit(m, src.selection());
+            let sel = m.theme_selection();
+            super::themepane::commit(m, sel);
         }
         (["ap", "reset", "dock"], CtlVal::Click) => {
             for k in DOCK_KEYS {

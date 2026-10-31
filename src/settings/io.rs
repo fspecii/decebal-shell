@@ -4,12 +4,12 @@ use super::tomlcfg::Cfg;
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
 
 pub const BACKUP_SUFFIX: &str = "bak-decsettings";
@@ -65,42 +65,296 @@ impl Paths {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Stamp(pub Option<(SystemTime, u64, u64)>);
 
+impl Stamp {
+    /// For task results that cross the worker boundary.
+    pub fn to_value(&self) -> Value {
+        match self.0 {
+            Some((t, len, ino)) => {
+                let d = t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
+                serde_json::json!([d.as_secs(), d.subsec_nanos(), len, ino])
+            }
+            None => Value::Null,
+        }
+    }
+
+    pub fn from_value(v: &Value) -> Stamp {
+        let n = |i: usize| v.get(i).and_then(Value::as_u64);
+        match (n(0), n(1), n(2), n(3)) {
+            (Some(s), Some(ns), Some(len), Some(ino)) => Stamp(Some((SystemTime::UNIX_EPOCH + Duration::new(s, ns as u32), len, ino))),
+            _ => Stamp(None),
+        }
+    }
+}
+
 pub fn stamp(path: &Path) -> Stamp {
     use std::os::unix::fs::MetadataExt;
     Stamp(std::fs::metadata(path).ok().and_then(|m| Some((m.modified().ok()?, m.len(), m.ino()))))
 }
 
+// ---------------------------------------------------------------- one write protocol for every writer
+
+/// The text every write that found its file changed since it was read fails with (nothing was written then).
+pub const CHANGED_ON_DISK: &str = "changed on disk while saving; nothing was written";
+
+pub fn is_changed_on_disk(e: &str) -> bool {
+    e.ends_with(CHANGED_ON_DISK)
+}
+
+fn file_lock(target: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: std::sync::OnceLock<Mutex<std::collections::HashMap<PathBuf, Arc<Mutex<()>>>>> = std::sync::OnceLock::new();
+    LOCKS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner()).entry(target.to_path_buf()).or_default().clone()
+}
+
+/// The file a write of `path` really replaces (a symlinked config is written through).
+fn target_of(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Runs `f` (with the real target) while no other writer in this process touches the file: every writer in `io`
+/// (the persistence worker, the theme engine, the remaining synchronous panes) takes this lock from its read to its
+/// rename. Writers in other processes are caught by the identity check right before the rename instead.
+/// Re-entrant on one thread, so a transaction holding the lock can call helpers that write the same file.
+pub fn with_file_lock<T>(path: &Path, f: impl FnOnce(&Path) -> T) -> T {
+    thread_local! {
+        static HELD: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let target = target_of(path);
+    if HELD.with(|h| h.borrow().contains(&target)) {
+        return f(&target);
+    }
+    let lock = file_lock(&target);
+    let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
+    HELD.with(|h| h.borrow_mut().push(target.clone()));
+    struct Release(PathBuf);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            HELD.with(|h| h.borrow_mut().retain(|p| p != &self.0));
+        }
+    }
+    let _release = Release(target.clone());
+    f(&target)
+}
+
 /// Writes `text` next to `path` and renames it over the target (following a symlinked target so
 /// dotfile managers keep working). Keeps the permissions of an existing file, makes a one-time
-/// `<name>.bak-decsettings` of the original, and fsyncs before the rename.
+/// `<name>.bak-decsettings` of the original, and fsyncs before the rename. A file that changes while it is
+/// being written (an editor saving during a slow fsync) is not replaced: the write fails with [`CHANGED_ON_DISK`].
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    with_file_lock(path, |t| write_locked(t, text, stamp(t))).map(|_| ())
+}
+
+/// [`write_atomic`], only while the file still has the identity `expect` it had when the caller read it.
+pub fn write_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<(), String> {
+    commit_if_unchanged(path, text, expect).map(|_| ())
+}
+
+/// [`write_if_unchanged`] returning the identity of the file it put in place (read from the written file itself, not
+/// by looking at the path afterwards, when someone else may already have replaced it).
+pub fn commit_if_unchanged(path: &Path, text: &str, expect: Stamp) -> Result<Stamp, String> {
+    with_file_lock(path, |t| write_locked(t, text, expect))
+}
+
+/// [`write_atomic`] without the one-time `.bak-decsettings` copy, for files other programs also write.
+pub fn write_shared(path: &Path, text: &str) -> Result<(), String> {
+    with_file_lock(path, |t| write_with(t, text.as_bytes(), stamp(t), None, false)).map(|_| ())
+}
+
+/// A private file (a secret, a cache): the same protocol, created with `mode` from the start (never readable by
+/// others, not even briefly), and no `.bak-decsettings` copy.
+pub fn write_private(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
+    with_file_lock(path, |t| write_with(t, bytes, stamp(t), Some(mode), false)).map(|_| ())
+}
+
+/// The caller holds the file lock of `target`.
+fn write_locked(target: &Path, text: &str, expect: Stamp) -> Result<Stamp, String> {
+    write_with(target, text.as_bytes(), expect, None, true)
+}
+
+/// Creates a new file next to `base` named `.<stem>-<pid>-<n><suffix>` that nobody else owns: `create_new`, and on a
+/// collision (a stale file of a reused pid, another writer) the next number, never removing what is there.
+pub fn create_owned(dir: &Path, stem: &str, suffix: &str, mode: u32, counter: &AtomicU64) -> std::io::Result<(PathBuf, std::fs::File)> {
+    for _ in 0..1024 {
+        let p = dir.join(format!("{stem}-{}-{}{suffix}", std::process::id(), counter.fetch_add(1, Ordering::Relaxed)));
+        match std::fs::OpenOptions::new().write(true).create_new(true).mode(mode).open(&p) {
+            Ok(f) => return Ok((p, f)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "no free temporary file name"))
+}
+
+/// The identity of an open file (what `stamp` would report for its path while it is there).
+fn stamp_of(f: &std::fs::File) -> Stamp {
+    use std::os::unix::fs::MetadataExt;
+    Stamp(f.metadata().ok().and_then(|m| Some((m.modified().ok()?, m.len(), m.ino()))))
+}
+
+/// The writes this thread committed, with the identity of the file each one put in place (see [`commits`]).
+pub mod commits {
+    use super::Stamp;
+    use std::path::PathBuf;
+
+    thread_local! {
+        static LOG: std::cell::RefCell<Option<Vec<(PathBuf, Stamp)>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Starts recording this thread's commits (the persistence worker, around a theme or task job).
+    pub fn begin() {
+        LOG.with(|l| *l.borrow_mut() = Some(Vec::new()));
+    }
+
+    /// Stops recording; the commits in order (a file written twice appears twice, the last is current).
+    pub fn take() -> Vec<(PathBuf, Stamp)> {
+        LOG.with(|l| l.borrow_mut().take().unwrap_or_default())
+    }
+
+    pub(super) fn record(path: &std::path::Path, id: Stamp) {
+        LOG.with(|l| {
+            if let Some(v) = l.borrow_mut().as_mut() {
+                v.push((path.to_path_buf(), id));
+            }
+        });
+    }
+}
+
+/// Returns the identity of the file it committed, taken from the open temp file before the rename: a writer that
+/// replaces the path right after us is never mistaken for our write.
+fn write_with(target: &Path, text: &[u8], expect: Stamp, mode: Option<u32>, backup: bool) -> Result<Stamp, String> {
+    static TMP: AtomicU64 = AtomicU64::new(0);
+    let changed = || {
+        crate::log_warn!("{} changed on disk while saving; not overwriting", target.display());
+        Err(format!("{}: {CHANGED_ON_DISK}", target.display()))
+    };
+    if stamp(target) != expect {
+        return changed();
+    }
     let dir = target.parent().ok_or("config path has no directory")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    if target.exists() {
+    if backup && target.exists() {
         let bak = dir.join(format!("{name}.{BACKUP_SUFFIX}"));
         if !bak.exists() {
-            std::fs::copy(&target, &bak).map_err(|e| format!("backup {}: {e}", bak.display()))?;
+            std::fs::copy(target, &bak).map_err(|e| format!("backup {}: {e}", bak.display()))?;
         }
     }
-    let tmp = dir.join(format!(".{name}.decsettings-{}.tmp", std::process::id()));
-    let res = (|| -> std::io::Result<()> {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
-        if let Ok(m) = std::fs::metadata(&target) {
-            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
-        }
-        std::fs::rename(&tmp, &target)
-    })();
-    if let Err(e) = res {
-        let _ = std::fs::remove_file(&tmp);
+    // Owned and unique per write: two writers never share (truncate, rename or delete) one another's temp file.
+    let (tmp, mut f) = create_owned(dir, &format!(".{name}.decsettings"), ".tmp", mode.unwrap_or(0o666), &TMP).map_err(|e| {
         crate::log_error!("write {} failed: {e}", target.display());
-        return Err(format!("{}: {e}", target.display()));
+        format!("{}: {e}", target.display())
+    })?;
+    let res = (|| -> std::io::Result<Option<Stamp>> {
+        f.write_all(text)?;
+        fault::before_sync(target)?;
+        f.sync_all()?;
+        if mode.is_none() {
+            if let Ok(m) = std::fs::metadata(target) {
+                f.set_permissions(std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777))?;
+            }
+        }
+        let ours = stamp_of(&f);
+        // At commit: the file must still be what the caller read (the fsync above may have taken seconds).
+        if stamp(target) != expect {
+            return Ok(None);
+        }
+        std::fs::rename(&tmp, target)?;
+        fault::after_commit(target);
+        Ok(Some(ours))
+    })();
+    match res {
+        Ok(Some(ours)) => {
+            crate::log_debug!("wrote {} ({} bytes)", target.display(), text.len());
+            commits::record(target, ours);
+            Ok(ours)
+        }
+        Ok(None) => {
+            let _ = std::fs::remove_file(&tmp); // ours: created above
+            changed()
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            crate::log_error!("write {} failed: {e}", target.display());
+            Err(format!("{}: {e}", target.display()))
+        }
     }
-    crate::log_debug!("wrote {} ({} bytes)", target.display(), text.len());
-    Ok(())
+}
+
+/// Deterministic slow or failing `fsync` for tests and private evidence builds. Production builds compile this to
+/// nothing: the `settings-io-fault` feature is off by default and never part of a package.
+pub mod fault {
+    use std::path::Path;
+
+    /// Runs before an fsync; an error fails that write.
+    #[cfg(test)]
+    pub type SyncHook = std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>;
+
+    #[cfg(test)]
+    thread_local! {
+        static HOOK: std::cell::RefCell<Option<SyncHook>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Unit tests: runs `hook` before every `fsync` that `write_atomic` makes on the current thread.
+    #[cfg(test)]
+    pub fn set_thread_hook(hook: Option<SyncHook>) {
+        HOOK.with(|h| *h.borrow_mut() = hook);
+    }
+
+    #[cfg(test)]
+    thread_local! {
+        static AFTER: std::cell::RefCell<Option<SyncHook>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Unit tests: runs `hook` right after each rename that publishes a write on the current thread (another writer
+    /// replacing the file at the worst moment).
+    #[cfg(test)]
+    pub fn set_after_commit_hook(hook: Option<SyncHook>) {
+        AFTER.with(|h| *h.borrow_mut() = hook);
+    }
+
+    #[allow(unused_variables)]
+    pub(super) fn after_commit(target: &Path) {
+        #[cfg(test)]
+        if let Some(hook) = AFTER.with(|h| h.borrow().clone()) {
+            let _ = hook(target);
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub(super) fn before_sync(target: &Path) -> std::io::Result<()> {
+        #[cfg(test)]
+        if let Some(hook) = HOOK.with(|h| h.borrow().clone()) {
+            hook(target)?;
+        }
+        #[cfg(feature = "settings-io-fault")]
+        env_fault(target)?;
+        Ok(())
+    }
+
+    /// `DECSETTINGS_FAULT_SYNC_GATE=<file>`: every fsync waits while that file exists (at most two minutes).
+    /// `DECSETTINGS_FAULT_SYNC_MS=<n>`: every fsync takes `n` ms longer.
+    /// `DECSETTINGS_FAULT_SYNC_FAIL=<text>`: an fsync of a file whose name contains `text` fails with EIO.
+    #[cfg(feature = "settings-io-fault")]
+    fn env_fault(target: &Path) -> std::io::Result<()> {
+        use std::time::{Duration, Instant};
+        let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(gate) = std::env::var_os("DECSETTINGS_FAULT_SYNC_GATE").filter(|g| !g.is_empty()) {
+            let start = Instant::now();
+            if Path::new(&gate).exists() {
+                crate::log_info!("fault: fsync of {name} held by the gate file");
+            }
+            while Path::new(&gate).exists() && start.elapsed() < Duration::from_secs(120) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        if let Some(ms) = std::env::var("DECSETTINGS_FAULT_SYNC_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+            std::thread::sleep(Duration::from_millis(ms));
+        }
+        if std::env::var("DECSETTINGS_FAULT_SYNC_FAIL").ok().filter(|f| !f.is_empty()).is_some_and(|f| name.contains(&f)) {
+            crate::log_info!("fault: failing fsync of {name}");
+            return Err(std::io::Error::from_raw_os_error(5));
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------- rdwm config store
@@ -114,19 +368,40 @@ pub enum External {
     Invalid(String),
 }
 
+/// `cfg` is what the window shows: the saved document plus edits the persistence worker has not committed yet
+/// (see `persist.rs`). `text` and the stamp are always the saved file as this process last knew it.
 pub struct Store {
     pub path: PathBuf,
     pub cfg: Cfg,
     pub text: String,
     stamp: Stamp,
     pub rdwmctl: PathBuf,
+    /// Increases whenever the document was (re)read from disk rather than derived from this process's own writes.
+    pub epoch: u64,
+}
+
+fn next_epoch() -> u64 {
+    static EPOCH: AtomicU64 = AtomicU64::new(1);
+    EPOCH.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Store {
     pub fn load(path: &Path, rdwmctl: &Path) -> Store {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         let cfg = Cfg::parse(&text).unwrap_or_default();
-        Store { path: path.to_path_buf(), cfg, text, stamp: stamp(path), rdwmctl: rdwmctl.to_path_buf() }
+        Store { path: path.to_path_buf(), cfg, text, stamp: stamp(path), rdwmctl: rdwmctl.to_path_buf(), epoch: next_epoch() }
+    }
+
+    /// The saved file's identity as this process last knew it.
+    pub fn saved_stamp(&self) -> Stamp {
+        self.stamp
+    }
+
+    /// The persistence worker committed `text` (whose file identity is now `stamp`). `cfg` is left to the caller,
+    /// which re-applies the edits still in flight on top.
+    pub fn adopt(&mut self, text: String, stamp: Stamp) {
+        self.text = text;
+        self.stamp = stamp;
     }
 
     /// Re-reads the file when its stamp changed.
@@ -149,6 +424,7 @@ impl Store {
             Ok(cfg) => {
                 self.cfg = cfg;
                 self.text = text;
+                self.epoch = next_epoch();
                 External::Reloaded
             }
             Err(e) => External::Invalid(e),
@@ -171,7 +447,7 @@ impl Store {
             crate::log_warn!("rdwm config rejected, nothing written: {e}");
             return Err(e);
         }
-        write_atomic(&self.path, &text)?;
+        write_if_unchanged(&self.path, &text, self.stamp)?;
         crate::log_info!("rdwm config saved: {}", self.path.display());
         self.cfg = new.clone();
         self.text = text;
@@ -180,16 +456,22 @@ impl Store {
     }
 
     pub fn restore_backup(&mut self) -> Result<(), String> {
-        let bak = self.path.with_file_name(format!("{}.{BACKUP_SUFFIX}", self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
-        let text = std::fs::read_to_string(&bak).map_err(|e| format!("{}: {e}", bak.display()))?;
-        let cfg = Cfg::parse(&text)?;
-        validate(&self.rdwmctl, &self.path, &text)?;
-        write_atomic(&self.path, &text)?;
-        self.cfg = cfg;
+        let text = restore_backup(&self.path, &self.rdwmctl)?;
+        self.cfg = Cfg::parse(&text)?;
         self.text = text;
         self.stamp = stamp(&self.path);
         Ok(())
     }
+}
+
+/// Puts the one-time `config.toml.bak-decsettings` back (validated like any other change); returns its text.
+pub fn restore_backup(path: &Path, rdwmctl: &Path) -> Result<String, String> {
+    let bak = path.with_file_name(format!("{}.{BACKUP_SUFFIX}", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+    let text = std::fs::read_to_string(&bak).map_err(|e| format!("{}: {e}", bak.display()))?;
+    Cfg::parse(&text)?;
+    validate(rdwmctl, path, &text)?;
+    write_atomic(path, &text)?;
+    Ok(text)
 }
 
 /// Runs `rdwmctl check-config` on a scratch copy; without rdwmctl only the TOML syntax is checked.
@@ -197,8 +479,15 @@ pub fn validate(rdwmctl: &Path, target: &Path, text: &str) -> Result<(), String>
     Cfg::parse(text).map_err(|e| format!("invalid TOML: {e}"))?;
     let dir = std::fs::canonicalize(target).ok().and_then(|p| p.parent().map(Path::to_path_buf)).or_else(|| target.parent().map(Path::to_path_buf)).unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&dir);
-    let tmp = dir.join(format!(".decsettings-check-{}.toml", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    // One owned scratch file per check (create_new, private): two validators never read each other's text, and a
+    // name someone else holds is skipped, never removed.
+    static CHECK: AtomicU64 = AtomicU64::new(0);
+    let (tmp, mut f) = create_owned(&dir, ".decsettings-check", ".toml", 0o600, &CHECK).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if let Err(e) = f.write_all(text.as_bytes()) {
+        let _ = std::fs::remove_file(&tmp); // ours: created above
+        return Err(format!("{}: {e}", tmp.display()));
+    }
+    drop(f);
     let out = Command::new(rdwmctl).arg("check-config").arg(&tmp).output();
     let _ = std::fs::remove_file(&tmp);
     match out {
@@ -221,20 +510,89 @@ pub fn json_load(path: &Path) -> Value {
 
 /// Sets (or with `None` removes) a top-level key, keeping every other key and the key order.
 pub fn json_set(path: &Path, key: &str, v: Option<Value>) -> Result<(), String> {
-    let mut doc = json_load(path);
-    let obj = doc.as_object_mut().ok_or("not an object")?;
-    match v {
-        Some(v) => {
-            obj.insert(key.to_string(), v);
+    json_update(path, key, v, |_, _| Ok(())).map(|_| ())
+}
+
+/// [`json_set`] as a compare-and-swap under the file lock: when the file changes between the read and the rename
+/// (someone saved it during a slow fsync), it is read again and the one key applied again, so their keys and ours
+/// both survive. `guard` sees the document and its identity before every attempt and may refuse (a conflict on the
+/// same key). A file that is not a JSON object right now is never overwritten. Returns the committed document and
+/// its identity.
+pub fn json_update(path: &Path, key: &str, v: Option<Value>, guard: impl Fn(&Value, Stamp) -> Result<(), String>) -> Result<(Value, Stamp), String> {
+    with_file_lock(path, |t| {
+        let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut attempt = 0;
+        loop {
+            let before = stamp(t);
+            let mut doc = match std::fs::read_to_string(t) {
+                Ok(s) if s.trim().is_empty() => Value::Object(Default::default()),
+                Ok(s) => serde_json::from_str::<Value>(&s).ok().filter(Value::is_object).ok_or_else(|| format!("{name} is not a JSON object right now; not overwriting it"))?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Value::Object(Default::default()),
+                Err(e) => return Err(format!("{}: {e}", t.display())),
+            };
+            guard(&doc, before)?;
+            let obj = doc.as_object_mut().expect("object");
+            match &v {
+                Some(v) => {
+                    obj.insert(key.to_string(), v.clone());
+                }
+                None => {
+                    obj.shift_remove(key);
+                }
+            }
+            let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+            text.push('\n');
+            crate::log_debug!("json set {name} key `{key}`");
+            match write_locked(t, &text, before) {
+                Ok(ours) => return Ok((doc, ours)),
+                Err(e) if is_changed_on_disk(&e) && attempt < 3 => {
+                    attempt += 1;
+                    crate::log_info!("{name} changed on disk while saving `{key}`; applying it again on top (attempt {attempt})");
+                }
+                Err(e) => return Err(e),
+            }
         }
-        None => {
-            obj.shift_remove(key);
+    })
+}
+
+/// Several keys of one JSON object file in one atomic write: `change` is applied to the file as it is, under the file
+/// lock, and committed only while the file is still what was read (a save made meanwhile, even during the fsync, is
+/// read again and `change` applied on top of it). Keeps keys `change` does not touch; never overwrites a file that is
+/// not a JSON object. Returns the committed document.
+pub fn json_update_doc(path: &Path, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    json_update_doc_with(path, true, change)
+}
+
+/// [`json_update_doc`] without the one-time `.bak-decsettings` copy, for files other programs also write.
+pub fn json_update_doc_shared(path: &Path, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    json_update_doc_with(path, false, change)
+}
+
+fn json_update_doc_with(path: &Path, backup: bool, change: impl Fn(&mut Value) -> Result<(), String>) -> Result<Value, String> {
+    with_file_lock(path, |t| {
+        let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut attempt = 0;
+        loop {
+            let before = stamp(t);
+            let mut doc = match std::fs::read_to_string(t) {
+                Ok(s) if s.trim().is_empty() => Value::Object(Default::default()),
+                Ok(s) => serde_json::from_str::<Value>(&s).ok().filter(Value::is_object).ok_or_else(|| format!("{name} is not a JSON object right now; not overwriting it"))?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Value::Object(Default::default()),
+                Err(e) => return Err(format!("{}: {e}", t.display())),
+            };
+            change(&mut doc)?;
+            let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+            text.push('\n');
+            match write_with(t, text.as_bytes(), before, None, backup) {
+                Ok(_) => return Ok(doc),
+                Err(e) if is_changed_on_disk(&e) && attempt < 3 => {
+                    attempt += 1;
+                    crate::log_info!("{name} changed on disk while saving; applying the change again on top (attempt {attempt})");
+                }
+                Err(e) => return Err(e),
+            }
         }
-    }
-    let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
-    text.push('\n');
-    crate::log_debug!("json set {} key `{key}`", path.display());
-    write_atomic(path, &text)
+    })
 }
 
 // ---------------------------------------------------------------- IPC
@@ -276,6 +634,8 @@ pub enum Ev {
     Runtime(Box<Runtime>),
     /// Result of a `reload` request to rdwm.
     Reload(Result<(), String>),
+    /// The persistence worker finished a job (in submission order).
+    Persisted(Box<super::persist::Done>),
 }
 
 /// Explicit support advertised by the live compositor, never inferred from schema keys.
@@ -388,8 +748,9 @@ pub fn queue_runtime(queue: &Queue, rt: Runtime) {
 }
 
 /// Polls file stamps every 500 ms and rdwm's state every second; wakes the UI only on change.
-/// Costs two `stat` calls per tick while nothing happens.
+/// Costs two `stat` calls per tick while nothing happens. Ends once the window's queue is gone.
 pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc<dyn Fn() + Send + Sync>) {
+    let queue: Weak<Mutex<VecDeque<Ev>>> = Arc::downgrade(&queue);
     std::thread::Builder::new()
         .name("decsettings-watch".into())
         .stack_size(256 * 1024)
@@ -399,10 +760,14 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
             let mut n = 0u32;
             loop {
                 std::thread::sleep(Duration::from_millis(500));
+                if queue.strong_count() == 0 {
+                    return;
+                }
                 n = n.wrapping_add(1);
                 let now: Vec<Stamp> = files.iter().map(|f| stamp(f)).collect();
                 if now != stamps {
                     stamps = now;
+                    let Some(queue) = queue.upgrade() else { return };
                     queue.lock().unwrap().push_back(Ev::FilesChanged);
                     wake();
                 }
@@ -410,6 +775,7 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
                     let rt = poll_runtime(&sock);
                     let changed = last.as_ref() != Some(&rt);
                     last = Some(rt.clone());
+                    let Some(queue) = queue.upgrade() else { return };
                     queue_runtime(&queue, rt);
                     if changed {
                         wake();
@@ -639,6 +1005,26 @@ mod tests {
     }
 
     #[test]
+    fn simultaneous_validations_each_check_their_own_text() {
+        let d = tmpdir("validators");
+        let target = d.join("config.toml");
+        let ctl = d.join("rdwmctl");
+        std::fs::write(&ctl, "#!/bin/sh\nsleep 0.1\nif grep -q bad \"$2\"; then echo 'config error: bad value' >&2; exit 1; fi\nexit 0\n").unwrap();
+        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let run = |text: &'static str| {
+            let (c, t) = (ctl.clone(), target.clone());
+            std::thread::spawn(move || validate(&c, &t, text))
+        };
+        let threads: Vec<_> = (0..6).map(|i| (i % 2 == 0, run(if i % 2 == 0 { "bad = 1\n" } else { "good = 1\n" }))).collect();
+        for (bad, t) in threads {
+            let r = t.join().unwrap();
+            assert_eq!(r.is_err(), bad, "{r:?}");
+        }
+        let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains("check")).collect();
+        assert!(left.is_empty(), "{left:?}");
+    }
+
+    #[test]
     fn invalid_toml_is_not_written() {
         assert!(validate(Path::new("/nonexistent"), Path::new("/tmp/x.toml"), "a = ").is_err());
     }
@@ -656,5 +1042,26 @@ mod tests {
         assert_eq!(v["alpha"]["x"], 1);
         json_set(&p, "zeta", None).unwrap();
         assert!(json_load(&p).get("zeta").is_none());
+    }
+
+    #[test]
+    fn race_colliding_temp_and_scratch_names_are_skipped_never_removed() {
+        let d = std::env::temp_dir().join(format!("decsettings-race-collide-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let pid = std::process::id();
+        let target = d.join("config.toml");
+        std::fs::write(&target, "a = 1\n").unwrap();
+        // files of a reused pid (or another writer) at the names the next writes would pick
+        for n in 0..300 {
+            std::fs::write(d.join(format!(".config.toml.decsettings-{pid}-{n}.tmp")), "sentinel").unwrap();
+            std::fs::write(d.join(format!(".decsettings-check-{pid}-{n}.toml")), "sentinel").unwrap();
+        }
+        let w = super::write_atomic(&target, "a = 2\n");
+        let v = super::validate(std::path::Path::new("/nonexistent/rdwmctl"), &target, "a = 3\n");
+        let kept = std::fs::read_dir(&d).unwrap().flatten().filter(|e| std::fs::read_to_string(e.path()).is_ok_and(|t| t == "sentinel")).count();
+        assert_eq!(kept, 600, "no file someone else owns was removed or overwritten");
+        assert!(w.is_ok() && v.is_ok(), "{w:?} {v:?}");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "a = 2\n");
     }
 }

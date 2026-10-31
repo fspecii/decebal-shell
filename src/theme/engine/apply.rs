@@ -24,6 +24,9 @@ pub struct Write {
     pub path: PathBuf,
     pub old: Option<String>,
     pub new: String,
+    /// The file's identity when planning started, before anything was read from it: the write commits only while
+    /// the file is still exactly that (`io::write_if_unchanged`), so a save made meanwhile is never overwritten.
+    pub expect: io::Stamp,
 }
 
 #[derive(Debug, Clone)]
@@ -253,6 +256,14 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         return Err(format!("theme `{id}` is broken: {e}"));
     }
     let mut notes: Vec<String> = Vec::new();
+    // Identities first: every later read of these files is covered by the commit-time check.
+    let planned: std::collections::HashMap<PathBuf, io::Stamp> = [paths.shell_json(), paths.dock_settings(), paths.rdwm_config.clone()]
+        .into_iter()
+        .map(|p| {
+            let s = io::stamp(&p);
+            (p, s)
+        })
+        .collect();
     let def = src.load_def(&id)?;
     let extra = def.extra.clone();
 
@@ -286,12 +297,13 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
     }
 
     let mut writes: Vec<Write> = Vec::new();
-    fn add(writes: &mut Vec<Write>, path: &Path, new: String) {
+    let add = |writes: &mut Vec<Write>, path: &Path, new: String| {
+        let expect = planned.get(path).copied().unwrap_or_else(|| io::stamp(path));
         let old = std::fs::read_to_string(path).ok();
         if old.as_deref() != Some(new.as_str()) {
-            writes.push(Write { path: path.to_path_buf(), old, new });
+            writes.push(Write { path: path.to_path_buf(), old, new, expect });
         }
-    }
+    };
 
     // ---- decebal.json
     let mut shell = io::json_load(&paths.shell_json());
@@ -527,7 +539,7 @@ fn plan_inner(src: &Source, paths: &Paths, name: &str, base: &Selection, reset_c
         }
         if text != old {
             rdwm_changed = true;
-            writes.push(Write { path: paths.rdwm_config.clone(), old: paths.rdwm_config.exists().then_some(old), new: text });
+            writes.push(Write { path: paths.rdwm_config.clone(), old: paths.rdwm_config.exists().then_some(old), new: text, expect: planned[&paths.rdwm_config] });
         }
     }
 
@@ -577,16 +589,15 @@ pub fn execute(src: &Source, paths: &Paths, plan: Plan) -> Result<Applied, Strin
         files.push(json!({"path": w.path.display().to_string(), "existed": w.old.is_some(), "bak": format!("{i}.bak")}));
     }
     std::fs::write(rec.join("meta.json"), text_of(&json!({"theme": plan.id, "files": files}))).map_err(|e| format!("undo record: {e}"))?;
-    let mut done: Vec<&Write> = Vec::new();
+    // Each file commits only while it is as planning found it; `done` keeps the identity each of our writes left.
+    let mut done: Vec<(&Write, io::Stamp)> = Vec::new();
     for w in &plan.writes {
-        if let Err(e) = io::write_atomic(&w.path, &w.new) {
-            for d in done.iter().rev() {
-                let _ = restore(d);
-            }
-            let _ = std::fs::remove_dir_all(&rec);
-            return Err(format!("{e} (nothing was changed)"));
+        // `ours` is the identity of the file this write put in place, from the write itself: someone replacing the
+        // path right after it is never taken for ours (and never overwritten by a rollback)
+        match io::commit_if_unchanged(&w.path, &w.new, w.expect) {
+            Ok(ours) => done.push((w, ours)),
+            Err(e) => return Err(roll_back(&rec, &done, &e)),
         }
-        done.push(w);
         applied.files.push(w.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
     }
     applied.undo_id = uid;
@@ -619,6 +630,43 @@ fn follow_wallpaper(paths: &Paths, plan: &Plan, applied: &mut Applied) {
             applied.notes.push(error);
         }
     }
+}
+
+fn file_name(p: &Path) -> String {
+    p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Puts back the files this transaction already wrote, newest first, each only while it is still exactly what our
+/// write left (someone may have saved it since). Returns the error to report: "nothing was changed" only when every
+/// file is back; otherwise which files were restored, which were left as someone else saved them or could not be
+/// restored, and the recovery record (kept) holding their previous contents.
+fn roll_back(rec: &Path, done: &[(&Write, io::Stamp)], cause: &str) -> String {
+    let (mut restored, mut kept) = (Vec::new(), Vec::new());
+    for (w, ours) in done.iter().rev() {
+        let r = io::with_file_lock(&w.path, |t| match &w.old {
+            Some(old) => io::write_if_unchanged(t, old, *ours),
+            None if io::stamp(t) == *ours => std::fs::remove_file(t).map_err(|e| format!("{}: {e}", t.display())),
+            None => Err(format!("{}: {}", t.display(), io::CHANGED_ON_DISK)),
+        });
+        match r {
+            Ok(()) => restored.push(file_name(&w.path)),
+            Err(e) => {
+                crate::log_error!("theme rollback: {e}");
+                kept.push(if io::is_changed_on_disk(&e) { format!("{} (saved by someone else since; their version kept)", file_name(&w.path)) } else { format!("{} ({e})", file_name(&w.path)) });
+            }
+        }
+    }
+    if kept.is_empty() {
+        let _ = std::fs::remove_dir_all(rec);
+        return format!("{cause} (nothing was changed)");
+    }
+    crate::log_error!("theme apply failed and was only partly undone; recovery record kept in {}", rec.display());
+    format!(
+        "{cause}; partly undone: {} not restored{}; their previous contents are kept in {}",
+        kept.join(", "),
+        if restored.is_empty() { String::new() } else { format!(", restored {}", restored.join(", ")) },
+        rec.display()
+    )
 }
 
 fn restore(w: &Write) -> Result<(), String> {
@@ -720,7 +768,13 @@ pub fn undo(src: &Source, paths: &Paths, only: Option<&str>) -> Result<String, S
         if path == paths.rdwm_config {
             rdwm_touched = true;
         }
-        let w = Write { path, old: f["existed"].as_bool().unwrap_or(false).then(|| std::fs::read_to_string(rec.join(f["bak"].as_str().unwrap_or_default())).unwrap_or_default()), new: String::new() };
+        let expect = io::stamp(&path);
+        let w = Write {
+            path,
+            old: f["existed"].as_bool().unwrap_or(false).then(|| std::fs::read_to_string(rec.join(f["bak"].as_str().unwrap_or_default())).unwrap_or_default()),
+            new: String::new(),
+            expect,
+        };
         restore_theme(&w, paths)?;
     }
     let theme = meta["theme"].as_str().unwrap_or("").to_string();

@@ -7,8 +7,13 @@ use super::model::{CtlVal, Model};
 use super::ui::{Ctl, Item, Kind, Row};
 use crate::theme::system::{self, Config, Env};
 
+/// The settings new changes start from: the shown ones while a change is pending, else the file.
+fn current(m: &Model) -> Config {
+    Config::from_json(&m.json_value_now("shell", "system").unwrap_or_default())
+}
+
 pub fn items(m: &Model) -> Vec<Item> {
-    let cfg = Config::load(&m.paths.shell_json());
+    let cfg = current(m);
     let env = Env::discover();
     let st = system::status(&env, &cfg);
     let applied = system::applied_theme(&env);
@@ -86,79 +91,95 @@ pub fn items(m: &Model) -> Vec<Item> {
     out
 }
 
-fn save(m: &mut Model, cfg: &Config) -> bool {
-    match cfg.save(&m.paths.shell_json()) {
-        Ok(()) => {
-            m.shell = super::io::json_load(&m.paths.shell_json());
-            m.dirty = true;
-            true
-        }
-        Err(e) => {
-            m.say(format!("Not saved: {e}"), true);
-            false
-        }
+/// Saves `"system"` through the persistence worker (keys this version does not know are kept); `then` runs once it
+/// is on disk (asking for an apply reads the file).
+fn save_then(m: &mut Model, cfg: &Config, then: impl FnOnce(&mut Model) + 'static) {
+    let base = m.json_value_now("shell", "system");
+    let mut obj = base.as_ref().and_then(|v| v.as_object()).cloned().unwrap_or_default();
+    // the keys Config owns are replaced (a cleared one is absent from to_json); every other key is kept
+    for k in ["enabled", "fileManagerStyle", "targets", "iconTheme", "cursorTheme", "signals", "options"] {
+        obj.shift_remove(k);
     }
+    if let serde_json::Value::Object(known) = cfg.to_json() {
+        obj.extend(known);
+    }
+    m.edit_json_then("shell", "system", Some(serde_json::Value::Object(obj)), base, None, Some(Box::new(then)));
+}
+
+/// Asks for an apply on the persistence worker, after the save (`request` reads the file and writes the pending
+/// marker; with DECEBAL_SYSTEM_SYNC=1 it applies inline): never on the UI thread.
+fn request(m: &mut Model) {
+    let shell = m.paths.shell_json();
+    m.run_task_quiet("system-apply-request", move || {
+        system::request(&shell);
+        Ok(serde_json::Value::Null)
+    });
 }
 
 pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
-    let mut cfg = Config::load(&m.paths.shell_json());
+    let mut cfg = current(m);
     match (parts, v) {
         (["sy", "on"], CtlVal::Bool(on)) => {
             // Save first, then queue one observable apply; opt-out restores the original app settings.
+            let then = move |m: &mut Model| {
+                if on {
+                    request(m);
+                } else {
+                    m.run_task_quiet("system-off", || {
+                        system::spawn_ctl(&["system", "off"]);
+                        Ok(serde_json::Value::Null)
+                    });
+                }
+                m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
+            };
             if cfg.enabled != on {
                 cfg.enabled = on;
-                if !save(m, &cfg) {
-                    return;
-                }
-            }
-            if on {
-                system::request(&m.paths.shell_json());
+                save_then(m, &cfg, then);
             } else {
-                system::spawn_ctl(&["system", "off"]);
+                then(m);
             }
-            m.say(if on { "Applying the theme to all apps" } else { "Restoring the apps' own settings" }, false);
         }
         (["sy", "t", id], CtlVal::Bool(b)) => {
             if !system::targets().iter().any(|t| t.id() == *id) {
                 return;
             }
             cfg.targets.insert((*id).to_string(), b);
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "o", key], CtlVal::Bool(b)) => {
             if !system::OPTIONS.iter().any(|o| o.0 == *key) {
                 return;
             }
             cfg.set_option(key, b);
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "files"], CtlVal::Str(s)) => {
             let Some(style) = system::file_manager::Style::parse(&s) else { return };
             cfg.file_manager_style = style;
-            if save(m, &cfg) && cfg.enabled {
-                system::request(&m.paths.shell_json());
-            }
+            let enabled = cfg.enabled;
+            save_then(m, &cfg, move |m| {
+                if enabled {
+                    request(m);
+                }
+            });
         }
         (["sy", "icon"], CtlVal::Str(s)) => {
             cfg.icon_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            if save(m, &cfg) {
-                system::request(&m.paths.shell_json());
-            }
+            save_then(m, &cfg, request);
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            if save(m, &cfg) {
-                let _ = crate::desktop_assets::policy::mark_user(&m.paths.shell_json(), crate::desktop_assets::Provides::Cursors);
-                system::request(&m.paths.shell_json());
-            }
+            // The cursor and who chose it (`asset_packs`) change in one atomic write; the apply request follows it.
+            let pick = match &cfg.cursor_theme {
+                Some(t) => crate::desktop_assets::policy::Choice::Name(t.clone()),
+                None => crate::desktop_assets::policy::Choice::Auto,
+            };
+            let said = format!("Cursor theme for apps: {}", cfg.cursor_theme.as_deref().unwrap_or("not set"));
+            m.edit_shell_doc("system-cursor", move |doc| crate::desktop_assets::policy::choose(doc, crate::desktop_assets::Provides::Cursors, &pick), said, Some(Box::new(request)));
         }
         (["sy", "now"], CtlVal::Click) => {
             if cfg.enabled {
-                system::request(&m.paths.shell_json());
+                request(m);
                 m.say("Applying the theme to all apps", false);
             } else {
                 m.say("Turn on Apply to all apps first", true);

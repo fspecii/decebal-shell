@@ -97,14 +97,12 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         _ => return,
     };
-    match super::io::json_set(&m.paths.shell_json(), "control_center", Some(s.to_json())) {
-        Ok(()) => {
-            m.shell = super::io::json_load(&m.paths.shell_json());
-            m.say(said, false);
-        }
-        Err(e) => m.say(format!("Not saved: {e}"), true),
+    // Keys of the object this version does not know (a newer decebal's, a theme's) are kept.
+    let mut obj = m.shell.get("control_center").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+    if let serde_json::Value::Object(known) = s.to_json() {
+        obj.extend(known);
     }
-    m.dirty = true;
+    m.edit_json_said("shell", "control_center", Some(serde_json::Value::Object(obj)), Some(said.into()));
 }
 
 #[cfg(test)]

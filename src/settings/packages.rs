@@ -129,15 +129,6 @@ fn free_id(src: &Source, base: &str) -> String {
     (2..100).map(|n| format!("{base}-{n}")).find(|id| !taken(id)).unwrap_or_else(|| format!("{base}-x"))
 }
 
-/// Re-reads the files the engine wrote so the pane's own copies are current.
-fn reload(m: &mut Model) {
-    m.store = super::io::Store::load(&m.paths.rdwm_config, &m.paths.rdwmctl);
-    m.dock = super::io::json_load(&m.paths.dock_settings());
-    m.shell = super::io::json_load(&m.paths.shell_json());
-    crate::theme::live::reload();
-    m.dirty = true;
-}
-
 fn downloads() -> std::path::PathBuf {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
     ["Downloads", "Documents"].iter().map(|d| home.join(d)).find(|d| d.is_dir()).unwrap_or(home)
@@ -158,51 +149,76 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
             }
             match *act {
                 "apply" => {
-                    let mut sel = src.selection();
+                    let base = m.theme_selection();
+                    let mut sel = base.clone();
                     sel.name = id.to_string();
                     if super::widgetchoice::request(m, &sel, true) {
                         return true;
                     }
-                    match eapply::apply(&src, &m.paths, id, &src.selection()) {
-                        Ok(a) => {
-                            reload(m);
-                            let extra = if a.notes.is_empty() { String::new() } else { format!(" ({} setting{} not available yet)", a.notes.len(), if a.notes.len() == 1 { "" } else { "s" }) };
-                            m.say(format!("Applied {}{extra}. `decthemectl theme undo` goes back.", a.theme_id), false);
-                        }
-                        Err(e) => m.say(format!("Not applied: {e}"), true),
-                    }
+                    let request = crate::settings::persist::ThemeRequest::Package { name: id.to_string(), base };
+                    m.apply_theme(src.clone(), m.paths.clone(), request, None, super::model::ThemeDone::Package);
                 }
                 "preview" => {
-                    let (s2, p2, id2, wake) = (src.clone(), m.paths.clone(), id.to_string(), m.wake.clone());
-                    m.say(format!("Previewing {id} for {PREVIEW_SECS} seconds…"), false);
-                    std::thread::spawn(move || {
+                    // Applies and puts back the theme's files: one ordered job, so no other change lands in between.
+                    let (s2, p2, id2) = (src.clone(), m.paths.clone(), id.to_string());
+                    let writes = vec![m.paths.rdwm_config.clone(), m.paths.shell_json(), m.paths.dock_settings()];
+                    let run = move || {
                         let cancel = std::sync::atomic::AtomicBool::new(false);
-                        let _ = eapply::preview(&s2, &p2, &id2, PREVIEW_SECS, &cancel);
-                        wake();
-                    });
+                        eapply::preview(&s2, &p2, &id2, PREVIEW_SECS, &cancel).map(|_| serde_json::Value::Null)
+                    };
+                    if m.run_task("theme-preview", writes, run, |m, r| {
+                        crate::theme::live::reload();
+                        if let Err(e) = r {
+                            m.say(format!("Preview ended: {e}"), true);
+                        }
+                    }) {
+                        m.say(format!("Previewing {id} for {PREVIEW_SECS} seconds…"), false);
+                    }
                 }
                 "dup" => {
                     let new = free_id(&src, &format!("{id}-copy"));
-                    match store::duplicate(&src, id, &new, None) {
-                        Ok(_) => m.say(format!("Created {new}; edit it in {}", src.themes_dir.join(&new).display()), false),
-                        Err(e) => m.say(format!("Not duplicated: {e}"), true),
-                    }
+                    let (s2, id2, n2) = (src.clone(), id.to_string(), new.clone());
+                    let dir = src.themes_dir.join(&new).display().to_string();
+                    m.run_task(
+                        "theme-duplicate",
+                        Vec::new(),
+                        move || store::duplicate(&s2, &id2, &n2, None).map(|_| serde_json::Value::Null),
+                        move |m, r| match r {
+                            Ok(_) => m.say(format!("Created {new}; edit it in {dir}"), false),
+                            Err(e) => m.say(format!("Not duplicated: {e}"), true),
+                        },
+                    );
                 }
                 "export" => {
                     let out = downloads().join(format!("{id}.dtheme"));
-                    match store::export(&src, id, &out) {
-                        Ok(_) => m.say(format!("Exported to {}", out.display()), false),
-                        Err(e) => m.say(format!("Not exported: {e}"), true),
-                    }
+                    let (s2, id2, o2) = (src.clone(), id.to_string(), out.clone());
+                    m.run_task(
+                        "theme-export",
+                        Vec::new(),
+                        move || store::export(&s2, &id2, &o2).map(|_| serde_json::Value::Null),
+                        move |m, r| match r {
+                            Ok(_) => m.say(format!("Exported to {}", out.display()), false),
+                            Err(e) => m.say(format!("Not exported: {e}"), true),
+                        },
+                    );
                 }
                 "delete" => {
                     let armed = CONFIRM.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(id);
                     if armed {
                         set_confirm(None);
-                        match store::uninstall(&src, id) {
-                            Ok(p) => m.say(format!("Removed {}", p.display()), false),
-                            Err(e) => m.say(format!("Not removed: {e}"), true),
-                        }
+                        let (s2, id2) = (src.clone(), id.to_string());
+                        m.run_task(
+                            "theme-delete",
+                            Vec::new(),
+                            move || store::uninstall(&s2, &id2).map(|p| serde_json::json!(p.display().to_string())),
+                            |m, r| match r {
+                                Ok(p) => {
+                                    m.say(format!("Removed {}", p.as_str().unwrap_or_default()), false);
+                                    m.dirty = true;
+                                }
+                                Err(e) => m.say(format!("Not removed: {e}"), true),
+                            },
+                        );
                     } else {
                         set_confirm(Some(id));
                         m.say("Click Delete again to remove this theme", false);
@@ -224,17 +240,24 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 return true;
             }
             let id = free_id(&src, &base);
-            match capture::from_current(&src, &m.paths, &id, name) {
-                Ok(c) => m.say(
-                    format!(
-                        "Created theme {id} in {}{}",
-                        c.dir.display(),
-                        if c.notes.is_empty() { String::new() } else { format!(" ({} note{})", c.notes.len(), if c.notes.len() == 1 { "" } else { "s" }) }
-                    ),
-                    false,
-                ),
+            // Captured in the worker: the theme holds every change accepted before it.
+            let (s2, p2, id2, n2) = (src.clone(), m.paths.clone(), id.clone(), name.to_string());
+            let run = move || capture::from_current(&s2, &p2, &id2, &n2).map(|c| serde_json::json!([c.dir.display().to_string(), c.notes.len()]));
+            m.run_task("theme-snapshot", Vec::new(), run, move |m, r| match r {
+                Ok(v) => {
+                    let notes = v[1].as_u64().unwrap_or(0);
+                    m.say(
+                        format!(
+                            "Created theme {id} in {}{}",
+                            v[0].as_str().unwrap_or_default(),
+                            if notes == 0 { String::new() } else { format!(" ({notes} note{})", if notes == 1 { "" } else { "s" }) }
+                        ),
+                        false,
+                    );
+                    m.dirty = true;
+                }
                 Err(e) => m.say(format!("Not created: {e}"), true),
-            }
+            });
             m.dirty = true;
             true
         }
@@ -244,10 +267,15 @@ pub fn apply(m: &mut Model, parts: &[&str], v: &CtlVal) -> bool {
                 return true;
             }
             let full = super::panes::expand_tilde(path);
-            match store::install(&src, std::path::Path::new(&full), false) {
-                Ok((i, r)) => m.say(format!("Installed {}{}", i.id, if r.all_warnings().is_empty() { String::new() } else { " (with warnings, see decthemectl theme validate)".to_string() }), false),
+            let s2 = src.clone();
+            let run = move || store::install(&s2, std::path::Path::new(&full), false).map(|(i, r)| serde_json::json!([i.id, !r.all_warnings().is_empty()]));
+            m.run_task("theme-install", Vec::new(), run, |m, r| match r {
+                Ok(v) => {
+                    m.say(format!("Installed {}{}", v[0].as_str().unwrap_or_default(), if v[1] == true { " (with warnings, see decthemectl theme validate)" } else { "" }), false);
+                    m.dirty = true;
+                }
                 Err(e) => m.say(format!("Not installed: {}", e.lines().next().unwrap_or("")), true),
-            }
+            });
             m.dirty = true;
             true
         }

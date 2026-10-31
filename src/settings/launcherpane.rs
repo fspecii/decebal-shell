@@ -64,15 +64,11 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         }
         _ => return,
     };
-    let path = m.paths.shell_json();
-    match style::save_choice(&path, choice) {
-        Ok(()) => {
-            m.shell = super::io::json_load(&path);
-            m.dirty = true;
-            m.say(format!("Launcher style: {}", choice.map_or("theme default", LauncherStyle::title)), false);
-        }
-        Err(e) => m.say(format!("Not saved: {e}"), true),
-    }
+    // Through the persistence worker: the other keys of the `launcher` object (and of the file) are kept.
+    let mut launcher = m.shell.get("launcher").filter(|v| v.is_object()).cloned().unwrap_or_else(|| serde_json::json!({}));
+    launcher["style"] = serde_json::json!(choice.map_or(style::THEME, LauncherStyle::key));
+    let said = format!("Launcher style: {}", choice.map_or("theme default", LauncherStyle::title));
+    m.edit_json_said("shell", "launcher", Some(launcher), Some(said));
 }
 
 #[cfg(test)]

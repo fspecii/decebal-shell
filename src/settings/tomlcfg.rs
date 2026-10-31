@@ -116,6 +116,17 @@ fn table_at_mut<'a>(root: &'a mut Table, section: &str, create: bool) -> Result<
     Ok(t)
 }
 
+fn forget_position(t: &mut Table) {
+    t.set_position(None);
+    for (_, item) in t.iter_mut() {
+        match item {
+            Item::Table(t) => forget_position(t),
+            Item::ArrayOfTables(a) => a.iter_mut().for_each(forget_position),
+            _ => {}
+        }
+    }
+}
+
 /// Stores `v` at `slot`, keeping the decoration (comments, spacing) of the value it replaces.
 fn put(slot: &mut Item, v: Value) {
     let mut v = v;
@@ -251,7 +262,9 @@ impl Cfg {
         let t = tables.remove(from);
         tables.insert(to, t);
         a.clear();
-        for t in tables {
+        for mut t in tables {
+            // A parsed table renders at its old place in the file whatever its index: let the new order decide.
+            forget_position(&mut t);
             a.push(t);
         }
         Ok(())
@@ -392,6 +405,12 @@ action = "setmfact"
         assert_eq!(c.array_get("bind", 0, "action"), Some(Val::Str("close".into())));
         assert_eq!(c.array_get("bind", 1, "key"), Some(Val::Str("t".into())));
         assert!(c.text().contains("# terminal"), "comments survive a reorder");
+        let reread = Cfg::parse(&c.text()).unwrap();
+        assert_eq!(reread.array_get("bind", 0, "action"), Some(Val::Str("close".into())), "the file has the new order too");
+        assert_eq!(reread.array_get("bind", 1, "key"), Some(Val::Str("t".into())));
+        let mut moved = Cfg::parse(&c.text()).unwrap();
+        moved.array_move("bind", 0, 2).unwrap();
+        assert_eq!(Cfg::parse(&moved.text()).unwrap().array_get("bind", 2, "action"), Some(Val::Str("close".into())), "a parsed file reorders too");
         c.array_remove("bind", 0).unwrap();
         c.array_remove("bind", 0).unwrap();
         c.array_remove("bind", 0).unwrap();
