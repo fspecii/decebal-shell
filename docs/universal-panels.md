@@ -18,9 +18,10 @@ Known limits:
 
 - The macOS dock has no keyboard mode (its menus take Up/Down/Enter/Escape); the taskbar's is `decdock --focus`.
 - On a side taskbar, a StatusNotifierItem's Activate gets the item's along/across position as its x/y hint.
-- `decbar --control-center` summoned by a key or hot corner places itself for a top menu bar or a top/bottom taskbar;
-  it does not yet know a side taskbar or a bottom/side classic bar (its `Host::detect` belongs to the Control Center
-  owner).
+- `decbar --control-center` summoned by a key or hot corner follows the resolved edge of the bar or taskbar
+  (`Host::Panel` for a bottom or side bar and a side taskbar; `auto` opens at the tray end, clear of the strip at the
+  display scale). On X11 it shares the panels' monitor (RandR primary); under Wayland the compositor picks the output
+  of each layer surface, so with several outputs it can open on another output than the bar.
 - Applet order inside a renderer is fixed (the renderer's own reading order).
 - Native evidence is X11 (private Xvfb without a window manager: strut hints are checked as values, not as a work area
   a WM honoured). Wayland layer-shell anchoring is unit-tested only.

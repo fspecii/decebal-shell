@@ -230,6 +230,9 @@ pub enum Host {
     Taskbar { top: bool, thickness: f32 },
     /// The Caelestia pill bar on `position`; `thickness` is its width (height when horizontal).
     Pill { position: BarPosition, thickness: f32 },
+    /// A bar or taskbar on an edge the variants above cannot name (a bottom or side menu, floating or Dux bar; a side
+    /// taskbar), from the shared panel resolution. `thickness` is in surface pixels; `taskbar` picks the `fluent` look.
+    Panel { edge: crate::panel::Edge, thickness: f32, taskbar: bool },
     /// No bar at all.
     Nothing,
 }
@@ -237,19 +240,38 @@ pub enum Host {
 impl Host {
     /// The host that is on screen for these settings and theme: the taskbar when the dock is in the Windows style and shown,
     /// else the pill bar or the menu bar when `bar.enabled` allows it.
+    ///
+    /// The edge is the resolved one (Settings → Panels, the theme, the old `windowsPosition`), and the thickness is in
+    /// surface pixels: the taskbar's metrics are already, a bar's logical thickness is multiplied by
+    /// [`crate::backend::surface_scale`] since decbar draws at the display scale on X11.
     pub fn detect(shell: &crate::config::ShellSettings, dock: &crate::config::DockSettings, pill: Option<BarPosition>, scale: f32) -> Host {
-        use crate::config::{DockStyle, WinPosition};
+        Self::detect_for(shell, dock, pill, scale, crate::backend::surface_scale(scale))
+    }
+
+    /// [`Host::detect`] with the bar's surface scale given (tests).
+    pub fn detect_for(shell: &crate::config::ShellSettings, dock: &crate::config::DockSettings, pill: Option<BarPosition>, scale: f32, bar_scale: f32) -> Host {
+        use crate::config::DockStyle;
+        use crate::panel::Edge;
         let windows = dock.style == DockStyle::Windows;
         if windows && shell.dock_visible(pill.is_some()) {
             let m = crate::taskbar::Metrics::new(scale, dock.windows_align);
-            return Host::Taskbar { top: dock.windows_position == WinPosition::Top, thickness: m.bar_h };
+            return match crate::theme::th().taskbar_panel(dock).edge {
+                Edge::Top => Host::Taskbar { top: true, thickness: m.bar_h },
+                Edge::Bottom => Host::Taskbar { top: false, thickness: m.bar_h },
+                edge => Host::Panel { edge, thickness: m.bar_h, taskbar: true },
+            };
         }
         if shell.bar_visible(dock.style) {
             return match pill {
-                Some(position) => Host::Pill { position, thickness: crate::theme::pill_bar_thickness(position) },
+                Some(position) => Host::Pill { position, thickness: crate::theme::pill_bar_thickness(position) * bar_scale },
                 None => {
                     let th = crate::theme::th();
-                    Host::MenuBar { thickness: if th.bar_style == "dux" { th.bar_height + 2.0 * th.bar_layout.margin } else { crate::theme::BAR_HEIGHT } }
+                    let edge = th.bar_panel().edge;
+                    let thickness = th.bar_thickness(edge) * bar_scale;
+                    match edge {
+                        Edge::Top => Host::MenuBar { thickness },
+                        edge => Host::Panel { edge, thickness, taskbar: false },
+                    }
                 }
             };
         }
@@ -258,7 +280,7 @@ impl Host {
 
     /// The Windows-style taskbar is what the panel hangs from (picks the `fluent` look for `style = "auto"`).
     pub fn is_taskbar(&self) -> bool {
-        matches!(self, Host::Taskbar { .. })
+        matches!(self, Host::Taskbar { .. } | Host::Panel { taskbar: true, .. })
     }
 
     /// Thickness this host takes from each screen edge: (left, right, top, bottom).
@@ -273,6 +295,12 @@ impl Host {
                 BarPosition::Top => (0.0, 0.0, thickness, 0.0),
                 BarPosition::Bottom => (0.0, 0.0, 0.0, thickness),
                 BarPosition::Split => (0.0, 0.0, thickness, thickness),
+            },
+            Host::Panel { edge, thickness, .. } => match edge {
+                crate::panel::Edge::Left => (thickness, 0.0, 0.0, 0.0),
+                crate::panel::Edge::Right => (0.0, thickness, 0.0, 0.0),
+                crate::panel::Edge::Top => (0.0, 0.0, thickness, 0.0),
+                crate::panel::Edge::Bottom => (0.0, 0.0, 0.0, thickness),
             },
             Host::Nothing => (0.0, 0.0, 0.0, 0.0),
         }
@@ -294,6 +322,12 @@ impl Host {
                 BarPosition::Right | BarPosition::Top => Corner::TopRight,
                 // the tray, with the Control Center tile, is in the bottom half of a split bar
                 BarPosition::Bottom | BarPosition::Split => Corner::BottomRight,
+            },
+            // the tray, with the Control Center button, ends a bottom or side panel (the foot of a side one)
+            Host::Panel { edge, .. } => match edge {
+                crate::panel::Edge::Top => Corner::TopRight,
+                crate::panel::Edge::Left => Corner::BottomLeft,
+                crate::panel::Edge::Right | crate::panel::Edge::Bottom => Corner::BottomRight,
             },
         }
     }
@@ -459,6 +493,55 @@ mod tests {
         }
         let p = place(&Host::Taskbar { top: false, thickness: 48.0 }, Corner::Auto);
         assert_eq!(p.origin(1920.0, 1080.0, 340.0, 520.0), (1920.0 - GAP - 340.0, 1080.0 - 48.0 - GAP - 520.0));
+    }
+
+    #[test]
+    fn a_summoned_panel_clears_a_taskbar_or_bar_on_any_edge_at_the_display_scale() {
+        use crate::config::{DockSettings, DockStyle, ShellSettings};
+        use crate::panel::Edge;
+        let shell = ShellSettings::default();
+        let mut dock = DockSettings { style: DockStyle::Windows, ..DockSettings::default() };
+        // the taskbar on each edge (Settings → Panels writes `edge`); auto opens at its tray end, clear of its strip
+        for (edge, corner) in [(Edge::Bottom, Corner::BottomRight), (Edge::Top, Corner::TopRight), (Edge::Left, Corner::BottomLeft), (Edge::Right, Corner::BottomRight)] {
+            dock.edge = Some(edge);
+            for scale in [1.0, 1.25, 2.0] {
+                let host = Host::detect_for(&shell, &dock, None, scale, scale);
+                assert!(host.is_taskbar(), "{edge:?}");
+                let thick = crate::taskbar::Metrics::new(scale, dock.windows_align).bar_h;
+                let p = place(&host, Corner::Auto);
+                assert_eq!(p.corner, corner, "{edge:?}");
+                let (x, y) = p.origin(1600.0, 1000.0, 360.0, 500.0);
+                let clear = match edge {
+                    Edge::Bottom => y + 500.0 <= 1000.0 - thick - GAP + 0.01,
+                    Edge::Top => y >= thick + GAP - 0.01,
+                    Edge::Left => x >= thick + GAP - 0.01,
+                    Edge::Right => x + 360.0 <= 1600.0 - thick - GAP + 0.01,
+                };
+                assert!(clear, "{edge:?} {scale}: panel at {x},{y} overlaps the {thick} px taskbar");
+                // an explicit corner on the far side still keeps clear of the strip
+                for want in [Corner::TopLeft, Corner::TopRight, Corner::BottomLeft, Corner::BottomRight] {
+                    let (x, y) = place(&host, want).origin(1600.0, 1000.0, 360.0, 500.0);
+                    let overlaps = match edge {
+                        Edge::Bottom => y + 500.0 > 1000.0 - thick,
+                        Edge::Top => y < thick,
+                        Edge::Left => x < thick,
+                        Edge::Right => x + 360.0 > 1600.0 - thick,
+                    };
+                    assert!(!overlaps, "{edge:?} {want:?}");
+                }
+            }
+        }
+        // bars on the other edges: their surface thickness is cleared, and a bar drawn at 2x is twice as thick
+        for edge in [Edge::Bottom, Edge::Left, Edge::Right] {
+            let host = Host::Panel { edge, thickness: 26.0 * 2.0, taskbar: false };
+            assert!(!host.is_taskbar());
+            let p = place(&host, Corner::Auto);
+            let inset = if edge == Edge::Bottom { p.inset_y } else { p.inset_x };
+            assert_eq!(inset, 52.0 + GAP, "{edge:?}");
+        }
+        let one = Host::detect_for(&shell, &DockSettings::default(), Some(BarPosition::Left), 1.0, 1.0);
+        let two = Host::detect_for(&shell, &DockSettings::default(), Some(BarPosition::Left), 2.0, 2.0);
+        assert!(matches!((one, two), (Host::Pill { thickness: a, .. }, Host::Pill { thickness: b, .. }) if b == 2.0 * a));
     }
 
     #[test]
