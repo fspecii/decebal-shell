@@ -240,6 +240,8 @@ impl Model {
                     super::wallpapercolors::follow(self, img);
                 }
             }
+            // Results of the persistence worker; edits are routed through it in the next step.
+            Ev::Persisted(_) => {}
             Ev::Reload(r) => {
                 match r {
                     Ok(()) => {}

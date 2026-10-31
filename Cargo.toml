@@ -48,6 +48,9 @@ x11 = ["dep:x11rb"]
 # TEST ONLY: compiles in a fake authenticator for declock (DECLOCK_FAKE_AUTH=1 + DECLOCK_TEST_PASSWORD). Never build
 # release packages with it (PKGBUILD and the Makefile do not); tests/e2e/lock.sh checks the shipped binary lacks it.
 test-auth = []
+# TEST ONLY: deterministic slow/failing fsync for decsettings evidence runs (DECSETTINGS_FAULT_SYNC_*, see
+# settings/io.rs `fault`). Off by default; never enable it for packages.
+settings-io-fault = []
 
 [profile.release]
 opt-level = 3

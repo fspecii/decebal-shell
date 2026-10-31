@@ -9,7 +9,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
 
 pub const BACKUP_SUFFIX: &str = "bak-decsettings";
@@ -88,6 +88,7 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let res = (|| -> std::io::Result<()> {
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(text.as_bytes())?;
+        fault::before_sync(&target)?;
         f.sync_all()?;
         if let Ok(m) = std::fs::metadata(&target) {
             let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
@@ -103,6 +104,63 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Deterministic slow or failing `fsync` for tests and private evidence builds. Production builds compile this to
+/// nothing: the `settings-io-fault` feature is off by default and never part of a package.
+pub mod fault {
+    use std::path::Path;
+
+    #[cfg(test)]
+    type Hook = std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>;
+
+    #[cfg(test)]
+    thread_local! {
+        static HOOK: std::cell::RefCell<Option<Hook>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Unit tests: runs `hook` before every `fsync` that `write_atomic` makes on the current thread.
+    #[cfg(test)]
+    pub fn set_thread_hook(hook: Option<Hook>) {
+        HOOK.with(|h| *h.borrow_mut() = hook);
+    }
+
+    #[allow(unused_variables)]
+    pub(super) fn before_sync(target: &Path) -> std::io::Result<()> {
+        #[cfg(test)]
+        if let Some(hook) = HOOK.with(|h| h.borrow().clone()) {
+            hook(target)?;
+        }
+        #[cfg(feature = "settings-io-fault")]
+        env_fault(target)?;
+        Ok(())
+    }
+
+    /// `DECSETTINGS_FAULT_SYNC_GATE=<file>`: every fsync waits while that file exists (at most two minutes).
+    /// `DECSETTINGS_FAULT_SYNC_MS=<n>`: every fsync takes `n` ms longer.
+    /// `DECSETTINGS_FAULT_SYNC_FAIL=<text>`: an fsync of a file whose name contains `text` fails with EIO.
+    #[cfg(feature = "settings-io-fault")]
+    fn env_fault(target: &Path) -> std::io::Result<()> {
+        use std::time::{Duration, Instant};
+        let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(gate) = std::env::var_os("DECSETTINGS_FAULT_SYNC_GATE").filter(|g| !g.is_empty()) {
+            let start = Instant::now();
+            if Path::new(&gate).exists() {
+                crate::log_info!("fault: fsync of {name} held by the gate file");
+            }
+            while Path::new(&gate).exists() && start.elapsed() < Duration::from_secs(120) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        if let Some(ms) = std::env::var("DECSETTINGS_FAULT_SYNC_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+            std::thread::sleep(Duration::from_millis(ms));
+        }
+        if std::env::var("DECSETTINGS_FAULT_SYNC_FAIL").ok().filter(|f| !f.is_empty()).is_some_and(|f| name.contains(&f)) {
+            crate::log_info!("fault: failing fsync of {name}");
+            return Err(std::io::Error::from_raw_os_error(5));
+        }
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------- rdwm config store
 
 #[derive(Debug, PartialEq, Eq)]
@@ -114,19 +172,40 @@ pub enum External {
     Invalid(String),
 }
 
+/// `cfg` is what the window shows: the saved document plus edits the persistence worker has not committed yet
+/// (see `persist.rs`). `text` and the stamp are always the saved file as this process last knew it.
 pub struct Store {
     pub path: PathBuf,
     pub cfg: Cfg,
     pub text: String,
     stamp: Stamp,
     pub rdwmctl: PathBuf,
+    /// Increases whenever the document was (re)read from disk rather than derived from this process's own writes.
+    pub epoch: u64,
+}
+
+fn next_epoch() -> u64 {
+    static EPOCH: AtomicU64 = AtomicU64::new(1);
+    EPOCH.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Store {
     pub fn load(path: &Path, rdwmctl: &Path) -> Store {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         let cfg = Cfg::parse(&text).unwrap_or_default();
-        Store { path: path.to_path_buf(), cfg, text, stamp: stamp(path), rdwmctl: rdwmctl.to_path_buf() }
+        Store { path: path.to_path_buf(), cfg, text, stamp: stamp(path), rdwmctl: rdwmctl.to_path_buf(), epoch: next_epoch() }
+    }
+
+    /// The saved file's identity as this process last knew it.
+    pub fn saved_stamp(&self) -> Stamp {
+        self.stamp
+    }
+
+    /// The persistence worker committed `text` (whose file identity is now `stamp`). `cfg` is left to the caller,
+    /// which re-applies the edits still in flight on top.
+    pub fn adopt(&mut self, text: String, stamp: Stamp) {
+        self.text = text;
+        self.stamp = stamp;
     }
 
     /// Re-reads the file when its stamp changed.
@@ -149,6 +228,7 @@ impl Store {
             Ok(cfg) => {
                 self.cfg = cfg;
                 self.text = text;
+                self.epoch = next_epoch();
                 External::Reloaded
             }
             Err(e) => External::Invalid(e),
@@ -276,6 +356,8 @@ pub enum Ev {
     Runtime(Box<Runtime>),
     /// Result of a `reload` request to rdwm.
     Reload(Result<(), String>),
+    /// The persistence worker finished a job (in submission order).
+    Persisted(Box<super::persist::Done>),
 }
 
 /// Explicit support advertised by the live compositor, never inferred from schema keys.
@@ -381,8 +463,9 @@ pub fn queue_runtime(queue: &Queue, rt: Runtime) {
 }
 
 /// Polls file stamps every 500 ms and rdwm's state every second; wakes the UI only on change.
-/// Costs two `stat` calls per tick while nothing happens.
+/// Costs two `stat` calls per tick while nothing happens. Ends once the window's queue is gone.
 pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc<dyn Fn() + Send + Sync>) {
+    let queue: Weak<Mutex<VecDeque<Ev>>> = Arc::downgrade(&queue);
     std::thread::Builder::new()
         .name("decsettings-watch".into())
         .stack_size(256 * 1024)
@@ -392,10 +475,14 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
             let mut n = 0u32;
             loop {
                 std::thread::sleep(Duration::from_millis(500));
+                if queue.strong_count() == 0 {
+                    return;
+                }
                 n = n.wrapping_add(1);
                 let now: Vec<Stamp> = files.iter().map(|f| stamp(f)).collect();
                 if now != stamps {
                     stamps = now;
+                    let Some(queue) = queue.upgrade() else { return };
                     queue.lock().unwrap().push_back(Ev::FilesChanged);
                     wake();
                 }
@@ -403,6 +490,7 @@ pub fn spawn_watcher(files: Vec<PathBuf>, sock: PathBuf, queue: Queue, wake: Arc
                     let rt = poll_runtime(&sock);
                     let changed = last.as_ref() != Some(&rt);
                     last = Some(rt.clone());
+                    let Some(queue) = queue.upgrade() else { return };
                     queue_runtime(&queue, rt);
                     if changed {
                         wake();
