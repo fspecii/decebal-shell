@@ -222,29 +222,27 @@ pub fn choose(doc: &mut Value, k: Provides, c: &Choice) {
 }
 
 /// Marks a slot as chosen by the user, in the file (the Icons pane, `decthemectl icons set`, the cursor setting).
+/// One transaction on the file as it is (Settings' `json_update_doc`: under the file lock, applied again on top of a
+/// save made meanwhile), so a concurrent writer's keys, also inside `asset_packs`, are never overwritten with a stale copy.
 pub fn mark_user(shell_json: &Path, k: Provides) -> Result<(), String> {
-    let mut doc = crate::settings::io::json_load(shell_json);
-    if !doc.is_object() {
-        doc = json!({});
-    }
-    if state(&doc, k).user {
-        return Ok(());
-    }
-    put_state(&mut doc, k, &SlotState { user: true, ..SlotState::default() });
-    crate::settings::io::json_set(shell_json, KEY, doc.get(KEY).cloned())
+    crate::settings::io::json_update_doc(shell_json, |doc| {
+        if !state(doc, k).user {
+            put_state(doc, k, &SlotState { user: true, ..SlotState::default() });
+        }
+        Ok(())
+    })
+    .map(|_| ())
 }
 
-/// Reads, changes and writes the slot in `shell_json` (only the `icons`, `system` and `asset_packs` keys change).
+/// Changes the slot in `shell_json`: the selected value (`icons.theme` or `system.cursorTheme`) and who owns it
+/// (`asset_packs`) in one atomic transaction on the file as it is; every other key, and every key another writer
+/// changed meanwhile, is kept. The same change the Icons pane makes through `edit_shell_doc`.
 pub fn choose_in_file(shell_json: &Path, k: Provides, c: &Choice) -> Result<(), String> {
-    let mut doc = crate::settings::io::json_load(shell_json);
-    if !doc.is_object() {
-        doc = json!({});
-    }
-    choose(&mut doc, k, c);
-    for key in [if k == Provides::Icons { "icons" } else { "system" }, KEY] {
-        crate::settings::io::json_set(shell_json, key, doc.get(key).cloned())?;
-    }
-    Ok(())
+    crate::settings::io::json_update_doc(shell_json, |doc| {
+        choose(doc, k, c);
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 /// Is a theme of this name installed and usable for `k`?
@@ -357,6 +355,47 @@ mod tests {
         assert!(notes.iter().any(|n| n.contains("assets install deepin-bloom")), "{notes:?}");
         assert_eq!(d[KEY]["recommended"]["missing"][0], "deepin-bloom");
         assert!(d.get("icons").is_none(), "nothing installed: nothing changes");
+    }
+
+    #[test]
+    fn file_choices_are_one_transaction_and_keep_concurrent_writers() {
+        let s = super::super::testkit::Scratch::new("policy-race");
+        let f = s.path().join("decebal.json");
+        std::fs::write(&f, r#"{"theme": {"name": "nord"}, "asset_packs": {"recommended": {"theme": "deepin", "count": 0}}}"#).unwrap();
+        const N: i64 = 150;
+        // another writer keeps changing a key inside `asset_packs`, the object a choice rewrites
+        let f2 = f.clone();
+        let other = std::thread::spawn(move || {
+            for _ in 0..N {
+                crate::settings::io::json_update_doc(&f2, |d| {
+                    let n = d[KEY]["recommended"]["count"].as_i64().unwrap_or(0);
+                    d[KEY]["recommended"]["count"] = json!(n + 1);
+                    Ok(())
+                })
+                .unwrap();
+            }
+        });
+        for i in 0..N {
+            let name = if i % 2 == 0 { "Papirus" } else { "bloom" };
+            choose_in_file(&f, Provides::Icons, &Choice::Name(name.into())).unwrap();
+            mark_user(&f, Provides::Cursors).unwrap();
+        }
+        other.join().unwrap();
+        let d = crate::settings::io::json_load(&f);
+        assert_eq!(d[KEY]["recommended"]["count"].as_i64(), Some(N), "no increment of the other writer was overwritten by a stale copy");
+        assert_eq!(d[KEY]["recommended"]["theme"], "deepin");
+        assert_eq!((current(&d, Provides::Icons).as_deref(), owner(&d, Provides::Icons)), (Some("bloom"), Owner::User), "the value and its owner agree");
+        assert!(state(&d, Provides::Cursors).user);
+        assert_eq!(d["theme"]["name"], "nord");
+        // handing a slot back to the theme is one transaction too
+        choose_in_file(&f, Provides::Icons, &Choice::Theme).unwrap();
+        let d = crate::settings::io::json_load(&f);
+        assert_eq!(state(&d, Provides::Icons), SlotState::default(), "no recommendation for icons: the slot is released");
+        assert_eq!(d[KEY]["recommended"]["count"].as_i64(), Some(N));
+        // a file that is not a JSON object is refused, not overwritten
+        std::fs::write(&f, "[1, 2]").unwrap();
+        assert!(choose_in_file(&f, Provides::Icons, &Choice::Auto).is_err());
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "[1, 2]");
     }
 
     #[test]
