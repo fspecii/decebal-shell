@@ -1,0 +1,31 @@
+format = 1
+id = "plasma-digital-clock"
+name = "Plasma digital clock"
+description = "Plasma's Digital Clock desktop widget: time over a short date on the wallpaper, no card (ShadowBackground: text with a soft shadow), 10 by 4 grid units. Saved off in the package."
+size = [180, 72]
+refresh = 1000
+
+# plasma-workspace applets/digital-clock: main.qml width = gridUnit * 10 (180 px), height = gridUnit * 4 (72 px); showDate default true,
+# dateFormat default shortDate; Plasma fits the text to the box (autoFontAndSize), here time 40 px over date 16 px is the fitted result
+# for that box (approximation, not read from a render). The date uses the safe format codes of the widget DSL, not the locale's shortDate.
+[root]
+type = "col"
+padding = 0
+gap = 0
+justify = "center"
+align = "center"
+
+[[root.children]]
+type = "text"
+text = "{clock:%H:%M}"
+size = 40
+weight = "regular"
+color = "text"
+text_align = "center"
+
+[[root.children]]
+type = "text"
+text = "{clock:%d/%m/%Y}"
+size = 16
+color = "text_secondary"
+text_align = "center"

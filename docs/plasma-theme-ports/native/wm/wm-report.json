@@ -1,0 +1,2795 @@
+{
+  "binary_sha256": {
+    "decdock": "235c4b501ff7386d5a90469bf6043e06bc05151d5a64664a27b1c6d02a8f970d",
+    "decthemectl": "b2e90ae2f08da093a4f7e6cc78dd1cccf26c2da8fc4ca631c38125ebd904ad0d",
+    "rdwm": "e4980f9eeb9cdc28962721d036a902cf2cc9669a89c9e6407b9e5187978f15ee",
+    "rdwmctl": "061313cb81972def843e3d35dc1c53b0799f0a0c452c4d32ddd52b15c051876f"
+  },
+  "cases": [
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            52
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            1028
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              514,
+              864,
+              514
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              514
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              1028
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1904 0 44\nstart 45 22\ntask org.gnome.Nautilus 95 22 0\ntask google-chrome 145 22 0\ntask foot 195 22 0\ntask plasmafakea 245 22 0\ntask plasmafakeb 295 22 0\ntask plasmafakec 345 22 1\ntray Workspaces 1517.5 22\ntray Notifications 1761 22\nclock 1821 22\ndesktop 1887 22\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1904 0 44\nstart 45 22\ntask org.gnome.Nautilus 95 22 0\ntask google-chrome 145 22 0\ntask foot 195 22 0\ntask plasmafakea 245 22 1\ntask plasmafakeb 295 22 0\ntask plasmafakec 345 22 0\ntray Workspaces 1517.5 22\ntray Notifications 1761 22\nclock 1821 22\ndesktop 1887 22\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 268.64
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 62816,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              95,
+              1076
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.19,
+          "ink": [
+            251,
+            251,
+            251
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            65
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            1015
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              507,
+              864,
+              508
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              507
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              1015
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1900 0 55\nstart 56.5 27.5\ntask org.gnome.Nautilus 119.5 27.5 0\ntask google-chrome 182.5 27.5 0\ntask foot 245.5 27.5 0\ntask plasmafakea 308.5 27.5 0\ntask plasmafakeb 371.5 27.5 0\ntask plasmafakec 434.5 27.5 1\ntray Workspaces 1414 27.5\ntray Notifications 1721 27.5\nclock 1796 27.5\ndesktop 1878.5 27.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1900 0 55\nstart 56.5 27.5\ntask org.gnome.Nautilus 119.5 27.5 0\ntask google-chrome 182.5 27.5 0\ntask foot 245.5 27.5 0\ntask plasmafakea 308.5 27.5 1\ntask plasmafakeb 371.5 27.5 0\ntask plasmafakec 434.5 27.5 0\ntray Workspaces 1414 27.5\ntray Notifications 1721 27.5\nclock 1796 27.5\ndesktop 1878.5 27.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 261.7986111111111
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 96974,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              120,
+              1075
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            104
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            976
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              488,
+              864,
+              488
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              488
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              976
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1888 0 88\nstart 90 44\ntask org.gnome.Nautilus 181.5 44 0\ntask google-chrome 264.5 44 0\ntask foot 347.5 44 0\ntask plasmafakea 430.5 44 0\ntask plasmafakeb 513.5 44 0\ntask plasmafakec 596.5 44 1\ntray Workspaces 1114.5 44\ntray Notifications 1602 44\nclock 1722 44\ndesktop 1854 44\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1888 0 88\nstart 90 44\ntask org.gnome.Nautilus 181.5 44 0\ntask google-chrome 264.5 44 0\ntask foot 347.5 44 0\ntask plasmafakea 430.5 44 1\ntask plasmafakeb 513.5 44 0\ntask plasmafakec 596.5 44 0\ntray Workspaces 1114.5 44\ntray Notifications 1602 44\nclock 1722 44\ndesktop 1854 44\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 220.99
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 220736,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              182,
+              1072
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            52,
+            0
+          ],
+          "work_area": [
+            0,
+            52,
+            1920,
+            1028
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              566,
+              864,
+              514
+            ],
+            "1": [
+              1056,
+              52,
+              864,
+              514
+            ],
+            "2": [
+              0,
+              52,
+              1056,
+              1028
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1904 8 44\nstart 45 30\ntask org.gnome.Nautilus 95 30 0\ntask google-chrome 145 30 0\ntask foot 195 30 0\ntask plasmafakea 245 30 0\ntask plasmafakeb 295 30 0\ntask plasmafakec 345 30 1\ntray Workspaces 1517.5 30\ntray Notifications 1761 30\nclock 1821 30\ndesktop 1887 30\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1904 8 44\nstart 45 30\ntask org.gnome.Nautilus 95 30 0\ntask google-chrome 145 30 0\ntask foot 195 30 0\ntask plasmafakea 245 30 1\ntask plasmafakeb 295 30 0\ntask plasmafakec 345 30 0\ntray Workspaces 1517.5 30\ntray Notifications 1761 30\nclock 1821 30\ndesktop 1887 30\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 267.36
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 63081,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            60.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              95,
+              4
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.19,
+          "ink": [
+            251,
+            251,
+            251
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            65,
+            0
+          ],
+          "work_area": [
+            0,
+            65,
+            1920,
+            1015
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              572,
+              864,
+              508
+            ],
+            "1": [
+              1056,
+              65,
+              864,
+              507
+            ],
+            "2": [
+              0,
+              65,
+              1056,
+              1015
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1900 10 55\nstart 56.5 37.5\ntask org.gnome.Nautilus 119.5 37.5 0\ntask google-chrome 182.5 37.5 0\ntask foot 245.5 37.5 0\ntask plasmafakea 308.5 37.5 0\ntask plasmafakeb 371.5 37.5 0\ntask plasmafakec 434.5 37.5 1\ntray Workspaces 1414 37.5\ntray Notifications 1721 37.5\nclock 1796 37.5\ndesktop 1878.5 37.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1900 10 55\nstart 56.5 37.5\ntask org.gnome.Nautilus 119.5 37.5 0\ntask google-chrome 182.5 37.5 0\ntask foot 245.5 37.5 0\ntask plasmafakea 308.5 37.5 1\ntask plasmafakeb 371.5 37.5 0\ntask plasmafakec 434.5 37.5 0\ntray Workspaces 1414 37.5\ntray Notifications 1721 37.5\nclock 1796 37.5\ndesktop 1878.5 37.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 260.90972222222223
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 97504,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            75.0,
+            316.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              120,
+              5
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            104,
+            0
+          ],
+          "work_area": [
+            0,
+            104,
+            1920,
+            976
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              592,
+              864,
+              488
+            ],
+            "1": [
+              1056,
+              104,
+              864,
+              488
+            ],
+            "2": [
+              0,
+              104,
+              1056,
+              976
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1888 16 88\nstart 90 60\ntask org.gnome.Nautilus 181.5 60 0\ntask google-chrome 264.5 60 0\ntask foot 347.5 60 0\ntask plasmafakea 430.5 60 0\ntask plasmafakeb 513.5 60 0\ntask plasmafakec 596.5 60 1\ntray Workspaces 1114.5 60\ntray Notifications 1602 60\nclock 1722 60\ndesktop 1854 60\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1888 16 88\nstart 90 60\ntask org.gnome.Nautilus 181.5 60 0\ntask google-chrome 264.5 60 0\ntask foot 347.5 60 0\ntask plasmafakea 430.5 60 1\ntask plasmafakeb 513.5 60 0\ntask plasmafakec 596.5 60 0\ntray Workspaces 1114.5 60\ntray Notifications 1602 60\nclock 1722 60\ndesktop 1854 60\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 223.0025
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 222134,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            120.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              182,
+              8
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            52,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            52,
+            0,
+            1868,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1079,
+              540,
+              841,
+              540
+            ],
+            "1": [
+              1079,
+              0,
+              841,
+              540
+            ],
+            "2": [
+              52,
+              0,
+              1027,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1064 8 44\nstart 30 45\ntask org.gnome.Nautilus 30 95 0\ntask google-chrome 30 145 0\ntask foot 30 195 0\ntask plasmafakea 30 245 0\ntask plasmafakeb 30 295 0\ntask plasmafakec 30 345 1\ntray Workspaces 30 874.5\ntray Notifications 30 965\nclock 30 1003\ndesktop 30 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1064 8 44\nstart 30 45\ntask org.gnome.Nautilus 30 95 0\ntask google-chrome 30 145 0\ntask foot 30 195 0\ntask plasmafakea 30 245 1\ntask plasmafakeb 30 295 0\ntask plasmafakec 30 345 0\ntray Workspaces 30 874.5\ntray Notifications 30 965\nclock 30 1003\ndesktop 30 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 277.82
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 19978,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            60.0,
+            818.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              4,
+              95
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.19,
+          "ink": [
+            251,
+            251,
+            251
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            65,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            65,
+            0,
+            1855,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1085,
+              540,
+              835,
+              540
+            ],
+            "1": [
+              1085,
+              0,
+              835,
+              540
+            ],
+            "2": [
+              65,
+              0,
+              1020,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1060 10 55\nstart 37.5 56.5\ntask org.gnome.Nautilus 37.5 119.5 0\ntask google-chrome 37.5 182.5 0\ntask foot 37.5 245.5 0\ntask plasmafakea 37.5 308.5 0\ntask plasmafakeb 37.5 371.5 0\ntask plasmafakec 37.5 434.5 1\ntray Workspaces 37.5 821.5\ntray Notifications 37.5 935\nclock 37.5 983\ndesktop 37.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1060 10 55\nstart 37.5 56.5\ntask org.gnome.Nautilus 37.5 119.5 0\ntask google-chrome 37.5 182.5 0\ntask foot 37.5 245.5 0\ntask plasmafakea 37.5 308.5 1\ntask plasmafakeb 37.5 371.5 0\ntask plasmafakec 37.5 434.5 0\ntray Workspaces 37.5 821.5\ntray Notifications 37.5 935\nclock 37.5 983\ndesktop 37.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 268.7986111111111
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 30867,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            75.0,
+            752.0,
+            315.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              5,
+              120
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            104,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            104,
+            0,
+            1816,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1102,
+              540,
+              818,
+              540
+            ],
+            "1": [
+              1102,
+              0,
+              818,
+              540
+            ],
+            "2": [
+              104,
+              0,
+              998,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1048 16 88\nstart 60 90\ntask org.gnome.Nautilus 60 172 0\ntask google-chrome 60 236 0\ntask foot 60 300 0\ntask plasmafakea 60 364 0\ntask plasmafakeb 60 428 0\ntask plasmafakec 60 492 1\ntray Workspaces 60 668.5\ntray Notifications 60 850\nclock 60 926\ndesktop 60 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1048 16 88\nstart 60 90\ntask org.gnome.Nautilus 60 172 0\ntask google-chrome 60 236 0\ntask foot 60 300 0\ntask plasmafakea 60 364 1\ntask plasmafakeb 60 428 0\ntask plasmafakec 60 492 0\ntray Workspaces 60 668.5\ntray Notifications 60 850\nclock 60 926\ndesktop 60 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 253.73999999999998
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 76347,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            120.0,
+            556.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              8,
+              172
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            52,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1868,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1027,
+              540,
+              841,
+              540
+            ],
+            "1": [
+              1027,
+              0,
+              841,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              1027,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1064 0 44\nstart 22 45\ntask org.gnome.Nautilus 22 95 0\ntask google-chrome 22 145 0\ntask foot 22 195 0\ntask plasmafakea 22 245 0\ntask plasmafakeb 22 295 0\ntask plasmafakec 22 345 1\ntray Workspaces 22 874.5\ntray Notifications 22 965\nclock 22 1003\ndesktop 22 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1064 0 44\nstart 22 45\ntask org.gnome.Nautilus 22 95 0\ntask google-chrome 22 145 0\ntask foot 22 195 0\ntask plasmafakea 22 245 1\ntask plasmafakeb 22 295 0\ntask plasmafakec 22 345 0\ntray Workspaces 22 874.5\ntray Notifications 22 965\nclock 22 1003\ndesktop 22 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 280.15
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 19929,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            6.0,
+            818.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1916,
+              95
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.19,
+          "ink": [
+            251,
+            251,
+            251
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            65,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1855,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1020,
+              540,
+              835,
+              540
+            ],
+            "1": [
+              1020,
+              0,
+              835,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              1020,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1060 0 55\nstart 27.5 56.5\ntask org.gnome.Nautilus 27.5 119.5 0\ntask google-chrome 27.5 182.5 0\ntask foot 27.5 245.5 0\ntask plasmafakea 27.5 308.5 0\ntask plasmafakeb 27.5 371.5 0\ntask plasmafakec 27.5 434.5 1\ntray Workspaces 27.5 821.5\ntray Notifications 27.5 935\nclock 27.5 983\ndesktop 27.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1060 0 55\nstart 27.5 56.5\ntask org.gnome.Nautilus 27.5 119.5 0\ntask google-chrome 27.5 182.5 0\ntask foot 27.5 245.5 0\ntask plasmafakea 27.5 308.5 1\ntask plasmafakeb 27.5 371.5 0\ntask plasmafakec 27.5 434.5 0\ntray Workspaces 27.5 821.5\ntray Notifications 27.5 935\nclock 27.5 983\ndesktop 27.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 268.7986111111111
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 30810,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            3.0,
+            752.0,
+            316.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1915,
+              120
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            104,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1816,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              998,
+              540,
+              818,
+              540
+            ],
+            "1": [
+              998,
+              0,
+              818,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              998,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1048 0 88\nstart 44 90\ntask org.gnome.Nautilus 44 172 0\ntask google-chrome 44 236 0\ntask foot 44 300 0\ntask plasmafakea 44 364 0\ntask plasmafakeb 44 428 0\ntask plasmafakec 44 492 1\ntray Workspaces 44 668.5\ntray Notifications 44 850\nclock 44 926\ndesktop 44 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1048 0 88\nstart 44 90\ntask org.gnome.Nautilus 44 172 0\ntask google-chrome 44 236 0\ntask foot 44 300 0\ntask plasmafakea 44 364 1\ntask plasmafakeb 44 428 0\ntask plasmafakec 44 492 0\ntray Workspaces 44 668.5\ntray Notifications 44 850\nclock 44 926\ndesktop 44 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 53.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 254.7375
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 76235,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            -2.0,
+            556.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1912,
+              172
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 16.33,
+          "ink": [
+            252,
+            252,
+            252
+          ],
+          "base": [
+            27,
+            30,
+            32
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            52
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            1028
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              514,
+              864,
+              514
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              514
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              1028
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1904 0 44\nstart 45 22\ntask org.gnome.Nautilus 95 22 0\ntask google-chrome 145 22 0\ntask foot 195 22 0\ntask plasmafakea 245 22 0\ntask plasmafakeb 295 22 0\ntask plasmafakec 345 22 1\ntray Workspaces 1517.5 22\ntray Notifications 1761 22\nclock 1821 22\ndesktop 1887 22\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1904 0 44\nstart 45 22\ntask org.gnome.Nautilus 95 22 0\ntask google-chrome 145 22 0\ntask foot 195 22 0\ntask plasmafakea 245 22 1\ntask plasmafakeb 295 22 0\ntask plasmafakec 345 22 0\ntray Workspaces 1517.5 22\ntray Notifications 1761 22\nclock 1821 22\ndesktop 1887 22\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 144.59
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 54180,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            6.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              95,
+              1076
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.34,
+          "ink": [
+            36,
+            39,
+            42
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            65
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            1015
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              507,
+              864,
+              508
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              507
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              1015
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1900 0 55\nstart 56.5 27.5\ntask org.gnome.Nautilus 119.5 27.5 0\ntask google-chrome 182.5 27.5 0\ntask foot 245.5 27.5 0\ntask plasmafakea 308.5 27.5 0\ntask plasmafakeb 371.5 27.5 0\ntask plasmafakec 434.5 27.5 1\ntray Workspaces 1414 27.5\ntray Notifications 1721 27.5\nclock 1796 27.5\ndesktop 1878.5 27.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1900 0 55\nstart 56.5 27.5\ntask org.gnome.Nautilus 119.5 27.5 0\ntask google-chrome 182.5 27.5 0\ntask foot 245.5 27.5 0\ntask plasmafakea 308.5 27.5 1\ntask plasmafakeb 371.5 27.5 0\ntask plasmafakec 434.5 27.5 0\ntray Workspaces 1414 27.5\ntray Notifications 1721 27.5\nclock 1796 27.5\ndesktop 1878.5 27.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 140.88194444444443
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 83283,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            3.0,
+            316.0,
+            304.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              120,
+              1075
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.46,
+          "ink": [
+            35,
+            38,
+            41
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            0,
+            104
+          ],
+          "work_area": [
+            0,
+            0,
+            1920,
+            976
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              488,
+              864,
+              488
+            ],
+            "1": [
+              1056,
+              0,
+              864,
+              488
+            ],
+            "2": [
+              0,
+              0,
+              1056,
+              976
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1888 0 88\nstart 90 44\ntask org.gnome.Nautilus 181.5 44 0\ntask google-chrome 264.5 44 0\ntask foot 347.5 44 0\ntask plasmafakea 430.5 44 0\ntask plasmafakeb 513.5 44 0\ntask plasmafakec 596.5 44 1\ntray Workspaces 1114.5 44\ntray Notifications 1602 44\nclock 1722 44\ndesktop 1854 44\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1888 0 88\nstart 90 44\ntask org.gnome.Nautilus 181.5 44 0\ntask google-chrome 264.5 44 0\ntask foot 347.5 44 0\ntask plasmafakea 430.5 44 1\ntask plasmafakeb 513.5 44 0\ntask plasmafakec 596.5 44 0\ntray Workspaces 1114.5 44\ntray Notifications 1602 44\nclock 1722 44\ndesktop 1854 44\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 112.67750000000001
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 194433,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            -2.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              182,
+              1072
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.46,
+          "ink": [
+            35,
+            38,
+            41
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            52,
+            0
+          ],
+          "work_area": [
+            0,
+            52,
+            1920,
+            1028
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              566,
+              864,
+              514
+            ],
+            "1": [
+              1056,
+              52,
+              864,
+              514
+            ],
+            "2": [
+              0,
+              52,
+              1056,
+              1028
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1904 8 44\nstart 45 30\ntask org.gnome.Nautilus 95 30 0\ntask google-chrome 145 30 0\ntask foot 195 30 0\ntask plasmafakea 245 30 0\ntask plasmafakeb 295 30 0\ntask plasmafakec 345 30 1\ntray Workspaces 1517.5 30\ntray Notifications 1761 30\nclock 1821 30\ndesktop 1887 30\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1904 8 44\nstart 45 30\ntask org.gnome.Nautilus 95 30 0\ntask google-chrome 145 30 0\ntask foot 195 30 0\ntask plasmafakea 245 30 1\ntask plasmafakeb 295 30 0\ntask plasmafakec 345 30 0\ntray Workspaces 1517.5 30\ntray Notifications 1761 30\nclock 1821 30\ndesktop 1887 30\nstrut 44\npagercell 0 1317.5\npagercell 1 1367.5\npagercell 2 1417.5\npagercell 3 1467.5\npagercell 4 1517.5\npagercell 5 1567.5\npagercell 6 1617.5\npagercell 7 1667.5\npagercell 8 1717.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 146.83
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 54166,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1610.0,
+            60.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              95,
+              4
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.34,
+          "ink": [
+            36,
+            39,
+            42
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            65,
+            0
+          ],
+          "work_area": [
+            0,
+            65,
+            1920,
+            1015
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              572,
+              864,
+              508
+            ],
+            "1": [
+              1056,
+              65,
+              864,
+              507
+            ],
+            "2": [
+              0,
+              65,
+              1056,
+              1015
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1900 10 55\nstart 56.5 37.5\ntask org.gnome.Nautilus 119.5 37.5 0\ntask google-chrome 182.5 37.5 0\ntask foot 245.5 37.5 0\ntask plasmafakea 308.5 37.5 0\ntask plasmafakeb 371.5 37.5 0\ntask plasmafakec 434.5 37.5 1\ntray Workspaces 1414 37.5\ntray Notifications 1721 37.5\nclock 1796 37.5\ndesktop 1878.5 37.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1900 10 55\nstart 56.5 37.5\ntask org.gnome.Nautilus 119.5 37.5 0\ntask google-chrome 182.5 37.5 0\ntask foot 245.5 37.5 0\ntask plasmafakea 308.5 37.5 1\ntask plasmafakeb 371.5 37.5 0\ntask plasmafakec 434.5 37.5 0\ntray Workspaces 1414 37.5\ntray Notifications 1721 37.5\nclock 1796 37.5\ndesktop 1878.5 37.5\nstrut 55\npagercell 0 1162\npagercell 1 1225\npagercell 2 1288\npagercell 3 1351\npagercell 4 1414\npagercell 5 1477\npagercell 6 1540\npagercell 7 1603\npagercell 8 1666\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 142.4375
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 83375,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1531.0,
+            75.0,
+            316.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              120,
+              5
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.46,
+          "ink": [
+            35,
+            38,
+            41
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            0,
+            104,
+            0
+          ],
+          "work_area": [
+            0,
+            104,
+            1920,
+            976
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1056,
+              592,
+              864,
+              488
+            ],
+            "1": [
+              1056,
+              104,
+              864,
+              488
+            ],
+            "2": [
+              0,
+              104,
+              1056,
+              976
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "bar 1888 16 88\nstart 90 60\ntask org.gnome.Nautilus 181.5 60 0\ntask google-chrome 264.5 60 0\ntask foot 347.5 60 0\ntask plasmafakea 430.5 60 0\ntask plasmafakeb 513.5 60 0\ntask plasmafakec 596.5 60 1\ntray Workspaces 1114.5 60\ntray Notifications 1602 60\nclock 1722 60\ndesktop 1854 60\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "bar 1888 16 88\nstart 90 60\ntask org.gnome.Nautilus 181.5 60 0\ntask google-chrome 264.5 60 0\ntask foot 347.5 60 0\ntask plasmafakea 430.5 60 1\ntask plasmafakeb 513.5 60 0\ntask plasmafakec 596.5 60 0\ntray Workspaces 1114.5 60\ntray Notifications 1602 60\nclock 1722 60\ndesktop 1854 60\nstrut 88\npagercell 0 714.5\npagercell 1 814.5\npagercell 2 914.5\npagercell 3 1014.5\npagercell 4 1114.5\npagercell 5 1214.5\npagercell 6 1314.5\npagercell 7 1414.5\npagercell 8 1514.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 117.82749999999999
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 194936,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            1300.0,
+            120.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              182,
+              8
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 9.46,
+          "ink": [
+            35,
+            38,
+            41
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            52,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            52,
+            0,
+            1868,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1079,
+              540,
+              841,
+              540
+            ],
+            "1": [
+              1079,
+              0,
+              841,
+              540
+            ],
+            "2": [
+              52,
+              0,
+              1027,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1064 8 44\nstart 30 45\ntask org.gnome.Nautilus 30 95 0\ntask google-chrome 30 145 0\ntask foot 30 195 0\ntask plasmafakea 30 245 0\ntask plasmafakeb 30 295 0\ntask plasmafakec 30 345 1\ntray Workspaces 30 874.5\ntray Notifications 30 965\nclock 30 1003\ndesktop 30 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1064 8 44\nstart 30 45\ntask org.gnome.Nautilus 30 95 0\ntask google-chrome 30 145 0\ntask foot 30 195 0\ntask plasmafakea 30 245 1\ntask plasmafakeb 30 295 0\ntask plasmafakec 30 345 0\ntray Workspaces 30 874.5\ntray Notifications 30 965\nclock 30 1003\ndesktop 30 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 152.69
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 17528,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            60.0,
+            818.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              4,
+              95
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            65,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            65,
+            0,
+            1855,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1085,
+              540,
+              835,
+              540
+            ],
+            "1": [
+              1085,
+              0,
+              835,
+              540
+            ],
+            "2": [
+              65,
+              0,
+              1020,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1060 10 55\nstart 37.5 56.5\ntask org.gnome.Nautilus 37.5 119.5 0\ntask google-chrome 37.5 182.5 0\ntask foot 37.5 245.5 0\ntask plasmafakea 37.5 308.5 0\ntask plasmafakeb 37.5 371.5 0\ntask plasmafakec 37.5 434.5 1\ntray Workspaces 37.5 821.5\ntray Notifications 37.5 935\nclock 37.5 983\ndesktop 37.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1060 10 55\nstart 37.5 56.5\ntask org.gnome.Nautilus 37.5 119.5 0\ntask google-chrome 37.5 182.5 0\ntask foot 37.5 245.5 0\ntask plasmafakea 37.5 308.5 1\ntask plasmafakeb 37.5 371.5 0\ntask plasmafakec 37.5 434.5 0\ntray Workspaces 37.5 821.5\ntray Notifications 37.5 935\nclock 37.5 983\ndesktop 37.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 143.65972222222223
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 26895,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            75.0,
+            752.0,
+            315.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              5,
+              120
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            104,
+            0,
+            0,
+            0
+          ],
+          "work_area": [
+            104,
+            0,
+            1816,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1102,
+              540,
+              818,
+              540
+            ],
+            "1": [
+              1102,
+              0,
+              818,
+              540
+            ],
+            "2": [
+              104,
+              0,
+              998,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge left\nbar 1048 16 88\nstart 60 90\ntask org.gnome.Nautilus 60 172 0\ntask google-chrome 60 236 0\ntask foot 60 300 0\ntask plasmafakea 60 364 0\ntask plasmafakeb 60 428 0\ntask plasmafakec 60 492 1\ntray Workspaces 60 668.5\ntray Notifications 60 850\nclock 60 926\ndesktop 60 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge left\nbar 1048 16 88\nstart 60 90\ntask org.gnome.Nautilus 60 172 0\ntask google-chrome 60 236 0\ntask foot 60 300 0\ntask plasmafakea 60 364 1\ntask plasmafakeb 60 428 0\ntask plasmafakec 60 492 0\ntray Workspaces 60 668.5\ntray Notifications 60 850\nclock 60 926\ndesktop 60 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 134.02249999999998
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 65480,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            120.0,
+            556.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              8,
+              172
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 1.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            52,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1868,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1027,
+              540,
+              841,
+              540
+            ],
+            "1": [
+              1027,
+              0,
+              841,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              1027,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1064 0 44\nstart 22 45\ntask org.gnome.Nautilus 22 95 0\ntask google-chrome 22 145 0\ntask foot 22 195 0\ntask plasmafakea 22 245 0\ntask plasmafakeb 22 295 0\ntask plasmafakec 22 345 1\ntray Workspaces 22 874.5\ntray Notifications 22 965\nclock 22 1003\ndesktop 22 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1064 0 44\nstart 22 45\ntask org.gnome.Nautilus 22 95 0\ntask google-chrome 22 145 0\ntask foot 22 195 0\ntask plasmafakea 22 245 1\ntask plasmafakeb 22 295 0\ntask plasmafakec 22 345 0\ntray Workspaces 22 874.5\ntray Notifications 22 965\nclock 22 1003\ndesktop 22 1047\nstrut 44\npagercell 0 810.5\npagercell 1 826.5\npagercell 2 842.5\npagercell 3 858.5\npagercell 4 874.5\npagercell 5 890.5\npagercell 6 906.5\npagercell 7 922.5\npagercell 8 938.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 152.64
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 17537,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            6.0,
+            818.0,
+            252.0,
+            242.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1916,
+              95
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 1.25,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            65,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1855,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              1020,
+              540,
+              835,
+              540
+            ],
+            "1": [
+              1020,
+              0,
+              835,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              1020,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1060 0 55\nstart 27.5 56.5\ntask org.gnome.Nautilus 27.5 119.5 0\ntask google-chrome 27.5 182.5 0\ntask foot 27.5 245.5 0\ntask plasmafakea 27.5 308.5 0\ntask plasmafakeb 27.5 371.5 0\ntask plasmafakec 27.5 434.5 1\ntray Workspaces 27.5 821.5\ntray Notifications 27.5 935\nclock 27.5 983\ndesktop 27.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1060 0 55\nstart 27.5 56.5\ntask org.gnome.Nautilus 27.5 119.5 0\ntask google-chrome 27.5 182.5 0\ntask foot 27.5 245.5 0\ntask plasmafakea 27.5 308.5 1\ntask plasmafakeb 27.5 371.5 0\ntask plasmafakec 27.5 434.5 0\ntray Workspaces 27.5 821.5\ntray Notifications 27.5 935\nclock 27.5 983\ndesktop 27.5 1038.5\nstrut 55\npagercell 0 741.5\npagercell 1 761.5\npagercell 2 781.5\npagercell 3 801.5\npagercell 4 821.5\npagercell 5 841.5\npagercell 6 861.5\npagercell 7 881.5\npagercell 8 901.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 143.65972222222223
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 26924,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            3.0,
+            752.0,
+            316.0,
+            303.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1915,
+              120
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 2.0,
+      "steps": [
+        {
+          "step": "work_area",
+          "strut": [
+            0,
+            104,
+            0,
+            0
+          ],
+          "work_area": [
+            0,
+            0,
+            1816,
+            1080
+          ]
+        },
+        {
+          "step": "clients_inside_work_area",
+          "geometry": {
+            "0": [
+              998,
+              540,
+              818,
+              540
+            ],
+            "1": [
+              998,
+              0,
+              818,
+              540
+            ],
+            "2": [
+              0,
+              0,
+              998,
+              1080
+            ]
+          }
+        },
+        {
+          "step": "dump_idle",
+          "layout": "edge right\nbar 1048 0 88\nstart 44 90\ntask org.gnome.Nautilus 44 172 0\ntask google-chrome 44 236 0\ntask foot 44 300 0\ntask plasmafakea 44 364 0\ntask plasmafakeb 44 428 0\ntask plasmafakec 44 492 1\ntray Workspaces 44 668.5\ntray Notifications 44 850\nclock 44 926\ndesktop 44 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485762,
+          "ids": [
+            10485760,
+            10485761,
+            10485762
+          ]
+        },
+        {
+          "step": "dump_focused",
+          "layout": "edge right\nbar 1048 0 88\nstart 44 90\ntask org.gnome.Nautilus 44 172 0\ntask google-chrome 44 236 0\ntask foot 44 300 0\ntask plasmafakea 44 364 1\ntask plasmafakeb 44 428 0\ntask plasmafakec 44 492 0\ntray Workspaces 44 668.5\ntray Notifications 44 850\nclock 44 926\ndesktop 44 1014\nstrut 88\npagercell 0 540.5\npagercell 1 572.5\npagercell 2 604.5\npagercell 3 636.5\npagercell 4 668.5\npagercell 5 700.5\npagercell 6 732.5\npagercell 7 764.5\npagercell 8 796.5\n",
+          "active": 10485760
+        },
+        {
+          "step": "minimised",
+          "delta_from_idle": 39.0
+        },
+        {
+          "step": "restored"
+        },
+        {
+          "step": "attention"
+        },
+        {
+          "step": "pager_switch",
+          "cell": 1
+        },
+        {
+          "step": "pager_windows",
+          "busy_vs_empty": 131.92249999999999
+        },
+        {
+          "step": "pager_geometry_only",
+          "changed_ink": 65550,
+          "restored": true
+        },
+        {
+          "step": "popup",
+          "rect": [
+            -2.0,
+            556.0,
+            504.0,
+            484.0
+          ]
+        },
+        {
+          "step": "gap_clicks",
+          "points": [
+            [
+              1912,
+              172
+            ]
+          ]
+        },
+        {
+          "step": "contrast",
+          "ratio": 13.06,
+          "ink": [
+            0,
+            0,
+            0
+          ],
+          "base": [
+            203,
+            204,
+            205
+          ]
+        }
+      ],
+      "ok": true
+    }
+  ],
+  "failures": []
+}

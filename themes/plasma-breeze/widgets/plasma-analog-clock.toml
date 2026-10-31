@@ -1,0 +1,22 @@
+format = 1
+id = "plasma-analog-clock"
+name = "Plasma analog clock"
+description = "Plasma's Analog Clock desktop widget: a bare dial on the wallpaper, no card (Plasmoid.backgroundHints NoBackground), 15 grid units square, no numerals, hour and minute hands, second hand off by default. Saved off in the package."
+size = [270, 270]
+refresh = 1000
+
+# plasma-workspace applets/analog-clock: main.qml width/height = gridUnit * 15 (gridUnit 18 = 270 px), NoBackground, face/hand SVG elements
+# ClockFace / HourHand / MinuteHand / SecondHand (shown only when showSecondHand, default false); no hour numerals in the face.
+[root]
+type = "col"
+padding = 0
+justify = "center"
+align = "center"
+
+[[root.children]]
+type = "analog-clock"
+size = 270
+color = "text"
+track = "text@0.6"
+numerals = false
+seconds = false

@@ -1,0 +1,901 @@
+{
+ "format": 1,
+ "status": "MERGE-READY RECORDS, NOT MERGED: copy images{} and themes{} verbatim into data/wallhaven-curated.json (and update docs/wallhaven-curated.md and the 22->24 counts) once the framework is ready; no shared data file is edited here.",
+ "reviewed_on": "2026-10-31",
+ "method": "Fresh Wallhaven detail API responses at download time (SFW, tag 133451 absent, no excluded tag names), original files downloaded to a private persistent cache (~/.cache/decebal-plasma-ports/wall/full/img), decoded with ImageMagick, dimensions and byte size checked against the API, sha256 recorded, 16:9, 21:9 and 9:16 centre-fill views and 1:1 crops inspected. Not a certification of capture method, authorship or licence.",
+ "private_cache": "~/.cache/decebal-plasma-ports/wall/full (images, detail JSON, review sheets, review.json)",
+ "upstream_authentic_wallpapers": {
+  "plasma-breeze": {
+   "name": "Next",
+   "author": "Krystian Zajdel",
+   "license": "CC-BY-SA-4.0",
+   "source": "https://invent.kde.org/plasma/breeze/-/tree/75561b7f32f3121603a0f2c8ea929b20a0d6c311/wallpapers/Next",
+   "note": "Breeze's real default wallpaper. Not bundled: shipped packages omit wallpaper metadata by repository policy."
+  },
+  "plasma-layan": {
+   "name": "Layan / Layan-light",
+   "license": "GPL-3.0-only (repository LICENSE)",
+   "source": "https://github.com/vinceliuice/Layan-kde/tree/a0b6a4956022276aee33309b2e07d1d0ef3db30c/wallpaper",
+   "note": "Not bundled; hashes and authorship of the inner images not individually verified."
+  }
+ },
+ "images": {
+  "d61kgg": {
+   "id": "d61kgg",
+   "subject": "Aoraki / Mount Cook under the Milky Way, indigo-violet night sky",
+   "page_url": "https://wallhaven.cc/w/d61kgg",
+   "api_url": "https://wallhaven.cc/api/v1/w/d61kgg",
+   "full_url": "https://w.wallhaven.cc/full/d6/wallhaven-d61kgg.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/d6/d61kgg.jpg",
+   "resolution": [
+    3840,
+    2160
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2024-12-09 11:08:54",
+   "uploader": {
+    "username": "jrmnt",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": null,
+    "candidate_basis": null
+   },
+   "source_url": null,
+   "source_verification": "source not provided by Wallhaven",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 245,
+     "name": "stars"
+    },
+    {
+     "id": 70220,
+     "name": "starred sky"
+    },
+    {
+     "id": 338,
+     "name": "night"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 65348,
+     "name": "4K"
+    },
+    {
+     "id": 31540,
+     "name": "low light"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance (star field with slight trailing, sensor noise in the foreground shadows); provenance is not proof of capture method",
+    "inspected": "full-resolution original, 16:9, 21:9 and 9:16 centre-fill views, native-pixel crops of the centre and bottom; see full_resolution_review"
+   },
+   "evidence": {
+    "detail_sha256": "b1fda2a7a1804ac64d335d6cc014279531a06c3bd21a1493ec0bd2d2fd2a978b",
+    "thumbnail_sha256": "ab0ca613fd1a1df49424c36660d327369adf54bf55b25f99b61261b23a9994b3"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "fe9b048f866208515d3616aa7a32512a75b156152d9e5d210dcab3f6293225dc",
+    "bytes": 10314057,
+    "dimensions_verified": true,
+    "jpeg_quality": 99,
+    "assessment": "usable; replaces a weaker pick",
+    "notes": "Exact 16:9, JPEG q99, 3840x2160. Indigo-violet night sky with the Milky Way and a snow-lit central peak: the closest photographic match to Layan's indigo palette. The peak sits at the centre, so 21:9 (2560x1080) and 9:16 (1080x1920) centre-fill both keep it with the Milky Way above. The bottom fifth is near-black foreground, which keeps light panel text readable on every edge: minimum bar-text contrast 7.12:1 across four viewports and all four edges (the replaced pick dropped to 4.01:1 on portrait side edges). Star points show slight trailing and fine noise at 1:1.",
+    "crops_checked": {
+     "16:9": "full image",
+     "21:9": "centre-fill 2560x1080: peak, ridge and Milky Way band kept",
+     "9:16": "centre-fill 1080x1920: peak centred under the Milky Way"
+    },
+    "fresh_detail_check": {
+     "checked_on": "2026-10-31",
+     "detail_response_sha256": "b1fda2a7a1804ac64d335d6cc014279531a06c3bd21a1493ec0bd2d2fd2a978b",
+     "purity": "sfw",
+     "ai_tag_133451_present": false,
+     "tag_ids_changed_since_first_review": [],
+     "declared_file_size_matches_download": true,
+     "note": "first-look and fresh responses are the same fetch for this image (it was found and downloaded in one session)"
+    },
+    "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/licence/capture method remain unverified"
+   }
+  },
+  "gwwre3": {
+   "id": "gwwre3",
+   "subject": "Snowy Lofoten fjord at dusk under a pastel lilac sky",
+   "page_url": "https://wallhaven.cc/w/gwwre3",
+   "api_url": "https://wallhaven.cc/api/v1/w/gwwre3",
+   "full_url": "https://w.wallhaven.cc/full/gw/wallhaven-gwwre3.png",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/gw/gwwre3.jpg",
+   "resolution": [
+    5120,
+    2880
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2025-12-16 13:49:22",
+   "uploader": {
+    "username": "Pc7",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Sven Roden",
+    "candidate_basis": "photographer name appears among Wallhaven tags; unverified"
+   },
+   "source_url": "https://www.flickr.com/photos/sven_roden/53132967177/",
+   "source_verification": "source link reported by Wallhaven, not opened or verified",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 162761,
+     "name": "Sven Roden"
+    },
+    {
+     "id": 84,
+     "name": "snow"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 12313,
+     "name": "town"
+    },
+    {
+     "id": 327,
+     "name": "winter"
+    },
+    {
+     "id": 115,
+     "name": "trees"
+    },
+    {
+     "id": 40,
+     "name": "water"
+    },
+    {
+     "id": 80567,
+     "name": "snow covered"
+    },
+    {
+     "id": 7936,
+     "name": "clear sky"
+    },
+    {
+     "id": 144088,
+     "name": "viewpoint"
+    },
+    {
+     "id": 3393,
+     "name": "house"
+    },
+    {
+     "id": 7563,
+     "name": "village"
+    },
+    {
+     "id": 22144,
+     "name": "apartments"
+    },
+    {
+     "id": 16267,
+     "name": "Lofoten"
+    },
+    {
+     "id": 1524,
+     "name": "Norway"
+    },
+    {
+     "id": 638,
+     "name": "reflection"
+    },
+    {
+     "id": 122,
+     "name": "sunlight"
+    },
+    {
+     "id": 10630,
+     "name": "aerial view"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic appearance with natural sensor grain at 1:1; provenance is not proof of capture method",
+    "inspected": "full-resolution original, 16:9 and 21:9 centre-fill views, native-pixel crops of the top-left and bottom-centre; see full_resolution_review"
+   },
+   "evidence": {
+    "detail_sha256": "09205cd5e7d0963e64c43dbff0167eb240d3572d4f5aa6c8b152e6252a0ffe96",
+    "thumbnail_sha256": "8b0fc19516dbc4317e203b557ffee3eb4007495f8c5acd67c64fefd355c23f73"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "d3e5a3240c5ce641d9ca04da64cd22b6c1487a7a2eec3776460c5ee655345d0b",
+    "bytes": 19936228,
+    "dimensions_verified": true,
+    "assessment": "usable with a crop caution",
+    "notes": "Exact 16:9, PNG, 5120x2880 (20 MB). Clean at 1:1 with natural grain. Dusk scene with a pastel lilac sky and snowy peaks, not a bright daylight image; the bottom fifth is near-black spruce silhouettes, so a bottom panel sits over very dark pixels. Ultrawide centre-fill removes much of the sky and water but keeps the village and peaks.",
+    "fresh_detail_check": {
+     "checked_on": "2026-10-31",
+     "detail_response_sha256": "3a274effc6cbbb604c4780ce288f67587674460a2a51a996550f148e25f8c536",
+     "purity": "sfw",
+     "ai_tag_133451_present": false,
+     "tag_ids_changed_since_first_review": [],
+     "declared_file_size_matches_download": true
+    },
+    "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/licence/capture method remain unverified",
+    "crops_checked": {
+     "21:9": "21:9 keeps peaks and village",
+     "9:16": "9:16 keeps the peak, church and spruces"
+    },
+    "inspected_views_note": "21:9 and 9:16 centre-fill views were added on 2026-10-31 (second review pass)"
+   }
+  },
+  "qz13pl": {
+   "id": "qz13pl",
+   "subject": "Misty valley and hilltop chapels at sunrise, aerial view over Banská Štiavnica",
+   "page_url": "https://wallhaven.cc/w/qz13pl",
+   "api_url": "https://wallhaven.cc/api/v1/w/qz13pl",
+   "full_url": "https://w.wallhaven.cc/full/qz/wallhaven-qz13pl.jpg",
+   "thumbnail_url": "https://th.wallhaven.cc/lg/qz/qz13pl.jpg",
+   "resolution": [
+    5120,
+    2880
+   ],
+   "purity": "sfw",
+   "category": "general",
+   "uploaded_at": "2025-01-27 15:23:39",
+   "uploader": {
+    "username": "Pc7",
+    "is_author": null
+   },
+   "author": {
+    "name": null,
+    "verification": "not independently verified",
+    "reported_candidate": "Marek Tomasik",
+    "candidate_basis": "photographer name appears among Wallhaven tags; unverified"
+   },
+   "source_url": "https://www.flickr.com/photos/muphloon/50573514036",
+   "source_verification": "source link reported by Wallhaven, not opened or verified",
+   "license": {
+    "identifier": null,
+    "url": null,
+    "status": "unknown; no redistribution permission established"
+   },
+   "tags": [
+    {
+     "id": 37,
+     "name": "nature"
+    },
+    {
+     "id": 711,
+     "name": "landscape"
+    },
+    {
+     "id": 115,
+     "name": "trees"
+    },
+    {
+     "id": 190,
+     "name": "clouds"
+    },
+    {
+     "id": 2729,
+     "name": "sky"
+    },
+    {
+     "id": 45110,
+     "name": "far view"
+    },
+    {
+     "id": 465,
+     "name": "hills"
+    },
+    {
+     "id": 328,
+     "name": "mountains"
+    },
+    {
+     "id": 1362,
+     "name": "building"
+    },
+    {
+     "id": 7563,
+     "name": "village"
+    },
+    {
+     "id": 69246,
+     "name": "drone photo"
+    },
+    {
+     "id": 10630,
+     "name": "aerial view"
+    },
+    {
+     "id": 870,
+     "name": "grass"
+    },
+    {
+     "id": 27402,
+     "name": "World Heritage Site"
+    },
+    {
+     "id": 3646,
+     "name": "Slovakia"
+    },
+    {
+     "id": 1463,
+     "name": "fall"
+    },
+    {
+     "id": 5994,
+     "name": "church"
+    },
+    {
+     "id": 35958,
+     "name": "chapel"
+    },
+    {
+     "id": 109,
+     "name": "photography"
+    },
+    {
+     "id": 1265,
+     "name": "forest"
+    },
+    {
+     "id": 161751,
+     "name": "Marek Tomasik"
+    },
+    {
+     "id": 161752,
+     "name": "Banská Štiavnica"
+    },
+    {
+     "id": 161753,
+     "name": "calvary"
+    }
+   ],
+   "ai_review": {
+    "flagged_ai": false,
+    "rejected_tag_ids": [
+     133451
+    ],
+    "returned_ai_boolean": null,
+    "visual_assessment": "photographic (drone) appearance, natural detail in foliage and fog at 1:1; provenance is not proof of capture method",
+    "inspected": "full-resolution original, 16:9, 21:9 and 9:16 centre-fill views, native-pixel crops of the top-left and bottom-centre; see full_resolution_review"
+   },
+   "evidence": {
+    "detail_sha256": "870809d259cd35547e529493494838306d26b8f96d8e95df50bd756084626113",
+    "thumbnail_sha256": "85935d2e6b80323eaee80e000b6fa272868850eebcd9db7fc54ab48abe1e20b8"
+   },
+   "full_resolution_review": {
+    "reviewed_on": "2026-10-31",
+    "sha256": "ccaca62b7f1f1ee5dbb4a4df09ca354ebb1fedaa3005f5b63385670b1b37937a",
+    "bytes": 8752266,
+    "dimensions_verified": true,
+    "assessment": "usable; replaces a clipped default",
+    "notes": "Exact 16:9, JPEG, 5120x2880. Replaces p8kyvm, whose ultrawide crop clipped the tree crown. The hill, upper chapel, fog bank and sunlit ridge sit near the centre, so the 21:9 centre-fill (2560x1080) keeps all of them and the 9:16 centre-fill (1080x1920) keeps the upper chapel, the hill and the lower red church. Clean detail at 1:1. Bright blue sky and white fog above, deep shadow grass in the bottom fifth, so a panel on the bottom edge sits over near-black pixels (4.4-4.6:1 for the light bar text).",
+    "crops_checked": {
+     "16:9": "full image",
+     "21:9": "centre-fill 2560x1080: keeps hill, chapel and fog",
+     "9:16": "centre-fill 1080x1920: keeps chapel, hill and lower church"
+    },
+    "fresh_detail_check": {
+     "checked_on": "2026-10-31",
+     "detail_response_sha256": "870809d259cd35547e529493494838306d26b8f96d8e95df50bd756084626113",
+     "purity": "sfw",
+     "ai_tag_133451_present": false,
+     "tag_ids_changed_since_first_review": [],
+     "declared_file_size_matches_download": true
+    },
+    "provenance_limit": "visual photographic assessment and current provider tags only; original authorship/licence/capture method remain unverified"
+   }
+  }
+ },
+ "themes": {
+  "plasma-breeze": {
+   "status": "curated_live_checked_on_download",
+   "rationale": "Selected from live SFW photography search results to suit the Breeze blue/violet palette. The first light pick (57o619) was already curated for nextkde and was replaced to keep images distinct.",
+   "dark": {
+    "image_id": "yx3w57",
+    "rationale": "Blue-hour glacial lake under a violet-pink sky: the closest photographic match to Breeze's violet-blue default wallpaper; no desktop widgets, so no placement constraints beyond the bottom panel."
+   },
+   "light": {
+    "image_id": "gwwre3",
+    "rationale": "Calm pastel lilac-blue dusk with snow-white peaks: the same cool violet-blue family as Breeze's default wallpaper without a saturated sunset. A dusk image, so light-mode contrast comes from the opaque Breeze surfaces, not the photo."
+   },
+   "same_image_both_modes": false,
+   "placement": "Centre-fill. Any panel edge sits over dark water/sky (dark) or pastel sky/near-black spruce (light). 21:9 and 9:16 centre-fill checked.",
+   "recommended_mode": "fill",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+  },
+  "plasma-layan": {
+   "status": "curated_live_checked_on_download",
+   "rationale": "Selected from live SFW photography search results to suit the Layan indigo/violet palette; the first dark pick (gpjk37) and the first light pick (p8kyvm) were replaced after crop and contrast review.",
+   "dark": {
+    "image_id": "d61kgg",
+    "rationale": "Indigo-violet Milky Way over Aoraki: the same hue family as Layan's #5657f5 accent and #31313a surfaces, with a centred peak that survives ultrawide and portrait centre-fill and a dark foreground that keeps the translucent panel text above 7:1 on every edge. Replaces a sunset-heather pick whose portrait side edges fell to 4.0:1."
+   },
+   "light": {
+    "image_id": "qz13pl",
+    "rationale": "Bright sunrise sky and white fog over a hilltop chapel: a light, airy photograph whose subject stays centred in ultrawide and portrait crops. Replaces the earlier misty-heather pick, whose ultrawide crop clipped the tree."
+   },
+   "same_image_both_modes": false,
+   "placement": "Centre-fill. Dark: the peak and Milky Way sit near the centre, foreground near-black at every edge. Light: hill and chapels centred, bottom fifth near-black grass. Ultrawide and portrait centre-fill checked for both.",
+   "recommended_mode": "fill",
+   "crop_policy": "keep original aspect; centre-fill crops on aspect mismatch; verify ultrawide/portrait separately"
+  }
+ },
+ "legibility_review": {
+  "plasma-breeze:dark:yx3w57": {
+   "panel_fill": "#202326",
+   "panel_alpha": 0.85,
+   "bar_text": "#fcfcfc",
+   "panel_thickness_px": 44,
+   "min_and_mean_wcag_contrast_by_viewport_and_edge": {
+    "1920x1080": {
+     "top": [
+      13.2,
+      14.19
+     ],
+     "bottom": [
+      14.65,
+      15.26
+     ],
+     "left": [
+      14.48,
+      15.27
+     ],
+     "right": [
+      12.77,
+      14.52
+     ]
+    },
+    "2560x1080": {
+     "top": [
+      11.97,
+      13.59
+     ],
+     "bottom": [
+      12.04,
+      14.21
+     ],
+     "left": [
+      14.48,
+      15.3
+     ],
+     "right": [
+      12.73,
+      14.55
+     ]
+    },
+    "1920x1200": {
+     "top": [
+      13.2,
+      14.17
+     ],
+     "bottom": [
+      14.61,
+      15.24
+     ],
+     "left": [
+      14.58,
+      15.2
+     ],
+     "right": [
+      12.48,
+      14.51
+     ]
+    },
+    "1080x1920": {
+     "top": [
+      13.97,
+      14.12
+     ],
+     "bottom": [
+      15.04,
+      15.16
+     ],
+     "left": [
+      12.2,
+      14.12
+     ],
+     "right": [
+      10.59,
+      13.32
+     ]
+    }
+   },
+   "method": "tools/plasma-wallpaper-review.py: 40 px cells of the centre-filled original under each edge band, panel fill composited at the declared alpha, WCAG contrast of the package bar text. Viewports 1920x1080, 2560x1080, 1920x1200 and portrait 1080x1920. Legibility only."
+  },
+  "plasma-breeze:light:gwwre3": {
+   "panel_fill": "#eff0f1",
+   "panel_alpha": 0.85,
+   "bar_text": "#232629",
+   "panel_thickness_px": 44,
+   "min_and_mean_wcag_contrast_by_viewport_and_edge": {
+    "1920x1080": {
+     "top": [
+      10.29,
+      11.03
+     ],
+     "bottom": [
+      9.46,
+      9.86
+     ],
+     "left": [
+      9.81,
+      11.24
+     ],
+     "right": [
+      9.48,
+      10.48
+     ]
+    },
+    "2560x1080": {
+     "top": [
+      10.53,
+      11.43
+     ],
+     "bottom": [
+      9.79,
+      10.64
+     ],
+     "left": [
+      9.82,
+      11.16
+     ],
+     "right": [
+      9.85,
+      10.65
+     ]
+    },
+    "1920x1200": {
+     "top": [
+      10.37,
+      11.02
+     ],
+     "bottom": [
+      9.46,
+      9.8
+     ],
+     "left": [
+      9.58,
+      11.24
+     ],
+     "right": [
+      9.55,
+      10.54
+     ]
+    },
+    "1080x1920": {
+     "top": [
+      10.81,
+      11.0
+     ],
+     "bottom": [
+      9.46,
+      9.58
+     ],
+     "left": [
+      9.57,
+      11.79
+     ],
+     "right": [
+      9.46,
+      11.24
+     ]
+    }
+   },
+   "method": "tools/plasma-wallpaper-review.py: 40 px cells of the centre-filled original under each edge band, panel fill composited at the declared alpha, WCAG contrast of the package bar text. Viewports 1920x1080, 2560x1080, 1920x1200 and portrait 1080x1920. Legibility only."
+  },
+  "plasma-layan:light:qz13pl": {
+   "panel_fill": "#f5f5f5",
+   "panel_alpha": 0.6,
+   "bar_text": "#333333",
+   "panel_thickness_px": 32,
+   "min_and_mean_wcag_contrast_by_viewport_and_edge": {
+    "1920x1080": {
+     "top": [
+      8.79,
+      9.97
+     ],
+     "bottom": [
+      4.45,
+      5.16
+     ],
+     "left": [
+      4.62,
+      6.21
+     ],
+     "right": [
+      5.22,
+      7.16
+     ]
+    },
+    "2560x1080": {
+     "top": [
+      6.06,
+      9.28
+     ],
+     "bottom": [
+      4.57,
+      5.08
+     ],
+     "left": [
+      4.7,
+      5.96
+     ],
+     "right": [
+      5.16,
+      6.63
+     ]
+    },
+    "1920x1200": {
+     "top": [
+      8.96,
+      9.94
+     ],
+     "bottom": [
+      4.44,
+      5.11
+     ],
+     "left": [
+      4.68,
+      6.26
+     ],
+     "right": [
+      5.17,
+      7.26
+     ]
+    },
+    "1080x1920": {
+     "top": [
+      9.46,
+      9.84
+     ],
+     "bottom": [
+      4.59,
+      4.86
+     ],
+     "left": [
+      4.44,
+      6.56
+     ],
+     "right": [
+      4.73,
+      6.07
+     ]
+    }
+   },
+   "method": "tools/plasma-wallpaper-review.py: 40 px cells of the centre-filled original under each edge band, panel fill composited at the declared alpha, WCAG contrast of the package bar text. Viewports 1920x1080, 2560x1080, 1920x1200 and portrait 1080x1920. Legibility only."
+  },
+  "plasma-layan:dark:d61kgg": {
+   "panel_fill": "#31313a",
+   "panel_alpha": 0.6,
+   "bar_text": "#eaeaea",
+   "panel_thickness_px": 32,
+   "min_and_mean_wcag_contrast_by_viewport_and_edge": {
+    "1920x1080": {
+     "top": [
+      7.57,
+      10.34
+     ],
+     "bottom": [
+      12.25,
+      12.66
+     ],
+     "left": [
+      9.52,
+      11.06
+     ],
+     "right": [
+      10.17,
+      11.79
+     ]
+    },
+    "2560x1080": {
+     "top": [
+      7.99,
+      10.6
+     ],
+     "bottom": [
+      10.08,
+      11.92
+     ],
+     "left": [
+      9.52,
+      10.77
+     ],
+     "right": [
+      10.17,
+      11.56
+     ]
+    },
+    "1920x1200": {
+     "top": [
+      7.46,
+      10.16
+     ],
+     "bottom": [
+      12.21,
+      12.64
+     ],
+     "left": [
+      9.07,
+      10.8
+     ],
+     "right": [
+      9.59,
+      11.43
+     ]
+    },
+    "1080x1920": {
+     "top": [
+      7.12,
+      8.58
+     ],
+     "bottom": [
+      12.47,
+      12.58
+     ],
+     "left": [
+      8.38,
+      10.43
+     ],
+     "right": [
+      7.53,
+      9.55
+     ]
+    }
+   },
+   "method": "tools/plasma-wallpaper-review.py: 40 px cells of the centre-filled original under each edge band, panel fill composited at the declared alpha, WCAG contrast of the package bar text. Viewports 1920x1080, 2560x1080, 1920x1200 and portrait 1080x1920. Legibility only."
+  }
+ },
+ "alternates_not_for_merge": {
+  "plasma-breeze:light": [
+   {
+    "image_id": "v9kw2m",
+    "page_url": "https://wallhaven.cc/w/v9kw2m",
+    "full_url": "https://w.wallhaven.cc/full/v9/wallhaven-v9kw2m.jpg",
+    "resolution": [
+     5280,
+     2970
+    ],
+    "purity": "sfw",
+    "uploader": "Petunai42",
+    "source_url": "https://www.reddit.com/r/EarthPorn/comments/w18hvs/the_mountains_of_picos_de_europa_spain_oc/",
+    "tags": [
+     "landscape",
+     "nature",
+     "lake",
+     "clouds",
+     "mountains",
+     "water",
+     "aerial view"
+    ],
+    "fresh_detail_check": {
+     "checked_on": "2026-10-31",
+     "ai_tag_133451_present": false,
+     "detail_response_sha256": "eab9001129e7ff11d47186e0fdb6377d6f628a7388f04970790c979021604f0c"
+    },
+    "full_resolution_review": {
+     "sha256": "1dc0f335523adcaccfe53ed495e4b5eb4268762a0f1725adee18b9075849e564",
+     "bytes": 1458570,
+     "dimensions_verified": true,
+     "jpeg_quality": 75
+    },
+    "assessment": "NOT chosen. A bright daylight alternative to the dusk pick gwwre3: blue sky, white clouds and a symmetric lake reflection (Picos de Europa, aerial). Ultrawide 21:9 centre-fill keeps the ridge and reflection. In portrait 9:16 centre-fill the main peak sits on the right edge and is half cut, so it fails the no-visible-clipping bar for a default. The file is only 1.4 MB for 5280x2970 (JPEG q75): water and foliage look smoothed at 1:1. Source link is a reddit r/EarthPorn post (unopened, unverified); no photography tag from the provider.",
+    "legibility_min_contrast_by_viewport_and_edge": {
+     "1920x1080": {
+      "top": 11.35,
+      "bottom": 10.43,
+      "left": 10.19,
+      "right": 10.48
+     },
+     "2560x1080": {
+      "top": 11.84,
+      "bottom": 10.8,
+      "left": 10.12,
+      "right": 10.49
+     },
+     "1920x1200": {
+      "top": 11.35,
+      "bottom": 10.43,
+      "left": 10.19,
+      "right": 10.46
+     },
+     "1080x1920": {
+      "top": 11.39,
+      "bottom": 10.44,
+      "left": 10.44,
+      "right": 10.5
+     }
+    }
+   }
+  ],
+  "plasma-layan:dark": [
+   {
+    "image_id": "gpjk37",
+    "status": "replaced by d61kgg",
+    "sha256": "315e5c8e1ac344d5e8f8890e5fdbe4d292e5dc73e01ce72e9ba1f299b7f76470",
+    "bytes": 4448821,
+    "resolution": [
+     3840,
+     2160
+    ],
+    "reason": "portrait 9:16 side edges reached only 4.01:1 (right) and 4.43:1 (left) for the panel's light text; the sky is strongly tone-mapped (HDR-like)",
+    "page_url": "https://wallhaven.cc/w/gpjk37",
+    "tags": [
+     "nature",
+     "landscape",
+     "field",
+     "flowers",
+     "sunset",
+     "sky",
+     "clouds",
+     "sunset glow",
+     "lavender"
+    ]
+   }
+  ],
+  "plasma-layan:light": [
+   {
+    "image_id": "p2eg9e",
+    "status": "rejected",
+    "resolution": [
+     3840,
+     2160
+    ],
+    "page_url": "https://wallhaven.cc/w/p2eg9e",
+    "reason": "bright Matterhorn and red train: portrait 9:16 centre-fill cuts the mountain at the right edge; JPEG q83 at 1.7 MB; no photography tag, reddit source unverified"
+   }
+  ]
+ }
+}

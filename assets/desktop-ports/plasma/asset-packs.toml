@@ -1,0 +1,72 @@
+# Plasma port: pinned cursor sources for the shared desktop asset-pack contract (docs/desktop-asset-packs.md at asset-owner commit
+# 76b92850..., branch feat/claude-desktop-asset-packs). Data only. Receipts (tree OIDs, archive hashes, content hashes) are in
+# docs/plasma-theme-ports/asset-receipts.json and were produced by tools/plasma-asset-receipt.py, an emulation of the documented steps:
+# the contract's own installer (src/desktop_assets/) was not committed when this file was written, so `decthemectl assets catalog check`
+# was not run against it.
+#
+# Not here, on purpose: the Breeze and Layan *icon* themes. breeze-icons' index.theme and dark variant are generated (a build step) and
+# Tela's install.sh generates its colour variants; the contract installs only prebuilt trees. See docs/plasma-theme-ports/asset-recipes.md
+# for the native build recipe and the `import` route.
+format = 1
+family = "plasma"
+
+[[source]]
+id = "kde-breeze"
+repo = "https://invent.kde.org/plasma/breeze"
+revision = "master"
+commit = "75561b7f32f3121603a0f2c8ea929b20a0d6c311"
+license = "GPL-2.0-only"
+license_files = ["cursors/Breeze/COPYING", "cursors/Breeze/COPYING-ICONS", "cursors/Breeze/AUTHORS"]
+archive_url = "https://invent.kde.org/plasma/breeze/-/archive/75561b7f32f3121603a0f2c8ea929b20a0d6c311/breeze-75561b7f32f3121603a0f2c8ea929b20a0d6c311.tar.gz"
+archive_sha256 = "377f44357a6e2bb0fefb001be159ee319a3723a42085414fc6e637c78af6cc8f"
+strip_components = 1
+
+[[source]]
+id = "layan-cursors"
+repo = "https://github.com/vinceliuice/Layan-cursors"
+revision = "master"
+commit = "b8c46895b64ac52ee538629d274a2787b3c0921e"
+license = "GPL-3.0-only"
+license_files = ["LICENSE"]
+archive_url = "https://github.com/vinceliuice/Layan-cursors/archive/b8c46895b64ac52ee538629d274a2787b3c0921e.tar.gz"
+archive_sha256 = "0d856f4d8b75131d42df07e96338b1b3619a56a7930b6330acbde89adc9a653d"
+strip_components = 1
+
+[[pack]]
+id = "plasma-breeze-cursors"
+name = "Breeze (dark) cursors"
+provides = ["cursors"]
+source = "kde-breeze"
+path = "cursors/Breeze/Breeze"
+tree = "ac0e5396057e0a7864d75fad624e81722b9c497d"
+install_name = "breeze_cursors"
+description = "KDE Breeze cursors, prebuilt Xcursor files committed in the Breeze repository (cursors/Breeze/Breeze, index.theme name Breeze Dark). Plasma's default cursor theme is breeze_cursors."
+
+[[pack]]
+id = "plasma-breeze-light-cursors"
+name = "Breeze Light cursors"
+provides = ["cursors"]
+source = "kde-breeze"
+path = "cursors/Breeze_Light/Breeze_Light"
+tree = "60a2775ea3ef53b21ff0c59fe67023b87909fd91"
+install_name = "Breeze_Light"
+license_files = ["cursors/Breeze_Light/COPYING", "cursors/Breeze_Light/COPYING-ICONS"]
+description = "KDE Breeze Light cursors, prebuilt in cursors/Breeze_Light/Breeze_Light."
+
+[[pack]]
+id = "plasma-layan-white-cursors"
+name = "Layan white cursors"
+provides = ["cursors"]
+source = "layan-cursors"
+path = "dist-white"
+tree = "409983964b6ce7bec9227bed8a94929e604c8bcf"
+install_name = "Layan-white-cursors"
+description = "Layan cursors, white variant (dist-white; upstream install.sh only copies it to Layan-white-cursors). The cursor theme Layan's look-and-feel defaults select."
+
+[[recommend]]
+theme = "plasma-breeze"
+cursors = "plasma-breeze-cursors"
+
+[[recommend]]
+theme = "plasma-layan"
+cursors = "plasma-layan-white-cursors"

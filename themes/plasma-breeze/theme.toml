@@ -1,0 +1,179 @@
+format = 1
+id = "plasma-breeze"
+name = "Plasma Breeze"
+version = "1.0.0"
+author = "KDE Visual Design Group; Decebal port"
+license = "LGPL-2.0-or-later"
+description = "KDE Plasma 6 Breeze Light and Breeze Dark: the stock translucent bottom panel with Kickoff, icon-only tasks, tray, clock and show-desktop; Breeze colours, Noto Sans, Breeze icons and Breeze window buttons. Ports Plasma's default layout, not its QML."
+homepage = "https://invent.kde.org/plasma/breeze"
+min_shell_version = "0.3.0"
+tags = ["kde", "plasma", "breeze", "official", "dark-light"]
+
+# Colours: breeze.git colors/BreezeLight.colors and BreezeDark.colors (75561b7). Window = background, Button = surface,
+# Tooltip = overlay, Selection = accent, WM = titlebars; border = mix(Window, ForegroundNormal, 0.2) as Breeze's
+# Helper::separatorColor with KColorScheme::frameContrast(); text_faint = 35% of the way from ForegroundInactive to Window.
+[colors.dark]
+background = "#202326"
+sidebar = "#292c30"
+surface = "#292c30"
+bar = "#202326"
+bar_text = "#fcfcfc"
+popup = "#202326"
+dock = "#202326"
+overlay = "#292c30"
+titlebar = "#272c31"
+titlebar_inactive = "#202428"
+border = "#4c4e51"
+text = "#fcfcfc"
+text_secondary = "#a1a9b1"
+text_faint = "#747a80"
+accent = "#3daee9"
+accent_text = "#fcfcfc"
+danger = "#da4453"
+ok = "#27ae60"
+warn = "#f67400"
+
+[colors.light]
+background = "#eff0f1"
+sidebar = "#e3e5e7"
+surface = "#fcfcfc"
+bar = "#eff0f1"
+bar_text = "#232629"
+popup = "#eff0f1"
+dock = "#eff0f1"
+overlay = "#f7f7f7"
+titlebar = "#e3e5e7"
+titlebar_inactive = "#eff0f1"
+border = "#c6c8c9"
+text = "#232629"
+text_secondary = "#707d8a"
+text_faint = "#9ca5ae"
+accent = "#3daee9"
+accent_text = "#ffffff"
+danger = "#da4453"
+ok = "#27ae60"
+warn = "#f67400"
+
+# Panel and dialog fills are libplasma's translucent Breeze SVGs: panel 0.85, widget/dialog backgrounds 0.8/0.85.
+# Frame radius is breezemetrics.h Frame_FrameRadius = 5 and Kirigami cornerRadius = 5. No glass lens in stock Breeze.
+[metrics]
+radius = 5
+dock_alpha = 0.85
+popup_alpha = 0.85
+panel_alpha = 0.95
+bar_alpha = 0.85
+dock_roundness = 0.23
+dock_padding = 4
+outline = 0.2
+shadow = 0.8
+blur = 0.3
+glass_refraction = 0
+glass_highlight = 0
+glass_grain = 0
+
+# Fontsettings defaults in plasma-workspace/kcms/fonts/fontssettings.kcfg: Noto Sans 10 and Hack 10.
+[font]
+ui = ["Noto Sans", "Noto Sans CJK JP"]
+title = ["Noto Sans", "Noto Sans CJK JP"]
+mono = ["Hack", "Noto Sans Mono", "monospace"]
+display = ["Noto Sans", "Noto Sans CJK JP"]
+fallback = ["Noto Color Emoji"]
+scale = 1.0
+
+# Breeze decoration: right-hand minimise/maximise/close, centred caption, Frame radius 5 (kdecoration/breezesettingsdata.kcfg).
+[decoration]
+style = "breeze"
+buttons = "right"
+height = 30
+radius = 5
+title_align = "center"
+
+# Visual gaps only: KWin's tile padding is 4 (kwin tilemanager.cpp), applied around every tile. The tiling policy itself (layouts, mfact,
+# nmaster, smart_gaps) is the user's global behaviour and is deliberately not set here, so applying or switching this theme never
+# changes custom layout proportions. KWin floats windows by default; Decebal's global tile-first policy is an intentional difference.
+[rdwm]
+gap_inner = 8
+gap_outer = 4
+border_px = 1
+
+# One Plasma panel: the bar stays off ("auto" = hidden while the taskbar-style dock is up) and the taskbar below carries the applets.
+# `applets` is the stock default panel script of plasma-desktop/layout-templates/org.kde.plasma.desktop.defaultPanel (kickoff, pager,
+# icontasks, systemtray, digitalclock, showdesktop) plus the system-tray entries Breeze shows by default (volume, bluetooth, brightness,
+# network, battery, notifications). Search, layout, weather and the Control Center button are not Plasma panel applets, so they start
+# off (the user can enable each). Mapping and sources: docs/plasma-theme-ports.md.
+[bar]
+enabled = "auto"
+position = "bottom"
+applets = ["launcher", "workspaces", "tasks", "tray", "volume", "bluetooth", "brightness", "network", "battery", "notifications", "clock", "show_desktop"]
+
+# The Windows-style taskbar draws Plasma's panel: left-aligned icon tasks, tray, clock, show-desktop. Icon size 28 = panel 44 minus two
+# paddings of 8 (Panel.qml: min(margin 4 + smallSpacing 4, (44 - 22) / 2) = 8); measured 28 px in upstream's fullscreenpreview.jpg.
+[dock]
+enabled = true
+style = "windows"
+position = "bottom"
+align = "left"
+size = 28
+roundness = 0.23
+
+# Plasma's panel, as typed `[taskbar]` metrics any theme can use (src/panel/plasma_style.rs). Sources: layout.js (thickness 2*ceil(grid
+# unit 18 * 2.5 / 2) = 46, 44 at grid unit 17: the preview image shows 44), Panel.qml (inner padding min(4 + 4, (44 - 22) / 2) = 8 so the
+# icon is 44 - 2*8 = 28; floating panels keep 8 px from the screen when the Plasma theme has no `floating-*` SVG prefix), tasks.svg (a
+# focused task is an accent cell at 45% with a strong 3 px line towards the desktop; hover 34%; cells fill the panel, 49-50 px wide in the
+# preview), showdesktop (a square `user-desktop-symbolic` icon, not a sliver), pager (one cell per desktop on the screen's aspect).
+[taskbar]
+thickness = 44
+icon_size = 28
+cell_width = 50
+gap = 0
+inset = 0
+float_gap = 8
+indicator = "frame"
+desktop = "icon"
+workspaces = "cells"
+
+# Kickoff's own compact icon: plasma-desktop applets/kickoff/main.xml `icon` default start-here-kde-symbolic (symbolic, so tinted like
+# KIconLoader does). Kickoff's menuLabel default is empty, so there is no launcher_label. desktop_label is only what a menu bar names when
+# no window is focused (Breeze has no menu bar by default); it is a neutral "Desktop", never "Finder" and never a claim of a global menu.
+[branding]
+logo = "icon:start-here-kde-symbolic"
+logo_tint = true
+desktop_label = "Desktop"
+
+# Kickoff is the launcher: `declaunch` draws the "kde" style (docs/launcher-styles.md), an anchored popup that opens from the launcher applet
+# towards the screen, centred on it along the panel, with the style's gap to the panel, on every edge. The user's Settings -> Launcher choice
+# still wins. KRunner (milou, Alt+Space) is the `search` applet's program (decspot, a centred floating box): Breeze has no search applet at
+# all, Layan has the magnifier at the right end; Decebal's search surface is not KRunner (no KRunner runners, plugins or categories).
+[launcher]
+style = "kde"
+
+# Breeze ships breeze and breeze-dark icon themes; monochrome tinting follows the foreground like KIconLoader.
+[icons]
+theme = "breeze"
+fallback = "hicolor"
+size_scale = 1.0
+monochrome_tint = true
+
+# Stock Plasma has neither hot corners nor a Control Center; the shell's quick settings stay reachable from the tray.
+[control_center]
+enabled = true
+position = "bottom-right"
+style = "fluent"
+
+# Saved-off widgets: Plasma's own desktop clocks (plasma-workspace applets/analog-clock and digital-clock). The stock Breeze and Layan
+# desktops place no widgets (so `[desktop] widgets = "none"` cannot be used alongside them), so both are `enabled = false`: they stay in the package, can be turned on in Settings, and change nothing.
+[[widgets]]
+use = "plasma-analog-clock"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 64
+enabled = false
+
+[[widgets]]
+use = "plasma-digital-clock"
+place = "desktop"
+anchor = "top-left"
+x = 48
+y = 64
+enabled = false

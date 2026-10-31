@@ -1,0 +1,152 @@
+{
+ "generated": "2026-10-31",
+ "kind": "asset receipts (emulation of docs/desktop-asset-packs.md @ 76b9285; the contract installer was not committed yet)",
+ "cursor_packs": {
+  "catalogue": "asset-packs.toml",
+  "emulated_contract": "docs/desktop-asset-packs.md @ 76b9285",
+  "sources": {
+   "kde-breeze": {
+    "archive": "breeze-75561b7f32f3121603a0f2c8ea929b20a0d6c311.tar.gz",
+    "bytes": 43118517,
+    "archive_sha256": "377f44357a6e2bb0fefb001be159ee319a3723a42085414fc6e637c78af6cc8f",
+    "archive_sha256_matches_catalogue": true,
+    "pax_commit": "75561b7f32f3121603a0f2c8ea929b20a0d6c311",
+    "pax_commit_matches_catalogue": true,
+    "commit": "75561b7f32f3121603a0f2c8ea929b20a0d6c311"
+   },
+   "layan-cursors": {
+    "archive": "b8c46895b64ac52ee538629d274a2787b3c0921e.tar.gz",
+    "bytes": 3571871,
+    "archive_sha256": "0d856f4d8b75131d42df07e96338b1b3619a56a7930b6330acbde89adc9a653d",
+    "archive_sha256_matches_catalogue": true,
+    "pax_commit": "b8c46895b64ac52ee538629d274a2787b3c0921e",
+    "pax_commit_matches_catalogue": true,
+    "commit": "b8c46895b64ac52ee538629d274a2787b3c0921e"
+   }
+  },
+  "packs": {
+   "plasma-breeze-cursors": {
+    "install_name": "breeze_cursors",
+    "provides": [
+     "cursors"
+    ],
+    "path": "cursors/Breeze/Breeze",
+    "tree": {
+     "expected": "ac0e5396057e0a7864d75fad624e81722b9c497d",
+     "computed": "ac0e5396057e0a7864d75fad624e81722b9c497d",
+     "matches": true
+    },
+    "files_kept": 139,
+    "symlinks": 68,
+    "files_skipped_by_filter": 47,
+    "core_pointer": [
+     "left_ptr",
+     "default"
+    ],
+    "license": "GPL-2.0-only",
+    "license_files": [
+     "cursors/Breeze/COPYING",
+     "cursors/Breeze/COPYING-ICONS",
+     "cursors/Breeze/AUTHORS"
+    ],
+    "content_hash": "sha256:5a0179d4073189e4902c1e48e657b136ba502dead45ca8f62e2f00f60d50b2ad",
+    "staged_at": "share/icons/breeze_cursors"
+   },
+   "plasma-breeze-light-cursors": {
+    "install_name": "Breeze_Light",
+    "provides": [
+     "cursors"
+    ],
+    "path": "cursors/Breeze_Light/Breeze_Light",
+    "tree": {
+     "expected": "60a2775ea3ef53b21ff0c59fe67023b87909fd91",
+     "computed": "60a2775ea3ef53b21ff0c59fe67023b87909fd91",
+     "matches": true
+    },
+    "files_kept": 139,
+    "symlinks": 68,
+    "files_skipped_by_filter": 47,
+    "core_pointer": [
+     "left_ptr",
+     "default"
+    ],
+    "license": "GPL-2.0-only",
+    "license_files": [
+     "cursors/Breeze/COPYING",
+     "cursors/Breeze/COPYING-ICONS",
+     "cursors/Breeze/AUTHORS",
+     "cursors/Breeze_Light/COPYING",
+     "cursors/Breeze_Light/COPYING-ICONS"
+    ],
+    "content_hash": "sha256:25b2a1b9e7359968997b3983e2c2d00c35a701b36188ea6045677cb25ab8fc53",
+    "staged_at": "share/icons/Breeze_Light"
+   },
+   "plasma-layan-white-cursors": {
+    "install_name": "Layan-white-cursors",
+    "provides": [
+     "cursors"
+    ],
+    "path": "dist-white",
+    "tree": {
+     "expected": "409983964b6ce7bec9227bed8a94929e604c8bcf",
+     "computed": "409983964b6ce7bec9227bed8a94929e604c8bcf",
+     "matches": true
+    },
+    "files_kept": 48,
+    "symlinks": 64,
+    "files_skipped_by_filter": 0,
+    "core_pointer": [
+     "left_ptr",
+     "default"
+    ],
+    "license": "GPL-3.0-only",
+    "license_files": [
+     "LICENSE"
+    ],
+    "content_hash": "sha256:9bc067ca818464003822d915c6baa9c2d6191d270dd8cce71b9b0c8752c4d1f3",
+    "staged_at": "share/icons/Layan-white-cursors"
+   }
+  }
+ },
+ "icon_themes_built_natively": {
+  "source": {
+   "repo": "https://invent.kde.org/frameworks/breeze-icons",
+   "commit": "e3c7154b4f243413b0cb9028484977f3c37de15c",
+   "version": "6.32.0 (CMakeLists KF_VERSION)"
+  },
+  "toolchain": {
+   "compiler": "g++ (GCC) 16.2.1 20260810",
+   "qt6core": "6.12.0"
+  },
+  "installed_package_compared": "breeze-icons 6.31.0-1 (pacman) at /usr/share/icons",
+  "themes": {
+   "breeze": {
+    "built_by": "tools/plasma-icon-recipe.sh",
+    "files": 5651,
+    "symlinks": 8442,
+    "content_hash": "sha256:6ead90dc450db69b3c329ac69ef9c0e6be31f5092c883a01fc75c17e235d611c",
+    "compared_with_installed_package": {
+     "absolute_symlinks": 0,
+     "broken_symlinks": 0,
+     "files_in_both": 5640,
+     "identical_to_installed_package": 5638,
+     "only_in_built": 11
+    }
+   },
+   "breeze-dark": {
+    "built_by": "tools/plasma-icon-recipe.sh",
+    "files": 5651,
+    "symlinks": 8442,
+    "content_hash": "sha256:7cc3bb031014ba21b7a52a999c25b605abf8a23090fe74065b2af8c764955dd7",
+    "compared_with_installed_package": {
+     "absolute_symlinks": 0,
+     "broken_symlinks": 0,
+     "files_in_both": 5640,
+     "identical_to_installed_package": 5638,
+     "only_in_built": 11
+    }
+   }
+  },
+  "note": "index.theme equals the installed package's apart from its translated Name[]/Comment[] lines; 5638 of 5640 shared files are byte-identical in both themes, including upstream's generated symbolic dark icons (for example places/22/start-here-kde-symbolic.svg, #fcfcfc)."
+ }
+}

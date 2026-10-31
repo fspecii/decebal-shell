@@ -1,0 +1,168 @@
+format = 1
+id = "plasma-layan"
+name = "Plasma Layan"
+version = "1.0.0"
+author = "Vince Liuice (Layan KDE); Decebal port"
+license = "GPL-3.0-only"
+description = "Layan KDE by vinceliuice: a flat indigo Plasma look with a thin translucent top menu panel, rounded translucent surfaces, grey round window buttons and an optional bottom dock as shown in the upstream preview. Layan Dark and Layan Light colour schemes."
+homepage = "https://github.com/vinceliuice/Layan-kde"
+min_shell_version = "0.3.0"
+tags = ["kde", "plasma", "layan", "indigo", "flat", "translucent", "dark-light"]
+
+# Colours: Layan-kde color-schemes/Layan.colors (dark) and LayanLight.colors (a0b6a49). Window = background, Button = surface,
+# Tooltip = overlay, Selection = accent, WM = titlebars; border = mix(Window, ForegroundNormal, 0.2) (KDE frame contrast, derived,
+# Layan itself draws frames through Kvantum SVGs); text_faint = 35% of the way from ForegroundInactive to Window (derived).
+# LayanLight ForegroundInactive is 51,51,51 at alpha 150, flattened on its Window colour.
+[colors.dark]
+background = "#31313a"
+sidebar = "#36383e"
+surface = "#44454b"
+bar = "#31313a"
+bar_text = "#eaeaea"
+popup = "#31313a"
+dock = "#31313a"
+overlay = "#212329"
+titlebar = "#36383e"
+titlebar_inactive = "#3e4147"
+border = "#56565d"
+text = "#eaeaea"
+text_secondary = "#999999"
+text_faint = "#757578"
+accent = "#5657f5"
+accent_text = "#ffffff"
+danger = "#bf0303"
+ok = "#006e28"
+warn = "#b08000"
+
+[colors.light]
+background = "#f5f5f5"
+sidebar = "#f5f5f5"
+surface = "#fcfcfc"
+bar = "#f5f5f5"
+bar_text = "#333333"
+popup = "#f5f5f5"
+dock = "#f5f5f5"
+overlay = "#212329"
+titlebar = "#eeeeee"
+titlebar_inactive = "#f0f0f0"
+border = "#cecece"
+text = "#333333"
+text_secondary = "#838383"
+text_faint = "#ababab"
+accent = "#5657f5"
+accent_text = "#ffffff"
+danger = "#bf0303"
+ok = "#006e28"
+warn = "#b08000"
+
+# Layan's translucent plasma SVGs: panel fill opacity 0.6, dialog fill 0.8. Corner radius is read from the upstream preview
+# (about 8 px); Layan has no glass lens.
+[metrics]
+radius = 8
+bar_alpha = 0.6
+dock_alpha = 0.6
+popup_alpha = 0.8
+panel_alpha = 0.9
+dock_roundness = 0.4
+dock_padding = 8
+outline = 0.15
+shadow = 1.0
+blur = 0.4
+glass_refraction = 0
+glass_highlight = 0
+glass_grain = 0
+
+# Layan sets no font: Plasma's Noto Sans 10 and Hack.
+[font]
+ui = ["Noto Sans", "Noto Sans CJK JP"]
+title = ["Noto Sans", "Noto Sans CJK JP"]
+mono = ["Hack", "Noto Sans Mono", "monospace"]
+display = ["Noto Sans", "Noto Sans CJK JP"]
+fallback = ["Noto Color Emoji"]
+scale = 1.0
+
+# Aurorae Layan: three round buttons on the right (kwinrc ButtonsOnRight=IAX), centred caption.
+[decoration]
+style = "adwaita"
+buttons = "right"
+height = 32
+radius = 8
+title_align = "center"
+
+# Visual gaps only: Layan's own SVG/Kvantum frames have no gap; KWin's tile padding of 4 is reused. The tiling policy (layouts, mfact,
+# nmaster, smart_gaps) is the user's global behaviour and is deliberately not set here, so applying or switching this theme never
+# changes custom layout proportions.
+[rdwm]
+gap_inner = 8
+gap_outer = 4
+border_px = 1
+
+# Layan's layout script (look-and-feel/*/contents/layouts): one 1.78-grid-unit (about 32 px) panel on the top edge with kickoff,
+# appmenu, panelspacer, systemtray, splitdigitalclock (third party; the stock clock stands in) and milou (KRunner search). The tray
+# entries and the extra icons are what the upstream preview shows (network, volume, clipboard, notifications). Workspace dots, layout,
+# weather, task buttons and the Control Center button are not part of Layan's panel and start off. `app_menu` is deliberately NOT in the
+# default set: Plasma's appmenu shows the focused application's real menus over DBus, which Decebal cannot export yet, and its menu-bar
+# form would also draw the logo a second time beside `launcher`. `window_title` (the focused window's real title and menu) stands in until a
+# genuine exporter exists; the user can still enable `app_menu` in Settings.
+[bar]
+enabled = true
+style = "flat"
+position = "top"
+height = 32
+applets = ["launcher", "window_title", "tray", "network", "volume", "clipboard", "notifications", "clock", "search"]
+
+# Companion dock: the upstream fullscreenpreview.jpg shows a bottom dock; Layan's layout script has none.
+[dock]
+enabled = true
+style = "mac"
+position = "bottom"
+size = 48
+align = "center"
+roundness = 0.4
+magnification = 1.0
+
+# Kickoff's compact icon (applets/kickoff/main.xml default start-here-kde-symbolic; Layan's layout gives it no override, so the icon
+# theme decides: Tela if installed, else the fallback below), tinted like a symbolic icon. No launcher_label (Kickoff menuLabel default is
+# empty). desktop_label is only what the bar names when no window is focused; it is a neutral "Desktop" so the bar never says "Finder" and
+# never presents itself as an exported global menu (none exists yet).
+[branding]
+logo = "icon:start-here-kde-symbolic"
+logo_tint = true
+desktop_label = "Desktop"
+
+# Kickoff is the launcher: `declaunch` draws the "kde" style (docs/launcher-styles.md), an anchored popup that opens from the launcher applet
+# towards the screen, centred on it along the panel, with the style's gap to the panel, on every edge. The user's Settings -> Launcher choice
+# still wins. KRunner (milou, Alt+Space) is the `search` applet's program (decspot, a centred floating box): Breeze has no search applet at
+# all, Layan has the magnifier at the right end; Decebal's search surface is not KRunner (no KRunner runners, plugins or categories).
+[launcher]
+style = "kde"
+
+# Layan recommends Tela (dark) and Tela-circle (light); one icon theme per package, so Tela with Breeze behind it. Neither is bundled.
+[icons]
+theme = "Tela"
+fallback = "breeze"
+size_scale = 1.0
+monochrome_tint = false
+
+[control_center]
+enabled = true
+position = "top-right"
+style = "card"
+
+# Saved-off widgets: Plasma's own desktop clocks (plasma-workspace applets/analog-clock and digital-clock). The stock Breeze and Layan
+# desktops place no widgets (so `[desktop] widgets = "none"` cannot be used alongside them), so both are `enabled = false`: they stay in the package, can be turned on in Settings, and change nothing.
+[[widgets]]
+use = "plasma-analog-clock"
+place = "desktop"
+anchor = "top-right"
+x = -48
+y = 64
+enabled = false
+
+[[widgets]]
+use = "plasma-digital-clock"
+place = "desktop"
+anchor = "top-left"
+x = 48
+y = 64
+enabled = false

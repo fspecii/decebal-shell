@@ -1,0 +1,800 @@
+{
+  "binary_sha256": {
+    "decdock": "8a10c026d71be9ebb86484901a59fe0f67c9cbd34c94d07d25c6b028f3b3cbee",
+    "decthemectl": "a89ff33ce7c2eec0e325965a64c71f5a9d9a51724e7e33f00eeca1d5c931d430"
+  },
+  "captures": [
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 1.0,
+      "capture": "plasma-breeze-dark-bottom-100.png",
+      "sha256": "9d06e426c4dff98aad861b000d70ceba6cb1c474ca197459041769461dff7e65",
+      "measured_box": [
+        8,
+        1028,
+        1912,
+        1072
+      ],
+      "expected_box": [
+        8,
+        1028,
+        1912,
+        1072
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "Start_ink_px": 131,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        20,
+        1028,
+        70,
+        1072
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 1.25,
+      "capture": "plasma-breeze-dark-bottom-125.png",
+      "sha256": "f240e8d67adea19c86cab19feb6aa2a3538b9a5f594183152bf3254482f9bfad",
+      "measured_box": [
+        10,
+        1015,
+        1910,
+        1070
+      ],
+      "expected_box": [
+        10,
+        1015,
+        1910,
+        1070
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "Start_ink_px": 167,
+      "show_desktop_ink_px": 246,
+      "hover_changed_box": [
+        25,
+        1015,
+        88,
+        1070
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "bottom",
+      "scale": 2.0,
+      "capture": "plasma-breeze-dark-bottom-200.png",
+      "sha256": "ad968a3e94afbf80e131e2e73054aca8015e35e5c1f57d3f55bd76b7878d5292",
+      "measured_box": [
+        16,
+        976,
+        1904,
+        1064
+      ],
+      "expected_box": [
+        16,
+        976,
+        1904,
+        1064
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "Start_ink_px": 413,
+      "show_desktop_ink_px": 566,
+      "hover_changed_box": [
+        40,
+        976,
+        140,
+        1064
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 1.0,
+      "capture": "plasma-breeze-dark-top-100.png",
+      "sha256": "1f95a82fe7640d65eeeca70056dd201d5d3d85d8c4c6b87dbf695324f22fc8c7",
+      "measured_box": [
+        8,
+        8,
+        1912,
+        52
+      ],
+      "expected_box": [
+        8,
+        8,
+        1912,
+        52
+      ],
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "Start_ink_px": 131,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        20,
+        8,
+        70,
+        52
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 1.25,
+      "capture": "plasma-breeze-dark-top-125.png",
+      "sha256": "70c0adfda4f313faf1baaebebcb6377655b06d8d406df029b6e80c2aabc4659b",
+      "measured_box": [
+        10,
+        10,
+        1910,
+        65
+      ],
+      "expected_box": [
+        10,
+        10,
+        1910,
+        65
+      ],
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "Start_ink_px": 167,
+      "show_desktop_ink_px": 246,
+      "hover_changed_box": [
+        25,
+        10,
+        88,
+        65
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "top",
+      "scale": 2.0,
+      "capture": "plasma-breeze-dark-top-200.png",
+      "sha256": "030b567fb78a4a5748062c170ca5a1c3874c064666dad4e73596a3b61e637be2",
+      "measured_box": [
+        16,
+        16,
+        1904,
+        104
+      ],
+      "expected_box": [
+        16,
+        16,
+        1904,
+        104
+      ],
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "Start_ink_px": 413,
+      "show_desktop_ink_px": 566,
+      "hover_changed_box": [
+        40,
+        16,
+        140,
+        104
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 1.0,
+      "capture": "plasma-breeze-dark-left-100.png",
+      "sha256": "bfeb60f235fa47306a96e48a852a5b2250717b265e328a10983a421f6068ffbc",
+      "measured_box": [
+        8,
+        8,
+        52,
+        1072
+      ],
+      "expected_box": [
+        8,
+        8,
+        52,
+        1072
+      ],
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 132,
+      "show_desktop_ink_px": 191,
+      "hover_changed_box": [
+        8,
+        20,
+        52,
+        70
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 1.25,
+      "capture": "plasma-breeze-dark-left-125.png",
+      "sha256": "944860651d68c9ef8f15e7ea9318c8a5502410d20ca279f6cf6a0bc6a77494cc",
+      "measured_box": [
+        10,
+        10,
+        65,
+        1070
+      ],
+      "expected_box": [
+        10,
+        10,
+        65,
+        1070
+      ],
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 167,
+      "show_desktop_ink_px": 246,
+      "hover_changed_box": [
+        10,
+        25,
+        65,
+        88
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "left",
+      "scale": 2.0,
+      "capture": "plasma-breeze-dark-left-200.png",
+      "sha256": "990c672f6f53017c7051f294d1e9a26769f6d0d6a919461f021555f7fea0876d",
+      "measured_box": [
+        16,
+        16,
+        104,
+        1064
+      ],
+      "expected_box": [
+        16,
+        16,
+        104,
+        1064
+      ],
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 414,
+      "show_desktop_ink_px": 565,
+      "hover_changed_box": [
+        16,
+        40,
+        104,
+        140
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 1.0,
+      "capture": "plasma-breeze-dark-right-100.png",
+      "sha256": "2909a0bcba59f72844e198b0b8c5b25ac8ecc5e76c75293f1a7074b697685c1a",
+      "measured_box": [
+        1868,
+        8,
+        1912,
+        1072
+      ],
+      "expected_box": [
+        1868,
+        8,
+        1912,
+        1072
+      ],
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "Start_ink_px": 132,
+      "show_desktop_ink_px": 191,
+      "hover_changed_box": [
+        1868,
+        20,
+        1912,
+        70
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 1.25,
+      "capture": "plasma-breeze-dark-right-125.png",
+      "sha256": "8665906177ea30ec5191506680e5e36ed20250264e8b9e539b5db470b3c050fa",
+      "measured_box": [
+        1855,
+        10,
+        1910,
+        1070
+      ],
+      "expected_box": [
+        1855,
+        10,
+        1910,
+        1070
+      ],
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "Start_ink_px": 167,
+      "show_desktop_ink_px": 246,
+      "hover_changed_box": [
+        1855,
+        25,
+        1910,
+        88
+      ]
+    },
+    {
+      "mode": "dark",
+      "edge": "right",
+      "scale": 2.0,
+      "capture": "plasma-breeze-dark-right-200.png",
+      "sha256": "4c18a28bb3206d1d0f21964f7d44e568e753d94fa6095414b04bd3c70c4a403b",
+      "measured_box": [
+        1816,
+        16,
+        1904,
+        1064
+      ],
+      "expected_box": [
+        1816,
+        16,
+        1904,
+        1064
+      ],
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "Start_ink_px": 414,
+      "show_desktop_ink_px": 565,
+      "hover_changed_box": [
+        1816,
+        40,
+        1904,
+        140
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 1.0,
+      "capture": "plasma-breeze-light-bottom-100.png",
+      "sha256": "29d7fd988d033dd1e7b8ca457786ee6290c8efb4a350bc0a5cca4a47dd8b1859",
+      "measured_box": [
+        8,
+        1028,
+        1912,
+        1072
+      ],
+      "expected_box": [
+        8,
+        1028,
+        1912,
+        1072
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        52
+      ],
+      "Start_ink_px": 133,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        20,
+        1028,
+        70,
+        1072
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 1.25,
+      "capture": "plasma-breeze-light-bottom-125.png",
+      "sha256": "f205c481ed2244c4b5955fe335ae51dd897d825f08d5f9da13dcbdf51d6e980d",
+      "measured_box": [
+        10,
+        1015,
+        1910,
+        1070
+      ],
+      "expected_box": [
+        10,
+        1015,
+        1910,
+        1070
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        65
+      ],
+      "Start_ink_px": 171,
+      "show_desktop_ink_px": 250,
+      "hover_changed_box": [
+        25,
+        1015,
+        88,
+        1070
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "bottom",
+      "scale": 2.0,
+      "capture": "plasma-breeze-light-bottom-200.png",
+      "sha256": "37b090a33ba6b1d60241bfe0d206e7e23e39ae2595670ff26d78aa8bdd4cb9b8",
+      "measured_box": [
+        16,
+        976,
+        1904,
+        1064
+      ],
+      "expected_box": [
+        16,
+        976,
+        1904,
+        1064
+      ],
+      "strut": [
+        0,
+        0,
+        0,
+        104
+      ],
+      "Start_ink_px": 412,
+      "show_desktop_ink_px": 558,
+      "hover_changed_box": [
+        40,
+        976,
+        140,
+        1064
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 1.0,
+      "capture": "plasma-breeze-light-top-100.png",
+      "sha256": "887d643d8f039d50d32ae0225f79fe96236f2df6bac47088a63442ad335ab736",
+      "measured_box": [
+        8,
+        8,
+        1912,
+        52
+      ],
+      "expected_box": [
+        8,
+        8,
+        1912,
+        52
+      ],
+      "strut": [
+        0,
+        0,
+        52,
+        0
+      ],
+      "Start_ink_px": 133,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        20,
+        8,
+        70,
+        52
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 1.25,
+      "capture": "plasma-breeze-light-top-125.png",
+      "sha256": "4ec5dbaec161ec1c22e1533915509089ce71f57bfedc56ec285cc1700c3d8be0",
+      "measured_box": [
+        10,
+        10,
+        1910,
+        65
+      ],
+      "expected_box": [
+        10,
+        10,
+        1910,
+        65
+      ],
+      "strut": [
+        0,
+        0,
+        65,
+        0
+      ],
+      "Start_ink_px": 171,
+      "show_desktop_ink_px": 250,
+      "hover_changed_box": [
+        25,
+        10,
+        88,
+        65
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "top",
+      "scale": 2.0,
+      "capture": "plasma-breeze-light-top-200.png",
+      "sha256": "50f4a8bde558c7e717bd863cdbfaf122e09f5b665287428f945596faa04cbff0",
+      "measured_box": [
+        16,
+        16,
+        1904,
+        104
+      ],
+      "expected_box": [
+        16,
+        16,
+        1904,
+        104
+      ],
+      "strut": [
+        0,
+        0,
+        104,
+        0
+      ],
+      "Start_ink_px": 412,
+      "show_desktop_ink_px": 558,
+      "hover_changed_box": [
+        40,
+        16,
+        140,
+        104
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 1.0,
+      "capture": "plasma-breeze-light-left-100.png",
+      "sha256": "139829a7643c032a6c02e23adc5b7b403d68b92a97ef1431e1c1e1cfc8f19ac5",
+      "measured_box": [
+        8,
+        8,
+        52,
+        1072
+      ],
+      "expected_box": [
+        8,
+        8,
+        52,
+        1072
+      ],
+      "strut": [
+        52,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 133,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        8,
+        20,
+        52,
+        70
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 1.25,
+      "capture": "plasma-breeze-light-left-125.png",
+      "sha256": "955c32ed2fdcd5303ad2af1260c5f6718a5f56a53a2354fb7ad3be8ce731b25e",
+      "measured_box": [
+        10,
+        10,
+        65,
+        1070
+      ],
+      "expected_box": [
+        10,
+        10,
+        65,
+        1070
+      ],
+      "strut": [
+        65,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 171,
+      "show_desktop_ink_px": 250,
+      "hover_changed_box": [
+        10,
+        25,
+        65,
+        88
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "left",
+      "scale": 2.0,
+      "capture": "plasma-breeze-light-left-200.png",
+      "sha256": "07aecd96fafde83b24c2518922fcc6c7cad869e5fe973cb7a15806f93b6a5b89",
+      "measured_box": [
+        16,
+        16,
+        104,
+        1064
+      ],
+      "expected_box": [
+        16,
+        16,
+        104,
+        1064
+      ],
+      "strut": [
+        104,
+        0,
+        0,
+        0
+      ],
+      "Start_ink_px": 412,
+      "show_desktop_ink_px": 558,
+      "hover_changed_box": [
+        16,
+        40,
+        104,
+        140
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 1.0,
+      "capture": "plasma-breeze-light-right-100.png",
+      "sha256": "6d64b87e4c1e1e3d1b018a9a32ea4402899b57b941c17277af46a1c3c6967ecc",
+      "measured_box": [
+        1868,
+        8,
+        1912,
+        1072
+      ],
+      "expected_box": [
+        1868,
+        8,
+        1912,
+        1072
+      ],
+      "strut": [
+        0,
+        52,
+        0,
+        0
+      ],
+      "Start_ink_px": 133,
+      "show_desktop_ink_px": 192,
+      "hover_changed_box": [
+        1868,
+        20,
+        1912,
+        70
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 1.25,
+      "capture": "plasma-breeze-light-right-125.png",
+      "sha256": "3618fdfee972f18b9129ea60f174bfed18f1682de462a5be655b6c5facd75637",
+      "measured_box": [
+        1855,
+        10,
+        1910,
+        1070
+      ],
+      "expected_box": [
+        1855,
+        10,
+        1910,
+        1070
+      ],
+      "strut": [
+        0,
+        65,
+        0,
+        0
+      ],
+      "Start_ink_px": 171,
+      "show_desktop_ink_px": 250,
+      "hover_changed_box": [
+        1855,
+        25,
+        1910,
+        88
+      ]
+    },
+    {
+      "mode": "light",
+      "edge": "right",
+      "scale": 2.0,
+      "capture": "plasma-breeze-light-right-200.png",
+      "sha256": "93f3cb2adf20c31afb287b77318f8f5644c0b6c95c716690152e65f3e85971b2",
+      "measured_box": [
+        1816,
+        16,
+        1904,
+        1064
+      ],
+      "expected_box": [
+        1816,
+        16,
+        1904,
+        1064
+      ],
+      "strut": [
+        0,
+        104,
+        0,
+        0
+      ],
+      "Start_ink_px": 412,
+      "show_desktop_ink_px": 558,
+      "hover_changed_box": [
+        1816,
+        40,
+        1904,
+        140
+      ]
+    }
+  ]
+}

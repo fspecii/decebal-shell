@@ -43,9 +43,5 @@ a theme condition.
 ## Not done and not claimed
 
 * No file of the OpenKylin package was touched; this note only lists the hooks. The owner picks the values and runs the same strict validator
-  and the native four-edge gate (`tests/e2e/universal-panels-native.py`, `tests/e2e/plasma-wm-native.py`) against their own package.
+  and the native four-edge gate (`tests/e2e/plasma-panel-native.py`, `tests/e2e/plasma-wm-native.py`) against their own package.
 * Icon sizes are pixels at scale 1.0 and the strip is native-pixel exact only at integer and 1.25 scales the gates cover (100 / 125 / 200 %).
-
-## Integration scope
-
-The shared tracker and renderer are integrated independently of the Plasma theme packages. Breeze and Layan remain outside this acceptance scope. The real-WM harness requires an explicitly supplied `plasma-breeze` fixture; it does not make that package a shipped or accepted theme. Its virtual X11 proof does not establish hardware GPU/input or Wayland behavior.
