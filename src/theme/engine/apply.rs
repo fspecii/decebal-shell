@@ -1059,6 +1059,23 @@ y = -30
     }
 
     #[test]
+    fn theme_apply_preserves_explicit_empty_control_groups_without_defaulting_them_on() {
+        for tiles in ["", "tiles = []\n"] {
+            let (dir, src, paths) = sandbox("cc-empty-selection");
+            std::fs::write(paths.shell_json(), r#"{"control_center":{"future":true}}"#).unwrap();
+            let text = SUNSET.replace("[icons]", &format!("[control_center]\nstyle = \"card\"\n{tiles}\n[icons]"));
+            install_sunset_manifest(&src, &text);
+            apply(&src, &paths, "sunset", &Selection::default()).unwrap();
+            let cc = io::json_load(&paths.shell_json())["control_center"].clone();
+            assert_eq!(cc["future"], true);
+            assert_eq!(cc.get("tiles").cloned(), if tiles.is_empty() { None } else { Some(json!([])) });
+            let settings = crate::controlcenter::settings::Settings::from_json(&cc);
+            assert_eq!(settings.tiles.names().is_empty(), !tiles.is_empty());
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
     fn switching_to_a_minimal_bar_drops_the_previous_theme_layout() {
         let (dir, src, paths) = sandbox("bar-layout-switch");
         let manifest = SUNSET.replace("id = \"sunset\"", "id = \"sunset-minimal\"").replace("left = [\"workspaces\"]", "style = \"dux\"");

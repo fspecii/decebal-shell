@@ -65,22 +65,16 @@ impl Tiles {
         }
     }
 
-    /// Exactly the named groups; names it does not know are ignored. An empty (or all-unknown) list means every group, so a
-    /// typo never leaves an empty panel.
+    /// Exactly the named groups; unknown names are ignored. An explicit empty list means no groups.
+    /// Missing configuration uses `Settings::default()` instead.
     pub fn from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Tiles {
         let mut t = Tiles { connectivity: false, focus: false, display: false, sound: false, media: false, toggles: false, actions: false };
-        let mut any = false;
         for n in names {
             if t.get(n).is_some() {
                 t.set(n, true);
-                any = true;
             }
         }
-        if any {
-            t
-        } else {
-            Tiles::ALL
-        }
+        t
     }
 
     /// The enabled names, in panel order.
@@ -423,8 +417,21 @@ mod tests {
         assert_eq!(s.tiles.names(), vec!["sound", "actions"]);
         assert_eq!(Settings::from_json(&s.to_json()), s);
         let bad = Settings::from_json(&json!({"enabled": "no", "position": "middle", "style": 4, "tiles": []}));
-        assert_eq!(bad, Settings::default(), "nonsense keeps the defaults; an empty list means every tile");
-        assert_eq!(Tiles::from_names(["nope"]), Tiles::ALL);
+        assert_eq!(bad.tiles.names(), Vec::<&str>::new(), "an explicit empty list disables every tile");
+        assert_eq!(bad.enabled, Settings::default().enabled);
+        assert!(Tiles::from_names(["nope"]).names().is_empty(), "unknown names must not enable unrelated controls");
+    }
+
+    #[test]
+    fn explicit_empty_survives_serialization_while_omission_keeps_defaults() {
+        for value in [json!({}), json!({"tiles": null}), json!({"tiles": "sound"})] {
+            assert_eq!(Settings::from_json(&value).tiles, Tiles::ALL);
+        }
+        let empty = Settings::from_json(&json!({"tiles": []}));
+        assert!(empty.tiles.names().is_empty());
+        assert_eq!(empty.to_json()["tiles"], json!([]));
+        assert_eq!(Settings::from_json(&empty.to_json()), empty);
+        assert_eq!(serde_json::from_str::<Settings>(r#"{"tiles":[]}"#).unwrap(), empty);
     }
 
     #[test]

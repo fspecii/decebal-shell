@@ -19,7 +19,7 @@ bins = Path(os.environ.get("LAUNCHER_BIN_DIR", target / "debug"))
 quick = "--quick" in sys.argv
 interactions_only = "--interactions-only" in sys.argv
 evidence = Path(os.environ.get("LAUNCHER_STYLES_EVIDENCE", "/var/tmp/launcher-styles-evidence"))
-evidence.mkdir(parents=True, exist_ok=True)
+evidence.mkdir(parents=True, exist_ok=False)
 STYLES = [s for s in ["default", "dux", "windows", "gnome", "kde", "xfce", "blackberry"] if s in os.environ.get("LAUNCHER_STYLES", "default,dux,windows,gnome,kde,xfce,blackberry").split(",")]
 EDGES = ["top", "bottom", "left", "right"]
 SCALES = [1.0, 1.25, 1.5, 2.0]
@@ -28,7 +28,7 @@ THICK = 36  # logical panel thickness used for the captures
 # -I omits the script directory; import only this trusted fixture directory.
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from private_x11 import start_private_xvfb
+from private_x11 import start_private_xvfb, listeners_owned
 root = Path(tempfile.mkdtemp(prefix="decebal-launcher-styles-", dir=os.environ.get("LAUNCHER_STYLES_WORK", "/var/tmp")))
 root.chmod(0o700)
 env = dict(os.environ)
@@ -52,6 +52,13 @@ app.chmod(0o755)
 session = fixture_bin / "decsession"
 session.write_text('#!/bin/sh\nprintf "decsession\\n" >> "$LAUNCHER_FIXTURE_CALLS"\n')
 session.chmod(0o755)
+# Native Kickoff actions call session helpers directly; all of them must stay inside the fixture.
+for name in ("systemctl", "loginctl", "rdwmctl", "xdg-open", "shutdown", "reboot", "halt", "decsettings"):
+    helper = fixture_bin / name
+    helper.write_text('#!/bin/sh\nprintf "%s\n" "blocked-helper ' + name + ' $*" >> "$LAUNCHER_FIXTURE_CALLS"\n')
+    helper.chmod(0o755)
+env["RDWMCTL"] = str(fixture_bin / "rdwmctl")
+
 env["LAUNCHER_FIXTURE_CALLS"] = str(calls)
 apps_dir = Path(env["XDG_DATA_HOME"]) / "applications"
 apps_dir.mkdir()
@@ -82,6 +89,7 @@ def git(*a):
 
 
 owned = []
+active_x = None
 
 
 def wait(fn, what, seconds=10):
@@ -94,15 +102,25 @@ def wait(fn, what, seconds=10):
     raise AssertionError(what)
 
 
+def verify_display():
+    assert active_x is not None, "no owned private X server"
+    number = int(env["DISPLAY"].lstrip(":").split(".")[0])
+    assert listeners_owned(active_x, number), "private X listeners no longer belong to this run"
+    assert Path(f"/tmp/.X{number}-lock").read_text().strip() == str(active_x.pid)
+
+
 def run(*args, check=True):
+    verify_display()
     return subprocess.run(list(map(str, args)), env=env, check=check, capture_output=True, text=True, timeout=20).stdout.strip()
 
 
 def start_x(size):
+    global active_x
     log = (root / f"xvfb-{len(owned)}.log").open("w")
     x, env["DISPLAY"] = start_private_xvfb(env=env, log=log, screen=f"{size[0]}x{size[1]}x24")
     log.close()
     owned.append(x)
+    active_x = x
     wait(lambda: run("xdotool", "getdisplaygeometry", check=False), "private Xvfb")
     return x
 
@@ -128,6 +146,7 @@ def desktop(size, edge=None, t=0, at=None):
     if desk is not None:
         desk.terminate()
         desk.wait(timeout=5)
+    verify_display()
     desk = subprocess.Popen(["display", "-immutable", "-borderwidth", "0", "-geometry", "+0+0", "-title", "launcher-evidence-desktop", str(f)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     owned.append(desk)
     wait(lambda: run("xdotool", "search", "--onlyvisible", "--name", "launcher-evidence-desktop", check=False), "desktop stand-in")
@@ -153,6 +172,7 @@ def configure(style, mode, theme="macos"):
 
 
 def set_scale(scale):
+    verify_display()
     subprocess.run(["xrdb", "-merge"], input=f"Xft.dpi: {int(round(96 * scale))}\n", env=env, text=True, check=True)
 
 
@@ -174,6 +194,7 @@ def window():
 
 
 def open_launcher(args):
+    verify_display()
     log = (root / "declaunch.log").open("a")
     p = subprocess.Popen([str(launcher), *map(str, args)], env=env, stdout=log, stderr=log, start_new_session=True)
     owned.append(p)
@@ -190,7 +211,8 @@ def close(p):
         except subprocess.TimeoutExpired:
             p.kill()
             p.wait()
-    assert p.returncode in (0, None) or p.returncode == -9, p.returncode
+            raise AssertionError("launcher did not close on Escape; forced cleanup is not a pass")
+    assert p.returncode == 0, p.returncode
     wait(lambda: not window(), "window still mapped")
 
 
@@ -347,6 +369,33 @@ try:
         assert p.wait(timeout=8) == 0, (style, "click exit")
         wait(lambda: "07" in calls.read_text().splitlines()[before:], f"{style}: clicking Chess did not launch it")
         result["click_launches"] = True
+        if style == "kde":
+            # Natural 655x516 card and header measurements, at 100%, anchored to the top without a panel.
+            # Settings is a fixture sibling, so these actions can never reach the live Settings window.
+            set_scale(1.0)
+            desktop((1366, 768))
+            for pane, point in (("users", (379, 27)), ("launcher", (954, 27))):
+                before = len(calls.read_text().splitlines())
+                p = open_launcher(["open", "--edge", "top", "--anchor", "683,0", "--thickness", "0"])
+                capture(evidence / "interactions" / f"kde-header-{pane}.png")
+                run("xdotool", "mousemove", str(point[0]), str(point[1]), "click", "1")
+                assert p.wait(timeout=8) == 0, ("KDE header", pane, "did not close")
+                wait(lambda: "blocked-helper decsettings " + pane in calls.read_text().splitlines()[before:],
+                     f"KDE header did not open the {pane} pane")
+                result["header_" + pane + "_opens"] = True
+            p = open_launcher(["open", "--edge", "top", "--anchor", "683,0", "--thickness", "0"])
+            run("xdotool", "type", "--delay", "20", "zzzz")
+            time.sleep(.2)
+            capture(evidence / "interactions" / "kde-header-query.png")
+            run("xdotool", "mousemove", "919", "27", "click", "1")
+            before = len(calls.read_text().splitlines())
+            run("xdotool", "type", "--delay", "20", "atlas")
+            time.sleep(.2)
+            run("xdotool", "key", "Return")
+            assert p.wait(timeout=8) == 0
+            wait(lambda: "09" in calls.read_text().splitlines()[before:], "KDE clear did not remove the previous query")
+            result["header_clear_removes_query"] = True
+            set_scale(1.25)
         records["interactions"].append(result)
         desktop((1366, 768))
     stop_x(x)

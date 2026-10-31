@@ -153,8 +153,9 @@ fn natural(style: LauncherStyle) -> Natural {
     match style {
         // Windows 11: 642 x 726 epx above the 48 epx taskbar, a 12 epx gap.
         LauncherStyle::Windows => Natural { size: (642.0, 726.0), gap: 12.0, fallback: Some((Edge::Bottom, 48.0)) },
-        // Plasma: Kickoff opens from a 44 px bottom panel's corner button.
-        LauncherStyle::Kde => Natural { size: (620.0, 560.0), gap: 4.0, fallback: Some((Edge::Bottom, 44.0)) },
+        // Plasma: Kickoff opens from a 44 px bottom panel's corner button; 655 x 516 is its size in the identified original capture
+        // (docs/plasma-theme-ports/kickoff-fidelity.md), wide enough for the footer's captioned power buttons.
+        LauncherStyle::Kde => Natural { size: (655.0, 516.0), gap: 4.0, fallback: Some((Edge::Bottom, 44.0)) },
         // Xfce: Whisker Menu's default menu-width 450 x menu-height 500, under the top panel's Applications button.
         LauncherStyle::Xfce => Natural { size: (450.0, 500.0), gap: 2.0, fallback: Some((Edge::Top, 28.0)) },
         LauncherStyle::Dux => Natural { size: (620.0, 620.0), gap: 0.0, fallback: None },
@@ -369,7 +370,8 @@ mod tests {
         let r = placement(LauncherStyle::Kde, at(Edge::Bottom, (24.0, 1060.0)), screen, 1.0);
         assert_eq!((r.x, r.bottom()), (8.0, 1080.0 - 40.0 - 4.0), "a corner applet pins the popup to the margin");
         let r = placement(LauncherStyle::Kde, at(Edge::Bottom, (1000.0, 1060.0)), screen, 1.0);
-        assert_eq!(r.x + r.w / 2.0, 1000.0, "centred on the applet");
+        // pixel-rounded: an odd card width (Kickoff's 655) centres to within half a pixel
+        assert!((r.x + r.w / 2.0 - 1000.0).abs() <= 0.5, "centred on the applet: {r:?}");
         let r = placement(LauncherStyle::Xfce, at(Edge::Left, (20.0, 1070.0)), screen, 1.0);
         assert_eq!((r.x, r.bottom()), (42.0, 1072.0));
         let r = placement(LauncherStyle::Windows, at(Edge::Right, (1900.0, 30.0)), screen, 1.0);

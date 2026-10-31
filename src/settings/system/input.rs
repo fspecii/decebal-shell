@@ -206,18 +206,24 @@ pub fn upsert_xinput(s: &mut Session, device: &str, prop: &str, value: &str) {
 // ---------------------------------------------------------------- pane
 
 pub fn items(h: &Hub) -> Vec<Item> {
+    items_for(h, super::run::wayland_session())
+}
+
+fn items_for(h: &Hub, wl: bool) -> Vec<Item> {
     let Some(st) = &h.input.data else { return vec![Item::Note { text: "Reading keyboard and pointer settings...".into(), warn: false }] };
     let mut v = Vec::new();
-    if let Some(e) = &st.error {
+    // On Wayland the X tools have no server to talk to; the note below says so, a red error would only alarm.
+    if let Some(e) = st.error.as_ref().filter(|_| !wl) {
         v.push(Item::Note { text: e.clone(), warn: true });
     }
-    if super::run::wayland_session() {
+    if wl {
         v.push(Item::Note {
-            text: "This is a Wayland session: layout, key repeat and pointer settings below only reach X11 apps (XWayland). Configure the compositor for native apps.".into(),
+            text: "This is a Wayland session: layout, key repeat and pointer settings below only reach X11 apps (XWayland). Touchpad and mouse settings for native apps are in the rdwm section below."
+                .into(),
             warn: false,
         });
     }
-    v.push(Item::Header("Keyboard".into()));
+    // Wayland sessions have no X tools to configure; their "not installed" rows would only repeat what the rdwm section says.
     let mut rows = Vec::new();
     if st.has_xkb && st.error.is_none() {
         let opts: Vec<Opt> = if st.layouts.is_empty() { vec![(st.layout.clone(), st.layout.clone())] } else { st.layouts.iter().map(|l| (l.clone(), l.clone())).collect() };
@@ -231,7 +237,7 @@ pub fn items(h: &Hub) -> Vec<Item> {
         let cur = caps_of(&st.options);
         let csel = co.iter().position(|(_, v)| *v == cur);
         rows.push(Row::new("Caps Lock key acts as").detail("Applied as an XKB option").ctl(Ctl::new("s:inp:caps:", Kind::Popup(co, csel))));
-    } else if !st.has_xkb {
+    } else if !st.has_xkb && !wl {
         rows.push(Row::new("Layout and Caps Lock").detail("Not available: setxkbmap is not installed"));
     }
     if st.has_xset {
@@ -246,14 +252,21 @@ pub fn items(h: &Hub) -> Vec<Item> {
             }
             None => rows.push(Row::new("Key repeat").detail("Not available: xset could not read the X server")),
         }
-    } else {
+    } else if !wl {
         rows.push(Row::new("Key repeat").detail("Not available: xset is not installed"));
     }
-    v.push(Item::Card(rows));
-    v.push(Item::Header("Pointer".into()));
+    if !rows.is_empty() {
+        v.push(Item::Header("Keyboard".into()));
+        v.push(Item::Card(rows));
+    }
+    if !(wl && st.pointers.is_empty()) {
+        v.push(Item::Header("Pointer".into()));
+    }
     if !st.has_xinput {
-        v.push(Item::Card(vec![Row::new("Pointer settings").detail("Not available: xinput is not installed")]));
-    } else if st.pointers.is_empty() {
+        if !wl {
+            v.push(Item::Card(vec![Row::new("Pointer settings").detail("Not available: xinput is not installed")]));
+        }
+    } else if st.pointers.is_empty() && !wl {
         v.push(Item::Card(vec![Row::new("No adjustable pointing devices").detail("Only devices driven by libinput expose these settings")]));
     }
     for p in &st.pointers {
@@ -441,8 +454,11 @@ mod tests {
         assert!(!s.has_xkb && !s.has_xset && !s.has_xinput);
         let mut h = Hub::with(std::sync::Arc::new(FakeRunner::lenient()), std::env::temp_dir().join("ms-inp-t"), std::sync::Arc::new(|| {}));
         h.input.data = Some(s);
-        let txt = format!("{:?}", items(&h));
+        let txt = format!("{:?}", items_for(&h, false));
         assert!(txt.contains("setxkbmap is not installed") && txt.contains("xset is not installed") && txt.contains("xinput is not installed"));
+        // A Wayland session has no X tools to install, so those rows and the red X server error stay out of the way.
+        let txt = format!("{:?}", items_for(&h, true));
+        assert!(!txt.contains("is not installed") && !txt.contains("No X server") && txt.contains("This is a Wayland session"), "{txt}");
     }
 
     #[test]

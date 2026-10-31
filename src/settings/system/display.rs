@@ -566,10 +566,15 @@ fn mode_label(m: &Mode) -> String {
 }
 
 pub fn items(h: &Hub, scale_now: Option<f64>) -> Vec<Item> {
+    items_in(h, scale_now, physical_wayland_session())
+}
+
+/// [`items`] for an explicit session type, so the X11 and Wayland panes can be tested whatever the test runs in.
+fn items_in(h: &Hub, scale_now: Option<f64>, wayland_session: bool) -> Vec<Item> {
     if let Some(s) = h.disp.data.as_ref().and_then(|s| s.wayland.as_ref()) {
         return wayland::items(h, s);
     }
-    if physical_wayland_session() {
+    if wayland_session {
         return super::sound::unavailable("Wayland display settings", h.disp.data.as_ref().and_then(|s| s.error.as_deref()).unwrap_or("Reading compositor display capabilities…"));
     }
     let mut v = Vec::new();
@@ -950,17 +955,17 @@ DP-3 connected 1080x1920+1920+0 left (normal left inverted right x axis y axis) 
         let mut h = Hub::with(fr, std::env::temp_dir().join("ms-disp-t"), std::sync::Arc::new(|| {}));
         h.disp.data = Some(st());
         let ids = |it: &[Item]| -> Vec<String> { it.iter().filter_map(|i| if let Item::Card(r) = i { Some(r) } else { None }).flatten().flat_map(|r| r.ctls.iter().map(|c| c.id.clone())).collect() };
-        let v = ids(&items(&h, None));
+        let v = ids(&items_in(&h, None, false));
         for want in ["s:disp:mirror:", "s:disp:mode:DP-1", "s:disp:rate:DP-1", "s:disp:rot:HDMI-1", "s:disp:pos:HDMI-1", "s:disp:primary:HDMI-1", "s:disp:scale:", "s:disp:enable:HDMI-2"] {
             assert!(v.contains(&want.to_string()), "{want} in {v:?}");
         }
         assert!(!v.contains(&"s:disp:primary:DP-1".to_string()));
         assert!(!v.contains(&"s:disp:keep:".to_string()));
         h.sh.confirm.lock().unwrap().begin(Instant::now(), 15, vec![], vec![], None);
-        let v = ids(&items(&h, None));
+        let v = ids(&items_in(&h, None, false));
         assert!(v.contains(&"s:disp:keep:".to_string()) && v.contains(&"s:disp:revert:".to_string()));
-        assert!(!ids(&items(&h, None)).contains(&"s:disp:night:".to_string()), "night shift hidden without a tool");
+        assert!(!ids(&items_in(&h, None, false)).contains(&"s:disp:night:".to_string()), "night shift hidden without a tool");
         h.disp.data.as_mut().unwrap().night_tool = Some("gammastep".into());
-        assert!(ids(&items(&h, None)).contains(&"s:disp:night:".to_string()));
+        assert!(ids(&items_in(&h, None, false)).contains(&"s:disp:night:".to_string()));
     }
 }

@@ -84,7 +84,10 @@ every step. It records `dest_dirs` (path → dev/ino of the pinned folder) and p
 `--managed-runtime` is required independently on `plan`, `publish`, and `rollback`. The default private root guards
 remain in force. Managed publication accepts **only** the exact owned, symlink-free directories
 `~/.local/share/rdwm-decebal/bin` and `~/.local/share/rdwm-macshell/bin`, never their parents or children. It requires
-the sealed standard manifest containing the 23 explicitly enumerated runtime binaries and `examples/launchapp`.
+either the sealed standard manifest containing the 23 explicitly enumerated runtime binaries and `examples/launchapp`,
+or a sealed follow-up manifest containing exactly `decsettings` and `decthemectl`. Both members of that preview producer/consumer
+pair must be selected in every destination, checked again at publication. An arbitrary partial manifest remains refused.
+Each follow-up file retains its own build commit and provenance; base binaries are never relabelled as follow-up artifacts.
 The example is never published; `--only` may select a runtime subset. Adding a new runtime name requires a deliberate
 tool inventory update. `rdwm`, `rdwmctl`, and all other unselected entries remain untouched.
 

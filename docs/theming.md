@@ -186,8 +186,9 @@ the same panel, in the `fluent` look: the theme's radius as it is, squared toggl
 "control_center": { "enabled": true, "position": "auto", "style": "auto", "tiles": ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"] }
 ```
 `position` (`auto`, `top-right`, `top-left`, `bottom-right`, `bottom-left`) is where a key or hot corner opens it (`auto`: beside the bar's own
-button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent` or `auto`; `tiles` lists the groups to show (an empty or
-unknown list means all). A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
+button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent`, `dux`, `gnome` or `auto`; `tiles` lists the groups to show.
+Omitting `tiles` keeps all groups enabled; an explicit empty list disables every group and shows a non-interactive empty state. Unknown names are ignored.
+Unavailable selected groups never enable unrelated controls. Dux’s header Settings shortcut belongs to the actions group and disappears when it is off. A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
 close|open|toggle [--corner C]`.
 
 ## The Caelestia theme
@@ -403,3 +404,29 @@ renderer needs a compositor and keeps geometry-only moves free of pixel uploads.
 An already running older rdwm remains unchanged until a new session; apply the
 theme there to pick up its strength. Custom/CSD decorations and Wayland remain
 separate work. See [implementation and limits](window-shadow-design.md).
+
+
+Control Center empty-selection regression checkpoint (candidate `d54bd27`):
+182 focused tests passed, one ignored; formatting, strict all-target Clippy and
+Settings/bar development builds passed under the single low-priority job limit.
+Coverage includes actual Settings pointer controls, disable-all persistence and
+reopen with foreign keys preserved, theme parsing/apply distinctions between
+omitted and empty lists, and inert layouts/keyboard targets across all four
+looks at wide/narrow sizes. The first run retained an old GNOME height assertion
+for the removed fallback; it failed and was corrected to require visible inert
+content. Evidence: `/var/tmp/decebal-control-center-groups-source-gate-v2/result.json`.
+This is source/dev acceptance; native desktop and optimized rollout remain pending.
+
+
+Native applet-selection acceptance (`d54bd27` dev bar; fixture `3d6c185`):
+`tests/e2e/control-center-empty-native.py` passed 12 fresh overlay cases across
+Card, Fluent, GNOME and Dux. Explicit empty and unavailable-media selections had
+visible content, zero action targets and no keyboard focus after Down; actions-only
+positive controls exposed Screenshot, Settings and Stay Awake. The Card empty
+capture was visually reviewed. The sealed old a82 release failed the same fixture
+at Card/empty, exposing unrelated actions. Both runs cleaned up without leftovers
+or outer rescue, and the positive gate had no resource abort.
+Evidence: `/var/tmp/decebal-cc-empty-native-control/result.json` and
+`/var/tmp/decebal-cc-empty-negative-evidence/result.json`.
+These are private X11 fresh-process checks; same-process reload, native Settings
+interaction, hardware and optimized artifact acceptance remain separate gates.

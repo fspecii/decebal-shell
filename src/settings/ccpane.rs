@@ -54,7 +54,7 @@ pub fn items(m: &Model) -> Vec<Item> {
     vec![
         Item::Header("Control Center".into()),
         Item::Card(rows),
-        Item::Note { text: "Bind a key to `decutil control-center toggle` to open it in any theme, with or without a bar. A theme can set these too ([control_center] in theme.toml); applying a theme overwrites them.".into(), warn: false },
+        Item::Note { text: "Bind a key to `decutil control-center toggle` to open it in any theme, with or without a bar. A theme can set these too ([control_center] in theme.toml); applying a theme overwrites them. Turn off every group for an empty panel; unavailable groups never enable other controls.".into(), warn: false },
     ]
 }
 
@@ -87,11 +87,6 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
         (["cc", "tile", name], CtlVal::Bool(on)) => {
             let mut t: Tiles = s.tiles;
             t.set(name, on);
-            if t.names().is_empty() {
-                m.say("Keep at least one tile group", true);
-                m.dirty = true;
-                return;
-            }
             s.tiles = t;
             "Control Center tiles saved"
         }
@@ -108,6 +103,35 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_toggle_can_be_disabled_saved_and_reopened_without_losing_foreign_keys() {
+        let (mut m, _) = crate::settings::model::tests_support::model_with("");
+        let path = m.paths.shell_json();
+        let initial = serde_json::json!({"control_center":{"tiles":["connectivity","focus","display","sound","media","toggles","actions"],"future":{"keep":true}},"unrelated":42});
+        std::fs::write(&path, initial.to_string()).unwrap();
+        m.on_files_changed();
+        for name in crate::controlcenter::settings::TILE_NAMES {
+            let id = format!("cc:tile:{name}");
+            let rows = items(&m);
+            let ctl = rows.iter().filter_map(|i| if let Item::Card(rows) = i { Some(rows) } else { None }).flat_map(|rows| rows.iter()).flat_map(|row| row.ctls.iter()).find(|c| c.id == id).unwrap();
+            assert!(matches!(ctl.kind, Kind::Toggle(true)), "{id} starts enabled");
+            m.apply(&id, CtlVal::Bool(false));
+        }
+        let saved = crate::settings::io::json_load(&path);
+        assert_eq!(saved["control_center"]["tiles"], serde_json::json!([]));
+        assert_eq!(saved["control_center"]["future"], initial["control_center"]["future"]);
+        assert_eq!(saved["unrelated"], 42);
+        let reopened = Model::new(m.paths.clone(), crate::settings::schema::Schema::snapshot(), Default::default(), std::sync::Arc::new(|| {}));
+        assert!(current(&reopened).tiles.names().is_empty(), "a fresh settings model keeps all disabled");
+        for item in items(&reopened) {
+            if let Item::Card(rows) = item {
+                for ctl in rows.iter().flat_map(|r| &r.ctls).filter(|c| c.id.starts_with("cc:tile:")) {
+                    assert!(matches!(ctl.kind, Kind::Toggle(false)), "{} stays off", ctl.id);
+                }
+            }
+        }
+    }
 
     #[test]
     fn titles_read_well() {

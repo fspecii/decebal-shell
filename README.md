@@ -327,7 +327,7 @@ A port of caelestia-shell's dashboard: a card hanging under the menu bar with th
   (`file://` or `http(s)` URLs, the latter fetched once with `curl` into `~/.cache/decebal/dash-art/`), title / artist / album, a progress bar
   you can click or drag to seek (the position is polled once a second, only while the tab shows), previous / play-pause / next, a volume slider
   when the player has a `Volume` property (Up / Down or the wheel too), and a picker when several players run (click a chip, or Tab).
-* **Performance**: CPU (total ring, per-core meters, history, package temperature from hwmon, load), memory and swap, root filesystem, network
+* **Performance**: CPU (total ring, per-core meters, history, package temperature from hwmon, load), memory and swap, disk (the root filesystem; on an immutable system, where `/` is a small read-only image, the filesystem holding your home), network
   rates with a history graph, and an NVIDIA GPU card (`nvidia-smi --query-gpu`; hidden when the tool is missing). Rings and sparklines are tiny-skia paths.
 
 Bind **one** key to the bare command `decdash` (or `decdash media` / `decdash performance` to open on a tab): running it again while the card is open closes it

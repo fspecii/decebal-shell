@@ -428,10 +428,12 @@ detached from the caller, output to its own fresh 0600 log `job-<token>.log` (th
 * **Deadline**: 30 minutes, then the job is cancelled like a stop; one that has not ended a minute later is ended and
   marked failed (only while it is still the current job).
 
-After applying, the job hands the change to app integration through one routing point,
-`desktop_assets::publish::selection_changed` (the GTK lane owns the toolkit side); see the limits below: until the
-narrow icon/cursor publication is finished and proven with native apps, GTK and Qt apps follow only through "Apply to
-all apps" (on by default; an explicit `system.enabled = false` stays off). The shell itself uses the new icons at once.
+After applying, the job hands the change to the narrow GTK/Qt publication through
+`desktop_assets::publish::selection_changed`. It changes only icon/cursor keys, leaving application colours, fonts
+and other targets alone. A pending full theme apply retains its wider intent. Explicit master and target opt-outs
+remain honored. This handoff is asynchronous: queued does not mean applied; toolkit status reports completion.
+Native toolkit and optimized-artifact acceptance remain separate from the unit tests. The shell uses the new icons
+at once.
 `follow.json` holds the phase (`starting`, `installing`, `stopping`; `applied`, `superseded`, `failed`, `stopped`), the
 pack being installed, the error and the log path. The pane shows it with *Stop* and *Retry*; `assets follow-theme
 --status` and `assets status` print it. A failure keeps the current icons and names `--archive` / `--source-dir` as the
