@@ -491,6 +491,8 @@ pub fn generate(src: &Source, selection: &Selection) -> Result<PathBuf, String> 
             let _ = fs::write(output.with_extension("error"), &e);
             return Err(e);
         }
+        // Repair can replace bytes at the same saved path: result-path equality must not suppress its repaint.
+        notify_changed();
     }
     save_preview(&dir, &request_id(src, selection), &key)?;
     prune(&dir);
