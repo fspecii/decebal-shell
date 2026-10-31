@@ -4,6 +4,9 @@
 use super::*;
 
 pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
+    if tiles.names().is_empty() {
+        return empty_layout(panel_width(Style::Dux), 16.0, true);
+    }
     let mut out = Vec::new();
     let scale = crate::theme::live::font_scale().max(1.0);
     let pad = 16.0;
@@ -17,7 +20,9 @@ pub(super) fn layout(s: &Snapshot, tiles: &Tiles) -> (Vec<Item>, f32) {
     out.push(item(pad + 12.0, pad + (header - 48.0) / 2.0, 48.0, 48.0, Draw::Circle { icon: "person", on: true }, None));
     out.push(text(pad + 72.0, pad + 10.0, inner - 136.0, name, 16.0, Weight::Medium, Ink::Primary));
     out.push(text(pad + 72.0, pad + 12.0 + 21.0 * scale, inner - 136.0, uptime, 12.0, Weight::Regular, Ink::Secondary));
-    out.push(item(pad + inner - 48.0, pad + (header - 40.0) / 2.0, 40.0, 40.0, Draw::Glyph { icon: "switches", size: 22.0, ink: Ink::Primary }, Some(Target::Settings)));
+    if tiles.actions {
+        out.push(item(pad + inner - 48.0, pad + (header - 40.0) / 2.0, 40.0, 40.0, Draw::Glyph { icon: "switches", size: 22.0, ink: Ink::Primary }, Some(Target::Settings)));
+    }
     let mut y = pad + header + gap;
     let mut column = 0;
     let mut tile = |icon: &'static str, title: &str, status: &str, on: bool, target: Option<Target>| {

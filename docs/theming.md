@@ -186,8 +186,9 @@ the same panel, in the `fluent` look: the theme's radius as it is, squared toggl
 "control_center": { "enabled": true, "position": "auto", "style": "auto", "tiles": ["connectivity", "focus", "display", "sound", "media", "toggles", "actions"] }
 ```
 `position` (`auto`, `top-right`, `top-left`, `bottom-right`, `bottom-left`) is where a key or hot corner opens it (`auto`: beside the bar's own
-button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent` or `auto`; `tiles` lists the groups to show (an empty or
-unknown list means all). A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
+button, above the taskbar, or the top right with no bar); `style` is `card`, `fluent`, `dux`, `gnome` or `auto`; `tiles` lists the groups to show.
+Omitting `tiles` keeps all groups enabled; an explicit empty list disables every group and shows a non-interactive empty state. Unknown names are ignored.
+Unavailable selected groups never enable unrelated controls. Dux’s header Settings shortcut belongs to the actions group and disappears when it is off. A theme can set the same keys in its `[control_center]` section (docs/theme-engine.md). `decutil control-center
 close|open|toggle [--corner C]`.
 
 ## The Caelestia theme

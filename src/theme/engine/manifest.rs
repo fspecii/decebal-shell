@@ -752,6 +752,18 @@ format = "%H:%M"
     }
 
     #[test]
+    fn control_center_omitted_tiles_and_explicit_empty_are_distinct() {
+        for (suffix, expected) in [("", None), ("tiles = []\n", Some(json!([])))] {
+            let result = analyze(&format!("format = 1\nname = \"x\"\n[control_center]\nstyle = \"card\"\n{suffix}"));
+            assert!(result.ok(), "{:?}", result.diags);
+            let def = result.def.unwrap();
+            assert_eq!(def.extra["control_center"].get("tiles").cloned(), expected);
+            let parsed = crate::controlcenter::settings::Settings::from_json(&def.extra["control_center"]);
+            assert_eq!(parsed.tiles.names().is_empty(), expected.is_some());
+        }
+    }
+
+    #[test]
     fn control_center_section_is_validated() {
         let ok = analyze("format = 1\nname = \"x\"\n[control_center]\nenabled = true\nposition = \"bottom-right\"\nstyle = \"fluent\"\ntiles = [\"sound\", \"actions\"]\n");
         assert!(ok.ok(), "{:?}", ok.diags);

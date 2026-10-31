@@ -2135,6 +2135,39 @@ mod key_tests {
         assert_eq!(a.scroll, 0.0, "a retry after clearing the error must be visible");
     }
 
+    #[test]
+    fn last_control_center_group_can_be_disabled_through_real_pointer_control() {
+        let mut a = app();
+        let path = a.m.paths.shell_json();
+        let initial = serde_json::json!({"control_center":{"tiles":["media"],"future":true},"unrelated":17});
+        super::super::io::json_set(&path, "control_center", Some(initial["control_center"].clone())).unwrap();
+        super::super::io::json_set(&path, "unrelated", Some(initial["unrelated"].clone())).unwrap();
+        a.m.on_files_changed();
+        a.m.sel.pane = PANES.iter().position(|p| p.id == "appearance").unwrap();
+        a.m.sel.tab = super::super::appearance::Tab::Customise;
+        a.m.sel.section = super::super::appearance::Section::DockBar;
+        a.m.apps = Some(Vec::new());
+        a.resize(1100, 1000);
+        let mut pixels = Pixmap::new(1100, 1000).unwrap();
+        a.draw(&mut pixels);
+        let id = "cc:tile:media";
+        let mut rect = a.frame.find(id).expect("media toggle exists").rect;
+        a.scroll = (a.scroll + rect.1 - 400.0).max(0.0);
+        a.reuse_items = false;
+        a.draw(&mut pixels);
+        rect = a.frame.find(id).unwrap().rect;
+        assert!(rect.1 >= 0.0 && rect.1 + rect.3 <= 1000.0, "toggle is reachable: {rect:?}");
+        a.pointer_button(rect.0 + rect.2 / 2.0, rect.1 + rect.3 / 2.0, Button::Left, true);
+        a.pointer_button(rect.0 + rect.2 / 2.0, rect.1 + rect.3 / 2.0, Button::Left, false);
+        let saved = super::super::io::json_load(&path);
+        assert_eq!(saved["control_center"]["tiles"], serde_json::json!([]));
+        assert_eq!(saved["control_center"]["future"], true);
+        assert_eq!(saved["unrelated"], 17);
+        let reopened = SettingsApp::new(a.m.paths.clone(), None);
+        let settings = crate::controlcenter::settings::Settings::from_json(&reopened.m.shell["control_center"]);
+        assert!(settings.tiles.names().is_empty(), "the final off toggle persists across Settings relaunch");
+    }
+
     /// Drives the Widgets page like a user: open the form, edit the name, create, and check the saved widget and layout.
     #[test]
     fn create_widget_form_works_through_real_controls() {
