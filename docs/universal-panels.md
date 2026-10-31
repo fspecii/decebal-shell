@@ -139,8 +139,8 @@ position = "bottom"       # this theme's default dock / taskbar edge: top | bott
   `[bar] applets` fails to install there ("unknown key"). `[bar] position` and `[dock] position` are known keys there and
   validate, but 0.2.0 draws the menu bar and Dux bar only on top and the taskbar only top/bottom (a left/right dock
   position is left out with a note). A package that uses `[bar] applets` or `[branding]`, or relies on a non-top edge for a non-rail bar or
-  a side dock, must declare `min_shell_version` as the first release that ships this framework. The parent assigns
-  that number at integration (`crate::panel::SINCE`); `decthemectl theme pack`/export writes it automatically for such
+  a side dock, must declare `min_shell_version = "0.3.0"`, the first release that ships this framework
+  (`crate::panel::SINCE`); `decthemectl theme pack`/export writes it automatically for such
   packages. Older packages and configurations keep loading unchanged.
 - No per-theme special-case settings: a Plasma-like port is `[dock] style = "windows"` with `[bar] enabled = "auto"`
   (or a flat bar on the bottom), a GNOME-like port is `[bar] style = "dux"` with `left = ["launcher", "workspaces"]`,

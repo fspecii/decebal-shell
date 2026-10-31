@@ -17,10 +17,10 @@ pub mod applets;
 pub mod branding;
 pub mod frame;
 
-/// The first release with this framework: packages that use `[bar] applets`, a non-top edge for a non-rail bar or a side
-/// dock declare it as `min_shell_version` (0.2.0 rejects `[bar] applets` as an unknown key). The release owner pins it to
-/// the version that first ships this module; until then it follows the crate version.
-pub const SINCE: &str = env!("CARGO_PKG_VERSION");
+/// The first release with this framework (the 0.3.0 feature batch): packages that use `[bar] applets`, `[branding]`, a
+/// non-top edge for a non-rail bar or a side dock declare it as `min_shell_version` (0.2.x rejects `[bar] applets` and
+/// `[branding]` as unknown keys and draws those bars only on top).
+pub const SINCE: &str = "0.3.0";
 
 /// Whether a theme's extra sections use something only this framework understands (see [`SINCE`]).
 pub fn needs_framework(extra: &serde_json::Map<String, Value>) -> bool {
@@ -630,6 +630,19 @@ mod tests {
         assert_eq!(workers_for(AppletSet::EMPTY, true), vec![Worker::VolumeWatch]);
         let w = workers_for(AppletSet::of(&[AppletId::Weather, AppletId::Cpu, AppletId::Memory, AppletId::Media]), false);
         assert_eq!(w, vec![Worker::Weather, Worker::Mpris, Worker::Resources]);
+    }
+
+    #[test]
+    fn packages_using_the_framework_require_its_release() {
+        let need = |v: serde_json::Value| needs_framework(&serde_json::from_value(v).unwrap());
+        assert!(need(json!({"bar": {"applets": ["clock"]}})));
+        assert!(need(json!({"branding": {"logo": "builtin:os"}})));
+        assert!(need(json!({"bar": {"style": "flat", "position": "bottom"}})));
+        assert!(need(json!({"dock": {"position": "left"}})));
+        assert!(!need(json!({"bar": {"style": "vertical", "position": "right"}})), "the rail had every edge before");
+        assert!(!need(json!({"bar": {"style": "flat", "position": "top"}, "dock": {"position": "bottom"}})));
+        assert_eq!(SINCE, "0.3.0");
+        assert!(crate::theme::engine::schema::parse_version(SINCE) <= crate::theme::engine::schema::parse_version(env!("CARGO_PKG_VERSION")), "never newer than this build");
     }
 
     #[test]
