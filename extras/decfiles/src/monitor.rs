@@ -185,7 +185,16 @@ mod tests {
         std::fs::write(first.join("created"), b"x").unwrap();
         assert!(until(|| monitor.take_change() == Some(1)), "create in watched folder");
         let mut byte = [0u8; 8];
-        assert!(wake.read(&mut byte).unwrap() > 0, "wake socket readable");
+        // The worker publishes the revision before writing its wake byte. Observing the
+        // revision does not imply that the subsequent nonblocking write has run yet.
+        assert!(
+            until(|| match wake.read(&mut byte) {
+                Ok(n) => n > 0,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
+                Err(error) => panic!("wake socket: {error}"),
+            }),
+            "wake socket readable"
+        );
         std::fs::rename(first.join("created"), first.join("renamed")).unwrap();
         assert!(until(|| monitor.take_change() == Some(1)), "rename in watched folder");
         monitor.watch(2, second.clone());
