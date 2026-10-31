@@ -1,7 +1,7 @@
 //! Offline contracts of the Deepin desktop port: `themes/deepin`, `assets/desktop-ports/deepin`, `docs/desktop-ports/deepin`.
 //! No display, network, live config or process. The upstream values below are the ones read from the revisions in
 //! `docs/desktop-ports/deepin/sources.json`; recomputing every colour token from them keeps the manifest from drifting.
-use decebal::theme::engine::{archive::Limits, package, schema, sha256};
+use decebal::theme::engine::{archive::Limits, package, schema};
 use serde_json::Value;
 use std::{
     collections::BTreeSet,
