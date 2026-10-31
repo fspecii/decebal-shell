@@ -150,7 +150,12 @@ impl DockApp {
     /// The dock or taskbar placed on its edge of a `width` x `height` desktop, as the backend would place it (the
     /// gallery's preview). Static sample pins; no trackers, watchers or event loop.
     pub fn preview_desktop(width: u32, height: u32) -> Result<Pixmap, String> {
-        let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], config::dock_settings());
+        Self::preview_desktop_with(config::dock_settings(), width, height)
+    }
+
+    /// [`DockApp::preview_desktop`] for given dock settings.
+    pub fn preview_desktop_with(settings: config::DockSettings, width: u32, height: u32) -> Result<Pixmap, String> {
+        let dock = Dock::new(vec![DockItem::pinned("launchpad", false), DockItem::pinned("trash", false)], settings);
         let mut app = Self::new(dock).with_scale(1.0);
         let th = crate::theme::th();
         let insets = th.bar_insets();
@@ -159,6 +164,13 @@ impl DockApp {
             win.time = "14:07".into();
             win.date = "23/10/2026".into();
             win.status.status_fill_sample();
+            // fixed sample tasks (a file manager pinned, a focused browser, a running terminal): the preview cache is not
+            // keyed on installed apps, and launchpad and trash are never task buttons
+            win.buttons = [("org.gnome.Nautilus", "", true, false), ("firefox", "Mozilla Firefox", true, true), ("foot", "Terminal", false, false)]
+                .into_iter()
+                .enumerate()
+                .map(|(i, (id, title, pinned, active))| crate::taskbar::TaskButton { app_id: id.into(), window: (i > 0).then_some(i as u64), title: title.into(), pinned, running: i > 0, active, windows: (i > 0) as usize })
+                .collect();
             let bar = win.m.bar_h.ceil() as u32;
             match app.win_vertical_edge() {
                 Some(true) => (bar, height, width as i32 - bar as i32 - insets.right, 0),
@@ -1496,6 +1508,23 @@ mod tests {
             }
         }
         crate::menubar::DecBar::status_test_applets(None);
+    }
+
+    #[test]
+    fn a_side_taskbar_preview_draws_the_whole_strip() {
+        for edge in [crate::panel::Edge::Left, crate::panel::Edge::Right] {
+            let settings = DockSettings { style: config::DockStyle::Windows, edge: Some(edge), ..DockSettings::default() };
+            let pm = DockApp::preview_desktop_with(settings, 1920, 1080).unwrap();
+            if let Some(dir) = std::env::var_os("PANEL_PREVIEW_OUT") {
+                pm.save_png(std::path::Path::new(&dir).join(format!("taskbar-{}.png", edge.as_str()))).unwrap();
+            }
+            // the strip is painted down the whole edge, with content near its start (Start) and its end (clock)
+            let x = if edge == crate::panel::Edge::Left { 24 } else { 1920 - 24 };
+            let painted = |y: u32| pm.pixel(x, y).is_some_and(|p| p.alpha() > 0);
+            for y in [5, 300, 540, 900, 1075] {
+                assert!(painted(y), "{edge:?}: strip painted at y={y}");
+            }
+        }
     }
 
     #[test]

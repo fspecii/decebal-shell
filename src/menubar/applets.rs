@@ -815,6 +815,9 @@ impl DecBar {
         if let Ok(mut p) = self.dux_perf.lock() {
             *p = Some((Some(0.18), Some(0.42)));
         }
+        // previews have no window manager to ask: four sample workspaces, the first current
+        self.workspaces = (0..4).map(|i| Workspace { name: (i + 1).to_string(), active: i == 0, occupied: i < 2, urgent: false }).collect();
+        self.show_workspaces = true;
         self.v_win = Some(("org.gnome.Nautilus".into(), "Files".into()));
         self.v_win_len = self.fonts.as_ref().map_or(40.0, |f| f.measure("Files", TEXT_PX, Weight::Medium));
         self.tasks = group_tasks(&[
@@ -1636,6 +1639,8 @@ pub(super) mod tests {
     fn the_keyboard_opens_menus_and_runs_their_items_on_the_classic_bar() {
         use crate::app::{App, NavKey};
         let mut bar = fixture(Renderer::MenuBar, Edge::Bottom, AppletSet::of(&[A::AppMenu, A::Clock]), 1600);
+        // menu rows are focusable only when their actions can run, which must not depend on the test machine
+        bar.runner = super::super::menus::Runner::available_for_tests();
         bar.focus_panel();
         let at = bar.focus_items().iter().position(|(f, _)| matches!(f, Focus::Menu(1))).expect("the app menu title");
         bar.kb_focus = Some(at);

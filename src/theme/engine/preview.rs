@@ -25,7 +25,7 @@ use std::{
 };
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-pub const VERSION: &str = "native-theme-preview-4";
+pub const VERSION: &str = "native-theme-preview-5";
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -664,7 +664,9 @@ pub fn worker(file: &Path) -> Result<(), String> {
         let dock = crate::dock_app::DockApp::preview_desktop(WIDTH, HEIGHT)?;
         composite(&mut canvas, &dock, 0, 0);
     }
-    notes.push(format!("Panels: {}", th.bar_panel().fingerprint()));
+    let dock = crate::config::dock_settings();
+    let dock_panel = if dock.style == crate::config::DockStyle::Windows { th.taskbar_panel(&dock).fingerprint() } else { format!("dock:{}", dock.edge.or(th.panel_theme.dock_edge).unwrap_or(crate::panel::Edge::Bottom).as_str()) };
+    notes.push(format!("Panels: {} / {}", th.bar_panel().fingerprint(), dock_panel));
     crate::gfx::fill_rounded(&mut canvas, 0.0, HEIGHT as f32, WIDTH as f32, 120.0, 0.0, th.background.color(1.0));
     // Separate caption sample footer, not an invented window layout over the desktop.
     if let Some(helper) = j.deco {
